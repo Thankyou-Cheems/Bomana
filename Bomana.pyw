@@ -1,322 +1,336 @@
-import sys
 import time
-import ctypes
 import threading
-import socket
+import ctypes
 import math
+import random
 import requests
 import tkinter as tk
-from dataclasses import dataclass
-from enum import Enum, auto
-from typing import Optional, Tuple, List, Any
+from typing import Optional, Tuple, List
 
-# =================================================================
-# 1. 核心配置与主题
-# =================================================================
-class AppConfig:
-    """应用程序静态配置"""
-    API_BASE = "http://127.0.0.1:8111"
-    LOCK_PORT = 41777
-    
-    CYCLE_SECONDS = 900
-    WARNING_THRESHOLD = 30
-    
-    POLL_INTERVAL = 0.25
-    UI_TICK_MS = 50
-    
-    # 判定逻辑阈值
-    LANDING_SPEED_MAX = 40  # km/h
-    LANDING_ALT_MAX = 5    # m
-    CONFIRM_DELAY = 1.2    # 状态确认防抖 (秒)
-
-class AppTheme:
-    """UI 视觉规范"""
-    BG = "#0A0E13"
-    BORDER = "#30363D"
-    TEXT_MAIN = "#E6EDF3"
-    TEXT_DIM = "#8B949E"
-    TEXT_MUTED = "#484F58"
-    
-    STATUS_COLORS = {
-        "ACTIVE": "#58A6FF",
-        "SUCCESS": "#3FB950",
-        "WARNING": "#D29922",
-        "DANGER": "#F85149"
+# ==========================================
+# 核心配置与主题定义
+# ==========================================
+CONFIG = {
+    "GAME_API_BASE": "http://127.0.0.1:8111",
+    "POLL_INTERVAL": 0.5,
+    "UI_REFRESH_MS": 50,
+    "CYCLE_SECONDS": 900,
+    "WARNING_THRESHOLD": 30,
+    "PULSE_SPEED": 2.2,
+    "SCALE": {"MIN": 0.8, "MAX": 1.6, "BASE_RES": (1920, 1080)},
+    "THEME": {
+        "TEXT": "#EDEDED",
+        "TEXT_DIM": "#A8B0B8",
+        "CARD_BG": "#0F141A",
+        "CARD_BG_ALT": "#101823",
+        "STROKE": "#263242",
+        "BAR_BG": "#1E2A36",
+        "BAR_FILL": "#EDEDED"
     }
+}
 
-# =================================================================
-# 2. 系统能力封装 (Win32 & Network)
-# =================================================================
+# ==========================================
+# 系统工具 (Win32 & 辅助函数)
+# ==========================================
 class SystemUtils:
-    @staticmethod
-    def initialize_high_dpi():
-        """启用 Windows DPI 感知"""
-        try:
-            ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
-        except Exception:
-            pass
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
 
-    @staticmethod
-    def get_window_scale(hwnd: int) -> float:
-        try:
-            dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
-            return dpi / 96.0 if dpi else 1.0
-        except Exception:
-            return 1.0
+    @classmethod
+    def hide_console(cls):
+        hwnd = cls.kernel32.GetConsoleWindow()
+        if hwnd:
+            cls.user32.ShowWindow(hwnd, 0)
 
-    @staticmethod
-    def configure_overlay(hwnd: int, clickthrough: bool):
-        """配置窗口扩展样式"""
-        styles = {
-            "GWL_EXSTYLE": -20,
-            "WS_EX_LAYERED": 0x00080000,
-            "WS_EX_TRANSPARENT": 0x00000020,
-            "WS_EX_TOPMOST": 0x00000008,
-            "WS_EX_TOOLWINDOW": 0x00000080
-        }
-        user32 = ctypes.windll.user32
-        style = user32.GetWindowLongW(hwnd, styles["GWL_EXSTYLE"])
-        style |= (styles["WS_EX_LAYERED"] | styles["WS_EX_TOPMOST"] | styles["WS_EX_TOOLWINDOW"])
-        
-        if clickthrough:
-            style |= styles["WS_EX_TRANSPARENT"]
+    @classmethod
+    def set_clickthrough(cls, hwnd: int, enable: bool, alpha: int = 235):
+        # Win32 样式常量
+        GWL_EXSTYLE = -20
+        WS_EX_LAYERED = 0x00080000
+        WS_EX_TRANSPARENT = 0x00000020
+        WS_EX_TOPMOST = 0x00000008
+        LWA_ALPHA = 0x00000002
+
+        ex_style = cls.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        if enable:
+            ex_style |= (WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST)
         else:
-            style &= ~styles["WS_EX_TRANSPARENT"]
-            
-        user32.SetWindowLongW(hwnd, styles["GWL_EXSTYLE"], style)
-        user32.SetLayeredWindowAttributes(hwnd, 0, 245, 0x2)
+            ex_style |= (WS_EX_LAYERED | WS_EX_TOPMOST)
+            ex_style &= ~WS_EX_TRANSPARENT
+        
+        cls.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style)
+        cls.user32.SetLayeredWindowAttributes(hwnd, 0, max(0, min(255, alpha)), LWA_ALPHA)
 
     @staticmethod
-    def play_notification_sound(freq=850, duration=55):
-        try:
-            ctypes.windll.kernel32.Beep(freq, duration)
-        except Exception:
-            pass
+    def get_screen_size():
+        return SystemUtils.user32.GetSystemMetrics(0), SystemUtils.user32.GetSystemMetrics(1)
 
-# =================================================================
-# 3. 游戏数据抓取与逻辑处理
-# =================================================================
-@dataclass
-class BattleSnapshot:
-    """单次轮询的游戏状态快照"""
-    valid: bool = False
-    player_present: bool = False
-    ias: float = 0.0
-    alt: float = 0.0
-    fuel: float = 0.0
-    aircraft_name: str = ""
+def format_hms(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
 
-class GameStateEngine:
-    """处理核心状态机逻辑"""
-    class Phase(Enum):
-        IDLE = auto()       # 未在战斗或未生成
-        ARMING = auto()     # 检测到实体，等待确认
-        ALIVE = auto()      # 战斗存活中
-        WAIT_NEXT = auto()  # 击落或跳伞，等待下次生成
+# ==========================================
+# 视觉特效引擎
+# ==========================================
+def render_visual_assets(w: int, h: int, scale: float):
+    """
+    尝试使用 PIL 渲染极光渐变和噪点层。
+    若 PIL 不可用，则返回 (None, None) 进行静默降级。
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFilter, ImageTk
+    except ImportError:
+        return None, None
 
-    def __init__(self):
-        self.session = requests.Session()
-        self.phase = self.Phase.IDLE
-        self.current_life_start = 0.0
-        self.life_count = 0
-        self.landed_confirmed = False
-        self._last_snapshot = BattleSnapshot()
+    # 1. 极光渐变层
+    aurora = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(aurora)
+    
+    # 模拟极光色带
+    blobs = [
+        ((int(w*0.15), int(h*0.30)), int(220*scale), (90, 255, 200, 70)),
+        ((int(w*0.55), int(h*0.20)), int(260*scale), (130, 190, 255, 60)),
+        ((int(w*0.70), int(h*0.55)), int(240*scale), (180, 140, 255, 55)),
+        ((int(w*0.35), int(h*0.70)), int(280*scale), (80, 220, 255, 45)),
+    ]
+    for (cx, cy), rad, col in blobs:
+        draw.ellipse((cx-rad, cy-rad, cx+rad, cy+rad), fill=col)
 
-    def update(self) -> "GameStateEngine":
-        snapshot = self._fetch_snapshot()
-        self._last_snapshot = snapshot
-        now = time.time()
+    aurora = aurora.filter(ImageFilter.GaussianBlur(radius=24))
 
-        # 核心逻辑：基于实体存在判断生命周期
-        if self.phase == self.Phase.IDLE:
-            if snapshot.player_present:
-                self.phase = self.Phase.ARMING
-                self._state_timer = now
-        
-        elif self.phase == self.Phase.ARMING:
-            if snapshot.player_present and (now - self._state_timer >= AppConfig.CONFIRM_DELAY):
-                self._start_new_life(now)
-            elif not snapshot.player_present:
-                self.phase = self.Phase.IDLE
+    # 2. 噪点层
+    nw, nh = max(160, int(220*scale)), max(120, int(180*scale))
+    noise_img = Image.new("RGBA", (nw, nh), (0, 0, 0, 0))
+    px = noise_img.load()
+    for y in range(nh):
+        for x in range(nw):
+            v = random.randint(0, 25)
+            a = random.randint(10, 22)
+            px[x, y] = (255, 255, 255, a) if v > 18 else (0, 0, 0, a)
+    
+    noise_img = noise_img.filter(ImageFilter.GaussianBlur(radius=0.6))
 
-        elif self.phase == self.Phase.ALIVE:
-            if not snapshot.player_present:
-                self.phase = self.Phase.WAIT_NEXT
-                self._state_timer = now
-            else:
-                self._check_landing_status(snapshot, now)
+    return ImageTk.PhotoImage(aurora), ImageTk.PhotoImage(noise_img)
 
-        elif self.phase == self.Phase.WAIT_NEXT:
-            if snapshot.player_present:
-                self._start_new_life(now)
-        
-        return self
-
-    def _fetch_snapshot(self) -> BattleSnapshot:
-        shot = BattleSnapshot()
-        try:
-            # 1. 检查物理实体
-            map_data = self.session.get(f"{AppConfig.API_BASE}/map_obj.json", timeout=0.3).json()
-            objs = map_data if isinstance(map_data, list) else map_data.get("objects", [])
-            shot.player_present = any(o.get("icon") == "Player" for o in objs)
-            
-            # 2. 检查遥测数据
-            ind = self.session.get(f"{AppConfig.API_BASE}/indicators", timeout=0.3).json()
-            if ind.get("valid"):
-                shot.valid = True
-                shot.aircraft_name = ind.get("type", "Unknown")
-                
-            state = self.session.get(f"{AppConfig.API_BASE}/state", timeout=0.3).json()
-            shot.ias = state.get("IAS, km/h", 0)
-            shot.alt = state.get("H, m", 0)
-            shot.fuel = state.get("Mfuel, kg", 0)
-        except Exception:
-            shot.valid = False
-        return shot
-
-    def _start_new_life(self, now: float):
-        self.phase = self.Phase.ALIVE
-        self.current_life_start = now
-        self.life_count += 1
-        self.landed_confirmed = False
-
-    def _check_landing_status(self, shot: BattleSnapshot, now: float):
-        if shot.ias < AppConfig.LANDING_SPEED_MAX and shot.alt < AppConfig.LANDING_ALT_MAX:
-            self.landed_confirmed = True
-
-    def get_timer_info(self, now: float):
-        if self.phase != self.Phase.ALIVE: return 0, 0, 0.0
-        elapsed = now - self.current_life_start
-        remaining = AppConfig.CYCLE_SECONDS - (elapsed % AppConfig.CYCLE_SECONDS)
-        cycle_num = int(elapsed // AppConfig.CYCLE_SECONDS) + 1
-        progress = (elapsed % AppConfig.CYCLE_SECONDS) / AppConfig.CYCLE_SECONDS
-        return int(remaining), cycle_num, progress
-
-# =================================================================
-# 4. UI 表现层
-# =================================================================
-class TimerApp:
+# ==========================================
+# 核心 UI 与 逻辑
+# ==========================================
+class OverlayApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.engine = GameStateEngine()
-        self.is_locked = True
-        self.enable_sound = False
-        self._last_beep_time = 0
-
-        self._init_window()
-        self._build_ui()
-        self._bind_controls()
+        self._init_window_settings()
+        self._init_state()
         
-        threading.Thread(target=self._logic_loop, daemon=True).start()
-        self._ui_tick()
+        # 布局参数与资源
+        self._calculate_scaling()
+        self.aurora_img, self.noise_img = render_visual_assets(self.width, self.height, self.scale)
+        
+        self._setup_ui()
+        self._bind_events()
+        
+        # 启动后台轮询
+        self.session = requests.Session()
+        threading.Thread(target=self._data_polling_loop, daemon=True).start()
+        self.update_ui()
 
-    def _init_window(self):
+    def _init_window_settings(self):
+        self.root.title("WT SB Timer")
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
-        self.root.configure(bg=AppTheme.BG)
-        
-        SystemUtils.initialize_high_dpi()
-        self.scale = SystemUtils.get_window_scale(self.root.winfo_id())
-        
-        # 初始布局位置
-        sw = self.root.winfo_screenwidth()
-        self.root.geometry(f"+{sw - 400}+{100}")
+        self.transparent_color = "#00ff00"
+        self.root.configure(bg=self.transparent_color)
+        self.root.wm_attributes("-transparentcolor", self.transparent_color)
 
-    def _build_ui(self):
+    def _init_state(self):
+        self.in_battle = False
+        self.join_time = None
+        self.last_cycle_idx = None
+        self.is_clickthrough = True
+        self.current_corner = 1
+        self.alert_enabled = True
+        self.beep_enabled = False
+
+    def _calculate_scaling(self):
+        sw, sh = SystemUtils.get_screen_size()
+        bw, bh = CONFIG["SCALE"]["BASE_RES"]
+        self.scale = max(CONFIG["SCALE"]["MIN"], min(CONFIG["SCALE"]["MAX"], ((sw/bw) + (sh/bh))/2.0))
+        self.width = int(340 * self.scale)
+        self.height = int(160 * self.scale)
+        self.radius = int(18 * self.scale)
+
+    def _setup_ui(self):
+        self.canvas = tk.Canvas(self.root, width=self.width, height=self.height, 
+                                highlightthickness=0, bd=0, bg=self.transparent_color)
+        self.canvas.pack()
+        
+        # 1. 绘制背景特效
+        if self.aurora_img:
+            self.canvas.create_image(0, 0, anchor="nw", image=self.aurora_img)
+        if self.noise_img:
+            tw, th = self.noise_img.width(), self.noise_img.height()
+            for y in range(0, self.height, th):
+                for x in range(0, self.width, tw):
+                    self.canvas.create_image(x, y, anchor="nw", image=self.noise_img)
+
+        # 2. Bento 布局网格计算
         s = self.scale
-        container = tk.Frame(self.root, bg=AppTheme.BG, padx=int(18*s), pady=int(12*s))
-        container.pack()
+        theme = CONFIG["THEME"]
+        pad, gap = int(12*s), int(10*s)
+        left_w = int(self.width * 0.58)
+        top_h = int(self.height * 0.58)
+        right_w = self.width - pad*2 - gap - left_w
+        bot_h = self.height - pad*2 - gap - top_h
 
-        # 头部：时间与周期
-        header = tk.Frame(container, bg=AppTheme.BG)
-        header.pack(fill="x")
+        # 卡片定义
+        self.layout = {
+            "timer": (pad, pad, pad + left_w, pad + top_h),
+            "bar": (pad, pad + top_h + gap, pad + left_w, pad + top_h + gap + bot_h),
+            "info": (pad + left_w + gap, pad, pad + left_w + gap + right_w, self.height - pad)
+        }
+
+        # 3. 绘制卡片
+        for key, rect in self.layout.items():
+            color = theme["CARD_BG"] if key != "bar" else theme["CARD_BG_ALT"]
+            self._draw_rounded_rect(*rect, self.radius, fill=color, outline=theme["STROKE"])
+
+        # 4. 初始化动态文本
+        tx, ty = self.layout["timer"][0] + int(14*s), self.layout["timer"][1] + int(10*s)
+        self.ui_timer = self.canvas.create_text(tx, ty, anchor="nw", text="--:--", 
+                                                fill=theme["TEXT"], font=("Segoe UI", int(34*s), "bold"))
+        self.ui_subtitle = self.canvas.create_text(tx, ty + int(52*s), anchor="nw", text="WAITING FOR BATTLE", 
+                                                   fill=theme["TEXT_DIM"], font=("Segoe UI", int(10*s)))
+
+        # 5. 进度条组件
+        bx1, by1, bx2, by2 = self.layout["bar"]
+        self.canvas.create_text(bx1+int(14*s), by1+int(10*s), anchor="nw", text="Cycle Progress", 
+                                fill=theme["TEXT_DIM"], font=("Segoe UI", int(10*s)))
         
-        self.ui_timer = tk.Label(header, text="--:--", font=("Segoe UI", int(38*s), "bold"),
-                                 fg=AppTheme.TEXT_MUTED, bg=AppTheme.BG)
-        self.ui_timer.pack(side="left")
-        
-        self.ui_cycle = tk.Label(header, text="", font=("Segoe UI", int(12*s)),
-                                 fg=AppTheme.STATUS_COLORS["ACTIVE"], bg=AppTheme.BG)
-        self.ui_cycle.pack(side="right", pady=(int(10*s), 0))
+        self.bar_coords = (bx1+int(14*s), by1+int(34*s), bx2-int(14*s), by1+int(44*s))
+        self._draw_rounded_rect(*self.bar_coords, int(8*s), fill=theme["BAR_BG"], outline="")
+        self.ui_bar_fill = self._draw_rounded_rect(self.bar_coords[0], self.bar_coords[1], self.bar_coords[0], self.bar_coords[3], 
+                                                   int(8*s), fill=theme["BAR_FILL"], outline="")
 
-        # 进度条
-        bar_container = tk.Frame(container, bg=AppTheme.BORDER, height=int(4*s))
-        bar_container.pack(fill="x", pady=int(10*s))
-        bar_container.pack_propagate(False)
-        self.ui_progress = tk.Frame(bar_container, bg=AppTheme.STATUS_COLORS["ACTIVE"], width=0)
-        self.ui_progress.place(relx=0, rely=0, relheight=1)
+        # 6. 信息栏
+        ix, iy = self.layout["info"][0] + int(14*s), self.layout["info"][1] + int(14*s)
+        self._create_info_item("Elapsed", ix, iy, "ui_elapsed")
+        self._create_info_item("Cycle", ix, iy + int(42*s), "ui_cycle")
+        self._create_info_item("Alerts", ix, iy + int(84*s), "ui_alerts")
 
-        # 状态栏
-        footer = tk.Frame(container, bg=AppTheme.BG)
-        footer.pack(fill="x")
-        self.ui_status = tk.Label(footer, text="WAITING", font=("Segoe UI", int(11*s)),
-                                  fg=AppTheme.TEXT_MUTED, bg=AppTheme.BG)
-        self.ui_status.pack(side="left")
+        # 初始化位置
+        self.dock_to_corner(self.current_corner)
+        SystemUtils.set_clickthrough(self.root.winfo_id(), True)
 
-        self.ui_landing_dot = tk.Label(footer, text="● LANDED", font=("Segoe UI", int(10*s)),
-                                       fg=AppTheme.TEXT_MUTED, bg=AppTheme.BG)
-        self.ui_landing_dot.pack(side="right")
+    def _create_info_item(self, label, x, y, attr_name):
+        s = self.scale
+        theme = CONFIG["THEME"]
+        self.canvas.create_text(x, y, anchor="nw", text=label, fill=theme["TEXT_DIM"], font=("Segoe UI", int(10*s)))
+        setattr(self, attr_name, self.canvas.create_text(x, y + int(16*s), anchor="nw", text="--", 
+                                                         fill=theme["TEXT"], font=("Segoe UI", int(11*s), "bold")))
 
-    def _logic_loop(self):
+    def _draw_rounded_rect(self, x1, y1, x2, y2, r, **kwargs):
+        r = max(0, min(r, (x2 - x1) / 2, (y2 - y1) / 2))
+        points = [x1+r, y1, x2-r, y1, x2, y1, x2, y1+r, x2, y2-r, x2, y2, x2-r, y2, x1+r, y2, x1, y2, x1, y2-r, x1, y1+r, x1, y1]
+        return self.canvas.create_polygon(points, smooth=True, **kwargs)
+
+    def _data_polling_loop(self):
         while True:
-            self.engine.update()
-            time.sleep(AppConfig.POLL_INTERVAL)
+            try:
+                # 检查进入战斗状态
+                ind = self.session.get(f"{CONFIG['GAME_API_BASE']}/indicators", timeout=0.4).json()
+                active = ind.get("valid", False)
+                if active:
+                    mission = self.session.get(f"{CONFIG['GAME_API_BASE']}/mission.json", timeout=0.4).json()
+                    active = mission.get("status") == "running"
+                
+                if not self.in_battle and active:
+                    self.join_time = time.time()
+                elif self.in_battle and not active:
+                    self.join_time = None
+                    self.last_cycle_idx = None
+                
+                self.in_battle = active
+            except Exception:
+                self.in_battle = False
+            time.sleep(CONFIG["POLL_INTERVAL"])
 
-    def _ui_tick(self):
+    def update_ui(self):
         now = time.time()
-        rem, cycle, prog = self.engine.get_timer_info(now)
+        theme = CONFIG["THEME"]
         
-        if self.engine.phase == GameStateEngine.Phase.ALIVE:
-            # 更新时间文本
-            m, s = divmod(rem, 60)
-            self.ui_timer.config(text=f"{m:02d}:{s:02d}", 
-                                 fg=AppTheme.STATUS_COLORS["DANGER"] if rem < 10 else 
-                                    AppTheme.STATUS_COLORS["WARNING"] if rem < AppConfig.WARNING_THRESHOLD else 
-                                    AppTheme.TEXT_MAIN)
+        if self.in_battle and self.join_time:
+            elapsed = int(now - self.join_time)
+            rem = CONFIG["CYCLE_SECONDS"] - (elapsed % CONFIG["CYCLE_SECONDS"])
+            cycle_idx = (elapsed // CONFIG["CYCLE_SECONDS"]) + 1
+            progress = (elapsed % CONFIG["CYCLE_SECONDS"]) / CONFIG["CYCLE_SECONDS"]
+
+            # 更新文本
+            self.canvas.itemconfig(self.ui_timer, text=format_hms(rem))
+            self.canvas.itemconfig(self.ui_elapsed, text=format_hms(elapsed))
+            self.canvas.itemconfig(self.ui_cycle, text=str(cycle_idx))
+            self.canvas.itemconfig(self.ui_alerts, text="ON" if self.alert_enabled else "OFF")
+
+            # 进度条呼吸效果与告警
+            in_final = rem <= CONFIG["WARNING_THRESHOLD"]
+            pulse = (0.5 + 0.5 * math.sin(now * CONFIG["PULSE_SPEED"] * 2 * math.pi)) if in_final else 0.0
             
-            # 更新进度条与状态
-            self.ui_progress.place(relwidth=prog)
-            self.ui_cycle.config(text=f"CYCLE {cycle}")
-            self.ui_status.config(text=f"LIFE {self.engine.life_count}", fg=AppTheme.TEXT_MAIN)
-            self.ui_landing_dot.config(fg=AppTheme.STATUS_COLORS["SUCCESS"] if self.engine.landed_confirmed else AppTheme.TEXT_MUTED)
-            
-            # 声音提醒逻辑
-            if self.enable_sound and rem in [30, 10, 5, 3, 2, 1] and rem != self._last_beep_time:
-                SystemUtils.play_notification_sound()
-                self._last_beep_time = rem
+            # 更新进度条
+            bx1, by1, bx2, by2 = self.bar_coords
+            fill_w = int((bx2 - bx1) * progress)
+            mod = int(2 * self.scale * pulse)
+            self.canvas.delete(self.ui_bar_fill)
+            self.ui_bar_fill = self._draw_rounded_rect(bx1, by1, bx1 + fill_w + mod, by2, int(8*self.scale), 
+                                                       fill="#FFFFFF" if pulse > 0.6 else theme["BAR_FILL"], outline="")
+
+            # 告警提醒
+            if in_final:
+                self.canvas.itemconfig(self.ui_subtitle, text="FINAL 30S • STAY ALIVE")
+                if rem in (30, 20, 10, 5, 4, 3, 2, 1) and self.beep_enabled:
+                    SystemUtils.kernel32.Beep(900, 60)
+            else:
+                self.canvas.itemconfig(self.ui_subtitle, text="SB INCOME TIMER • 15M CYCLE")
+
+            # 周期变更提醒
+            if self.last_cycle_idx is not None and cycle_idx != self.last_cycle_idx:
+                if self.beep_enabled: SystemUtils.kernel32.Beep(1000, 100)
+            self.last_cycle_idx = cycle_idx
+
         else:
-            self._reset_ui_display()
+            self.canvas.itemconfig(self.ui_timer, text="--:--")
+            self.canvas.itemconfig(self.ui_subtitle, text="AWAITING GAME CONNECTION (8111)")
+            self.canvas.itemconfig(self.ui_elapsed, text="--")
+            self.canvas.itemconfig(self.ui_cycle, text="--")
 
-        self.root.after(AppConfig.UI_TICK_MS, self._ui_tick)
+        self.root.after(CONFIG["UI_REFRESH_MS"], self.update_ui)
 
-    def _reset_ui_display(self):
-        self.ui_timer.config(text="--:--", fg=AppTheme.TEXT_MUTED)
-        self.ui_progress.place(relwidth=0)
-        self.ui_status.config(text=self.engine.phase.name)
-        self.ui_landing_dot.config(fg=AppTheme.TEXT_MUTED)
+    def dock_to_corner(self, corner_idx):
+        sw, sh = SystemUtils.get_screen_size()
+        p = 22
+        positions = [
+            (p, p), (sw - self.width - p, p),
+            (p, sh - self.height - p), (sw - self.width - p, sh - self.height - p)
+        ]
+        x, y = positions[corner_idx]
+        self.root.geometry(f"{self.width}x{self.height}+{max(0, x)}+{max(0, y)}")
 
-    def _bind_controls(self):
-        self.root.bind("<F8>", self._toggle_lock)
-        self.root.bind("<F10>", self._toggle_sound)
-        # 点击穿透初始化
-        self.root.after(100, lambda: SystemUtils.configure_overlay(self.root.winfo_id(), True))
+    def _bind_events(self):
+        self.root.bind("<F8>", self.toggle_clickthrough)
+        self.root.bind("<F9>", self.next_corner)
+        self.root.bind("<F10>", lambda e: setattr(self, "alert_enabled", not self.alert_enabled))
+        self.root.bind("<F11>", lambda e: setattr(self, "beep_enabled", not self.beep_enabled))
+        self.root.bind("<Escape>", lambda e: self.root.destroy())
 
-    def _toggle_lock(self, e=None):
-        self.is_locked = not self.is_locked
-        SystemUtils.configure_overlay(self.root.winfo_id(), self.is_locked)
+    def toggle_clickthrough(self, event=None):
+        self.is_clickthrough = not self.is_clickthrough
+        SystemUtils.set_clickthrough(self.root.winfo_id(), self.is_clickthrough)
 
-    def _toggle_sound(self, e=None):
-        self.enable_sound = not self.enable_sound
-        SystemUtils.play_notification_sound(freq=1000 if self.enable_sound else 600)
+    def next_corner(self, event=None):
+        self.current_corner = (self.current_corner + 1) % 4
+        self.dock_to_corner(self.current_corner)
 
 if __name__ == "__main__":
-    # 单实例检测逻辑
-    try:
-        lock_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        lock_sock.bind(("127.0.0.1", AppConfig.LOCK_PORT))
-    except socket.error:
-        sys.exit(0)
-
+    SystemUtils.hide_console()
     root = tk.Tk()
-    app = TimerApp(root)
+    app = OverlayApp(root)
     root.mainloop()
