@@ -139,6 +139,19 @@ class ZoneConfig:
     
     # 地图信息缓存时间：30秒（减少API请求）
     MAP_INFO_CACHE_SEC = 30.0
+    
+    # v5.7: 目标锁定相关配置
+    # 精确对准角度阈值：<5°视为精确对准
+    PRECISE_AIM_THRESHOLD = 5
+    
+    # 精确对准确认时间：持续3秒后切换目标
+    PRECISE_AIM_CONFIRM_SEC = 3.0
+    
+    # 目标保持角度：超过90°视为目标丢失
+    TARGET_HOLD_ANGLE = 90
+    
+    # 敌方机场ETE显示角度：只在<45°时显示ETE
+    ENEMY_AIRFIELD_ETE_ANGLE = 45
 
 
 class NetworkConfig:
@@ -1061,11 +1074,17 @@ class ZoneNavigationState:
     destroyed_alert_until: float = 0.0                           # 摧毁警告持续到的时间戳
     is_deviating: bool = False                                   # 是否偏航
     player_heading: float = 0.0                                  # 玩家航向
+    should_play_destroyed_sound: bool = False                    # 是否应该播放摧毁音效（v5.5新增）
     
     # 地速计算相关（v5.2新增）
     last_pos: Optional[Tuple[float, float]] = None  # 上次位置
     last_pos_ts: float = 0.0                        # 上次位置时间戳
     ground_speed: float = 0.0                       # 地速（归一化单位/秒）
+    
+    # v5.7: 目标锁定相关（智能目标切换）
+    locked_target_id: Optional[str] = None          # 当前锁定的目标ID（粘性）
+    precise_aim_candidate_id: Optional[str] = None  # 精确对准候选目标ID
+    precise_aim_since: float = 0.0                  # 开始精确对准的时间戳
 
 
 @dataclass
@@ -1162,6 +1181,7 @@ class UISnapshot:
     zone_destroyed_alert: bool = False
     destroyed_zone_count: int = 0
     destroyed_zone_text: str = ""
+    should_play_destroyed_sound: bool = False  # v5.5新增：是否应该播放摧毁音效
     
     player_heading: float = 0.0
 
@@ -1599,7 +1619,7 @@ class GameLogic:
         1. 计算地速（基于位置微分）
         2. 检测战区被摧毁
         3. 计算所有战区的导航信息
-        4. 选择目标战区
+        4. 选择目标战区（v5.6改进：只在飞行中且航向内才选择）
         
         Args:
             mp: 地图对象数据
@@ -1666,6 +1686,17 @@ class GameLogic:
                 if destroyed:
                     nav.destroyed_zones = destroyed
                     nav.destroyed_alert_until = now + ZoneConfig.DESTROYED_ALERT_SEC
+                    
+                    # v5.5: 判断是否有感兴趣的战区被摧毁
+                    has_interesting = any(
+                        self._is_zone_of_interest(z, nav.target_zone)
+                        for z in destroyed
+                    )
+                    nav.should_play_destroyed_sound = has_interesting
+                else:
+                    nav.should_play_destroyed_sound = False
+            else:
+                nav.should_play_destroyed_sound = False
         nav.previous_zone_ids = current_zone_ids
         
         # === 计算所有战区的导航信息 ===
@@ -1683,15 +1714,71 @@ class GameLogic:
         # 按距离排序
         zones_with_nav.sort(key=lambda z: z.distance)
         
-        # === 选择目标战区 ===
-        # 策略：优先选择航向容差内的，否则选最近的
+        # === 选择目标战区（v5.7改进：目标粘性 + 精确对准切换）===
+        # 策略：
+        # 1. 当前锁定目标有效（存在且<90°）→ 保持
+        # 2. 检测精确对准（<5°）的候选目标 → 超3秒则切换
+        # 3. 目标丢失（>90°或消失）→ 选择45°内最近的
         target = None
-        for zone in zones_with_nav:
-            if abs(zone.relative) <= ZoneConfig.HEADING_TOLERANCE:
-                target = zone
-                break
-        if not target and zones_with_nav:
-            target = zones_with_nav[0]
+        is_airborne = not tel.is_on_ground  # 判断是否在空中
+        
+        if is_airborne and zones_with_nav:
+            # 创建ID到Zone的映射，方便查找
+            zone_by_id = {z.id: z for z in zones_with_nav}
+            
+            # Step 1: 检查当前锁定目标是否仍然有效
+            locked_zone = None
+            if nav.locked_target_id and nav.locked_target_id in zone_by_id:
+                locked_zone = zone_by_id[nav.locked_target_id]
+                # 目标仍在前方（<90°）则保持
+                if abs(locked_zone.relative) <= ZoneConfig.TARGET_HOLD_ANGLE:
+                    target = locked_zone
+                else:
+                    # 目标超出视野，清除锁定
+                    nav.locked_target_id = None
+                    locked_zone = None
+            else:
+                # 目标消失，清除锁定
+                nav.locked_target_id = None
+            
+            # Step 2: 检测精确对准（<5°）的候选目标
+            precise_candidate = None
+            for zone in zones_with_nav:
+                if abs(zone.relative) <= ZoneConfig.PRECISE_AIM_THRESHOLD:
+                    precise_candidate = zone
+                    break  # 取最近的精确对准目标
+            
+            if precise_candidate:
+                # 检查是否是新的候选目标
+                if nav.precise_aim_candidate_id != precise_candidate.id:
+                    # 新候选，重置计时
+                    nav.precise_aim_candidate_id = precise_candidate.id
+                    nav.precise_aim_since = now
+                else:
+                    # 相同候选，检查是否超过确认时间
+                    aim_duration = now - nav.precise_aim_since
+                    if aim_duration >= ZoneConfig.PRECISE_AIM_CONFIRM_SEC:
+                        # 确认切换到新目标
+                        if nav.locked_target_id != precise_candidate.id:
+                            nav.locked_target_id = precise_candidate.id
+                            target = precise_candidate
+            else:
+                # 没有精确对准的目标，清除候选
+                nav.precise_aim_candidate_id = None
+                nav.precise_aim_since = 0.0
+            
+            # Step 3: 如果还没有目标，选择45°内最近的
+            if target is None:
+                for zone in zones_with_nav:
+                    if abs(zone.relative) <= ZoneConfig.HEADING_TOLERANCE:
+                        target = zone
+                        nav.locked_target_id = zone.id
+                        break
+        else:
+            # 在地面或无战区时，清除所有锁定状态
+            nav.locked_target_id = None
+            nav.precise_aim_candidate_id = None
+            nav.precise_aim_since = 0.0
         
         # 标记目标
         if target:
@@ -1708,6 +1795,46 @@ class GameLogic:
         nav.zones = zones_with_nav
         nav.target_zone = target
         nav.is_deviating = (abs(target.relative) > ZoneConfig.DEVIATION_WARNING) if target else False
+
+    def _is_zone_of_interest(self, zone: Zone, target_zone: Optional[Zone]) -> bool:
+        """判断战区是否是玩家感兴趣的（v5.5新增）
+        
+        判断标准：
+        1. 是当前目标战区 → 关注
+        2. 后方战区（>90°）→ 不关注
+        3. 前方近距离战区：≤75° 且 <35km → 关注
+        4. 正前方中距离战区：≤45° 且 <60km → 关注
+        
+        Args:
+            zone: 待判断的战区
+            target_zone: 当前目标战区
+        
+        Returns:
+            True 表示该战区是感兴趣的
+        """
+        # 1. 是当前目标战区
+        if target_zone and zone.id == target_zone.id:
+            return True
+        
+        abs_relative = abs(zone.relative)
+        
+        # 2. 后方战区（>90°）不关注
+        if abs_relative > 90:
+            return False
+        
+        # 3. 前方战区需要结合距离判断
+        distance_km = zone.distance * ZoneConfig.DISTANCE_SCALE
+        
+        # 前方近距离：≤75° 且 <35km
+        if abs_relative <= 75 and distance_km < 35:
+            return True
+        
+        # 正前方中距离：≤45° 且 <60km
+        if abs_relative <= 45 and distance_km < 60:
+            return True
+        
+        # 其他情况（前方远距离或大角度）不关注
+        return False
 
     def manual_reset(self):
         """手动重置计时器（F7热键）
@@ -1904,19 +2031,21 @@ class GameLogic:
                         is_target=True, ete_str=ete_text
                     )
 
-                # 敌方机场：显示所有
+                # 敌方机场：显示所有，但只在朝向时显示ETE（v5.7改进）
                 if enemy_infos:
                     enemy_infos.sort(key=lambda t: t[0])
-                    target_idx = 0
+                    # 查找45°内最近的敌方机场作为目标
+                    target_idx = -1  # -1表示没有目标
                     for i, (dist, info) in enumerate(enemy_infos):
-                        if abs(info.relative) <= ZoneConfig.HEADING_TOLERANCE:
+                        if abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE:
                             target_idx = i
                             break
 
                     for i, (dist, info) in enumerate(enemy_infos):
                         is_target = (i == target_idx)
                         ete_text = ""
-                        if is_target and nav.ground_speed > 1e-7:
+                        # 只在目标机场且在航向前方（<45°）时显示ETE
+                        if is_target and abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE and nav.ground_speed > 1e-7:
                             seconds_left = dist / nav.ground_speed
                             if seconds_left < 3600:
                                 mm, ss = divmod(int(seconds_left), 60)
@@ -1927,7 +2056,7 @@ class GameLogic:
                             relative=info.relative,
                             is_target=is_target, ete_str=ete_text
                         ))
-                    has_airfield_target = True
+                    has_airfield_target = (target_idx >= 0)
             
             has_target = nav.target_zone is not None
             deviation_angle = nav.target_zone.relative if nav.target_zone else 0.0
@@ -1977,7 +2106,8 @@ class GameLogic:
                 deviation_angle=deviation_angle, 
                 zone_destroyed_alert=zone_destroyed_alert,
                 destroyed_zone_count=destroyed_count, 
-                destroyed_zone_text=destroyed_zone_text, 
+                destroyed_zone_text=destroyed_zone_text,
+                should_play_destroyed_sound=nav.should_play_destroyed_sound,
                 player_heading=nav.player_heading,
             )
 
@@ -2703,6 +2833,7 @@ class App:
         策略：
         - 扩展：立即响应
         - 收缩：保守处理（避免抖动）
+        - 边界检查：确保窗口不超出屏幕
         
         Args:
             keep_pos: 保持窗口位置
@@ -2725,11 +2856,14 @@ class App:
         
         pad = int(UIConfig.WINDOW_PADDING * self.scale)
         
+        # 提示文字最小宽度（确保底部快捷键提示完整显示）
+        hint_min_width = int(340 * self.scale)
+        
         # 根据面板可见性设置最小宽度
         if self._zone_panel_visible and self._checklist_panel_visible:
-            min_width = int(480 * self.scale)
+            min_width = max(int(480 * self.scale), hint_min_width)
         else:
-            min_width = int(280 * self.scale)
+            min_width = max(int(280 * self.scale), hint_min_width)
         
         new_w = max(min_width, req_w + pad)
         new_h = req_h + pad + int(8 * self.scale)
@@ -2740,6 +2874,11 @@ class App:
                 new_h = old_h
         
         if new_w == old_w and new_h == old_h:
+            # 尺寸未变，但仍需检查边界（窗口可能需要重新定位）
+            if keep_pos and (old_x, old_y) != (0, 0):
+                x, y = self._clamp_to_screen(old_x, old_y)
+                if (x, y) != (old_x, old_y):
+                    self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
             return
         
         self.W = new_w
@@ -2753,6 +2892,8 @@ class App:
             else:
                 self._position()
                 return
+            # 边界检查：确保窗口不超出屏幕
+            x, y = self._clamp_to_screen(x, y)
             self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
         else:
             self._position()
@@ -2779,7 +2920,36 @@ class App:
             x, y = self._manual_pos
         else:
             x, y = pos[self._corner]
+        # 边界检查
+        x, y = self._clamp_to_screen(x, y)
         self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
+
+    def _clamp_to_screen(self, x: int, y: int) -> Tuple[int, int]:
+        """确保窗口位置不超出屏幕边界
+        
+        Args:
+            x, y: 窗口左上角坐标
+        
+        Returns:
+            调整后的 (x, y) 坐标
+        """
+        sw, sh = Win32.screen_size()
+        m = int(UIConfig.WINDOW_MARGIN * self.scale)
+        
+        # 确保右边界不超出（优先保证窗口在屏幕内）
+        if x + self.W > sw - m:
+            x = sw - self.W - m
+        # 确保左边界不超出
+        if x < m:
+            x = m
+        # 确保下边界不超出
+        if y + self.H > sh - m:
+            y = sh - self.H - m
+        # 确保上边界不超出
+        if y < m:
+            y = m
+        
+        return x, y
 
     def _toggle_lock(self):
         """切换锁定/解锁"""
@@ -2971,7 +3141,8 @@ class App:
             self.zone_alert_lbl.config(text=alert_text, wraplength=wrap, justify="left")
             if not self.zone_alert_lbl.winfo_ismapped():
                 self.zone_alert_lbl.pack(fill="x", padx=int(8*s), pady=(0, int(4*s)), after=self.zone_title.master)
-            if not self._last_zone_destroyed_alert and self._zone_sound_enabled:
+            # v5.5: 只在感兴趣的战区被摧毁时播放音效
+            if snap.should_play_destroyed_sound and not self._last_zone_destroyed_alert and self._zone_sound_enabled:
                 self.sound.play(pattern="zone_destroyed")
             self._last_zone_destroyed_alert = True
         else:
