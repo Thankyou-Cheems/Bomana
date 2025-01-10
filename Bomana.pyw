@@ -154,6 +154,36 @@ class ZoneConfig:
     ENEMY_AIRFIELD_ETE_ANGLE = 45
 
 
+class FuelConfig:
+    """燃油管理相关配置
+    
+    燃油采样、警告阈值、返航估算参数。
+    """
+    # 采样参数
+    SAMPLE_INTERVAL_SEC = 2.0        # 采样间隔（秒）
+    SAMPLE_WINDOW_SEC = 60.0         # 历史窗口（秒）
+    MIN_STABLE_SAMPLES = 5           # 最少稳定样本数
+    
+    # 补给检测（油量突增）
+    REFUEL_JUMP_KG = 30.0            # 油量增加超过此值视为补给
+    
+    # 警告阈值（基于百分比）
+    WARNING_PERCENT = 30             # 黄色警告阈值
+    DANGER_PERCENT = 15              # 红色警告阈值
+    
+    # 返航安全系数
+    RETURN_SAFETY_FACTOR = 1.3       # 返航油量估算的安全系数（30%余量）
+    RETURN_WARNING_FACTOR = 1.5      # 低于此倍数时提醒返航
+    
+    # 显示开关
+    SHOW_FUEL_PANEL = True           # 是否显示燃油面板
+    SHOW_CONSUMPTION_RATE = True     # 是否显示油耗率
+    SHOW_ALTITUDE = True             # 是否显示高度
+    
+    # 最小飞行速度（低于此速度不计算油耗率）
+    MIN_FLIGHT_SPEED_KMH = 50.0
+
+
 class NetworkConfig:
     """网络请求相关配置
     
@@ -932,6 +962,12 @@ class TelemetryData:
     vy_ms: float = 0              # 垂直速度 (m/s)
     fuel_kg: float = 0            # 燃油量 (kg)
     compass: float = 0            # 罗盘航向 (度)
+    
+    # v5.8 新增：燃油管理相关字段
+    fuel0_kg: float = 0           # 起飞油量 (kg) - 来自 Mfuel0
+    altitude_m: float = 0         # 飞行高度 (m)
+    tas_kmh: float = 0            # 真空速 (km/h)
+    throttle_pct: float = 0       # 油门百分比 (%)
 
     @property
     def entity_like(self) -> bool:
@@ -1062,6 +1098,164 @@ class LifeState:
 
 
 @dataclass
+class FuelSample:
+    """燃油采样点
+    
+    记录某一时刻的燃油量，用于计算油耗率。
+    """
+    timestamp: float    # 时间戳
+    fuel_kg: float      # 油量
+    altitude_m: float   # 高度（用于分析，可选）
+
+
+@dataclass
+class FuelState:
+    """燃油状态管理
+    
+    采样燃油变化，计算油耗率，估算剩余飞行时间和返航油量。
+    """
+    current_kg: float = 0.0           # 当前油量
+    initial_kg: float = 0.0           # 起飞油量（来自Mfuel0）
+    
+    # 采样缓冲
+    samples: List[FuelSample] = field(default_factory=list)
+    last_sample_time: float = 0.0     # 上次采样时间
+    
+    # 计算结果
+    consumption_rate: float = 0.0     # 油耗率 (kg/min)
+    rate_stable: bool = False         # 油耗率是否稳定
+    
+    def update(self, fuel_kg: float, fuel0_kg: float, altitude_m: float, 
+               ias_kmh: float, now: float) -> None:
+        """更新燃油状态
+        
+        Args:
+            fuel_kg: 当前油量
+            fuel0_kg: 起飞油量（API提供）
+            altitude_m: 当前高度
+            ias_kmh: 指示空速
+            now: 当前时间戳
+        """
+        self.current_kg = fuel_kg
+        
+        # 更新起飞油量（只在有效时更新）
+        if fuel0_kg > 0:
+            self.initial_kg = fuel0_kg
+        
+        # 检测补给（油量突增）→ 清空历史
+        if self.samples and fuel_kg > self.samples[-1].fuel_kg + FuelConfig.REFUEL_JUMP_KG:
+            self.samples.clear()
+            self.rate_stable = False
+            self.consumption_rate = 0.0
+            # 补给后更新起飞油量
+            if fuel0_kg > 0:
+                self.initial_kg = fuel0_kg
+            self.last_sample_time = now
+            return
+        
+        # 低速时不采样（地面或悬停）
+        if ias_kmh < FuelConfig.MIN_FLIGHT_SPEED_KMH:
+            return
+        
+        # 控制采样频率
+        if (now - self.last_sample_time) < FuelConfig.SAMPLE_INTERVAL_SEC:
+            return
+        
+        # 添加新样本
+        self.samples.append(FuelSample(now, fuel_kg, altitude_m))
+        self.last_sample_time = now
+        
+        # 清理过期样本
+        cutoff = now - FuelConfig.SAMPLE_WINDOW_SEC
+        self.samples = [s for s in self.samples if s.timestamp > cutoff]
+        
+        # 计算油耗率
+        self._calculate_consumption_rate()
+    
+    def _calculate_consumption_rate(self) -> None:
+        """计算油耗率（kg/min）"""
+        if len(self.samples) < FuelConfig.MIN_STABLE_SAMPLES:
+            self.rate_stable = False
+            return
+        
+        oldest = self.samples[0]
+        newest = self.samples[-1]
+        dt_min = (newest.timestamp - oldest.timestamp) / 60.0
+        
+        if dt_min < 0.1:  # 至少6秒数据
+            self.rate_stable = False
+            return
+        
+        fuel_used = oldest.fuel_kg - newest.fuel_kg
+        if fuel_used < 0:
+            # 油量增加了（可能是数据抖动），忽略
+            self.rate_stable = False
+            return
+        
+        self.consumption_rate = fuel_used / dt_min
+        self.rate_stable = True
+    
+    def reset(self) -> None:
+        """重置燃油状态"""
+        self.current_kg = 0.0
+        self.initial_kg = 0.0
+        self.samples.clear()
+        self.last_sample_time = 0.0
+        self.consumption_rate = 0.0
+        self.rate_stable = False
+    
+    @property
+    def fuel_percent(self) -> float:
+        """剩余油量百分比"""
+        if self.initial_kg <= 0:
+            return 0.0
+        return min(100.0, (self.current_kg / self.initial_kg) * 100)
+    
+    @property
+    def remaining_time_min(self) -> Optional[float]:
+        """剩余飞行时间（分钟）"""
+        if not self.rate_stable or self.consumption_rate <= 0:
+            return None
+        return self.current_kg / self.consumption_rate
+    
+    def estimate_return_fuel(self, distance_km: float, ground_speed_kmh: float) -> Optional[float]:
+        """估算返航所需油量（kg）
+        
+        Args:
+            distance_km: 到友方机场距离（km）
+            ground_speed_kmh: 地速（km/h）
+        
+        Returns:
+            返航所需油量（kg），无法估算时返回None
+        """
+        if not self.rate_stable or ground_speed_kmh < 50 or distance_km <= 0:
+            return None
+        
+        time_hours = distance_km / ground_speed_kmh
+        time_min = time_hours * 60
+        return self.consumption_rate * time_min * FuelConfig.RETURN_SAFETY_FACTOR
+    
+    def get_return_status(self, return_fuel_needed: Optional[float]) -> str:
+        """获取返航状态
+        
+        Args:
+            return_fuel_needed: 返航所需油量
+        
+        Returns:
+            "safe" / "warning" / "danger" / "unknown"
+        """
+        if return_fuel_needed is None or return_fuel_needed <= 0:
+            return "unknown"
+        
+        if self.current_kg >= return_fuel_needed * FuelConfig.RETURN_WARNING_FACTOR:
+            return "safe"
+        elif self.current_kg >= return_fuel_needed:
+            return "warning"
+        else:
+            return "danger"
+
+
+@dataclass
 class ZoneNavigationState:
     """战区导航状态
     
@@ -1116,6 +1310,9 @@ class GameState:
     
     # 导航状态
     zone_nav: ZoneNavigationState = field(default_factory=ZoneNavigationState)
+    
+    # v5.8 新增：燃油状态
+    fuel_state: FuelState = field(default_factory=FuelState)
 
 
 @dataclass(frozen=True)
@@ -1184,6 +1381,20 @@ class UISnapshot:
     should_play_destroyed_sound: bool = False  # v5.5新增：是否应该播放摧毁音效
     
     player_heading: float = 0.0
+    
+    # v5.8 新增：燃油管理
+    fuel_kg: float = 0.0                       # 当前油量
+    fuel_initial_kg: float = 0.0               # 起飞油量
+    fuel_percent: float = 0.0                  # 油量百分比
+    fuel_rate_kg_min: float = 0.0              # 油耗率 (kg/min)
+    fuel_rate_stable: bool = False             # 油耗率是否稳定
+    fuel_time_remaining_str: str = ""          # 剩余飞行时间字符串
+    altitude_m: float = 0.0                    # 高度
+    
+    # 返航估算
+    return_fuel_needed_kg: float = 0.0         # 返航所需油量
+    return_status: str = "unknown"             # "safe"/"warning"/"danger"/"unknown"
+    friendly_distance_km: float = 0.0          # 到友方机场距离
 
 
 # ============================================================================
@@ -1276,6 +1487,12 @@ class TelemetryFetcher:
             data.ias_kmh = float(j.get("IAS, km/h", 0) or 0)
             data.vy_ms = float(j.get("Vy, m/s", 0) or 0)
             data.fuel_kg = float(j.get("Mfuel, kg", 0) or 0)
+            
+            # v5.8 新增：解析燃油管理相关字段
+            data.fuel0_kg = float(j.get("Mfuel0, kg", 0) or 0)
+            data.altitude_m = float(j.get("H, m", 0) or 0)
+            data.tas_kmh = float(j.get("TAS, km/h", 0) or 0)
+            data.throttle_pct = float(j.get("throttle 1, %", 0) or 0)
         
         return data
 
@@ -1565,6 +1782,16 @@ class GameLogic:
             elif s.phase == Phase.ALIVE:
                 # 存活中：检测补给、着陆、死亡
                 
+                # v5.8 新增：更新燃油状态
+                if tel.state_resp_ok:
+                    s.fuel_state.update(
+                        fuel_kg=tel.fuel_kg,
+                        fuel0_kg=tel.fuel0_kg,
+                        altitude_m=tel.altitude_m,
+                        ias_kmh=tel.ias_kmh,
+                        now=now
+                    )
+                
                 # 补给检测：燃油突增
                 if prev_tel and prev_tel.state_resp_ok and tel.state_resp_ok:
                     fuel_jump = tel.fuel_kg - prev_tel.fuel_kg
@@ -1714,11 +1941,28 @@ class GameLogic:
         # 按距离排序
         zones_with_nav.sort(key=lambda z: z.distance)
         
+        # ╔══════════════════════════════════════════════════════════════════════╗
+        # ║ ⚠️ 修改注意事项 - 战区目标选择算法                                    ║
+        # ╠══════════════════════════════════════════════════════════════════════╣
+        # ║ 目标选择的核心原则：                                                  ║
+        # ║ 1. 目标粘性：一旦锁定目标，在90°内保持锁定，避免频繁切换             ║
+        # ║ 2. 精确对准优先：玩家持续对准(<5°)某目标3秒后，主动切换到该目标      ║
+        # ║ 3. 角度优先于距离：在角度门(±45°)内有多个目标时，选择角度最小的      ║
+        # ║    而不是距离最近的，因为玩家更可能在飞向角度小的目标                 ║
+        # ║                                                                      ║
+        # ║ 关键配置项（在 ZoneConfig 中）：                                      ║
+        # ║ - HEADING_TOLERANCE = 45      # 角度门：±45°内视为正对目标           ║
+        # ║ - TARGET_HOLD_ANGLE = 90      # 目标保持：超过90°视为目标丢失        ║
+        # ║ - PRECISE_AIM_THRESHOLD = 5   # 精确对准：<5°视为精确对准            ║
+        # ║ - PRECISE_AIM_CONFIRM_SEC = 3 # 精确对准确认时间                     ║
+        # ║                                                                      ║
+        # ║ 修改此逻辑时注意：                                                    ║
+        # ║ - zones_with_nav 已按距离排序，但目标选择应按角度优先                ║
+        # ║ - Step 2 和 Step 3 中筛选候选时，需要从角度门内选角度最小的          ║
+        # ╚══════════════════════════════════════════════════════════════════════╝
+        
         # === 选择目标战区（v5.7改进：目标粘性 + 精确对准切换）===
-        # 策略：
-        # 1. 当前锁定目标有效（存在且<90°）→ 保持
-        # 2. 检测精确对准（<5°）的候选目标 → 超3秒则切换
-        # 3. 目标丢失（>90°或消失）→ 选择45°内最近的
+        # === v5.9改进：角度门内优先选择角度最小的目标 ===
         target = None
         is_airborne = not tel.is_on_ground  # 判断是否在空中
         
@@ -1742,11 +1986,13 @@ class GameLogic:
                 nav.locked_target_id = None
             
             # Step 2: 检测精确对准（<5°）的候选目标
+            # ⚠️ 从精确对准范围内选择角度最小的目标（不是距离最近的）
+            precise_candidates = [z for z in zones_with_nav 
+                                  if abs(z.relative) <= ZoneConfig.PRECISE_AIM_THRESHOLD]
             precise_candidate = None
-            for zone in zones_with_nav:
-                if abs(zone.relative) <= ZoneConfig.PRECISE_AIM_THRESHOLD:
-                    precise_candidate = zone
-                    break  # 取最近的精确对准目标
+            if precise_candidates:
+                # 按角度排序，选择角度最小的
+                precise_candidate = min(precise_candidates, key=lambda z: abs(z.relative))
             
             if precise_candidate:
                 # 检查是否是新的候选目标
@@ -1767,13 +2013,16 @@ class GameLogic:
                 nav.precise_aim_candidate_id = None
                 nav.precise_aim_since = 0.0
             
-            # Step 3: 如果还没有目标，选择45°内最近的
+            # Step 3: 如果还没有目标，从45°角度门内选择角度最小的
+            # ⚠️ 优先角度最小，而不是距离最近
             if target is None:
-                for zone in zones_with_nav:
-                    if abs(zone.relative) <= ZoneConfig.HEADING_TOLERANCE:
-                        target = zone
-                        nav.locked_target_id = zone.id
-                        break
+                candidates_in_gate = [z for z in zones_with_nav 
+                                      if abs(z.relative) <= ZoneConfig.HEADING_TOLERANCE]
+                if candidates_in_gate:
+                    # 按角度排序，选择角度最小的
+                    best_candidate = min(candidates_in_gate, key=lambda z: abs(z.relative))
+                    target = best_candidate
+                    nav.locked_target_id = best_candidate.id
         else:
             # 在地面或无战区时，清除所有锁定状态
             nav.locked_target_id = None
@@ -2090,6 +2339,39 @@ class GameLogic:
                         items.append(f"#{dz.index}")
                 destroyed_zone_text = "  |  ".join(items)
 
+            # v5.8 新增：燃油管理数据
+            fuel = s.fuel_state
+            fuel_kg = fuel.current_kg
+            fuel_initial_kg = fuel.initial_kg
+            fuel_percent = fuel.fuel_percent
+            fuel_rate_kg_min = fuel.consumption_rate if fuel.rate_stable else 0.0
+            fuel_rate_stable = fuel.rate_stable
+            altitude_m = tel.altitude_m
+            
+            # 剩余飞行时间字符串
+            fuel_time_remaining_str = ""
+            remaining_min = fuel.remaining_time_min
+            if remaining_min is not None:
+                if remaining_min > 60:
+                    fuel_time_remaining_str = ">60:00"
+                else:
+                    rm, rs = divmod(int(remaining_min * 60), 60)
+                    fuel_time_remaining_str = f"{rm:02d}:{rs:02d}"
+            
+            # 返航估算
+            return_fuel_needed_kg = 0.0
+            return_status = "unknown"
+            friendly_distance_km = 0.0
+            
+            if friendly_airfield_display and nav.ground_speed > 0:
+                friendly_distance_km = friendly_airfield_display.distance_km
+                # 将地速转换为 km/h
+                ground_speed_kmh = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 3600
+                return_fuel_needed = fuel.estimate_return_fuel(friendly_distance_km, ground_speed_kmh)
+                if return_fuel_needed is not None:
+                    return_fuel_needed_kg = return_fuel_needed
+                    return_status = fuel.get_return_status(return_fuel_needed)
+
             return UISnapshot(
                 phase=s.phase, life_index=life_index, cycle=cycle, 
                 remaining_sec=remaining, progress=progress, sortie_id=s.sortie_id, 
@@ -2109,6 +2391,17 @@ class GameLogic:
                 destroyed_zone_text=destroyed_zone_text,
                 should_play_destroyed_sound=nav.should_play_destroyed_sound,
                 player_heading=nav.player_heading,
+                # v5.8 新增：燃油管理字段
+                fuel_kg=fuel_kg,
+                fuel_initial_kg=fuel_initial_kg,
+                fuel_percent=fuel_percent,
+                fuel_rate_kg_min=fuel_rate_kg_min,
+                fuel_rate_stable=fuel_rate_stable,
+                fuel_time_remaining_str=fuel_time_remaining_str,
+                altitude_m=altitude_m,
+                return_fuel_needed_kg=return_fuel_needed_kg,
+                return_status=return_status,
+                friendly_distance_km=friendly_distance_km,
             )
 
     def _start_new_life_locked(self, now: float):
@@ -2131,6 +2424,7 @@ class GameLogic:
         s.landed_flash_until = 0.0
         s.zone_nav = ZoneNavigationState()
         s.map_info = None
+        s.fuel_state.reset()  # v5.8 新增：重置燃油状态
 
     def _clear_transient_state_locked(self):
         """清除瞬态状态（必须在锁内调用）"""
@@ -2677,7 +2971,26 @@ class App:
         self._rebuild_checklist()
 
     def _init_zone_ui(self):
-        """初始化战区导航UI"""
+        """初始化战区导航UI
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ ⚠️ 修改注意事项 - 战区导航UI初始化                                    ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 1. font_item 变量在此方法中定义，用于所有列表项和燃油信息             ║
+        ║    - 如果在此方法中添加新的 UI 元素，确保 font_item 已定义            ║
+        ║    - font_item = font_heading（复用战区项目字体）                    ║
+        ║                                                                      ║
+        ║ 2. 添加新的信息区块时，遵循现有结构：                                 ║
+        ║    - 标题使用 font_title                                             ║
+        ║    - 列表项使用 font_item                                            ║
+        ║    - 遵循 padx=int(8*s) 的统一内边距                                 ║
+        ║                                                                      ║
+        ║ 3. 燃油信息区块在最后，包含三行：                                     ║
+        ║    - fuel_main_lbl: 油量和剩余时间                                   ║
+        ║    - fuel_detail_lbl: 油耗率和高度                                   ║
+        ║    - fuel_return_lbl: 返航估算                                       ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
         s = self.scale
         
         # 标题栏
@@ -2689,6 +3002,8 @@ class App:
         self.zone_title.pack(side="left")
         
         font_heading = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
+        # ⚠️ font_item 在此定义，供后续所有列表项和燃油信息使用
+        font_item = font_heading
         self.heading_lbl = tk.Label(title_frame, text="HDG: ---", font=font_heading, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e")
         self.heading_lbl.pack(side="right")
         
@@ -2708,6 +3023,37 @@ class App:
         self.airport_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
         self.airport_list_frame.pack(fill="x", padx=int(8*s), pady=(0, int(10*s)))
         self.airport_labels: List[tk.Label] = []
+
+        # v5.8 新增：燃油信息
+        self.fuel_title_lbl = tk.Label(self.zone_frame, text="⛽ 燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        self.fuel_title_lbl.pack(fill="x", padx=int(8*s), pady=(0, int(2*s)))
+        
+        self.fuel_info_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
+        self.fuel_info_frame.pack(fill="x", padx=int(8*s), pady=(0, int(6*s)))
+        
+        # 燃油主信息行
+        self.fuel_main_lbl = tk.Label(
+            self.fuel_info_frame, 
+            text="-- kg (--%)  ⏱️ --:--",
+            font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.fuel_main_lbl.pack(fill="x")
+        
+        # 油耗率和高度行
+        self.fuel_detail_lbl = tk.Label(
+            self.fuel_info_frame,
+            text="油耗 --kg/min │ 高度 --m",
+            font=font_item, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.fuel_detail_lbl.pack(fill="x")
+        
+        # 返航估算行
+        self.fuel_return_lbl = tk.Label(
+            self.fuel_info_frame,
+            text="🏠 返航: --",
+            font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.fuel_return_lbl.pack(fill="x")
 
     def _rebuild_checklist(self):
         """重建检查清单UI（纯展示模式）"""
@@ -2835,6 +3181,21 @@ class App:
         - 收缩：保守处理（避免抖动）
         - 边界检查：确保窗口不超出屏幕
         
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ ⚠️ 修改注意事项 - 窗口尺寸计算                                        ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 1. hint_min_width 必须足够容纳底部提示文字的完整显示                  ║
+        ║    - 提示文字内容在 _hint_text() 方法中定义                           ║
+        ║    - 如果增加新的快捷键提示，需要相应增加 hint_min_width              ║
+        ║    - 当前提示文字约需 380-400 像素宽度（含emoji和中文）               ║
+        ║                                                                      ║
+        ║ 2. 面板可见性影响最小宽度计算                                         ║
+        ║    - 双面板: 480px                                                   ║
+        ║    - 单面板/无面板: 取 hint_min_width                                ║
+        ║                                                                      ║
+        ║ 3. _clamp_to_screen() 确保窗口不超出屏幕边界                         ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        
         Args:
             keep_pos: 保持窗口位置
             force_shrink: 强制收缩（隐藏面板时）
@@ -2856,14 +3217,17 @@ class App:
         
         pad = int(UIConfig.WINDOW_PADDING * self.scale)
         
-        # 提示文字最小宽度（确保底部快捷键提示完整显示）
-        hint_min_width = int(340 * self.scale)
+        # ⚠️ 提示文字最小宽度（确保底部快捷键提示完整显示）
+        # 如果修改了 _hint_text() 中的提示文字，需要同步调整此值！
+        # 当前提示："F7重置 │ F8解锁 │ F9角落 │ F10声音(🔊开) │ F11战区(🔔开)"
+        hint_min_width = int(400 * self.scale)
         
         # 根据面板可见性设置最小宽度
         if self._zone_panel_visible and self._checklist_panel_visible:
             min_width = max(int(480 * self.scale), hint_min_width)
         else:
-            min_width = max(int(280 * self.scale), hint_min_width)
+            # ⚠️ 单面板或无面板时，hint_min_width 是主要约束
+            min_width = hint_min_width
         
         new_w = max(min_width, req_w + pad)
         new_h = req_h + pad + int(8 * self.scale)
@@ -2958,7 +3322,22 @@ class App:
         self._update_hint()
 
     def _hint_text(self) -> str:
-        """生成提示文本"""
+        """生成提示文本
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ ⚠️ 修改注意事项 - 提示文字                                            ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 如果修改此处的提示文字（增加/删除快捷键），必须同步修改：              ║
+        ║ 1. _recalc_size() 中的 hint_min_width 值                             ║
+        ║    - 当前设置为 400 * scale 像素                                     ║
+        ║    - 每增加一个快捷键约需增加 50-60 像素                              ║
+        ║                                                                      ║
+        ║ 2. 如果增加新快捷键，还需修改：                                       ║
+        ║    - HotkeyConfig 中添加 VK_xxx 和 HK_ID_xxx                         ║
+        ║    - _init_bindings() 中添加键盘绑定                                 ║
+        ║    - _init_global_hotkeys() 中添加全局热键注册                       ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
         sound = "🔊开" if self.sound.is_enabled() else "🔇关"
         zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
         if self._locked:
@@ -3226,6 +3605,77 @@ class App:
             empty_lbl = tk.Label(self.airport_list_frame, text="无机场数据", font=font_item, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
             empty_lbl.pack(fill="x")
             self.airport_labels.append(empty_lbl)
+
+        # === v5.8 新增：燃油信息更新 ===
+        self._update_fuel_display(snap, font_item)
+
+    def _update_fuel_display(self, snap: UISnapshot, font_item):
+        """更新燃油信息显示（v5.8 新增）"""
+        # 燃油主信息：油量、百分比、剩余时间
+        if snap.fuel_kg > 0:
+            # 油量和百分比
+            fuel_text = f"{int(snap.fuel_kg)}kg ({snap.fuel_percent:.0f}%)"
+            
+            # 剩余飞行时间
+            if snap.fuel_time_remaining_str:
+                fuel_text += f"  ⏱️ {snap.fuel_time_remaining_str}"
+            else:
+                fuel_text += "  ⏱️ 计算中..."
+            
+            # 根据百分比设置颜色
+            if snap.fuel_percent <= FuelConfig.DANGER_PERCENT:
+                fuel_color = Theme.RED
+            elif snap.fuel_percent <= FuelConfig.WARNING_PERCENT:
+                fuel_color = Theme.YELLOW
+            else:
+                fuel_color = Theme.TEXT
+            
+            self.fuel_main_lbl.config(text=fuel_text, fg=fuel_color)
+        else:
+            self.fuel_main_lbl.config(text="-- kg (--%)", fg=Theme.TEXT_MUTED)
+        
+        # 油耗率和高度
+        if snap.fuel_rate_stable and snap.fuel_rate_kg_min > 0:
+            rate_text = f"油耗 {snap.fuel_rate_kg_min:.0f}kg/min"
+        else:
+            rate_text = "油耗 --"
+        
+        if snap.altitude_m > 0:
+            alt_text = f"高度 {int(snap.altitude_m)}m"
+        else:
+            alt_text = "高度 --"
+        
+        self.fuel_detail_lbl.config(text=f"{rate_text} │ {alt_text}")
+        
+        # 返航估算
+        if snap.return_status != "unknown" and snap.return_fuel_needed_kg > 0:
+            needed_text = f"需~{int(snap.return_fuel_needed_kg)}kg"
+            
+            # 计算返航油量占比
+            if snap.fuel_initial_kg > 0:
+                return_percent = (snap.return_fuel_needed_kg / snap.fuel_initial_kg) * 100
+                needed_text += f" ({return_percent:.0f}%)"
+            
+            # 状态标识
+            if snap.return_status == "safe":
+                status_icon = "✅ 充足"
+                return_color = Theme.GREEN
+            elif snap.return_status == "warning":
+                status_icon = "⚠️ 注意"
+                return_color = Theme.YELLOW
+            else:  # danger
+                status_icon = "🔴 不足!"
+                return_color = Theme.RED
+            
+            return_text = f"🏠 返航: {needed_text}  {status_icon}"
+            self.fuel_return_lbl.config(text=return_text, fg=return_color)
+        elif snap.friendly_distance_km > 0:
+            self.fuel_return_lbl.config(
+                text=f"🏠 返航: 距离{snap.friendly_distance_km:.0f}km (估算中...)", 
+                fg=Theme.TEXT_MUTED
+            )
+        else:
+            self.fuel_return_lbl.config(text="🏠 返航: 无机场数据", fg=Theme.TEXT_MUTED)
 
     def _update_ui(self):
         """UI更新循环（20fps）"""
