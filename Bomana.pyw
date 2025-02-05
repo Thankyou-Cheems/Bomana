@@ -3,7 +3,7 @@
 """
 ===============================================================================
 War Thunder SB Timer - 战雷全真模式收益计时器
-软件名：Bomana
+软件名：Bomana（因为战区猴子喜欢炸弹和香蕉）
 ===============================================================================
 
 项目说明：
@@ -67,6 +67,7 @@ import ctypes
 import threading
 from pathlib import Path
 from dataclasses import dataclass, field
+from collections import deque
 from typing import Optional, Tuple, Any, List, Dict
 from enum import Enum, auto
 
@@ -1113,12 +1114,21 @@ class FuelState:
     """燃油状态管理
     
     采样燃油变化，计算油耗率，估算剩余飞行时间和返航油量。
+    
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║ 性能优化说明                                                          ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║ 使用 deque 代替 list 管理采样数据：                                   ║
+    ║ - deque.popleft() 是 O(1)，list.pop(0) 是 O(n)                       ║
+    ║ - 设置 maxlen 自动限制大小，无需手动清理                              ║
+    ║ - 60秒窗口 / 2秒间隔 = 最多30个样本                                  ║
+    ╚══════════════════════════════════════════════════════════════════════╝
     """
     current_kg: float = 0.0           # 当前油量
     initial_kg: float = 0.0           # 起飞油量（来自Mfuel0）
     
-    # 采样缓冲
-    samples: List[FuelSample] = field(default_factory=list)
+    # 采样缓冲（使用deque，maxlen=30对应60秒窗口/2秒间隔）
+    samples: deque = field(default_factory=lambda: deque(maxlen=30))
     last_sample_time: float = 0.0     # 上次采样时间
     
     # 计算结果
@@ -1161,13 +1171,14 @@ class FuelState:
         if (now - self.last_sample_time) < FuelConfig.SAMPLE_INTERVAL_SEC:
             return
         
-        # 添加新样本
+        # 添加新样本（deque自动丢弃超出maxlen的旧样本）
         self.samples.append(FuelSample(now, fuel_kg, altitude_m))
         self.last_sample_time = now
         
-        # 清理过期样本
+        # 清理过期样本（补充清理，处理时间间隔不均匀的情况）
         cutoff = now - FuelConfig.SAMPLE_WINDOW_SEC
-        self.samples = [s for s in self.samples if s.timestamp > cutoff]
+        while self.samples and self.samples[0].timestamp < cutoff:
+            self.samples.popleft()  # O(1) 操作
         
         # 计算油耗率
         self._calculate_consumption_rate()
@@ -1670,6 +1681,15 @@ class GameLogic:
         self.map_info_fetcher = MapInfoFetcher(self.http)
         self.map = MapObjectsFetcher(self.http)
         self.state = GameState()
+    
+    @property
+    def is_api_down(self) -> bool:
+        """轻量级API状态检查（用于轮询间隔控制）
+        
+        避免在_poll_loop中生成完整snapshot只为检查api_down状态。
+        """
+        with self._lock:
+            return self.state.api_down
 
     def tick(self) -> None:
         """主逻辑循环（每250ms执行一次）
@@ -2774,6 +2794,19 @@ class App:
         # 布局可见性
         self._zone_panel_visible = False
         self._checklist_panel_visible = False
+        
+        # ╔══════════════════════════════════════════════════════════════════════╗
+        # ║ 性能优化：缓存和Label池                                               ║
+        # ╠══════════════════════════════════════════════════════════════════════╣
+        # ║ 1. _cached_fonts: 缓存字体元组，避免每帧重新计算                      ║
+        # ║ 2. _zone_label_pool: Label复用池，避免频繁销毁/创建                   ║
+        # ║ 3. _last_zone_count: 记录上次战区数量，智能触发 _recalc_size         ║
+        # ╚══════════════════════════════════════════════════════════════════════╝
+        self._cached_fonts: Dict[str, tuple] = {}
+        self._zone_label_pool: List[tk.Label] = []
+        self._airport_label_pool: List[tk.Label] = []
+        self._last_zone_count = 0
+        self._last_airport_count = 0
 
         # 初始化流程
         self._load_config()
@@ -2862,6 +2895,40 @@ class App:
             self.root.tk.call("tk", "scaling", float(self.scale))
         except tk.TclError:
             pass
+        
+        # 缓存常用字体（避免每帧重新计算）
+        self._cache_fonts()
+    
+    def _cache_fonts(self):
+        """缓存所有常用字体元组
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 性能优化说明                                                          ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 字体元组在UI更新循环中频繁使用，每帧重新计算会产生开销。              ║
+        ║ 此方法在初始化时预计算所有字体，后续通过 _get_font() 获取。           ║
+        ║                                                                      ║
+        ║ 如果添加新的字体使用场景，需要在此方法中添加对应的缓存项。            ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
+        s = self.scale
+        self._cached_fonts = {
+            'timer': (UIConfig.FONT_TIMER[0], int(UIConfig.FONT_TIMER[1]*s), UIConfig.FONT_TIMER[2]),
+            'life': (UIConfig.FONT_LIFE[0], int(UIConfig.FONT_LIFE[1]*s), UIConfig.FONT_LIFE[2]),
+            'cycle': (UIConfig.FONT_CYCLE[0], int(UIConfig.FONT_CYCLE[1]*s)),
+            'pill': (UIConfig.FONT_PILL[0], int(UIConfig.FONT_PILL[1]*s), UIConfig.FONT_PILL[2]),
+            'status': (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s)),
+            'checklist_title': (UIConfig.FONT_CHECKLIST_TITLE[0], int(UIConfig.FONT_CHECKLIST_TITLE[1]*s), UIConfig.FONT_CHECKLIST_TITLE[2]),
+            'checklist_item': (UIConfig.FONT_CHECKLIST_ITEM[0], int(UIConfig.FONT_CHECKLIST_ITEM[1]*s)),
+            'zone_title': (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2]),
+            'zone_item': (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s)),
+            'debug': (UIConfig.FONT_DEBUG[0], int(UIConfig.FONT_DEBUG[1]*s)),
+            'hint': (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s)),
+        }
+    
+    def _get_font(self, name: str) -> tuple:
+        """获取缓存的字体"""
+        return self._cached_fonts.get(name, ('Segoe UI', 10))
 
     def _finalize_window_geometry_and_styles(self):
         """最终确定窗口几何和样式"""
@@ -3011,18 +3078,17 @@ class App:
         font_alert = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
         self.zone_alert_lbl = tk.Label(self.zone_frame, text="", font=font_alert, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
         
-        # 战区列表容器
+        # 战区列表容器（Label由复用池管理，见 _zone_label_pool）
         self.zone_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
         self.zone_list_frame.pack(fill="x", padx=int(8*s), pady=(0, int(10*s)))
-        self.zone_labels: List[tk.Label] = []
 
         # 机场导航
         self.airport_title_lbl = tk.Label(self.zone_frame, text="🛫 机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.airport_title_lbl.pack(fill="x", padx=int(8*s), pady=(0, int(2*s)))
 
+        # 机场列表容器（Label由复用池管理，见 _airport_label_pool）
         self.airport_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
         self.airport_list_frame.pack(fill="x", padx=int(8*s), pady=(0, int(10*s)))
-        self.airport_labels: List[tk.Label] = []
 
         # v5.8 新增：燃油信息
         self.fuel_title_lbl = tk.Label(self.zone_frame, text="⛽ 燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
@@ -3448,12 +3514,22 @@ class App:
             pass
 
     def _poll_loop(self):
-        """逻辑轮询循环（独立线程）"""
+        """逻辑轮询循环（独立线程）
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 性能优化说明                                                          ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 使用 is_api_down 属性替代完整的 snapshot()：                          ║
+        ║ - snapshot() 生成大量对象，开销较大                                   ║
+        ║ - 此处只需检查 api_down 状态来决定轮询间隔                            ║
+        ║ - is_api_down 是轻量级读取                                           ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
         while not self._stop:
             loop_start = time.monotonic()
             self.game.tick()
-            snap = self.game.snapshot()
-            interval = NetworkConfig.BACKOFF_MAX if snap.api_down else NetworkConfig.POLL_INTERVAL
+            # 使用轻量级属性替代完整snapshot
+            interval = NetworkConfig.BACKOFF_MAX if self.game.is_api_down else NetworkConfig.POLL_INTERVAL
             elapsed = time.monotonic() - loop_start
             time.sleep(max(0.0, interval - elapsed))
 
@@ -3500,8 +3576,25 @@ class App:
             self._update_mid_panel_layout()
 
     def _update_zone_display(self, snap: UISnapshot):
-        """更新战区显示（根据UISnapshot）"""
+        """更新战区显示（根据UISnapshot）
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 性能优化说明 - Label复用池                                            ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 此方法每50ms调用一次（20fps），避免以下性能陷阱：                      ║
+        ║                                                                      ║
+        ║ 1. 不销毁Label：使用 pack_forget() 隐藏，而非 destroy()               ║
+        ║ 2. Label复用：通过 _get_or_create_label() 从池中获取                  ║
+        ║ 3. 字体缓存：使用 _get_font() 而非每帧计算                            ║
+        ║ 4. 智能刷新：只在数量变化时调用 _recalc_size()                        ║
+        ║                                                                      ║
+        ║ 修改此方法时，确保：                                                  ║
+        ║ - 不要使用 lbl.destroy()，改用 lbl.pack_forget()                     ║
+        ║ - 新建Label时添加到对应的池中                                         ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
         s = self.scale
+        font_item = self._get_font('zone_item')
         
         # 更新航向显示
         if snap.player_heading > 0:
@@ -3520,7 +3613,6 @@ class App:
             self.zone_alert_lbl.config(text=alert_text, wraplength=wrap, justify="left")
             if not self.zone_alert_lbl.winfo_ismapped():
                 self.zone_alert_lbl.pack(fill="x", padx=int(8*s), pady=(0, int(4*s)), after=self.zone_title.master)
-            # v5.5: 只在感兴趣的战区被摧毁时播放音效
             if snap.should_play_destroyed_sound and not self._last_zone_destroyed_alert and self._zone_sound_enabled:
                 self.sound.play(pattern="zone_destroyed")
             self._last_zone_destroyed_alert = True
@@ -3529,51 +3621,74 @@ class App:
                 self.zone_alert_lbl.pack_forget()
             self._last_zone_destroyed_alert = False
         
-        # 清除旧战区标签
-        for lbl in self.zone_labels:
-            lbl.destroy()
-        self.zone_labels.clear()
+        # === 战区列表（使用Label复用池）===
+        # 先隐藏所有现有标签
+        for lbl in self._zone_label_pool:
+            lbl.pack_forget()
         
-        font_item = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
+        # 计算需要的标签数量
+        zone_count = len(snap.zones) if snap.zones else 1  # 至少1个（显示"无战区"）
+        if snap.is_deviating and snap.has_target:
+            zone_count += 1  # 偏航警告
         
-        # 无战区时显示提示
+        # 确保池中有足够的标签
+        while len(self._zone_label_pool) < zone_count:
+            lbl = tk.Label(self.zone_list_frame, text="", font=font_item, 
+                          fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
+            self._zone_label_pool.append(lbl)
+        
+        # 更新并显示标签
+        idx = 0
         if not snap.zones:
-            empty_lbl = tk.Label(self.zone_list_frame, text="无战区", font=font_item, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            empty_lbl.pack(fill="x")
-            self.zone_labels.append(empty_lbl)
-        
-        # 显示战区列表
-        for zone in snap.zones:
-            marker = "➤" if zone.is_target else "○"
-            dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
-            rel_sign = "+" if zone.relative > 0 else ""
-            rel_text = f"{rel_sign}{int(zone.relative)}°"
-            
-            text = f"{marker} {zone.direction} {dist_text}  ({rel_text})"
-            
-            if zone.ete_str:
-                text += f"   ⏱️{zone.ete_str}"
-            
-            fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
-            
-            lbl = tk.Label(self.zone_list_frame, text=text, font=font_item, fg=fg, bg=Theme.GRAYPILL, anchor="w")
+            lbl = self._zone_label_pool[idx]
+            lbl.config(text="无战区", fg=Theme.TEXT_MUTED)
             lbl.pack(fill="x")
-            self.zone_labels.append(lbl)
+            idx += 1
+        else:
+            for zone in snap.zones:
+                marker = "➤" if zone.is_target else "○"
+                dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
+                rel_sign = "+" if zone.relative > 0 else ""
+                rel_text = f"{rel_sign}{int(zone.relative)}°"
+                text = f"{marker} {zone.direction} {dist_text}  ({rel_text})"
+                if zone.ete_str:
+                    text += f"   ⏱️{zone.ete_str}"
+                fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
+                
+                lbl = self._zone_label_pool[idx]
+                lbl.config(text=text, fg=fg)
+                lbl.pack(fill="x")
+                idx += 1
         
         # 偏航警告
         if snap.is_deviating and snap.has_target:
             warn_text = f"⚠️ 偏航 ({int(snap.deviation_angle):+d}°)"
-            warn_lbl = tk.Label(self.zone_list_frame, text=warn_text, font=font_item, fg=Theme.ORANGE, bg=Theme.GRAYPILL, anchor="w")
-            warn_lbl.pack(fill="x", pady=(int(4*s), 0))
-            self.zone_labels.append(warn_lbl)
+            lbl = self._zone_label_pool[idx]
+            lbl.config(text=warn_text, fg=Theme.ORANGE)
+            lbl.pack(fill="x", pady=(int(4*s), 0))
+            idx += 1
 
-        # === 机场导航显示 ===
-        for lbl in getattr(self, "airport_labels", []):
-            lbl.destroy()
-        if hasattr(self, "airport_labels"):
-            self.airport_labels.clear()
-
-        # 友方机场（最近的）
+        # === 机场导航（使用Label复用池）===
+        for lbl in self._airport_label_pool:
+            lbl.pack_forget()
+        
+        # 计算需要的机场标签数量
+        airport_count = 0
+        if snap.friendly_airfield:
+            airport_count += 1
+        if snap.enemy_airfields:
+            airport_count += len(snap.enemy_airfields)
+        if airport_count == 0:
+            airport_count = 1  # "无机场数据"
+        
+        # 确保池中有足够的标签
+        while len(self._airport_label_pool) < airport_count:
+            lbl = tk.Label(self.airport_list_frame, text="", font=font_item,
+                          fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
+            self._airport_label_pool.append(lbl)
+        
+        # 更新并显示机场标签
+        ap_idx = 0
         if snap.friendly_airfield:
             af = snap.friendly_airfield
             dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
@@ -3582,11 +3697,11 @@ class App:
             text = f"🟢 ➤ {af.direction} {dist_text}  ({rel_text})"
             if af.ete_str:
                 text += f"   ⏱️{af.ete_str}"
-            lbl = tk.Label(self.airport_list_frame, text=text, font=font_item, fg=Theme.GREEN, bg=Theme.GRAYPILL, anchor="w")
+            lbl = self._airport_label_pool[ap_idx]
+            lbl.config(text=text, fg=Theme.GREEN)
             lbl.pack(fill="x")
-            self.airport_labels.append(lbl)
-
-        # 敌方机场（所有）
+            ap_idx += 1
+        
         if snap.enemy_airfields:
             for af in snap.enemy_airfields:
                 marker = "➤" if af.is_target else "○"
@@ -3597,17 +3712,27 @@ class App:
                 if af.ete_str:
                     text += f"   ⏱️{af.ete_str}"
                 fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
-                lbl = tk.Label(self.airport_list_frame, text=text, font=font_item, fg=fg, bg=Theme.GRAYPILL, anchor="w")
+                lbl = self._airport_label_pool[ap_idx]
+                lbl.config(text=text, fg=fg)
                 lbl.pack(fill="x")
-                self.airport_labels.append(lbl)
-
-        if (not snap.friendly_airfield) and (not snap.enemy_airfields):
-            empty_lbl = tk.Label(self.airport_list_frame, text="无机场数据", font=font_item, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            empty_lbl.pack(fill="x")
-            self.airport_labels.append(empty_lbl)
-
+                ap_idx += 1
+        
+        if ap_idx == 0:
+            lbl = self._airport_label_pool[0]
+            lbl.config(text="无机场数据", fg=Theme.TEXT_MUTED)
+            lbl.pack(fill="x")
+            ap_idx = 1
+        
         # === v5.8 新增：燃油信息更新 ===
         self._update_fuel_display(snap, font_item)
+        
+        # 智能触发尺寸重算（只在数量变化时）
+        total_count = zone_count + airport_count
+        if total_count != (self._last_zone_count + self._last_airport_count):
+            self._last_zone_count = zone_count
+            self._last_airport_count = airport_count
+            return True  # 需要重算尺寸
+        return False  # 不需要重算
 
     def _update_fuel_display(self, snap: UISnapshot, font_item):
         """更新燃油信息显示（v5.8 新增）"""
@@ -3678,7 +3803,18 @@ class App:
             self.fuel_return_lbl.config(text="🏠 返航: 无机场数据", fg=Theme.TEXT_MUTED)
 
     def _update_ui(self):
-        """UI更新循环（20fps）"""
+        """UI更新循环（20fps）
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 性能优化说明                                                          ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 此方法每50ms调用一次，是UI的主要性能热点。优化措施：                   ║
+        ║                                                                      ║
+        ║ 1. _update_zone_display() 返回是否需要重算尺寸                       ║
+        ║ 2. 只在面板可见性变化或内容数量变化时调用 _recalc_size()              ║
+        ║ 3. 使用缓存字体和Label复用池                                          ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
         if self._stop:
             return
         
@@ -3692,8 +3828,10 @@ class App:
         )
         self._set_zone_panel_visible(show_zones)
         if show_zones: 
-            self._update_zone_display(snap)
-            self._recalc_size()
+            # _update_zone_display 返回是否需要重算尺寸
+            need_recalc = self._update_zone_display(snap)
+            if need_recalc:
+                self._recalc_size()
 
         show_chk = (snap.phase == Phase.ALIVE) and (snap.on_ground or snap.landed_flash) and (not snap.api_down)
         self._set_checklist_visible(show_chk)
