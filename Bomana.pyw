@@ -3,7 +3,7 @@
 """
 ===============================================================================
 War Thunder SB Timer - 战雷全真模式收益计时器
-软件名：Bomana（因为战区猴子喜欢炸弹和香蕉）
+软件名：Bomana
 ===============================================================================
 
 项目说明：
@@ -260,14 +260,32 @@ class UIConfig:
 class HotkeyConfig:
     """热键配置
     
-    全局热键使用F7-F11，避免与游戏冲突。
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║ 快捷键自定义说明                                                      ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║ 支持的功能键：F1-F12                                                  ║
+    ║ 默认绑定：F7=重置, F8=锁定, F9=角落, F10=声音, F11=战区               ║
+    ║                                                                      ║
+    ║ 修改快捷键：在设置对话框中选择新的功能键                               ║
+    ║ 注意：避免与游戏快捷键冲突（如F1-F4通常被游戏占用）                    ║
+    ╚══════════════════════════════════════════════════════════════════════╝
     """
-    # 虚拟键码定义（Windows VK codes）
-    VK_F7 = 0x76   # 重置计时器
-    VK_F8 = 0x77   # 锁定/解锁
-    VK_F9 = 0x78   # 切换角落
-    VK_F10 = 0x79  # 声音开关
-    VK_F11 = 0x7A  # 战区提示音
+    # 功能键VK码映射表
+    VK_CODES = {
+        "F1": 0x70, "F2": 0x71, "F3": 0x72, "F4": 0x73,
+        "F5": 0x74, "F6": 0x75, "F7": 0x76, "F8": 0x77,
+        "F9": 0x78, "F10": 0x79, "F11": 0x7A, "F12": 0x7B,
+    }
+    
+    # 可用功能键列表（供UI选择）
+    AVAILABLE_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
+    
+    # 当前绑定（可运行时修改）
+    KEY_RESET = "F7"     # 重置计时器
+    KEY_LOCK = "F8"      # 锁定/解锁
+    KEY_CORNER = "F9"    # 切换角落
+    KEY_BEEP = "F10"     # 声音开关
+    KEY_ZONES = "F11"    # 战区提示音
     
     # 热键ID（用于注册/注销）
     HK_ID_RESET = 7007
@@ -278,6 +296,36 @@ class HotkeyConfig:
     
     # 全局热键开关（用户可配置）
     GLOBAL_HOTKEYS = True
+    
+    @classmethod
+    def get_vk(cls, key_name: str) -> int:
+        """获取功能键的VK码"""
+        return cls.VK_CODES.get(key_name, 0)
+    
+    @classmethod
+    def get_bindings(cls) -> dict:
+        """获取当前所有绑定"""
+        return {
+            "reset": cls.KEY_RESET,
+            "lock": cls.KEY_LOCK,
+            "corner": cls.KEY_CORNER,
+            "beep": cls.KEY_BEEP,
+            "zones": cls.KEY_ZONES,
+        }
+    
+    @classmethod
+    def set_bindings(cls, bindings: dict) -> None:
+        """设置绑定"""
+        if "reset" in bindings:
+            cls.KEY_RESET = bindings["reset"]
+        if "lock" in bindings:
+            cls.KEY_LOCK = bindings["lock"]
+        if "corner" in bindings:
+            cls.KEY_CORNER = bindings["corner"]
+        if "beep" in bindings:
+            cls.KEY_BEEP = bindings["beep"]
+        if "zones" in bindings:
+            cls.KEY_ZONES = bindings["zones"]
 
 
 class SoundConfig:
@@ -341,22 +389,155 @@ class ChecklistConfig:
 
 
 class Theme:
-    """颜色主题（GitHub Dark风格）
+    """颜色主题基类
     
-    所有颜色使用十六进制表示，便于调整整体风格。
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║ 主题系统说明                                                          ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║ 提供3套预设主题：Dark（默认）、Light、HighContrast                    ║
+    ║                                                                      ║
+    ║ 添加新主题步骤：                                                      ║
+    ║ 1. 在 THEMES 字典中添加新主题定义                                     ║
+    ║ 2. 确保包含所有必要的颜色键                                           ║
+    ║ 3. 调用 Theme.apply(name) 应用主题                                   ║
+    ║                                                                      ║
+    ║ 运行时切换主题需要重启应用才能完全生效（tkinter限制）                  ║
+    ╚══════════════════════════════════════════════════════════════════════╝
     """
-    BG = "#0a0e13"           # 背景色（深黑）
-    BORDER = "#30363d"       # 边框色
-    TEXT = "#e6edf3"         # 主文本色
-    TEXT_DIM = "#8b949e"     # 次要文本色
-    TEXT_MUTED = "#484f58"   # 弱化文本色
-    GREEN = "#3fb950"        # 成功/正常状态
-    YELLOW = "#d29922"       # 警告状态
-    RED = "#f85149"          # 危险状态
-    BLUE = "#58a6ff"         # 进度/信息状态
-    ORANGE = "#f0883e"       # 偏航/次要警告
-    GRAYPILL = "#161b22"     # 徽章背景
-    SEPARATOR = "#21262d"    # 分隔线
+    # 当前活动主题名称
+    _current = "dark"
+    
+    # 预设主题定义
+    THEMES = {
+        "dark": {
+            "name": "暗色 (Dark)",
+            "BG": "#0a0e13",
+            "BORDER": "#30363d",
+            "TEXT": "#e6edf3",
+            "TEXT_DIM": "#8b949e",
+            "TEXT_MUTED": "#484f58",
+            "GREEN": "#3fb950",
+            "YELLOW": "#d29922",
+            "RED": "#f85149",
+            "BLUE": "#58a6ff",
+            "ORANGE": "#f0883e",
+            "GRAYPILL": "#161b22",
+            "SEPARATOR": "#21262d",
+        },
+        "light": {
+            "name": "亮色 (Light)",
+            "BG": "#ffffff",
+            "BORDER": "#d0d7de",
+            "TEXT": "#1f2328",
+            "TEXT_DIM": "#656d76",
+            "TEXT_MUTED": "#8c959f",
+            "GREEN": "#1a7f37",
+            "YELLOW": "#9a6700",
+            "RED": "#cf222e",
+            "BLUE": "#0969da",
+            "ORANGE": "#bc4c00",
+            "GRAYPILL": "#f6f8fa",
+            "SEPARATOR": "#d8dee4",
+        },
+        "high_contrast": {
+            "name": "高对比度",
+            "BG": "#000000",
+            "BORDER": "#ffffff",
+            "TEXT": "#ffffff",
+            "TEXT_DIM": "#ffff00",
+            "TEXT_MUTED": "#808080",
+            "GREEN": "#00ff00",
+            "YELLOW": "#ffff00",
+            "RED": "#ff0000",
+            "BLUE": "#00ffff",
+            "ORANGE": "#ffa500",
+            "GRAYPILL": "#1a1a1a",
+            "SEPARATOR": "#404040",
+        },
+    }
+    
+    # 默认颜色值（使用暗色主题）
+    BG = "#0a0e13"
+    BORDER = "#30363d"
+    TEXT = "#e6edf3"
+    TEXT_DIM = "#8b949e"
+    TEXT_MUTED = "#484f58"
+    GREEN = "#3fb950"
+    YELLOW = "#d29922"
+    RED = "#f85149"
+    BLUE = "#58a6ff"
+    ORANGE = "#f0883e"
+    GRAYPILL = "#161b22"
+    SEPARATOR = "#21262d"
+    
+    @classmethod
+    def apply(cls, theme_name: str) -> bool:
+        """应用指定主题
+        
+        Args:
+            theme_name: 主题名称 ("dark", "light", "high_contrast")
+        
+        Returns:
+            是否成功应用
+        """
+        if theme_name not in cls.THEMES:
+            return False
+        
+        theme = cls.THEMES[theme_name]
+        cls._current = theme_name
+        
+        # 更新类属性
+        cls.BG = theme["BG"]
+        cls.BORDER = theme["BORDER"]
+        cls.TEXT = theme["TEXT"]
+        cls.TEXT_DIM = theme["TEXT_DIM"]
+        cls.TEXT_MUTED = theme["TEXT_MUTED"]
+        cls.GREEN = theme["GREEN"]
+        cls.YELLOW = theme["YELLOW"]
+        cls.RED = theme["RED"]
+        cls.BLUE = theme["BLUE"]
+        cls.ORANGE = theme["ORANGE"]
+        cls.GRAYPILL = theme["GRAYPILL"]
+        cls.SEPARATOR = theme["SEPARATOR"]
+        
+        return True
+    
+    @classmethod
+    def get_current(cls) -> str:
+        """获取当前主题名称"""
+        return cls._current
+    
+    @classmethod
+    def get_theme_names(cls) -> list:
+        """获取所有主题名称列表"""
+        return list(cls.THEMES.keys())
+    
+    @classmethod
+    def get_theme_display_name(cls, theme_name: str) -> str:
+        """获取主题的显示名称"""
+        if theme_name in cls.THEMES:
+            return cls.THEMES[theme_name]["name"]
+        return theme_name
+
+
+class PanelConfig:
+    """面板显示配置
+    
+    控制各个信息面板的显示/隐藏状态。
+    """
+    # 默认全部显示
+    show_zones = True        # 战区导航
+    show_airfields = True    # 机场导航
+    show_fuel = True         # 燃油管理
+    show_checklist = True    # 检查清单
+
+
+class SnapConfig:
+    """窗口吸附配置"""
+    # 吸附距离（像素）：窗口边缘距离屏幕边缘小于此值时自动吸附
+    SNAP_DISTANCE = 20
+    # 是否启用吸附
+    enabled = True
 
 
 # ============================================================================
@@ -619,9 +800,138 @@ class Win32:
         except (OSError, AttributeError):
             pass
 
-
-# 全局互斥锁句柄（防止多开）
-_MUTEX_HANDLE = None
+    @classmethod
+    def get_all_monitors(cls) -> List[Dict[str, Any]]:
+        """获取所有显示器信息
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 多显示器支持说明                                                      ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 返回所有显示器的工作区域（排除任务栏）                                 ║
+        ║ 用于：                                                               ║
+        ║ 1. 记忆窗口在哪个显示器上                                             ║
+        ║ 2. 窗口吸附到显示器边缘                                               ║
+        ║ 3. 确保窗口不超出可见区域                                             ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        
+        Returns:
+            显示器信息列表 [{"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1080}, ...]
+        """
+        monitors = []
+        
+        try:
+            # 定义回调函数类型
+            MONITORENUMPROC = ctypes.WINFUNCTYPE(
+                ctypes.c_int,
+                ctypes.c_void_p,  # hMonitor
+                ctypes.c_void_p,  # hdcMonitor
+                ctypes.POINTER(ctypes.c_long * 4),  # lprcMonitor (RECT)
+                ctypes.c_void_p   # dwData
+            )
+            
+            # MONITORINFO 结构体
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", ctypes.c_uint),
+                    ("rcMonitor", ctypes.c_long * 4),  # 显示器完整区域
+                    ("rcWork", ctypes.c_long * 4),     # 工作区域（排除任务栏）
+                    ("dwFlags", ctypes.c_uint),
+                ]
+            
+            monitor_list = []
+            
+            def callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
+                info = MONITORINFO()
+                info.cbSize = ctypes.sizeof(MONITORINFO)
+                cls.user32.GetMonitorInfoW(hMonitor, ctypes.byref(info))
+                
+                # 使用工作区域（排除任务栏）
+                work = info.rcWork
+                monitor_list.append({
+                    "index": len(monitor_list),
+                    "x": work[0],
+                    "y": work[1],
+                    "width": work[2] - work[0],
+                    "height": work[3] - work[1],
+                    "is_primary": bool(info.dwFlags & 1),
+                })
+                return 1  # 继续枚举
+            
+            # 枚举所有显示器
+            enum_proc = MONITORENUMPROC(callback)
+            cls.user32.EnumDisplayMonitors(None, None, enum_proc, 0)
+            
+            monitors = monitor_list
+        except (OSError, AttributeError, Exception):
+            # 失败时返回主屏幕
+            w, h = cls.screen_size()
+            monitors = [{"index": 0, "x": 0, "y": 0, "width": w, "height": h, "is_primary": True}]
+        
+        return monitors if monitors else [{"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1080, "is_primary": True}]
+    
+    @classmethod
+    def get_monitor_at(cls, x: int, y: int) -> Optional[Dict[str, Any]]:
+        """获取指定坐标所在的显示器
+        
+        Args:
+            x, y: 屏幕坐标
+        
+        Returns:
+            显示器信息字典，或None
+        """
+        monitors = cls.get_all_monitors()
+        for mon in monitors:
+            if (mon["x"] <= x < mon["x"] + mon["width"] and
+                mon["y"] <= y < mon["y"] + mon["height"]):
+                return mon
+        # 默认返回主显示器
+        for mon in monitors:
+            if mon.get("is_primary"):
+                return mon
+        return monitors[0] if monitors else None
+    
+    @classmethod
+    def snap_to_edges(cls, x: int, y: int, w: int, h: int, snap_dist: int = 20) -> Tuple[int, int]:
+        """计算窗口吸附后的位置
+        
+        Args:
+            x, y: 窗口左上角坐标
+            w, h: 窗口尺寸
+            snap_dist: 吸附距离
+        
+        Returns:
+            吸附后的 (x, y) 坐标
+        """
+        # 获取窗口所在的显示器
+        center_x = x + w // 2
+        center_y = y + h // 2
+        monitor = cls.get_monitor_at(center_x, center_y)
+        
+        if not monitor:
+            return x, y
+        
+        mon_x = monitor["x"]
+        mon_y = monitor["y"]
+        mon_w = monitor["width"]
+        mon_h = monitor["height"]
+        
+        new_x, new_y = x, y
+        
+        # 左边缘吸附
+        if abs(x - mon_x) < snap_dist:
+            new_x = mon_x
+        # 右边缘吸附
+        elif abs((x + w) - (mon_x + mon_w)) < snap_dist:
+            new_x = mon_x + mon_w - w
+        
+        # 上边缘吸附
+        if abs(y - mon_y) < snap_dist:
+            new_y = mon_y
+        # 下边缘吸附
+        elif abs((y + h) - (mon_y + mon_h)) < snap_dist:
+            new_y = mon_y + mon_h - h
+        
+        return new_x, new_y
 
 
 class SingleInstanceManager:
@@ -2509,12 +2819,20 @@ class Pill(tk.Label):
 class SettingsDialog(tk.Toplevel):
     """设置对话框
     
-    提供透明度、缩放、热键等配置选项。
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║ 设置对话框说明                                                        ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║ 使用选项卡组织设置项：                                                 ║
+    ║ - 显示：透明度、缩放、主题                                            ║
+    ║ - 面板：各信息面板的显示开关                                          ║
+    ║ - 快捷键：自定义热键绑定                                              ║
+    ║ - 其他：吸附、全局热键等                                              ║
+    ╚══════════════════════════════════════════════════════════════════════╝
     """
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
-        self.title("设置")
+        self.title("⚙️ 设置")
         self.resizable(False, False)
         self.configure(bg=Theme.BG)
         self.transient(parent)
@@ -2523,38 +2841,269 @@ class SettingsDialog(tk.Toplevel):
         self._center_on_parent(parent)
     
     def _build_ui(self):
+        # 主容器
         main = tk.Frame(self, bg=Theme.BG)
-        main.pack(padx=20, pady=15)
+        main.pack(padx=15, pady=10, fill="both", expand=True)
         
-        # 透明度滑块
-        tk.Label(main, text="窗口透明度:", bg=Theme.BG, fg=Theme.TEXT).grid(row=0, column=0, sticky="w", pady=5)
-        self.alpha_var = tk.IntVar(value=UIConfig.WINDOW_ALPHA)
-        tk.Scale(main, from_=100, to=255, orient="horizontal", length=200, variable=self.alpha_var, 
-                 bg=Theme.BG, fg=Theme.TEXT, highlightthickness=0, 
-                 troughcolor=Theme.BORDER, activebackground=Theme.BLUE).grid(row=0, column=1, padx=10, pady=5)
+        # 创建选项卡（使用Frame模拟，因为ttk样式在透明窗口中有问题）
+        self.tab_buttons_frame = tk.Frame(main, bg=Theme.BG)
+        self.tab_buttons_frame.pack(fill="x", pady=(0, 10))
         
-        # 缩放滑块
-        tk.Label(main, text="UI缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(row=1, column=0, sticky="w", pady=5)
-        self.scale_var = tk.DoubleVar(value=UIConfig.UI_SCALE_MULT)
-        tk.Scale(main, from_=0.6, to=1.2, resolution=0.05, orient="horizontal", length=200, 
-                 variable=self.scale_var, bg=Theme.BG, fg=Theme.TEXT, highlightthickness=0, 
-                 troughcolor=Theme.BORDER, activebackground=Theme.BLUE).grid(row=1, column=1, padx=10, pady=5)
+        self.tabs = ["显示", "面板", "快捷键", "其他"]
+        self.tab_frames = {}
+        self.tab_btns = {}
+        self.current_tab = "显示"
         
-        # 热键开关
-        tk.Label(main, text="全局热键:", bg=Theme.BG, fg=Theme.TEXT).grid(row=2, column=0, sticky="w", pady=5)
-        self.hotkeys_var = tk.BooleanVar(value=HotkeyConfig.GLOBAL_HOTKEYS)
-        tk.Checkbutton(main, text="启用", variable=self.hotkeys_var, 
-                      bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL, 
-                      activebackground=Theme.BG, activeforeground=Theme.TEXT, 
-                      highlightthickness=0).grid(row=2, column=1, sticky="w", padx=10, pady=5)
+        # 选项卡按钮
+        for tab in self.tabs:
+            btn = tk.Button(
+                self.tab_buttons_frame, text=tab, 
+                bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=12, pady=4,
+                command=lambda t=tab: self._switch_tab(t)
+            )
+            btn.pack(side="left", padx=2)
+            self.tab_btns[tab] = btn
+        
+        # 选项卡内容容器
+        self.content_frame = tk.Frame(main, bg=Theme.BG)
+        self.content_frame.pack(fill="both", expand=True)
+        
+        # 创建各选项卡页面
+        self._build_display_tab()
+        self._build_panel_tab()
+        self._build_hotkey_tab()
+        self._build_other_tab()
         
         # 按钮行
         btn_frame = tk.Frame(main, bg=Theme.BG)
-        btn_frame.grid(row=3, column=0, columnspan=2, pady=(15, 0))
+        btn_frame.pack(fill="x", pady=(15, 0))
         tk.Button(btn_frame, text="保存", command=self._save, 
-                 bg=Theme.BLUE, fg=Theme.TEXT, bd=0, padx=20, pady=5).pack(side="left", padx=5)
+                 bg=Theme.BLUE, fg=Theme.TEXT, bd=0, padx=20, pady=5).pack(side="right", padx=5)
         tk.Button(btn_frame, text="取消", command=self.destroy, 
-                 bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=20, pady=5).pack(side="left", padx=5)
+                 bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=20, pady=5).pack(side="right", padx=5)
+        
+        # 显示第一个选项卡
+        self._switch_tab("显示")
+    
+    def _switch_tab(self, tab_name: str):
+        """切换选项卡"""
+        # 隐藏所有页面
+        for frame in self.tab_frames.values():
+            frame.pack_forget()
+        
+        # 更新按钮样式
+        for name, btn in self.tab_btns.items():
+            if name == tab_name:
+                btn.config(bg=Theme.BLUE)
+            else:
+                btn.config(bg=Theme.GRAYPILL)
+        
+        # 显示当前页面
+        if tab_name in self.tab_frames:
+            self.tab_frames[tab_name].pack(fill="both", expand=True)
+        
+        self.current_tab = tab_name
+    
+    def _build_display_tab(self):
+        """构建显示设置页"""
+        frame = tk.Frame(self.content_frame, bg=Theme.BG)
+        self.tab_frames["显示"] = frame
+        
+        row = 0
+        
+        # 透明度
+        tk.Label(frame, text="窗口透明度:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        self.alpha_var = tk.IntVar(value=UIConfig.WINDOW_ALPHA)
+        tk.Scale(frame, from_=100, to=255, orient="horizontal", length=180, 
+                variable=self.alpha_var, bg=Theme.BG, fg=Theme.TEXT, 
+                highlightthickness=0, troughcolor=Theme.BORDER, 
+                activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
+        row += 1
+        
+        # 缩放
+        tk.Label(frame, text="UI缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        self.scale_var = tk.DoubleVar(value=UIConfig.UI_SCALE_MULT)
+        tk.Scale(frame, from_=0.6, to=1.2, resolution=0.05, orient="horizontal", 
+                length=180, variable=self.scale_var, bg=Theme.BG, fg=Theme.TEXT, 
+                highlightthickness=0, troughcolor=Theme.BORDER, 
+                activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
+        row += 1
+        
+        # 主题选择
+        tk.Label(frame, text="颜色主题:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        theme_frame = tk.Frame(frame, bg=Theme.BG)
+        theme_frame.grid(row=row, column=1, sticky="w", padx=10, pady=5)
+        
+        self.theme_var = tk.StringVar(value=Theme.get_current())
+        for theme_name in Theme.get_theme_names():
+            display_name = Theme.get_theme_display_name(theme_name)
+            tk.Radiobutton(
+                theme_frame, text=display_name, variable=self.theme_var, value=theme_name,
+                bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+                activebackground=Theme.BG, activeforeground=Theme.TEXT,
+                highlightthickness=0
+            ).pack(anchor="w")
+        row += 1
+        
+        # 主题提示
+        tk.Label(frame, text="* 主题更改需要重启生效", bg=Theme.BG, fg=Theme.TEXT_MUTED,
+                font=("Segoe UI", 8)).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
+    
+    def _build_panel_tab(self):
+        """构建面板设置页"""
+        frame = tk.Frame(self.content_frame, bg=Theme.BG)
+        self.tab_frames["面板"] = frame
+        
+        tk.Label(frame, text="选择显示的信息面板:", bg=Theme.BG, fg=Theme.TEXT).pack(
+            anchor="w", pady=(0, 10))
+        
+        # 面板开关
+        self.panel_vars = {}
+        panels = [
+            ("show_zones", "🎯 战区导航", "显示战区位置和距离"),
+            ("show_airfields", "🛫 机场导航", "显示友方/敌方机场"),
+            ("show_fuel", "⛽ 燃油管理", "显示油量和返航估算"),
+            ("show_checklist", "✅ 出击检查", "显示起飞前检查清单"),
+        ]
+        
+        for key, label, desc in panels:
+            var = tk.BooleanVar(value=getattr(PanelConfig, key))
+            self.panel_vars[key] = var
+            
+            item_frame = tk.Frame(frame, bg=Theme.BG)
+            item_frame.pack(fill="x", pady=3)
+            
+            tk.Checkbutton(
+                item_frame, text=label, variable=var,
+                bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+                activebackground=Theme.BG, activeforeground=Theme.TEXT,
+                highlightthickness=0, anchor="w"
+            ).pack(side="left")
+            
+            tk.Label(item_frame, text=f"  - {desc}", bg=Theme.BG, fg=Theme.TEXT_DIM,
+                    font=("Segoe UI", 8)).pack(side="left")
+    
+    def _build_hotkey_tab(self):
+        """构建快捷键设置页"""
+        frame = tk.Frame(self.content_frame, bg=Theme.BG)
+        self.tab_frames["快捷键"] = frame
+        
+        tk.Label(frame, text="自定义快捷键绑定:", bg=Theme.BG, fg=Theme.TEXT).pack(
+            anchor="w", pady=(0, 10))
+        
+        # 快捷键配置
+        self.hotkey_vars = {}
+        hotkeys = [
+            ("reset", "重置计时器", HotkeyConfig.KEY_RESET),
+            ("lock", "锁定/解锁", HotkeyConfig.KEY_LOCK),
+            ("corner", "切换角落", HotkeyConfig.KEY_CORNER),
+            ("beep", "声音开关", HotkeyConfig.KEY_BEEP),
+            ("zones", "战区提示音", HotkeyConfig.KEY_ZONES),
+        ]
+        
+        for key, label, current in hotkeys:
+            row_frame = tk.Frame(frame, bg=Theme.BG)
+            row_frame.pack(fill="x", pady=3)
+            
+            tk.Label(row_frame, text=f"{label}:", bg=Theme.BG, fg=Theme.TEXT, 
+                    width=12, anchor="w").pack(side="left")
+            
+            var = tk.StringVar(value=current)
+            self.hotkey_vars[key] = var
+            
+            # 下拉选择框
+            menu_btn = tk.Menubutton(
+                row_frame, textvariable=var, bg=Theme.GRAYPILL, fg=Theme.TEXT,
+                bd=0, padx=10, pady=2, highlightthickness=1, 
+                highlightbackground=Theme.BORDER, relief="flat"
+            )
+            menu_btn.pack(side="left", padx=(10, 0))
+            
+            menu = tk.Menu(menu_btn, tearoff=0, bg=Theme.GRAYPILL, fg=Theme.TEXT)
+            for fkey in HotkeyConfig.AVAILABLE_KEYS:
+                menu.add_command(label=fkey, command=lambda v=var, k=fkey: v.set(k))
+            menu_btn["menu"] = menu
+        
+        # 提示
+        tk.Label(frame, text="* 避免与游戏快捷键冲突\n* 更改后需要重启热键服务", 
+                bg=Theme.BG, fg=Theme.TEXT_MUTED, font=("Segoe UI", 8),
+                justify="left").pack(anchor="w", pady=(15, 0))
+    
+    def _build_other_tab(self):
+        """构建其他设置页"""
+        frame = tk.Frame(self.content_frame, bg=Theme.BG)
+        self.tab_frames["其他"] = frame
+        
+        row = 0
+        
+        # 全局热键开关
+        tk.Label(frame, text="全局热键:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        self.hotkeys_enabled_var = tk.BooleanVar(value=HotkeyConfig.GLOBAL_HOTKEYS)
+        tk.Checkbutton(
+            frame, text="启用全局热键", variable=self.hotkeys_enabled_var,
+            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG, activeforeground=Theme.TEXT,
+            highlightthickness=0
+        ).grid(row=row, column=1, sticky="w", padx=10, pady=5)
+        row += 1
+        
+        # 窗口吸附
+        tk.Label(frame, text="窗口吸附:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        self.snap_var = tk.BooleanVar(value=SnapConfig.enabled)
+        tk.Checkbutton(
+            frame, text="拖动时吸附到屏幕边缘", variable=self.snap_var,
+            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG, activeforeground=Theme.TEXT,
+            highlightthickness=0
+        ).grid(row=row, column=1, sticky="w", padx=10, pady=5)
+        row += 1
+        
+        # 吸附距离
+        tk.Label(frame, text="吸附距离:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        self.snap_dist_var = tk.IntVar(value=SnapConfig.SNAP_DISTANCE)
+        tk.Scale(frame, from_=5, to=50, orient="horizontal", length=150, 
+                variable=self.snap_dist_var, bg=Theme.BG, fg=Theme.TEXT, 
+                highlightthickness=0, troughcolor=Theme.BORDER, 
+                activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5, sticky="w")
+        row += 1
+        
+        # 分隔线
+        tk.Frame(frame, bg=Theme.SEPARATOR, height=1).grid(
+            row=row, column=0, columnspan=2, sticky="ew", pady=10)
+        row += 1
+        
+        # 重置按钮
+        tk.Button(frame, text="重置所有设置为默认", command=self._reset_defaults,
+                 bg=Theme.YELLOW, fg=Theme.BG, bd=0, padx=15, pady=5).grid(
+            row=row, column=0, columnspan=2, pady=10)
+    
+    def _reset_defaults(self):
+        """重置为默认设置"""
+        if messagebox.askyesno("确认", "确定要重置所有设置为默认值吗？", parent=self):
+            # 重置显示设置
+            self.alpha_var.set(210)
+            self.scale_var.set(0.85)
+            self.theme_var.set("dark")
+            
+            # 重置面板设置
+            for key in self.panel_vars:
+                self.panel_vars[key].set(True)
+            
+            # 重置快捷键
+            defaults = {"reset": "F7", "lock": "F8", "corner": "F9", "beep": "F10", "zones": "F11"}
+            for key, val in defaults.items():
+                self.hotkey_vars[key].set(val)
+            
+            # 重置其他设置
+            self.hotkeys_enabled_var.set(True)
+            self.snap_var.set(True)
+            self.snap_dist_var.set(20)
     
     def _center_on_parent(self, parent):
         """居中显示"""
@@ -2564,23 +3113,57 @@ class SettingsDialog(tk.Toplevel):
         self.geometry(f"+{x}+{y}")
     
     def _save(self):
-        """保存设置"""
+        """保存所有设置"""
+        # 收集设置值
+        config = ConfigManager.load()
+        
+        # 显示设置
         UIConfig.WINDOW_ALPHA = self.alpha_var.get()
         UIConfig.UI_SCALE_MULT = self.scale_var.get()
-        old_hotkeys = HotkeyConfig.GLOBAL_HOTKEYS
-        HotkeyConfig.GLOBAL_HOTKEYS = self.hotkeys_var.get()
+        new_theme = self.theme_var.get()
+        old_theme = Theme.get_current()
         
-        config = ConfigManager.load()
         config['alpha'] = UIConfig.WINDOW_ALPHA
         config['scale'] = UIConfig.UI_SCALE_MULT
+        config['theme'] = new_theme
+        
+        # 面板设置
+        panel_config = {}
+        for key, var in self.panel_vars.items():
+            setattr(PanelConfig, key, var.get())
+            panel_config[key] = var.get()
+        config['panels'] = panel_config
+        
+        # 快捷键设置
+        old_hotkeys_enabled = HotkeyConfig.GLOBAL_HOTKEYS
+        HotkeyConfig.GLOBAL_HOTKEYS = self.hotkeys_enabled_var.get()
+        
+        hotkey_bindings = {}
+        for key, var in self.hotkey_vars.items():
+            hotkey_bindings[key] = var.get()
+        HotkeyConfig.set_bindings(hotkey_bindings)
+        
         config['global_hotkeys'] = HotkeyConfig.GLOBAL_HOTKEYS
+        config['hotkey_bindings'] = hotkey_bindings
+        
+        # 吸附设置
+        SnapConfig.enabled = self.snap_var.get()
+        SnapConfig.SNAP_DISTANCE = self.snap_dist_var.get()
+        config['snap_enabled'] = SnapConfig.enabled
+        config['snap_distance'] = SnapConfig.SNAP_DISTANCE
+        
+        # 保存配置
         ConfigManager.save(config)
         
         # 应用透明度
         Win32.setup_window(self.app.hwnd, self.app._locked, UIConfig.WINDOW_ALPHA)
         
-        # 重启热键（如果设置改变）
-        if old_hotkeys != HotkeyConfig.GLOBAL_HOTKEYS:
+        # 重启热键服务（如果需要）
+        need_restart_hotkeys = (
+            old_hotkeys_enabled != HotkeyConfig.GLOBAL_HOTKEYS or
+            hotkey_bindings != HotkeyConfig.get_bindings()
+        )
+        if need_restart_hotkeys:
             if hasattr(self.app, '_ghk') and self.app._ghk:
                 self.app._ghk.stop()
             if HotkeyConfig.GLOBAL_HOTKEYS:
@@ -2588,7 +3171,15 @@ class SettingsDialog(tk.Toplevel):
                 if hasattr(self.app, '_ghk') and self.app._ghk:
                     self.app._ghk.start()
         
-        messagebox.showinfo("设置", "设置已保存\n部分更改需要重启生效", parent=self)
+        # 应用主题（需要重启）
+        theme_changed = new_theme != old_theme
+        Theme.apply(new_theme)
+        
+        if theme_changed:
+            messagebox.showinfo("设置", "设置已保存\n主题更改需要重启应用生效", parent=self)
+        else:
+            messagebox.showinfo("设置", "设置已保存", parent=self)
+        
         self.destroy()
 
 
@@ -2825,15 +3416,54 @@ class App:
             self._init_tray()
 
     def _load_config(self):
-        """加载用户配置"""
+        """加载用户配置
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 配置加载说明                                                          ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 加载顺序很重要！主题必须在UI创建之前应用。                             ║
+        ║                                                                      ║
+        ║ 配置项：                                                              ║
+        ║ - alpha, scale: 显示设置                                             ║
+        ║ - theme: 颜色主题                                                    ║
+        ║ - panels: 面板显示开关                                               ║
+        ║ - hotkey_bindings: 快捷键绑定                                        ║
+        ║ - snap_enabled, snap_distance: 吸附设置                              ║
+        ║ - window_position: 多显示器窗口位置                                   ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
         config = ConfigManager.load()
+        
+        # 显示设置
         UIConfig.WINDOW_ALPHA = config.get('alpha', UIConfig.WINDOW_ALPHA)
         UIConfig.UI_SCALE_MULT = config.get('scale', UIConfig.UI_SCALE_MULT)
+        
+        # 主题设置（必须在UI创建前应用）
+        theme_name = config.get('theme', 'dark')
+        Theme.apply(theme_name)
+        
+        # 面板显示设置
+        panels = config.get('panels', {})
+        PanelConfig.show_zones = panels.get('show_zones', True)
+        PanelConfig.show_airfields = panels.get('show_airfields', True)
+        PanelConfig.show_fuel = panels.get('show_fuel', True)
+        PanelConfig.show_checklist = panels.get('show_checklist', True)
+        
+        # 快捷键设置
         HotkeyConfig.GLOBAL_HOTKEYS = config.get('global_hotkeys', HotkeyConfig.GLOBAL_HOTKEYS)
+        hotkey_bindings = config.get('hotkey_bindings', {})
+        if hotkey_bindings:
+            HotkeyConfig.set_bindings(hotkey_bindings)
+        
+        # 吸附设置
+        SnapConfig.enabled = config.get('snap_enabled', True)
+        SnapConfig.SNAP_DISTANCE = config.get('snap_distance', 20)
+        
+        # 检查清单
         self.chk_items = config.get('checklist_items', ChecklistConfig.DEFAULT_ITEMS.copy())
         self._zone_sound_enabled = config.get('zone_sound_enabled', True)
         
-        # 恢复窗口位置
+        # 恢复窗口位置（支持多显示器）
         saved_pos = config.get('window_position')
         if saved_pos and isinstance(saved_pos, dict):
             corner_name = saved_pos.get('corner')
@@ -2846,6 +3476,10 @@ class App:
             if manual_pos and isinstance(manual_pos, list) and len(manual_pos) == 2:
                 self._manual_pos = tuple(manual_pos)
                 self._user_moved = saved_pos.get('user_moved', False)
+            # 记录显示器索引（用于多显示器支持）
+            self._saved_monitor_index = saved_pos.get('monitor_index', 0)
+        else:
+            self._saved_monitor_index = 0
         
         beep_enabled = config.get('beep_enabled', False)
         self.sound.set_enabled(beep_enabled)
@@ -2853,17 +3487,47 @@ class App:
     def _save_config(self):
         """保存用户配置"""
         config = ConfigManager.load()
+        
+        # 显示设置
         config['alpha'] = UIConfig.WINDOW_ALPHA
         config['scale'] = UIConfig.UI_SCALE_MULT
+        config['theme'] = Theme.get_current()
+        
+        # 面板设置
+        config['panels'] = {
+            'show_zones': PanelConfig.show_zones,
+            'show_airfields': PanelConfig.show_airfields,
+            'show_fuel': PanelConfig.show_fuel,
+            'show_checklist': PanelConfig.show_checklist,
+        }
+        
+        # 快捷键设置
         config['global_hotkeys'] = HotkeyConfig.GLOBAL_HOTKEYS
+        config['hotkey_bindings'] = HotkeyConfig.get_bindings()
+        
+        # 吸附设置
+        config['snap_enabled'] = SnapConfig.enabled
+        config['snap_distance'] = SnapConfig.SNAP_DISTANCE
+        
+        # 其他设置
         config['checklist_items'] = self.chk_items
         config['beep_enabled'] = self.sound.is_enabled()
         config['zone_sound_enabled'] = self._zone_sound_enabled
+        
+        # 窗口位置（包含多显示器信息）
+        monitor_index = 0
+        if self._manual_pos:
+            monitor = Win32.get_monitor_at(self._manual_pos[0], self._manual_pos[1])
+            if monitor:
+                monitor_index = monitor.get('index', 0)
+        
         config['window_position'] = {
             'corner': self._corner.name,
             'manual_pos': list(self._manual_pos) if self._manual_pos else None,
-            'user_moved': self._user_moved
+            'user_moved': self._user_moved,
+            'monitor_index': monitor_index,
         }
+        
         ConfigManager.save(config)
 
     def _init_window_base(self):
@@ -3041,61 +3705,64 @@ class App:
         """初始化战区导航UI
         
         ╔══════════════════════════════════════════════════════════════════════╗
-        ║ ⚠️ 修改注意事项 - 战区导航UI初始化                                    ║
+        ║ ⚠️ 布局说明 - 使用Grid布局确保区块顺序固定                            ║
         ╠══════════════════════════════════════════════════════════════════════╣
-        ║ 1. font_item 变量在此方法中定义，用于所有列表项和燃油信息             ║
-        ║    - 如果在此方法中添加新的 UI 元素，确保 font_item 已定义            ║
-        ║    - font_item = font_heading（复用战区项目字体）                    ║
+        ║ 使用 grid 布局而非 pack，确保面板开关时顺序不会错乱：                  ║
         ║                                                                      ║
-        ║ 2. 添加新的信息区块时，遵循现有结构：                                 ║
-        ║    - 标题使用 font_title                                             ║
-        ║    - 列表项使用 font_item                                            ║
-        ║    - 遵循 padx=int(8*s) 的统一内边距                                 ║
+        ║ Row 0: zone_header_frame (标题栏 + HDG)                              ║
+        ║ Row 1: zone_alert_lbl (战区被摧毁警告)                                ║
+        ║ Row 2: zone_list_frame (战区列表)                                    ║
+        ║ Row 3: airport_title_lbl (机场标题)                                  ║
+        ║ Row 4: airport_list_frame (机场列表)                                 ║
+        ║ Row 5: fuel_title_lbl (燃油标题)                                     ║
+        ║ Row 6: fuel_info_frame (燃油信息)                                    ║
         ║                                                                      ║
-        ║ 3. 燃油信息区块在最后，包含三行：                                     ║
-        ║    - fuel_main_lbl: 油量和剩余时间                                   ║
-        ║    - fuel_detail_lbl: 油耗率和高度                                   ║
-        ║    - fuel_return_lbl: 返航估算                                       ║
+        ║ 使用 grid_remove() 隐藏、grid() 显示，可保持行号不变                  ║
         ╚══════════════════════════════════════════════════════════════════════╝
         """
         s = self.scale
+        pad_x = int(8*s)
         
-        # 标题栏
-        title_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        title_frame.pack(fill="x", padx=int(8*s), pady=(int(6*s), int(2*s)))
+        # 配置grid列宽
+        self.zone_frame.columnconfigure(0, weight=1)
+        
+        # Row 0: 标题栏（始终显示）
+        self.zone_header_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
+        self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6*s), int(2*s)))
         
         font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
-        self.zone_title = tk.Label(title_frame, text="🎯 战区导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        self.zone_title = tk.Label(self.zone_header_frame, text="🎯 战区导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.zone_title.pack(side="left")
         
         font_heading = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
-        # ⚠️ font_item 在此定义，供后续所有列表项和燃油信息使用
         font_item = font_heading
-        self.heading_lbl = tk.Label(title_frame, text="HDG: ---", font=font_heading, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e")
+        self.heading_lbl = tk.Label(self.zone_header_frame, text="HDG: ---", font=font_heading, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e")
         self.heading_lbl.pack(side="right")
         
-        # 被摧毁警告标签
+        # Row 1: 被摧毁警告标签（动态显示）
         font_alert = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
         self.zone_alert_lbl = tk.Label(self.zone_frame, text="", font=font_alert, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
+        # 初始不显示，由_update_zone_display控制
         
-        # 战区列表容器（Label由复用池管理，见 _zone_label_pool）
+        # Row 2: 战区列表容器
         self.zone_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.zone_list_frame.pack(fill="x", padx=int(8*s), pady=(0, int(10*s)))
+        self.zone_list_frame.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
 
-        # 机场导航
+        # Row 3: 机场标题
         self.airport_title_lbl = tk.Label(self.zone_frame, text="🛫 机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-        self.airport_title_lbl.pack(fill="x", padx=int(8*s), pady=(0, int(2*s)))
+        self.airport_title_lbl.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
 
-        # 机场列表容器（Label由复用池管理，见 _airport_label_pool）
+        # Row 4: 机场列表容器
         self.airport_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.airport_list_frame.pack(fill="x", padx=int(8*s), pady=(0, int(10*s)))
+        self.airport_list_frame.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
 
-        # v5.8 新增：燃油信息
+        # Row 5: 燃油标题
         self.fuel_title_lbl = tk.Label(self.zone_frame, text="⛽ 燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-        self.fuel_title_lbl.pack(fill="x", padx=int(8*s), pady=(0, int(2*s)))
+        self.fuel_title_lbl.grid(row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
         
+        # Row 6: 燃油信息容器
         self.fuel_info_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.fuel_info_frame.pack(fill="x", padx=int(8*s), pady=(0, int(6*s)))
+        self.fuel_info_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
         
         # 燃油主信息行
         self.fuel_main_lbl = tk.Label(
@@ -3154,14 +3821,19 @@ class App:
             lbl.pack(fill="x", padx=(pad_x, pad_x), pady=1, anchor="w")
 
     def _init_bindings(self):
-        """初始化键盘/鼠标绑定"""
-        # 键盘快捷键
+        """初始化键盘/鼠标绑定
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 说明：右键菜单已移至系统托盘，窗口不再响应右键                         ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
+        # 键盘快捷键（使用配置的按键）
         self.root.bind("<Escape>", lambda e: self._quit())
-        self.root.bind("<F7>", lambda e: self._manual_reset())
-        self.root.bind("<F8>", lambda e: self._toggle_lock())
-        self.root.bind("<F9>", lambda e: self._next_corner())
-        self.root.bind("<F10>", lambda e: self._toggle_beep())
-        self.root.bind("<F11>", lambda e: self._toggle_zone_sound())
+        self.root.bind(f"<{HotkeyConfig.KEY_RESET}>", lambda e: self._manual_reset())
+        self.root.bind(f"<{HotkeyConfig.KEY_LOCK}>", lambda e: self._toggle_lock())
+        self.root.bind(f"<{HotkeyConfig.KEY_CORNER}>", lambda e: self._next_corner())
+        self.root.bind(f"<{HotkeyConfig.KEY_BEEP}>", lambda e: self._toggle_beep())
+        self.root.bind(f"<{HotkeyConfig.KEY_ZONES}>", lambda e: self._toggle_zone_sound())
         self.root.bind("<Control-MouseWheel>", self._adjust_alpha)
         
         # 拖动相关
@@ -3170,55 +3842,161 @@ class App:
         self.root.bind("<B1-Motion>", self._do_drag)
         self.root.bind("<ButtonRelease-1>", self._end_drag)
         
-        # 右键菜单
-        self.root.bind("<Button-3>", self._show_context_menu)
-        self.context_menu = tk.Menu(self.root, tearoff=0, bg=Theme.GRAYPILL, fg=Theme.TEXT)
-        self.context_menu.add_command(label="🔄 重置计时器 (F7)", command=self._manual_reset)
-        self.context_menu.add_command(label="🔓 锁定/解锁 (F8)", command=self._toggle_lock)
-        self.context_menu.add_command(label="📍 切换角落 (F9)", command=self._next_corner)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="🔔 战区提示音 (F11)", command=self._toggle_zone_sound)
-        self.context_menu.add_command(label="📝 编辑检查清单", command=self._edit_checklist)
-        self.context_menu.add_command(label="⚙️ 设置", command=self._show_settings)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="❌ 退出", command=self._quit)
+        # 不再绑定窗口右键菜单（功能移至系统托盘）
+
+    def _toggle_panel(self, panel_key: str):
+        """切换面板显示状态"""
+        current = getattr(PanelConfig, panel_key)
+        setattr(PanelConfig, panel_key, not current)
+        self._save_config()
+        self._refresh_tray()
+    
+    def _refresh_tray(self):
+        """刷新系统托盘菜单状态
+        
+        调用此方法以确保托盘菜单的勾选状态与实际状态同步。
+        """
+        if HAS_TRAY and hasattr(self, 'tray') and self.tray:
+            try:
+                self.tray.update_menu()
+            except Exception:
+                pass
 
     def _init_global_hotkeys(self):
-        """初始化全局热键"""
+        """初始化全局热键
+        
+        使用HotkeyConfig中配置的快捷键，支持运行时自定义。
+        """
         self._ghk = None
         if not os.name == "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
             return
         
+        # 使用配置的快捷键
         hotkeys = [
-            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.VK_F7, self._manual_reset),
-            (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.VK_F8, self._toggle_lock),
-            (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.VK_F9, self._next_corner),
-            (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.VK_F10, self._toggle_beep),
-            (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.VK_F11, self._toggle_zone_sound),
+            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.get_vk(HotkeyConfig.KEY_RESET), self._manual_reset),
+            (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.get_vk(HotkeyConfig.KEY_LOCK), self._toggle_lock),
+            (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.get_vk(HotkeyConfig.KEY_CORNER), self._next_corner),
+            (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.get_vk(HotkeyConfig.KEY_BEEP), self._toggle_beep),
+            (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.get_vk(HotkeyConfig.KEY_ZONES), self._toggle_zone_sound),
         ]
         self._ghk = GlobalHotkeys(self.root, hotkeys)
         self._ghk.start()
 
     def _init_tray(self):
-        """初始化系统托盘"""
+        """初始化系统托盘
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 系统托盘菜单说明                                                      ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 所有右键菜单功能已移至系统托盘：                                       ║
+        ║ - 重置计时器、锁定/解锁、切换角落                                     ║
+        ║ - 面板显示开关（战区/机场/燃油/检查清单）                             ║
+        ║ - 声音设置、编辑检查清单、设置对话框                                  ║
+        ║ - Debug模式、退出                                                    ║
+        ║                                                                      ║
+        ║ ⚠️ 状态刷新：使用 _refresh_tray_menu() 在状态改变后刷新勾选状态       ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
+        # 保存self引用供嵌套函数使用
+        app = self
+        
         def icon():
             try:
                 return Image.open(resource_path(FileConfig.ICON_FILE)).convert("RGBA")
             except:
                 return Image.new('RGBA', (64, 64), Theme.BLUE)
         
-        def toggle_debug(icon, item):
-            self.root.after(0, self._toggle_debug)
+        # 回调函数（需要在主线程执行）
+        def do_reset(icon, item):
+            app.root.after(0, app._manual_reset)
         
-        def is_debug_checked(item):
-            return self._debug
+        def do_lock(icon, item):
+            app.root.after(0, app._toggle_lock)
         
-        menu = pystray.Menu(
-            pystray.MenuItem("Debug模式", toggle_debug, checked=is_debug_checked),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("显示", lambda: self.root.after(0, self._show)),
-            pystray.MenuItem("退出", lambda: self.root.after(0, self._quit)),
+        def do_corner(icon, item):
+            app.root.after(0, app._next_corner)
+        
+        def do_beep(icon, item):
+            app.root.after(0, app._toggle_beep)
+        
+        def do_zone_sound(icon, item):
+            app.root.after(0, app._toggle_zone_sound)
+        
+        def do_edit_checklist(icon, item):
+            app.root.after(0, app._edit_checklist)
+        
+        def do_settings(icon, item):
+            app.root.after(0, app._show_settings)
+        
+        def do_debug(icon, item):
+            app.root.after(0, app._toggle_debug)
+        
+        def do_quit(icon, item):
+            app.root.after(0, app._quit)
+        
+        # 面板开关回调
+        def toggle_zone(icon, item):
+            app.root.after(0, lambda: app._toggle_panel('show_zones'))
+        
+        def toggle_airfield(icon, item):
+            app.root.after(0, lambda: app._toggle_panel('show_airfields'))
+        
+        def toggle_fuel(icon, item):
+            app.root.after(0, lambda: app._toggle_panel('show_fuel'))
+        
+        def toggle_checklist(icon, item):
+            app.root.after(0, lambda: app._toggle_panel('show_checklist'))
+        
+        # 状态检查函数（每次菜单显示时调用）
+        def is_locked(item):
+            return app._locked
+        
+        def is_beep_on(item):
+            return app.sound.is_enabled()
+        
+        def is_zone_sound_on(item):
+            return app._zone_sound_enabled
+        
+        def is_debug_on(item):
+            return app._debug
+        
+        def is_zone_panel(item):
+            return PanelConfig.show_zones
+        
+        def is_airfield_panel(item):
+            return PanelConfig.show_airfields
+        
+        def is_fuel_panel(item):
+            return PanelConfig.show_fuel
+        
+        def is_checklist_panel(item):
+            return PanelConfig.show_checklist
+        
+        # 面板子菜单
+        panel_menu = pystray.Menu(
+            pystray.MenuItem("🎯 战区导航", toggle_zone, checked=is_zone_panel),
+            pystray.MenuItem("🛫 机场导航", toggle_airfield, checked=is_airfield_panel),
+            pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel),
+            pystray.MenuItem("✅ 出击检查", toggle_checklist, checked=is_checklist_panel),
         )
+        
+        # 主菜单
+        menu = pystray.Menu(
+            pystray.MenuItem(f"🔄 重置计时器 ({HotkeyConfig.KEY_RESET})", do_reset),
+            pystray.MenuItem(f"🔓 锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
+            pystray.MenuItem(f"📍 切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("📊 显示面板", panel_menu),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(f"🔊 声音 ({HotkeyConfig.KEY_BEEP})", do_beep, checked=is_beep_on),
+            pystray.MenuItem(f"🔔 战区提示音 ({HotkeyConfig.KEY_ZONES})", do_zone_sound, checked=is_zone_sound_on),
+            pystray.MenuItem("📝 编辑检查清单", do_edit_checklist),
+            pystray.MenuItem("⚙️ 设置", do_settings),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("🐛 Debug模式", do_debug, checked=is_debug_on),
+            pystray.MenuItem("❌ 退出", do_quit),
+        )
+        
         self.tray = pystray.Icon("WTTimer", icon(), "WT Timer", menu)
         threading.Thread(target=self.tray.run, daemon=True).start()
 
@@ -3230,12 +4008,14 @@ class App:
         else:
             self.diag_lbl.pack_forget()
         self._recalc_size()
+        self._refresh_tray()
 
     def _toggle_zone_sound(self):
         """切换战区提示音"""
         self._zone_sound_enabled = not self._zone_sound_enabled
         self._update_hint()
         self._save_config()
+        self._refresh_tray()
         if self._zone_sound_enabled:
             self.sound.play(pattern="on")
 
@@ -3386,6 +4166,7 @@ class App:
         self._locked = not self._locked
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=UIConfig.WINDOW_ALPHA)
         self._update_hint()
+        self._refresh_tray()
 
     def _hint_text(self) -> str:
         """生成提示文本
@@ -3393,23 +4174,26 @@ class App:
         ╔══════════════════════════════════════════════════════════════════════╗
         ║ ⚠️ 修改注意事项 - 提示文字                                            ║
         ╠══════════════════════════════════════════════════════════════════════╣
-        ║ 如果修改此处的提示文字（增加/删除快捷键），必须同步修改：              ║
-        ║ 1. _recalc_size() 中的 hint_min_width 值                             ║
-        ║    - 当前设置为 400 * scale 像素                                     ║
-        ║    - 每增加一个快捷键约需增加 50-60 像素                              ║
+        ║ 提示文字现在使用 HotkeyConfig 中的快捷键配置。                         ║
         ║                                                                      ║
-        ║ 2. 如果增加新快捷键，还需修改：                                       ║
-        ║    - HotkeyConfig 中添加 VK_xxx 和 HK_ID_xxx                         ║
-        ║    - _init_bindings() 中添加键盘绑定                                 ║
-        ║    - _init_global_hotkeys() 中添加全局热键注册                       ║
+        ║ 如果修改提示文字长度，需要同步修改：                                   ║
+        ║ _recalc_size() 中的 hint_min_width 值（当前 400 * scale 像素）        ║
         ╚══════════════════════════════════════════════════════════════════════╝
         """
         sound = "🔊开" if self.sound.is_enabled() else "🔇关"
         zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
+        
+        # 使用配置的快捷键
+        k_reset = HotkeyConfig.KEY_RESET
+        k_lock = HotkeyConfig.KEY_LOCK
+        k_corner = HotkeyConfig.KEY_CORNER
+        k_beep = HotkeyConfig.KEY_BEEP
+        k_zones = HotkeyConfig.KEY_ZONES
+        
         if self._locked:
-            return f"F7重置 │ F8解锁 │ F9角落 │ F10声音({sound}) │ F11战区({zone_sound})"
+            return f"{k_reset}重置 │ {k_lock}解锁 │ {k_corner}角落 │ {k_beep}音({sound}) │ {k_zones}区({zone_sound})"
         else:
-            return f"拖动移动 │ F8锁定 │ F10声音({sound}) │ F11战区({zone_sound}) │ 右键菜单"
+            return f"拖动移动 │ {k_lock}锁定 │ {k_beep}音({sound}) │ {k_zones}区({zone_sound}) │ 右键菜单"
 
     def _update_hint(self) -> None:
         """更新提示文本"""
@@ -3432,6 +4216,7 @@ class App:
         self.sound.set_enabled(enabled)
         self._update_hint()
         self._save_config()
+        self._refresh_tray()
         if enabled:
             self.sound.play(pattern="on")
 
@@ -3441,22 +4226,18 @@ class App:
         self.sound.play(*SoundConfig.BEEP_MANUAL_RESET)
 
     def _show_settings(self):
-        """显示设置对话框"""
-        if not self._locked:
-            SettingsDialog(self.root, self)
+        """显示设置对话框
+        
+        从托盘菜单调用，不受窗口锁定状态影响。
+        """
+        SettingsDialog(self.root, self)
 
     def _edit_checklist(self):
-        """编辑检查清单"""
-        if not self._locked:
-            ChecklistEditor(self.root, self)
-
-    def _show_context_menu(self, event):
-        """显示右键菜单"""
-        if not self._locked:
-            try:
-                self.context_menu.tk_popup(event.x_root, event.y_root)
-            finally:
-                self.context_menu.grab_release()
+        """编辑检查清单
+        
+        从托盘菜单调用，不受窗口锁定状态影响。
+        """
+        ChecklistEditor(self.root, self)
 
     def _adjust_alpha(self, event):
         """Ctrl+滚轮调整透明度"""
@@ -3503,11 +4284,35 @@ class App:
         self.root.geometry(f"+{x}+{y}")
 
     def _end_drag(self, e=None):
-        """结束拖动"""
+        """结束拖动
+        
+        ╔══════════════════════════════════════════════════════════════════════╗
+        ║ 窗口吸附功能                                                          ║
+        ╠══════════════════════════════════════════════════════════════════════╣
+        ║ 拖动结束时，如果窗口边缘距离屏幕边缘小于 SNAP_DISTANCE，             ║
+        ║ 自动将窗口吸附到屏幕边缘。                                            ║
+        ║                                                                      ║
+        ║ 支持多显示器：检测窗口在哪个显示器上，吸附到该显示器的边缘。          ║
+        ╚══════════════════════════════════════════════════════════════════════╝
+        """
         if self._locked:
             return
         try:
-            self._manual_pos = (int(self.root.winfo_x()), int(self.root.winfo_y()))
+            x = int(self.root.winfo_x())
+            y = int(self.root.winfo_y())
+            
+            # 应用窗口吸附
+            if SnapConfig.enabled:
+                w = self.root.winfo_width()
+                h = self.root.winfo_height()
+                new_x, new_y = Win32.snap_to_edges(x, y, w, h, SnapConfig.SNAP_DISTANCE)
+                
+                # 如果位置变化，更新窗口位置
+                if (new_x, new_y) != (x, y):
+                    self.root.geometry(f"+{new_x}+{new_y}")
+                    x, y = new_x, new_y
+            
+            self._manual_pos = (x, y)
             self._user_moved = True
             self._save_config()
         except tk.TclError:
@@ -3587,6 +4392,7 @@ class App:
         ║ 2. Label复用：通过 _get_or_create_label() 从池中获取                  ║
         ║ 3. 字体缓存：使用 _get_font() 而非每帧计算                            ║
         ║ 4. 智能刷新：只在数量变化时调用 _recalc_size()                        ║
+        ║ 5. 根据 PanelConfig 控制各区块显示                                    ║
         ║                                                                      ║
         ║ 修改此方法时，确保：                                                  ║
         ║ - 不要使用 lbl.destroy()，改用 lbl.pack_forget()                     ║
@@ -3595,6 +4401,7 @@ class App:
         """
         s = self.scale
         font_item = self._get_font('zone_item')
+        pad_x = int(8*s)
         
         # 更新航向显示
         if snap.player_heading > 0:
@@ -3602,129 +4409,161 @@ class App:
         else:
             self.heading_lbl.config(text="HDG: ---")
         
-        # 战区被摧毁警告
-        if snap.zone_destroyed_alert:
-            alert_text = "💥 战区被摧毁："
-            if getattr(snap, "destroyed_zone_text", ""):
-                alert_text += snap.destroyed_zone_text
+        zone_count = 0
+        airport_count = 0
+        
+        # === 战区导航区块（根据PanelConfig.show_zones控制）===
+        if PanelConfig.show_zones:
+            # 使用grid显示（行号固定，顺序不会乱）
+            self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6*s), int(2*s)))
+            self.zone_list_frame.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
+            
+            # 战区被摧毁警告（row=1）
+            if snap.zone_destroyed_alert:
+                alert_text = "💥 战区被摧毁："
+                if getattr(snap, "destroyed_zone_text", ""):
+                    alert_text += snap.destroyed_zone_text
+                else:
+                    alert_text = "💥 战区已摧毁!"
+                wrap = max(int(220*s), self.zone_frame.winfo_width() - int(16*s))
+                self.zone_alert_lbl.config(text=alert_text, wraplength=wrap, justify="left")
+                self.zone_alert_lbl.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(0, int(4*s)))
+                if snap.should_play_destroyed_sound and not self._last_zone_destroyed_alert and self._zone_sound_enabled:
+                    self.sound.play(pattern="zone_destroyed")
+                self._last_zone_destroyed_alert = True
             else:
-                alert_text = "💥 战区已摧毁!"
-            wrap = max(int(220*s), self.zone_frame.winfo_width() - int(16*s))
-            self.zone_alert_lbl.config(text=alert_text, wraplength=wrap, justify="left")
-            if not self.zone_alert_lbl.winfo_ismapped():
-                self.zone_alert_lbl.pack(fill="x", padx=int(8*s), pady=(0, int(4*s)), after=self.zone_title.master)
-            if snap.should_play_destroyed_sound and not self._last_zone_destroyed_alert and self._zone_sound_enabled:
-                self.sound.play(pattern="zone_destroyed")
-            self._last_zone_destroyed_alert = True
-        else:
-            if self.zone_alert_lbl.winfo_ismapped():
-                self.zone_alert_lbl.pack_forget()
-            self._last_zone_destroyed_alert = False
-        
-        # === 战区列表（使用Label复用池）===
-        # 先隐藏所有现有标签
-        for lbl in self._zone_label_pool:
-            lbl.pack_forget()
-        
-        # 计算需要的标签数量
-        zone_count = len(snap.zones) if snap.zones else 1  # 至少1个（显示"无战区"）
-        if snap.is_deviating and snap.has_target:
-            zone_count += 1  # 偏航警告
-        
-        # 确保池中有足够的标签
-        while len(self._zone_label_pool) < zone_count:
-            lbl = tk.Label(self.zone_list_frame, text="", font=font_item, 
-                          fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
-            self._zone_label_pool.append(lbl)
-        
-        # 更新并显示标签
-        idx = 0
-        if not snap.zones:
-            lbl = self._zone_label_pool[idx]
-            lbl.config(text="无战区", fg=Theme.TEXT_MUTED)
-            lbl.pack(fill="x")
-            idx += 1
-        else:
-            for zone in snap.zones:
-                marker = "➤" if zone.is_target else "○"
-                dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
-                rel_sign = "+" if zone.relative > 0 else ""
-                rel_text = f"{rel_sign}{int(zone.relative)}°"
-                text = f"{marker} {zone.direction} {dist_text}  ({rel_text})"
-                if zone.ete_str:
-                    text += f"   ⏱️{zone.ete_str}"
-                fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
-                
+                self.zone_alert_lbl.grid_remove()
+                self._last_zone_destroyed_alert = False
+            
+            # 先隐藏所有现有标签
+            for lbl in self._zone_label_pool:
+                lbl.pack_forget()
+            
+            # 计算需要的标签数量
+            zone_count = len(snap.zones) if snap.zones else 1
+            if snap.is_deviating and snap.has_target:
+                zone_count += 1
+            
+            # 确保池中有足够的标签
+            while len(self._zone_label_pool) < zone_count:
+                lbl = tk.Label(self.zone_list_frame, text="", font=font_item, 
+                              fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
+                self._zone_label_pool.append(lbl)
+            
+            # 更新并显示标签
+            idx = 0
+            if not snap.zones:
                 lbl = self._zone_label_pool[idx]
-                lbl.config(text=text, fg=fg)
+                lbl.config(text="无战区", fg=Theme.TEXT_MUTED)
                 lbl.pack(fill="x")
                 idx += 1
-        
-        # 偏航警告
-        if snap.is_deviating and snap.has_target:
-            warn_text = f"⚠️ 偏航 ({int(snap.deviation_angle):+d}°)"
-            lbl = self._zone_label_pool[idx]
-            lbl.config(text=warn_text, fg=Theme.ORANGE)
-            lbl.pack(fill="x", pady=(int(4*s), 0))
-            idx += 1
+            else:
+                for zone in snap.zones:
+                    marker = "➤" if zone.is_target else "○"
+                    dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
+                    rel_sign = "+" if zone.relative > 0 else ""
+                    rel_text = f"{rel_sign}{int(zone.relative)}°"
+                    text = f"{marker} {zone.direction} {dist_text}  ({rel_text})"
+                    if zone.ete_str:
+                        text += f"   ⏱️{zone.ete_str}"
+                    fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
+                    
+                    lbl = self._zone_label_pool[idx]
+                    lbl.config(text=text, fg=fg)
+                    lbl.pack(fill="x")
+                    idx += 1
+            
+            # 偏航警告
+            if snap.is_deviating and snap.has_target:
+                warn_text = f"⚠️ 偏航 ({int(snap.deviation_angle):+d}°)"
+                lbl = self._zone_label_pool[idx]
+                lbl.config(text=warn_text, fg=Theme.ORANGE)
+                lbl.pack(fill="x", pady=(int(4*s), 0))
+                idx += 1
+        else:
+            # 隐藏战区区块（使用grid_remove保持行号）
+            self.zone_header_frame.grid_remove()
+            self.zone_list_frame.grid_remove()
+            self.zone_alert_lbl.grid_remove()
+            for lbl in self._zone_label_pool:
+                lbl.pack_forget()
 
-        # === 机场导航（使用Label复用池）===
-        for lbl in self._airport_label_pool:
-            lbl.pack_forget()
-        
-        # 计算需要的机场标签数量
-        airport_count = 0
-        if snap.friendly_airfield:
-            airport_count += 1
-        if snap.enemy_airfields:
-            airport_count += len(snap.enemy_airfields)
-        if airport_count == 0:
-            airport_count = 1  # "无机场数据"
-        
-        # 确保池中有足够的标签
-        while len(self._airport_label_pool) < airport_count:
-            lbl = tk.Label(self.airport_list_frame, text="", font=font_item,
-                          fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
-            self._airport_label_pool.append(lbl)
-        
-        # 更新并显示机场标签
-        ap_idx = 0
-        if snap.friendly_airfield:
-            af = snap.friendly_airfield
-            dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
-            rel_sign = "+" if af.relative > 0 else ""
-            rel_text = f"{rel_sign}{int(af.relative)}°"
-            text = f"🟢 ➤ {af.direction} {dist_text}  ({rel_text})"
-            if af.ete_str:
-                text += f"   ⏱️{af.ete_str}"
-            lbl = self._airport_label_pool[ap_idx]
-            lbl.config(text=text, fg=Theme.GREEN)
-            lbl.pack(fill="x")
-            ap_idx += 1
-        
-        if snap.enemy_airfields:
-            for af in snap.enemy_airfields:
-                marker = "➤" if af.is_target else "○"
+        # === 机场导航区块（根据PanelConfig.show_airfields控制）===
+        if PanelConfig.show_airfields:
+            # 使用grid显示（行号固定）
+            self.airport_title_lbl.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
+            self.airport_list_frame.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
+            
+            for lbl in self._airport_label_pool:
+                lbl.pack_forget()
+            
+            # 计算需要的机场标签数量
+            airport_count = 0
+            if snap.friendly_airfield:
+                airport_count += 1
+            if snap.enemy_airfields:
+                airport_count += len(snap.enemy_airfields)
+            if airport_count == 0:
+                airport_count = 1
+            
+            # 确保池中有足够的标签
+            while len(self._airport_label_pool) < airport_count:
+                lbl = tk.Label(self.airport_list_frame, text="", font=font_item,
+                              fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
+                self._airport_label_pool.append(lbl)
+            
+            # 更新并显示机场标签
+            ap_idx = 0
+            if snap.friendly_airfield:
+                af = snap.friendly_airfield
                 dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
                 rel_sign = "+" if af.relative > 0 else ""
                 rel_text = f"{rel_sign}{int(af.relative)}°"
-                text = f"🔴 {marker} {af.direction} {dist_text}  ({rel_text})"
+                text = f"🟢 ➤ {af.direction} {dist_text}  ({rel_text})"
                 if af.ete_str:
                     text += f"   ⏱️{af.ete_str}"
-                fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
                 lbl = self._airport_label_pool[ap_idx]
-                lbl.config(text=text, fg=fg)
+                lbl.config(text=text, fg=Theme.GREEN)
                 lbl.pack(fill="x")
                 ap_idx += 1
+            
+            if snap.enemy_airfields:
+                for af in snap.enemy_airfields:
+                    marker = "➤" if af.is_target else "○"
+                    dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
+                    rel_sign = "+" if af.relative > 0 else ""
+                    rel_text = f"{rel_sign}{int(af.relative)}°"
+                    text = f"🔴 {marker} {af.direction} {dist_text}  ({rel_text})"
+                    if af.ete_str:
+                        text += f"   ⏱️{af.ete_str}"
+                    fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
+                    lbl = self._airport_label_pool[ap_idx]
+                    lbl.config(text=text, fg=fg)
+                    lbl.pack(fill="x")
+                    ap_idx += 1
+            
+            if ap_idx == 0:
+                lbl = self._airport_label_pool[0]
+                lbl.config(text="无机场数据", fg=Theme.TEXT_MUTED)
+                lbl.pack(fill="x")
+                ap_idx = 1
+        else:
+            # 隐藏机场区块（使用grid_remove保持行号）
+            self.airport_title_lbl.grid_remove()
+            self.airport_list_frame.grid_remove()
+            for lbl in self._airport_label_pool:
+                lbl.pack_forget()
         
-        if ap_idx == 0:
-            lbl = self._airport_label_pool[0]
-            lbl.config(text="无机场数据", fg=Theme.TEXT_MUTED)
-            lbl.pack(fill="x")
-            ap_idx = 1
-        
-        # === v5.8 新增：燃油信息更新 ===
-        self._update_fuel_display(snap, font_item)
+        # === 燃油信息区块（根据PanelConfig.show_fuel控制）===
+        if PanelConfig.show_fuel:
+            # 使用grid显示（行号固定）
+            self.fuel_title_lbl.grid(row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
+            self.fuel_info_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
+            self._update_fuel_display(snap, font_item)
+        else:
+            # 隐藏燃油区块（使用grid_remove保持行号）
+            self.fuel_title_lbl.grid_remove()
+            self.fuel_info_frame.grid_remove()
         
         # 智能触发尺寸重算（只在数量变化时）
         total_count = zone_count + airport_count
@@ -3813,6 +4652,7 @@ class App:
         ║ 1. _update_zone_display() 返回是否需要重算尺寸                       ║
         ║ 2. 只在面板可见性变化或内容数量变化时调用 _recalc_size()              ║
         ║ 3. 使用缓存字体和Label复用池                                          ║
+        ║ 4. 根据 PanelConfig 控制各面板显示                                    ║
         ╚══════════════════════════════════════════════════════════════════════╝
         """
         if self._stop:
@@ -3820,20 +4660,34 @@ class App:
         
         snap = self.game.snapshot()
 
-        # 控制面板可见性
-        show_zones = (snap.phase == Phase.ALIVE) and (not snap.api_down) and (
-            len(snap.zones) > 0 or 
-            snap.friendly_airfield is not None or 
-            len(snap.enemy_airfields) > 0
+        # 控制面板可见性（结合PanelConfig设置）
+        # 战区/机场/燃油面板需要任一相关面板启用
+        has_zone_data = len(snap.zones) > 0
+        has_airfield_data = snap.friendly_airfield is not None or len(snap.enemy_airfields) > 0
+        
+        show_zone_panel = (
+            (snap.phase == Phase.ALIVE) and 
+            (not snap.api_down) and 
+            (
+                (PanelConfig.show_zones and has_zone_data) or 
+                (PanelConfig.show_airfields and has_airfield_data) or
+                PanelConfig.show_fuel
+            )
         )
-        self._set_zone_panel_visible(show_zones)
-        if show_zones: 
+        self._set_zone_panel_visible(show_zone_panel)
+        if show_zone_panel: 
             # _update_zone_display 返回是否需要重算尺寸
             need_recalc = self._update_zone_display(snap)
             if need_recalc:
                 self._recalc_size()
 
-        show_chk = (snap.phase == Phase.ALIVE) and (snap.on_ground or snap.landed_flash) and (not snap.api_down)
+        # 检查清单面板
+        show_chk = (
+            (snap.phase == Phase.ALIVE) and 
+            (snap.on_ground or snap.landed_flash) and 
+            (not snap.api_down) and
+            PanelConfig.show_checklist
+        )
         self._set_checklist_visible(show_chk)
 
         # 更新计时器显示
