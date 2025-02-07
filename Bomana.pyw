@@ -55,6 +55,9 @@ War Thunder SB Timer - 战雷全真模式收益计时器
 - ctypes: Windows API调用
 - PIL/pystray: 系统托盘（可选）
 
+打包命令：
+-------
+pyinstaller --onefile --windowed --icon=app.ico --name=Bomana --add-data "app.png;." --add-data "sponsor_*.png;." WTtimer.pyw
 ===============================================================================
 """
 
@@ -65,6 +68,7 @@ import time
 import math
 import ctypes
 import threading
+import webbrowser
 from pathlib import Path
 from dataclasses import dataclass, field
 from collections import deque
@@ -368,6 +372,24 @@ class FileConfig:
     # 互斥锁名称（防止多开）
     MUTEX_NAME = r"Global\WTtimer_SingleInstance"
 
+class AboutConfig:
+    """关于对话框配置"""
+    # 软件信息
+    APP_NAME = "Bomana"
+    APP_NAME_CN = "战雷全真模式收益计时器"
+    VERSION = "5.9"
+    AUTHOR = "猹Cheems"  # 替换为你的名字
+    # 链接配置
+    GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
+    
+    # 赞助链接配置（可以添加多个）
+    SPONSOR_LINKS = [
+        # ("显示名称", "链接URL", "图片文件名"),
+        ("微信赞赏", "", "sponsor_wechat.png"),  # 空链接表示只显示图片
+    ]
+    
+    # 赞助图片尺寸
+    SPONSOR_IMAGE_WIDTH = 400
 
 class ChecklistConfig:
     """检查清单配置
@@ -379,12 +401,14 @@ class ChecklistConfig:
     
     # 默认检查清单
     DEFAULT_ITEMS = [
+        "按I启动发动机",
+        "等待发动机转速稳定",
         "收起落架",
         "开增稳系统", 
-        "设定打击目标",
+        "Y66或地图设定打击目标",
         "取消武器选择模式",
-        "火控Y67炸弹自动",
-        "调整雷达Y11"
+        "火控系统Y67调节炸弹自动",
+        "降落后Y65关闭座舱盖防噪音"
     ]
 
 
@@ -3255,6 +3279,274 @@ class ChecklistEditor(tk.Toplevel):
         self.text.delete("1.0", "end")
         self.text.insert("1.0", "\n".join(ChecklistConfig.DEFAULT_ITEMS))
 
+class AboutDialog(tk.Toplevel):
+    """关于对话框"""
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.title("关于 Bomana")
+        self.configure(bg=Theme.BG)
+        self.transient(parent)
+        self.grab_set()
+        self._images = []
+        
+        self._build_ui()
+        
+        # 让窗口自适应内容大小
+        self.update_idletasks()
+        
+        # 获取内容实际需要的尺寸
+        req_width = self.winfo_reqwidth()
+        req_height = self.winfo_reqheight()
+        
+        # 设置最小尺寸，确保不会太小
+        min_width = max(800, req_width)
+        min_height = max(1200, req_height)
+        
+        # 限制最大尺寸不超过屏幕
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        final_width = min(min_width, screen_w - 100)
+        final_height = min(min_height, screen_h - 100)
+        
+        self.geometry(f"{final_width}x{final_height}")
+        self.minsize(400, 500)
+        self.resizable(True, True)  # 允许用户调整大小
+        
+        self._center_on_parent(parent)
+    
+    def _build_ui(self):
+        # 创建可滚动的画布（内容太多时可以滚动）
+        canvas = tk.Canvas(self, bg=Theme.BG, highlightthickness=0)
+        scrollbar = tk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        
+        main = tk.Frame(canvas, bg=Theme.BG)
+        
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        
+        canvas_frame = canvas.create_window((0, 0), window=main, anchor="nw")
+        
+        def configure_scroll(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # 让内容宽度跟随窗口
+            canvas.itemconfig(canvas_frame, width=event.width)
+        
+        def configure_canvas(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        
+        canvas.bind("<Configure>", configure_scroll)
+        main.bind("<Configure>", configure_canvas)
+        
+        # 鼠标滚轮支持
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", on_mousewheel)
+        
+        # 内容区域，增大padding
+        content = tk.Frame(main, bg=Theme.BG)
+        content.pack(fill="both", expand=True, padx=30, pady=25)
+        
+        # === 软件标题 ===
+        title_frame = tk.Frame(content, bg=Theme.BG)
+        title_frame.pack(fill="x", pady=(0, 15))
+        
+        try:
+            icon_path = resource_path(FileConfig.ICON_FILE)
+            if HAS_TRAY:
+                from PIL import Image, ImageTk
+                img = Image.open(icon_path).convert("RGBA")
+                img = img.resize((64, 64), Image.Resampling.LANCZOS)  # 更大的图标
+                self._app_icon = ImageTk.PhotoImage(img)
+                icon_lbl = tk.Label(title_frame, image=self._app_icon, bg=Theme.BG)
+                icon_lbl.pack(side="left", padx=(0, 15))
+        except Exception:
+            pass
+        
+        title_text_frame = tk.Frame(title_frame, bg=Theme.BG)
+        title_text_frame.pack(side="left", fill="both", expand=True)
+        
+        tk.Label(
+            title_text_frame,
+            text=f"{AboutConfig.APP_NAME} v{AboutConfig.VERSION}",
+            font=("Segoe UI", 20, "bold"),  # 更大字体
+            fg=Theme.TEXT, bg=Theme.BG, anchor="w"
+        ).pack(anchor="w")
+        
+        tk.Label(
+            title_text_frame,
+            text=AboutConfig.APP_NAME_CN,
+            font=("Segoe UI", 12),  # 更大字体
+            fg=Theme.TEXT_DIM, bg=Theme.BG, anchor="w"
+        ).pack(anchor="w", pady=(5, 0))
+        
+        # === 分隔线 ===
+        tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
+        
+        # === 项目说明 ===
+        description = """本软件是一个用于战雷全真模式的辅助计时工具，
+帮助玩家管理15分钟的复活周期。
+
+核心特性：
+• 仅使用官方8111接口，安全合规
+• 自动检测出生/死亡/着陆状态
+• 战区导航和燃油管理
+• 可自定义的起飞检查清单
+
+本软件完全开源免费，欢迎贡献代码！"""
+        
+        tk.Label(
+            content, text=description,
+            font=("Segoe UI", 11),  # 更大字体
+            fg=Theme.TEXT_DIM, bg=Theme.BG,
+            justify="left", anchor="w"
+        ).pack(anchor="w")
+        
+        # === GitHub 链接 ===
+        if AboutConfig.GITHUB_URL:
+            link_frame = tk.Frame(content, bg=Theme.BG)
+            link_frame.pack(fill="x", pady=(15, 0))
+            
+            tk.Label(
+                link_frame, text="📦 项目主页：",
+                font=("Segoe UI", 11),
+                fg=Theme.TEXT_DIM, bg=Theme.BG
+            ).pack(side="left")
+            
+            github_btn = tk.Label(
+                link_frame, text=AboutConfig.GITHUB_URL,
+                font=("Segoe UI", 11, "underline"),
+                fg=Theme.BLUE, bg=Theme.BG, cursor="hand2"
+            )
+            github_btn.pack(side="left")
+            github_btn.bind("<Button-1>", lambda e: self._open_url(AboutConfig.GITHUB_URL))
+        
+        # === 分隔线 ===
+        tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
+        
+        # === 赞助区域 ===
+        tk.Label(
+            content, text="❤️ 支持作者",
+            font=("Segoe UI", 14, "bold"),  # 更大字体
+            fg=Theme.TEXT, bg=Theme.BG, anchor="w"
+        ).pack(anchor="w", pady=(0, 10))
+        
+        tk.Label(
+            content, text="如果这个工具对你有帮助，欢迎请作者喝杯咖啡~",
+            font=("Segoe UI", 11),
+            fg=Theme.TEXT_DIM, bg=Theme.BG, anchor="w"
+        ).pack(anchor="w", pady=(0, 15))
+        
+        # 赞助图片/链接区域
+        sponsor_frame = tk.Frame(content, bg=Theme.BG)
+        sponsor_frame.pack(fill="x", pady=(0, 15))
+        
+        for name, url, img_file in AboutConfig.SPONSOR_LINKS:
+            self._add_sponsor_item(sponsor_frame, name, url, img_file)
+        
+        # === 分隔线 ===
+        tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
+        
+        # === 版权声明 ===
+        copyright_text = f"""作者：{AboutConfig.AUTHOR}
+
+MIT License
+Copyright © 2024-2026 {AboutConfig.AUTHOR}
+
+Gaijin Entertainment AG及其子公司拥有《战争雷霆》及相关商标的所有权
+本软件与Gaijin Entertainment AG无任何关联
+注意！滥用本软件可能违反Gaijin用户守则
+使用本软件的风险由用户自行承担"""
+        
+        tk.Label(
+            content, text=copyright_text,
+            font=("Segoe UI", 10),  # 更大字体
+            fg=Theme.TEXT_MUTED, bg=Theme.BG,
+            justify="left", anchor="w"
+        ).pack(anchor="w", pady=(0, 15))
+        
+        # === 关闭按钮 ===
+        tk.Button(
+            content, text="关闭", command=self._close,
+            font=("Segoe UI", 11),
+            bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=40, pady=8
+        ).pack(pady=(10, 0))
+    
+    def _add_sponsor_item(self, parent, name: str, url: str, img_file: str):
+        item_frame = tk.Frame(parent, bg=Theme.BG)
+        item_frame.pack(side="left", padx=(0, 20), pady=10)
+        
+        img_loaded = False
+        if img_file and HAS_TRAY:
+            try:
+                from PIL import Image, ImageTk
+                img_path = resource_path(img_file)
+                img = Image.open(img_path).convert("RGBA")
+                
+                # 更大的图片尺寸
+                target_width = AboutConfig.SPONSOR_IMAGE_WIDTH
+                ratio = target_width / img.width
+                new_height = int(img.height * ratio)
+                img = img.resize((target_width, new_height), Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(img)
+                self._images.append(photo)
+                
+                img_lbl = tk.Label(item_frame, image=photo, bg=Theme.BG, cursor="hand2" if url else "")
+                img_lbl.pack()
+                if url:
+                    img_lbl.bind("<Button-1>", lambda e, u=url: self._open_url(u))
+                
+                tk.Label(
+                    item_frame, text=name,
+                    font=("Segoe UI", 10),
+                    fg=Theme.TEXT_DIM, bg=Theme.BG
+                ).pack(pady=(5, 0))
+                img_loaded = True
+            except Exception:
+                pass
+        
+        if not img_loaded:
+            btn = tk.Button(
+                item_frame, text=f"💝 {name}",
+                font=("Segoe UI", 11),
+                bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=20, pady=10,
+                cursor="hand2" if url else ""
+            )
+            btn.pack()
+            if url:
+                btn.config(command=lambda u=url: self._open_url(u))
+    
+    def _open_url(self, url: str):
+        if url:
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+    
+    def _close(self):
+        # 解绑鼠标滚轮事件，防止关闭后影响其他窗口
+        try:
+            self.unbind_all("<MouseWheel>")
+        except:
+            pass
+        self.destroy()
+    
+    def _center_on_parent(self, parent):
+        self.update_idletasks()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        px = parent.winfo_x()
+        py = parent.winfo_y()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        x = px + (pw - w) // 2
+        y = py + (ph - h) // 2
+        # 确保不超出屏幕
+        x = max(0, x)
+        y = max(0, y)
+        self.geometry(f"+{x}+{y}")
+
 
 # ============================================================================
 # 音效管理
@@ -3933,7 +4225,10 @@ class App:
         
         def do_quit(icon, item):
             app.root.after(0, app._quit)
-        
+
+        def do_about(icon, item):
+            app.root.after(0, app._show_about)
+
         # 面板开关回调
         def toggle_zone(icon, item):
             app.root.after(0, lambda: app._toggle_panel('show_zones'))
@@ -3994,6 +4289,7 @@ class App:
             pystray.MenuItem("⚙️ 设置", do_settings),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("🐛 Debug模式", do_debug, checked=is_debug_on),
+            pystray.MenuItem("ℹ️ 关于", do_about),
             pystray.MenuItem("❌ 退出", do_quit),
         )
         
@@ -4191,9 +4487,9 @@ class App:
         k_zones = HotkeyConfig.KEY_ZONES
         
         if self._locked:
-            return f"{k_reset}重置 │ {k_lock}解锁 │ {k_corner}角落 │ {k_beep}音({sound}) │ {k_zones}区({zone_sound})"
+            return f"{k_reset}重置 │ {k_lock}解锁 │ {k_corner}角落 │ {k_beep}声音({sound}) │ {k_zones}战区({zone_sound})"
         else:
-            return f"拖动移动 │ {k_lock}锁定 │ {k_beep}音({sound}) │ {k_zones}区({zone_sound}) │ 右键菜单"
+            return f"拖动移动 │ {k_lock}锁定 │ {k_beep}声音({sound}) │ {k_zones}战区({zone_sound})"
 
     def _update_hint(self) -> None:
         """更新提示文本"""
@@ -4238,6 +4534,10 @@ class App:
         从托盘菜单调用，不受窗口锁定状态影响。
         """
         ChecklistEditor(self.root, self)
+
+    def _show_about(self):
+        """显示关于对话框"""
+        AboutDialog(self.root, self)
 
     def _adjust_alpha(self, event):
         """Ctrl+滚轮调整透明度"""
