@@ -1,0 +1,26 @@
+# Bomana - 战雷全真模式收益计时器
+# 依赖项列表
+
+# HTTP 请求库 - 用于访问战雷 8111 接口
+requests>=2.25.0
+
+# 图像处理库 - 用于系统托盘图标和图片显示
+Pillow>=8.0.0
+
+# 系统托盘支持 - 创建托盘图标和菜单
+pystray>=0.17.0
+
+# 注意事项：
+# 1. tkinter 是 Python 标准库的一部分，无需单独安装
+#    如果运行时提示缺少 tkinter，请安装：
+#    - Windows: 重新安装 Python 并勾选 "tcl/tk and IDLE"
+#    - Ubuntu/Debian: sudo apt-get install python3-tk
+#    - macOS: tkinter 通常已包含在 Python 安装中
+#
+# 2. 其他标准库（无需安装）：
+#    - json, time, math, ctypes, threading, webbrowser
+#    - pathlib, dataclasses, collections, typing, enum
+#    - os, sys
+#
+# 3. 打包为 .exe 需要额外安装：
+#    pip install pyinstaller
