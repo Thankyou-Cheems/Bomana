@@ -214,12 +214,28 @@ class NetworkConfig:
 
 
 class UIConfig:
-    """UI界面相关配置
-    
-    所有视觉元素的尺寸、颜色、字体都在这里定义。
     """
-    # UI缩放倍数：0.85（相对于系统DPI的额外缩放）
-    UI_SCALE_MULT = 0.85
+    
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║ UI缩放机制说明（v5.9.3改进）                                          ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║ 1. 基础缩放：UI_SCALE_MULT（默认1.0，比之前的0.85更大）               ║
+    ║ 2. DPI缩放：自动根据系统DPI调整（Windows高DPI支持）                   ║
+    ║ 3. 智能缩放：首次启动时根据屏幕分辨率自动调整                          ║
+    ║    - 1080p及以下：1.1x（更大字体）                                   ║
+    ║    - 1440p：1.0x（标准）                                             ║
+    ║    - 4K及以上：0.9x（更紧凑）                                        ║
+    ║ 4. 用户可在设置中调整范围：0.6-1.5（比之前的0.6-1.2更大）             ║
+    ║                                                                      ║
+    ║ 最终缩放 = DPI缩放 × UI_SCALE_MULT                                   ║
+    ║                                                                      ║
+    ║ 注意：所有字体大小都会根据此缩放值自动调整！                           ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+    """
+    # UI缩放倍数：1.0（相对于系统DPI的额外缩放）
+    # v5.9.3: 从0.85提升到1.0，让界面在1080p/2k下更清晰
+    # 注意：此值可能被智能缩放逻辑覆盖（首次启动时）
+    UI_SCALE_MULT = 1.0
     
     # 窗口不透明度：210/255（约82%）
     WINDOW_ALPHA = 210
@@ -377,7 +393,7 @@ class AboutConfig:
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "5.9"
+    VERSION = "5.9.3"  # v5.9.3: UI缩放改进版
     AUTHOR = "猹Cheems"  # 替换为你的名字
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
@@ -597,6 +613,50 @@ def fmt_time(sec: Optional[float]) -> str:
     sec = max(0, int(sec))
     m, s = divmod(sec, 60)
     return f"{m:02d}:{s:02d}"
+
+def calculate_smart_scale(screen_width: int, screen_height: int, base_dpi_scale: float) -> float:
+    """根据屏幕分辨率智能计算UI缩放倍数（v5.9.3新增）
+    
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║ 智能缩放逻辑说明                                                      ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║ 目标：让界面在不同分辨率下都有合适的大小                               ║
+    ║                                                                      ║
+    ║ 缩放策略：                                                            ║
+    ║ 1. 1080p及以下（≤1920x1080）：1.5x - 更大字体，提高可读性             ║
+    ║ 2. 1440p（2560x1440）：1.2x - 120%大小                               ║
+    ║ 3. 4K及以上（≥3840x2160）：0.9x - 更紧凑，充分利用屏幕空间           ║
+    ║                                                                      ║
+    ║ 特殊情况：                                                            ║
+    ║ - 如果Windows DPI缩放已经>1.25，说明用户自己已经设置了大字体，       ║
+    ║   此时不再额外放大，使用1.0x                                          ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+    
+    Args:
+        screen_width: 屏幕宽度（像素）
+        screen_height: 屏幕高度（像素）
+        base_dpi_scale: Windows DPI缩放倍数
+    
+    Returns:
+        推荐的UI缩放倍数
+    """
+    # 如果Windows DPI已经很大（>125%），说明用户希望大字体
+    # 此时不再额外放大
+    if base_dpi_scale > 1.25:
+        return 1.0
+    
+    # 根据分辨率决定缩放
+    # 1080p及以下：放大50%
+    if screen_width <= 1920 and screen_height <= 1080:
+        return 1.5
+    # 1440p：放大20%
+    elif screen_width <= 2560 and screen_height <= 1440:
+        return 1.2
+    # 4K及以上：缩小10%（利用高分辨率显示更多内容）
+    else:
+        return 0.9
+
+
 
 
 class ConfigManager:
@@ -2949,7 +3009,7 @@ class SettingsDialog(tk.Toplevel):
         tk.Label(frame, text="UI缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
             row=row, column=0, sticky="w", pady=5)
         self.scale_var = tk.DoubleVar(value=UIConfig.UI_SCALE_MULT)
-        tk.Scale(frame, from_=0.6, to=1.2, resolution=0.05, orient="horizontal", 
+        tk.Scale(frame, from_=0.6, to=1.5, resolution=0.05, orient="horizontal", 
                 length=180, variable=self.scale_var, bg=Theme.BG, fg=Theme.TEXT, 
                 highlightthickness=0, troughcolor=Theme.BORDER, 
                 activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
@@ -3728,7 +3788,23 @@ class App:
         
         # 显示设置
         UIConfig.WINDOW_ALPHA = config.get('alpha', UIConfig.WINDOW_ALPHA)
-        UIConfig.UI_SCALE_MULT = config.get('scale', UIConfig.UI_SCALE_MULT)
+        # v5.9.3: 智能缩放逻辑
+        # 检查是否是首次启动（没有保存的缩放配置）
+        if 'scale' in config:
+            # 用户已经设置过缩放，使用保存的值
+            UIConfig.UI_SCALE_MULT = config.get('scale')
+        else:
+            # 首次启动，根据屏幕分辨率智能设置
+            try:
+                sw, sh = Win32.screen_size()
+                # 临时获取DPI缩放（此时窗口还未创建，使用默认值1.2）
+                smart_scale = calculate_smart_scale(sw, sh, 1.2)
+                UIConfig.UI_SCALE_MULT = smart_scale
+                print(f"[智能缩放] 检测到屏幕分辨率 {sw}x{sh}，设置缩放为 {smart_scale:.2f}x")
+            except Exception as e:
+                # 出错时使用默认值1.2
+                UIConfig.UI_SCALE_MULT = 1.2
+                print(f"[智能缩放] 检测失败，使用默认缩放1.2x: {e}")
         
         # 主题设置（必须在UI创建前应用）
         theme_name = config.get('theme', 'dark')
