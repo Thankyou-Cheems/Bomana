@@ -4837,9 +4837,17 @@ class App:
                 for zone in snap.zones:
                     marker = "➤" if zone.is_target else "○"
                     dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
+                    # v5.9.4: 目标战区显示精确角度（1位小数），非目标战区显示整数
                     rel_sign = "+" if zone.relative > 0 else ""
-                    rel_text = f"{rel_sign}{int(zone.relative)}°"
+                    if zone.is_target:
+                        # 目标战区：精确到0.1度
+                        rel_text = f"{rel_sign}{zone.relative:.2f}°"
+                    else:
+                        # 非目标战区：整数度
+                        rel_text = f"{rel_sign}{int(zone.relative)}°"
+                    
                     text = f"{marker} {zone.direction} {dist_text}  ({rel_text})"
+
                     if zone.ete_str:
                         text += f"   ⏱️{zone.ete_str}"
                     fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
