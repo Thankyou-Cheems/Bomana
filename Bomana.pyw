@@ -4195,9 +4195,7 @@ class App:
         ║ 说明：右键菜单已移至系统托盘，窗口不再响应右键                         ║
         ╚══════════════════════════════════════════════════════════════════════╝
         """
-        # 键盘快捷键（使用配置的按键）
-        self.root.bind("<Escape>", lambda e: self._quit())
-        self.root.bind(f"<{HotkeyConfig.KEY_RESET}>", lambda e: self._manual_reset())
+
         self.root.bind(f"<{HotkeyConfig.KEY_LOCK}>", lambda e: self._toggle_lock())
         self.root.bind(f"<{HotkeyConfig.KEY_CORNER}>", lambda e: self._next_corner())
         self.root.bind(f"<{HotkeyConfig.KEY_BEEP}>", lambda e: self._toggle_beep())
@@ -4489,25 +4487,58 @@ class App:
             pass
 
     def _position(self):
-        """定位窗口到指定角落"""
-        sw, sh = Win32.screen_size()
+        """定位窗口到指定角落（支持多显示器）
+        
+        在当前显示器上定位窗口，避免自动跳回主显示器。
+        """
         m = int(UIConfig.WINDOW_MARGIN * self.scale)
+        
+        # 获取当前窗口所在的显示器
+        try:
+            current_x = self.root.winfo_x()
+            current_y = self.root.winfo_y()
+        except tk.TclError:
+            current_x, current_y = 0, 0
+        
+        # 如果窗口位置有效，获取该位置所在的显示器
+        if (current_x, current_y) != (0, 0):
+            monitor = Win32.get_monitor_at(current_x, current_y)
+        else:
+            # 否则使用主显示器
+            monitors = Win32.get_all_monitors()
+            monitor = next((m for m in monitors if m.get("is_primary")), monitors[0] if monitors else None)
+        
+        # 如果无法获取显示器信息，回退到主屏幕
+        if not monitor:
+            sw, sh = Win32.screen_size()
+            monitor = {"x": 0, "y": 0, "width": sw, "height": sh}
+        
+        # 计算在当前显示器上的角落位置
+        mon_x = monitor["x"]
+        mon_y = monitor["y"]
+        mon_w = monitor["width"]
+        mon_h = monitor["height"]
+        
         pos = {
-            Corner.TOP_RIGHT: (sw - self.W - m, m),
-            Corner.TOP_LEFT: (m, m),
-            Corner.BOTTOM_RIGHT: (sw - self.W - m, sh - self.H - m),
-            Corner.BOTTOM_LEFT: (m, sh - self.H - m),
+            Corner.TOP_RIGHT: (mon_x + mon_w - self.W - m, mon_y + m),
+            Corner.TOP_LEFT: (mon_x + m, mon_y + m),
+            Corner.BOTTOM_RIGHT: (mon_x + mon_w - self.W - m, mon_y + mon_h - self.H - m),
+            Corner.BOTTOM_LEFT: (mon_x + m, mon_y + mon_h - self.H - m),
         }
+        
         if self._user_moved and self._manual_pos:
             x, y = self._manual_pos
         else:
             x, y = pos[self._corner]
-        # 边界检查
+        
+        # 边界检查（基于当前显示器）
         x, y = self._clamp_to_screen(x, y)
         self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
 
     def _clamp_to_screen(self, x: int, y: int) -> Tuple[int, int]:
-        """确保窗口位置不超出屏幕边界
+        """确保窗口位置不超出屏幕边界（支持多显示器）
+        
+        基于窗口所在的显示器进行边界检查，避免跨显示器时的问题。
         
         Args:
             x, y: 窗口左上角坐标
@@ -4515,21 +4546,35 @@ class App:
         Returns:
             调整后的 (x, y) 坐标
         """
-        sw, sh = Win32.screen_size()
         m = int(UIConfig.WINDOW_MARGIN * self.scale)
         
+        # 获取窗口中心点所在的显示器
+        center_x = x + self.W // 2
+        center_y = y + self.H // 2
+        monitor = Win32.get_monitor_at(center_x, center_y)
+        
+        # 如果无法获取显示器信息，回退到主屏幕
+        if not monitor:
+            sw, sh = Win32.screen_size()
+            monitor = {"x": 0, "y": 0, "width": sw, "height": sh}
+        
+        mon_x = monitor["x"]
+        mon_y = monitor["y"]
+        mon_w = monitor["width"]
+        mon_h = monitor["height"]
+        
         # 确保右边界不超出（优先保证窗口在屏幕内）
-        if x + self.W > sw - m:
-            x = sw - self.W - m
+        if x + self.W > mon_x + mon_w - m:
+            x = mon_x + mon_w - self.W - m
         # 确保左边界不超出
-        if x < m:
-            x = m
+        if x < mon_x + m:
+            x = mon_x + m
         # 确保下边界不超出
-        if y + self.H > sh - m:
-            y = sh - self.H - m
+        if y + self.H > mon_y + mon_h - m:
+            y = mon_y + mon_h - self.H - m
         # 确保上边界不超出
-        if y < m:
-            y = m
+        if y < mon_y + m:
+            y = mon_y + m
         
         return x, y
 
