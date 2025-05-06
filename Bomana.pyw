@@ -126,6 +126,28 @@ class ZoneConfig:
     
     这些参数影响战区目标选择和偏航判断。
     """
+    # === 航道偏差指示器(CDI)配置 ===
+    # 指示器宽度（字符数，奇数以确保中心点）
+    CDI_WIDTH = 21
+    
+    # 动态容差配置：(距离上限km, 容差角度°)
+    # 距离越近，容差越小，投弹精度要求越高
+    CDI_TOLERANCE_THRESHOLDS = [
+        (3.0, 1.5),     # <3km: ±1.5°（最终投弹进入）
+        (8.0, 3.0),     # <8km: ±3°（投弹准备）
+        (15.0, 5.0),    # <15km: ±5°（接近目标）
+        (30.0, 10.0),   # <30km: ±10°（中距离）
+        (float('inf'), 15.0)  # >30km: ±15°（远距离巡航）
+    ]
+    
+    # CDI符号定义
+    CDI_CENTER = "●"      # 中心指示点
+    CDI_TRACK = "━"       # 轨道线
+    CDI_LEFT = "◁"        # 左边界
+    CDI_RIGHT = "▷"       # 右边界
+    CDI_OVERFLOW_LEFT = "◀◀"   # 严重偏左指示
+    CDI_OVERFLOW_RIGHT = "▶▶"  # 严重偏右指示
+    
     # 航向容差：±45°内视为正对目标
     HEADING_TOLERANCE = 45
     
@@ -393,7 +415,7 @@ class AboutConfig:
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "5.9.3"  # v5.9.3: UI缩放改进版
+    VERSION = "5.9.5"  # v5.9.5: 新增CDI航道偏差指示器
     AUTHOR = "猹Cheems"  # 替换为你的名字
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
@@ -1285,6 +1307,120 @@ def get_direction_text(relative: float) -> str:
         return "右"
     else:
         return "左"
+def get_cdi_tolerance(distance_km: float) -> float:
+    """根据距离获取动态容差角度
+    
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║ 动态容差说明                                                          ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║ 距离越近，投弹精度要求越高，容差越小：                                 ║
+    ║ - >30km: ±15° (远距离巡航，允许较大偏差)                             ║
+    ║ - 15-30km: ±10° (中距离)                                            ║
+    ║ - 8-15km: ±5° (接近目标)                                            ║
+    ║ - 3-8km: ±3° (投弹准备)                                             ║
+    ║ - <3km: ±1.5° (最终投弹进入，需要精确对准)                           ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+    
+    Args:
+        distance_km: 到目标的距离（公里）
+    
+    Returns:
+        容差角度（度）
+    """
+    for threshold_km, tolerance_deg in ZoneConfig.CDI_TOLERANCE_THRESHOLDS:
+        if distance_km < threshold_km:
+            return tolerance_deg
+    return 15.0  # 默认
+
+
+def generate_cdi_indicator(relative_angle: float, distance_km: float) -> Tuple[str, str]:
+    """生成航道偏差指示器(CDI)字符串
+    
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║ CDI指示器说明                                                         ║
+    ╠══════════════════════════════════════════════════════════════════════╣
+    ║ 指示器显示当前航向与目标方位的偏差：                                   ║
+    ║                                                                      ║
+    ║ ◁━━━━━━━━━●━━━━━━━━━▷  正对目标（绿色）                              ║
+    ║ ◁━━━━━━━━━━━━●━━━━━━▷  稍微偏右，需要左转修正                        ║
+    ║ ◁━━━━━━●━━━━━━━━━━━━▷  稍微偏左，需要右转修正                        ║
+    ║ ◀◀━━━━━━━━━━━━━━━━━━▷  严重偏左，大幅右转（红色）                    ║
+    ║ ◁━━━━━━━━━━━━━━━━━▶▶  严重偏右，大幅左转（红色）                     ║
+    ║                                                                      ║
+    ║ 指示器逻辑：                                                          ║
+    ║ - 中心 = 完美对准目标                                                 ║
+    ║ - 指示点偏右 = 目标在右边 = 需要右转（或等效：向左修正航向）          ║
+    ║ - 指示点偏左 = 目标在左边 = 需要左转                                  ║
+    ║ - 超出范围时显示溢出箭头                                              ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+    
+    Args:
+        relative_angle: 相对方位角（-180到180，正数=目标在右，负数=目标在左）
+        distance_km: 到目标的距离（公里）
+    
+    Returns:
+        (指示器字符串, 颜色代码)
+    """
+    width = ZoneConfig.CDI_WIDTH
+    tolerance = get_cdi_tolerance(distance_km)
+    
+    # 计算偏差比例：relative_angle / tolerance
+    # 正值 = 目标在右 = 指示点显示在右边
+    if tolerance > 0:
+        deviation_ratio = relative_angle / tolerance
+    else:
+        deviation_ratio = 0.0
+    
+    # 限制在 -1.5 到 1.5 范围（超出1.0表示溢出）
+    clamped_ratio = max(-1.5, min(1.5, deviation_ratio))
+    
+    # 计算指示点位置（0 = 最左，width-1 = 最右）
+    center = (width - 1) // 2
+    # 偏差比例映射到位置：ratio=0 -> center, ratio=1 -> 右边界附近
+    track_width = center - 1  # 可用的偏移范围
+    offset = int(clamped_ratio * track_width)
+    pos = center + offset
+    pos = max(1, min(width - 2, pos))  # 确保不覆盖边界符号
+    
+    # 判断是否溢出
+    is_overflow_left = deviation_ratio < -1.0
+    is_overflow_right = deviation_ratio > 1.0
+    
+    # 构建指示器字符串
+    indicator = [ZoneConfig.CDI_TRACK] * width
+    
+    # 设置边界
+    if is_overflow_left:
+        indicator[0] = ZoneConfig.CDI_OVERFLOW_LEFT[0]
+        indicator[1] = ZoneConfig.CDI_OVERFLOW_LEFT[1] if len(ZoneConfig.CDI_OVERFLOW_LEFT) > 1 else ZoneConfig.CDI_TRACK
+    else:
+        indicator[0] = ZoneConfig.CDI_LEFT
+    
+    if is_overflow_right:
+        indicator[-1] = ZoneConfig.CDI_OVERFLOW_RIGHT[-1] if len(ZoneConfig.CDI_OVERFLOW_RIGHT) > 1 else ZoneConfig.CDI_OVERFLOW_RIGHT[0]
+        indicator[-2] = ZoneConfig.CDI_OVERFLOW_RIGHT[0]
+    else:
+        indicator[-1] = ZoneConfig.CDI_RIGHT
+    
+    # 设置中心指示点
+    indicator[pos] = ZoneConfig.CDI_CENTER
+    
+    # 确定颜色
+    abs_ratio = abs(deviation_ratio)
+    if abs_ratio <= 0.3:
+        # 接近中心，绿色
+        color = Theme.GREEN
+    elif abs_ratio <= 0.7:
+        # 轻微偏差，蓝色
+        color = Theme.BLUE
+    elif abs_ratio <= 1.0:
+        # 中等偏差，黄色
+        color = Theme.YELLOW
+    else:
+        # 严重偏差，橙红色
+        color = Theme.ORANGE
+    
+    return "".join(indicator), color
 
 
 def normalized_to_grid(x: float, y: float, map_info: Optional[Dict]) -> str:
@@ -1733,6 +1869,8 @@ class ZoneDisplayInfo:
     relative: float
     is_target: bool
     ete_str: str = ""      # 预计抵达时间字符串
+    cdi_indicator: str = ""  # 航道偏差指示器字符串
+    cdi_color: str = ""      # 指示器颜色
 
 
 @dataclass(frozen=True)
@@ -1746,6 +1884,8 @@ class AirfieldDisplayInfo:
     relative: float
     is_target: bool
     ete_str: str = ""
+    cdi_indicator: str = ""  # 航道偏差指示器字符串
+    cdi_color: str = ""      # 指示器颜色
 
 
 @dataclass(frozen=True)
@@ -2626,20 +2766,32 @@ class GameLogic:
             gs = nav.ground_speed
 
             for zone in nav.zones[:ZoneConfig.MAX_DISPLAY_ZONES]:
-                # ETE计算
+                # ETE计算（仅目标战区）
                 ete_text = ""
                 if zone.is_target and gs > 1e-7:
                     seconds_left = zone.distance / gs
                     if seconds_left < 5999:
                         m, s_time = divmod(int(seconds_left), 60)
                         ete_text = f"{m:02d}:{s_time:02d}"
+                
+                # CDI指示器（仅目标战区显示）
+                cdi_str = ""
+                cdi_clr = ""
+                if zone.is_target:
+                    # 转换距离单位为公里
+                    dist_km = zone.distance * ZoneConfig.DISTANCE_SCALE
+                    # 接收函数返回的两个值：指示器字符串和颜色
+                    cdi_str, cdi_clr = generate_cdi_indicator(zone.relative, dist_km)
 
+                # 所有战区都添加到显示列表（CDI仅目标战区有值）
                 zone_display_list.append(ZoneDisplayInfo(
                     id=zone.id, grid=zone.grid, 
                     distance_km=zone.distance * ZoneConfig.DISTANCE_SCALE,
                     direction=get_direction_text(zone.relative), 
                     relative=zone.relative, is_target=zone.is_target,
-                    ete_str=ete_text
+                    ete_str=ete_text,
+                    cdi_indicator=cdi_str,
+                    cdi_color=cdi_clr
                 ))
             
             # 机场导航信息
@@ -2687,11 +2839,14 @@ class GameLogic:
                         if seconds_left < 3600:
                             mm, ss = divmod(int(seconds_left), 60)
                             ete_text = f"{mm:02d}:{ss:02d}"
+                    # CDI指示器（友方机场始终显示）
+                    cdi_str, cdi_clr = generate_cdi_indicator(info.relative, info.distance_km)
                     friendly_airfield_display = AirfieldDisplayInfo(
                         id=info.id, side=info.side, grid=info.grid,
                         distance_km=info.distance_km, direction=info.direction, 
                         relative=info.relative,
-                        is_target=True, ete_str=ete_text
+                        is_target=True, ete_str=ete_text,
+                        cdi_indicator=cdi_str, cdi_color=cdi_clr
                     )
 
                 # 敌方机场：显示所有，但只在朝向时显示ETE（v5.7改进）
@@ -2707,17 +2862,21 @@ class GameLogic:
                     for i, (dist, info) in enumerate(enemy_infos):
                         is_target = (i == target_idx)
                         ete_text = ""
-                        # 只在目标机场且在航向前方（<45°）时显示ETE
+                        cdi_str = ""
+                        cdi_clr = ""
+                        # 只在目标机场且在航向前方（<45°）时显示ETE和CDI
                         if is_target and abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE and nav.ground_speed > 1e-7:
                             seconds_left = dist / nav.ground_speed
                             if seconds_left < 3600:
                                 mm, ss = divmod(int(seconds_left), 60)
                                 ete_text = f"{mm:02d}:{ss:02d}"
+                            cdi_str, cdi_clr = generate_cdi_indicator(info.relative, info.distance_km)
                         enemy_airfields_display.append(AirfieldDisplayInfo(
                             id=info.id, side=info.side, grid=info.grid,
                             distance_km=info.distance_km, direction=info.direction, 
                             relative=info.relative,
-                            is_target=is_target, ete_str=ete_text
+                            is_target=is_target, ete_str=ete_text,
+                            cdi_indicator=cdi_str, cdi_color=cdi_clr
                         ))
                     has_airfield_target = (target_idx >= 0)
             
@@ -4131,6 +4290,24 @@ class App:
         # Row 6: 燃油信息容器
         self.fuel_info_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
         self.fuel_info_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
+        # CDI指示器标签（战区目标上方）
+        font_cdi = ("Consolas", int(UIConfig.FONT_ZONE_ITEM[1]*s))  # 等宽字体确保对齐
+        self.zone_cdi_lbl = tk.Label(
+            self.zone_list_frame, text="", font=font_cdi,
+            fg=Theme.GREEN, bg=Theme.GRAYPILL, anchor="w"
+        )
+        
+        # CDI指示器标签（友方机场上方）
+        self.friendly_cdi_lbl = tk.Label(
+            self.airport_list_frame, text="", font=font_cdi,
+            fg=Theme.GREEN, bg=Theme.GRAYPILL, anchor="w"
+        )
+        
+        # CDI指示器标签（敌方机场目标上方）
+        self.enemy_cdi_lbl = tk.Label(
+            self.airport_list_frame, text="", font=font_cdi,
+            fg=Theme.ORANGE, bg=Theme.GRAYPILL, anchor="w"
+        )
         
         # 燃油主信息行
         self.fuel_main_lbl = tk.Label(
@@ -4873,6 +5050,8 @@ class App:
             
             # 更新并显示标签
             idx = 0
+            self.zone_cdi_lbl.pack_forget()  # 先隐藏CDI
+            
             if not snap.zones:
                 lbl = self._zone_label_pool[idx]
                 lbl.config(text="无战区", fg=Theme.TEXT_MUTED)
@@ -4880,6 +5059,13 @@ class App:
                 idx += 1
             else:
                 for zone in snap.zones:
+                    # 如果是目标战区且有CDI数据，先显示CDI指示器
+                    if zone.is_target and zone.cdi_indicator:
+                        tolerance = get_cdi_tolerance(zone.distance_km)
+                        cdi_text = f"  {zone.cdi_indicator}  ±{tolerance:.1f}°"
+                        self.zone_cdi_lbl.config(text=cdi_text, fg=zone.cdi_color)
+                        self.zone_cdi_lbl.pack(fill="x")
+                    
                     marker = "➤" if zone.is_target else "○"
                     dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
                     # v5.9.4: 目标战区显示精确角度（1位小数），非目标战区显示整数
@@ -4943,8 +5129,18 @@ class App:
             
             # 更新并显示机场标签
             ap_idx = 0
+            self.friendly_cdi_lbl.pack_forget()  # 先隐藏友方CDI
+            self.enemy_cdi_lbl.pack_forget()     # 先隐藏敌方CDI
+            
             if snap.friendly_airfield:
                 af = snap.friendly_airfield
+                # 显示友方机场CDI（如果在前方）
+                if af.cdi_indicator and abs(af.relative) <= 90:
+                    tolerance = get_cdi_tolerance(af.distance_km)
+                    cdi_text = f"  {af.cdi_indicator}  ±{tolerance:.1f}°"
+                    self.friendly_cdi_lbl.config(text=cdi_text, fg=af.cdi_color)
+                    self.friendly_cdi_lbl.pack(fill="x")
+                
                 dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
                 rel_sign = "+" if af.relative > 0 else ""
                 rel_text = f"{rel_sign}{int(af.relative)}°"
@@ -4958,6 +5154,13 @@ class App:
             
             if snap.enemy_airfields:
                 for af in snap.enemy_airfields:
+                    # 显示敌方目标机场CDI
+                    if af.is_target and af.cdi_indicator:
+                        tolerance = get_cdi_tolerance(af.distance_km)
+                        cdi_text = f"  {af.cdi_indicator}  ±{tolerance:.1f}°"
+                        self.enemy_cdi_lbl.config(text=cdi_text, fg=af.cdi_color)
+                        self.enemy_cdi_lbl.pack(fill="x")
+                    
                     marker = "➤" if af.is_target else "○"
                     dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
                     rel_sign = "+" if af.relative > 0 else ""
