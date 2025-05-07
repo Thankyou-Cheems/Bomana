@@ -1499,6 +1499,9 @@ class TelemetryData:
     altitude_m: float = 0         # 飞行高度 (m)
     tas_kmh: float = 0            # 真空速 (km/h)
     throttle_pct: float = 0       # 油门百分比 (%)
+    
+    # v5.9.6 新增：起落架状态
+    gear_down: bool = False       # 起落架是否放下 (True=放下, False=收起)
 
     @property
     def entity_like(self) -> bool:
@@ -1940,6 +1943,9 @@ class UISnapshot:
     return_fuel_needed_kg: float = 0.0         # 返航所需油量
     return_status: str = "unknown"             # "safe"/"warning"/"danger"/"unknown"
     friendly_distance_km: float = 0.0          # 到友方机场距离
+    
+    # v5.9.6 新增：起落架警告
+    gear_warning: bool = False                 # 起落架未收起警告
 
 
 # ============================================================================
@@ -2038,6 +2044,10 @@ class TelemetryFetcher:
             data.altitude_m = float(j.get("H, m", 0) or 0)
             data.tas_kmh = float(j.get("TAS, km/h", 0) or 0)
             data.throttle_pct = float(j.get("throttle 1, %", 0) or 0)
+            
+            # v5.9.6 新增：解析起落架状态 ("gear, %": 100表示放下, 0表示收起)
+            gear_pct = float(j.get("gear, %", 0) or 0)
+            data.gear_down = (gear_pct > 50)  # 超过50%视为放下状态
         
         return data
 
@@ -2944,6 +2954,15 @@ class GameLogic:
                 if return_fuel_needed is not None:
                     return_fuel_needed_kg = return_fuel_needed
                     return_status = fuel.get_return_status(return_fuel_needed)
+            
+            # v5.9.6 新增：起落架警告判断
+            # 判断条件：在空中（速度>80km/h 或 高度>50m）且起落架未收起
+            gear_warning = False
+            if s.phase == Phase.ALIVE and tel.state_resp_ok:
+                is_airborne = (tel.ias_kmh > 80) or (tel.altitude_m > 50)
+                # gear_down=True 表示起落架放下（未收起）
+                if is_airborne and tel.gear_down:
+                    gear_warning = True
 
             return UISnapshot(
                 phase=s.phase, life_index=life_index, cycle=cycle, 
@@ -2975,6 +2994,8 @@ class GameLogic:
                 return_fuel_needed_kg=return_fuel_needed_kg,
                 return_status=return_status,
                 friendly_distance_km=friendly_distance_km,
+                # v5.9.6 新增：起落架警告
+                gear_warning=gear_warning,
             )
 
     def _start_new_life_locked(self, now: float):
@@ -4196,6 +4217,9 @@ class App:
         self.badge_main.pack(side="left")
         self.badge_flight = Pill(row2, text="—", fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, font=pill_font)
         self.badge_flight.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
+        # v5.9.6 新增：起落架警告徽章
+        self.badge_gear = Pill(row2, text="", fg=Theme.TEXT, bg=Theme.ORANGE, font=pill_font)
+        # 初始隐藏
         font_status = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s))
         self.status_txt = tk.Label(row2, text="等待中", font=font_status, fg=Theme.TEXT_DIM, bg=Theme.BG, anchor="e")
         self.status_txt.pack(side="right")
@@ -5353,6 +5377,16 @@ class App:
         # 更新徽章
         self.badge_main.set(*snap.main_badge)
         self.badge_flight.set(*snap.flight_badge)
+        
+        # v5.9.6 新增：起落架警告徽章显示/隐藏
+        if snap.gear_warning:
+            self.badge_gear.set("⚠️起落架", Theme.TEXT, Theme.ORANGE)
+            if not self.badge_gear.winfo_ismapped():
+                self.badge_gear.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*self.scale), 0), after=self.badge_flight)
+        else:
+            if self.badge_gear.winfo_ismapped():
+                self.badge_gear.pack_forget()
+        
         self.status_txt.config(text=snap.status_text, fg=(Theme.YELLOW if snap.api_down else Theme.TEXT_DIM))
 
         # 调试信息
