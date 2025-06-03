@@ -1,0 +1,75 @@
+name: Build and Release Bomana
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller requests Pillow pystray
+
+      - name: Extract Version from Code
+        id: get_version
+        shell: pwsh
+        run: |
+          # 从 Bomana.pyw 中正则匹配 VERSION = "x.x.x"
+          $version = (Get-Content Bomana.pyw | Select-String'VERSION = "(.*)"').Matches.Groups[1].Value
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "Detected Version: $version"
+
+      - name: Build with PyInstaller
+        shell: pwsh
+        run: |
+          # 执行打包
+            pyinstaller --noconsole --onefile `
+                --name "Bomana" `
+                --icon "app.ico" `
+                --add-data "app.png;." `
+                --add-data "sponsor_wechat.png;." `
+                --hidden-import "pystray._win32" `
+                --collect-submodules "PIL" `
+                --clean `
+                Bomana.pyw
+
+      - name: Post-Build Renaming
+        shell: pwsh
+        run: |
+          # 将 Bomana.exe 重命名为带有版本号的形式
+          $ver = "${{ steps.get_version.outputs.VERSION }}"
+          Rename-Item -Path "dist/Bomana.exe" -NewName "BomanaV$ver.exe"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bomana-v${{ steps.get_version.outputs.VERSION }}
+          path: dist/*.exe
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          body: |
+            ## Bomana 战雷收益计时器
+            构建版本: v${{ steps.get_version.outputs.VERSION }}
+            构建时间: ${{ github.event.head_commit.timestamp }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -57,7 +57,18 @@ War Thunder SB Timer - 战雷全真模式收益计时器
 
 打包命令：
 -------
-pyinstaller --onefile --windowed --icon=app.ico --name=Bomana --add-data "app.png;." --add-data "sponsor_*.png;." WTtimer.pyw
+pip install pyinstaller requests Pillow pystray
+
+pyinstaller --noconsole --onefile `
+    --name "Bomana" `
+    --icon "app.ico" `
+    --add-data "app.png;." `
+    --add-data "sponsor_wechat.png;." `
+    --hidden-import "pystray._win32" `
+    --collect-submodules "PIL" `
+    --clean `
+    Bomana.pyw
+
 ===============================================================================
 """
 
@@ -415,8 +426,8 @@ class AboutConfig:
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "5.9.5"  # v5.9.5: 新增CDI航道偏差指示器
-    AUTHOR = "猹Cheems"  # 替换为你的名字
+    VERSION = "5.9.6"  # v5.9.6: 新增CDI航道偏差指示器和起落架警告
+    AUTHOR = "猹Cheems"
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
     
