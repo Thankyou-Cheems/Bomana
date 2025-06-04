@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -29,7 +32,7 @@ jobs:
         shell: pwsh
         run: |
           # 从 Bomana.pyw 中正则匹配 VERSION = "x.x.x"
-          $version = (Get-Content Bomana.pyw | Select-String'VERSION = "(.*)"').Matches.Groups[1].Value
+          $version = (Get-Content Bomana.pyw | Select-String 'VERSION = "(.*)"').Matches.Groups[1].Value
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
           echo "Detected Version: $version"
 
