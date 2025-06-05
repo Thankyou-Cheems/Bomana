@@ -86,6 +86,15 @@ from collections import deque
 from typing import Optional, Tuple, Any, List, Dict
 from enum import Enum, auto
 
+# 尝试导入外部炸弹参数模块（仅在CCRP启用时）
+# 注意：ENABLE_CCRP 在后面定义，这里先尝试导入，后续根据开关决定是否使用
+try:
+    from ccrp_bomb_params import BALLISTIC_PARAMS as CCRP_BOMB_PARAMS
+    _CCRP_PARAMS_AVAILABLE = True
+except ImportError:
+    CCRP_BOMB_PARAMS = {}
+    _CCRP_PARAMS_AVAILABLE = False
+
 import tkinter as tk
 from tkinter import messagebox
 import requests
@@ -97,6 +106,14 @@ try:
     HAS_TRAY = True
 except ImportError:
     HAS_TRAY = False
+# ============================================================================
+# 编译开关 - 功能模块启用控制
+# ============================================================================
+# 设置为 False 可在打包时完全移除对应功能，减小体积并简化界面
+# 修改后需要重新打包才能生效
+
+ENABLE_CCRP = True  # CCRP投弹预测功能开关（设为False则完全禁用投弹预测模块）
+
 
 
 # ============================================================================
@@ -421,12 +438,86 @@ class FileConfig:
     # 互斥锁名称（防止多开）
     MUTEX_NAME = r"Global\WTtimer_SingleInstance"
 
+
+# ============================================================================
+# 弹道物理计算参数（用于公式校准）
+# ============================================================================
+
+class BallisticPhysicsParams:
+    """弹道物理计算参数 v3.0（基于War Thunder大气模型研究）
+    
+    ╔══════════════════════════════════════════════════════════════════════════╗
+    ║ CCRP v3.0 - War Thunder 专用大气模型                                       ║
+    ╠══════════════════════════════════════════════════════════════════════════╣
+    ║ 空气密度模型：ρ(h) = 1.225 × exp(-h/14426) kg/m³                           ║
+    ║ 标高 H = 14,426 m（来自Wiki "10km约一半密度"的推导）                        ║
+    ║ 支持地图温度修正（冷图+12%密度，热图-6%密度）                               ║
+    ╚══════════════════════════════════════════════════════════════════════════╝
+    """
+    
+    # ==================== 基础物理常量 ====================
+    GRAVITY = 9.8
+    AIR_DENSITY_SEA = 1.225
+    AIR_DENSITY_SCALE_HEIGHT = 14426.0
+    
+    # ==================== 地图温度修正 ====================
+    TEMP_REFERENCE_K = 288.15
+    MAP_TEMPERATURE_K = 288.0
+    USE_TEMPERATURE_CORRECTION = True
+    
+    # ==================== 阻力模型配置 ====================
+    DRAG_MODEL = "advanced"
+    DRAG_COEFFICIENT_MULT = 0.5
+    DRAG_REFERENCE_AREA_MULT = 0.2
+    
+    # ==================== 减速伞参数 ====================
+    BRAKE_DRAG_MULT = 1.0
+    BRAKE_DEPLOY_DELAY = 0.5
+    
+    # ==================== 数值计算精度 ====================
+    TIME_STEP = 0.005
+    MAX_FLIGHT_TIME = 120.0
+    GROUND_MARGIN = 1.0
+    
+    # ==================== 校准修正参数 ====================
+    RANGE_CORRECTION_MULT = 1.0
+    TIME_CORRECTION_MULT = 1.0
+    ALTITUDE_CORRECTION_OFFSET = 0.0
+    
+    # ==================== 飞机状态参数 ====================
+    USE_AIRCRAFT_VY = True
+    DEFAULT_TARGET_ALT = 0.0
+    
+    # ==================== 投弹提示配置 ====================
+    RELEASE_WARNING_SEC = 5.0
+    RELEASE_READY_SEC = 0.5
+
+
+def _wt_get_air_density(altitude_m: float, temp_k: float = None) -> float:
+    """计算War Thunder指数衰减大气密度
+    
+    公式：ρ(h) = 1.225 × exp(-h/14426) × (288.15/T)
+    """
+    if altitude_m < 0:
+        altitude_m = 0
+    
+    rho_sea = BallisticPhysicsParams.AIR_DENSITY_SEA
+    scale_h = BallisticPhysicsParams.AIR_DENSITY_SCALE_HEIGHT
+    
+    density = rho_sea * math.exp(-altitude_m / scale_h)
+    
+    if temp_k is not None and temp_k > 0 and BallisticPhysicsParams.USE_TEMPERATURE_CORRECTION:
+        density *= BallisticPhysicsParams.TEMP_REFERENCE_K / temp_k
+    
+    return density
+
+
 class AboutConfig:
     """关于对话框配置"""
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "5.9.6"  # v5.9.6: 新增CDI航道偏差指示器和起落架警告
+    VERSION = "6.0.0"  # v6.0.0: 新增CCRP投弹预测功能，保留CDI和起落架警告
     AUTHOR = "猹Cheems"
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
@@ -459,6 +550,163 @@ class ChecklistConfig:
         "火控系统Y67调节炸弹自动",
         "降落后Y65关闭座舱盖防噪音"
     ]
+
+
+class BombConfig:
+    """投弹预测配置（CCRP v2.0 - 外部参数加载版）
+    
+    ╔══════════════════════════════════════════════════════════════════════════╗
+    ║ 投弹系统说明 (CCRP v2.0)                                                   ║
+    ╠══════════════════════════════════════════════════════════════════════════╣
+    ║ 炸弹参数从外部ccrp_bomb_params.py模块加载                                   ║
+    ║ 弹道计算参数集中到BallisticPhysicsParams配置块                              ║
+    ║ 支持动态切换阻力模型（none/simple/advanced）                                ║
+    ╚══════════════════════════════════════════════════════════════════════════╝
+    """
+    
+    selected_bomb = "su_fab100sv"
+    BOMB_DATABASE = {}
+    _database_loaded = False
+    
+    @classmethod
+    def _ensure_database_loaded(cls):
+        """确保炸弹数据库已加载"""
+        if cls._database_loaded:
+            return
+        
+        try:
+            from ccrp_bomb_params import BALLISTIC_PARAMS as external_params
+            
+            for bomb_id, params in external_params.items():
+                cls.BOMB_DATABASE[bomb_id] = {
+                    'mass': params.get('mass', 100.0),
+                    'drag_cx': params.get('dragCx', 0.04),
+                    'caliber': params.get('caliber', 0.2),
+                    'distFromCmToStab': params.get('distFromCmToStab', 0.5),
+                    'brakeTime': params.get('brakeTime', [0.0, 0.0]),
+                    'brakeCxK': params.get('brakeCxK', 0.0),
+                    'brakeArm': params.get('brakeArm', 0.0),
+                    'stab_enabled': params.get('stab_enabled', False),
+                    'category': cls._infer_category(bomb_id),
+                }
+            
+            cls._database_loaded = True
+            print(f"[BombConfig] 已从ccrp_bomb_params加载 {len(cls.BOMB_DATABASE)} 种炸弹参数")
+            
+        except ImportError as e:
+            print(f"[BombConfig] 警告: 无法加载ccrp_bomb_params模块: {e}")
+            cls._database_loaded = True
+        except Exception as e:
+            print(f"[BombConfig] 加载炸弹参数时出错: {e}")
+            cls._database_loaded = True
+    
+    @classmethod
+    def _infer_category(cls, bomb_id: str) -> str:
+        """根据炸弹ID推断国家/分类"""
+        bomb_id_lower = bomb_id.lower()
+        
+        category_prefixes = {
+            'us_': '美国', 'su_': '苏联', 'uk_': '英国', 'de_': '德国',
+            'jp_': '日本', 'it_': '意大利', 'fr_': '法国', 'cn_': '中国',
+            'swd_': '瑞典', 'sws_': '瑞典', 'il_': '以色列',
+        }
+        
+        for prefix, category in category_prefixes.items():
+            if bomb_id_lower.startswith(prefix):
+                return category
+        
+        if 'fab' in bomb_id_lower or 'ofab' in bomb_id_lower:
+            return '苏联'
+        if 'mk_' in bomb_id_lower or 'gbu' in bomb_id_lower:
+            return '美国'
+        
+        return '通用'
+    
+    @classmethod
+    def get_categories(cls) -> list:
+        """获取所有炸弹分类"""
+        cls._ensure_database_loaded()
+        categories = set(bomb.get("category", "通用") for bomb in cls.BOMB_DATABASE.values())
+        priority = ['苏联', '美国', '德国', '英国', '日本', '中国']
+        result = [p for p in priority if p in categories]
+        result.extend(sorted(categories - set(priority)))
+        return result
+    
+    @classmethod
+    def get_bombs_by_category(cls, category: str) -> list:
+        """获取指定分类的所有炸弹"""
+        cls._ensure_database_loaded()
+        bombs = [name for name, data in cls.BOMB_DATABASE.items() if data.get("category") == category]
+        return sorted(bombs, key=lambda x: cls.BOMB_DATABASE[x].get('mass', 0))
+    
+    @classmethod
+    def get_all_bomb_names(cls) -> list:
+        """获取所有炸弹名称"""
+        cls._ensure_database_loaded()
+        return sorted(list(cls.BOMB_DATABASE.keys()))
+    
+    @classmethod
+    def get_bomb_data(cls, name: str):
+        """获取指定炸弹的数据"""
+        cls._ensure_database_loaded()
+        return cls.BOMB_DATABASE.get(name)
+    
+    @classmethod
+    def get_selected_bomb_data(cls) -> dict:
+        """获取当前选中炸弹的数据"""
+        cls._ensure_database_loaded()
+        data = cls.BOMB_DATABASE.get(cls.selected_bomb)
+        return data if data else {"mass": 100.0, "drag_cx": 0.04, "caliber": 0.2, "category": "苏联"}
+    
+    @classmethod
+    def search_bombs(cls, query: str, limit: int = 100) -> list:
+        """搜索炸弹"""
+        cls._ensure_database_loaded()
+        if not query:
+            return list(cls.BOMB_DATABASE.keys())[:limit]
+        
+        def normalize(s):
+            return s.lower().replace('_', '').replace('-', '').replace(' ', '')
+        
+        query_norm = normalize(query)
+        results = []
+        
+        for bomb_id, data in cls.BOMB_DATABASE.items():
+            keywords = bomb_id + ' ' + data.get('category', '') + ' ' + str(int(data.get('mass', 0)))
+            if query_norm in normalize(keywords) or query.lower() in keywords.lower():
+                results.append(bomb_id)
+                if len(results) >= limit:
+                    break
+        return results
+    
+    @classmethod
+    def format_bomb_name(cls, bomb_id: str) -> str:
+        """格式化炸弹名称用于显示"""
+        cls._ensure_database_loaded()
+        data = cls.get_bomb_data(bomb_id)
+        if data is None:
+            return bomb_id
+        mass = data.get('mass', 0)
+        mass_str = f"{mass/1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
+        name = bomb_id.replace('_', ' ').replace(' default', '')
+        return f"{name} ({mass_str})"
+    
+    @classmethod
+    def get_bomb_physics_params(cls, name: str = None) -> dict:
+        """获取炸弹的完整物理参数"""
+        cls._ensure_database_loaded()
+        data = cls.get_selected_bomb_data() if name is None else (cls.get_bomb_data(name) or {})
+        return {
+            'mass': data.get('mass', 100.0),
+            'caliber': data.get('caliber', 0.2),
+            'drag_cx': data.get('drag_cx', 0.04),
+            'distFromCmToStab': data.get('distFromCmToStab', 0.5),
+            'brakeTime': data.get('brakeTime', [0.0, 0.0]),
+            'brakeCxK': data.get('brakeCxK', 0.0),
+            'brakeArm': data.get('brakeArm', 0.0),
+            'stab_enabled': data.get('stab_enabled', False),
+            'reference_area': 3.14159 * (data.get('caliber', 0.2) / 2) ** 2,
+        }
 
 
 class Theme:
@@ -603,6 +851,13 @@ class PanelConfig:
     show_airfields = True    # 机场导航
     show_fuel = True         # 燃油管理
     show_checklist = True    # 检查清单
+    show_bombing = True      # v6.0新增：投弹预测（受ENABLE_CCRP开关控制）
+    
+    @classmethod
+    def init_bombing_state(cls):
+        """根据ENABLE_CCRP开关初始化投弹面板状态"""
+        if not ENABLE_CCRP:
+            cls.show_bombing = False
 
 
 class SnapConfig:
@@ -1487,6 +1742,243 @@ def normalized_to_grid(x: float, y: float, map_info: Optional[Dict]) -> str:
 
 
 # ============================================================================
+# 弹道计算模块（CCRP v3.0）
+# ============================================================================
+
+def calculate_bomb_trajectory(
+    release_alt_m: float,
+    release_speed_ms: float,
+    bomb_mass_kg: float = 0.0,
+    bomb_bc: float = 0.0,
+    target_alt_m: float = 0.0,
+    dive_angle_deg: float = 0.0,
+    initial_vz_ms = None,
+    bomb_params: dict = None
+) -> tuple:
+    """计算炸弹弹道（支持多种阻力模型）
+    
+    Args:
+        release_alt_m: 投弹高度（米）
+        release_speed_ms: 投弹时水平速度（m/s）
+        target_alt_m: 目标高度（米）
+        dive_angle_deg: 俯冲角度（度）
+        initial_vz_ms: 初始垂直速度（m/s）
+        bomb_params: 炸弹物理参数字典
+    
+    Returns:
+        (飞行时间秒, 水平飞行距离米, 落地速度m/s)
+    """
+    g = BallisticPhysicsParams.GRAVITY
+    drag_model = BallisticPhysicsParams.DRAG_MODEL
+    
+    alt_offset = BallisticPhysicsParams.ALTITUDE_CORRECTION_OFFSET
+    range_mult = BallisticPhysicsParams.RANGE_CORRECTION_MULT
+    time_mult = BallisticPhysicsParams.TIME_CORRECTION_MULT
+    
+    h = (release_alt_m + alt_offset) - target_alt_m
+    if h <= 0:
+        return 0.0, 0.0, 0.0
+    
+    dive_rad = math.radians(dive_angle_deg)
+    vx = release_speed_ms * math.cos(dive_rad)
+    vz0 = float(initial_vz_ms) if initial_vz_ms is not None else -release_speed_ms * math.sin(dive_rad)
+    
+    if drag_model == "none":
+        discriminant = vz0 * vz0 + 2.0 * g * h
+        if discriminant < 0:
+            return 0.0, 0.0, 0.0
+        t = (vz0 + math.sqrt(discriminant)) / g
+        x = vx * t
+        vz_final = vz0 - g * t
+        impact_speed = math.sqrt(vx * vx + vz_final * vz_final)
+        return t * time_mult, x * range_mult, impact_speed
+    
+    elif drag_model == "simple":
+        return _calculate_trajectory_with_drag(h, vx, vz0, g, bomb_params, range_mult, time_mult)
+    
+    elif drag_model == "advanced":
+        return _calculate_trajectory_advanced(h, vx, vz0, g, bomb_params, range_mult, time_mult)
+    
+    else:
+        discriminant = vz0 * vz0 + 2.0 * g * h
+        if discriminant < 0:
+            return 0.0, 0.0, 0.0
+        t = (vz0 + math.sqrt(discriminant)) / g
+        x = vx * t
+        vz_final = vz0 - g * t
+        impact_speed = math.sqrt(vx * vx + vz_final * vz_final)
+        return t * time_mult, x * range_mult, impact_speed
+
+
+def _calculate_trajectory_with_drag(h, vx, vz0, g, bomb_params, range_mult, time_mult):
+    """简化阻力模型"""
+    if bomb_params is None:
+        bomb_params = BombConfig.get_bomb_physics_params()
+    
+    mass = bomb_params.get('mass', 100.0)
+    drag_cx = bomb_params.get('drag_cx', 0.04)
+    caliber = bomb_params.get('caliber', 0.2)
+    
+    area = math.pi * (caliber / 2) ** 2 * BallisticPhysicsParams.DRAG_REFERENCE_AREA_MULT
+    drag_cx *= BallisticPhysicsParams.DRAG_COEFFICIENT_MULT
+    
+    dt = BallisticPhysicsParams.TIME_STEP
+    max_time = BallisticPhysicsParams.MAX_FLIGHT_TIME
+    temp_k = BallisticPhysicsParams.MAP_TEMPERATURE_K
+    temp_factor = BallisticPhysicsParams.TEMP_REFERENCE_K / temp_k if temp_k > 0 else 1.0
+    
+    x, z = 0.0, h
+    vx_curr, vz_curr = vx, vz0
+    t = 0.0
+    
+    while t < max_time and z > 0:
+        current_altitude = max(0, z + BallisticPhysicsParams.DEFAULT_TARGET_ALT)
+        rho = _wt_get_air_density(current_altitude) * temp_factor
+        
+        v = max(0.1, math.sqrt(vx_curr**2 + vz_curr**2))
+        drag_coeff = 0.5 * rho * drag_cx * area / mass
+        ax = -drag_coeff * vx_curr * v
+        az = -g - drag_coeff * vz_curr * v
+        
+        vx_curr += ax * dt
+        vz_curr += az * dt
+        x += vx_curr * dt
+        z += vz_curr * dt
+        t += dt
+    
+    impact_speed = math.sqrt(vx_curr**2 + vz_curr**2)
+    return t * time_mult, x * range_mult, impact_speed
+
+
+def _calculate_trajectory_advanced(h, vx, vz0, g, bomb_params, range_mult, time_mult):
+    """完整物理模型弹道计算 v3.0（使用RK4积分）"""
+    if bomb_params is None:
+        bomb_params = BombConfig.get_bomb_physics_params()
+    
+    mass = bomb_params.get('mass', 100.0)
+    drag_cx = bomb_params.get('dragCx', bomb_params.get('drag_cx', 0.04))
+    caliber = bomb_params.get('caliber', 0.2)
+    brake_time = bomb_params.get('brakeTime', [0.0, 0.0])
+    brake_cx_k = bomb_params.get('brakeCxK', 0.0)
+    stab_enabled = bomb_params.get('stab_enabled', False)
+    
+    area = math.pi * (caliber / 2) ** 2 * BallisticPhysicsParams.DRAG_REFERENCE_AREA_MULT
+    drag_cx *= BallisticPhysicsParams.DRAG_COEFFICIENT_MULT
+    
+    dt = BallisticPhysicsParams.TIME_STEP
+    max_time = BallisticPhysicsParams.MAX_FLIGHT_TIME
+    temp_k = BallisticPhysicsParams.MAP_TEMPERATURE_K
+    temp_factor = BallisticPhysicsParams.TEMP_REFERENCE_K / temp_k if temp_k > 0 else 1.0
+    
+    x, z = 0.0, h
+    vx_curr, vz_curr = vx, vz0
+    t = 0.0
+    prev_z, prev_vz, prev_vx, prev_x = h, vz0, vx, 0.0
+    
+    while t < max_time and z > BallisticPhysicsParams.GROUND_MARGIN:
+        prev_z, prev_vz, prev_vx, prev_x = z, vz_curr, vx_curr, x
+        
+        current_altitude = max(0, z + BallisticPhysicsParams.DEFAULT_TARGET_ALT)
+        rho = _wt_get_air_density(current_altitude) * temp_factor
+        
+        current_drag_cx = drag_cx
+        if stab_enabled and len(brake_time) >= 2:
+            brake_start = brake_time[0] + BallisticPhysicsParams.BRAKE_DEPLOY_DELAY
+            brake_end = brake_time[1] + BallisticPhysicsParams.BRAKE_DEPLOY_DELAY
+            if brake_start <= t <= brake_end and brake_cx_k > 0:
+                brake_drag = brake_cx_k / (caliber ** 2) * BallisticPhysicsParams.BRAKE_DRAG_MULT
+                current_drag_cx += brake_drag
+        
+        v = max(0.1, math.sqrt(vx_curr**2 + vz_curr**2))
+        drag_factor = 0.5 * rho * current_drag_cx * area / mass
+        
+        # RK4积分
+        ax1 = -drag_factor * vx_curr * v
+        az1 = -g - drag_factor * vz_curr * v
+        
+        vx2, vz2 = vx_curr + ax1 * dt/2, vz_curr + az1 * dt/2
+        v2 = max(0.1, math.sqrt(vx2**2 + vz2**2))
+        ax2 = -drag_factor * vx2 * v2
+        az2 = -g - drag_factor * vz2 * v2
+        
+        vx3, vz3 = vx_curr + ax2 * dt/2, vz_curr + az2 * dt/2
+        v3 = max(0.1, math.sqrt(vx3**2 + vz3**2))
+        ax3 = -drag_factor * vx3 * v3
+        az3 = -g - drag_factor * vz3 * v3
+        
+        vx4, vz4 = vx_curr + ax3 * dt, vz_curr + az3 * dt
+        v4 = max(0.1, math.sqrt(vx4**2 + vz4**2))
+        ax4 = -drag_factor * vx4 * v4
+        az4 = -g - drag_factor * vz4 * v4
+        
+        vx_curr += (ax1 + 2*ax2 + 2*ax3 + ax4) * dt / 6
+        vz_curr += (az1 + 2*az2 + 2*az3 + az4) * dt / 6
+        x += vx_curr * dt
+        z += vz_curr * dt
+        t += dt
+    
+    # 线性插值精确落地点
+    if z < BallisticPhysicsParams.GROUND_MARGIN and prev_vz < 0:
+        dz = prev_z - z
+        if dz > 0.01:
+            ratio = max(0.0, min(1.0, (prev_z - BallisticPhysicsParams.GROUND_MARGIN) / dz))
+            t -= dt * (1 - ratio)
+            x = prev_x + (x - prev_x) * ratio
+            vx_curr = prev_vx + (vx_curr - prev_vx) * ratio
+            vz_curr = prev_vz + (vz_curr - prev_vz) * ratio
+    
+    impact_speed = math.sqrt(vx_curr**2 + vz_curr**2)
+    return t * time_mult, x * range_mult, impact_speed
+
+
+def calculate_release_timing(
+    current_distance_m: float,
+    current_alt_m: float,
+    ground_speed_ms: float,
+    bomb_mass_kg: float = 0.0,
+    bomb_bc: float = 0.0,
+    target_alt_m: float = 0.0,
+    dive_angle_deg: float = 0.0,
+    initial_vz_ms: Optional[float] = None
+) -> Tuple[float, float, str]:
+    """计算投弹时机
+    
+    Returns:
+        (距离投弹距离米, 距离投弹时间秒, 状态字符串)
+        状态: "ready" / "approaching" / "too_far" / "passed" / "invalid"
+    """
+    if ground_speed_ms < 10.0 or current_alt_m <= target_alt_m:
+        return 0.0, 0.0, "invalid"
+    
+    flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
+        release_alt_m=current_alt_m,
+        release_speed_ms=ground_speed_ms,
+        bomb_mass_kg=bomb_mass_kg,
+        bomb_bc=bomb_bc,
+        target_alt_m=target_alt_m,
+        dive_angle_deg=dive_angle_deg,
+        initial_vz_ms=initial_vz_ms
+    )
+    
+    if bomb_range_m <= 0:
+        return 0.0, 0.0, "invalid"
+    
+    release_distance_m = current_distance_m - bomb_range_m
+    
+    if release_distance_m < 0:
+        return abs(release_distance_m), 0.0, "passed"
+    
+    time_to_release = release_distance_m / ground_speed_ms
+    
+    if time_to_release <= BallisticPhysicsParams.RELEASE_READY_SEC:
+        return release_distance_m, time_to_release, "ready"
+    elif time_to_release <= BallisticPhysicsParams.RELEASE_WARNING_SEC:
+        return release_distance_m, time_to_release, "approaching"
+    else:
+        return release_distance_m, time_to_release, "too_far"
+
+
+# ============================================================================
 # 数据结构定义
 # ============================================================================
 
@@ -1957,6 +2449,17 @@ class UISnapshot:
     
     # v5.9.6 新增：起落架警告
     gear_warning: bool = False                 # 起落架未收起警告
+    
+    # v6.0 新增：投弹预测
+    bombing_valid: bool = False                # 投弹预测是否有效
+    bomb_name: str = ""                        # 当前炸弹名称
+    bomb_range_m: float = 0.0                  # 炸弹水平飞行距离 (米)
+    bomb_flight_time: float = 0.0              # 炸弹飞行时间 (秒)
+    release_distance_m: float = 0.0            # 投弹距离 (米)
+    time_to_release: float = 0.0               # 到投弹点时间 (秒)
+    release_status: str = "invalid"            # ready/approaching/too_far/passed/invalid
+    target_zone_distance_m: float = 0.0        # 目标战区距离 (米)
+    ground_speed_kmh: float = 0.0              # 地速 (km/h)
 
 
 # ============================================================================
@@ -2975,6 +3478,49 @@ class GameLogic:
                 if is_airborne and tel.gear_down:
                     gear_warning = True
 
+            # v6.0 新增：投弹预测计算（仅在ENABLE_CCRP启用时）
+            bombing_valid = False
+            bomb_name = BombConfig.selected_bomb if ENABLE_CCRP else ""
+            bomb_range_m = 0.0
+            bomb_flight_time = 0.0
+            release_distance_m = 0.0
+            time_to_release = 0.0
+            release_status = "invalid"
+            target_zone_distance_m = 0.0
+            ground_speed_kmh_for_bombing = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 3600
+            
+            # 只在CCRP启用、有目标战区、飞行中且高度足够时计算投弹预测
+            if (ENABLE_CCRP and has_target and s.phase == Phase.ALIVE and 
+                not on_ground and altitude_m > 50 and 
+                nav.ground_speed > 0.0002):  # 约72km/h
+                
+                target_zone = nav.get_target_zone()
+                if target_zone:
+                    target_zone_distance_m = target_zone.distance * ZoneConfig.DISTANCE_SCALE * 1000
+                    ground_speed_ms = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 1000
+                    
+                    bomb_params = BombConfig.get_bomb_physics_params()
+                    
+                    bomb_flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
+                        release_alt_m=altitude_m,
+                        release_speed_ms=ground_speed_ms,
+                        target_alt_m=0.0,
+                        dive_angle_deg=0.0,
+                        initial_vz_ms=None,
+                        bomb_params=bomb_params
+                    )
+                    
+                    if bomb_range_m > 0:
+                        release_distance_m, time_to_release, release_status = calculate_release_timing(
+                            current_distance_m=target_zone_distance_m,
+                            current_alt_m=altitude_m,
+                            ground_speed_ms=ground_speed_ms,
+                            target_alt_m=0.0,
+                            dive_angle_deg=0.0,
+                            initial_vz_ms=None
+                        )
+                        bombing_valid = True
+
             return UISnapshot(
                 phase=s.phase, life_index=life_index, cycle=cycle, 
                 remaining_sec=remaining, progress=progress, sortie_id=s.sortie_id, 
@@ -3007,6 +3553,16 @@ class GameLogic:
                 friendly_distance_km=friendly_distance_km,
                 # v5.9.6 新增：起落架警告
                 gear_warning=gear_warning,
+                # v6.0 新增：投弹预测
+                bombing_valid=bombing_valid,
+                bomb_name=bomb_name,
+                bomb_range_m=bomb_range_m,
+                bomb_flight_time=bomb_flight_time,
+                release_distance_m=release_distance_m,
+                time_to_release=time_to_release,
+                release_status=release_status,
+                target_zone_distance_m=target_zone_distance_m,
+                ground_speed_kmh=ground_speed_kmh_for_bombing,
             )
 
     def _start_new_life_locked(self, now: float):
@@ -3530,6 +4086,218 @@ class ChecklistEditor(tk.Toplevel):
         self.text.delete("1.0", "end")
         self.text.insert("1.0", "\n".join(ChecklistConfig.DEFAULT_ITEMS))
 
+
+class BombSelectorDialog(tk.Toplevel):
+    """炸弹选择对话框"""
+    
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.selected_bomb = BombConfig.selected_bomb
+        self._current_category = None
+        
+        self.title("选择炸弹")
+        self.configure(bg=Theme.BG)
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        
+        main = tk.Frame(self, bg=Theme.BG, padx=15, pady=15)
+        main.pack(fill="both", expand=True)
+        
+        # 搜索框
+        search_frame = tk.Frame(main, bg=Theme.BG)
+        search_frame.pack(fill="x", pady=(0, 10))
+        
+        self.search_var = tk.StringVar()
+        self.search_var.trace("w", lambda *args: self._on_search())
+        self.search_entry = tk.Entry(
+            search_frame, textvariable=self.search_var,
+            bg=Theme.GRAYPILL, fg=Theme.TEXT_MUTED, bd=0, highlightthickness=1,
+            highlightbackground=Theme.BORDER, font=("Segoe UI", 10)
+        )
+        self.search_entry.pack(fill="x", ipady=5)
+        self.search_entry.insert(0, "搜索...")
+        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
+        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
+        
+        # 分类按钮
+        cat_frame = tk.Frame(main, bg=Theme.BG)
+        cat_frame.pack(fill="x", pady=(0, 10))
+        
+        self.cat_buttons = {}
+        categories = ['全部'] + BombConfig.get_categories()
+        for cat in categories:
+            btn = tk.Button(
+                cat_frame, text=cat, 
+                bg=Theme.GRAYPILL if cat != '全部' else Theme.BLUE,
+                fg=Theme.TEXT, bd=0, padx=8, pady=4, font=("Segoe UI", 9),
+                command=lambda c=cat: self._filter_category(c)
+            )
+            btn.pack(side="left", padx=2)
+            self.cat_buttons[cat] = btn
+        
+        # 列表区域
+        list_frame = tk.Frame(main, bg=Theme.GRAYPILL)
+        list_frame.pack(fill="both", expand=True)
+        
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+        
+        self.listbox = tk.Listbox(
+            list_frame, width=55, height=20,
+            bg=Theme.GRAYPILL, fg=Theme.TEXT, selectbackground=Theme.BLUE,
+            selectforeground=Theme.TEXT, bd=0, highlightthickness=1,
+            highlightbackground=Theme.BORDER, yscrollcommand=scrollbar.set, 
+            font=("Consolas", 9)
+        )
+        self.listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=self.listbox.yview)
+        self.listbox.bind("<Double-Button-1>", lambda e: self._select())
+        
+        # 统计
+        self.stats_lbl = tk.Label(
+            main, text="", bg=Theme.BG, fg=Theme.TEXT_DIM, 
+            font=("Segoe UI", 9), anchor="w"
+        )
+        self.stats_lbl.pack(fill="x", pady=(5, 0))
+        
+        # 按钮
+        btn_frame = tk.Frame(main, bg=Theme.BG)
+        btn_frame.pack(fill="x", pady=(10, 0))
+        tk.Button(
+            btn_frame, text="确定", command=self._select, 
+            bg=Theme.BLUE, fg=Theme.TEXT, bd=0, padx=20, pady=5
+        ).pack(side="right", padx=5)
+        tk.Button(
+            btn_frame, text="取消", command=self.destroy, 
+            bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=20, pady=5
+        ).pack(side="right", padx=5)
+        
+        self._populate_list()
+        self._center_on_parent(parent)
+    
+    def _on_search_focus_in(self, event):
+        if self.search_entry.get() == "搜索...":
+            self.search_entry.delete(0, "end")
+            self.search_entry.config(fg=Theme.TEXT)
+    
+    def _on_search_focus_out(self, event):
+        if not self.search_entry.get():
+            self.search_entry.insert(0, "搜索...")
+            self.search_entry.config(fg=Theme.TEXT_MUTED)
+    
+    def _on_search(self):
+        if not hasattr(self, "listbox"):
+            return
+        query = self.search_var.get()
+        if query == "搜索...":
+            query = ""
+        self._populate_list(query)
+    
+    def _filter_category(self, category):
+        self._current_category = None if category == '全部' else category
+        self.search_var.set("")
+        for cat, btn in self.cat_buttons.items():
+            btn.config(bg=Theme.BLUE if cat == category else Theme.GRAYPILL)
+        self._populate_list()
+    
+    def _populate_list(self, search_query: str = ""):
+        if not hasattr(self, "listbox"):
+            return
+        self.listbox.delete(0, "end")
+        
+        if search_query and search_query != "搜索...":
+            bombs = BombConfig.search_bombs(search_query, limit=100)
+            show_categories = False
+        elif self._current_category:
+            bombs = BombConfig.get_bombs_by_category(self._current_category)
+            show_categories = False
+        else:
+            bombs = None
+            show_categories = True
+        
+        current_index, select_index, total_count = 0, 0, 0
+        
+        if show_categories:
+            for category in BombConfig.get_categories():
+                cat_bombs = BombConfig.get_bombs_by_category(category)
+                if not cat_bombs:
+                    continue
+                self.listbox.insert("end", f"━━━ {category} ({len(cat_bombs)}种) ━━━")
+                self.listbox.itemconfig(current_index, fg=Theme.YELLOW)
+                current_index += 1
+                
+                for bomb_id in cat_bombs:
+                    bomb_data = BombConfig.get_bomb_data(bomb_id)
+                    if bomb_data:
+                        mass = bomb_data['mass']
+                        mass_str = f"{mass/1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
+                        text = f"  {bomb_id} ({mass_str}, Cx={bomb_data.get('drag_cx', 0.04):.4f})"
+                    else:
+                        text = f"  {bomb_id}"
+                    
+                    self.listbox.insert("end", text)
+                    if bomb_id == self.selected_bomb:
+                        select_index = current_index
+                        self.listbox.itemconfig(current_index, fg=Theme.GREEN)
+                    current_index += 1
+                    total_count += 1
+        else:
+            for bomb_id in bombs:
+                bomb_data = BombConfig.get_bomb_data(bomb_id)
+                if bomb_data:
+                    mass = bomb_data['mass']
+                    mass_str = f"{mass/1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
+                    cat = bomb_data.get('category', '?')
+                    text = f"{bomb_id} ({mass_str}, Cx={bomb_data.get('drag_cx', 0.04):.4f}) [{cat}]"
+                else:
+                    text = bomb_id
+                
+                self.listbox.insert("end", text)
+                if bomb_id == self.selected_bomb:
+                    select_index = current_index
+                    self.listbox.itemconfig(current_index, fg=Theme.GREEN)
+                current_index += 1
+                total_count += 1
+        
+        if select_index > 0:
+            self.listbox.selection_set(select_index)
+            self.listbox.see(select_index)
+        
+        self.stats_lbl.config(text=f"显示 {total_count} / {len(BombConfig.BOMB_DATABASE)} 种炸弹")
+    
+    def _center_on_parent(self, parent):
+        self.update_idletasks()
+        x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
+        y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
+        self.geometry(f"+{x}+{y}")
+    
+    def _select(self):
+        selection = self.listbox.curselection()
+        if not selection:
+            return
+        
+        text = self.listbox.get(selection[0]).strip()
+        if text.startswith("━━"):
+            return
+        
+        bomb_id = text.split(" (")[0].strip()
+        
+        if BombConfig.get_bomb_data(bomb_id):
+            BombConfig.selected_bomb = bomb_id
+            config = ConfigManager.load()
+            config['selected_bomb'] = bomb_id
+            ConfigManager.save(config)
+            
+            if hasattr(self.app, 'bomb_select_lbl'):
+                self.app.bomb_select_lbl.config(
+                    text=f"炸弹: {BombConfig.format_bomb_name(bomb_id)} (点击更换)"
+                )
+            
+            self.destroy()
+
+
 class AboutDialog(tk.Toplevel):
     """关于对话框"""
     def __init__(self, parent, app):
@@ -4007,6 +4775,16 @@ class App:
         PanelConfig.show_airfields = panels.get('show_airfields', True)
         PanelConfig.show_fuel = panels.get('show_fuel', True)
         PanelConfig.show_checklist = panels.get('show_checklist', True)
+        PanelConfig.show_bombing = panels.get('show_bombing', True)  # v6.0 新增
+        
+        # v6.0 新增：炸弹选择（仅在CCRP启用时）
+        if ENABLE_CCRP:
+            selected_bomb = config.get('selected_bomb', 'su_fab100sv')
+            if BombConfig.get_bomb_data(selected_bomb):
+                BombConfig.selected_bomb = selected_bomb
+        
+        # 根据编译开关初始化面板状态
+        PanelConfig.init_bombing_state()
         
         # 快捷键设置
         HotkeyConfig.GLOBAL_HOTKEYS = config.get('global_hotkeys', HotkeyConfig.GLOBAL_HOTKEYS)
@@ -4053,12 +4831,20 @@ class App:
         config['theme'] = Theme.get_current()
         
         # 面板设置
-        config['panels'] = {
+        panels_config = {
             'show_zones': PanelConfig.show_zones,
             'show_airfields': PanelConfig.show_airfields,
             'show_fuel': PanelConfig.show_fuel,
             'show_checklist': PanelConfig.show_checklist,
         }
+        # v6.0 新增：投弹预测面板（仅在CCRP启用时保存）
+        if ENABLE_CCRP:
+            panels_config['show_bombing'] = PanelConfig.show_bombing
+        config['panels'] = panels_config
+        
+        # v6.0 新增：炸弹选择（仅在CCRP启用时保存）
+        if ENABLE_CCRP:
+            config['selected_bomb'] = BombConfig.selected_bomb
         
         # 快捷键设置
         config['global_hotkeys'] = HotkeyConfig.GLOBAL_HOTKEYS
@@ -4278,6 +5064,8 @@ class App:
         ║ Row 4: airport_list_frame (机场列表)                                 ║
         ║ Row 5: fuel_title_lbl (燃油标题)                                     ║
         ║ Row 6: fuel_info_frame (燃油信息)                                    ║
+        ║ Row 7: bombing_title_lbl (投弹预测标题) v6.0新增                     ║
+        ║ Row 8: bombing_info_frame (投弹预测信息) v6.0新增                    ║
         ║                                                                      ║
         ║ 使用 grid_remove() 隐藏、grid() 显示，可保持行号不变                  ║
         ╚══════════════════════════════════════════════════════════════════════╝
@@ -4367,6 +5155,49 @@ class App:
             font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.fuel_return_lbl.pack(fill="x")
+        
+        # === v6.0 新增：投弹预测区域（仅在ENABLE_CCRP启用时创建）===
+        if ENABLE_CCRP:
+            # Row 7: 投弹预测标题
+            self.bombing_title_lbl = tk.Label(
+                self.zone_frame, 
+                text="💣 投弹预测", 
+                font=font_title, 
+                fg=Theme.TEXT, 
+                bg=Theme.GRAYPILL, 
+                anchor="w"
+            )
+            self.bombing_title_lbl.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
+            
+            # Row 8: 投弹预测信息容器
+            self.bombing_info_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
+            self.bombing_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
+            
+            # 当前炸弹行（可点击选择）
+            self.bomb_select_lbl = tk.Label(
+                self.bombing_info_frame,
+                text=f"炸弹: {BombConfig.format_bomb_name(BombConfig.selected_bomb)} (点击更换)",
+                font=font_item, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w", cursor="hand2"
+            )
+            self.bomb_select_lbl.pack(fill="x")
+            self.bomb_select_lbl.bind("<Button-1>", lambda e: self._show_bomb_selector())
+            
+            # 弹道信息行
+            self.bomb_trajectory_lbl = tk.Label(
+                self.bombing_info_frame,
+                text="弹道: -- m │ 飞行: -- s",
+                font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+            )
+            self.bomb_trajectory_lbl.pack(fill="x")
+            
+            # 投弹时机行（大号显示）
+            font_release = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s*1.2), UIConfig.FONT_ZONE_TITLE[2])
+            self.bomb_release_lbl = tk.Label(
+                self.bombing_info_frame,
+                text="⏱️ 等待目标",
+                font=font_release, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
+            )
+            self.bomb_release_lbl.pack(fill="x", pady=(int(4*s), 0))
 
     def _rebuild_checklist(self):
         """重建检查清单UI（纯展示模式）"""
@@ -4553,13 +5384,22 @@ class App:
         def is_checklist_panel(item):
             return PanelConfig.show_checklist
         
-        # 面板子菜单
-        panel_menu = pystray.Menu(
+        def toggle_bombing(icon, item):
+            app.root.after(0, lambda: app._toggle_panel('show_bombing'))
+        
+        def is_bombing_panel(item):
+            return PanelConfig.show_bombing
+        
+        # 面板子菜单（根据ENABLE_CCRP决定是否包含投弹预测选项）
+        panel_items = [
             pystray.MenuItem("🎯 战区导航", toggle_zone, checked=is_zone_panel),
             pystray.MenuItem("🛫 机场导航", toggle_airfield, checked=is_airfield_panel),
             pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel),
-            pystray.MenuItem("✅ 出击检查", toggle_checklist, checked=is_checklist_panel),
-        )
+        ]
+        if ENABLE_CCRP:
+            panel_items.append(pystray.MenuItem("💣 投弹预测", toggle_bombing, checked=is_bombing_panel))
+        panel_items.append(pystray.MenuItem("✅ 出击检查", toggle_checklist, checked=is_checklist_panel))
+        panel_menu = pystray.Menu(*panel_items)
         
         # 主菜单
         menu = pystray.Menu(
@@ -5232,6 +6072,16 @@ class App:
             self.fuel_title_lbl.grid_remove()
             self.fuel_info_frame.grid_remove()
         
+        # === v6.0 新增：投弹预测区块（仅在ENABLE_CCRP启用时处理）===
+        if ENABLE_CCRP:
+            if PanelConfig.show_bombing:
+                self.bombing_title_lbl.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
+                self.bombing_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
+                self._update_bombing_display(snap, font_item)
+            else:
+                self.bombing_title_lbl.grid_remove()
+                self.bombing_info_frame.grid_remove()
+        
         # 智能触发尺寸重算（只在数量变化时）
         total_count = zone_count + airport_count
         if total_count != (self._last_zone_count + self._last_airport_count):
@@ -5308,6 +6158,62 @@ class App:
         else:
             self.fuel_return_lbl.config(text="🏠 返航: 无机场数据", fg=Theme.TEXT_MUTED)
 
+    def _update_bombing_display(self, snap: UISnapshot, font_item):
+        """更新投弹预测信息显示（v6.0新增）"""
+        self.bomb_select_lbl.config(text=f"炸弹: {BombConfig.format_bomb_name(snap.bomb_name)} (点击更换)")
+        
+        if snap.bombing_valid:
+            bomb_range_km = snap.bomb_range_m / 1000.0
+            trajectory_text = f"弹道: {bomb_range_km:.2f}km │ 飞行: {snap.bomb_flight_time:.1f}s"
+            self.bomb_trajectory_lbl.config(text=trajectory_text, fg=Theme.TEXT_DIM)
+            
+            status = snap.release_status
+            dist_m = snap.release_distance_m
+            if dist_m > 1000:
+                dist_str = f"{dist_m/1000:.2f}km"
+            elif dist_m > 100:
+                dist_str = f"{int(dist_m)}m"
+            else:
+                dist_str = f"{dist_m:.0f}m"
+            
+            if status == "ready":
+                time_str = f"{snap.time_to_release:.2f}s"
+                release_text = f"💣 投弹! {time_str} ({dist_str})"
+                release_color = Theme.GREEN
+            elif status == "approaching":
+                time_str = f"{snap.time_to_release:.1f}s"
+                release_text = f"⏱️ {time_str} ({dist_str})"
+                release_color = Theme.YELLOW
+            elif status == "passed":
+                release_text = f"❌ 已飞过 {dist_str}"
+                release_color = Theme.RED
+            elif status == "too_far":
+                time_str = f"{snap.time_to_release:.0f}s"
+                release_text = f"🎯 {dist_str} ({time_str})"
+                release_color = Theme.TEXT_DIM
+            else:
+                release_text = "⏳ 计算中..."
+                release_color = Theme.TEXT_MUTED
+            
+            self.bomb_release_lbl.config(text=release_text, fg=release_color)
+        else:
+            self.bomb_trajectory_lbl.config(text="弹道: -- km │ 飞行: -- s", fg=Theme.TEXT_MUTED)
+            
+            if snap.on_ground:
+                release_text = "🛫 请起飞"
+            elif snap.altitude_m <= 50:
+                release_text = "📈 请爬升"
+            elif not snap.has_target:
+                release_text = "🎯 无目标战区"
+            else:
+                release_text = "↻ 请对准目标"
+            
+            self.bomb_release_lbl.config(text=release_text, fg=Theme.TEXT_MUTED)
+
+    def _show_bomb_selector(self):
+        """显示炸弹选择对话框"""
+        BombSelectorDialog(self.root, self)
+
     def _update_ui(self):
         """UI更新循环（20fps）
         
@@ -5328,7 +6234,7 @@ class App:
         snap = self.game.snapshot()
 
         # 控制面板可见性（结合PanelConfig设置）
-        # 战区/机场/燃油面板需要任一相关面板启用
+        # 战区/机场/燃油/投弹面板需要任一相关面板启用
         has_zone_data = len(snap.zones) > 0
         has_airfield_data = snap.friendly_airfield is not None or len(snap.enemy_airfields) > 0
         
@@ -5338,7 +6244,8 @@ class App:
             (
                 (PanelConfig.show_zones and has_zone_data) or 
                 (PanelConfig.show_airfields and has_airfield_data) or
-                PanelConfig.show_fuel
+                PanelConfig.show_fuel or
+                (ENABLE_CCRP and PanelConfig.show_bombing)  # v6.0 新增，受编译开关控制
             )
         )
         self._set_zone_panel_visible(show_zone_panel)
