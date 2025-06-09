@@ -57,7 +57,20 @@ War Thunder SB Timer - 战雷全真模式收益计时器
 
 打包命令：
 -------
-pip install pyinstaller requests Pillow pystray
+1. 开启 CCRP 功能 确保 ENABLE_CCRP = True
+
+pyinstaller --noconsole --onefile `
+    --name "Bomana" `
+    --icon "app.ico" `
+    --add-data "app.png;." `
+    --add-data "sponsor_wechat.png;." `
+    --add-data "ccrp_bomb_params.py;." `
+    --hidden-import "pystray._win32" `
+    --collect-submodules "PIL" `
+    --clean `
+    Bomana.pyw
+
+2. 关闭 CCRP 功能
 
 pyinstaller --noconsole --onefile `
     --name "Bomana" `
