@@ -5,14 +5,75 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (例如: 6.0.1)'
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: 准备构建信息
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 提取版本号
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="dev"
+          fi
+          
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          [ "$TAG_NAME" == "$GITHUB_REF" ] && TAG_NAME="v$VERSION"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: 生成更新日志
+        id: changelog
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            CHANGELOG=$(git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s" --no-merges | head -15)
+          else
+            CHANGELOG="手动触发构建 / 开发版本"
+          fi
+          {
+            echo "changelog<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
   build:
+    name: 构建 ${{ matrix.variant.name }}
+    needs: prepare
     runs-on: windows-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - { name: "增强版", slug: "Enhanced", ccrp: "True", zones: "True", fuel: "True", description: "包含所有功能" }
+          - { name: "标准版", slug: "Standard", ccrp: "False", zones: "True", fuel: "True", description: "不含CCRP自动投弹" }
+          - { name: "精简版", slug: "Lite", ccrp: "False", zones: "False", fuel: "False", description: "仅保留基础计时" }
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,57 +83,109 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: |
-          python -m pip install --upgrade pip
           pip install pyinstaller requests Pillow pystray
 
-      - name: Extract Version from Code
-        id: get_version
+      - name: 🛠️ 强制注入配置开关
         shell: pwsh
         run: |
-          # 从 Bomana.pyw 中正则匹配 VERSION = "x.x.x"
-          $version = (Get-Content Bomana.pyw | Select-String 'VERSION = "(.*)"').Matches.Groups[1].Value
-          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-          echo "Detected Version: $version"
+          # 读取源码
+          $filePath = "Bomana.pyw"
+          $code = Get-Content $filePath -Raw
+          
+          # 定义需要修改的开关列表
+          # 无论源代码后面带不带注释，直接覆盖整行
+          $switches = @{
+            "ENABLE_CCRP" = "${{ matrix.variant.ccrp }}"
+            "ENABLE_ZONES" = "${{ matrix.variant.zones }}"
+            "ENABLE_AIRFIELDS" = "${{ matrix.variant.zones }}"
+            "ENABLE_FUEL" = "${{ matrix.variant.fuel }}"
+            "ENABLE_CHECKLIST" = "${{ matrix.variant.zones }}"
+            "ENABLE_ADVANCED_SETTINGS" = "${{ matrix.variant.zones }}"
+          }
 
-      - name: Build with PyInstaller
+          foreach ($key in $switches.Keys) {
+              $val = $switches[$key]
+              # 正则说明：匹配行首的变量名，直到行尾的所有内容全部替换
+              $code = $code -replace "(?m)^$key\s*=.*", "$key = $val"
+              Write-Host "Setting $key to $val"
+          }
+
+          $code | Set-Content $filePath -NoNewline
+          
+          # 验证注入结果 (Debug)
+          Write-Host "--- 验证修改结果 ---"
+          Select-String -Path $filePath -Pattern "ENABLE_"
+
+      - name: 构建可执行文件
         shell: pwsh
         run: |
-          # 执行打包
-            pyinstaller --noconsole --onefile `
-                --name "Bomana" `
-                --icon "app.ico" `
-                --add-data "app.png;." `
-                --add-data "sponsor_wechat.png;." `
-                --hidden-import "pystray._win32" `
-                --collect-submodules "PIL" `
-                --clean `
-                Bomana.pyw
+          $execName = "Bomana_${{ matrix.variant.slug }}"
+          pyinstaller --noconsole --onefile `
+            --name "$execName" `
+            --icon "app.ico" `
+            --add-data "app.png;." `
+            --add-data "sponsor_wechat.png;." `
+            --hidden-import "pystray._win32" `
+            --clean "Bomana.pyw"
 
-      - name: Post-Build Renaming
+      - name: 📦 处理产物命名与校验
         shell: pwsh
         run: |
-          # 将 Bomana.exe 重命名为带有版本号的形式
-          $ver = "${{ steps.get_version.outputs.VERSION }}"
-          Rename-Item -Path "dist/Bomana.exe" -NewName "BomanaV$ver.exe"
+          $slug = "${{ matrix.variant.slug }}"
+          $ver = "${{ needs.prepare.outputs.version }}"
+          
+          # 1. 极简命名：Bomana_增强版_v6.0.0.exe
+          $newName = "Bomana_${slug}_v$ver.exe"
+          Move-Item "dist/Bomana_$slug.exe" "dist/$newName"
 
-      - name: Upload Artifact
+          # 2. 校验文件命名：校验信息_增强版.txt
+          $sha256 = (Get-FileHash "dist/$newName" -Algorithm SHA256).Hash
+          $lines = @(
+              "版本类型: ${{ matrix.variant.name }} ($slug)",
+              "软件名称: $newName",
+              "SHA256校验码: $sha256",
+              "功能说明: ${{ matrix.variant.description }}"
+          )
+          $lines | Out-File -FilePath "dist/校验信息_$slug.txt" -Encoding UTF8
+          
+          Write-Host "已生成产物: $newName"
+
+      - name: 上传临时产物
         uses: actions/upload-artifact@v4
         with:
-          name: Bomana-v${{ steps.get_version.outputs.VERSION }}
-          path: dist/*.exe
+          name: Bomana-${{ matrix.variant.slug }}
+          path: dist/*
+
+  release:
+    name: 发布正式版本
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: 下载产物
+        uses: actions/download-artifact@v4
+        with:
+          path: release_files
+          merge-multiple: true
 
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: Bomana v${{ needs.prepare.outputs.version }}
           body: |
-            ## Bomana 战雷收益计时器
-            构建版本: v${{ steps.get_version.outputs.VERSION }}
-            构建时间: ${{ github.event.head_commit.timestamp }}
-          draft: false
-          prerelease: false
+            ## 📝 更新日志
+            ${{ needs.prepare.outputs.changelog }}
+
+            ## 💡 下载指南
+            - **Enhanced (增强版)**: 适合高级玩家，含全自动投弹预测。
+            - **Standard (标准版)**: 适合普通玩家，包含导航但不含自动投弹。
+            - **Lite (精简版)**: 仅计时功能，极致轻量。
+            
+            *请下载对应的 .exe 文件，并对比 .txt 文件中的校验码确保安全。*
+          files: release_files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -57,7 +57,7 @@ War Thunder SB Timer - 战雷全真模式收益计时器
 
 打包命令：
 -------
-1. 开启 CCRP 功能 确保 ENABLE_CCRP = True
+1. 完整版（所有功能开启）
 
 pyinstaller --noconsole --onefile `
     --name "Bomana" `
@@ -70,10 +70,17 @@ pyinstaller --noconsole --onefile `
     --clean `
     Bomana.pyw
 
-2. 关闭 CCRP 功能
+2. Lite精简版（关闭所有扩展功能）
+   修改编译开关:
+   ENABLE_CCRP = False
+   ENABLE_ZONES = False
+   ENABLE_AIRFIELDS = False
+   ENABLE_FUEL = False
+   ENABLE_CHECKLIST = False
+   ENABLE_ADVANCED_SETTINGS = False
 
 pyinstaller --noconsole --onefile `
-    --name "Bomana" `
+    --name "BomanaLite" `
     --icon "app.ico" `
     --add-data "app.png;." `
     --add-data "sponsor_wechat.png;." `
@@ -81,6 +88,9 @@ pyinstaller --noconsole --onefile `
     --collect-submodules "PIL" `
     --clean `
     Bomana.pyw
+
+3. 自定义版（按需开启功能）
+   根据需要修改编译开关组合，然后打包
 
 ===============================================================================
 """
@@ -124,8 +134,21 @@ except ImportError:
 # ============================================================================
 # 设置为 False 可在打包时完全移除对应功能，减小体积并简化界面
 # 修改后需要重新打包才能生效
+#
+# Lite模式配置示例（全部设为False即为精简版）:
+#   ENABLE_CCRP = False
+#   ENABLE_ZONES = False
+#   ENABLE_AIRFIELDS = False
+#   ENABLE_FUEL = False
+#   ENABLE_CHECKLIST = False
+#   ENABLE_ADVANCED_SETTINGS = False
 
-ENABLE_CCRP = True  # CCRP投弹预测功能开关（设为False则完全禁用投弹预测模块）
+ENABLE_CCRP = True           # CCRP投弹预测功能开关
+ENABLE_ZONES = True          # 战区导航功能开关
+ENABLE_AIRFIELDS = True      # 机场导航功能开关
+ENABLE_FUEL = True           # 燃油管理功能开关
+ENABLE_CHECKLIST = True      # 出击检查清单功能开关
+ENABLE_ADVANCED_SETTINGS = True  # 高级设置功能开关（面板选择、快捷键自定义等）
 
 
 
@@ -838,6 +861,7 @@ class PanelConfig:
     """面板显示配置
     
     控制各个信息面板的显示/隐藏状态。
+    受编译开关控制：如果编译开关禁用某功能，则对应面板强制隐藏。
     """
     # 默认全部显示
     show_zones = True        # 战区导航
@@ -847,10 +871,37 @@ class PanelConfig:
     show_bombing = True      # v6.0新增：投弹预测（受ENABLE_CCRP开关控制）
     
     @classmethod
-    def init_bombing_state(cls):
-        """根据ENABLE_CCRP开关初始化投弹面板状态"""
+    def init_from_compile_switches(cls):
+        """根据编译开关初始化面板状态
+        
+        编译开关优先级高于用户配置：
+        如果编译开关禁用某功能，则该面板强制隐藏且用户无法开启
+        """
         if not ENABLE_CCRP:
             cls.show_bombing = False
+        if not ENABLE_ZONES:
+            cls.show_zones = False
+        if not ENABLE_AIRFIELDS:
+            cls.show_airfields = False
+        if not ENABLE_FUEL:
+            cls.show_fuel = False
+        if not ENABLE_CHECKLIST:
+            cls.show_checklist = False
+    
+    @classmethod
+    def is_feature_enabled(cls, feature: str) -> bool:
+        """检查某功能是否被编译开关启用
+        
+        用于UI判断是否显示相关设置选项
+        """
+        feature_map = {
+            'zones': ENABLE_ZONES,
+            'airfields': ENABLE_AIRFIELDS,
+            'fuel': ENABLE_FUEL,
+            'checklist': ENABLE_CHECKLIST,
+            'bombing': ENABLE_CCRP,
+        }
+        return feature_map.get(feature, True)
 
 
 class SnapConfig:
@@ -3439,7 +3490,7 @@ class GameLogic:
                 not on_ground and altitude_m > 50 and 
                 nav.ground_speed > 0.0002):  # 约72km/h
                 
-                target_zone = nav.get_target_zone()
+                target_zone = nav.target_zone
                 if target_zone:
                     target_zone_distance_m = target_zone.distance * ZoneConfig.DISTANCE_SCALE * 1000
                     ground_speed_ms = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 1000
@@ -3729,17 +3780,32 @@ class SettingsDialog(tk.Toplevel):
         frame = tk.Frame(self.content_frame, bg=Theme.BG)
         self.tab_frames["面板"] = frame
         
+        # 如果高级设置被禁用，显示简化提示
+        if not ENABLE_ADVANCED_SETTINGS:
+            tk.Label(frame, text="面板设置在精简模式下不可用", 
+                    bg=Theme.BG, fg=Theme.TEXT_MUTED).pack(anchor="w", pady=10)
+            return
+        
         tk.Label(frame, text="选择显示的信息面板:", bg=Theme.BG, fg=Theme.TEXT).pack(
             anchor="w", pady=(0, 10))
         
-        # 面板开关
+        # 面板开关（根据编译开关动态生成）
         self.panel_vars = {}
-        panels = [
-            ("show_zones", "🎯 战区导航", "显示战区位置和距离"),
-            ("show_airfields", "🛫 机场导航", "显示友方/敌方机场"),
-            ("show_fuel", "⛽ 燃油管理", "显示油量和返航估算"),
-            ("show_checklist", "✅ 出击检查", "显示起飞前检查清单"),
-        ]
+        panels = []
+        
+        if ENABLE_ZONES:
+            panels.append(("show_zones", "🎯 战区导航", "显示战区位置和距离"))
+        if ENABLE_AIRFIELDS:
+            panels.append(("show_airfields", "🛫 机场导航", "显示友方/敌方机场"))
+        if ENABLE_FUEL:
+            panels.append(("show_fuel", "⛽ 燃油管理", "显示油量和返航估算"))
+        if ENABLE_CHECKLIST:
+            panels.append(("show_checklist", "✅ 出击检查", "显示起飞前检查清单"))
+        
+        if not panels:
+            tk.Label(frame, text="所有扩展面板已在编译时禁用", 
+                    bg=Theme.BG, fg=Theme.TEXT_MUTED).pack(anchor="w")
+            return
         
         for key, label, desc in panels:
             var = tk.BooleanVar(value=getattr(PanelConfig, key))
@@ -4708,7 +4774,7 @@ class App:
                 BombConfig.selected_bomb = selected_bomb
         
         # 根据编译开关初始化面板状态
-        PanelConfig.init_bombing_state()
+        PanelConfig.init_from_compile_switches()
         
         # 快捷键设置
         HotkeyConfig.GLOBAL_HOTKEYS = config.get('global_hotkeys', HotkeyConfig.GLOBAL_HOTKEYS)
@@ -5207,9 +5273,9 @@ class App:
     def _init_tray(self):
         """初始化系统托盘
         
-        托盘菜单包含所有控制功能:
-        重置/锁定/角落/面板开关/声音/检查清单/设置/Debug/退出
-        状态改变后调用_refresh_tray()刷新勾选状态
+        托盘菜单根据编译开关动态生成:
+        - Lite模式: 仅保留基本功能（重置/锁定/声音/退出）
+        - 完整模式: 包含所有功能
         """
         # 保存self引用供嵌套函数使用
         app = self
@@ -5251,20 +5317,7 @@ class App:
         def do_about(icon, item):
             app.root.after(0, app._show_about)
 
-        # 面板开关回调
-        def toggle_zone(icon, item):
-            app.root.after(0, lambda: app._toggle_panel('show_zones'))
-        
-        def toggle_airfield(icon, item):
-            app.root.after(0, lambda: app._toggle_panel('show_airfields'))
-        
-        def toggle_fuel(icon, item):
-            app.root.after(0, lambda: app._toggle_panel('show_fuel'))
-        
-        def toggle_checklist(icon, item):
-            app.root.after(0, lambda: app._toggle_panel('show_checklist'))
-        
-        # 状态检查函数（每次菜单显示时调用）
+        # 状态检查函数
         def is_locked(item):
             return app._locked
         
@@ -5277,52 +5330,86 @@ class App:
         def is_debug_on(item):
             return app._debug
         
-        def is_zone_panel(item):
-            return PanelConfig.show_zones
-        
-        def is_airfield_panel(item):
-            return PanelConfig.show_airfields
-        
-        def is_fuel_panel(item):
-            return PanelConfig.show_fuel
-        
-        def is_checklist_panel(item):
-            return PanelConfig.show_checklist
-        
-        def toggle_bombing(icon, item):
-            app.root.after(0, lambda: app._toggle_panel('show_bombing'))
-        
-        def is_bombing_panel(item):
-            return PanelConfig.show_bombing
-        
-        # 面板子菜单（根据ENABLE_CCRP决定是否包含投弹预测选项）
-        panel_items = [
-            pystray.MenuItem("🎯 战区导航", toggle_zone, checked=is_zone_panel),
-            pystray.MenuItem("🛫 机场导航", toggle_airfield, checked=is_airfield_panel),
-            pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel),
-        ]
-        if ENABLE_CCRP:
-            panel_items.append(pystray.MenuItem("💣 投弹预测", toggle_bombing, checked=is_bombing_panel))
-        panel_items.append(pystray.MenuItem("✅ 出击检查", toggle_checklist, checked=is_checklist_panel))
-        panel_menu = pystray.Menu(*panel_items)
-        
-        # 主菜单
-        menu = pystray.Menu(
+        # 构建菜单项列表
+        menu_items = [
             pystray.MenuItem(f"🔄 重置计时器 ({HotkeyConfig.KEY_RESET})", do_reset),
             pystray.MenuItem(f"🔓 锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
             pystray.MenuItem(f"📍 切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("📊 显示面板", panel_menu),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem(f"🔊 声音 ({HotkeyConfig.KEY_BEEP})", do_beep, checked=is_beep_on),
-            pystray.MenuItem(f"🔔 战区提示音 ({HotkeyConfig.KEY_ZONES})", do_zone_sound, checked=is_zone_sound_on),
-            pystray.MenuItem("📝 编辑检查清单", do_edit_checklist),
-            pystray.MenuItem("⚙️ 设置", do_settings),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("🐛 Debug模式", do_debug, checked=is_debug_on),
-            pystray.MenuItem("ℹ️ 关于", do_about),
-            pystray.MenuItem("❌ 退出", do_quit),
-        )
+        ]
+        
+        # 面板子菜单（仅在有可配置面板时显示）
+        if ENABLE_ADVANCED_SETTINGS:
+            # 面板开关回调
+            def toggle_zone(icon, item):
+                app.root.after(0, lambda: app._toggle_panel('show_zones'))
+            
+            def toggle_airfield(icon, item):
+                app.root.after(0, lambda: app._toggle_panel('show_airfields'))
+            
+            def toggle_fuel(icon, item):
+                app.root.after(0, lambda: app._toggle_panel('show_fuel'))
+            
+            def toggle_checklist(icon, item):
+                app.root.after(0, lambda: app._toggle_panel('show_checklist'))
+            
+            def toggle_bombing(icon, item):
+                app.root.after(0, lambda: app._toggle_panel('show_bombing'))
+            
+            def is_zone_panel(item):
+                return PanelConfig.show_zones
+            
+            def is_airfield_panel(item):
+                return PanelConfig.show_airfields
+            
+            def is_fuel_panel(item):
+                return PanelConfig.show_fuel
+            
+            def is_checklist_panel(item):
+                return PanelConfig.show_checklist
+            
+            def is_bombing_panel(item):
+                return PanelConfig.show_bombing
+            
+            panel_items = []
+            if ENABLE_ZONES:
+                panel_items.append(pystray.MenuItem("🎯 战区导航", toggle_zone, checked=is_zone_panel))
+            if ENABLE_AIRFIELDS:
+                panel_items.append(pystray.MenuItem("🛫 机场导航", toggle_airfield, checked=is_airfield_panel))
+            if ENABLE_FUEL:
+                panel_items.append(pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel))
+            if ENABLE_CCRP:
+                panel_items.append(pystray.MenuItem("💣 投弹预测", toggle_bombing, checked=is_bombing_panel))
+            if ENABLE_CHECKLIST:
+                panel_items.append(pystray.MenuItem("✅ 出击检查", toggle_checklist, checked=is_checklist_panel))
+            
+            if panel_items:
+                panel_menu = pystray.Menu(*panel_items)
+                menu_items.append(pystray.MenuItem("📊 显示面板", panel_menu))
+                menu_items.append(pystray.Menu.SEPARATOR)
+        
+        # 声音设置
+        menu_items.append(pystray.MenuItem(f"🔊 声音 ({HotkeyConfig.KEY_BEEP})", do_beep, checked=is_beep_on))
+        
+        # 战区提示音（仅在战区功能启用时显示）
+        if ENABLE_ZONES:
+            menu_items.append(pystray.MenuItem(f"🔔 战区提示音 ({HotkeyConfig.KEY_ZONES})", do_zone_sound, checked=is_zone_sound_on))
+        
+        # 检查清单编辑（仅在检查清单功能启用时显示）
+        if ENABLE_CHECKLIST:
+            menu_items.append(pystray.MenuItem("📝 编辑检查清单", do_edit_checklist))
+        
+        # 设置（仅在高级设置启用时显示）
+        if ENABLE_ADVANCED_SETTINGS:
+            menu_items.append(pystray.MenuItem("⚙️ 设置", do_settings))
+        
+        menu_items.append(pystray.Menu.SEPARATOR)
+        menu_items.append(pystray.MenuItem("🐛 Debug模式", do_debug, checked=is_debug_on))
+        menu_items.append(pystray.MenuItem("ℹ️ 关于", do_about))
+        menu_items.append(pystray.MenuItem("❌ 退出", do_quit))
+        
+        # 主菜单
+        menu = pystray.Menu(*menu_items)
         
         self.tray = pystray.Icon("WTTimer", icon(), "WT Timer", menu)
         threading.Thread(target=self.tray.run, daemon=True).start()
@@ -5528,21 +5615,31 @@ class App:
         """生成提示文本
         
         注意: 修改提示文字长度时需同步修改_recalc_size()中的hint_min_width
+        根据编译开关动态生成提示内容
         """
         sound = "🔊开" if self.sound.is_enabled() else "🔇关"
-        zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
         
         # 使用配置的快捷键
         k_reset = HotkeyConfig.KEY_RESET
         k_lock = HotkeyConfig.KEY_LOCK
         k_corner = HotkeyConfig.KEY_CORNER
         k_beep = HotkeyConfig.KEY_BEEP
-        k_zones = HotkeyConfig.KEY_ZONES
         
         if self._locked:
-            return f"{k_reset}重置 │ {k_lock}解锁 │ {k_corner}角落 │ {k_beep}声音({sound}) │ {k_zones}战区({zone_sound})"
+            parts = [f"{k_reset}重置", f"{k_lock}解锁", f"{k_corner}角落", f"{k_beep}声音({sound})"]
+            # 战区提示音仅在战区功能启用时显示
+            if ENABLE_ZONES:
+                zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
+                k_zones = HotkeyConfig.KEY_ZONES
+                parts.append(f"{k_zones}战区({zone_sound})")
+            return " │ ".join(parts)
         else:
-            return f"拖动移动 │ {k_lock}锁定 │ {k_beep}声音({sound}) │ {k_zones}战区({zone_sound})"
+            parts = ["拖动移动", f"{k_lock}锁定", f"{k_beep}声音({sound})"]
+            if ENABLE_ZONES:
+                zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
+                k_zones = HotkeyConfig.KEY_ZONES
+                parts.append(f"{k_zones}战区({zone_sound})")
+            return " │ ".join(parts)
 
     def _update_hint(self) -> None:
         """更新提示文本"""
@@ -5741,8 +5838,8 @@ class App:
         zone_count = 0
         airport_count = 0
         
-        # === 战区导航区块（根据PanelConfig.show_zones控制）===
-        if PanelConfig.show_zones:
+        # === 战区导航区块（根据编译开关和PanelConfig.show_zones控制）===
+        if ENABLE_ZONES and PanelConfig.show_zones:
             # 使用grid显示（行号固定，顺序不会乱）
             self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6*s), int(2*s)))
             self.zone_list_frame.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
@@ -5834,8 +5931,8 @@ class App:
             for lbl in self._zone_label_pool:
                 lbl.pack_forget()
 
-        # === 机场导航区块（根据PanelConfig.show_airfields控制）===
-        if PanelConfig.show_airfields:
+        # === 机场导航区块（根据编译开关和PanelConfig.show_airfields控制）===
+        if ENABLE_AIRFIELDS and PanelConfig.show_airfields:
             # 使用grid显示（行号固定）
             self.airport_title_lbl.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
             self.airport_list_frame.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
@@ -5917,8 +6014,8 @@ class App:
             for lbl in self._airport_label_pool:
                 lbl.pack_forget()
         
-        # === 燃油信息区块（根据PanelConfig.show_fuel控制）===
-        if PanelConfig.show_fuel:
+        # === 燃油信息区块（根据编译开关和PanelConfig.show_fuel控制）===
+        if ENABLE_FUEL and PanelConfig.show_fuel:
             # 使用grid显示（行号固定）
             self.fuel_title_lbl.grid(row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
             self.fuel_info_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
@@ -6083,7 +6180,7 @@ class App:
         
         snap = self.game.snapshot()
 
-        # 控制面板可见性（结合PanelConfig设置）
+        # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
         has_zone_data = len(snap.zones) > 0
         has_airfield_data = snap.friendly_airfield is not None or len(snap.enemy_airfields) > 0
@@ -6092,10 +6189,10 @@ class App:
             (snap.phase == Phase.ALIVE) and 
             (not snap.api_down) and 
             (
-                (PanelConfig.show_zones and has_zone_data) or 
-                (PanelConfig.show_airfields and has_airfield_data) or
-                PanelConfig.show_fuel or
-                (ENABLE_CCRP and PanelConfig.show_bombing)  # v6.0 新增，受编译开关控制
+                (ENABLE_ZONES and PanelConfig.show_zones and has_zone_data) or 
+                (ENABLE_AIRFIELDS and PanelConfig.show_airfields and has_airfield_data) or
+                (ENABLE_FUEL and PanelConfig.show_fuel) or
+                (ENABLE_CCRP and PanelConfig.show_bombing)
             )
         )
         self._set_zone_panel_visible(show_zone_panel)
@@ -6105,8 +6202,9 @@ class App:
             if need_recalc:
                 self._recalc_size()
 
-        # 检查清单面板
+        # 检查清单面板（受编译开关控制）
         show_chk = (
+            ENABLE_CHECKLIST and
             (snap.phase == Phase.ALIVE) and 
             (snap.on_ground or snap.landed_flash) and 
             (not snap.api_down) and
