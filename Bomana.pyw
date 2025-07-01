@@ -460,6 +460,9 @@ class FileConfig:
     
     # 互斥锁名称（防止多开）
     MUTEX_NAME = r"Global\WTtimer_SingleInstance"
+    
+    # 配置文件版本（用于迁移旧配置）
+    CONFIG_VERSION = 2
 
 
 # ============================================================================
@@ -537,7 +540,7 @@ class AboutConfig:
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "6.0.0"  # v6.0.0: 新增CCRP投弹预测功能，保留CDI和起落架警告
+    VERSION = "6.0.1"  # v6.0.1: 性能优化，配置版本管理，锁定状态视觉反馈
     AUTHOR = "猹Cheems"
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
@@ -995,6 +998,7 @@ class ConfigManager:
     """配置文件管理器
     
     负责从JSON文件读写用户配置，如窗口位置、透明度等。
+    v6.0.1: 新增配置版本管理，自动迁移旧配置
     """
     
     @staticmethod
@@ -1007,10 +1011,36 @@ class ConfigManager:
         if FileConfig.CONFIG_FILE.exists():
             try:
                 with open(FileConfig.CONFIG_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    config = json.load(f)
+                # 配置版本迁移
+                config = ConfigManager._migrate_config(config)
+                return config
             except (json.JSONDecodeError, IOError):
                 pass
         return {}
+    
+    @staticmethod
+    def _migrate_config(config: Dict[str, Any]) -> Dict[str, Any]:
+        """配置版本迁移
+        
+        处理旧版本配置的兼容性问题，自动升级配置结构
+        """
+        version = config.get('config_version', 1)
+        
+        # v1 -> v2: 添加投弹面板配置
+        if version < 2:
+            panels = config.get('panels', {})
+            if 'show_bombing' not in panels:
+                panels['show_bombing'] = True
+            config['panels'] = panels
+            config['config_version'] = 2
+            # 自动保存迁移后的配置
+            try:
+                ConfigManager.save(config)
+            except:
+                pass
+        
+        return config
     
     @staticmethod
     def save(config: Dict[str, Any]) -> None:
@@ -1020,6 +1050,8 @@ class ConfigManager:
             config: 配置字典
         """
         try:
+            # 确保保存时带有版本号
+            config['config_version'] = FileConfig.CONFIG_VERSION
             with open(FileConfig.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
         except IOError:
@@ -2348,6 +2380,15 @@ class GameState:
     所有游戏逻辑状态的集合，由GameLogic类管理。
     """
     phase: Phase = Phase.IDLE                                    # 当前阶段
+    # v6.0.1 新增：弹道计算缓存（在tick线程计算，减少UI线程负载）
+    cached_bomb_flight_time: float = 0.0
+    cached_bomb_range_m: float = 0.0
+    cached_release_distance_m: float = 0.0
+    cached_time_to_release: float = 0.0
+    cached_release_status: str = "invalid"
+    cached_target_distance_m: float = 0.0
+    bombing_calc_valid: bool = False
+    last_bombing_calc_time: float = 0.0
     current_life: Optional[LifeState] = None                     # 当前生命
     sortie_id: int = 0                                           # 出击计数（补给时递增）
     last_refit_ts: float = 0.0                                   # 上次补给时间
@@ -2742,11 +2783,17 @@ class GameLogic:
     - 使用锁保护共享状态
     - 独立线程执行tick循环
     - 通过snapshot()传递数据给UI
+    
+    v6.0.1 优化：
+    - Session禁用代理检查，减少网络延迟
+    - 弹道计算移至tick线程，降低UI线程负载
     """
     
     def __init__(self):
         self._lock = threading.Lock()
         self.session = requests.Session()
+        # 性能优化：禁用代理环境检查，减少每次请求的开销
+        self.session.trust_env = False
         self.http = HttpJson(self.session)
         self.tel = TelemetryFetcher(self.http)
         self.map_info_fetcher = MapInfoFetcher(self.http)
@@ -2830,6 +2877,9 @@ class GameLogic:
             # 更新导航信息（战区、地速）
             self._update_zone_navigation_locked(mp, tel, now)
 
+            # v6.0.1 优化：弹道计算移至tick线程（每250ms计算一次，而非每50ms）
+            self._update_bombing_calculation_locked(tel, now)
+            
             # === 状态机逻辑 ===
             
             # 机库检测：无地图数据或对象为空
@@ -3474,7 +3524,7 @@ class GameLogic:
                 if is_airborne and tel.gear_down:
                     gear_warning = True
 
-            # v6.0 新增：投弹预测计算（仅在ENABLE_CCRP启用时）
+            # v6.0.1 优化：从缓存读取弹道计算结果（计算已移至tick线程）
             bombing_valid = False
             bomb_name = BombConfig.selected_bomb if ENABLE_CCRP else ""
             bomb_range_m = 0.0
@@ -3485,37 +3535,15 @@ class GameLogic:
             target_zone_distance_m = 0.0
             ground_speed_kmh_for_bombing = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 3600
             
-            # 只在CCRP启用、有目标战区、飞行中且高度足够时计算投弹预测
-            if (ENABLE_CCRP and has_target and s.phase == Phase.ALIVE and 
-                not on_ground and altitude_m > 50 and 
-                nav.ground_speed > 0.0002):  # 约72km/h
-                
-                target_zone = nav.target_zone
-                if target_zone:
-                    target_zone_distance_m = target_zone.distance * ZoneConfig.DISTANCE_SCALE * 1000
-                    ground_speed_ms = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 1000
-                    
-                    bomb_params = BombConfig.get_bomb_physics_params()
-                    
-                    bomb_flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
-                        release_alt_m=altitude_m,
-                        release_speed_ms=ground_speed_ms,
-                        target_alt_m=0.0,
-                        dive_angle_deg=0.0,
-                        initial_vz_ms=None,
-                        bomb_params=bomb_params
-                    )
-                    
-                    if bomb_range_m > 0:
-                        release_distance_m, time_to_release, release_status = calculate_release_timing(
-                            current_distance_m=target_zone_distance_m,
-                            current_alt_m=altitude_m,
-                            ground_speed_ms=ground_speed_ms,
-                            target_alt_m=0.0,
-                            dive_angle_deg=0.0,
-                            initial_vz_ms=None
-                        )
-                        bombing_valid = True
+            # 从缓存读取弹道计算结果（避免在UI线程重复计算）
+            if ENABLE_CCRP and s.bombing_calc_valid:
+                bombing_valid = True
+                bomb_flight_time = s.cached_bomb_flight_time
+                bomb_range_m = s.cached_bomb_range_m
+                release_distance_m = s.cached_release_distance_m
+                time_to_release = s.cached_time_to_release
+                release_status = s.cached_release_status
+                target_zone_distance_m = s.cached_target_distance_m
 
             return UISnapshot(
                 phase=s.phase, life_index=life_index, cycle=cycle, 
@@ -3608,6 +3636,73 @@ class GameLogic:
                     s.landed_flash_until = now + GameConfig.LANDED_FLASH_SEC
         else:
             s.landing_start_time = None
+    def _update_bombing_calculation_locked(self, tel: TelemetryData, now: float):
+        """更新弹道计算缓存（必须在锁内调用）
+        
+        v6.0.1 优化：将弹道计算从UI线程(50ms)移至tick线程(250ms)
+        减少UI线程的计算负载，提高界面流畅度
+        """
+        s = self.state
+        nav = s.zone_nav
+        
+        # 检查是否需要计算
+        if not ENABLE_CCRP:
+            s.bombing_calc_valid = False
+            return
+        
+        # 计算频率控制：至少间隔200ms
+        if (now - s.last_bombing_calc_time) < 0.2:
+            return
+        
+        s.last_bombing_calc_time = now
+        
+        # 检查计算条件
+        has_target = nav.target_zone is not None
+        on_ground = tel.is_on_ground
+        altitude_m = tel.altitude_m
+        
+        if not (has_target and s.phase == Phase.ALIVE and 
+                not on_ground and altitude_m > 50 and 
+                nav.ground_speed > 0.0002):
+            s.bombing_calc_valid = False
+            return
+        
+        # 执行弹道计算
+        target_zone = nav.target_zone
+        target_distance_m = target_zone.distance * ZoneConfig.DISTANCE_SCALE * 1000
+        ground_speed_ms = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 1000
+        
+        bomb_params = BombConfig.get_bomb_physics_params()
+        
+        flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
+            release_alt_m=altitude_m,
+            release_speed_ms=ground_speed_ms,
+            target_alt_m=0.0,
+            dive_angle_deg=0.0,
+            initial_vz_ms=None,
+            bomb_params=bomb_params
+        )
+        
+        if bomb_range_m > 0:
+            release_distance_m, time_to_release, release_status = calculate_release_timing(
+                current_distance_m=target_distance_m,
+                current_alt_m=altitude_m,
+                ground_speed_ms=ground_speed_ms,
+                target_alt_m=0.0,
+                dive_angle_deg=0.0,
+                initial_vz_ms=None
+            )
+            
+            # 缓存结果
+            s.cached_bomb_flight_time = flight_time
+            s.cached_bomb_range_m = bomb_range_m
+            s.cached_release_distance_m = release_distance_m
+            s.cached_time_to_release = time_to_release
+            s.cached_release_status = release_status
+            s.cached_target_distance_m = target_distance_m
+            s.bombing_calc_valid = True
+        else:
+            s.bombing_calc_valid = False
 
 
 # ============================================================================
@@ -5605,9 +5700,16 @@ class App:
         return x, y
 
     def _toggle_lock(self):
-        """切换锁定/解锁"""
+        """切换锁定/解锁
+        
+        v6.0.1 优化：锁定/解锁时使用不同透明度，提供明确的视觉反馈
+        - 锁定状态：使用配置的透明度（默认210）
+        - 解锁状态：提高透明度到240，让窗口更明显便于拖动
+        """
         self._locked = not self._locked
-        Win32.setup_window(self.hwnd, click_through=self._locked, alpha=UIConfig.WINDOW_ALPHA)
+        # 解锁时提高不透明度，让用户更容易看到可拖动区域
+        alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
+        Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
         self._update_hint()
         self._refresh_tray()
 

@@ -70,9 +70,10 @@ jobs:
       fail-fast: false
       matrix:
         variant:
-          - { name: "增强版", slug: "Enhanced", ccrp: "True", zones: "True", fuel: "True", description: "包含所有功能" }
-          - { name: "标准版", slug: "Standard", ccrp: "False", zones: "True", fuel: "True", description: "不含CCRP自动投弹" }
-          - { name: "精简版", slug: "Lite", ccrp: "False", zones: "False", fuel: "False", description: "仅保留基础计时" }
+          # 增加 advanced 开关，明确控制设置面板
+          - { name: "增强版", slug: "Enhanced", ccrp: "True",  zones: "True",  fuel: "True",  advanced: "True",  description: "全功能开启" }
+          - { name: "标准版", slug: "Standard", ccrp: "False", zones: "True",  fuel: "True",  advanced: "True",  description: "含导航与燃油，无CCRP" }
+          - { name: "精简版", slug: "Lite",     ccrp: "False", zones: "False", fuel: "False", advanced: "True",  description: "仅计时器，保留UI缩放与设置" }
 
     steps:
       - name: Checkout code
@@ -97,12 +98,12 @@ jobs:
           # 定义需要修改的开关列表
           # 无论源代码后面带不带注释，直接覆盖整行
           $switches = @{
-            "ENABLE_CCRP" = "${{ matrix.variant.ccrp }}"
-            "ENABLE_ZONES" = "${{ matrix.variant.zones }}"
-            "ENABLE_AIRFIELDS" = "${{ matrix.variant.zones }}"
-            "ENABLE_FUEL" = "${{ matrix.variant.fuel }}"
-            "ENABLE_CHECKLIST" = "${{ matrix.variant.zones }}"
-            "ENABLE_ADVANCED_SETTINGS" = "${{ matrix.variant.zones }}"
+            "ENABLE_CCRP"             = "${{ matrix.variant.ccrp }}"
+            "ENABLE_ZONES"            = "${{ matrix.variant.zones }}"
+            "ENABLE_AIRFIELDS"        = "${{ matrix.variant.zones }}" # 机场
+            "ENABLE_FUEL"             = "${{ matrix.variant.fuel }}"
+            "ENABLE_CHECKLIST"        = "${{ matrix.variant.zones }}" # 检查清单
+            "ENABLE_ADVANCED_SETTINGS" = "${{ matrix.variant.advanced }}" 
           }
 
           foreach ($key in $switches.Keys) {
