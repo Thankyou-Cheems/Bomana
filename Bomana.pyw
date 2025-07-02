@@ -70,14 +70,13 @@ pyinstaller --noconsole --onefile `
     --clean `
     Bomana.pyw
 
-2. Lite精简版（关闭所有扩展功能）
+2. Lite精简版（关闭扩展功能）
    修改编译开关:
    ENABLE_CCRP = False
    ENABLE_ZONES = False
    ENABLE_AIRFIELDS = False
    ENABLE_FUEL = False
    ENABLE_CHECKLIST = False
-   ENABLE_ADVANCED_SETTINGS = False
 
 pyinstaller --noconsole --onefile `
     --name "BomanaLite" `
@@ -134,14 +133,6 @@ except ImportError:
 # ============================================================================
 # 设置为 False 可在打包时完全移除对应功能，减小体积并简化界面
 # 修改后需要重新打包才能生效
-#
-# Lite模式配置示例（全部设为False即为精简版）:
-#   ENABLE_CCRP = False
-#   ENABLE_ZONES = False
-#   ENABLE_AIRFIELDS = False
-#   ENABLE_FUEL = False
-#   ENABLE_CHECKLIST = False
-#   ENABLE_ADVANCED_SETTINGS = False
 
 ENABLE_CCRP = True           # CCRP投弹预测功能开关
 ENABLE_ZONES = True          # 战区导航功能开关
@@ -247,7 +238,7 @@ class FuelConfig:
     燃油采样、警告阈值、返航估算参数。
     """
     # 采样参数
-    SAMPLE_INTERVAL_SEC = 2.0        # 采样间隔（秒）
+    SAMPLE_INTERVAL_SEC = 1.0        # 采样间隔缩短至1秒，使燃油流速计算更灵敏
     SAMPLE_WINDOW_SEC = 60.0         # 历史窗口（秒）
     MIN_STABLE_SAMPLES = 5           # 最少稳定样本数
     
@@ -279,11 +270,11 @@ class NetworkConfig:
     # 8111接口基础URL（本地回环地址）
     API_BASE = "http://127.0.0.1:8111"
     
-    # 连接超时：80ms（快速失败）
-    API_CONNECT_TIMEOUT = 0.08
+    # 连接超时：30ms（针对localhost优化，快速失败防止阻塞）
+    API_CONNECT_TIMEOUT = 0.03
     
-    # 读取超时：160ms（等待响应）
-    API_READ_TIMEOUT = 0.16
+    # 读取超时：45ms（配合50ms轮询，确保不会跨周期堆积）
+    API_READ_TIMEOUT = 0.045
     
     # 单次tick最大网络耗时：300ms
     MAX_TICK_NET_BUDGET = 0.30
@@ -291,8 +282,8 @@ class NetworkConfig:
     # API断线时的轮询间隔：1.25秒（降低CPU占用）
     BACKOFF_MAX = 1.25
     
-    # 正常轮询间隔：250ms（4次/秒，平衡响应与性能）
-    POLL_INTERVAL = 0.25
+    # 正常轮询间隔：50ms（20次/秒，与UI刷新频率一致，大幅提升仪表平滑度）
+    POLL_INTERVAL = 0.05
 
 
 class UIConfig:
@@ -491,7 +482,7 @@ class BallisticPhysicsParams:
     # ==================== 阻力模型配置 ====================
     DRAG_MODEL = "advanced"
     DRAG_COEFFICIENT_MULT = 0.5
-    DRAG_REFERENCE_AREA_MULT = 0.2
+    DRAG_REFERENCE_AREA_MULT = 0.8
     
     # ==================== 减速伞参数 ====================
     BRAKE_DRAG_MULT = 1.0
