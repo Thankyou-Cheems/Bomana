@@ -544,7 +544,7 @@ class AboutConfig:
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "6.1.1"  # v6.1.1: 增强偏航提示，机场航向带，配置兼容性修复，移除旧CDI
+    VERSION = "6.1.2"  # v6.1.2: 机场航向带
     AUTHOR = "猹Cheems"
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
@@ -6014,8 +6014,9 @@ class App:
         策略: 扩展立即响应, 收缩保守处理(避免抖动), 边界检查
         
         注意:
-        - hint_min_width需容纳底部提示文字(约400px)
-        - 双面板480px, 单面板取hint_min_width
+        - badge_min_width: 徽章行最小宽度(约320px)，确保起落架徽章等能完整显示
+        - hint_min_width: 提示文字最小宽度，根据编译开关动态计算
+        - 双面板480px, 单面板取max(badge_min_width, hint_min_width)
         - _clamp_to_screen()确保不超出屏幕
         
         Args:
@@ -6039,17 +6040,27 @@ class App:
         
         pad = int(UIConfig.WINDOW_PADDING * self.scale)
         
-        # ⚠️ 提示文字最小宽度（确保底部快捷键提示完整显示）
-        # 如果修改了 _hint_text() 中的提示文字，需要同步调整此值！
-        # 当前提示："F7重置 │ F8解锁 │ F9角落 │ F10声音(🔊开) │ F11战区(🔔开)"
-        hint_min_width = int(400 * self.scale)
+        # ⚠️ 徽章行最小宽度（确保起落架徽章等能完整显示）
+        # 徽章行包含: badge_main + badge_flight + badge_gear(可选) + status_txt
+        # 估算: 80 + 80 + 100 + 60 = 320px 基础宽度
+        badge_min_width = int(320 * self.scale)
+        
+        # ⚠️ 提示文字最小宽度（根据编译开关动态计算）
+        # 完整版: "F7重置 │ F8解锁 │ F9角落 │ F10声音(🔊开) │ F11战区(🔔开)" ≈ 400px
+        # 精简版: "F7重置 │ F8解锁 │ F9角落 │ F10声音(🔊开)" ≈ 320px
+        if ENABLE_ZONES:
+            hint_min_width = int(400 * self.scale)
+        else:
+            hint_min_width = int(320 * self.scale)
+        
+        # 基础最小宽度：取徽章行和提示行中较大的
+        base_min_width = max(badge_min_width, hint_min_width)
         
         # 根据面板可见性设置最小宽度
         if self._zone_panel_visible and self._checklist_panel_visible:
-            min_width = max(int(480 * self.scale), hint_min_width)
+            min_width = max(int(480 * self.scale), base_min_width)
         else:
-            # ⚠️ 单面板或无面板时，hint_min_width 是主要约束
-            min_width = hint_min_width
+            min_width = base_min_width
         
         new_w = max(min_width, req_w + pad)
         new_h = req_h + pad + int(8 * self.scale)
