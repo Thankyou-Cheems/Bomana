@@ -3869,99 +3869,103 @@ class Pill(tk.Label):
         self.configure(fg=fg, bg=bg)
         self._apply_padding(text)
 class HeadingTape(tk.Canvas):
-    """高精度航向带指示器 (Heading Tape)
+    """统一航向带指示器 (Heading Tape)
     
-    v6.1新增: 类似PFD风格的航向刻度带
-    v6.1.1修复: 增强偏航视觉提示
+    v6.2重构: 合并战区/机场到同一航向带，支持多目标显示
+    
+    目标类型及标记:
+    - zone: 战区目标 - 红色标靶 ⊚
+    - friendly: 友方机场 - 蓝色飞机 ✈
+    - enemy: 敌方机场 - 橙色飞机 ✈
+    - destroyed: 被摧毁战区 - 灰色X ✕
     
     特性:
-    - 平滑动画效果
-    - 可视化显示具体航向度数
-    - 目标菱形颜色反馈精度状态
-    - 大尺寸偏航箭头和背景色块提示
+    - 同时显示多个不同类型的目标
+    - 主目标（战区）有偏航提示
+    - 被摧毁的战区用特殊标记显示
     """
     
-    def __init__(self, parent, width: int = 280, height: int = 36, 
-                 tape_type: str = "zone", **kwargs):
+    def __init__(self, parent, width: int = 280, height: int = 36, **kwargs):
         """初始化航向带
         
         Args:
             parent: 父容器
             width: 宽度(像素)
             height: 高度(像素)
-            tape_type: 类型 "zone"(战区) / "friendly"(友方机场) / "enemy"(敌方机场)
         """
         super().__init__(parent, width=width, height=height, 
                         bg=Theme.GRAYPILL, highlightthickness=0, **kwargs)
         self.tape_width = width
         self.tape_height = height
-        self.tape_type = tape_type
         self.pixels_per_degree = ZoneConfig.HEADING_TAPE_PIXELS_PER_DEG
         self._current_hdg = 0.0
-        self._target_hdg = None
-        self._distance_km = 0.0
+        self._primary_target = None
         
-        # 根据类型设置颜色主题
-        self._colors = {
-            "zone": {"target": Theme.GREEN, "overflow": Theme.ORANGE, "icon": "🎯"},
-            "friendly": {"target": Theme.BLUE, "overflow": Theme.YELLOW, "icon": "🟢"},
-            "enemy": {"target": Theme.ORANGE, "overflow": Theme.RED, "icon": "🔴"},
-        }.get(tape_type, {"target": Theme.GREEN, "overflow": Theme.ORANGE, "icon": "●"})
-        
-    def update_tape(self, current_hdg: float, target_hdg: float = None, 
-                    distance_km: float = 0.0, tolerance: float = 5.0,
-                    target_name: str = ""):
-        """更新航向带显示
+        # 目标类型颜色配置
+        self._target_colors = {
+            "zone": Theme.RED,
+            "friendly": Theme.BLUE,
+            "enemy": Theme.ORANGE,
+            "destroyed": Theme.TEXT_MUTED,
+        }
+    
+    def update_tape_multi(self, current_hdg: float, targets: list = None,
+                          primary_distance_km: float = 0.0):
+        """更新航向带显示（多目标版本）
         
         Args:
             current_hdg: 当前航向(0-360°)
-            target_hdg: 目标航向(0-360°)，None表示无目标
-            distance_km: 到目标距离(公里)
-            tolerance: 当前容差角度
-            target_name: 目标名称（用于显示）
+            targets: 目标列表，每个目标为dict:
+                {
+                    'type': 'zone'/'friendly'/'enemy'/'destroyed',
+                    'relative': 相对角度(-180~180),
+                    'distance_km': 距离(公里),
+                    'is_primary': 是否主目标(用于偏航提示),
+                    'name': 目标名称(可选)
+                }
+            primary_distance_km: 主目标距离(用于计算缩放)
         """
         self.delete("all")
-        
         self._current_hdg = current_hdg
-        self._target_hdg = target_hdg
-        self._distance_km = distance_km
         
-        # 1. 动态计算缩放系数
-        scale_factor = calculate_heading_tape_scale(distance_km) if distance_km > 0 else 1.0
+        if targets is None:
+            targets = []
+        
+        # 找出主目标（用于偏航提示和缩放计算）
+        primary = next((t for t in targets if t.get('is_primary')), None)
+        self._primary_target = primary
+        
+        # 1. 动态计算缩放系数（基于主目标距离）
+        dist_for_scale = primary_distance_km if primary_distance_km > 0 else (
+            primary['distance_km'] if primary else 10.0
+        )
+        scale_factor = calculate_heading_tape_scale(dist_for_scale)
         ppd = self.pixels_per_degree * scale_factor
         
         center_x = self.tape_width / 2
         
-        # 2. 计算目标偏差（提前计算用于背景绘制）
-        target_diff = 0.0
-        target_in_view = False
-        if target_hdg is not None:
-            target_diff = target_hdg - current_hdg
-            while target_diff > 180:
-                target_diff -= 360
-            while target_diff < -180:
-                target_diff += 360
-            target_x = center_x + target_diff * ppd
-            target_in_view = (0 <= target_x <= self.tape_width)
+        # 2. 检查主目标是否在视野外（用于偏航提示）
+        primary_diff = 0.0
+        primary_in_view = True
+        if primary:
+            primary_diff = primary['relative']
+            primary_x = center_x + primary_diff * ppd
+            primary_in_view = (0 <= primary_x <= self.tape_width)
+            
+            # 主目标在视野外时，绘制偏航背景
+            if not primary_in_view:
+                if primary_diff < 0:
+                    self.create_rectangle(0, 0, 50, self.tape_height, 
+                                         fill=Theme.RED, stipple="gray50", outline="")
+                else:
+                    self.create_rectangle(self.tape_width - 50, 0, self.tape_width, self.tape_height,
+                                         fill=Theme.RED, stipple="gray50", outline="")
         
-        # 3. 如果目标在视野外，绘制大面积偏航提示背景
-        if target_hdg is not None and not target_in_view:
-            overflow_color = self._colors["overflow"]
-            # 半透明背景色块
-            if target_diff < 0:
-                # 目标在左边
-                self.create_rectangle(0, 0, 50, self.tape_height, 
-                                     fill=overflow_color, stipple="gray50", outline="")
-            else:
-                # 目标在右边
-                self.create_rectangle(self.tape_width - 50, 0, self.tape_width, self.tape_height,
-                                     fill=overflow_color, stipple="gray50", outline="")
-        
-        # 4. 绘制背景分割线
+        # 3. 绘制背景分割线
         self.create_line(0, self.tape_height - 1, self.tape_width, self.tape_height - 1, 
                         fill=Theme.BORDER, width=1)
         
-        # 5. 计算可见航向范围并绘制刻度
+        # 4. 绘制刻度
         visible_degrees = self.tape_width / ppd
         start_deg = current_hdg - visible_degrees / 2 - 5
         end_deg = current_hdg + visible_degrees / 2 + 5
@@ -3982,80 +3986,42 @@ class HeadingTape(tk.Canvas):
             if x < -20 or x > self.tape_width + 20:
                 continue
             
-            # 主刻度（每10度）
             if display_d % 10 == 0:
                 self.create_line(x, 2, x, 14, fill=Theme.TEXT, width=2)
-                hdg_text = f"{display_d:03d}"
-                self.create_text(x, 22, text=hdg_text, fill=Theme.TEXT, 
+                self.create_text(x, 22, text=f"{display_d:03d}", fill=Theme.TEXT, 
                                font=("Consolas", 8), anchor="n")
-            # 次刻度（每5度）
             elif display_d % 5 == 0:
                 self.create_line(x, 4, x, 12, fill=Theme.TEXT_DIM, width=1)
-            # 细刻度（每1度，仅在高缩放时显示）
             elif scale_factor >= 2.0:
                 self.create_line(x, 6, x, 10, fill=Theme.TEXT_MUTED, width=1)
         
-        # 6. 绘制目标指示
-        if target_hdg is not None:
-            target_x = center_x + target_diff * ppd
+        # 5. 绘制所有目标标记（按优先级：destroyed < enemy < friendly < zone）
+        sorted_targets = sorted(targets, key=lambda t: {
+            'destroyed': 0, 'enemy': 1, 'friendly': 2, 'zone': 3
+        }.get(t.get('type', 'zone'), 2))
+        
+        for target in sorted_targets:
+            t_type = target.get('type', 'zone')
+            t_rel = target.get('relative', 0)
+            t_is_primary = target.get('is_primary', False)
             
-            if target_in_view:
-                # 目标在视野内 - 绘制菱形
-                abs_diff = abs(target_diff)
-                if abs_diff < 0.2:
-                    diamond_color = "#00FF00"
-                elif abs_diff < tolerance * 0.3:
-                    diamond_color = Theme.GREEN
-                elif abs_diff < tolerance * 0.6:
-                    diamond_color = Theme.BLUE
-                elif abs_diff < tolerance:
-                    diamond_color = Theme.YELLOW
-                else:
-                    diamond_color = Theme.ORANGE
-                
-                # 绘制目标菱形（稍大）
-                size = 8
-                points = [
-                    target_x, 2,
-                    target_x - size, 2 + size,
-                    target_x, 2 + size * 2,
-                    target_x + size, 2 + size
-                ]
-                self.create_polygon(points, fill=diamond_color, outline=Theme.BG, width=1)
+            t_x = center_x + t_rel * ppd
+            in_view = (0 <= t_x <= self.tape_width)
+            
+            if in_view:
+                self._draw_target_marker(t_x, t_type, t_is_primary, t_rel, 
+                                        primary['distance_km'] if primary else 10.0)
             else:
-                # 目标在视野外 - 绘制大箭头和文字提示
-                overflow_color = self._colors["overflow"]
-                if target_diff < 0:
-                    # 目标在左边 - 大箭头
-                    arrow_points = [
-                        5, self.tape_height // 2,
-                        25, self.tape_height // 2 - 10,
-                        20, self.tape_height // 2,
-                        25, self.tape_height // 2 + 10,
-                    ]
-                    self.create_polygon(arrow_points, fill=overflow_color, outline=Theme.BG)
-                    # 偏差角度文字
-                    self.create_text(40, self.tape_height // 2, 
-                                   text=f"← {abs(int(target_diff))}°",
-                                   fill=overflow_color, font=("Arial", 10, "bold"), anchor="w")
-                else:
-                    # 目标在右边 - 大箭头
-                    arrow_points = [
-                        self.tape_width - 5, self.tape_height // 2,
-                        self.tape_width - 25, self.tape_height // 2 - 10,
-                        self.tape_width - 20, self.tape_height // 2,
-                        self.tape_width - 25, self.tape_height // 2 + 10,
-                    ]
-                    self.create_polygon(arrow_points, fill=overflow_color, outline=Theme.BG)
-                    # 偏差角度文字
-                    self.create_text(self.tape_width - 40, self.tape_height // 2,
-                                   text=f"{abs(int(target_diff))}° →",
-                                   fill=overflow_color, font=("Arial", 10, "bold"), anchor="e")
+                # 视野外目标显示小箭头
+                self._draw_overflow_indicator(t_rel, t_type)
+        
+        # 6. 主目标在视野外时的大箭头提示
+        if primary and not primary_in_view:
+            self._draw_primary_overflow(primary_diff)
         
         # 7. 绘制中心基准线（机头指向）
         self.create_line(center_x, 0, center_x, self.tape_height, 
                         fill=Theme.GREEN, width=2, dash=(3, 2))
-        # 中心三角形
         tri_size = 5
         self.create_polygon(
             center_x, 0,
@@ -4064,10 +4030,131 @@ class HeadingTape(tk.Canvas):
             fill=Theme.GREEN, outline=""
         )
     
+    def _draw_target_marker(self, x: float, t_type: str, is_primary: bool, 
+                           relative: float, distance_km: float):
+        """绘制目标标记
+        
+        Args:
+            x: X坐标
+            t_type: 目标类型
+            is_primary: 是否主目标
+            relative: 相对角度
+            distance_km: 距离
+        """
+        color = self._target_colors.get(t_type, Theme.TEXT)
+        y_center = 10
+        
+        if t_type == 'zone':
+            # 战区：红色标靶（同心圆）
+            size = 8 if is_primary else 6
+            # 主目标根据精度调整颜色深浅
+            if is_primary:
+                tolerance = get_cdi_tolerance(distance_km)
+                abs_rel = abs(relative)
+                if abs_rel < 0.2:
+                    color = "#FF4444"  # 亮红
+                elif abs_rel < tolerance * 0.5:
+                    color = Theme.RED
+                elif abs_rel < tolerance:
+                    color = "#CC3333"  # 暗红
+                else:
+                    color = Theme.ORANGE  # 偏航时变橙
+            # 绘制标靶（外圈+内圈+中心点）
+            self.create_oval(x - size, y_center - size, x + size, y_center + size,
+                           outline=color, width=2, fill="")
+            inner_size = size * 0.5
+            self.create_oval(x - inner_size, y_center - inner_size, 
+                           x + inner_size, y_center + inner_size,
+                           fill=color, outline="")
+            
+        elif t_type == 'friendly':
+            # 友方机场：蓝色飞机符号
+            self._draw_aircraft_icon(x, y_center, color, size=7)
+            
+        elif t_type == 'enemy':
+            # 敌方机场：橙色飞机符号
+            self._draw_aircraft_icon(x, y_center, color, size=7)
+            
+        elif t_type == 'destroyed':
+            # 被摧毁：灰色X标记
+            size = 5
+            self.create_line(x - size, y_center - size, x + size, y_center + size,
+                           fill=color, width=2)
+            self.create_line(x - size, y_center + size, x + size, y_center - size,
+                           fill=color, width=2)
+    
+    def _draw_aircraft_icon(self, x: float, y: float, color: str, size: int = 7):
+        """绘制飞机图标
+        
+        简化的飞机俯视图：机身+机翼+尾翼
+        """
+        # 机身（垂直线）
+        self.create_line(x, y - size, x, y + size * 0.6, fill=color, width=2)
+        # 主翼（水平线）
+        wing_y = y - size * 0.2
+        self.create_line(x - size, wing_y, x + size, wing_y, fill=color, width=2)
+        # 尾翼（小水平线）
+        tail_y = y + size * 0.5
+        self.create_line(x - size * 0.5, tail_y, x + size * 0.5, tail_y, fill=color, width=1)
+    
+    def _draw_overflow_indicator(self, relative: float, t_type: str):
+        """绘制视野外目标的小指示器"""
+        color = self._target_colors.get(t_type, Theme.TEXT_DIM)
+        y = 10
+        
+        if relative < 0:
+            # 左侧小三角
+            self.create_polygon(2, y, 8, y - 4, 8, y + 4, 
+                              fill=color, outline="")
+        else:
+            # 右侧小三角
+            self.create_polygon(self.tape_width - 2, y, 
+                              self.tape_width - 8, y - 4, 
+                              self.tape_width - 8, y + 4,
+                              fill=color, outline="")
+    
+    def _draw_primary_overflow(self, diff: float):
+        """绘制主目标的大偏航箭头"""
+        y = self.tape_height // 2
+        
+        if diff < 0:
+            # 左侧大箭头
+            arrow_points = [5, y, 25, y - 10, 20, y, 25, y + 10]
+            self.create_polygon(arrow_points, fill=Theme.RED, outline=Theme.BG)
+            self.create_text(40, y, text=f"◀ {abs(int(diff))}°",
+                           fill=Theme.RED, font=("Arial", 10, "bold"), anchor="w")
+        else:
+            # 右侧大箭头
+            arrow_points = [self.tape_width - 5, y, self.tape_width - 25, y - 10,
+                          self.tape_width - 20, y, self.tape_width - 25, y + 10]
+            self.create_polygon(arrow_points, fill=Theme.RED, outline=Theme.BG)
+            self.create_text(self.tape_width - 40, y, text=f"{abs(int(diff))}° ▶",
+                           fill=Theme.RED, font=("Arial", 10, "bold"), anchor="e")
+    
+    def update_tape(self, current_hdg: float, target_hdg: float = None, 
+                    distance_km: float = 0.0, tolerance: float = 5.0,
+                    target_name: str = ""):
+        """兼容旧接口：单目标更新"""
+        if target_hdg is None:
+            self.update_tape_multi(current_hdg, [], distance_km)
+        else:
+            rel = target_hdg - current_hdg
+            while rel > 180:
+                rel -= 360
+            while rel < -180:
+                rel += 360
+            targets = [{
+                'type': 'zone',
+                'relative': rel,
+                'distance_km': distance_km,
+                'is_primary': True
+            }]
+            self.update_tape_multi(current_hdg, targets, distance_km)
+    
     def clear(self):
         """清除航向带"""
         self.delete("all")
-        self._target_hdg = None
+        self._primary_target = None
 
 
 class SettingsDialog(tk.Toplevel):
@@ -5498,7 +5585,7 @@ class App:
         self.heading_lbl = tk.Label(self.zone_header_frame, text="HDG: ---", font=font_heading, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e")
         self.heading_lbl.pack(side="right")
         
-        # Row 1: v6.1新增 - 战区航向带(Heading Tape)
+        # Row 1: v6.2重构 - 统一航向带(显示战区+机场+被摧毁目标)
         if ZoneConfig.HEADING_TAPE_ENABLED:
             self.heading_tape_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
             self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
@@ -5508,52 +5595,100 @@ class App:
             self.heading_tape = HeadingTape(
                 self.heading_tape_frame, 
                 width=tape_width, 
-                height=tape_height,
-                tape_type="zone"
+                height=tape_height
             )
             self.heading_tape.pack(fill="x", expand=True)
             
-            # v6.1.2: 航向带下方的信息栏（三栏布局）
-            self.tape_info_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
-            self.tape_info_row.pack(fill="x", pady=(int(2*s), 0))
+            # 图例行（显示标记含义）- v6.2.1: 加大字体
+            self.tape_legend_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
+            self.tape_legend_row.pack(fill="x", pady=(int(1*s), 0))
             
-            # 配置三栏等宽
-            self.tape_info_row.columnconfigure(0, weight=1)
-            self.tape_info_row.columnconfigure(1, weight=1)
-            self.tape_info_row.columnconfigure(2, weight=1)
+            legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
+            tk.Label(self.tape_legend_row, text="⊚战区", font=legend_font, 
+                    fg=Theme.RED, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
+            tk.Label(self.tape_legend_row, text="✈友方", font=legend_font,
+                    fg=Theme.BLUE, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
+            tk.Label(self.tape_legend_row, text="✈敌方", font=legend_font,
+                    fg=Theme.ORANGE, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
+            tk.Label(self.tape_legend_row, text="✕摧毁", font=legend_font,
+                    fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL).pack(side="left")
             
-            info_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.95))
+            # v6.2.1: 战区状态提示行
+            self.tape_zone_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
+            self.tape_zone_row.pack(fill="x", pady=(int(2*s), 0))
             
-            # 左栏：转向指示（← 左转 / → 右转）
-            self.tape_turn_lbl = tk.Label(
-                self.tape_info_row, text="", font=info_font,
+            status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.95))
+            
+            # 战区标签
+            self.tape_zone_label = tk.Label(
+                self.tape_zone_row, text="⊚战区:", font=status_font,
+                fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w"
+            )
+            self.tape_zone_label.pack(side="left")
+            
+            # 战区转向指示
+            self.tape_zone_turn = tk.Label(
+                self.tape_zone_row, text="", font=status_font,
                 fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
             )
-            self.tape_turn_lbl.grid(row=0, column=0, sticky="w", padx=(0, int(4*s)))
+            self.tape_zone_turn.pack(side="left", padx=(int(6*s), 0))
             
-            # 中栏：偏差角度（居中显示）
-            self.tape_deviation_lbl = tk.Label(
-                self.tape_info_row, text="", font=info_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="center"
+            # 战区状态描述
+            self.tape_zone_status = tk.Label(
+                self.tape_zone_row, text="", font=status_font,
+                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
             )
-            self.tape_deviation_lbl.grid(row=0, column=1, sticky="ew")
+            self.tape_zone_status.pack(side="left", padx=(int(8*s), 0))
             
-            # 右栏：容差/缩放信息
-            self.tape_tolerance_lbl = tk.Label(
-                self.tape_info_row, text="", font=info_font,
+            # 战区容差信息（右对齐）
+            self.tape_zone_tolerance = tk.Label(
+                self.tape_zone_row, text="", font=status_font,
                 fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
             )
-            self.tape_tolerance_lbl.grid(row=0, column=2, sticky="e", padx=(int(4*s), 0))
+            self.tape_zone_tolerance.pack(side="right")
             
-            # 保留旧变量兼容（不再使用）
-            self.tape_info_lbl = None
+            # v6.2.1: 友方机场状态提示行
+            self.tape_friendly_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
+            self.tape_friendly_row.pack(fill="x", pady=(int(1*s), 0))
+            
+            # 友方机场标签
+            self.tape_friendly_label = tk.Label(
+                self.tape_friendly_row, text="✈友方:", font=status_font,
+                fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w"
+            )
+            self.tape_friendly_label.pack(side="left")
+            
+            # 友方机场转向指示
+            self.tape_friendly_turn = tk.Label(
+                self.tape_friendly_row, text="", font=status_font,
+                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+            )
+            self.tape_friendly_turn.pack(side="left", padx=(int(6*s), 0))
+            
+            # 友方机场距离/ETE
+            self.tape_friendly_info = tk.Label(
+                self.tape_friendly_row, text="", font=status_font,
+                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+            )
+            self.tape_friendly_info.pack(side="left", padx=(int(8*s), 0))
+            
+            # 保留旧变量兼容
+            self.tape_turn_lbl = self.tape_zone_turn
+            self.tape_deviation_lbl = self.tape_zone_status
+            self.tape_tolerance_lbl = self.tape_zone_tolerance
+            self.tape_info_container = None
+            self._tape_info_labels = []
         else:
             self.heading_tape = None
-            self.tape_info_lbl = None
-            self.tape_info_row = None
+            self.tape_info_container = None
+            self._tape_info_labels = []
             self.tape_turn_lbl = None
             self.tape_deviation_lbl = None
             self.tape_tolerance_lbl = None
+            self.tape_zone_row = None
+            self.tape_friendly_row = None
+            self.tape_friendly_turn = None
+            self.tape_friendly_info = None
         
         # Row 2: 被摧毁警告标签（动态显示）
         font_alert = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
@@ -5568,106 +5703,11 @@ class App:
         self.airport_title_lbl = tk.Label(self.zone_frame, text="🛫 机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.airport_title_lbl.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
 
-        # Row 5: v6.1.1新增 - 机场航向带容器
-        if ZoneConfig.HEADING_TAPE_ENABLED:
-            self.airport_tape_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-            # 初始隐藏，由_update_zone_display控制
-            
-            tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s)
-            tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
-            info_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.95))
-            
-            # ========== 友方机场航向带 ==========
-            self.friendly_tape_container = tk.Frame(self.airport_tape_frame, bg=Theme.GRAYPILL)
-            self.friendly_tape_container.pack(fill="x", pady=(0, int(2*s)))
-            
-            self.friendly_tape_label = tk.Label(
-                self.friendly_tape_container, text="🟢 友方机场",
-                font=(UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.9)),
-                fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.friendly_tape_label.pack(fill="x")
-            
-            self.friendly_heading_tape = HeadingTape(
-                self.friendly_tape_container, 
-                width=tape_width, 
-                height=tape_height,
-                tape_type="friendly"
-            )
-            self.friendly_heading_tape.pack(fill="x", expand=True)
-            
-            # v6.1.2: 友方机场三栏信息布局
-            self.friendly_info_row = tk.Frame(self.friendly_tape_container, bg=Theme.GRAYPILL)
-            self.friendly_info_row.pack(fill="x", pady=(int(2*s), 0))
-            self.friendly_info_row.columnconfigure(0, weight=1)
-            self.friendly_info_row.columnconfigure(1, weight=1)
-            self.friendly_info_row.columnconfigure(2, weight=1)
-            
-            self.friendly_turn_lbl = tk.Label(
-                self.friendly_info_row, text="", font=info_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.friendly_turn_lbl.grid(row=0, column=0, sticky="w")
-            
-            self.friendly_status_lbl = tk.Label(
-                self.friendly_info_row, text="", font=info_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="center"
-            )
-            self.friendly_status_lbl.grid(row=0, column=1, sticky="ew")
-            
-            self.friendly_dist_lbl = tk.Label(
-                self.friendly_info_row, text="", font=info_font,
-                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
-            )
-            self.friendly_dist_lbl.grid(row=0, column=2, sticky="e")
-            
-            # ========== 敌方机场航向带 ==========
-            self.enemy_tape_container = tk.Frame(self.airport_tape_frame, bg=Theme.GRAYPILL)
-            self.enemy_tape_container.pack(fill="x", pady=(int(4*s), 0))
-            
-            self.enemy_tape_label = tk.Label(
-                self.enemy_tape_container, text="🔴 敌方机场",
-                font=(UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.9)),
-                fg=Theme.ORANGE, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.enemy_tape_label.pack(fill="x")
-            
-            self.enemy_heading_tape = HeadingTape(
-                self.enemy_tape_container,
-                width=tape_width,
-                height=tape_height,
-                tape_type="enemy"
-            )
-            self.enemy_heading_tape.pack(fill="x", expand=True)
-            
-            # v6.1.2: 敌方机场三栏信息布局
-            self.enemy_info_row = tk.Frame(self.enemy_tape_container, bg=Theme.GRAYPILL)
-            self.enemy_info_row.pack(fill="x", pady=(int(2*s), 0))
-            self.enemy_info_row.columnconfigure(0, weight=1)
-            self.enemy_info_row.columnconfigure(1, weight=1)
-            self.enemy_info_row.columnconfigure(2, weight=1)
-            
-            self.enemy_turn_lbl = tk.Label(
-                self.enemy_info_row, text="", font=info_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.enemy_turn_lbl.grid(row=0, column=0, sticky="w")
-            
-            self.enemy_status_lbl = tk.Label(
-                self.enemy_info_row, text="", font=info_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="center"
-            )
-            self.enemy_status_lbl.grid(row=0, column=1, sticky="ew")
-            
-            self.enemy_dist_lbl = tk.Label(
-                self.enemy_info_row, text="", font=info_font,
-                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
-            )
-            self.enemy_dist_lbl.grid(row=0, column=2, sticky="e")
-        else:
-            self.airport_tape_frame = None
-            self.friendly_heading_tape = None
-            self.enemy_heading_tape = None
+        # v6.2: 移除独立的机场航向带（已合并到主航向带）
+        # 保留变量引用以兼容
+        self.airport_tape_frame = None
+        self.friendly_heading_tape = None
+        self.enemy_heading_tape = None
 
         # Row 6: 机场列表容器
         self.airport_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
@@ -6402,6 +6442,98 @@ class App:
         if self._zone_panel_visible != visible:
             self._zone_panel_visible = visible
             self._update_mid_panel_layout()
+    def _update_tape_info_labels(self, targets_info: list, primary_zone):
+        """更新航向带下方的状态提示（战区+友方机场）
+        
+        v6.2.1: 分两行显示战区和友方机场的状态
+        
+        Args:
+            targets_info: 目标信息列表
+            primary_zone: 主目标战区（用于计算容差）
+        """
+        # === 更新战区状态提示 ===
+        if primary_zone and self.tape_turn_lbl and self.tape_deviation_lbl and self.tape_tolerance_lbl:
+            tolerance = get_cdi_tolerance(primary_zone.distance_km)
+            scale = calculate_heading_tape_scale(primary_zone.distance_km)
+            rel = primary_zone.relative
+            abs_rel = abs(rel)
+            
+            # 转向指示
+            if abs_rel < 0.5:
+                turn_text = "✓ 对准"
+                turn_color = "#00FF00"
+            elif rel < 0:
+                turn_text = f"◀ 左转 {abs_rel:.1f}°"
+                turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
+            else:
+                turn_text = f"右转 {abs_rel:.1f}° ▶"
+                turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
+            
+            # 状态描述
+            if abs_rel < 0.2:
+                dev_text = "精确对准"
+                dev_color = "#00FF00"
+            elif abs_rel < tolerance * 0.3:
+                dev_text = "高精度"
+                dev_color = Theme.GREEN
+            elif abs_rel < tolerance * 0.6:
+                dev_text = "航线内"
+                dev_color = Theme.BLUE
+            elif abs_rel < tolerance:
+                dev_text = "边缘"
+                dev_color = Theme.YELLOW
+            else:
+                dev_text = "⚠ 偏航"
+                dev_color = Theme.ORANGE
+            
+            # 容差和缩放
+            tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
+            
+            self.tape_turn_lbl.config(text=turn_text, fg=turn_color)
+            self.tape_deviation_lbl.config(text=dev_text, fg=dev_color)
+            self.tape_tolerance_lbl.config(text=tol_text)
+            
+            if self.tape_zone_row:
+                self.tape_zone_row.pack(fill="x", pady=(int(2*self.scale), 0))
+        elif self.tape_turn_lbl and self.tape_deviation_lbl and self.tape_tolerance_lbl:
+            # 无战区目标时隐藏战区行
+            self.tape_turn_lbl.config(text="", fg=Theme.TEXT_MUTED)
+            self.tape_deviation_lbl.config(text="无目标", fg=Theme.TEXT_MUTED)
+            self.tape_tolerance_lbl.config(text="")
+            if self.tape_zone_row:
+                self.tape_zone_row.pack_forget()
+        
+        # === 更新友方机场状态提示 ===
+        friendly_info = next((t for t in targets_info if t['type'] == 'friendly'), None)
+        if friendly_info and self.tape_friendly_turn and self.tape_friendly_info:
+            rel = friendly_info['relative']
+            abs_rel = abs(rel)
+            dist = friendly_info['distance_km']
+            
+            # 转向指示
+            if abs_rel < 0.5:
+                turn_text = "✓ 对准"
+                turn_color = "#00FF00"
+            elif rel < 0:
+                turn_text = f"◀ 左转 {abs_rel:.1f}°"
+                turn_color = Theme.BLUE
+            else:
+                turn_text = f"右转 {abs_rel:.1f}° ▶"
+                turn_color = Theme.BLUE
+            
+            # 距离和ETE
+            dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
+            ete_str = f" ⏱{friendly_info['ete_str']}" if friendly_info.get('ete_str') else ""
+            info_text = f"{dist_str}{ete_str}"
+            
+            self.tape_friendly_turn.config(text=turn_text, fg=turn_color)
+            self.tape_friendly_info.config(text=info_text, fg=Theme.BLUE)
+            
+            if self.tape_friendly_row:
+                self.tape_friendly_row.pack(fill="x", pady=(int(1*self.scale), 0))
+        elif self.tape_friendly_row:
+            # 无友方机场时隐藏该行
+            self.tape_friendly_row.pack_forget()
 
     def _set_checklist_visible(self, visible: bool):
         """设置检查清单可见性"""
@@ -6437,79 +6569,95 @@ class App:
             self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6*s), int(2*s)))
             self.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
             
-            # v6.1: 更新航向带
-            if self.heading_tape is not None:
+            # v6.2: 更新统一航向带（战区+机场+被摧毁）
+            if self.heading_tape is not None and snap.player_heading > 0:
+                targets = []
+                active_targets_info = []  # 用于生成文字信息
+                
+                # 添加战区目标
                 target_zone = next((z for z in snap.zones if z.is_target), None)
-                if target_zone and snap.player_heading > 0:
-                    # 计算目标航向
-                    target_hdg = (snap.player_heading + target_zone.relative) % 360
-                    tolerance = get_cdi_tolerance(target_zone.distance_km)
-                    self.heading_tape.update_tape(
-                        current_hdg=snap.player_heading,
-                        target_hdg=target_hdg,
-                        distance_km=target_zone.distance_km,
-                        tolerance=tolerance
-                    )
-                    
-                    # v6.1.2: 更新三栏信息显示
-                    scale = calculate_heading_tape_scale(target_zone.distance_km)
-                    rel = target_zone.relative
-                    abs_rel = abs(rel)
-                    
-                    # 左栏：转向指示
-                    if abs_rel < 0.5:
-                        turn_text = "✓ 对准"
-                        turn_color = "#00FF00"
-                    elif rel < 0:
-                        turn_text = f"◀ 左转 {abs_rel:.1f}°"
-                        turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
-                    else:
-                        turn_text = f"右转 {abs_rel:.1f}° ▶"
-                        turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
-                    
-                    # 中栏：状态描述
-                    if abs_rel < 0.2:
-                        dev_text = "精确锁定"
-                        dev_color = "#00FF00"
-                    elif abs_rel < tolerance * 0.3:
-                        dev_text = "高精度"
-                        dev_color = Theme.GREEN
-                    elif abs_rel < tolerance * 0.6:
-                        dev_text = "航线内"
-                        dev_color = Theme.BLUE
-                    elif abs_rel < tolerance:
-                        dev_text = "边缘"
-                        dev_color = Theme.YELLOW
-                    else:
-                        dev_text = "⚠ 偏航"
-                        dev_color = Theme.ORANGE
-                    
-                    # 右栏：容差和缩放
-                    tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
-                    
-                    # 更新标签
-                    if self.tape_turn_lbl:
-                        self.tape_turn_lbl.config(text=turn_text, fg=turn_color)
-                    if self.tape_deviation_lbl:
-                        self.tape_deviation_lbl.config(text=dev_text, fg=dev_color)
-                    if self.tape_tolerance_lbl:
-                        self.tape_tolerance_lbl.config(text=tol_text)
-                    
-                    self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
-                else:
-                    # 无目标时仅显示当前航向
-                    if snap.player_heading > 0:
-                        self.heading_tape.update_tape(current_hdg=snap.player_heading)
-                        if self.tape_turn_lbl:
-                            self.tape_turn_lbl.config(text="", fg=Theme.TEXT_MUTED)
-                        if self.tape_deviation_lbl:
-                            self.tape_deviation_lbl.config(text="无目标", fg=Theme.TEXT_MUTED)
-                        if self.tape_tolerance_lbl:
-                            self.tape_tolerance_lbl.config(text="")
-                        self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
-                    else:
-                        self.heading_tape.clear()
-                        self.heading_tape_frame.grid_remove()
+                if target_zone:
+                    targets.append({
+                        'type': 'zone',
+                        'relative': target_zone.relative,
+                        'distance_km': target_zone.distance_km,
+                        'is_primary': True
+                    })
+                    active_targets_info.append({
+                        'type': 'zone',
+                        'name': '战区',
+                        'icon': '⊚',
+                        'relative': target_zone.relative,
+                        'distance_km': target_zone.distance_km,
+                        'ete_str': target_zone.ete_str if hasattr(target_zone, 'ete_str') else '',
+                        'color': Theme.RED
+                    })
+                
+                # 添加被摧毁的战区
+                if snap.zone_destroyed_alert and hasattr(self.game.state.zone_nav, 'destroyed_zones'):
+                    for dz in self.game.state.zone_nav.destroyed_zones:
+                        if hasattr(dz, 'relative'):
+                            targets.append({
+                                'type': 'destroyed',
+                                'relative': dz.relative,
+                                'distance_km': dz.distance * ZoneConfig.DISTANCE_SCALE,
+                                'is_primary': False
+                            })
+                
+                # 添加友方机场（前方180°内视为当前目标）
+                if snap.friendly_airfield and abs(snap.friendly_airfield.relative) <= 90:
+                    af = snap.friendly_airfield
+                    targets.append({
+                        'type': 'friendly',
+                        'relative': af.relative,
+                        'distance_km': af.distance_km,
+                        'is_primary': False
+                    })
+                    active_targets_info.append({
+                        'type': 'friendly',
+                        'name': '友方',
+                        'icon': '✈',
+                        'relative': af.relative,
+                        'distance_km': af.distance_km,
+                        'ete_str': af.ete_str,
+                        'color': Theme.BLUE
+                    })
+                
+                # 添加敌方机场（前方180°内的目标机场）
+                if snap.enemy_airfields:
+                    for af in snap.enemy_airfields:
+                        if abs(af.relative) <= 90:
+                            targets.append({
+                                'type': 'enemy',
+                                'relative': af.relative,
+                                'distance_km': af.distance_km,
+                                'is_primary': False
+                            })
+                            if af.is_target:
+                                active_targets_info.append({
+                                    'type': 'enemy',
+                                    'name': '敌方',
+                                    'icon': '✈',
+                                    'relative': af.relative,
+                                    'distance_km': af.distance_km,
+                                    'ete_str': af.ete_str,
+                                    'color': Theme.ORANGE
+                                })
+                
+                # 更新航向带
+                primary_dist = target_zone.distance_km if target_zone else 10.0
+                self.heading_tape.update_tape_multi(snap.player_heading, targets, primary_dist)
+                
+                # 更新目标信息文字（所有前方目标）
+                self._update_tape_info_labels(active_targets_info, target_zone)
+                
+                self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
+            elif self.heading_tape is not None:
+                self.heading_tape.clear()
+                if self.tape_info_container:
+                    for lbl in self._tape_info_labels:
+                        lbl.pack_forget()
+                self.heading_tape_frame.grid_remove()
             
             # 战区被摧毁警告（row=2）
             if snap.zone_destroyed_alert:
@@ -6559,10 +6707,8 @@ class App:
                     else:
                         rel_text = f"{rel_sign}{int(zone.relative)}°"
                     
+                    # v6.2.1: 去掉ETE显示（航向带下方已有）
                     text = f"{marker} {zone.direction} {dist_text}  ({rel_text})"
-
-                    if zone.ete_str:
-                        text += f"   ⏱️{zone.ete_str}"
                     fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
                     
                     lbl = self._zone_label_pool[idx]
@@ -6582,116 +6728,7 @@ class App:
             # 使用grid显示（行号固定）- v6.1.1: 调整行号
             self.airport_title_lbl.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
             
-            # v6.1.1: 更新机场航向带
-            has_airport_tape = False
-            if self.airport_tape_frame is not None:
-                # 友方机场航向带
-                if snap.friendly_airfield and snap.player_heading > 0:
-                    af = snap.friendly_airfield
-                    target_hdg = (snap.player_heading + af.relative) % 360
-                    tolerance = get_cdi_tolerance(af.distance_km)
-                    self.friendly_heading_tape.update_tape(
-                        current_hdg=snap.player_heading,
-                        target_hdg=target_hdg,
-                        distance_km=af.distance_km,
-                        tolerance=tolerance
-                    )
-                    
-                    # v6.1.2: 更新友方机场三栏信息
-                    rel = af.relative
-                    abs_rel = abs(rel)
-                    
-                    # 左栏：转向指示
-                    if abs_rel < 0.5:
-                        turn_text = "✓ 对准"
-                        turn_color = "#00FF00"
-                    elif rel < 0:
-                        turn_text = f"◀ 左转 {abs_rel:.1f}°"
-                        turn_color = Theme.BLUE if abs_rel < tolerance else Theme.YELLOW
-                    else:
-                        turn_text = f"右转 {abs_rel:.1f}° ▶"
-                        turn_color = Theme.BLUE if abs_rel < tolerance else Theme.YELLOW
-                    
-                    # 中栏：状态
-                    if abs_rel < tolerance * 0.3:
-                        status_text = "航线内"
-                        status_color = Theme.GREEN
-                    elif abs_rel < tolerance:
-                        status_text = "可接受"
-                        status_color = Theme.BLUE
-                    else:
-                        status_text = "⚠ 偏航"
-                        status_color = Theme.YELLOW
-                    
-                    # 右栏：距离和ETE
-                    dist_text = f"{af.distance_km:.1f}km"
-                    if af.ete_str:
-                        dist_text += f" ⏱️{af.ete_str}"
-                    
-                    self.friendly_turn_lbl.config(text=turn_text, fg=turn_color)
-                    self.friendly_status_lbl.config(text=status_text, fg=status_color)
-                    self.friendly_dist_lbl.config(text=dist_text)
-                    self.friendly_tape_container.pack(fill="x", pady=(0, int(2*s)))
-                    has_airport_tape = True
-                else:
-                    self.friendly_tape_container.pack_forget()
-                
-                # 敌方目标机场航向带
-                enemy_target = next((af for af in snap.enemy_airfields if af.is_target), None) if snap.enemy_airfields else None
-                if enemy_target and snap.player_heading > 0:
-                    target_hdg = (snap.player_heading + enemy_target.relative) % 360
-                    tolerance = get_cdi_tolerance(enemy_target.distance_km)
-                    self.enemy_heading_tape.update_tape(
-                        current_hdg=snap.player_heading,
-                        target_hdg=target_hdg,
-                        distance_km=enemy_target.distance_km,
-                        tolerance=tolerance
-                    )
-                    
-                    # v6.1.2: 更新敌方机场三栏信息
-                    rel = enemy_target.relative
-                    abs_rel = abs(rel)
-                    
-                    # 左栏：转向指示
-                    if abs_rel < 0.5:
-                        turn_text = "✓ 对准"
-                        turn_color = Theme.YELLOW
-                    elif rel < 0:
-                        turn_text = f"◀ 左转 {abs_rel:.1f}°"
-                        turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
-                    else:
-                        turn_text = f"右转 {abs_rel:.1f}° ▶"
-                        turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
-                    
-                    # 中栏：状态
-                    if abs_rel < tolerance * 0.3:
-                        status_text = "瞄准中"
-                        status_color = Theme.YELLOW
-                    elif abs_rel < tolerance:
-                        status_text = "接近"
-                        status_color = Theme.ORANGE
-                    else:
-                        status_text = "⚠ 偏航"
-                        status_color = Theme.ORANGE
-                    
-                    # 右栏：距离和ETE
-                    dist_text = f"{enemy_target.distance_km:.1f}km"
-                    if enemy_target.ete_str:
-                        dist_text += f" ⏱️{enemy_target.ete_str}"
-                    
-                    self.enemy_turn_lbl.config(text=turn_text, fg=turn_color)
-                    self.enemy_status_lbl.config(text=status_text, fg=status_color)
-                    self.enemy_dist_lbl.config(text=dist_text)
-                    self.enemy_tape_container.pack(fill="x", pady=(int(4*s), 0))
-                    has_airport_tape = True
-                else:
-                    self.enemy_tape_container.pack_forget()
-                
-                # 显示/隐藏机场航向带容器
-                if has_airport_tape:
-                    self.airport_tape_frame.grid(row=5, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
-                else:
-                    self.airport_tape_frame.grid_remove()
+            # v6.2: 机场航向带已合并到主航向带，此处不再需要单独处理
             
             self.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
             
@@ -6721,9 +6758,8 @@ class App:
                 dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
                 rel_sign = "+" if af.relative > 0 else ""
                 rel_text = f"{rel_sign}{int(af.relative)}°"
+                # v6.2.1: 去掉ETE显示（航向带下方已有）
                 text = f"🟢 ➤ {af.direction} {dist_text}  ({rel_text})"
-                if af.ete_str:
-                    text += f"   ⏱️{af.ete_str}"
                 lbl = self._airport_label_pool[ap_idx]
                 lbl.config(text=text, fg=Theme.GREEN)
                 lbl.pack(fill="x")
@@ -6735,9 +6771,8 @@ class App:
                     dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
                     rel_sign = "+" if af.relative > 0 else ""
                     rel_text = f"{rel_sign}{int(af.relative)}°"
+                    # v6.2.1: 去掉ETE显示（航向带下方已有）
                     text = f"🔴 {marker} {af.direction} {dist_text}  ({rel_text})"
-                    if af.ete_str:
-                        text += f"   ⏱️{af.ete_str}"
                     fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
                     lbl = self._airport_label_pool[ap_idx]
                     lbl.config(text=text, fg=fg)
