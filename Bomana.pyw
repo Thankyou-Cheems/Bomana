@@ -876,6 +876,9 @@ class PanelConfig:
     show_fuel = True         # 燃油管理
     show_checklist = True    # 检查清单
     show_bombing = True      # v6.0新增：投弹预测（受ENABLE_CCRP开关控制）
+    # v6.2.1: 导航条模式 - "integrated"(集成) / "standalone"(独立窗口)
+    navigation_mode = "integrated"
+    navigation_window_pos = None  # 独立窗口位置 (x, y)
     
     @classmethod
     def init_from_compile_switches(cls):
@@ -5232,6 +5235,11 @@ class App:
         self._finalize_window_geometry_and_styles()
         self._init_bindings()
         self._init_global_hotkeys()
+        
+        # v6.2.1: 初始化独立导航窗口
+        self.nav_window = NavigationWindow(self)
+        if PanelConfig.navigation_mode == "standalone":
+            self.nav_window.show()
 
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
@@ -5280,6 +5288,12 @@ class App:
         PanelConfig.show_fuel = panels.get('show_fuel', True)
         PanelConfig.show_checklist = panels.get('show_checklist', True)
         PanelConfig.show_bombing = panels.get('show_bombing', True)  # v6.0 新增
+        
+        # v6.2.1: 导航条模式
+        PanelConfig.navigation_mode = config.get('navigation_mode', 'integrated')
+        nav_pos = config.get('navigation_window_pos')
+        if nav_pos and isinstance(nav_pos, list) and len(nav_pos) == 2:
+            PanelConfig.navigation_window_pos = tuple(nav_pos)
         
         # v6.0 新增：炸弹选择（仅在CCRP启用时）
         if ENABLE_CCRP:
@@ -5345,6 +5359,11 @@ class App:
         if ENABLE_CCRP:
             panels_config['show_bombing'] = PanelConfig.show_bombing
         config['panels'] = panels_config
+        
+        # v6.2.1: 导航条模式
+        config['navigation_mode'] = PanelConfig.navigation_mode
+        if PanelConfig.navigation_window_pos:
+            config['navigation_window_pos'] = list(PanelConfig.navigation_window_pos)
         
         # v6.0 新增：炸弹选择（仅在CCRP启用时保存）
         if ENABLE_CCRP:
@@ -6001,7 +6020,18 @@ class App:
             if panel_items:
                 panel_menu = pystray.Menu(*panel_items)
                 menu_items.append(pystray.MenuItem("📊 显示面板", panel_menu))
-                menu_items.append(pystray.Menu.SEPARATOR)
+            
+            # v6.2.1: 导航条模式切换
+            if ENABLE_ZONES:
+                def toggle_nav_mode(icon, item):
+                    app.root.after(0, app._toggle_navigation_mode)
+                
+                def is_standalone_nav(item):
+                    return PanelConfig.navigation_mode == "standalone"
+                
+                menu_items.append(pystray.MenuItem("🧭 独立导航窗口", toggle_nav_mode, checked=is_standalone_nav))
+            
+            menu_items.append(pystray.Menu.SEPARATOR)
         
         # 声音设置
         menu_items.append(pystray.MenuItem(f"🔊 声音 ({HotkeyConfig.KEY_BEEP})", do_beep, checked=is_beep_on))
@@ -6047,6 +6077,16 @@ class App:
         self._refresh_tray()
         if self._zone_sound_enabled:
             self.sound.play(pattern="on")
+    def _toggle_navigation_mode(self):
+        """切换导航条模式（集成/独立）"""
+        if PanelConfig.navigation_mode == "integrated":
+            PanelConfig.navigation_mode = "standalone"
+            self.nav_window.show()
+        else:
+            PanelConfig.navigation_mode = "integrated"
+            self.nav_window.hide()
+        self._save_config()
+        self._refresh_tray()
 
     def _recalc_size(self, keep_pos: bool = True, force_shrink: bool = False):
         """重新计算窗口尺寸
@@ -6651,13 +6691,26 @@ class App:
                 # 更新目标信息文字（所有前方目标）
                 self._update_tape_info_labels(active_targets_info, target_zone)
                 
-                self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
+                # v6.2.1: 根据导航模式决定是否显示集成航向带
+                if PanelConfig.navigation_mode == "integrated":
+                    self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
+                else:
+                    self.heading_tape_frame.grid_remove()
+                
+                # v6.2.1: 更新独立导航窗口
+                if hasattr(self, 'nav_window') and self.nav_window.is_visible():
+                    self.nav_window.update_display(snap, targets, active_targets_info, target_zone)
             elif self.heading_tape is not None:
                 self.heading_tape.clear()
                 if self.tape_info_container:
                     for lbl in self._tape_info_labels:
                         lbl.pack_forget()
-                self.heading_tape_frame.grid_remove()
+                if PanelConfig.navigation_mode == "integrated":
+                    self.heading_tape_frame.grid_remove()
+                
+                # v6.2.1: 独立窗口也需要清空
+                if hasattr(self, 'nav_window') and self.nav_window.is_visible():
+                    self.nav_window.update_display(snap, [], [], None)
             
             # 战区被摧毁警告（row=2）
             if snap.zone_destroyed_alert:
@@ -7048,6 +7101,366 @@ class App:
         # 继续下一帧
         self.root.after(UIConfig.UI_REFRESH_MS, self._update_ui)
 
+
+# ============================================================================
+# 独立导航窗口
+# ============================================================================
+
+class NavigationWindow:
+    """独立导航条窗口
+    
+    v6.2.1新增：可拖动的独立导航窗口，方便放置在屏幕任意位置
+    
+    特性:
+    - 无边框透明窗口
+    - 支持拖动
+    - 关闭时隐藏而非退出
+    - 位置自动保存
+    - 与主窗口数据同步
+    """
+    
+    def __init__(self, parent_app):
+        """初始化独立导航窗口
+        
+        Args:
+            parent_app: 主App实例，用于访问游戏数据和配置
+        """
+        self.app = parent_app
+        self.root = parent_app.root
+        self.scale = parent_app.scale
+        self._visible = False
+        self._drag_data = {"x": 0, "y": 0}
+        
+        # 创建顶层窗口
+        self.window = tk.Toplevel(self.root)
+        self.window.title("导航条")
+        self.window.overrideredirect(True)
+        self.window.attributes("-topmost", True)
+        self.window.attributes("-alpha", UIConfig.WINDOW_ALPHA)
+        self.window.configure(bg=Theme.BG)
+        
+        # 初始隐藏
+        self.window.withdraw()
+        
+        # 设置窗口点击穿透（可选）
+        self.hwnd = ctypes.windll.user32.GetParent(self.window.winfo_id())
+        
+        # 初始化UI
+        self._init_ui()
+        
+        # 绑定事件
+        self._init_bindings()
+        
+        # 恢复位置
+        self._restore_position()
+    
+    def _init_ui(self):
+        """初始化导航条UI"""
+        s = self.scale
+        pad = int(6 * s)
+        
+        # 主框架
+        self.main_frame = tk.Frame(self.window, bg=Theme.GRAYPILL)
+        self.main_frame.pack(fill="both", expand=True, padx=2, pady=2)
+        
+        # 标题栏（用于拖动）
+        self.title_bar = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.title_bar.pack(fill="x", padx=pad, pady=(pad, 0))
+        
+        font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s*0.9))
+        self.title_lbl = tk.Label(
+            self.title_bar, text="🎯 导航", font=font_title,
+            fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.title_lbl.pack(side="left")
+        
+        # 航向显示
+        font_hdg = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
+        self.heading_lbl = tk.Label(
+            self.title_bar, text="HDG: ---", font=font_hdg,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e"
+        )
+        self.heading_lbl.pack(side="right")
+        
+        # 关闭按钮（点击后隐藏窗口）
+        self.close_btn = tk.Label(
+            self.title_bar, text="✕", font=font_title,
+            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, cursor="hand2"
+        )
+        self.close_btn.pack(side="right", padx=(0, int(8*s)))
+        self.close_btn.bind("<Button-1>", lambda e: self.hide())
+        self.close_btn.bind("<Enter>", lambda e: self.close_btn.config(fg=Theme.RED))
+        self.close_btn.bind("<Leave>", lambda e: self.close_btn.config(fg=Theme.TEXT_MUTED))
+        
+        # 航向带容器
+        self.tape_frame = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.tape_frame.pack(fill="x", padx=pad, pady=(int(2*s), 0))
+        
+        # 航向带
+        tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s * 1.2)  # 稍微宽一点
+        tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
+        self.heading_tape = HeadingTape(
+            self.tape_frame,
+            width=tape_width,
+            height=tape_height
+        )
+        self.heading_tape.pack(fill="x", expand=True)
+        
+        # 图例行
+        self.legend_row = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.legend_row.pack(fill="x", padx=pad, pady=(int(1*s), 0))
+        
+        legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
+        tk.Label(self.legend_row, text="⊚战区", font=legend_font,
+                fg=Theme.RED, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
+        tk.Label(self.legend_row, text="✈友方", font=legend_font,
+                fg=Theme.BLUE, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
+        tk.Label(self.legend_row, text="✈敌方", font=legend_font,
+                fg=Theme.ORANGE, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
+        tk.Label(self.legend_row, text="✕摧毁", font=legend_font,
+                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL).pack(side="left")
+        
+        # 战区状态行
+        self.zone_row = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.zone_row.pack(fill="x", padx=pad, pady=(int(2*s), 0))
+        
+        status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.95))
+        
+        self.zone_label = tk.Label(
+            self.zone_row, text="⊚战区:", font=status_font,
+            fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.zone_label.pack(side="left")
+        
+        self.zone_turn = tk.Label(
+            self.zone_row, text="", font=status_font,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.zone_turn.pack(side="left", padx=(int(6*s), 0))
+        
+        self.zone_status = tk.Label(
+            self.zone_row, text="", font=status_font,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.zone_status.pack(side="left", padx=(int(8*s), 0))
+        
+        self.zone_tolerance = tk.Label(
+            self.zone_row, text="", font=status_font,
+            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
+        )
+        self.zone_tolerance.pack(side="right")
+        
+        # 友方机场状态行
+        self.friendly_row = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.friendly_row.pack(fill="x", padx=pad, pady=(int(1*s), pad))
+        
+        self.friendly_label = tk.Label(
+            self.friendly_row, text="✈友方:", font=status_font,
+            fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.friendly_label.pack(side="left")
+        
+        self.friendly_turn = tk.Label(
+            self.friendly_row, text="", font=status_font,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.friendly_turn.pack(side="left", padx=(int(6*s), 0))
+        
+        self.friendly_info = tk.Label(
+            self.friendly_row, text="", font=status_font,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.friendly_info.pack(side="left", padx=(int(8*s), 0))
+        
+        # 提示文字
+        hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s*0.9))
+        self.hint_lbl = tk.Label(
+            self.main_frame, text="拖动标题栏移动 | 右键菜单",
+            font=hint_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL
+        )
+        self.hint_lbl.pack(fill="x", padx=pad, pady=(0, int(2*s)))
+    
+    def _init_bindings(self):
+        """初始化事件绑定"""
+        # 标题栏拖动
+        for widget in [self.title_bar, self.title_lbl]:
+            widget.bind("<Button-1>", self._on_drag_start)
+            widget.bind("<B1-Motion>", self._on_drag_motion)
+        
+        # 右键菜单
+        self.window.bind("<Button-3>", self._show_context_menu)
+        
+        # 窗口关闭事件（点X或Alt+F4）
+        self.window.protocol("WM_DELETE_WINDOW", self.hide)
+    
+    def _on_drag_start(self, event):
+        """开始拖动"""
+        self._drag_data["x"] = event.x
+        self._drag_data["y"] = event.y
+    
+    def _on_drag_motion(self, event):
+        """拖动中"""
+        x = self.window.winfo_x() + (event.x - self._drag_data["x"])
+        y = self.window.winfo_y() + (event.y - self._drag_data["y"])
+        self.window.geometry(f"+{x}+{y}")
+        # 保存位置
+        PanelConfig.navigation_window_pos = (x, y)
+    
+    def _show_context_menu(self, event):
+        """显示右键菜单"""
+        menu = tk.Menu(self.window, tearoff=0)
+        menu.add_command(label="🔄 切换到集成模式", command=self._switch_to_integrated)
+        menu.add_separator()
+        menu.add_command(label="📍 重置位置", command=self._reset_position)
+        menu.add_separator()
+        menu.add_command(label="❌ 隐藏导航条", command=self.hide)
+        
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+    
+    def _switch_to_integrated(self):
+        """切换到集成模式"""
+        PanelConfig.navigation_mode = "integrated"
+        self.hide()
+        self.app._save_config()
+        self.app._refresh_tray()
+    
+    def _reset_position(self):
+        """重置窗口位置到屏幕中央"""
+        sw, sh = Win32.screen_size()
+        w = self.window.winfo_width()
+        h = self.window.winfo_height()
+        x = (sw - w) // 2
+        y = 50  # 靠近顶部
+        self.window.geometry(f"+{x}+{y}")
+        PanelConfig.navigation_window_pos = (x, y)
+    
+    def _restore_position(self):
+        """恢复保存的窗口位置"""
+        if PanelConfig.navigation_window_pos:
+            x, y = PanelConfig.navigation_window_pos
+            # 确保在屏幕范围内
+            sw, sh = Win32.screen_size()
+            x = max(0, min(x, sw - 100))
+            y = max(0, min(y, sh - 50))
+            self.window.geometry(f"+{x}+{y}")
+        else:
+            self._reset_position()
+    
+    def show(self):
+        """显示窗口"""
+        if not self._visible:
+            self._visible = True
+            self.window.deiconify()
+            self.window.lift()
+    
+    def hide(self):
+        """隐藏窗口"""
+        if self._visible:
+            self._visible = False
+            self.window.withdraw()
+    
+    def is_visible(self):
+        """返回窗口是否可见"""
+        return self._visible
+    
+    def update_display(self, snap: 'UISnapshot', targets: list, targets_info: list, primary_zone):
+        """更新导航显示
+        
+        Args:
+            snap: UI快照
+            targets: 航向带目标列表
+            targets_info: 目标信息列表
+            primary_zone: 主目标战区
+        """
+        if not self._visible:
+            return
+        
+        # 更新航向
+        if snap.player_heading > 0:
+            self.heading_lbl.config(text=f"HDG: {int(snap.player_heading):03d}°")
+        else:
+            self.heading_lbl.config(text="HDG: ---")
+        
+        # 更新航向带
+        if snap.player_heading > 0 and targets:
+            primary_dist = primary_zone.distance_km if primary_zone else 10.0
+            self.heading_tape.update_tape_multi(snap.player_heading, targets, primary_dist)
+        else:
+            self.heading_tape.clear()
+        
+        # 更新战区状态
+        if primary_zone:
+            tolerance = get_cdi_tolerance(primary_zone.distance_km)
+            scale = calculate_heading_tape_scale(primary_zone.distance_km)
+            rel = primary_zone.relative
+            abs_rel = abs(rel)
+            
+            # 转向指示
+            if abs_rel < 0.5:
+                turn_text = "✓ 对准"
+                turn_color = "#00FF00"
+            elif rel < 0:
+                turn_text = f"◀ 左转 {abs_rel:.1f}°"
+                turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
+            else:
+                turn_text = f"右转 {abs_rel:.1f}° ▶"
+                turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
+            
+            # 状态描述
+            if abs_rel < 0.2:
+                dev_text = "精确对准"
+                dev_color = "#00FF00"
+            elif abs_rel < tolerance * 0.3:
+                dev_text = "高精度"
+                dev_color = Theme.GREEN
+            elif abs_rel < tolerance * 0.6:
+                dev_text = "航线内"
+                dev_color = Theme.BLUE
+            elif abs_rel < tolerance:
+                dev_text = "边缘"
+                dev_color = Theme.YELLOW
+            else:
+                dev_text = "⚠ 偏航"
+                dev_color = Theme.ORANGE
+            
+            tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
+            
+            self.zone_turn.config(text=turn_text, fg=turn_color)
+            self.zone_status.config(text=dev_text, fg=dev_color)
+            self.zone_tolerance.config(text=tol_text)
+            self.zone_row.pack(fill="x", padx=int(6*self.scale), pady=(int(2*self.scale), 0))
+        else:
+            self.zone_row.pack_forget()
+        
+        # 更新友方机场状态
+        friendly_info = next((t for t in targets_info if t['type'] == 'friendly'), None)
+        if friendly_info:
+            rel = friendly_info['relative']
+            abs_rel = abs(rel)
+            dist = friendly_info['distance_km']
+            
+            if abs_rel < 0.5:
+                turn_text = "✓ 对准"
+                turn_color = "#00FF00"
+            elif rel < 0:
+                turn_text = f"◀ 左转 {abs_rel:.1f}°"
+                turn_color = Theme.BLUE
+            else:
+                turn_text = f"右转 {abs_rel:.1f}° ▶"
+                turn_color = Theme.BLUE
+            
+            dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
+            ete_str = f" ⏱{friendly_info['ete_str']}" if friendly_info.get('ete_str') else ""
+            info_text = f"{dist_str}{ete_str}"
+            
+            self.friendly_turn.config(text=turn_text, fg=turn_color)
+            self.friendly_info.config(text=info_text, fg=Theme.BLUE)
+            self.friendly_row.pack(fill="x", padx=int(6*self.scale), pady=(int(1*self.scale), int(6*self.scale)))
+        else:
+            self.friendly_row.pack_forget()
 
 # ============================================================================
 # 程序入口
