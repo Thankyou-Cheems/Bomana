@@ -879,6 +879,7 @@ class PanelConfig:
     # v6.2.1: 导航条模式 - "integrated"(集成) / "standalone"(独立窗口)
     navigation_mode = "integrated"
     navigation_window_pos = None  # 独立窗口位置 (x, y)
+    navigation_bar_width = 1.0    # 独立导航栏宽度倍率（0.5-2.0）
     
     @classmethod
     def init_from_compile_switches(cls):
@@ -4045,11 +4046,13 @@ class HeadingTape(tk.Canvas):
             distance_km: 距离
         """
         color = self._target_colors.get(t_type, Theme.TEXT)
-        y_center = 10
+        # 根据高度计算图标缩放（基于32px基准高度）
+        icon_scale = self.tape_height / 32.0
+        y_center = int(self.tape_height * 0.35)
         
         if t_type == 'zone':
             # 战区：红色标靶（同心圆）
-            size = 8 if is_primary else 6
+            size = int((12 if is_primary else 9) * icon_scale)
             # 主目标根据精度调整颜色深浅
             if is_primary:
                 tolerance = get_cdi_tolerance(distance_km)
@@ -4072,15 +4075,15 @@ class HeadingTape(tk.Canvas):
             
         elif t_type == 'friendly':
             # 友方机场：蓝色飞机符号
-            self._draw_aircraft_icon(x, y_center, color, size=7)
+            self._draw_aircraft_icon(x, y_center, color, size=int(10 * icon_scale))
             
         elif t_type == 'enemy':
             # 敌方机场：橙色飞机符号
-            self._draw_aircraft_icon(x, y_center, color, size=7)
+            self._draw_aircraft_icon(x, y_center, color, size=int(10 * icon_scale))
             
         elif t_type == 'destroyed':
             # 被摧毁：灰色X标记
-            size = 5
+            size = int(7 * icon_scale)
             self.create_line(x - size, y_center - size, x + size, y_center + size,
                            fill=color, width=2)
             self.create_line(x - size, y_center + size, x + size, y_center - size,
@@ -4103,17 +4106,20 @@ class HeadingTape(tk.Canvas):
     def _draw_overflow_indicator(self, relative: float, t_type: str):
         """绘制视野外目标的小指示器"""
         color = self._target_colors.get(t_type, Theme.TEXT_DIM)
-        y = 10
+        icon_scale = self.tape_height / 32.0
+        y = int(self.tape_height * 0.35)
+        tri_size = int(6 * icon_scale)
         
         if relative < 0:
             # 左侧小三角
-            self.create_polygon(2, y, 8, y - 4, 8, y + 4, 
+            self.create_polygon(2, y, 2 + tri_size, y - tri_size * 0.7, 
+                              2 + tri_size, y + tri_size * 0.7, 
                               fill=color, outline="")
         else:
             # 右侧小三角
             self.create_polygon(self.tape_width - 2, y, 
-                              self.tape_width - 8, y - 4, 
-                              self.tape_width - 8, y + 4,
+                              self.tape_width - 2 - tri_size, y - tri_size * 0.7, 
+                              self.tape_width - 2 - tri_size, y + tri_size * 0.7,
                               fill=color, outline="")
     
     def _draw_primary_overflow(self, diff: float):
@@ -4257,6 +4263,16 @@ class SettingsDialog(tk.Toplevel):
         self.alpha_var = tk.IntVar(value=UIConfig.WINDOW_ALPHA)
         tk.Scale(frame, from_=100, to=255, orient="horizontal", length=180, 
                 variable=self.alpha_var, bg=Theme.BG, fg=Theme.TEXT, 
+                highlightthickness=0, troughcolor=Theme.BORDER, 
+                activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
+        row += 1
+        
+        # 独立导航栏宽度
+        tk.Label(frame, text="导航栏宽度:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        self.nav_width_var = tk.DoubleVar(value=PanelConfig.navigation_bar_width)
+        tk.Scale(frame, from_=0.5, to=2.0, resolution=0.1, orient="horizontal", 
+                length=180, variable=self.nav_width_var, bg=Theme.BG, fg=Theme.TEXT, 
                 highlightthickness=0, troughcolor=Theme.BORDER, 
                 activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
         row += 1
@@ -4443,6 +4459,7 @@ class SettingsDialog(tk.Toplevel):
         if messagebox.askyesno("确认", "确定要重置所有设置为默认值吗？", parent=self):
             # 重置显示设置
             self.alpha_var.set(210)
+            self.nav_width_var.set(1.0)
             self.scale_var.set(0.85)
             self.theme_var.set("dark")
             
@@ -4474,6 +4491,7 @@ class SettingsDialog(tk.Toplevel):
         
         # 显示设置
         UIConfig.WINDOW_ALPHA = self.alpha_var.get()
+        PanelConfig.navigation_bar_width = self.nav_width_var.get()
         UIConfig.UI_SCALE_MULT = self.scale_var.get()
         new_theme = self.theme_var.get()
         old_theme = Theme.get_current()
@@ -5294,6 +5312,10 @@ class App:
         nav_pos = config.get('navigation_window_pos')
         if nav_pos and isinstance(nav_pos, list) and len(nav_pos) == 2:
             PanelConfig.navigation_window_pos = tuple(nav_pos)
+        # 独立导航栏宽度
+        nav_width = config.get('navigation_bar_width')
+        if nav_width and isinstance(nav_width, (int, float)):
+            PanelConfig.navigation_bar_width = max(0.5, min(2.0, float(nav_width)))
         
         # v6.0 新增：炸弹选择（仅在CCRP启用时）
         if ENABLE_CCRP:
@@ -5364,6 +5386,7 @@ class App:
         config['navigation_mode'] = PanelConfig.navigation_mode
         if PanelConfig.navigation_window_pos:
             config['navigation_window_pos'] = list(PanelConfig.navigation_window_pos)
+        config['navigation_bar_width'] = PanelConfig.navigation_bar_width
         
         # v6.0 新增：炸弹选择（仅在CCRP启用时保存）
         if ENABLE_CCRP:
@@ -5599,6 +5622,17 @@ class App:
         self.zone_title = tk.Label(self.zone_header_frame, text="🎯 战区导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.zone_title.pack(side="left")
         
+        # 独立导航条模式按钮
+        font_btn = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
+        self.standalone_btn = tk.Label(
+            self.zone_header_frame, text="⧉独立导航条", font=font_btn,
+            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, cursor="hand2"
+        )
+        self.standalone_btn.pack(side="left", padx=(int(10*s), 0))
+        self.standalone_btn.bind("<Button-1>", lambda e: self._toggle_navigation_mode())
+        self.standalone_btn.bind("<Enter>", lambda e: self.standalone_btn.config(fg=Theme.BLUE))
+        self.standalone_btn.bind("<Leave>", lambda e: self.standalone_btn.config(fg=Theme.TEXT_MUTED))
+        
         font_heading = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
         font_item = font_heading
         self.heading_lbl = tk.Label(self.zone_header_frame, text="HDG: ---", font=font_heading, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e")
@@ -5659,6 +5693,13 @@ class App:
             )
             self.tape_zone_status.pack(side="left", padx=(int(8*s), 0))
             
+            # 战区距离/ETE信息
+            self.tape_zone_info = tk.Label(
+                self.tape_zone_row, text="", font=status_font,
+                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+            )
+            self.tape_zone_info.pack(side="left", padx=(int(8*s), 0))
+            
             # 战区容差信息（右对齐）
             self.tape_zone_tolerance = tk.Label(
                 self.tape_zone_row, text="", font=status_font,
@@ -5684,6 +5725,13 @@ class App:
             )
             self.tape_friendly_turn.pack(side="left", padx=(int(6*s), 0))
             
+            # 友方机场状态
+            self.tape_friendly_status = tk.Label(
+                self.tape_friendly_row, text="", font=status_font,
+                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+            )
+            self.tape_friendly_status.pack(side="left", padx=(int(8*s), 0))
+            
             # 友方机场距离/ETE
             self.tape_friendly_info = tk.Label(
                 self.tape_friendly_row, text="", font=status_font,
@@ -5708,6 +5756,8 @@ class App:
             self.tape_friendly_row = None
             self.tape_friendly_turn = None
             self.tape_friendly_info = None
+            self.tape_friendly_status = None
+            self.tape_zone_info = None
         
         # Row 2: 被摧毁警告标签（动态显示）
         font_alert = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
@@ -6486,12 +6536,14 @@ class App:
         """更新航向带下方的状态提示（战区+友方机场）
         
         v6.2.1: 分两行显示战区和友方机场的状态
+        v6.2.2: 统一格式，战区添加距离/ETE，机场添加状态描述
         
         Args:
             targets_info: 目标信息列表
             primary_zone: 主目标战区（用于计算容差）
         """
         # === 更新战区状态提示 ===
+        zone_info = next((t for t in targets_info if t['type'] == 'zone'), None)
         if primary_zone and self.tape_turn_lbl and self.tape_deviation_lbl and self.tape_tolerance_lbl:
             tolerance = get_cdi_tolerance(primary_zone.distance_km)
             scale = calculate_heading_tape_scale(primary_zone.distance_km)
@@ -6526,11 +6578,21 @@ class App:
                 dev_text = "⚠ 偏航"
                 dev_color = Theme.ORANGE
             
+            # 距离和ETE
+            dist = primary_zone.distance_km
+            dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
+            ete_str = ""
+            if zone_info and zone_info.get('ete_str'):
+                ete_str = f" ⏱{zone_info['ete_str']}"
+            info_text = f"{dist_str}{ete_str}"
+            
             # 容差和缩放
             tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
             
             self.tape_turn_lbl.config(text=turn_text, fg=turn_color)
             self.tape_deviation_lbl.config(text=dev_text, fg=dev_color)
+            if hasattr(self, 'tape_zone_info') and self.tape_zone_info:
+                self.tape_zone_info.config(text=info_text, fg=Theme.RED)
             self.tape_tolerance_lbl.config(text=tol_text)
             
             if self.tape_zone_row:
@@ -6539,6 +6601,8 @@ class App:
             # 无战区目标时隐藏战区行
             self.tape_turn_lbl.config(text="", fg=Theme.TEXT_MUTED)
             self.tape_deviation_lbl.config(text="无目标", fg=Theme.TEXT_MUTED)
+            if hasattr(self, 'tape_zone_info') and self.tape_zone_info:
+                self.tape_zone_info.config(text="")
             self.tape_tolerance_lbl.config(text="")
             if self.tape_zone_row:
                 self.tape_zone_row.pack_forget()
@@ -6561,12 +6625,31 @@ class App:
                 turn_text = f"右转 {abs_rel:.1f}° ▶"
                 turn_color = Theme.BLUE
             
+            # 状态描述（与战区格式一致）
+            if abs_rel < 0.5:
+                status_text = "精确对准"
+                status_color = "#00FF00"
+            elif abs_rel < 5:
+                status_text = "高精度"
+                status_color = Theme.GREEN
+            elif abs_rel < 15:
+                status_text = "航线内"
+                status_color = Theme.BLUE
+            elif abs_rel < 45:
+                status_text = "接近"
+                status_color = Theme.BLUE
+            else:
+                status_text = "偏离"
+                status_color = Theme.TEXT_DIM
+            
             # 距离和ETE
             dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
             ete_str = f" ⏱{friendly_info['ete_str']}" if friendly_info.get('ete_str') else ""
             info_text = f"{dist_str}{ete_str}"
             
             self.tape_friendly_turn.config(text=turn_text, fg=turn_color)
+            if hasattr(self, 'tape_friendly_status') and self.tape_friendly_status:
+                self.tape_friendly_status.config(text=status_text, fg=status_color)
             self.tape_friendly_info.config(text=info_text, fg=Theme.BLUE)
             
             if self.tape_friendly_row:
@@ -7132,18 +7215,25 @@ class NavigationWindow:
         self._drag_data = {"x": 0, "y": 0}
         
         # 创建顶层窗口
+        # 定义透明键颜色（用于背景透明，内容不透明）
+        self._transparent_color = "#010101"  # 接近黑色但不影响正常UI
+        
         self.window = tk.Toplevel(self.root)
         self.window.title("导航条")
         self.window.overrideredirect(True)
         self.window.attributes("-topmost", True)
-        self.window.attributes("-alpha", UIConfig.WINDOW_ALPHA)
-        self.window.configure(bg=Theme.BG)
+        # 窗口背景设置为透明键颜色
+        self.window.configure(bg=self._transparent_color)
         
         # 初始隐藏
         self.window.withdraw()
         
-        # 设置窗口点击穿透（可选）
+        # 获取窗口句柄
+        self.window.update_idletasks()  # 确保窗口已创建
         self.hwnd = ctypes.windll.user32.GetParent(self.window.winfo_id())
+        
+        # 使用Win32 API设置分层窗口：背景透明，内容保持不透明
+        self._setup_layered_window()
         
         # 初始化UI
         self._init_ui()
@@ -7154,6 +7244,42 @@ class NavigationWindow:
         # 恢复位置
         self._restore_position()
     
+    def _setup_layered_window(self):
+        """设置分层窗口属性
+        
+        使用透明键颜色实现背景透明、内容不透明的效果，
+        同时应用应用程序的整体透明度配置
+        """
+        GWL_EXSTYLE = -20
+        WS_EX_LAYERED = 0x00080000
+        WS_EX_TOPMOST = 0x00000008
+        WS_EX_TOOLWINDOW = 0x00000080
+        LWA_COLORKEY = 0x1
+        LWA_ALPHA = 0x2
+        
+        try:
+            user32 = ctypes.windll.user32
+            # 获取当前样式并添加分层窗口样式
+            style = user32.GetWindowLongW(self.hwnd, GWL_EXSTYLE)
+            style |= (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW)
+            user32.SetWindowLongW(self.hwnd, GWL_EXSTYLE, style)
+            
+            # 将透明键颜色转换为COLORREF (BGR格式)
+            color_hex = self._transparent_color.lstrip('#')
+            r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
+            colorref = r | (g << 8) | (b << 16)
+            
+            # 同时应用透明键和整体透明度
+            alpha = int(UIConfig.WINDOW_ALPHA)
+            user32.SetLayeredWindowAttributes(self.hwnd, colorref, alpha, LWA_COLORKEY | LWA_ALPHA)
+        except (OSError, AttributeError):
+            # 降级：使用Tkinter的alpha属性
+            self.window.attributes("-alpha", UIConfig.WINDOW_ALPHA / 255.0)
+    
+    def update_transparency(self):
+        """更新窗口透明度（响应透明度配置变化）"""
+        self._setup_layered_window()
+    
     def _init_ui(self):
         """初始化导航条UI"""
         s = self.scale
@@ -7163,8 +7289,12 @@ class NavigationWindow:
         self.main_frame = tk.Frame(self.window, bg=Theme.GRAYPILL)
         self.main_frame.pack(fill="both", expand=True, padx=2, pady=2)
         
+        # 内容区域（动态内容放这里，确保hint始终在底部）
+        self.content_frame = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.content_frame.pack(fill="both", expand=True)
+        
         # 标题栏（用于拖动）
-        self.title_bar = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.title_bar = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.title_bar.pack(fill="x", padx=pad, pady=(pad, 0))
         
         font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s*0.9))
@@ -7193,11 +7323,12 @@ class NavigationWindow:
         self.close_btn.bind("<Leave>", lambda e: self.close_btn.config(fg=Theme.TEXT_MUTED))
         
         # 航向带容器
-        self.tape_frame = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.tape_frame = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.tape_frame.pack(fill="x", padx=pad, pady=(int(2*s), 0))
         
-        # 航向带
-        tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s * 1.2)  # 稍微宽一点
+        # 航向带 - 应用导航栏宽度配置
+        width_mult = PanelConfig.navigation_bar_width
+        tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s * 1.2 * width_mult)
         tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
         self.heading_tape = HeadingTape(
             self.tape_frame,
@@ -7207,7 +7338,7 @@ class NavigationWindow:
         self.heading_tape.pack(fill="x", expand=True)
         
         # 图例行
-        self.legend_row = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.legend_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.legend_row.pack(fill="x", padx=pad, pady=(int(1*s), 0))
         
         legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
@@ -7221,7 +7352,7 @@ class NavigationWindow:
                 fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL).pack(side="left")
         
         # 战区状态行
-        self.zone_row = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
+        self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.zone_row.pack(fill="x", padx=pad, pady=(int(2*s), 0))
         
         status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.95))
@@ -7244,6 +7375,12 @@ class NavigationWindow:
         )
         self.zone_status.pack(side="left", padx=(int(8*s), 0))
         
+        self.zone_info = tk.Label(
+            self.zone_row, text="", font=status_font,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.zone_info.pack(side="left", padx=(int(8*s), 0))
+        
         self.zone_tolerance = tk.Label(
             self.zone_row, text="", font=status_font,
             fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
@@ -7251,8 +7388,8 @@ class NavigationWindow:
         self.zone_tolerance.pack(side="right")
         
         # 友方机场状态行
-        self.friendly_row = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
-        self.friendly_row.pack(fill="x", padx=pad, pady=(int(1*s), pad))
+        self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
+        self.friendly_row.pack(fill="x", padx=pad, pady=(int(1*s), 0))
         
         self.friendly_label = tk.Label(
             self.friendly_row, text="✈友方:", font=status_font,
@@ -7266,19 +7403,25 @@ class NavigationWindow:
         )
         self.friendly_turn.pack(side="left", padx=(int(6*s), 0))
         
+        self.friendly_status = tk.Label(
+            self.friendly_row, text="", font=status_font,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
+        )
+        self.friendly_status.pack(side="left", padx=(int(8*s), 0))
+        
         self.friendly_info = tk.Label(
             self.friendly_row, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_info.pack(side="left", padx=(int(8*s), 0))
         
-        # 提示文字
+        # 提示文字（固定在main_frame底部，居中显示）
         hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s*0.9))
         self.hint_lbl = tk.Label(
-            self.main_frame, text="拖动标题栏移动 | 右键菜单",
-            font=hint_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL
+            self.main_frame, text="解锁(F8)后可拖动 | 右键菜单",
+            font=hint_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="center"
         )
-        self.hint_lbl.pack(fill="x", padx=pad, pady=(0, int(2*s)))
+        self.hint_lbl.pack(side="bottom", fill="x", padx=pad, pady=(0, int(2*s)))
     
     def _init_bindings(self):
         """初始化事件绑定"""
@@ -7294,12 +7437,16 @@ class NavigationWindow:
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
     
     def _on_drag_start(self, event):
-        """开始拖动"""
+        """开始拖动（仅在主窗口解锁时允许）"""
+        if self.app._locked:
+            return
         self._drag_data["x"] = event.x
         self._drag_data["y"] = event.y
     
     def _on_drag_motion(self, event):
-        """拖动中"""
+        """拖动中（仅在主窗口解锁时允许）"""
+        if self.app._locked:
+            return
         x = self.window.winfo_x() + (event.x - self._drag_data["x"])
         y = self.window.winfo_y() + (event.y - self._drag_data["y"])
         self.window.geometry(f"+{x}+{y}")
@@ -7312,8 +7459,6 @@ class NavigationWindow:
         menu.add_command(label="🔄 切换到集成模式", command=self._switch_to_integrated)
         menu.add_separator()
         menu.add_command(label="📍 重置位置", command=self._reset_position)
-        menu.add_separator()
-        menu.add_command(label="❌ 隐藏导航条", command=self.hide)
         
         try:
             menu.tk_popup(event.x_root, event.y_root)
@@ -7326,6 +7471,8 @@ class NavigationWindow:
         self.hide()
         self.app._save_config()
         self.app._refresh_tray()
+        # 强制触发UI刷新，确保投弹预测等面板正确显示
+        self.app.root.after(50, self.app._recalc_size)
     
     def _reset_position(self):
         """重置窗口位置到屏幕中央"""
@@ -7392,6 +7539,7 @@ class NavigationWindow:
             self.heading_tape.clear()
         
         # 更新战区状态
+        zone_info = next((t for t in targets_info if t['type'] == 'zone'), None)
         if primary_zone:
             tolerance = get_cdi_tolerance(primary_zone.distance_km)
             scale = calculate_heading_tape_scale(primary_zone.distance_km)
@@ -7426,10 +7574,20 @@ class NavigationWindow:
                 dev_text = "⚠ 偏航"
                 dev_color = Theme.ORANGE
             
+            # 距离和ETE
+            dist = primary_zone.distance_km
+            dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
+            ete_str = ""
+            if zone_info and zone_info.get('ete_str'):
+                ete_str = f" ⏱{zone_info['ete_str']}"
+            info_text = f"{dist_str}{ete_str}"
+            
             tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
             
             self.zone_turn.config(text=turn_text, fg=turn_color)
             self.zone_status.config(text=dev_text, fg=dev_color)
+            if hasattr(self, 'zone_info'):
+                self.zone_info.config(text=info_text, fg=Theme.RED)
             self.zone_tolerance.config(text=tol_text)
             self.zone_row.pack(fill="x", padx=int(6*self.scale), pady=(int(2*self.scale), 0))
         else:
@@ -7442,6 +7600,7 @@ class NavigationWindow:
             abs_rel = abs(rel)
             dist = friendly_info['distance_km']
             
+            # 转向指示
             if abs_rel < 0.5:
                 turn_text = "✓ 对准"
                 turn_color = "#00FF00"
@@ -7452,11 +7611,31 @@ class NavigationWindow:
                 turn_text = f"右转 {abs_rel:.1f}° ▶"
                 turn_color = Theme.BLUE
             
+            # 状态描述（与战区格式一致）
+            if abs_rel < 0.5:
+                status_text = "精确对准"
+                status_color = "#00FF00"
+            elif abs_rel < 5:
+                status_text = "高精度"
+                status_color = Theme.GREEN
+            elif abs_rel < 15:
+                status_text = "航线内"
+                status_color = Theme.BLUE
+            elif abs_rel < 45:
+                status_text = "接近"
+                status_color = Theme.BLUE
+            else:
+                status_text = "偏离"
+                status_color = Theme.TEXT_DIM
+            
+            # 距离和ETE
             dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
             ete_str = f" ⏱{friendly_info['ete_str']}" if friendly_info.get('ete_str') else ""
             info_text = f"{dist_str}{ete_str}"
             
             self.friendly_turn.config(text=turn_text, fg=turn_color)
+            if hasattr(self, 'friendly_status'):
+                self.friendly_status.config(text=status_text, fg=status_color)
             self.friendly_info.config(text=info_text, fg=Theme.BLUE)
             self.friendly_row.pack(fill="x", padx=int(6*self.scale), pady=(int(1*self.scale), int(6*self.scale)))
         else:
