@@ -544,7 +544,7 @@ class AboutConfig:
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "6.1.2"  # v6.1.2: 机场航向带
+    VERSION = "6.3.1"  # v6.3.1: 独立航向带窗口
     AUTHOR = "猹Cheems"
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
@@ -4008,16 +4008,19 @@ class HeadingTape(tk.Canvas):
             t_type = target.get('type', 'zone')
             t_rel = target.get('relative', 0)
             t_is_primary = target.get('is_primary', False)
+            t_is_target = target.get('is_target', True)  # v6.3: 是否为活动目标
             
             t_x = center_x + t_rel * ppd
             in_view = (0 <= t_x <= self.tape_width)
             
             if in_view:
                 self._draw_target_marker(t_x, t_type, t_is_primary, t_rel, 
-                                        primary['distance_km'] if primary else 10.0)
+                                        primary['distance_km'] if primary else 10.0,
+                                        is_target=t_is_target)
             else:
-                # 视野外目标显示小箭头
-                self._draw_overflow_indicator(t_rel, t_type)
+                # 视野外目标显示小箭头（只显示活动目标）
+                if t_is_target:
+                    self._draw_overflow_indicator(t_rel, t_type)
         
         # 6. 主目标在视野外时的大箭头提示
         if primary and not primary_in_view:
@@ -4035,7 +4038,7 @@ class HeadingTape(tk.Canvas):
         )
     
     def _draw_target_marker(self, x: float, t_type: str, is_primary: bool, 
-                           relative: float, distance_km: float):
+                           relative: float, distance_km: float, is_target: bool = True):
         """绘制目标标记
         
         Args:
@@ -4044,17 +4047,30 @@ class HeadingTape(tk.Canvas):
             is_primary: 是否主目标
             relative: 相对角度
             distance_km: 距离
+            is_target: 是否为活动目标（v6.3新增）
         """
-        color = self._target_colors.get(t_type, Theme.TEXT)
+        # v6.3: 根据是否为目标调整颜色和透明度
+        base_color = self._target_colors.get(t_type, Theme.TEXT)
+        
+        if not is_target:
+            # 非目标：使用暗淡颜色
+            color_map = {
+                Theme.RED: "#8B4545",      # 暗红
+                Theme.BLUE: "#4A5A8B",     # 暗蓝
+                Theme.ORANGE: "#B8774A",   # 暗橙
+            }
+            color = color_map.get(base_color, Theme.TEXT_MUTED)
+        else:
+            color = base_color
         # 根据高度计算图标缩放（基于32px基准高度）
         icon_scale = self.tape_height / 32.0
         y_center = int(self.tape_height * 0.35)
         
         if t_type == 'zone':
-            # 战区：红色标靶（同心圆）
-            size = int((12 if is_primary else 9) * icon_scale)
-            # 主目标根据精度调整颜色深浅
+            # v6.3: 战区标靶 - 区分目标和非目标
             if is_primary:
+                size = int(12 * icon_scale)
+                # 主目标根据精度调整颜色
                 tolerance = get_cdi_tolerance(distance_km)
                 abs_rel = abs(relative)
                 if abs_rel < 0.2:
@@ -4065,21 +4081,40 @@ class HeadingTape(tk.Canvas):
                     color = "#CC3333"  # 暗红
                 else:
                     color = Theme.ORANGE  # 偏航时变橙
-            # 绘制标靶（外圈+内圈+中心点）
-            self.create_oval(x - size, y_center - size, x + size, y_center + size,
-                           outline=color, width=2, fill="")
-            inner_size = size * 0.5
-            self.create_oval(x - inner_size, y_center - inner_size, 
-                           x + inner_size, y_center + inner_size,
-                           fill=color, outline="")
+                # 绘制实心标靶（外圈+内圈）
+                self.create_oval(x - size, y_center - size, x + size, y_center + size,
+                               outline=color, width=2, fill="")
+                inner_size = size * 0.5
+                self.create_oval(x - inner_size, y_center - inner_size, 
+                               x + inner_size, y_center + inner_size,
+                               fill=color, outline="")
+            elif is_target:
+                # 活动目标但非主目标：中等大小，实心
+                size = int(9 * icon_scale)
+                self.create_oval(x - size, y_center - size, x + size, y_center + size,
+                               outline=color, width=2, fill="")
+                inner_size = size * 0.5
+                self.create_oval(x - inner_size, y_center - inner_size, 
+                               x + inner_size, y_center + inner_size,
+                               fill=color, outline="")
+            else:
+                # 非目标战区：小尺寸，空心
+                size = int(9 * icon_scale)
+                self.create_oval(x - size, y_center - size, x + size, y_center + size,
+                               outline=color, width=5, fill="", dash=(2, 2))
+                # 只画一个圆圈，不画中心点
             
         elif t_type == 'friendly':
-            # 友方机场：蓝色飞机符号
-            self._draw_aircraft_icon(x, y_center, color, size=int(10 * icon_scale))
+            # v6.3: 友方机场 - 根据是否为目标调整大小
+            size = int((10 if is_target else 7) * icon_scale)
+            width = 2 if is_target else 1
+            self._draw_aircraft_icon(x, y_center, color, size=size, width=width)
             
         elif t_type == 'enemy':
-            # 敌方机场：橙色飞机符号
-            self._draw_aircraft_icon(x, y_center, color, size=int(10 * icon_scale))
+            # v6.3: 敌方机场 - 根据是否为目标调整大小
+            size = int((10 if is_target else 7) * icon_scale)
+            width = 2 if is_target else 1
+            self._draw_aircraft_icon(x, y_center, color, size=size, width=width)
             
         elif t_type == 'destroyed':
             # 被摧毁：灰色X标记
@@ -4089,19 +4124,26 @@ class HeadingTape(tk.Canvas):
             self.create_line(x - size, y_center + size, x + size, y_center - size,
                            fill=color, width=2)
     
-    def _draw_aircraft_icon(self, x: float, y: float, color: str, size: int = 7):
+    def _draw_aircraft_icon(self, x: float, y: float, color: str, size: int = 7, width: int = 2):
         """绘制飞机图标
         
         简化的飞机俯视图：机身+机翼+尾翼
+        
+        Args:
+            x, y: 坐标
+            color: 颜色
+            size: 大小
+            width: 线条粗细（v6.3新增）
         """
         # 机身（垂直线）
-        self.create_line(x, y - size, x, y + size * 0.6, fill=color, width=2)
+        self.create_line(x, y - size, x, y + size * 0.6, fill=color, width=width)
         # 主翼（水平线）
         wing_y = y - size * 0.2
-        self.create_line(x - size, wing_y, x + size, wing_y, fill=color, width=2)
+        self.create_line(x - size, wing_y, x + size, wing_y, fill=color, width=width)
         # 尾翼（小水平线）
         tail_y = y + size * 0.5
-        self.create_line(x - size * 0.5, tail_y, x + size * 0.5, tail_y, fill=color, width=1)
+        tail_width = max(1, width - 1)
+        self.create_line(x - size * 0.5, tail_y, x + size * 0.5, tail_y, fill=color, width=tail_width)
     
     def _draw_overflow_indicator(self, relative: float, t_type: str):
         """绘制视野外目标的小指示器"""
@@ -5652,19 +5694,18 @@ class App:
             )
             self.heading_tape.pack(fill="x", expand=True)
             
-            # 图例行（显示标记含义）- v6.2.1: 加大字体
+            # 图例行 - v6.2.2: 优化为紧凑单行布局
             self.tape_legend_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
             self.tape_legend_row.pack(fill="x", pady=(int(1*s), 0))
             
-            legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
-            tk.Label(self.tape_legend_row, text="⊚战区", font=legend_font, 
-                    fg=Theme.RED, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
-            tk.Label(self.tape_legend_row, text="✈友方", font=legend_font,
-                    fg=Theme.BLUE, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
-            tk.Label(self.tape_legend_row, text="✈敌方", font=legend_font,
-                    fg=Theme.ORANGE, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
-            tk.Label(self.tape_legend_row, text="✕摧毁", font=legend_font,
-                    fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL).pack(side="left")
+            # 使用更小字体和紧凑间距
+            legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.85))
+            legend_text = "⊚战区  ✈友方  ✈敌方  ✕摧毁"
+            legend_label = tk.Label(
+                self.tape_legend_row, text=legend_text, font=legend_font,
+                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="center"
+            )
+            legend_label.pack(fill="x")
             
             # v6.2.1: 战区状态提示行
             self.tape_zone_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
@@ -6553,7 +6594,7 @@ class App:
             # 转向指示
             if abs_rel < 0.5:
                 turn_text = "✓ 对准"
-                turn_color = "#00FF00"
+                turn_color = Theme.GREEN
             elif rel < 0:
                 turn_text = f"◀ 左转 {abs_rel:.1f}°"
                 turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
@@ -6564,7 +6605,7 @@ class App:
             # 状态描述
             if abs_rel < 0.2:
                 dev_text = "精确对准"
-                dev_color = "#00FF00"
+                dev_color = Theme.GREEN
             elif abs_rel < tolerance * 0.3:
                 dev_text = "高精度"
                 dev_color = Theme.GREEN
@@ -6617,7 +6658,7 @@ class App:
             # 转向指示
             if abs_rel < 0.5:
                 turn_text = "✓ 对准"
-                turn_color = "#00FF00"
+                turn_color = Theme.GREEN
             elif rel < 0:
                 turn_text = f"◀ 左转 {abs_rel:.1f}°"
                 turn_color = Theme.BLUE
@@ -6628,7 +6669,7 @@ class App:
             # 状态描述（与战区格式一致）
             if abs_rel < 0.5:
                 status_text = "精确对准"
-                status_color = "#00FF00"
+                status_color = Theme.GREEN
             elif abs_rel < 5:
                 status_text = "高精度"
                 status_color = Theme.GREEN
@@ -6697,24 +6738,28 @@ class App:
                 targets = []
                 active_targets_info = []  # 用于生成文字信息
                 
-                # 添加战区目标
+                # v6.3: 添加所有战区（目标和非目标）
                 target_zone = next((z for z in snap.zones if z.is_target), None)
-                if target_zone:
+                for zone in snap.zones:
+                    is_target = zone.is_target
                     targets.append({
                         'type': 'zone',
-                        'relative': target_zone.relative,
-                        'distance_km': target_zone.distance_km,
-                        'is_primary': True
+                        'relative': zone.relative,
+                        'distance_km': zone.distance_km,
+                        'is_primary': is_target,
+                        'is_target': is_target  # 新增字段用于区分目标/非目标
                     })
-                    active_targets_info.append({
-                        'type': 'zone',
-                        'name': '战区',
-                        'icon': '⊚',
-                        'relative': target_zone.relative,
-                        'distance_km': target_zone.distance_km,
-                        'ete_str': target_zone.ete_str if hasattr(target_zone, 'ete_str') else '',
-                        'color': Theme.RED
-                    })
+                    # 只有目标战区才添加到active_targets_info
+                    if is_target:
+                        active_targets_info.append({
+                            'type': 'zone',
+                            'name': '战区',
+                            'icon': '⊚',
+                            'relative': zone.relative,
+                            'distance_km': zone.distance_km,
+                            'ete_str': zone.ete_str if hasattr(zone, 'ete_str') else '',
+                            'color': Theme.RED
+                        })
                 
                 # 添加被摧毁的战区
                 if snap.zone_destroyed_alert and hasattr(self.game.state.zone_nav, 'destroyed_zones'):
@@ -6727,45 +6772,49 @@ class App:
                                 'is_primary': False
                             })
                 
-                # 添加友方机场（前方180°内视为当前目标）
-                if snap.friendly_airfield and abs(snap.friendly_airfield.relative) <= 90:
+                # v6.3: 添加所有友方机场
+                if snap.friendly_airfield:
                     af = snap.friendly_airfield
+                    is_in_front = abs(af.relative) <= 90
                     targets.append({
                         'type': 'friendly',
                         'relative': af.relative,
                         'distance_km': af.distance_km,
-                        'is_primary': False
+                        'is_primary': False,
+                        'is_target': is_in_front  # 前方180°视为活动目标
                     })
-                    active_targets_info.append({
-                        'type': 'friendly',
-                        'name': '友方',
-                        'icon': '✈',
-                        'relative': af.relative,
-                        'distance_km': af.distance_km,
-                        'ete_str': af.ete_str,
-                        'color': Theme.BLUE
-                    })
+                    if is_in_front:
+                        active_targets_info.append({
+                            'type': 'friendly',
+                            'name': '友方',
+                            'icon': '✈',
+                            'relative': af.relative,
+                            'distance_km': af.distance_km,
+                            'ete_str': af.ete_str,
+                            'color': Theme.BLUE
+                        })
                 
-                # 添加敌方机场（前方180°内的目标机场）
+                # v6.3: 添加所有敌方机场
                 if snap.enemy_airfields:
                     for af in snap.enemy_airfields:
-                        if abs(af.relative) <= 90:
-                            targets.append({
+                        is_in_front = abs(af.relative) <= 90
+                        targets.append({
+                            'type': 'enemy',
+                            'relative': af.relative,
+                            'distance_km': af.distance_km,
+                            'is_primary': False,
+                            'is_target': is_in_front  # 前方180°视为活动目标
+                        })
+                        if af.is_target and is_in_front:
+                            active_targets_info.append({
                                 'type': 'enemy',
+                                'name': '敌方',
+                                'icon': '✈',
                                 'relative': af.relative,
                                 'distance_km': af.distance_km,
-                                'is_primary': False
+                                'ete_str': af.ete_str,
+                                'color': Theme.ORANGE
                             })
-                            if af.is_target:
-                                active_targets_info.append({
-                                    'type': 'enemy',
-                                    'name': '敌方',
-                                    'icon': '✈',
-                                    'relative': af.relative,
-                                    'distance_km': af.distance_km,
-                                    'ete_str': af.ete_str,
-                                    'color': Theme.ORANGE
-                                })
                 
                 # 更新航向带
                 primary_dist = target_zone.distance_km if target_zone else 10.0
@@ -7337,19 +7386,20 @@ class NavigationWindow:
         )
         self.heading_tape.pack(fill="x", expand=True)
         
-        # 图例行
+        # 图例行 - v6.2.3: 与提示文字共用一行
         self.legend_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.legend_row.pack(fill="x", padx=pad, pady=(int(1*s), 0))
         
-        legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
-        tk.Label(self.legend_row, text="⊚战区", font=legend_font,
-                fg=Theme.RED, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
-        tk.Label(self.legend_row, text="✈友方", font=legend_font,
-                fg=Theme.BLUE, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
-        tk.Label(self.legend_row, text="✈敌方", font=legend_font,
-                fg=Theme.ORANGE, bg=Theme.GRAYPILL).pack(side="left", padx=(0, int(10*s)))
-        tk.Label(self.legend_row, text="✕摧毁", font=legend_font,
-                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL).pack(side="left")
+        # 左侧：图例
+        legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.85))
+        legend_text = "⊚战区  ✈友方  ✈敌方  ✕摧毁"
+        tk.Label(self.legend_row, text=legend_text, font=legend_font,
+                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w").pack(side="left")
+        
+        # 右侧：提示文字
+        hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s*0.85))
+        tk.Label(self.legend_row, text="解锁(F8)后可拖动 | 右键菜单", font=hint_font,
+                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e").pack(side="right")
         
         # 战区状态行
         self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
@@ -7357,71 +7407,85 @@ class NavigationWindow:
         
         status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.95))
         
+        # v6.2.3: 让战区提示整体居中显示（不再与容差分居两侧）
+        self._zone_row_left_spacer = tk.Frame(self.zone_row, bg=Theme.GRAYPILL)
+        self._zone_row_left_spacer.pack(side="left", fill="x", expand=True)
+        
+        self._zone_row_center = tk.Frame(self.zone_row, bg=Theme.GRAYPILL)
+        self._zone_row_center.pack(side="left")
+        
+        self._zone_row_right_spacer = tk.Frame(self.zone_row, bg=Theme.GRAYPILL)
+        self._zone_row_right_spacer.pack(side="left", fill="x", expand=True)
+        
         self.zone_label = tk.Label(
-            self.zone_row, text="⊚战区:", font=status_font,
+            self._zone_row_center, text="⊚战区:", font=status_font,
             fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w"
         )
         self.zone_label.pack(side="left")
         
         self.zone_turn = tk.Label(
-            self.zone_row, text="", font=status_font,
+            self._zone_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.zone_turn.pack(side="left", padx=(int(6*s), 0))
         
         self.zone_status = tk.Label(
-            self.zone_row, text="", font=status_font,
+            self._zone_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.zone_status.pack(side="left", padx=(int(8*s), 0))
         
         self.zone_info = tk.Label(
-            self.zone_row, text="", font=status_font,
+            self._zone_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.zone_info.pack(side="left", padx=(int(8*s), 0))
         
         self.zone_tolerance = tk.Label(
-            self.zone_row, text="", font=status_font,
-            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
+            self._zone_row_center, text="", font=status_font,
+            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
         )
-        self.zone_tolerance.pack(side="right")
+        self.zone_tolerance.pack(side="left", padx=(int(10*s), 0))
         
         # 友方机场状态行
         self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.friendly_row.pack(fill="x", padx=pad, pady=(int(1*s), 0))
         
+        # v6.2.3: 友方提示同样居中，视觉更一致
+        self._friendly_row_left_spacer = tk.Frame(self.friendly_row, bg=Theme.GRAYPILL)
+        self._friendly_row_left_spacer.pack(side="left", fill="x", expand=True)
+        
+        self._friendly_row_center = tk.Frame(self.friendly_row, bg=Theme.GRAYPILL)
+        self._friendly_row_center.pack(side="left")
+        
+        self._friendly_row_right_spacer = tk.Frame(self.friendly_row, bg=Theme.GRAYPILL)
+        self._friendly_row_right_spacer.pack(side="left", fill="x", expand=True)
+        
         self.friendly_label = tk.Label(
-            self.friendly_row, text="✈友方:", font=status_font,
+            self._friendly_row_center, text="✈友方:", font=status_font,
             fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_label.pack(side="left")
         
         self.friendly_turn = tk.Label(
-            self.friendly_row, text="", font=status_font,
+            self._friendly_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_turn.pack(side="left", padx=(int(6*s), 0))
         
         self.friendly_status = tk.Label(
-            self.friendly_row, text="", font=status_font,
+            self._friendly_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_status.pack(side="left", padx=(int(8*s), 0))
         
         self.friendly_info = tk.Label(
-            self.friendly_row, text="", font=status_font,
+            self._friendly_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_info.pack(side="left", padx=(int(8*s), 0))
         
-        # 提示文字（固定在main_frame底部，居中显示）
-        hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s*0.9))
-        self.hint_lbl = tk.Label(
-            self.main_frame, text="解锁(F8)后可拖动 | 右键菜单",
-            font=hint_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="center"
-        )
-        self.hint_lbl.pack(side="bottom", fill="x", padx=pad, pady=(0, int(2*s)))
+
     
     def _init_bindings(self):
         """初始化事件绑定"""
@@ -7531,10 +7595,14 @@ class NavigationWindow:
         else:
             self.heading_lbl.config(text="HDG: ---")
         
-        # 更新航向带
-        if snap.player_heading > 0 and targets:
-            primary_dist = primary_zone.distance_km if primary_zone else 10.0
-            self.heading_tape.update_tape_multi(snap.player_heading, targets, primary_dist)
+        # 更新航向带 - v6.2.3: 即使没有目标也保持显示
+        if snap.player_heading > 0:
+            if targets:
+                primary_dist = primary_zone.distance_km if primary_zone else 10.0
+                self.heading_tape.update_tape_multi(snap.player_heading, targets, primary_dist)
+            else:
+                # 没有目标时显示空白航向带（保持常驻）
+                self.heading_tape.update_tape_multi(snap.player_heading, [], 10.0)
         else:
             self.heading_tape.clear()
         
@@ -7549,7 +7617,7 @@ class NavigationWindow:
             # 转向指示
             if abs_rel < 0.5:
                 turn_text = "✓ 对准"
-                turn_color = "#00FF00"
+                turn_color = Theme.GREEN
             elif rel < 0:
                 turn_text = f"◀ 左转 {abs_rel:.1f}°"
                 turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
@@ -7560,7 +7628,7 @@ class NavigationWindow:
             # 状态描述
             if abs_rel < 0.2:
                 dev_text = "精确对准"
-                dev_color = "#00FF00"
+                dev_color = Theme.GREEN
             elif abs_rel < tolerance * 0.3:
                 dev_text = "高精度"
                 dev_color = Theme.GREEN
@@ -7603,7 +7671,7 @@ class NavigationWindow:
             # 转向指示
             if abs_rel < 0.5:
                 turn_text = "✓ 对准"
-                turn_color = "#00FF00"
+                turn_color = Theme.GREEN
             elif rel < 0:
                 turn_text = f"◀ 左转 {abs_rel:.1f}°"
                 turn_color = Theme.BLUE
@@ -7614,7 +7682,7 @@ class NavigationWindow:
             # 状态描述（与战区格式一致）
             if abs_rel < 0.5:
                 status_text = "精确对准"
-                status_color = "#00FF00"
+                status_color = Theme.GREEN
             elif abs_rel < 5:
                 status_text = "高精度"
                 status_color = Theme.GREEN
