@@ -1,427 +1,328 @@
-# 🍌 Bomana - 战雷全真模式收益计时器
+# Bomana 🍌
 
-<div align="center">
+**战雷全真模式收益计时器** | War Thunder SB Timer
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/Thankyou-Cheems/Bomana)
-[![Version](https://img.shields.io/badge/version-5.9-green.svg)](https://github.com/Thankyou-Cheems/Bomana/releases)
+A powerful War Thunder timer made for the "Space Monkeys" who love dropping bombs and eating bananas
 
-**A powerful War Thunder timer made for the "Space Monkeys" who love dropping bombs and eating bananas**
-
-[English](#english) | [中文](#中文)
-
-</div>
+[![Version](https://img.shields.io/badge/version-6.3.1-blue.svg)](https://github.com/Thankyou-Cheems/Bomana/releases)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.7+-yellow.svg)](https://www.python.org/)
 
 ---
 
-## 中文
+## ⚠️ 重要：合规性声明 | Compliance Statement
+> ⚠️ 本合规性声明存在前发布的版本已经移除，下载新版默认为同意此声明 ⚠️
+### 官方立场引用 | Official Statement Reference
 
-### 📖 项目简介
+根据 War Thunder 论坛中社区经理 **Stona_WT** 于 2024年5月13日的[官方回复](https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664/16)：
 
-Bomana 是一个专为《战争雷霆》全真模式（Simulator Battles）设计的辅助计时工具，帮助玩家精确管理 15 分钟的复活周期。本软件仅使用官方 8111 接口获取数据，**完全合法合规**，不涉及任何作弊行为。
+> Generally speaking, using localhost data to display overlays is considered fine and not a bannable offense. However, displaying enemy markers in a markerless mode incorporated into a compass-heading-style UI overlay, which our map tool doesn't do, gives advantage over others players. This is clearly demonstrated in the video — this is where there's a fine line as it can be considered an ESP overlay. While we won't permanently suspend any account without a preceding temporary ban or a warning, we do not approve using this data in such way even if it is publicly available.
 
-### ✨ 核心特性
+**中文译文：**
 
-#### 🎯 智能计时系统
-- **自动状态检测**：自动识别出生、死亡、着陆状态
-- **精确周期管理**：15 分钟复活周期倒计时，声音和视觉双重提醒
-- **状态恢复**：应用重启后可恢复计时状态，不丢失进度
-- **补给检测**：自动识别地面补给站，重置"出击检查"
+> 一般来说，使用 localhost 数据来显示覆盖层是被允许的，不会导致封禁。但是，在无标记模式下以罗盘样式的 UI 覆盖层显示敌人标记——而我们官方的地图工具不会这样做——会让用户相对其他玩家获得优势。这是有明确案例可以证明的——这就是可能被视为 ESP 覆盖层的临界点。虽然我们不会在没有事先临时封禁或警告的情况下永久封禁任何账户，但即使这些数据是公开可用的，**我们也不认可以这种方式使用它**。
 
-#### 🗺️ 战区导航
-- **实时战区定位**：显示所有战区的方位、距离和格子坐标
-- **智能目标选择**：自动锁定前方最佳战区（45° 角度门内优先级最高）
-- **精确对准切换**：持续对准某目标 3 秒后自动切换
-- **抵达时间估算**：基于地速计算到达战区的预计时间（ETE）
-- **偏航警告**：超过 ±60° 时显示偏航提示
-- **战区摧毁提醒**：战区被摧毁时声音+视觉警告（持续 30 秒）
+### 合规边界辨析 | Compliance Analysis
 
-#### 🛫 机场导航
-- **友方机场**：显示最近的友方机场位置和距离
-- **敌方机场**：列出所有敌方机场，自动标记 45° 内的目标
-- **返航 ETE**：实时显示返回友方机场的预计时间
+| 使用方式 | 官方态度 | 说明 |
+|---------|---------|------|
+| ✅ 显示本机飞行数据（速度、高度、燃油等） | **允许** | 类似 WTRTI 等工具，获官方认可 |
+| ✅ 使用 8111 端口数据作为辅助参考 | **允许** | 本地数据本身是官方提供的 |
+| ⚠️ 在无标记模式下显示敌人位置叠加层 | **不认可** | 可能被视为 ESP，存在封禁风险 |
+| ❌ 任何获取超出 8111 端口提供信息的行为 | **禁止** | 违反用户协议 |
 
-#### ⛽ 燃油管理（v5.8 新增）
-- **油量监控**：显示当前油量（kg）和百分比
-- **油耗率计算**：基于 60 秒采样窗口计算平均油耗（kg/min）
-- **剩余飞行时间**：估算当前油量可飞行的时间
-- **返航估算**：计算返回友方机场所需油量，提供三级警告
-  - ✅ **充足**：油量 > 返航需求 × 1.5
-  - ⚠️ **注意**：油量在返航需求 × 1.0~1.5 之间
-  - 🔴 **不足**：油量 < 返航需求
-- **高度显示**：实时显示飞行高度
-- **智能补给检测**：识别油量突增（补给），自动清空历史数据重新计算
+### Bomana 的设计原则
 
-#### ✅ 出击检查清单
-- **自定义检查项**：最多 8 个检查项，可自由编辑
-- **智能显示**：仅在着陆或"就绪"状态时显示
-- **纯展示模式**：简洁的 ○ 符号标记
+Bomana 严格遵循以下原则，确保合规使用：
 
-#### 🎨 界面特性
-- **多主题支持**：暗色、亮色、高对比度三种主题
-- **透明置顶窗口**：半透明、始终置顶，不遮挡游戏视野
-- **多显示器支持**：自动识别显示器，智能吸附边缘
-- **四角落切换**：快速切换窗口位置（F9）
-- **拖动自由定位**：解锁后可拖动到任意位置
-- **DPI 自适应**：支持高 DPI 显示器
+1. **仅使用官方 8111 接口** - 所有数据来源于 War Thunder 官方提供的 `localhost:8111` API
+2. **不读取游戏内存** - 不注入代码，不修改游戏文件
+3. **不提供游戏内不可见的信息** - 不显示敌机位置、敌方数据等
+4. **只展示玩家可见信息** - 战区、己方机场位置等地图上本就可见的信息
+5. **信息辅助而非游戏干预** - 计时器基于玩家自身出生时间，不涉及服务器数据操纵
 
-#### ⚙️ 高级功能
-- **全局热键**：即使游戏在前台也能操作
-- **系统托盘**：最小化到托盘，右键菜单控制
-- **面板开关**：可独立显示/隐藏战区、机场、燃油、检查清单面板
-- **音效系统**：可自定义的提示音（基于 Windows Beep API）
-- **Debug 模式**：查看详细的 API 状态和数据流
+### ⚡ 关键结论 | Key Takeaway
 
-### 🚀 安装说明
+**Bomana 作为基于 8111 端口数据的计时器工具，其核心功能（复活计时、飞行数据显示、投弹预测）属于官方认可的使用范畴。** 但用户应当：
 
-#### 方法一：直接运行（开发者）
+1. **了解**即使某些功能技术上可行，也不代表官方认可其使用
+2. **承担**因使用方式不当可能导致的任何后果
 
-1. **安装 Python 3.7+**
-   ```bash
-   # 检查 Python 版本
-   python --version
-   ```
+---
 
-2. **克隆仓库**
-   ```bash
-   git clone https://github.com/Thankyou-Cheems/Bomana.git
-   cd Bomana
-   ```
+## 🎯 功能特性 | Features
 
-3. **安装依赖**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 核心功能：15分钟复活周期计时器
 
-4. **运行程序**
-   ```bash
-   python Bomana.pyw
-   # 或双击 Bomana.pyw
-   ```
+War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周期。Bomana 自动追踪这一周期：
 
-#### 方法二：使用打包版本（推荐）
+- ⏱️ **自动计时** - 检测出生、着陆、死亡事件，自动开始/重置计时
+- 🔢 **复活计数** - 显示当前是第几条命
+- 💾 **状态恢复** - 支持应用重启后继续计时
+- 🔔 **倒计时警告** - 30秒、20秒、10秒...语音/蜂鸣提醒
 
-1. 前往 [Releases 页面](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. 下载最新的 `Bomana-v5.9.exe`
-3. 双击运行即可（无需安装 Python）
+### 投弹预测系统（CCRP v3.0）
 
-### 📦 打包说明
+基于真实弹道物理的投弹辅助计算：
 
-如果你想自己打包成 .exe：
+- 🎯 **弹道计算** - 考虑空气阻力、大气密度、温度修正
+- 💣 **多型号支持** - 内置多国炸弹参数数据库（苏联、美国、德国、英国等）
+- 📐 **实时预测** - 根据当前高度、速度、俯仰角计算投弹距离和时间
+- 🪂 **减速伞支持** - 支持带减速伞炸弹的特殊弹道计算
+
+### 战区导航系统
+
+精确引导你飞向目标：
+
+- 🧭 **航向带（Heading Tape）** - 图形化显示目标方位
+- 📍 **CDI 指示器** - 航道偏差指示，精度随距离动态调整
+- 📏 **距离显示** - 到目标的距离（km）
+- ⏱️ **ETE 预估** - 按当前速度到达目标的预计时间
+- 🔄 **智能目标切换** - 持续对准某目标 3 秒后自动锁定
+
+### 机场导航
+
+- ✈️ **友方机场** - 显示返航方向和距离
+- 🎯 **敌方机场** - 显示敌方机场位置（可选）
+
+### 燃油管理
+
+- ⛽ **油量显示** - 当前燃油量（kg）
+- 📉 **油耗率** - 实时燃油消耗速率
+- ⚠️ **低油量警告** - 黄色（30%）、红色（15%）警告
+- 🏠 **返航估算** - 预估返回机场所需燃油
+
+### 出击检查清单
+
+可自定义的起飞前检查项目：
+
+- ✅ 按 I 启动发动机
+- ✅ 等待发动机转速稳定
+- ✅ 收起落架
+- ✅ 开增稳系统
+- ✅ 设定打击目标
+- ✅ ...（可自定义）
+
+### 界面特性
+
+| 特性 | 说明 |
+|------|------|
+| 🪟 透明覆盖 | 不遮挡游戏视野 |
+| 📌 窗口置顶 | 始终显示在游戏上方 |
+| 🔒 锁定/解锁 | 锁定后点击穿透，不影响游戏操作 |
+| 🖱️ 拖动定位 | 自由拖动到任意位置 |
+| 📐 边缘吸附 | 自动吸附到屏幕边缘 |
+| 🖥️ 多显示器 | 支持多显示器环境 |
+| 🎨 主题切换 | 暗色/亮色/高对比度 |
+| ⌨️ 全局热键 | F7-F11 快捷操作 |
+| 📱 系统托盘 | 最小化到托盘 |
+
+---
+
+## 📥 安装与使用 | Installation & Usage
+
+### 方式一：下载预编译版本（推荐）
+
+1. 前往 [Releases](https://github.com/Thankyou-Cheems/Bomana/releases) 页面
+2. 下载最新版 `Bomana.exe`
+3. 双击运行
+
+### 方式二：从源码运行
+
+#### 环境要求
+
+- Python 3.7+
+- Windows 操作系统
+
+#### 安装依赖
 
 ```bash
-# 安装 PyInstaller
-pip install pyinstaller
-
-# 打包命令
-pyinstaller --onefile --windowed --icon=app.ico --name=Bomana ^
-  --add-data "app.png;." ^
-  --add-data "sponsor_wechat.png;." ^
-  Bomana.pyw
+pip install requests pillow pystray
 ```
 
-打包后的文件在 `dist/` 目录下。
+#### 运行
 
-### 🎮 使用方法
-
-#### 初次启动
-
-1. **启动战雷**：进入全真模式战斗
-2. **运行 Bomana**：程序会自动检测 8111 接口
-3. **等待出生**：程序自动识别出生状态并开始计时
-
-#### 快捷键操作
-
-| 快捷键 | 功能 | 说明 |
-|--------|------|------|
-| **F7** | 重置计时器 | 手动重置当前周期为 15 分钟 |
-| **F8** | 锁定/解锁窗口 | 锁定后窗口点击穿透，解锁后可拖动 |
-| **F9** | 切换角落 | 在四个屏幕角落间循环切换位置 |
-| **F10** | 声音开关 | 开启/关闭所有提示音 |
-| **F11** | 战区提示音 | 开启/关闭战区被摧毁的提示音 |
-| **Ctrl+滚轮** | 调整透明度 | 仅在解锁状态下有效 |
-| **Esc** | 退出程序 | 关闭应用 |
-
-> 💡 **提示**：快捷键可在设置中自定义（右键托盘图标 → 设置）
-
-#### 系统托盘菜单
-
-右键点击托盘图标可以：
-- ⚙️ 打开设置对话框
-- 📊 控制各面板显示
-- 🔊 调整音效设置
-- 📝 编辑出击检查清单
-- ℹ️ 查看关于信息
-
-### ⚙️ 配置说明
-
-#### 配置文件位置
-
-所有配置保存在用户主目录：
-- **配置文件**：`~/.wttimer_config.json`
-- **状态文件**：`~/.wttimer_state.json`（计时状态）
-
-#### 主要配置项
-
-```json
-{
-  "alpha": 210,              // 窗口不透明度 (100-255)
-  "scale": 0.85,             // UI 缩放倍数
-  "theme": "dark",           // 主题 (dark/light/high_contrast)
-  "global_hotkeys": true,    // 全局热键开关
-  "snap_enabled": true,      // 窗口吸附开关
-  "snap_distance": 20,       // 吸附距离（像素）
-  "beep_enabled": false,     // 提示音开关
-  "zone_sound_enabled": true,// 战区提示音开关
-  "panels": {
-    "show_zones": true,      // 显示战区导航
-    "show_airfields": true,  // 显示机场导航
-    "show_fuel": true,       // 显示燃油管理
-    "show_checklist": true   // 显示出击检查
-  },
-  "checklist_items": [       // 自定义检查清单
-    "按I启动发动机",
-    "收起落架",
-    "开增稳系统"
-  ]
-}
+```bash
+python Bomana.pyw
 ```
 
-### 🔧 高级配置
+### 开启 War Thunder 本地服务器
 
-程序内部有大量可调参数（代码中的 `Config` 类），包括：
+**重要：** 必须在 War Thunder 中启用本地网页服务器，Bomana 才能获取数据。
 
-- **游戏逻辑**：复活周期、着陆判断、补给检测参数
-- **战区导航**：航向容差、偏航警告角度、目标锁定参数
-- **燃油管理**：采样间隔、警告阈值、返航安全系数
-- **网络请求**：超时时间、轮询间隔
-- **UI 样式**：字体、颜色、间距、进度条样式
-- **音效设置**：频率、持续时间、警告时间点
+```
+设置 → 主要 → 在浏览器中显示战斗界面 → 启用
+```
 
-如需修改，请直接编辑 `Bomana.pyw` 中对应的 `Config` 类。
-
-### 📊 性能优化
-
-程序已进行多项性能优化：
-
-1. **Label 复用池**：避免频繁创建/销毁 UI 组件
-2. **字体缓存**：预计算所有字体，避免重复计算
-3. **智能刷新**：只在数据变化时重算窗口尺寸
-4. **deque 采样**：燃油采样使用 O(1) 的 deque 而非 list
-5. **独立线程**：网络请求在独立线程，不阻塞 UI
-6. **预算管理**：限制单次 tick 的网络耗时（≤300ms）
-
-### 🛡️ 安全说明
-
-#### 合规性
-
-✅ **完全合法**：仅使用官方 8111 接口（`http://127.0.0.1:8111`）  
-✅ **不读取内存**：不涉及任何游戏内存修改或注入  
-✅ **不提供作弊信息**：只显示玩家可见的地图信息  
-✅ **信息辅助**：所有功能都是"信息展示"而非"游戏干预"
-
-#### 官方 8111 接口说明
-
-战雷官方提供的本地 API，用于获取：
-- `/indicators`：飞机仪表数据（速度、油量等）
-- `/state`：飞机状态数据（真空速、高度等）
-- `/map_obj.json`：地图对象（战区、机场、玩家位置）
-- `/map_info.json`：地图元数据（格子坐标系统）
-
-这些接口是官方合法提供的，许多第三方工具（如 SteelSeries GameSense）都在使用。
-
-### 🐛 已知问题
-
-1. **首次启动可能需要手动调整位置**（多显示器环境）
-2. **主题更改需要重启才能完全生效**（tkinter 限制）
-3. **系统托盘图标在某些 Windows 10 主题下可能显示异常**
-
-### 🤝 贡献指南
-
-欢迎任何形式的贡献！
-
-1. **Fork 本仓库**
-2. **创建新分支**：`git checkout -b feature/your-feature`
-3. **提交更改**：`git commit -m 'Add some feature'`
-4. **推送到分支**：`git push origin feature/your-feature`
-5. **提交 Pull Request**
-
-#### 代码规范
-
-- 遵循 PEP 8 规范
-- 保持注释清晰（中文注释）
-- 新增功能请更新文档
-
-### 📝 待办事项
-
-- [ ] 添加单元测试
-- [ ] 支持多语言界面（英文）
-- [ ] 添加数据统计功能（成功率、平均时间）
-- [ ] 支持自定义音效文件
-- [ ] Linux/macOS 兼容性支持
-- [ ] 添加自动更新检查
-
-### 💖 支持作者
-
-如果这个工具对你有帮助，欢迎请作者喝杯咖啡~
-
-<div align="center">
-<img src="sponsor_wechat.png" width="200" alt="微信赞赏码" />
-<p>微信赞赏</p>
-</div>
-
-### 📄 许可证
-
-本项目采用 [MIT 许可证](LICENSE)。
-
-### ⚠️ 免责声明
-
-**商标声明**  
-War Thunder® 及所有相关商标、标识和素材归 Gaijin Entertainment AG 及其子公司所有。本软件为独立项目，与 Gaijin Entertainment AG 无任何关联、授权或赞助关系。
-
-**使用警告**  
-⚠️ 滥用或不当使用本软件可能违反 Gaijin Entertainment 用户协议。用户需自行确保其使用行为符合所有适用的服务条款和游戏规则。
-
-**责任限制**  
-本软件按"现状"提供，不提供任何形式的保证。作者不对因使用本软件而产生的任何损害、账号封禁或其他后果承担责任。使用风险由用户自行承担。
+启用后，可通过 `http://localhost:8111` 访问游戏数据。
 
 ---
 
-## English
+## ⌨️ 快捷键 | Hotkeys
 
-### 📖 About
+| 按键 | 功能 | 说明 |
+|------|------|------|
+| `F7` | 重置计时器 | 手动重置15分钟周期 |
+| `F8` | 锁定/解锁 | 切换窗口点击穿透状态 |
+| `F9` | 切换角落 | 在四个屏幕角落间切换位置 |
+| `F10` | 声音开关 | 开启/关闭提示音 |
+| `F11` | 战区提示音 | 开启/关闭战区被摧毁提示 |
 
-Bomana is an auxiliary timer tool designed for War Thunder Simulator Battles, helping players accurately manage the 15-minute respawn cycle. This software **only uses the official 8111 API** and is completely legal and compliant, without any cheating behavior.
+*快捷键可在设置中自定义*
 
-### ✨ Key Features
+---
 
-#### 🎯 Smart Timer System
-- **Auto State Detection**: Automatically recognizes spawn, death, and landing states
-- **Precise Cycle Management**: 15-minute respawn countdown with audio and visual alerts
-- **State Recovery**: Restores timer state after app restart
-- **Refuel Detection**: Auto-detects ground resupply stations
+## 🔧 高级配置 | Advanced Configuration
 
-#### 🗺️ Zone Navigation
-- **Real-time Zone Location**: Shows bearing, distance, and grid coordinates
-- **Smart Target Selection**: Auto-locks optimal zone within 45° heading tolerance
-- **Precise Aim Switching**: Auto-switches after 3 seconds of precise aim (<5°)
-- **ETE Calculation**: Ground speed-based Estimated Time En-route
-- **Deviation Warning**: Alert when off-heading >±60°
-- **Zone Destroyed Alert**: Audio + visual warning for destroyed zones (30s duration)
+### 编译开关
 
-#### 🛫 Airfield Navigation
-- **Friendly Airfield**: Shows nearest friendly airfield position and distance
-- **Enemy Airfields**: Lists all enemy airfields, marks target within 45°
-- **Return ETE**: Real-time estimated time to friendly airfield
+修改源码中的编译开关可定制功能模块：
 
-#### ⛽ Fuel Management (v5.8)
-- **Fuel Monitoring**: Current fuel (kg) and percentage
-- **Consumption Rate**: Average fuel consumption (kg/min) based on 60s sampling
-- **Remaining Flight Time**: Estimated flight time with current fuel
-- **Return Fuel Estimation**: Three-level warnings
-  - ✅ **Safe**: Fuel > Return needed × 1.5
-  - ⚠️ **Warning**: Fuel between Return needed × 1.0~1.5
-  - 🔴 **Danger**: Fuel < Return needed
-- **Altitude Display**: Real-time flight altitude
-- **Smart Refuel Detection**: Detects fuel jump, resets history data
+```python
+ENABLE_CCRP = True           # CCRP投弹预测功能
+ENABLE_ZONES = True          # 战区导航功能
+ENABLE_AIRFIELDS = True      # 机场导航功能
+ENABLE_FUEL = True           # 燃油管理功能
+ENABLE_CHECKLIST = True      # 出击检查清单功能
+```
 
-#### ✅ Takeoff Checklist
-- **Customizable Items**: Up to 8 checklist items, freely editable
-- **Smart Display**: Only shows when landed or "Ready"
-- **Pure Display Mode**: Simple ○ symbol markers
+---
 
-#### 🎨 UI Features
-- **Multi-theme Support**: Dark, Light, High Contrast
-- **Transparent Overlay**: Semi-transparent, always on top
-- **Multi-monitor Support**: Auto-detects monitors, smart edge snapping
-- **Corner Switching**: Quick position switch (F9)
-- **Free Dragging**: Drag to any position when unlocked
-- **DPI Adaptive**: Supports high DPI displays
+## 🔌 技术原理 | Technical Details
 
-#### ⚙️ Advanced Features
-- **Global Hotkeys**: Operable even when game is foreground
-- **System Tray**: Minimize to tray, right-click menu control
-- **Panel Toggles**: Show/hide zones, airfields, fuel, checklist independently
-- **Sound System**: Customizable alerts (Windows Beep API)
-- **Debug Mode**: View detailed API status and data flow
+### 数据来源
 
-### 🚀 Installation
+Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 
-#### Method 1: Direct Run (Developers)
+| 端点 | 数据内容 |
+|------|---------|
+| `/indicators` | 飞机仪表数据（速度、油量、有效性） |
+| `/state` | 飞机状态数据（空速、垂直速度、高度等） |
+| `/map_obj.json` | 地图对象（战区、机场、玩家位置） |
+| `/map_info.json` | 地图元数据（格子坐标系统参数） |
 
-1. **Install Python 3.7+**
-   ```bash
-   python --version
-   ```
+### 轮询频率
 
-2. **Clone Repository**
-   ```bash
-   git clone https://github.com/Thankyou-Cheems/Bomana.git
-   cd Bomana
-   ```
+- 正常状态：50ms（20Hz）
+- API 断线：1.25s（降低 CPU 占用）
 
-3. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 状态机
 
-4. **Run Program**
-   ```bash
-   python Bomana.pyw
-   ```
+```
+[等待] ──检测到玩家──→ [飞行中] ──速度<40km/h持续3秒──→ [已着陆]
+   ↑                      │                              │
+   │                      ↓                              │
+   └───无玩家1.2秒───[死亡/返回机库]←────10秒后──────────┘
+```
 
-#### Method 2: Packaged Version (Recommended)
+---
 
-1. Go to [Releases page](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. Download latest `Bomana-v5.9.exe`
-3. Double-click to run (no Python installation required)
+## ❓ 常见问题 | FAQ
 
-### 🎮 Usage
+### Q: 窗口不显示/显示异常？
 
-#### Hotkeys
+1. 确认 War Thunder 已启动并进入战斗
+2. 确认已启用"在浏览器中显示战斗界面"
+3. 尝试访问 `http://localhost:8111` 确认服务正常
+4. 按 `F9` 切换窗口位置
 
-| Key | Function | Description |
-|-----|----------|-------------|
-| **F7** | Reset Timer | Manually reset current cycle to 15 min |
-| **F8** | Lock/Unlock | Lock = click-through, Unlock = draggable |
-| **F9** | Switch Corner | Cycle through 4 screen corners |
-| **F10** | Sound Toggle | Enable/disable all sounds |
-| **F11** | Zone Sound | Enable/disable zone destroyed sound |
-| **Ctrl+Wheel** | Adjust Alpha | Only when unlocked |
-| **Esc** | Exit | Close application |
+### Q: 计时器不自动开始？
 
-> 💡 **Tip**: Hotkeys can be customized in Settings (right-click tray icon → Settings)
+1. 确认已出生在战场中
+2. 检查 8111 端口是否可访问
+3. 等待 1-2 秒让程序检测到玩家
 
-### 🛡️ Safety & Compliance
+### Q: 投弹预测不准确？
 
-✅ **Fully Legal**: Uses only official 8111 API (`http://127.0.0.1:8111`)  
-✅ **No Memory Access**: No game memory modification or injection  
-✅ **No Cheating Info**: Only displays map info visible to player  
-✅ **Information Aid**: All features are "information display", not "game intervention"
+1. 确认选择了正确的炸弹型号
+2. 高空投弹时注意风速影响（游戏内未提供风速数据）
+3. 减速伞炸弹需要额外的展开时间
 
-### 📜 License
+### Q: 与 WTRTI 有什么区别？
 
-This project is licensed under the [MIT License](LICENSE).
+| 特性 | Bomana | WTRTI |
+|------|--------|-------|
+| 主要用途 | SB 模式计时+投弹 | 通用飞行数据显示 |
+| 15分钟计时 | ✅ 核心功能 | ❌ |
+| 投弹预测 | ✅ 内置 | ❌ |
+| 战区导航 | ✅ 内置 | ❌ |
+| 自定义指标 | ❌ | ✅ 高度自定义 |
+| 平台 | Windows | 跨平台 |
 
-### ⚠️ Disclaimer
+两者可以同时使用，功能互补。
 
-**Trademark Notice**  
+---
+
+## 📜 许可证与免责声明 | License & Disclaimer
+
+### 许可证 | License
+
+**MIT License**
+
+Copyright (c) 2024-2026 Cheems
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+本软件根据 MIT 许可证授权，任何人均可免费获取本软件及相关文档文件的副本，并不受限制地处理本软件，包括但不限于使用、复制、修改、合并、发布、分发、再许可和/或销售本软件的副本。
+
+---
+
+### 免责声明 | Disclaimer
+
+#### 商标声明 | Trademark Notice
+
 War Thunder® and all related trademarks, logos, and materials are the property of Gaijin Entertainment AG and its subsidiaries. This software is an independent project and is NOT affiliated with, endorsed by, or sponsored by Gaijin Entertainment AG.
 
-**Usage Warning**  
-⚠️ Misuse or abuse of this software may violate the Gaijin Entertainment User Agreement. Users are solely responsible for ensuring their usage complies with all applicable terms of service and game rules.
+《战争雷霆》®及所有相关商标、标识和素材归 Gaijin Entertainment AG 及其子公司所有。本软件为独立项目，与 Gaijin Entertainment AG 无任何关联、授权或赞助关系。
 
-**Liability**  
-This software is provided "AS IS" without warranty of any kind. The author(s) shall not be held liable for any damages, account suspensions, or consequences arising from the use of this software. Use at your own risk.
+#### 使用警告 | Usage Warning
+
+⚠️ **IMPORTANT:** Misuse or abuse of this software may violate the Gaijin Entertainment User Agreement. Users are solely responsible for ensuring their usage complies with all applicable terms of service and game rules.
+
+⚠️ **重要提示：** 滥用或不当使用本软件可能违反 Gaijin Entertainment 用户协议。用户需自行确保其使用行为符合所有适用的服务条款和游戏规则。
+
+#### 用户协议相关条款 | Relevant EULA Terms
+
+根据 Gaijin Entertainment 用户协议第 6.1 条：
+
+> **6.1.3.** 禁止安装或使用未经授权的游戏客户端修改、作弊或其他修改游戏进程和/或游戏产生的原始图像（包括修改游戏界面）以获取优势的软件或设备，除非获得 Gaijin 的明确授权。
+>
+> **6.1.4.** 其他违反公平竞争原则的行为。
+
+#### 责任限制 | Liability
+
+This software is provided "AS IS" without warranty of any kind. The author(s) shall not be held liable for any damages, account suspensions, or consequences arising from the use of this software. **Use at your own risk.**
+
+本软件按"现状"提供，不提供任何形式的保证。作者不对因使用本软件而产生的任何损害、账号封禁或其他后果承担责任。**使用风险由用户自行承担。**
 
 ---
 
-<div align="center">
+## 📚 参考资料 | References
 
-**Made with ❤️ by [猹Cheems](https://github.com/Thankyou-Cheems)**
+- [War Thunder 官方论坛 - 关于 8111 端口工具的讨论](https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664)
+- [Stona_WT 官方回复 (Post #16)](https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664/16)
+- [Gaijin Entertainment 用户协议](https://legal.gaijin.net/termsofservice)
+- [WTRTI - 另一款官方认可的 8111 端口工具](https://mesofthorny.github.io/WTRTI/)
+- [War Thunder localhost:8111 API 文档](https://github.com/lucasvmx/WarThunder-localhost-documentation)
 
-⭐ 如果这个项目对你有帮助，请给个 Star！  
-⭐ If this project helps you, please give it a Star!
+---
 
-</div>
+## 🙏 赞助支持 | Sponsor
+
+如果 Bomana 对你有帮助，欢迎通过微信赞助支持开发！
+
+<img src="sponsor_wechat.png" width="200" alt="微信赞赏二维码">
+
+---
+
+## 📝 更新日志 | Changelog
+
+### v6.3.1
+- 独立航向带窗口
+- UI 优化
+
+---
+
+*Made with ❤️ by 猹Cheems for the Space Monkeys community*
