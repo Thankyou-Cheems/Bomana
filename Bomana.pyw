@@ -544,7 +544,7 @@ class AboutConfig:
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "6.3.1"  # v6.3.1: 独立航向带窗口
+    VERSION = "6.4.1"  # v6.4.1: 航向带用户体验优化
     AUTHOR = "猹Cheems"
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
@@ -4009,6 +4009,7 @@ class HeadingTape(tk.Canvas):
             t_rel = target.get('relative', 0)
             t_is_primary = target.get('is_primary', False)
             t_is_target = target.get('is_target', True)  # v6.3: 是否为活动目标
+            t_distance = target.get('distance_km', 0)  # v6.4.1: 获取目标自身距离
             
             t_x = center_x + t_rel * ppd
             in_view = (0 <= t_x <= self.tape_width)
@@ -4016,11 +4017,12 @@ class HeadingTape(tk.Canvas):
             if in_view:
                 self._draw_target_marker(t_x, t_type, t_is_primary, t_rel, 
                                         primary['distance_km'] if primary else 10.0,
-                                        is_target=t_is_target)
+                                        is_target=t_is_target,
+                                        show_distance=t_distance)
             else:
                 # 视野外目标显示小箭头（只显示活动目标）
                 if t_is_target:
-                    self._draw_overflow_indicator(t_rel, t_type)
+                    self._draw_overflow_indicator(t_rel, t_type, t_distance)
         
         # 6. 主目标在视野外时的大箭头提示
         if primary and not primary_in_view:
@@ -4038,7 +4040,8 @@ class HeadingTape(tk.Canvas):
         )
     
     def _draw_target_marker(self, x: float, t_type: str, is_primary: bool, 
-                           relative: float, distance_km: float, is_target: bool = True):
+                           relative: float, distance_km: float, is_target: bool = True,
+                           show_distance: float = 0):
         """绘制目标标记
         
         Args:
@@ -4046,8 +4049,9 @@ class HeadingTape(tk.Canvas):
             t_type: 目标类型
             is_primary: 是否主目标
             relative: 相对角度
-            distance_km: 距离
+            distance_km: 距离（用于颜色计算）
             is_target: 是否为活动目标（v6.3新增）
+            show_distance: 显示的距离值（v6.4.1新增，0表示不显示）
         """
         # v6.3: 根据是否为目标调整颜色和透明度
         base_color = self._target_colors.get(t_type, Theme.TEXT)
@@ -4065,6 +4069,20 @@ class HeadingTape(tk.Canvas):
         # 根据高度计算图标缩放（基于32px基准高度）
         icon_scale = self.tape_height / 32.0
         y_center = int(self.tape_height * 0.35)
+        
+        # v6.4.1: 在图标下方显示距离（仅对活动目标且距离>0时显示）
+        if show_distance > 0 and is_target:
+            dist_y = self.tape_height - 3  # 底部位置
+            if show_distance < 10:
+                dist_text = f"{show_distance:.1f}"
+            elif show_distance < 100:
+                dist_text = f"{int(show_distance)}"
+            else:
+                dist_text = f"{int(show_distance)}"
+            # 字体大小根据icon_scale调整
+            font_size = max(7, int(8 * icon_scale))
+            self.create_text(x, dist_y, text=dist_text, fill=color, 
+                           font=("Consolas", font_size), anchor="s")
         
         if t_type == 'zone':
             # v6.3: 战区标靶 - 区分目标和非目标
@@ -4098,11 +4116,15 @@ class HeadingTape(tk.Canvas):
                                x + inner_size, y_center + inner_size,
                                fill=color, outline="")
             else:
-                # 非目标战区：小尺寸，空心
-                size = int(9 * icon_scale)
+                # 非目标战区：空心虚线圈（v6.4: 更明显的虚线样式）
+                size = int(10 * icon_scale)
                 self.create_oval(x - size, y_center - size, x + size, y_center + size,
-                               outline=color, width=5, fill="", dash=(2, 2))
-                # 只画一个圆圈，不画中心点
+                               outline=color, width=2, fill="", dash=(4, 3))
+                # 添加小中心点提高可见度
+                dot_size = 2
+                self.create_oval(x - dot_size, y_center - dot_size, 
+                               x + dot_size, y_center + dot_size,
+                               fill=color, outline="")
             
         elif t_type == 'friendly':
             # v6.3: 友方机场 - 根据是否为目标调整大小
@@ -4117,52 +4139,80 @@ class HeadingTape(tk.Canvas):
             self._draw_aircraft_icon(x, y_center, color, size=size, width=width)
             
         elif t_type == 'destroyed':
-            # 被摧毁：灰色X标记
-            size = int(7 * icon_scale)
+            # 被摧毁：灰色X标记（v6.4: 更大更粗更易识别）
+            size = int(10 * icon_scale)
+            line_width = 3
             self.create_line(x - size, y_center - size, x + size, y_center + size,
-                           fill=color, width=2)
+                           fill=color, width=line_width)
             self.create_line(x - size, y_center + size, x + size, y_center - size,
-                           fill=color, width=2)
+                           fill=color, width=line_width)
+            # 添加小圆圈背景提高对比度
+            bg_size = size + 2
+            self.create_oval(x - bg_size, y_center - bg_size, x + bg_size, y_center + bg_size,
+                           outline=color, width=1, dash=(2, 2), fill="")
     
     def _draw_aircraft_icon(self, x: float, y: float, color: str, size: int = 7, width: int = 2):
-        """绘制飞机图标
-        
-        简化的飞机俯视图：机身+机翼+尾翼
+        """绘制飞机图标（v6.4: 更粗更易识别）"""
+        base_width = max(2, width)
+        # 机身（垂直线，加粗）
+        self.create_line(x, y - size, x, y + size * 0.7, fill=color, width=base_width + 1)
+        # 主翼（水平线，加粗）
+        wing_y = y - size * 0.15
+        self.create_line(x - size * 1.1, wing_y, x + size * 1.1, wing_y, fill=color, width=base_width)
+        # 尾翼
+        tail_y = y + size * 0.55
+        self.create_line(x - size * 0.55, tail_y, x + size * 0.55, tail_y, fill=color, width=base_width)
+        # 机头标记（小三角形）
+        head_size = size * 0.25
+        self.create_polygon(
+            x, y - size - head_size,
+            x - head_size, y - size + head_size * 0.5,
+            x + head_size, y - size + head_size * 0.5,
+            fill=color, outline=""
+        )
+    
+    def _draw_overflow_indicator(self, relative: float, t_type: str, distance: float = 0):
+        """绘制视野外目标的小指示器
         
         Args:
-            x, y: 坐标
-            color: 颜色
-            size: 大小
-            width: 线条粗细（v6.3新增）
+            relative: 相对角度
+            t_type: 目标类型
+            distance: 目标距离（v6.4.1新增，用于显示距离）
         """
-        # 机身（垂直线）
-        self.create_line(x, y - size, x, y + size * 0.6, fill=color, width=width)
-        # 主翼（水平线）
-        wing_y = y - size * 0.2
-        self.create_line(x - size, wing_y, x + size, wing_y, fill=color, width=width)
-        # 尾翼（小水平线）
-        tail_y = y + size * 0.5
-        tail_width = max(1, width - 1)
-        self.create_line(x - size * 0.5, tail_y, x + size * 0.5, tail_y, fill=color, width=tail_width)
-    
-    def _draw_overflow_indicator(self, relative: float, t_type: str):
-        """绘制视野外目标的小指示器"""
         color = self._target_colors.get(t_type, Theme.TEXT_DIM)
         icon_scale = self.tape_height / 32.0
         y = int(self.tape_height * 0.35)
         tri_size = int(6 * icon_scale)
+        
+        # v6.4.1: 准备距离文本
+        dist_text = ""
+        if distance > 0:
+            if distance < 10:
+                dist_text = f"{distance:.1f}"
+            else:
+                dist_text = f"{int(distance)}"
+        
+        font_size = max(6, int(7 * icon_scale))
         
         if relative < 0:
             # 左侧小三角
             self.create_polygon(2, y, 2 + tri_size, y - tri_size * 0.7, 
                               2 + tri_size, y + tri_size * 0.7, 
                               fill=color, outline="")
+            # v6.4.1: 显示距离
+            if dist_text:
+                self.create_text(2 + tri_size + 2, y, text=dist_text, fill=color,
+                               font=("Consolas", font_size), anchor="w")
         else:
             # 右侧小三角
             self.create_polygon(self.tape_width - 2, y, 
                               self.tape_width - 2 - tri_size, y - tri_size * 0.7, 
                               self.tape_width - 2 - tri_size, y + tri_size * 0.7,
                               fill=color, outline="")
+            # v6.4.1: 显示距离
+            if dist_text:
+                self.create_text(self.tape_width - 2 - tri_size - 2, y, text=dist_text, fill=color,
+                               font=("Consolas", font_size), anchor="e")
     
     def _draw_primary_overflow(self, diff: float):
         """绘制主目标的大偏航箭头"""
@@ -5701,11 +5751,20 @@ class App:
             # 使用更小字体和紧凑间距
             legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.85))
             legend_text = "⊚战区  ✈友方  ✈敌方  ✕摧毁"
-            legend_label = tk.Label(
+            
+            # v6.4: 图例行分为左侧图例和右侧阈值显示
+            legend_left = tk.Label(
                 self.tape_legend_row, text=legend_text, font=legend_font,
-                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="center"
+                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
             )
-            legend_label.pack(fill="x")
+            legend_left.pack(side="left", fill="x", expand=True)
+            
+            # 角度阈值显示（移至图例行右侧）
+            self.tape_tolerance_legend = tk.Label(
+                self.tape_legend_row, text="", font=legend_font,
+                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
+            )
+            self.tape_tolerance_legend.pack(side="right", padx=(0, int(4*s)))
             
             # v6.2.1: 战区状态提示行
             self.tape_zone_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
@@ -5741,12 +5800,12 @@ class App:
             )
             self.tape_zone_info.pack(side="left", padx=(int(8*s), 0))
             
-            # 战区容差信息（右对齐）
+            # v6.4: 战区容差已移至图例行，保留变量引用
             self.tape_zone_tolerance = tk.Label(
                 self.tape_zone_row, text="", font=status_font,
                 fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
             )
-            self.tape_zone_tolerance.pack(side="right")
+            # 不再pack，让状态行布局更居中
             
             # v6.2.1: 友方机场状态提示行
             self.tape_friendly_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
@@ -6591,9 +6650,19 @@ class App:
             rel = primary_zone.relative
             abs_rel = abs(rel)
             
-            # 转向指示
-            if abs_rel < 0.5:
-                turn_text = "✓ 对准"
+            # v6.4: 优化转向指示 - 精确对准时显示微调角度
+            if abs_rel < 0.1:
+                turn_text = "▶▶ 保持 ◀◀"
+                turn_color = Theme.GREEN
+            elif abs_rel < 0.5:
+                direction = "◀" if rel < 0 else "▶"
+                turn_text = f"{direction} {abs_rel:.2f}° {direction}"
+                turn_color = Theme.GREEN
+            elif abs_rel < tolerance * 0.3:
+                if rel < 0:
+                    turn_text = f"◀ 左修 {abs_rel:.1f}°"
+                else:
+                    turn_text = f"右修 {abs_rel:.1f}° ▶"
                 turn_color = Theme.GREEN
             elif rel < 0:
                 turn_text = f"◀ 左转 {abs_rel:.1f}°"
@@ -6602,8 +6671,11 @@ class App:
                 turn_text = f"右转 {abs_rel:.1f}° ▶"
                 turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
             
-            # 状态描述
-            if abs_rel < 0.2:
+            # v6.4: 优化状态描述
+            if abs_rel < 0.1:
+                dev_text = "★ 锁定"
+                dev_color = Theme.GREEN
+            elif abs_rel < 0.3:
                 dev_text = "精确对准"
                 dev_color = Theme.GREEN
             elif abs_rel < tolerance * 0.3:
@@ -6627,14 +6699,17 @@ class App:
                 ete_str = f" ⏱{zone_info['ete_str']}"
             info_text = f"{dist_str}{ete_str}"
             
-            # 容差和缩放
+            # v6.4: 容差移至图例行
             tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
             
             self.tape_turn_lbl.config(text=turn_text, fg=turn_color)
             self.tape_deviation_lbl.config(text=dev_text, fg=dev_color)
             if hasattr(self, 'tape_zone_info') and self.tape_zone_info:
                 self.tape_zone_info.config(text=info_text, fg=Theme.RED)
-            self.tape_tolerance_lbl.config(text=tol_text)
+            # 更新图例行的容差显示
+            if hasattr(self, 'tape_tolerance_legend') and self.tape_tolerance_legend:
+                self.tape_tolerance_legend.config(text=tol_text)
+            self.tape_tolerance_lbl.config(text="")
             
             if self.tape_zone_row:
                 self.tape_zone_row.pack(fill="x", pady=(int(2*self.scale), 0))
@@ -6655,10 +6730,20 @@ class App:
             abs_rel = abs(rel)
             dist = friendly_info['distance_km']
             
-            # 转向指示
-            if abs_rel < 0.5:
-                turn_text = "✓ 对准"
+            # v6.4: 优化转向指示
+            if abs_rel < 0.1:
+                turn_text = "▶▶ 保持 ◀◀"
                 turn_color = Theme.GREEN
+            elif abs_rel < 0.5:
+                direction = "◀" if rel < 0 else "▶"
+                turn_text = f"{direction} {abs_rel:.2f}° {direction}"
+                turn_color = Theme.GREEN
+            elif abs_rel < 5:
+                if rel < 0:
+                    turn_text = f"◀ 左修 {abs_rel:.1f}°"
+                else:
+                    turn_text = f"右修 {abs_rel:.1f}° ▶"
+                turn_color = Theme.BLUE
             elif rel < 0:
                 turn_text = f"◀ 左转 {abs_rel:.1f}°"
                 turn_color = Theme.BLUE
@@ -6666,8 +6751,11 @@ class App:
                 turn_text = f"右转 {abs_rel:.1f}° ▶"
                 turn_color = Theme.BLUE
             
-            # 状态描述（与战区格式一致）
-            if abs_rel < 0.5:
+            # v6.4: 优化状态描述
+            if abs_rel < 0.1:
+                status_text = "★ 锁定"
+                status_color = Theme.GREEN
+            elif abs_rel < 0.5:
                 status_text = "精确对准"
                 status_color = Theme.GREEN
             elif abs_rel < 5:
@@ -7396,6 +7484,13 @@ class NavigationWindow:
         tk.Label(self.legend_row, text=legend_text, font=legend_font,
                 fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w").pack(side="left")
         
+        # v6.4: 角度阈值显示（图例和提示之间）
+        self.zone_tolerance_legend = tk.Label(
+            self.legend_row, text="", font=legend_font,
+            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="center"
+        )
+        self.zone_tolerance_legend.pack(side="left", padx=(int(10*s), 0))
+        
         # 右侧：提示文字
         hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s*0.85))
         tk.Label(self.legend_row, text="解锁(F8)后可拖动 | 右键菜单", font=hint_font,
@@ -7441,11 +7536,12 @@ class NavigationWindow:
         )
         self.zone_info.pack(side="left", padx=(int(8*s), 0))
         
+        # v6.4: 容差已移至图例行，保留变量引用
         self.zone_tolerance = tk.Label(
             self._zone_row_center, text="", font=status_font,
             fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
         )
-        self.zone_tolerance.pack(side="left", padx=(int(10*s), 0))
+        # 不再pack，让状态行布局更居中
         
         # 友方机场状态行
         self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
@@ -7614,9 +7710,19 @@ class NavigationWindow:
             rel = primary_zone.relative
             abs_rel = abs(rel)
             
-            # 转向指示
-            if abs_rel < 0.5:
-                turn_text = "✓ 对准"
+            # v6.4: 优化转向指示
+            if abs_rel < 0.1:
+                turn_text = "▶▶ 保持 ◀◀"
+                turn_color = Theme.GREEN
+            elif abs_rel < 0.5:
+                direction = "◀" if rel < 0 else "▶"
+                turn_text = f"{direction} {abs_rel:.2f}° {direction}"
+                turn_color = Theme.GREEN
+            elif abs_rel < tolerance * 0.3:
+                if rel < 0:
+                    turn_text = f"◀ 左修 {abs_rel:.1f}°"
+                else:
+                    turn_text = f"右修 {abs_rel:.1f}° ▶"
                 turn_color = Theme.GREEN
             elif rel < 0:
                 turn_text = f"◀ 左转 {abs_rel:.1f}°"
@@ -7625,8 +7731,11 @@ class NavigationWindow:
                 turn_text = f"右转 {abs_rel:.1f}° ▶"
                 turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
             
-            # 状态描述
-            if abs_rel < 0.2:
+            # v6.4: 优化状态描述
+            if abs_rel < 0.1:
+                dev_text = "★ 锁定"
+                dev_color = Theme.GREEN
+            elif abs_rel < 0.3:
                 dev_text = "精确对准"
                 dev_color = Theme.GREEN
             elif abs_rel < tolerance * 0.3:
@@ -7650,13 +7759,17 @@ class NavigationWindow:
                 ete_str = f" ⏱{zone_info['ete_str']}"
             info_text = f"{dist_str}{ete_str}"
             
+            # v6.4: 容差移至图例行
             tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
             
             self.zone_turn.config(text=turn_text, fg=turn_color)
             self.zone_status.config(text=dev_text, fg=dev_color)
             if hasattr(self, 'zone_info'):
                 self.zone_info.config(text=info_text, fg=Theme.RED)
-            self.zone_tolerance.config(text=tol_text)
+            # 更新图例行的容差显示
+            if hasattr(self, 'zone_tolerance_legend') and self.zone_tolerance_legend:
+                self.zone_tolerance_legend.config(text=tol_text)
+            self.zone_tolerance.config(text="")
             self.zone_row.pack(fill="x", padx=int(6*self.scale), pady=(int(2*self.scale), 0))
         else:
             self.zone_row.pack_forget()
@@ -7668,10 +7781,20 @@ class NavigationWindow:
             abs_rel = abs(rel)
             dist = friendly_info['distance_km']
             
-            # 转向指示
-            if abs_rel < 0.5:
-                turn_text = "✓ 对准"
+            # v6.4: 优化转向指示
+            if abs_rel < 0.1:
+                turn_text = "▶▶ 保持 ◀◀"
                 turn_color = Theme.GREEN
+            elif abs_rel < 0.5:
+                direction = "◀" if rel < 0 else "▶"
+                turn_text = f"{direction} {abs_rel:.2f}° {direction}"
+                turn_color = Theme.GREEN
+            elif abs_rel < 5:
+                if rel < 0:
+                    turn_text = f"◀ 左修 {abs_rel:.1f}°"
+                else:
+                    turn_text = f"右修 {abs_rel:.1f}° ▶"
+                turn_color = Theme.BLUE
             elif rel < 0:
                 turn_text = f"◀ 左转 {abs_rel:.1f}°"
                 turn_color = Theme.BLUE
@@ -7679,8 +7802,11 @@ class NavigationWindow:
                 turn_text = f"右转 {abs_rel:.1f}° ▶"
                 turn_color = Theme.BLUE
             
-            # 状态描述（与战区格式一致）
-            if abs_rel < 0.5:
+            # v6.4: 优化状态描述
+            if abs_rel < 0.1:
+                status_text = "★ 锁定"
+                status_color = Theme.GREEN
+            elif abs_rel < 0.5:
                 status_text = "精确对准"
                 status_color = Theme.GREEN
             elif abs_rel < 5:
