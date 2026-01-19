@@ -1736,6 +1736,142 @@ def get_cdi_tolerance(distance_km: float) -> float:
     return 15.0  # 默认
 
 
+# ============================================================================
+# 导航显示工具函数 - v6.5 重构：复用导航条显示逻辑
+# ============================================================================
+
+def calculate_zone_turn_indicator(rel: float, tolerance: float) -> Tuple[str, str]:
+    """计算战区转向指示文本和颜色
+    
+    根据相对方位角计算需要显示的转向指示（左转/右转/保持）
+    独立导航条和集成导航条共用此逻辑。
+    
+    Args:
+        rel: 相对方位角（正值=目标在右侧）
+        tolerance: 当前距离对应的容差角度
+    
+    Returns:
+        (指示文本, 颜色代码)
+    """
+    abs_rel = abs(rel)
+    
+    if abs_rel < 0.1:
+        return "▶▶ 保持 ◀◀", Theme.GREEN
+    elif abs_rel < 0.5:
+        direction = "◀" if rel < 0 else "▶"
+        return f"{direction} {abs_rel:.2f}° {direction}", Theme.GREEN
+    elif abs_rel < tolerance * 0.3:
+        if rel < 0:
+            return f"◀ 左修 {abs_rel:.1f}°", Theme.GREEN
+        else:
+            return f"右修 {abs_rel:.1f}° ▶", Theme.GREEN
+    elif rel < 0:
+        color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
+        return f"◀ 左转 {abs_rel:.1f}°", color
+    else:
+        color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
+        return f"右转 {abs_rel:.1f}° ▶", color
+
+
+def calculate_zone_status(abs_rel: float, tolerance: float) -> Tuple[str, str]:
+    """计算战区状态描述文本和颜色
+    
+    根据相对方位角计算当前对准状态。
+    独立导航条和集成导航条共用此逻辑。
+    
+    Args:
+        abs_rel: 相对方位角的绝对值
+        tolerance: 当前距离对应的容差角度
+    
+    Returns:
+        (状态文本, 颜色代码)
+    """
+    if abs_rel < 0.1:
+        return "★ 锁定", Theme.GREEN
+    elif abs_rel < 0.3:
+        return "精确对准", Theme.GREEN
+    elif abs_rel < tolerance * 0.3:
+        return "高精度", Theme.GREEN
+    elif abs_rel < tolerance * 0.6:
+        return "航线内", Theme.BLUE
+    elif abs_rel < tolerance:
+        return "边缘", Theme.YELLOW
+    else:
+        return "⚠ 偏航", Theme.ORANGE
+
+
+def calculate_airfield_turn_indicator(rel: float) -> Tuple[str, str]:
+    """计算机场转向指示文本和颜色
+    
+    独立导航条和集成导航条共用此逻辑。
+    
+    Args:
+        rel: 相对方位角（正值=目标在右侧）
+    
+    Returns:
+        (指示文本, 颜色代码)
+    """
+    abs_rel = abs(rel)
+    
+    if abs_rel < 0.1:
+        return "▶▶ 保持 ◀◀", Theme.GREEN
+    elif abs_rel < 0.5:
+        direction = "◀" if rel < 0 else "▶"
+        return f"{direction} {abs_rel:.2f}° {direction}", Theme.GREEN
+    elif abs_rel < 5:
+        if rel < 0:
+            return f"◀ 左修 {abs_rel:.1f}°", Theme.BLUE
+        else:
+            return f"右修 {abs_rel:.1f}° ▶", Theme.BLUE
+    elif rel < 0:
+        return f"◀ 左转 {abs_rel:.1f}°", Theme.BLUE
+    else:
+        return f"右转 {abs_rel:.1f}° ▶", Theme.BLUE
+
+
+def calculate_airfield_status(abs_rel: float) -> Tuple[str, str]:
+    """计算机场状态描述文本和颜色
+    
+    独立导航条和集成导航条共用此逻辑。
+    
+    Args:
+        abs_rel: 相对方位角的绝对值
+    
+    Returns:
+        (状态文本, 颜色代码)
+    """
+    if abs_rel < 0.1:
+        return "★ 锁定", Theme.GREEN
+    elif abs_rel < 0.5:
+        return "精确对准", Theme.GREEN
+    elif abs_rel < 5:
+        return "高精度", Theme.GREEN
+    elif abs_rel < 15:
+        return "航线内", Theme.BLUE
+    elif abs_rel < 45:
+        return "接近", Theme.BLUE
+    else:
+        return "偏离", Theme.TEXT_DIM
+
+
+def format_distance_ete(dist_km: float, ete_str: Optional[str] = None) -> str:
+    """格式化距离和预计到达时间
+    
+    独立导航条和集成导航条共用此逻辑。
+    
+    Args:
+        dist_km: 距离（公里）
+        ete_str: 预计到达时间字符串（可选）
+    
+    Returns:
+        格式化后的字符串，如 "12.3km ⏱2:30"
+    """
+    dist_str = f"{dist_km:.1f}km" if dist_km < 100 else f"{int(dist_km)}km"
+    if ete_str:
+        return f"{dist_str} ⏱{ete_str}"
+    return dist_str
+
+
 def generate_cdi_indicator(relative_angle: float, distance_km: float) -> Tuple[str, str]:
     """生成高精度航道偏差指示器(CDI)字符串
     
@@ -4070,19 +4206,9 @@ class HeadingTape(tk.Canvas):
         icon_scale = self.tape_height / 32.0
         y_center = int(self.tape_height * 0.35)
         
-        # v6.4.1: 在图标下方显示距离（仅对活动目标且距离>0时显示）
+        # v6.5: 重构距离显示 - 增加区分度
         if show_distance > 0 and is_target:
-            dist_y = self.tape_height - 3  # 底部位置
-            if show_distance < 10:
-                dist_text = f"{show_distance:.1f}"
-            elif show_distance < 100:
-                dist_text = f"{int(show_distance)}"
-            else:
-                dist_text = f"{int(show_distance)}"
-            # 字体大小根据icon_scale调整
-            font_size = max(7, int(8 * icon_scale))
-            self.create_text(x, dist_y, text=dist_text, fill=color, 
-                           font=("Consolas", font_size), anchor="s")
+            self._draw_distance_label(x, show_distance, t_type, is_primary, icon_scale)
         
         if t_type == 'zone':
             # v6.3: 战区标靶 - 区分目标和非目标
@@ -4171,26 +4297,160 @@ class HeadingTape(tk.Canvas):
             fill=color, outline=""
         )
     
+    def _draw_distance_label(self, x: float, distance: float, t_type: str, 
+                             is_primary: bool, icon_scale: float):
+        """绘制距离标签（v6.5新增：增强区分度）
+        
+        根据目标类型和距离显示不同样式的标签：
+        - 战区：红底白字（主目标）或红字（非主目标）
+        - 友方机场：蓝底白字，带"⌂"标记
+        - 敌方机场：橙色字
+        
+        距离分级着色：
+        - <5km：高亮（即将到达）
+        - 5-15km：正常
+        - 15-30km：稍暗
+        - >30km：暗淡
+        
+        Args:
+            x: X坐标
+            distance: 距离（公里）
+            t_type: 目标类型
+            is_primary: 是否主目标
+            icon_scale: 图标缩放系数
+        """
+        dist_y = self.tape_height - 2
+        
+        # 格式化距离文本
+        if distance < 5:
+            dist_text = f"{distance:.1f}"
+            urgency = "close"
+        elif distance < 15:
+            dist_text = f"{int(distance)}"
+            urgency = "medium"
+        elif distance < 30:
+            dist_text = f"{int(distance)}"
+            urgency = "far"
+        else:
+            dist_text = f"{int(distance)}"
+            urgency = "distant"
+        
+        # 根据目标类型和距离确定样式
+        font_size = max(7, int(9 * icon_scale))
+        
+        if t_type == 'zone':
+            # 战区：主目标用醒目底色，非主目标用普通红字
+            if is_primary:
+                # 主目标：根据距离调整底色亮度
+                if urgency == "close":
+                    bg_color = "#FF3333"  # 亮红底
+                    text_color = "#FFFFFF"
+                elif urgency == "medium":
+                    bg_color = "#CC2222"  # 红底
+                    text_color = "#FFFFFF"
+                elif urgency == "far":
+                    bg_color = "#992222"  # 暗红底
+                    text_color = "#DDDDDD"
+                else:
+                    bg_color = "#662222"  # 很暗红底
+                    text_color = "#AAAAAA"
+                
+                # 绘制带底色的标签
+                text_width = len(dist_text) * font_size * 0.6
+                pad = 2
+                self.create_rectangle(
+                    x - text_width/2 - pad, dist_y - font_size - pad,
+                    x + text_width/2 + pad, dist_y + pad,
+                    fill=bg_color, outline=""
+                )
+                self.create_text(x, dist_y, text=dist_text, fill=text_color,
+                               font=("Consolas", font_size, "bold"), anchor="s")
+            else:
+                # 非主目标战区：根据距离调整颜色
+                color_map = {
+                    "close": Theme.RED,
+                    "medium": "#CC4444",
+                    "far": "#994444",
+                    "distant": "#664444"
+                }
+                self.create_text(x, dist_y, text=dist_text, fill=color_map[urgency],
+                               font=("Consolas", font_size), anchor="s")
+        
+        elif t_type == 'friendly':
+            # 友方机场：蓝底白字 + ⌂ 标记
+            if urgency == "close":
+                bg_color = "#3399FF"  # 亮蓝
+                text_color = "#FFFFFF"
+            elif urgency == "medium":
+                bg_color = "#2277CC"  # 蓝
+                text_color = "#FFFFFF"
+            elif urgency == "far":
+                bg_color = "#225599"  # 暗蓝
+                text_color = "#DDDDDD"
+            else:
+                bg_color = "#224466"  # 很暗蓝
+                text_color = "#AAAAAA"
+            
+            # 友方机场添加"⌂"标记
+            label_text = f"⌂{dist_text}"
+            text_width = len(label_text) * font_size * 0.55
+            pad = 2
+            self.create_rectangle(
+                x - text_width/2 - pad, dist_y - font_size - pad,
+                x + text_width/2 + pad, dist_y + pad,
+                fill=bg_color, outline=""
+            )
+            self.create_text(x, dist_y, text=label_text, fill=text_color,
+                           font=("Consolas", font_size, "bold"), anchor="s")
+        
+        elif t_type == 'enemy':
+            # 敌方机场：橙色字，带"✖"标记
+            color_map = {
+                "close": Theme.ORANGE,
+                "medium": "#CC8844",
+                "far": "#996633",
+                "distant": "#664422"
+            }
+            label_text = f"✖{dist_text}"
+            self.create_text(x, dist_y, text=label_text, fill=color_map[urgency],
+                           font=("Consolas", font_size), anchor="s")
+        
+        else:
+            # 其他类型：普通显示
+            self.create_text(x, dist_y, text=dist_text, fill=Theme.TEXT_DIM,
+                           font=("Consolas", font_size), anchor="s")
+    
     def _draw_overflow_indicator(self, relative: float, t_type: str, distance: float = 0):
-        """绘制视野外目标的小指示器
+        """绘制视野外目标的小指示器（v6.5优化：增强区分度）
         
         Args:
             relative: 相对角度
             t_type: 目标类型
-            distance: 目标距离（v6.4.1新增，用于显示距离）
+            distance: 目标距离（公里）
         """
         color = self._target_colors.get(t_type, Theme.TEXT_DIM)
         icon_scale = self.tape_height / 32.0
         y = int(self.tape_height * 0.35)
         tri_size = int(6 * icon_scale)
         
-        # v6.4.1: 准备距离文本
+        # v6.5: 根据类型添加前缀标记
+        prefix = ""
+        if t_type == 'friendly':
+            prefix = "⌂"
+        elif t_type == 'enemy':
+            prefix = "✖"
+        elif t_type == 'zone':
+            prefix = "●"
+        
+        # v6.5: 格式化距离文本
         dist_text = ""
         if distance > 0:
             if distance < 10:
-                dist_text = f"{distance:.1f}"
+                dist_text = f"{prefix}{distance:.1f}"
             else:
-                dist_text = f"{int(distance)}"
+                dist_text = f"{prefix}{int(distance)}"
+        elif prefix:
+            dist_text = prefix
         
         font_size = max(6, int(7 * icon_scale))
         
@@ -4199,20 +4459,20 @@ class HeadingTape(tk.Canvas):
             self.create_polygon(2, y, 2 + tri_size, y - tri_size * 0.7, 
                               2 + tri_size, y + tri_size * 0.7, 
                               fill=color, outline="")
-            # v6.4.1: 显示距离
+            # v6.5: 显示带前缀的距离
             if dist_text:
                 self.create_text(2 + tri_size + 2, y, text=dist_text, fill=color,
-                               font=("Consolas", font_size), anchor="w")
+                               font=("Consolas", font_size, "bold"), anchor="w")
         else:
             # 右侧小三角
             self.create_polygon(self.tape_width - 2, y, 
                               self.tape_width - 2 - tri_size, y - tri_size * 0.7, 
                               self.tape_width - 2 - tri_size, y + tri_size * 0.7,
                               fill=color, outline="")
-            # v6.4.1: 显示距离
+            # v6.5: 显示带前缀的距离
             if dist_text:
                 self.create_text(self.tape_width - 2 - tri_size - 2, y, text=dist_text, fill=color,
-                               font=("Consolas", font_size), anchor="e")
+                               font=("Consolas", font_size, "bold"), anchor="e")
     
     def _draw_primary_overflow(self, diff: float):
         """绘制主目标的大偏航箭头"""
@@ -6637,6 +6897,7 @@ class App:
         
         v6.2.1: 分两行显示战区和友方机场的状态
         v6.2.2: 统一格式，战区添加距离/ETE，机场添加状态描述
+        v6.5: 重构 - 使用工具函数复用导航逻辑
         
         Args:
             targets_info: 目标信息列表
@@ -6650,54 +6911,13 @@ class App:
             rel = primary_zone.relative
             abs_rel = abs(rel)
             
-            # v6.4: 优化转向指示 - 精确对准时显示微调角度
-            if abs_rel < 0.1:
-                turn_text = "▶▶ 保持 ◀◀"
-                turn_color = Theme.GREEN
-            elif abs_rel < 0.5:
-                direction = "◀" if rel < 0 else "▶"
-                turn_text = f"{direction} {abs_rel:.2f}° {direction}"
-                turn_color = Theme.GREEN
-            elif abs_rel < tolerance * 0.3:
-                if rel < 0:
-                    turn_text = f"◀ 左修 {abs_rel:.1f}°"
-                else:
-                    turn_text = f"右修 {abs_rel:.1f}° ▶"
-                turn_color = Theme.GREEN
-            elif rel < 0:
-                turn_text = f"◀ 左转 {abs_rel:.1f}°"
-                turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
-            else:
-                turn_text = f"右转 {abs_rel:.1f}° ▶"
-                turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
-            
-            # v6.4: 优化状态描述
-            if abs_rel < 0.1:
-                dev_text = "★ 锁定"
-                dev_color = Theme.GREEN
-            elif abs_rel < 0.3:
-                dev_text = "精确对准"
-                dev_color = Theme.GREEN
-            elif abs_rel < tolerance * 0.3:
-                dev_text = "高精度"
-                dev_color = Theme.GREEN
-            elif abs_rel < tolerance * 0.6:
-                dev_text = "航线内"
-                dev_color = Theme.BLUE
-            elif abs_rel < tolerance:
-                dev_text = "边缘"
-                dev_color = Theme.YELLOW
-            else:
-                dev_text = "⚠ 偏航"
-                dev_color = Theme.ORANGE
+            # v6.5: 使用工具函数计算转向指示和状态
+            turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
+            dev_text, dev_color = calculate_zone_status(abs_rel, tolerance)
             
             # 距离和ETE
-            dist = primary_zone.distance_km
-            dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
-            ete_str = ""
-            if zone_info and zone_info.get('ete_str'):
-                ete_str = f" ⏱{zone_info['ete_str']}"
-            info_text = f"{dist_str}{ete_str}"
+            ete_str = zone_info.get('ete_str') if zone_info else None
+            info_text = format_distance_ete(primary_zone.distance_km, ete_str)
             
             # v6.4: 容差移至图例行
             tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
@@ -6730,51 +6950,12 @@ class App:
             abs_rel = abs(rel)
             dist = friendly_info['distance_km']
             
-            # v6.4: 优化转向指示
-            if abs_rel < 0.1:
-                turn_text = "▶▶ 保持 ◀◀"
-                turn_color = Theme.GREEN
-            elif abs_rel < 0.5:
-                direction = "◀" if rel < 0 else "▶"
-                turn_text = f"{direction} {abs_rel:.2f}° {direction}"
-                turn_color = Theme.GREEN
-            elif abs_rel < 5:
-                if rel < 0:
-                    turn_text = f"◀ 左修 {abs_rel:.1f}°"
-                else:
-                    turn_text = f"右修 {abs_rel:.1f}° ▶"
-                turn_color = Theme.BLUE
-            elif rel < 0:
-                turn_text = f"◀ 左转 {abs_rel:.1f}°"
-                turn_color = Theme.BLUE
-            else:
-                turn_text = f"右转 {abs_rel:.1f}° ▶"
-                turn_color = Theme.BLUE
-            
-            # v6.4: 优化状态描述
-            if abs_rel < 0.1:
-                status_text = "★ 锁定"
-                status_color = Theme.GREEN
-            elif abs_rel < 0.5:
-                status_text = "精确对准"
-                status_color = Theme.GREEN
-            elif abs_rel < 5:
-                status_text = "高精度"
-                status_color = Theme.GREEN
-            elif abs_rel < 15:
-                status_text = "航线内"
-                status_color = Theme.BLUE
-            elif abs_rel < 45:
-                status_text = "接近"
-                status_color = Theme.BLUE
-            else:
-                status_text = "偏离"
-                status_color = Theme.TEXT_DIM
+            # v6.5: 使用工具函数计算转向指示和状态
+            turn_text, turn_color = calculate_airfield_turn_indicator(rel)
+            status_text, status_color = calculate_airfield_status(abs_rel)
             
             # 距离和ETE
-            dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
-            ete_str = f" ⏱{friendly_info['ete_str']}" if friendly_info.get('ete_str') else ""
-            info_text = f"{dist_str}{ete_str}"
+            info_text = format_distance_ete(dist, friendly_info.get('ete_str'))
             
             self.tape_friendly_turn.config(text=turn_text, fg=turn_color)
             if hasattr(self, 'tape_friendly_status') and self.tape_friendly_status:
@@ -7676,6 +7857,8 @@ class NavigationWindow:
     def update_display(self, snap: 'UISnapshot', targets: list, targets_info: list, primary_zone):
         """更新导航显示
         
+        v6.5: 重构 - 使用工具函数复用导航逻辑
+        
         Args:
             snap: UI快照
             targets: 航向带目标列表
@@ -7710,54 +7893,13 @@ class NavigationWindow:
             rel = primary_zone.relative
             abs_rel = abs(rel)
             
-            # v6.4: 优化转向指示
-            if abs_rel < 0.1:
-                turn_text = "▶▶ 保持 ◀◀"
-                turn_color = Theme.GREEN
-            elif abs_rel < 0.5:
-                direction = "◀" if rel < 0 else "▶"
-                turn_text = f"{direction} {abs_rel:.2f}° {direction}"
-                turn_color = Theme.GREEN
-            elif abs_rel < tolerance * 0.3:
-                if rel < 0:
-                    turn_text = f"◀ 左修 {abs_rel:.1f}°"
-                else:
-                    turn_text = f"右修 {abs_rel:.1f}° ▶"
-                turn_color = Theme.GREEN
-            elif rel < 0:
-                turn_text = f"◀ 左转 {abs_rel:.1f}°"
-                turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
-            else:
-                turn_text = f"右转 {abs_rel:.1f}° ▶"
-                turn_color = Theme.YELLOW if abs_rel < tolerance else Theme.ORANGE
-            
-            # v6.4: 优化状态描述
-            if abs_rel < 0.1:
-                dev_text = "★ 锁定"
-                dev_color = Theme.GREEN
-            elif abs_rel < 0.3:
-                dev_text = "精确对准"
-                dev_color = Theme.GREEN
-            elif abs_rel < tolerance * 0.3:
-                dev_text = "高精度"
-                dev_color = Theme.GREEN
-            elif abs_rel < tolerance * 0.6:
-                dev_text = "航线内"
-                dev_color = Theme.BLUE
-            elif abs_rel < tolerance:
-                dev_text = "边缘"
-                dev_color = Theme.YELLOW
-            else:
-                dev_text = "⚠ 偏航"
-                dev_color = Theme.ORANGE
+            # v6.5: 使用工具函数计算转向指示和状态
+            turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
+            dev_text, dev_color = calculate_zone_status(abs_rel, tolerance)
             
             # 距离和ETE
-            dist = primary_zone.distance_km
-            dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
-            ete_str = ""
-            if zone_info and zone_info.get('ete_str'):
-                ete_str = f" ⏱{zone_info['ete_str']}"
-            info_text = f"{dist_str}{ete_str}"
+            ete_str = zone_info.get('ete_str') if zone_info else None
+            info_text = format_distance_ete(primary_zone.distance_km, ete_str)
             
             # v6.4: 容差移至图例行
             tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
@@ -7781,51 +7923,12 @@ class NavigationWindow:
             abs_rel = abs(rel)
             dist = friendly_info['distance_km']
             
-            # v6.4: 优化转向指示
-            if abs_rel < 0.1:
-                turn_text = "▶▶ 保持 ◀◀"
-                turn_color = Theme.GREEN
-            elif abs_rel < 0.5:
-                direction = "◀" if rel < 0 else "▶"
-                turn_text = f"{direction} {abs_rel:.2f}° {direction}"
-                turn_color = Theme.GREEN
-            elif abs_rel < 5:
-                if rel < 0:
-                    turn_text = f"◀ 左修 {abs_rel:.1f}°"
-                else:
-                    turn_text = f"右修 {abs_rel:.1f}° ▶"
-                turn_color = Theme.BLUE
-            elif rel < 0:
-                turn_text = f"◀ 左转 {abs_rel:.1f}°"
-                turn_color = Theme.BLUE
-            else:
-                turn_text = f"右转 {abs_rel:.1f}° ▶"
-                turn_color = Theme.BLUE
-            
-            # v6.4: 优化状态描述
-            if abs_rel < 0.1:
-                status_text = "★ 锁定"
-                status_color = Theme.GREEN
-            elif abs_rel < 0.5:
-                status_text = "精确对准"
-                status_color = Theme.GREEN
-            elif abs_rel < 5:
-                status_text = "高精度"
-                status_color = Theme.GREEN
-            elif abs_rel < 15:
-                status_text = "航线内"
-                status_color = Theme.BLUE
-            elif abs_rel < 45:
-                status_text = "接近"
-                status_color = Theme.BLUE
-            else:
-                status_text = "偏离"
-                status_color = Theme.TEXT_DIM
+            # v6.5: 使用工具函数计算转向指示和状态
+            turn_text, turn_color = calculate_airfield_turn_indicator(rel)
+            status_text, status_color = calculate_airfield_status(abs_rel)
             
             # 距离和ETE
-            dist_str = f"{dist:.1f}km" if dist < 100 else f"{int(dist)}km"
-            ete_str = f" ⏱{friendly_info['ete_str']}" if friendly_info.get('ete_str') else ""
-            info_text = f"{dist_str}{ete_str}"
+            info_text = format_distance_ete(dist, friendly_info.get('ete_str'))
             
             self.friendly_turn.config(text=turn_text, fg=turn_color)
             if hasattr(self, 'friendly_status'):
