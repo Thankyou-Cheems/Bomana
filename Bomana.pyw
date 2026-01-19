@@ -4204,16 +4204,18 @@ class HeadingTape(tk.Canvas):
             color = base_color
         # 根据高度计算图标缩放（基于32px基准高度）
         icon_scale = self.tape_height / 32.0
-        y_center = int(self.tape_height * 0.35)
+        # v6.5.2: 图标偏上，给底部距离标签留空间
+        y_center = int(self.tape_height * 0.42)
         
-        # v6.5: 重构距离显示 - 增加区分度
+        # v6.5: 重构距离显示 - 增加区分度（放在图标下方）
         if show_distance > 0 and is_target:
-            self._draw_distance_label(x, show_distance, t_type, is_primary, icon_scale)
+            self._draw_distance_label(x, show_distance, t_type, is_primary, icon_scale, y_center)
         
         if t_type == 'zone':
             # v6.3: 战区标靶 - 区分目标和非目标
+            # v6.5.2: 调小尺寸，给距离标签腾空间
             if is_primary:
-                size = int(12 * icon_scale)
+                size = int(8 * icon_scale)
                 # 主目标根据精度调整颜色
                 tolerance = get_cdi_tolerance(distance_km)
                 abs_rel = abs(relative)
@@ -4234,7 +4236,7 @@ class HeadingTape(tk.Canvas):
                                fill=color, outline="")
             elif is_target:
                 # 活动目标但非主目标：中等大小，实心
-                size = int(9 * icon_scale)
+                size = int(6 * icon_scale)
                 self.create_oval(x - size, y_center - size, x + size, y_center + size,
                                outline=color, width=2, fill="")
                 inner_size = size * 0.5
@@ -4243,7 +4245,7 @@ class HeadingTape(tk.Canvas):
                                fill=color, outline="")
             else:
                 # 非目标战区：空心虚线圈（v6.4: 更明显的虚线样式）
-                size = int(10 * icon_scale)
+                size = int(6 * icon_scale)
                 self.create_oval(x - size, y_center - size, x + size, y_center + size,
                                outline=color, width=2, fill="", dash=(4, 3))
                 # 添加小中心点提高可见度
@@ -4254,28 +4256,26 @@ class HeadingTape(tk.Canvas):
             
         elif t_type == 'friendly':
             # v6.3: 友方机场 - 根据是否为目标调整大小
-            size = int((10 if is_target else 7) * icon_scale)
+            # v6.5.2: 调小尺寸
+            size = int((7 if is_target else 5) * icon_scale)
             width = 2 if is_target else 1
             self._draw_aircraft_icon(x, y_center, color, size=size, width=width)
             
         elif t_type == 'enemy':
             # v6.3: 敌方机场 - 根据是否为目标调整大小
-            size = int((10 if is_target else 7) * icon_scale)
+            # v6.5.2: 调小尺寸
+            size = int((7 if is_target else 5) * icon_scale)
             width = 2 if is_target else 1
             self._draw_aircraft_icon(x, y_center, color, size=size, width=width)
             
         elif t_type == 'destroyed':
             # 被摧毁：灰色X标记（v6.4: 更大更粗更易识别）
-            size = int(10 * icon_scale)
-            line_width = 3
+            size = int(6 * icon_scale)
+            line_width = 2
             self.create_line(x - size, y_center - size, x + size, y_center + size,
                            fill=color, width=line_width)
             self.create_line(x - size, y_center + size, x + size, y_center - size,
                            fill=color, width=line_width)
-            # 添加小圆圈背景提高对比度
-            bg_size = size + 2
-            self.create_oval(x - bg_size, y_center - bg_size, x + bg_size, y_center + bg_size,
-                           outline=color, width=1, dash=(2, 2), fill="")
     
     def _draw_aircraft_icon(self, x: float, y: float, color: str, size: int = 7, width: int = 2):
         """绘制飞机图标（v6.4: 更粗更易识别）"""
@@ -4298,7 +4298,7 @@ class HeadingTape(tk.Canvas):
         )
     
     def _draw_distance_label(self, x: float, distance: float, t_type: str, 
-                             is_primary: bool, icon_scale: float):
+                             is_primary: bool, icon_scale: float, y_center: int):
         """绘制距离标签（v6.5新增：增强区分度）
         
         根据目标类型和距离显示不同样式的标签：
@@ -4318,7 +4318,9 @@ class HeadingTape(tk.Canvas):
             t_type: 目标类型
             is_primary: 是否主目标
             icon_scale: 图标缩放系数
+            y_center: 图标中心Y坐标
         """
+        # v6.5.2: 距离标签放在图标下方（航向带底部）
         dist_y = self.tape_height - 2
         
         # 格式化距离文本
@@ -4355,11 +4357,11 @@ class HeadingTape(tk.Canvas):
                     bg_color = "#662222"  # 很暗红底
                     text_color = "#AAAAAA"
                 
-                # 绘制带底色的标签
+                # 绘制带底色的标签（在图标上方）
                 text_width = len(dist_text) * font_size * 0.6
                 pad = 2
                 self.create_rectangle(
-                    x - text_width/2 - pad, dist_y - font_size - pad,
+                    x - text_width/2 - pad, dist_y - font_size,
                     x + text_width/2 + pad, dist_y + pad,
                     fill=bg_color, outline=""
                 )
@@ -4396,7 +4398,7 @@ class HeadingTape(tk.Canvas):
             text_width = len(label_text) * font_size * 0.55
             pad = 2
             self.create_rectangle(
-                x - text_width/2 - pad, dist_y - font_size - pad,
+                x - text_width/2 - pad, dist_y - font_size,
                 x + text_width/2 + pad, dist_y + pad,
                 fill=bg_color, outline=""
             )
@@ -4430,7 +4432,8 @@ class HeadingTape(tk.Canvas):
         """
         color = self._target_colors.get(t_type, Theme.TEXT_DIM)
         icon_scale = self.tape_height / 32.0
-        y = int(self.tape_height * 0.35)
+        # v6.5.2: 与图标位置保持一致
+        y = int(self.tape_height * 0.42)
         tri_size = int(6 * icon_scale)
         
         # v6.5: 根据类型添加前缀标记
@@ -4476,7 +4479,8 @@ class HeadingTape(tk.Canvas):
     
     def _draw_primary_overflow(self, diff: float):
         """绘制主目标的大偏航箭头"""
-        y = self.tape_height // 2
+        # v6.5.2: 与图标位置保持一致
+        y = int(self.tape_height * 0.42)
         
         if diff < 0:
             # 左侧大箭头
