@@ -46,6 +46,12 @@ VibeCoding / AI 助手协作规范 (请严格遵守)
       应直接调用 present_files / file_create 等工具提供完整文件，
       避免因 Token 限制导致输出被截断而丢失代码
 ⚠️ 5. 【版本同步】修改功能后请同步更新 __version__ 变量
+⚠️ 6. 【编译开关】本项目通过 ENABLE_* 开关编译为三个版本（增强/标准/精简），
+      修改任何功能时必须考虑：
+      - 该功能是否受某个 ENABLE_* 开关控制？
+      - 是否需要添加 `if ENABLE_XXX:` 条件判断？
+      - 配置文件加载/保存是否需要检查开关状态？
+      - 三个版本共享同一配置文件，精简版不应继承完整版的专属功能状态
 
 数据来源说明：
 -------------
@@ -63,43 +69,31 @@ VibeCoding / AI 助手协作规范 (请严格遵守)
 - Pillow >= 8.0.0: 图像处理 (可选，系统托盘需要)
 - pystray >= 0.17.0: 系统托盘 (可选)
 
-打包命令 (Windows PowerShell)：
------------------------------
-注意: 以下命令使用 PowerShell 反引号(`)换行，CMD 用户请改用脱字符(^)
+构建说明：
+---------
+推荐使用 GitHub Actions 自动构建（见 .github/workflows/build.yml）
+手动构建请使用 PowerShell，反引号(`)换行；CMD 用户请改用脱字符(^)
 
-1. 完整版（所有功能开启）
+版本矩阵 (与 CI/CD 保持一致)：
+┌──────────┬─────────────────────────────────────────────────────────┬────────────────────────┐
+│ 版本     │ 编译开关                                                │ 说明                   │
+├──────────┼─────────────────────────────────────────────────────────┼────────────────────────┤
+│ Enhanced │ CCRP=True,  ZONES=True,  FUEL=True,  ADVANCED=True      │ 全功能，含投弹预测     │
+│ Standard │ CCRP=False, ZONES=True,  FUEL=True,  ADVANCED=True      │ 导航+燃油，无CCRP      │
+│ Lite     │ CCRP=False, ZONES=False, FUEL=False, ADVANCED=True      │ 仅计时器，极致轻量     │
+└──────────┴─────────────────────────────────────────────────────────┴────────────────────────┘
+注: AIRFIELDS/CHECKLIST 跟随 ZONES 开关
 
+手动打包命令示例 (Enhanced 增强版)：
 pyinstaller --noconsole --onefile `
-    --name "Bomana" `
+    --name "Bomana_Enhanced" `
     --icon "app.ico" `
     --add-data "app.png;." `
     --add-data "sponsor_wechat.png;." `
     --add-data "ccrp_bomb_params.py;." `
     --hidden-import "pystray._win32" `
     --collect-submodules "PIL" `
-    --clean `
-    Bomana.pyw
-
-2. Lite精简版（关闭扩展功能）
-   修改编译开关:
-   ENABLE_CCRP = False
-   ENABLE_ZONES = False
-   ENABLE_AIRFIELDS = False
-   ENABLE_FUEL = False
-   ENABLE_CHECKLIST = False
-
-pyinstaller --noconsole --onefile `
-    --name "BomanaLite" `
-    --icon "app.ico" `
-    --add-data "app.png;." `
-    --add-data "sponsor_wechat.png;." `
-    --hidden-import "pystray._win32" `
-    --collect-submodules "PIL" `
-    --clean `
-    Bomana.pyw
-
-3. 自定义版（按需开启功能）
-   根据需要修改编译开关组合，然后打包
+    --clean Bomana.pyw
 
 ===============================================================================
 """
@@ -108,7 +102,7 @@ pyinstaller --noconsole --onefile `
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.6.1"
+__version__ = "6.6.2"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -5048,6 +5042,10 @@ class SettingsDialog(tk.Toplevel):
                 self.app._init_global_hotkeys()
                 if hasattr(self.app, '_ghk') and self.app._ghk:
                     self.app._ghk.start()
+            # 刷新提示文本（主窗口 + 导航窗口）
+            self.app._update_hint()
+            if hasattr(self.app, 'nav_window') and self.app.nav_window:
+                self.app.nav_window.update_hint_text()
         
         # 应用主题（需要重启）
         theme_changed = new_theme != old_theme
@@ -5759,10 +5757,13 @@ class App:
         self._init_bindings()
         self._init_global_hotkeys()
         
-        # v6.2.1: 初始化独立导航窗口
-        self.nav_window = NavigationWindow(self)
-        if PanelConfig.navigation_mode == "standalone":
-            self.nav_window.show()
+        # v6.2.1: 初始化独立导航窗口（仅在战区功能启用时）
+        if ENABLE_ZONES:
+            self.nav_window = NavigationWindow(self)
+            if PanelConfig.navigation_mode == "standalone":
+                self.nav_window.show()
+        else:
+            self.nav_window = None
 
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
@@ -5812,15 +5813,19 @@ class App:
         PanelConfig.show_checklist = panels.get('show_checklist', True)
         PanelConfig.show_bombing = panels.get('show_bombing', True)  # v6.0 新增
         
-        # v6.2.1: 导航条模式
-        PanelConfig.navigation_mode = config.get('navigation_mode', 'integrated')
-        nav_pos = config.get('navigation_window_pos')
-        if nav_pos and isinstance(nav_pos, list) and len(nav_pos) == 2:
-            PanelConfig.navigation_window_pos = tuple(nav_pos)
-        # 独立导航栏宽度
-        nav_width = config.get('navigation_bar_width')
-        if nav_width and isinstance(nav_width, (int, float)):
-            PanelConfig.navigation_bar_width = max(0.5, min(2.0, float(nav_width)))
+        # v6.2.1: 导航条模式（仅在战区功能启用时生效）
+        if ENABLE_ZONES:
+            PanelConfig.navigation_mode = config.get('navigation_mode', 'integrated')
+            nav_pos = config.get('navigation_window_pos')
+            if nav_pos and isinstance(nav_pos, list) and len(nav_pos) == 2:
+                PanelConfig.navigation_window_pos = tuple(nav_pos)
+            # 独立导航栏宽度
+            nav_width = config.get('navigation_bar_width')
+            if nav_width and isinstance(nav_width, (int, float)):
+                PanelConfig.navigation_bar_width = max(0.5, min(2.0, float(nav_width)))
+        else:
+            # 精简版强制使用集成模式，忽略配置文件中的设置
+            PanelConfig.navigation_mode = 'integrated'
         
         # v6.0 新增：炸弹选择（仅在CCRP启用时）
         if ENABLE_CCRP:
@@ -6666,7 +6671,13 @@ class App:
         if self._zone_sound_enabled:
             self.sound.play(pattern="on")
     def _toggle_navigation_mode(self):
-        """切换导航条模式（集成/独立）"""
+        """切换导航条模式（集成/独立）
+        
+        仅在战区功能启用时可用。
+        """
+        if not ENABLE_ZONES or not self.nav_window:
+            return
+        
         if PanelConfig.navigation_mode == "integrated":
             PanelConfig.navigation_mode = "standalone"
             self.nav_window.show()
@@ -7277,7 +7288,7 @@ class App:
                     self.heading_tape_frame.grid_remove()
                 
                 # v6.2.1: 更新独立导航窗口
-                if hasattr(self, 'nav_window') and self.nav_window.is_visible():
+                if hasattr(self, 'nav_window') and self.nav_window and self.nav_window.is_visible():
                     self.nav_window.update_display(snap, targets, active_targets_info, target_zone)
             elif self.heading_tape is not None:
                 self.heading_tape.clear()
@@ -7288,7 +7299,7 @@ class App:
                     self.heading_tape_frame.grid_remove()
                 
                 # v6.2.1: 独立窗口也需要清空
-                if hasattr(self, 'nav_window') and self.nav_window.is_visible():
+                if hasattr(self, 'nav_window') and self.nav_window and self.nav_window.is_visible():
                     self.nav_window.update_display(snap, [], [], None)
             
             # 战区被摧毁警告（row=2）
@@ -7879,9 +7890,9 @@ class NavigationWindow:
         tk.Label(legend_frame, text="✈友", font=legend_font, fg=Theme.BLUE, bg=Theme.GRAYPILL).pack(side="left", padx=(int(4*s), 0))
         tk.Label(legend_frame, text="✈敌", font=legend_font, fg=Theme.ORANGE, bg=Theme.GRAYPILL).pack(side="left", padx=(int(4*s), 0))
         
-        # 解锁提示
+        # 解锁提示（动态引用按键配置）
         self.hint_lbl = tk.Label(
-            self.title_bar, text="F8拖动", font=hint_font,
+            self.title_bar, text=f"{HotkeyConfig.KEY_LOCK}解锁后可拖动", font=hint_font,
             fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
         )
         self.hint_lbl.pack(side="left", padx=(int(8*s), 0))
@@ -8100,6 +8111,11 @@ class NavigationWindow:
     def is_visible(self):
         """返回窗口是否可见"""
         return self._visible
+    
+    def update_hint_text(self):
+        """更新提示文本（当热键配置变更时调用）"""
+        if hasattr(self, 'hint_lbl') and self.hint_lbl:
+            self.hint_lbl.config(text=f"{HotkeyConfig.KEY_LOCK}解锁后可拖动")
     
     def update_display(self, snap: 'UISnapshot', targets: list, targets_info: list, primary_zone):
         """更新导航显示
