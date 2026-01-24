@@ -36,9 +36,16 @@ War Thunder SB Timer - 战雷全真模式收益计时器
    - 配置自动保存，支持状态恢复
    - 低性能开销，不影响游戏帧率
 
-5. **VibeCoding助手或ChatBot应该遵循的原则**
-   - 始终维护核心原则部分注释，永远不要在输出中擅自删除开头的注释块
-   - 不要随意删除代码部分的注释，应当在代码中保留注释，只针对每次修改的部分添加/删除注释
+-------------------------------------------------------------------------------
+VibeCoding / AI 助手协作规范 (请严格遵守)
+-------------------------------------------------------------------------------
+⚠️ 1. 【文件头保护】始终维护本注释块，永远不要删除或精简开头的注释
+⚠️ 2. 【注释保留】不要随意删除代码中的注释，仅针对修改部分增删注释
+⚠️ 3. 【核心原则】任何修改都必须遵守上述"核心原则"，不得引入违规功能
+⚠️ 4. 【输出方式】由于本文件体量较大(8000+行)，修改后请勿流式输出全文，
+      应直接调用 present_files / file_create 等工具提供完整文件，
+      避免因 Token 限制导致输出被截断而丢失代码
+⚠️ 5. 【版本同步】修改功能后请同步更新 __version__ 变量
 
 数据来源说明：
 -------------
@@ -47,16 +54,19 @@ War Thunder SB Timer - 战雷全真模式收益计时器
 - /map_obj.json: 地图对象（战区、机场、玩家位置）
 - /map_info.json: 地图元数据（格子坐标系统参数）
 
-技术栈：
--------
-- Python 3.7+
-- tkinter: GUI框架
-- requests: HTTP请求
-- ctypes: Windows API调用
-- PIL/pystray: 系统托盘（可选）
+技术栈与依赖：
+-------------
+- Python 3.8+
+- tkinter: GUI框架 (标准库)
+- requests >= 2.25.0: HTTP请求
+- ctypes: Windows API调用 (标准库)
+- Pillow >= 8.0.0: 图像处理 (可选，系统托盘需要)
+- pystray >= 0.17.0: 系统托盘 (可选)
 
-打包命令：
--------
+打包命令 (Windows PowerShell)：
+-----------------------------
+注意: 以下命令使用 PowerShell 反引号(`)换行，CMD 用户请改用脱字符(^)
+
 1. 完整版（所有功能开启）
 
 pyinstaller --noconsole --onefile `
@@ -93,6 +103,16 @@ pyinstaller --noconsole --onefile `
 
 ===============================================================================
 """
+
+# =============================================================================
+# 标准元数据 (Standard Metadata)
+# =============================================================================
+__title__ = "Bomana"
+__version__ = "6.6.1"
+__author__ = "Thankyou-Cheems"
+__license__ = "MIT"
+__copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
+__repository__ = "https://github.com/Thankyou-Cheems/Bomana"
 
 import os
 import sys
@@ -140,7 +160,6 @@ ENABLE_AIRFIELDS = True      # 机场导航功能开关
 ENABLE_FUEL = True           # 燃油管理功能开关
 ENABLE_CHECKLIST = True      # 出击检查清单功能开关
 ENABLE_ADVANCED_SETTINGS = True  # 高级设置功能开关（面板选择、快捷键自定义等）
-
 
 
 # ============================================================================
@@ -540,14 +559,18 @@ def _wt_get_air_density(altitude_m: float, temp_k: float = None) -> float:
 
 
 class AboutConfig:
-    """关于对话框配置"""
-    # 软件信息
-    APP_NAME = "Bomana"
+    """关于对话框配置
+    
+    注意: APP_NAME, VERSION, AUTHOR, GITHUB_URL 引用自文件头的标准元数据，
+    修改版本号请更新 __version__ 变量，无需在此处重复修改。
+    """
+    # 软件信息 (引用标准元数据，保持单一数据源)
+    APP_NAME = __title__
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "6.6.1"  # v6.6.1: 紧凑布局 + 起落架进度集成 + 非目标增强 + 消抖
-    AUTHOR = "猹Cheems"
-    # 链接配置
-    GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
+    VERSION = __version__
+    AUTHOR = __author__
+    # 链接配置 (引用标准元数据)
+    GITHUB_URL = __repository__
     
     # 赞助链接配置（可以添加多个）
     SPONSOR_LINKS = [
