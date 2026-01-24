@@ -544,7 +544,7 @@ class AboutConfig:
     # 软件信息
     APP_NAME = "Bomana"
     APP_NAME_CN = "战雷全真模式收益计时器"
-    VERSION = "6.4.1"  # v6.4.1: 航向带用户体验优化
+    VERSION = "6.6.0"  # v6.6.0: UX/Visual improvements - 距离标签重构 + 起落架进度指示器
     AUTHOR = "猹Cheems"
     # 链接配置
     GITHUB_URL = "https://github.com/Thankyou-Cheems/Bomana"
@@ -1872,6 +1872,60 @@ def format_distance_ete(dist_km: float, ete_str: Optional[str] = None) -> str:
     return dist_str
 
 
+def format_distance_dynamic(distance_km: float) -> str:
+    """v6.6.0: 动态精度距离格式化
+    
+    根据距离自动选择显示精度：
+    - Distance > 20 km: 整数 (e.g., 25)
+    - Distance 5 - 20 km: 1位小数 (e.g., 8.4)
+    - Distance < 5 km: 1位小数或米 (e.g., 1.2 或 800m)
+    
+    Args:
+        distance_km: 距离（公里）
+    
+    Returns:
+        格式化后的距离字符串（不含单位）
+    """
+    if distance_km > 20:
+        return f"{int(distance_km)}"
+    elif distance_km >= 1:
+        return f"{distance_km:.1f}"
+    else:
+        # 小于1km时显示米
+        meters = int(distance_km * 1000)
+        return f"{meters}m"
+
+
+def get_deviation_color(relative_angle: float, distance_km: float) -> str:
+    """v6.6.0: 根据偏差计算语义颜色
+    
+    距离标签颜色应继承当前航道偏差颜色。
+    
+    Args:
+        relative_angle: 相对角度
+        distance_km: 距离（公里）
+    
+    Returns:
+        颜色代码
+    """
+    tolerance = get_cdi_tolerance(distance_km)
+    abs_rel = abs(relative_angle)
+    
+    if abs_rel < 0.2:
+        # 极精准
+        return "#00FF00"  # 亮绿
+    elif abs_rel <= tolerance * 0.3:
+        return Theme.GREEN
+    elif abs_rel <= tolerance * 0.6:
+        return Theme.BLUE
+    elif abs_rel <= tolerance:
+        return Theme.YELLOW
+    elif abs_rel <= tolerance * 1.5:
+        return Theme.ORANGE
+    else:
+        return Theme.RED
+
+
 def generate_cdi_indicator(relative_angle: float, distance_km: float) -> Tuple[str, str]:
     """生成高精度航道偏差指示器(CDI)字符串
     
@@ -2327,6 +2381,9 @@ class TelemetryData:
     
     # v5.9.6 新增：起落架状态
     gear_down: bool = False       # 起落架是否放下 (True=放下, False=收起)
+    
+    # v6.6.0 新增：起落架百分比（用于进度指示器）
+    gear_pct: float = 0.0         # 起落架位置百分比 (0=收起, 100=放下)
 
     @property
     def entity_like(self) -> bool:
@@ -2686,6 +2743,9 @@ class GameState:
     
     # v5.8 新增：燃油状态
     fuel_state: FuelState = field(default_factory=FuelState)
+    
+    # v6.6.0 新增：起落架进度追踪
+    last_gear_pct: float = 0.0                                   # 上一帧起落架百分比（用于判断方向）
 
 
 @dataclass(frozen=True)
@@ -2775,6 +2835,11 @@ class UISnapshot:
     
     # v5.9.6 新增：起落架警告
     gear_warning: bool = False                 # 起落架未收起警告
+    
+    # v6.6.0 新增：起落架进度指示器
+    gear_pct: float = 0.0                      # 起落架位置百分比 (0-100)
+    gear_moving: bool = False                  # 起落架是否正在移动
+    gear_retracting: bool = False              # 是否正在收起（True=收起/蓝色，False=放下/黄色）
     
     # v6.0 新增：投弹预测
     bombing_valid: bool = False                # 投弹预测是否有效
@@ -2885,8 +2950,9 @@ class TelemetryFetcher:
             data.tas_kmh = float(j.get("TAS, km/h", 0) or 0)
             data.throttle_pct = float(j.get("throttle 1, %", 0) or 0)
             
-            # v5.9.6 新增：解析起落架状态 ("gear, %": 100表示放下, 0表示收起)
+            # v5.9.6 + v6.6.0：解析起落架状态和百分比
             gear_pct = float(j.get("gear, %", 0) or 0)
+            data.gear_pct = gear_pct  # v6.6.0: 保存原始百分比
             data.gear_down = (gear_pct > 50)  # 超过50%视为放下状态
         
         return data
@@ -3795,6 +3861,16 @@ class GameLogic:
                 # gear_down=True 表示起落架放下（未收起）
                 if is_airborne and tel.gear_down:
                     gear_warning = True
+            
+            # v6.6.0 新增：起落架进度指示器
+            gear_pct = tel.gear_pct
+            gear_moving = (0 < gear_pct < 100)  # 正在移动 = 不在两端
+            gear_retracting = False
+            if gear_moving:
+                # 判断方向：当前百分比 < 上一帧百分比 = 正在收起
+                gear_retracting = (gear_pct < s.last_gear_pct)
+            # 更新上一帧百分比用于下次判断
+            s.last_gear_pct = gear_pct
 
             # v6.0.1 优化：从缓存读取弹道计算结果（计算已移至tick线程）
             bombing_valid = False
@@ -3849,6 +3925,10 @@ class GameLogic:
                 friendly_distance_km=friendly_distance_km,
                 # v5.9.6 新增：起落架警告
                 gear_warning=gear_warning,
+                # v6.6.0 新增：起落架进度指示器
+                gear_pct=gear_pct,
+                gear_moving=gear_moving,
+                gear_retracting=gear_retracting,
                 # v6.0 新增：投弹预测
                 bombing_valid=bombing_valid,
                 bomb_name=bomb_name,
@@ -4207,9 +4287,9 @@ class HeadingTape(tk.Canvas):
         # v6.5.2: 图标偏上，给底部距离标签留空间
         y_center = int(self.tape_height * 0.42)
         
-        # v6.5: 重构距离显示 - 增加区分度（放在图标下方）
+        # v6.6.0: 重构距离显示 - 位置调整到图标下方，颜色继承偏差色
         if show_distance > 0 and is_target:
-            self._draw_distance_label(x, show_distance, t_type, is_primary, icon_scale, y_center)
+            self._draw_distance_label(x, show_distance, t_type, is_primary, icon_scale, y_center, relative)
         
         if t_type == 'zone':
             # v6.3: 战区标靶 - 区分目标和非目标
@@ -4298,19 +4378,14 @@ class HeadingTape(tk.Canvas):
         )
     
     def _draw_distance_label(self, x: float, distance: float, t_type: str, 
-                             is_primary: bool, icon_scale: float, y_center: int):
-        """绘制距离标签（v6.5新增：增强区分度）
+                             is_primary: bool, icon_scale: float, y_center: int,
+                             relative_angle: float = 0.0):
+        """v6.6.0 重构：绘制距离标签（图标下方，继承偏差颜色）
         
         根据目标类型和距离显示不同样式的标签：
-        - 战区：红底白字（主目标）或红字（非主目标）
-        - 友方机场：蓝底白字，带"⌂"标记
-        - 敌方机场：橙色字
-        
-        距离分级着色：
-        - <5km：高亮（即将到达）
-        - 5-15km：正常
-        - 15-30km：稍暗
-        - >30km：暗淡
+        - 位置：图标下方（航向带底部）
+        - 颜色：继承当前航道偏差颜色
+        - 精度：动态精度（>20km整数，5-20km一位小数，<5km一位小数或米）
         
         Args:
             x: X坐标
@@ -4319,45 +4394,29 @@ class HeadingTape(tk.Canvas):
             is_primary: 是否主目标
             icon_scale: 图标缩放系数
             y_center: 图标中心Y坐标
+            relative_angle: 相对角度（用于计算偏差颜色）
         """
-        # v6.5.2: 距离标签放在图标下方（航向带底部）
+        # v6.6.0: 距离标签放在图标下方（航向带底部）
         dist_y = self.tape_height - 2
         
-        # 格式化距离文本
-        if distance < 5:
-            dist_text = f"{distance:.1f}"
-            urgency = "close"
-        elif distance < 15:
-            dist_text = f"{int(distance)}"
-            urgency = "medium"
-        elif distance < 30:
-            dist_text = f"{int(distance)}"
-            urgency = "far"
-        else:
-            dist_text = f"{int(distance)}"
-            urgency = "distant"
+        # v6.6.0: 使用动态精度格式化距离
+        dist_text = format_distance_dynamic(distance)
+        
+        # v6.6.0: 获取基于偏差的语义颜色
+        deviation_color = get_deviation_color(relative_angle, distance)
         
         # 根据目标类型和距离确定样式
         font_size = max(7, int(9 * icon_scale))
         
         if t_type == 'zone':
-            # 战区：主目标用醒目底色，非主目标用普通红字
+            # v6.6.0: 战区距离标签 - 使用偏差颜色
             if is_primary:
-                # 主目标：根据距离调整底色亮度
-                if urgency == "close":
-                    bg_color = "#FF3333"  # 亮红底
-                    text_color = "#FFFFFF"
-                elif urgency == "medium":
-                    bg_color = "#CC2222"  # 红底
-                    text_color = "#FFFFFF"
-                elif urgency == "far":
-                    bg_color = "#992222"  # 暗红底
-                    text_color = "#DDDDDD"
-                else:
-                    bg_color = "#662222"  # 很暗红底
-                    text_color = "#AAAAAA"
+                # 主目标：带底色的标签，底色基于偏差颜色
+                # 计算底色（偏差颜色的暗化版本）
+                bg_color = self._darken_color(deviation_color, 0.4)
+                text_color = "#FFFFFF"
                 
-                # 绘制带底色的标签（在图标上方）
+                # 绘制带底色的标签
                 text_width = len(dist_text) * font_size * 0.6
                 pad = 2
                 self.create_rectangle(
@@ -4368,30 +4427,14 @@ class HeadingTape(tk.Canvas):
                 self.create_text(x, dist_y, text=dist_text, fill=text_color,
                                font=("Consolas", font_size, "bold"), anchor="s")
             else:
-                # 非主目标战区：根据距离调整颜色
-                color_map = {
-                    "close": Theme.RED,
-                    "medium": "#CC4444",
-                    "far": "#994444",
-                    "distant": "#664444"
-                }
-                self.create_text(x, dist_y, text=dist_text, fill=color_map[urgency],
+                # 非主目标战区：直接使用偏差颜色
+                self.create_text(x, dist_y, text=dist_text, fill=deviation_color,
                                font=("Consolas", font_size), anchor="s")
         
         elif t_type == 'friendly':
-            # 友方机场：蓝底白字 + ⌂ 标记
-            if urgency == "close":
-                bg_color = "#3399FF"  # 亮蓝
-                text_color = "#FFFFFF"
-            elif urgency == "medium":
-                bg_color = "#2277CC"  # 蓝
-                text_color = "#FFFFFF"
-            elif urgency == "far":
-                bg_color = "#225599"  # 暗蓝
-                text_color = "#DDDDDD"
-            else:
-                bg_color = "#224466"  # 很暗蓝
-                text_color = "#AAAAAA"
+            # 友方机场：蓝色系 + ⌂ 标记
+            bg_color = self._get_urgency_blue(distance)
+            text_color = "#FFFFFF"
             
             # 友方机场添加"⌂"标记
             label_text = f"⌂{dist_text}"
@@ -4406,21 +4449,57 @@ class HeadingTape(tk.Canvas):
                            font=("Consolas", font_size, "bold"), anchor="s")
         
         elif t_type == 'enemy':
-            # 敌方机场：橙色字，带"✖"标记
-            color_map = {
-                "close": Theme.ORANGE,
-                "medium": "#CC8844",
-                "far": "#996633",
-                "distant": "#664422"
-            }
+            # 敌方机场：橙色系，带"✖"标记
+            urgency_color = self._get_urgency_orange(distance)
             label_text = f"✖{dist_text}"
-            self.create_text(x, dist_y, text=label_text, fill=color_map[urgency],
+            self.create_text(x, dist_y, text=label_text, fill=urgency_color,
                            font=("Consolas", font_size), anchor="s")
         
         else:
             # 其他类型：普通显示
             self.create_text(x, dist_y, text=dist_text, fill=Theme.TEXT_DIM,
                            font=("Consolas", font_size), anchor="s")
+    
+    def _darken_color(self, hex_color: str, factor: float) -> str:
+        """v6.6.0: 暗化颜色
+        
+        Args:
+            hex_color: 十六进制颜色 (如 "#FF0000")
+            factor: 暗化系数 (0-1, 越小越暗)
+        
+        Returns:
+            暗化后的颜色
+        """
+        try:
+            hex_color = hex_color.lstrip('#')
+            r = int(int(hex_color[0:2], 16) * factor)
+            g = int(int(hex_color[2:4], 16) * factor)
+            b = int(int(hex_color[4:6], 16) * factor)
+            return f"#{r:02x}{g:02x}{b:02x}"
+        except:
+            return "#333333"
+    
+    def _get_urgency_blue(self, distance: float) -> str:
+        """v6.6.0: 根据距离获取蓝色系紧急程度颜色"""
+        if distance < 5:
+            return "#3399FF"  # 亮蓝
+        elif distance < 15:
+            return "#2277CC"  # 蓝
+        elif distance < 30:
+            return "#225599"  # 暗蓝
+        else:
+            return "#224466"  # 很暗蓝
+    
+    def _get_urgency_orange(self, distance: float) -> str:
+        """v6.6.0: 根据距离获取橙色系紧急程度颜色"""
+        if distance < 5:
+            return Theme.ORANGE
+        elif distance < 15:
+            return "#CC8844"
+        elif distance < 30:
+            return "#996633"
+        else:
+            return "#664422"
     
     def _draw_overflow_indicator(self, relative: float, t_type: str, distance: float = 0):
         """绘制视野外目标的小指示器（v6.5优化：增强区分度）
@@ -5913,6 +5992,18 @@ class App:
         # v5.9.6 新增：起落架警告徽章
         self.badge_gear = Pill(row2, text="", fg=Theme.TEXT, bg=Theme.ORANGE, font=pill_font)
         # 初始隐藏
+        
+        # v6.6.0 新增：起落架进度条框架
+        self.gear_progress_frame = tk.Frame(row2, bg=Theme.BG, height=int(6*s))
+        # 起落架进度条背景
+        self.gear_progress_bg = tk.Frame(self.gear_progress_frame, bg=Theme.BORDER, height=int(4*s), width=int(60*s))
+        self.gear_progress_bg.pack(pady=int(1*s))
+        self.gear_progress_bg.pack_propagate(False)
+        # 起落架进度条填充
+        self.gear_progress_fill = tk.Frame(self.gear_progress_bg, bg=Theme.BLUE, height=int(4*s))
+        self.gear_progress_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
+        # 初始隐藏进度条
+        
         font_status = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s))
         self.status_txt = tk.Label(row2, text="等待中", font=font_status, fg=Theme.TEXT_DIM, bg=Theme.BG, anchor="e")
         self.status_txt.pack(side="right")
@@ -7490,6 +7581,22 @@ class App:
         else:
             if self.badge_gear.winfo_ismapped():
                 self.badge_gear.pack_forget()
+        
+        # v6.6.0 新增：起落架进度条显示/隐藏
+        if snap.gear_moving:
+            # 显示进度条
+            if not self.gear_progress_frame.winfo_ismapped():
+                self.gear_progress_frame.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*self.scale), 0), after=self.badge_flight)
+            # 更新进度和颜色
+            progress = snap.gear_pct / 100.0
+            # 收起=蓝色，放下=黄色
+            bar_color = Theme.BLUE if snap.gear_retracting else Theme.YELLOW
+            self.gear_progress_fill.config(bg=bar_color)
+            self.gear_progress_fill.place(relwidth=progress)
+        else:
+            # 隐藏进度条
+            if self.gear_progress_frame.winfo_ismapped():
+                self.gear_progress_frame.pack_forget()
         
         self.status_txt.config(text=snap.status_text, fg=(Theme.YELLOW if snap.api_down else Theme.TEXT_DIM))
 
