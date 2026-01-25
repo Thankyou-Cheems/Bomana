@@ -201,12 +201,12 @@ Bomana 会自动锁定前方 45° 内最近的战区。如果你想切换目标�
 
 ## 开发者：更新 CCRP 炸弹参数
 
-如果需要更新 `ccrp_bomb_params.py`：
+如果需要更新 `ccrp_bomb_params.json`：
 
 ```bash
 python tools/blkx_extractor.py ^
   <path-to-datamine>\aces.vromfs.bin_u\gamedata\weapons\bombguns ^
-  -o ccrp_bomb_params.py
+  -o ccrp_bomb_params.json
 ```
 
 ---

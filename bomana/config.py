@@ -4,6 +4,7 @@
 """
 
 from pathlib import Path
+import json
 
 # =============================================================================
 # 标准元数据 (Standard Metadata)
@@ -457,7 +458,7 @@ class BombConfig:
     ╔══════════════════════════════════════════════════════════════════════════╗
     ║ 投弹系统说明 (CCRP v2.0)                                                   ║
     ╠══════════════════════════════════════════════════════════════════════════╣
-    ║ 炸弹参数从外部ccrp_bomb_params.py模块加载                                   ║
+    ║ 炸弹参数从外部ccrp_bomb_params.json模块加载                                   ║
     ║ 弹道计算参数集中到BallisticPhysicsParams配置块                              ║
     ║ 支持动态切换阻力模型（none/simple/advanced）                                ║
     ╚══════════════════════════════════════════════════════════════════════════╝
@@ -474,7 +475,13 @@ class BombConfig:
             return
 
         try:
-            from ccrp_bomb_params import BALLISTIC_PARAMS as external_params
+            external_params = None
+            json_path = Path(__file__).resolve().parent.parent / "ccrp_bomb_params.json"
+            if json_path.exists():
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+                external_params = data.get("ballistic_params", {})
+            else:
+                from ccrp_bomb_params import BALLISTIC_PARAMS as external_params
 
             for bomb_id, params in external_params.items():
                 cls.BOMB_DATABASE[bomb_id] = {
@@ -490,7 +497,8 @@ class BombConfig:
                 }
 
             cls._database_loaded = True
-            print(f"[BombConfig] 已从ccrp_bomb_params加载 {len(cls.BOMB_DATABASE)} 种炸弹参数")
+            source = "ccrp_bomb_params.json" if json_path.exists() else "ccrp_bomb_params.json"
+            print(f"[BombConfig] 已从{source}加载 {len(cls.BOMB_DATABASE)} 种炸弹参数")
 
         except ImportError as e:
             print(f"[BombConfig] 警告: 无法加载ccrp_bomb_params模块: {e}")

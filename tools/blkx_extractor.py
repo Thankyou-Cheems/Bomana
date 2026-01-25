@@ -4,7 +4,7 @@
 War Thunder .blkx bomb parameter extractor.
 
 Input: the extracted .blkx files from the War Thunder datamine repo.
-Output: ccrp_bomb_params.py with BALLISTIC_PARAMS for Bomana.
+Output: ccrp_bomb_params.json for Bomana.
 """
 
 import argparse
@@ -44,6 +44,8 @@ class BlkxExtractor:
     def __init__(self):
         self.results = []
         self.error_count = 0
+        self.no_bomb_files = []
+        self.skipped_types = {}
 
     def parse_blkx_content(self, content: str):
         """Remove comments then parse JSON."""
@@ -118,6 +120,10 @@ class BlkxExtractor:
         params = self.extract_ballistic_params(config)
         if not params:
             print("  Missing bomb section or no params extracted")
+            self.no_bomb_files.append(filepath.name)
+            if isinstance(config, dict):
+                if "rocketGun" in config:
+                    self.skipped_types[filepath.name] = "rocketGun"
             return
 
         params["source_file"] = filepath.name
@@ -171,17 +177,38 @@ class BlkxExtractor:
         )
         total = len(self.results)
         print(f"\nComplete (mass+caliber+dragCx): {complete}/{total}")
+        if self.no_bomb_files:
+            print(f"Non-bomb files skipped: {len(self.no_bomb_files)}")
+            if self.skipped_types:
+                type_counts = {}
+                for t in self.skipped_types.values():
+                    type_counts[t] = type_counts.get(t, 0) + 1
+                for t, c in sorted(type_counts.items()):
+                    print(f"  - {t}: {c}")
 
-    def export_ccrp_params(self, output_file: str = "ccrp_bomb_params.py"):
-        """Export BALLISTIC_PARAMS for Bomana."""
+    def export_ccrp_params(self, output_file: str = "ccrp_bomb_params.json"):
+        """Export BALLISTIC_PARAMS for Bomana (JSON)."""
         ccrp_params = {}
+        collision_count = 0
 
         for bomb in self.results:
             if not all(k in bomb for k in ("mass", "caliber", "dragCx")):
                 continue
 
-            key = re.sub(r"[^\w-]", "_", bomb["filename"].lower())
+            # Use source file name (stable + unique) as key to avoid mesh collisions.
+            stem = Path(bomb.get("source_file", "")).stem or bomb["filename"]
+            key = re.sub(r"[^\w-]", "_", stem.lower())
             key = re.sub(r"(_na|_mesh|_bomb)$", "", key)
+
+            if key in ccrp_params:
+                # Rare fallback if filenames still collide.
+                collision_count += 1
+                suffix = 2
+                new_key = f"{key}_{suffix}"
+                while new_key in ccrp_params:
+                    suffix += 1
+                    new_key = f"{key}_{suffix}"
+                key = new_key
 
             ccrp_params[key] = {
                 "mass": float(bomb["mass"]),
@@ -192,33 +219,28 @@ class BlkxExtractor:
                 "brakeCxK": float(bomb.get("brakeCxK", 0.0)),
                 "brakeArm": float(bomb.get("brakeArm", 0.0)),
                 "stab_enabled": bool(bomb.get("brakeCxK", 0.0) > 0.0),
+                "source_file": bomb.get("source_file", ""),
+                "mesh": bomb.get("filename", ""),
             }
 
-        header = (
-            "# War Thunder CCRP ballistic parameters (auto-extracted)\n\n"
-            f"# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"# Bombs: {len(ccrp_params)}\n\n"
-            "BALLISTIC_PARAMS = {\n"
+        payload = {
+            "meta": {
+                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "bombs": len(ccrp_params),
+                "collisions": collision_count,
+                "skipped_non_bomb": len(self.no_bomb_files),
+            },
+            "ballistic_params": ccrp_params,
+        }
+
+        Path(output_file).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
 
-        lines = [header]
-        for key in sorted(ccrp_params.keys()):
-            params = ccrp_params[key]
-            lines.append(f"    '{key}': {{\n")
-            lines.append(f"        'mass': {params['mass']:.6f},\n")
-            lines.append(f"        'caliber': {params['caliber']:.6f},\n")
-            lines.append(f"        'dragCx': {params['dragCx']:.6f},\n")
-            lines.append(f"        'distFromCmToStab': {params['distFromCmToStab']:.6f},\n")
-            lines.append(f"        'brakeTime': {params['brakeTime']},\n")
-            lines.append(f"        'brakeCxK': {params['brakeCxK']:.6f},\n")
-            lines.append(f"        'brakeArm': {params['brakeArm']:.6f},\n")
-            lines.append(f"        'stab_enabled': {str(params['stab_enabled'])},\n")
-            lines.append("    },\n")
-        lines.append("}\n")
-
-        Path(output_file).write_text("".join(lines), encoding="utf-8")
-
         print(f"Wrote {len(ccrp_params)} bombs to {output_file}")
+        if collision_count:
+            print(f"  Note: {collision_count} key collisions resolved with suffixes")
         return ccrp_params
 
 
@@ -230,8 +252,8 @@ def main():
     parser.add_argument(
         "-o",
         "--output",
-        default="ccrp_bomb_params.py",
-        help="output file (default: ccrp_bomb_params.py)",
+        default="ccrp_bomb_params.json",
+        help="output file (default: ccrp_bomb_params.json)",
     )
     parser.add_argument("--single", help="process a single .blkx file")
     parser.add_argument(

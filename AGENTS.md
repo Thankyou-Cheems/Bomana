@@ -9,7 +9,7 @@ Keep it concise and update when workflows or boundaries change.
 - Core: `bomana/core/` (state, telemetry, ballistics, logic)
 - UI: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound)
-- CCRP data: `ccrp_bomb_params.py`
+- CCRP data: `ccrp_bomb_params.json`
 - Docs: `ARCHITECTURE.md`, `PITFALLS.md`
 
 ## Guardrails

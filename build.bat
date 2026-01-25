@@ -105,13 +105,22 @@ echo 这可能需要几分钟时间，请耐心等待...
 echo.
 
 set "EXEC_NAME=Bomana_%VARIANT%"
-if /I "%VARIANT%"=="Enhanced" if exist ccrp_bomb_params.py (
+set "CCRP_DATA_ARG="
+if /I "%VARIANT%"=="Enhanced" (
+    if exist ccrp_bomb_params.json (
+        set "CCRP_DATA_ARG=--add-data \"ccrp_bomb_params.json;.\""
+    ) else if exist ccrp_bomb_params.py (
+        set "CCRP_DATA_ARG=--add-data \"ccrp_bomb_params.py;.\""
+    )
+)
+
+if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
     pyinstaller --noconsole --onefile ^
                 --name=%EXEC_NAME% ^
                 --icon=app.ico ^
                 --add-data "app.png;." ^
                 --add-data "sponsor_wechat.png;." ^
-                --add-data "ccrp_bomb_params.py;." ^
+                %CCRP_DATA_ARG% ^
                 --hidden-import "pystray._win32" ^
                 --collect-submodules "PIL" ^
                 --clean Bomana.pyw

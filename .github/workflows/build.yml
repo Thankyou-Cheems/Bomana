@@ -167,9 +167,12 @@ jobs:
           
           # 增强版包含炸弹参数文件
           if ("${{ matrix.variant.ccrp }}" -eq "True") {
-            if (Test-Path "ccrp_bomb_params.py") {
+            if (Test-Path "ccrp_bomb_params.json") {
+              $addDataArgs += "--add-data", "ccrp_bomb_params.json;."
+              Write-Host "包含 CCRP 炸弹参数文件 (JSON)"
+            } elseif (Test-Path "ccrp_bomb_params.py") {
               $addDataArgs += "--add-data", "ccrp_bomb_params.py;."
-              Write-Host "包含 CCRP 炸弹参数文件"
+              Write-Host "包含 CCRP 炸弹参数文件 (PY)"
             }
           }
           

@@ -114,8 +114,12 @@ ADD_DATA_ARGS=(
   "--add-data" "app.png:."
   "--add-data" "sponsor_wechat.png:."
 )
-if [ "$VARIANT" = "Enhanced" ] && [ -f "ccrp_bomb_params.py" ]; then
-  ADD_DATA_ARGS+=("--add-data" "ccrp_bomb_params.py:.")
+if [ "$VARIANT" = "Enhanced" ]; then
+  if [ -f "ccrp_bomb_params.json" ]; then
+    ADD_DATA_ARGS+=("--add-data" "ccrp_bomb_params.json:.")
+  elif [ -f "ccrp_bomb_params.py" ]; then
+    ADD_DATA_ARGS+=("--add-data" "ccrp_bomb_params.py:.")
+  fi
 fi
 
 pyinstaller --onefile \

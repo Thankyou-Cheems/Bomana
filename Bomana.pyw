@@ -91,7 +91,7 @@ pyinstaller --noconsole --onefile `
     --icon "app.ico" `
     --add-data "app.png;." `
     --add-data "sponsor_wechat.png;." `
-    --add-data "ccrp_bomb_params.py;." `
+    --add-data "ccrp_bomb_params.json;." `
     --hidden-import "pystray._win32" `
     --collect-submodules "PIL" `
     --clean Bomana.pyw

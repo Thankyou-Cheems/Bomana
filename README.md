@@ -195,7 +195,7 @@ ENABLE_ADVANCED_SETTINGS = True # 高级设置（面板/快捷键自定义等）
 
 ### 更新 CCRP 炸弹参数（开发者）
 
-`ccrp_bomb_params.py` 由 War Thunder datamine 中的 `.blkx` 文件生成。仓库内集成了提取脚本，流程如下：
+`ccrp_bomb_params.json` 由 War Thunder datamine 中的 `.blkx` 文件生成。仓库内集成了提取脚本，流程如下：
 
 ```bash
 # 1) 准备 datamine 仓库（或直接指向已解包的 .blkx 目录）
@@ -204,10 +204,10 @@ git clone https://github.com/gszabi99/War-Thunder-Datamine.git
 # 2) 运行提取脚本
 python tools/blkx_extractor.py ^
   .\War-Thunder-Datamine\aces.vromfs.bin_u\gamedata\weapons\bombguns ^
-  -o ccrp_bomb_params.py
+  -o ccrp_bomb_params.json
 ```
 
-生成后的 `ccrp_bomb_params.py` 放在仓库根目录，Enhanced 版本会自动打包该文件。
+生成后的 `ccrp_bomb_params.json` 放在仓库根目录，Enhanced 版本会自动打包该文件。
 
 
 ---

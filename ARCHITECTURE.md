@@ -6,7 +6,7 @@
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
-- External data: `ccrp_bomb_params.py` (CCRP bomb parameters)
+- External data: `ccrp_bomb_params.json` (CCRP bomb parameters)
 - Tools: `tools/blkx_extractor.py` (generate CCRP bomb parameters from .blkx)
 - Assets: `app.png`, `sponsor_wechat.png`, `app.ico`
 
@@ -31,9 +31,9 @@
 │     ├─ math_utils.py        # Navigation/math helpers
 │     ├─ sound.py             # Sound manager
 │     └─ system.py            # Windows/system helpers
-├─ ccrp_bomb_params.py       # Bomb parameters (CCRP)
+├─ ccrp_bomb_params.json       # Bomb parameters (CCRP)
 ├─ tools/
-│  └─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.py generator
+│  └─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.json generator
 ├─ assets (root files)       # Icons/sponsor image, etc.
 ├─ build.bat / build.sh      # PyInstaller packaging scripts
 └─ *.md                      # Docs, changelog, contribution guide
