@@ -7,7 +7,7 @@ Keep it concise and update when workflows or boundaries change.
 - Entry: `Bomana.pyw`
 - Config: `bomana/config.py`
 - Core: `bomana/core/` (state, telemetry, ballistics, logic)
-- UI: `bomana/ui/` (widgets, dialogs, nav window)
+- UI: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound)
 - CCRP data: `ccrp_bomb_params.py`
 - Docs: `ARCHITECTURE.md`, `PITFALLS.md`
