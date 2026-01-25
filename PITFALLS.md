@@ -1,8 +1,5 @@
 # Pitfalls Log (Bomana)
 
-Purpose: record brief causes/notes when tasks fail, so we avoid repeating mistakes.
-Update this file whenever you hit a new failure mode or environment issue.
-
 ## Format
 - Date: YYYY-MM-DD
 - Context: what you were trying to do
@@ -11,4 +8,9 @@ Update this file whenever you hit a new failure mode or environment issue.
 - Fix/Workaround: what resolved it
 
 ## Entries
-- (none yet)
+- Date: 2026-01-25
+  Context: editing Bomana.pyw with apply_patch
+  Symptom: apply_patch panicked with 'byte index ... is not a char boundary'
+  Cause: patch tool choking on non-ASCII/emoji in large file
+  Fix/Workaround: use a Python script (read/replace) instead of apply_patch
+

@@ -1,0 +1,215 @@
+# -*- coding: utf-8 -*-
+"""File/config helpers."""
+
+import os
+import sys
+import json
+import time
+from pathlib import Path
+from typing import Optional, Any, Dict
+
+from bomana.config import (
+    FileConfig,
+    GameConfig,
+    ENABLE_CCRP,
+    ENABLE_ZONES,
+    ENABLE_AIRFIELDS,
+    ENABLE_FUEL,
+    ENABLE_CHECKLIST,
+)
+
+def resource_path(rel_path: str) -> str:
+    """获取资源文件的绝对路径
+    
+    支持PyInstaller打包，打包后资源在_MEIPASS临时目录。
+    
+    Args:
+        rel_path: 相对路径（如 "app.png"）
+    
+    Returns:
+        绝对路径字符串
+    """
+    base = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base, rel_path)
+
+class ConfigManager:
+    """配置文件管理器
+    
+    负责从JSON文件读写用户配置，如窗口位置、透明度等。
+    v6.0.1: 新增配置版本管理，自动迁移旧配置
+    """
+    
+    @staticmethod
+    def load() -> Dict[str, Any]:
+        """加载配置文件
+        
+        Returns:
+            配置字典，加载失败返回空字典
+        """
+        if FileConfig.CONFIG_FILE.exists():
+            try:
+                with open(FileConfig.CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                # 配置版本迁移
+                config = ConfigManager._migrate_config(config)
+                return config
+            except (json.JSONDecodeError, IOError):
+                pass
+        return {}
+    
+    @staticmethod
+    def _migrate_config(config: Dict[str, Any]) -> Dict[str, Any]:
+        """配置版本迁移
+        
+        处理旧版本配置的兼容性问题，自动升级配置结构
+        v6.1.1: 添加编译开关状态记简版/完整版配置冲突
+        """
+        version = config.get('config_version', 1)
+        
+        # v1 -> v2: 添加投弹面板配置
+        if version < 2:
+            panels = config.get('panels', {})
+            if 'show_bombing' not in panels:
+                panels['show_bombing'] = True
+            config['panels'] = panels
+            config['config_version'] = 2
+        
+        # v2 -> v3: 添加编译开关状态记录
+        if version < 3:
+            config['config_version'] = 3
+        
+        # 检查编译开关是否变化（精简版 <-> 完整版切换）
+        saved_switches = config.get('compile_switches', {})
+        current_switches = {
+            'ENABLE_CCRP': ENABLE_CCRP,
+            'ENABLE_ZONES': ENABLE_ZONES,
+            'ENABLE_AIRFIELDS': ENABLE_AIRFIELDS,
+            'ENABLE_FUEL': ENABLE_FUEL,
+            'ENABLE_CHECKLIST': ENABLE_CHECKLIST,
+        }
+        
+        # 如果某个功能从禁用变为启用，重置该面板为默认显示
+        panels = config.get('panels', {})
+        switches_changed = False
+        
+        for switch_name, current_enabled in current_switches.items():
+            was_enabled = saved_switches.get(switch_name, False)
+            if current_enabled and not was_enabled:
+                # 功能从禁用变为启用，重置对应面板为显示
+                panel_key = {
+                    'ENABLE_CCRP': 'show_bombing',
+                    'ENABLE_ZONES': 'show_zones',
+                    'ENABLE_AIRFIELDS': 'show_airfields',
+                    'ENABLE_FUEL': 'show_fuel',
+                    'ENABLE_CHECKLIST': 'show_checklist',
+                }.get(switch_name)
+                if panel_key:
+                    panels[panel_key] = True
+                    switches_changed = True
+        
+        if switches_changed:
+            config['panels'] = panels
+        
+        # 更新保存的编译开关状态
+        config['compile_switches'] = current_switches
+        
+        # 自动保存迁移后的配置
+        try:
+            ConfigManager.save(config)
+        except:
+            pass
+        
+        return config
+    
+    @staticmethod
+    def save(config: Dict[str, Any]) -> None:
+        """保存配置文件
+        
+        Args:
+            config: 配置字典
+        """
+        try:
+            # 确保保存时带有版本号
+            config['config_version'] = FileConfig.CONFIG_VERSION
+            with open(FileConfig.CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+        except IOError:
+            pass
+
+class StateManager:
+    """状态文件管理器
+    
+    保存/恢复当前计时状态，支持应用重启后继续计时。
+    原理：记录剩余时间和保存时刻，重启后计算实际流逝时间。
+    """
+    
+    @staticmethod
+    def save(remaining_sec: float, life_index: int, sortie_id: int) -> None:
+        """保存当前状态
+        
+        Args:
+            remaining_sec: 剩余秒数
+            life_index: 复活次数
+            sortie_id: 出击次数（补给计数器）
+        """
+        state_data = {
+            'remaining_sec': remaining_sec,
+            'save_timestamp': time.time(),
+            'life_index': life_index,
+            'sortie_id': sortie_id
+        }
+        try:
+            with open(FileConfig.STATE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(state_data, f, indent=2)
+        except (IOError, OSError):
+            pass
+    
+    @staticmethod
+    def load() -> Optional[Dict[str, Any]]:
+        """加载并计算恢复后的状态
+        
+        Returns:
+            包含计算后状态的字典，或None（如果无法恢复）
+        """
+        if not FileConfig.STATE_FILE.exists():
+            return None
+        try:
+            with open(FileConfig.STATE_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # 提取保存时的剩余时间和时间戳
+            saved_remaining = data.get('remaining_sec', 0)
+            save_time = data.get('save_timestamp', 0)
+            
+            # 计算实际流逝的时间
+            now = time.time()
+            elapsed_since_save = now - save_time
+            new_remaining = saved_remaining - elapsed_since_save
+            
+            # 如果过期太久（超过一个完整周期），放弃恢复
+            if new_remaining < -GameConfig.CYCLE_SECONDS:
+                StateManager.clear()
+                return None
+            
+            # 如果时间为负（已进入下一周期），计算新周期的剩余时间
+            if new_remaining < 0:
+                overshoot = abs(new_remaining)
+                new_remaining = GameConfig.CYCLE_SECONDS - overshoot
+            
+            # 反推出生时间
+            data['computed_remaining'] = new_remaining
+            data['computed_spawn_time'] = now - (GameConfig.CYCLE_SECONDS - new_remaining)
+            
+            return data
+        except (json.JSONDecodeError, IOError, KeyError, OSError):
+            StateManager.clear()
+            return None
+    
+    @staticmethod
+    def clear() -> None:
+        """清除状态文件"""
+        try:
+            if FileConfig.STATE_FILE.exists():
+                FileConfig.STATE_FILE.unlink()
+        except (IOError, OSError):
+            pass

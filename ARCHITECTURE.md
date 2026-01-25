@@ -1,11 +1,9 @@
 # Project Architecture (Bomana)
 
-> Goal: help open-source contributors and code agents understand the structure, data flow, and change boundaries quickly.
-> When the architecture changes (new/split modules, major data-flow changes, or core directory renames), update this file.
-
 ## Overview
 - Entry point: `Bomana.pyw` (single-file app that currently contains UI, logic, and polling)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
+- Utilities: `bomana/utils/` (system, math, file, sound helpers)
 - External data: `ccrp_bomb_params.py` (CCRP bomb parameters)
 - Assets: `app.png`, `sponsor_wechat.png`, `app.ico`
 
@@ -14,7 +12,12 @@
 .
 ├─ Bomana.pyw                # Main program (GUI + logic + polling)
 ├─ bomana/
-│  └─ config.py              # Metadata/flags/config classes
+│  ├─ config.py              # Metadata/flags/config classes
+│  └─ utils/
+│     ├─ file_utils.py        # Config/state/resource helpers
+│     ├─ math_utils.py        # Navigation/math helpers
+│     ├─ sound.py             # Sound manager
+│     └─ system.py            # Windows/system helpers
 ├─ ccrp_bomb_params.py       # Bomb parameters (CCRP)
 ├─ assets (root files)       # Icons/sponsor image, etc.
 ├─ build.bat / build.sh      # PyInstaller packaging scripts
@@ -44,7 +47,3 @@ Important constraint: only use the official 8111 API. No memory reads, injection
 ## Build & Release
 Use `build.bat` / `build.sh` (PyInstaller) with `ENABLE_*` combinations to generate Enhanced/Standard/Lite.
 
-## Maintenance Contract
-- If architecture changes, update this file.
-- If new/split modules are added, update the layout and data flow sections.
-- If entry point or config approach changes, update the overview and config sections.
