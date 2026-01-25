@@ -102,7 +102,7 @@ pyinstaller --noconsole --onefile `
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.6.2"
+__version__ = "6.6.3"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -1273,11 +1273,14 @@ class Win32:
             hwnd: 窗口句柄
             click_through: 是否允许点击穿透
             alpha: 不透明度 (0-255)
+        
+        v6.6.3: 添加 WS_EX_NOACTIVATE 标志，解决窗口被激活后点击穿透失效的问题
         """
         # 窗口扩展样式标志
         GWL_EXSTYLE = -20
         WS_EX_LAYERED = 0x00080000      # 分层窗口（支持透明度）
-        WS_EX_TRANSPARENT = 0x00000020   # 点击穿透
+        WS_EX_TRANSPARENT = 0x00000020   # 点击穿透（使窗口在点击测试中透明）
+        WS_EX_NOACTIVATE = 0x08000000    # 防止窗口被激活（关键：防止点击后窗口获得焦点）
         WS_EX_TOPMOST = 0x00000008       # 窗口置顶
         WS_EX_TOOLWINDOW = 0x00000080    # 工具窗口（不显示在任务栏）
         LWA_ALPHA = 0x2                  # 透明度标志
@@ -1290,10 +1293,13 @@ class Win32:
             style |= (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW)
 
             # 根据锁定状态切换点击穿透
+            # 关键：同时设置 WS_EX_TRANSPARENT 和 WS_EX_NOACTIVATE
+            # - WS_EX_TRANSPARENT: 让点击穿透到下层窗口
+            # - WS_EX_NOACTIVATE: 防止窗口被激活，确保持续穿透
             if click_through:
-                style |= WS_EX_TRANSPARENT
+                style |= (WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
             else:
-                style &= ~WS_EX_TRANSPARENT
+                style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
 
             # 应用样式和透明度
             cls.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
@@ -2766,9 +2772,9 @@ class GameState:
     fuel_state: FuelState = field(default_factory=FuelState)
     
     # v6.6.0 新增：起落架进度追踪
-    last_gear_pct: float = 0.0                                   # 上一帧起落架百分比（用于判断方向）
+    last_gear_pct: float = -1.0                                  # 上一帧起落架百分比（-1=未初始化）
     # v6.6.1 新增：起落架消抖
-    gear_stable_pct: float = 0.0                                 # 稳定后的起落架百分比
+    gear_stable_pct: float = -1.0                                # 稳定后的起落架百分比（-1=未初始化）
     gear_stable_direction: bool = False                          # 稳定后的方向（True=收起）
     gear_change_time: float = 0.0                                # 上次变化时间
 
@@ -3889,9 +3895,16 @@ class GameLogic:
             
             # v6.6.0 新增：起落架进度指示器
             # v6.6.1: 添加消抖 - 变化超过2%且持续100ms才更新
+            # v6.6.3: 修复方向判断 - 使用前后帧比较而非与初始值比较
             raw_gear_pct = tel.gear_pct
-            gear_pct = s.gear_stable_pct
+            gear_pct = s.gear_stable_pct if s.gear_stable_pct >= 0 else raw_gear_pct
             gear_retracting = s.gear_stable_direction
+            
+            # 首次初始化：确保状态变量有正确的起始值
+            if s.last_gear_pct < 0:
+                s.last_gear_pct = raw_gear_pct
+                s.gear_stable_pct = raw_gear_pct
+                gear_pct = raw_gear_pct
             
             # 检测变化并消抖
             pct_diff = abs(raw_gear_pct - s.gear_stable_pct)
@@ -3899,8 +3912,10 @@ class GameLogic:
                 if s.gear_change_time == 0.0:
                     s.gear_change_time = now
                 elif now - s.gear_change_time > 0.1:  # 持续100ms
-                    # 确定方向
-                    gear_retracting = (raw_gear_pct < s.gear_stable_pct)
+                    # v6.6.3 修复：使用前后帧比较判断方向
+                    # raw_gear_pct 减小 = 收起（从100向0）
+                    # raw_gear_pct 增大 = 放下（从0向100）
+                    gear_retracting = (raw_gear_pct < s.last_gear_pct)
                     gear_pct = raw_gear_pct
                     s.gear_stable_pct = raw_gear_pct
                     s.gear_stable_direction = gear_retracting
@@ -5953,7 +5968,11 @@ class App:
         self.root.update_idletasks()
         
         # 获取窗口句柄和DPI缩放
-        self.hwnd = int(self.root.winfo_id())
+        # v6.6.3: 修复点击穿透问题 - 使用 GetParent 获取真正的顶层窗口句柄
+        # 对于 overrideredirect(True) 的窗口，winfo_id() 返回的是内部 frame 的句柄
+        # 必须使用 GetParent() 获取顶层窗口句柄，否则 WS_EX_TRANSPARENT 样式无效
+        internal_id = self.root.winfo_id()
+        self.hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
         self.scale = Win32.get_dpi_scale(self.hwnd) * float(UIConfig.UI_SCALE_MULT)
         
         try:
@@ -6143,8 +6162,10 @@ class App:
         )
         self.standalone_btn.pack(side="left", padx=(int(10*s), 0))
         self.standalone_btn.bind("<Button-1>", lambda e: self._toggle_navigation_mode())
-        self.standalone_btn.bind("<Enter>", lambda e: self.standalone_btn.config(fg=Theme.BLUE))
-        self.standalone_btn.bind("<Leave>", lambda e: self.standalone_btn.config(fg=Theme.TEXT_MUTED))
+        self.standalone_btn.bind("<Enter>", lambda e: self.standalone_btn.config(
+            fg=(Theme.BLUE if PanelConfig.navigation_mode != "standalone" else Theme.GREEN)))
+        self.standalone_btn.bind("<Leave>", lambda e: self._update_nav_mode_button())
+        self._update_nav_mode_button()
         
         font_heading = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
         font_item = font_heading
@@ -6457,6 +6478,9 @@ class App:
         self.root.bind("<B1-Motion>", self._do_drag)
         self.root.bind("<ButtonRelease-1>", self._end_drag)
         
+        # v6.6.3: 焦点保护 - 锁定状态下拒绝焦点，确保点击穿透有效
+        self.root.bind("<FocusIn>", self._on_focus_in)
+        
         # 不再绑定窗口右键菜单（功能移至系统托盘）
 
     def _toggle_panel(self, panel_key: str):
@@ -6684,6 +6708,7 @@ class App:
         else:
             PanelConfig.navigation_mode = "integrated"
             self.nav_window.hide()
+        self._update_nav_mode_button()
         self._save_config()
         self._refresh_tray()
 
@@ -6880,8 +6905,28 @@ class App:
         # 解锁时提高不透明度，让用户更容易看到可拖动区域
         alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
+        if self.nav_window:
+            self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
         self._update_hint()
         self._refresh_tray()
+
+    def _on_focus_in(self, event=None):
+        """焦点保护：锁定状态下拒绝焦点
+        
+        v6.6.3: 当窗口在锁定（穿透）状态下意外获得焦点时，
+        立即重新应用穿透样式，确保点击穿透功能持续有效。
+        
+        问题背景：
+        - WS_EX_TRANSPARENT 只让点击穿透，但窗口仍可被激活
+        - 通过 Alt+Tab、系统事件等方式激活窗口后，穿透可能失效
+        - 此方法作为额外保护，配合 WS_EX_NOACTIVATE 标志使用
+        """
+        if self._locked:
+            # 重新应用窗口样式，确保穿透标志生效
+            try:
+                Win32.setup_window(self.hwnd, click_through=True, alpha=UIConfig.WINDOW_ALPHA)
+            except Exception:
+                pass
 
     def _hint_text(self) -> str:
         """生成提示文本
@@ -6917,6 +6962,15 @@ class App:
         """更新提示文本"""
         if hasattr(self, "hint_lbl") and self.hint_lbl:
             self.hint_lbl.config(text=self._hint_text())
+
+    def _update_nav_mode_button(self):
+        """更新独立导航条按钮状态显示"""
+        if not ENABLE_ZONES or not hasattr(self, "standalone_btn"):
+            return
+        if PanelConfig.navigation_mode == "standalone":
+            self.standalone_btn.config(text="⧉独立导航条(已开启)", fg=Theme.GREEN)
+        else:
+            self.standalone_btn.config(text="⧉独立导航条", fg=Theme.TEXT_MUTED)
 
     def _next_corner(self):
         """切换到下一个角落"""
@@ -7802,10 +7856,12 @@ class NavigationWindow:
         
         # 获取窗口句柄
         self.window.update_idletasks()  # 确保窗口已创建
-        self.hwnd = ctypes.windll.user32.GetParent(self.window.winfo_id())
+        # v6.6.3: 兼容 overrideredirect 的真实句柄获取
+        internal_id = self.window.winfo_id()
+        self.hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
         
-        # 使用Win32 API设置分层窗口：背景透明，内容保持不透明
-        self._setup_layered_window()
+        # 使用Win32 API设置分层窗口：背景透明，内容保持不透明 + 点击穿透
+        self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
         
         # 初始化UI
         self._init_ui()
@@ -7816,14 +7872,16 @@ class NavigationWindow:
         # 恢复位置
         self._restore_position()
     
-    def _setup_layered_window(self):
-        """设置分层窗口属性
+    def apply_window_styles(self, click_through: bool, alpha: int):
+        """设置分层窗口属性 + 点击穿透
         
         使用透明键颜色实现背景透明、内容不透明的效果，
-        同时应用应用程序的整体透明度配置
+        同时根据锁定状态启用点击穿透。
         """
         GWL_EXSTYLE = -20
         WS_EX_LAYERED = 0x00080000
+        WS_EX_TRANSPARENT = 0x00000020
+        WS_EX_NOACTIVATE = 0x08000000
         WS_EX_TOPMOST = 0x00000008
         WS_EX_TOOLWINDOW = 0x00000080
         LWA_COLORKEY = 0x1
@@ -7834,6 +7892,10 @@ class NavigationWindow:
             # 获取当前样式并添加分层窗口样式
             style = user32.GetWindowLongW(self.hwnd, GWL_EXSTYLE)
             style |= (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW)
+            if click_through:
+                style |= (WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
+            else:
+                style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
             user32.SetWindowLongW(self.hwnd, GWL_EXSTYLE, style)
             
             # 将透明键颜色转换为COLORREF (BGR格式)
@@ -7842,15 +7904,15 @@ class NavigationWindow:
             colorref = r | (g << 8) | (b << 16)
             
             # 同时应用透明键和整体透明度
-            alpha = int(UIConfig.WINDOW_ALPHA)
+            alpha = int(alpha)
             user32.SetLayeredWindowAttributes(self.hwnd, colorref, alpha, LWA_COLORKEY | LWA_ALPHA)
         except (OSError, AttributeError):
             # 降级：使用Tkinter的alpha属性
-            self.window.attributes("-alpha", UIConfig.WINDOW_ALPHA / 255.0)
+            self.window.attributes("-alpha", alpha / 255.0)
     
     def update_transparency(self):
         """更新窗口透明度（响应透明度配置变化）"""
-        self._setup_layered_window()
+        self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
     
     def _init_ui(self):
         """初始化导航条UI
@@ -8034,6 +8096,7 @@ class NavigationWindow:
         
         # 窗口关闭事件（点X或Alt+F4）
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
+        self.window.bind("<FocusIn>", self._on_focus_in)
     
     def _on_drag_start(self, event):
         """开始拖动（仅在主窗口解锁时允许）"""
@@ -8069,6 +8132,7 @@ class NavigationWindow:
         PanelConfig.navigation_mode = "integrated"
         self.hide()
         self.app._save_config()
+        self.app._update_nav_mode_button()
         self.app._refresh_tray()
         # 强制触发UI刷新，确保投弹预测等面板正确显示
         self.app.root.after(50, self.app._recalc_size)
@@ -8101,6 +8165,8 @@ class NavigationWindow:
             self._visible = True
             self.window.deiconify()
             self.window.lift()
+            alpha = UIConfig.WINDOW_ALPHA if self.app._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
+            self.apply_window_styles(click_through=self.app._locked, alpha=alpha)
     
     def hide(self):
         """隐藏窗口"""
@@ -8116,6 +8182,14 @@ class NavigationWindow:
         """更新提示文本（当热键配置变更时调用）"""
         if hasattr(self, 'hint_lbl') and self.hint_lbl:
             self.hint_lbl.config(text=f"{HotkeyConfig.KEY_LOCK}解锁后可拖动")
+
+    def _on_focus_in(self, event=None):
+        """Focus guard to keep click-through when locked."""
+        if self.app._locked:
+            try:
+                self.apply_window_styles(click_through=True, alpha=UIConfig.WINDOW_ALPHA)
+            except Exception:
+                pass
     
     def update_display(self, snap: 'UISnapshot', targets: list, targets_info: list, primary_zone):
         """更新导航显示
