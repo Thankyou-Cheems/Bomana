@@ -850,7 +850,13 @@ class GameLogic:
                     gear_pct = raw_gear_pct
                     s.gear_stable_pct = raw_gear_pct
             
-            gear_moving = (0 < gear_pct < 100)  # 正在移动 = 不在两端
+            delta = raw_gear_pct - s.last_gear_pct
+            if abs(delta) >= 0.5:
+                gear_retracting = (delta < 0)
+                s.gear_stable_direction = gear_retracting
+            gear_moving = (0 < raw_gear_pct < 100)
+            if not gear_moving:
+                gear_retracting = False
             s.last_gear_pct = raw_gear_pct
 
             # v6.0.1 优化：从缓存读取弹道计算结果（计算已移至tick线程）

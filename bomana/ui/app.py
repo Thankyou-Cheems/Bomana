@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-        - hint_min_width: 提示文字最小宽度，根据编译开关动态计算
 """Main Tk app container."""
 
 import ctypes
@@ -6,6 +6,7 @@ import os
 import threading
 import time
 import tkinter as tk
+from tkinter import font as tkfont
 from enum import Enum
 from typing import Optional, Tuple, Any, List, Dict
 
@@ -125,6 +126,7 @@ class App:
         # 初始化流程
         self._load_config()
         self._init_window_base()
+        self._apply_font_family()
         self._init_ui()
         self._finalize_window_geometry_and_styles()
         self._init_bindings()
@@ -365,6 +367,51 @@ class App:
     def _get_font(self, name: str) -> tuple:
         """获取缓存的字体"""
         return self._cached_fonts.get(name, ('Segoe UI', 10))
+
+    def _select_font_family(self) -> str:
+        """Pick an available UI font family."""
+        preferred = [
+            "Segoe UI",
+            "Microsoft YaHei UI",
+            "Noto Sans CJK SC",
+            "PingFang SC",
+            "Source Han Sans SC",
+            "WenQuanYi Micro Hei",
+            "Arial",
+            "Helvetica",
+        ]
+        try:
+            fams = set(tkfont.families(self.root))
+        except Exception:
+            return ""
+        for fam in preferred:
+            if fam in fams:
+                return fam
+        return ""
+
+    def _apply_font_family(self) -> None:
+        """Apply a unified UI font family."""
+        fam = self._select_font_family()
+        if not fam:
+            return
+        font_keys = [
+            "FONT_TIMER",
+            "FONT_LIFE",
+            "FONT_CYCLE",
+            "FONT_PILL",
+            "FONT_STATUS",
+            "FONT_CHECKLIST_TITLE",
+            "FONT_CHECKLIST_ITEM",
+            "FONT_ZONE_TITLE",
+            "FONT_ZONE_ITEM",
+            "FONT_DEBUG",
+            "FONT_HINT",
+        ]
+        for key in font_keys:
+            val = getattr(UIConfig, key, None)
+            if isinstance(val, (list, tuple)) and len(val) >= 2:
+                new_val = (fam, val[1], *val[2:])
+                setattr(UIConfig, key, new_val)
 
     def _finalize_window_geometry_and_styles(self):
         """最终确定窗口几何和样式"""
@@ -666,6 +713,7 @@ class App:
         
         # v6.6.1: Row 3: 紧凑模式两栏容器（战区+机场并排）
         self.compact_nav_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
+        self.compact_nav_frame.grid_propagate(True)
         self.compact_nav_frame.columnconfigure(0, weight=1)
         self.compact_nav_frame.columnconfigure(1, weight=1)
         # 紧凑模式 - 左栏：战区
@@ -674,14 +722,14 @@ class App:
         self.compact_zone_title = tk.Label(self.compact_zone_frame, text="⊚ 战区", font=font_title, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
         self.compact_zone_title.pack(fill="x")
         self.compact_zone_list = tk.Frame(self.compact_zone_frame, bg=Theme.GRAYPILL)
-        self.compact_zone_list.pack(fill="both", expand=True)
+        self.compact_zone_list.pack(fill="x")
         # 紧凑模式 - 右栏：机场
         self.compact_airport_frame = tk.Frame(self.compact_nav_frame, bg=Theme.GRAYPILL)
         self.compact_airport_frame.grid(row=0, column=1, sticky="nsew", padx=(int(4*s), 0))
         self.compact_airport_title = tk.Label(self.compact_airport_frame, text="✈ 机场", font=font_title, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
         self.compact_airport_title.pack(fill="x")
         self.compact_airport_list = tk.Frame(self.compact_airport_frame, bg=Theme.GRAYPILL)
-        self.compact_airport_list.pack(fill="both", expand=True)
+        self.compact_airport_list.pack(fill="x")
         # 紧凑模式标签池
         self._compact_zone_label_pool = []
         self._compact_airport_label_pool = []
@@ -846,6 +894,9 @@ class App:
         current = getattr(PanelConfig, panel_key)
         setattr(PanelConfig, panel_key, not current)
         self._save_config()
+        # 立即刷新布局，避免留下空白
+        self._recalc_size(force_shrink=True)
+        self._update_ui()
         self._refresh_tray()
     
     def _refresh_tray(self):
@@ -1068,6 +1119,9 @@ class App:
             self.nav_window.hide()
         self._update_nav_mode_button()
         self._save_config()
+        # 先刷新布局，再强制收缩，避免残留空白
+        self._update_ui()
+        self._recalc_size(force_shrink=True)
         self._refresh_tray()
 
     def _recalc_size(self, keep_pos: bool = True, force_shrink: bool = False):
@@ -1077,7 +1131,7 @@ class App:
         
         注意:
         - badge_min_width: 徽章行最小宽度(约320px)，确保起落架徽章等能完整显示
-        - hint_min_width: 提示文字最小宽度，根据编译开关动态计算
+
         - 双面板480px, 单面板取max(badge_min_width, hint_min_width)
         - _clamp_to_screen()确保不超出屏幕
         
@@ -1134,7 +1188,7 @@ class App:
         
         if new_w == old_w and new_h == old_h:
             # 尺寸未变，但仍需检查边界（窗口可能需要重新定位）
-            if keep_pos and (old_x, old_y) != (0, 0):
+            if keep_pos and (old_w > 0 and old_h > 0):
                 x, y = self._clamp_to_screen(old_x, old_y)
                 if (x, y) != (old_x, old_y):
                     self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
@@ -1146,7 +1200,7 @@ class App:
         if keep_pos:
             if self._user_moved and self._manual_pos:
                 x, y = self._manual_pos
-            elif (old_x, old_y) != (0, 0):
+            elif (old_w > 0 and old_h > 0):
                 x, y = old_x, old_y
             else:
                 self._position()
@@ -1406,8 +1460,12 @@ class App:
         """开始拖动"""
         if self._locked:
             return
-        self._drag["x"] = e.x
-        self._drag["y"] = e.y
+        try:
+            self._drag["x"] = e.x_root - self.root.winfo_x()
+            self._drag["y"] = e.y_root - self.root.winfo_y()
+        except tk.TclError:
+            self._drag["x"] = 0
+            self._drag["y"] = 0
 
     def _do_drag(self, e):
         """拖动中"""
@@ -1741,8 +1799,16 @@ class App:
             is_compact = (PanelConfig.navigation_mode == "standalone")
             
             if is_compact:
-                # 紧凑模式：隐藏完整布局的战区列表
+                # 紧凑模式：显示紧凑布局，隐藏完整布局
+                self.compact_nav_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
                 self.zone_list_frame.grid_remove()
+                airfields_enabled = ENABLE_AIRFIELDS and PanelConfig.show_airfields
+                if airfields_enabled:
+                    self.compact_airport_frame.grid(row=0, column=1, sticky="nsew", padx=(int(4*s), 0))
+                    self.compact_zone_frame.grid(row=0, column=0, columnspan=1, sticky="nsew", padx=(0, int(4*s)))
+                else:
+                    self.compact_airport_frame.grid_remove()
+                    self.compact_zone_frame.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=(0, 0))
             else:
                 # 完整模式：显示战区列表，隐藏紧凑布局
                 self.compact_nav_frame.grid_remove()

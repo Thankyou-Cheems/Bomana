@@ -154,9 +154,16 @@ class NavigationWindow:
         # 图例（带文字说明，更清晰）
         legend_frame = tk.Frame(self.title_bar, bg=Theme.GRAYPILL)
         legend_frame.pack(side="left", padx=(int(6*s), 0))
-        tk.Label(legend_frame, text="⊚战区", font=legend_font, fg=Theme.RED, bg=Theme.GRAYPILL).pack(side="left")
-        tk.Label(legend_frame, text="✈友", font=legend_font, fg=Theme.BLUE, bg=Theme.GRAYPILL).pack(side="left", padx=(int(4*s), 0))
-        tk.Label(legend_frame, text="✈敌", font=legend_font, fg=Theme.ORANGE, bg=Theme.GRAYPILL).pack(side="left", padx=(int(4*s), 0))
+        legend_kwargs = {
+            "font": legend_font,
+            "bg": Theme.GRAYPILL,
+            "anchor": "center",
+            "height": 1,
+            "pady": 0,
+        }
+        tk.Label(legend_frame, text="⊚战区", fg=Theme.RED, **legend_kwargs).pack(side="left")
+        tk.Label(legend_frame, text="✈友", fg=Theme.BLUE, **legend_kwargs).pack(side="left", padx=(int(4*s), 0))
+        tk.Label(legend_frame, text="✈敌", fg=Theme.ORANGE, **legend_kwargs).pack(side="left", padx=(int(4*s), 0))
         
         # 解锁提示（动态引用按键配置）
         self.hint_lbl = tk.Label(
@@ -292,10 +299,8 @@ class NavigationWindow:
     
     def _init_bindings(self):
         """初始化事件绑定"""
-        # 标题栏拖动
-        for widget in [self.title_bar, self.title_lbl]:
-            widget.bind("<Button-1>", self._on_drag_start)
-            widget.bind("<B1-Motion>", self._on_drag_motion)
+        # 全窗口拖动
+        self._bind_drag_recursive(self.window)
         
         # 右键菜单
         self.window.bind("<Button-3>", self._show_context_menu)
@@ -304,19 +309,29 @@ class NavigationWindow:
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.bind("<FocusIn>", self._on_focus_in)
     
+    def _bind_drag_recursive(self, widget):
+        widget.bind("<Button-1>", self._on_drag_start, add="+")
+        widget.bind("<B1-Motion>", self._on_drag_motion, add="+")
+        for child in widget.winfo_children():
+            self._bind_drag_recursive(child)
+
     def _on_drag_start(self, event):
         """开始拖动（仅在主窗口解锁时允许）"""
         if self.app._locked:
             return
-        self._drag_data["x"] = event.x
-        self._drag_data["y"] = event.y
+        self._drag_data["x"] = event.x_root
+        self._drag_data["y"] = event.y_root
+        self._drag_data["win_x"] = self.window.winfo_x()
+        self._drag_data["win_y"] = self.window.winfo_y()
     
     def _on_drag_motion(self, event):
         """拖动中（仅在主窗口解锁时允许）"""
         if self.app._locked:
             return
-        x = self.window.winfo_x() + (event.x - self._drag_data["x"])
-        y = self.window.winfo_y() + (event.y - self._drag_data["y"])
+        dx = event.x_root - self._drag_data["x"]
+        dy = event.y_root - self._drag_data["y"]
+        x = self._drag_data["win_x"] + dx
+        y = self._drag_data["win_y"] + dy
         self.window.geometry(f"+{x}+{y}")
         # 保存位置
         PanelConfig.navigation_window_pos = (x, y)

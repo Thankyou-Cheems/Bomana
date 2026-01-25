@@ -394,6 +394,10 @@ class SettingsDialog(tk.Toplevel):
         
         # 保存配置
         ConfigManager.save(config)
+
+        # 刷新托盘菜单勾选状态
+        if hasattr(self.app, "_refresh_tray"):
+            self.app._refresh_tray()
         
         # 应用透明度
         Win32.setup_window(self.app.hwnd, self.app._locked, UIConfig.WINDOW_ALPHA)
