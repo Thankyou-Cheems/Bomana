@@ -6,6 +6,7 @@ Keep it concise and update when workflows or boundaries change.
 ## Quick Map
 - Entry: `Bomana.pyw`
 - Config: `bomana/config.py`
+- Core: `bomana/core/` (state, telemetry, ballistics, logic)
 - Utilities: `bomana/utils/` (system, math, file, sound)
 - CCRP data: `ccrp_bomb_params.py`
 - Docs: `ARCHITECTURE.md`, `PITFALLS.md`
