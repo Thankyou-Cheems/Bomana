@@ -4,6 +4,7 @@
 - Entry point: `Bomana.pyw` (single-file app that currently contains UI, logic, and polling)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
+- UI components: `bomana/ui/` (widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
 - External data: `ccrp_bomb_params.py` (CCRP bomb parameters)
 - Assets: `app.png`, `sponsor_wechat.png`, `app.ico`
@@ -19,6 +20,10 @@
 │  │  ├─ logic.py             # GameLogic core loop
 │  │  ├─ state.py             # Dataclasses/enums
 │  │  └─ telemetry.py         # 8111 fetchers
+│  ├─ ui/
+│  │  ├─ dialogs.py           # Settings/About/etc dialogs
+│  │  ├─ nav_window.py        # Standalone navigation window
+│  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
 │     ├─ file_utils.py        # Config/state/resource helpers
 │     ├─ math_utils.py        # Navigation/math helpers

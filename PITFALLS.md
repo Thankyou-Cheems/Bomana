@@ -14,3 +14,8 @@
   Cause: patch tool choking on non-ASCII/emoji in large file
   Fix/Workaround: use a Python script (read/replace) instead of apply_patch
 
+- Date: 2026-01-25
+  Context: after UI split, flight state stopped updating
+  Symptom: UI no longer reflected live state updates
+  Cause: GameLogic thread crashed on NameError (missing math import)
+  Fix/Workaround: add `import math` to bomana/core/logic.py
