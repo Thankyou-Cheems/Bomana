@@ -13,7 +13,10 @@
 #### 选项 A：下载打包版（推荐新手）
 
 1. 访问 [Releases 页面](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. 下载最新的 `Bomana-v5.9.exe`（约 10-15MB）
+2. 选择适合你的版本：
+   - `Bomana_Enhanced_vX.X.X.exe`（增强版：全功能，含CCRP）
+   - `Bomana_Standard_vX.X.X.exe`（标准版：导航+燃油，无CCRP）
+   - `Bomana_Lite_vX.X.X.exe`（精简版：仅计时器）
 3. 下载完成！跳到步骤 2
 
 #### 选项 B：从源码运行（开发者）
@@ -144,7 +147,7 @@ python Bomana.pyw
 
 **解决**：
 1. 设置中调整 **UI 缩放**（默认 0.85）
-2. 范围：0.6 - 1.2
+2. 范围：0.6 - 1.5
 
 ### ❓ 声音太吵？
 
@@ -212,7 +215,10 @@ Bomana 会自动锁定前方 45° 内最近的战区。如果你想切换目标�
 #### Option A: Download Packaged Version (Recommended)
 
 1. Visit [Releases page](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. Download latest `Bomana-v5.9.exe`
+2. Pick a build:
+   - `Bomana_Enhanced_vX.X.X.exe` (Enhanced: full features + CCRP)
+   - `Bomana_Standard_vX.X.X.exe` (Standard: navigation + fuel, no CCRP)
+   - `Bomana_Lite_vX.X.X.exe` (Lite: timer only)
 3. Done! Skip to Step 2
 
 #### Option B: Run from Source
@@ -232,7 +238,7 @@ python Bomana.pyw
 
 ### 🚀 Step 3: Run Bomana
 
-1. Double-click `Bomana.exe`
+1. Double-click your `Bomana_*_vX.X.X.exe`
 2. Window appears in **top-right corner**
 3. Shows "🏠Hangar" or "IDLE"
 

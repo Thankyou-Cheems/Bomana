@@ -4,9 +4,9 @@
 
 A powerful War Thunder timer made for the "Space Monkeys" who love dropping bombs and eating bananas
 
-[![Version](https://img.shields.io/badge/version-6.3.1-blue.svg)](https://github.com/Thankyou-Cheems/Bomana/releases)
+[![Version](https://img.shields.io/badge/version-6.6.3-blue.svg)](https://github.com/Thankyou-Cheems/Bomana/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.7+-yellow.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.8+-yellow.svg)](https://www.python.org/)
 
 ---
 
@@ -124,21 +124,27 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 ### 方式一：下载预编译版本（推荐）
 
 1. 前往 [Releases](https://github.com/Thankyou-Cheems/Bomana/releases) 页面
-2. 下载最新版 `Bomana.exe`
-3. 双击运行
+2. 选择适合你的版本：
+   - `Bomana_Enhanced_vX.X.X.exe`（增强版：全功能，含CCRP）
+   - `Bomana_Standard_vX.X.X.exe`（标准版：导航+燃油，无CCRP）
+   - `Bomana_Lite_vX.X.X.exe`（精简版：仅计时器）
+3. 下载后双击运行
 
 ### 方式二：从源码运行
 
 #### 环境要求
 
-- Python 3.7+
+- Python 3.8+
 - Windows 操作系统
 
 #### 安装依赖
 
 ```bash
-pip install requests pillow pystray
+pip install -r requirements.txt
 ```
+
+> 打包 .exe 还需要安装 PyInstaller：`pip install pyinstaller`
+
 
 #### 运行
 
@@ -176,15 +182,17 @@ python Bomana.pyw
 
 ### 编译开关
 
-修改源码中的编译开关可定制功能模块：
+编译开关在 `bomana/config.py` 中，用于打包不同功能版本：
 
 ```python
-ENABLE_CCRP = True           # CCRP投弹预测功能
-ENABLE_ZONES = True          # 战区导航功能
-ENABLE_AIRFIELDS = True      # 机场导航功能
-ENABLE_FUEL = True           # 燃油管理功能
-ENABLE_CHECKLIST = True      # 出击检查清单功能
+ENABLE_CCRP = True              # CCRP投弹预测功能
+ENABLE_ZONES = True             # 战区导航功能
+ENABLE_AIRFIELDS = True         # 机场导航功能
+ENABLE_FUEL = True              # 燃油管理功能
+ENABLE_CHECKLIST = True         # 出击检查清单功能
+ENABLE_ADVANCED_SETTINGS = True # 高级设置（面板/快捷键自定义等）
 ```
+
 
 ---
 
@@ -319,10 +327,8 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 ## 📝 更新日志 | Changelog
 
-### v6.3.1
-- 独立航向带窗口
-- UI 优化
+详见 `CHANGELOG.md`（最新版本：v6.6.3）。
 
 ---
 
-*Made with ❤️ by 猹Cheems for the Space Monkeys community*
+*Made with ❤️ by 猹Cheems for the Space Monkeys community* ❤️ by 猹Cheems for the Space Monkeys community*

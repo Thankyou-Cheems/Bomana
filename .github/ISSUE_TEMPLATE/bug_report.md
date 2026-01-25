@@ -35,7 +35,7 @@ assignees: ''
 
 - **操作系统 | OS**: [例如 Windows 10 21H2]
 - **Python 版本 | Python Version**: [例如 3.9.7，如果使用打包版请填写 "打包版/Packaged"]
-- **软件版本 | Software Version**: [例如 v5.9]
+- **软件版本 | Software Version**: [例如 v6.6.3]
 - **是否使用打包版 | Using Packaged Version**: [是/否 | Yes/No]
 
 ## 日志/错误信息 | Logs/Error Messages

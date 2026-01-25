@@ -19,7 +19,7 @@
 3. **提供详细信息**：
    - 操作系统和版本（如 Windows 10 21H2）
    - Python 版本（如 Python 3.9.7）
-   - 软件版本（如 v5.9）
+   - 软件版本（如 v6.6.3）
    - 复现步骤
    - 错误截图或错误信息
    - 预期行为 vs 实际行为
@@ -239,8 +239,8 @@ git commit -m "bug"
 仅维护者可以发布新版本：
 
 1. 更新 `CHANGELOG.md`
-2. 更新版本号（代码中的 `VERSION`）
-3. 创建 Git Tag：`git tag v5.x`
+2. 更新版本号（`bomana/config.py` 中的 `__version__`）
+3. 创建 Git Tag：`git tag v6.x`
 4. 打包 .exe 文件
 5. 创建 GitHub Release
 6. 上传打包文件
@@ -266,7 +266,7 @@ If you find a bug:
 3. **Provide details**:
    - OS and version (e.g., Windows 10 21H2)
    - Python version (e.g., Python 3.9.7)
-   - Software version (e.g., v5.9)
+   - Software version (e.g., v6.6.3)
    - Steps to reproduce
    - Screenshots or error messages
    - Expected vs actual behavior
