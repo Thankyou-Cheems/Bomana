@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Optional, Tuple, Any, List, Dict
 
 from bomana.config import (
+    __title__,
     ENABLE_CCRP,
     ENABLE_ZONES,
     ENABLE_AIRFIELDS,
@@ -1082,7 +1083,7 @@ class App:
         # 主菜单
         menu = pystray.Menu(*menu_items)
         
-        self.tray = pystray.Icon("WTTimer", icon(), "WT Timer", menu)
+        self.tray = pystray.Icon(__title__, icon(), __title__, menu)
         threading.Thread(target=self.tray.run, daemon=True).start()
 
     def _toggle_debug(self):
