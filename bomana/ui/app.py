@@ -7,6 +7,7 @@ import threading
 import time
 import tkinter as tk
 import locale
+import webbrowser
 from tkinter import font as tkfont
 from enum import Enum
 from typing import Optional, Tuple, Any, List, Dict
@@ -31,6 +32,7 @@ from bomana.config import (
     NetworkConfig,
     FuelConfig,
     Theme,
+    AboutConfig,
 )
 from bomana.core.logic import GameLogic
 from bomana.core.state import UISnapshot, Phase
@@ -113,6 +115,9 @@ class App:
         self._last_sortie_id = -1
         self._restored_state = False
         self._last_zone_destroyed_alert = False
+        self._last_landed_flash = False
+        self._nudge_visible = False
+        self._nudge_sortie_id = -1
 
         # UI刷新控制
         self._ui_after_id = None
@@ -474,12 +479,31 @@ class App:
         bottom_frame = tk.Frame(self.main_frame, bg=Theme.BG)
         bottom_frame.pack(side="bottom", fill="x")
 
+        self.hint_row = tk.Frame(bottom_frame, bg=Theme.BG)
+        self.hint_row.pack(side="bottom", fill="x")
+
         font_hint = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s))
         self.hint_lbl = tk.Label(
-            bottom_frame, text=self._hint_text(),
+            self.hint_row, text=self._hint_text(),
             font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.BG
         )
-        self.hint_lbl.pack(side="bottom", fill="x")
+        self.hint_lbl.pack(side="left", fill="x", expand=True)
+
+        self.nudge_row = tk.Frame(bottom_frame, bg=Theme.BG)
+        self.nudge_lbl = tk.Label(
+            self.nudge_row, text=self._nudge_text(),
+            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.BG
+        )
+        self.nudge_lbl.pack(side="left", fill="x", expand=True)
+
+        self.star_lbl = tk.Label(
+            self.nudge_row, text="⭐ Star",
+            font=font_hint, fg=Theme.TEXT, bg=Theme.BG, cursor="hand2"
+        )
+        self.star_lbl.bind("<Button-1>", lambda e: self._open_star_url())
+        self.star_lbl.bind("<Enter>", lambda e: self.star_lbl.config(fg=Theme.YELLOW))
+        self.star_lbl.bind("<Leave>", lambda e: self.star_lbl.config(fg=Theme.TEXT))
+        self.star_lbl.pack(side="right", padx=(int(8*s), 0))
 
         font_debug = (UIConfig.FONT_DEBUG[0], int(UIConfig.FONT_DEBUG[1]*s))
         self.diag_lbl = tk.Label(
@@ -1007,6 +1031,9 @@ class App:
 
         def do_about(icon, item):
             app.root.after(0, app._show_about)
+        
+        def do_star(icon, item):
+            app.root.after(0, app._open_star_url)
 
         # 状态检查函数
         def is_locked(item):
@@ -1106,6 +1133,7 @@ class App:
             menu_items.append(pystray.MenuItem("⚙️ 设置", do_settings))
         
         menu_items.append(pystray.Menu.SEPARATOR)
+        menu_items.append(pystray.MenuItem("⭐ 给作者点个Star", do_star))
         menu_items.append(pystray.MenuItem("🐛 Debug模式", do_debug, checked=is_debug_on))
         menu_items.append(pystray.MenuItem("ℹ️ 关于", do_about))
         menu_items.append(pystray.MenuItem("❌ 退出", do_quit))
@@ -1120,7 +1148,7 @@ class App:
         """切换调试模式"""
         self._debug = not self._debug
         if self._debug:
-            self.diag_lbl.pack(side="bottom", fill="x", pady=(0, int(UIConfig.SPACING_DEBUG*self.scale)), before=self.hint_lbl)
+            self.diag_lbl.pack(side="bottom", fill="x", pady=(0, int(UIConfig.SPACING_DEBUG*self.scale)), before=self.hint_row)
         else:
             self.diag_lbl.pack_forget()
         self._recalc_size()
@@ -1384,7 +1412,7 @@ class App:
         k_lock = HotkeyConfig.KEY_LOCK
         k_corner = HotkeyConfig.KEY_CORNER
         k_beep = HotkeyConfig.KEY_BEEP
-        
+
         if self._locked:
             parts = [f"{k_reset}重置", f"{k_lock}解锁", f"{k_corner}角落", f"{k_beep}声音({sound})"]
             # 战区提示音仅在战区功能启用时显示
@@ -1401,10 +1429,33 @@ class App:
                 parts.append(f"{k_zones}战区({zone_sound})")
             return " │ ".join(parts)
 
+    def _nudge_text(self) -> str:
+        return "✨ 炸弹，爽！如果觉得好用，给项目点个 Star 支持一下（起飞自动隐藏）"
+
     def _update_hint(self) -> None:
         """更新提示文本"""
         if hasattr(self, "hint_lbl") and self.hint_lbl:
             self.hint_lbl.config(text=self._hint_text())
+        if hasattr(self, "nudge_lbl") and self.nudge_lbl:
+            self.nudge_lbl.config(text=self._nudge_text())
+        if hasattr(self, "nudge_row") and self.nudge_row:
+            was_mapped = self.nudge_row.winfo_ismapped()
+            if self._nudge_visible:
+                if not self.nudge_row.winfo_ismapped():
+                    self.nudge_row.pack(side="bottom", fill="x")
+            else:
+                if self.nudge_row.winfo_ismapped():
+                    self.nudge_row.pack_forget()
+            if was_mapped != self.nudge_row.winfo_ismapped():
+                self._recalc_size()
+
+    def _open_star_url(self) -> None:
+        url = AboutConfig.GITHUB_URL
+        if url:
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
 
     def _update_nav_mode_button(self):
         """更新独立导航条按钮状态显示"""
@@ -2163,6 +2214,19 @@ class App:
         self._ui_after_id = None
         loop_start = time.monotonic()
         snap = self.game.snapshot()
+        # 高光时刻弱提醒：成功着陆后显示，起飞后消除（不弹窗）
+        if (snap.phase == Phase.ALIVE and snap.landed_flash and not self._last_landed_flash):
+            if snap.sortie_id != self._nudge_sortie_id:
+                self._nudge_sortie_id = snap.sortie_id
+                if not self._nudge_visible:
+                    self._nudge_visible = True
+                    self._update_hint()
+        self._last_landed_flash = snap.landed_flash
+
+        # 起飞后清除提示
+        if self._nudge_visible and snap.phase == Phase.ALIVE and not snap.on_ground:
+            self._nudge_visible = False
+            self._update_hint()
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
