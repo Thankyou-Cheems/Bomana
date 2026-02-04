@@ -31,6 +31,7 @@ from bomana.config import (
     GameConfig,
     NetworkConfig,
     FuelConfig,
+    BallisticPhysicsParams,
     Theme,
     AboutConfig,
 )
@@ -120,6 +121,9 @@ class App:
         self._nudge_sortie_id = -1
         self._nudge_airborne_seen = False
         self._nudge_sortie_seen = -1
+        # 初始缩放占位：_init_window_base 后会用DPI重新计算
+        self.scale = float(UIConfig.UI_SCALE_MULT)
+        self._hint_width_cache = {"text": "", "width": int(320 * self.scale)}
 
         # UI刷新控制
         self._ui_after_id = None
@@ -223,6 +227,8 @@ class App:
             selected_bomb = config.get('selected_bomb', 'su_fab100sv')
             if BombConfig.get_bomb_data(selected_bomb):
                 BombConfig.selected_bomb = selected_bomb
+            tuning = config.get('ccrp_tuning', {})
+            BallisticPhysicsParams.apply_user_tuning(tuning)
         
         # 根据编译开关初始化面板状态
         PanelConfig.init_from_compile_switches()
@@ -294,6 +300,7 @@ class App:
         # v6.0 新增：炸弹选择（仅在CCRP启用时保存）
         if ENABLE_CCRP:
             config['selected_bomb'] = BombConfig.selected_bomb
+            config['ccrp_tuning'] = BallisticPhysicsParams.get_user_tuning()
         
         # 快捷键设置
         config['global_hotkeys'] = HotkeyConfig.GLOBAL_HOTKEYS
@@ -1226,12 +1233,24 @@ class App:
         # 估算: 80 + 80 + 100 + 60 = 320px 基础宽度
         badge_min_width = int(320 * self.scale)
         
-        # ⚠️ 提示文字最小宽度（根据编译开关动态计算）
-        # 完整版: "F7重置 │ F8解锁 │ F9角落 │ F10声音(🔊开) │ F11战区(🔔开)" ≈ 400px
-        # 精简版: "F7重置 │ F8解锁 │ F9角落 │ F10声音(🔊开)" ≈ 320px
-        if ENABLE_ZONES:
-            hint_min_width = int(400 * self.scale)
-        else:
+        # ⚠️ 提示文字最小宽度（动态测量，避免浪费或截断）
+        hint_min_width = int(320 * self.scale)
+        try:
+            hint_text = ""
+            if hasattr(self, "hint_lbl") and self.hint_lbl:
+                hint_text = self.hint_lbl.cget("text") or ""
+            if not hint_text:
+                hint_text = self._hint_text()
+            cache = getattr(self, "_hint_width_cache", None)
+            if cache and cache.get("text") == hint_text:
+                hint_min_width = int(cache.get("width", hint_min_width))
+            else:
+                hint_font = tkfont.Font(font=self._get_font("hint"))
+                hint_min_width = hint_font.measure(hint_text) + int(16 * self.scale)
+                if cache is not None:
+                    cache["text"] = hint_text
+                    cache["width"] = hint_min_width
+        except Exception:
             hint_min_width = int(320 * self.scale)
         
         # 基础最小宽度：取徽章行和提示行中较大的
@@ -1442,6 +1461,8 @@ class App:
         """更新提示文本"""
         if hasattr(self, "hint_lbl") and self.hint_lbl:
             self.hint_lbl.config(text=self._hint_text())
+        if hasattr(self, "_hint_width_cache") and self._hint_width_cache is not None:
+            self._hint_width_cache["text"] = ""
         if hasattr(self, "nudge_lbl") and self.nudge_lbl:
             self.nudge_lbl.config(text=self._nudge_text())
         if hasattr(self, "nudge_row") and self.nudge_row:

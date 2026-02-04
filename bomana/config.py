@@ -409,6 +409,45 @@ class BallisticPhysicsParams:
     RELEASE_WARNING_SEC = 5.0
     RELEASE_READY_SEC = 0.5
 
+    # ==================== 用户可调参数（全局） ====================
+    _DEFAULT_TUNING = {
+        "range_correction_mult": 1.0,
+        "time_correction_mult": 1.0,
+    }
+    _TUNING_LIMITS = {
+        "range_correction_mult": (0.6, 1.6),
+        "time_correction_mult": (0.6, 1.6),
+    }
+
+    @classmethod
+    def apply_user_tuning(cls, tuning: dict) -> None:
+        """应用用户全局调参（来自配置文件/UI）"""
+        if not isinstance(tuning, dict):
+            return
+
+        def _clamp(name: str, value: float) -> float:
+            low, high = cls._TUNING_LIMITS[name]
+            return max(low, min(high, float(value)))
+
+        if "range_correction_mult" in tuning and isinstance(tuning["range_correction_mult"], (int, float)):
+            cls.RANGE_CORRECTION_MULT = _clamp("range_correction_mult", tuning["range_correction_mult"])
+
+        if "time_correction_mult" in tuning and isinstance(tuning["time_correction_mult"], (int, float)):
+            cls.TIME_CORRECTION_MULT = _clamp("time_correction_mult", tuning["time_correction_mult"])
+
+    @classmethod
+    def get_user_tuning(cls) -> dict:
+        """获取当前用户调参（用于保存）"""
+        return {
+            "range_correction_mult": float(cls.RANGE_CORRECTION_MULT),
+            "time_correction_mult": float(cls.TIME_CORRECTION_MULT),
+        }
+
+    @classmethod
+    def get_default_tuning(cls) -> dict:
+        """获取默认调参（用于重置）"""
+        return dict(cls._DEFAULT_TUNING)
+
 
 class AboutConfig:
     """关于对话框配置

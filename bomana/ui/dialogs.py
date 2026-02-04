@@ -4,6 +4,7 @@
 import tkinter as tk
 from tkinter import messagebox
 import webbrowser
+from tkinter import font as tkfont
 
 from bomana.config import (
     ENABLE_ADVANCED_SETTINGS,
@@ -18,6 +19,7 @@ from bomana.config import (
     SnapConfig,
     BombConfig,
     ChecklistConfig,
+    BallisticPhysicsParams,
     AboutConfig,
     FileConfig,
     Theme,
@@ -33,7 +35,97 @@ try:
 except ImportError:
     HAS_TRAY = False
 
-class SettingsDialog(tk.Toplevel):
+class _ScalableDialogMixin:
+    """可缩放窗口通用逻辑（适配屏幕 + 动态字体缩放）"""
+    def _fit_window_to_screen(self):
+        """固定初始尺寸，适配屏幕，同时允许手动调整"""
+        self.update_idletasks()
+        req_w = self.winfo_reqwidth()
+        req_h = self.winfo_reqheight()
+
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+
+        min_w = max(520, int(req_w * 0.85))
+        min_h = max(420, int(req_h * 0.85))
+
+        max_w = max(min_w, screen_w - 120)
+        max_h = max(min_h, screen_h - 120)
+
+        init_w = min(max(req_w, min_w), max_w)
+        init_h = min(max(req_h, min_h), max_h)
+
+        self.geometry(f"{int(init_w)}x{int(init_h)}")
+        self.minsize(int(min_w), int(min_h))
+        self.maxsize(int(max_w), int(max_h))
+
+    def _init_dynamic_scaling(self):
+        """初始化窗口的动态字体缩放"""
+        self.update_idletasks()
+        self._scale_base_w = max(1, self.winfo_width())
+        self._scale_base_h = max(1, self.winfo_height())
+        self._last_scale = 1.0
+        self._scale_after_id = None
+        self._scaled_fonts = {}
+
+        def collect(widget):
+            for child in widget.winfo_children():
+                collect(child)
+            if "font" in widget.keys():
+                try:
+                    font_name = widget.cget("font")
+                    if not font_name:
+                        font_name = "TkDefaultFont"
+                    base_font = tkfont.Font(font=font_name)
+                    actual = base_font.actual()
+                    base_size = actual.get("size", 10)
+                    new_font = tkfont.Font(
+                        family=actual.get("family", "Segoe UI"),
+                        size=base_size,
+                        weight=actual.get("weight", "normal"),
+                        slant=actual.get("slant", "roman"),
+                        underline=actual.get("underline", 0),
+                        overstrike=actual.get("overstrike", 0),
+                    )
+                    widget.configure(font=new_font)
+                    self._scaled_fonts[widget] = (new_font, base_size)
+                except Exception:
+                    pass
+
+        collect(self)
+        self.bind("<Configure>", self._on_scale_configure)
+
+    def _on_scale_configure(self, event):
+        if self._scale_after_id:
+            try:
+                self.after_cancel(self._scale_after_id)
+            except Exception:
+                pass
+        self._scale_after_id = self.after(120, self._apply_dynamic_scale)
+
+    def _apply_dynamic_scale(self):
+        self._scale_after_id = None
+        w = max(1, self.winfo_width())
+        h = max(1, self.winfo_height())
+        scale = (w / self._scale_base_w + h / self._scale_base_h) / 2.0
+        scale = max(0.85, min(3.0, scale))
+        if abs(scale - self._last_scale) < 0.01:
+            return
+        self._last_scale = scale
+
+        if not self._scaled_fonts:
+            self._init_dynamic_scaling()
+            return
+
+        for widget, (font_obj, base_size) in list(self._scaled_fonts.items()):
+            try:
+                size = int(abs(base_size) * scale)
+                size = max(8, size)
+                font_obj.configure(size=-size if base_size < 0 else size)
+            except Exception:
+                pass
+
+class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
     """设置对话框
     
     使用选项卡组织设置项：
@@ -46,11 +138,13 @@ class SettingsDialog(tk.Toplevel):
         super().__init__(parent)
         self.app = app
         self.title("⚙️ 设置")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(bg=Theme.BG)
         self.transient(parent)
         self.grab_set()
         self._build_ui()
+        self._fit_window_to_screen()
+        self._init_dynamic_scaling()
         self._center_on_parent(parent)
     
     def _build_ui(self):
@@ -63,6 +157,8 @@ class SettingsDialog(tk.Toplevel):
         self.tab_buttons_frame.pack(fill="x", pady=(0, 10))
         
         self.tabs = ["显示", "面板", "快捷键", "其他"]
+        if ENABLE_CCRP:
+            self.tabs.insert(2, "投弹")
         self.tab_frames = {}
         self.tab_btns = {}
         self.current_tab = "显示"
@@ -84,6 +180,8 @@ class SettingsDialog(tk.Toplevel):
         # 创建各选项卡页面
         self._build_display_tab()
         self._build_panel_tab()
+        if ENABLE_CCRP:
+            self._build_ccrp_tab()
         self._build_hotkey_tab()
         self._build_other_tab()
         
@@ -269,6 +367,55 @@ class SettingsDialog(tk.Toplevel):
         tk.Label(frame, text="* 避免与游戏快捷键冲突\n* 更改后需要重启热键服务", 
                 bg=Theme.BG, fg=Theme.TEXT_MUTED, font=("Segoe UI", 8),
                 justify="left").pack(anchor="w", pady=(15, 0))
+
+    def _build_ccrp_tab(self):
+        """构建投弹预测设置页"""
+        frame = tk.Frame(self.content_frame, bg=Theme.BG)
+        self.tab_frames["投弹"] = frame
+
+        tk.Label(frame, text="CCRP校准参数（全局生效）:", bg=Theme.BG, fg=Theme.TEXT).pack(
+            anchor="w", pady=(0, 10))
+
+        defaults = BallisticPhysicsParams.get_default_tuning()
+
+        grid = tk.Frame(frame, bg=Theme.BG)
+        grid.pack(anchor="w")
+
+        self.ccrp_range_mult_var = tk.DoubleVar(
+            value=BallisticPhysicsParams.RANGE_CORRECTION_MULT)
+        self.ccrp_time_mult_var = tk.DoubleVar(
+            value=BallisticPhysicsParams.TIME_CORRECTION_MULT)
+
+        row = 0
+
+        tk.Label(grid, text="距离修正倍率:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        tk.Spinbox(
+            grid, from_=0.6, to=1.6, increment=0.01, width=8,
+            textvariable=self.ccrp_range_mult_var, bg=Theme.GRAYPILL, fg=Theme.TEXT,
+            bd=0, highlightthickness=1, highlightbackground=Theme.BORDER
+        ).grid(row=row, column=1, padx=10, pady=5, sticky="w")
+        tk.Label(grid, text=f"默认 {defaults['range_correction_mult']:.2f}",
+                 bg=Theme.BG, fg=Theme.TEXT_DIM, font=("Segoe UI", 8)).grid(
+            row=row, column=2, sticky="w")
+        row += 1
+
+        tk.Label(grid, text="时间修正倍率:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        tk.Spinbox(
+            grid, from_=0.6, to=1.6, increment=0.01, width=8,
+            textvariable=self.ccrp_time_mult_var, bg=Theme.GRAYPILL, fg=Theme.TEXT,
+            bd=0, highlightthickness=1, highlightbackground=Theme.BORDER
+        ).grid(row=row, column=1, padx=10, pady=5, sticky="w")
+        tk.Label(grid, text=f"默认 {defaults['time_correction_mult']:.2f}",
+                 bg=Theme.BG, fg=Theme.TEXT_DIM, font=("Segoe UI", 8)).grid(
+            row=row, column=2, sticky="w")
+
+        tk.Label(
+            frame,
+            text="说明：倍率 > 1 代表提前投弹（预测更远/更久），< 1 代表延后投弹。",
+            bg=Theme.BG, fg=Theme.TEXT_MUTED, font=("Segoe UI", 8)
+        ).pack(anchor="w", pady=(10, 0))
     
     def _build_other_tab(self):
         """构建其他设置页"""
@@ -343,6 +490,11 @@ class SettingsDialog(tk.Toplevel):
             self.hotkeys_enabled_var.set(True)
             self.snap_var.set(True)
             self.snap_dist_var.set(20)
+
+            if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
+                defaults = BallisticPhysicsParams.get_default_tuning()
+                self.ccrp_range_mult_var.set(defaults["range_correction_mult"])
+                self.ccrp_time_mult_var.set(defaults["time_correction_mult"])
     
     def _center_on_parent(self, parent):
         """居中显示"""
@@ -391,6 +543,15 @@ class SettingsDialog(tk.Toplevel):
         SnapConfig.SNAP_DISTANCE = self.snap_dist_var.get()
         config['snap_enabled'] = SnapConfig.enabled
         config['snap_distance'] = SnapConfig.SNAP_DISTANCE
+
+        # 投弹预测调参（仅在CCRP启用时保存）
+        if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
+            tuning = {
+                "range_correction_mult": self.ccrp_range_mult_var.get(),
+                "time_correction_mult": self.ccrp_time_mult_var.get(),
+            }
+            BallisticPhysicsParams.apply_user_tuning(tuning)
+            config['ccrp_tuning'] = BallisticPhysicsParams.get_user_tuning()
         
         # 保存配置
         ConfigManager.save(config)
@@ -431,7 +592,7 @@ class SettingsDialog(tk.Toplevel):
         self.destroy()
 
 
-class ChecklistEditor(tk.Toplevel):
+class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
     """检查清单编辑器
     
     允许用户自定义起飞前的检查项目。
@@ -440,11 +601,13 @@ class ChecklistEditor(tk.Toplevel):
         super().__init__(parent)
         self.app = app
         self.title("编辑检查清单")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(bg=Theme.BG)
         self.transient(parent)
         self.grab_set()
         self._build_ui()
+        self._fit_window_to_screen()
+        self._init_dynamic_scaling()
         self._center_on_parent(parent)
     
     def _build_ui(self):
@@ -504,7 +667,7 @@ class ChecklistEditor(tk.Toplevel):
         self.text.insert("1.0", "\n".join(ChecklistConfig.DEFAULT_ITEMS))
 
 
-class BombSelectorDialog(tk.Toplevel):
+class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
     """炸弹选择对话框"""
     
     def __init__(self, parent, app):
@@ -515,7 +678,7 @@ class BombSelectorDialog(tk.Toplevel):
         
         self.title("选择炸弹")
         self.configure(bg=Theme.BG)
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.transient(parent)
         self.grab_set()
         
@@ -592,6 +755,8 @@ class BombSelectorDialog(tk.Toplevel):
         ).pack(side="right", padx=5)
         
         self._populate_list()
+        self._fit_window_to_screen()
+        self._init_dynamic_scaling()
         self._center_on_parent(parent)
     
     def _on_search_focus_in(self, event):
@@ -715,7 +880,7 @@ class BombSelectorDialog(tk.Toplevel):
             self.destroy()
 
 
-class AboutDialog(tk.Toplevel):
+class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
     """关于对话框"""
     def __init__(self, parent, app):
         super().__init__(parent)
@@ -749,6 +914,7 @@ class AboutDialog(tk.Toplevel):
         self.minsize(400, 500)
         self.resizable(True, True)  # 允许用户调整大小
         
+        self._init_dynamic_scaling()
         self._center_on_parent(parent)
     
     def _build_ui(self):
