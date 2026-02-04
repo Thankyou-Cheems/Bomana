@@ -6,6 +6,7 @@ import os
 import threading
 import time
 import tkinter as tk
+import locale
 from tkinter import font as tkfont
 from enum import Enum
 from typing import Optional, Tuple, Any, List, Dict
@@ -380,23 +381,43 @@ class App:
 
     def _select_font_family(self) -> str:
         """Pick an available UI font family."""
-        preferred = [
+        preferred_latin = [
+            "Segoe UI Variable",
             "Segoe UI",
+            "Arial",
+            "Helvetica",
+        ]
+        preferred_cjk = [
             "Microsoft YaHei UI",
+            "Microsoft YaHei",
             "Noto Sans CJK SC",
             "PingFang SC",
             "Source Han Sans SC",
             "WenQuanYi Micro Hei",
-            "Arial",
-            "Helvetica",
         ]
+        loc = locale.getdefaultlocale()[0] or ""
         try:
             fams = set(tkfont.families(self.root))
         except Exception:
             return ""
-        for fam in preferred:
-            if fam in fams:
-                return fam
+        if os.name == "nt":
+            for fam in preferred_cjk:
+                if fam in fams:
+                    return fam
+            for fam in preferred_latin:
+                if fam in fams:
+                    return fam
+        else:
+            if loc.startswith(("zh", "ja", "ko")):
+                for fam in preferred_cjk:
+                    if fam in fams:
+                        return fam
+            for fam in preferred_latin:
+                if fam in fams:
+                    return fam
+            for fam in preferred_cjk:
+                if fam in fams:
+                    return fam
         return ""
 
     def _apply_font_family(self) -> None:
