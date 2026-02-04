@@ -112,6 +112,9 @@ class App:
         self._last_sortie_id = -1
         self._restored_state = False
         self._last_zone_destroyed_alert = False
+
+        # UI刷新控制
+        self._ui_after_id = None
         
         # 布局可见性
         self._zone_panel_visible = False
@@ -158,12 +161,16 @@ class App:
         config = ConfigManager.load()
         
         # 显示设置
-        UIConfig.WINDOW_ALPHA = config.get('alpha', UIConfig.WINDOW_ALPHA)
+        alpha = config.get('alpha', UIConfig.WINDOW_ALPHA)
+        if isinstance(alpha, (int, float)):
+            UIConfig.WINDOW_ALPHA = max(30, min(255, int(alpha)))
         # v5.9.3: 智能缩放逻辑
         # 检查是否是首次启动（没有保存的缩放配置）
         if 'scale' in config:
             # 用户已经设置过缩放，使用保存的值
-            UIConfig.UI_SCALE_MULT = config.get('scale')
+            scale = config.get('scale')
+            if isinstance(scale, (int, float)):
+                UIConfig.UI_SCALE_MULT = max(0.6, min(1.5, float(scale)))
         else:
             # 首次启动，根据屏幕分辨率智能设置
             try:
@@ -220,7 +227,9 @@ class App:
         
         # 吸附设置
         SnapConfig.enabled = config.get('snap_enabled', True)
-        SnapConfig.SNAP_DISTANCE = config.get('snap_distance', 20)
+        snap_dist = config.get('snap_distance', 20)
+        if isinstance(snap_dist, (int, float)):
+            SnapConfig.SNAP_DISTANCE = max(5, min(200, int(snap_dist)))
         
         # 检查清单
         self.chk_items = config.get('checklist_items', ChecklistConfig.DEFAULT_ITEMS.copy())
@@ -1511,7 +1520,11 @@ class App:
         """
         while not self._stop:
             loop_start = time.monotonic()
-            self.game.tick()
+            try:
+                self.game.tick()
+            except Exception:
+                time.sleep(NetworkConfig.BACKOFF_MAX)
+                continue
             # 使用轻量级属性替代完整snapshot
             interval = NetworkConfig.BACKOFF_MAX if self.game.is_api_down else NetworkConfig.POLL_INTERVAL
             elapsed = time.monotonic() - loop_start
@@ -2126,7 +2139,8 @@ class App:
         """
         if self._stop:
             return
-        
+        self._ui_after_id = None
+        loop_start = time.monotonic()
         snap = self.game.snapshot()
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
@@ -2232,5 +2246,8 @@ class App:
                 debug_text += f" | 目标偏离: {int(snap.deviation_angle)}°"
             self.diag_lbl.config(text=debug_text)
 
-        # 继续下一帧
-        self.root.after(UIConfig.UI_REFRESH_MS, self._update_ui)
+        # 继续下一帧（基于实际耗时补偿）
+        elapsed_ms = (time.monotonic() - loop_start) * 1000.0
+        delay = max(0, int(UIConfig.UI_REFRESH_MS - elapsed_ms))
+        if not self._stop:
+            self._ui_after_id = self.root.after(delay, self._update_ui)

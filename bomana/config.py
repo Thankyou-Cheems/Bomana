@@ -110,6 +110,9 @@ class ZoneConfig:
     # 最多显示战区数量：6个（避免UI过长）
     MAX_DISPLAY_ZONES = 6
 
+    # 最多显示机场数量（友方+敌方合计）
+    MAX_DISPLAY_AIRFIELDS = 6
+
     # 距离缩放系数：归一化距离 × 100 = km
     # （战雷地图归一化为0-1，实际约100km）
     DISTANCE_SCALE = 100.0

@@ -711,9 +711,15 @@ class GameLogic:
                         cdi_indicator=cdi_str, cdi_color=cdi_clr
                     )
 
-                # 敌方机场：显示所有，但只在朝向时显示ETE（v5.7改进）
+                # 敌方机场：显示部分（上限），但只在朝向时显示ETE（v5.7改进）
                 if enemy_infos:
                     enemy_infos.sort(key=lambda t: t[0])
+                    max_total = ZoneConfig.MAX_DISPLAY_AIRFIELDS
+                    max_enemy = max(0, max_total - (1 if friendly_infos else 0))
+                    if max_enemy == 0:
+                        enemy_infos = []
+                    else:
+                        enemy_infos = enemy_infos[:max_enemy]
                     # 查找45°内最近的敌方机场作为目标
                     target_idx = -1  # -1表示没有目标
                     for i, (dist, info) in enumerate(enemy_infos):
