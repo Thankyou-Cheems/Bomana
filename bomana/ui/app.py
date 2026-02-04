@@ -118,6 +118,8 @@ class App:
         self._last_landed_flash = False
         self._nudge_visible = False
         self._nudge_sortie_id = -1
+        self._nudge_airborne_seen = False
+        self._nudge_sortie_seen = -1
 
         # UI刷新控制
         self._ui_after_id = None
@@ -490,11 +492,15 @@ class App:
         self.hint_lbl.pack(side="left", fill="x", expand=True)
 
         self.nudge_row = tk.Frame(bottom_frame, bg=Theme.BG)
+        self.nudge_row.columnconfigure(0, weight=1)
+
+        nudge_wrap = int(380 * s)
         self.nudge_lbl = tk.Label(
             self.nudge_row, text=self._nudge_text(),
-            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.BG
+            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.BG,
+            anchor="w", justify="left", wraplength=nudge_wrap
         )
-        self.nudge_lbl.pack(side="left", fill="x", expand=True)
+        self.nudge_lbl.grid(row=0, column=0, sticky="ew")
 
         self.star_lbl = tk.Label(
             self.nudge_row, text="⭐ Star",
@@ -503,7 +509,7 @@ class App:
         self.star_lbl.bind("<Button-1>", lambda e: self._open_star_url())
         self.star_lbl.bind("<Enter>", lambda e: self.star_lbl.config(fg=Theme.YELLOW))
         self.star_lbl.bind("<Leave>", lambda e: self.star_lbl.config(fg=Theme.TEXT))
-        self.star_lbl.pack(side="right", padx=(int(8*s), 0))
+        self.star_lbl.grid(row=0, column=1, sticky="e", padx=(int(8*s), 0))
 
         font_debug = (UIConfig.FONT_DEBUG[0], int(UIConfig.FONT_DEBUG[1]*s))
         self.diag_lbl = tk.Label(
@@ -2215,10 +2221,20 @@ class App:
         loop_start = time.monotonic()
         snap = self.game.snapshot()
         # 高光时刻弱提醒：成功着陆后显示，起飞后消除（不弹窗）
+        if snap.sortie_id != self._nudge_sortie_seen:
+            self._nudge_sortie_seen = snap.sortie_id
+            self._nudge_airborne_seen = False
+            if self._nudge_visible:
+                self._nudge_visible = False
+                self._update_hint()
+
+        if snap.phase == Phase.ALIVE and not snap.on_ground:
+            self._nudge_airborne_seen = True
+
         if (snap.phase == Phase.ALIVE and snap.landed_flash and not self._last_landed_flash):
             if snap.sortie_id != self._nudge_sortie_id:
                 self._nudge_sortie_id = snap.sortie_id
-                if not self._nudge_visible:
+                if self._nudge_airborne_seen and not self._nudge_visible:
                     self._nudge_visible = True
                     self._update_hint()
         self._last_landed_flash = snap.landed_flash
@@ -2227,6 +2243,9 @@ class App:
         if self._nudge_visible and snap.phase == Phase.ALIVE and not snap.on_ground:
             self._nudge_visible = False
             self._update_hint()
+
+        if snap.phase != Phase.ALIVE:
+            self._nudge_airborne_seen = False
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
