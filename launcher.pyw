@@ -29,6 +29,16 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import font as tkfont
 
+# Configure SSL context for HTTPS connections (critical for PyInstaller)
+import ssl
+
+try:
+    import certifi
+
+    _ssl_context = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _ssl_context = ssl.create_default_context()
+
 # Launcher metadata
 LAUNCHER_VERSION = "1.1.0"
 DISPLAY_NAME = "Bomana香焦"
@@ -240,7 +250,7 @@ def _fetch_bytes(
         url,
         headers=req_headers,
     )
-    with urlopen(req, timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)) as resp:
+    with urlopen(req, timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC), context=_ssl_context) as resp:
         total: Optional[int] = None
         try:
             header = resp.headers.get("Content-Length")
@@ -278,7 +288,7 @@ def _fetch_content_length(url: str, timeout_sec: Optional[float] = None) -> Opti
     timeout = (timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)
     req = Request(url, method="HEAD", headers={"User-Agent": UA, "Accept": "*/*"})
     try:
-        with urlopen(req, timeout=timeout) as resp:
+        with urlopen(req, timeout=timeout, context=_ssl_context) as resp:
             header = resp.headers.get("Content-Length")
             if header:
                 value = int(header)
@@ -289,7 +299,7 @@ def _fetch_content_length(url: str, timeout_sec: Optional[float] = None) -> Opti
     # Some CDNs reject HEAD; fallback to a 1-byte range request.
     try:
         req2 = Request(url, headers={"User-Agent": UA, "Accept": "*/*", "Range": "bytes=0-0"})
-        with urlopen(req2, timeout=timeout) as resp2:
+        with urlopen(req2, timeout=timeout, context=_ssl_context) as resp2:
             content_range = str(resp2.headers.get("Content-Range", "")).strip()
             m = re.search(r"/(\d+)$", content_range)
             if m:
@@ -328,7 +338,7 @@ def _post_json(url: str, payload: Dict[str, Any], timeout_sec: float) -> Dict[st
             "Content-Type": "application/json; charset=utf-8",
         },
     )
-    with urlopen(req, timeout=timeout_sec) as resp:
+    with urlopen(req, timeout=timeout_sec, context=_ssl_context) as resp:
         data = resp.read()
     if not data:
         return {}
@@ -880,7 +890,17 @@ class LauncherDetailsDialog(tk.Toplevel):
 
         content.bind("<Configure>", on_content_configure)
         canvas.bind("<Configure>", on_canvas_configure)
-        canvas.bind("<MouseWheel>", on_mousewheel)
+        # Bind mousewheel globally to ensure it works over all widgets
+        canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+        # Unbind when dialog is closed
+        def _cleanup(_e=None) -> None:
+            try:
+                canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+
+        self.bind("<Destroy>", lambda e: _cleanup() if e.widget == self else None, "+")
 
         title_row = tk.Frame(content, bg=_THEME["BG"])
         title_row.pack(fill="x", pady=(4, 8))
@@ -1025,6 +1045,48 @@ class LauncherDetailsDialog(tk.Toplevel):
             ).pack(anchor="w")
 
         tk.Frame(content, bg=_THEME["BORDER"], height=1).pack(fill="x", pady=12)
+
+        # Privacy notice
+        privacy_frame = tk.Frame(content, bg=_THEME["BG"])
+        privacy_frame.pack(fill="x", pady=(0, 8))
+
+        tk.Label(
+            privacy_frame,
+            text="📊 隐私说明：",
+            font=("Segoe UI", 10, "bold"),
+            fg=_THEME["BLUE"],
+            bg=_THEME["BG"],
+            anchor="w",
+        ).pack(anchor="w")
+
+        tk.Label(
+            privacy_frame,
+            text="本应用收集匿名DAU数据（设备ID、版本号等）用于统计分析，不涉及个人隐私。",
+            font=("Segoe UI", 9),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["BG"],
+            anchor="w",
+            wraplength=580,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 0))
+
+        privacy_link = tk.Label(
+            privacy_frame,
+            text="查看详细隐私政策 →",
+            font=("Segoe UI", 9, "underline"),
+            fg=_THEME["BLUE"],
+            bg=_THEME["BG"],
+            cursor="hand2",
+            anchor="w",
+        )
+        privacy_link.pack(anchor="w", pady=(2, 0))
+        privacy_link.bind(
+            "<Button-1>",
+            lambda _: webbrowser.open(f"{PROJECT_URL}/blob/main/PRIVACY.md"),
+        )
+
+        tk.Frame(content, bg=_THEME["BORDER"], height=1).pack(fill="x", pady=12)
+
         tk.Label(
             content,
             text="MIT License  |  Copyright © 2024-2026 Thankyou-Cheems",

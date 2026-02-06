@@ -168,6 +168,8 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         "pystray",
         "--collect-all",
         "requests",
+        "--collect-all",
+        "certifi",
         "--distpath",
         str(out_dir),
         "--workpath",

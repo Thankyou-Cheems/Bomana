@@ -1050,6 +1050,78 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         # === 分隔线 ===
         tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
         
+        # === 隐私政策 ===
+
+        tk.Label(
+
+            content, text="🔒 隐私说明",
+
+            font=("Segoe UI", 14, "bold"),
+
+            fg=Theme.TEXT, bg=Theme.BG, anchor="w"
+
+        ).pack(anchor="w", pady=(0, 10))
+
+
+
+        privacy_desc = """本应用收集匿名DAU数据（设备ID、版本号等）用于统计分析，不涉及个人隐私。
+
+
+
+数据特点：
+
+• 完全匿名化（SHA256加密，不可逆向）
+
+• 仅统计必需（不收集IP、账号、邮箱等）
+
+• 代码开源可审查
+
+• 用户可禁用（见隐私政策详情）"""
+
+
+
+        tk.Label(
+
+            content, text=privacy_desc,
+
+            font=("Segoe UI", 10),
+
+            fg=Theme.TEXT_DIM, bg=Theme.BG,
+
+            justify="left", anchor="w"
+
+        ).pack(anchor="w", pady=(0, 10))
+
+
+
+        privacy_link = tk.Label(
+
+            content, text="查看完整隐私政策 →",
+
+            font=("Segoe UI", 10, "underline"),
+
+            fg=Theme.BLUE, bg=Theme.BG, cursor="hand2", anchor="w"
+
+        )
+
+        privacy_link.pack(anchor="w", pady=(0, 15))
+
+        privacy_link.bind(
+
+            "<Button-1>",
+
+            lambda e: self._open_url(f"{AboutConfig.GITHUB_URL}/blob/main/PRIVACY.md")
+
+        )
+
+        
+
+        # === 分隔线 ===
+
+        tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
+
+        
+
         # === 版权声明 ===
         copyright_text = f"""作者：{AboutConfig.AUTHOR}
 
