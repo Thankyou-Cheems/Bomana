@@ -2,7 +2,7 @@
 
 ## Overview
 - Entry point: `Bomana.pyw` (single-file app that currently contains UI, logic, and polling)
-- Portable launcher: `launcher.pyw` (checks Tencent update API first, falls back to GitHub Release, updates app package, launches app)
+- Portable launcher: `launcher.pyw` (startup auto-check, Tencent version check + GitHub fallback, check/download split, offline launch, details/support dialog)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app, widgets, dialogs, nav window)
@@ -49,8 +49,17 @@
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
 3. UI render with `tkinter` (timer, panels, hints, debug text).
 4. Alerts and sounds via `SoundConfig` + Windows Beep.
-5. Launcher update flow: Tencent API first (`BOMANA_UPDATE_BASE_URL`), GitHub fallback on failure.
-6. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` events to Tencent API (best effort).
+5. Launcher check flow:
+   - On startup (and channel switch), launcher auto-checks update metadata.
+   - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for version/manifest when available.
+   - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
+   - Resolves package total size from manifest value or HTTP `Content-Length` probe.
+6. Launcher download/apply flow:
+   - Download only starts after explicit user confirmation.
+   - Streams package with progress and transfer speed updates.
+   - Verifies SHA256 (when provided), replaces `app/`, and updates local version metadata.
+   - Launch action stays available for offline local app start.
+7. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` events to Tencent API (best effort).
 
 Important constraint: only use the official 8111 API. No memory reads, injection, or game file modifications (see `Bomana.pyw` header rules).
 
@@ -82,5 +91,9 @@ CI:
 - `.github/workflows/build.yml` runs separate jobs for:
   - `build_app`: app package + manifest
   - `build_launcher`: launcher exe
-- pushing tag `vX.Y.Z` triggers cloud build and release automatically.
+- tag-driven release targets:
+  - `vX.Y.Z`: full release (launcher + app packages)
+  - `vX.Y.Z-app`: app packages only
+  - `vX.Y.Z-launcher`: launcher only
+- `workflow_dispatch` also supports `build_target=all|app|launcher`.
 

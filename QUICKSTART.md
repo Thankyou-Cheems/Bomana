@@ -51,10 +51,11 @@ python Bomana.pyw
 1. **双击 `Bomana_launcher_vX.X.X.exe`**（或运行 `python Bomana.pyw`）
 2. 窗口会出现在**屏幕右上角**
 3. 初始状态显示 "🏠机库" 或 "等待中"
-4. 启动器先选择版本通道，再优先连接国内更新服务；失败时自动回退 GitHub 并下载最新 `Bomana_app_*.zip`
-5. 首次运行需要联网完成应用包下载
-6. 可使用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 验证下载完整性
-7. 程序显示名为 `Bomana香焦`
+4. 启动器打开后会自动检查当前通道（可手动切换），优先连接国内更新服务；失败时自动回退 GitHub
+5. 界面会先展示新版本来源与下载总大小，点击“下载更新”后还会二次确认
+6. 首次运行通常需要联网完成应用包下载，后续可离线启动本地版本
+7. 可使用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 验证下载完整性
+8. 程序显示名为 `Bomana香焦`
 
 ### ✈️ 步骤 4：出生后开始计时
 
@@ -267,10 +268,11 @@ python Bomana.pyw
 1. Double-click your `Bomana_launcher_vX.X.X.exe`
 2. Window appears in **top-right corner**
 3. Shows "🏠Hangar" or "IDLE"
-4. Select a channel first, then launcher checks Tencent update service first; if it fails, GitHub Releases is used as fallback to update `Bomana_app_*.zip`
-5. First launch requires network access to download the app package
-6. Use `checksums_launcher.txt` and `checksums_app_*.txt` to verify file integrity
-7. Display name: `Bomana香焦`
+4. Launcher auto-checks the current channel on startup (you can switch channels), using Tencent update service first and GitHub Releases as fallback
+5. The UI shows update source and total download size before downloading, and "Download Update" asks for confirmation
+6. First launch usually needs network access to fetch the app package; later you can launch offline from local files
+7. Use `checksums_launcher.txt` and `checksums_app_*.txt` to verify file integrity
+8. Display name: `Bomana香焦`
 
 ### ✈️ Step 4: Spawn and Start Timer
 

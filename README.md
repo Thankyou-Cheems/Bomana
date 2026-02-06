@@ -141,8 +141,8 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 | **Lite** | 仅核心计时器 | 只想要极简界面和最低占用 |
 
 3. 下载后双击运行（绿色版，无需安装）
-4. 启动器会先让你选择通道（Enhanced/Standard/Lite），然后一键检查更新并下载对应 `Bomana_app_*.zip`
-5. 首次运行需联网下载应用包，后续可离线启动已下载版本
+4. 启动器打开后会自动检查当前通道版本（优先国内更新服务，必要时回退 GitHub），并在界面展示来源与下载总大小
+5. 仅“下载更新”操作需要用户确认；首次运行通常需联网下载应用包，后续可离线启动本地已下载版本
 6. 可用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 校验文件完整性
 7. 程序显示名为 `Bomana香焦`
 
@@ -169,7 +169,10 @@ pip install -r requirements.txt
 
 GitHub 云端自动打包发布：
 
-- 推送标签 `vX.Y.Z` 后，Actions 自动构建并创建/更新 Release
+- 推送标签 `vX.Y.Z`：构建并发布 启动器 + 三通道应用包
+- 推送标签 `vX.Y.Z-app`：仅构建并发布三通道应用包
+- 推送标签 `vX.Y.Z-launcher`：仅构建并发布启动器
+- `workflow_dispatch` 手动触发时也可通过 `build_target` 选择 `all` / `app` / `launcher`
 - 不需要本地打包后手工上传文件
 
 

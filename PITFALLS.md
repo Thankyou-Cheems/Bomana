@@ -31,3 +31,9 @@
   Symptom: uploaded asset names containing Chinese were rewritten on GitHub (e.g. became underscored names)
   Cause: GitHub Release asset upload normalizes non-ASCII/special characters in file names
   Fix/Workaround: use ASCII-only artifact names (`Bomana_launcher_v*.exe`, `checksums_*.txt`) and put Chinese text in release notes, not in file names
+
+- Date: 2026-02-06
+  Context: launcher progress animation during update check
+  Symptom: progress bar looked like it was finishing download during "check" stage, and window size could drift while status text kept changing
+  Cause: check phase reused download-like progress behavior and did not separate indeterminate animation/layout reflow from real download progress
+  Fix/Workaround: split check/download states, keep check phase indeterminate, and recalc layout/progress geometry from current canvas width instead of fixed assumptions

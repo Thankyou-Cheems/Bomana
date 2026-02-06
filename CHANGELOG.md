@@ -8,19 +8,21 @@
 ## [6.7.0] - 2026-02-06
 
 ### ✨ 新增
-- 新增绿色版启动器 `launcher.pyw`（可打包为 `Bomana香焦_v*.exe`）
-- 启动器每次启动自动检查 GitHub Release，并按通道更新应用包
+- 新增绿色版通用启动器 `launcher.pyw`（发布名：`Bomana_launcher_v*.exe`）
+- 启动器每次启动自动检查更新（优先国内更新服务，失败或仅版本检测场景自动回退 GitHub）
 - 新增可替换应用包发布形态：`Bomana_app_<Variant>_vX.Y.Z.zip`
 - 新增发布清单 `manifest_<Variant>.json`（版本、包名、SHA256）
+- 启动器新增“详情/支持作者”弹窗入口（复用主程序赞助资源）
 
 ### 🔧 改进
 - 新增 `tools/build_portable.py` 与 `build_portable.bat`，统一构建 Launcher + app.zip + manifest
 - GitHub Actions 发布流程切换为绿色版产物链路
-- CI 拆分为 `build_app` 与 `build_launcher` 两类产物构建，支持手动选择构建目标（all/app/launcher）
-- 启动器升级为可视化引导界面：实时状态、下载进度、重试/离线启动/打开下载页等新手友好交互
-- 启动器新增通道下拉选择（Enhanced/Standard/Lite），不再“打开即自动下载”
-- 启动器新增通道详细说明（功能差异/适用人群），并固定显示“离线启动”按钮（无本地版本时禁用并提示）
-- 发布形态调整为单一通用启动器（`Bomana香焦_vX.Y.Z.exe`）+ 三通道小包（`Bomana_app_*`）
+- CI 拆分为 `build_app` 与 `build_launcher` 两类产物构建，支持手动选择构建目标（all/app/launcher）及标签选择目标（`vX.Y.Z` / `vX.Y.Z-app` / `vX.Y.Z-launcher`）
+- 启动器升级为可视化引导界面：自动检查、来源展示、下载总大小提示、下载二次确认、离线启动/重新检查/打开下载页等完整交互
+- 启动器下载状态反馈增强：显示进度百分比、传输速度，完成后明确提示安装位置
+- 启动器界面缩放与字体渲染优化（DPI 感知 + 主程序同优先级字体策略）
+- 修复进度条与动画误导问题（检查阶段不假满、完成后状态符号稳定）
+- 打包脚本为启动器补充运行时资源（`app.ico`、`sponsor_wechat.png`）
 
 ---
 ## [6.6.3] - 2026-01-25
