@@ -104,6 +104,15 @@ echo [6/6] 开始打包...
 echo 这可能需要几分钟时间，请耐心等待...
 echo.
 
+REM 生成版本信息文件
+echo [5.5/6] 生成版本信息...
+python tools\create_version_info.py --config bomana\config.py --output file_version_info.txt
+set "VERSION_ARG="
+if exist file_version_info.txt (
+    set "VERSION_ARG=--version-file file_version_info.txt"
+)
+
+
 set "EXEC_NAME=Bomana_%VARIANT%"
 set "CCRP_DATA_ARG="
 if /I "%VARIANT%"=="Enhanced" (
@@ -123,6 +132,7 @@ if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
                 %CCRP_DATA_ARG% ^
                 --hidden-import "pystray._win32" ^
                 --collect-submodules "PIL" ^
+                %VERSION_ARG% ^
                 --clean Bomana.pyw
 ) else (
     pyinstaller --noconsole --onefile ^
@@ -132,6 +142,7 @@ if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
                 --add-data "sponsor_wechat.png;." ^
                 --hidden-import "pystray._win32" ^
                 --collect-submodules "PIL" ^
+                %VERSION_ARG% ^
                 --clean Bomana.pyw
 )
 
@@ -147,6 +158,7 @@ REM 恢复 config.py
 if exist "%CONFIG_BAK%" move /y "%CONFIG_BAK%" "%CONFIG_FILE%" >nul
 
 echo.
+if exist file_version_info.txt del file_version_info.txt
 echo [验证] 检查输出...
 if exist "dist\%EXEC_NAME%.exe" (
     echo [成功] 打包完成！
