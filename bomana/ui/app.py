@@ -1009,10 +1009,16 @@ class App:
         app = self
         
         def icon():
-            try:
-                return Image.open(resource_path(FileConfig.ICON_FILE)).convert("RGBA")
-            except:
-                return Image.new('RGBA', (64, 64), Theme.BLUE)
+            # Prefer configured icon; fallback to .ico for better Windows compatibility.
+            candidates = [FileConfig.ICON_FILE, "app.ico"]
+            for name in candidates:
+                try:
+                    p = resource_path(name)
+                    if os.path.exists(p):
+                        return Image.open(p).convert("RGBA")
+                except Exception:
+                    continue
+            return Image.new("RGBA", (64, 64), Theme.BLUE)
         
         # 回调函数（需要在主线程执行）
         def do_reset(icon, item):

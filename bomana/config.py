@@ -349,7 +349,7 @@ class FileConfig:
     STATE_FILE = Path.home() / ".wttimer_state.json"
 
     # 图标文件（用于托盘和窗口）
-    ICON_FILE = "app.png"
+    ICON_FILE = "app.ico"
 
     # 互斥锁名称（防止多开）
     MUTEX_NAME = r"Global\WTtimer_SingleInstance"

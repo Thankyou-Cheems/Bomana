@@ -127,7 +127,7 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
                 continue
             add_file_to_zip(zf, root, path)
 
-        for asset in ("app.png", "sponsor_wechat.png"):
+        for asset in ("app.ico", "sponsor_wechat.png"):
             p = root / asset
             if p.exists():
                 add_file_to_zip(zf, root, p)

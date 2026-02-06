@@ -24,7 +24,7 @@ def resource_path(rel_path: str) -> str:
     支持PyInstaller打包，打包后资源在_MEIPASS临时目录。
     
     Args:
-        rel_path: 相对路径（如 "app.png"）
+        rel_path: 相对路径（如 "app.ico"）
     
     Returns:
         绝对路径字符串

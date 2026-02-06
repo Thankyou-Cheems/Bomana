@@ -89,7 +89,7 @@ VibeCoding / AI 助手协作规范 (请严格遵守)
 pyinstaller --noconsole --onefile `
     --name "Bomana_Enhanced" `
     --icon "app.ico" `
-    --add-data "app.png;." `
+    --add-data "app.ico;." `
     --add-data "sponsor_wechat.png;." `
     --add-data "ccrp_bomb_params.json;." `
     --hidden-import "pystray._win32" `
