@@ -25,3 +25,9 @@
   Symptom: `UnicodeEncodeError: 'charmap' codec can't encode characters` when printing paths
   Cause: CI console encoding was cp1252, but output included Chinese file names (e.g. checksum file path)
   Fix/Workaround: route status logs through `safe_print()` with encoding fallback (`backslashreplace`)
+
+- Date: 2026-02-06
+  Context: GitHub Release asset naming in Actions
+  Symptom: uploaded asset names containing Chinese were rewritten on GitHub (e.g. became underscored names)
+  Cause: GitHub Release asset upload normalizes non-ASCII/special characters in file names
+  Fix/Workaround: use ASCII-only artifact names (`Bomana_launcher_v*.exe`, `checksums_*.txt`) and put Chinese text in release notes, not in file names

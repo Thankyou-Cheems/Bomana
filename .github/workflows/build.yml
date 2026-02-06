@@ -127,7 +127,7 @@ jobs:
           path: |
             dist/Bomana_app_${{ matrix.variant.slug }}_v${{ needs.prepare.outputs.version }}.zip
             dist/manifest_${{ matrix.variant.slug }}.json
-            dist/校验信息_app_${{ matrix.variant.slug }}.txt
+            dist/checksums_app_${{ matrix.variant.slug }}.txt
 
   build_launcher:
     name: 构建通用启动器
@@ -161,8 +161,8 @@ jobs:
         with:
           name: Bomana-Launcher
           path: |
-            dist/Bomana香焦_v${{ needs.prepare.outputs.version }}.exe
-            dist/校验信息_launcher.txt
+            dist/Bomana_launcher_v${{ needs.prepare.outputs.version }}.exe
+            dist/checksums_launcher.txt
 
   release:
     name: 发布正式版本
@@ -187,18 +187,22 @@ jobs:
             ${{ needs.prepare.outputs.changelog }}
 
             ## 📦 版本说明
-            - 通用启动器：`Bomana香焦_v*.exe`（一个文件，内置通道选择）
+            - 通用启动器：`Bomana_launcher_v*.exe`（一个文件，内置通道选择）
             - 可更新应用包：
               - `Bomana_app_Enhanced_v*.zip`
               - `Bomana_app_Standard_v*.zip`
               - `Bomana_app_Lite_v*.zip`
+            - 校验文件：
+              - `checksums_launcher.txt`（启动器 SHA256）
+              - `checksums_app_*.txt`（应用包 SHA256）
 
             每次启动时，Launcher 内可选择通道，并按选择更新对应 `app.zip`。
+            文件名统一使用 ASCII，避免 GitHub Release 对非 ASCII 名称的自动重写。
 
             > 云端自动构建：推送 `vX.Y.Z` 标签后，GitHub Actions 会自动构建并发布，无需本地打包上传。
 
             ## 🔐 安全验证
-            请下载对应的 `校验信息_*.txt` 文件，使用 SHA256 校验确保文件完整性。
+            请下载对应的 `checksums_*.txt` 文件，使用 SHA256 校验确保文件完整性。
 
             ## 📄 许可证
             本软件基于 MIT 许可证开源。

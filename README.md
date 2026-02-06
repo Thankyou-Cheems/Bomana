@@ -128,7 +128,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 ### 方式一：下载预编译版本（推荐）
 
 1. 前往 [Releases](https://github.com/Thankyou-Cheems/Bomana/releases) 页面
-2. 下载通用启动器：`Bomana香焦_vX.X.X.exe`
+2. 下载通用启动器：`Bomana_launcher_vX.X.X.exe`
 
 启动器内可选版本通道：
 
@@ -141,7 +141,8 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 3. 下载后双击运行（绿色版，无需安装）
 4. 启动器会先让你选择通道（Enhanced/Standard/Lite），然后一键检查更新并下载对应 `Bomana_app_*.zip`
 5. 首次运行需联网下载应用包，后续可离线启动已下载版本
-6. 程序显示名为 `Bomana香焦`
+6. 可用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 校验文件完整性
+7. 程序显示名为 `Bomana香焦`
 
 ### 方式二：从源码运行
 

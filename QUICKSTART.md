@@ -13,7 +13,7 @@
 #### 选项 A：下载打包版（推荐新手）
 
 1. 访问 [Releases 页面](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. 下载通用启动器：`Bomana香焦_vX.X.X.exe`
+2. 下载通用启动器：`Bomana_launcher_vX.X.X.exe`
 
 启动器内可选版本通道：
 
@@ -48,12 +48,13 @@ python Bomana.pyw
 
 ### 🚀 步骤 3：运行 Bomana
 
-1. **双击 `Bomana香焦_vX.X.X.exe`**（或运行 `python Bomana.pyw`）
+1. **双击 `Bomana_launcher_vX.X.X.exe`**（或运行 `python Bomana.pyw`）
 2. 窗口会出现在**屏幕右上角**
 3. 初始状态显示 "🏠机库" 或 "等待中"
 4. 启动器先选择版本通道，再优先连接国内更新服务；失败时自动回退 GitHub 并下载最新 `Bomana_app_*.zip`
 5. 首次运行需要联网完成应用包下载
-6. 程序显示名为 `Bomana香焦`
+6. 可使用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 验证下载完整性
+7. 程序显示名为 `Bomana香焦`
 
 ### ✈️ 步骤 4：出生后开始计时
 
@@ -235,7 +236,7 @@ python tools/blkx_extractor.py ^
 #### Option A: Download Packaged Version (Recommended)
 
 1. Visit [Releases page](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. Download the universal launcher: `Bomana香焦_vX.X.X.exe`
+2. Download the universal launcher: `Bomana_launcher_vX.X.X.exe`
 
 Choose channel inside launcher:
 
@@ -263,12 +264,13 @@ python Bomana.pyw
 
 ### 🚀 Step 3: Run Bomana
 
-1. Double-click your `Bomana香焦_vX.X.X.exe`
+1. Double-click your `Bomana_launcher_vX.X.X.exe`
 2. Window appears in **top-right corner**
 3. Shows "🏠Hangar" or "IDLE"
 4. Select a channel first, then launcher checks Tencent update service first; if it fails, GitHub Releases is used as fallback to update `Bomana_app_*.zip`
 5. First launch requires network access to download the app package
-6. Display name: `Bomana香焦`
+6. Use `checksums_launcher.txt` and `checksums_app_*.txt` to verify file integrity
+7. Display name: `Bomana香焦`
 
 ### ✈️ Step 4: Spawn and Start Timer
 

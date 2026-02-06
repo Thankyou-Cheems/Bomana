@@ -42,7 +42,7 @@ VARIANT_SWITCHES = {
 
 APP_ENTRY = "Bomana.pyw"
 APP_DIR = "bomana"
-UNIVERSAL_LAUNCHER_NAME = "Bomana香焦"
+UNIVERSAL_LAUNCHER_NAME = "Bomana_launcher"
 
 
 def safe_print(msg: str) -> None:
@@ -218,11 +218,11 @@ def write_checksum_info(
         lines.append(f"{launcher.name}  SHA256  {sha256_file(launcher)}")
     lines.append("")
     if target == "launcher":
-        path = out_dir / "校验信息_launcher.txt"
+        path = out_dir / "checksums_launcher.txt"
     elif target == "app":
-        path = out_dir / f"校验信息_app_{variant}.txt"
+        path = out_dir / f"checksums_app_{variant}.txt"
     else:
-        path = out_dir / f"校验信息_portable_{variant}.txt"
+        path = out_dir / f"checksums_portable_{variant}.txt"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 

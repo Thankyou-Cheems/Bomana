@@ -68,9 +68,10 @@ Important constraint: only use the official 8111 API. No memory reads, injection
 
 ## Build & Release
 Portable release uses:
-- `Bomana香焦_vX.Y.Z.exe` (universal bootstrap runtime with channel selector)
+- `Bomana_launcher_vX.Y.Z.exe` (universal bootstrap runtime with channel selector)
 - `Bomana_app_<Variant>_vX.Y.Z.zip` (updatable application package)
 - `manifest_<Variant>.json` (channel/version/package metadata + SHA256)
+- `checksums_*.txt` (SHA256 checksum info)
 
 Local build helper:
 - `build_portable.bat <Variant> <all|app|launcher>`

@@ -1,5 +1,5 @@
 @echo off
-REM 仅打包通用启动器（Bomana香焦_vX.Y.Z.exe）
+REM 仅打包通用启动器（Bomana_launcher_vX.Y.Z.exe）
 setlocal
 set "VERSION=%~1"
 
