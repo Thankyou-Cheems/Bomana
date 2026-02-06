@@ -143,6 +143,51 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
     return out_zip
 
 
+def generate_version_info(work_dir: Path, version: str) -> Path:
+    """Generate a version info file for PyInstaller to reduce AV false positives."""
+    # Convert "1.1.0" -> (1, 1, 0, 0)
+    nums = re.findall(r'\d+', version)
+    parts = [int(x) for x in nums]
+    while len(parts) < 4:
+        parts.append(0)
+    ver_tuple = tuple(parts[:4])
+    
+    content = f"""# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers={ver_tuple},
+    prodvers={ver_tuple},
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        u'080404b0',
+        [StringStruct(u'CompanyName', u'Bomana Team'),
+        StringStruct(u'FileDescription', u'Bomana Portable Launcher'),
+        StringStruct(u'FileVersion', u'{version}'),
+        StringStruct(u'InternalName', u'BomanaLauncher'),
+        StringStruct(u'LegalCopyright', u'Copyright (c) 2024 Bomana Team'),
+        StringStruct(u'OriginalFilename', u'Bomana_launcher.exe'),
+        StringStruct(u'ProductName', u'Bomana'),
+        StringStruct(u'ProductVersion', u'{version}')])
+      ]), 
+    VarFileInfo([VarStruct(u'Translation', [2052, 1200])])
+  ]
+)
+"""
+    path = work_dir / "file_version_info.txt"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+
 def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
     name = f"{UNIVERSAL_LAUNCHER_NAME}_v{version}"
     work_dir = root / "build" / "pyinstaller" / "UniversalLauncher"
@@ -178,6 +223,10 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         str(work_dir),
         "--clean",
     ]
+
+    # Add version info to reduce false positives
+    version_file = generate_version_info(work_dir, version)
+    cmd.extend(["--version-file", str(version_file)])
 
     # Launcher runtime resources (window icon + details dialog assets)
     icon_file = root / "app.ico"
