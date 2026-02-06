@@ -26,7 +26,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 
 # Configure SSL context for HTTPS connections (critical for PyInstaller)
@@ -54,11 +54,17 @@ DEFAULT_ENTRYPOINT = "Bomana.pyw"
 NET_TIMEOUT_SEC = 8.0
 PRIMARY_TIMEOUT_SEC = 4.0
 UA = f"BomanaLauncher/{LAUNCHER_VERSION}"
-PRIMARY_UPDATE_BASE_URL = os.environ.get("BOMANA_UPDATE_BASE_URL", "https://bomanaupdate.007985.xyz").strip().rstrip("/")
+PRIMARY_UPDATE_BASE_URL = (
+    os.environ.get("BOMANA_UPDATE_BASE_URL", "https://bomanaupdate.007985.xyz")
+    .strip()
+    .rstrip("/")
+)
 PRIMARY_VERSION_API_PATH = "/api/v1/version"
 PRIMARY_EVENT_API_PATH = "/api/v1/event"
 # 默认将国内服务作为“版本检查源”；仅在显式开启时才使用其下载地址。
-PRIMARY_ALLOW_PACKAGE_DOWNLOAD = os.environ.get("BOMANA_PRIMARY_ALLOW_PACKAGE_DOWNLOAD", "").strip().lower() in ("1", "true", "yes", "on")
+PRIMARY_ALLOW_PACKAGE_DOWNLOAD = os.environ.get(
+    "BOMANA_PRIMARY_ALLOW_PACKAGE_DOWNLOAD", ""
+).strip().lower() in ("1", "true", "yes", "on")
 
 RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
@@ -250,7 +256,11 @@ def _fetch_bytes(
         url,
         headers=req_headers,
     )
-    with urlopen(req, timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC), context=_ssl_context) as resp:
+    with urlopen(
+        req,
+        timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC),
+        context=_ssl_context,
+    ) as resp:
         total: Optional[int] = None
         try:
             header = resp.headers.get("Content-Length")
@@ -284,8 +294,10 @@ def _fetch_json_with_timeout(url: str, timeout_sec: float) -> Dict[str, Any]:
     return json.loads(raw.decode("utf-8"))
 
 
-def _fetch_content_length(url: str, timeout_sec: Optional[float] = None) -> Optional[int]:
-    timeout = (timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)
+def _fetch_content_length(
+    url: str, timeout_sec: Optional[float] = None
+) -> Optional[int]:
+    timeout = timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC
     req = Request(url, method="HEAD", headers={"User-Agent": UA, "Accept": "*/*"})
     try:
         with urlopen(req, timeout=timeout, context=_ssl_context) as resp:
@@ -298,7 +310,9 @@ def _fetch_content_length(url: str, timeout_sec: Optional[float] = None) -> Opti
 
     # Some CDNs reject HEAD; fallback to a 1-byte range request.
     try:
-        req2 = Request(url, headers={"User-Agent": UA, "Accept": "*/*", "Range": "bytes=0-0"})
+        req2 = Request(
+            url, headers={"User-Agent": UA, "Accept": "*/*", "Range": "bytes=0-0"}
+        )
         with urlopen(req2, timeout=timeout, context=_ssl_context) as resp2:
             content_range = str(resp2.headers.get("Content-Range", "")).strip()
             m = re.search(r"/(\d+)$", content_range)
@@ -350,7 +364,11 @@ def _detect_channel() -> str:
     if env in _CHANNEL_MAP:
         return _CHANNEL_MAP[env]
 
-    exe_name = (Path(sys.executable).name if getattr(sys, "frozen", False) else Path(__file__).name).lower()
+    exe_name = (
+        Path(sys.executable).name
+        if getattr(sys, "frozen", False)
+        else Path(__file__).name
+    ).lower()
     for key, value in _CHANNEL_MAP.items():
         if key in exe_name:
             return value
@@ -394,7 +412,9 @@ def _is_local_app_ready(base: Path) -> bool:
 def _write_state(base: Path, state: Dict[str, Any]) -> None:
     path = base / STATE_FILE_NAME
     try:
-        path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     except Exception:
         pass
 
@@ -421,7 +441,9 @@ def _read_machine_guid() -> str:
     try:
         import winreg  # type: ignore
 
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as key:
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography"
+        ) as key:
             guid, _ = winreg.QueryValueEx(key, "MachineGuid")
         return str(guid).strip()
     except Exception:
@@ -563,7 +585,10 @@ def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
     remote_version = str(manifest.get("app_version", "")).strip()
     package_asset = str(manifest.get("package_asset", "")).strip()
     package_sha256 = str(manifest.get("package_sha256", "")).strip()
-    entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
+    entrypoint = (
+        str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip()
+        or DEFAULT_ENTRYPOINT
+    )
     if not remote_version or not package_asset:
         raise RuntimeError("发布清单字段缺失")
 
@@ -585,7 +610,9 @@ def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
     }
 
 
-def _fetch_manifest_from_primary(channel: str, local_version: str, identity: Dict[str, str]) -> Dict[str, Any]:
+def _fetch_manifest_from_primary(
+    channel: str, local_version: str, identity: Dict[str, str]
+) -> Dict[str, Any]:
     if not PRIMARY_UPDATE_BASE_URL:
         raise RuntimeError("未配置国内更新服务")
 
@@ -597,14 +624,24 @@ def _fetch_manifest_from_primary(channel: str, local_version: str, identity: Dic
         "install_id": identity.get("install_id", ""),
     }
     version_url = _join_base_url_path(PRIMARY_UPDATE_BASE_URL, PRIMARY_VERSION_API_PATH)
-    payload = _fetch_json_with_timeout(f"{version_url}?{urlencode(params)}", PRIMARY_TIMEOUT_SEC)
+    payload = _fetch_json_with_timeout(
+        f"{version_url}?{urlencode(params)}", PRIMARY_TIMEOUT_SEC
+    )
     remote_version = str(payload.get("app_version", "")).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
-    package_url = _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
+    package_url = (
+        _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url)
+        if raw_package_url
+        else ""
+    )
     package_sha256 = str(payload.get("package_sha256", "")).strip()
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
-    entrypoint = str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
-    source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
+    entrypoint = (
+        str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
+    )
+    source_name = (
+        str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
+    )
 
     if not remote_version:
         raise RuntimeError("国内更新服务返回字段缺失")
@@ -655,7 +692,12 @@ def _resolve_update_manifest(
     identity: Dict[str, str],
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
 ) -> Tuple[str, Dict[str, Any]]:
-    def notify(title: str, detail: str = "", progress: Optional[float] = None, level: str = "info") -> None:
+    def notify(
+        title: str,
+        detail: str = "",
+        progress: Optional[float] = None,
+        level: str = "info",
+    ) -> None:
         if status_cb:
             status_cb(title, detail, progress, level)
 
@@ -675,12 +717,19 @@ def _resolve_update_manifest(
             if manifest is not None:
                 remote_version_preview = str(manifest.get("remote_version", "")).strip()
                 package_url_preview = str(manifest.get("package_url", "")).strip()
-                need_fallback = _version_is_newer(remote_version_preview, local_version) and (
+                need_fallback = _version_is_newer(
+                    remote_version_preview, local_version
+                ) and (
                     (not PRIMARY_ALLOW_PACKAGE_DOWNLOAD) or (not package_url_preview)
                 )
                 if need_fallback:
                     _log(base, "腾讯云更新服务仅用于版本检测，下载源切换为 GitHub")
-                    notify("发现新版本", "腾讯云仅提供版本号，正在切换 GitHub 下载源...", None, "info")
+                    notify(
+                        "发现新版本",
+                        "腾讯云仅提供版本号，正在切换 GitHub 下载源...",
+                        None,
+                        "info",
+                    )
                     manifest = None
         except Exception as e:
             primary_err = e
@@ -693,7 +742,9 @@ def _resolve_update_manifest(
             manifest = _fetch_manifest_from_github(channel)
         except Exception as e:
             if primary_err is not None:
-                raise RuntimeError(f"国内更新服务不可用({primary_err})，GitHub 回退失败({e})") from e
+                raise RuntimeError(
+                    f"国内更新服务不可用({primary_err})，GitHub 回退失败({e})"
+                ) from e
             raise
 
     if manifest is None:
@@ -707,11 +758,18 @@ def _check_for_update(
     identity: Dict[str, str],
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
 ) -> Dict[str, Any]:
-    def notify(title: str, detail: str = "", progress: Optional[float] = None, level: str = "info") -> None:
+    def notify(
+        title: str,
+        detail: str = "",
+        progress: Optional[float] = None,
+        level: str = "info",
+    ) -> None:
         if status_cb:
             status_cb(title, detail, progress, level)
 
-    local_version, manifest = _resolve_update_manifest(base, channel, identity, status_cb=notify)
+    local_version, manifest = _resolve_update_manifest(
+        base, channel, identity, status_cb=notify
+    )
     remote_version = str(manifest.get("remote_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
@@ -747,19 +805,29 @@ def _download_update_from_manifest(
     manifest: Dict[str, Any],
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
 ) -> Tuple[str, str]:
-    def notify(title: str, detail: str = "", progress: Optional[float] = None, level: str = "info") -> None:
+    def notify(
+        title: str,
+        detail: str = "",
+        progress: Optional[float] = None,
+        level: str = "info",
+    ) -> None:
         if status_cb:
             status_cb(title, detail, progress, level)
 
     remote_version = str(manifest.get("remote_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
     package_sha256 = str(manifest.get("package_sha256", "")).strip()
-    entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
+    entrypoint = (
+        str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip()
+        or DEFAULT_ENTRYPOINT
+    )
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
     if not remote_version or not package_url:
         raise RuntimeError("更新清单字段缺失")
 
-    notify("开始下载", f"正在下载 v{remote_version}（来源：{source_name}）", 0.24, "info")
+    notify(
+        "开始下载", f"正在下载 v{remote_version}（来源：{source_name}）", 0.24, "info"
+    )
     last_emit = [0.0]
     speed_state = {
         "time": time.monotonic(),
@@ -785,7 +853,9 @@ def _download_update_from_manifest(
         if dt > 0 and db >= 0:
             inst_bps = db / dt
             prev_bps = float(speed_state["bps"])
-            speed_state["bps"] = inst_bps if prev_bps <= 0 else (prev_bps * 0.65 + inst_bps * 0.35)
+            speed_state["bps"] = (
+                inst_bps if prev_bps <= 0 else (prev_bps * 0.65 + inst_bps * 0.35)
+            )
             speed_state["time"] = now
             speed_state["downloaded"] = downloaded
 
@@ -801,7 +871,9 @@ def _download_update_from_manifest(
             notify("正在下载更新", detail, None, "info")
 
     package_bytes = _fetch_bytes(package_url, progress_cb=on_progress)
-    _install_zip_package(base, package_bytes, package_sha256, entrypoint, status_cb=notify)
+    _install_zip_package(
+        base, package_bytes, package_sha256, entrypoint, status_cb=notify
+    )
     notify("更新完成", f"已更新到 v{remote_version}", 1.0, "success")
     return remote_version, source_name
 
@@ -864,7 +936,9 @@ class LauncherDetailsDialog(tk.Toplevel):
         self._fit_window_to_parent(parent)
         self._center_on_parent(parent)
 
-    def _build_ui(self, channel: str, local_version: str, launcher_version: str, install_dir: Path) -> None:
+    def _build_ui(
+        self, channel: str, local_version: str, launcher_version: str, install_dir: Path
+    ) -> None:
         wrap_w = 760
 
         container = tk.Frame(self, bg=_THEME["BG"])
@@ -914,7 +988,9 @@ class LauncherDetailsDialog(tk.Toplevel):
                 img = img.resize((56, 56), Image.Resampling.LANCZOS)
                 icon_img = ImageTk.PhotoImage(img)
                 self._images.append(icon_img)
-                tk.Label(title_row, image=icon_img, bg=_THEME["BG"]).pack(side="left", padx=(0, 12))
+                tk.Label(title_row, image=icon_img, bg=_THEME["BG"]).pack(
+                    side="left", padx=(0, 12)
+                )
         except Exception:
             pass
 
@@ -972,7 +1048,13 @@ class LauncherDetailsDialog(tk.Toplevel):
 
         link_row = tk.Frame(content, bg=_THEME["BG"])
         link_row.pack(fill="x", pady=(8, 0))
-        tk.Label(link_row, text="项目主页：", font=("Segoe UI", 11), fg=_THEME["TEXT_DIM"], bg=_THEME["BG"]).pack(side="left")
+        tk.Label(
+            link_row,
+            text="项目主页：",
+            font=("Segoe UI", 11),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["BG"],
+        ).pack(side="left")
         gh = tk.Label(
             link_row,
             text=PROJECT_URL,
@@ -986,7 +1068,13 @@ class LauncherDetailsDialog(tk.Toplevel):
 
         rel_row = tk.Frame(content, bg=_THEME["BG"])
         rel_row.pack(fill="x", pady=(4, 0))
-        tk.Label(rel_row, text="最新发布：", font=("Segoe UI", 11), fg=_THEME["TEXT_DIM"], bg=_THEME["BG"]).pack(side="left")
+        tk.Label(
+            rel_row,
+            text="最新发布：",
+            font=("Segoe UI", 11),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["BG"],
+        ).pack(side="left")
         rel = tk.Label(
             rel_row,
             text=RELEASES_URL,
@@ -1026,7 +1114,10 @@ class LauncherDetailsDialog(tk.Toplevel):
                 img = Image.open(sponsor_file).convert("RGBA")
                 target_w = 360
                 ratio = target_w / float(img.width)
-                img = img.resize((target_w, max(1, int(img.height * ratio))), Image.Resampling.LANCZOS)
+                img = img.resize(
+                    (target_w, max(1, int(img.height * ratio))),
+                    Image.Resampling.LANCZOS,
+                )
                 sponsor_img = ImageTk.PhotoImage(img)
                 self._images.append(sponsor_img)
                 tk.Label(content, image=sponsor_img, bg=_THEME["BG"]).pack(anchor="w")
@@ -1206,9 +1297,14 @@ class LauncherWindow:
         self._init_dynamic_font_scaling()
         self._refresh_wraplengths()
         self._schedule_layout_reflow()
-        self._set_status("准备就绪", "启动后将自动检查更新，并展示可下载包总大小。", 0.0, "info")
+        self._set_status(
+            "准备就绪", "启动后将自动检查更新，并展示可下载包总大小。", 0.0, "info"
+        )
         self._set_running(False)
-        _log(self.base, f"Launcher start, channel={self.channel}, version={LAUNCHER_VERSION}")
+        _log(
+            self.base,
+            f"Launcher start, channel={self.channel}, version={LAUNCHER_VERSION}",
+        )
         threading.Thread(
             target=_report_primary_event,
             args=(
@@ -1317,7 +1413,9 @@ class LauncherWindow:
             hwnd = internal_id
             if os.name == "nt":
                 try:
-                    hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
+                    hwnd = ctypes.windll.user32.GetParent(internal_id) or int(
+                        internal_id
+                    )
                 except Exception:
                     hwnd = int(internal_id)
             dpi_scale = _get_dpi_scale(int(hwnd))
@@ -1440,16 +1538,24 @@ class LauncherWindow:
             self.progress_width = max(self._px(320), content_w)
             self.progress_height = self._px(12)
             if hasattr(self, "progress_canvas"):
-                self.progress_canvas.config(width=self.progress_width, height=self.progress_height)
+                self.progress_canvas.config(
+                    width=self.progress_width, height=self.progress_height
+                )
                 if self.indeterminate:
                     block = max(self._px(70), int(self.progress_width * 0.2))
-                    x = (self.anim_phase * self._px(14)) % (self.progress_width + block) - block
+                    x = (self.anim_phase * self._px(14)) % (
+                        self.progress_width + block
+                    ) - block
                     x0 = max(0, x)
                     x1 = min(self.progress_width, x + block)
-                    self.progress_canvas.coords(self.progress_bar, x0, 0, x1, self.progress_height)
+                    self.progress_canvas.coords(
+                        self.progress_bar, x0, 0, x1, self.progress_height
+                    )
                 else:
                     width = int(self.progress_width * self.progress_value)
-                    self.progress_canvas.coords(self.progress_bar, 0, 0, width, self.progress_height)
+                    self.progress_canvas.coords(
+                        self.progress_bar, 0, 0, width, self.progress_height
+                    )
         except Exception:
             pass
 
@@ -1534,7 +1640,9 @@ class LauncherWindow:
         )
         channel_title.pack(side="left")
 
-        self.channel_menu = tk.OptionMenu(channel_row, self.channel_var, "Enhanced", "Standard", "Lite")
+        self.channel_menu = tk.OptionMenu(
+            channel_row, self.channel_var, "Enhanced", "Standard", "Lite"
+        )
         self.channel_menu.config(
             bg=_THEME["CARD"],
             fg=_THEME["TEXT"],
@@ -1587,10 +1695,17 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
         )
-        card.pack(fill="both", expand=True, padx=self._px(20), pady=(self._px(4), self._px(10)))
+        card.pack(
+            fill="both",
+            expand=True,
+            padx=self._px(20),
+            pady=(self._px(4), self._px(10)),
+        )
 
         status_header = tk.Frame(card, bg=_THEME["CARD"])
-        status_header.pack(fill="x", padx=(self._px(16), self._px(6)), pady=(self._px(12), self._px(6)))
+        status_header.pack(
+            fill="x", padx=(self._px(16), self._px(6)), pady=(self._px(12), self._px(6))
+        )
 
         self.status_lbl = tk.Label(
             status_header,
@@ -1650,7 +1765,9 @@ class LauncherWindow:
             justify="left",
             wraplength=self._px(520),
         )
-        self.hint_lbl.pack(fill="x", padx=self._px(16), pady=(self._px(2), self._px(10)))
+        self.hint_lbl.pack(
+            fill="x", padx=self._px(16), pady=(self._px(2), self._px(10))
+        )
 
         btn_row = tk.Frame(card, bg=_THEME["CARD"])
         btn_row.pack(fill="x", padx=self._px(16), pady=(0, self._px(14)))
@@ -1694,6 +1811,19 @@ class LauncherWindow:
         self.release_btn.pack(side="right")
         self._style_action_button(self.release_btn, "secondary")
 
+        self.import_btn = tk.Button(
+            btn_row,
+            text="手动丢入ZIP",
+            width=11,
+            command=self._on_import_zip,
+            cursor="hand2",
+            font=self._font(10),
+            padx=self._px(6),
+            pady=self._px(3),
+        )
+        self.import_btn.pack(side="right", padx=(0, self._px(8)))
+        self._style_action_button(self.import_btn, "secondary")
+
         self.exit_btn = tk.Button(
             btn_row,
             text="退出",
@@ -1710,7 +1840,9 @@ class LauncherWindow:
     def _start_worker(self, task: str) -> None:
         if self._worker and self._worker.is_alive():
             return
-        self._worker = threading.Thread(target=self._worker_main, args=(task,), daemon=True)
+        self._worker = threading.Thread(
+            target=self._worker_main, args=(task,), daemon=True
+        )
         self._worker.start()
 
     def _begin_check(self, automatic: bool) -> None:
@@ -1725,11 +1857,20 @@ class LauncherWindow:
         self.last_check_error = ""
         self.channel = self.channel_var.get().strip() or self.detected_channel
         self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
-        self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
+        self.sub_lbl.config(
+            text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
+        )
         if automatic:
-            self._set_status("自动检查更新", f"正在检查 {self.channel} 通道，并读取下载包大小...", None, "info")
+            self._set_status(
+                "自动检查更新",
+                f"正在检查 {self.channel} 通道，并读取下载包大小...",
+                None,
+                "info",
+            )
         else:
-            self._set_status("正在检查更新", f"正在重新检查 {self.channel} 通道...", None, "info")
+            self._set_status(
+                "正在检查更新", f"正在重新检查 {self.channel} 通道...", None, "info"
+            )
         self._set_running(True)
         self._start_worker("check")
 
@@ -1747,6 +1888,69 @@ class LauncherWindow:
                 msg = _friendly_error_text(e, self.channel)
                 _log(self.base, f"更新检查失败：{e}")
                 self.events.put(("check_done", {"ok": False, "error": msg}))
+            return
+        if task == "import_zip":
+            final_version = _read_local_app_version(self.base / APP_DIR_NAME)
+            update_ok = False
+            update_error = ""
+            package_path = str(getattr(self, "pending_import_zip_path", "")).strip()
+            try:
+                if not package_path:
+                    raise RuntimeError("未选择 ZIP 包")
+                zip_file = Path(package_path)
+                if not zip_file.exists():
+                    raise RuntimeError("ZIP 包不存在")
+                self._emit_status(
+                    "开始安装", f"正在导入本地包：{zip_file.name}", 0.2, "info"
+                )
+                package_bytes = zip_file.read_bytes()
+                _install_zip_package(
+                    self.base,
+                    package_bytes,
+                    expected_sha256="",
+                    entrypoint=DEFAULT_ENTRYPOINT,
+                    status_cb=self._emit_status,
+                )
+                final_version = _read_local_app_version(self.base / APP_DIR_NAME)
+                update_ok = True
+            except Exception as e:
+                update_error = str(e)
+                _log(self.base, f"导入本地 ZIP 失败：{e}")
+
+            if update_ok:
+                self.events.put(
+                    (
+                        "download_done",
+                        {
+                            "update_ok": True,
+                            "final_version": final_version,
+                            "warning": "",
+                            "status": "安装完成",
+                            "detail": f"已导入本地应用包，当前版本 v{final_version}",
+                            "level": "success",
+                        },
+                    )
+                )
+            else:
+                self.events.put(
+                    (
+                        "download_done",
+                        {
+                            "update_ok": False,
+                            "final_version": final_version,
+                            "warning": "",
+                            "status": "导入失败",
+                            "detail": (
+                                _friendly_error_text(
+                                    RuntimeError(update_error), self.channel
+                                )
+                                if update_error
+                                else "导入失败"
+                            ),
+                            "level": "warning",
+                        },
+                    )
+                )
             return
 
         final_version = _read_local_app_version(self.base / APP_DIR_NAME)
@@ -1817,7 +2021,9 @@ class LauncherWindow:
             )
         else:
             if local_ready:
-                detail = f"{update_error}\n可点击“启动应用”使用本地版本 v{final_version}。"
+                detail = (
+                    f"{update_error}\n可点击“启动应用”使用本地版本 v{final_version}。"
+                )
                 level = "warning"
                 status = "更新失败"
             else:
@@ -1838,7 +2044,9 @@ class LauncherWindow:
                 )
             )
 
-    def _emit_status(self, title: str, detail: str, progress: Optional[float], level: str) -> None:
+    def _emit_status(
+        self, title: str, detail: str, progress: Optional[float], level: str
+    ) -> None:
         self.events.put(
             (
                 "status",
@@ -1869,10 +2077,16 @@ class LauncherWindow:
                         self.last_check_ok = True
                         self.last_check_error = ""
                         self.latest_manifest = payload.get("manifest", None)
-                        self.latest_remote_version = str(payload.get("remote_version", self.local_version))
-                        self.latest_source_name = str(payload.get("source_name", "GitHub"))
+                        self.latest_remote_version = str(
+                            payload.get("remote_version", self.local_version)
+                        )
+                        self.latest_source_name = str(
+                            payload.get("source_name", "GitHub")
+                        )
                         self.latest_package_size = payload.get("package_size", None)
-                        self.update_available = bool(payload.get("update_available", False))
+                        self.update_available = bool(
+                            payload.get("update_available", False)
+                        )
 
                         if self.update_available:
                             size_text = _format_size_text(self.latest_package_size)
@@ -1891,14 +2105,22 @@ class LauncherWindow:
                         self.latest_package_size = None
                         self.latest_source_name = ""
                         self.last_check_error = str(payload.get("error", "检查失败"))
-                        self._set_status("检查失败", self.last_check_error, 0.0, "warning")
-                    self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
-                    self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
+                        self._set_status(
+                            "检查失败", self.last_check_error, 0.0, "warning"
+                        )
+                    self.local_version = _read_local_app_version(
+                        self.base / APP_DIR_NAME
+                    )
+                    self.sub_lbl.config(
+                        text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
+                    )
                     self._set_running(False)
                     if not ok:
                         self._show_error_actions()
                 elif typ == "download_done":
-                    final_version = str(payload.get("final_version", self.local_version))
+                    final_version = str(
+                        payload.get("final_version", self.local_version)
+                    )
                     warning = str(payload.get("warning", ""))
                     self.decision = LaunchDecision(
                         action="exit",
@@ -1911,8 +2133,12 @@ class LauncherWindow:
                         self.progress_value,
                         str(payload.get("level", "info")),
                     )
-                    self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
-                    self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
+                    self.local_version = _read_local_app_version(
+                        self.base / APP_DIR_NAME
+                    )
+                    self.sub_lbl.config(
+                        text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
+                    )
                     if bool(payload.get("update_ok", False)):
                         self.update_available = False
                         self.latest_package_size = None
@@ -1938,7 +2164,9 @@ class LauncherWindow:
                 x = (self.anim_phase * self._px(14)) % (width + block) - block
                 x0 = max(0, x)
                 x1 = min(width, x + block)
-                self.progress_canvas.coords(self.progress_bar, x0, 0, x1, self.progress_height)
+                self.progress_canvas.coords(
+                    self.progress_bar, x0, 0, x1, self.progress_height
+                )
         self.root.after(100, self._animate)
 
     def _status_color(self, level: str) -> str:
@@ -1966,7 +2194,9 @@ class LauncherWindow:
         text = f"{symbol} {title}" if title else symbol
         self.status_lbl.config(text=text, fg=self._status_color(self.status_level))
 
-    def _set_status(self, title: str, detail: str, progress: Optional[float], level: str) -> None:
+    def _set_status(
+        self, title: str, detail: str, progress: Optional[float], level: str
+    ) -> None:
         if title:
             self.status_title = title
         self.status_level = level
@@ -1979,7 +2209,9 @@ class LauncherWindow:
             self.indeterminate = False
             self.progress_value = max(0.0, min(1.0, progress))
             width = int(self.progress_width * self.progress_value)
-            self.progress_canvas.coords(self.progress_bar, 0, 0, width, self.progress_height)
+            self.progress_canvas.coords(
+                self.progress_bar, 0, 0, width, self.progress_height
+            )
         self._schedule_layout_reflow()
 
     def _update_launch_button_label(self) -> None:
@@ -1999,6 +2231,7 @@ class LauncherWindow:
         self.retry_btn.config(state=state)
         self.launch_btn.config(state=state)
         self.release_btn.config(state="normal")
+        self.import_btn.config(state="normal")
         self.details_btn.config(state="normal")
         self.exit_btn.config(state="normal")
         self.channel_menu.config(state=state)
@@ -2006,7 +2239,9 @@ class LauncherWindow:
         if running:
             self.retry_btn.pack_forget()
             if self.current_task == "check":
-                self.hint_lbl.config(text="正在自动检查版本并获取下载包总大小，请稍候...")
+                self.hint_lbl.config(
+                    text="正在自动检查版本并获取下载包总大小，请稍候..."
+                )
             else:
                 self.hint_lbl.config(text="正在下载并安装更新，请稍候...")
         else:
@@ -2032,30 +2267,44 @@ class LauncherWindow:
                 )
             elif self.last_check_ok and not self.update_available:
                 if _is_local_app_ready(self.base):
-                    self.hint_lbl.config(text=f"当前已是最新版本，可直接点击“启动应用”。\n安装位置：{self.install_dir}")
+                    self.hint_lbl.config(
+                        text=f"当前已是最新版本，可直接点击“启动应用”。\n安装位置：{self.install_dir}"
+                    )
                 else:
-                    self.hint_lbl.config(text="当前设备没有本地版本，请等待在线更新可用后下载。")
+                    self.hint_lbl.config(
+                        text="当前设备没有本地版本，请等待在线更新可用后下载。"
+                    )
             elif self.last_check_error:
                 if _is_local_app_ready(self.base):
-                    self.hint_lbl.config(text="自动检查失败，可点击“重新检查”，或先点击“启动应用”使用本地版本。")
+                    self.hint_lbl.config(
+                        text="自动检查失败，可点击“重新检查”，或先点击“启动应用”使用本地版本。"
+                    )
                 else:
-                    self.hint_lbl.config(text="自动检查失败，且当前没有本地版本。请点击“重新检查”或“打开下载页”。")
+                    self.hint_lbl.config(
+                        text="自动检查失败，且当前没有本地版本。请点击“重新检查”或“打开下载页”。"
+                    )
             else:
                 self.hint_lbl.config(text="启动后会自动检查更新。")
         self._schedule_layout_reflow()
 
     def _show_error_actions(self) -> None:
         if _is_local_app_ready(self.base):
-            self.hint_lbl.config(text="可点击“重新检查”或“打开下载页”。也可直接点击“启动应用”。")
+            self.hint_lbl.config(
+                text="可点击“重新检查”或“打开下载页”。也可直接点击“启动应用”。"
+            )
         else:
-            self.hint_lbl.config(text="可点击“重新检查”或“打开下载页”。首次使用请先完成下载。")
+            self.hint_lbl.config(
+                text="可点击“重新检查”或“打开下载页”。首次使用请先完成下载。"
+            )
         self._schedule_layout_reflow()
 
     def _on_start(self) -> None:
         if self.running:
             return
         if not self.last_check_ok:
-            messagebox.showwarning(DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。")
+            messagebox.showwarning(
+                DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。"
+            )
             return
         if not self.update_available:
             messagebox.showinfo(DISPLAY_NAME, "当前已是最新版本，无需下载。")
@@ -2090,27 +2339,64 @@ class LauncherWindow:
     def _on_retry(self) -> None:
         self._begin_check(automatic=False)
 
+    def _on_import_zip(self) -> None:
+        if self.running:
+            return
+        selected = filedialog.askopenfilename(
+            parent=self.root,
+            title="选择本地应用包 ZIP",
+            filetypes=[("Zip files", "*.zip"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+        path = Path(selected)
+        ok = messagebox.askyesno(
+            DISPLAY_NAME,
+            (
+                f"将导入并安装本地包：\n{path}\n\n"
+                f"安装位置：{self.install_dir}\n"
+                "这会覆盖当前本地应用。是否继续？"
+            ),
+        )
+        if not ok:
+            return
+        self.pending_import_zip_path = str(path)
+        self.last_download_success = False
+        self.current_task = "import_zip"
+        self.has_attempted_update = True
+        self._set_status("准备导入", f"即将导入：{path.name}", 0.0, "info")
+        self._set_running(True)
+        self._start_worker("import_zip")
+
     def _on_channel_changed(self, *_args) -> None:
         if self.running:
             return
         self.channel = self.channel_var.get().strip() or self.detected_channel
         self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
-        self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
+        self.sub_lbl.config(
+            text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
+        )
         self._refresh_channel_details()
         self._begin_check(automatic=True)
 
     def _refresh_channel_details(self) -> None:
         ch = self.channel_var.get().strip() or self.detected_channel
         info = CHANNEL_DETAILS.get(ch, CHANNEL_DETAILS["Enhanced"])
-        self.channel_desc_lbl.config(text=f"{info['title']}\n{info['desc']}\n{info['who']}")
+        self.channel_desc_lbl.config(
+            text=f"{info['title']}\n{info['desc']}\n{info['who']}"
+        )
         self._refresh_wraplengths()
 
     def _on_launch(self) -> None:
         if not _is_local_app_ready(self.base):
-            self._set_status("无法启动", "本地没有可用应用包，请先点击“下载更新”。", None, "error")
+            self._set_status(
+                "无法启动", "本地没有可用应用包，请先点击“下载更新”。", None, "error"
+            )
             return
         final_version = _read_local_app_version(self.base / APP_DIR_NAME)
-        self.decision = LaunchDecision(action="launch", final_version=final_version, warning="")
+        self.decision = LaunchDecision(
+            action="launch", final_version=final_version, warning=""
+        )
         self._set_status("准备启动", f"将启动本地版本 v{final_version}", 1.0, "success")
         self.root.after(300, self._commit_launch)
 
@@ -2137,7 +2423,11 @@ class LauncherWindow:
             self.root.destroy()
 
     def _on_exit(self) -> None:
-        self.decision = LaunchDecision(action="exit", final_version=self.local_version, warning=self.decision.warning)
+        self.decision = LaunchDecision(
+            action="exit",
+            final_version=self.local_version,
+            warning=self.decision.warning,
+        )
         self.root.destroy()
 
     def run(self) -> LaunchDecision:
