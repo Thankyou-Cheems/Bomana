@@ -175,8 +175,17 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         "--specpath",
         str(work_dir),
         "--clean",
-        str(root / "launcher.pyw"),
     ]
+
+    # Launcher runtime resources (window icon + details dialog assets)
+    icon_file = root / "app.ico"
+    if icon_file.exists():
+        cmd.extend(["--add-data", f"{icon_file};."])
+    sponsor_file = root / "sponsor_wechat.png"
+    if sponsor_file.exists():
+        cmd.extend(["--add-data", f"{sponsor_file};."])
+
+    cmd.append(str(root / "launcher.pyw"))
     subprocess.run(cmd, check=True, cwd=root)
     return out_dir / f"{name}.exe"
 

@@ -30,6 +30,9 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       build_target: ${{ steps.version.outputs.build_target }}
+      build_desc: ${{ steps.version.outputs.build_desc }}
+      asset_desc: ${{ steps.version.outputs.asset_desc }}
+      release_name: ${{ steps.version.outputs.release_name }}
       changelog: ${{ steps.changelog.outputs.changelog }}
       tag_name: ${{ steps.version.outputs.tag_name }}
 
@@ -43,9 +46,20 @@ jobs:
         id: version
         shell: bash
         run: |
+          TAG_REF="${GITHUB_REF#refs/tags/}"
+          AUTO_TARGET=""
+
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
             echo "版本来源: 手动输入"
+          elif [[ "$TAG_REF" =~ ^v(.+)-app$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            AUTO_TARGET="app"
+            echo "版本来源: Git Tag (app only)"
+          elif [[ "$TAG_REF" =~ ^v(.+)-launcher$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            AUTO_TARGET="launcher"
+            echo "版本来源: Git Tag (launcher only)"
           elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
             echo "版本来源: Git Tag"
@@ -54,16 +68,48 @@ jobs:
             echo "版本来源: 源代码 __version__"
           fi
 
-          TAG_NAME=${GITHUB_REF#refs/tags/}
+          TAG_NAME="$TAG_REF"
           [ "$TAG_NAME" == "$GITHUB_REF" ] && TAG_NAME="v$VERSION"
           BUILD_TARGET="${{ github.event.inputs.build_target }}"
-          [ -z "$BUILD_TARGET" ] && BUILD_TARGET="all"
+          if [ -z "$BUILD_TARGET" ]; then
+            [ -n "$AUTO_TARGET" ] && BUILD_TARGET="$AUTO_TARGET" || BUILD_TARGET="all"
+          fi
+
+          case "$BUILD_TARGET" in
+            all)
+              BUILD_DESC="完整发布（启动器 + 三通道应用包）"
+              RELEASE_NAME="Bomana v$VERSION"
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt`'
+              ;;
+            app)
+              BUILD_DESC="应用包发布（Enhanced/Standard/Lite）"
+              RELEASE_NAME="Bomana v$VERSION · App Packages"
+              ASSET_DESC=$'- 应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_app_*.txt`'
+              ;;
+            launcher)
+              BUILD_DESC="启动器发布（通用启动器）"
+              RELEASE_NAME="Bomana v$VERSION · Launcher"
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 校验：`checksums_launcher.txt`'
+              ;;
+            *)
+              echo "未知构建目标: $BUILD_TARGET"
+              exit 1
+              ;;
+          esac
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "build_target=$BUILD_TARGET" >> "$GITHUB_OUTPUT"
+          echo "build_desc=$BUILD_DESC" >> "$GITHUB_OUTPUT"
+          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+          {
+            echo "asset_desc<<EOF"
+            echo "$ASSET_DESC"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           echo "提取到版本号: $VERSION"
           echo "构建目标: $BUILD_TARGET"
+          echo "发布说明: $BUILD_DESC"
 
       - name: 生成更新日志
         id: changelog
@@ -181,25 +227,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag_name }}
-          name: Bomana v${{ needs.prepare.outputs.version }}
+          name: ${{ needs.prepare.outputs.release_name }}
           body: |
+            ## 🚀 本次发布类型
+            **${{ needs.prepare.outputs.build_desc }}**
+
+            > Tag 规则：`vX.Y.Z` = 全量；`vX.Y.Z-app` = 仅应用包；`vX.Y.Z-launcher` = 仅启动器。
+
             ## 📝 更新日志
             ${{ needs.prepare.outputs.changelog }}
 
-            ## 📦 版本说明
-            - 通用启动器：`Bomana_launcher_v*.exe`（一个文件，内置通道选择）
-            - 可更新应用包：
-              - `Bomana_app_Enhanced_v*.zip`
-              - `Bomana_app_Standard_v*.zip`
-              - `Bomana_app_Lite_v*.zip`
-            - 校验文件：
-              - `checksums_launcher.txt`（启动器 SHA256）
-              - `checksums_app_*.txt`（应用包 SHA256）
+            ## 📦 本次包含产物
+            ${{ needs.prepare.outputs.asset_desc }}
 
-            每次启动时，Launcher 内可选择通道，并按选择更新对应 `app.zip`。
-            文件名统一使用 ASCII，避免 GitHub Release 对非 ASCII 名称的自动重写。
-
-            > 云端自动构建：推送 `vX.Y.Z` 标签后，GitHub Actions 会自动构建并发布，无需本地打包上传。
+            > 云端自动构建：推送 `vX.Y.Z` / `vX.Y.Z-app` / `vX.Y.Z-launcher` 标签后，GitHub Actions 会按标签类型自动构建并发布。
 
             ## 🔐 安全验证
             请下载对应的 `checksums_*.txt` 文件，使用 SHA256 校验确保文件完整性。

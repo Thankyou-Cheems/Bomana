@@ -15,6 +15,8 @@ import time
 import uuid
 import webbrowser
 import zipfile
+import locale
+import ctypes
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,12 +27,14 @@ from urllib.request import Request, urlopen
 
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import font as tkfont
 
 # Launcher metadata
 LAUNCHER_VERSION = "1.1.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
+PROJECT_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
 DEFAULT_CHANNEL = "Enhanced"
 APP_DIR_NAME = "app"
 STATE_FILE_NAME = "launcher_state.json"
@@ -85,6 +89,21 @@ CHANNEL_DETAILS = {
     },
 }
 
+_PREFERRED_LATIN_FONTS = [
+    "Segoe UI Variable",
+    "Segoe UI",
+    "Arial",
+    "Helvetica",
+]
+_PREFERRED_CJK_FONTS = [
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "PingFang SC",
+    "Source Han Sans SC",
+    "WenQuanYi Micro Hei",
+]
+
 
 @dataclass
 class LaunchDecision:
@@ -93,10 +112,92 @@ class LaunchDecision:
     warning: str = ""
 
 
+def _enable_dpi_awareness() -> None:
+    """Use the same DPI-awareness strategy as the main app."""
+    if os.name != "nt":
+        return
+    try:
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+    except Exception:
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
+
+def _get_dpi_scale(hwnd: int) -> float:
+    if os.name != "nt":
+        return 1.0
+    try:
+        dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
+        return (float(dpi) / 96.0) if dpi else 1.0
+    except Exception:
+        return 1.0
+
+
+def _select_ui_font_family(root: tk.Misc) -> str:
+    """Pick a readable UI font family using the same priority as the main app."""
+    try:
+        families = set(tkfont.families(root))
+    except Exception:
+        return ""
+
+    loc = ""
+    try:
+        loc = locale.getdefaultlocale()[0] or ""
+    except Exception:
+        loc = ""
+
+    if os.name == "nt":
+        for fam in _PREFERRED_CJK_FONTS:
+            if fam in families:
+                return fam
+        for fam in _PREFERRED_LATIN_FONTS:
+            if fam in families:
+                return fam
+    else:
+        if loc.startswith(("zh", "ja", "ko")):
+            for fam in _PREFERRED_CJK_FONTS:
+                if fam in families:
+                    return fam
+        for fam in _PREFERRED_LATIN_FONTS:
+            if fam in families:
+                return fam
+        for fam in _PREFERRED_CJK_FONTS:
+            if fam in families:
+                return fam
+    return ""
+
+
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
+
+
+def _resource_path(filename: str) -> Path:
+    """Resolve resource path for source mode and PyInstaller onefile mode."""
+    try:
+        bundle_root = Path(getattr(sys, "_MEIPASS"))
+        candidate = bundle_root / filename
+        if candidate.exists():
+            return candidate
+    except Exception:
+        pass
+    return _base_dir() / filename
+
+
+def _apply_window_icon(window: tk.Misc) -> None:
+    icon_path = _resource_path("app.ico")
+    if not icon_path.exists():
+        return
+    try:
+        window.iconbitmap(default=str(icon_path))
+    except Exception:
+        pass
 
 
 def _now_utc_iso() -> str:
@@ -113,6 +214,7 @@ def _log(base: Path, msg: str) -> None:
 
 def _show_error(title: str, msg: str) -> None:
     try:
+        _enable_dpi_awareness()
         root = tk.Tk()
         root.withdraw()
         messagebox.showerror(title, msg)
@@ -170,6 +272,48 @@ def _fetch_json(url: str) -> Dict[str, Any]:
 def _fetch_json_with_timeout(url: str, timeout_sec: float) -> Dict[str, Any]:
     raw = _fetch_bytes(url, timeout_sec=timeout_sec)
     return json.loads(raw.decode("utf-8"))
+
+
+def _fetch_content_length(url: str, timeout_sec: Optional[float] = None) -> Optional[int]:
+    timeout = (timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)
+    req = Request(url, method="HEAD", headers={"User-Agent": UA, "Accept": "*/*"})
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            header = resp.headers.get("Content-Length")
+            if header:
+                value = int(header)
+                return value if value >= 0 else None
+    except Exception:
+        pass
+
+    # Some CDNs reject HEAD; fallback to a 1-byte range request.
+    try:
+        req2 = Request(url, headers={"User-Agent": UA, "Accept": "*/*", "Range": "bytes=0-0"})
+        with urlopen(req2, timeout=timeout) as resp2:
+            content_range = str(resp2.headers.get("Content-Range", "")).strip()
+            m = re.search(r"/(\d+)$", content_range)
+            if m:
+                value = int(m.group(1))
+                return value if value >= 0 else None
+            header2 = resp2.headers.get("Content-Length")
+            if header2:
+                value = int(header2)
+                return value if value >= 0 else None
+    except Exception:
+        pass
+    return None
+
+
+def _format_size_text(num_bytes: Optional[int]) -> str:
+    if num_bytes is None or num_bytes < 0:
+        return "未知"
+    if num_bytes >= 1073741824:
+        return f"{num_bytes / 1073741824:.2f} GB"
+    if num_bytes >= 1048576:
+        return f"{num_bytes / 1048576:.1f} MB"
+    if num_bytes >= 1024:
+        return f"{num_bytes / 1024:.1f} KB"
+    return f"{num_bytes} B"
 
 
 def _post_json(url: str, payload: Dict[str, Any], timeout_sec: float) -> Dict[str, Any]:
@@ -392,7 +536,7 @@ def _join_base_url_path(base_url: str, path: str) -> str:
     return f"{base_url}{path}"
 
 
-def _fetch_manifest_from_github(channel: str) -> Dict[str, str]:
+def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
     release = _fetch_json(_latest_release_url())
     assets = release.get("assets", [])
 
@@ -419,17 +563,19 @@ def _fetch_manifest_from_github(channel: str) -> Dict[str, str]:
     package_url = str(app_asset.get("browser_download_url", "")).strip()
     if not package_url:
         raise RuntimeError("应用包下载地址无效")
+    package_size = app_asset.get("size", None)
 
     return {
         "remote_version": remote_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
         "entrypoint": entrypoint,
+        "package_size": package_size,
         "source_name": "GitHub",
     }
 
 
-def _fetch_manifest_from_primary(channel: str, local_version: str, identity: Dict[str, str]) -> Dict[str, str]:
+def _fetch_manifest_from_primary(channel: str, local_version: str, identity: Dict[str, str]) -> Dict[str, Any]:
     if not PRIMARY_UPDATE_BASE_URL:
         raise RuntimeError("未配置国内更新服务")
 
@@ -446,6 +592,7 @@ def _fetch_manifest_from_primary(channel: str, local_version: str, identity: Dic
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
     package_sha256 = str(payload.get("package_sha256", "")).strip()
+    package_size = payload.get("package_size_bytes", payload.get("package_size"))
     entrypoint = str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
     source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
 
@@ -457,6 +604,7 @@ def _fetch_manifest_from_primary(channel: str, local_version: str, identity: Dic
         "package_url": package_url,
         "package_sha256": package_sha256,
         "entrypoint": entrypoint,
+        "package_size": package_size,
         "source_name": source_name,
     }
 
@@ -491,24 +639,22 @@ def _report_primary_event(
         _log(base, f"事件上报失败({event_name})：{e}")
 
 
-def _check_and_update(
+def _resolve_update_manifest(
     base: Path,
     channel: str,
     identity: Dict[str, str],
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
-) -> Tuple[str, str]:
+) -> Tuple[str, Dict[str, Any]]:
     def notify(title: str, detail: str = "", progress: Optional[float] = None, level: str = "info") -> None:
         if status_cb:
             status_cb(title, detail, progress, level)
 
-    app_dir = base / APP_DIR_NAME
-    local_version = _read_local_app_version(app_dir)
-    source_name = "GitHub"
+    local_version = _read_local_app_version(base / APP_DIR_NAME)
 
-    manifest: Optional[Dict[str, str]] = None
+    manifest: Optional[Dict[str, Any]] = None
     primary_err: Optional[Exception] = None
     if PRIMARY_UPDATE_BASE_URL:
-        notify("正在检查更新", "优先连接腾讯云更新服务...", 0.08, "info")
+        notify("正在检查更新", "优先连接腾讯云更新服务...", None, "info")
         try:
             manifest = _fetch_manifest_from_primary(channel, local_version, identity)
             if manifest is not None:
@@ -516,19 +662,23 @@ def _check_and_update(
                     base,
                     f"腾讯云版本检查成功：local=v{local_version}, remote=v{str(manifest.get('remote_version', '')).strip() or 'unknown'}",
                 )
-            if manifest is not None and not PRIMARY_ALLOW_PACKAGE_DOWNLOAD:
+            if manifest is not None:
                 remote_version_preview = str(manifest.get("remote_version", "")).strip()
-                if _version_is_newer(remote_version_preview, local_version):
+                package_url_preview = str(manifest.get("package_url", "")).strip()
+                need_fallback = _version_is_newer(remote_version_preview, local_version) and (
+                    (not PRIMARY_ALLOW_PACKAGE_DOWNLOAD) or (not package_url_preview)
+                )
+                if need_fallback:
                     _log(base, "腾讯云更新服务仅用于版本检测，下载源切换为 GitHub")
-                    notify("发现新版本", "腾讯云仅提供版本号，正在切换 GitHub 下载源...", 0.1, "info")
+                    notify("发现新版本", "腾讯云仅提供版本号，正在切换 GitHub 下载源...", None, "info")
                     manifest = None
         except Exception as e:
             primary_err = e
             _log(base, f"腾讯云更新服务不可用：{e}")
-            notify("国内服务暂不可用", "正在切换 GitHub 回退...", 0.1, "warning")
+            notify("国内服务暂不可用", "正在切换 GitHub 回退...", None, "warning")
 
     if manifest is None:
-        notify("正在检查更新", "连接 GitHub 获取最新版本信息...", 0.12, "info")
+        notify("正在检查更新", "连接 GitHub 获取最新版本信息...", None, "info")
         try:
             manifest = _fetch_manifest_from_github(channel)
         except Exception as e:
@@ -536,20 +686,70 @@ def _check_and_update(
                 raise RuntimeError(f"国内更新服务不可用({primary_err})，GitHub 回退失败({e})") from e
             raise
 
+    if manifest is None:
+        raise RuntimeError("更新清单字段缺失")
+    return local_version, manifest
+
+
+def _check_for_update(
+    base: Path,
+    channel: str,
+    identity: Dict[str, str],
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+) -> Dict[str, Any]:
+    def notify(title: str, detail: str = "", progress: Optional[float] = None, level: str = "info") -> None:
+        if status_cb:
+            status_cb(title, detail, progress, level)
+
+    local_version, manifest = _resolve_update_manifest(base, channel, identity, status_cb=notify)
+    remote_version = str(manifest.get("remote_version", "")).strip()
+    package_url = str(manifest.get("package_url", "")).strip()
+    source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
+    if not remote_version:
+        raise RuntimeError("更新清单字段缺失")
+
+    update_available = _version_is_newer(remote_version, local_version)
+    if update_available and not package_url:
+        raise RuntimeError("更新清单字段缺失")
+
+    package_size_raw = manifest.get("package_size", None)
+    package_size: Optional[int] = None
+    try:
+        if package_size_raw is not None and str(package_size_raw).strip() != "":
+            package_size = int(str(package_size_raw).strip())
+    except Exception:
+        package_size = None
+    if update_available and package_size is None and package_url:
+        package_size = _fetch_content_length(package_url, timeout_sec=NET_TIMEOUT_SEC)
+
+    return {
+        "local_version": local_version,
+        "remote_version": remote_version,
+        "source_name": source_name,
+        "update_available": update_available,
+        "package_size": package_size,
+        "manifest": manifest,
+    }
+
+
+def _download_update_from_manifest(
+    base: Path,
+    manifest: Dict[str, Any],
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+) -> Tuple[str, str]:
+    def notify(title: str, detail: str = "", progress: Optional[float] = None, level: str = "info") -> None:
+        if status_cb:
+            status_cb(title, detail, progress, level)
+
     remote_version = str(manifest.get("remote_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
     package_sha256 = str(manifest.get("package_sha256", "")).strip()
     entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
-
     if not remote_version or not package_url:
         raise RuntimeError("更新清单字段缺失")
 
-    if not _version_is_newer(remote_version, local_version):
-        notify("已是最新版本", f"当前版本 v{local_version}（来源：{source_name}）", 1.0, "success")
-        return local_version, source_name
-
-    notify("发现新版本", f"v{local_version} -> v{remote_version}（来源：{source_name}）", 0.24, "success")
+    notify("开始下载", f"正在下载 v{remote_version}（来源：{source_name}）", 0.24, "info")
     last_emit = [0.0]
     speed_state = {
         "time": time.monotonic(),
@@ -630,6 +830,256 @@ def _friendly_error_text(err: Exception, channel: str) -> str:
     return f"更新失败：{msg}"
 
 
+class LauncherDetailsDialog(tk.Toplevel):
+    """Launcher detail/about dialog with content structure similar to main app."""
+
+    def __init__(
+        self,
+        parent: tk.Tk,
+        channel: str,
+        local_version: str,
+        launcher_version: str,
+        install_dir: Path,
+    ):
+        super().__init__(parent)
+        self.title("关于 Bomana")
+        self.configure(bg=_THEME["BG"])
+        self.resizable(True, True)
+        self.transient(parent)
+        self.grab_set()
+        _apply_window_icon(self)
+        self._images: list = []
+
+        self._build_ui(channel, local_version, launcher_version, install_dir)
+        self._fit_window_to_parent(parent)
+        self._center_on_parent(parent)
+
+    def _build_ui(self, channel: str, local_version: str, launcher_version: str, install_dir: Path) -> None:
+        wrap_w = 760
+
+        container = tk.Frame(self, bg=_THEME["BG"])
+        container.pack(fill="both", expand=True, padx=12, pady=10)
+
+        canvas = tk.Canvas(container, bg=_THEME["BG"], highlightthickness=0, bd=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        content = tk.Frame(canvas, bg=_THEME["BG"])
+        win_id = canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def on_content_configure(_event: tk.Event) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def on_canvas_configure(event: tk.Event) -> None:
+            canvas.itemconfig(win_id, width=event.width)
+
+        def on_mousewheel(event: tk.Event) -> None:
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        content.bind("<Configure>", on_content_configure)
+        canvas.bind("<Configure>", on_canvas_configure)
+        canvas.bind("<MouseWheel>", on_mousewheel)
+
+        title_row = tk.Frame(content, bg=_THEME["BG"])
+        title_row.pack(fill="x", pady=(4, 8))
+
+        try:
+            from PIL import Image, ImageTk  # type: ignore
+
+            icon_file = _resource_path("app.ico")
+            if icon_file.exists():
+                img = Image.open(icon_file).convert("RGBA")
+                img = img.resize((56, 56), Image.Resampling.LANCZOS)
+                icon_img = ImageTk.PhotoImage(img)
+                self._images.append(icon_img)
+                tk.Label(title_row, image=icon_img, bg=_THEME["BG"]).pack(side="left", padx=(0, 12))
+        except Exception:
+            pass
+
+        title_text = tk.Frame(title_row, bg=_THEME["BG"])
+        title_text.pack(side="left", fill="both", expand=True)
+        tk.Label(
+            title_text,
+            text=f"{DISPLAY_NAME} Launcher v{launcher_version}",
+            font=("Segoe UI", 20, "bold"),
+            fg=_THEME["TEXT"],
+            bg=_THEME["BG"],
+            anchor="w",
+        ).pack(anchor="w")
+        tk.Label(
+            title_text,
+            text="战雷全真模式收益计时器（绿色启动器）",
+            font=("Segoe UI", 12),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["BG"],
+            anchor="w",
+        ).pack(anchor="w", pady=(4, 0))
+
+        tk.Frame(content, bg=_THEME["BORDER"], height=1).pack(fill="x", pady=10)
+
+        desc = (
+            "本启动器用于检查更新、下载应用包并启动 Bomana 主程序。\n"
+            "仅在你确认后才会执行下载，支持离线启动本地已安装版本。"
+        )
+        tk.Label(
+            content,
+            text=desc,
+            font=("Segoe UI", 11),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["BG"],
+            justify="left",
+            anchor="w",
+            wraplength=wrap_w,
+        ).pack(anchor="w")
+
+        info_text = (
+            f"当前通道：{channel}\n"
+            f"本地版本：v{local_version}\n"
+            f"安装目录：{install_dir}\n"
+            f"启动器版本：v{launcher_version}"
+        )
+        tk.Label(
+            content,
+            text=info_text,
+            font=("Segoe UI", 11),
+            fg=_THEME["TEXT"],
+            bg=_THEME["BG"],
+            justify="left",
+            anchor="w",
+        ).pack(anchor="w", pady=(10, 2))
+
+        link_row = tk.Frame(content, bg=_THEME["BG"])
+        link_row.pack(fill="x", pady=(8, 0))
+        tk.Label(link_row, text="项目主页：", font=("Segoe UI", 11), fg=_THEME["TEXT_DIM"], bg=_THEME["BG"]).pack(side="left")
+        gh = tk.Label(
+            link_row,
+            text=PROJECT_URL,
+            font=("Segoe UI", 11, "underline"),
+            fg=_THEME["BLUE"],
+            bg=_THEME["BG"],
+            cursor="hand2",
+        )
+        gh.pack(side="left")
+        gh.bind("<Button-1>", lambda _e: webbrowser.open(PROJECT_URL))
+
+        rel_row = tk.Frame(content, bg=_THEME["BG"])
+        rel_row.pack(fill="x", pady=(4, 0))
+        tk.Label(rel_row, text="最新发布：", font=("Segoe UI", 11), fg=_THEME["TEXT_DIM"], bg=_THEME["BG"]).pack(side="left")
+        rel = tk.Label(
+            rel_row,
+            text=RELEASES_URL,
+            font=("Segoe UI", 11, "underline"),
+            fg=_THEME["BLUE"],
+            bg=_THEME["BG"],
+            cursor="hand2",
+        )
+        rel.pack(side="left")
+        rel.bind("<Button-1>", lambda _e: webbrowser.open(RELEASES_URL))
+
+        tk.Frame(content, bg=_THEME["BORDER"], height=1).pack(fill="x", pady=12)
+
+        tk.Label(
+            content,
+            text="❤️ 支持作者",
+            font=("Segoe UI", 14, "bold"),
+            fg=_THEME["TEXT"],
+            bg=_THEME["BG"],
+            anchor="w",
+        ).pack(anchor="w")
+        tk.Label(
+            content,
+            text="如果这个工具对你有帮助，欢迎请作者喝杯咖啡~",
+            font=("Segoe UI", 11),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["BG"],
+            anchor="w",
+        ).pack(anchor="w", pady=(4, 10))
+
+        sponsor_shown = False
+        try:
+            from PIL import Image, ImageTk  # type: ignore
+
+            sponsor_file = _resource_path("sponsor_wechat.png")
+            if sponsor_file.exists():
+                img = Image.open(sponsor_file).convert("RGBA")
+                target_w = 360
+                ratio = target_w / float(img.width)
+                img = img.resize((target_w, max(1, int(img.height * ratio))), Image.Resampling.LANCZOS)
+                sponsor_img = ImageTk.PhotoImage(img)
+                self._images.append(sponsor_img)
+                tk.Label(content, image=sponsor_img, bg=_THEME["BG"]).pack(anchor="w")
+                sponsor_shown = True
+        except Exception:
+            sponsor_shown = False
+
+        if not sponsor_shown:
+            tk.Label(
+                content,
+                text="赞助二维码资源未找到（可在主程序中查看完整赞助页）。",
+                font=("Segoe UI", 10),
+                fg=_THEME["TEXT_MUTED"],
+                bg=_THEME["BG"],
+                anchor="w",
+            ).pack(anchor="w")
+
+        tk.Frame(content, bg=_THEME["BORDER"], height=1).pack(fill="x", pady=12)
+        tk.Label(
+            content,
+            text="MIT License  |  Copyright © 2024-2026 Thankyou-Cheems",
+            font=("Segoe UI", 10),
+            fg=_THEME["TEXT_MUTED"],
+            bg=_THEME["BG"],
+            anchor="w",
+        ).pack(anchor="w")
+
+        tk.Button(
+            content,
+            text="关闭",
+            command=self.destroy,
+            bg="#2b3542",
+            fg=_THEME["TEXT"],
+            activebackground="#3b4654",
+            activeforeground=_THEME["TEXT"],
+            relief="flat",
+            bd=1,
+            highlightthickness=1,
+            highlightbackground="#4c5a6b",
+            cursor="hand2",
+            font=("Segoe UI", 10, "bold"),
+            padx=20,
+            pady=6,
+        ).pack(pady=(16, 4), anchor="center")
+
+    def _fit_window_to_parent(self, parent: tk.Tk) -> None:
+        self.update_idletasks()
+        req_w = self.winfo_reqwidth()
+        req_h = self.winfo_reqheight()
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        parent_w = max(760, parent.winfo_width())
+        parent_h = max(560, parent.winfo_height())
+
+        # Keep the dialog large enough so sponsor image area is visible by default.
+        w = min(max(req_w, int(parent_w * 0.9), 780), screen_w - 70)
+        h = min(max(req_h, int(parent_h * 0.9), 640), screen_h - 70)
+        self.geometry(f"{int(w)}x{int(h)}")
+        self.minsize(720, 560)
+
+    def _center_on_parent(self, parent: tk.Tk) -> None:
+        self.update_idletasks()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        px = parent.winfo_x()
+        py = parent.winfo_y()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        x = max(0, px + (pw - w) // 2)
+        y = max(0, py + (ph - h) // 2)
+        self.geometry(f"+{x}+{y}")
+
+
 class LauncherWindow:
     """Simple, user-friendly GUI for launcher status and recovery actions."""
 
@@ -645,55 +1095,377 @@ class LauncherWindow:
         self.indeterminate = True
         self.anim_phase = 0
         self.progress_value = 0.0
+        self.current_task = ""
+        self.latest_manifest: Optional[Dict[str, Any]] = None
+        self.latest_remote_version = self.local_version
+        self.latest_source_name = ""
+        self.latest_package_size: Optional[int] = None
+        self.update_available = False
+        self.last_check_ok = False
+        self.last_check_error = ""
+        self.install_dir = self.base / APP_DIR_NAME
+        self.last_download_success = False
         self.decision = LaunchDecision(action="exit", final_version=self.local_version)
         self._worker: Optional[threading.Thread] = None
         self._spin = ["◜", "◠", "◝", "◞", "◡", "◟"]
+        self.status_title = "正在准备"
+        self.status_level = "info"
+        self.dpi_scale = 1.0
+        self.scale = 1.0
+        self.font_family = "Segoe UI"
+        self.progress_width = 520
+        self.progress_height = 12
+        self._scale_base_w = 1
+        self._scale_base_h = 1
+        self._last_scale = 1.0
+        self._scale_after_id: Optional[str] = None
+        self._scaled_fonts: Dict[Any, Tuple[tkfont.Font, int]] = {}
+        self._button_styles: Dict[str, Dict[str, str]] = {}
+        self._layout_after_id: Optional[str] = None
+        self._base_min_w = self._px(760)
+        self._base_min_h = self._px(560)
+        self._max_w = self._base_min_w
+        self._max_h = self._base_min_h
+        self._min_w = self._base_min_w
+        self._min_h = self._base_min_h
 
         self.root = tk.Tk()
         self.root.title(DISPLAY_NAME)
-        self.root.geometry("560x360")
-        self.root.resizable(False, False)
+        _apply_window_icon(self.root)
+        self._init_window_scale_context()
+        self.root.geometry(f"{self._px(760)}x{self._px(560)}")
+        self.root.resizable(True, True)
         self.root.configure(bg=_THEME["BG"])
         self.root.protocol("WM_DELETE_WINDOW", self._on_exit)
         self.channel_var = tk.StringVar(master=self.root, value=channel)
 
         self._build_ui()
-        self._set_status("准备就绪", "请选择通道，然后点击“下载更新”。下载完成后再点击“启动应用”。", 0.0, "info")
+        self._fit_window_to_screen()
+        self._init_dynamic_font_scaling()
+        self._refresh_wraplengths()
+        self._schedule_layout_reflow()
+        self._set_status("准备就绪", "启动后将自动检查更新，并展示可下载包总大小。", 0.0, "info")
         self._set_running(False)
+        _log(self.base, f"Launcher start, channel={self.channel}, version={LAUNCHER_VERSION}")
+        threading.Thread(
+            target=_report_primary_event,
+            args=(
+                self.base,
+                self.client_identity,
+                "launcher_start",
+                self.channel,
+                self.local_version,
+            ),
+            daemon=True,
+        ).start()
         self.root.after(80, self._poll_events)
         self.root.after(100, self._animate)
+        self.root.after(120, lambda: self._begin_check(automatic=True))
+
+    def _px(self, value: int) -> int:
+        # Avoid DPI double-scaling: tk scaling handles DPI globally.
+        return max(1, int(round(float(value))))
+
+    def _font(self, size: int, weight: str = "normal") -> Tuple[str, int, str]:
+        return (self.font_family, max(8, self._px(size)), weight)
+
+    def _style_action_button(self, btn: tk.Button, variant: str) -> None:
+        styles = {
+            "primary": {
+                "bg": _THEME["BLUE"],
+                "fg": "#0a0e13",
+                "hover_bg": "#79b8ff",
+                "press_bg": "#3f98f0",
+                "border": "#8cc2ff",
+            },
+            "success": {
+                "bg": "#2f6f44",
+                "fg": "#0a0e13",
+                "hover_bg": "#3f8f58",
+                "press_bg": "#2d7348",
+                "border": "#58a36f",
+            },
+            "secondary": {
+                "bg": "#2b3542",
+                "fg": _THEME["TEXT"],
+                "hover_bg": "#3b4654",
+                "press_bg": "#2f3946",
+                "border": "#4c5a6b",
+            },
+        }
+        st = styles.get(variant, styles["secondary"])
+        self._button_styles[str(btn)] = st
+        btn.config(
+            bg=st["bg"],
+            fg=st["fg"],
+            activebackground=st["hover_bg"],
+            activeforeground=st["fg"],
+            bd=1,
+            highlightthickness=1,
+            highlightbackground=st["border"],
+            relief="flat",
+        )
+        self._bind_button_motion(btn)
+
+    def _bind_button_motion(self, btn: tk.Button) -> None:
+        if getattr(btn, "_bomana_motion_bound", False):
+            return
+        setattr(btn, "_bomana_motion_bound", True)
+
+        def on_enter(_event: tk.Event) -> None:
+            if str(btn.cget("state")) == "disabled":
+                return
+            st = self._button_styles.get(str(btn), None)
+            if st:
+                btn.config(bg=st["hover_bg"])
+
+        def on_leave(_event: tk.Event) -> None:
+            st = self._button_styles.get(str(btn), None)
+            if st:
+                btn.config(bg=st["bg"])
+
+        def on_press(_event: tk.Event) -> None:
+            if str(btn.cget("state")) == "disabled":
+                return
+            st = self._button_styles.get(str(btn), None)
+            if st:
+                btn.config(bg=st["press_bg"])
+
+        def on_release(event: tk.Event) -> None:
+            st = self._button_styles.get(str(btn), None)
+            if not st:
+                return
+            if str(btn.cget("state")) == "disabled":
+                btn.config(bg=st["bg"])
+                return
+            under = btn.winfo_containing(event.x_root, event.y_root)
+            btn.config(bg=(st["hover_bg"] if under == btn else st["bg"]))
+
+        btn.bind("<Enter>", on_enter, add="+")
+        btn.bind("<Leave>", on_leave, add="+")
+        btn.bind("<ButtonPress-1>", on_press, add="+")
+        btn.bind("<ButtonRelease-1>", on_release, add="+")
+
+    def _init_window_scale_context(self) -> None:
+        self.dpi_scale = 1.0
+        self.scale = 1.0
+        try:
+            self.root.update_idletasks()
+            internal_id = self.root.winfo_id()
+            hwnd = internal_id
+            if os.name == "nt":
+                try:
+                    hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
+                except Exception:
+                    hwnd = int(internal_id)
+            dpi_scale = _get_dpi_scale(int(hwnd))
+            self.dpi_scale = max(1.0, min(2.0, float(dpi_scale)))
+        except Exception:
+            self.dpi_scale = 1.0
+
+        try:
+            self.root.tk.call("tk", "scaling", float(self.dpi_scale))
+        except Exception:
+            pass
+
+        fam = _select_ui_font_family(self.root)
+        if fam:
+            self.font_family = fam
+
+    def _fit_window_to_screen(self) -> None:
+        self.root.update_idletasks()
+        req_w = self.root.winfo_reqwidth()
+        req_h = self.root.winfo_reqheight()
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+
+        min_w = max(self._base_min_w, int(req_w * 0.9))
+        min_h = max(self._base_min_h, int(req_h * 0.9))
+        max_w = max(min_w, screen_w - self._px(80))
+        max_h = max(min_h, screen_h - self._px(80))
+
+        init_w = min(max(req_w, min_w), max_w)
+        init_h = min(max(req_h, min_h), max_h)
+        self.root.geometry(f"{int(init_w)}x{int(init_h)}")
+        self.root.minsize(int(min_w), int(min_h))
+        self.root.maxsize(int(max_w), int(max_h))
+        self._base_min_w = int(min_w)
+        self._base_min_h = int(min_h)
+        self._min_w = int(min_w)
+        self._min_h = int(min_h)
+        self._max_w = int(max_w)
+        self._max_h = int(max_h)
+
+    def _init_dynamic_font_scaling(self) -> None:
+        self.root.update_idletasks()
+        self._scale_base_w = max(1, self.root.winfo_width())
+        self._scale_base_h = max(1, self.root.winfo_height())
+        self._last_scale = 1.0
+        self._scale_after_id = None
+        self._scaled_fonts = {}
+
+        def collect(widget: tk.Misc) -> None:
+            for child in widget.winfo_children():
+                collect(child)
+            try:
+                keys = widget.keys()
+            except Exception:
+                return
+            if "font" not in keys:
+                return
+            try:
+                font_name = widget.cget("font") or "TkDefaultFont"
+                base_font = tkfont.Font(font=font_name)
+                actual = base_font.actual()
+                base_size = int(actual.get("size", 10))
+                new_font = tkfont.Font(
+                    family=actual.get("family", self.font_family),
+                    size=base_size,
+                    weight=actual.get("weight", "normal"),
+                    slant=actual.get("slant", "roman"),
+                    underline=actual.get("underline", 0),
+                    overstrike=actual.get("overstrike", 0),
+                )
+                widget.configure(font=new_font)
+                self._scaled_fonts[widget] = (new_font, base_size)
+            except Exception:
+                pass
+
+        collect(self.root)
+        self.root.bind("<Configure>", self._on_scale_configure, add="+")
+
+    def _on_scale_configure(self, _event: tk.Event) -> None:
+        if self._scale_after_id:
+            try:
+                self.root.after_cancel(self._scale_after_id)
+            except Exception:
+                pass
+        self._scale_after_id = self.root.after(120, self._apply_dynamic_scale)
+
+    def _apply_dynamic_scale(self) -> None:
+        self._scale_after_id = None
+        w = max(1, self.root.winfo_width())
+        h = max(1, self.root.winfo_height())
+        scale = (w / self._scale_base_w + h / self._scale_base_h) / 2.0
+        scale = max(0.9, min(2.2, scale))
+        if abs(scale - self._last_scale) < 0.01:
+            self._refresh_wraplengths()
+            return
+        self._last_scale = scale
+
+        if not self._scaled_fonts:
+            return
+        for _widget, (font_obj, base_size) in list(self._scaled_fonts.items()):
+            try:
+                size = max(8, int(abs(base_size) * scale))
+                font_obj.configure(size=(-size if base_size < 0 else size))
+            except Exception:
+                pass
+        self._refresh_wraplengths()
+
+    def _refresh_wraplengths(self) -> None:
+        try:
+            win_w = self.root.winfo_width()
+            if win_w <= 1:
+                win_w = max(self._base_min_w, self.root.winfo_reqwidth())
+            content_w = max(self._px(280), win_w - self._px(80))
+            if hasattr(self, "channel_desc_lbl"):
+                self.channel_desc_lbl.config(wraplength=content_w)
+            if hasattr(self, "detail_lbl"):
+                self.detail_lbl.config(wraplength=content_w)
+            if hasattr(self, "hint_lbl"):
+                self.hint_lbl.config(wraplength=content_w)
+            self.progress_width = max(self._px(320), content_w)
+            self.progress_height = self._px(12)
+            if hasattr(self, "progress_canvas"):
+                self.progress_canvas.config(width=self.progress_width, height=self.progress_height)
+                if self.indeterminate:
+                    block = max(self._px(70), int(self.progress_width * 0.2))
+                    x = (self.anim_phase * self._px(14)) % (self.progress_width + block) - block
+                    x0 = max(0, x)
+                    x1 = min(self.progress_width, x + block)
+                    self.progress_canvas.coords(self.progress_bar, x0, 0, x1, self.progress_height)
+                else:
+                    width = int(self.progress_width * self.progress_value)
+                    self.progress_canvas.coords(self.progress_bar, 0, 0, width, self.progress_height)
+        except Exception:
+            pass
+
+    def _schedule_layout_reflow(self) -> None:
+        if self._layout_after_id:
+            try:
+                self.root.after_cancel(self._layout_after_id)
+            except Exception:
+                pass
+        self._layout_after_id = self.root.after(80, self._reflow_window_layout)
+
+    def _reflow_window_layout(self) -> None:
+        self._layout_after_id = None
+        try:
+            self.root.update_idletasks()
+            req_h = self.root.winfo_reqheight() + self._px(6)
+            target_min_h = max(self._base_min_h, min(req_h, self._max_h))
+            if target_min_h != self._min_h:
+                self._min_h = int(target_min_h)
+                self.root.minsize(self._min_w, self._min_h)
+
+            cur_w = self.root.winfo_width()
+            cur_h = self.root.winfo_height()
+            if cur_h < self._min_h:
+                x = self.root.winfo_x()
+                y = self.root.winfo_y()
+                grow_h = min(self._min_h, self._max_h)
+                self.root.geometry(f"{cur_w}x{grow_h}+{x}+{y}")
+        except Exception:
+            pass
 
     def _build_ui(self) -> None:
         top = tk.Frame(self.root, bg=_THEME["BG"])
-        top.pack(fill="x", padx=20, pady=(16, 8))
+        top.pack(fill="x", padx=self._px(20), pady=(self._px(16), self._px(8)))
+
+        title_row = tk.Frame(top, bg=_THEME["BG"])
+        title_row.pack(fill="x")
 
         self.title_lbl = tk.Label(
-            top,
+            title_row,
             text=DISPLAY_NAME,
-            font=("Segoe UI", 18, "bold"),
+            font=self._font(18, "bold"),
             fg=_THEME["TEXT"],
             bg=_THEME["BG"],
             anchor="w",
         )
-        self.title_lbl.pack(fill="x")
+        self.title_lbl.pack(side="left", fill="x", expand=True)
+
+        self.details_btn = tk.Button(
+            title_row,
+            text="详情/支持作者",
+            width=14,
+            command=self._open_details,
+            cursor="hand2",
+            font=self._font(10),
+            padx=self._px(8),
+            pady=self._px(4),
+        )
+        self.details_btn.pack(side="right", padx=(self._px(8), 0))
+        self._style_action_button(self.details_btn, "secondary")
 
         self.sub_lbl = tk.Label(
             top,
             text=f"通道：{self.channel}  |  本地版本：v{self.local_version}",
-            font=("Segoe UI", 10),
+            font=self._font(10),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["BG"],
             anchor="w",
         )
-        self.sub_lbl.pack(fill="x", pady=(3, 0))
+        self.sub_lbl.pack(fill="x", pady=(self._px(3), 0))
 
         channel_row = tk.Frame(top, bg=_THEME["BG"])
-        channel_row.pack(fill="x", pady=(8, 0))
+        channel_row.pack(fill="x", pady=(self._px(8), 0))
 
         channel_title = tk.Label(
             channel_row,
             text="版本通道",
-            font=("Segoe UI", 10, "bold"),
+            font=self._font(10, "bold"),
             fg=_THEME["TEXT"],
             bg=_THEME["BG"],
             anchor="w",
@@ -711,6 +1483,7 @@ class LauncherWindow:
             bd=0,
             width=10,
             cursor="hand2",
+            font=self._font(10),
         )
         self.channel_menu["menu"].config(
             bg=_THEME["CARD"],
@@ -718,30 +1491,31 @@ class LauncherWindow:
             activebackground=_THEME["BORDER"],
             activeforeground=_THEME["TEXT"],
             bd=0,
+            font=self._font(10),
         )
-        self.channel_menu.pack(side="left", padx=(8, 0))
+        self.channel_menu.pack(side="left", padx=(self._px(8), 0))
 
         auto_tip = tk.Label(
             channel_row,
             text=f"默认推荐通道：{self.detected_channel}",
-            font=("Segoe UI", 9),
+            font=self._font(9),
             fg=_THEME["TEXT_MUTED"],
             bg=_THEME["BG"],
             anchor="w",
         )
-        auto_tip.pack(side="left", padx=(10, 0))
+        auto_tip.pack(side="left", padx=(self._px(10), 0))
 
         self.channel_desc_lbl = tk.Label(
             top,
             text="",
-            font=("Segoe UI", 9),
+            font=self._font(9),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["BG"],
             anchor="w",
             justify="left",
-            wraplength=540,
+            wraplength=self._px(540),
         )
-        self.channel_desc_lbl.pack(fill="x", pady=(6, 0))
+        self.channel_desc_lbl.pack(fill="x", pady=(self._px(6), 0))
         self.channel_var.trace_add("write", self._on_channel_changed)
         self._refresh_channel_details()
 
@@ -751,173 +1525,187 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
         )
-        card.pack(fill="both", expand=True, padx=20, pady=(4, 10))
+        card.pack(fill="both", expand=True, padx=self._px(20), pady=(self._px(4), self._px(10)))
+
+        status_header = tk.Frame(card, bg=_THEME["CARD"])
+        status_header.pack(fill="x", padx=(self._px(16), self._px(6)), pady=(self._px(12), self._px(6)))
 
         self.status_lbl = tk.Label(
-            card,
+            status_header,
             text="◜ 正在准备",
-            font=("Segoe UI", 12, "bold"),
+            font=self._font(12, "bold"),
             fg=_THEME["BLUE"],
             bg=_THEME["CARD"],
             anchor="w",
         )
-        self.status_lbl.pack(fill="x", padx=16, pady=(16, 6))
+        self.status_lbl.pack(side="left", fill="x", expand=True)
+
+        self.launch_btn = tk.Button(
+            status_header,
+            text="离线启动（本地）",
+            width=16,
+            command=self._on_launch,
+            cursor="hand2",
+            font=self._font(11, "bold"),
+            padx=self._px(12),
+            pady=self._px(5),
+        )
+        self.launch_btn.pack(side="right", padx=(self._px(4), 0))
+        self._style_action_button(self.launch_btn, "secondary")
 
         self.detail_lbl = tk.Label(
             card,
             text="",
-            font=("Segoe UI", 10),
+            font=self._font(10),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["CARD"],
             anchor="w",
             justify="left",
-            wraplength=520,
+            wraplength=self._px(520),
         )
-        self.detail_lbl.pack(fill="x", padx=16)
+        self.detail_lbl.pack(fill="x", padx=self._px(16))
 
         self.progress_canvas = tk.Canvas(
             card,
-            width=520,
-            height=12,
+            width=self.progress_width,
+            height=self.progress_height,
             bg=_THEME["BORDER"],
             bd=0,
             highlightthickness=0,
         )
-        self.progress_canvas.pack(padx=16, pady=(14, 6))
-        self.progress_bar = self.progress_canvas.create_rectangle(0, 0, 0, 12, fill=_THEME["BLUE"], width=0)
+        self.progress_canvas.pack(padx=self._px(16), pady=(self._px(14), self._px(6)))
+        self.progress_bar = self.progress_canvas.create_rectangle(
+            0, 0, 0, self.progress_height, fill=_THEME["BLUE"], width=0
+        )
 
         self.hint_lbl = tk.Label(
             card,
             text="首次使用请先下载应用包，下载完成后再启动应用。",
-            font=("Segoe UI", 9),
+            font=self._font(9),
             fg=_THEME["TEXT_MUTED"],
             bg=_THEME["CARD"],
             anchor="w",
+            justify="left",
+            wraplength=self._px(520),
         )
-        self.hint_lbl.pack(fill="x", padx=16, pady=(2, 10))
+        self.hint_lbl.pack(fill="x", padx=self._px(16), pady=(self._px(2), self._px(10)))
 
         btn_row = tk.Frame(card, bg=_THEME["CARD"])
-        btn_row.pack(fill="x", padx=16, pady=(0, 14))
+        btn_row.pack(fill="x", padx=self._px(16), pady=(0, self._px(14)))
 
         self.start_btn = tk.Button(
             btn_row,
             text="下载更新",
             width=12,
             command=self._on_start,
-            bg=_THEME["BLUE"],
-            fg="#0a0e13",
-            activebackground="#79b8ff",
-            activeforeground="#0a0e13",
-            relief="flat",
-            bd=0,
-            highlightthickness=0,
             cursor="hand2",
+            font=self._font(10, "bold"),
+            padx=self._px(6),
+            pady=self._px(3),
         )
         self.start_btn.pack(side="left")
+        self._style_action_button(self.start_btn, "primary")
 
         self.retry_btn = tk.Button(
             btn_row,
-            text="重试",
+            text="重新检查",
             width=10,
             command=self._on_retry,
-            bg=_THEME["CARD"],
-            fg=_THEME["TEXT"],
-            activebackground=_THEME["BORDER"],
-            activeforeground=_THEME["TEXT"],
-            relief="flat",
-            bd=1,
-            highlightthickness=1,
-            highlightbackground=_THEME["BORDER"],
             cursor="hand2",
+            font=self._font(10),
+            padx=self._px(6),
+            pady=self._px(3),
         )
         self.retry_btn.pack(side="left")
-
-        self.launch_btn = tk.Button(
-            btn_row,
-            text="启动应用",
-            width=12,
-            command=self._on_launch,
-            bg=_THEME["CARD"],
-            fg=_THEME["TEXT"],
-            activebackground=_THEME["BORDER"],
-            activeforeground=_THEME["TEXT"],
-            relief="flat",
-            bd=1,
-            highlightthickness=1,
-            highlightbackground=_THEME["BORDER"],
-            cursor="hand2",
-        )
-        self.launch_btn.pack(side="left", padx=(8, 0))
+        self._style_action_button(self.retry_btn, "secondary")
 
         self.release_btn = tk.Button(
             btn_row,
             text="打开下载页",
             width=12,
             command=self._open_releases,
-            bg=_THEME["CARD"],
-            fg=_THEME["TEXT"],
-            activebackground=_THEME["BORDER"],
-            activeforeground=_THEME["TEXT"],
-            relief="flat",
-            bd=1,
-            highlightthickness=1,
-            highlightbackground=_THEME["BORDER"],
             cursor="hand2",
+            font=self._font(10),
+            padx=self._px(6),
+            pady=self._px(3),
         )
         self.release_btn.pack(side="right")
+        self._style_action_button(self.release_btn, "secondary")
 
         self.exit_btn = tk.Button(
             btn_row,
             text="退出",
             width=10,
             command=self._on_exit,
-            bg=_THEME["CARD"],
-            fg=_THEME["TEXT"],
-            activebackground=_THEME["BORDER"],
-            activeforeground=_THEME["TEXT"],
-            relief="flat",
-            bd=1,
-            highlightthickness=1,
-            highlightbackground=_THEME["BORDER"],
             cursor="hand2",
+            font=self._font(10),
+            padx=self._px(6),
+            pady=self._px(3),
         )
-        self.exit_btn.pack(side="right", padx=(0, 8))
+        self.exit_btn.pack(side="right", padx=(0, self._px(8)))
+        self._style_action_button(self.exit_btn, "secondary")
 
-    def _start_worker(self) -> None:
+    def _start_worker(self, task: str) -> None:
         if self._worker and self._worker.is_alive():
             return
-        self._worker = threading.Thread(target=self._worker_main, daemon=True)
+        self._worker = threading.Thread(target=self._worker_main, args=(task,), daemon=True)
         self._worker.start()
 
-    def _worker_main(self) -> None:
-        initial_version = self.local_version
-        final_version = self.local_version
+    def _begin_check(self, automatic: bool) -> None:
+        if self.running:
+            return
+        self.has_attempted_update = True
+        self.current_task = "check"
+        self.latest_manifest = None
+        self.latest_package_size = None
+        self.update_available = False
+        self.last_check_ok = False
+        self.last_check_error = ""
+        self.channel = self.channel_var.get().strip() or self.detected_channel
+        self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
+        self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
+        if automatic:
+            self._set_status("自动检查更新", f"正在检查 {self.channel} 通道，并读取下载包大小...", None, "info")
+        else:
+            self._set_status("正在检查更新", f"正在重新检查 {self.channel} 通道...", None, "info")
+        self._set_running(True)
+        self._start_worker("check")
+
+    def _worker_main(self, task: str) -> None:
+        if task == "check":
+            try:
+                info = _check_for_update(
+                    self.base,
+                    self.channel,
+                    self.client_identity,
+                    status_cb=self._emit_status,
+                )
+                self.events.put(("check_done", {"ok": True, **info}))
+            except Exception as e:
+                msg = _friendly_error_text(e, self.channel)
+                _log(self.base, f"更新检查失败：{e}")
+                self.events.put(("check_done", {"ok": False, "error": msg}))
+            return
+
+        final_version = _read_local_app_version(self.base / APP_DIR_NAME)
         update_ok = False
         update_source = ""
         update_error = ""
         local_ready = _is_local_app_ready(self.base)
-
-        _log(self.base, f"Launcher start, channel={self.channel}, version={LAUNCHER_VERSION}")
-        _report_primary_event(
-            self.base,
-            self.client_identity,
-            "launcher_start",
-            self.channel,
-            final_version,
-        )
-
+        manifest = dict(self.latest_manifest or {})
         try:
-            final_version, update_source = _check_and_update(
+            if not manifest:
+                raise RuntimeError("请先完成更新检查")
+            final_version, update_source = _download_update_from_manifest(
                 self.base,
-                self.channel,
-                self.client_identity,
+                manifest,
                 status_cb=self._emit_status,
             )
             update_ok = True
             local_ready = _is_local_app_ready(self.base)
         except Exception as e:
             update_error = _friendly_error_text(e, self.channel)
-            _log(self.base, f"更新检查失败：{e}")
+            _log(self.base, f"下载更新失败：{e}")
 
         _report_primary_event(
             self.base,
@@ -949,21 +1737,18 @@ class LauncherWindow:
         )
 
         if update_ok:
-            if _version_is_newer(final_version, initial_version):
-                status = "下载完成"
-                detail = f"已更新到 v{final_version}（来源：{update_source}）。现在可点击“启动应用”。"
-            else:
-                status = "已是最新版本"
-                detail = f"当前版本 v{final_version}（来源：{update_source}）。可直接点击“启动应用”。"
             self.events.put(
                 (
-                    "done",
+                    "download_done",
                     {
                         "update_ok": True,
                         "final_version": final_version,
                         "warning": "",
-                        "status": status,
-                        "detail": detail,
+                        "status": "下载完成",
+                        "detail": (
+                            f"已更新到 v{final_version}（来源：{update_source}）。现在可点击“启动应用”。\n"
+                            f"安装位置：{self.install_dir}"
+                        ),
                         "level": "success",
                     },
                 )
@@ -979,7 +1764,7 @@ class LauncherWindow:
                 status = "无法启动"
             self.events.put(
                 (
-                    "done",
+                    "download_done",
                     {
                         "update_ok": False,
                         "final_version": final_version,
@@ -1015,7 +1800,42 @@ class LauncherWindow:
                         payload.get("progress", None),
                         payload.get("level", "info"),
                     )
-                elif typ == "done":
+                elif typ == "check_done":
+                    ok = bool(payload.get("ok", False))
+                    self.last_download_success = False
+                    if ok:
+                        self.last_check_ok = True
+                        self.last_check_error = ""
+                        self.latest_manifest = payload.get("manifest", None)
+                        self.latest_remote_version = str(payload.get("remote_version", self.local_version))
+                        self.latest_source_name = str(payload.get("source_name", "GitHub"))
+                        self.latest_package_size = payload.get("package_size", None)
+                        self.update_available = bool(payload.get("update_available", False))
+
+                        if self.update_available:
+                            size_text = _format_size_text(self.latest_package_size)
+                            detail = (
+                                f"v{self.local_version} -> v{self.latest_remote_version}（来源：{self.latest_source_name}）\n"
+                                f"下载总大小：{size_text}"
+                            )
+                            self._set_status("发现新版本", detail, 0.0, "success")
+                        else:
+                            detail = f"当前版本 v{self.local_version}（来源：{self.latest_source_name}）"
+                            self._set_status("已是最新版本", detail, 0.0, "success")
+                    else:
+                        self.last_check_ok = False
+                        self.update_available = False
+                        self.latest_manifest = None
+                        self.latest_package_size = None
+                        self.latest_source_name = ""
+                        self.last_check_error = str(payload.get("error", "检查失败"))
+                        self._set_status("检查失败", self.last_check_error, 0.0, "warning")
+                    self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
+                    self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
+                    self._set_running(False)
+                    if not ok:
+                        self._show_error_actions()
+                elif typ == "download_done":
                     final_version = str(payload.get("final_version", self.local_version))
                     warning = str(payload.get("warning", ""))
                     self.decision = LaunchDecision(
@@ -1031,6 +1851,13 @@ class LauncherWindow:
                     )
                     self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
                     self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
+                    if bool(payload.get("update_ok", False)):
+                        self.update_available = False
+                        self.latest_package_size = None
+                        self.last_check_ok = True
+                        self.last_download_success = True
+                    else:
+                        self.last_download_success = False
                     self._set_running(False)
                     if not bool(payload.get("update_ok", False)):
                         self._show_error_actions()
@@ -1041,21 +1868,18 @@ class LauncherWindow:
 
     def _animate(self) -> None:
         if self.running:
-            spin = self._spin[self.anim_phase % len(self._spin)]
             self.anim_phase += 1
-            text = self.status_lbl.cget("text")
-            if len(text) > 2:
-                self.status_lbl.config(text=f"{spin} {text[2:]}")
+            self._render_status_text()
             if self.indeterminate:
-                width = 520
-                block = 110
-                x = (self.anim_phase * 14) % (width + block) - block
+                width = self.progress_width
+                block = max(self._px(70), int(width * 0.2))
+                x = (self.anim_phase * self._px(14)) % (width + block) - block
                 x0 = max(0, x)
                 x1 = min(width, x + block)
-                self.progress_canvas.coords(self.progress_bar, x0, 0, x1, 12)
+                self.progress_canvas.coords(self.progress_bar, x0, 0, x1, self.progress_height)
         self.root.after(100, self._animate)
 
-    def _set_status(self, title: str, detail: str, progress: Optional[float], level: str) -> None:
+    def _status_color(self, level: str) -> str:
         color = _THEME["BLUE"]
         if level == "success":
             color = _THEME["GREEN"]
@@ -1063,9 +1887,28 @@ class LauncherWindow:
             color = _THEME["YELLOW"]
         elif level == "error":
             color = _THEME["RED"]
+        return color
 
+    def _render_status_text(self) -> None:
+        title = self.status_title or ""
+        if self.running:
+            symbol = self._spin[self.anim_phase % len(self._spin)]
+        else:
+            symbol_map = {
+                "success": "✓",
+                "warning": "!",
+                "error": "×",
+                "info": "•",
+            }
+            symbol = symbol_map.get(self.status_level, "•")
+        text = f"{symbol} {title}" if title else symbol
+        self.status_lbl.config(text=text, fg=self._status_color(self.status_level))
+
+    def _set_status(self, title: str, detail: str, progress: Optional[float], level: str) -> None:
         if title:
-            self.status_lbl.config(text=f"◜ {title}", fg=color)
+            self.status_title = title
+        self.status_level = level
+        self._render_status_text()
         self.detail_lbl.config(text=detail or "")
 
         if progress is None:
@@ -1073,54 +1916,117 @@ class LauncherWindow:
         else:
             self.indeterminate = False
             self.progress_value = max(0.0, min(1.0, progress))
-            width = int(520 * self.progress_value)
-            self.progress_canvas.coords(self.progress_bar, 0, 0, width, 12)
+            width = int(self.progress_width * self.progress_value)
+            self.progress_canvas.coords(self.progress_bar, 0, 0, width, self.progress_height)
+        self._schedule_layout_reflow()
+
+    def _update_launch_button_label(self) -> None:
+        if self.last_download_success:
+            self.launch_btn.config(text="启动（已下载更新）")
+            self._style_action_button(self.launch_btn, "success")
+            return
+        self.launch_btn.config(text="离线启动（本地）")
+        self._style_action_button(self.launch_btn, "secondary")
 
     def _set_running(self, running: bool) -> None:
         self.running = running
+        self._render_status_text()
+        self._update_launch_button_label()
         state = "disabled" if running else "normal"
         self.start_btn.config(state=state)
         self.retry_btn.config(state=state)
         self.launch_btn.config(state=state)
         self.release_btn.config(state="normal")
+        self.details_btn.config(state="normal")
         self.exit_btn.config(state="normal")
         self.channel_menu.config(state=state)
 
         if running:
             self.retry_btn.pack_forget()
-            self.hint_lbl.config(text="正在下载并安装更新，请稍候...")
+            if self.current_task == "check":
+                self.hint_lbl.config(text="正在自动检查版本并获取下载包总大小，请稍候...")
+            else:
+                self.hint_lbl.config(text="正在下载并安装更新，请稍候...")
         else:
             if self.has_attempted_update:
                 self.retry_btn.pack(side="left", padx=(8, 0))
             else:
                 self.retry_btn.pack_forget()
+            if self.last_check_ok and self.update_available:
+                self.start_btn.config(state="normal")
+            else:
+                self.start_btn.config(state="disabled")
             if _is_local_app_ready(self.base):
                 self.launch_btn.config(state="normal")
-                if self.has_attempted_update:
-                    self.hint_lbl.config(text="可点击“启动应用”进入游戏，或点击“重试”重新检查更新。")
             else:
                 self.launch_btn.config(state="disabled")
-            if not self.has_attempted_update:
-                self.hint_lbl.config(text="先点击“下载更新”，完成后再点击“启动应用”。")
-            if not _is_local_app_ready(self.base):
-                self.hint_lbl.config(text="启动应用不可用：当前设备没有已下载的本地版本。")
+            if self.last_check_ok and self.update_available:
+                size_text = _format_size_text(self.latest_package_size)
+                self.hint_lbl.config(
+                    text=(
+                        f"可下载 v{self.latest_remote_version}（总大小：{size_text}）。点击“下载更新”会再次确认。\n"
+                        f"安装位置：{self.install_dir}"
+                    )
+                )
+            elif self.last_check_ok and not self.update_available:
+                if _is_local_app_ready(self.base):
+                    self.hint_lbl.config(text=f"当前已是最新版本，可直接点击“启动应用”。\n安装位置：{self.install_dir}")
+                else:
+                    self.hint_lbl.config(text="当前设备没有本地版本，请等待在线更新可用后下载。")
+            elif self.last_check_error:
+                if _is_local_app_ready(self.base):
+                    self.hint_lbl.config(text="自动检查失败，可点击“重新检查”，或先点击“启动应用”使用本地版本。")
+                else:
+                    self.hint_lbl.config(text="自动检查失败，且当前没有本地版本。请点击“重新检查”或“打开下载页”。")
+            else:
+                self.hint_lbl.config(text="启动后会自动检查更新。")
+        self._schedule_layout_reflow()
 
     def _show_error_actions(self) -> None:
-        self.hint_lbl.config(text="可点击“重试”或“打开下载页”。若本地已有版本，也可直接点击“启动应用”。")
+        if _is_local_app_ready(self.base):
+            self.hint_lbl.config(text="可点击“重新检查”或“打开下载页”。也可直接点击“启动应用”。")
+        else:
+            self.hint_lbl.config(text="可点击“重新检查”或“打开下载页”。首次使用请先完成下载。")
+        self._schedule_layout_reflow()
 
     def _on_start(self) -> None:
         if self.running:
             return
+        if not self.last_check_ok:
+            messagebox.showwarning(DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。")
+            return
+        if not self.update_available:
+            messagebox.showinfo(DISPLAY_NAME, "当前已是最新版本，无需下载。")
+            return
+        if not self.latest_manifest:
+            messagebox.showwarning(DISPLAY_NAME, "缺少下载清单，请先点击“重新检查”。")
+            return
+        size_text = _format_size_text(self.latest_package_size)
+        ok = messagebox.askyesno(
+            DISPLAY_NAME,
+            (
+                f"将下载并安装 v{self.latest_remote_version}。\n"
+                f"下载总大小：{size_text}\n"
+                f"安装位置：{self.install_dir}\n"
+                "是否现在开始下载？"
+            ),
+        )
+        if not ok:
+            return
+        self.last_download_success = False
+        self.current_task = "download"
         self.has_attempted_update = True
-        self.channel = self.channel_var.get().strip() or self.detected_channel
-        self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
-        self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
-        self._set_status("准备下载", f"已选择通道：{self.channel}", 0.0, "info")
+        self._set_status(
+            "准备下载",
+            f"即将下载 v{self.latest_remote_version}，总大小：{size_text}\n安装位置：{self.install_dir}",
+            0.0,
+            "info",
+        )
         self._set_running(True)
-        self._start_worker()
+        self._start_worker("download")
 
     def _on_retry(self) -> None:
-        self._on_start()
+        self._begin_check(automatic=False)
 
     def _on_channel_changed(self, *_args) -> None:
         if self.running:
@@ -1129,11 +2035,13 @@ class LauncherWindow:
         self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
         self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
         self._refresh_channel_details()
+        self._begin_check(automatic=True)
 
     def _refresh_channel_details(self) -> None:
         ch = self.channel_var.get().strip() or self.detected_channel
         info = CHANNEL_DETAILS.get(ch, CHANNEL_DETAILS["Enhanced"])
         self.channel_desc_lbl.config(text=f"{info['title']}\n{info['desc']}\n{info['who']}")
+        self._refresh_wraplengths()
 
     def _on_launch(self) -> None:
         if not _is_local_app_ready(self.base):
@@ -1150,6 +2058,18 @@ class LauncherWindow:
         except Exception:
             pass
 
+    def _open_details(self) -> None:
+        try:
+            LauncherDetailsDialog(
+                self.root,
+                channel=self.channel,
+                local_version=self.local_version,
+                launcher_version=LAUNCHER_VERSION,
+                install_dir=self.install_dir,
+            )
+        except Exception as e:
+            _log(self.base, f"打开详情弹窗失败：{e}")
+
     def _commit_launch(self) -> None:
         if self.decision.action == "launch":
             self.root.destroy()
@@ -1165,6 +2085,7 @@ class LauncherWindow:
 
 def main() -> None:
     base = _base_dir()
+    _enable_dpi_awareness()
     channel = _detect_channel()
     identity = _build_client_identity(base)
 
