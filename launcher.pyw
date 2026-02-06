@@ -43,6 +43,8 @@ UA = f"BomanaLauncher/{LAUNCHER_VERSION}"
 PRIMARY_UPDATE_BASE_URL = os.environ.get("BOMANA_UPDATE_BASE_URL", "https://bomanaupdate.007985.xyz").strip().rstrip("/")
 PRIMARY_VERSION_API_PATH = "/api/v1/version"
 PRIMARY_EVENT_API_PATH = "/api/v1/event"
+# 默认将国内服务作为“版本检查源”；仅在显式开启时才使用其下载地址。
+PRIMARY_ALLOW_PACKAGE_DOWNLOAD = os.environ.get("BOMANA_PRIMARY_ALLOW_PACKAGE_DOWNLOAD", "").strip().lower() in ("1", "true", "yes", "on")
 
 RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
@@ -447,7 +449,7 @@ def _fetch_manifest_from_primary(channel: str, local_version: str, identity: Dic
     entrypoint = str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
     source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
 
-    if not remote_version or not package_url:
+    if not remote_version:
         raise RuntimeError("国内更新服务返回字段缺失")
 
     return {
@@ -509,6 +511,17 @@ def _check_and_update(
         notify("正在检查更新", "优先连接腾讯云更新服务...", 0.08, "info")
         try:
             manifest = _fetch_manifest_from_primary(channel, local_version, identity)
+            if manifest is not None:
+                _log(
+                    base,
+                    f"腾讯云版本检查成功：local=v{local_version}, remote=v{str(manifest.get('remote_version', '')).strip() or 'unknown'}",
+                )
+            if manifest is not None and not PRIMARY_ALLOW_PACKAGE_DOWNLOAD:
+                remote_version_preview = str(manifest.get("remote_version", "")).strip()
+                if _version_is_newer(remote_version_preview, local_version):
+                    _log(base, "腾讯云更新服务仅用于版本检测，下载源切换为 GitHub")
+                    notify("发现新版本", "腾讯云仅提供版本号，正在切换 GitHub 下载源...", 0.1, "info")
+                    manifest = None
         except Exception as e:
             primary_err = e
             _log(base, f"腾讯云更新服务不可用：{e}")
@@ -538,6 +551,18 @@ def _check_and_update(
 
     notify("发现新版本", f"v{local_version} -> v{remote_version}（来源：{source_name}）", 0.24, "success")
     last_emit = [0.0]
+    speed_state = {
+        "time": time.monotonic(),
+        "downloaded": 0,
+        "bps": 0.0,
+    }
+
+    def _fmt_speed_text(bps: float) -> str:
+        if bps >= 1048576:
+            return f"{bps / 1048576:.2f} MB/s"
+        if bps >= 1024:
+            return f"{bps / 1024:.1f} KB/s"
+        return f"{max(0.0, bps):.0f} B/s"
 
     def on_progress(downloaded: int, total: Optional[int]) -> None:
         now = time.monotonic()
@@ -545,13 +570,24 @@ def _check_and_update(
             return
         last_emit[0] = now
 
+        dt = now - float(speed_state["time"])
+        db = downloaded - int(speed_state["downloaded"])
+        if dt > 0 and db >= 0:
+            inst_bps = db / dt
+            prev_bps = float(speed_state["bps"])
+            speed_state["bps"] = inst_bps if prev_bps <= 0 else (prev_bps * 0.65 + inst_bps * 0.35)
+            speed_state["time"] = now
+            speed_state["downloaded"] = downloaded
+
+        speed_text = _fmt_speed_text(float(speed_state["bps"]))
+
         if total and total > 0:
             percent = downloaded / float(total)
             progress = 0.24 + min(0.56, 0.56 * percent)
-            detail = f"正在下载应用包：{downloaded / 1048576:.1f} / {total / 1048576:.1f} MB"
+            detail = f"正在下载应用包：{downloaded / 1048576:.1f} / {total / 1048576:.1f} MB  |  {speed_text}"
             notify("正在下载更新", detail, progress, "info")
         else:
-            detail = f"正在下载应用包：{downloaded / 1048576:.1f} MB"
+            detail = f"正在下载应用包：{downloaded / 1048576:.1f} MB  |  {speed_text}"
             notify("正在下载更新", detail, None, "info")
 
     package_bytes = _fetch_bytes(package_url, progress_cb=on_progress)
@@ -622,7 +658,7 @@ class LauncherWindow:
         self.channel_var = tk.StringVar(master=self.root, value=channel)
 
         self._build_ui()
-        self._set_status("准备就绪", "请选择通道，然后点击“开始更新并启动”。", 0.0, "info")
+        self._set_status("准备就绪", "请选择通道，然后点击“下载更新”。下载完成后再点击“启动应用”。", 0.0, "info")
         self._set_running(False)
         self.root.after(80, self._poll_events)
         self.root.after(100, self._animate)
@@ -752,7 +788,7 @@ class LauncherWindow:
 
         self.hint_lbl = tk.Label(
             card,
-            text="首次启动会自动下载应用包，请保持网络可用。",
+            text="首次使用请先下载应用包，下载完成后再启动应用。",
             font=("Segoe UI", 9),
             fg=_THEME["TEXT_MUTED"],
             bg=_THEME["CARD"],
@@ -765,8 +801,8 @@ class LauncherWindow:
 
         self.start_btn = tk.Button(
             btn_row,
-            text="开始更新并启动",
-            width=14,
+            text="下载更新",
+            width=12,
             command=self._on_start,
             bg=_THEME["BLUE"],
             fg="#0a0e13",
@@ -796,11 +832,11 @@ class LauncherWindow:
         )
         self.retry_btn.pack(side="left")
 
-        self.offline_btn = tk.Button(
+        self.launch_btn = tk.Button(
             btn_row,
-            text="离线启动",
+            text="启动应用",
             width=12,
-            command=self._on_offline_launch,
+            command=self._on_launch,
             bg=_THEME["CARD"],
             fg=_THEME["TEXT"],
             activebackground=_THEME["BORDER"],
@@ -811,7 +847,7 @@ class LauncherWindow:
             highlightbackground=_THEME["BORDER"],
             cursor="hand2",
         )
-        self.offline_btn.pack(side="left", padx=(8, 0))
+        self.launch_btn.pack(side="left", padx=(8, 0))
 
         self.release_btn = tk.Button(
             btn_row,
@@ -854,6 +890,7 @@ class LauncherWindow:
         self._worker.start()
 
     def _worker_main(self) -> None:
+        initial_version = self.local_version
         final_version = self.local_version
         update_ok = False
         update_source = ""
@@ -911,47 +948,45 @@ class LauncherWindow:
             },
         )
 
-        if local_ready:
-            if update_ok:
-                self.events.put(
-                    (
-                        "done",
-                        {
-                            "launch": True,
-                            "final_version": final_version,
-                            "warning": "",
-                            "status": "准备启动",
-                            "detail": f"版本 v{final_version}，正在启动...",
-                            "level": "success",
-                        },
-                    )
-                )
+        if update_ok:
+            if _version_is_newer(final_version, initial_version):
+                status = "下载完成"
+                detail = f"已更新到 v{final_version}（来源：{update_source}）。现在可点击“启动应用”。"
             else:
-                self.events.put(
-                    (
-                        "done",
-                        {
-                            "launch": True,
-                            "final_version": final_version,
-                            "warning": update_error,
-                            "status": "已切换离线启动",
-                            "detail": f"{update_error}\n将使用本地版本 v{final_version} 启动。",
-                            "level": "warning",
-                        },
-                    )
-                )
-        else:
-            detail = update_error or "当前没有本地可用版本，请先联网完成首次下载。"
+                status = "已是最新版本"
+                detail = f"当前版本 v{final_version}（来源：{update_source}）。可直接点击“启动应用”。"
             self.events.put(
                 (
                     "done",
                     {
-                        "launch": False,
+                        "update_ok": True,
+                        "final_version": final_version,
+                        "warning": "",
+                        "status": status,
+                        "detail": detail,
+                        "level": "success",
+                    },
+                )
+            )
+        else:
+            if local_ready:
+                detail = f"{update_error}\n可点击“启动应用”使用本地版本 v{final_version}。"
+                level = "warning"
+                status = "更新失败"
+            else:
+                detail = update_error or "当前没有本地可用版本，请先联网完成首次下载。"
+                level = "error"
+                status = "无法启动"
+            self.events.put(
+                (
+                    "done",
+                    {
+                        "update_ok": False,
                         "final_version": final_version,
                         "warning": detail,
-                        "status": "无法启动",
+                        "status": status,
                         "detail": detail,
-                        "level": "error",
+                        "level": level,
                     },
                 )
             )
@@ -981,25 +1016,23 @@ class LauncherWindow:
                         payload.get("level", "info"),
                     )
                 elif typ == "done":
-                    launch = bool(payload.get("launch", False))
                     final_version = str(payload.get("final_version", self.local_version))
                     warning = str(payload.get("warning", ""))
                     self.decision = LaunchDecision(
-                        action=("launch" if launch else "exit"),
+                        action="exit",
                         final_version=final_version,
                         warning=warning,
                     )
                     self._set_status(
                         str(payload.get("status", "")),
                         str(payload.get("detail", "")),
-                        (1.0 if launch else self.progress_value),
+                        self.progress_value,
                         str(payload.get("level", "info")),
                     )
+                    self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
+                    self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
                     self._set_running(False)
-                    if launch:
-                        self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{final_version}")
-                        self.root.after(700, self._commit_launch)
-                    else:
+                    if not bool(payload.get("update_ok", False)):
                         self._show_error_actions()
         except queue.Empty:
             pass
@@ -1048,30 +1081,32 @@ class LauncherWindow:
         state = "disabled" if running else "normal"
         self.start_btn.config(state=state)
         self.retry_btn.config(state=state)
-        self.offline_btn.config(state=state)
+        self.launch_btn.config(state=state)
         self.release_btn.config(state="normal")
         self.exit_btn.config(state="normal")
         self.channel_menu.config(state=state)
 
         if running:
             self.retry_btn.pack_forget()
-            self.hint_lbl.config(text="正在自动处理更新流程，请稍候...")
+            self.hint_lbl.config(text="正在下载并安装更新，请稍候...")
         else:
             if self.has_attempted_update:
                 self.retry_btn.pack(side="left", padx=(8, 0))
             else:
                 self.retry_btn.pack_forget()
             if _is_local_app_ready(self.base):
-                self.offline_btn.config(state="normal")
+                self.launch_btn.config(state="normal")
+                if self.has_attempted_update:
+                    self.hint_lbl.config(text="可点击“启动应用”进入游戏，或点击“重试”重新检查更新。")
             else:
-                self.offline_btn.config(state="disabled")
+                self.launch_btn.config(state="disabled")
             if not self.has_attempted_update:
-                self.hint_lbl.config(text="建议先使用默认通道；仅在你明确知道差异时再切换。")
+                self.hint_lbl.config(text="先点击“下载更新”，完成后再点击“启动应用”。")
             if not _is_local_app_ready(self.base):
-                self.hint_lbl.config(text="离线启动不可用：当前设备没有已下载的本地版本。")
+                self.hint_lbl.config(text="启动应用不可用：当前设备没有已下载的本地版本。")
 
     def _show_error_actions(self) -> None:
-        self.hint_lbl.config(text="可点击“重试”或“打开下载页”。首次使用请先联网完成下载。")
+        self.hint_lbl.config(text="可点击“重试”或“打开下载页”。若本地已有版本，也可直接点击“启动应用”。")
 
     def _on_start(self) -> None:
         if self.running:
@@ -1080,7 +1115,7 @@ class LauncherWindow:
         self.channel = self.channel_var.get().strip() or self.detected_channel
         self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
         self.sub_lbl.config(text=f"通道：{self.channel}  |  本地版本：v{self.local_version}")
-        self._set_status("准备开始", f"已选择通道：{self.channel}", 0.0, "info")
+        self._set_status("准备下载", f"已选择通道：{self.channel}", 0.0, "info")
         self._set_running(True)
         self._start_worker()
 
@@ -1100,13 +1135,13 @@ class LauncherWindow:
         info = CHANNEL_DETAILS.get(ch, CHANNEL_DETAILS["Enhanced"])
         self.channel_desc_lbl.config(text=f"{info['title']}\n{info['desc']}\n{info['who']}")
 
-    def _on_offline_launch(self) -> None:
+    def _on_launch(self) -> None:
         if not _is_local_app_ready(self.base):
-            self._set_status("无法离线启动", "本地没有可用应用包。", None, "error")
+            self._set_status("无法启动", "本地没有可用应用包，请先点击“下载更新”。", None, "error")
             return
         final_version = _read_local_app_version(self.base / APP_DIR_NAME)
         self.decision = LaunchDecision(action="launch", final_version=final_version, warning="")
-        self._set_status("离线启动", f"将启动本地版本 v{final_version}", 1.0, "success")
+        self._set_status("准备启动", f"将启动本地版本 v{final_version}", 1.0, "success")
         self.root.after(300, self._commit_launch)
 
     def _open_releases(self) -> None:
