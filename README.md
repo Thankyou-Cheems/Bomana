@@ -5,7 +5,7 @@
 A powerful War Thunder timer made for the "Space Monkeys" who love dropping bombs and eating bananas
 
 <p align="center">
-  <img src="Bomana.png" width="320" alt="Bomana promotional art">
+  <img src="app.png" width="320" alt="Bomana promotional art">
 </p>
 
 [![Version](https://img.shields.io/badge/version-6.7.0-blue.svg)](https://github.com/Thankyou-Cheems/Bomana/releases)
