@@ -118,7 +118,7 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
             if [ -n "$PREV_TAG" ]; then
-              CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges | head -15)
+              CHANGELOG=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges -n 15)
             else
               CHANGELOG=$(git log --pretty=format:"- %s" --no-merges -15)
             fi
