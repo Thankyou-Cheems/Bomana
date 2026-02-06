@@ -10,7 +10,7 @@ import json
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.6.3"
+__version__ = "6.7.0"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -22,12 +22,12 @@ __repository__ = "https://github.com/Thankyou-Cheems/Bomana"
 # 设置为 False 可在打包时完全移除对应功能，减小体积并简化界面
 # 修改后需要重新打包才能生效
 
-ENABLE_CCRP = True           # CCRP投弹预测功能开关
-ENABLE_ZONES = True          # 战区导航功能开关
-ENABLE_AIRFIELDS = True      # 机场导航功能开关
-ENABLE_FUEL = True           # 燃油管理功能开关
-ENABLE_CHECKLIST = True      # 出击检查清单功能开关
-ENABLE_ADVANCED_SETTINGS = True  # 高级设置功能开关（面板选择、快捷键自定义等）
+ENABLE_CCRP = False
+ENABLE_ZONES = False
+ENABLE_AIRFIELDS = False
+ENABLE_FUEL = False
+ENABLE_CHECKLIST = False
+ENABLE_ADVANCED_SETTINGS = True
 
 
 # ============================================================================

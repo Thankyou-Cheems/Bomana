@@ -1,37 +1,24 @@
-# ============================================================================
-# Bomana - GitHub Actions 自动构建配置
-# ============================================================================
-# 
-# 触发方式:
-#   1. 推送 v* 格式的 Tag (如 v6.6.1)
-#   2. 手动触发 (workflow_dispatch)，可选填版本号
-#
-# 构建产物:
-#   - Bomana_Enhanced_vX.X.X.exe  (增强版: 全功能)
-#   - Bomana_Standard_vX.X.X.exe  (标准版: 导航+燃油，无CCRP)
-#   - Bomana_Lite_vX.X.X.exe      (精简版: 仅计时器)
-#   - 校验信息_*.txt              (SHA256 校验文件)
-#
-# 版本号来源优先级:
-#   1. 手动输入 (workflow_dispatch)
-#   2. Git Tag (refs/tags/v*)
-#   3. 源代码 __version__ 变量
-#   4. 默认 "dev"
-#
-# ============================================================================
-
-name: Build and Release Bomana
+name: Build and Release Bomana Portable
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (例如: 6.6.1)，留空则从源代码提取'
+        description: "版本号 (例如: 6.7.0)，留空则从源代码提取"
         required: false
         type: string
+      build_target:
+        description: "构建目标"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - app
+          - launcher
 
 permissions:
   contents: write
@@ -42,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      build_target: ${{ steps.version.outputs.build_target }}
       changelog: ${{ steps.changelog.outputs.changelog }}
       tag_name: ${{ steps.version.outputs.tag_name }}
 
@@ -55,7 +43,6 @@ jobs:
         id: version
         shell: bash
         run: |
-          # 优先级: 手动输入 > Git Tag > 源代码 __version__ > dev
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
             echo "版本来源: 手动输入"
@@ -63,24 +50,26 @@ jobs:
             VERSION="${GITHUB_REF#refs/tags/v}"
             echo "版本来源: Git Tag"
           else
-            # 从源代码提取 __version__
             VERSION=$(grep -oP '__version__\s*=\s*["\x27]\K[^"\x27]+' bomana/config.py || echo "dev")
             echo "版本来源: 源代码 __version__"
           fi
-          
+
           TAG_NAME=${GITHUB_REF#refs/tags/}
           [ "$TAG_NAME" == "$GITHUB_REF" ] && TAG_NAME="v$VERSION"
+          BUILD_TARGET="${{ github.event.inputs.build_target }}"
+          [ -z "$BUILD_TARGET" ] && BUILD_TARGET="all"
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "build_target=$BUILD_TARGET" >> "$GITHUB_OUTPUT"
           echo "提取到版本号: $VERSION"
+          echo "构建目标: $BUILD_TARGET"
 
       - name: 生成更新日志
         id: changelog
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            # 获取上一个 tag 到当前 tag 的提交记录
             PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
             if [ -n "$PREV_TAG" ]; then
               CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges | head -15)
@@ -96,19 +85,18 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-  build:
-    name: 构建 ${{ matrix.variant.name }}
+  build_app:
+    name: 构建应用包 ${{ matrix.variant.name }}
     needs: prepare
+    if: needs.prepare.outputs.build_target == 'all' || needs.prepare.outputs.build_target == 'app'
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         variant:
-          # 三个版本的功能开关配置
-          # advanced: 高级设置面板 (UI缩放、快捷键自定义等)
-          - { name: "增强版", slug: "Enhanced", ccrp: "True",  zones: "True",  fuel: "True",  advanced: "True",  description: "全功能开启，含CCRP投弹预测" }
-          - { name: "标准版", slug: "Standard", ccrp: "False", zones: "True",  fuel: "True",  advanced: "True",  description: "含导航与燃油管理，无CCRP" }
-          - { name: "精简版", slug: "Lite",     ccrp: "False", zones: "False", fuel: "False", advanced: "True",  description: "仅计时器，极致轻量" }
+          - { name: "增强版", slug: "Enhanced", description: "全功能，含CCRP投弹预测" }
+          - { name: "标准版", slug: "Standard", description: "含导航与燃油管理，无CCRP" }
+          - { name: "精简版", slug: "Lite", description: "仅计时器，极致轻量" }
 
     steps:
       - name: Checkout code
@@ -117,121 +105,70 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: 安装依赖
         run: |
           pip install -r requirements.txt pyinstaller
 
-      - name: 🛠️ 强制注入配置开关
+      - name: 构建应用包
         shell: pwsh
         run: |
-          # 读取源码
-          $filePath = "bomana/config.py"
-          $code = Get-Content $filePath -Raw
-          
-          # 定义需要修改的开关列表
-          # 无论源代码后面带不带注释，直接覆盖整行
-          $switches = @{
-            "ENABLE_CCRP"              = "${{ matrix.variant.ccrp }}"
-            "ENABLE_ZONES"             = "${{ matrix.variant.zones }}"
-            "ENABLE_AIRFIELDS"         = "${{ matrix.variant.zones }}"   # 机场跟随战区开关
-            "ENABLE_FUEL"              = "${{ matrix.variant.fuel }}"
-            "ENABLE_CHECKLIST"         = "${{ matrix.variant.zones }}"   # 检查清单跟随战区开关
-            "ENABLE_ADVANCED_SETTINGS" = "${{ matrix.variant.advanced }}"
-          }
+          python tools/build_portable.py `
+            --variant "${{ matrix.variant.slug }}" `
+            --target "app" `
+            --version "${{ needs.prepare.outputs.version }}" `
+            --output "dist"
 
-          foreach ($key in $switches.Keys) {
-              $val = $switches[$key]
-              # 正则说明：匹配行首的变量名，直到行尾的所有内容全部替换
-              $code = $code -replace "(?m)^$key\s*=.*", "$key = $val"
-              Write-Host "Setting $key to $val"
-          }
-
-          $code | Set-Content $filePath -NoNewline
-          
-          # 验证注入结果 (Debug)
-          Write-Host "--- 验证修改结果 ---"
-          Select-String -Path $filePath -Pattern "ENABLE_"
-
-      - name: 构建可执行文件
-        shell: pwsh
-        run: |
-          $execName = "Bomana_${{ matrix.variant.slug }}"
-          
-          # 根据版本类型决定是否包含 CCRP 参数文件
-          $addDataArgs = @(
-            "--add-data", "app.png;.",
-            "--add-data", "sponsor_wechat.png;."
-          )
-          
-          # 增强版包含炸弹参数文件
-          if ("${{ matrix.variant.ccrp }}" -eq "True") {
-            if (Test-Path "ccrp_bomb_params.json") {
-              $addDataArgs += "--add-data", "ccrp_bomb_params.json;."
-              Write-Host "包含 CCRP 炸弹参数文件 (JSON)"
-            } elseif (Test-Path "ccrp_bomb_params.py") {
-              $addDataArgs += "--add-data", "ccrp_bomb_params.py;."
-              Write-Host "包含 CCRP 炸弹参数文件 (PY)"
-            }
-          }
-          
-          pyinstaller --noconsole --onefile `
-            --name "$execName" `
-            --icon "app.ico" `
-            @addDataArgs `
-            --hidden-import "pystray._win32" `
-            --collect-submodules "PIL" `
-            --clean "Bomana.pyw"
-
-      - name: 📦 处理产物命名与校验
-        shell: pwsh
-        run: |
-          $slug = "${{ matrix.variant.slug }}"
-          $ver = "${{ needs.prepare.outputs.version }}"
-          
-          # 1. 命名格式：Bomana_Enhanced_v6.6.1.exe
-          $newName = "Bomana_${slug}_v$ver.exe"
-          Move-Item "dist/Bomana_$slug.exe" "dist/$newName"
-
-          # 2. 生成校验文件
-          $sha256 = (Get-FileHash "dist/$newName" -Algorithm SHA256).Hash
-          $fileSize = (Get-Item "dist/$newName").Length
-          $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
-          
-          $lines = @(
-              "Bomana 构建信息",
-              "================",
-              "",
-              "版本类型: ${{ matrix.variant.name }} ($slug)",
-              "软件版本: v$ver",
-              "文件名称: $newName",
-              "文件大小: $fileSizeMB MB ($fileSize bytes)",
-              "SHA256:   $sha256",
-              "",
-              "功能说明: ${{ matrix.variant.description }}",
-              "",
-              "验证方法 (PowerShell):",
-              "  (Get-FileHash `"$newName`" -Algorithm SHA256).Hash",
-              "",
-              "许可证: MIT License",
-              "仓库: https://github.com/Thankyou-Cheems/Bomana"
-          )
-          $lines | Out-File -FilePath "dist/校验信息_$slug.txt" -Encoding UTF8
-          
-          Write-Host "已生成产物: $newName ($fileSizeMB MB)"
-
-      - name: 上传临时产物
+      - name: 上传应用包产物
         uses: actions/upload-artifact@v4
         with:
-          name: Bomana-${{ matrix.variant.slug }}
-          path: dist/*
+          name: Bomana-AppPackage-${{ matrix.variant.slug }}
+          path: |
+            dist/Bomana_app_${{ matrix.variant.slug }}_v${{ needs.prepare.outputs.version }}.zip
+            dist/manifest_${{ matrix.variant.slug }}.json
+            dist/校验信息_app_${{ matrix.variant.slug }}.txt
+
+  build_launcher:
+    name: 构建通用启动器
+    needs: prepare
+    if: needs.prepare.outputs.build_target == 'all' || needs.prepare.outputs.build_target == 'launcher'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: 安装依赖
+        run: |
+          pip install -r requirements.txt pyinstaller
+
+      - name: 构建启动器
+        shell: pwsh
+        run: |
+          python tools/build_portable.py `
+            --target "launcher" `
+            --version "${{ needs.prepare.outputs.version }}" `
+            --output "dist"
+
+      - name: 上传启动器产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bomana-Launcher
+          path: |
+            dist/Bomana香焦_v${{ needs.prepare.outputs.version }}.exe
+            dist/校验信息_launcher.txt
 
   release:
     name: 发布正式版本
-    needs: [prepare, build]
+    needs: [prepare, build_app, build_launcher]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    if: (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') && always() && contains(fromJSON('["success","skipped"]'), needs.build_app.result) && contains(fromJSON('["success","skipped"]'), needs.build_launcher.result)
 
     steps:
       - name: 下载产物
@@ -250,11 +187,15 @@ jobs:
             ${{ needs.prepare.outputs.changelog }}
 
             ## 📦 版本说明
-            | 版本 | 说明 | 适用场景 |
-            |------|------|----------|
-            | **Enhanced (增强版)** | 全功能，含CCRP投弹预测 | 高级玩家、轰炸机爱好者 |
-            | **Standard (标准版)** | 导航+燃油，无CCRP | 普通玩家 |
-            | **Lite (精简版)** | 仅计时器 | 追求极致轻量 |
+            - 通用启动器：`Bomana香焦_v*.exe`（一个文件，内置通道选择）
+            - 可更新应用包：
+              - `Bomana_app_Enhanced_v*.zip`
+              - `Bomana_app_Standard_v*.zip`
+              - `Bomana_app_Lite_v*.zip`
+
+            每次启动时，Launcher 内可选择通道，并按选择更新对应 `app.zip`。
+
+            > 云端自动构建：推送 `vX.Y.Z` 标签后，GitHub Actions 会自动构建并发布，无需本地打包上传。
 
             ## 🔐 安全验证
             请下载对应的 `校验信息_*.txt` 文件，使用 SHA256 校验确保文件完整性。

@@ -13,10 +13,15 @@
 #### 选项 A：下载打包版（推荐新手）
 
 1. 访问 [Releases 页面](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. 选择适合你的版本：
-   - `Bomana_Enhanced_vX.X.X.exe`（增强版：全功能，含CCRP）
-   - `Bomana_Standard_vX.X.X.exe`（标准版：导航+燃油，无CCRP）
-   - `Bomana_Lite_vX.X.X.exe`（精简版：仅计时器）
+2. 下载通用启动器：`Bomana香焦_vX.X.X.exe`
+
+启动器内可选版本通道：
+
+| 通道 | 包含功能 | 适合人群 |
+|------|----------|----------|
+| **Enhanced** | 计时器 + 导航 + 燃油 + CCRP | 推荐大多数玩家 |
+| **Standard** | 计时器 + 导航 + 燃油（无CCRP） | 不需要投弹预测 |
+| **Lite** | 仅计时器 | 只要极简与低占用 |
 3. 下载完成！跳到步骤 2
 
 #### 选项 B：从源码运行（开发者）
@@ -43,9 +48,12 @@ python Bomana.pyw
 
 ### 🚀 步骤 3：运行 Bomana
 
-1. **双击 `Bomana.exe`**（或运行 `python Bomana.pyw`）
+1. **双击 `Bomana香焦_vX.X.X.exe`**（或运行 `python Bomana.pyw`）
 2. 窗口会出现在**屏幕右上角**
 3. 初始状态显示 "🏠机库" 或 "等待中"
+4. 启动器先选择版本通道，再检查更新并下载最新 `Bomana_app_*.zip`
+5. 首次运行需要联网完成应用包下载
+6. 程序显示名为 `Bomana香焦`
 
 ### ✈️ 步骤 4：出生后开始计时
 
@@ -227,10 +235,15 @@ python tools/blkx_extractor.py ^
 #### Option A: Download Packaged Version (Recommended)
 
 1. Visit [Releases page](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. Pick a build:
-   - `Bomana_Enhanced_vX.X.X.exe` (Enhanced: full features + CCRP)
-   - `Bomana_Standard_vX.X.X.exe` (Standard: navigation + fuel, no CCRP)
-   - `Bomana_Lite_vX.X.X.exe` (Lite: timer only)
+2. Download the universal launcher: `Bomana香焦_vX.X.X.exe`
+
+Choose channel inside launcher:
+
+| Channel | Features | Best for |
+|------|----------|----------|
+| **Enhanced** | Timer + navigation + fuel + CCRP | Most players (recommended) |
+| **Standard** | Timer + navigation + fuel (no CCRP) | Players not using bombing prediction |
+| **Lite** | Timer only | Minimal UI and lowest overhead |
 3. Done! Skip to Step 2
 
 #### Option B: Run from Source
@@ -250,9 +263,12 @@ python Bomana.pyw
 
 ### 🚀 Step 3: Run Bomana
 
-1. Double-click your `Bomana_*_vX.X.X.exe`
+1. Double-click your `Bomana香焦_vX.X.X.exe`
 2. Window appears in **top-right corner**
 3. Shows "🏠Hangar" or "IDLE"
+4. Select a channel first, then launcher checks GitHub Releases and updates `Bomana_app_*.zip`
+5. First launch requires network access to download the app package
+6. Display name: `Bomana香焦`
 
 ### ✈️ Step 4: Spawn and Start Timer
 

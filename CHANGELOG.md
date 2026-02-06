@@ -5,6 +5,24 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
 ---
+## [6.7.0] - 2026-02-06
+
+### ✨ 新增
+- 新增绿色版启动器 `launcher.pyw`（可打包为 `Bomana香焦_v*.exe`）
+- 启动器每次启动自动检查 GitHub Release，并按通道更新应用包
+- 新增可替换应用包发布形态：`Bomana_app_<Variant>_vX.Y.Z.zip`
+- 新增发布清单 `manifest_<Variant>.json`（版本、包名、SHA256）
+
+### 🔧 改进
+- 新增 `tools/build_portable.py` 与 `build_portable.bat`，统一构建 Launcher + app.zip + manifest
+- GitHub Actions 发布流程切换为绿色版产物链路
+- CI 拆分为 `build_app` 与 `build_launcher` 两类产物构建，支持手动选择构建目标（all/app/launcher）
+- 启动器升级为可视化引导界面：实时状态、下载进度、重试/离线启动/打开下载页等新手友好交互
+- 启动器新增通道下拉选择（Enhanced/Standard/Lite），不再“打开即自动下载”
+- 启动器新增通道详细说明（功能差异/适用人群），并固定显示“离线启动”按钮（无本地版本时禁用并提示）
+- 发布形态调整为单一通用启动器（`Bomana香焦_vX.Y.Z.exe`）+ 三通道小包（`Bomana_app_*`）
+
+---
 ## [6.6.3] - 2026-01-25
 
 ### 🔧 改进

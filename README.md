@@ -8,7 +8,7 @@ A powerful War Thunder timer made for the "Space Monkeys" who love dropping bomb
   <img src="Bomana.png" width="320" alt="Bomana promotional art">
 </p>
 
-[![Version](https://img.shields.io/badge/version-6.6.3-blue.svg)](https://github.com/Thankyou-Cheems/Bomana/releases)
+[![Version](https://img.shields.io/badge/version-6.7.0-blue.svg)](https://github.com/Thankyou-Cheems/Bomana/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-yellow.svg)](https://www.python.org/)
 
@@ -128,11 +128,20 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 ### 方式一：下载预编译版本（推荐）
 
 1. 前往 [Releases](https://github.com/Thankyou-Cheems/Bomana/releases) 页面
-2. 选择适合你的版本：
-   - `Bomana_Enhanced_vX.X.X.exe`（增强版：全功能，含CCRP）
-   - `Bomana_Standard_vX.X.X.exe`（标准版：导航+燃油，无CCRP）
-   - `Bomana_Lite_vX.X.X.exe`（精简版：仅计时器）
-3. 下载后双击运行
+2. 下载通用启动器：`Bomana香焦_vX.X.X.exe`
+
+启动器内可选版本通道：
+
+| 通道 | 包含功能 | 适合人群 |
+|------|----------|----------|
+| **Enhanced** | 计时器 + 战区/机场导航 + 燃油管理 + CCRP投弹预测 | 需要完整功能的玩家（推荐） |
+| **Standard** | 计时器 + 战区/机场导航 + 燃油管理（无CCRP） | 不用投弹预测但需要导航/燃油信息 |
+| **Lite** | 仅核心计时器 | 只想要极简界面和最低占用 |
+
+3. 下载后双击运行（绿色版，无需安装）
+4. 启动器会先让你选择通道（Enhanced/Standard/Lite），然后一键检查更新并下载对应 `Bomana_app_*.zip`
+5. 首次运行需联网下载应用包，后续可离线启动已下载版本
+6. 程序显示名为 `Bomana香焦`
 
 ### 方式二：从源码运行
 
@@ -147,7 +156,18 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 pip install -r requirements.txt
 ```
 
-> 打包 .exe 还需要安装 PyInstaller：`pip install pyinstaller`
+> 打包绿色版（启动器+应用包）可执行：`build_portable.bat <Enhanced|Standard|Lite> <all|app|launcher> [version]`
+
+开发者区分打包目标：
+
+- 仅打包应用包（用于自动更新）：`build_app_package.bat Enhanced|Standard|Lite`
+- 仅打包通用启动器（绿色入口）：`build_launcher.bat [version]`
+- 一次性全打：`build_portable.bat Enhanced all`
+
+GitHub 云端自动打包发布：
+
+- 推送标签 `vX.Y.Z` 后，Actions 自动构建并创建/更新 Release
+- 不需要本地打包后手工上传文件
 
 
 #### 运行
@@ -347,7 +367,7 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 ## 📝 更新日志 | Changelog
 
-详见 `CHANGELOG.md`（最新版本：v6.6.3）。
+详见 `CHANGELOG.md`（最新版本：v6.7.0）。
 
 ---
 

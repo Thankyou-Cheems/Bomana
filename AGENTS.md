@@ -4,12 +4,14 @@ This file is the single place for agent guidance and project rules.
 Keep it concise and update when workflows or boundaries change.
 
 ## Quick Map
-- Entry: `Bomana.pyw`
+- Launcher: `launcher.pyw`
+- App entry: `Bomana.pyw`
 - Config: `bomana/config.py`
 - Core: `bomana/core/` (state, telemetry, ballistics, logic)
 - UI: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound)
 - CCRP data: `ccrp_bomb_params.json`
+- Portable build: `tools/build_portable.py`, `build_portable.bat`, `build_app_package.bat`, `build_launcher.bat`
 - Docs: `ARCHITECTURE.md`, `PITFALLS.md`
 
 ## Guardrails
@@ -19,7 +21,7 @@ Keep it concise and update when workflows or boundaries change.
 ## Header Facts (Condensed)
 - Data sources: `/indicators`, `/state`, `/map_obj.json`, `/map_info.json`.
 - Tech stack: Python 3.8+, `tkinter`, `requests`, `ctypes` (optional: Pillow, pystray).
-- Builds: PyInstaller; variants driven by ENABLE_* (Enhanced/Standard/Lite).
+- Builds: portable launcher + app package (primary), PyInstaller onefile (legacy).
 
 ## Documentation Rules
 - If architecture changes (new/split modules, major data-flow changes, core directory renames), update `ARCHITECTURE.md`.

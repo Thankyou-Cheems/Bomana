@@ -2,6 +2,7 @@
 
 ## Overview
 - Entry point: `Bomana.pyw` (single-file app that currently contains UI, logic, and polling)
+- Portable launcher: `launcher.pyw` (checks GitHub Release, updates app package, launches app)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app, widgets, dialogs, nav window)
@@ -14,6 +15,7 @@
 ```
 .
 ├─ Bomana.pyw                # Main program (GUI + logic + polling)
+├─ launcher.pyw              # Green launcher (auto update + bootstrap)
 ├─ bomana/
 │  ├─ config.py              # Metadata/flags/config classes
 │  ├─ core/
@@ -34,8 +36,10 @@
 ├─ ccrp_bomb_params.json       # Bomb parameters (CCRP)
 ├─ tools/
 │  └─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.json generator
+├─ tools/build_portable.py   # Build launcher/app package/manifest
 ├─ assets (root files)       # Icons/sponsor image, etc.
-├─ build.bat / build.sh      # PyInstaller packaging scripts
+├─ build.bat / build.sh      # Legacy onefile packaging scripts
+├─ build_portable.bat        # Portable packaging helper (Windows)
 └─ *.md                      # Docs, changelog, contribution guide
 ```
 
@@ -60,5 +64,19 @@ Important constraint: only use the official 8111 API. No memory reads, injection
 - UI overlays & global hotkeys
 
 ## Build & Release
-Use `build.bat` / `build.sh` (PyInstaller) with `ENABLE_*` combinations to generate Enhanced/Standard/Lite.
+Portable release uses:
+- `Bomana香焦_vX.Y.Z.exe` (universal bootstrap runtime with channel selector)
+- `Bomana_app_<Variant>_vX.Y.Z.zip` (updatable application package)
+- `manifest_<Variant>.json` (channel/version/package metadata + SHA256)
+
+Local build helper:
+- `build_portable.bat <Variant> <all|app|launcher>`
+- `build_app_package.bat <Variant>` (only app zip + manifest)
+- `build_launcher.bat [version]` (only universal launcher exe)
+
+CI:
+- `.github/workflows/build.yml` runs separate jobs for:
+  - `build_app`: app package + manifest
+  - `build_launcher`: launcher exe
+- pushing tag `vX.Y.Z` triggers cloud build and release automatically.
 
