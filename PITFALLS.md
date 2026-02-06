@@ -19,3 +19,9 @@
   Symptom: UI no longer reflected live state updates
   Cause: GameLogic thread crashed on NameError (missing math import)
   Fix/Workaround: add `import math` to bomana/core/logic.py
+
+- Date: 2026-02-06
+  Context: GitHub Actions Windows packaging (`tools/build_portable.py`)
+  Symptom: `UnicodeEncodeError: 'charmap' codec can't encode characters` when printing paths
+  Cause: CI console encoding was cp1252, but output included Chinese file names (e.g. checksum file path)
+  Fix/Workaround: route status logs through `safe_print()` with encoding fallback (`backslashreplace`)

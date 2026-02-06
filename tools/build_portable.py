@@ -45,6 +45,16 @@ APP_DIR = "bomana"
 UNIVERSAL_LAUNCHER_NAME = "Bomana香焦"
 
 
+def safe_print(msg: str) -> None:
+    text = str(msg)
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        fallback = text.encode(enc, errors="backslashreplace").decode(enc, errors="replace")
+        print(fallback)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -247,14 +257,14 @@ def main() -> int:
         checksum_variant = "Universal" if args.target == "launcher" else args.variant
         checksum = write_checksum_info(out_dir, checksum_variant, version, app_zip, launcher, args.target)
 
-        print(f"[OK] variant={checksum_variant} version={version} target={args.target}")
+        safe_print(f"[OK] variant={checksum_variant} version={version} target={args.target}")
         if app_zip and app_zip.exists():
-            print(f"  - app package: {app_zip}")
+            safe_print(f"  - app package: {app_zip}")
         if manifest and manifest.exists():
-            print(f"  - manifest:    {manifest}")
+            safe_print(f"  - manifest:    {manifest}")
         if launcher and launcher.exists():
-            print(f"  - launcher:    {launcher}")
-        print(f"  - checksum:    {checksum}")
+            safe_print(f"  - launcher:    {launcher}")
+        safe_print(f"  - checksum:    {checksum}")
         return 0
     finally:
         config_path.write_text(original, encoding="utf-8")
