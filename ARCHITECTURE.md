@@ -2,7 +2,7 @@
 
 ## Overview
 - Entry point: `Bomana.pyw` (single-file app that currently contains UI, logic, and polling)
-- Portable launcher: `launcher.pyw` (checks GitHub Release, updates app package, launches app)
+- Portable launcher: `launcher.pyw` (checks Tencent update API first, falls back to GitHub Release, updates app package, launches app)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app, widgets, dialogs, nav window)
@@ -35,7 +35,8 @@
 │     └─ system.py            # Windows/system helpers
 ├─ ccrp_bomb_params.json       # Bomb parameters (CCRP)
 ├─ tools/
-│  └─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.json generator
+│  ├─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.json generator
+│  └─ update_service/        # Optional self-hosted update + DAU stats service
 ├─ tools/build_portable.py   # Build launcher/app package/manifest
 ├─ assets (root files)       # Icons/sponsor image, etc.
 ├─ build.bat / build.sh      # Legacy onefile packaging scripts
@@ -48,6 +49,8 @@
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
 3. UI render with `tkinter` (timer, panels, hints, debug text).
 4. Alerts and sounds via `SoundConfig` + Windows Beep.
+5. Launcher update flow: Tencent API first (`BOMANA_UPDATE_BASE_URL`), GitHub fallback on failure.
+6. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` events to Tencent API (best effort).
 
 Important constraint: only use the official 8111 API. No memory reads, injection, or game file modifications (see `Bomana.pyw` header rules).
 

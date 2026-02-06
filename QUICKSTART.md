@@ -51,7 +51,7 @@ python Bomana.pyw
 1. **双击 `Bomana香焦_vX.X.X.exe`**（或运行 `python Bomana.pyw`）
 2. 窗口会出现在**屏幕右上角**
 3. 初始状态显示 "🏠机库" 或 "等待中"
-4. 启动器先选择版本通道，再检查更新并下载最新 `Bomana_app_*.zip`
+4. 启动器先选择版本通道，再优先连接国内更新服务；失败时自动回退 GitHub 并下载最新 `Bomana_app_*.zip`
 5. 首次运行需要联网完成应用包下载
 6. 程序显示名为 `Bomana香焦`
 
@@ -266,7 +266,7 @@ python Bomana.pyw
 1. Double-click your `Bomana香焦_vX.X.X.exe`
 2. Window appears in **top-right corner**
 3. Shows "🏠Hangar" or "IDLE"
-4. Select a channel first, then launcher checks GitHub Releases and updates `Bomana_app_*.zip`
+4. Select a channel first, then launcher checks Tencent update service first; if it fails, GitHub Releases is used as fallback to update `Bomana_app_*.zip`
 5. First launch requires network access to download the app package
 6. Display name: `Bomana香焦`
 

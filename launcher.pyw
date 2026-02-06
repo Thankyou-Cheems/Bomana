@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 import webbrowser
 import zipfile
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import tkinter as tk
@@ -33,9 +35,14 @@ DEFAULT_CHANNEL = "Enhanced"
 APP_DIR_NAME = "app"
 STATE_FILE_NAME = "launcher_state.json"
 LOG_FILE_NAME = "launcher.log"
+INSTALL_ID_FILE_NAME = ".bomana_install_id"
 DEFAULT_ENTRYPOINT = "Bomana.pyw"
 NET_TIMEOUT_SEC = 8.0
+PRIMARY_TIMEOUT_SEC = 4.0
 UA = f"BomanaLauncher/{LAUNCHER_VERSION}"
+PRIMARY_UPDATE_BASE_URL = os.environ.get("BOMANA_UPDATE_BASE_URL", "https://bomanaupdate.007985.xyz").strip().rstrip("/")
+PRIMARY_VERSION_API_PATH = "/api/v1/version"
+PRIMARY_EVENT_API_PATH = "/api/v1/event"
 
 RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
@@ -115,15 +122,21 @@ def _show_error(title: str, msg: str) -> None:
 def _fetch_bytes(
     url: str,
     progress_cb: Optional[Callable[[int, Optional[int]], None]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout_sec: Optional[float] = None,
 ) -> bytes:
+    req_headers = {
+        "User-Agent": UA,
+        "Accept": "application/json, application/vnd.github+json, */*",
+    }
+    if headers:
+        req_headers.update(headers)
+
     req = Request(
         url,
-        headers={
-            "User-Agent": UA,
-            "Accept": "application/vnd.github+json",
-        },
+        headers=req_headers,
     )
-    with urlopen(req, timeout=NET_TIMEOUT_SEC) as resp:
+    with urlopen(req, timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)) as resp:
         total: Optional[int] = None
         try:
             header = resp.headers.get("Content-Length")
@@ -150,6 +163,30 @@ def _fetch_bytes(
 def _fetch_json(url: str) -> Dict[str, Any]:
     raw = _fetch_bytes(url)
     return json.loads(raw.decode("utf-8"))
+
+
+def _fetch_json_with_timeout(url: str, timeout_sec: float) -> Dict[str, Any]:
+    raw = _fetch_bytes(url, timeout_sec=timeout_sec)
+    return json.loads(raw.decode("utf-8"))
+
+
+def _post_json(url: str, payload: Dict[str, Any], timeout_sec: float) -> Dict[str, Any]:
+    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = Request(
+        url,
+        data=raw,
+        method="POST",
+        headers={
+            "User-Agent": UA,
+            "Accept": "application/json",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+    )
+    with urlopen(req, timeout=timeout_sec) as resp:
+        data = resp.read()
+    if not data:
+        return {}
+    return json.loads(data.decode("utf-8"))
 
 
 def _detect_channel() -> str:
@@ -204,6 +241,50 @@ def _write_state(base: Path, state: Dict[str, Any]) -> None:
         path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
+
+
+def _load_or_create_install_id(base: Path) -> str:
+    path = base / INSTALL_ID_FILE_NAME
+    try:
+        if path.exists():
+            text = path.read_text(encoding="utf-8").strip().lower()
+            if re.fullmatch(r"[0-9a-f]{32}", text):
+                return text
+    except Exception:
+        pass
+
+    install_id = uuid.uuid4().hex
+    try:
+        path.write_text(install_id, encoding="utf-8")
+    except Exception:
+        pass
+    return install_id
+
+
+def _read_machine_guid() -> str:
+    try:
+        import winreg  # type: ignore
+
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as key:
+            guid, _ = winreg.QueryValueEx(key, "MachineGuid")
+        return str(guid).strip()
+    except Exception:
+        return ""
+
+
+def _build_client_identity(base: Path) -> Dict[str, str]:
+    install_id = _load_or_create_install_id(base)
+    machine_guid = _read_machine_guid()
+    if machine_guid:
+        raw = f"{DISPLAY_NAME}|machine|{machine_guid}"
+    else:
+        machine_name = os.environ.get("COMPUTERNAME", "").strip()
+        raw = f"{DISPLAY_NAME}|fallback|{machine_name}|{install_id}"
+    device_id = hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()[:32]
+    return {
+        "install_id": install_id,
+        "device_id": device_id,
+    }
 
 
 def _find_asset(assets: list, name: str) -> Optional[Dict[str, Any]]:
@@ -299,19 +380,17 @@ def _latest_release_url() -> str:
     return f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
 
-def _check_and_update(
-    base: Path,
-    channel: str,
-    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
-) -> str:
-    def notify(title: str, detail: str = "", progress: Optional[float] = None, level: str = "info") -> None:
-        if status_cb:
-            status_cb(title, detail, progress, level)
+def _join_base_url_path(base_url: str, path: str) -> str:
+    if not path:
+        return base_url
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    if not path.startswith("/"):
+        path = "/" + path
+    return f"{base_url}{path}"
 
-    app_dir = base / APP_DIR_NAME
-    local_version = _read_local_app_version(app_dir)
 
-    notify("正在检查更新", "连接 GitHub 获取最新版本信息...", 0.08, "info")
+def _fetch_manifest_from_github(channel: str) -> Dict[str, str]:
     release = _fetch_json(_latest_release_url())
     assets = release.get("assets", [])
 
@@ -324,28 +403,140 @@ def _check_and_update(
     if not manifest_url:
         raise RuntimeError("发布清单下载地址无效")
 
-    notify("正在检查更新", "读取更新清单...", 0.16, "info")
     manifest = _fetch_json(manifest_url)
     remote_version = str(manifest.get("app_version", "")).strip()
     package_asset = str(manifest.get("package_asset", "")).strip()
     package_sha256 = str(manifest.get("package_sha256", "")).strip()
     entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
-
     if not remote_version or not package_asset:
         raise RuntimeError("发布清单字段缺失")
-
-    if not _version_is_newer(remote_version, local_version):
-        notify("已是最新版本", f"当前版本 v{local_version}", 1.0, "success")
-        return local_version
 
     app_asset = _find_asset(assets, package_asset)
     if not app_asset:
         raise RuntimeError(f"未找到应用包: {package_asset}")
-    app_url = str(app_asset.get("browser_download_url", "")).strip()
-    if not app_url:
+    package_url = str(app_asset.get("browser_download_url", "")).strip()
+    if not package_url:
         raise RuntimeError("应用包下载地址无效")
 
-    notify("发现新版本", f"v{local_version} -> v{remote_version}", 0.24, "success")
+    return {
+        "remote_version": remote_version,
+        "package_url": package_url,
+        "package_sha256": package_sha256,
+        "entrypoint": entrypoint,
+        "source_name": "GitHub",
+    }
+
+
+def _fetch_manifest_from_primary(channel: str, local_version: str, identity: Dict[str, str]) -> Dict[str, str]:
+    if not PRIMARY_UPDATE_BASE_URL:
+        raise RuntimeError("未配置国内更新服务")
+
+    params = {
+        "channel": channel,
+        "launcher_version": LAUNCHER_VERSION,
+        "local_version": local_version,
+        "device_id": identity.get("device_id", ""),
+        "install_id": identity.get("install_id", ""),
+    }
+    version_url = _join_base_url_path(PRIMARY_UPDATE_BASE_URL, PRIMARY_VERSION_API_PATH)
+    payload = _fetch_json_with_timeout(f"{version_url}?{urlencode(params)}", PRIMARY_TIMEOUT_SEC)
+    remote_version = str(payload.get("app_version", "")).strip()
+    raw_package_url = str(payload.get("package_url", "")).strip()
+    package_url = _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
+    package_sha256 = str(payload.get("package_sha256", "")).strip()
+    entrypoint = str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
+    source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
+
+    if not remote_version or not package_url:
+        raise RuntimeError("国内更新服务返回字段缺失")
+
+    return {
+        "remote_version": remote_version,
+        "package_url": package_url,
+        "package_sha256": package_sha256,
+        "entrypoint": entrypoint,
+        "source_name": source_name,
+    }
+
+
+def _report_primary_event(
+    base: Path,
+    identity: Dict[str, str],
+    event_name: str,
+    channel: str,
+    app_version: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    if not PRIMARY_UPDATE_BASE_URL:
+        return
+
+    payload: Dict[str, Any] = {
+        "event": event_name,
+        "event_time_utc": _now_utc_iso(),
+        "channel": channel,
+        "launcher_version": LAUNCHER_VERSION,
+        "app_version": app_version,
+        "device_id": identity.get("device_id", ""),
+        "install_id": identity.get("install_id", ""),
+    }
+    if extra:
+        payload.update(extra)
+
+    try:
+        event_url = _join_base_url_path(PRIMARY_UPDATE_BASE_URL, PRIMARY_EVENT_API_PATH)
+        _post_json(event_url, payload, timeout_sec=PRIMARY_TIMEOUT_SEC)
+    except Exception as e:
+        _log(base, f"事件上报失败({event_name})：{e}")
+
+
+def _check_and_update(
+    base: Path,
+    channel: str,
+    identity: Dict[str, str],
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+) -> Tuple[str, str]:
+    def notify(title: str, detail: str = "", progress: Optional[float] = None, level: str = "info") -> None:
+        if status_cb:
+            status_cb(title, detail, progress, level)
+
+    app_dir = base / APP_DIR_NAME
+    local_version = _read_local_app_version(app_dir)
+    source_name = "GitHub"
+
+    manifest: Optional[Dict[str, str]] = None
+    primary_err: Optional[Exception] = None
+    if PRIMARY_UPDATE_BASE_URL:
+        notify("正在检查更新", "优先连接腾讯云更新服务...", 0.08, "info")
+        try:
+            manifest = _fetch_manifest_from_primary(channel, local_version, identity)
+        except Exception as e:
+            primary_err = e
+            _log(base, f"腾讯云更新服务不可用：{e}")
+            notify("国内服务暂不可用", "正在切换 GitHub 回退...", 0.1, "warning")
+
+    if manifest is None:
+        notify("正在检查更新", "连接 GitHub 获取最新版本信息...", 0.12, "info")
+        try:
+            manifest = _fetch_manifest_from_github(channel)
+        except Exception as e:
+            if primary_err is not None:
+                raise RuntimeError(f"国内更新服务不可用({primary_err})，GitHub 回退失败({e})") from e
+            raise
+
+    remote_version = str(manifest.get("remote_version", "")).strip()
+    package_url = str(manifest.get("package_url", "")).strip()
+    package_sha256 = str(manifest.get("package_sha256", "")).strip()
+    entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
+    source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
+
+    if not remote_version or not package_url:
+        raise RuntimeError("更新清单字段缺失")
+
+    if not _version_is_newer(remote_version, local_version):
+        notify("已是最新版本", f"当前版本 v{local_version}（来源：{source_name}）", 1.0, "success")
+        return local_version, source_name
+
+    notify("发现新版本", f"v{local_version} -> v{remote_version}（来源：{source_name}）", 0.24, "success")
     last_emit = [0.0]
 
     def on_progress(downloaded: int, total: Optional[int]) -> None:
@@ -363,10 +554,10 @@ def _check_and_update(
             detail = f"正在下载应用包：{downloaded / 1048576:.1f} MB"
             notify("正在下载更新", detail, None, "info")
 
-    package_bytes = _fetch_bytes(app_url, progress_cb=on_progress)
+    package_bytes = _fetch_bytes(package_url, progress_cb=on_progress)
     _install_zip_package(base, package_bytes, package_sha256, entrypoint, status_cb=notify)
     notify("更新完成", f"已更新到 v{remote_version}", 1.0, "success")
-    return remote_version
+    return remote_version, source_name
 
 
 def _launch_app(base: Path, channel: str) -> None:
@@ -385,17 +576,21 @@ def _launch_app(base: Path, channel: str) -> None:
 def _friendly_error_text(err: Exception, channel: str) -> str:
     msg = str(err)
     if isinstance(err, (URLError, TimeoutError)):
-        return "网络连接失败。请确认可以访问 GitHub 后点击“重试”。"
+        return "网络连接失败。请确认网络可用后点击“重试”。"
     if isinstance(err, HTTPError):
         if err.code == 403:
-            return "GitHub 访问频率受限（403）。请稍后重试。"
+            return "远端访问频率受限（HTTP 403）。请稍后重试。"
         return f"下载服务器返回错误（HTTP {err.code}）。请稍后重试。"
     if "未找到发布清单" in msg:
         return f"当前通道（{channel}）的在线更新文件暂未发布。请点击“打开下载页”。"
+    if "国内更新服务不可用" in msg and "GitHub 回退失败" in msg:
+        return "国内更新服务与 GitHub 回退均不可用。请检查网络后重试，或点击“打开下载页”手动下载。"
     if "SHA256 校验失败" in msg:
         return "下载文件校验失败，已自动拦截。请点击“重试”。"
     if "发布清单字段缺失" in msg:
         return "更新清单格式异常。请稍后重试或联系维护者。"
+    if "更新清单字段缺失" in msg:
+        return "在线更新接口返回异常。请稍后重试。"
     return f"更新失败：{msg}"
 
 
@@ -406,6 +601,7 @@ class LauncherWindow:
         self.base = base
         self.channel = channel
         self.detected_channel = channel
+        self.client_identity = _build_client_identity(base)
         self.local_version = _read_local_app_version(base / APP_DIR_NAME)
         self.events: "queue.Queue[Tuple[str, Dict[str, Any]]]" = queue.Queue()
         self.running = False
@@ -660,18 +856,44 @@ class LauncherWindow:
     def _worker_main(self) -> None:
         final_version = self.local_version
         update_ok = False
+        update_source = ""
         update_error = ""
         local_ready = _is_local_app_ready(self.base)
 
         _log(self.base, f"Launcher start, channel={self.channel}, version={LAUNCHER_VERSION}")
+        _report_primary_event(
+            self.base,
+            self.client_identity,
+            "launcher_start",
+            self.channel,
+            final_version,
+        )
 
         try:
-            final_version = _check_and_update(self.base, self.channel, status_cb=self._emit_status)
+            final_version, update_source = _check_and_update(
+                self.base,
+                self.channel,
+                self.client_identity,
+                status_cb=self._emit_status,
+            )
             update_ok = True
             local_ready = _is_local_app_ready(self.base)
         except Exception as e:
             update_error = _friendly_error_text(e, self.channel)
             _log(self.base, f"更新检查失败：{e}")
+
+        _report_primary_event(
+            self.base,
+            self.client_identity,
+            "update_result",
+            self.channel,
+            final_version,
+            extra={
+                "update_ok": update_ok,
+                "update_source": update_source,
+                "update_error": update_error,
+            },
+        )
 
         _write_state(
             self.base,
@@ -682,7 +904,10 @@ class LauncherWindow:
                 "last_check_utc": _now_utc_iso(),
                 "app_version": final_version,
                 "update_ok": update_ok,
+                "update_source": update_source,
                 "update_error": update_error,
+                "device_id": self.client_identity.get("device_id", ""),
+                "install_id": self.client_identity.get("install_id", ""),
             },
         )
 
@@ -906,6 +1131,7 @@ class LauncherWindow:
 def main() -> None:
     base = _base_dir()
     channel = _detect_channel()
+    identity = _build_client_identity(base)
 
     gui = LauncherWindow(base, channel)
     decision = gui.run()
@@ -913,6 +1139,12 @@ def main() -> None:
         return
 
     selected_channel = gui.channel
+
+    threading.Thread(
+        target=_report_primary_event,
+        args=(base, identity, "app_launch", selected_channel, decision.final_version),
+        daemon=True,
+    ).start()
 
     try:
         _launch_app(base, selected_channel)
