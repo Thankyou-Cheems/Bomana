@@ -661,7 +661,7 @@ class BombConfig:
 class Theme:
     """颜色主题配置
 
-    预设主题: Dark(默认), Light, HighContrast
+    预设主题: Dark(默认), Light, HighContrast, LunarNewYear
 
     添加新主题:
     1. 在THEMES字典中添加定义
@@ -719,6 +719,21 @@ class Theme:
             "ORANGE": "#ffa500",
             "GRAYPILL": "#1a1a1a",
             "SEPARATOR": "#404040",
+        },
+        "lunar_new_year": {
+            "name": "农历新年 (Lunar New Year)",
+            "BG": "#2a0d0d",
+            "BORDER": "#9c4e1d",
+            "TEXT": "#fbe7b2",
+            "TEXT_DIM": "#e8c47a",
+            "TEXT_MUTED": "#a8835c",
+            "GREEN": "#8fbf6b",
+            "YELLOW": "#e7b75b",
+            "RED": "#e14c3a",
+            "BLUE": "#5e8f8a",
+            "ORANGE": "#c97a33",
+            "GRAYPILL": "#4a1a14",
+            "SEPARATOR": "#6a2b1a",
         },
     }
 
