@@ -408,3 +408,12 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 ---
 
 *Made with ❤️ by 猹Cheems for the Space Monkeys community* ❤️ by 猹Cheems for the Space Monkeys community*
+
+## 🔄 更新服务仓库说明
+
+Bomana 的独立更新统计服务（Docker/FastAPI）已迁移到以下仓库维护：
+
+- https://github.com/Thankyou-Cheems/bomana-worker
+- 路径：`services/bomana-update-service/`
+
+本仓库继续维护主程序与启动器；更新服务相关部署文档与迭代以 `bomana-worker` 为准。
