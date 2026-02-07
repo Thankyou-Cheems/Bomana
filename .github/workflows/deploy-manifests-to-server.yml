@@ -1,0 +1,94 @@
+name: Deploy Manifests To Server
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to deploy (leave empty to use latest release)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release and download manifests
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RELEASE_EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${RELEASE_EVENT_TAG:-}" ]]; then
+            TAG="$RELEASE_EVENT_TAG"
+            API_URL="https://api.github.com/repos/$REPO/releases/tags/$TAG"
+          elif [[ -n "${INPUT_TAG:-}" ]]; then
+            TAG="$INPUT_TAG"
+            API_URL="https://api.github.com/repos/$REPO/releases/tags/$TAG"
+          else
+            TAG="latest"
+            API_URL="https://api.github.com/repos/$REPO/releases/latest"
+          fi
+
+          echo "Using release source: $TAG"
+          curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$API_URL" > release.json
+
+          for CH in Enhanced Standard Lite; do
+            NAME="manifest_${CH}.json"
+            URL="$(jq -r --arg NAME "$NAME" '.assets[] | select(.name == $NAME) | .browser_download_url' release.json | head -n 1)"
+            if [[ -z "$URL" || "$URL" == "null" ]]; then
+              echo "Missing asset in release: $NAME"
+              exit 1
+            fi
+            curl -fL "$URL" -o "$NAME"
+            echo "Downloaded $NAME"
+          done
+
+      - name: Setup SSH key
+        shell: bash
+        env:
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Upload manifests to Tencent Cloud
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          REMOTE_DIR="/opt/stacks/bomana-update/data/manifests"
+          scp -P "$SERVER_PORT" -i ~/.ssh/id_ed25519 \
+            manifest_Enhanced.json manifest_Standard.json manifest_Lite.json \
+            "$SERVER_USER@$SERVER_HOST:$REMOTE_DIR/"
+
+      - name: Verify files on server
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
+            "ls -l /opt/stacks/bomana-update/data/manifests/manifest_*.json"
