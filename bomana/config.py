@@ -10,7 +10,7 @@ import json
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.7.1"
+__version__ = "6.7.2"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -19,14 +19,15 @@ __repository__ = "https://github.com/Thankyou-Cheems/Bomana"
 # ============================================================================
 # 编译开关 - 功能模块启用控制
 # ============================================================================
-# 设置为 False 可在打包时完全移除对应功能，减小体积并简化界面
-# 修改后需要重新打包才能生效
+# 本地源码直接运行（python Bomana.pyw）默认全功能，提升测试体验。
+# 构建脚本 tools/build_portable.py 会按变体临时覆盖这些值，并在结束后恢复。
+# 因此此处默认值不会改变 Enhanced/Standard/Lite 的打包结果。
 
-ENABLE_CCRP = False
-ENABLE_ZONES = False
-ENABLE_AIRFIELDS = False
-ENABLE_FUEL = False
-ENABLE_CHECKLIST = False
+ENABLE_CCRP = True
+ENABLE_ZONES = True
+ENABLE_AIRFIELDS = True
+ENABLE_FUEL = True
+ENABLE_CHECKLIST = True
 ENABLE_ADVANCED_SETTINGS = True
 
 
