@@ -136,8 +136,8 @@ class App:
         self._cached_fonts: Dict[str, tuple] = {}
         self._zone_label_pool: List[tk.Label] = []
         self._airport_label_pool: List[tk.Label] = []
-        self._last_zone_count = 0
-        self._last_airport_count = 0
+        self._last_layout_signature = None
+        self._last_expand_ts = 0.0
 
         # 初始化流程
         self._load_config()
@@ -1270,18 +1270,42 @@ class App:
         
         new_w = max(min_width, req_w + pad)
         new_h = req_h + pad + int(8 * self.scale)
-        
-        # 高度收缩策略：避免频繁抖动
-        if new_h < old_h:
-            if not force_shrink and (old_h - new_h) < 30:
-                new_h = old_h
+
+        # 手动拖拽后若贴边，记录贴边锚点；尺寸变化时优先保持贴边体验
+        edge_anchor = None
+        if keep_pos and self._user_moved and old_w > 0 and old_h > 0:
+            edge_anchor = self._capture_snap_anchor(old_x, old_y, old_w, old_h)
+
+        # 宽高双向收缩防抖：扩张立即生效，收缩需满足阈值且避开刚扩张后的冷却窗口
+        now = time.monotonic()
+        dw = new_w - old_w
+        dh = new_h - old_h
+        minor_shrink_px = max(16, int(18 * self.scale))
+        shrink_cooldown_sec = 0.8
+
+        if dw > 0 or dh > 0:
+            self._last_expand_ts = now
+
+        if not force_shrink:
+            if dw < 0:
+                if abs(dw) < minor_shrink_px or (now - self._last_expand_ts) < shrink_cooldown_sec:
+                    new_w = old_w
+            if dh < 0:
+                if abs(dh) < minor_shrink_px or (now - self._last_expand_ts) < shrink_cooldown_sec:
+                    new_h = old_h
         
         if new_w == old_w and new_h == old_h:
+            # 同步内部缓存，避免后续geometry误用过期的self.W/self.H
+            self.W = old_w
+            self.H = old_h
             # 尺寸未变，但仍需检查边界（窗口可能需要重新定位）
             if keep_pos and (old_w > 0 and old_h > 0):
-                x, y = self._clamp_to_screen(old_x, old_y)
+                clamp_margin = 0 if self._user_moved else None
+                x, y = self._clamp_to_screen(old_x, old_y, margin=clamp_margin)
                 if (x, y) != (old_x, old_y):
-                    self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
+                    self.root.geometry(f"{old_w}x{old_h}+{x}+{y}")
+                    if self._user_moved:
+                        self._manual_pos = (x, y)
             return
         
         self.W = new_w
@@ -1296,10 +1320,81 @@ class App:
                 self._position()
                 return
             # 边界检查：确保窗口不超出屏幕
-            x, y = self._clamp_to_screen(x, y)
+            # 手动拖拽位置使用0边距，避免尺寸变化后破坏边缘吸附锚点
+            if edge_anchor:
+                x, y = self._apply_snap_anchor(x, y, self.W, self.H, edge_anchor)
+            clamp_margin = 0 if self._user_moved else None
+            x, y = self._clamp_to_screen(x, y, margin=clamp_margin)
             self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
+            if self._user_moved:
+                self._manual_pos = (x, y)
         else:
             self._position()
+
+    def _capture_snap_anchor(self, x: int, y: int, w: int, h: int) -> Optional[Dict[str, Any]]:
+        """捕获窗口当前贴边锚点（仅在手动拖拽场景使用）。"""
+        if not SnapConfig.enabled:
+            return None
+        monitor = Win32.get_monitor_at(x + w // 2, y + h // 2)
+        if not monitor:
+            return None
+
+        mon_x = monitor["x"]
+        mon_y = monitor["y"]
+        mon_w = monitor["width"]
+        mon_h = monitor["height"]
+        threshold = max(1, int(SnapConfig.SNAP_DISTANCE))
+
+        left_gap = x - mon_x
+        right_gap = (mon_x + mon_w) - (x + w)
+        top_gap = y - mon_y
+        bottom_gap = (mon_y + mon_h) - (y + h)
+
+        horizontal = None
+        vertical = None
+
+        if abs(left_gap) <= threshold:
+            horizontal = ("left", left_gap)
+        elif abs(right_gap) <= threshold:
+            horizontal = ("right", right_gap)
+
+        if abs(top_gap) <= threshold:
+            vertical = ("top", top_gap)
+        elif abs(bottom_gap) <= threshold:
+            vertical = ("bottom", bottom_gap)
+
+        if not horizontal and not vertical:
+            return None
+        return {"monitor": monitor, "horizontal": horizontal, "vertical": vertical}
+
+    def _apply_snap_anchor(self, x: int, y: int, w: int, h: int, anchor: Dict[str, Any]) -> Tuple[int, int]:
+        """按捕获的贴边锚点修正新尺寸下的位置。"""
+        monitor = anchor.get("monitor") or {}
+        mon_x = int(monitor.get("x", 0))
+        mon_y = int(monitor.get("y", 0))
+        mon_w = int(monitor.get("width", 0))
+        mon_h = int(monitor.get("height", 0))
+
+        horizontal = anchor.get("horizontal")
+        vertical = anchor.get("vertical")
+
+        if horizontal and mon_w > 0:
+            edge, gap = horizontal
+            gap = int(gap)
+            if edge == "left":
+                x = mon_x + gap
+            elif edge == "right":
+                x = mon_x + mon_w - w - gap
+
+        if vertical and mon_h > 0:
+            edge, gap = vertical
+            gap = int(gap)
+            if edge == "top":
+                y = mon_y + gap
+            elif edge == "bottom":
+                y = mon_y + mon_h - h - gap
+
+        return x, y
 
     def _show(self):
         """显示窗口"""
@@ -1355,7 +1450,7 @@ class App:
         x, y = self._clamp_to_screen(x, y)
         self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
 
-    def _clamp_to_screen(self, x: int, y: int) -> Tuple[int, int]:
+    def _clamp_to_screen(self, x: int, y: int, margin: Optional[int] = None) -> Tuple[int, int]:
         """确保窗口位置不超出屏幕边界(支持多显示器)
         
         Args:
@@ -1364,7 +1459,7 @@ class App:
         Returns:
             调整后的(x, y)坐标
         """
-        m = int(UIConfig.WINDOW_MARGIN * self.scale)
+        m = int(UIConfig.WINDOW_MARGIN * self.scale) if margin is None else int(margin)
         
         # 获取窗口中心点所在的显示器
         center_x = x + self.W // 2
@@ -1759,7 +1854,7 @@ class App:
         - 使用pack_forget()而非destroy()
         - Label复用池避免频繁创建
         - 字体缓存(_get_font)
-        - 只在数量变化时调用_recalc_size()
+        - 仅在布局签名变化时调用_recalc_size()
         """
         s = self.scale
         font_item = self._get_font('zone_item')
@@ -2102,11 +2197,20 @@ class App:
                 self.bombing_title_lbl.grid_remove()
                 self.bombing_info_frame.grid_remove()
         
-        # 智能触发尺寸重算（只在数量变化时）
-        total_count = zone_count + airport_count
-        if total_count != (self._last_zone_count + self._last_airport_count):
-            self._last_zone_count = zone_count
-            self._last_airport_count = airport_count
+        # 智能触发尺寸重算：基于“布局签名”而非单一数量，减少漏判和误判
+        layout_signature = (
+            PanelConfig.navigation_mode,
+            bool(ENABLE_ZONES and PanelConfig.show_zones),
+            bool(ENABLE_AIRFIELDS and PanelConfig.show_airfields),
+            bool(ENABLE_FUEL and PanelConfig.show_fuel),
+            bool(ENABLE_CCRP and PanelConfig.show_bombing),
+            bool(snap.zone_destroyed_alert),
+            int(zone_count),
+            int(airport_count),
+            bool(self.heading_tape is not None and snap.player_heading > 0 and PanelConfig.navigation_mode == "integrated"),
+        )
+        if layout_signature != self._last_layout_signature:
+            self._last_layout_signature = layout_signature
             return True  # 需要重算尺寸
         return False  # 不需要重算
 
@@ -2239,7 +2343,7 @@ class App:
         
         性能优化:
         - _update_zone_display()返回是否需重算尺寸
-        - 仅在可见性/数量变化时调用_recalc_size()
+        - 仅在布局结构变化时调用_recalc_size()
         - 使用缓存字体和Label复用池
         """
         if self._stop:
@@ -2276,15 +2380,12 @@ class App:
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
-        has_zone_data = len(snap.zones) > 0
-        has_airfield_data = snap.friendly_airfield is not None or len(snap.enemy_airfields) > 0
-        
         show_zone_panel = (
-            (snap.phase == Phase.ALIVE) and 
-            (not snap.api_down) and 
+            (snap.phase == Phase.ALIVE) and
+            (not snap.api_down) and
             (
-                (ENABLE_ZONES and PanelConfig.show_zones and has_zone_data) or 
-                (ENABLE_AIRFIELDS and PanelConfig.show_airfields and has_airfield_data) or
+                (ENABLE_ZONES and PanelConfig.show_zones) or
+                (ENABLE_AIRFIELDS and PanelConfig.show_airfields) or
                 (ENABLE_FUEL and PanelConfig.show_fuel) or
                 (ENABLE_CCRP and PanelConfig.show_bombing)
             )
