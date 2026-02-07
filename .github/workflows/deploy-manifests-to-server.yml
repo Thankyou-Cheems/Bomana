@@ -16,8 +16,11 @@ permissions:
 jobs:
   deploy-manifests:
     runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.resolve.outputs.should_deploy }}
     steps:
       - name: Resolve release and download manifests
+        id: resolve
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -27,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
 
+          SHOULD_DEPLOY="true"
           if [[ -n "${RELEASE_EVENT_TAG:-}" ]]; then
             TAG="$RELEASE_EVENT_TAG"
             API_URL="https://api.github.com/repos/$REPO/releases/tags/$TAG"
@@ -38,6 +42,14 @@ jobs:
             API_URL="https://api.github.com/repos/$REPO/releases/latest"
           fi
 
+          if [[ "$TAG" =~ -launcher$ ]]; then
+            echo "Launcher-only tag detected ($TAG); skip manifest deployment."
+            SHOULD_DEPLOY="false"
+            echo "should_deploy=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_deploy=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
           echo "Using release source: $TAG"
           curl -fsSL \
             -H "Authorization: Bearer $GH_TOKEN" \
@@ -56,6 +68,7 @@ jobs:
           done
 
       - name: Setup SSH key
+        if: steps.resolve.outputs.should_deploy == 'true'
         shell: bash
         env:
           SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
@@ -70,6 +83,7 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
       - name: Upload manifests to Tencent Cloud
+        if: steps.resolve.outputs.should_deploy == 'true'
         shell: bash
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -83,6 +97,7 @@ jobs:
             "$SERVER_USER@$SERVER_HOST:$REMOTE_DIR/"
 
       - name: Verify files on server
+        if: steps.resolve.outputs.should_deploy == 'true'
         shell: bash
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
