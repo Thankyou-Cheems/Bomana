@@ -40,7 +40,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.1.0"
+LAUNCHER_VERSION = "1.1.1"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -2219,7 +2219,15 @@ class LauncherWindow:
             self.launch_btn.config(text="启动（已下载更新）")
             self._style_action_button(self.launch_btn, "success")
             return
-        self.launch_btn.config(text="离线启动（本地）")
+        if self.last_check_ok and not self.update_available:
+            self.launch_btn.config(text="启动应用")
+            self._style_action_button(self.launch_btn, "secondary")
+            return
+        if self.last_check_ok and self.update_available:
+            self.launch_btn.config(text="启动本地（跳过更新）")
+            self._style_action_button(self.launch_btn, "secondary")
+            return
+        self.launch_btn.config(text="启动应用（本地）")
         self._style_action_button(self.launch_btn, "secondary")
 
     def _set_running(self, running: bool) -> None:
@@ -2229,7 +2237,11 @@ class LauncherWindow:
         state = "disabled" if running else "normal"
         self.start_btn.config(state=state)
         self.retry_btn.config(state=state)
-        self.launch_btn.config(state=state)
+        if running and self.current_task == "check" and _is_local_app_ready(self.base):
+            # Allow launching local app immediately while background check continues.
+            self.launch_btn.config(state="normal")
+        else:
+            self.launch_btn.config(state=state)
         self.release_btn.config(state="normal")
         self.import_btn.config(state="normal")
         self.details_btn.config(state="normal")
