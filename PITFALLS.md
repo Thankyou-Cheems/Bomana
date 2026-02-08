@@ -37,3 +37,9 @@
   Symptom: progress bar looked like it was finishing download during "check" stage, and window size could drift while status text kept changing
   Cause: check phase reused download-like progress behavior and did not separate indeterminate animation/layout reflow from real download progress
   Fix/Workaround: split check/download states, keep check phase indeterminate, and recalc layout/progress geometry from current canvas width instead of fixed assumptions
+
+- Date: 2026-02-08
+  Context: in-battle map toggle (`M`) caused UI flash and frame drop spikes
+  Symptom: app flashed briefly when opening/closing game map; occasional CPU/load spike
+  Cause: transient 8111 `/map_obj.json` jitter (player/map fields briefly invalid) triggered state/UI oscillation, plus per-frame full list relayout and full heading-tape redraw amplified cost
+  Fix/Workaround: add ALIVE/LOSS_PENDING telemetry fallback for player presence, keep integrated tape row mounted, switch to incremental zone/airport label updates, deduplicate equivalent heading-tape renders, and keep standalone nav status rows mounted

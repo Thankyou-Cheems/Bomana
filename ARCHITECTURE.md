@@ -75,6 +75,14 @@ Important constraint: only use the official 8111 API. No memory reads, injection
 - CCRP bombing predictor
 - UI overlays & global hotkeys
 
+## UI Stability & Performance Guardrails
+- Keep panel containers structurally stable during transient 8111 data drops (avoid frame-level mount/unmount churn).
+- In `ALIVE/LOSS_PENDING`, treat short `/map_obj.json` jitter conservatively by combining map presence with telemetry entity signals.
+- Prefer incremental list updates in `bomana/ui/app.py` (update visible labels and hide only overflow items) instead of per-frame full `pack_forget()/pack()` cycles.
+- Keep integrated heading-tape row mounted and clear content only when heading is temporarily unavailable.
+- `HeadingTape` (`bomana/ui/widgets.py`) uses render-signature dedup to skip equivalent canvas redraw frames.
+- Standalone nav window rows (`bomana/ui/nav_window.py`) stay mounted; update text/color only to reduce micro-flicker.
+
 ## Build & Release
 Portable release uses:
 - `Bomana_launcher_vX.Y.Z.exe` (universal bootstrap runtime with channel selector)

@@ -163,7 +163,11 @@ class GameLogic:
                 return
 
             # 判断玩家是否存在
+            # 地图/对象接口在个别时刻会瞬时抖动（例如游戏内打开/关闭地图），
+            # 在 ALIVE/LOSS_PENDING 阶段允许使用遥测实体特征兜底，避免误触发状态切换。
             player_present = bool(mp.ok and mp.player_aircraft_present)
+            if (not player_present) and s.phase in (Phase.ALIVE, Phase.LOSS_PENDING) and tel.entity_like:
+                player_present = True
             spawn_candidate = player_present and tel.entity_like
 
             # 更新导航信息（战区、地速）

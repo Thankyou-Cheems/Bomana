@@ -138,6 +138,8 @@ class App:
         self._airport_label_pool: List[tk.Label] = []
         self._last_layout_signature = None
         self._last_expand_ts = 0.0
+        self._zone_layout_mode = None
+        self._airport_layout_mode = None
 
         # 初始化流程
         self._load_config()
@@ -392,6 +394,15 @@ class App:
     def _get_font(self, name: str) -> tuple:
         """获取缓存的字体"""
         return self._cached_fonts.get(name, ('Segoe UI', 10))
+
+    def _hide_label_pool(self, pool: List[tk.Label], start: int = 0) -> None:
+        """隐藏标签池中从start开始的已显示标签。"""
+        for lbl in pool[start:]:
+            try:
+                if lbl.winfo_ismapped():
+                    lbl.pack_forget()
+            except tk.TclError:
+                continue
 
     def _select_font_family(self) -> str:
         """Pick an available UI font family."""
@@ -1979,8 +1990,9 @@ class App:
                 if self.tape_info_container:
                     for lbl in self._tape_info_labels:
                         lbl.pack_forget()
+                # 集成模式下保持航向带容器常驻，避免瞬时无航向数据导致整行闪烁
                 if PanelConfig.navigation_mode == "integrated":
-                    self.heading_tape_frame.grid_remove()
+                    self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
                 
                 # v6.2.1: 独立窗口也需要清空
                 if hasattr(self, 'nav_window') and self.nav_window and self.nav_window.is_visible():
@@ -2003,14 +2015,14 @@ class App:
                 self.zone_alert_lbl.grid_remove()
                 self._last_zone_destroyed_alert = False
             
-            # 先隐藏所有现有标签
-            for lbl in self._zone_label_pool:
-                lbl.pack_forget()
-            for lbl in self._compact_zone_label_pool:
-                lbl.pack_forget()
-            
             # v6.6.1: 根据导航模式选择布局
             is_compact = (PanelConfig.navigation_mode == "standalone")
+            zone_layout_mode = "compact" if is_compact else "full"
+            if self._zone_layout_mode != zone_layout_mode:
+                # 仅在布局模式切换时清空显示池，避免每帧反复重排
+                self._hide_label_pool(self._zone_label_pool)
+                self._hide_label_pool(self._compact_zone_label_pool)
+                self._zone_layout_mode = zone_layout_mode
             
             if is_compact:
                 # 紧凑模式：显示紧凑布局，隐藏完整布局
@@ -2051,7 +2063,8 @@ class App:
             if not snap.zones:
                 lbl = label_pool[idx]
                 lbl.config(text="无战区", fg=Theme.TEXT_MUTED)
-                lbl.pack(fill="x")
+                if not lbl.winfo_ismapped():
+                    lbl.pack(fill="x")
                 idx += 1
             else:
                 for zone in snap.zones:
@@ -2074,28 +2087,28 @@ class App:
                     
                     lbl = label_pool[idx]
                     lbl.config(text=text, fg=fg)
-                    lbl.pack(fill="x")
+                    if not lbl.winfo_ismapped():
+                        lbl.pack(fill="x")
                     idx += 1
+            self._hide_label_pool(label_pool, idx)
         else:
             # 隐藏战区区块（使用grid_remove保持行号）
             self.zone_header_frame.grid_remove()
             self.zone_list_frame.grid_remove()
             self.compact_nav_frame.grid_remove()
             self.zone_alert_lbl.grid_remove()
-            for lbl in self._zone_label_pool:
-                lbl.pack_forget()
-            for lbl in self._compact_zone_label_pool:
-                lbl.pack_forget()
+            self._hide_label_pool(self._zone_label_pool)
+            self._hide_label_pool(self._compact_zone_label_pool)
+            self._zone_layout_mode = None
 
         # === 机场导航区块（根据编译开关和PanelConfig.show_airfields控制）===
         if ENABLE_AIRFIELDS and PanelConfig.show_airfields:
-            # 先隐藏所有现有标签
-            for lbl in self._airport_label_pool:
-                lbl.pack_forget()
-            for lbl in self._compact_airport_label_pool:
-                lbl.pack_forget()
-            
             is_compact = (PanelConfig.navigation_mode == "standalone")
+            airport_layout_mode = "compact" if is_compact else "full"
+            if self._airport_layout_mode != airport_layout_mode:
+                self._hide_label_pool(self._airport_label_pool)
+                self._hide_label_pool(self._compact_airport_label_pool)
+                self._airport_layout_mode = airport_layout_mode
             
             if is_compact:
                 # 紧凑模式：显示两栏布局，隐藏完整布局
@@ -2140,7 +2153,8 @@ class App:
                     text = f"🟢 ➤ {af.direction} {dist_text}  ({rel_text})"
                 lbl = label_pool[ap_idx]
                 lbl.config(text=text, fg=Theme.GREEN)
-                lbl.pack(fill="x")
+                if not lbl.winfo_ismapped():
+                    lbl.pack(fill="x")
                 ap_idx += 1
             
             if snap.enemy_airfields:
@@ -2156,24 +2170,26 @@ class App:
                     fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
                     lbl = label_pool[ap_idx]
                     lbl.config(text=text, fg=fg)
-                    lbl.pack(fill="x")
+                    if not lbl.winfo_ismapped():
+                        lbl.pack(fill="x")
                     ap_idx += 1
             
             if ap_idx == 0:
                 lbl = label_pool[0]
                 lbl.config(text="无数据", fg=Theme.TEXT_MUTED)
-                lbl.pack(fill="x")
+                if not lbl.winfo_ismapped():
+                    lbl.pack(fill="x")
                 ap_idx = 1
+            self._hide_label_pool(label_pool, ap_idx)
         else:
             # 隐藏机场区块（使用grid_remove保持行号）
             self.airport_title_lbl.grid_remove()
             if self.airport_tape_frame:
                 self.airport_tape_frame.grid_remove()
             self.airport_list_frame.grid_remove()
-            for lbl in self._airport_label_pool:
-                lbl.pack_forget()
-            for lbl in self._compact_airport_label_pool:
-                lbl.pack_forget()
+            self._hide_label_pool(self._airport_label_pool)
+            self._hide_label_pool(self._compact_airport_label_pool)
+            self._airport_layout_mode = None
         
         # === 燃油信息区块（根据编译开关和PanelConfig.show_fuel控制）===
         if ENABLE_FUEL and PanelConfig.show_fuel:
@@ -2207,7 +2223,7 @@ class App:
             bool(snap.zone_destroyed_alert),
             int(zone_count),
             int(airport_count),
-            bool(self.heading_tape is not None and snap.player_heading > 0 and PanelConfig.navigation_mode == "integrated"),
+            bool(self.heading_tape is not None and PanelConfig.navigation_mode == "integrated"),
         )
         if layout_signature != self._last_layout_signature:
             self._last_layout_signature = layout_signature

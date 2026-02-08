@@ -62,6 +62,7 @@ class HeadingTape(tk.Canvas):
         self.pixels_per_degree = ZoneConfig.HEADING_TAPE_PIXELS_PER_DEG
         self._current_hdg = 0.0
         self._primary_target = None
+        self._last_render_signature = None
         
         # 目标类型颜色配置
         self._target_colors = {
@@ -87,11 +88,30 @@ class HeadingTape(tk.Canvas):
                 }
             primary_distance_km: 主目标距离(用于计算缩放)
         """
-        self.delete("all")
-        self._current_hdg = current_hdg
-        
         if targets is None:
             targets = []
+
+        # 高频刷新场景下跳过等效帧重绘，降低Canvas CPU/GDI开销
+        render_signature = (
+            int(round(float(current_hdg) * 5)),  # 0.2°精度
+            int(round(float(primary_distance_km) * 10)),  # 0.1km精度
+            tuple(
+                (
+                    t.get("type", "zone"),
+                    int(round(float(t.get("relative", 0.0)) * 5)),
+                    int(round(float(t.get("distance_km", 0.0)) * 10)),
+                    bool(t.get("is_primary", False)),
+                    bool(t.get("is_target", True)),
+                )
+                for t in targets
+            ),
+        )
+        if render_signature == self._last_render_signature:
+            return
+        self._last_render_signature = render_signature
+
+        self.delete("all")
+        self._current_hdg = current_hdg
         
         # 找出主目标（用于偏航提示和缩放计算）
         primary = next((t for t in targets if t.get('is_primary')), None)
@@ -562,3 +582,4 @@ class HeadingTape(tk.Canvas):
         """清除航向带"""
         self.delete("all")
         self._primary_target = None
+        self._last_render_signature = None

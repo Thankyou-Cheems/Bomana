@@ -217,7 +217,6 @@ class NavigationWindow:
         
         # 战区状态行
         self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        # 初始不pack，由update_display控制
         
         self._zone_row_left_spacer = tk.Frame(self.zone_row, bg=Theme.GRAYPILL)
         self._zone_row_left_spacer.pack(side="left", fill="x", expand=True)
@@ -257,10 +256,10 @@ class NavigationWindow:
             fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
         )
         # 不pack，容差已在标题栏显示
+        self.zone_row.pack(fill="x", padx=int(4*self.scale), pady=(int(2*self.scale), 0))
         
         # 友方机场状态行
         self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        # 初始不pack，由update_display控制
         
         self._friendly_row_left_spacer = tk.Frame(self.friendly_row, bg=Theme.GRAYPILL)
         self._friendly_row_left_spacer.pack(side="left", fill="x", expand=True)
@@ -294,6 +293,7 @@ class NavigationWindow:
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_info.pack(side="left", padx=(int(6*s), 0))
+        self.friendly_row.pack(fill="x", padx=int(4*self.scale), pady=(int(1*self.scale), int(4*self.scale)))
         
 
     
@@ -465,9 +465,10 @@ class NavigationWindow:
             self.zone_status.config(text=dev_text, fg=dev_color)
             self.zone_info.config(text=info_text, fg=Theme.RED)
             self.zone_tolerance_legend.config(text=tol_text)
-            self.zone_row.pack(fill="x", padx=int(4*self.scale), pady=(int(2*self.scale), 0))
         else:
-            self.zone_row.pack_forget()
+            self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
+            self.zone_status.config(text="", fg=Theme.TEXT_DIM)
+            self.zone_info.config(text="", fg=Theme.TEXT_DIM)
             self.zone_tolerance_legend.config(text="")
         
         # 更新友方机场状态行
@@ -487,6 +488,7 @@ class NavigationWindow:
             self.friendly_turn.config(text=turn_text, fg=turn_color)
             self.friendly_status.config(text=status_text, fg=status_color)
             self.friendly_info.config(text=info_text, fg=Theme.BLUE)
-            self.friendly_row.pack(fill="x", padx=int(4*self.scale), pady=(int(1*self.scale), int(4*self.scale)))
         else:
-            self.friendly_row.pack_forget()
+            self.friendly_turn.config(text="", fg=Theme.TEXT_DIM)
+            self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
+            self.friendly_info.config(text="", fg=Theme.TEXT_DIM)
