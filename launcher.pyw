@@ -62,6 +62,7 @@ TEMP_META_FILE_NAME = ".bomana_temp_meta.json"
 DEFAULT_ENTRYPOINT = "Bomana.pyw"
 NET_TIMEOUT_SEC = 8.0
 PRIMARY_TIMEOUT_SEC = 4.0
+PRIMARY_RETRY_TIMEOUT_SEC = 8.0
 UA = f"BomanaLauncher/{LAUNCHER_VERSION}"
 PRIMARY_UPDATE_BASE_URL = (
     os.environ.get("BOMANA_UPDATE_BASE_URL", "https://bomanaupdate.007985.xyz")
@@ -331,6 +332,49 @@ def _fetch_json(url: str) -> Dict[str, Any]:
 def _fetch_json_with_timeout(url: str, timeout_sec: float) -> Dict[str, Any]:
     raw = _fetch_bytes(url, timeout_sec=timeout_sec)
     return json.loads(raw.decode("utf-8"))
+
+
+def _http_error_detail(err: HTTPError) -> str:
+    detail = ""
+    try:
+        raw = err.read()
+        if raw:
+            text = raw.decode("utf-8", errors="replace").strip()
+            if text:
+                try:
+                    payload = json.loads(text)
+                except Exception:
+                    payload = None
+                if isinstance(payload, dict):
+                    for key in ("detail", "message", "error"):
+                        value = str(payload.get(key, "")).strip()
+                        if value:
+                            detail = value
+                            break
+                if not detail:
+                    detail = text
+    except Exception:
+        detail = ""
+    if detail:
+        return detail
+    return str(getattr(err, "reason", "") or getattr(err, "msg", "") or err)
+
+
+def _fetch_primary_version_payload(
+    version_url: str, params: Dict[str, str], timeout_sec: float
+) -> Dict[str, Any]:
+    request_url = f"{version_url}?{urlencode(params)}"
+    try:
+        payload = _fetch_json_with_timeout(request_url, timeout_sec)
+    except HTTPError as err:
+        raise RuntimeError(f"HTTP {err.code}: {_http_error_detail(err)}") from err
+    except URLError as err:
+        reason = str(getattr(err, "reason", "") or err).strip()
+        raise RuntimeError(reason or str(err)) from err
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("国内更新服务返回格式异常")
+    return payload
 
 
 def _fetch_content_length(
@@ -765,6 +809,14 @@ def _latest_release_url() -> str:
     return f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
 
+def _releases_list_url(limit: int = 20) -> str:
+    safe_limit = max(1, min(int(limit), 100))
+    return (
+        f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases"
+        f"?per_page={safe_limit}"
+    )
+
+
 def _join_base_url_path(base_url: str, path: str) -> str:
     if not path:
         return base_url
@@ -775,9 +827,9 @@ def _join_base_url_path(base_url: str, path: str) -> str:
     return f"{base_url}{path}"
 
 
-def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
-    release = _fetch_json(_latest_release_url())
+def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict[str, Any]:
     assets = release.get("assets", [])
+    tag_name = str(release.get("tag_name", "")).strip()
 
     manifest_name = f"manifest_{channel}.json"
     manifest_asset = _find_asset(assets, manifest_name)
@@ -813,12 +865,53 @@ def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
         "package_sha256": package_sha256,
         "entrypoint": entrypoint,
         "package_size": package_size,
-        "source_name": "GitHub",
+        "source_name": (f"GitHub ({tag_name})" if tag_name else "GitHub"),
     }
 
 
+def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
+    latest_release = _fetch_json(_latest_release_url())
+    latest_err_msg = ""
+    try:
+        return _manifest_from_github_release(latest_release, channel)
+    except Exception as latest_err:
+        latest_tag = str(latest_release.get("tag_name", "")).strip()
+        latest_err_msg = str(latest_err)
+
+    # 若 latest 是 launcher-only 发布（无 manifest），回退到最近若干 release 中
+    # 第一个可用的 app 发布，避免更新检查失败。
+    releases = _fetch_json(_releases_list_url(20))
+    if not isinstance(releases, list):
+        raise RuntimeError("GitHub releases 返回格式异常")
+
+    checked = 0
+    for rel in releases:
+        if not isinstance(rel, dict):
+            continue
+        tag = str(rel.get("tag_name", "")).strip()
+        if latest_tag and tag == latest_tag:
+            continue
+        try:
+            manifest = _manifest_from_github_release(rel, channel)
+            if checked > 0:
+                manifest["source_name"] = (
+                    f"{manifest.get('source_name', 'GitHub')} fallback"
+                )
+            return manifest
+        except Exception:
+            checked += 1
+            continue
+
+    raise RuntimeError(
+        f"未找到可用发布清单: manifest_{channel}.json (latest={latest_tag}, err={latest_err_msg})"
+    )
+
+
 def _fetch_manifest_from_primary(
-    channel: str, local_version: str, identity: Dict[str, str]
+    channel: str,
+    local_version: str,
+    identity: Dict[str, str],
+    timeout_sec: float = PRIMARY_TIMEOUT_SEC,
 ) -> Dict[str, Any]:
     if not PRIMARY_UPDATE_BASE_URL:
         raise RuntimeError("未配置国内更新服务")
@@ -831,9 +924,21 @@ def _fetch_manifest_from_primary(
         "install_id": identity.get("install_id", ""),
     }
     version_url = _join_base_url_path(PRIMARY_UPDATE_BASE_URL, PRIMARY_VERSION_API_PATH)
-    payload = _fetch_json_with_timeout(
-        f"{version_url}?{urlencode(params)}", PRIMARY_TIMEOUT_SEC
-    )
+    used_anonymous_fallback = False
+    try:
+        payload = _fetch_primary_version_payload(version_url, params, timeout_sec)
+    except Exception as first_err:
+        # 服务端偶发在身份参数路径上超时或返回 5xx，回退到匿名请求以提升成功率。
+        anon_params = dict(params)
+        anon_params["device_id"] = ""
+        anon_params["install_id"] = ""
+        if anon_params == params:
+            raise
+        try:
+            payload = _fetch_primary_version_payload(version_url, anon_params, timeout_sec)
+            used_anonymous_fallback = True
+        except Exception as anon_err:
+            raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
     remote_version = str(payload.get("app_version", "")).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
@@ -849,6 +954,8 @@ def _fetch_manifest_from_primary(
     source_name = (
         str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     )
+    if used_anonymous_fallback:
+        source_name = f"{source_name} (匿名回退)"
 
     if not remote_version:
         raise RuntimeError("国内更新服务返回字段缺失")
@@ -914,13 +1021,47 @@ def _resolve_update_manifest(
     primary_err: Optional[Exception] = None
     if PRIMARY_UPDATE_BASE_URL:
         notify("正在检查更新", "优先连接腾讯云更新服务...", None, "info")
+        original_proxy_mode = bool(_USE_SYSTEM_PROXY)
+        attempts = [
+            (original_proxy_mode, PRIMARY_TIMEOUT_SEC),
+            (original_proxy_mode, PRIMARY_RETRY_TIMEOUT_SEC),
+            ((not original_proxy_mode), PRIMARY_RETRY_TIMEOUT_SEC),
+        ]
+        tried_modes = []
         try:
-            manifest = _fetch_manifest_from_primary(channel, local_version, identity)
-            if manifest is not None:
-                _log(
-                    base,
-                    f"腾讯云版本检查成功：local=v{local_version}, remote=v{str(manifest.get('remote_version', '')).strip() or 'unknown'}",
-                )
+            last_exc: Optional[Exception] = None
+            for use_proxy, timeout_sec in attempts:
+                # 避免重复尝试相同组合
+                key = (use_proxy, timeout_sec)
+                if key in tried_modes:
+                    continue
+                tried_modes.append(key)
+                _set_use_system_proxy(use_proxy)
+                mode_name = "system-proxy" if use_proxy else "direct"
+                try:
+                    manifest = _fetch_manifest_from_primary(
+                        channel,
+                        local_version,
+                        identity,
+                        timeout_sec=timeout_sec,
+                    )
+                    _log(
+                        base,
+                        f"腾讯云版本检查成功(mode={mode_name}, timeout={timeout_sec:.1f}s)："
+                        f"local=v{local_version}, remote=v{str(manifest.get('remote_version', '')).strip() or 'unknown'}",
+                    )
+                    break
+                except Exception as e:
+                    last_exc = e
+                    _log(
+                        base,
+                        f"腾讯云版本检查失败(mode={mode_name}, timeout={timeout_sec:.1f}s)：{e}",
+                    )
+                    continue
+
+            if manifest is None and last_exc is not None:
+                raise last_exc
+
             if manifest is not None:
                 remote_version_preview = str(manifest.get("remote_version", "")).strip()
                 package_url_preview = str(manifest.get("package_url", "")).strip()
@@ -942,6 +1083,8 @@ def _resolve_update_manifest(
             primary_err = e
             _log(base, f"腾讯云更新服务不可用：{e}")
             notify("国内服务暂不可用", "正在切换 GitHub 回退...", None, "warning")
+        finally:
+            _set_use_system_proxy(original_proxy_mode)
 
     if manifest is None:
         notify("正在检查更新", "连接 GitHub 获取最新版本信息...", None, "info")

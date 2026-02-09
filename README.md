@@ -8,7 +8,7 @@ A powerful War Thunder timer made for the "Space Monkeys" who love dropping bomb
   <img src="app.png" width="320" alt="Bomana promotional art">
 </p>
 
-[![Version](https://img.shields.io/badge/version-6.7.1-blue.svg)](https://github.com/Thankyou-Cheems/Bomana/releases)
+[![Version](https://img.shields.io/github/v/release/Thankyou-Cheems/Bomana?display_name=tag&sort=semver&label=version)](https://github.com/Thankyou-Cheems/Bomana/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-yellow.svg)](https://www.python.org/)
 [![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=brightgreen)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
