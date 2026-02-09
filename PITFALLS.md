@@ -73,3 +73,9 @@
   Symptom: users reported "cannot fetch version from Tencent" even with proxy toggle; root cause detail was hidden
   Cause: `urllib` raised `HTTPError` without surfacing response JSON detail, and identity-bound request path could intermittently fail
   Fix/Workaround: parse and propagate HTTP error body detail (e.g. upstream timeout reason), and add one-shot anonymous retry (drop `device_id/install_id`) before falling back
+
+- Date: 2026-02-09
+  Context: Actions deploy-manifests workflow (`scp` to server manifests directory)
+  Symptom: upload failed with `Permission denied` on `/opt/stacks/bomana-update/data/manifests/manifest_*.json`
+  Cause: CI SSH user lacked direct write permission to target directory (owner/ACL drift after manual ops or container writes)
+  Fix/Workaround: upload manifests to remote `/tmp` staging first, then sync into target dir with direct-write check and passwordless-`sudo` fallback; keep verify step with same permission fallback and actionable remediation hints

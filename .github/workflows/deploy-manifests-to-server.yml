@@ -85,7 +85,23 @@ jobs:
           printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Upload manifests to Tencent Cloud
+      - name: Upload manifests to remote staging
+        if: steps.resolve.outputs.should_deploy == 'true'
+        shell: bash
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          STAGE_DIR="/tmp/bomana-manifests-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
+            "mkdir -p '$STAGE_DIR' && chmod 700 '$STAGE_DIR'"
+          scp -P "$SERVER_PORT" -i ~/.ssh/id_ed25519 \
+            manifest_Enhanced.json manifest_Standard.json manifest_Lite.json \
+            "$SERVER_USER@$SERVER_HOST:$STAGE_DIR/"
+
+      - name: Sync manifests into target directory
         if: steps.resolve.outputs.should_deploy == 'true'
         shell: bash
         env:
@@ -95,9 +111,24 @@ jobs:
         run: |
           set -euo pipefail
           REMOTE_DIR="/opt/stacks/bomana-update/data/manifests"
-          scp -P "$SERVER_PORT" -i ~/.ssh/id_ed25519 \
-            manifest_Enhanced.json manifest_Standard.json manifest_Lite.json \
-            "$SERVER_USER@$SERVER_HOST:$REMOTE_DIR/"
+          STAGE_DIR="/tmp/bomana-manifests-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
+            "set -euo pipefail
+            if mkdir -p '$REMOTE_DIR' 2>/dev/null && test -w '$REMOTE_DIR'; then
+              install -m 644 '$STAGE_DIR'/manifest_*.json '$REMOTE_DIR'/
+            elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+              sudo mkdir -p '$REMOTE_DIR'
+              sudo install -m 644 '$STAGE_DIR'/manifest_*.json '$REMOTE_DIR'/
+            else
+              echo 'ERROR: no write permission to target manifests directory.'
+              echo 'Run one of the following on server, then retry workflow:'
+              echo '  sudo chown -R $SERVER_USER:$SERVER_USER $REMOTE_DIR'
+              echo '  sudo chmod -R u+rwX $REMOTE_DIR'
+              ls -ld '$REMOTE_DIR' || true
+              id || true
+              exit 1
+            fi
+            rm -rf '$STAGE_DIR'"
 
       - name: Verify files on server
         if: steps.resolve.outputs.should_deploy == 'true'
@@ -109,4 +140,13 @@ jobs:
         run: |
           set -euo pipefail
           ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
-            "ls -l /opt/stacks/bomana-update/data/manifests/manifest_*.json"
+            "set -euo pipefail
+            TARGET='/opt/stacks/bomana-update/data/manifests/manifest_*.json'
+            if ls -l \$TARGET >/dev/null 2>&1; then
+              ls -l \$TARGET
+            elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+              sudo ls -l \$TARGET
+            else
+              echo 'ERROR: cannot verify remote manifests due to permissions.'
+              exit 1
+            fi"
