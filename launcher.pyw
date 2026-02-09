@@ -23,7 +23,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import (
+    Request,
+    build_opener,
+    HTTPHandler,
+    HTTPSHandler,
+    ProxyHandler,
+)
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -40,7 +46,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.1.1"
+LAUNCHER_VERSION = "1.2.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -50,6 +56,9 @@ APP_DIR_NAME = "app"
 STATE_FILE_NAME = "launcher_state.json"
 LOG_FILE_NAME = "launcher.log"
 INSTALL_ID_FILE_NAME = ".bomana_install_id"
+UPDATE_LOCK_FILE_NAME = ".bomana_update.lock"
+UPDATE_LOCK_STALE_SEC = 30 * 60
+TEMP_META_FILE_NAME = ".bomana_temp_meta.json"
 DEFAULT_ENTRYPOINT = "Bomana.pyw"
 NET_TIMEOUT_SEC = 8.0
 PRIMARY_TIMEOUT_SEC = 4.0
@@ -67,6 +76,9 @@ PRIMARY_ALLOW_PACKAGE_DOWNLOAD = os.environ.get(
 ).strip().lower() in ("1", "true", "yes", "on")
 
 RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
+
+_USE_SYSTEM_PROXY = True
+_URL_OPENERS: Dict[str, Any] = {}
 
 _CHANNEL_MAP = {
     "enhanced": "Enhanced",
@@ -239,9 +251,36 @@ def _show_error(title: str, msg: str) -> None:
         pass
 
 
+def _set_use_system_proxy(enabled: bool) -> None:
+    global _USE_SYSTEM_PROXY
+    _USE_SYSTEM_PROXY = bool(enabled)
+
+
+def _get_url_opener() -> Any:
+    key = "proxy" if _USE_SYSTEM_PROXY else "direct"
+    opener = _URL_OPENERS.get(key)
+    if opener is not None:
+        return opener
+
+    handlers = [HTTPHandler(), HTTPSHandler(context=_ssl_context)]
+    if _USE_SYSTEM_PROXY:
+        handlers.append(ProxyHandler())
+    else:
+        handlers.append(ProxyHandler({}))
+    opener = build_opener(*handlers)
+    _URL_OPENERS[key] = opener
+    return opener
+
+
+def _open_url(req: Request, timeout: float):
+    opener = _get_url_opener()
+    return opener.open(req, timeout=timeout)
+
+
 def _fetch_bytes(
     url: str,
     progress_cb: Optional[Callable[[int, Optional[int]], None]] = None,
+    cancel_cb: Optional[Callable[[], bool]] = None,
     headers: Optional[Dict[str, str]] = None,
     timeout_sec: Optional[float] = None,
 ) -> bytes:
@@ -256,11 +295,7 @@ def _fetch_bytes(
         url,
         headers=req_headers,
     )
-    with urlopen(
-        req,
-        timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC),
-        context=_ssl_context,
-    ) as resp:
+    with _open_url(req, timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)) as resp:
         total: Optional[int] = None
         try:
             header = resp.headers.get("Content-Length")
@@ -271,6 +306,8 @@ def _fetch_bytes(
         chunks = []
         downloaded = 0
         while True:
+            if cancel_cb and cancel_cb():
+                raise RuntimeError("已取消当前操作")
             chunk = resp.read(64 * 1024)
             if not chunk:
                 break
@@ -278,6 +315,8 @@ def _fetch_bytes(
             downloaded += len(chunk)
             if progress_cb:
                 progress_cb(downloaded, total)
+            if cancel_cb and cancel_cb():
+                raise RuntimeError("已取消当前操作")
 
         if progress_cb:
             progress_cb(downloaded, total)
@@ -300,7 +339,7 @@ def _fetch_content_length(
     timeout = timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC
     req = Request(url, method="HEAD", headers={"User-Agent": UA, "Accept": "*/*"})
     try:
-        with urlopen(req, timeout=timeout, context=_ssl_context) as resp:
+        with _open_url(req, timeout=timeout) as resp:
             header = resp.headers.get("Content-Length")
             if header:
                 value = int(header)
@@ -313,7 +352,7 @@ def _fetch_content_length(
         req2 = Request(
             url, headers={"User-Agent": UA, "Accept": "*/*", "Range": "bytes=0-0"}
         )
-        with urlopen(req2, timeout=timeout, context=_ssl_context) as resp2:
+        with _open_url(req2, timeout=timeout) as resp2:
             content_range = str(resp2.headers.get("Content-Range", "")).strip()
             m = re.search(r"/(\d+)$", content_range)
             if m:
@@ -352,7 +391,7 @@ def _post_json(url: str, payload: Dict[str, Any], timeout_sec: float) -> Dict[st
             "Content-Type": "application/json; charset=utf-8",
         },
     )
-    with urlopen(req, timeout=timeout_sec, context=_ssl_context) as resp:
+    with _open_url(req, timeout=timeout_sec) as resp:
         data = resp.read()
     if not data:
         return {}
@@ -409,6 +448,80 @@ def _is_local_app_ready(base: Path) -> bool:
     return (base / APP_DIR_NAME / DEFAULT_ENTRYPOINT).exists()
 
 
+def _acquire_update_lock(base: Path) -> Path:
+    lock_path = base / UPDATE_LOCK_FILE_NAME
+    try:
+        if lock_path.exists():
+            age = time.time() - lock_path.stat().st_mtime
+            if age >= UPDATE_LOCK_STALE_SEC:
+                lock_path.unlink()
+    except Exception:
+        pass
+
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise RuntimeError("检测到另一个更新任务正在进行，请稍后重试。")
+
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(f"pid={os.getpid()}\n")
+            f.write(f"utc={_now_utc_iso()}\n")
+    except Exception:
+        try:
+            lock_path.unlink()
+        except Exception:
+            pass
+        raise
+    return lock_path
+
+
+def _release_update_lock(lock_path: Optional[Path]) -> None:
+    if not lock_path:
+        return
+    try:
+        lock_path.unlink()
+    except Exception:
+        pass
+
+
+def _recover_incomplete_install(base: Path) -> None:
+    app_dir = base / APP_DIR_NAME
+    backup_dir = base / f"{APP_DIR_NAME}_backup"
+    new_dir = base / f"{APP_DIR_NAME}_new"
+    steps = []
+
+    try:
+        if (not app_dir.exists()) and backup_dir.exists():
+            os.replace(str(backup_dir), str(app_dir))
+            steps.append("restore_backup")
+
+        if app_dir.exists() and backup_dir.exists():
+            shutil.rmtree(backup_dir, ignore_errors=True)
+            steps.append("cleanup_backup")
+
+        if new_dir.exists():
+            if not app_dir.exists():
+                os.replace(str(new_dir), str(app_dir))
+                steps.append("promote_new")
+            else:
+                shutil.rmtree(new_dir, ignore_errors=True)
+                steps.append("cleanup_new")
+
+        lock_path = base / UPDATE_LOCK_FILE_NAME
+        if lock_path.exists():
+            age = time.time() - lock_path.stat().st_mtime
+            if age >= UPDATE_LOCK_STALE_SEC:
+                lock_path.unlink()
+                steps.append("cleanup_stale_lock")
+    except Exception as e:
+        _log(base, f"安装恢复失败：{e}")
+        return
+
+    if steps:
+        _log(base, f"检测到上次安装未完成，已恢复：{', '.join(steps)}")
+
+
 def _write_state(base: Path, state: Dict[str, Any]) -> None:
     path = base / STATE_FILE_NAME
     try:
@@ -417,6 +530,83 @@ def _write_state(base: Path, state: Dict[str, Any]) -> None:
         )
     except Exception:
         pass
+
+
+def _read_state(base: Path) -> Dict[str, Any]:
+    path = base / STATE_FILE_NAME
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _read_temp_meta(base: Path) -> Dict[str, Any]:
+    path = base / TEMP_META_FILE_NAME
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _write_temp_meta(base: Path, data: Dict[str, Any]) -> None:
+    path = base / TEMP_META_FILE_NAME
+    try:
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _cleanup_temp_files_on_launcher_upgrade(base: Path) -> None:
+    meta = _read_temp_meta(base)
+    prev_version = str(meta.get("launcher_version", "")).strip()
+    should_update_meta = (prev_version != LAUNCHER_VERSION)
+    if prev_version and prev_version != LAUNCHER_VERSION:
+        cleaned = []
+        lock_path = base / UPDATE_LOCK_FILE_NAME
+        lock_active = False
+        try:
+            if lock_path.exists():
+                age = time.time() - lock_path.stat().st_mtime
+                lock_active = age < UPDATE_LOCK_STALE_SEC
+        except Exception:
+            lock_active = True
+
+        if not lock_active:
+            try:
+                for p in base.iterdir():
+                    if p.name.startswith("bomana_update_"):
+                        if p.is_dir():
+                            shutil.rmtree(p, ignore_errors=True)
+                        else:
+                            try:
+                                p.unlink()
+                            except Exception:
+                                pass
+                        cleaned.append(p.name)
+            except Exception:
+                pass
+            if cleaned:
+                _log(base, f"检测到启动器升级（v{prev_version} -> v{LAUNCHER_VERSION}），已清理临时文件：{', '.join(cleaned)}")
+        else:
+            _log(base, f"检测到启动器升级（v{prev_version} -> v{LAUNCHER_VERSION}），存在进行中的更新任务，暂不清理临时文件。")
+            should_update_meta = False
+
+    if should_update_meta:
+        _write_temp_meta(
+            base,
+            {
+                "launcher_version": LAUNCHER_VERSION,
+                "updated_utc": _now_utc_iso(),
+            },
+        )
 
 
 def _load_or_create_install_id(base: Path) -> str:
@@ -501,23 +691,32 @@ def _install_zip_package(
     expected_sha256: str,
     entrypoint: str,
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+    cancel_cb: Optional[Callable[[], bool]] = None,
 ) -> None:
     expected = (expected_sha256 or "").strip().lower()
     actual = _sha256_bytes(package_bytes)
     if expected and actual != expected:
         raise RuntimeError("应用包 SHA256 校验失败")
+    if cancel_cb and cancel_cb():
+        raise RuntimeError("已取消当前操作")
 
     app_dir = base / APP_DIR_NAME
     backup_dir = base / f"{APP_DIR_NAME}_backup"
+    new_dir = base / f"{APP_DIR_NAME}_new"
+    lock_path = _acquire_update_lock(base)
     work_dir = Path(tempfile.mkdtemp(prefix="bomana_update_", dir=str(base)))
     zip_path = work_dir / "app.zip"
     stage_dir = work_dir / "stage"
     stage_dir.mkdir(parents=True, exist_ok=True)
+    moved_to_backup = False
+    replaced_app = False
 
     try:
         if status_cb:
             status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
         zip_path.write_bytes(package_bytes)
+        if cancel_cb and cancel_cb():
+            raise RuntimeError("已取消当前操作")
         _safe_extract_zip(zip_path, stage_dir)
 
         src_root = _normalize_package_root(stage_dir, entrypoint)
@@ -527,31 +726,39 @@ def _install_zip_package(
         if status_cb:
             status_cb("正在安装更新", "正在替换旧版本文件...", 0.94, "info")
 
-        new_dir = base / f"{APP_DIR_NAME}_new"
         if new_dir.exists():
             shutil.rmtree(new_dir, ignore_errors=True)
         shutil.copytree(src_root, new_dir)
+        if cancel_cb and cancel_cb():
+            raise RuntimeError("已取消当前操作")
 
         if backup_dir.exists():
             shutil.rmtree(backup_dir, ignore_errors=True)
         if app_dir.exists():
             os.replace(str(app_dir), str(backup_dir))
+            moved_to_backup = True
         os.replace(str(new_dir), str(app_dir))
+        replaced_app = True
 
         if backup_dir.exists():
             shutil.rmtree(backup_dir, ignore_errors=True)
     except Exception:
         # rollback
         try:
-            if app_dir.exists():
-                shutil.rmtree(app_dir, ignore_errors=True)
-            if backup_dir.exists():
+            if replaced_app and moved_to_backup and backup_dir.exists():
+                if app_dir.exists():
+                    shutil.rmtree(app_dir, ignore_errors=True)
                 os.replace(str(backup_dir), str(app_dir))
+            elif moved_to_backup and backup_dir.exists() and not app_dir.exists():
+                os.replace(str(backup_dir), str(app_dir))
+            if new_dir.exists():
+                shutil.rmtree(new_dir, ignore_errors=True)
         except Exception:
             pass
         raise
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+        _release_update_lock(lock_path)
 
 
 def _latest_release_url() -> str:
@@ -804,6 +1011,7 @@ def _download_update_from_manifest(
     base: Path,
     manifest: Dict[str, Any],
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+    cancel_cb: Optional[Callable[[], bool]] = None,
 ) -> Tuple[str, str]:
     def notify(
         title: str,
@@ -870,15 +1078,23 @@ def _download_update_from_manifest(
             detail = f"正在下载应用包：{downloaded / 1048576:.1f} MB  |  {speed_text}"
             notify("正在下载更新", detail, None, "info")
 
-    package_bytes = _fetch_bytes(package_url, progress_cb=on_progress)
+    package_bytes = _fetch_bytes(package_url, progress_cb=on_progress, cancel_cb=cancel_cb)
+    if cancel_cb and cancel_cb():
+        raise RuntimeError("已取消当前操作")
     _install_zip_package(
-        base, package_bytes, package_sha256, entrypoint, status_cb=notify
+        base,
+        package_bytes,
+        package_sha256,
+        entrypoint,
+        status_cb=notify,
+        cancel_cb=cancel_cb,
     )
     notify("更新完成", f"已更新到 v{remote_version}", 1.0, "success")
     return remote_version, source_name
 
 
 def _launch_app(base: Path, channel: str) -> None:
+    _recover_incomplete_install(base)
     app_dir = base / APP_DIR_NAME
     entry = app_dir / DEFAULT_ENTRYPOINT
     if not entry.exists():
@@ -893,6 +1109,8 @@ def _launch_app(base: Path, channel: str) -> None:
 
 def _friendly_error_text(err: Exception, channel: str) -> str:
     msg = str(err)
+    if "已取消" in msg:
+        return "已取消当前操作。"
     if isinstance(err, (URLError, TimeoutError)):
         return "网络连接失败。请确认网络可用后点击“重试”。"
     if isinstance(err, HTTPError):
@@ -1238,8 +1456,20 @@ class LauncherWindow:
 
     def __init__(self, base: Path, channel: str):
         self.base = base
+        self.saved_state = _read_state(base)
         self.channel = channel
         self.detected_channel = channel
+        raw_proxy = self.saved_state.get("use_system_proxy", True)
+        if isinstance(raw_proxy, str):
+            self.use_system_proxy = raw_proxy.strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+        else:
+            self.use_system_proxy = bool(raw_proxy)
+        _set_use_system_proxy(self.use_system_proxy)
         self.client_identity = _build_client_identity(base)
         self.local_version = _read_local_app_version(base / APP_DIR_NAME)
         self.events: "queue.Queue[Tuple[str, Dict[str, Any]]]" = queue.Queue()
@@ -1260,6 +1490,8 @@ class LauncherWindow:
         self.last_download_success = False
         self.decision = LaunchDecision(action="exit", final_version=self.local_version)
         self._worker: Optional[threading.Thread] = None
+        self._cancel_requested = threading.Event()
+        self._exit_after_task = False
         self._spin = ["◜", "◠", "◝", "◞", "◡", "◟"]
         self.status_title = "正在准备"
         self.status_level = "info"
@@ -1291,6 +1523,7 @@ class LauncherWindow:
         self.root.configure(bg=_THEME["BG"])
         self.root.protocol("WM_DELETE_WINDOW", self._on_exit)
         self.channel_var = tk.StringVar(master=self.root, value=channel)
+        self.proxy_var = tk.BooleanVar(master=self.root, value=self.use_system_proxy)
 
         self._build_ui()
         self._fit_window_to_screen()
@@ -1301,6 +1534,7 @@ class LauncherWindow:
             "准备就绪", "启动后将自动检查更新，并展示可下载包总大小。", 0.0, "info"
         )
         self._set_running(False)
+        self._save_launcher_state()
         _log(
             self.base,
             f"Launcher start, channel={self.channel}, version={LAUNCHER_VERSION}",
@@ -1675,6 +1909,23 @@ class LauncherWindow:
         )
         auto_tip.pack(side="left", padx=(self._px(10), 0))
 
+        self.proxy_chk = tk.Checkbutton(
+            channel_row,
+            text="使用系统代理",
+            variable=self.proxy_var,
+            command=self._on_proxy_changed,
+            bg=_THEME["BG"],
+            fg=_THEME["TEXT_DIM"],
+            activebackground=_THEME["BG"],
+            activeforeground=_THEME["TEXT"],
+            selectcolor=_THEME["CARD"],
+            bd=0,
+            highlightthickness=0,
+            cursor="hand2",
+            font=self._font(9),
+        )
+        self.proxy_chk.pack(side="right")
+
         self.channel_desc_lbl = tk.Label(
             top,
             text="",
@@ -1840,6 +2091,8 @@ class LauncherWindow:
     def _start_worker(self, task: str) -> None:
         if self._worker and self._worker.is_alive():
             return
+        self._cancel_requested.clear()
+        self._exit_after_task = False
         self._worker = threading.Thread(
             target=self._worker_main, args=(task,), daemon=True
         )
@@ -1910,6 +2163,7 @@ class LauncherWindow:
                     expected_sha256="",
                     entrypoint=DEFAULT_ENTRYPOINT,
                     status_cb=self._emit_status,
+                    cancel_cb=lambda: self._cancel_requested.is_set(),
                 )
                 final_version = _read_local_app_version(self.base / APP_DIR_NAME)
                 update_ok = True
@@ -1966,6 +2220,7 @@ class LauncherWindow:
                 self.base,
                 manifest,
                 status_cb=self._emit_status,
+                cancel_cb=lambda: self._cancel_requested.is_set(),
             )
             update_ok = True
             local_ready = _is_local_app_ready(self.base)
@@ -1986,12 +2241,9 @@ class LauncherWindow:
             },
         )
 
-        _write_state(
-            self.base,
+        self._save_launcher_state(
             {
-                "launcher_version": LAUNCHER_VERSION,
                 "display_name": DISPLAY_NAME,
-                "channel": self.channel,
                 "last_check_utc": _now_utc_iso(),
                 "app_version": final_version,
                 "update_ok": update_ok,
@@ -1999,7 +2251,7 @@ class LauncherWindow:
                 "update_error": update_error,
                 "device_id": self.client_identity.get("device_id", ""),
                 "install_id": self.client_identity.get("install_id", ""),
-            },
+            }
         )
 
         if update_ok:
@@ -2115,6 +2367,9 @@ class LauncherWindow:
                         text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
                     )
                     self._set_running(False)
+                    if self._exit_after_task:
+                        self._finalize_exit()
+                        continue
                     if not ok:
                         self._show_error_actions()
                 elif typ == "download_done":
@@ -2147,6 +2402,9 @@ class LauncherWindow:
                     else:
                         self.last_download_success = False
                     self._set_running(False)
+                    if self._exit_after_task:
+                        self._finalize_exit()
+                        continue
                     if not bool(payload.get("update_ok", False)):
                         self._show_error_actions()
         except queue.Empty:
@@ -2247,6 +2505,8 @@ class LauncherWindow:
         self.details_btn.config(state="normal")
         self.exit_btn.config(state="normal")
         self.channel_menu.config(state=state)
+        if hasattr(self, "proxy_chk"):
+            self.proxy_chk.config(state=state)
 
         if running:
             self.retry_btn.pack_forget()
@@ -2309,6 +2569,35 @@ class LauncherWindow:
                 text="可点击“重新检查”或“打开下载页”。首次使用请先完成下载。"
             )
         self._schedule_layout_reflow()
+
+    def _save_launcher_state(self, extra: Optional[Dict[str, Any]] = None) -> None:
+        state = _read_state(self.base)
+        state.update(
+            {
+                "launcher_version": LAUNCHER_VERSION,
+                "channel": self.channel,
+                "use_system_proxy": bool(self.use_system_proxy),
+                "state_updated_utc": _now_utc_iso(),
+            }
+        )
+        if extra:
+            state.update(extra)
+        _write_state(self.base, state)
+
+    def _on_proxy_changed(self) -> None:
+        if self.running:
+            self.proxy_var.set(bool(self.use_system_proxy))
+            return
+        self.use_system_proxy = bool(self.proxy_var.get())
+        _set_use_system_proxy(self.use_system_proxy)
+        self._save_launcher_state()
+        mode = "系统代理" if self.use_system_proxy else "直连模式"
+        self._set_status(
+            "网络设置已更新",
+            f"当前使用：{mode}。后续检查/下载将按此设置进行。",
+            self.progress_value,
+            "info",
+        )
 
     def _on_start(self) -> None:
         if self.running:
@@ -2385,6 +2674,7 @@ class LauncherWindow:
             return
         self.channel = self.channel_var.get().strip() or self.detected_channel
         self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
+        self._save_launcher_state()
         self.sub_lbl.config(
             text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
         )
@@ -2434,13 +2724,35 @@ class LauncherWindow:
         if self.decision.action == "launch":
             self.root.destroy()
 
-    def _on_exit(self) -> None:
+    def _finalize_exit(self) -> None:
+        self._exit_after_task = False
         self.decision = LaunchDecision(
             action="exit",
-            final_version=self.local_version,
+            final_version=_read_local_app_version(self.base / APP_DIR_NAME),
             warning=self.decision.warning,
         )
         self.root.destroy()
+
+    def _on_exit(self) -> None:
+        if self.running:
+            ok = messagebox.askyesno(
+                DISPLAY_NAME,
+                "当前任务正在进行中。\n取消当前任务并退出可能导致本次更新无效。\n是否继续退出？",
+                parent=self.root,
+            )
+            if not ok:
+                return
+            self._cancel_requested.set()
+            self._exit_after_task = True
+            self._set_status(
+                "正在取消",
+                "正在取消当前任务并等待清理完成，请稍候...",
+                None,
+                "warning",
+            )
+            return
+
+        self._finalize_exit()
 
     def run(self) -> LaunchDecision:
         self.root.mainloop()
@@ -2449,6 +2761,8 @@ class LauncherWindow:
 
 def main() -> None:
     base = _base_dir()
+    _recover_incomplete_install(base)
+    _cleanup_temp_files_on_launcher_upgrade(base)
     _enable_dpi_awareness()
     channel = _detect_channel()
     identity = _build_client_identity(base)

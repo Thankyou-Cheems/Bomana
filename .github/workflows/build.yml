@@ -29,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      launcher_version: ${{ steps.version.outputs.launcher_version }}
       build_target: ${{ steps.version.outputs.build_target }}
       build_desc: ${{ steps.version.outputs.build_desc }}
       asset_desc: ${{ steps.version.outputs.asset_desc }}
@@ -71,6 +72,11 @@ jobs:
 
           TAG_NAME="$TAG_REF"
           [ "$TAG_NAME" == "$GITHUB_REF" ] && TAG_NAME="v$VERSION"
+          LAUNCHER_VERSION=$(grep -oP 'LAUNCHER_VERSION\s*=\s*["\x27]\K[^"\x27]+' launcher.pyw || echo "")
+          if [ -z "$LAUNCHER_VERSION" ]; then
+            echo "无法从 launcher.pyw 提取 LAUNCHER_VERSION"
+            exit 1
+          fi
           BUILD_TARGET="${{ github.event.inputs.build_target }}"
           if [ -z "$BUILD_TARGET" ]; then
             [ -n "$AUTO_TARGET" ] && BUILD_TARGET="$AUTO_TARGET" || BUILD_TARGET="all"
@@ -99,6 +105,7 @@ jobs:
           esac
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "launcher_version=$LAUNCHER_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "build_target=$BUILD_TARGET" >> "$GITHUB_OUTPUT"
           echo "build_desc=$BUILD_DESC" >> "$GITHUB_OUTPUT"
@@ -109,6 +116,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
           echo "提取到版本号: $VERSION"
+          echo "提取到启动器内部版本: $LAUNCHER_VERSION"
           echo "构建目标: $BUILD_TARGET"
           echo "发布说明: $BUILD_DESC"
 
@@ -206,7 +214,7 @@ jobs:
         run: |
           python tools/build_portable.py `
             --target "launcher" `
-            --version "${{ needs.prepare.outputs.version }}" `
+            --version "${{ needs.prepare.outputs.launcher_version }}" `
             --output "dist"
 
       - name: 上传启动器产物
@@ -214,7 +222,7 @@ jobs:
         with:
           name: Bomana-Launcher
           path: |
-            dist/Bomana_launcher_v${{ needs.prepare.outputs.version }}.exe
+            dist/Bomana_launcher_v${{ needs.prepare.outputs.launcher_version }}.exe
             dist/checksums_launcher.txt
 
   release:

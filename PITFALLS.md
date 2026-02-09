@@ -49,3 +49,9 @@
   Symptom: timer UI could momentarily collapse, status flickered to "加入战斗中", then quickly returned
   Cause: ALIVE state reacted to short 8111 empty frames too aggressively (transient player-loss + immediate pending hint), causing rapid panel resize oscillation
   Fix/Workaround: add `PLAYER_PRESENCE_GRACE_SEC` debounce in `GameLogic.tick`, delay `api_down_pending` hint via `API_PENDING_HINT_DELAY_SEC`, keep zone panel visible during `LOSS_PENDING`, reuse previous valid telemetry/map snapshot during short unstable windows, guard landing/on-ground logic from `/state` failed frames, throttle zone-driven `_recalc_size()` calls, and relax localhost API timeouts (`0.05/0.08`) for packaged runtime stability
+
+- Date: 2026-02-09
+  Context: launcher update interrupted/failure path hardening
+  Symptom: under specific install exceptions, local app could disappear after rollback; concurrent launchers could race on install target
+  Cause: rollback removed `app/` unconditionally on exception and there was no cross-process install lock or startup recovery for leftover `app_new`/`app_backup`
+  Fix/Workaround: make rollback state-aware (only restore when replacement actually started), add cross-process update lock + stale-lock cleanup, add startup recovery for `app_new`/`app_backup`, and support graceful cancel-exit during running tasks
