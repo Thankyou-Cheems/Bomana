@@ -136,13 +136,39 @@ class GameLogic:
         # 3. 获取地图对象
         mp = self.map.fetch(budget, map_info)
         
-        # 4. 判断API状态
-        api_up = bool(tel.ind_ok or tel.state_resp_ok or mp.ok)
+        # 4. 记录原始API状态（后续可能在锁内应用短时缓存兜底）
+        raw_api_up = bool(tel.ind_ok or tel.state_resp_ok or mp.ok)
 
         # 5. 更新游戏状态（线程安全）
         with self._lock:
             s = self.state
             prev_tel = s.last_tel
+            prev_map = s.last_map
+
+            # 在战斗阶段对瞬时空帧做“上一帧有效数据”兜底，避免UI/状态机被单帧抖动拉偏。
+            phase_allows_grace = s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
+            recently_seen = (
+                s.last_player_present_ts > 0.0 and
+                (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
+            )
+            used_tel_fallback = False
+            used_map_fallback = False
+
+            if phase_allows_grace and recently_seen:
+                tel_unstable = (not tel.ind_ok) or (not tel.state_resp_ok)
+                if tel_unstable and prev_tel and (prev_tel.ind_ok or prev_tel.state_resp_ok):
+                    tel = prev_tel
+                    used_tel_fallback = True
+
+                map_unstable = (
+                    (not mp.ok) or
+                    (mp.ok and (mp.obj_count == 0) and (not mp.player_aircraft_present))
+                )
+                if map_unstable and prev_map and prev_map.ok:
+                    mp = prev_map
+                    used_map_fallback = True
+
+            api_up = bool(raw_api_up or used_tel_fallback or used_map_fallback)
             s.last_tel = tel
             s.last_map = mp
 
@@ -165,9 +191,23 @@ class GameLogic:
             # 判断玩家是否存在
             # 地图/对象接口在个别时刻会瞬时抖动（例如游戏内打开/关闭地图），
             # 在 ALIVE/LOSS_PENDING 阶段允许使用遥测实体特征兜底，避免误触发状态切换。
+            phase_allows_player_grace = s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
             player_present = bool(mp.ok and mp.player_aircraft_present)
-            if (not player_present) and s.phase in (Phase.ALIVE, Phase.LOSS_PENDING) and tel.entity_like:
+            if (not player_present) and phase_allows_player_grace and tel.entity_like:
                 player_present = True
+                s.last_player_present_ts = now
+            elif player_present:
+                s.last_player_present_ts = now
+
+            # 数据短抖动宽限：计分板/地图等场景可能导致8111瞬时空帧，避免ALIVE阶段立即判死。
+            if (not player_present) and phase_allows_player_grace:
+                data_unstable = (not mp.ok) or (not tel.ind_ok) or (not tel.state_resp_ok)
+                recently_seen = (
+                    s.last_player_present_ts > 0.0 and
+                    (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
+                )
+                if data_unstable and recently_seen:
+                    player_present = True
             spawn_candidate = player_present and tel.entity_like
 
             # 更新导航信息（战区、地速）
@@ -547,6 +587,7 @@ class GameLogic:
             self.state.sortie_id = data.get('sortie_id', 0)
             self.state.phase = Phase.ALIVE
             self.state.last_refit_ts = data['computed_spawn_time']
+            self.state.last_player_present_ts = time.time()
         return True
 
     def snapshot(self) -> UISnapshot:
@@ -571,18 +612,22 @@ class GameLogic:
             progress = 0.0
             life_index = life.life_index if life else None
 
-            if s.phase == Phase.ALIVE and life:
+            if s.phase in (Phase.ALIVE, Phase.LOSS_PENDING) and life:
                 remaining = life.cycle_remaining(now)
                 cycle = life.current_cycle(now)
                 progress = life.cycle_progress(now)
 
             # 确定主徽章和状态文字
-            api_down_pending = (s.api_down_candidate_since is not None) and (not s.api_down)
+            api_down_pending = False
+            if (s.api_down_candidate_since is not None) and (not s.api_down):
+                api_down_pending = (
+                    (now - s.api_down_candidate_since) >= GameConfig.API_PENDING_HINT_DELAY_SEC
+                )
 
             if s.api_down:
                 main_badge = ("❌8111不可用", Theme.TEXT, Theme.RED)
                 status_text = "未检测到 8111"
-            elif api_down_pending:
+            elif api_down_pending and (s.phase in (Phase.IDLE, Phase.HANGAR, Phase.ARMING) or not life):
                 main_badge = ("⏳加入战斗中", Theme.TEXT, Theme.BLUE)
                 status_text = "加入战斗中"
             else:
@@ -607,9 +652,9 @@ class GameLogic:
 
             # 飞行徽章
             landed_flash = s.landed_flash_until > now
-            on_ground = tel.is_on_ground
+            on_ground = tel.is_on_ground if tel.state_resp_ok else False
 
-            if s.phase != Phase.ALIVE or not life:
+            if s.phase not in (Phase.ALIVE, Phase.LOSS_PENDING) or not life:
                 flight_badge = ("—", Theme.TEXT_DIM, Theme.GRAYPILL)
             else:
                 if landed_flash:
@@ -945,6 +990,7 @@ class GameLogic:
         s.current_life = LifeState(spawn_time=now, life_index=next_index)
         s.sortie_id += 1
         s.last_refit_ts = now
+        s.last_player_present_ts = now
 
     def _reset_life_state_locked(self):
         """重置生命状态（必须在锁内调用）"""
@@ -954,6 +1000,7 @@ class GameLogic:
         s.last_refit_ts = 0.0
         s.spawn_candidate_since = None
         s.missing_player_since = None
+        s.last_player_present_ts = 0.0
         s.landing_start_time = None
         s.landed_flash_until = 0.0
         s.zone_nav = ZoneNavigationState()
@@ -975,6 +1022,10 @@ class GameLogic:
         """
         s = self.state
         if not s.current_life:
+            return
+
+        # /state 失败时不要用默认零值参与着陆判断，避免误判为“在地面”。
+        if not tel.state_resp_ok:
             return
         
         if tel.is_on_ground:

@@ -10,7 +10,7 @@ import json
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.7.3"
+__version__ = "6.7.4"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -56,6 +56,8 @@ class GameConfig:
     DEAD_CONFIRM_SEC = 1.2       # 死亡确认：连续1.2秒无玩家
     HANGAR_CONFIRM_SEC = 1.2     # 机库确认：连续1.2秒无地图数据
     API_DOWN_CONFIRM_SEC = 5.0   # API断线确认：连续5秒无响应
+    PLAYER_PRESENCE_GRACE_SEC = 1.2   # ALIVE阶段短时数据抖动宽限（按计分板/地图常见）
+    API_PENDING_HINT_DELAY_SEC = 0.35 # 断线候选需持续到该时长才显示“加入战斗中”
 
     # 补给判断参数（检测地面补给站）
     REFIT_FUEL_JUMP_KG = 50.0    # 油量突增50kg以上
@@ -173,11 +175,11 @@ class NetworkConfig:
     # 8111接口基础URL（本地回环地址）
     API_BASE = "http://127.0.0.1:8111"
 
-    # 连接超时：30ms（针对localhost优化，快速失败防止阻塞）
-    API_CONNECT_TIMEOUT = 0.03
+    # 连接超时：50ms（保留快速失败，同时降低打包环境偶发超时抖动）
+    API_CONNECT_TIMEOUT = 0.05
 
-    # 读取超时：45ms（配合50ms轮询，确保不会跨周期堆积）
-    API_READ_TIMEOUT = 0.045
+    # 读取超时：80ms（计分板/地图切换时8111短卡顿更稳）
+    API_READ_TIMEOUT = 0.08
 
     # 单次tick最大网络耗时：300ms
     MAX_TICK_NET_BUDGET = 0.30

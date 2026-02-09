@@ -379,6 +379,7 @@ class GameState:
     # 状态确认相关（防止误判）
     spawn_candidate_since: Optional[float] = None                # 出生候选开始时间
     missing_player_since: Optional[float] = None                 # 玩家消失开始时间
+    last_player_present_ts: float = 0.0                          # 最近一次确认玩家存在（用于短时抖动宽限）
     landing_start_time: Optional[float] = None                   # 着陆开始时间
     landed_flash_until: float = 0.0                              # 着陆闪烁持续到
     hangar_candidate_since: Optional[float] = None               # 机库候选开始时间

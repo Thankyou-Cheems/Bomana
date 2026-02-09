@@ -138,6 +138,7 @@ class App:
         self._airport_label_pool: List[tk.Label] = []
         self._last_layout_signature = None
         self._last_expand_ts = 0.0
+        self._last_zone_recalc_ts = 0.0
         self._zone_layout_mode = None
         self._airport_layout_mode = None
 
@@ -2397,7 +2398,7 @@ class App:
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
         show_zone_panel = (
-            (snap.phase == Phase.ALIVE) and
+            (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
             (not snap.api_down) and
             (
                 (ENABLE_ZONES and PanelConfig.show_zones) or
@@ -2411,7 +2412,11 @@ class App:
             # _update_zone_display 返回是否需要重算尺寸
             need_recalc = self._update_zone_display(snap)
             if need_recalc:
-                self._recalc_size()
+                now_recalc = time.monotonic()
+                # 数据抖动期节流尺寸重算，避免高频geometry震荡
+                if (now_recalc - self._last_zone_recalc_ts) >= 0.25:
+                    self._last_zone_recalc_ts = now_recalc
+                    self._recalc_size()
 
         # 检查清单面板（受编译开关控制）
         show_chk = (

@@ -43,3 +43,9 @@
   Symptom: app flashed briefly when opening/closing game map; occasional CPU/load spike
   Cause: transient 8111 `/map_obj.json` jitter (player/map fields briefly invalid) triggered state/UI oscillation, plus per-frame full list relayout and full heading-tape redraw amplified cost
   Fix/Workaround: add ALIVE/LOSS_PENDING telemetry fallback for player presence, keep integrated tape row mounted, switch to incremental zone/airport label updates, deduplicate equivalent heading-tape renders, and keep standalone nav status rows mounted
+
+- Date: 2026-02-09
+  Context: users still reported severe jitter when holding scoreboard/map in battle
+  Symptom: timer UI could momentarily collapse, status flickered to "加入战斗中", then quickly returned
+  Cause: ALIVE state reacted to short 8111 empty frames too aggressively (transient player-loss + immediate pending hint), causing rapid panel resize oscillation
+  Fix/Workaround: add `PLAYER_PRESENCE_GRACE_SEC` debounce in `GameLogic.tick`, delay `api_down_pending` hint via `API_PENDING_HINT_DELAY_SEC`, keep zone panel visible during `LOSS_PENDING`, reuse previous valid telemetry/map snapshot during short unstable windows, guard landing/on-ground logic from `/state` failed frames, throttle zone-driven `_recalc_size()` calls, and relax localhost API timeouts (`0.05/0.08`) for packaged runtime stability
