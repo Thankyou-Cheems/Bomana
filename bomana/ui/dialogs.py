@@ -270,7 +270,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         row += 1
         
         # 主题提示
-        tk.Label(frame, text="* 主题更改需要重启生效", bg=Theme.BG, fg=Theme.TEXT_MUTED,
+        tk.Label(frame, text="* 主题与UI缩放保存后立即生效", bg=Theme.BG, fg=Theme.TEXT_MUTED,
                 font=("Segoe UI", 8)).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
     
     def _build_panel_tab(self):
@@ -507,6 +507,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         """保存所有设置"""
         # 收集设置值
         config = ConfigManager.load()
+        old_scale = float(UIConfig.UI_SCALE_MULT)
+        old_nav_width = float(PanelConfig.navigation_bar_width)
         
         # 显示设置
         UIConfig.WINDOW_ALPHA = self.alpha_var.get()
@@ -580,14 +582,20 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             if hasattr(self.app, 'nav_window') and self.app.nav_window:
                 self.app.nav_window.update_hint_text()
         
-        # 应用主题（需要重启）
         theme_changed = new_theme != old_theme
+        scale_changed = abs(UIConfig.UI_SCALE_MULT - old_scale) > 1e-6
+        nav_width_changed = abs(PanelConfig.navigation_bar_width - old_nav_width) > 1e-6
         Theme.apply(new_theme)
-        
-        if theme_changed:
-            messagebox.showinfo("设置", "设置已保存\n主题更改需要重启应用生效", parent=self)
-        else:
-            messagebox.showinfo("设置", "设置已保存", parent=self)
+
+        # 运行时应用显示设置，无需重启应用。
+        if hasattr(self.app, "apply_display_settings_runtime"):
+            self.app.apply_display_settings_runtime(
+                theme_changed=theme_changed,
+                scale_changed=scale_changed,
+                nav_width_changed=nav_width_changed,
+            )
+
+        messagebox.showinfo("设置", "设置已保存", parent=self)
         
         self.destroy()
 

@@ -404,6 +404,14 @@ class NavigationWindow:
         if hasattr(self, 'hint_lbl') and self.hint_lbl:
             self.hint_lbl.config(text=f"{HotkeyConfig.KEY_LOCK}解锁后可拖动")
 
+    def destroy(self):
+        """销毁窗口实例（用于主题/缩放热重载）"""
+        self._visible = False
+        try:
+            self.window.destroy()
+        except tk.TclError:
+            pass
+
     def _on_focus_in(self, event=None):
         """Focus guard to keep click-through when locked."""
         if self.app._locked:

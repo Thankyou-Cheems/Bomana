@@ -1638,6 +1638,83 @@ class App:
         """
         SettingsDialog(self.root, self)
 
+    def apply_display_settings_runtime(
+        self,
+        theme_changed: bool,
+        scale_changed: bool,
+        nav_width_changed: bool = False,
+    ) -> None:
+        """运行时应用显示设置（主题/缩放/导航宽度）
+
+        通过局部重建UI避免强制重启应用。
+        """
+        need_main_rebuild = bool(theme_changed or scale_changed)
+        need_nav_rebuild = bool(need_main_rebuild or nav_width_changed)
+        if not (need_main_rebuild or need_nav_rebuild):
+            return
+
+        nav_was_visible = False
+        if ENABLE_ZONES and need_nav_rebuild and getattr(self, "nav_window", None):
+            try:
+                nav_was_visible = bool(self.nav_window.is_visible())
+            except Exception:
+                nav_was_visible = False
+            try:
+                self.nav_window.destroy()
+            except Exception:
+                pass
+            self.nav_window = None
+
+        if need_main_rebuild:
+            if hasattr(self, "main_frame") and self.main_frame:
+                try:
+                    self.main_frame.destroy()
+                except tk.TclError:
+                    pass
+
+            self.root.configure(bg=Theme.BG)
+            self.scale = Win32.get_dpi_scale(self.hwnd) * float(UIConfig.UI_SCALE_MULT)
+            self._hint_width_cache = {"text": "", "width": int(320 * self.scale)}
+            try:
+                self.root.tk.call("tk", "scaling", float(self.scale))
+            except tk.TclError:
+                pass
+            self._cache_fonts()
+
+            # 清理旧布局缓存，避免复用已销毁的控件引用。
+            self._zone_label_pool = []
+            self._airport_label_pool = []
+            self._zone_panel_visible = False
+            self._checklist_panel_visible = False
+            self._last_layout_signature = None
+            self._zone_layout_mode = None
+            self._airport_layout_mode = None
+            self._last_zone_recalc_ts = 0.0
+
+            self._init_ui()
+            if self._debug:
+                self.diag_lbl.pack(
+                    side="bottom",
+                    fill="x",
+                    pady=(0, int(UIConfig.SPACING_DEBUG * self.scale)),
+                    before=self.hint_row,
+                )
+            self._update_hint()
+            self._update_nav_mode_button()
+            self._recalc_size(force_shrink=True)
+
+        if ENABLE_ZONES and need_nav_rebuild:
+            self.nav_window = NavigationWindow(self)
+            if PanelConfig.navigation_mode == "standalone" and nav_was_visible:
+                self.nav_window.show()
+
+        # 重新应用窗口样式（锁定态穿透 + 透明度）
+        alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
+        Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
+        if ENABLE_ZONES and getattr(self, "nav_window", None):
+            self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
+        self._refresh_tray()
+
     def _edit_checklist(self):
         """编辑检查清单
         

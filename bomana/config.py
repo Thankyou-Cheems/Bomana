@@ -671,7 +671,7 @@ class Theme:
     2. 确保包含所有必要颜色键
     3. 调用Theme.apply(name)应用
 
-    注意: 主题切换需重启应用生效(tkinter限制)
+    注意: 主题切换由App在运行时重建UI以即时生效
     """
     # 当前活动主题名称
     _current = "dark"
