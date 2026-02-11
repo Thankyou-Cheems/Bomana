@@ -190,23 +190,28 @@ class GameLogic:
 
             # 判断玩家是否存在
             # 地图/对象接口在个别时刻会瞬时抖动（例如游戏内打开/关闭地图），
-            # 在 ALIVE/LOSS_PENDING 阶段允许使用遥测实体特征兜底，避免误触发状态切换。
+            # 在 ALIVE/LOSS_PENDING 阶段允许短时兜底，但不能无限延长宽限窗口。
             phase_allows_player_grace = s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
             player_present = bool(mp.ok and mp.player_aircraft_present)
-            if (not player_present) and phase_allows_player_grace and tel.entity_like:
+            # 仅真实 map 帧（非上一帧兜底）可以刷新“最近见到玩家”时间，
+            # 否则回机库时可能被兜底数据无限续期。
+            if player_present and (not used_map_fallback):
+                s.last_player_present_ts = now
+
+            presence_recently_seen = (
+                s.last_player_present_ts > 0.0 and
+                (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
+            )
+
+            # 实体特征兜底：仅在“最近确实见过玩家”的短时间窗口内生效，
+            # 避免回机库后因遥测仍有残留值而长期保持 ALIVE。
+            if (not player_present) and phase_allows_player_grace and tel.entity_like and presence_recently_seen:
                 player_present = True
-                s.last_player_present_ts = now
-            elif player_present:
-                s.last_player_present_ts = now
 
             # 数据短抖动宽限：计分板/地图等场景可能导致8111瞬时空帧，避免ALIVE阶段立即判死。
             if (not player_present) and phase_allows_player_grace:
                 data_unstable = (not mp.ok) or (not tel.ind_ok) or (not tel.state_resp_ok)
-                recently_seen = (
-                    s.last_player_present_ts > 0.0 and
-                    (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
-                )
-                if data_unstable and recently_seen:
+                if data_unstable and presence_recently_seen:
                     player_present = True
             spawn_candidate = player_present and tel.entity_like
 
