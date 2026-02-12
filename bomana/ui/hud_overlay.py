@@ -25,12 +25,14 @@ class HUDOverlay:
       不使用每帧 delete/create。
     """
 
-    # 2.5D 投影参数（首版估计）
-    _MAX_RELATIVE_DEG = 90.0
-    _HORIZONTAL_COVER_RATIO = 0.42
-    _VERTICAL_COVER_RATIO = 0.36
-    _ROLL_COUPLING_RATIO = 0.14
-    _VERTICAL_FOV_DEG = 55.0
+    # 透视投影参数（v6.8.2: 统一垂直轴 + 2D roll 旋转）
+    _MAX_RELATIVE_DEG = 80.0           # tan()安全裁剪上限（避免极端值）
+    _MAX_LOOKDOWN_DEG = 78.0
+    _PITCH_BLEND_NEAR_KM = 4.0         # 用户反馈近距(3-4km)表现较好，保留全量pitch
+    _PITCH_BLEND_FAR_KM = 14.0
+    _PITCH_GAIN_NEAR = 1.0
+    _PITCH_GAIN_FAR = 0.62
+    _DIVE_EXTRA_DAMP_MAX = 0.18        # 俯冲远距额外抑制比例上限
 
     # 距离 -> 尺寸/亮度映射参数
     _DIST_NEAR_KM = 2.0
@@ -40,6 +42,7 @@ class HUDOverlay:
     _RADIUS_MAX_SCALE = 1.85
     _BRIGHTNESS_MIN = 0.35
     _BRIGHTNESS_MAX = 1.00
+    _MAX_SECONDARY_TARGETS = 6
 
     # 顶部简化罗盘条参数（v6.8.x 可选增强）
     _COMPASS_TOP_RATIO = 0.075
@@ -56,6 +59,8 @@ class HUDOverlay:
         self.root = parent_app.root
         self._visible = False
         self._transparent_color = "#010101"
+        self._transparent_color_ref = self._hex_to_colorref(self._transparent_color)
+        self._transparent_color_supported = False
 
         self.window = tk.Toplevel(self.root)
         self.window.title("HUD Overlay")
@@ -67,8 +72,9 @@ class HUDOverlay:
         # 尽量使用透明色键；不支持时降级为普通透明窗口。
         try:
             self.window.attributes("-transparentcolor", self._transparent_color)
+            self._transparent_color_supported = True
         except tk.TclError:
-            pass
+            self._transparent_color_supported = False
 
         self.canvas = tk.Canvas(
             self.window,
@@ -90,6 +96,7 @@ class HUDOverlay:
         self._attitude_roll_deg = 0.0
         self._attitude_fallback = True
         self._heading_deg = 0.0
+        self._player_altitude_m = 0.0
 
         # 轻量平滑缓存
         self._smoothed_x: Optional[float] = None
@@ -116,7 +123,8 @@ class HUDOverlay:
         self._reticle_vline_id: Optional[int] = None
         self._reticle_mode_id: Optional[int] = None
         self._reticle_dist_id: Optional[int] = None
-        self._secondary_text_ids: List[int] = []
+        self._secondary_marker_ids: List[int] = []
+        self._secondary_label_ids: List[int] = []
         self._compass_bg_id: Optional[int] = None
         self._compass_axis_id: Optional[int] = None
         self._compass_center_id: Optional[int] = None
@@ -147,6 +155,41 @@ class HUDOverlay:
     @staticmethod
     def _normalize_heading_deg(deg: float) -> float:
         return float(deg) % 360.0
+
+    @staticmethod
+    def _hex_to_colorref(hex_color: str) -> int:
+        """将 '#RRGGBB' 转为 Win32 COLORREF(0x00bbggrr)。"""
+        text = str(hex_color or "").strip()
+        if text.startswith("#"):
+            text = text[1:]
+        if len(text) != 6:
+            return 0
+        try:
+            r = int(text[0:2], 16)
+            g = int(text[2:4], 16)
+            b = int(text[4:6], 16)
+        except ValueError:
+            return 0
+        return (b << 16) | (g << 8) | r
+
+    @classmethod
+    def _pitch_gain_for_distance(cls, distance_km: float, pitch_deg: float) -> float:
+        """远距降低 pitch 权重，缓解俯冲时的远距离垂直误差放大。"""
+        d = max(0.0, float(distance_km))
+        if cls._PITCH_BLEND_FAR_KM <= cls._PITCH_BLEND_NEAR_KM:
+            gain = cls._PITCH_GAIN_NEAR
+        else:
+            t = (d - cls._PITCH_BLEND_NEAR_KM) / (cls._PITCH_BLEND_FAR_KM - cls._PITCH_BLEND_NEAR_KM)
+            t = max(0.0, min(1.0, t))
+            gain = cls._PITCH_GAIN_NEAR + (cls._PITCH_GAIN_FAR - cls._PITCH_GAIN_NEAR) * t
+
+        # 远距俯冲额外抑制，避免目标在屏幕上方过度漂移
+        if float(pitch_deg) < 0.0:
+            t_dive = (d - cls._PITCH_BLEND_NEAR_KM) / max(1.0, (cls._PITCH_BLEND_FAR_KM - cls._PITCH_BLEND_NEAR_KM))
+            t_dive = max(0.0, min(1.0, t_dive))
+            gain *= (1.0 - cls._DIVE_EXTRA_DAMP_MAX * t_dive)
+
+        return float(gain)
 
     @classmethod
     def _compass_label(cls, heading_deg: float) -> str:
@@ -184,6 +227,11 @@ class HUDOverlay:
         if current is None:
             return float(target)
         alpha = self._clamp(getattr(HUDConfig, "smoothing", 0.35), 0.05, 1.0)
+        if self._has_target:
+            if self._target_distance_km <= 8.0:
+                alpha = max(alpha, 0.78)
+            elif self._target_distance_km <= 18.0:
+                alpha = max(alpha, 0.62)
         return current + (float(target) - current) * alpha
 
     def _get_main_window_monitor(self) -> Dict[str, Any]:
@@ -240,9 +288,18 @@ class HUDOverlay:
         self.window.geometry(f"{w}x{h}+{x}+{y}")
 
     def apply_window_styles(self, click_through: bool, alpha: Optional[int] = None) -> None:
+        """应用 HUD 窗口样式。
+
+        优先使用 Win32 color key 保证背景透明，避免出现整屏黑底/蒙层。
+        """
         target_alpha = HUDConfig.alpha if alpha is None else alpha
         target_alpha = max(30, min(255, int(target_alpha)))
-        Win32.setup_window(self.hwnd, click_through=bool(click_through), alpha=target_alpha)
+        Win32.setup_window(
+            self.hwnd,
+            click_through=bool(click_through),
+            alpha=target_alpha,
+            color_key=self._transparent_color_ref,
+        )
 
     def set_lock_state(self, locked: bool) -> None:
         self.apply_window_styles(click_through=bool(locked), alpha=HUDConfig.alpha)
@@ -302,6 +359,7 @@ class HUDOverlay:
         attitude_roll_deg: float = 0.0,
         attitude_fallback: bool = True,
         heading_deg: float = 0.0,
+        own_altitude_m: float = 0.0,
         secondary_targets: Optional[List[Dict[str, float]]] = None,
     ) -> None:
         """更新目标渲染输入。
@@ -314,6 +372,7 @@ class HUDOverlay:
             attitude_roll_deg: 姿态横滚角（度）
             attitude_fallback: 姿态不可信时为 True，自动降级 2D
             heading_deg: 当前航向角（度）
+            own_altitude_m: 自身高度（米，用于近距/越顶几何修正）
             secondary_targets: 次目标列表（每项含 relative/distance）
         """
         self._has_target = bool(has_target)
@@ -323,6 +382,7 @@ class HUDOverlay:
         self._attitude_roll_deg = float(attitude_roll_deg)
         self._attitude_fallback = bool(attitude_fallback)
         self._heading_deg = float(heading_deg)
+        self._player_altitude_m = max(0.0, float(own_altitude_m))
         cleaned_secondary: List[Dict[str, float]] = []
         if secondary_targets:
             for item in secondary_targets:
@@ -330,8 +390,9 @@ class HUDOverlay:
                     continue
                 rel = float(item.get("relative", 0.0) or 0.0)
                 dist = max(0.0, float(item.get("distance", 0.0) or 0.0))
-                cleaned_secondary.append({"relative": rel, "distance": dist})
-                if len(cleaned_secondary) >= 2:
+                label = str(item.get("label", "") or "").strip()
+                cleaned_secondary.append({"relative": rel, "distance": dist, "label": label})
+                if len(cleaned_secondary) >= self._MAX_SECONDARY_TARGETS:
                     break
         self._secondary_targets = cleaned_secondary
         self.clear_standby()
@@ -356,6 +417,7 @@ class HUDOverlay:
         roll = float(getattr(snapshot, "attitude_roll_deg", 0.0) or 0.0)
         fallback = bool(getattr(snapshot, "hud_attitude_fallback", True))
         heading = float(getattr(snapshot, "player_heading", 0.0) or 0.0)
+        altitude = float(getattr(snapshot, "altitude_m", 0.0) or 0.0)
 
         self.update_target(
             has_target=has_target,
@@ -365,6 +427,7 @@ class HUDOverlay:
             attitude_roll_deg=roll,
             attitude_fallback=fallback,
             heading_deg=heading,
+            own_altitude_m=altitude,
             secondary_targets=None,
         )
 
@@ -417,24 +480,26 @@ class HUDOverlay:
             state="hidden",
             tags=("hud_reticle",),
         )
-        self._secondary_text_ids = [
-            self.canvas.create_text(
+        self._secondary_marker_ids = []
+        self._secondary_label_ids = []
+        for _ in range(self._MAX_SECONDARY_TARGETS):
+            marker_id = self.canvas.create_oval(
+                0, 0, 0, 0,
+                outline=color,
+                width=2,
+                state="hidden",
+                tags=("hud_secondary",),
+            )
+            self._secondary_marker_ids.append(marker_id)
+            label_id = self.canvas.create_text(
                 0, 0,
                 text="",
                 fill=color,
-                font=("Segoe UI", 9, "bold"),
+                font=("Segoe UI", 8, "bold"),
                 state="hidden",
                 tags=("hud_secondary",),
-            ),
-            self.canvas.create_text(
-                0, 0,
-                text="",
-                fill=color,
-                font=("Segoe UI", 9, "bold"),
-                state="hidden",
-                tags=("hud_secondary",),
-            ),
-        ]
+            )
+            self._secondary_label_ids.append(label_id)
         self._standby_id = self.canvas.create_text(
             0, 0,
             text="HUD STANDBY",
@@ -514,7 +579,9 @@ class HUDOverlay:
         ):
             if item_id is not None:
                 self.canvas.itemconfig(item_id, state=state)
-        for item_id in self._secondary_text_ids:
+        for item_id in self._secondary_marker_ids:
+            self.canvas.itemconfig(item_id, state=state)
+        for item_id in self._secondary_label_ids:
             self.canvas.itemconfig(item_id, state=state)
         if not visible:
             self._last_signature = None
@@ -558,191 +625,164 @@ class HUDOverlay:
         else:
             self.canvas.itemconfig(self._standby_id, state="hidden")
 
-    def _project_target(self, width: int, height: int) -> tuple:
-        """根据相对方位 + 姿态估计目标屏幕位置。"""
+    def _project_point(self, width: int, height: int, relative_deg: float, distance_km: float) -> tuple:
+        """根据相对方位 + 姿态 + 几何关系估计目标屏幕位置。
+
+        v6.8.2: 垂直轴 pitch+lookdown 合并为统一 vertical_angle，
+        roll 从 Y-only 近似改为完整 2D 旋转矩阵，
+        垂直轴也使用 tan() 透视投影保持一致。
+
+        WT pitch 符号约定: aviahorizon_pitch 正值=抬头, 负值=低头。
+        """
         cx = width * 0.5
         cy = height * 0.5
-        rel = self._clamp(self._target_relative_deg, -self._MAX_RELATIVE_DEG, self._MAX_RELATIVE_DEG)
-        rel_norm = rel / self._MAX_RELATIVE_DEG
+        rel = self._clamp(relative_deg, -self._MAX_RELATIVE_DEG, self._MAX_RELATIVE_DEG)
 
-        # X: 方位投影
-        target_x = cx + rel_norm * (width * self._HORIZONTAL_COVER_RATIO)
+        # === X: tan() 透视投影 ===
+        h_fov = HUDConfig.horizontal_fov_deg
+        tan_hh = math.tan(math.radians(h_fov * 0.5))
+        dx = (math.tan(math.radians(rel)) / tan_hh) * (width * 0.5)
 
-        # Y: 2.5D 俯仰 + 横滚耦合补偿（姿态可靠时）
+        # === Y: 统一 vertical_angle 计算 ===
         if self._attitude_fallback:
-            target_y = cy
+            dy = 0.0
         else:
-            pixels_per_deg = (height * self._VERTICAL_COVER_RATIO) / max(10.0, self._VERTICAL_FOV_DEG * 0.5)
-            pitch_offset = -self._attitude_pitch_deg * pixels_per_deg
-            roll_offset = math.sin(math.radians(self._attitude_roll_deg)) * (rel_norm * height * self._ROLL_COUPLING_RATIO)
-            target_y = cy + pitch_offset + roll_offset
+            v_fov = HUDConfig.vertical_fov_deg
+            tan_hv = math.tan(math.radians(v_fov * 0.5))
 
-        min_x, max_x = width * 0.06, width * 0.94
-        min_y, max_y = height * 0.08, height * 0.92
-        target_x = self._clamp(target_x, min_x, max_x)
-        target_y = self._clamp(target_y, min_y, max_y)
+            # 目标俯角（高度/水平距离）
+            horiz_m = max(120.0, float(distance_km) * 1000.0)
+            lookdown_deg = math.degrees(math.atan2(
+                max(0.0, self._player_altitude_m), horiz_m))
+            lookdown_deg = self._clamp(lookdown_deg, 0.0, self._MAX_LOOKDOWN_DEG)
+
+            # 合并: vertical_angle = lookdown + pitch
+            # 远距时降低 pitch 贡献，抑制俯冲场景下的纵向误差放大。
+            # 正值 = 目标在摄像机中心下方 → 屏幕正Y方向（下移）
+            # 抬头(pitch>0) → 地面目标更靠下 ✓
+            # 俯冲(pitch<0) → 地面目标更靠上 ✓
+            pitch_gain = self._pitch_gain_for_distance(distance_km, self._attitude_pitch_deg)
+            effective_pitch_deg = self._attitude_pitch_deg * pitch_gain
+            vertical_angle = lookdown_deg + effective_pitch_deg
+            vert_clamped = self._clamp(vertical_angle,
+                                       -self._MAX_LOOKDOWN_DEG,
+                                        self._MAX_LOOKDOWN_DEG)
+            dy = (math.tan(math.radians(vert_clamped)) / tan_hv) * (height * 0.5)
+
+        # === Roll: 完整 2D 旋转 ===
+        # 飞机右滚(roll>0)时，世界在视野中逆时针旋转
+        if not self._attitude_fallback and abs(self._attitude_roll_deg) > 0.5:
+            r = math.radians(self._attitude_roll_deg)
+            c, s = math.cos(r), math.sin(r)
+            dx, dy = dx * c + dy * s, -dx * s + dy * c
+
+        target_x = self._clamp(cx + dx, width * 0.06, width * 0.94)
+        target_y = self._clamp(cy + dy, height * 0.08, height * 0.92)
 
         return target_x, target_y, rel
+
+    def _project_target(self, width: int, height: int) -> tuple:
+        return self._project_point(width, height, self._target_relative_deg, self._target_distance_km)
 
     def _direction_prompt(self, rel: float) -> str:
         """2D 降级时的方向提示文本。"""
         if rel <= -8.0:
-            return "<- 2D"
+            return "←"
         if rel >= 8.0:
-            return "2D ->"
-        return "2D"
+            return "→"
+        return ""
 
-    def _render_secondary_targets(self, width: int, height: int, color: str, force: bool = False) -> None:
-        """渲染次目标文字（双侧布局，避免占用中心视野）。"""
-        if not self._secondary_text_ids:
-            return
-
-        if not self._secondary_targets:
-            for item_id in self._secondary_text_ids:
-                self.canvas.itemconfig(item_id, state="hidden")
-            self._secondary_signature = None
+    def _render_secondary_targets(
+        self,
+        width: int,
+        height: int,
+        color: str,
+        primary_x: float,
+        primary_y: float,
+        primary_radius: float,
+        force: bool = False,
+    ) -> None:
+        """渲染次目标图形标记（与主目标同屏显示）。"""
+        if not self._secondary_marker_ids:
             return
 
         candidates = sorted(self._secondary_targets, key=lambda t: abs(float(t.get("relative", 0.0))))
-        selected: List[Dict[str, float]] = []
-        left_first = next((t for t in candidates if float(t.get("relative", 0.0)) < 0.0), None)
-        right_first = next((t for t in candidates if float(t.get("relative", 0.0)) >= 0.0), None)
-        if left_first is not None:
-            selected.append(left_first)
-        if right_first is not None and right_first is not left_first and len(selected) < 2:
-            selected.append(right_first)
-        if len(selected) < 2:
-            for item in candidates:
-                if item in selected:
-                    continue
-                selected.append(item)
-                if len(selected) >= 2:
-                    break
+        selected = candidates[:len(self._secondary_marker_ids)]
+        if not selected:
+            for item_id in self._secondary_marker_ids:
+                self.canvas.itemconfig(item_id, state="hidden")
+            for item_id in self._secondary_label_ids:
+                self.canvas.itemconfig(item_id, text="", state="hidden")
+            self._secondary_signature = None
+            return
 
         signature = (
             tuple(
-                (round(float(item.get("relative", 0.0)), 1), round(float(item.get("distance", 0.0)), 1))
+                (
+                    round(float(item.get("relative", 0.0)), 1),
+                    round(float(item.get("distance", 0.0)), 1),
+                    str(item.get("label", "") or ""),
+                )
                 for item in selected
             ),
+            round(self._attitude_pitch_deg, 1),
+            round(self._attitude_roll_deg, 1),
+            round(self._player_altitude_m, 0),
+            int(self._attitude_fallback),
             color,
             width,
             height,
+            round(primary_x, 1),
+            round(primary_y, 1),
+            round(primary_radius, 1),
         )
         if (not force) and signature == self._secondary_signature:
             return
         self._secondary_signature = signature
 
-        left_rows = 0
-        right_rows = 0
-        base_y = max(40.0, float(height) * 0.18)
-
-        for idx, item_id in enumerate(self._secondary_text_ids):
+        secondary_color = self._color_from_brightness(0.62, self._attitude_fallback)
+        for idx, item_id in enumerate(self._secondary_marker_ids):
+            label_id = self._secondary_label_ids[idx] if idx < len(self._secondary_label_ids) else None
             if idx >= len(selected):
-                self.canvas.itemconfig(item_id, text="", state="hidden")
+                self.canvas.itemconfig(item_id, state="hidden")
+                if label_id is not None:
+                    self.canvas.itemconfig(label_id, text="", state="hidden")
                 continue
-
             rel = float(selected[idx].get("relative", 0.0))
             dist = max(0.0, float(selected[idx].get("distance", 0.0)))
-            abs_rel = abs(rel)
+            x, y, _ = self._project_point(width, height, rel, dist)
 
-            if rel < 0.0:
-                row = left_rows
-                left_rows += 1
-                x = float(width) * 0.08
-                y = base_y + (row * 18.0)
-                text = f"< {abs_rel:.0f}°  {dist:.1f}km"
-                anchor = "w"
-            else:
-                row = right_rows
-                right_rows += 1
-                x = float(width) * 0.92
-                y = base_y + (row * 18.0)
-                text = f"{dist:.1f}km  {abs_rel:.0f}° >"
-                anchor = "e"
+            dx = x - float(primary_x)
+            dy = y - float(primary_y)
+            distance_to_primary = math.hypot(dx, dy)
+            min_gap = max(22.0, float(primary_radius) * 2.1)
+            if distance_to_primary < min_gap:
+                if distance_to_primary < 1e-3:
+                    dx, dy, distance_to_primary = 1.0, 0.0, 1.0
+                push = (min_gap - distance_to_primary) + 9.0
+                x += (dx / distance_to_primary) * push
+                y += (dy / distance_to_primary) * push
 
-            self.canvas.coords(item_id, x, y)
-            self.canvas.itemconfig(item_id, text=text, fill=color, anchor=anchor, state="normal")
+            x = self._clamp(x, width * 0.05, width * 0.95)
+            y = self._clamp(y, height * 0.08, height * 0.92)
+            dist_t = self._normalize_distance(dist)
+            marker_r = self._BASE_RADIUS_PX * float(HUDConfig.scale) * self._lerp(1.0, 0.58, dist_t) * 0.52
+            marker_r = max(7.0, marker_r)
+            self.canvas.coords(item_id, x - marker_r, y - marker_r, x + marker_r, y + marker_r)
+            self.canvas.itemconfig(item_id, outline=secondary_color, width=2, state="normal")
+
+            if label_id is not None:
+                label = str(selected[idx].get("label", "") or "").strip()
+                if label:
+                    text = f"{label} {dist:.1f}km"
+                else:
+                    text = f"{dist:.1f}km"
+                self.canvas.coords(label_id, x, y - marker_r - 10.0)
+                self.canvas.itemconfig(label_id, text=text, fill=secondary_color, state="normal")
 
     def _render_compass(self, width: int, height: int, color: str, force: bool = False) -> None:
-        """渲染顶部简化罗盘条（与主靶子同步更新）。"""
-        if not bool(getattr(HUDConfig, "compass_enabled", True)):
-            self._set_compass_visible(False)
-            return
-
-        bar_w = max(180.0, float(width) * self._COMPASS_WIDTH_RATIO)
-        bar_h = self._COMPASS_BAR_HEIGHT_PX
-        half_w = bar_w * 0.5
-        cx = float(width) * 0.5
-        top = max(10.0, float(height) * self._COMPASS_TOP_RATIO)
-        left = cx - half_w
-        right = cx + half_w
-        bottom = top + bar_h
-        axis_y = top + (bar_h * 0.5)
-
-        clamped_rel = self._clamp(
-            self._target_relative_deg,
-            -self._COMPASS_VISIBLE_HALF_DEG,
-            self._COMPASS_VISIBLE_HALF_DEG,
-        )
-        target_x = cx + (clamped_rel / self._COMPASS_VISIBLE_HALF_DEG) * half_w
-
-        signature = (
-            round(cx, 1),
-            round(top, 1),
-            round(bar_w, 1),
-            round(self._normalize_heading_deg(self._heading_deg), 1),
-            round(clamped_rel, 1),
-            color,
-            int(self._attitude_fallback),
-        )
-        if (not force) and signature == self._compass_signature:
-            return
-        self._compass_signature = signature
-
-        self._set_compass_visible(True)
-
-        bg_fill = "#2a1f12" if self._attitude_fallback else "#11261b"
-        bg_outline = "#6f5738" if self._attitude_fallback else "#2f5742"
-        self.canvas.coords(self._compass_bg_id, left, top, right, bottom)
-        self.canvas.itemconfig(self._compass_bg_id, fill=bg_fill, outline=bg_outline)
-
-        self.canvas.coords(self._compass_axis_id, left + 8.0, axis_y, right - 8.0, axis_y)
-        self.canvas.itemconfig(self._compass_axis_id, fill=color)
-
-        self.canvas.coords(self._compass_center_id, cx, top + 2.0, cx, bottom - 2.0)
-
-        for idx, offset_deg in enumerate(self._compass_offsets):
-            x = cx + (offset_deg / self._COMPASS_VISIBLE_HALF_DEG) * half_w
-            major = int(abs(offset_deg)) % int(self._COMPASS_MAJOR_STEP_DEG) == 0
-            tick_half = 7.0 if major else 4.0
-
-            tick_id = self._compass_tick_ids[idx]
-            self.canvas.coords(tick_id, x, axis_y - tick_half, x, axis_y + tick_half)
-            self.canvas.itemconfig(tick_id, fill=color, width=2 if major else 1)
-
-            label_id = self._compass_label_ids[idx]
-            if major:
-                tick_heading = self._normalize_heading_deg(self._heading_deg + offset_deg)
-                tick_text = self._compass_label(tick_heading)
-                self.canvas.coords(label_id, x, bottom + 8.0)
-                self.canvas.itemconfig(label_id, text=tick_text, fill=color, state="normal")
-            else:
-                self.canvas.itemconfig(label_id, text="", state="hidden")
-
-        hdg_value = int(round(self._normalize_heading_deg(self._heading_deg))) % 360
-        self.canvas.coords(self._compass_heading_id, cx, top - 8.0)
-        self.canvas.itemconfig(self._compass_heading_id, text=f"HDG {hdg_value:03d}", fill=color)
-
-        marker_top = bottom + 2.0
-        marker_w = self._COMPASS_TARGET_MARKER_W
-        marker_h = self._COMPASS_TARGET_MARKER_H
-        self.canvas.coords(
-            self._compass_target_id,
-            target_x, marker_top + marker_h,
-            target_x - marker_w, marker_top,
-            target_x + marker_w, marker_top,
-        )
-        self.canvas.itemconfig(self._compass_target_id, fill=color)
+        """HUD 层不再渲染导航条，避免与主导航系统重复。"""
+        self._set_compass_visible(False)
 
     def _render_reticle(self, force: bool = False) -> None:
         if not self._visible:
@@ -772,7 +812,7 @@ class HUDOverlay:
         line_len = radius * 2.3
 
         color = self._color_from_brightness(brightness, self._attitude_fallback)
-        mode_text = self._direction_prompt(rel) if self._attitude_fallback else "2.5D"
+        mode_text = self._direction_prompt(rel) if self._attitude_fallback else ""
         dist_text = f"{self._target_distance_km:.1f}km"
         stroke = 2 if self._attitude_fallback else 3
 
@@ -786,7 +826,15 @@ class HUDOverlay:
             stroke,
         )
         self._render_compass(width, height, color=color, force=force)
-        self._render_secondary_targets(width, height, color=color, force=force)
+        self._render_secondary_targets(
+            width,
+            height,
+            color=color,
+            primary_x=cx,
+            primary_y=cy,
+            primary_radius=radius,
+            force=force,
+        )
         if (not force) and signature == self._last_signature:
             return
         self._last_signature = signature
@@ -798,7 +846,7 @@ class HUDOverlay:
         self.canvas.coords(self._reticle_mode_id, cx, cy + radius + 16)
         self.canvas.coords(self._reticle_dist_id, cx, cy + radius + 32)
 
-        self.canvas.itemconfig(self._reticle_mode_id, text=mode_text)
+        self.canvas.itemconfig(self._reticle_mode_id, text=mode_text, state="normal" if mode_text else "hidden")
         self.canvas.itemconfig(self._reticle_dist_id, text=dist_text)
 
         self.canvas.itemconfig(self._reticle_ring_id, outline=color, width=stroke)

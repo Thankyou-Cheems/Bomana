@@ -85,3 +85,41 @@
   Symptom: `/indicators` and `/state` requests timed out; collected sample count stayed 0
   Cause: no active War Thunder battle session exposing local 8111 API
   Fix/Workaround: run sampler only while in battle with 8111 enabled; keep `duration>=120s` and collect per-aircraft runs before closing baseline task
+
+- Date: 2026-02-12
+  Context: running `tools/build_portable.py` builds concurrently in separate terminals
+  Symptom: sporadic `RuntimeError: Failed to find __version__ in bomana/config.py` and occasional `config.py` dirty/needs-update state after build
+  Cause: script patches `bomana/config.py` for variant app packaging; parallel runs race on read/write timing
+  Fix/Workaround: do not run build variants in parallel; script now restores `config.py` only when patched and preserves original timestamps to avoid launcher-only false dirty status
+
+- Date: 2026-02-12
+  Context: HUD overlay transparency refactor (trying to remove tinted background layer)
+  Symptom: HUD window became opaque black on some systems instead of transparent overlay
+  Cause: relying on Tk `-transparentcolor` plus Win32 `LWA_ALPHA` only is not stable across environments; when color-key transparency is not actually applied, canvas background is rendered as a full black layer
+  Fix/Workaround: pass Win32 color key explicitly via `SetLayeredWindowAttributes(..., LWA_COLORKEY | LWA_ALPHA)` and keep HUD background/canvas on the same key color
+
+- Date: 2026-02-12
+  Context: HUD warzone target reticle position deviates significantly from actual game position
+  Symptom: target marker appeared too close to screen center, especially at larger angles (20-45°), with up to 51% position error at 45°
+  Cause: `_project_point()` used linear mapping `rel / 90 * width * 0.42` instead of perspective `tan(rel) / tan(fov/2)` projection — game uses perspective rendering where screen position ∝ tan(angle), not angle
+  Fix/Workaround: replaced horizontal projection with `tan(rel_rad) / tan(fov_half_rad) * (width * 0.5)`, added configurable FOV (default 73° horizontal, 55° vertical) to `HUDConfig`, and harmonised vertical `pixels_per_deg` calculation
+
+- Date: 2026-02-12
+  Context: after horizontal tan() fix, HUD target goes above horizon during dives and aggressive maneuvers
+  Symptom: target marker flew into the sky during dives; roll caused misaligned offsets
+  Cause: pitch_offset and geometry_offset (lookdown) were separate additive terms with different scales (ppd vs ppd×0.78); ppd increase from previous fix amplified the imbalance; roll was Y-only approximation
+  Fix/Workaround: merged pitch+lookdown into single `vertical_angle = lookdown + pitch`, applied tan() projection to vertical axis, replaced roll with full 2D rotation matrix `(cos/sin)`, removed `_ROLL_COUPLING_RATIO` and `_LOOKDOWN_COUPLING_RATIO`
+
+- Date: 2026-02-12
+  Context: HUD projection after vertical-axis merge still had large far-range error during steep dives
+  Symptom: targets were acceptable around 3-4km, but far targets drifted heavily in vertical position when nose-down
+  Cause: direct `vertical_angle = lookdown + pitch` over-weighted body pitch for far targets (small lookdown + large negative pitch), amplifying vertical error without camera-input telemetry
+  Fix/Workaround: introduced distance-adaptive pitch gain in HUD projection (full pitch near 4km, linearly reduced by 14km, plus extra damp in far dives) and use `vertical_angle = lookdown + effective_pitch`
+
+- Date: 2026-02-12
+  Context: HUD/nav still showed large far-range mismatch after pitch-gain tuning
+  Symptom: near-range looked acceptable, but far targets and dive scenarios still drifted; distance/bearing felt map-dependent
+  Cause: navigation geometry used normalized map coordinates with fixed `DISTANCE_SCALE=100` and ignored `map_info` axis scales (`map_min/map_max`), introducing distance and bearing distortion on non-square/variable-size maps
+  Fix/Workaround: switched nav geometry to map_info-based meter scaling for bearing/distance/ground-speed (while preserving existing `distance * DISTANCE_SCALE` UI compatibility)
+
+

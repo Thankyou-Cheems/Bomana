@@ -82,7 +82,6 @@ class Zone:
     index: int                 # 战区编号（1开始）
     x: float                   # X坐标（归一化）
     y: float                   # Y坐标（归一化）
-    grid: str = "?"            # 格子坐标（如"C5"）
     color: str = ""            # 颜色标识（API返回）
     distance: float = 0.0      # 距离玩家的距离
     bearing: float = 0.0       # 绝对方位角
@@ -100,7 +99,6 @@ class Airfield:
     index: int                 # 机场编号
     x: float                   # X坐标（归一化）
     y: float                   # Y坐标（归一化）
-    grid: str = "?"            # 格子坐标
     color: str = ""            # 颜色标识
     is_friendly: bool = False  # 是否为友方机场
     distance: float = 0.0      # 距离
@@ -129,7 +127,7 @@ class MapObjData:
 class MapInfo:
     """地图元数据（来自/map_info.json）
     
-    提供格子坐标系统的转换参数，缓存30秒避免频繁请求。
+    提供地图尺度参数（如 map_min/map_max），缓存30秒避免频繁请求。
     """
     valid: bool = False
     grid_size: List[float] = field(default_factory=lambda: [52719.0, 55385.0])
@@ -449,7 +447,6 @@ class ZoneDisplayInfo:
     不可变数据类，用于快照传递给UI。
     """
     id: str
-    grid: str
     distance_km: float
     direction: str
     relative: float
@@ -464,7 +461,6 @@ class AirfieldDisplayInfo:
     """机场显示信息（UI层数据）"""
     id: str
     side: str              # "friendly" 或 "enemy"
-    grid: str
     distance_km: float
     direction: str
     relative: float

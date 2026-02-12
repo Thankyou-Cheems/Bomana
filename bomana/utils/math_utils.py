@@ -2,7 +2,7 @@
 """Math/navigation helpers."""
 
 import math
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple
 
 from bomana.config import ZoneConfig, Theme
 
@@ -519,58 +519,3 @@ def generate_cdi_indicator_extended(relative_angle: float, distance_km: float) -
         'pointer_percent': pointer_percent,
     }
 
-
-def normalized_to_grid(x: float, y: float, map_info: Optional[Dict]) -> str:
-    """将归一化坐标转换为格子坐标（如"C5"）
-    
-    警告: 此函数的计算结果可能不准确，取决于地图参数的正确性。
-    目前仅用于数据结构存储，不再在UI中显示。
-    考虑在未来版本中移除。
-    
-    战雷地图使用字母+数字表示格子，需要map_info提供转换参数。
-    
-    Args:
-        x, y: 归一化坐标 (0-1)
-        map_info: 地图元数据字典
-    
-    Returns:
-        格子坐标字符串，如"C5"，失败返回"?"
-    """
-    if not map_info or not map_info.get('valid'):
-        return "?"
-    
-    try:
-        # 提取地图参数
-        map_min = map_info.get('map_min', [-65536.0, -65536.0])
-        map_max = map_info.get('map_max', [65536.0, 65536.0])
-        grid_zero = map_info.get('grid_zero', [0.0, 0.0])
-        grid_steps = map_info.get('grid_steps', [5500.0, 5500.0])
-        grid_size = map_info.get('grid_size', [52719.0, 55385.0])
-        
-        # 归一化坐标 → 世界坐标（米）
-        world_x = map_min[0] + x * (map_max[0] - map_min[0])
-        world_y = map_min[1] + y * (map_max[1] - map_min[1])
-        
-        # 世界坐标 → 格子索引
-        grid_col = int((world_x - grid_zero[0]) / grid_steps[0])
-        grid_row = int((world_y - grid_zero[1]) / grid_steps[1])
-        
-        # 计算总行数
-        num_rows = max(1, int(grid_size[1] / grid_steps[1]))
-        
-        # 列号（从1开始）
-        col_num = grid_col + 1
-        
-        # 行字母索引（从底部向上）
-        row_letter_idx = num_rows - 1 - grid_row
-        
-        # 边界保护
-        col_num = max(1, col_num)
-        row_letter_idx = max(0, row_letter_idx)
-        
-        # 转换为字母
-        row_letter = chr(ord('A') + row_letter_idx)
-        
-        return f"{row_letter}{col_num}"
-    except (KeyError, TypeError, ValueError, ZeroDivisionError):
-        return "?"

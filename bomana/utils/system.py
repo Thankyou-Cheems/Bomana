@@ -77,13 +77,14 @@ class Win32:
         return cls.user32.GetSystemMetrics(0), cls.user32.GetSystemMetrics(1)
 
     @classmethod
-    def setup_window(cls, hwnd: int, click_through: bool, alpha: int = 210):
+    def setup_window(cls, hwnd: int, click_through: bool, alpha: int = 210, color_key: Optional[int] = None):
         """设置窗口样式（透明、置顶、穿透）
         
         Args:
             hwnd: 窗口句柄
             click_through: 是否允许点击穿透
             alpha: 不透明度 (0-255)
+            color_key: 颜色键透明（COLORREF, 0x00bbggrr）。传入后背景色匹配像素将被完全透明。
         
         v6.6.3: 添加 WS_EX_NOACTIVATE 标志，解决窗口被激活后点击穿透失效的问题
         """
@@ -94,7 +95,8 @@ class Win32:
         WS_EX_NOACTIVATE = 0x08000000    # 防止窗口被激活（关键：防止点击后窗口获得焦点）
         WS_EX_TOPMOST = 0x00000008       # 窗口置顶
         WS_EX_TOOLWINDOW = 0x00000080    # 工具窗口（不显示在任务栏）
-        LWA_ALPHA = 0x2                  # 透明度标志
+        LWA_COLORKEY = 0x1              # 颜色键透明标志
+        LWA_ALPHA = 0x2                 # 透明度标志
 
         try:
             # 获取当前样式
@@ -112,9 +114,15 @@ class Win32:
             else:
                 style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
 
-            # 应用样式和透明度
+            # 应用样式和透明度/颜色键
             cls.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-            cls.user32.SetLayeredWindowAttributes(hwnd, 0, int(alpha), LWA_ALPHA)
+            target_alpha = max(0, min(255, int(alpha)))
+            flags = LWA_ALPHA
+            key = 0
+            if color_key is not None:
+                flags |= LWA_COLORKEY
+                key = int(color_key) & 0x00FFFFFF
+            cls.user32.SetLayeredWindowAttributes(hwnd, key, target_alpha, flags)
         except (OSError, AttributeError):
             pass
 

@@ -5,6 +5,7 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -294,7 +295,9 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     config_path = root / "bomana" / "config.py"
+    config_stat = config_path.stat()
     original = config_path.read_text(encoding="utf-8")
+    config_patched = False
 
     app_zip: Optional[Path] = None
     manifest: Optional[Path] = None
@@ -305,7 +308,9 @@ def main() -> int:
 
         if args.target in ("all", "app"):
             patched = replace_switches(original, VARIANT_SWITCHES[args.variant])
-            config_path.write_text(patched, encoding="utf-8")
+            if patched != original:
+                config_path.write_text(patched, encoding="utf-8")
+                config_patched = True
             version = args.version.strip() or read_version(patched)
             app_zip = build_app_zip(root, args.variant, version, out_dir)
             app_sha = sha256_file(app_zip)
@@ -327,7 +332,9 @@ def main() -> int:
         safe_print(f"  - checksum:    {checksum}")
         return 0
     finally:
-        config_path.write_text(original, encoding="utf-8")
+        if config_patched:
+            config_path.write_text(original, encoding="utf-8")
+            os.utime(config_path, ns=(config_stat.st_atime_ns, config_stat.st_mtime_ns))
 
 
 if __name__ == "__main__":

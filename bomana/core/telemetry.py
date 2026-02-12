@@ -9,7 +9,6 @@ import requests
 
 from bomana.config import NetworkConfig
 from bomana.core.state import TelemetryData, MapInfo, MapObjData, Zone, Airfield
-from bomana.utils.math_utils import normalized_to_grid
 
 # ============================================================================
 # 网络请求层
@@ -176,7 +175,7 @@ class TelemetryFetcher:
 class MapInfoFetcher:
     """地图元数据获取器
     
-    获取格子坐标系统的转换参数，结果会缓存30秒。
+    获取地图尺度参数，结果会缓存30秒。
     """
     def __init__(self, http: HttpJson):
         self.http = http
@@ -218,7 +217,7 @@ class MapObjectsFetcher:
         
         Args:
             budget: 时间预算
-            map_info: 地图元数据（用于坐标转换）
+            map_info: 地图元数据（为兼容保留，当前不用于格子转换）
         
         Returns:
             MapObjData对象
@@ -233,18 +232,6 @@ class MapObjectsFetcher:
         # 提取对象列表
         objs = j if isinstance(j, list) else j.get("objects", []) if isinstance(j, dict) else []
         out.obj_count = len(objs)
-        
-        # 准备map_info字典（用于坐标转换）
-        map_info_dict = None
-        if map_info and map_info.valid:
-            map_info_dict = {
-                'valid': True,
-                'grid_size': map_info.grid_size,
-                'grid_steps': map_info.grid_steps,
-                'grid_zero': map_info.grid_zero,
-                'map_min': map_info.map_min,
-                'map_max': map_info.map_max
-            }
         
         zone_index = 1
         airfield_index = 1
@@ -278,13 +265,8 @@ class MapObjectsFetcher:
                 cx = (float(sx) + float(ex)) / 2.0
                 cy = (float(sy) + float(ey)) / 2.0
 
-                # 坐标转换（保持归一化坐标系统）
-                if map_info_dict and map_info_dict.get('valid'):
-                    wx, wy = cx, cy
-                    grid = normalized_to_grid(cx, cy, map_info_dict)
-                else:
-                    wx, wy = 0.0, 0.0
-                    grid = "?"
+                # 仅保留归一化坐标。格子坐标换算已停用。
+                wx, wy = cx, cy
 
                 # 判断归属：蓝色通道高 = 友方
                 rgb = o.get("color[]", [0, 0, 0])
@@ -297,7 +279,6 @@ class MapObjectsFetcher:
                     id=f"airfield_{airfield_index}",
                     index=airfield_index,
                     x=wx, y=wy,
-                    grid=grid,
                     color=o.get("color", ""),
                     is_friendly=is_friendly
                 ))
@@ -311,7 +292,6 @@ class MapObjectsFetcher:
                     id=f"zone_{zone_x:.4f}_{zone_y:.4f}",
                     index=zone_index,
                     x=zone_x, y=zone_y,
-                    grid=normalized_to_grid(zone_x, zone_y, map_info_dict),
                     color=o.get("color", "")
                 ))
                 zone_index += 1

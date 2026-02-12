@@ -259,12 +259,15 @@ class HUDConfig:
     enabled = True
 
     # 基础显示参数
-    alpha = 200                  # 叠加层透明度（0-255）
+    alpha = 255                  # 叠加层透明度（0-255）
     scale = 1.0                  # 全局缩放倍率
     smoothing = 0.35             # 位移平滑系数（0-1）
     follow_main_window_monitor = True  # True=跟随主窗口显示器，False=跟随鼠标所在显示器
-    compass_enabled = True       # 是否显示顶部简化罗盘条
     color_style = "auto"         # 配色风格：auto/green/amber/cyan/white
+
+    # 透视投影FOV参数（v6.8.1新增：匹配游戏画面）
+    horizontal_fov_deg = 73.0    # 水平FOV（度），战雷16:9默认约73°
+    vertical_fov_deg = 55.0      # 垂直FOV（度），战雷16:9默认约55°
 
     @classmethod
     def to_dict(cls) -> dict:
@@ -274,8 +277,9 @@ class HUDConfig:
             "scale": float(cls.scale),
             "smoothing": float(cls.smoothing),
             "follow_main_window_monitor": bool(cls.follow_main_window_monitor),
-            "compass_enabled": bool(cls.compass_enabled),
             "color_style": str(cls.color_style),
+            "horizontal_fov_deg": float(cls.horizontal_fov_deg),
+            "vertical_fov_deg": float(cls.vertical_fov_deg),
         }
 
     @classmethod
@@ -291,11 +295,13 @@ class HUDConfig:
             cls.smoothing = max(0.0, min(1.0, float(data["smoothing"])))
         if isinstance(data.get("follow_main_window_monitor"), bool):
             cls.follow_main_window_monitor = data["follow_main_window_monitor"]
-        if isinstance(data.get("compass_enabled"), bool):
-            cls.compass_enabled = data["compass_enabled"]
         style = str(data.get("color_style", cls.color_style) or "").strip().lower()
         if style in {"auto", "green", "amber", "cyan", "white"}:
             cls.color_style = style
+        if isinstance(data.get("horizontal_fov_deg"), (int, float)):
+            cls.horizontal_fov_deg = max(40.0, min(120.0, float(data["horizontal_fov_deg"])))
+        if isinstance(data.get("vertical_fov_deg"), (int, float)):
+            cls.vertical_fov_deg = max(30.0, min(90.0, float(data["vertical_fov_deg"])))
 
 
 class HotkeyConfig:

@@ -1283,6 +1283,7 @@ class App:
 
             target_zone = None
             secondary_targets = []
+            secondary_limit = max(2, int(getattr(ZoneConfig, "MAX_DISPLAY_ZONES", 6)))
             if snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING):
                 target_zone = next((z for z in snap.zones if z.is_target), None)
                 if target_zone is None and snap.zones:
@@ -1295,9 +1296,10 @@ class App:
                             {
                                 "relative": float(zone.relative),
                                 "distance": float(zone.distance_km),
+                                "label": "",
                             }
                         )
-                        if len(secondary_targets) >= 2:
+                        if len(secondary_targets) >= secondary_limit:
                             break
 
             if target_zone:
@@ -1309,6 +1311,7 @@ class App:
                     "roll": float(getattr(snap, "attitude_roll_deg", 0.0) or 0.0),
                     "fallback": bool(getattr(snap, "hud_attitude_fallback", True)),
                     "heading": float(getattr(snap, "player_heading", 0.0) or 0.0),
+                    "altitude": float(getattr(snap, "altitude_m", 0.0) or 0.0),
                     "secondary_targets": list(secondary_targets),
                 }
                 overlay.clear_standby()
@@ -1320,6 +1323,7 @@ class App:
                     attitude_roll_deg=self._hud_last_target["roll"],
                     attitude_fallback=self._hud_last_target["fallback"],
                     heading_deg=self._hud_last_target["heading"],
+                    own_altitude_m=self._hud_last_target["altitude"],
                     secondary_targets=self._hud_last_target["secondary_targets"],
                 )
             else:
@@ -1331,16 +1335,25 @@ class App:
                 if can_hold:
                     cached = self._hud_last_target
                     heading = float(getattr(snap, "player_heading", cached.get("heading", 0.0)) or 0.0)
+                    altitude = float(getattr(snap, "altitude_m", cached.get("altitude", 0.0)) or 0.0)
+                    pitch = float(getattr(snap, "attitude_pitch_deg", cached.get("pitch", 0.0)) or 0.0)
+                    roll = float(getattr(snap, "attitude_roll_deg", cached.get("roll", 0.0)) or 0.0)
+                    fallback = bool(getattr(snap, "hud_attitude_fallback", cached.get("fallback", True)))
                     cached["heading"] = heading
+                    cached["altitude"] = altitude
+                    cached["pitch"] = pitch
+                    cached["roll"] = roll
+                    cached["fallback"] = fallback
                     overlay.clear_standby()
                     overlay.update_target(
                         has_target=True,
                         relative_deg=float(cached["relative"]),
                         distance_km=float(cached["distance"]),
-                        attitude_pitch_deg=float(cached["pitch"]),
-                        attitude_roll_deg=float(cached["roll"]),
-                        attitude_fallback=bool(cached["fallback"]),
+                        attitude_pitch_deg=pitch,
+                        attitude_roll_deg=roll,
+                        attitude_fallback=fallback,
                         heading_deg=heading,
+                        own_altitude_m=altitude,
                         secondary_targets=list(cached.get("secondary_targets", [])),
                     )
                 else:
@@ -2156,10 +2169,14 @@ class App:
         s = self.scale
         font_item = self._get_font('zone_item')
         pad_x = int(8*s)
+
+        raw_heading = float(getattr(snap, "player_heading", 0.0) or 0.0)
+        heading_deg = raw_heading % 360.0
+        heading_available = (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and (not snap.api_down)
         
         # 更新航向显示
-        if snap.player_heading > 0:
-            self.heading_lbl.config(text=f"HDG: {int(snap.player_heading):03d}°")
+        if heading_available:
+            self.heading_lbl.config(text=f"HDG: {int(heading_deg):03d}°")
         else:
             self.heading_lbl.config(text="HDG: ---")
         
@@ -2173,7 +2190,7 @@ class App:
             self.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
             
             # v6.2: 更新统一航向带（战区+机场+被摧毁）
-            if self.heading_tape is not None and snap.player_heading > 0:
+            if self.heading_tape is not None and heading_available:
                 targets = []
                 active_targets_info = []  # 用于生成文字信息
                 
@@ -2257,7 +2274,7 @@ class App:
                 
                 # 更新航向带
                 primary_dist = target_zone.distance_km if target_zone else 10.0
-                self.heading_tape.update_tape_multi(snap.player_heading, targets, primary_dist)
+                self.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
                 
                 # 更新目标信息文字（所有前方目标）
                 self._update_tape_info_labels(active_targets_info, target_zone)

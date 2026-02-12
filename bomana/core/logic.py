@@ -338,6 +338,55 @@ class GameLogic:
         """计算两角度差值（映射到 [-180, 180] 后取绝对值）。"""
         return abs(normalize_angle(float(current) - float(previous)))
 
+    @staticmethod
+    def _map_axis_scale_m(map_info: Optional[MapInfo]) -> Optional[Tuple[float, float]]:
+        """从 map_info 提取归一化坐标在 X/Y 轴对应的米制尺度。"""
+        if map_info is None or not getattr(map_info, "valid", False):
+            return None
+        try:
+            min_x, min_y = map_info.map_min
+            max_x, max_y = map_info.map_max
+            scale_x = abs(float(max_x) - float(min_x))
+            scale_y = abs(float(max_y) - float(min_y))
+            if scale_x <= 1e-6 or scale_y <= 1e-6:
+                return None
+            return scale_x, scale_y
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    @staticmethod
+    def _distance_norm_from_delta(dx: float, dy: float, map_axis_scale_m: Optional[Tuple[float, float]]) -> float:
+        """计算兼容旧语义的 distance（实际km / DISTANCE_SCALE）。"""
+        dx = float(dx)
+        dy = float(dy)
+        if map_axis_scale_m is not None:
+            moved_m = math.hypot(dx * map_axis_scale_m[0], dy * map_axis_scale_m[1])
+            moved_km = moved_m / 1000.0
+            return moved_km / ZoneConfig.DISTANCE_SCALE
+        return math.hypot(dx, dy)
+
+    @staticmethod
+    def _bearing_distance_norm(
+        px: float,
+        py: float,
+        tx: float,
+        ty: float,
+        map_axis_scale_m: Optional[Tuple[float, float]],
+    ) -> Tuple[float, float]:
+        """计算目标方位角与兼容距离值。"""
+        dx = float(tx) - float(px)
+        dy = float(ty) - float(py)
+        if map_axis_scale_m is not None:
+            dx_m = dx * map_axis_scale_m[0]
+            dy_m = dy * map_axis_scale_m[1]
+            bearing = (math.degrees(math.atan2(dx_m, -dy_m)) + 360.0) % 360.0
+            distance_norm = GameLogic._distance_norm_from_delta(dx, dy, map_axis_scale_m)
+            return bearing, distance_norm
+
+        bearing = calculate_bearing(px, py, tx, ty)
+        distance_norm = calculate_distance(px, py, tx, ty)
+        return bearing, distance_norm
+
     def _update_attitude_confidence_locked(self, tel: TelemetryData, now: float) -> None:
         """更新姿态可信度（须在锁内调用）。"""
         att = self.state.attitude
@@ -433,11 +482,22 @@ class GameLogic:
             return
         
         px, py = mp.player_pos
+        map_axis_scale_m = self._map_axis_scale_m(self.state.map_info)
         
-        # 计算航向：优先使用速度向量，后备使用罗盘
-        heading = calculate_heading_from_vector(mp.player_dx, mp.player_dy)
+        # 计算航向：
+        # HUD/导航优先使用机头罗盘（更贴近驾驶视角），
+        # 罗盘不可用时再回退到地速向量航向。
+        heading = None
+        if tel.ind_ok and math.isfinite(float(tel.compass)):
+            heading = float(tel.compass) % 360.0
         if heading is None:
-            heading = tel.compass
+            heading = calculate_heading_from_vector(mp.player_dx, mp.player_dy)
+        if heading is None:
+            fallback_compass = float(tel.compass)
+            if math.isfinite(fallback_compass):
+                heading = fallback_compass % 360.0
+        if heading is None:
+            heading = 0.0
         nav.player_heading = heading
         
         # === 地速(SOG)计算 ===
@@ -449,7 +509,7 @@ class GameLogic:
             if dt >= 0.4:
                 dx = px - nav.last_pos[0]
                 dy = py - nav.last_pos[1]
-                dist_moved = math.sqrt(dx*dx + dy*dy)
+                dist_moved = self._distance_norm_from_delta(dx, dy, map_axis_scale_m)
                 
                 if dist_moved > 0:
                     current_speed = dist_moved / dt
@@ -497,12 +557,11 @@ class GameLogic:
         # === 计算所有战区的导航信息 ===
         zones_with_nav = []
         for zone in mp.zones:
-            bearing = calculate_bearing(px, py, zone.x, zone.y)
+            bearing, distance = self._bearing_distance_norm(px, py, zone.x, zone.y, map_axis_scale_m)
             relative = calculate_relative_bearing(heading, bearing)
-            distance = calculate_distance(px, py, zone.x, zone.y)
             zones_with_nav.append(Zone(
                 id=zone.id, index=zone.index, x=zone.x, y=zone.y,
-                grid=zone.grid, color=zone.color, distance=distance,
+                color=zone.color, distance=distance,
                 bearing=bearing, relative=relative, is_target=False
             ))
         
@@ -595,7 +654,7 @@ class GameLogic:
                 if zone.id == target.id:
                     zones_with_nav[i] = Zone(
                         id=zone.id, index=zone.index, x=zone.x, y=zone.y,
-                        grid=zone.grid, color=zone.color, distance=zone.distance,
+                        color=zone.color, distance=zone.distance,
                         bearing=zone.bearing, relative=zone.relative, is_target=True
                     )
                     target = zones_with_nav[i]
@@ -777,6 +836,7 @@ class GameLogic:
             nav = s.zone_nav
             zone_display_list = []
             gs = nav.ground_speed
+            map_axis_scale_m = self._map_axis_scale_m(s.map_info)
 
             for zone in nav.zones[:ZoneConfig.MAX_DISPLAY_ZONES]:
                 # ETE计算（仅目标战区）
@@ -798,7 +858,7 @@ class GameLogic:
 
                 # 所有战区都添加到显示列表（CDI仅目标战区有值）
                 zone_display_list.append(ZoneDisplayInfo(
-                    id=zone.id, grid=zone.grid, 
+                    id=zone.id,
                     distance_km=zone.distance * ZoneConfig.DISTANCE_SCALE,
                     direction=get_direction_text(zone.relative), 
                     relative=zone.relative, is_target=zone.is_target,
@@ -820,16 +880,14 @@ class GameLogic:
                 enemy_infos: List[Tuple[float, AirfieldDisplayInfo]] = []
 
                 for af in mp.airfields:
-                    if af.x == 0.0 and af.y == 0.0 and af.grid == "?":
+                    if (not math.isfinite(float(af.x))) or (not math.isfinite(float(af.y))):
                         continue
 
-                    bearing = calculate_bearing(px, py, af.x, af.y)
+                    bearing, distance = self._bearing_distance_norm(px, py, af.x, af.y, map_axis_scale_m)
                     relative = calculate_relative_bearing(heading, bearing)
-                    distance = calculate_distance(px, py, af.x, af.y)
                     info = AirfieldDisplayInfo(
                         id=af.id,
                         side="friendly" if af.is_friendly else "enemy",
-                        grid=af.grid,
                         distance_km=distance * ZoneConfig.DISTANCE_SCALE,
                         direction=get_direction_text(relative),
                         relative=relative,
@@ -855,7 +913,7 @@ class GameLogic:
                     # CDI指示器（友方机场始终显示）
                     cdi_str, cdi_clr = generate_cdi_indicator(info.relative, info.distance_km)
                     friendly_airfield_display = AirfieldDisplayInfo(
-                        id=info.id, side=info.side, grid=info.grid,
+                        id=info.id, side=info.side,
                         distance_km=info.distance_km, direction=info.direction, 
                         relative=info.relative,
                         is_target=True, ete_str=ete_text,
@@ -891,7 +949,7 @@ class GameLogic:
                                 ete_text = f"{mm:02d}:{ss:02d}"
                             cdi_str, cdi_clr = generate_cdi_indicator(info.relative, info.distance_km)
                         enemy_airfields_display.append(AirfieldDisplayInfo(
-                            id=info.id, side=info.side, grid=info.grid,
+                            id=info.id, side=info.side,
                             distance_km=info.distance_km, direction=info.direction, 
                             relative=info.relative,
                             is_target=is_target, ete_str=ete_text,
@@ -915,14 +973,13 @@ class GameLogic:
                     px, py = mp.player_pos
                     for dz in nav.destroyed_zones:
                         try:
+                            bearing, dist_norm = self._bearing_distance_norm(px, py, dz.x, dz.y, map_axis_scale_m)
+                            dist_km = dist_norm * ZoneConfig.DISTANCE_SCALE
                             if nav.player_heading is not None:
-                                bearing = calculate_bearing(px, py, dz.x, dz.y)
                                 rel = calculate_relative_bearing(nav.player_heading, bearing)
                                 dir_text = get_direction_text(rel)
-                                dist_km = calculate_distance(px, py, dz.x, dz.y) * ZoneConfig.DISTANCE_SCALE
                                 items.append(f"#{dz.index} {dir_text} {dist_km:.1f}km")
                             else:
-                                dist_km = calculate_distance(px, py, dz.x, dz.y) * ZoneConfig.DISTANCE_SCALE
                                 items.append(f"#{dz.index} {dist_km:.1f}km")
                         except Exception:
                             items.append(f"#{dz.index}")

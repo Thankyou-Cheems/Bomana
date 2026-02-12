@@ -433,20 +433,25 @@ class NavigationWindow:
         """
         if not self._visible:
             return
-        
+
+        raw_heading = float(getattr(snap, "player_heading", 0.0) or 0.0)
+        heading_deg = raw_heading % 360.0
+        phase_name = str(getattr(getattr(snap, "phase", None), "name", "") or "")
+        heading_available = (phase_name in {"ALIVE", "LOSS_PENDING"}) and (not bool(getattr(snap, "api_down", False)))
+
         # 更新航向
-        if snap.player_heading > 0:
-            self.heading_lbl.config(text=f"{int(snap.player_heading):03d}°")
+        if heading_available:
+            self.heading_lbl.config(text=f"{int(heading_deg):03d}°")
         else:
             self.heading_lbl.config(text="---°")
         
         # 更新航向带
-        if snap.player_heading > 0:
+        if heading_available:
             if targets:
                 primary_dist = primary_zone.distance_km if primary_zone else 10.0
-                self.heading_tape.update_tape_multi(snap.player_heading, targets, primary_dist)
+                self.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
             else:
-                self.heading_tape.update_tape_multi(snap.player_heading, [], 10.0)
+                self.heading_tape.update_tape_multi(heading_deg, [], 10.0)
         else:
             self.heading_tape.clear()
         

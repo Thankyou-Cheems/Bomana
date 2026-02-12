@@ -330,17 +330,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
         row += 1
 
-        tk.Label(frame, text="HUD信息层级:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
-        self.hud_compass_enabled_var = tk.BooleanVar(value=bool(HUDConfig.compass_enabled))
-        tk.Checkbutton(
-            frame, text="显示顶部简化罗盘条", variable=self.hud_compass_enabled_var,
-            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG, activeforeground=Theme.TEXT,
-            highlightthickness=0
-        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
-        row += 1
-
         tk.Label(frame, text="HUD配色:", bg=Theme.BG, fg=Theme.TEXT).grid(
             row=row, column=0, sticky="w", pady=3)
         self.hud_color_style_var = tk.StringVar(value=str(getattr(HUDConfig, "color_style", "auto")))
@@ -579,11 +568,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             self.scale_var.set(0.85)
             self.theme_var.set("dark")
             self.hud_enabled_var.set(True)
-            self.hud_alpha_var.set(200)
+            self.hud_alpha_var.set(255)
             self.hud_scale_var.set(1.0)
             self.hud_smoothing_var.set(0.35)
             self.hud_follow_main_monitor_var.set(True)
-            self.hud_compass_enabled_var.set(True)
             self.hud_color_style_var.set("auto")
             if hasattr(self, "_hud_color_btn_text"):
                 self._hud_color_btn_text.set("自动(可靠绿/降级琥珀)")
@@ -630,7 +618,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         old_hud_enabled = bool(HUDConfig.enabled)
         old_hud_alpha = int(HUDConfig.alpha)
         old_hud_follow_main = bool(HUDConfig.follow_main_window_monitor)
-        old_hud_compass_enabled = bool(HUDConfig.compass_enabled)
         old_hud_color_style = str(getattr(HUDConfig, "color_style", "auto"))
         
         # 显示设置
@@ -644,7 +631,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         HUDConfig.scale = max(0.5, min(2.0, float(self.hud_scale_var.get())))
         HUDConfig.smoothing = max(0.0, min(1.0, float(self.hud_smoothing_var.get())))
         HUDConfig.follow_main_window_monitor = bool(self.hud_follow_main_monitor_var.get())
-        HUDConfig.compass_enabled = bool(self.hud_compass_enabled_var.get())
         new_hud_color_style = str(self.hud_color_style_var.get() or "auto").strip().lower()
         if new_hud_color_style not in {"auto", "green", "amber", "cyan", "white"}:
             new_hud_color_style = "auto"
@@ -733,7 +719,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         hud_enabled_changed = old_hud_enabled != bool(HUDConfig.enabled)
         hud_alpha_changed = old_hud_alpha != int(HUDConfig.alpha)
         hud_follow_changed = old_hud_follow_main != bool(HUDConfig.follow_main_window_monitor)
-        hud_compass_changed = old_hud_compass_enabled != bool(HUDConfig.compass_enabled)
         hud_color_changed = old_hud_color_style != str(HUDConfig.color_style)
 
         if HUDConfig.enabled:
@@ -749,7 +734,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             if hasattr(self.app, "_hud_last_target"):
                 self.app._hud_last_target = None
 
-        if hud_enabled_changed or hud_alpha_changed or hud_compass_changed or hud_color_changed:
+        if hud_enabled_changed or hud_alpha_changed or hud_color_changed:
             if hasattr(self.app, "_update_hint"):
                 self.app._update_hint()
             if hasattr(self.app, "_refresh_tray"):
