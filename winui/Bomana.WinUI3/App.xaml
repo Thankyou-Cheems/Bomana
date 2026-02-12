@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Application
+    x:Class="Bomana.WinUI3.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <Color x:Key="BrandBlue">#1F6FEB</Color>
+            <Color x:Key="BrandTeal">#1A8E7D</Color>
+            <Color x:Key="BrandAmber">#CC7A24</Color>
+            <Color x:Key="BrandRed">#C74444</Color>
+
+            <LinearGradientBrush
+                x:Key="PageGradientBrush"
+                EndPoint="1,1"
+                StartPoint="0,0">
+                <GradientStop Color="#F6FAFF" Offset="0.0" />
+                <GradientStop Color="#EDF4FF" Offset="0.58" />
+                <GradientStop Color="#EAF7F2" Offset="1.0" />
+            </LinearGradientBrush>
+
+            <LinearGradientBrush
+                x:Key="HeroCardBrush"
+                EndPoint="1,1"
+                StartPoint="0,0">
+                <GradientStop Color="#1F6FEB" Offset="0.0" />
+                <GradientStop Color="#2E88E9" Offset="0.55" />
+                <GradientStop Color="#38A169" Offset="1.0" />
+            </LinearGradientBrush>
+
+            <SolidColorBrush x:Key="PanelStrokeBrush" Color="#C8D9EE" />
+            <SolidColorBrush x:Key="PanelSubtleStrokeBrush" Color="#DCE7F5" />
+
+            <Style x:Key="AppTitleText" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display Semibold" />
+                <Setter Property="FontSize" Value="28" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <Style x:Key="SectionTitleText" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text Semibold" />
+                <Setter Property="FontSize" Value="17" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <Style x:Key="MutedCaptionText" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="FontSize" Value="13" />
+            </Style>
+
+            <Style x:Key="KpiValueText" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display Semibold" />
+                <Setter Property="FontSize" Value="34" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <Style x:Key="CardContainerStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="16" />
+                <Setter Property="Padding" Value="16" />
+                <Setter Property="BorderBrush" Value="{StaticResource PanelSubtleStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            </Style>
+
+            <Style x:Key="GlassPanelStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="20" />
+                <Setter Property="Padding" Value="16" />
+                <Setter Property="BorderBrush" Value="{StaticResource PanelStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+            </Style>
+
+            <Style x:Key="HeroCardStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="20" />
+                <Setter Property="Padding" Value="20" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Background" Value="{StaticResource HeroCardBrush}" />
+            </Style>
+
+            <Style x:Key="BadgeChipStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="999" />
+                <Setter Property="Padding" Value="10,4" />
+                <Setter Property="MinHeight" Value="28" />
+            </Style>
+
+            <Style x:Key="StatusPillStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="999" />
+                <Setter Property="Padding" Value="10,4" />
+                <Setter Property="MinWidth" Value="84" />
+            </Style>
+
+            <Style x:Key="MonoTextStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Cascadia Mono" />
+                <Setter Property="FontSize" Value="12" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Bomana.WinUI3 (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Bomana.WinUI3 (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

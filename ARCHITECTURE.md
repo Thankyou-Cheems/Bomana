@@ -39,6 +39,7 @@
 │     ├─ sound.py             # Sound manager
 │     └─ system.py            # Windows/system helpers
 ├─ winui/
+│  ├─ Bomana.WinUI3/          # WinUI3 frontend project (Fluent UI)
 │  ├─ README.md               # WinUI migration notes / runtime switch
 │  └─ SNAPSHOT_API.md         # Bridge contract for frontend polling
 │
@@ -46,7 +47,8 @@
 ├─ tools/
 │  ├─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.json generator
 │  └─ update_service/        # Optional self-hosted update + DAU stats service
-├─ tools/build_portable.py   # Build launcher/app package/manifest
+├─ tools/build_portable.py   # Build launcher/app package/manifest (+optional WinUI runtime assets)
+├─ tools/build_winui_frontend.py # Build/export WinUI3 runtime to winui/dist
 ├─ assets (root files)       # Icons/sponsor image, etc.
 ├─ build.bat / build.sh      # Legacy onefile packaging scripts
 ├─ build_portable.bat        # Portable packaging helper (Windows)
@@ -82,7 +84,7 @@ Important constraint: only use the official 8111 API. No memory reads, injection
 - Runtime configuration lives in `bomana/config.py`.
 - User config/state stored as JSON in the user home directory (`FileConfig.CONFIG_FILE` / `STATE_FILE`).
 - Feature flags (`ENABLE_*`) drive compile-time variants and UI availability. All variants share the same config file.
-- Runtime UI selection is env-based in phase 1: `BOMANA_UI_RUNTIME=tk|winui3`.
+- Runtime UI selection is env-based in phase 1: `BOMANA_UI_RUNTIME=auto|tk|winui3` (`auto` default).
 
 ## Functional Areas (Conceptual)
 - Timer & lifecycle
@@ -110,6 +112,7 @@ Local build helper:
 - `build_portable.bat <Variant> <all|app|launcher>`
 - `build_app_package.bat <Variant>` (only app zip + manifest)
 - `build_launcher.bat [version]` (only universal launcher exe)
+- `build_winui_frontend.bat [Debug|Release] [x64|x86|ARM64]` (export WinUI runtime to `winui/dist`)
 
 CI:
 - `.github/workflows/build.yml` runs separate jobs for:

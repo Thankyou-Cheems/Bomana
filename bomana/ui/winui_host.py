@@ -10,6 +10,7 @@ from bomana.ui.winui_bridge import WinUISnapshotBridge
 
 # Default WinUI frontend locations inside app package.
 _WINUI_EXE_CANDIDATES = (
+    Path("winui/dist/Bomana.WinUI3.exe"),
     Path("winui/Bomana.WinUI3.exe"),
     Path("Bomana.WinUI3.exe"),
 )
@@ -28,6 +29,16 @@ def _resolve_frontend_exe(base_dir: Path) -> Path:
 
     for rel in _WINUI_EXE_CANDIDATES:
         candidates.append((base_dir / rel).resolve())
+
+    # Dev build output candidates (prefer latest built executable).
+    project_bin = (base_dir / "winui" / "Bomana.WinUI3" / "bin").resolve()
+    if project_bin.exists():
+        globbed = sorted(
+            project_bin.rglob("Bomana.WinUI3.exe"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        candidates.extend(globbed)
 
     for path in candidates:
         if path.exists():
@@ -70,3 +81,15 @@ def run_winui_runtime(base_dir: Optional[Path] = None) -> int:
         return int(proc.wait())
     finally:
         bridge.stop()
+
+
+def has_winui_frontend(base_dir: Optional[Path] = None) -> bool:
+    """Check whether a runnable WinUI frontend executable is available."""
+    if base_dir is None:
+        base_dir = Path(__file__).resolve().parents[2]
+    base_dir = base_dir.resolve()
+    try:
+        _resolve_frontend_exe(base_dir)
+        return True
+    except Exception:
+        return False

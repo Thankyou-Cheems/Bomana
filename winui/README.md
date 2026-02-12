@@ -17,9 +17,32 @@ $env:BOMANA_WINUI_EXE="D:\path\to\Bomana.WinUI3.exe"  # optional override
 python Bomana.pyw
 ```
 
+Default behavior when `BOMANA_UI_RUNTIME` is not set:
+- `auto` mode is used
+- if WinUI frontend executable exists, app starts WinUI3
+- otherwise app falls back to Tk UI
+
 If `BOMANA_WINUI_EXE` is not set, the app probes:
+- `winui/dist/Bomana.WinUI3.exe`
 - `winui/Bomana.WinUI3.exe`
 - `Bomana.WinUI3.exe`
+
+For local dev build output, `bomana/ui/winui_host.py` also probes
+`winui/Bomana.WinUI3/bin/**/Bomana.WinUI3.exe` and picks the latest one.
+
+## Build Frontend Runtime
+
+```powershell
+python tools/build_winui_frontend.py --configuration Release --platform x64
+```
+
+or:
+
+```bat
+build_winui_frontend.bat Release x64
+```
+
+This exports runtime files to `winui/dist`, which portable app packaging can include.
 
 ## Frontend Contract
 See `winui/SNAPSHOT_API.md`.

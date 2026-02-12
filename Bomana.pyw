@@ -104,7 +104,7 @@ from pathlib import Path
 
 from bomana.utils.system import SingleInstanceManager, Win32
 from bomana.ui.app import App
-from bomana.ui.winui_host import run_winui_runtime
+from bomana.ui.winui_host import run_winui_runtime, has_winui_frontend
 
 # ============================================================================
 # 程序入口
@@ -114,10 +114,11 @@ def _ui_runtime() -> str:
     """UI runtime selector.
     
     Supported values:
-    - tk (default): current tkinter UI
+    - auto (default): prefer WinUI3 when frontend exe exists, else Tk
+    - tk: current tkinter UI
     - winui3: launch WinUI3 frontend + local snapshot bridge
     """
-    runtime = os.environ.get("BOMANA_UI_RUNTIME", "tk")
+    runtime = os.environ.get("BOMANA_UI_RUNTIME", "auto")
     return runtime.strip().lower()
 
 
@@ -140,9 +141,11 @@ def main():
     Win32.hide_console()
 
     runtime = _ui_runtime()
-    if runtime == "winui3":
+    app_root = Path(__file__).resolve().parent
+    prefer_winui = runtime == "winui3" or (runtime == "auto" and has_winui_frontend(app_root))
+
+    if prefer_winui:
         try:
-            app_root = Path(__file__).resolve().parent
             code = run_winui_runtime(app_root)
             if code != 0:
                 print(f"[WinUI3] 前端退出码: {code}")

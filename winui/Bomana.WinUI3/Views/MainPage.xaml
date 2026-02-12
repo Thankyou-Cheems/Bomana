@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Page
+    x:Class="Bomana.WinUI3.Views.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:model="using:Bomana.WinUI3.Models"
+    mc:Ignorable="d">
+
+    <Grid Background="{StaticResource PageGradientBrush}">
+        <NavigationView
+            x:Name="ShellNavigation"
+            AlwaysShowHeader="False"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="True"
+            IsSettingsVisible="False"
+            PaneTitle="Bomana"
+            PaneDisplayMode="Left"
+            SelectionChanged="OnShellNavigationSelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem
+                    Content="概览"
+                    IsSelected="True"
+                    Tag="overview">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Home" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="导航" Tag="navigation">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Map" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="系统" Tag="system">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Setting" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.Content>
+                <Grid Padding="16,12,16,18" RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Style="{StaticResource GlassPanelStyle}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Spacing="2">
+                                <TextBlock Style="{StaticResource AppTitleText}" Text="{x:Bind CurrentSectionTitle, Mode=OneWay}" />
+                                <TextBlock Style="{StaticResource MutedCaptionText}" Text="{x:Bind CurrentSectionSubtitle, Mode=OneWay}" />
+                                <TextBlock Style="{StaticResource MonoTextStyle}" Text="{x:Bind SnapshotEndpointText, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="8">
+                                <Border Background="{x:Bind ConnectionPillBackgroundBrush, Mode=OneWay}" Style="{StaticResource StatusPillStyle}">
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        Foreground="White"
+                                        Text="{x:Bind ConnectionPillText, Mode=OneWay}" />
+                                </Border>
+                                <Button Click="OnReconnectClick" Content="立即重连" />
+                                <TextBlock
+                                    HorizontalAlignment="Right"
+                                    Style="{StaticResource MutedCaptionText}"
+                                    Text="{x:Bind LastUpdatedText, Mode=OneWay}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <InfoBar
+                        Grid.Row="1"
+                        IsClosable="False"
+                        IsIconVisible="True"
+                        IsOpen="True"
+                        Message="{x:Bind ConnectionMessage, Mode=OneWay}"
+                        Severity="{x:Bind ConnectionSeverity, Mode=OneWay}"
+                        Title="{x:Bind ConnectionTitle, Mode=OneWay}" />
+
+                    <Grid Grid.Row="2">
+                        <ScrollViewer
+                            HorizontalScrollMode="Disabled"
+                            HorizontalScrollBarVisibility="Disabled"
+                            Visibility="{x:Bind OverviewVisibility, Mode=OneWay}">
+                            <StackPanel Spacing="12">
+                                <StackPanel.Transitions>
+                                    <TransitionCollection>
+                                        <EntranceThemeTransition IsStaggeringEnabled="True" />
+                                        <RepositionThemeTransition />
+                                    </TransitionCollection>
+                                </StackPanel.Transitions>
+
+                                <Border Style="{StaticResource HeroCardStyle}">
+                                    <Grid RowSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <StackPanel Grid.Column="0" Spacing="4">
+                                            <TextBlock
+                                                FontFamily="Segoe UI Variable Display Semibold"
+                                                FontSize="72"
+                                                Foreground="White"
+                                                Text="{x:Bind RemainingText, Mode=OneWay}" />
+                                            <TextBlock
+                                                FontSize="16"
+                                                Foreground="#EAF2FF"
+                                                Text="{x:Bind StatusText, Mode=OneWay}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="8">
+                                            <Border
+                                                Background="{x:Bind MainBadgeBackgroundBrush, Mode=OneWay}"
+                                                Style="{StaticResource BadgeChipStyle}">
+                                                <TextBlock
+                                                    Foreground="{x:Bind MainBadgeForegroundBrush, Mode=OneWay}"
+                                                    Text="{x:Bind MainBadgeText, Mode=OneWay}" />
+                                            </Border>
+                                            <Border
+                                                Background="{x:Bind FlightBadgeBackgroundBrush, Mode=OneWay}"
+                                                Style="{StaticResource BadgeChipStyle}">
+                                                <TextBlock
+                                                    Foreground="{x:Bind FlightBadgeForegroundBrush, Mode=OneWay}"
+                                                    Text="{x:Bind FlightBadgeText, Mode=OneWay}" />
+                                            </Border>
+                                            <TextBlock
+                                                HorizontalAlignment="Right"
+                                                Foreground="#EAF2FF"
+                                                Text="{x:Bind SortieText, Mode=OneWay}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="6">
+                                            <ProgressBar Foreground="White" Maximum="100" Value="{x:Bind ProgressPercent, Mode=OneWay}" />
+                                            <TextBlock Foreground="#EAF2FF" Text="{x:Bind LifeCycleText, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <Border Style="{StaticResource CardContainerStyle}">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Style="{StaticResource SectionTitleText}" Text="飞行状态" />
+                                        <Grid ColumnSpacing="12" RowSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Grid.Row="0" Text="阶段" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind PhaseText, Mode=OneWay}" />
+                                            <TextBlock Grid.Row="1" Text="地面状态" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind GroundText, Mode=OneWay}" />
+                                            <TextBlock Grid.Row="2" Text="航向" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{x:Bind HeadingText, Mode=OneWay}" />
+                                            <TextBlock Grid.Row="3" Text="目标状态" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind TargetStateText, Mode=OneWay}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Style="{StaticResource CardContainerStyle}">
+                                        <StackPanel Spacing="10">
+                                            <TextBlock Style="{StaticResource SectionTitleText}" Text="燃油管理" />
+                                            <TextBlock Style="{StaticResource KpiValueText}" Text="{x:Bind FuelText, Mode=OneWay}" />
+                                            <ProgressBar Maximum="100" Value="{x:Bind FuelPercentValue, Mode=OneWay}" />
+                                            <TextBlock Style="{StaticResource MutedCaptionText}" Text="{x:Bind FuelEtaText, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="1" Style="{StaticResource CardContainerStyle}">
+                                        <StackPanel Spacing="10">
+                                            <TextBlock Style="{StaticResource SectionTitleText}" Text="姿态链路" />
+                                            <Grid ColumnSpacing="12" RowSpacing="6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Pitch" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind PitchText, Mode=OneWay}" />
+                                                <TextBlock Grid.Column="2" Text="Roll" />
+                                                <TextBlock Grid.Column="3" Text="{x:Bind RollText, Mode=OneWay}" />
+                                            </Grid>
+                                            <TextBlock Style="{StaticResource MutedCaptionText}" Text="{x:Bind AttitudeStateText, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <ScrollViewer
+                            HorizontalScrollMode="Disabled"
+                            HorizontalScrollBarVisibility="Disabled"
+                            Visibility="{x:Bind NavigationVisibility, Mode=OneWay}">
+                            <StackPanel Spacing="12">
+                                <StackPanel.Transitions>
+                                    <TransitionCollection>
+                                        <EntranceThemeTransition IsStaggeringEnabled="True" />
+                                        <RepositionThemeTransition />
+                                    </TransitionCollection>
+                                </StackPanel.Transitions>
+
+                                <Border Style="{StaticResource CardContainerStyle}">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Style="{StaticResource SectionTitleText}" Text="战区导航" />
+                                        <ListView Height="360" ItemsSource="{x:Bind ZoneItems, Mode=OneWay}">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="model:ZoneRowItem">
+                                                    <Grid ColumnSpacing="10" Padding="2,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="2*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock Text="{x:Bind Title}" />
+                                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Cdi}" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Bearing}" />
+                                                        <TextBlock Grid.Column="2" Text="{x:Bind Distance}" />
+                                                        <Border
+                                                            Grid.Column="3"
+                                                            Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                            CornerRadius="999"
+                                                            MinWidth="72"
+                                                            Padding="8,2">
+                                                            <TextBlock HorizontalAlignment="Center" Text="{x:Bind Ete}" />
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource CardContainerStyle}">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Style="{StaticResource SectionTitleText}" Text="机场导航" />
+                                        <TextBlock Style="{StaticResource MutedCaptionText}" Text="{x:Bind FriendlyAirfieldText, Mode=OneWay}" />
+                                        <ListView Height="260" ItemsSource="{x:Bind EnemyAirfieldItems, Mode=OneWay}">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="model:AirfieldRowItem">
+                                                    <Grid ColumnSpacing="10" Padding="2,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="2*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{x:Bind Title}" />
+                                                        <TextBlock Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Bearing}" />
+                                                        <TextBlock Grid.Column="2" Text="{x:Bind Distance}" />
+                                                        <TextBlock Grid.Column="3" Text="{x:Bind Ete}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <ScrollViewer
+                            HorizontalScrollMode="Disabled"
+                            HorizontalScrollBarVisibility="Disabled"
+                            Visibility="{x:Bind SystemVisibility, Mode=OneWay}">
+                            <StackPanel Spacing="12">
+                                <StackPanel.Transitions>
+                                    <TransitionCollection>
+                                        <EntranceThemeTransition IsStaggeringEnabled="True" />
+                                        <RepositionThemeTransition />
+                                    </TransitionCollection>
+                                </StackPanel.Transitions>
+
+                                <Border Style="{StaticResource CardContainerStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource SectionTitleText}" Text="运行端点" />
+                                        <TextBlock Text="{x:Bind SnapshotEndpointText, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind HealthEndpointText, Mode=OneWay}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <InfoBar
+                                    IsClosable="False"
+                                    IsIconVisible="True"
+                                    IsOpen="True"
+                                    Message="当前默认关闭 HUD，建议仅在设置页手动开启。"
+                                    Severity="Warning"
+                                    Title="HUD 稳定性保护" />
+
+                                <Border Style="{StaticResource CardContainerStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource SectionTitleText}" Text="诊断信息" />
+                                        <TextBox
+                                            AcceptsReturn="True"
+                                            FontFamily="Cascadia Mono"
+                                            IsReadOnly="True"
+                                            MinHeight="280"
+                                            Text="{x:Bind DiagnosticsText, Mode=OneWay}"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </NavigationView.Content>
+        </NavigationView>
+    </Grid>
+</Page>

@@ -174,7 +174,10 @@ pip install -r requirements.txt
 
 - 仅打包应用包（用于自动更新）：`build_app_package.bat Enhanced|Standard|Lite`
 - 仅打包通用启动器（绿色入口）：`build_launcher.bat [version]`
+- 仅构建 WinUI3 前端运行时：`build_winui_frontend.bat [Debug|Release] [x64|x86|ARM64]`
 - 一次性全打：`build_portable.bat Enhanced all`
+
+说明：当 `winui/dist/Bomana.WinUI3.exe` 存在时，`build_portable` 会自动将 WinUI3 前端运行时资产打入 `app.zip`。
 
 GitHub 云端自动打包发布：
 
@@ -200,7 +203,7 @@ python Bomana.pyw
 ```
 
 说明：
-- 未设置 `BOMANA_UI_RUNTIME` 时默认使用现有 Tk UI
+- 未设置 `BOMANA_UI_RUNTIME` 时默认 `auto`：若检测到 WinUI3 前端则优先启动，否则回退 Tk UI
 - WinUI3 前端启动时，Python 会自动提供本地快照 API（详见 `winui/SNAPSHOT_API.md`）
 
 ### 开启 War Thunder 本地服务器
