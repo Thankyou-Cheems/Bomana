@@ -79,3 +79,9 @@
   Symptom: upload failed with `Permission denied` on `/opt/stacks/bomana-update/data/manifests/manifest_*.json`
   Cause: CI SSH user lacked direct write permission to target directory (owner/ACL drift after manual ops or container writes)
   Fix/Workaround: upload manifests to remote `/tmp` staging first, then sync into target dir with direct-write check and passwordless-`sudo` fallback; keep verify step with same permission fallback and actionable remediation hints
+
+- Date: 2026-02-12
+  Context: running v6.8.0 HUD baseline sampling (`tools/sample_8111_attitude.py`) in local dev environment
+  Symptom: `/indicators` and `/state` requests timed out; collected sample count stayed 0
+  Cause: no active War Thunder battle session exposing local 8111 API
+  Fix/Workaround: run sampler only while in battle with 8111 enabled; keep `duration>=120s` and collect per-aircraft runs before closing baseline task
