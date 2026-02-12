@@ -250,12 +250,51 @@ class UIConfig:
     DEBUG_WRAP_LENGTH = 600
 
 
+class HUDConfig:
+    """HUD 叠加层基础配置
+
+    v6.8.0 首版仅提供开关与基础参数，具体渲染由后续模块实现。
+    """
+    # HUD 总开关（可由配置/热键切换）
+    enabled = True
+
+    # 基础显示参数
+    alpha = 200                  # 叠加层透明度（0-255）
+    scale = 1.0                  # 全局缩放倍率
+    smoothing = 0.35             # 位移平滑系数（0-1）
+    follow_main_window_monitor = True  # 是否跟随主窗口所在显示器
+
+    @classmethod
+    def to_dict(cls) -> dict:
+        """导出 HUD 基础配置用于保存。"""
+        return {
+            "alpha": int(cls.alpha),
+            "scale": float(cls.scale),
+            "smoothing": float(cls.smoothing),
+            "follow_main_window_monitor": bool(cls.follow_main_window_monitor),
+        }
+
+    @classmethod
+    def apply_dict(cls, data: dict) -> None:
+        """从配置字典应用 HUD 参数（兼容缺省字段）。"""
+        if not isinstance(data, dict):
+            return
+        if isinstance(data.get("alpha"), (int, float)):
+            cls.alpha = max(30, min(255, int(data["alpha"])))
+        if isinstance(data.get("scale"), (int, float)):
+            cls.scale = max(0.5, min(2.0, float(data["scale"])))
+        if isinstance(data.get("smoothing"), (int, float)):
+            cls.smoothing = max(0.0, min(1.0, float(data["smoothing"])))
+        if isinstance(data.get("follow_main_window_monitor"), bool):
+            cls.follow_main_window_monitor = data["follow_main_window_monitor"]
+
+
 class HotkeyConfig:
     """热键配置
 
     [快捷键自定义]
     - 支持功能键: F1-F12
-    - 默认绑定: F7=重置, F8=锁定, F9=角落, F10=声音, F11=战区
+    - 默认绑定: F7=重置, F8=锁定, F9=角落, F10=声音, F11=战区, F12=HUD
     - 可在设置对话框中自定义
     - 注意: 避免与游戏快捷键冲突(F1-F4通常被游戏占用)
     """
@@ -275,6 +314,7 @@ class HotkeyConfig:
     KEY_CORNER = "F9"    # 切换角落
     KEY_BEEP = "F10"     # 声音开关
     KEY_ZONES = "F11"    # 战区提示音
+    KEY_HUD = "F12"      # HUD开关
 
     # 热键ID（用于注册/注销）
     HK_ID_RESET = 7007
@@ -282,6 +322,7 @@ class HotkeyConfig:
     HK_ID_CORNER = 7009
     HK_ID_BEEP = 7010
     HK_ID_ZONES = 7011
+    HK_ID_HUD = 7012
 
     # 全局热键开关（用户可配置）
     GLOBAL_HOTKEYS = True
@@ -300,6 +341,7 @@ class HotkeyConfig:
             "corner": cls.KEY_CORNER,
             "beep": cls.KEY_BEEP,
             "zones": cls.KEY_ZONES,
+            "hud": cls.KEY_HUD,
         }
 
     @classmethod
@@ -315,6 +357,8 @@ class HotkeyConfig:
             cls.KEY_BEEP = bindings["beep"]
         if "zones" in bindings:
             cls.KEY_ZONES = bindings["zones"]
+        if "hud" in bindings:
+            cls.KEY_HUD = bindings["hud"]
 
 
 class SoundConfig:

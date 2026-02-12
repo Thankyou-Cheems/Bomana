@@ -338,6 +338,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             ("corner", "切换角落", HotkeyConfig.KEY_CORNER),
             ("beep", "声音开关", HotkeyConfig.KEY_BEEP),
             ("zones", "战区提示音", HotkeyConfig.KEY_ZONES),
+            ("hud", "HUD开关", HotkeyConfig.KEY_HUD),
         ]
         
         for key, label, current in hotkeys:
@@ -482,7 +483,14 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 self.panel_vars[key].set(True)
             
             # 重置快捷键
-            defaults = {"reset": "F7", "lock": "F8", "corner": "F9", "beep": "F10", "zones": "F11"}
+            defaults = {
+                "reset": "F7",
+                "lock": "F8",
+                "corner": "F9",
+                "beep": "F10",
+                "zones": "F11",
+                "hud": "F12",
+            }
             for key, val in defaults.items():
                 self.hotkey_vars[key].set(val)
             
