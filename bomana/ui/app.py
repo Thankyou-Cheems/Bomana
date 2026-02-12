@@ -145,6 +145,9 @@ class App:
         self._airport_layout_mode = None
         self.hud_overlay = None
         self._hud_monitor_refresh_ts = 0.0
+        self._hud_last_target = None
+        self._hud_target_hold_sec = 1.2
+        self._hud_render_error_count = 0
 
         # 初始化流程
         self._load_config()
@@ -1257,6 +1260,7 @@ class App:
         if not HUDConfig.enabled:
             if overlay and overlay.is_visible():
                 overlay.hide()
+            self._hud_last_target = None
             return
 
         if not self._show_hud_overlay():
@@ -1264,34 +1268,84 @@ class App:
             self._update_hint()
             self._save_config()
             self._refresh_tray()
+            self._hud_last_target = None
             return
 
         overlay = self.hud_overlay
         if not overlay:
             return
 
-        now = time.monotonic()
-        if (now - self._hud_monitor_refresh_ts) >= 0.35:
-            self._hud_monitor_refresh_ts = now
-            overlay.refresh_monitor_geometry()
+        try:
+            now = time.monotonic()
+            if (now - self._hud_monitor_refresh_ts) >= 0.35:
+                self._hud_monitor_refresh_ts = now
+                overlay.refresh_monitor_geometry()
 
-        if snap.api_down or snap.phase not in (Phase.ALIVE, Phase.LOSS_PENDING):
-            overlay.clear_target()
-            return
+            target_zone = None
+            if snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING):
+                target_zone = next((z for z in snap.zones if z.is_target), None)
+                if target_zone is None and snap.zones:
+                    target_zone = min(snap.zones, key=lambda z: abs(z.relative))
 
-        target_zone = next((z for z in snap.zones if z.is_target), None)
-        if target_zone is None and snap.zones:
-            target_zone = min(snap.zones, key=lambda z: abs(z.relative))
+            if target_zone:
+                self._hud_last_target = {
+                    "ts": now,
+                    "relative": float(target_zone.relative),
+                    "distance": float(target_zone.distance_km),
+                    "pitch": float(getattr(snap, "attitude_pitch_deg", 0.0) or 0.0),
+                    "roll": float(getattr(snap, "attitude_roll_deg", 0.0) or 0.0),
+                    "fallback": bool(getattr(snap, "hud_attitude_fallback", True)),
+                }
+                overlay.clear_standby()
+                overlay.update_target(
+                    has_target=True,
+                    relative_deg=self._hud_last_target["relative"],
+                    distance_km=self._hud_last_target["distance"],
+                    attitude_pitch_deg=self._hud_last_target["pitch"],
+                    attitude_roll_deg=self._hud_last_target["roll"],
+                    attitude_fallback=self._hud_last_target["fallback"],
+                )
+            else:
+                can_hold = False
+                if self._hud_last_target and snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING) and not snap.api_down:
+                    age = now - float(self._hud_last_target.get("ts", 0.0))
+                    can_hold = age <= self._hud_target_hold_sec
 
-        if not target_zone:
-            overlay.clear_target()
-            return
+                if can_hold:
+                    cached = self._hud_last_target
+                    overlay.clear_standby()
+                    overlay.update_target(
+                        has_target=True,
+                        relative_deg=float(cached["relative"]),
+                        distance_km=float(cached["distance"]),
+                        attitude_pitch_deg=float(cached["pitch"]),
+                        attitude_roll_deg=float(cached["roll"]),
+                        attitude_fallback=bool(cached["fallback"]),
+                    )
+                else:
+                    overlay.clear_target()
+                    if snap.api_down:
+                        overlay.show_standby("8111 DELAY")
+                    elif snap.api_down_pending:
+                        overlay.show_standby("8111 PENDING")
+                    elif snap.phase not in (Phase.ALIVE, Phase.LOSS_PENDING):
+                        overlay.show_standby("HUD STANDBY")
+                    else:
+                        overlay.show_standby("NO TARGET")
 
-        overlay.update_from_snapshot(
-            snapshot=snap,
-            target_relative_deg=target_zone.relative,
-            target_distance_km=target_zone.distance_km,
-        )
+            if self._hud_render_error_count > 0:
+                self._hud_render_error_count = 0
+                overlay.update_transparency()
+        except Exception as e:
+            self._hud_render_error_count += 1
+            if self._hud_render_error_count in (1, 10, 30):
+                print(f"[HUD] 渲染降级: {e}")
+            degraded_alpha = max(60, int(HUDConfig.alpha * 0.55))
+            try:
+                overlay.apply_window_styles(click_through=self._locked, alpha=degraded_alpha)
+                overlay.show_standby("HUD DEGRADED")
+            except Exception:
+                pass
 
     def _toggle_hud(self):
         """切换 HUD 叠加层开关。"""
@@ -1299,9 +1353,12 @@ class App:
         if HUDConfig.enabled:
             if not self._show_hud_overlay():
                 HUDConfig.enabled = False
+            else:
+                self._hud_render_error_count = 0
         else:
             if self.hud_overlay:
                 self.hud_overlay.hide()
+            self._hud_last_target = None
 
         self._update_hint()
         self._save_config()

@@ -85,6 +85,8 @@ class HUDOverlay:
         self._smoothed_y: Optional[float] = None
         self._smoothed_radius: Optional[float] = None
         self._last_signature: Optional[tuple] = None
+        self._standby_visible = False
+        self._standby_text = "HUD STANDBY"
 
         # 图元初始化：仅创建一次，后续只更新
         self._reticle_ring_id: Optional[int] = None
@@ -92,6 +94,7 @@ class HUDOverlay:
         self._reticle_vline_id: Optional[int] = None
         self._reticle_mode_id: Optional[int] = None
         self._reticle_dist_id: Optional[int] = None
+        self._standby_id: Optional[int] = None
         self._init_reticle_items()
 
         self.window.bind("<Configure>", self._on_configure)
@@ -217,6 +220,15 @@ class HUDOverlay:
         self._has_target = False
         self._render_reticle(force=True)
 
+    def show_standby(self, text: str = "HUD STANDBY") -> None:
+        """显示 HUD 待机文案。"""
+        self._standby_text = str(text or "HUD STANDBY")
+        self._set_standby_visible(True)
+
+    def clear_standby(self) -> None:
+        """隐藏 HUD 待机文案。"""
+        self._set_standby_visible(False)
+
     def update_target(
         self,
         has_target: bool,
@@ -242,6 +254,7 @@ class HUDOverlay:
         self._attitude_pitch_deg = float(attitude_pitch_deg)
         self._attitude_roll_deg = float(attitude_roll_deg)
         self._attitude_fallback = bool(attitude_fallback)
+        self.clear_standby()
         self._render_reticle()
 
     def update_from_snapshot(
@@ -277,6 +290,8 @@ class HUDOverlay:
             self.apply_window_styles(click_through=True, alpha=HUDConfig.alpha)
 
     def _on_configure(self, _event=None) -> None:
+        if self._standby_visible:
+            self._position_standby()
         self._render_reticle(force=True)
 
     def _init_reticle_items(self) -> None:
@@ -319,6 +334,14 @@ class HUDOverlay:
             state="hidden",
             tags=("hud_reticle",),
         )
+        self._standby_id = self.canvas.create_text(
+            0, 0,
+            text="HUD STANDBY",
+            fill="#8fb5a0",
+            font=("Segoe UI", 12, "bold"),
+            state="hidden",
+            tags=("hud_standby",),
+        )
 
     def _set_reticle_visible(self, visible: bool) -> None:
         state = "normal" if visible else "hidden"
@@ -333,6 +356,25 @@ class HUDOverlay:
                 self.canvas.itemconfig(item_id, state=state)
         if not visible:
             self._last_signature = None
+
+    def _position_standby(self) -> None:
+        w = max(1, int(self.window.winfo_width()))
+        h = max(1, int(self.window.winfo_height()))
+        cx = w * 0.5
+        cy = h * 0.5
+        if self._standby_id is not None:
+            self.canvas.coords(self._standby_id, cx, cy)
+
+    def _set_standby_visible(self, visible: bool) -> None:
+        self._standby_visible = bool(visible)
+        if self._standby_id is None:
+            return
+        if self._standby_visible:
+            self._set_reticle_visible(False)
+            self._position_standby()
+            self.canvas.itemconfig(self._standby_id, text=self._standby_text, state="normal")
+        else:
+            self.canvas.itemconfig(self._standby_id, state="hidden")
 
     def _project_target(self, width: int, height: int) -> tuple:
         """根据相对方位 + 姿态估计目标屏幕位置。"""
