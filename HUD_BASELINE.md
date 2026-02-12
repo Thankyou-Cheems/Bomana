@@ -53,6 +53,7 @@ Output:
 - JSON score report under `tools/output/`
 - Per-trial pass/fail for `T_acq` / `T_correct` / `T_reacq`
 - Aggregate mean/median/p90 and pass rates
+- Manual execution matrix template: `HUD_MVP_ACCEPTANCE.md`
 
 ## Aircraft Baseline Table (Template)
 
