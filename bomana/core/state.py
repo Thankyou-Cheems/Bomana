@@ -39,6 +39,15 @@ class TelemetryData:
     # v6.6.0 新增：起落架百分比（用于进度指示器）
     gear_pct: float = 0.0         # 起落架位置百分比 (0=收起, 100=放下)
 
+    # v6.8.0 新增：HUD姿态字段（来自 aviahorizon_* / bank）
+    attitude_pitch_deg: float = 0.0
+    attitude_roll_deg: float = 0.0
+    attitude_bank_deg: float = 0.0
+    attitude_pitch_present: bool = False
+    attitude_roll_present: bool = False
+    attitude_bank_present: bool = False
+    attitude_available: bool = False
+
     @property
     def entity_like(self) -> bool:
         """判断是否像一个"实体"（有燃油或速度）
@@ -56,6 +65,11 @@ class TelemetryData:
         低速 + 小垂直速度 = 可能着陆
         """
         return (self.ias_kmh < GameConfig.LAND_SPEED_KMH and abs(self.vy_ms) < 2.0)
+
+    @property
+    def attitude_lateral_deg(self) -> float:
+        """获取横滚轴数据（优先 roll，缺失时回退 bank）。"""
+        return self.attitude_roll_deg if self.attitude_roll_present else self.attitude_bank_deg
 
 
 @dataclass
@@ -357,6 +371,24 @@ class ZoneNavigationState:
 
 
 @dataclass
+class AttitudeConfidenceState:
+    """HUD姿态可信度状态。"""
+    pitch_deg: float = 0.0
+    roll_deg: float = 0.0
+    bank_deg: float = 0.0
+    available: bool = False
+    reliable: bool = False
+    fallback: bool = True
+    fallback_reason: str = "missing"
+    missing_since: Optional[float] = None
+    zero_since: Optional[float] = None
+    jitter_score: float = 0.0
+    last_pitch_deg: Optional[float] = None
+    last_roll_deg: Optional[float] = None
+    last_sample_ts: float = 0.0
+
+
+@dataclass
 class GameState:
     """游戏总体状态
     
@@ -395,6 +427,9 @@ class GameState:
     
     # 导航状态
     zone_nav: ZoneNavigationState = field(default_factory=ZoneNavigationState)
+
+    # v6.8.0 新增：姿态可信度（HUD 2.5D/2D 降级决策）
+    attitude: AttitudeConfidenceState = field(default_factory=AttitudeConfidenceState)
     
     # v5.8 新增：燃油状态
     fuel_state: FuelState = field(default_factory=FuelState)
@@ -510,3 +545,11 @@ class UISnapshot:
     release_status: str = "invalid"            # ready/approaching/too_far/passed/invalid
     target_zone_distance_m: float = 0.0        # 目标战区距离 (米)
     ground_speed_kmh: float = 0.0              # 地速 (km/h)
+
+    # v6.8.0 新增：HUD姿态链路输出
+    attitude_pitch_deg: float = 0.0
+    attitude_roll_deg: float = 0.0
+    attitude_bank_deg: float = 0.0
+    attitude_reliable: bool = False
+    hud_attitude_fallback: bool = True
+    hud_attitude_fallback_reason: str = "missing"

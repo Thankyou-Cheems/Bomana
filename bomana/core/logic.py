@@ -31,6 +31,7 @@ from bomana.core.state import (
     LifeState,
     FuelState,
     ZoneNavigationState,
+    AttitudeConfidenceState,
     GameState,
     ZoneDisplayInfo,
     AirfieldDisplayInfo,
@@ -80,6 +81,15 @@ class GameLogic:
     - Session禁用代理检查，减少网络延迟
     - 弹道计算移至tick线程，降低UI线程负载
     """
+
+    # v6.8.0 姿态可信度检测参数（供 HUD 回退决策）
+    ATTITUDE_MISSING_CONFIRM_SEC = 1.0
+    ATTITUDE_ZERO_CONFIRM_SEC = 3.0
+    ATTITUDE_ZERO_EPS_DEG = 0.35
+    ATTITUDE_JITTER_DECAY_PER_SEC = 1.5
+    ATTITUDE_JITTER_TRIGGER_SCORE = 3.0
+    ATTITUDE_JITTER_PITCH_RATE_DEG_S = 260.0
+    ATTITUDE_JITTER_ROLL_RATE_DEG_S = 420.0
     
     def __init__(self):
         self._lock = threading.Lock()
@@ -116,6 +126,7 @@ class GameLogic:
         
         # 1. 获取遥测数据
         tel = self.tel.fetch(budget)
+        raw_tel = tel
         
         # 2. 检查是否需要更新地图元数据（30秒缓存）
         with self._lock:
@@ -171,6 +182,7 @@ class GameLogic:
             api_up = bool(raw_api_up or used_tel_fallback or used_map_fallback)
             s.last_tel = tel
             s.last_map = mp
+            self._update_attitude_confidence_locked(raw_tel, now)
 
             # API状态管理
             if api_up:
@@ -320,6 +332,89 @@ class GameLogic:
                         self._clear_transient_state_locked()
                 else:
                     s.spawn_candidate_since = None
+
+    @staticmethod
+    def _angle_delta_deg(current: float, previous: float) -> float:
+        """计算两角度差值（映射到 [-180, 180] 后取绝对值）。"""
+        return abs(normalize_angle(float(current) - float(previous)))
+
+    def _update_attitude_confidence_locked(self, tel: TelemetryData, now: float) -> None:
+        """更新姿态可信度（须在锁内调用）。"""
+        att = self.state.attitude
+
+        # 抖动分数自然衰减，避免单次异常长期影响。
+        if att.last_sample_ts > 0:
+            dt = max(0.0, now - att.last_sample_ts)
+            if dt > 0:
+                att.jitter_score = max(0.0, att.jitter_score - dt * self.ATTITUDE_JITTER_DECAY_PER_SEC)
+        else:
+            dt = 0.0
+
+        available = bool(
+            tel.attitude_available and
+            tel.attitude_pitch_present and
+            (tel.attitude_roll_present or tel.attitude_bank_present)
+        )
+        airborne = bool(tel.state_resp_ok and ((tel.ias_kmh > 120.0) or (tel.altitude_m > 150.0)))
+
+        if available:
+            pitch = float(tel.attitude_pitch_deg)
+            lateral = float(tel.attitude_lateral_deg)
+
+            att.pitch_deg = pitch
+            att.roll_deg = lateral
+            att.bank_deg = float(tel.attitude_bank_deg)
+            att.available = True
+            att.missing_since = None
+
+            # 长期恒零检测（仅在空中启用，避免地面状态误判）。
+            if airborne and abs(pitch) <= self.ATTITUDE_ZERO_EPS_DEG and abs(lateral) <= self.ATTITUDE_ZERO_EPS_DEG:
+                if att.zero_since is None:
+                    att.zero_since = now
+            else:
+                att.zero_since = None
+
+            # 突变抖动检测：按角速度阈值累计分数。
+            if dt > 0 and (att.last_pitch_deg is not None) and (att.last_roll_deg is not None):
+                pitch_rate = self._angle_delta_deg(pitch, att.last_pitch_deg) / dt
+                roll_rate = self._angle_delta_deg(lateral, att.last_roll_deg) / dt
+                if pitch_rate >= self.ATTITUDE_JITTER_PITCH_RATE_DEG_S or roll_rate >= self.ATTITUDE_JITTER_ROLL_RATE_DEG_S:
+                    att.jitter_score += 1.0
+
+            att.last_pitch_deg = pitch
+            att.last_roll_deg = lateral
+            att.last_sample_ts = now
+        else:
+            att.available = False
+            if att.missing_since is None:
+                att.missing_since = now
+            att.zero_since = None
+            # 数据缺失时清理历史角速度基线，避免恢复后误判抖动。
+            att.last_pitch_deg = None
+            att.last_roll_deg = None
+            att.last_sample_ts = now
+
+        missing_unreliable = bool(
+            (att.missing_since is not None) and
+            ((now - att.missing_since) >= self.ATTITUDE_MISSING_CONFIRM_SEC)
+        )
+        zero_unreliable = bool(
+            (att.zero_since is not None) and
+            ((now - att.zero_since) >= self.ATTITUDE_ZERO_CONFIRM_SEC)
+        )
+        jitter_unreliable = bool(att.jitter_score >= self.ATTITUDE_JITTER_TRIGGER_SCORE)
+
+        att.reliable = bool(available and (not zero_unreliable) and (not jitter_unreliable))
+        att.fallback = not att.reliable
+
+        if missing_unreliable or (not available):
+            att.fallback_reason = "missing"
+        elif zero_unreliable:
+            att.fallback_reason = "stuck_zero"
+        elif jitter_unreliable:
+            att.fallback_reason = "jitter"
+        else:
+            att.fallback_reason = ""
 
     def _update_zone_navigation_locked(self, mp: MapObjData, tel: TelemetryData, now: float):
         """更新战区导航状态(须在锁内调用)
@@ -610,6 +705,7 @@ class GameLogic:
             tel = s.last_tel or TelemetryData()
             mp = s.last_map or MapObjData()
             life = s.current_life
+            attitude = s.attitude
             
             # 计算时间相关
             remaining = None
@@ -672,7 +768,8 @@ class GameLogic:
             diag_lines = [
                 f"MAP: ok={int(mp.ok)} | objs={mp.obj_count} | player={int(player_present)}",
                 f"IND: ok={int(tel.ind_ok)} | valid={int(tel.valid)} | type={'✓' if tel.type_name else '✗'}",
-                f"STATE: ok={int(tel.state_resp_ok)} | fuel={tel.fuel_kg:.0f}kg | ias={tel.ias_kmh:.0f}km/h"
+                f"STATE: ok={int(tel.state_resp_ok)} | fuel={tel.fuel_kg:.0f}kg | ias={tel.ias_kmh:.0f}km/h",
+                f"ATT: ok={int(attitude.available)} | rel={int(attitude.reliable)} | fb={attitude.fallback_reason or '-'}",
             ]
             diag = "\n".join(diag_lines)
 
@@ -986,6 +1083,12 @@ class GameLogic:
                 release_status=release_status,
                 target_zone_distance_m=target_zone_distance_m,
                 ground_speed_kmh=ground_speed_kmh_for_bombing,
+                attitude_pitch_deg=attitude.pitch_deg,
+                attitude_roll_deg=attitude.roll_deg,
+                attitude_bank_deg=attitude.bank_deg,
+                attitude_reliable=attitude.reliable,
+                hud_attitude_fallback=attitude.fallback,
+                hud_attitude_fallback_reason=attitude.fallback_reason,
             )
 
     def _start_new_life_locked(self, now: float):
@@ -996,6 +1099,7 @@ class GameLogic:
         s.sortie_id += 1
         s.last_refit_ts = now
         s.last_player_present_ts = now
+        s.attitude = AttitudeConfidenceState()
 
     def _reset_life_state_locked(self):
         """重置生命状态（必须在锁内调用）"""
@@ -1009,6 +1113,7 @@ class GameLogic:
         s.landing_start_time = None
         s.landed_flash_until = 0.0
         s.zone_nav = ZoneNavigationState()
+        s.attitude = AttitudeConfidenceState()
         s.map_info = None
         s.fuel_state.reset()  # v5.8 新增：重置燃油状态
 

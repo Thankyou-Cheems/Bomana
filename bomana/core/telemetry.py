@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Telemetry/network fetchers."""
 
+import math
 import time
 from typing import Optional, Tuple, Any
 
@@ -70,6 +71,55 @@ class TelemetryFetcher:
     """
     def __init__(self, http: HttpJson):
         self.http = http
+
+    @staticmethod
+    def _to_float(raw: Any, default: float = 0.0) -> float:
+        """将8111字段值转换为float，兼容 list/dict 包装。"""
+        if raw is None:
+            return float(default)
+        if isinstance(raw, dict):
+            raw = raw.get("value", default)
+        elif isinstance(raw, (list, tuple)):
+            raw = raw[0] if raw else default
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _read_float(self, payload: dict, keys: Tuple[str, ...]) -> Tuple[float, bool]:
+        """按候选键顺序读取数值，返回(值, 是否命中键)。"""
+        for key in keys:
+            if key in payload:
+                value = self._to_float(payload.get(key), 0.0)
+                if "rad" in key.lower():
+                    value = math.degrees(value)
+                return value, True
+        return 0.0, False
+
+    def _merge_attitude_fields(self, payload: dict, data: TelemetryData) -> None:
+        """合并姿态字段（支持不同机型/端点键名差异）。"""
+        pitch, pitch_present = self._read_float(
+            payload,
+            ("aviahorizon_pitch", "aviahorizon_pitch, deg", "aviahorizon_pitch, rad", "pitch", "pitch, deg"),
+        )
+        roll, roll_present = self._read_float(
+            payload,
+            ("aviahorizon_roll", "aviahorizon_roll, deg", "aviahorizon_roll, rad", "roll", "roll, deg"),
+        )
+        bank, bank_present = self._read_float(
+            payload,
+            ("bank", "bank, deg", "bank, rad", "aviahorizon_bank", "aviahorizon_bank, deg", "aviahorizon_bank, rad"),
+        )
+
+        if pitch_present:
+            data.attitude_pitch_deg = pitch
+            data.attitude_pitch_present = True
+        if roll_present:
+            data.attitude_roll_deg = roll
+            data.attitude_roll_present = True
+        if bank_present:
+            data.attitude_bank_deg = bank
+            data.attitude_bank_present = True
     
     def fetch(self, budget: Budget) -> TelemetryData:
         """获取遥测数据
@@ -88,7 +138,8 @@ class TelemetryFetcher:
         if ok and isinstance(j, dict):
             data.valid = bool(j.get("valid", False))
             data.type_name = str(j.get("type", "") or "").strip()
-            data.compass = float(j.get("compass1") or j.get("compass") or 0)
+            data.compass = self._to_float(j.get("compass1") or j.get("compass"), 0.0)
+            self._merge_attitude_fields(j, data)
         
         if not data.ind_ok:
             return data
@@ -97,20 +148,27 @@ class TelemetryFetcher:
         ok, j = self.http.get_json(f"{NetworkConfig.API_BASE}/state", budget)
         data.state_resp_ok = ok
         if ok and isinstance(j, dict):
-            data.ias_kmh = float(j.get("IAS, km/h", 0) or 0)
-            data.vy_ms = float(j.get("Vy, m/s", 0) or 0)
-            data.fuel_kg = float(j.get("Mfuel, kg", 0) or 0)
+            data.ias_kmh = self._to_float(j.get("IAS, km/h", 0), 0.0)
+            data.vy_ms = self._to_float(j.get("Vy, m/s", 0), 0.0)
+            data.fuel_kg = self._to_float(j.get("Mfuel, kg", 0), 0.0)
             
             # v5.8 新增：解析燃油管理相关字段
-            data.fuel0_kg = float(j.get("Mfuel0, kg", 0) or 0)
-            data.altitude_m = float(j.get("H, m", 0) or 0)
-            data.tas_kmh = float(j.get("TAS, km/h", 0) or 0)
-            data.throttle_pct = float(j.get("throttle 1, %", 0) or 0)
+            data.fuel0_kg = self._to_float(j.get("Mfuel0, kg", 0), 0.0)
+            data.altitude_m = self._to_float(j.get("H, m", 0), 0.0)
+            data.tas_kmh = self._to_float(j.get("TAS, km/h", 0), 0.0)
+            data.throttle_pct = self._to_float(j.get("throttle 1, %", 0), 0.0)
             
             # v5.9.6 + v6.6.0：解析起落架状态和百分比
-            gear_pct = float(j.get("gear, %", 0) or 0)
+            gear_pct = self._to_float(j.get("gear, %", 0), 0.0)
             data.gear_pct = gear_pct  # v6.6.0: 保存原始百分比
             data.gear_down = (gear_pct > 50)  # 超过50%视为放下状态
+            self._merge_attitude_fields(j, data)
+
+        data.attitude_available = bool(
+            data.state_resp_ok and
+            data.attitude_pitch_present and
+            (data.attitude_roll_present or data.attitude_bank_present)
+        )
         
         return data
 
