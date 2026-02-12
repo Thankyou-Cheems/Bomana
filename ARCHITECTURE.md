@@ -26,6 +26,7 @@
 │  ├─ ui/
 │  │  ├─ app.py               # App (Tk UI orchestrator)
 │  │  ├─ dialogs.py           # Settings/About/etc dialogs
+│  │  ├─ hud_overlay.py       # Fullscreen HUD overlay skeleton (v6.8.0)
 │  │  ├─ nav_window.py        # Standalone navigation window
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
