@@ -122,10 +122,4 @@
   Cause: navigation geometry used normalized map coordinates with fixed `DISTANCE_SCALE=100` and ignored `map_info` axis scales (`map_min/map_max`), introducing distance and bearing distortion on non-square/variable-size maps
   Fix/Workaround: switched nav geometry to map_info-based meter scaling for bearing/distance/ground-speed (while preserving existing `distance * DISTANCE_SCALE` UI compatibility)
 
-- Date: 2026-02-12
-  Context: bootstrapping WinUI3 frontend from CLI in local dev shell
-  Symptom: `dotnet new list winui` returned no matching template
-  Cause: current SDK environment did not include an official WinUI3 project template by default
-  Fix/Workaround: proceed with Python-side bridge/runtime scaffolding first; create WinUI3 project from Visual Studio template or install a vetted template package before frontend implementation
-
 

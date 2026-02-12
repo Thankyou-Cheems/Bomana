@@ -99,35 +99,13 @@ pyinstaller --noconsole --onefile `
 ===============================================================================
 """
 import tkinter as tk
-import os
-from pathlib import Path
 
 from bomana.utils.system import SingleInstanceManager, Win32
 from bomana.ui.app import App
-from bomana.ui.winui_host import run_winui_runtime, has_winui_frontend
 
 # ============================================================================
 # 程序入口
 # ============================================================================
-
-def _ui_runtime() -> str:
-    """UI runtime selector.
-    
-    Supported values:
-    - auto (default): prefer WinUI3 when frontend exe exists, else Tk
-    - tk: current tkinter UI
-    - winui3: launch WinUI3 frontend + local snapshot bridge
-    """
-    runtime = os.environ.get("BOMANA_UI_RUNTIME", "auto")
-    return runtime.strip().lower()
-
-
-def _run_tk_ui():
-    """Run legacy tkinter UI."""
-    root = tk.Tk()
-    App(root)
-    root.mainloop()
-
 
 def main():
     """主函数"""
@@ -139,23 +117,11 @@ def main():
     
     # 隐藏控制台窗口
     Win32.hide_console()
-
-    runtime = _ui_runtime()
-    app_root = Path(__file__).resolve().parent
-    prefer_winui = runtime == "winui3" or (runtime == "auto" and has_winui_frontend(app_root))
-
-    if prefer_winui:
-        try:
-            code = run_winui_runtime(app_root)
-            if code != 0:
-                print(f"[WinUI3] 前端退出码: {code}")
-            return
-        except Exception as e:
-            # WinUI 前端不可用时回退到 Tk，避免阻断现有可用路径。
-            print(f"[WinUI3] 启动失败，回退 Tk: {e}")
-
-    # 默认/回退路径：创建 Tk 主窗口和应用
-    _run_tk_ui()
+    
+    # 创建主窗口和应用
+    root = tk.Tk()
+    App(root)
+    root.mainloop()
 
 
 if __name__ == "__main__":

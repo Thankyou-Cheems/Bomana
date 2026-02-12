@@ -36,7 +36,6 @@ MANIFEST
 # PyInstaller
 *.manifest
 *.spec
-!winui/Bomana.WinUI3/app.manifest
 
 # Installer logs
 pip-log.txt
@@ -256,11 +255,6 @@ TODO_PRIVATE.md
 # ============================================================================
 # 其他
 # ============================================================================
-
-# WinUI / .NET build artifacts
-winui/Bomana.WinUI3/bin/
-winui/Bomana.WinUI3/obj/
-winui/dist/
 
 # 压缩文件（除了发布用的）
 *.zip

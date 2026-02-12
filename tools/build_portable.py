@@ -109,47 +109,6 @@ def add_file_to_zip(zf: zipfile.ZipFile, root: Path, path: Path) -> None:
     zf.write(path, rel)
 
 
-def add_external_file_to_zip(zf: zipfile.ZipFile, path: Path, arcname: str) -> None:
-    zf.write(path, arcname.replace("\\", "/"))
-
-
-def find_winui_runtime_dir(root: Path) -> Optional[Path]:
-    """Locate WinUI frontend runtime directory to package.
-
-    Priority:
-    1) BOMANA_WINUI_DIST_DIR (absolute or relative to repo root)
-    2) repo/winui/dist
-    3) latest build output under repo/winui/Bomana.WinUI3/bin/**/Bomana.WinUI3.exe
-    """
-    override = os.environ.get("BOMANA_WINUI_DIST_DIR", "").strip()
-    candidates = []
-    if override:
-        p = Path(override)
-        if not p.is_absolute():
-            p = (root / p).resolve()
-        candidates.append(p)
-
-    candidates.append((root / "winui" / "dist").resolve())
-
-    for c in candidates:
-        if c.exists() and c.is_dir() and (c / "Bomana.WinUI3.exe").exists():
-            return c
-
-    bin_root = (root / "winui" / "Bomana.WinUI3" / "bin").resolve()
-    if bin_root.exists():
-        exe_dirs = []
-        for exe in bin_root.rglob("Bomana.WinUI3.exe"):
-            try:
-                exe_dirs.append((exe.stat().st_mtime, exe.parent))
-            except OSError:
-                continue
-        if exe_dirs:
-            exe_dirs.sort(key=lambda x: x[0], reverse=True)
-            return exe_dirs[0][1]
-
-    return None
-
-
 def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path:
     name = f"Bomana_app_{variant}_v{version}.zip"
     out_zip = out_dir / name
@@ -181,18 +140,6 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
                 add_file_to_zip(zf, root, ccrp_json)
             elif ccrp_py.exists():
                 add_file_to_zip(zf, root, ccrp_py)
-
-        # Optional WinUI3 frontend runtime assets
-        winui_dir = find_winui_runtime_dir(root)
-        if winui_dir:
-            for p in winui_dir.rglob("*"):
-                if p.is_dir():
-                    continue
-                # Keep package lean; symbols are not required at runtime.
-                if p.suffix.lower() in {".pdb"}:
-                    continue
-                rel = p.relative_to(winui_dir).as_posix()
-                add_external_file_to_zip(zf, p, f"winui/{rel}")
 
     return out_zip
 
