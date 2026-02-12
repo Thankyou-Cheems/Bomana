@@ -191,6 +191,18 @@ GitHub 云端自动打包发布：
 python Bomana.pyw
 ```
 
+#### 可选：实验性 WinUI3 入口（迁移一期）
+
+```powershell
+$env:BOMANA_UI_RUNTIME="winui3"
+$env:BOMANA_WINUI_EXE="D:\path\to\Bomana.WinUI3.exe"  # 可选
+python Bomana.pyw
+```
+
+说明：
+- 未设置 `BOMANA_UI_RUNTIME` 时默认使用现有 Tk UI
+- WinUI3 前端启动时，Python 会自动提供本地快照 API（详见 `winui/SNAPSHOT_API.md`）
+
 ### 开启 War Thunder 本地服务器
 
 **重要：** 必须在 War Thunder 中启用本地网页服务器，Bomana 才能获取数据。
