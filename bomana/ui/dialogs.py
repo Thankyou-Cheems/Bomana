@@ -14,6 +14,7 @@ from bomana.config import (
     ENABLE_CHECKLIST,
     ENABLE_CCRP,
     UIConfig,
+    HUDConfig,
     PanelConfig,
     HotkeyConfig,
     SnapConfig,
@@ -268,6 +269,106 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 highlightthickness=0
             ).pack(anchor="w")
         row += 1
+
+        # HUD 显示设置
+        tk.Frame(frame, bg=Theme.SEPARATOR, height=1).grid(
+            row=row, column=0, columnspan=2, sticky="ew", pady=(8, 8))
+        row += 1
+
+        tk.Label(frame, text="HUD叠加层:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_enabled_var = tk.BooleanVar(value=HUDConfig.enabled)
+        tk.Checkbutton(
+            frame, text="启用HUD", variable=self.hud_enabled_var,
+            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG, activeforeground=Theme.TEXT,
+            highlightthickness=0
+        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
+        row += 1
+
+        tk.Label(frame, text="HUD透明度:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_alpha_var = tk.IntVar(value=int(HUDConfig.alpha))
+        tk.Scale(
+            frame, from_=30, to=255, orient="horizontal", length=180,
+            variable=self.hud_alpha_var, bg=Theme.BG, fg=Theme.TEXT,
+            highlightthickness=0, troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE
+        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
+        row += 1
+
+        tk.Label(frame, text="HUD缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_scale_var = tk.DoubleVar(value=float(HUDConfig.scale))
+        tk.Scale(
+            frame, from_=0.5, to=2.0, resolution=0.05, orient="horizontal", length=180,
+            variable=self.hud_scale_var, bg=Theme.BG, fg=Theme.TEXT,
+            highlightthickness=0, troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE
+        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
+        row += 1
+
+        tk.Label(frame, text="HUD平滑:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_smoothing_var = tk.DoubleVar(value=float(HUDConfig.smoothing))
+        tk.Scale(
+            frame, from_=0.0, to=1.0, resolution=0.05, orient="horizontal", length=180,
+            variable=self.hud_smoothing_var, bg=Theme.BG, fg=Theme.TEXT,
+            highlightthickness=0, troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE
+        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
+        row += 1
+
+        tk.Label(frame, text="HUD显示器策略:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_follow_main_monitor_var = tk.BooleanVar(value=bool(HUDConfig.follow_main_window_monitor))
+        tk.Checkbutton(
+            frame, text="跟随主窗口显示器（关闭=跟随鼠标）", variable=self.hud_follow_main_monitor_var,
+            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG, activeforeground=Theme.TEXT,
+            highlightthickness=0
+        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
+        row += 1
+
+        tk.Label(frame, text="HUD信息层级:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_compass_enabled_var = tk.BooleanVar(value=bool(HUDConfig.compass_enabled))
+        tk.Checkbutton(
+            frame, text="显示顶部简化罗盘条", variable=self.hud_compass_enabled_var,
+            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG, activeforeground=Theme.TEXT,
+            highlightthickness=0
+        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
+        row += 1
+
+        tk.Label(frame, text="HUD配色:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_color_style_var = tk.StringVar(value=str(getattr(HUDConfig, "color_style", "auto")))
+        self._hud_color_style_labels = {
+            "auto": "自动(可靠绿/降级琥珀)",
+            "green": "绿色",
+            "amber": "琥珀",
+            "cyan": "青色",
+            "white": "白色",
+        }
+        color_btn_text = tk.StringVar(
+            value=self._hud_color_style_labels.get(self.hud_color_style_var.get(), "自动(可靠绿/降级琥珀)")
+        )
+        self._hud_color_btn_text = color_btn_text
+        menu_btn = tk.Menubutton(
+            frame, textvariable=self._hud_color_btn_text, bg=Theme.GRAYPILL, fg=Theme.TEXT,
+            bd=0, padx=10, pady=2, highlightthickness=1,
+            highlightbackground=Theme.BORDER, relief="flat"
+        )
+        menu_btn.grid(row=row, column=1, sticky="w", padx=10, pady=3)
+        menu = tk.Menu(menu_btn, tearoff=0, bg=Theme.GRAYPILL, fg=Theme.TEXT)
+        for style, label in self._hud_color_style_labels.items():
+            menu.add_command(
+                label=label,
+                command=lambda s=style, l=label: (self.hud_color_style_var.set(s), self._hud_color_btn_text.set(l))
+            )
+        menu_btn["menu"] = menu
+        row += 1
         
         # 主题提示
         tk.Label(frame, text="* 主题与UI缩放保存后立即生效", bg=Theme.BG, fg=Theme.TEXT_MUTED,
@@ -477,6 +578,15 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             self.nav_width_var.set(1.0)
             self.scale_var.set(0.85)
             self.theme_var.set("dark")
+            self.hud_enabled_var.set(True)
+            self.hud_alpha_var.set(200)
+            self.hud_scale_var.set(1.0)
+            self.hud_smoothing_var.set(0.35)
+            self.hud_follow_main_monitor_var.set(True)
+            self.hud_compass_enabled_var.set(True)
+            self.hud_color_style_var.set("auto")
+            if hasattr(self, "_hud_color_btn_text"):
+                self._hud_color_btn_text.set("自动(可靠绿/降级琥珀)")
             
             # 重置面板设置
             for key in self.panel_vars:
@@ -517,6 +627,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         config = ConfigManager.load()
         old_scale = float(UIConfig.UI_SCALE_MULT)
         old_nav_width = float(PanelConfig.navigation_bar_width)
+        old_hud_enabled = bool(HUDConfig.enabled)
+        old_hud_alpha = int(HUDConfig.alpha)
+        old_hud_follow_main = bool(HUDConfig.follow_main_window_monitor)
+        old_hud_compass_enabled = bool(HUDConfig.compass_enabled)
+        old_hud_color_style = str(getattr(HUDConfig, "color_style", "auto"))
         
         # 显示设置
         UIConfig.WINDOW_ALPHA = self.alpha_var.get()
@@ -524,10 +639,22 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         UIConfig.UI_SCALE_MULT = self.scale_var.get()
         new_theme = self.theme_var.get()
         old_theme = Theme.get_current()
+        HUDConfig.enabled = bool(self.hud_enabled_var.get())
+        HUDConfig.alpha = max(30, min(255, int(self.hud_alpha_var.get())))
+        HUDConfig.scale = max(0.5, min(2.0, float(self.hud_scale_var.get())))
+        HUDConfig.smoothing = max(0.0, min(1.0, float(self.hud_smoothing_var.get())))
+        HUDConfig.follow_main_window_monitor = bool(self.hud_follow_main_monitor_var.get())
+        HUDConfig.compass_enabled = bool(self.hud_compass_enabled_var.get())
+        new_hud_color_style = str(self.hud_color_style_var.get() or "auto").strip().lower()
+        if new_hud_color_style not in {"auto", "green", "amber", "cyan", "white"}:
+            new_hud_color_style = "auto"
+        HUDConfig.color_style = new_hud_color_style
         
         config['alpha'] = UIConfig.WINDOW_ALPHA
         config['scale'] = UIConfig.UI_SCALE_MULT
         config['theme'] = new_theme
+        config['hud_enabled'] = HUDConfig.enabled
+        config['hud'] = HUDConfig.to_dict()
         
         # 面板设置
         panel_config = {}
@@ -602,6 +729,31 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 scale_changed=scale_changed,
                 nav_width_changed=nav_width_changed,
             )
+
+        hud_enabled_changed = old_hud_enabled != bool(HUDConfig.enabled)
+        hud_alpha_changed = old_hud_alpha != int(HUDConfig.alpha)
+        hud_follow_changed = old_hud_follow_main != bool(HUDConfig.follow_main_window_monitor)
+        hud_compass_changed = old_hud_compass_enabled != bool(HUDConfig.compass_enabled)
+        hud_color_changed = old_hud_color_style != str(HUDConfig.color_style)
+
+        if HUDConfig.enabled:
+            if hasattr(self.app, "_show_hud_overlay"):
+                self.app._show_hud_overlay()
+            if getattr(self.app, "hud_overlay", None):
+                if hud_follow_changed:
+                    self.app.hud_overlay.refresh_monitor_geometry()
+                self.app.hud_overlay.update_transparency()
+        else:
+            if getattr(self.app, "hud_overlay", None) and self.app.hud_overlay.is_visible():
+                self.app.hud_overlay.hide()
+            if hasattr(self.app, "_hud_last_target"):
+                self.app._hud_last_target = None
+
+        if hud_enabled_changed or hud_alpha_changed or hud_compass_changed or hud_color_changed:
+            if hasattr(self.app, "_update_hint"):
+                self.app._update_hint()
+            if hasattr(self.app, "_refresh_tray"):
+                self.app._refresh_tray()
 
         messagebox.showinfo("设置", "设置已保存", parent=self)
         

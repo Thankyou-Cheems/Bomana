@@ -1282,10 +1282,23 @@ class App:
                 overlay.refresh_monitor_geometry()
 
             target_zone = None
+            secondary_targets = []
             if snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING):
                 target_zone = next((z for z in snap.zones if z.is_target), None)
                 if target_zone is None and snap.zones:
                     target_zone = min(snap.zones, key=lambda z: abs(z.relative))
+                if snap.zones:
+                    for zone in sorted(snap.zones, key=lambda z: abs(z.relative)):
+                        if target_zone is not None and zone.id == target_zone.id:
+                            continue
+                        secondary_targets.append(
+                            {
+                                "relative": float(zone.relative),
+                                "distance": float(zone.distance_km),
+                            }
+                        )
+                        if len(secondary_targets) >= 2:
+                            break
 
             if target_zone:
                 self._hud_last_target = {
@@ -1295,6 +1308,8 @@ class App:
                     "pitch": float(getattr(snap, "attitude_pitch_deg", 0.0) or 0.0),
                     "roll": float(getattr(snap, "attitude_roll_deg", 0.0) or 0.0),
                     "fallback": bool(getattr(snap, "hud_attitude_fallback", True)),
+                    "heading": float(getattr(snap, "player_heading", 0.0) or 0.0),
+                    "secondary_targets": list(secondary_targets),
                 }
                 overlay.clear_standby()
                 overlay.update_target(
@@ -1304,6 +1319,8 @@ class App:
                     attitude_pitch_deg=self._hud_last_target["pitch"],
                     attitude_roll_deg=self._hud_last_target["roll"],
                     attitude_fallback=self._hud_last_target["fallback"],
+                    heading_deg=self._hud_last_target["heading"],
+                    secondary_targets=self._hud_last_target["secondary_targets"],
                 )
             else:
                 can_hold = False
@@ -1313,6 +1330,8 @@ class App:
 
                 if can_hold:
                     cached = self._hud_last_target
+                    heading = float(getattr(snap, "player_heading", cached.get("heading", 0.0)) or 0.0)
+                    cached["heading"] = heading
                     overlay.clear_standby()
                     overlay.update_target(
                         has_target=True,
@@ -1321,6 +1340,8 @@ class App:
                         attitude_pitch_deg=float(cached["pitch"]),
                         attitude_roll_deg=float(cached["roll"]),
                         attitude_fallback=bool(cached["fallback"]),
+                        heading_deg=heading,
+                        secondary_targets=list(cached.get("secondary_targets", [])),
                     )
                 else:
                     overlay.clear_target()

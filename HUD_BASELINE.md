@@ -35,26 +35,6 @@ Output:
 - JSON baseline report under `tools/output/`
 - Per-aircraft availability/jitter/zero-like rates
 
-## First-principles Timing Scoring Tool
-
-Command:
-
-```bash
-python tools/score_hud_mvp_metrics.py --input tools/hud_mvp_metric_template.json
-```
-
-Input fields per trial:
-- `acq_start_s`: spawn/readiness start timestamp
-- `acq_done_s`: first correct HUD target pick timestamp
-- `correct_done_s`: stable heading correction timestamp (within `+/-5deg` for `>=1s`)
-- `loss_s` / `reacq_done_s`: optional pair for target-loss recovery timing
-
-Output:
-- JSON score report under `tools/output/`
-- Per-trial pass/fail for `T_acq` / `T_correct` / `T_reacq`
-- Aggregate mean/median/p90 and pass rates
-- Manual execution matrix template: `HUD_MVP_ACCEPTANCE.md`
-
 ## Aircraft Baseline Table (Template)
 
 | Aircraft | Samples | Pitch | Roll | Bank | Attitude Available | Compass | Altitude | Zero-like (airborne) | Jitter | Notes |

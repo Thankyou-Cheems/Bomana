@@ -262,7 +262,9 @@ class HUDConfig:
     alpha = 200                  # 叠加层透明度（0-255）
     scale = 1.0                  # 全局缩放倍率
     smoothing = 0.35             # 位移平滑系数（0-1）
-    follow_main_window_monitor = True  # 是否跟随主窗口所在显示器
+    follow_main_window_monitor = True  # True=跟随主窗口显示器，False=跟随鼠标所在显示器
+    compass_enabled = True       # 是否显示顶部简化罗盘条
+    color_style = "auto"         # 配色风格：auto/green/amber/cyan/white
 
     @classmethod
     def to_dict(cls) -> dict:
@@ -272,6 +274,8 @@ class HUDConfig:
             "scale": float(cls.scale),
             "smoothing": float(cls.smoothing),
             "follow_main_window_monitor": bool(cls.follow_main_window_monitor),
+            "compass_enabled": bool(cls.compass_enabled),
+            "color_style": str(cls.color_style),
         }
 
     @classmethod
@@ -287,6 +291,11 @@ class HUDConfig:
             cls.smoothing = max(0.0, min(1.0, float(data["smoothing"])))
         if isinstance(data.get("follow_main_window_monitor"), bool):
             cls.follow_main_window_monitor = data["follow_main_window_monitor"]
+        if isinstance(data.get("compass_enabled"), bool):
+            cls.compass_enabled = data["compass_enabled"]
+        style = str(data.get("color_style", cls.color_style) or "").strip().lower()
+        if style in {"auto", "green", "amber", "cyan", "white"}:
+            cls.color_style = style
 
 
 class HotkeyConfig:
