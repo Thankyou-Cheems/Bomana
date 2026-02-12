@@ -57,8 +57,9 @@ Keep it concise and update when workflows or boundaries change.
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-- Every `git commit` MUST use `/gc` (`git-commit-smart`) to generate the commit message first
-- Do NOT bypass `/gc` by writing a direct commit message and committing immediately
+- On `main` branch, every `git commit` MUST use `/gc` (`git-commit-smart`) to generate the commit message first
+- `beads-sync` commits are exempt from `/gc` (auto-sync/manual sync commits allowed)
+- On `main` branch, do NOT bypass `/gc` by writing a direct commit message and committing immediately
 Use 'bd' for task tracking
 
 
