@@ -55,6 +55,7 @@ from bomana.utils.math_utils import (
 from bomana.ui.widgets import Pill, HeadingTape
 from bomana.ui.dialogs import SettingsDialog, ChecklistEditor, BombSelectorDialog, AboutDialog
 from bomana.ui.nav_window import NavigationWindow
+from bomana.ui.hud_overlay import HUDOverlay
 
 try:
     from PIL import Image
@@ -142,6 +143,8 @@ class App:
         self._last_zone_recalc_ts = 0.0
         self._zone_layout_mode = None
         self._airport_layout_mode = None
+        self.hud_overlay = None
+        self._hud_monitor_refresh_ts = 0.0
 
         # 初始化流程
         self._load_config()
@@ -159,6 +162,11 @@ class App:
                 self.nav_window.show()
         else:
             self.nav_window = None
+
+        # v6.8.0: 初始化 HUD 叠加层（按配置决定是否显示）
+        if HUDConfig.enabled:
+            if not self._show_hud_overlay():
+                HUDConfig.enabled = False
 
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
@@ -1216,9 +1224,85 @@ class App:
         if self._zone_sound_enabled:
             self.sound.play(pattern="on")
 
+    def _ensure_hud_overlay(self) -> bool:
+        """确保 HUD 叠加层实例可用。"""
+        if self.hud_overlay:
+            return True
+        try:
+            self.hud_overlay = HUDOverlay(self)
+            self.hud_overlay.set_lock_state(self._locked)
+            self._hud_monitor_refresh_ts = 0.0
+            return True
+        except Exception as e:
+            self.hud_overlay = None
+            print(f"[HUD] 初始化失败: {e}")
+            return False
+
+    def _show_hud_overlay(self) -> bool:
+        """显示 HUD 叠加层。"""
+        if not self._ensure_hud_overlay():
+            return False
+        try:
+            self.hud_overlay.show()
+            self.hud_overlay.set_lock_state(self._locked)
+            self._hud_monitor_refresh_ts = 0.0
+            return True
+        except Exception as e:
+            print(f"[HUD] 显示失败: {e}")
+            return False
+
+    def _update_hud_overlay(self, snap: UISnapshot) -> None:
+        """在 UI 刷新中更新 HUD 叠加层。"""
+        overlay = self.hud_overlay
+        if not HUDConfig.enabled:
+            if overlay and overlay.is_visible():
+                overlay.hide()
+            return
+
+        if not self._show_hud_overlay():
+            HUDConfig.enabled = False
+            self._update_hint()
+            self._save_config()
+            self._refresh_tray()
+            return
+
+        overlay = self.hud_overlay
+        if not overlay:
+            return
+
+        now = time.monotonic()
+        if (now - self._hud_monitor_refresh_ts) >= 0.35:
+            self._hud_monitor_refresh_ts = now
+            overlay.refresh_monitor_geometry()
+
+        if snap.api_down or snap.phase not in (Phase.ALIVE, Phase.LOSS_PENDING):
+            overlay.clear_target()
+            return
+
+        target_zone = next((z for z in snap.zones if z.is_target), None)
+        if target_zone is None and snap.zones:
+            target_zone = min(snap.zones, key=lambda z: abs(z.relative))
+
+        if not target_zone:
+            overlay.clear_target()
+            return
+
+        overlay.update_from_snapshot(
+            snapshot=snap,
+            target_relative_deg=target_zone.relative,
+            target_distance_km=target_zone.distance_km,
+        )
+
     def _toggle_hud(self):
-        """切换 HUD 叠加层开关（窗口骨架由后续任务实现）。"""
+        """切换 HUD 叠加层开关。"""
         HUDConfig.enabled = not HUDConfig.enabled
+        if HUDConfig.enabled:
+            if not self._show_hud_overlay():
+                HUDConfig.enabled = False
+        else:
+            if self.hud_overlay:
+                self.hud_overlay.hide()
+
         self._update_hint()
         self._save_config()
         self._refresh_tray()
@@ -1548,6 +1632,8 @@ class App:
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
         if self.nav_window:
             self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
+        if self.hud_overlay:
+            self.hud_overlay.set_lock_state(self._locked)
         self._update_hint()
         self._refresh_tray()
 
@@ -1747,6 +1833,9 @@ class App:
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
         if ENABLE_ZONES and getattr(self, "nav_window", None):
             self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
+        if self.hud_overlay:
+            self.hud_overlay.set_lock_state(self._locked)
+            self.hud_overlay.update_transparency()
         self._refresh_tray()
 
     def _edit_checklist(self):
@@ -1785,6 +1874,13 @@ class App:
                 self.tray.stop()
             except:
                 pass
+
+        if self.hud_overlay:
+            try:
+                self.hud_overlay.destroy()
+            except Exception:
+                pass
+            self.hud_overlay = None
         
         SingleInstanceManager.release()
         self.root.destroy()
@@ -2609,6 +2705,9 @@ class App:
             if snap.has_target:
                 debug_text += f" | 目标偏离: {int(snap.deviation_angle)}°"
             self.diag_lbl.config(text=debug_text)
+
+        # HUD 叠加层更新（v6.8.0）
+        self._update_hud_overlay(snap)
 
         # 继续下一帧（基于实际耗时补偿）
         elapsed_ms = (time.monotonic() - loop_start) * 1000.0
