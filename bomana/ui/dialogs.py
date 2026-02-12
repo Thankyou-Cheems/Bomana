@@ -428,7 +428,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             ("corner", "切换角落", HotkeyConfig.KEY_CORNER),
             ("beep", "声音开关", HotkeyConfig.KEY_BEEP),
             ("zones", "战区提示音", HotkeyConfig.KEY_ZONES),
-            ("hud", "HUD开关", HotkeyConfig.KEY_HUD),
         ]
         
         for key, label, current in hotkeys:
@@ -455,7 +454,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             menu_btn["menu"] = menu
         
         # 提示
-        tk.Label(frame, text="* 避免与游戏快捷键冲突\n* 更改后需要重启热键服务", 
+        tk.Label(frame, text="* 避免与游戏快捷键冲突\n* 更改后需要重启热键服务\n* HUD 仅可在显示设置中启用/关闭", 
                 bg=Theme.BG, fg=Theme.TEXT_MUTED, font=("Segoe UI", 8),
                 justify="left").pack(anchor="w", pady=(15, 0))
 
@@ -567,7 +566,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             self.nav_width_var.set(1.0)
             self.scale_var.set(0.85)
             self.theme_var.set("dark")
-            self.hud_enabled_var.set(True)
+            self.hud_enabled_var.set(False)
             self.hud_alpha_var.set(255)
             self.hud_scale_var.set(1.0)
             self.hud_smoothing_var.set(0.35)
@@ -587,7 +586,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 "corner": "F9",
                 "beep": "F10",
                 "zones": "F11",
-                "hud": "F12",
             }
             for key, val in defaults.items():
                 self.hotkey_vars[key].set(val)
@@ -656,6 +654,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         hotkey_bindings = {}
         for key, var in self.hotkey_vars.items():
             hotkey_bindings[key] = var.get()
+        # HUD 热键入口已停用，保留配置字段兼容旧配置结构。
+        hotkey_bindings["hud"] = HotkeyConfig.KEY_HUD
         HotkeyConfig.set_bindings(hotkey_bindings)
         
         config['global_hotkeys'] = HotkeyConfig.GLOBAL_HOTKEYS

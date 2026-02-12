@@ -978,7 +978,6 @@ class App:
         self.root.bind(f"<{HotkeyConfig.KEY_CORNER}>", lambda e: self._next_corner())
         self.root.bind(f"<{HotkeyConfig.KEY_BEEP}>", lambda e: self._toggle_beep())
         self.root.bind(f"<{HotkeyConfig.KEY_ZONES}>", lambda e: self._toggle_zone_sound())
-        self.root.bind(f"<{HotkeyConfig.KEY_HUD}>", lambda e: self._toggle_hud())
         self.root.bind("<Control-MouseWheel>", self._adjust_alpha)
         
         # 拖动相关
@@ -1029,7 +1028,6 @@ class App:
             (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.get_vk(HotkeyConfig.KEY_CORNER), self._next_corner),
             (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.get_vk(HotkeyConfig.KEY_BEEP), self._toggle_beep),
             (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.get_vk(HotkeyConfig.KEY_ZONES), self._toggle_zone_sound),
-            (HotkeyConfig.HK_ID_HUD, HotkeyConfig.get_vk(HotkeyConfig.KEY_HUD), self._toggle_hud),
         ]
         self._ghk = GlobalHotkeys(self.root, hotkeys)
         self._ghk.start()
@@ -1072,9 +1070,6 @@ class App:
         def do_zone_sound(icon, item):
             app.root.after(0, app._toggle_zone_sound)
 
-        def do_hud(icon, item):
-            app.root.after(0, app._toggle_hud)
-        
         def do_edit_checklist(icon, item):
             app.root.after(0, app._edit_checklist)
         
@@ -1103,9 +1098,6 @@ class App:
         def is_zone_sound_on(item):
             return app._zone_sound_enabled
 
-        def is_hud_on(item):
-            return HUDConfig.enabled
-        
         def is_debug_on(item):
             return app._debug
         
@@ -1184,9 +1176,6 @@ class App:
         # 战区提示音（仅在战区功能启用时显示）
         if ENABLE_ZONES:
             menu_items.append(pystray.MenuItem(f"🔔 战区提示音 ({HotkeyConfig.KEY_ZONES})", do_zone_sound, checked=is_zone_sound_on))
-
-        # HUD 开关（v6.8.0）
-        menu_items.append(pystray.MenuItem(f"🎯 HUD ({HotkeyConfig.KEY_HUD})", do_hud, checked=is_hud_on))
         
         # 检查清单编辑（仅在检查清单功能启用时显示）
         if ENABLE_CHECKLIST:
@@ -1759,11 +1748,9 @@ class App:
         k_lock = HotkeyConfig.KEY_LOCK
         k_corner = HotkeyConfig.KEY_CORNER
         k_beep = HotkeyConfig.KEY_BEEP
-        k_hud = HotkeyConfig.KEY_HUD
-        hud = "🎯开" if HUDConfig.enabled else "❌关"
 
         if self._locked:
-            parts = [f"{k_reset}重置", f"{k_lock}解锁", f"{k_corner}角落", f"{k_beep}声音({sound})", f"{k_hud}HUD({hud})"]
+            parts = [f"{k_reset}重置", f"{k_lock}解锁", f"{k_corner}角落", f"{k_beep}声音({sound})"]
             # 战区提示音仅在战区功能启用时显示
             if ENABLE_ZONES:
                 zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
@@ -1771,7 +1758,7 @@ class App:
                 parts.append(f"{k_zones}战区({zone_sound})")
             return " │ ".join(parts)
         else:
-            parts = ["拖动移动", f"{k_lock}锁定", f"{k_beep}声音({sound})", f"{k_hud}HUD({hud})"]
+            parts = ["拖动移动", f"{k_lock}锁定", f"{k_beep}声音({sound})"]
             if ENABLE_ZONES:
                 zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
                 k_zones = HotkeyConfig.KEY_ZONES

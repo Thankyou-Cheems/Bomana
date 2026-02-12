@@ -10,7 +10,7 @@ import json
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.7.5"
+__version__ = "6.7.6"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -255,8 +255,8 @@ class HUDConfig:
 
     v6.8.0 首版仅提供开关与基础参数，具体渲染由后续模块实现。
     """
-    # HUD 总开关（可由配置/热键切换）
-    enabled = True
+    # HUD 总开关（仅由设置页和配置控制）
+    enabled = False
 
     # 基础显示参数
     alpha = 255                  # 叠加层透明度（0-255）
@@ -309,7 +309,7 @@ class HotkeyConfig:
 
     [快捷键自定义]
     - 支持功能键: F1-F12
-    - 默认绑定: F7=重置, F8=锁定, F9=角落, F10=声音, F11=战区, F12=HUD
+    - 默认绑定: F7=重置, F8=锁定, F9=角落, F10=声音, F11=战区
     - 可在设置对话框中自定义
     - 注意: 避免与游戏快捷键冲突(F1-F4通常被游戏占用)
     """
@@ -329,7 +329,7 @@ class HotkeyConfig:
     KEY_CORNER = "F9"    # 切换角落
     KEY_BEEP = "F10"     # 声音开关
     KEY_ZONES = "F11"    # 战区提示音
-    KEY_HUD = "F12"      # HUD开关
+    KEY_HUD = "F12"      # HUD开关（兼容保留，默认不绑定）
 
     # 热键ID（用于注册/注销）
     HK_ID_RESET = 7007
