@@ -8,7 +8,7 @@ A powerful War Thunder timer made for the "Space Monkeys" who love dropping bomb
   <img src="app.png" width="320" alt="Bomana promotional art">
 </p>
 
-[![Version](https://img.shields.io/github/v/release/Thankyou-Cheems/Bomana?display_name=tag&sort=semver&label=version)](https://github.com/Thankyou-Cheems/Bomana/releases)
+[![App Release](https://img.shields.io/github/v/tag/Thankyou-Cheems/Bomana?sort=semver&filter=v*.*.*-app&label=app%20release)](https://github.com/Thankyou-Cheems/Bomana/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-yellow.svg)](https://www.python.org/)
 [![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=brightgreen)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
@@ -414,11 +414,11 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 ## 📝 更新日志 | Changelog
 
-详见 `CHANGELOG.md`（最新版本：v6.8.0）。
+详见 `CHANGELOG.md`（源码版本以 `bomana/config.py` 中 `__version__` 为准；已发布版本见顶部 `app release` 徽章）。
 
 ---
 
-*Made with ❤️ by 猹Cheems for the Space Monkeys community* ❤️ by 猹Cheems for the Space Monkeys community*
+*Made with ❤️ by 猹Cheems for the Space Monkeys community*
 
 ## 🔄 更新服务仓库说明
 
