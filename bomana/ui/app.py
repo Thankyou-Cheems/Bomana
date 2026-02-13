@@ -8,6 +8,7 @@ import time
 import tkinter as tk
 import locale
 import webbrowser
+from dataclasses import replace
 from tkinter import font as tkfont
 from enum import Enum
 from typing import Optional, Tuple, Any, List, Dict
@@ -37,7 +38,7 @@ from bomana.config import (
     AboutConfig,
 )
 from bomana.core.logic import GameLogic
-from bomana.core.state import UISnapshot, Phase
+from bomana.core.state import UISnapshot, Phase, ZoneDisplayInfo, AirfieldDisplayInfo
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.config import FileConfig
 from bomana.utils.system import Win32, GlobalHotkeys, SingleInstanceManager
@@ -109,6 +110,18 @@ class App:
         self._corner = Corner.TOP_RIGHT
         self._locked = True
         self._debug = False
+        self._debug_force_mock = True
+        self._debug_scene_index = 0
+        self._debug_frame_counter = 0
+        self._debug_live_available = False
+        self._debug_effective_mock = False
+        self._debug_scene_names = [
+            "巡航导航",
+            "偏航修正",
+            "低油返航",
+            "投弹窗口",
+            "地面检查",
+        ]
         self._last_beep_sec = -1
         self._zone_sound_enabled = True
 
@@ -569,6 +582,79 @@ class App:
             anchor="w", justify="left",
             wraplength=int(UIConfig.DEBUG_WRAP_LENGTH*s)
         )
+        self.debug_ctrl_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
+        btn_pad_x = int(6 * s)
+        btn_pad_y = max(1, int(1 * s))
+        debug_btn_font = font_hint
+
+        self.debug_source_btn = tk.Label(
+            self.debug_ctrl_row,
+            text="数据源: 模拟",
+            font=debug_btn_font,
+            fg=Theme.GREEN,
+            bg=Theme.BG,
+            cursor="hand2",
+            padx=btn_pad_x,
+            pady=btn_pad_y,
+        )
+        self.debug_source_btn.pack(side="left")
+        self.debug_source_btn.bind("<Button-1>", lambda e: self._toggle_debug_mock_mode())
+        self.debug_source_btn.bind(
+            "<Enter>",
+            lambda e: self.debug_source_btn.config(bg=Theme.BORDER, fg=Theme.TEXT),
+        )
+        self.debug_source_btn.bind("<Leave>", lambda e: self._update_debug_controls())
+
+        self.debug_prev_btn = tk.Label(
+            self.debug_ctrl_row,
+            text="◀",
+            font=debug_btn_font,
+            fg=Theme.TEXT,
+            bg=Theme.BG,
+            cursor="hand2",
+            padx=btn_pad_x,
+            pady=btn_pad_y,
+        )
+        self.debug_prev_btn.pack(side="left", padx=(int(6*s), 0))
+        self.debug_prev_btn.bind("<Button-1>", lambda e: self._cycle_debug_scene(-1))
+        self.debug_prev_btn.bind("<Enter>", lambda e: self.debug_prev_btn.config(bg=Theme.BORDER))
+        self.debug_prev_btn.bind("<Leave>", lambda e: self.debug_prev_btn.config(bg=Theme.BG))
+
+        self.debug_scene_lbl = tk.Label(
+            self.debug_ctrl_row,
+            text="",
+            font=debug_btn_font,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
+        self.debug_scene_lbl.pack(side="left", padx=(int(6*s), int(4*s)))
+
+        self.debug_next_btn = tk.Label(
+            self.debug_ctrl_row,
+            text="▶",
+            font=debug_btn_font,
+            fg=Theme.TEXT,
+            bg=Theme.BG,
+            cursor="hand2",
+            padx=btn_pad_x,
+            pady=btn_pad_y,
+        )
+        self.debug_next_btn.pack(side="left")
+        self.debug_next_btn.bind("<Button-1>", lambda e: self._cycle_debug_scene(1))
+        self.debug_next_btn.bind("<Enter>", lambda e: self.debug_next_btn.config(bg=Theme.BORDER))
+        self.debug_next_btn.bind("<Leave>", lambda e: self.debug_next_btn.config(bg=Theme.BG))
+
+        self.debug_hint_lbl = tk.Label(
+            self.debug_ctrl_row,
+            text="提示: 无 8111 数据时将自动使用模拟场景",
+            font=debug_btn_font,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="e",
+        )
+        self.debug_hint_lbl.pack(side="right", fill="x", expand=True)
+        self._update_debug_controls()
 
         # === 顶部区域（主信息卡）===
         self.top_frame = tk.Frame(
@@ -1028,6 +1114,9 @@ class App:
         self.root.bind(f"<{HotkeyConfig.KEY_BEEP}>", lambda e: self._toggle_beep())
         self.root.bind(f"<{HotkeyConfig.KEY_ZONES}>", lambda e: self._toggle_zone_sound())
         self.root.bind("<Control-MouseWheel>", self._adjust_alpha)
+        self.root.bind("<Control-Shift-Left>", lambda e: self._cycle_debug_scene(-1) if self._debug else None)
+        self.root.bind("<Control-Shift-Right>", lambda e: self._cycle_debug_scene(1) if self._debug else None)
+        self.root.bind("<Control-Shift-m>", lambda e: self._toggle_debug_mock_mode() if self._debug else None)
         
         # 拖动相关
         self._drag = {"x": 0, "y": 0}
@@ -1247,14 +1336,447 @@ class App:
         threading.Thread(target=self.tray.run, daemon=True).start()
 
     def _toggle_debug(self):
-        """切换调试模式"""
+        """切换调试模式（支持离线模拟场景）。"""
         self._debug = not self._debug
         if self._debug:
-            self.diag_lbl.pack(side="bottom", fill="x", pady=(0, int(UIConfig.SPACING_DEBUG*self.scale)), before=self.hint_row)
+            self._debug_force_mock = True
+            self._debug_effective_mock = True
+            self._show_debug_ui()
+            if self._nudge_visible:
+                self._nudge_visible = False
+                self._update_hint()
         else:
-            self.diag_lbl.pack_forget()
+            self._hide_debug_ui()
         self._recalc_size()
         self._refresh_tray()
+
+    def _show_debug_ui(self) -> None:
+        """显示 Debug 控制区和诊断区。"""
+        self._update_debug_controls()
+        if hasattr(self, "debug_ctrl_row") and self.debug_ctrl_row and (not self.debug_ctrl_row.winfo_ismapped()):
+            self.debug_ctrl_row.pack(
+                side="bottom",
+                fill="x",
+                pady=(0, int(4 * self.scale)),
+                before=self.hint_row,
+            )
+        if hasattr(self, "diag_lbl") and self.diag_lbl and (not self.diag_lbl.winfo_ismapped()):
+            self.diag_lbl.pack(
+                side="bottom",
+                fill="x",
+                pady=(0, int(UIConfig.SPACING_DEBUG * self.scale)),
+                before=self.hint_row,
+            )
+
+    def _hide_debug_ui(self) -> None:
+        """隐藏 Debug 控制区和诊断区。"""
+        if hasattr(self, "debug_ctrl_row") and self.debug_ctrl_row and self.debug_ctrl_row.winfo_ismapped():
+            self.debug_ctrl_row.pack_forget()
+        if hasattr(self, "diag_lbl") and self.diag_lbl and self.diag_lbl.winfo_ismapped():
+            self.diag_lbl.pack_forget()
+
+    def _toggle_debug_mock_mode(self) -> None:
+        """切换 Debug 数据源（模拟/实时）。"""
+        self._debug_force_mock = not self._debug_force_mock
+        self._update_debug_controls()
+
+    def _cycle_debug_scene(self, delta: int) -> None:
+        """切换 Debug 场景。"""
+        total = max(1, len(self._debug_scene_names))
+        self._debug_scene_index = (self._debug_scene_index + int(delta)) % total
+        self._update_debug_controls()
+
+    def _update_debug_controls(self) -> None:
+        """刷新 Debug 控制栏文案。"""
+        if not hasattr(self, "debug_scene_lbl"):
+            return
+        total = max(1, len(self._debug_scene_names))
+        idx = self._debug_scene_index % total
+        scene_name = self._debug_scene_names[idx]
+        self.debug_scene_lbl.config(text=f"场景 {idx + 1}/{total}: {scene_name}")
+
+        live_online = bool(self._debug_live_available)
+        if self._debug_force_mock:
+            source_text = "数据源: 模拟(强制)"
+            source_fg = Theme.GREEN
+        elif live_online:
+            source_text = "数据源: 实时"
+            source_fg = Theme.BLUE
+        else:
+            source_text = "数据源: 自动模拟"
+            source_fg = Theme.YELLOW
+        self.debug_source_btn.config(text=source_text, fg=source_fg, bg=Theme.BG)
+
+    @staticmethod
+    def _debug_direction(relative_deg: float) -> str:
+        """将相对角转换为简短方向文案。"""
+        rel = float(relative_deg)
+        abs_rel = abs(rel)
+        if abs_rel < 8:
+            return "正前"
+        if abs_rel < 28:
+            return "前左" if rel < 0 else "前右"
+        if abs_rel < 65:
+            return "左侧" if rel < 0 else "右侧"
+        return "后左" if rel < 0 else "后右"
+
+    def _debug_live_snapshot_available(self, snap: UISnapshot) -> bool:
+        """判断实时快照是否可用于完整UI测试。"""
+        return (not snap.api_down) and (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING))
+
+    def _build_debug_snapshot(self, base_snap: UISnapshot) -> UISnapshot:
+        """按 Debug 状态构建渲染快照（实时或模拟）。"""
+        self._debug_frame_counter += 1
+        self._debug_live_available = self._debug_live_snapshot_available(base_snap)
+        self._debug_effective_mock = bool(self._debug_force_mock or (not self._debug_live_available))
+        self._update_debug_controls()
+        if not self._debug_effective_mock:
+            return base_snap
+        return self._build_debug_mock_snapshot(base_snap)
+
+    def _build_debug_mock_snapshot(self, base_snap: UISnapshot) -> UISnapshot:
+        """构建离线可视化调试快照。"""
+        idx = self._debug_scene_index % max(1, len(self._debug_scene_names))
+        heading = (self._debug_frame_counter * 1.8) % 360.0
+
+        if idx == 0:
+            zones = [
+                ZoneDisplayInfo("dbg-z1", 8.6, self._debug_direction(-2.4), -2.4, True, "00:42"),
+                ZoneDisplayInfo("dbg-z2", 22.3, self._debug_direction(21.0), 21.0, False, ""),
+                ZoneDisplayInfo("dbg-z3", 31.2, self._debug_direction(-56.0), -56.0, False, ""),
+            ]
+            friendly = AirfieldDisplayInfo("dbg-af-f", "friendly", 14.2, self._debug_direction(-18.0), -18.0, True, "01:18")
+            enemies = [
+                AirfieldDisplayInfo("dbg-af-e1", "enemy", 19.0, self._debug_direction(35.0), 35.0, True, "01:02"),
+                AirfieldDisplayInfo("dbg-af-e2", "enemy", 28.8, self._debug_direction(-74.0), -74.0, False, ""),
+            ]
+            return replace(
+                base_snap,
+                phase=Phase.ALIVE,
+                life_index=3,
+                cycle=2,
+                remaining_sec=470.0,
+                progress=0.48,
+                sortie_id=903,
+                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
+                flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
+                status_text="模拟: 巡航导航",
+                api_down=False,
+                api_down_pending=False,
+                on_ground=False,
+                landed_flash=False,
+                zones=zones,
+                friendly_airfield=friendly,
+                enemy_airfields=enemies,
+                has_airfield_target=True,
+                has_target=True,
+                is_deviating=False,
+                deviation_angle=-2.4,
+                zone_destroyed_alert=False,
+                destroyed_zone_count=0,
+                destroyed_zone_text="",
+                should_play_destroyed_sound=False,
+                player_heading=heading,
+                fuel_kg=1860.0,
+                fuel_initial_kg=2600.0,
+                fuel_percent=71.5,
+                fuel_rate_kg_min=430.0,
+                fuel_rate_stable=True,
+                fuel_time_remaining_str="04:19",
+                altitude_m=3250.0,
+                return_fuel_needed_kg=580.0,
+                return_status="safe",
+                friendly_distance_km=14.2,
+                gear_warning=False,
+                gear_pct=0.0,
+                gear_moving=False,
+                gear_retracting=False,
+                bombing_valid=False,
+                bomb_name=BombConfig.selected_bomb,
+                ground_speed_kmh=392.0,
+                attitude_pitch_deg=3.5,
+                attitude_roll_deg=-1.1,
+                attitude_bank_deg=-1.1,
+                attitude_reliable=True,
+                hud_attitude_fallback=False,
+                hud_attitude_fallback_reason="",
+            )
+
+        if idx == 1:
+            rel = 37.0
+            zones = [
+                ZoneDisplayInfo("dbg-z1", 10.4, self._debug_direction(rel), rel, True, "00:55"),
+                ZoneDisplayInfo("dbg-z2", 15.6, self._debug_direction(-14.0), -14.0, False, ""),
+            ]
+            friendly = AirfieldDisplayInfo("dbg-af-f", "friendly", 9.8, self._debug_direction(-10.0), -10.0, True, "00:50")
+            return replace(
+                base_snap,
+                phase=Phase.ALIVE,
+                life_index=5,
+                cycle=1,
+                remaining_sec=121.0,
+                progress=0.87,
+                sortie_id=1201,
+                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
+                flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
+                status_text="模拟: 偏航修正中",
+                api_down=False,
+                api_down_pending=False,
+                on_ground=False,
+                landed_flash=False,
+                zones=zones,
+                friendly_airfield=friendly,
+                enemy_airfields=[],
+                has_airfield_target=True,
+                has_target=True,
+                is_deviating=True,
+                deviation_angle=rel,
+                zone_destroyed_alert=True,
+                destroyed_zone_count=1,
+                destroyed_zone_text="#2 右侧 6.4km",
+                should_play_destroyed_sound=False,
+                player_heading=heading,
+                fuel_kg=1200.0,
+                fuel_initial_kg=2200.0,
+                fuel_percent=54.5,
+                fuel_rate_kg_min=520.0,
+                fuel_rate_stable=True,
+                fuel_time_remaining_str="02:18",
+                altitude_m=2780.0,
+                return_fuel_needed_kg=410.0,
+                return_status="warning",
+                friendly_distance_km=9.8,
+                gear_warning=False,
+                gear_pct=0.0,
+                gear_moving=False,
+                gear_retracting=False,
+                bombing_valid=False,
+                bomb_name=BombConfig.selected_bomb,
+                ground_speed_kmh=455.0,
+                attitude_pitch_deg=1.8,
+                attitude_roll_deg=6.4,
+                attitude_bank_deg=6.4,
+                attitude_reliable=True,
+                hud_attitude_fallback=False,
+                hud_attitude_fallback_reason="",
+            )
+
+        if idx == 2:
+            zones = [
+                ZoneDisplayInfo("dbg-z1", 18.2, self._debug_direction(-6.0), -6.0, True, "02:36"),
+                ZoneDisplayInfo("dbg-z2", 30.1, self._debug_direction(42.0), 42.0, False, ""),
+            ]
+            friendly = AirfieldDisplayInfo("dbg-af-f", "friendly", 7.4, self._debug_direction(-3.0), -3.0, True, "01:06")
+            return replace(
+                base_snap,
+                phase=Phase.ALIVE,
+                life_index=7,
+                cycle=3,
+                remaining_sec=42.0,
+                progress=0.95,
+                sortie_id=1540,
+                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
+                flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
+                status_text="模拟: 低油返航",
+                api_down=False,
+                api_down_pending=False,
+                on_ground=False,
+                landed_flash=False,
+                zones=zones,
+                friendly_airfield=friendly,
+                enemy_airfields=[],
+                has_airfield_target=True,
+                has_target=True,
+                is_deviating=False,
+                deviation_angle=-6.0,
+                zone_destroyed_alert=False,
+                destroyed_zone_count=0,
+                destroyed_zone_text="",
+                should_play_destroyed_sound=False,
+                player_heading=heading,
+                fuel_kg=250.0,
+                fuel_initial_kg=2600.0,
+                fuel_percent=9.6,
+                fuel_rate_kg_min=460.0,
+                fuel_rate_stable=True,
+                fuel_time_remaining_str="00:33",
+                altitude_m=1680.0,
+                return_fuel_needed_kg=340.0,
+                return_status="danger",
+                friendly_distance_km=7.4,
+                gear_warning=False,
+                gear_pct=0.0,
+                gear_moving=False,
+                gear_retracting=False,
+                bombing_valid=False,
+                bomb_name=BombConfig.selected_bomb,
+                ground_speed_kmh=405.0,
+                attitude_pitch_deg=-2.0,
+                attitude_roll_deg=1.0,
+                attitude_bank_deg=1.0,
+                attitude_reliable=True,
+                hud_attitude_fallback=False,
+                hud_attitude_fallback_reason="",
+            )
+
+        if idx == 3:
+            phase_slot = self._debug_frame_counter % 80
+            if phase_slot < 18:
+                release_status = "too_far"
+                time_to_release = float(46 - phase_slot)
+                release_distance = float(3100 - phase_slot * 40)
+            elif phase_slot < 42:
+                release_status = "approaching"
+                time_to_release = max(0.1, float(12 - (phase_slot - 18) * 0.45))
+                release_distance = max(120.0, float(980 - (phase_slot - 18) * 34))
+            elif phase_slot < 52:
+                release_status = "ready"
+                time_to_release = max(0.01, float(0.8 - (phase_slot - 42) * 0.07))
+                release_distance = max(30.0, float(95 - (phase_slot - 42) * 6.0))
+            else:
+                release_status = "passed"
+                time_to_release = float(-(phase_slot - 52) * 0.35)
+                release_distance = float(220 + (phase_slot - 52) * 18)
+
+            zones = [
+                ZoneDisplayInfo("dbg-z1", 5.6, self._debug_direction(0.7), 0.7, True, "00:28"),
+                ZoneDisplayInfo("dbg-z2", 17.9, self._debug_direction(-25.0), -25.0, False, ""),
+            ]
+            return replace(
+                base_snap,
+                phase=Phase.ALIVE,
+                life_index=2,
+                cycle=1,
+                remaining_sec=301.0,
+                progress=0.66,
+                sortie_id=640,
+                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
+                flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
+                status_text="模拟: 投弹窗口测试",
+                api_down=False,
+                api_down_pending=False,
+                on_ground=False,
+                landed_flash=False,
+                zones=zones,
+                friendly_airfield=AirfieldDisplayInfo("dbg-af-f", "friendly", 13.0, self._debug_direction(-20.0), -20.0, True, "01:20"),
+                enemy_airfields=[
+                    AirfieldDisplayInfo("dbg-af-e1", "enemy", 11.2, self._debug_direction(26.0), 26.0, True, "00:52"),
+                ],
+                has_airfield_target=True,
+                has_target=True,
+                is_deviating=False,
+                deviation_angle=0.7,
+                zone_destroyed_alert=False,
+                destroyed_zone_count=0,
+                destroyed_zone_text="",
+                should_play_destroyed_sound=False,
+                player_heading=heading,
+                fuel_kg=920.0,
+                fuel_initial_kg=1800.0,
+                fuel_percent=51.1,
+                fuel_rate_kg_min=390.0,
+                fuel_rate_stable=True,
+                fuel_time_remaining_str="02:21",
+                altitude_m=4120.0,
+                return_fuel_needed_kg=370.0,
+                return_status="safe",
+                friendly_distance_km=13.0,
+                gear_warning=False,
+                gear_pct=0.0,
+                gear_moving=False,
+                gear_retracting=False,
+                bombing_valid=True,
+                bomb_name=BombConfig.selected_bomb,
+                bomb_range_m=3200.0,
+                bomb_flight_time=15.2,
+                release_distance_m=release_distance,
+                time_to_release=time_to_release,
+                release_status=release_status,
+                target_zone_distance_m=release_distance,
+                ground_speed_kmh=420.0,
+                attitude_pitch_deg=-0.8,
+                attitude_roll_deg=0.6,
+                attitude_bank_deg=0.6,
+                attitude_reliable=True,
+                hud_attitude_fallback=False,
+                hud_attitude_fallback_reason="",
+            )
+
+        zones = [
+            ZoneDisplayInfo("dbg-z1", 0.0, "正前", 0.0, False, ""),
+        ]
+        return replace(
+            base_snap,
+            phase=Phase.ALIVE,
+            life_index=1,
+            cycle=1,
+            remaining_sec=890.0,
+            progress=0.02,
+            sortie_id=100,
+            main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
+            flight_badge=("就绪✓", Theme.TEXT, Theme.GREEN),
+            status_text="模拟: 地面检查",
+            api_down=False,
+            api_down_pending=False,
+            on_ground=True,
+            landed_flash=True,
+            zones=zones,
+            friendly_airfield=AirfieldDisplayInfo("dbg-af-f", "friendly", 2.1, "正前", 0.0, True, ""),
+            enemy_airfields=[],
+            has_airfield_target=True,
+            has_target=False,
+            is_deviating=False,
+            deviation_angle=0.0,
+            zone_destroyed_alert=False,
+            destroyed_zone_count=0,
+            destroyed_zone_text="",
+            should_play_destroyed_sound=False,
+            player_heading=heading,
+            fuel_kg=1540.0,
+            fuel_initial_kg=1600.0,
+            fuel_percent=96.0,
+            fuel_rate_kg_min=0.0,
+            fuel_rate_stable=False,
+            fuel_time_remaining_str="",
+            altitude_m=8.0,
+            return_fuel_needed_kg=0.0,
+            return_status="unknown",
+            friendly_distance_km=2.1,
+            gear_warning=False,
+            gear_pct=100.0,
+            gear_moving=False,
+            gear_retracting=False,
+            bombing_valid=False,
+            bomb_name=BombConfig.selected_bomb,
+            ground_speed_kmh=0.0,
+            attitude_pitch_deg=0.0,
+            attitude_roll_deg=0.0,
+            attitude_bank_deg=0.0,
+            attitude_reliable=True,
+            hud_attitude_fallback=False,
+            hud_attitude_fallback_reason="",
+        )
+
+    def _build_debug_text(self, live_snap: UISnapshot, render_snap: UISnapshot) -> str:
+        """生成 Debug 面板文本。"""
+        scene_name = self._debug_scene_names[self._debug_scene_index % len(self._debug_scene_names)]
+        source_text = "模拟" if self._debug_effective_mock else "实时"
+        lines = [
+            f"[Debug] 数据源={source_text} | 场景={scene_name}",
+            "操作: 点击[数据源]切实时/模拟，点击[◀/▶]切换场景",
+            (
+                f"Live: phase={live_snap.phase.name} api_down={int(live_snap.api_down)} "
+                f"zones={len(live_snap.zones)} target={int(live_snap.has_target)}"
+            ),
+            (
+                f"Render: phase={render_snap.phase.name} on_ground={int(render_snap.on_ground)} "
+                f"fuel={render_snap.fuel_kg:.0f}kg ({render_snap.fuel_percent:.0f}%) "
+                f"bombing={int(render_snap.bombing_valid)}"
+            ),
+        ]
+        if self._restored_state and (not self._debug_effective_mock) and render_snap.phase == Phase.ALIVE:
+            lines.append("状态恢复: 已从保存状态恢复计时")
+        return "\n".join(lines)
 
     def _toggle_zone_sound(self):
         """切换战区提示音"""
@@ -1959,12 +2481,7 @@ class App:
 
             self._init_ui()
             if self._debug:
-                self.diag_lbl.pack(
-                    side="bottom",
-                    fill="x",
-                    pady=(0, int(UIConfig.SPACING_DEBUG * self.scale)),
-                    before=self.hint_row,
-                )
+                self._show_debug_ui()
             self._update_hint()
             self._update_nav_mode_button()
             self._recalc_size(force_shrink=True)
@@ -2724,32 +3241,45 @@ class App:
             return
         self._ui_after_id = None
         loop_start = time.monotonic()
-        snap = self.game.snapshot()
-        # 高光时刻弱提醒：成功着陆后显示，起飞后消除（不弹窗）
-        if snap.sortie_id != self._nudge_sortie_seen:
-            self._nudge_sortie_seen = snap.sortie_id
-            self._nudge_airborne_seen = False
-            if self._nudge_visible:
+        live_snap = self.game.snapshot()
+        if self._debug:
+            snap = self._build_debug_snapshot(live_snap)
+        else:
+            snap = live_snap
+            self._debug_effective_mock = False
+            self._debug_live_available = False
+
+        debug_mock_mode = bool(self._debug and self._debug_effective_mock)
+
+        if not self._debug:
+            # 高光时刻弱提醒：成功着陆后显示，起飞后消除（不弹窗）
+            if snap.sortie_id != self._nudge_sortie_seen:
+                self._nudge_sortie_seen = snap.sortie_id
+                self._nudge_airborne_seen = False
+                if self._nudge_visible:
+                    self._nudge_visible = False
+                    self._update_hint()
+
+            if snap.phase == Phase.ALIVE and not snap.on_ground:
+                self._nudge_airborne_seen = True
+
+            if (snap.phase == Phase.ALIVE and snap.landed_flash and not self._last_landed_flash):
+                if snap.sortie_id != self._nudge_sortie_id:
+                    self._nudge_sortie_id = snap.sortie_id
+                    if self._nudge_airborne_seen and not self._nudge_visible:
+                        self._nudge_visible = True
+                        self._update_hint()
+            self._last_landed_flash = snap.landed_flash
+
+            # 起飞后清除提示
+            if self._nudge_visible and snap.phase == Phase.ALIVE and not snap.on_ground:
                 self._nudge_visible = False
                 self._update_hint()
 
-        if snap.phase == Phase.ALIVE and not snap.on_ground:
-            self._nudge_airborne_seen = True
-
-        if (snap.phase == Phase.ALIVE and snap.landed_flash and not self._last_landed_flash):
-            if snap.sortie_id != self._nudge_sortie_id:
-                self._nudge_sortie_id = snap.sortie_id
-                if self._nudge_airborne_seen and not self._nudge_visible:
-                    self._nudge_visible = True
-                    self._update_hint()
-        self._last_landed_flash = snap.landed_flash
-
-        # 起飞后清除提示
-        if self._nudge_visible and snap.phase == Phase.ALIVE and not snap.on_ground:
-            self._nudge_visible = False
-            self._update_hint()
-
-        if snap.phase != Phase.ALIVE:
+            if snap.phase != Phase.ALIVE:
+                self._nudge_airborne_seen = False
+        else:
+            self._last_landed_flash = False
             self._nudge_airborne_seen = False
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
@@ -2801,7 +3331,7 @@ class App:
             
             # 播放警告音
             remain_int = int(remain)
-            if remain <= GameConfig.FINAL_WARNING_SEC:
+            if (remain <= GameConfig.FINAL_WARNING_SEC) and (not debug_mock_mode):
                 if remain_int in SoundConfig.WARNING_SECONDS and remain_int != self._last_beep_sec:
                     pattern = "warning" if remain_int in SoundConfig.MAJOR_WARNINGS else "tick"
                     self.sound.play(pattern=pattern)
@@ -2853,13 +3383,7 @@ class App:
 
         # 调试信息
         if self._debug:
-            debug_text = snap.diag_text
-            if self._restored_state and snap.phase == Phase.ALIVE:
-                debug_text += "\n🔄 已从保存状态恢复计时"
-            debug_text += f"\n战区: {len(snap.zones)}个"
-            if snap.has_target:
-                debug_text += f" | 目标偏离: {int(snap.deviation_angle)}°"
-            self.diag_lbl.config(text=debug_text)
+            self.diag_lbl.config(text=self._build_debug_text(live_snap, snap))
 
         # HUD 叠加层更新（v6.8.0）
         self._update_hud_overlay(snap)
