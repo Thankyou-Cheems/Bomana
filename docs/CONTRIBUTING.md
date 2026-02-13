@@ -239,7 +239,7 @@ git commit -m "bug"
 
 仅维护者可以发布新版本：
 
-1. 更新 `CHANGELOG.md`
+1. 更新 `docs/CHANGELOG.md`
 2. 更新版本号（`bomana/config.py` 中的 `__version__`）
 3. 创建 Git Tag（按发布目标选择）：
    - `vX.Y.Z`：完整发布（启动器 + 应用包）
@@ -260,7 +260,7 @@ git commit -m "bug"
 
 ### ❓ 有问题？
 
-- 查看 [README.md](README.md)
+- 查看 [README.md](../README.md)
 - 查看 [Issues](https://github.com/Thankyou-Cheems/Bomana/issues)
 - 创建新 Issue 提问
 

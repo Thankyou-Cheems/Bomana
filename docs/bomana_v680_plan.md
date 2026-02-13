@@ -215,7 +215,7 @@ bomana/
 5. `ui/app.py`：在 `_update_ui` 中喂入 `UISnapshot`，做阈值更新。
 6. `ui/dialogs.py`：新增 HUD 设置（Phase 2）。
 7. 手测矩阵：全屏独占/无边框、单屏/双屏、锁定/解锁、8111断连恢复。
-8. 文档更新：`CHANGELOG.md` + `README.md`（HUD开关与合规提示）。
+8. 文档更新：`docs/CHANGELOG.md` + `README.md`（HUD开关与合规提示）。
 
 ---
 

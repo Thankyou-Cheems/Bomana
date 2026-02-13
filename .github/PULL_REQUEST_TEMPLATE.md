@@ -38,7 +38,7 @@
 ## 检查清单 | Checklist
 <!-- 请确保完成以下检查 / Please ensure you have completed the following -->
 
-- [ ] 我已阅读 [贡献指南](../CONTRIBUTING.md) / I have read the [contributing guide](../CONTRIBUTING.md)
+- [ ] 我已阅读 [贡献指南](../docs/CONTRIBUTING.md) / I have read the [contributing guide](../docs/CONTRIBUTING.md)
 - [ ] 代码遵循项目的代码风格 / Code follows the project's style guidelines
 - [ ] 我已进行自我审查 / I have performed a self-review of my code
 - [ ] 我已添加了必要的注释 / I have commented my code, particularly in hard-to-understand areas

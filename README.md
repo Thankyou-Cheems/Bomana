@@ -170,13 +170,13 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 uv sync
 ```
 
-> 打包绿色版（启动器+应用包）可执行：`build_portable.bat <Enhanced|Standard|Lite> <all|app|launcher> [version]`
+> 打包绿色版（启动器+应用包）可执行：`tools\scripts\build_portable.bat <Enhanced|Standard|Lite> <all|app|launcher> [version]`
 
 开发者区分打包目标：
 
-- 仅打包应用包（用于自动更新）：`build_app_package.bat Enhanced|Standard|Lite`
-- 仅打包通用启动器（绿色入口）：`build_launcher.bat [version]`
-- 一次性全打：`build_portable.bat Enhanced all`
+- 仅打包应用包（用于自动更新）：`tools\scripts\build_app_package.bat Enhanced|Standard|Lite`
+- 仅打包通用启动器（绿色入口）：`tools\scripts\build_launcher.bat [version]`
+- 一次性全打：`tools\scripts\build_portable.bat Enhanced all`
 
 GitHub 云端自动打包发布：
 
@@ -338,7 +338,7 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 
 ### 📖 详细信息
 
-请查看完整的 **[隐私政策 (PRIVACY.md)](PRIVACY.md)**，了解：
+请查看完整的 **[隐私政策 (docs/PRIVACY.md)](docs/PRIVACY.md)**，了解：
 - 收集哪些数据及其用途
 - 数据安全与匿名化技术细节
 - 如何禁用数据收集
@@ -414,7 +414,7 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 ## 📝 更新日志 | Changelog
 
-详见 `CHANGELOG.md`（源码版本以 `bomana/config.py` 中 `__version__` 为准；已发布版本见顶部 `app release` 徽章）。
+详见 `docs/CHANGELOG.md`（源码版本以 `bomana/config.py` 中 `__version__` 为准；已发布版本见顶部 `app release` 徽章）。
 
 ---
 

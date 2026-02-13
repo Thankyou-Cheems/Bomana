@@ -35,14 +35,14 @@
 │     ├─ sound.py             # Sound manager
 │     └─ system.py            # Windows/system helpers
 ├─ ccrp_bomb_params.json       # Bomb parameters (CCRP)
+├─ docs/                        # Architecture/changelog/privacy/contributing docs
 ├─ tools/
+│  ├─ build_portable.py      # Build launcher/app package/manifest
 │  ├─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.json generator
+│  ├─ scripts/               # Local build helper scripts (bat/sh)
 │  └─ update_service/        # Optional self-hosted update + DAU stats service
-├─ tools/build_portable.py   # Build launcher/app package/manifest
 ├─ assets (root files)       # Icons/sponsor image, etc.
-├─ build.bat / build.sh      # Legacy onefile packaging scripts
-├─ build_portable.bat        # Portable packaging helper (Windows)
-└─ *.md                      # Docs, changelog, contribution guide
+└─ README.md                 # Main landing page for GitHub visitors
 ```
 
 ## Runtime Data Flow
@@ -92,9 +92,9 @@ Portable release uses:
 - `checksums_*.txt` (SHA256 checksum info)
 
 Local build helper:
-- `build_portable.bat <Variant> <all|app|launcher>`
-- `build_app_package.bat <Variant>` (only app zip + manifest)
-- `build_launcher.bat [version]` (only universal launcher exe)
+- `tools\scripts\build_portable.bat <Variant> <all|app|launcher>`
+- `tools\scripts\build_app_package.bat <Variant>` (only app zip + manifest)
+- `tools\scripts\build_launcher.bat [version]` (only universal launcher exe)
 
 CI:
 - `.github/workflows/build.yml` runs separate jobs for:

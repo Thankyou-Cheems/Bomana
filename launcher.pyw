@@ -1534,7 +1534,7 @@ class LauncherDetailsDialog(tk.Toplevel):
         privacy_link.pack(anchor="w", pady=(2, 0))
         privacy_link.bind(
             "<Button-1>",
-            lambda _: webbrowser.open(f"{PROJECT_URL}/blob/main/PRIVACY.md"),
+            lambda _: webbrowser.open(f"{PROJECT_URL}/blob/main/docs/PRIVACY.md"),
         )
 
         tk.Frame(content, bg=_THEME["BORDER"], height=1).pack(fill="x", pady=12)

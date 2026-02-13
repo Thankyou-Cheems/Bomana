@@ -224,7 +224,7 @@ python tools/blkx_extractor.py ^
 
 ## 下一步
 
-- 📖 阅读完整的 [README.md](README.md)
+- 📖 阅读完整的 [README.md](../README.md)
 - 🎨 尝试不同的主题（设置中）
 - 📝 自定义检查清单（右键托盘 → 编辑检查清单）
 - ⭐ 给项目一个 Star！

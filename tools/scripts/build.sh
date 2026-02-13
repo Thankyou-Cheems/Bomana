@@ -6,12 +6,16 @@
 # 使用说明：
 # 1. 确保已安装 uv
 # 2. 同步依赖: uv sync --extra build
-# 3. 运行此脚本: chmod +x build.sh && ./build.sh [Enhanced|Standard|Lite]
+# 3. 运行此脚本: chmod +x tools/scripts/build.sh && ./tools/scripts/build.sh [Enhanced|Standard|Lite]
 #
 # 输出文件将在 dist/ 目录下
 # ============================================================================
 
 set -e  # 遇到错误立即退出
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$ROOT_DIR"
 
 echo "========================================"
 echo "Bomana 打包脚本"
@@ -46,7 +50,7 @@ case "$VARIANT" in
   Enhanced|Standard|Lite) ;;
   *)
     echo "[错误] 版本类型无效: $VARIANT"
-    echo "用法: ./build.sh [Enhanced|Standard|Lite]"
+    echo "用法: ./tools/scripts/build.sh [Enhanced|Standard|Lite]"
     exit 1
     ;;
 esac

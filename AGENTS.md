@@ -11,8 +11,8 @@ Keep it concise and update when workflows or boundaries change.
 - UI: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound)
 - CCRP data: `ccrp_bomb_params.json`
-- Portable build: `tools/build_portable.py`, `build_portable.bat`, `build_app_package.bat`, `build_launcher.bat`
-- Docs: `ARCHITECTURE.md`, `PITFALLS.md`
+- Portable build: `tools/build_portable.py`, `tools/scripts/build_portable.bat`, `tools/scripts/build_app_package.bat`, `tools/scripts/build_launcher.bat`
+- Docs: `docs/ARCHITECTURE.md`, `docs/PITFALLS.md`
 
 ## Guardrails
 - Only use the official 8111 API; no memory reads, injection, or game file edits.
@@ -24,8 +24,8 @@ Keep it concise and update when workflows or boundaries change.
 - Builds: portable launcher + app package (primary), PyInstaller onefile (legacy).
 
 ## Documentation Rules
-- If architecture changes (new/split modules, major data-flow changes, core directory renames), update `ARCHITECTURE.md`.
-- If a task fails in a new way, add a short entry to `PITFALLS.md`.
+- If architecture changes (new/split modules, major data-flow changes, core directory renames), update `docs/ARCHITECTURE.md`.
+- If a task fails in a new way, add a short entry to `docs/PITFALLS.md`.
 
 ## Expected Task Flow
 1. Locate target code in `Bomana.pyw` or `bomana/` modules.

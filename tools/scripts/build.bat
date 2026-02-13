@@ -6,8 +6,8 @@ REM
 REM 使用说明：
 REM 1. 确保已安装 uv
 REM 2. 同步依赖: uv sync --extra build
-REM 3. 运行此脚本（默认 Enhanced）：build.bat
-REM    或指定版本：build.bat Enhanced|Standard|Lite
+REM 3. 运行此脚本（默认 Enhanced）：tools\scripts\build.bat
+REM    或指定版本：tools\scripts\build.bat Enhanced|Standard|Lite
 REM 
 REM 输出文件将在 dist/ 目录下
 REM ============================================================================
@@ -16,6 +16,14 @@ echo ========================================
 echo Bomana 打包脚本
 echo ========================================
 echo.
+
+set "ROOT_DIR=%~dp0..\.."
+pushd "%ROOT_DIR%" >nul
+if %errorlevel% neq 0 (
+    echo [错误] 无法进入仓库根目录: %ROOT_DIR%
+    pause
+    exit /b 1
+)
 
 REM 检查 uv
 echo [1/6] 检查 uv 环境...
@@ -26,6 +34,7 @@ if %errorlevel% neq 0 (
     %UV_CMD% --version >nul 2>&1
     if %errorlevel% neq 0 (
         echo [错误] 未找到 uv，请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
+        popd >nul
         pause
         exit /b 1
     )
@@ -38,6 +47,7 @@ echo [2/6] 检查依赖...
 %UV_CMD% sync --extra build
 if %errorlevel% neq 0 (
     echo [错误] 依赖同步失败
+    popd >nul
     pause
     exit /b 1
 )
@@ -50,7 +60,8 @@ if "%VARIANT%"=="" set "VARIANT=Enhanced"
 
 if /I not "%VARIANT%"=="Enhanced" if /I not "%VARIANT%"=="Standard" if /I not "%VARIANT%"=="Lite" (
     echo [错误] 版本类型无效: %VARIANT%
-    echo 用法: build.bat Enhanced^|Standard^|Lite
+    echo 用法: tools\scripts\build.bat Enhanced^|Standard^|Lite
+    popd >nul
     pause
     exit /b 1
 )
@@ -63,6 +74,7 @@ set "CONFIG_FILE=bomana\config.py"
 set "CONFIG_BAK=bomana\config.py.bak"
 if not exist "%CONFIG_FILE%" (
     echo [错误] 未找到 %CONFIG_FILE%
+    popd >nul
     pause
     exit /b 1
 )
@@ -151,6 +163,7 @@ if %errorlevel% neq 0 (
     if exist "%CONFIG_BAK%" move /y "%CONFIG_BAK%" "%CONFIG_FILE%" >nul
     echo.
     echo [错误] 打包失败
+    popd >nul
     pause
     exit /b 1
 )
@@ -178,8 +191,10 @@ if exist "dist\%EXEC_NAME%.exe" (
     echo.
 ) else (
     echo [错误] 未找到输出文件
+    popd >nul
     pause
     exit /b 1
 )
 
+popd >nul
 pause

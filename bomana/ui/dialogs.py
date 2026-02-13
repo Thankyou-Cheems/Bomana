@@ -1641,7 +1641,7 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         privacy_link.pack(anchor="w", pady=(6, 0))
         privacy_link.bind(
             "<Button-1>",
-            lambda _e: self._open_url(f"{AboutConfig.GITHUB_URL}/blob/main/PRIVACY.md"),
+            lambda _e: self._open_url(f"{AboutConfig.GITHUB_URL}/blob/main/docs/PRIVACY.md"),
         )
 
         sponsor_card = self._make_card(content, title="支持作者")

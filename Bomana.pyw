@@ -52,7 +52,7 @@ VibeCoding / AI 助手协作规范 (请严格遵守)
       - 是否需要添加 `if ENABLE_XXX:` 条件判断？
       - 配置文件加载/保存是否需要检查开关状态？
       - 三个版本共享同一配置文件，精简版不应继承完整版的专属功能状态
-⚠️ 7. 【协作规范】其余协作与文档维护要求见 AGENTS.md（含 ARCHITECTURE.md / PITFALLS.md）
+⚠️ 7. 【协作规范】其余协作与文档维护要求见 AGENTS.md（含 docs/ARCHITECTURE.md / docs/PITFALLS.md）
 
 数据来源说明：
 -------------

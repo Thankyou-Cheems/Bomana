@@ -33,7 +33,7 @@
 - 启动器新增“详情/支持作者”弹窗入口（复用主程序赞助资源）
 
 ### 🔧 改进
-- 新增 `tools/build_portable.py` 与 `build_portable.bat`，统一构建 Launcher + app.zip + manifest
+- 新增 `tools/build_portable.py` 与 `tools/scripts/build_portable.bat`，统一构建 Launcher + app.zip + manifest
 - GitHub Actions 发布流程切换为绿色版产物链路
 - CI 拆分为 `build_app` 与 `build_launcher` 两类产物构建，支持手动选择构建目标（all/app/launcher）及标签选择目标（`vX.Y.Z` / `vX.Y.Z-app` / `vX.Y.Z-launcher`）
 - 启动器升级为可视化引导界面：自动检查、来源展示、下载总大小提示、下载二次确认、离线启动/重新检查/打开下载页等完整交互
