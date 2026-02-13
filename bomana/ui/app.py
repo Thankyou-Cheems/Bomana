@@ -122,6 +122,7 @@ class App:
             "低油返航",
             "投弹窗口",
             "地面检查",
+            "超速压测",
         ]
         self._last_beep_sec = -1
         self._last_overspeed_sound_ts = 0.0
@@ -1443,6 +1444,14 @@ class App:
         """构建离线可视化调试快照。"""
         idx = self._debug_scene_index % max(1, len(self._debug_scene_names))
         heading = (self._debug_frame_counter * 1.8) % 360.0
+        overspeed_defaults = {
+            "overspeed_level": "safe",
+            "overspeed_ratio": 0.0,
+            "overspeed_limit_kmh": 0.0,
+            "overspeed_limit_mach": 0.0,
+            "overspeed_match": False,
+            "overspeed_reason": "safe",
+        }
 
         if idx == 0:
             zones = [
@@ -1505,6 +1514,7 @@ class App:
                 attitude_reliable=True,
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
+                **overspeed_defaults,
             )
 
         if idx == 1:
@@ -1564,6 +1574,7 @@ class App:
                 attitude_reliable=True,
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
+                **overspeed_defaults,
             )
 
         if idx == 2:
@@ -1622,6 +1633,7 @@ class App:
                 attitude_reliable=True,
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
+                **overspeed_defaults,
             )
 
         if idx == 3:
@@ -1705,61 +1717,143 @@ class App:
                 attitude_reliable=True,
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
+                **overspeed_defaults,
             )
 
-        zones = [
-            ZoneDisplayInfo("dbg-z1", 0.0, "正前", 0.0, False, ""),
-        ]
+        if idx == 4:
+            zones = [
+                ZoneDisplayInfo("dbg-z1", 0.0, "正前", 0.0, False, ""),
+            ]
+            return replace(
+                base_snap,
+                phase=Phase.ALIVE,
+                life_index=1,
+                cycle=1,
+                remaining_sec=890.0,
+                progress=0.02,
+                sortie_id=100,
+                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
+                flight_badge=("就绪✓", Theme.TEXT, Theme.GREEN),
+                status_text="模拟: 地面检查",
+                api_down=False,
+                api_down_pending=False,
+                on_ground=True,
+                landed_flash=True,
+                zones=zones,
+                friendly_airfield=AirfieldDisplayInfo("dbg-af-f", "friendly", 2.1, "正前", 0.0, True, ""),
+                enemy_airfields=[],
+                has_airfield_target=True,
+                has_target=False,
+                is_deviating=False,
+                deviation_angle=0.0,
+                zone_destroyed_alert=False,
+                destroyed_zone_count=0,
+                destroyed_zone_text="",
+                should_play_destroyed_sound=False,
+                player_heading=heading,
+                fuel_kg=1540.0,
+                fuel_initial_kg=1600.0,
+                fuel_percent=96.0,
+                fuel_rate_kg_min=0.0,
+                fuel_rate_stable=False,
+                fuel_time_remaining_str="",
+                altitude_m=8.0,
+                return_fuel_needed_kg=0.0,
+                return_status="unknown",
+                friendly_distance_km=2.1,
+                gear_warning=False,
+                gear_pct=100.0,
+                gear_moving=False,
+                gear_retracting=False,
+                bombing_valid=False,
+                bomb_name=BombConfig.selected_bomb,
+                ground_speed_kmh=0.0,
+                attitude_pitch_deg=0.0,
+                attitude_roll_deg=0.0,
+                attitude_bank_deg=0.0,
+                attitude_reliable=True,
+                hud_attitude_fallback=False,
+                hud_attitude_fallback_reason="",
+                **overspeed_defaults,
+            )
+
+        # 超速压测：循环展示 caution -> warning -> critical 三档
+        phase_slot = self._debug_frame_counter % 90
+        if phase_slot < 30:
+            os_level = "caution"
+            os_ratio = 0.955
+            os_reason = "ias"
+            os_status = "模拟: 超速压测 (提前提示)"
+        elif phase_slot < 60:
+            os_level = "warning"
+            os_ratio = 0.978
+            os_reason = "ias+mach"
+            os_status = "模拟: 超速压测 (接近极限)"
+        else:
+            os_level = "critical"
+            os_ratio = 1.005
+            os_reason = "ias+mach"
+            os_status = "模拟: 超速压测 (危险)"
+
         return replace(
             base_snap,
             phase=Phase.ALIVE,
-            life_index=1,
-            cycle=1,
-            remaining_sec=890.0,
-            progress=0.02,
-            sortie_id=100,
+            life_index=4,
+            cycle=2,
+            remaining_sec=188.0,
+            progress=0.79,
+            sortie_id=1120,
             main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
-            flight_badge=("就绪✓", Theme.TEXT, Theme.GREEN),
-            status_text="模拟: 地面检查",
+            flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
+            status_text=os_status,
             api_down=False,
             api_down_pending=False,
-            on_ground=True,
-            landed_flash=True,
-            zones=zones,
-            friendly_airfield=AirfieldDisplayInfo("dbg-af-f", "friendly", 2.1, "正前", 0.0, True, ""),
+            on_ground=False,
+            landed_flash=False,
+            zones=[
+                ZoneDisplayInfo("dbg-z1", 11.6, self._debug_direction(-1.2), -1.2, True, "01:12"),
+                ZoneDisplayInfo("dbg-z2", 23.1, self._debug_direction(18.0), 18.0, False, ""),
+            ],
+            friendly_airfield=AirfieldDisplayInfo("dbg-af-f", "friendly", 10.2, self._debug_direction(-8.0), -8.0, True, "01:02"),
             enemy_airfields=[],
             has_airfield_target=True,
-            has_target=False,
+            has_target=True,
             is_deviating=False,
-            deviation_angle=0.0,
+            deviation_angle=-1.2,
             zone_destroyed_alert=False,
             destroyed_zone_count=0,
             destroyed_zone_text="",
             should_play_destroyed_sound=False,
             player_heading=heading,
-            fuel_kg=1540.0,
-            fuel_initial_kg=1600.0,
-            fuel_percent=96.0,
-            fuel_rate_kg_min=0.0,
-            fuel_rate_stable=False,
-            fuel_time_remaining_str="",
-            altitude_m=8.0,
-            return_fuel_needed_kg=0.0,
-            return_status="unknown",
-            friendly_distance_km=2.1,
+            fuel_kg=980.0,
+            fuel_initial_kg=1800.0,
+            fuel_percent=54.4,
+            fuel_rate_kg_min=470.0,
+            fuel_rate_stable=True,
+            fuel_time_remaining_str="02:05",
+            altitude_m=4680.0,
+            return_fuel_needed_kg=390.0,
+            return_status="safe",
+            friendly_distance_km=10.2,
             gear_warning=False,
-            gear_pct=100.0,
+            gear_pct=0.0,
             gear_moving=False,
             gear_retracting=False,
             bombing_valid=False,
             bomb_name=BombConfig.selected_bomb,
-            ground_speed_kmh=0.0,
-            attitude_pitch_deg=0.0,
-            attitude_roll_deg=0.0,
-            attitude_bank_deg=0.0,
+            ground_speed_kmh=980.0,
+            attitude_pitch_deg=-12.0,
+            attitude_roll_deg=2.8,
+            attitude_bank_deg=2.8,
             attitude_reliable=True,
             hud_attitude_fallback=False,
             hud_attitude_fallback_reason="",
+            overspeed_level=os_level,
+            overspeed_ratio=os_ratio,
+            overspeed_limit_kmh=980.0,
+            overspeed_limit_mach=0.88,
+            overspeed_match=True,
+            overspeed_reason=os_reason,
         )
 
     def _build_debug_text(self, live_snap: UISnapshot, render_snap: UISnapshot) -> str:
@@ -1777,6 +1871,11 @@ class App:
                 f"Render: phase={render_snap.phase.name} on_ground={int(render_snap.on_ground)} "
                 f"fuel={render_snap.fuel_kg:.0f}kg ({render_snap.fuel_percent:.0f}%) "
                 f"bombing={int(render_snap.bombing_valid)}"
+            ),
+            (
+                f"Overspeed: match={int(render_snap.overspeed_match)} "
+                f"level={render_snap.overspeed_level} ratio={render_snap.overspeed_ratio*100:.1f}% "
+                f"limit={render_snap.overspeed_limit_kmh:.0f}km/h M{render_snap.overspeed_limit_mach:.3f}"
             ),
         ]
         if self._restored_state and (not self._debug_effective_mock) and render_snap.phase == Phase.ALIVE:

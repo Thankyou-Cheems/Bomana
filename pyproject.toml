@@ -1,6 +1,6 @@
 [project]
 name = "bomana"
-version = "6.9.0"
+version = "6.9.1"
 description = "War Thunder SB timer and navigation assistant"
 readme = "README.md"
 requires-python = ">=3.8"
