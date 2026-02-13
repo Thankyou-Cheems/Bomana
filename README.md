@@ -160,12 +160,14 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 #### 环境要求
 
 - Python 3.8+
+- uv（Python 包管理器）
 - Windows 操作系统
 
 #### 安装依赖
 
 ```bash
-pip install -r requirements.txt
+# 首次使用请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
+uv sync
 ```
 
 > 打包绿色版（启动器+应用包）可执行：`build_portable.bat <Enhanced|Standard|Lite> <all|app|launcher> [version]`
@@ -188,7 +190,7 @@ GitHub 云端自动打包发布：
 #### 运行
 
 ```bash
-python Bomana.pyw
+uv run python Bomana.pyw
 ```
 
 ### 开启 War Thunder 本地服务器

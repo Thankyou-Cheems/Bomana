@@ -60,7 +60,8 @@
 
 4. **安装依赖**
    ```bash
-   pip install -r requirements.txt
+   # 首次使用请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
+   uv sync
    ```
 
 ##### 开发规范
@@ -311,7 +312,8 @@ We welcome feature suggestions! Please:
    ```
 4. **Install dependencies**
    ```bash
-   pip install -r requirements.txt
+   # Install uv first if needed: https://docs.astral.sh/uv/getting-started/installation/
+   uv sync
    ```
 
 ##### Development Guidelines

@@ -4,8 +4,8 @@
 # ============================================================================
 #
 # 使用说明：
-# 1. 确保已安装 Python 3.8+
-# 2. 确保已安装依赖: pip install -r requirements.txt
+# 1. 确保已安装 uv
+# 2. 同步依赖: uv sync --extra build
 # 3. 运行此脚本: chmod +x build.sh && ./build.sh [Enhanced|Standard|Lite]
 #
 # 输出文件将在 dist/ 目录下
@@ -18,22 +18,26 @@ echo "Bomana 打包脚本"
 echo "========================================"
 echo ""
 
-# 检查 Python
-echo "[1/6] 检查 Python 环境..."
-if ! command -v python3 &> /dev/null; then
-    echo "[错误] 未找到 Python3，请先安装 Python 3.8+"
+# 检查 uv
+echo "[1/6] 检查 uv 环境..."
+if command -v uv &> /dev/null; then
+    UV_CMD=(uv)
+elif python3 -m uv --version >/dev/null 2>&1; then
+    UV_CMD=(python3 -m uv)
+else
+    echo "[错误] 未找到 uv，请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/"
     exit 1
 fi
-python3 --version
+"${UV_CMD[@]}" --version
 echo ""
 
 # 检查依赖
 echo "[2/6] 检查依赖..."
-if ! python3 -c "import PyInstaller" 2>/dev/null; then
-    echo "[警告] 未安装 PyInstaller，正在安装..."
-    pip3 install pyinstaller
+if ! "${UV_CMD[@]}" sync --extra build; then
+    echo "[错误] 依赖同步失败"
+    exit 1
 fi
-echo "PyInstaller 已安装"
+echo "依赖同步完成"
 echo ""
 
 # 解析版本类型
@@ -78,7 +82,7 @@ ENABLE_AIRFIELDS="$ENABLE_ZONES"
 ENABLE_CHECKLIST="$ENABLE_ZONES"
 export ENABLE_CCRP ENABLE_ZONES ENABLE_AIRFIELDS ENABLE_FUEL ENABLE_CHECKLIST ENABLE_ADVANCED_SETTINGS
 
-python3 - <<'PY'
+"${UV_CMD[@]}" run python - <<'PY'
 from pathlib import Path
 import os
 import re
@@ -122,7 +126,7 @@ if [ "$VARIANT" = "Enhanced" ]; then
   fi
 fi
 
-pyinstaller --onefile \
+"${UV_CMD[@]}" run pyinstaller --onefile \
             --noconsole \
             --icon=app.ico \
             --name="$EXEC_NAME" \

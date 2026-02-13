@@ -165,14 +165,18 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: 安装依赖
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: 安装依赖（uv）
+        shell: pwsh
         run: |
-          pip install -r requirements.txt pyinstaller
+          uv sync --extra build --frozen
 
       - name: 构建应用包
         shell: pwsh
         run: |
-          python tools/build_portable.py `
+          uv run python tools/build_portable.py `
             --variant "${{ matrix.variant.slug }}" `
             --target "app" `
             --version "${{ needs.prepare.outputs.version }}" `
@@ -205,14 +209,18 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: 安装依赖
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: 安装依赖（uv）
+        shell: pwsh
         run: |
-          pip install -r requirements.txt pyinstaller
+          uv sync --extra build --frozen
 
       - name: 构建启动器
         shell: pwsh
         run: |
-          python tools/build_portable.py `
+          uv run python tools/build_portable.py `
             --target "launcher" `
             --version "${{ needs.prepare.outputs.launcher_version }}" `
             --output "dist"

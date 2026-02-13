@@ -4,8 +4,8 @@ REM Bomana 打包脚本 (Windows)
 REM ============================================================================
 REM 
 REM 使用说明：
-REM 1. 确保已安装 Python 3.8+
-REM 2. 确保已安装依赖: pip install -r requirements.txt
+REM 1. 确保已安装 uv
+REM 2. 同步依赖: uv sync --extra build
 REM 3. 运行此脚本（默认 Enhanced）：build.bat
 REM    或指定版本：build.bat Enhanced|Standard|Lite
 REM 
@@ -17,30 +17,31 @@ echo Bomana 打包脚本
 echo ========================================
 echo.
 
-REM 检查 Python
-echo [1/6] 检查 Python 环境...
-python --version >nul 2>&1
+REM 检查 uv
+echo [1/6] 检查 uv 环境...
+set "UV_CMD=uv"
+%UV_CMD% --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [错误] 未找到 Python，请先安装 Python 3.8+
-    pause
-    exit /b 1
-)
-python --version
-echo.
-
-REM 检查依赖
-echo [2/6] 检查依赖...
-pip show pyinstaller >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [警告] 未安装 PyInstaller，正在安装...
-    pip install pyinstaller
+    set "UV_CMD=python -m uv"
+    %UV_CMD% --version >nul 2>&1
     if %errorlevel% neq 0 (
-        echo [错误] PyInstaller 安装失败
+        echo [错误] 未找到 uv，请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
         pause
         exit /b 1
     )
 )
-echo PyInstaller 已安装
+%UV_CMD% --version
+echo.
+
+REM 检查依赖
+echo [2/6] 检查依赖...
+%UV_CMD% sync --extra build
+if %errorlevel% neq 0 (
+    echo [错误] 依赖同步失败
+    pause
+    exit /b 1
+)
+echo 依赖同步完成
 echo.
 
 REM 解析版本类型
@@ -106,7 +107,7 @@ echo.
 
 REM 生成版本信息文件
 echo [5.5/6] 生成版本信息...
-python tools\create_version_info.py --config bomana\config.py --output file_version_info.txt
+%UV_CMD% run python tools\create_version_info.py --config bomana\config.py --output file_version_info.txt
 set "VERSION_ARG="
 if exist file_version_info.txt (
     set "VERSION_ARG=--version-file file_version_info.txt"
@@ -124,7 +125,7 @@ if /I "%VARIANT%"=="Enhanced" (
 )
 
 if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
-    pyinstaller --noconsole --onefile ^
+    %UV_CMD% run pyinstaller --noconsole --onefile ^
                 --name=%EXEC_NAME% ^
                 --icon=app.ico ^
                 --add-data "app.png;." ^
@@ -135,7 +136,7 @@ if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
                 %VERSION_ARG% ^
                 --clean Bomana.pyw
 ) else (
-    pyinstaller --noconsole --onefile ^
+    %UV_CMD% run pyinstaller --noconsole --onefile ^
                 --name=%EXEC_NAME% ^
                 --icon=app.ico ^
                 --add-data "app.png;." ^

@@ -31,11 +31,12 @@
 git clone https://github.com/Thankyou-Cheems/Bomana.git
 cd Bomana
 
+# 首次使用请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
 # 安装依赖
-pip install -r requirements.txt
+uv sync
 
 # 运行
-python Bomana.pyw
+uv run python Bomana.pyw
 ```
 
 ### 🎮 步骤 2：启动战雷
@@ -48,7 +49,7 @@ python Bomana.pyw
 
 ### 🚀 步骤 3：运行 Bomana
 
-1. **双击 `Bomana_launcher_vX.X.X.exe`**（或运行 `python Bomana.pyw`）
+1. **双击 `Bomana_launcher_vX.X.X.exe`**（或运行 `uv run python Bomana.pyw`）
 2. 窗口会出现在**屏幕右上角**
 3. 初始状态显示 "🏠机库" 或 "等待中"
 4. 启动器打开后会自动检查当前通道（可手动切换），优先连接国内更新服务；失败时自动回退 GitHub
@@ -253,8 +254,9 @@ Choose channel inside launcher:
 ```bash
 git clone https://github.com/Thankyou-Cheems/Bomana.git
 cd Bomana
-pip install -r requirements.txt
-python Bomana.pyw
+# Install uv first if needed: https://docs.astral.sh/uv/getting-started/installation/
+uv sync
+uv run python Bomana.pyw
 ```
 
 ### 🎮 Step 2: Start War Thunder

@@ -40,16 +40,28 @@ echo 打包目标: %TARGET%
 if not "%VERSION%"=="" echo 版本号: %VERSION%
 echo.
 
-python --version >nul 2>&1
+set "UV_CMD=uv"
+%UV_CMD% --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [错误] 未找到 Python，请先安装 Python 3.8+
+    set "UV_CMD=python -m uv"
+    %UV_CMD% --version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo [错误] 未找到 uv，请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
+        exit /b 1
+    )
+)
+
+echo [信息] 同步依赖 (uv sync --extra build)...
+%UV_CMD% sync --extra build
+if %errorlevel% neq 0 (
+    echo [错误] 依赖同步失败
     exit /b 1
 )
 
 if "%VERSION%"=="" (
-    python tools\build_portable.py --variant %VARIANT% --target %TARGET%
+    %UV_CMD% run python tools\build_portable.py --variant %VARIANT% --target %TARGET%
 ) else (
-    python tools\build_portable.py --variant %VARIANT% --target %TARGET% --version %VERSION%
+    %UV_CMD% run python tools\build_portable.py --variant %VARIANT% --target %TARGET% --version %VERSION%
 )
 
 if %errorlevel% neq 0 (
