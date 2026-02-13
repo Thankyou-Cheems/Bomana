@@ -441,6 +441,15 @@ class GameState:
     gear_stable_direction: bool = False                          # 稳定后的方向（True=收起）
     gear_change_time: float = 0.0                                # 上次变化时间
 
+    # v6.9.2 新增：clog 一次性解析状态（方案C实验集成）
+    clog_probe_status: str = "disabled"                          # disabled/idle/pending/running/parsed/empty/error/skip
+    clog_probe_life_index: int = 0                               # 计划或执行对应的 life_index
+    clog_probe_scheduled_at: Optional[float] = None              # 计划触发时间（epoch秒）
+    clog_probe_last_run_ts: float = 0.0                          # 最近执行时间
+    clog_probe_player_count: int = 0                             # 解析到的玩家数
+    clog_probe_players: List[str] = field(default_factory=list)  # 玩家名（截断）
+    clog_probe_error: str = ""                                   # 最近错误
+
 
 @dataclass(frozen=True)
 class ZoneDisplayInfo:

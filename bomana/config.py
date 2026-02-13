@@ -10,7 +10,7 @@ import json
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.9.1"
+__version__ = "6.9.2"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -29,6 +29,7 @@ ENABLE_AIRFIELDS = True
 ENABLE_FUEL = True
 ENABLE_CHECKLIST = True
 ENABLE_ADVANCED_SETTINGS = True
+ENABLE_CLOG_PROBE = False
 
 
 # ============================================================================
@@ -189,6 +190,31 @@ class NetworkConfig:
 
     # 正常轮询间隔：50ms（20次/秒，与UI刷新频率一致，大幅提升仪表平滑度）
     POLL_INTERVAL = 0.05
+
+
+class ClogConfig:
+    """clog 一次性解析配置（实验功能）。"""
+
+    # 默认关闭，避免改变“仅8111主链路”行为；按需显式启用
+    # 也可通过环境变量 BOMANA_ENABLE_CLOG_PROBE=1 临时启用
+    ENABLED = ENABLE_CLOG_PROBE
+
+    # 进入 ALIVE 后延迟触发一次解析（秒）
+    TRIGGER_DELAY_SEC = 3.0
+
+    # 读取窗口限制（仅尾部）
+    MAX_LOG_BYTES = 8 * 1024 * 1024
+    MAX_LOG_LINES = 60000
+
+    # 可选：指定固定目录或固定 .clog 文件；留空则自动发现最新日志
+    CLOG_DIR = ""
+    CLOG_FILE = ""
+
+    # 可选：XOR key 文件（hex/dec 文本或原始 bytes）；留空使用内置 key
+    KEY_FILE = ""
+
+    # 诊断行最多展示的玩家名数量
+    MAX_DEBUG_NAMES = 3
 
 
 class UIConfig:

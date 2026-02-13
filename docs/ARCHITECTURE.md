@@ -24,6 +24,7 @@
 │  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
 │  ├─ core/
 │  │  ├─ ballistics.py        # Bombing ballistics
+│  │  ├─ clog_probe.py        # Optional one-shot clog parser (shared-read + XOR)
 │  │  ├─ logic.py             # GameLogic core loop
 │  │  ├─ overspeed.py         # Aircraft speed-limit matching + alert grading
 │  │  ├─ state.py             # Dataclasses/enums
@@ -60,19 +61,25 @@
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
    - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives badge + alert sound.
-6. Launcher check flow:
+6. Optional hybrid probe flow (default disabled):
+   - `ENABLE_CLOG_PROBE=False` by default; no behavior change in normal builds.
+   - Can be temporarily enabled for local validation with `BOMANA_ENABLE_CLOG_PROBE=1`.
+   - When enabled, `GameLogic` schedules one-shot clog parse after ALIVE confirmation (`ClogConfig.TRIGGER_DELAY_SEC`).
+   - Parser reads latest `.clog` with Windows shared-read flags, XOR-decrypts tail bytes, and extracts candidate player/vehicle lines.
+   - Probe runs in a background thread and updates debug diagnostic state without blocking the main tick loop.
+7. Launcher check flow:
    - On startup (and channel switch), launcher auto-checks update metadata.
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for version/manifest when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
-7. Launcher download/apply flow:
+8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
    - Verifies SHA256 (when provided), replaces `app/`, and updates local version metadata.
    - Launch action stays available for offline local app start.
-8. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` events to Tencent API (best effort).
+9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` events to Tencent API (best effort).
 
-Important constraint: only use the official 8111 API. No memory reads, injection, or game file modifications (see `Bomana.pyw` header rules).
+Important constraint: default runtime data path is official 8111 API only; no memory reads, injection, or game file modifications. Experimental clog probe remains disabled unless explicitly enabled via config.
 
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config.py`.
