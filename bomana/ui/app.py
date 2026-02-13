@@ -1860,6 +1860,14 @@ class App:
         """生成 Debug 面板文本。"""
         scene_name = self._debug_scene_names[self._debug_scene_index % len(self._debug_scene_names)]
         source_text = "模拟" if self._debug_effective_mock else "实时"
+        clog_line = "CLOG: -"
+        raw_diag = str(getattr(live_snap, "diag_text", "") or "")
+        if raw_diag:
+            for line in raw_diag.splitlines():
+                txt = str(line or "").strip()
+                if txt.startswith("CLOG:"):
+                    clog_line = txt
+                    break
         lines = [
             f"[Debug] 数据源={source_text} | 场景={scene_name}",
             "操作: 点击[数据源]切实时/模拟，点击[◀/▶]切换场景",
@@ -1867,6 +1875,7 @@ class App:
                 f"Live: phase={live_snap.phase.name} api_down={int(live_snap.api_down)} "
                 f"zones={len(live_snap.zones)} target={int(live_snap.has_target)}"
             ),
+            clog_line,
             (
                 f"Render: phase={render_snap.phase.name} on_ground={int(render_snap.on_ground)} "
                 f"fuel={render_snap.fuel_kg:.0f}kg ({render_snap.fuel_percent:.0f}%) "
