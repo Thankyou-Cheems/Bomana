@@ -147,15 +147,152 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self._fit_window_to_screen()
         self._init_dynamic_scaling()
         self._center_on_parent(parent)
+
+    def _bind_button_hover(
+        self,
+        button: tk.Widget,
+        normal_bg: str,
+        hover_bg: str,
+        normal_border: str,
+        hover_border: str,
+    ) -> None:
+        """统一按钮悬停反馈，保持 Tk 原生控件下的 Fluent 触感。"""
+        def _on_enter(_event=None):
+            button.configure(bg=hover_bg, highlightbackground=hover_border)
+
+        def _on_leave(_event=None):
+            button.configure(bg=normal_bg, highlightbackground=normal_border)
+
+        button.bind("<Enter>", _on_enter, add="+")
+        button.bind("<Leave>", _on_leave, add="+")
+
+    def _create_action_button(
+        self,
+        parent: tk.Widget,
+        text: str,
+        command,
+        variant: str = "neutral",
+        width: int = 10,
+    ) -> tk.Button:
+        palette = {
+            "primary": {
+                "bg": Theme.BLUE,
+                "hover_bg": Theme.GREEN,
+                "fg": Theme.TEXT,
+                "border": Theme.BLUE,
+                "hover_border": Theme.GREEN,
+            },
+            "neutral": {
+                "bg": Theme.GRAYPILL,
+                "hover_bg": Theme.SEPARATOR,
+                "fg": Theme.TEXT,
+                "border": Theme.BORDER,
+                "hover_border": Theme.BLUE,
+            },
+            "accent": {
+                "bg": Theme.YELLOW,
+                "hover_bg": Theme.ORANGE,
+                "fg": Theme.TEXT,
+                "border": Theme.YELLOW,
+                "hover_border": Theme.ORANGE,
+            },
+        }
+        style = palette.get(variant, palette["neutral"])
+        button = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=style["bg"],
+            fg=style["fg"],
+            bd=0,
+            relief="flat",
+            width=width,
+            padx=10,
+            pady=5,
+            activebackground=style["hover_bg"],
+            activeforeground=style["fg"],
+            highlightthickness=1,
+            highlightbackground=style["border"],
+            highlightcolor=style["border"],
+            cursor="hand2",
+        )
+        self._bind_button_hover(
+            button,
+            normal_bg=style["bg"],
+            hover_bg=style["hover_bg"],
+            normal_border=style["border"],
+            hover_border=style["hover_border"],
+        )
+        return button
+
+    def _style_tab_button(self, name: str, active: bool) -> None:
+        btn = self.tab_btns.get(name)
+        if not btn:
+            return
+        if active:
+            btn.configure(
+                bg=Theme.BLUE,
+                fg=Theme.TEXT,
+                highlightbackground=Theme.BLUE,
+                activebackground=Theme.BLUE,
+                activeforeground=Theme.TEXT,
+            )
+        else:
+            btn.configure(
+                bg=Theme.GRAYPILL,
+                fg=Theme.TEXT_DIM,
+                highlightbackground=Theme.BORDER,
+                activebackground=Theme.SEPARATOR,
+                activeforeground=Theme.TEXT,
+            )
+
+    def _on_tab_hover(self, tab_name: str, hover: bool) -> None:
+        if tab_name == self.current_tab:
+            self._style_tab_button(tab_name, active=True)
+            return
+        btn = self.tab_btns.get(tab_name)
+        if not btn:
+            return
+        if hover:
+            btn.configure(
+                bg=Theme.SEPARATOR,
+                fg=Theme.TEXT,
+                highlightbackground=Theme.BLUE,
+            )
+        else:
+            self._style_tab_button(tab_name, active=False)
     
     def _build_ui(self):
-        # 主容器
-        main = tk.Frame(self, bg=Theme.BG)
-        main.pack(padx=15, pady=10, fill="both", expand=True)
-        
-        # 创建选项卡（使用Frame模拟，因为ttk样式在透明窗口中有问题）
-        self.tab_buttons_frame = tk.Frame(main, bg=Theme.BG)
-        self.tab_buttons_frame.pack(fill="x", pady=(0, 10))
+        # Fluent 外层边框 + 内容表面，保持与主界面一致的分层节奏。
+        shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
+        shell.pack(padx=15, pady=12, fill="both", expand=True)
+        main = tk.Frame(shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        main.pack(fill="both", expand=True, padx=1, pady=1)
+
+        header = tk.Frame(main, bg=Theme.BG)
+        header.pack(fill="x", padx=12, pady=(10, 6))
+        tk.Label(
+            header,
+            text="设置",
+            font=("Segoe UI", 14, "bold"),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            anchor="w",
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text="显示、面板、快捷键与行为偏好",
+            font=("Segoe UI", 9),
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            anchor="w",
+        ).pack(anchor="w", pady=(2, 0))
+
+        # 创建选项卡（使用 Frame 模拟，避免 ttk 在透明窗口中的样式冲突）
+        tab_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        tab_shell.pack(fill="x", padx=12, pady=(4, 10))
+        self.tab_buttons_frame = tk.Frame(tab_shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        self.tab_buttons_frame.pack(fill="x", padx=1, pady=1)
         
         self.tabs = ["显示", "面板", "快捷键", "其他"]
         if ENABLE_CCRP:
@@ -167,16 +304,32 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 选项卡按钮
         for tab in self.tabs:
             btn = tk.Button(
-                self.tab_buttons_frame, text=tab, 
-                bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=12, pady=4,
-                command=lambda t=tab: self._switch_tab(t)
+                self.tab_buttons_frame,
+                text=tab,
+                bg=Theme.GRAYPILL,
+                fg=Theme.TEXT_DIM,
+                bd=0,
+                relief="flat",
+                padx=14,
+                pady=5,
+                cursor="hand2",
+                activebackground=Theme.SEPARATOR,
+                activeforeground=Theme.TEXT,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+                highlightcolor=Theme.BORDER,
+                command=lambda t=tab: self._switch_tab(t),
             )
             btn.pack(side="left", padx=2)
             self.tab_btns[tab] = btn
+            btn.bind("<Enter>", lambda _e, t=tab: self._on_tab_hover(t, True), add="+")
+            btn.bind("<Leave>", lambda _e, t=tab: self._on_tab_hover(t, False), add="+")
         
         # 选项卡内容容器
-        self.content_frame = tk.Frame(main, bg=Theme.BG)
-        self.content_frame.pack(fill="both", expand=True)
+        content_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        content_shell.pack(fill="both", expand=True, padx=12)
+        self.content_frame = tk.Frame(content_shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        self.content_frame.pack(fill="both", expand=True, padx=1, pady=1)
         
         # 创建各选项卡页面
         self._build_display_tab()
@@ -188,11 +341,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         
         # 按钮行
         btn_frame = tk.Frame(main, bg=Theme.BG)
-        btn_frame.pack(fill="x", pady=(15, 0))
-        tk.Button(btn_frame, text="保存", command=self._save, 
-                 bg=Theme.BLUE, fg=Theme.TEXT, bd=0, padx=20, pady=5).pack(side="right", padx=5)
-        tk.Button(btn_frame, text="取消", command=self.destroy, 
-                 bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=20, pady=5).pack(side="right", padx=5)
+        btn_frame.pack(fill="x", padx=12, pady=(10, 10))
+        self._create_action_button(
+            btn_frame, "保存", self._save, variant="primary", width=9
+        ).pack(side="right")
+        self._create_action_button(
+            btn_frame, "取消", self.destroy, variant="neutral", width=9
+        ).pack(side="right", padx=(0, 8))
         
         # 显示第一个选项卡
         self._switch_tab("显示")
@@ -205,10 +360,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         
         # 更新按钮样式
         for name, btn in self.tab_btns.items():
-            if name == tab_name:
-                btn.config(bg=Theme.BLUE)
-            else:
-                btn.config(bg=Theme.GRAYPILL)
+            self._style_tab_button(name, active=(name == tab_name))
         
         # 显示当前页面
         if tab_name in self.tab_frames:
@@ -834,83 +986,201 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         self.resizable(True, True)
         self.transient(parent)
         self.grab_set()
-        
-        main = tk.Frame(self, bg=Theme.BG, padx=15, pady=15)
-        main.pack(fill="both", expand=True)
-        
+
+        shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
+        shell.pack(fill="both", expand=True, padx=15, pady=12)
+        main = tk.Frame(shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        main.pack(fill="both", expand=True, padx=1, pady=1)
+
+        header = tk.Frame(main, bg=Theme.BG)
+        header.pack(fill="x", padx=12, pady=(10, 6))
+        tk.Label(
+            header,
+            text="选择炸弹",
+            font=("Segoe UI", 13, "bold"),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            anchor="w",
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text="支持关键词检索与分类筛选",
+            font=("Segoe UI", 9),
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            anchor="w",
+        ).pack(anchor="w", pady=(2, 0))
+
         # 搜索框
         search_frame = tk.Frame(main, bg=Theme.BG)
-        search_frame.pack(fill="x", pady=(0, 10))
-        
+        search_frame.pack(fill="x", padx=12, pady=(4, 8))
+
         self.search_var = tk.StringVar()
         self.search_var.trace("w", lambda *args: self._on_search())
         self.search_entry = tk.Entry(
             search_frame, textvariable=self.search_var,
             bg=Theme.GRAYPILL, fg=Theme.TEXT_MUTED, bd=0, highlightthickness=1,
-            highlightbackground=Theme.BORDER, font=("Segoe UI", 10)
+            highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE,
+            insertbackground=Theme.TEXT, font=("Segoe UI", 10)
         )
-        self.search_entry.pack(fill="x", ipady=5)
+        self.search_entry.pack(fill="x", ipady=6)
         self.search_entry.insert(0, "搜索...")
         self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
         self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
-        
+
         # 分类按钮
-        cat_frame = tk.Frame(main, bg=Theme.BG)
-        cat_frame.pack(fill="x", pady=(0, 10))
-        
+        cat_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        cat_shell.pack(fill="x", padx=12, pady=(0, 10))
+        cat_frame = tk.Frame(cat_shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        cat_frame.pack(fill="x", padx=1, pady=1)
+
         self.cat_buttons = {}
         categories = ['全部'] + BombConfig.get_categories()
         for cat in categories:
             btn = tk.Button(
-                cat_frame, text=cat, 
+                cat_frame, text=cat,
                 bg=Theme.GRAYPILL if cat != '全部' else Theme.BLUE,
-                fg=Theme.TEXT, bd=0, padx=8, pady=4, font=("Segoe UI", 9),
-                command=lambda c=cat: self._filter_category(c)
+                fg=Theme.TEXT if cat == "全部" else Theme.TEXT_DIM,
+                bd=0,
+                relief="flat",
+                padx=10,
+                pady=4,
+                font=("Segoe UI", 9),
+                cursor="hand2",
+                activebackground=Theme.SEPARATOR,
+                activeforeground=Theme.TEXT,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+                highlightcolor=Theme.BORDER,
+                command=lambda c=cat: self._filter_category(c),
             )
             btn.pack(side="left", padx=2)
             self.cat_buttons[cat] = btn
-        
+            btn.bind("<Enter>", lambda _e, c=cat: self._style_category_button(c, hover=True), add="+")
+            btn.bind("<Leave>", lambda _e, c=cat: self._style_category_button(c, hover=False), add="+")
+
         # 列表区域
-        list_frame = tk.Frame(main, bg=Theme.GRAYPILL)
-        list_frame.pack(fill="both", expand=True)
-        
-        scrollbar = tk.Scrollbar(list_frame)
+        list_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        list_shell.pack(fill="both", expand=True, padx=12)
+        list_frame = tk.Frame(list_shell, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
+        list_frame.pack(fill="both", expand=True, padx=1, pady=1)
+
+        scrollbar = tk.Scrollbar(
+            list_frame,
+            troughcolor=Theme.BG,
+            bg=Theme.GRAYPILL,
+            activebackground=Theme.SEPARATOR,
+            bd=0,
+            highlightthickness=0,
+        )
         scrollbar.pack(side="right", fill="y")
-        
+
         self.listbox = tk.Listbox(
             list_frame, width=55, height=20,
             bg=Theme.GRAYPILL, fg=Theme.TEXT, selectbackground=Theme.BLUE,
             selectforeground=Theme.TEXT, bd=0, highlightthickness=1,
-            highlightbackground=Theme.BORDER, yscrollcommand=scrollbar.set, 
+            highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE,
+            yscrollcommand=scrollbar.set,
             font=("Consolas", 9)
         )
         self.listbox.pack(side="left", fill="both", expand=True)
         scrollbar.config(command=self.listbox.yview)
         self.listbox.bind("<Double-Button-1>", lambda e: self._select())
-        
+
         # 统计
         self.stats_lbl = tk.Label(
             main, text="", bg=Theme.BG, fg=Theme.TEXT_DIM, 
             font=("Segoe UI", 9), anchor="w"
         )
-        self.stats_lbl.pack(fill="x", pady=(5, 0))
-        
+        self.stats_lbl.pack(fill="x", padx=12, pady=(6, 0))
+
         # 按钮
         btn_frame = tk.Frame(main, bg=Theme.BG)
-        btn_frame.pack(fill="x", pady=(10, 0))
-        tk.Button(
-            btn_frame, text="确定", command=self._select, 
-            bg=Theme.BLUE, fg=Theme.TEXT, bd=0, padx=20, pady=5
-        ).pack(side="right", padx=5)
-        tk.Button(
-            btn_frame, text="取消", command=self.destroy, 
-            bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=20, pady=5
-        ).pack(side="right", padx=5)
-        
+        btn_frame.pack(fill="x", padx=12, pady=(10, 10))
+        self._create_action_button(
+            btn_frame, "确定", self._select, variant="primary", width=9
+        ).pack(side="right")
+        self._create_action_button(
+            btn_frame, "取消", self.destroy, variant="neutral", width=9
+        ).pack(side="right", padx=(0, 8))
+
         self._populate_list()
         self._fit_window_to_screen()
         self._init_dynamic_scaling()
         self._center_on_parent(parent)
+
+    def _create_action_button(
+        self,
+        parent: tk.Widget,
+        text: str,
+        command,
+        variant: str = "neutral",
+        width: int = 10,
+    ) -> tk.Button:
+        palette = {
+            "primary": (Theme.BLUE, Theme.GREEN, Theme.BLUE, Theme.GREEN),
+            "neutral": (Theme.GRAYPILL, Theme.SEPARATOR, Theme.BORDER, Theme.BLUE),
+        }
+        bg, hover_bg, border, hover_border = palette.get(variant, palette["neutral"])
+        button = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=bg,
+            fg=Theme.TEXT,
+            bd=0,
+            relief="flat",
+            width=width,
+            padx=10,
+            pady=5,
+            activebackground=hover_bg,
+            activeforeground=Theme.TEXT,
+            highlightthickness=1,
+            highlightbackground=border,
+            highlightcolor=border,
+            cursor="hand2",
+        )
+
+        def _on_enter(_event=None):
+            button.configure(bg=hover_bg, highlightbackground=hover_border)
+
+        def _on_leave(_event=None):
+            button.configure(bg=bg, highlightbackground=border)
+
+        button.bind("<Enter>", _on_enter, add="+")
+        button.bind("<Leave>", _on_leave, add="+")
+        return button
+
+    def _style_category_button(self, category: str, hover: bool = False) -> None:
+        btn = self.cat_buttons.get(category)
+        if not btn:
+            return
+        is_active = ((self._current_category is None and category == "全部") or (self._current_category == category))
+        if is_active:
+            btn.configure(
+                bg=Theme.BLUE,
+                fg=Theme.TEXT,
+                highlightbackground=Theme.BLUE,
+                activebackground=Theme.BLUE,
+                activeforeground=Theme.TEXT,
+            )
+            return
+        if hover:
+            btn.configure(
+                bg=Theme.SEPARATOR,
+                fg=Theme.TEXT,
+                highlightbackground=Theme.BLUE,
+            )
+        else:
+            btn.configure(
+                bg=Theme.GRAYPILL,
+                fg=Theme.TEXT_DIM,
+                highlightbackground=Theme.BORDER,
+            )
+
+    def _refresh_category_button_styles(self) -> None:
+        for cat in self.cat_buttons.keys():
+            self._style_category_button(cat, hover=False)
     
     def _on_search_focus_in(self, event):
         if self.search_entry.get() == "搜索...":
@@ -933,8 +1203,7 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
     def _filter_category(self, category):
         self._current_category = None if category == '全部' else category
         self.search_var.set("")
-        for cat, btn in self.cat_buttons.items():
-            btn.config(bg=Theme.BLUE if cat == category else Theme.GRAYPILL)
+        self._refresh_category_button_styles()
         self._populate_list()
     
     def _populate_list(self, search_query: str = ""):
