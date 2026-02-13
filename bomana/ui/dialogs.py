@@ -294,7 +294,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self.tab_buttons_frame = tk.Frame(tab_shell, bg=Theme.BG, bd=0, highlightthickness=0)
         self.tab_buttons_frame.pack(fill="x", padx=1, pady=1)
         
-        self.tabs = ["显示", "面板", "快捷键", "其他"]
+        self.tabs = ["显示", "面板", "快捷键", "实验性", "其他"]
         if ENABLE_CCRP:
             self.tabs.insert(2, "投弹")
         self.tab_frames = {}
@@ -337,6 +337,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if ENABLE_CCRP:
             self._build_ccrp_tab()
         self._build_hotkey_tab()
+        self._build_experimental_tab()
         self._build_other_tab()
         
         # 按钮行
@@ -422,98 +423,15 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             ).pack(anchor="w")
         row += 1
 
-        # HUD 显示设置
-        tk.Frame(frame, bg=Theme.SEPARATOR, height=1).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(8, 8))
-        row += 1
-
-        tk.Label(frame, text="HUD叠加层:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
-        self.hud_enabled_var = tk.BooleanVar(value=HUDConfig.enabled)
-        tk.Checkbutton(
-            frame, text="启用HUD", variable=self.hud_enabled_var,
-            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG, activeforeground=Theme.TEXT,
-            highlightthickness=0
-        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
-        row += 1
-
-        tk.Label(frame, text="HUD透明度:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
-        self.hud_alpha_var = tk.IntVar(value=int(HUDConfig.alpha))
-        tk.Scale(
-            frame, from_=30, to=255, orient="horizontal", length=180,
-            variable=self.hud_alpha_var, bg=Theme.BG, fg=Theme.TEXT,
-            highlightthickness=0, troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE
-        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
-        row += 1
-
-        tk.Label(frame, text="HUD缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
-        self.hud_scale_var = tk.DoubleVar(value=float(HUDConfig.scale))
-        tk.Scale(
-            frame, from_=0.5, to=2.0, resolution=0.05, orient="horizontal", length=180,
-            variable=self.hud_scale_var, bg=Theme.BG, fg=Theme.TEXT,
-            highlightthickness=0, troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE
-        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
-        row += 1
-
-        tk.Label(frame, text="HUD平滑:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
-        self.hud_smoothing_var = tk.DoubleVar(value=float(HUDConfig.smoothing))
-        tk.Scale(
-            frame, from_=0.0, to=1.0, resolution=0.05, orient="horizontal", length=180,
-            variable=self.hud_smoothing_var, bg=Theme.BG, fg=Theme.TEXT,
-            highlightthickness=0, troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE
-        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
-        row += 1
-
-        tk.Label(frame, text="HUD显示器策略:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
-        self.hud_follow_main_monitor_var = tk.BooleanVar(value=bool(HUDConfig.follow_main_window_monitor))
-        tk.Checkbutton(
-            frame, text="跟随主窗口显示器（关闭=跟随鼠标）", variable=self.hud_follow_main_monitor_var,
-            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG, activeforeground=Theme.TEXT,
-            highlightthickness=0
-        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
-        row += 1
-
-        tk.Label(frame, text="HUD配色:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
-        self.hud_color_style_var = tk.StringVar(value=str(getattr(HUDConfig, "color_style", "auto")))
-        self._hud_color_style_labels = {
-            "auto": "自动(可靠绿/降级琥珀)",
-            "green": "绿色",
-            "amber": "琥珀",
-            "cyan": "青色",
-            "white": "白色",
-        }
-        color_btn_text = tk.StringVar(
-            value=self._hud_color_style_labels.get(self.hud_color_style_var.get(), "自动(可靠绿/降级琥珀)")
-        )
-        self._hud_color_btn_text = color_btn_text
-        menu_btn = tk.Menubutton(
-            frame, textvariable=self._hud_color_btn_text, bg=Theme.GRAYPILL, fg=Theme.TEXT,
-            bd=0, padx=10, pady=2, highlightthickness=1,
-            highlightbackground=Theme.BORDER, relief="flat"
-        )
-        menu_btn.grid(row=row, column=1, sticky="w", padx=10, pady=3)
-        menu = tk.Menu(menu_btn, tearoff=0, bg=Theme.GRAYPILL, fg=Theme.TEXT)
-        for style, label in self._hud_color_style_labels.items():
-            menu.add_command(
-                label=label,
-                command=lambda s=style, l=label: (self.hud_color_style_var.set(s), self._hud_color_btn_text.set(l))
-            )
-        menu_btn["menu"] = menu
-        row += 1
-        
         # 主题提示
-        tk.Label(frame, text="* 主题与UI缩放保存后立即生效", bg=Theme.BG, fg=Theme.TEXT_MUTED,
-                font=("Segoe UI", 8)).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        tk.Label(
+            frame,
+            text="* 主题与UI缩放保存后立即生效\n* HUD 等实验性功能请在“实验性”页配置",
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
+            justify="left",
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
     
     def _build_panel_tab(self):
         """构建面板设置页"""
@@ -606,9 +524,133 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             menu_btn["menu"] = menu
         
         # 提示
-        tk.Label(frame, text="* 避免与游戏快捷键冲突\n* 更改后需要重启热键服务\n* HUD 仅可在显示设置中启用/关闭", 
+        tk.Label(frame, text="* 避免与游戏快捷键冲突\n* 更改后需要重启热键服务\n* HUD 开关与参数已迁移到“实验性”页", 
                 bg=Theme.BG, fg=Theme.TEXT_MUTED, font=("Segoe UI", 8),
                 justify="left").pack(anchor="w", pady=(15, 0))
+
+    def _build_experimental_tab(self):
+        """构建实验性功能页（HUD 等尚未稳定能力）。"""
+        frame = tk.Frame(self.content_frame, bg=Theme.BG)
+        self.tab_frames["实验性"] = frame
+
+        row = 0
+        warn_bg = Theme.GRAYPILL
+        warn_frame = tk.Frame(
+            frame,
+            bg=warn_bg,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.SEPARATOR,
+        )
+        warn_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        tk.Label(
+            warn_frame,
+            text="实验性功能可能出现偏差、性能抖动或显示异常，建议仅在测试场景启用。",
+            bg=warn_bg,
+            fg=Theme.YELLOW,
+            justify="left",
+            anchor="w",
+            padx=8,
+            pady=6,
+            wraplength=460,
+        ).pack(fill="x")
+        row += 1
+
+        tk.Label(frame, text="HUD叠加层:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_enabled_var = tk.BooleanVar(value=HUDConfig.enabled)
+        tk.Checkbutton(
+            frame, text="启用实验性HUD", variable=self.hud_enabled_var,
+            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG, activeforeground=Theme.TEXT,
+            highlightthickness=0
+        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
+        row += 1
+
+        tk.Label(frame, text="HUD透明度:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_alpha_var = tk.IntVar(value=int(HUDConfig.alpha))
+        tk.Scale(
+            frame, from_=30, to=255, orient="horizontal", length=200,
+            variable=self.hud_alpha_var, bg=Theme.BG, fg=Theme.TEXT,
+            highlightthickness=0, troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE
+        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
+        row += 1
+
+        tk.Label(frame, text="HUD缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_scale_var = tk.DoubleVar(value=float(HUDConfig.scale))
+        tk.Scale(
+            frame, from_=0.5, to=2.0, resolution=0.05, orient="horizontal", length=200,
+            variable=self.hud_scale_var, bg=Theme.BG, fg=Theme.TEXT,
+            highlightthickness=0, troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE
+        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
+        row += 1
+
+        tk.Label(frame, text="HUD平滑:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_smoothing_var = tk.DoubleVar(value=float(HUDConfig.smoothing))
+        tk.Scale(
+            frame, from_=0.0, to=1.0, resolution=0.05, orient="horizontal", length=200,
+            variable=self.hud_smoothing_var, bg=Theme.BG, fg=Theme.TEXT,
+            highlightthickness=0, troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE
+        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
+        row += 1
+
+        tk.Label(frame, text="HUD显示器策略:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_follow_main_monitor_var = tk.BooleanVar(
+            value=bool(HUDConfig.follow_main_window_monitor)
+        )
+        tk.Checkbutton(
+            frame, text="跟随主窗口显示器（关闭=跟随鼠标）", variable=self.hud_follow_main_monitor_var,
+            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG, activeforeground=Theme.TEXT,
+            highlightthickness=0
+        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
+        row += 1
+
+        tk.Label(frame, text="HUD配色:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=3)
+        self.hud_color_style_var = tk.StringVar(value=str(getattr(HUDConfig, "color_style", "auto")))
+        self._hud_color_style_labels = {
+            "auto": "自动(可靠绿/降级琥珀)",
+            "green": "绿色",
+            "amber": "琥珀",
+            "cyan": "青色",
+            "white": "白色",
+        }
+        color_btn_text = tk.StringVar(
+            value=self._hud_color_style_labels.get(
+                self.hud_color_style_var.get(), "自动(可靠绿/降级琥珀)"
+            )
+        )
+        self._hud_color_btn_text = color_btn_text
+        menu_btn = tk.Menubutton(
+            frame, textvariable=self._hud_color_btn_text, bg=Theme.GRAYPILL, fg=Theme.TEXT,
+            bd=0, padx=10, pady=2, highlightthickness=1,
+            highlightbackground=Theme.BORDER, relief="flat"
+        )
+        menu_btn.grid(row=row, column=1, sticky="w", padx=10, pady=3)
+        menu = tk.Menu(menu_btn, tearoff=0, bg=Theme.GRAYPILL, fg=Theme.TEXT)
+        for style, label in self._hud_color_style_labels.items():
+            menu.add_command(
+                label=label,
+                command=lambda s=style, l=label: (self.hud_color_style_var.set(s), self._hud_color_btn_text.set(l))
+            )
+        menu_btn["menu"] = menu
+        row += 1
+
+        tk.Label(
+            frame,
+            text="* 建议先在无战斗风险场景测试，再决定是否常驻启用",
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
     def _build_ccrp_tab(self):
         """构建投弹预测设置页"""
@@ -717,7 +759,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             self.alpha_var.set(210)
             self.nav_width_var.set(1.0)
             self.scale_var.set(0.85)
-            self.theme_var.set("dark")
+            self.theme_var.set("fluent_dark")
             self.hud_enabled_var.set(False)
             self.hud_alpha_var.set(255)
             self.hud_scale_var.set(1.0)
@@ -914,30 +956,111 @@ class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
         self._fit_window_to_screen()
         self._init_dynamic_scaling()
         self._center_on_parent(parent)
+
+    def _create_action_button(
+        self,
+        parent: tk.Widget,
+        text: str,
+        command,
+        variant: str = "neutral",
+        width: int = 10,
+    ) -> tk.Button:
+        palette = {
+            "primary": (Theme.BLUE, Theme.GREEN, Theme.BLUE, Theme.GREEN),
+            "neutral": (Theme.GRAYPILL, Theme.SEPARATOR, Theme.BORDER, Theme.BLUE),
+            "accent": (Theme.YELLOW, Theme.ORANGE, Theme.YELLOW, Theme.ORANGE),
+        }
+        bg, hover_bg, border, hover_border = palette.get(variant, palette["neutral"])
+        btn = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=bg,
+            fg=Theme.TEXT,
+            bd=0,
+            relief="flat",
+            width=width,
+            padx=10,
+            pady=5,
+            highlightthickness=1,
+            highlightbackground=border,
+            highlightcolor=border,
+            activebackground=hover_bg,
+            activeforeground=Theme.TEXT,
+            cursor="hand2",
+        )
+
+        def _on_enter(_event=None):
+            btn.configure(bg=hover_bg, highlightbackground=hover_border)
+
+        def _on_leave(_event=None):
+            btn.configure(bg=bg, highlightbackground=border)
+
+        btn.bind("<Enter>", _on_enter, add="+")
+        btn.bind("<Leave>", _on_leave, add="+")
+        return btn
     
     def _build_ui(self):
-        main = tk.Frame(self, bg=Theme.BG)
-        main.pack(padx=20, pady=15, fill="both", expand=True)
-        
-        tk.Label(main, text=f"每行一个检查项（最多{ChecklistConfig.MAX_ITEMS}项）:", 
-                bg=Theme.BG, fg=Theme.TEXT, anchor="w").pack(fill="x", pady=(0, 5))
-        
-        self.text = tk.Text(main, width=40, height=10, bg=Theme.GRAYPILL, fg=Theme.TEXT, 
-                           insertbackground=Theme.TEXT, bd=0, highlightthickness=1, 
-                           highlightbackground=Theme.BORDER)
-        self.text.pack(fill="both", expand=True)
-        
+        shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
+        shell.pack(fill="both", expand=True, padx=15, pady=12)
+        main = tk.Frame(shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        main.pack(fill="both", expand=True, padx=1, pady=1)
+
+        header = tk.Frame(main, bg=Theme.BG)
+        header.pack(fill="x", padx=12, pady=(10, 6))
+        tk.Label(
+            header,
+            text="检查清单编辑",
+            font=("Segoe UI", 13, "bold"),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            anchor="w",
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text=f"每行一个检查项，最多 {ChecklistConfig.MAX_ITEMS} 项",
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).pack(anchor="w", pady=(2, 0))
+
+        editor_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        editor_shell.pack(fill="both", expand=True, padx=12, pady=(4, 10))
+        editor = tk.Frame(editor_shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        editor.pack(fill="both", expand=True, padx=1, pady=1)
+
+        self.text = tk.Text(
+            editor,
+            width=40,
+            height=12,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            insertbackground=Theme.TEXT,
+            bd=0,
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BLUE,
+            padx=8,
+            pady=8,
+        )
+        self.text.pack(fill="both", expand=True, padx=8, pady=8)
+
         current_items = "\n".join(self.app.chk_items)
         self.text.insert("1.0", current_items)
-        
+
         btn_frame = tk.Frame(main, bg=Theme.BG)
-        btn_frame.pack(pady=(10, 0))
-        tk.Button(btn_frame, text="保存", command=self._save, 
-                 bg=Theme.BLUE, fg=Theme.TEXT, bd=0, padx=20, pady=5).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="恢复默认", command=self._restore_default, 
-                 bg=Theme.YELLOW, fg=Theme.TEXT, bd=0, padx=15, pady=5).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="取消", command=self.destroy, 
-                 bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=20, pady=5).pack(side="left", padx=5)
+        btn_frame.pack(fill="x", padx=12, pady=(0, 10))
+        self._create_action_button(
+            btn_frame, "保存", self._save, variant="primary", width=9
+        ).pack(side="right")
+        self._create_action_button(
+            btn_frame, "恢复默认", self._restore_default, variant="accent", width=10
+        ).pack(side="right", padx=(0, 8))
+        self._create_action_button(
+            btn_frame, "取消", self.destroy, variant="neutral", width=9
+        ).pack(side="right", padx=(0, 8))
     
     def _center_on_parent(self, parent):
         self.update_idletasks()
@@ -1340,237 +1463,231 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         self._center_on_parent(parent)
     
     def _build_ui(self):
-        # 创建可滚动的画布（内容太多时可以滚动）
-        canvas = tk.Canvas(self, bg=Theme.BG, highlightthickness=0)
-        scrollbar = tk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        
-        main = tk.Frame(canvas, bg=Theme.BG)
-        
+        shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
+        shell.pack(fill="both", expand=True, padx=16, pady=12)
+        body = tk.Frame(shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        body.pack(fill="both", expand=True, padx=1, pady=1)
+
+        canvas = tk.Canvas(body, bg=Theme.BG, highlightthickness=0, bd=0)
+        scrollbar = tk.Scrollbar(
+            body,
+            orient="vertical",
+            command=canvas.yview,
+            troughcolor=Theme.BG,
+            bg=Theme.GRAYPILL,
+            activebackground=Theme.SEPARATOR,
+            bd=0,
+            highlightthickness=0,
+        )
+
         canvas.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
-        
-        canvas_frame = canvas.create_window((0, 0), window=main, anchor="nw")
-        
+
+        root = tk.Frame(canvas, bg=Theme.BG)
+        canvas_window = canvas.create_window((0, 0), window=root, anchor="nw")
+
         def configure_scroll(event):
             canvas.configure(scrollregion=canvas.bbox("all"))
-            # 让内容宽度跟随窗口
-            canvas.itemconfig(canvas_frame, width=event.width)
-        
-        def configure_canvas(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        def configure_canvas(_event):
             canvas.configure(scrollregion=canvas.bbox("all"))
-        
+
         canvas.bind("<Configure>", configure_scroll)
-        main.bind("<Configure>", configure_canvas)
-        
-        # 鼠标滚轮支持
+        root.bind("<Configure>", configure_canvas)
+
         def on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        canvas.bind_all("<MouseWheel>", on_mousewheel)
-        
-        # 内容区域，增大padding
-        content = tk.Frame(main, bg=Theme.BG)
-        content.pack(fill="both", expand=True, padx=30, pady=25)
-        
-        # === 软件标题 ===
-        title_frame = tk.Frame(content, bg=Theme.BG)
-        title_frame.pack(fill="x", pady=(0, 15))
-        
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", on_mousewheel), add="+")
+        canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"), add="+")
+
+        content = tk.Frame(root, bg=Theme.BG)
+        content.pack(fill="both", expand=True, padx=24, pady=20)
+
+        header = self._make_card(content)
+        title_row = tk.Frame(header, bg=Theme.GRAYPILL)
+        title_row.pack(fill="x")
         try:
             icon_path = resource_path(FileConfig.ICON_FILE)
             if HAS_TRAY:
                 from PIL import Image, ImageTk
                 img = Image.open(icon_path).convert("RGBA")
-                img = img.resize((64, 64), Image.Resampling.LANCZOS)  # 更大的图标
+                img = img.resize((56, 56), Image.Resampling.LANCZOS)
                 self._app_icon = ImageTk.PhotoImage(img)
-                icon_lbl = tk.Label(title_frame, image=self._app_icon, bg=Theme.BG)
-                icon_lbl.pack(side="left", padx=(0, 15))
+                tk.Label(title_row, image=self._app_icon, bg=Theme.GRAYPILL).pack(side="left", padx=(0, 12))
         except Exception:
             pass
-        
-        title_text_frame = tk.Frame(title_frame, bg=Theme.BG)
-        title_text_frame.pack(side="left", fill="both", expand=True)
-        
+
+        title_txt = tk.Frame(title_row, bg=Theme.GRAYPILL)
+        title_txt.pack(side="left", fill="both", expand=True)
         tk.Label(
-            title_text_frame,
+            title_txt,
             text=f"{AboutConfig.APP_NAME} v{AboutConfig.VERSION}",
-            font=("Segoe UI", 20, "bold"),  # 更大字体
-            fg=Theme.TEXT, bg=Theme.BG, anchor="w"
+            font=("Segoe UI", 18, "bold"),
+            fg=Theme.TEXT,
+            bg=Theme.GRAYPILL,
+            anchor="w",
         ).pack(anchor="w")
-        
         tk.Label(
-            title_text_frame,
+            title_txt,
             text=AboutConfig.APP_NAME_CN,
-            font=("Segoe UI", 12),  # 更大字体
-            fg=Theme.TEXT_DIM, bg=Theme.BG, anchor="w"
-        ).pack(anchor="w", pady=(5, 0))
-        
-        # === 分隔线 ===
-        tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
-        
-        # === 项目说明 ===
-        description = """本软件是一个用于战雷全真模式的辅助计时工具，
-帮助玩家管理15分钟的复活周期。
+            font=("Segoe UI", 11),
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        ).pack(anchor="w", pady=(4, 0))
 
-核心特性：
-• 仅使用官方8111接口，安全合规
-• 自动检测出生/死亡/着陆状态
-• 战区导航和燃油管理
-• 可自定义的起飞检查清单
-
-本软件完全开源免费，欢迎贡献代码！"""
-        
+        desc_card = self._make_card(content, title="项目说明")
+        description = (
+            "本软件用于战雷全真模式辅助计时，聚焦复活周期管理与基础导航信息。\n\n"
+            "核心特性：\n"
+            "• 仅使用官方 8111 接口，遵循合规边界\n"
+            "• 自动检测出生/死亡/着陆状态\n"
+            "• 战区导航、燃油管理、检查清单等辅助能力\n"
+            "• 开源维护，可审查与持续迭代"
+        )
         tk.Label(
-            content, text=description,
-            font=("Segoe UI", 11),  # 更大字体
-            fg=Theme.TEXT_DIM, bg=Theme.BG,
-            justify="left", anchor="w"
-        ).pack(anchor="w")
-        
-        # === GitHub 链接 ===
+            desc_card,
+            text=description,
+            font=("Segoe UI", 10),
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            justify="left",
+            anchor="w",
+            wraplength=780,
+        ).pack(fill="x")
+
+        links_card = self._make_card(content, title="链接与隐私")
         if AboutConfig.GITHUB_URL:
-            link_frame = tk.Frame(content, bg=Theme.BG)
-            link_frame.pack(fill="x", pady=(15, 0))
-            
+            row = tk.Frame(links_card, bg=Theme.GRAYPILL)
+            row.pack(fill="x", pady=(0, 6))
             tk.Label(
-                link_frame, text="📦 项目主页：",
-                font=("Segoe UI", 11),
-                fg=Theme.TEXT_DIM, bg=Theme.BG
+                row,
+                text="项目主页：",
+                font=("Segoe UI", 10),
+                fg=Theme.TEXT_DIM,
+                bg=Theme.GRAYPILL,
             ).pack(side="left")
-            
             github_btn = tk.Label(
-                link_frame, text=AboutConfig.GITHUB_URL,
-                font=("Segoe UI", 11, "underline"),
-                fg=Theme.BLUE, bg=Theme.BG, cursor="hand2"
+                row,
+                text=AboutConfig.GITHUB_URL,
+                font=("Segoe UI", 10, "underline"),
+                fg=Theme.BLUE,
+                bg=Theme.GRAYPILL,
+                cursor="hand2",
             )
             github_btn.pack(side="left")
-            github_btn.bind("<Button-1>", lambda e: self._open_url(AboutConfig.GITHUB_URL))
-        
-        # === 分隔线 ===
-        tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
-        
-        # === 赞助区域 ===
+            github_btn.bind("<Button-1>", lambda _e: self._open_url(AboutConfig.GITHUB_URL))
+
+        privacy_desc = (
+            "本应用收集匿名 DAU 数据（设备ID、版本号等）用于统计分析，不涉及个人身份。\n"
+            "详细字段与禁用方式请查看隐私政策。"
+        )
         tk.Label(
-            content, text="❤️ 支持作者",
-            font=("Segoe UI", 14, "bold"),  # 更大字体
-            fg=Theme.TEXT, bg=Theme.BG, anchor="w"
-        ).pack(anchor="w", pady=(0, 10))
-        
+            links_card,
+            text=privacy_desc,
+            font=("Segoe UI", 10),
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            justify="left",
+            anchor="w",
+            wraplength=780,
+        ).pack(fill="x")
+        privacy_link = tk.Label(
+            links_card,
+            text="查看完整隐私政策",
+            font=("Segoe UI", 10, "underline"),
+            fg=Theme.BLUE,
+            bg=Theme.GRAYPILL,
+            cursor="hand2",
+            anchor="w",
+        )
+        privacy_link.pack(anchor="w", pady=(6, 0))
+        privacy_link.bind(
+            "<Button-1>",
+            lambda _e: self._open_url(f"{AboutConfig.GITHUB_URL}/blob/main/PRIVACY.md"),
+        )
+
+        sponsor_card = self._make_card(content, title="支持作者")
         tk.Label(
-            content, text="如果这个工具对你有帮助，欢迎请作者喝杯咖啡~",
-            font=("Segoe UI", 11),
-            fg=Theme.TEXT_DIM, bg=Theme.BG, anchor="w"
-        ).pack(anchor="w", pady=(0, 15))
-        
-        # 赞助图片/链接区域
-        sponsor_frame = tk.Frame(content, bg=Theme.BG)
-        sponsor_frame.pack(fill="x", pady=(0, 15))
-        
+            sponsor_card,
+            text="如果这个工具对你有帮助，欢迎支持持续维护。",
+            font=("Segoe UI", 10),
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        ).pack(anchor="w", pady=(0, 8))
+        sponsor_frame = tk.Frame(sponsor_card, bg=Theme.GRAYPILL)
+        sponsor_frame.pack(fill="x")
         for name, url, img_file in AboutConfig.SPONSOR_LINKS:
             self._add_sponsor_item(sponsor_frame, name, url, img_file)
-        
-        # === 分隔线 ===
-        tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
-        
-        # === 隐私政策 ===
 
+        legal_card = self._make_card(content, title="许可证与声明")
+        copyright_text = (
+            f"作者：{AboutConfig.AUTHOR}\n\n"
+            "MIT License\n"
+            f"Copyright © 2024-2026 {AboutConfig.AUTHOR}\n\n"
+            "War Thunder 及相关商标归 Gaijin Entertainment AG 及其子公司所有。\n"
+            "本软件为独立项目，与 Gaijin Entertainment AG 无关联。\n"
+            "请自行确保使用行为符合用户协议，风险由用户自行承担。"
+        )
         tk.Label(
-
-            content, text="🔒 隐私说明",
-
-            font=("Segoe UI", 14, "bold"),
-
-            fg=Theme.TEXT, bg=Theme.BG, anchor="w"
-
-        ).pack(anchor="w", pady=(0, 10))
-
-
-
-        privacy_desc = """本应用收集匿名DAU数据（设备ID、版本号等）用于统计分析，不涉及个人隐私。
-
-
-
-数据特点：
-
-• 完全匿名化（SHA256加密，不可逆向）
-
-• 仅统计必需（不收集IP、账号、邮箱等）
-
-• 代码开源可审查
-
-• 用户可禁用（见隐私政策详情）"""
-
-
-
-        tk.Label(
-
-            content, text=privacy_desc,
-
+            legal_card,
+            text=copyright_text,
             font=("Segoe UI", 10),
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            justify="left",
+            anchor="w",
+            wraplength=780,
+        ).pack(fill="x")
 
-            fg=Theme.TEXT_DIM, bg=Theme.BG,
-
-            justify="left", anchor="w"
-
-        ).pack(anchor="w", pady=(0, 10))
-
-
-
-        privacy_link = tk.Label(
-
-            content, text="查看完整隐私政策 →",
-
-            font=("Segoe UI", 10, "underline"),
-
-            fg=Theme.BLUE, bg=Theme.BG, cursor="hand2", anchor="w"
-
+        footer = tk.Frame(content, bg=Theme.BG)
+        footer.pack(fill="x", pady=(6, 0))
+        close_btn = tk.Button(
+            footer,
+            text="关闭",
+            command=self._close,
+            font=("Segoe UI", 10),
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            bd=0,
+            relief="flat",
+            padx=20,
+            pady=6,
+            cursor="hand2",
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER,
+            activebackground=Theme.SEPARATOR,
+            activeforeground=Theme.TEXT,
         )
+        close_btn.pack(side="right")
 
-        privacy_link.pack(anchor="w", pady=(0, 15))
-
-        privacy_link.bind(
-
-            "<Button-1>",
-
-            lambda e: self._open_url(f"{AboutConfig.GITHUB_URL}/blob/main/PRIVACY.md")
-
-        )
-
-        
-
-        # === 分隔线 ===
-
-        tk.Frame(content, bg=Theme.SEPARATOR, height=1).pack(fill="x", pady=15)
-
-        
-
-        # === 版权声明 ===
-        copyright_text = f"""作者：{AboutConfig.AUTHOR}
-
-MIT License
-Copyright © 2024-2026 {AboutConfig.AUTHOR}
-
-Gaijin Entertainment AG及其子公司拥有《战争雷霆》及相关商标的所有权
-本软件与Gaijin Entertainment AG无任何关联
-注意！滥用本软件可能违反Gaijin用户守则
-使用本软件的风险由用户自行承担"""
-        
-        tk.Label(
-            content, text=copyright_text,
-            font=("Segoe UI", 10),  # 更大字体
-            fg=Theme.TEXT_MUTED, bg=Theme.BG,
-            justify="left", anchor="w"
-        ).pack(anchor="w", pady=(0, 15))
-        
-        # === 关闭按钮 ===
-        tk.Button(
-            content, text="关闭", command=self._close,
-            font=("Segoe UI", 11),
-            bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=40, pady=8
-        ).pack(pady=(10, 0))
+    def _make_card(self, parent, title: str = ""):
+        """创建统一的 Fluent 卡片区块。"""
+        card_shell = tk.Frame(parent, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        card_shell.pack(fill="x", pady=(0, 10))
+        card = tk.Frame(card_shell, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
+        card.pack(fill="both", expand=True, padx=1, pady=1)
+        body = tk.Frame(card, bg=Theme.GRAYPILL)
+        body.pack(fill="both", expand=True, padx=12, pady=10)
+        if title:
+            tk.Label(
+                body,
+                text=title,
+                font=("Segoe UI", 12, "bold"),
+                fg=Theme.TEXT,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+            ).pack(anchor="w", pady=(0, 8))
+        return body
     
     def _add_sponsor_item(self, parent, name: str, url: str, img_file: str):
-        item_frame = tk.Frame(parent, bg=Theme.BG)
+        bg = str(parent.cget("bg") or Theme.GRAYPILL)
+        item_frame = tk.Frame(parent, bg=bg)
         item_frame.pack(side="left", padx=(0, 20), pady=10)
         
         img_loaded = False
@@ -1588,7 +1705,7 @@ Gaijin Entertainment AG及其子公司拥有《战争雷霆》及相关商标的
                 photo = ImageTk.PhotoImage(img)
                 self._images.append(photo)
                 
-                img_lbl = tk.Label(item_frame, image=photo, bg=Theme.BG, cursor="hand2" if url else "")
+                img_lbl = tk.Label(item_frame, image=photo, bg=bg, cursor="hand2" if url else "")
                 img_lbl.pack()
                 if url:
                     img_lbl.bind("<Button-1>", lambda e, u=url: self._open_url(u))
@@ -1596,7 +1713,7 @@ Gaijin Entertainment AG及其子公司拥有《战争雷霆》及相关商标的
                 tk.Label(
                     item_frame, text=name,
                     font=("Segoe UI", 10),
-                    fg=Theme.TEXT_DIM, bg=Theme.BG
+                    fg=Theme.TEXT_DIM, bg=bg
                 ).pack(pady=(5, 0))
                 img_loaded = True
             except Exception:
@@ -1606,8 +1723,11 @@ Gaijin Entertainment AG及其子公司拥有《战争雷霆》及相关商标的
             btn = tk.Button(
                 item_frame, text=f"💝 {name}",
                 font=("Segoe UI", 11),
-                bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=20, pady=10,
-                cursor="hand2" if url else ""
+                bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=18, pady=8,
+                relief="flat", highlightthickness=1,
+                highlightbackground=Theme.BORDER, highlightcolor=Theme.BORDER,
+                activebackground=Theme.SEPARATOR, activeforeground=Theme.TEXT,
+                cursor="hand2" if url else "",
             )
             btn.pack()
             if url:
