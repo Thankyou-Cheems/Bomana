@@ -8,7 +8,9 @@
 - UI components: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
 - External data: `ccrp_bomb_params.json` (CCRP bomb parameters)
+- External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
 - Tools: `tools/blkx_extractor.py` (generate CCRP bomb parameters from .blkx)
+- Tools: `tools/fm_speed_extractor.py` (generate speed-limit DB from datamine flightmodels)
 - Assets: `app.png`, `sponsor_wechat.png`, `app.ico`
 
 ## Repository Layout
@@ -18,9 +20,12 @@
 ├─ launcher.pyw              # Green launcher (auto update + bootstrap)
 ├─ bomana/
 │  ├─ config.py              # Metadata/flags/config classes
+│  ├─ data/
+│  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
 │  ├─ core/
 │  │  ├─ ballistics.py        # Bombing ballistics
 │  │  ├─ logic.py             # GameLogic core loop
+│  │  ├─ overspeed.py         # Aircraft speed-limit matching + alert grading
 │  │  ├─ state.py             # Dataclasses/enums
 │  │  └─ telemetry.py         # 8111 fetchers
 │  ├─ ui/
@@ -39,6 +44,7 @@
 ├─ tools/
 │  ├─ build_portable.py      # Build launcher/app package/manifest
 │  ├─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.json generator
+│  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
 │  └─ update_service/        # Optional self-hosted update + DAU stats service
 ├─ assets (root files)       # Icons/sponsor image, etc.
@@ -50,17 +56,21 @@
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
 3. UI render with `tkinter` (timer, panels, hints, debug text).
 4. Alerts and sounds via `SoundConfig` + Windows Beep.
-5. Launcher check flow:
+5. Overspeed flow:
+   - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
+   - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
+   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives badge + alert sound.
+6. Launcher check flow:
    - On startup (and channel switch), launcher auto-checks update metadata.
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for version/manifest when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
-6. Launcher download/apply flow:
+7. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
    - Verifies SHA256 (when provided), replaces `app/`, and updates local version metadata.
    - Launch action stays available for offline local app start.
-7. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` events to Tencent API (best effort).
+8. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` events to Tencent API (best effort).
 
 Important constraint: only use the official 8111 API. No memory reads, injection, or game file modifications (see `Bomana.pyw` header rules).
 

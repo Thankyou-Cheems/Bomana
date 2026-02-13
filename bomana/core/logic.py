@@ -20,6 +20,7 @@ from bomana.config import (
     NetworkConfig,
     BombConfig,
     Theme,
+    OverspeedConfig,
 )
 from bomana.core.state import (
     TelemetryData,
@@ -39,6 +40,7 @@ from bomana.core.state import (
 )
 from bomana.core.telemetry import Budget, HttpJson, TelemetryFetcher, MapInfoFetcher, MapObjectsFetcher
 from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing
+from bomana.core.overspeed import OverspeedAnalyzer
 from bomana.utils.math_utils import (
     calculate_heading_from_vector,
     calculate_bearing,
@@ -100,6 +102,7 @@ class GameLogic:
         self.tel = TelemetryFetcher(self.http)
         self.map_info_fetcher = MapInfoFetcher(self.http)
         self.map = MapObjectsFetcher(self.http)
+        self.overspeed = OverspeedAnalyzer()
         self.state = GameState()
     
     @property
@@ -822,12 +825,37 @@ class GameLogic:
                 else:
                     flight_badge = ("着陆中", Theme.TEXT_DIM, Theme.GRAYPILL) if on_ground else ("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL)
 
+            # v6.9.0 新增：超速判定（IAS/Mach 双通道）
+            overspeed = self.overspeed.evaluate(
+                plane_type=tel.type_name,
+                ias_kmh=tel.ias_kmh,
+                tas_kmh=tel.tas_kmh,
+                mach=tel.mach,
+                wing_sweep=tel.wing_sweep,
+                enabled=(
+                    OverspeedConfig.ENABLED and
+                    (s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
+                    tel.state_resp_ok and
+                    (not on_ground)
+                ),
+            )
+
+            if s.phase == Phase.ALIVE:
+                if overspeed.level == "critical":
+                    status_text = "超速危险，立即减速"
+                elif overspeed.level == "warning":
+                    status_text = "接近结构极限"
+
             # 调试信息
             player_present = bool(mp.ok and mp.player_aircraft_present)
+            ratio_dbg = (overspeed.ias_ratio * 100.0) if overspeed.ias_ratio is not None else 0.0
+            lim_ias_dbg = overspeed.ias_limit_kmh or 0.0
+            lim_mach_dbg = overspeed.mach_limit or 0.0
             diag_lines = [
                 f"MAP: ok={int(mp.ok)} | objs={mp.obj_count} | player={int(player_present)}",
                 f"IND: ok={int(tel.ind_ok)} | valid={int(tel.valid)} | type={'✓' if tel.type_name else '✗'}",
                 f"STATE: ok={int(tel.state_resp_ok)} | fuel={tel.fuel_kg:.0f}kg | ias={tel.ias_kmh:.0f}km/h",
+                f"SPD: lvl={overspeed.level} | ratio={ratio_dbg:.1f}% | lim={lim_ias_dbg:.0f}km/h M{lim_mach_dbg:.3f}",
                 f"ATT: ok={int(attitude.available)} | rel={int(attitude.reliable)} | fb={attitude.fallback_reason or '-'}",
             ]
             diag = "\n".join(diag_lines)
@@ -1146,6 +1174,12 @@ class GameLogic:
                 attitude_reliable=attitude.reliable,
                 hud_attitude_fallback=attitude.fallback,
                 hud_attitude_fallback_reason=attitude.fallback_reason,
+                overspeed_level=overspeed.level,
+                overspeed_ratio=float(overspeed.ias_ratio or 0.0),
+                overspeed_limit_kmh=float(overspeed.ias_limit_kmh or 0.0),
+                overspeed_limit_mach=float(overspeed.mach_limit or 0.0),
+                overspeed_match=bool(overspeed.resolved_fm),
+                overspeed_reason=overspeed.reason,
             )
 
     def _start_new_life_locked(self, now: float):

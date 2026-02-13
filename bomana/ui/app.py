@@ -33,6 +33,7 @@ from bomana.config import (
     GameConfig,
     NetworkConfig,
     FuelConfig,
+    OverspeedConfig,
     BallisticPhysicsParams,
     Theme,
     AboutConfig,
@@ -123,6 +124,8 @@ class App:
             "地面检查",
         ]
         self._last_beep_sec = -1
+        self._last_overspeed_sound_ts = 0.0
+        self._last_overspeed_level = "unknown"
         self._zone_sound_enabled = True
 
         # 窗口状态
@@ -704,6 +707,8 @@ class App:
         self.badge_main.pack(side="left")
         self.badge_flight = Pill(row2, text="—", fg=Theme.TEXT_DIM, bg=Theme.BG, font=pill_font)
         self.badge_flight.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
+        # v6.9.0: 超速分级徽章（按需显示）
+        self.badge_speed = Pill(row2, text="", fg=Theme.TEXT, bg=Theme.BLUE, font=pill_font)
         self.badge_lock = Pill(row2, text="锁定", fg=Theme.TEXT, bg=Theme.BLUE, font=pill_font)
         self.badge_lock.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
         self._update_lock_badge()
@@ -2013,10 +2018,9 @@ class App:
         
         pad = int(UIConfig.WINDOW_PADDING * self.scale)
         
-        # ⚠️ 徽章行最小宽度（确保起落架徽章等能完整显示）
-        # 徽章行包含: badge_main + badge_flight + badge_gear(可选) + status_txt
-        # 估算: 主状态 + 飞行状态 + 锁定状态 + 起落架 + 右侧状态文本
-        badge_min_width = int(390 * self.scale)
+        # ⚠️ 徽章行最小宽度（确保超速/起落架徽章等能完整显示）
+        # 徽章行包含: badge_main + badge_flight + badge_speed(可选) + badge_gear(可选) + status_txt
+        badge_min_width = int(460 * self.scale)
         
         # ⚠️ 提示文字最小宽度（动态测量，避免浪费或截断）
         hint_min_width = int(380 * self.scale)
@@ -3346,6 +3350,56 @@ class App:
         # 更新徽章
         self.badge_main.set(*snap.main_badge)
         self.badge_flight.set(*snap.flight_badge)
+
+        # v6.9.0: 超速徽章（仅在接近极限时显示）
+        speed_level = str(getattr(snap, "overspeed_level", "unknown") or "unknown")
+        speed_ratio = float(getattr(snap, "overspeed_ratio", 0.0) or 0.0)
+        show_speed_badge = bool(getattr(snap, "overspeed_match", False)) and (
+            speed_level in ("caution", "warning", "critical")
+        )
+
+        if show_speed_badge:
+            speed_pct = int(max(0.0, speed_ratio) * 100.0)
+            if speed_level == "critical":
+                speed_text = f"🔴超速 {speed_pct}%"
+                speed_bg = Theme.RED
+            elif speed_level == "warning":
+                speed_text = f"⚠临界 {speed_pct}%"
+                speed_bg = Theme.YELLOW
+            else:
+                speed_text = f"高速 {speed_pct}%"
+                speed_bg = Theme.BLUE
+
+            self.badge_speed.set(speed_text, Theme.TEXT, speed_bg)
+            if not self.badge_speed.winfo_ismapped():
+                self.badge_speed.pack(
+                    side="left",
+                    padx=(int(UIConfig.SPACING_BADGE*self.scale), 0),
+                    after=self.badge_flight,
+                )
+        else:
+            if self.badge_speed.winfo_ismapped():
+                self.badge_speed.pack_forget()
+
+        # 超速声音节奏控制（低刺激，避免连续刺耳）
+        if speed_level != self._last_overspeed_level:
+            self._last_overspeed_level = speed_level
+            self._last_overspeed_sound_ts = 0.0
+
+        if not debug_mock_mode:
+            now_sound = time.monotonic()
+            if speed_level == "critical":
+                if (now_sound - self._last_overspeed_sound_ts) >= OverspeedConfig.CRITICAL_SOUND_INTERVAL_SEC:
+                    self.sound.play(pattern="overspeed_critical")
+                    self._last_overspeed_sound_ts = now_sound
+            elif speed_level == "warning":
+                if (now_sound - self._last_overspeed_sound_ts) >= OverspeedConfig.WARNING_SOUND_INTERVAL_SEC:
+                    self.sound.play(pattern="overspeed_warning")
+                    self._last_overspeed_sound_ts = now_sound
+            else:
+                self._last_overspeed_sound_ts = 0.0
+        elif speed_level not in ("critical", "warning"):
+            self._last_overspeed_sound_ts = 0.0
         
         # v6.6.1: 起落架徽章（集成警告和进度）
         # 显示条件：警告 或 正在移动
@@ -3378,8 +3432,13 @@ class App:
         else:
             if self.badge_gear.winfo_ismapped():
                 self.badge_gear.pack_forget()
-        
-        self.status_txt.config(text=snap.status_text, fg=(Theme.YELLOW if snap.api_down else Theme.TEXT_DIM))
+
+        status_fg = Theme.YELLOW if snap.api_down else Theme.TEXT_DIM
+        if speed_level == "critical":
+            status_fg = Theme.RED
+        elif speed_level == "warning" and not snap.api_down:
+            status_fg = Theme.YELLOW
+        self.status_txt.config(text=snap.status_text, fg=status_fg)
 
         # 调试信息
         if self._debug:

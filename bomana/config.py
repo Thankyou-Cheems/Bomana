@@ -10,7 +10,7 @@ import json
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.8.0"
+__version__ = "6.9.0"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -394,9 +394,41 @@ class SoundConfig:
     WARNING_GAP_MS = 20   # 警告双音间隔
     ON_GAP_MS = 25        # 开启双音间隔
 
+    # 超速提醒音（低刺激，避免刺耳）
+    BEEP_OVERSPEED_WARN = (620, 45)
+    BEEP_OVERSPEED_CRIT_1 = (660, 42)
+    BEEP_OVERSPEED_CRIT_2 = (760, 42)
+    OVERSPEED_CRIT_GAP_MS = 30
+
     # 警告触发时间点（秒）
     WARNING_SECONDS = [30, 20, 10, 5, 4, 3, 2, 1]
     MAJOR_WARNINGS = [30, 20, 10]  # 重要警告点（双音）
+
+
+class OverspeedConfig:
+    """超速提醒配置
+
+    数据源为 War-Thunder-Datamine 的 flightmodels 提取结果：
+    `bomana/data/fm_speed_limits.json`
+    """
+    # 总开关
+    ENABLED = True
+
+    # 限速数据库文件（相对项目根目录，resource_path可解析）
+    LIMITS_FILE = "bomana/data/fm_speed_limits.json"
+
+    # 级别阈值（保持与 WTSpeeder 关键逻辑一致，并增加全真提前感知层）
+    CAUTION_RATIO = 0.94      # 提前提示（全真模式保守）
+    WARNING_RATIO = 0.97      # WTSpeeder warn_percent 默认值
+    CRITICAL_RATIO = 0.992    # WTSpeeder 临界 IAS 阈值
+
+    MACH_CAUTION_MARGIN = 0.06
+    MACH_WARNING_MARGIN = 0.04
+    MACH_CRITICAL_MARGIN = 0.02
+
+    # 声音节奏（秒）
+    WARNING_SOUND_INTERVAL_SEC = 1.10
+    CRITICAL_SOUND_INTERVAL_SEC = 0.55
 
 
 class FileConfig:

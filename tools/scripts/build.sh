@@ -122,6 +122,9 @@ ADD_DATA_ARGS=(
   "--add-data" "app.png:."
   "--add-data" "sponsor_wechat.png:."
 )
+if [ -f "bomana/data/fm_speed_limits.json" ]; then
+  ADD_DATA_ARGS+=("--add-data" "bomana/data/fm_speed_limits.json:bomana/data")
+fi
 if [ "$VARIANT" = "Enhanced" ]; then
   if [ -f "ccrp_bomb_params.json" ]; then
     ADD_DATA_ARGS+=("--add-data" "ccrp_bomb_params.json:.")

@@ -32,7 +32,7 @@ class SoundManager:
         """播放音效
         
         Args:
-            pattern: 音效模式（"tick", "warning", "on", "zone_destroyed"）
+            pattern: 音效模式（"tick", "warning", "on", "zone_destroyed", "overspeed_warning", "overspeed_critical"）
             freq: 直接指定频率（Hz）
             duration: 直接指定持续时间（ms）
         """
@@ -91,5 +91,12 @@ class SoundManager:
         elif pattern == "zone_destroyed":
             return [(*SoundConfig.BEEP_ZONE_DESTROYED, 50), 
                    (*SoundConfig.BEEP_ZONE_DESTROYED, 0)]
+        elif pattern == "overspeed_warning":
+            return [(*SoundConfig.BEEP_OVERSPEED_WARN, 0)]
+        elif pattern == "overspeed_critical":
+            return [
+                (*SoundConfig.BEEP_OVERSPEED_CRIT_1, SoundConfig.OVERSPEED_CRIT_GAP_MS),
+                (*SoundConfig.BEEP_OVERSPEED_CRIT_2, 0),
+            ]
         else:  # "tick"
             return [(*SoundConfig.BEEP_TICK, 0)]

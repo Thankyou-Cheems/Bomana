@@ -128,12 +128,16 @@ if exist file_version_info.txt (
 
 set "EXEC_NAME=Bomana_%VARIANT%"
 set "CCRP_DATA_ARG="
+set "FM_SPEED_DATA_ARG="
 if /I "%VARIANT%"=="Enhanced" (
     if exist ccrp_bomb_params.json (
         set "CCRP_DATA_ARG=--add-data \"ccrp_bomb_params.json;.\""
     ) else if exist ccrp_bomb_params.py (
         set "CCRP_DATA_ARG=--add-data \"ccrp_bomb_params.py;.\""
     )
+)
+if exist bomana\data\fm_speed_limits.json (
+    set "FM_SPEED_DATA_ARG=--add-data \"bomana/data/fm_speed_limits.json;bomana/data\""
 )
 
 if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
@@ -143,6 +147,7 @@ if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
                 --add-data "app.png;." ^
                 --add-data "sponsor_wechat.png;." ^
                 %CCRP_DATA_ARG% ^
+                %FM_SPEED_DATA_ARG% ^
                 --hidden-import "pystray._win32" ^
                 --collect-submodules "PIL" ^
                 %VERSION_ARG% ^
@@ -153,6 +158,7 @@ if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
                 --icon=app.ico ^
                 --add-data "app.png;." ^
                 --add-data "sponsor_wechat.png;." ^
+                %FM_SPEED_DATA_ARG% ^
                 --hidden-import "pystray._win32" ^
                 --collect-submodules "PIL" ^
                 %VERSION_ARG% ^

@@ -85,6 +85,20 @@ class TelemetryFetcher:
         except (TypeError, ValueError):
             return float(default)
 
+    @staticmethod
+    def _to_optional_float(raw: Any) -> Optional[float]:
+        """将8111字段值转换为可空float。"""
+        if raw is None:
+            return None
+        if isinstance(raw, dict):
+            raw = raw.get("value")
+        elif isinstance(raw, (list, tuple)):
+            raw = raw[0] if raw else None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
     def _read_float(self, payload: dict, keys: Tuple[str, ...]) -> Tuple[float, bool]:
         """按候选键顺序读取数值，返回(值, 是否命中键)。"""
         for key in keys:
@@ -138,6 +152,9 @@ class TelemetryFetcher:
             data.valid = bool(j.get("valid", False))
             data.type_name = str(j.get("type", "") or "").strip()
             data.compass = self._to_float(j.get("compass1") or j.get("compass"), 0.0)
+            data.wing_sweep = self._to_optional_float(
+                j.get("wing_sweep_indicator", j.get("wing_sweep"))
+            )
             self._merge_attitude_fields(j, data)
         
         if not data.ind_ok:
@@ -156,6 +173,7 @@ class TelemetryFetcher:
             data.altitude_m = self._to_float(j.get("H, m", 0), 0.0)
             data.tas_kmh = self._to_float(j.get("TAS, km/h", 0), 0.0)
             data.throttle_pct = self._to_float(j.get("throttle 1, %", 0), 0.0)
+            data.mach = self._to_optional_float(j.get("M"))
             
             # v5.9.6 + v6.6.0：解析起落架状态和百分比
             gear_pct = self._to_float(j.get("gear, %", 0), 0.0)

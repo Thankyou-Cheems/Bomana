@@ -32,6 +32,8 @@ class TelemetryData:
     altitude_m: float = 0         # 飞行高度 (m)
     tas_kmh: float = 0            # 真空速 (km/h)
     throttle_pct: float = 0       # 油门百分比 (%)
+    mach: Optional[float] = None  # 马赫数
+    wing_sweep: Optional[float] = None  # 后掠翼位置 (0~1, 可为空)
     
     # v5.9.6 新增：起落架状态
     gear_down: bool = False       # 起落架是否放下 (True=放下, False=收起)
@@ -549,3 +551,11 @@ class UISnapshot:
     attitude_reliable: bool = False
     hud_attitude_fallback: bool = True
     hud_attitude_fallback_reason: str = "missing"
+
+    # v6.9.0 新增：超速提醒链路
+    overspeed_level: str = "unknown"        # unknown/safe/caution/warning/critical
+    overspeed_ratio: float = 0.0            # IAS占限速百分比（0~1）
+    overspeed_limit_kmh: float = 0.0        # 机型IAS限速
+    overspeed_limit_mach: float = 0.0       # 机型马赫限速
+    overspeed_match: bool = False           # 是否成功匹配机型限速
+    overspeed_reason: str = ""              # 判定来源（ias/mach/ias+mach/safe/unknown）

@@ -250,6 +250,22 @@ python tools/blkx_extractor.py ^
 
 生成后的 `ccrp_bomb_params.json` 放在仓库根目录，Enhanced 版本会自动打包该文件。
 
+### 更新机型超速限速库（开发者）
+
+超速提醒使用 `bomana/data/fm_speed_limits.json`。该文件由 War Thunder datamine 的 `flightmodels` 提取生成：
+
+```bash
+# 1) 准备 datamine 仓库（需包含 flightmodels 目录）
+git clone https://github.com/gszabi99/War-Thunder-Datamine.git
+
+# 2) 运行提取脚本（生成 unit->fm 映射 + IAS/Mach 限速）
+python tools/fm_speed_extractor.py ^
+  .\War-Thunder-Datamine ^
+  -o bomana\data\fm_speed_limits.json
+```
+
+`Bomana` 运行时会读取该 JSON，并基于 `/indicators.type` + `/state(IAS/Mach)` 进行超速分级提醒。
+
 
 ---
 
