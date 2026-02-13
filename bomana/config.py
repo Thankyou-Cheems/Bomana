@@ -723,7 +723,7 @@ class BombConfig:
 class Theme:
     """颜色主题配置
 
-    预设主题: Dark(默认), Light, HighContrast, LunarNewYear
+    预设主题: FluentDark(默认), FluentLight, Dark, Light, HighContrast, LunarNewYear
 
     添加新主题:
     1. 在THEMES字典中添加定义
@@ -733,10 +733,40 @@ class Theme:
     注意: 主题切换由App在运行时重建UI以即时生效
     """
     # 当前活动主题名称
-    _current = "dark"
+    _current = "fluent_dark"
 
     # 预设主题定义
     THEMES = {
+        "fluent_dark": {
+            "name": "Fluent 深色",
+            "BG": "#10151d",
+            "BORDER": "#354258",
+            "TEXT": "#f2f6fb",
+            "TEXT_DIM": "#bac7d8",
+            "TEXT_MUTED": "#7f8da0",
+            "GREEN": "#6ed081",
+            "YELLOW": "#f2c14e",
+            "RED": "#ff6b6b",
+            "BLUE": "#5ab0ff",
+            "ORANGE": "#ff9a52",
+            "GRAYPILL": "#1a2330",
+            "SEPARATOR": "#2a3648",
+        },
+        "fluent_light": {
+            "name": "Fluent 亮色",
+            "BG": "#f5f8fc",
+            "BORDER": "#c8d5e6",
+            "TEXT": "#132033",
+            "TEXT_DIM": "#3b4e67",
+            "TEXT_MUTED": "#677b96",
+            "GREEN": "#1f8b4c",
+            "YELLOW": "#9a6700",
+            "RED": "#c63a3a",
+            "BLUE": "#0a70e8",
+            "ORANGE": "#c96a1f",
+            "GRAYPILL": "#e9eff7",
+            "SEPARATOR": "#d5e0ed",
+        },
         "dark": {
             "name": "暗色 (Dark)",
             "BG": "#0a0e13",
@@ -799,19 +829,19 @@ class Theme:
         },
     }
 
-    # 默认颜色值（使用暗色主题）
-    BG = "#0a0e13"
-    BORDER = "#30363d"
-    TEXT = "#e6edf3"
-    TEXT_DIM = "#8b949e"
-    TEXT_MUTED = "#484f58"
-    GREEN = "#3fb950"
-    YELLOW = "#d29922"
-    RED = "#f85149"
-    BLUE = "#58a6ff"
-    ORANGE = "#f0883e"
-    GRAYPILL = "#161b22"
-    SEPARATOR = "#21262d"
+    # 默认颜色值（使用 Fluent 深色主题）
+    BG = "#10151d"
+    BORDER = "#354258"
+    TEXT = "#f2f6fb"
+    TEXT_DIM = "#bac7d8"
+    TEXT_MUTED = "#7f8da0"
+    GREEN = "#6ed081"
+    YELLOW = "#f2c14e"
+    RED = "#ff6b6b"
+    BLUE = "#5ab0ff"
+    ORANGE = "#ff9a52"
+    GRAYPILL = "#1a2330"
+    SEPARATOR = "#2a3648"
 
     @classmethod
     def apply(cls, theme_name: str) -> bool:

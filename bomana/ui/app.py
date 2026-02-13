@@ -125,7 +125,7 @@ class App:
         self._nudge_sortie_seen = -1
         # 初始缩放占位：_init_window_base 后会用DPI重新计算
         self.scale = float(UIConfig.UI_SCALE_MULT)
-        self._hint_width_cache = {"text": "", "width": int(320 * self.scale)}
+        self._hint_width_cache = {"text": "", "width": int(380 * self.scale)}
 
         # UI刷新控制
         self._ui_after_id = None
@@ -212,7 +212,7 @@ class App:
                 print(f"[智能缩放] 检测失败，使用默认缩放1.2x: {e}")
         
         # 主题设置（必须在UI创建前应用）
-        theme_name = config.get('theme', 'dark')
+        theme_name = config.get('theme', 'fluent_dark')
         Theme.apply(theme_name)
         
         # 面板显示设置
@@ -505,126 +505,171 @@ class App:
         Win32.setup_window(self.hwnd, click_through=True, alpha=UIConfig.WINDOW_ALPHA)
 
     def _init_ui(self):
-        """初始化UI布局
-        
-        结构：
-        - main_frame: 主容器
-          - bottom_frame: 底部（提示/调试）
-          - top_frame: 顶部（计时器/徽章/进度条）
-          - mid_frame: 中部（战区/检查清单）
-        """
+        """初始化 UI 布局（Fluent 风格层级）。"""
         s = self.scale
-        self.main_frame = tk.Frame(self.root, bg=Theme.BG)
         pad_x, pad_y = UIConfig.PADDING_MAIN
+
+        # 外层壳：边框 + 内容表面，模拟 Fluent 的分层容器
+        self.main_frame = tk.Frame(self.root, bg=Theme.BORDER, bd=0, highlightthickness=0)
         self.main_frame.pack(fill="both", expand=True, padx=int(pad_x*s), pady=int(pad_y*s))
 
-        # === 底部区域 ===
-        bottom_frame = tk.Frame(self.main_frame, bg=Theme.BG)
-        bottom_frame.pack(side="bottom", fill="x")
+        inset = max(1, int(1 * s))
+        self.surface_frame = tk.Frame(self.main_frame, bg=Theme.BG, bd=0, highlightthickness=0)
+        self.surface_frame.pack(fill="both", expand=True, padx=inset, pady=inset)
 
-        self.hint_row = tk.Frame(bottom_frame, bg=Theme.BG)
+        # === 底部区域（操作提示卡）===
+        self.bottom_card = tk.Frame(
+            self.surface_frame,
+            bg=Theme.GRAYPILL,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.SEPARATOR,
+            highlightcolor=Theme.SEPARATOR,
+        )
+        self.bottom_card.pack(side="bottom", fill="x", pady=(int(6*s), 0), padx=int(2*s))
+
+        bottom_frame = tk.Frame(self.bottom_card, bg=Theme.GRAYPILL)
+        bottom_frame.pack(fill="x", padx=int(8*s), pady=int(6*s))
+
+        self.hint_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
         self.hint_row.pack(side="bottom", fill="x")
 
         font_hint = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s))
         self.hint_lbl = tk.Label(
             self.hint_row, text=self._hint_text(),
-            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.BG
+            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL
         )
         self.hint_lbl.pack(side="left", fill="x", expand=True)
 
-        self.nudge_row = tk.Frame(bottom_frame, bg=Theme.BG)
+        self.nudge_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
         self.nudge_row.columnconfigure(0, weight=1)
 
-        nudge_wrap = int(380 * s)
+        nudge_wrap = int(420 * s)
         self.nudge_lbl = tk.Label(
             self.nudge_row, text=self._nudge_text(),
-            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.BG,
+            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL,
             anchor="w", justify="left", wraplength=nudge_wrap
         )
         self.nudge_lbl.grid(row=0, column=0, sticky="ew")
 
         self.star_lbl = tk.Label(
-            self.nudge_row, text="⭐ Star",
-            font=font_hint, fg=Theme.TEXT, bg=Theme.BG, cursor="hand2"
+            self.nudge_row, text="GitHub Star",
+            font=font_hint, fg=Theme.BLUE, bg=Theme.BG, cursor="hand2",
+            padx=int(8*s), pady=max(1, int(1*s))
         )
         self.star_lbl.bind("<Button-1>", lambda e: self._open_star_url())
-        self.star_lbl.bind("<Enter>", lambda e: self.star_lbl.config(fg=Theme.YELLOW))
-        self.star_lbl.bind("<Leave>", lambda e: self.star_lbl.config(fg=Theme.TEXT))
+        self.star_lbl.bind("<Enter>", lambda e: self.star_lbl.config(fg=Theme.TEXT, bg=Theme.BORDER))
+        self.star_lbl.bind("<Leave>", lambda e: self.star_lbl.config(fg=Theme.BLUE, bg=Theme.BG))
         self.star_lbl.grid(row=0, column=1, sticky="e", padx=(int(8*s), 0))
 
         font_debug = (UIConfig.FONT_DEBUG[0], int(UIConfig.FONT_DEBUG[1]*s))
         self.diag_lbl = tk.Label(
             bottom_frame, text="",
-            font=font_debug, fg=Theme.TEXT_MUTED, bg=Theme.BG, 
+            font=font_debug, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL,
             anchor="w", justify="left",
             wraplength=int(UIConfig.DEBUG_WRAP_LENGTH*s)
         )
 
-        # === 顶部区域 ===
-        self.top_frame = tk.Frame(self.main_frame, bg=Theme.BG)
-        self.top_frame.pack(side="top", fill="x")
+        # === 顶部区域（主信息卡）===
+        self.top_frame = tk.Frame(
+            self.surface_frame,
+            bg=Theme.GRAYPILL,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.SEPARATOR,
+            highlightcolor=Theme.SEPARATOR,
+        )
+        self.top_frame.pack(side="top", fill="x", pady=(0, int(8*s)), padx=int(2*s))
 
-        # 第一行：计时器
-        row1 = tk.Frame(self.top_frame, bg=Theme.BG)
+        top_content = tk.Frame(self.top_frame, bg=Theme.GRAYPILL)
+        top_content.pack(fill="x", padx=int(10*s), pady=int(8*s))
+
+        # 第一行：计时器 + 复活信息
+        row1 = tk.Frame(top_content, bg=Theme.GRAYPILL)
         row1.pack(fill="x")
         font_timer = (UIConfig.FONT_TIMER[0], int(UIConfig.FONT_TIMER[1]*s), UIConfig.FONT_TIMER[2])
-        self.timer_lbl = tk.Label(row1, text="--:--", font=font_timer, fg=Theme.TEXT_MUTED, bg=Theme.BG, anchor="w")
+        self.timer_lbl = tk.Label(
+            row1, text="--:--", font=font_timer,
+            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
+        )
         self.timer_lbl.pack(side="left")
-        
-        # 右侧信息
-        right = tk.Frame(row1, bg=Theme.BG)
-        right.pack(side="right", padx=(int(14*s), 0))
+
+        right = tk.Frame(row1, bg=Theme.GRAYPILL)
+        right.pack(side="right", padx=(int(12*s), 0))
         font_life = (UIConfig.FONT_LIFE[0], int(UIConfig.FONT_LIFE[1]*s), UIConfig.FONT_LIFE[2])
-        self.life_lbl = tk.Label(right, text="未复活", font=font_life, fg=Theme.BLUE, bg=Theme.BG, anchor="e")
+        self.life_lbl = tk.Label(
+            right, text="未复活", font=font_life,
+            fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="e"
+        )
         self.life_lbl.pack(anchor="e")
         font_cycle = (UIConfig.FONT_CYCLE[0], int(UIConfig.FONT_CYCLE[1]*s))
-        self.cycle_lbl = tk.Label(right, text="未开始", font=font_cycle, fg=Theme.TEXT_DIM, bg=Theme.BG, anchor="e")
+        self.cycle_lbl = tk.Label(
+            right, text="未开始", font=font_cycle,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e"
+        )
         self.cycle_lbl.pack(anchor="e", pady=(int(2*s), 0))
 
-        # 第二行：徽章
-        row2 = tk.Frame(self.top_frame, bg=Theme.BG)
+        # 第二行：状态徽章
+        row2 = tk.Frame(top_content, bg=Theme.GRAYPILL)
         pad_top, pad_bot = UIConfig.PADDING_ROW2
         row2.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
         pill_font = (UIConfig.FONT_PILL[0], int(UIConfig.FONT_PILL[1]*s), UIConfig.FONT_PILL[2])
-        self.badge_main = Pill(row2, text="IDLE", fg=Theme.TEXT, bg=Theme.GRAYPILL, font=pill_font)
+        self.badge_main = Pill(row2, text="IDLE", fg=Theme.TEXT, bg=Theme.BG, font=pill_font)
         self.badge_main.pack(side="left")
-        self.badge_flight = Pill(row2, text="—", fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, font=pill_font)
+        self.badge_flight = Pill(row2, text="—", fg=Theme.TEXT_DIM, bg=Theme.BG, font=pill_font)
         self.badge_flight.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
+        self.badge_lock = Pill(row2, text="锁定", fg=Theme.TEXT, bg=Theme.BLUE, font=pill_font)
+        self.badge_lock.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
+        self._update_lock_badge()
+
         # v5.9.6 新增：起落架警告徽章（v6.6.1: 集成进度条）
         self.badge_gear = Pill(row2, text="", fg=Theme.TEXT, bg=Theme.ORANGE, font=pill_font)
-        # v6.6.1: 在徽章内部添加进度条指示器
         self.gear_progress_bar = tk.Frame(self.badge_gear, bg=Theme.BLUE, height=int(3*s))
-        # 初始隐藏
-        
+
         font_status = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s))
-        self.status_txt = tk.Label(row2, text="等待中", font=font_status, fg=Theme.TEXT_DIM, bg=Theme.BG, anchor="e")
+        self.status_txt = tk.Label(
+            row2, text="等待中", font=font_status,
+            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e"
+        )
         self.status_txt.pack(side="right")
 
         # 进度条
         bar_height = int(UIConfig.PROGRESS_BAR_HEIGHT * s)
-        bar_frame = tk.Frame(self.top_frame, bg=Theme.BG, height=bar_height)
+        bar_frame = tk.Frame(top_content, bg=Theme.GRAYPILL, height=bar_height)
         pad_top, pad_bot = UIConfig.PADDING_PROGRESS
         bar_frame.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
         bar_frame.pack_propagate(False)
         bar_thickness = int(UIConfig.PROGRESS_BAR_THICKNESS * s)
-        self.bar_bg = tk.Frame(bar_frame, bg=Theme.BORDER, height=bar_thickness)
+        self.bar_bg = tk.Frame(bar_frame, bg=Theme.SEPARATOR, height=bar_thickness)
         self.bar_bg.place(relx=0, rely=0.5, relwidth=1, anchor="w")
         self.bar_fill = tk.Frame(self.bar_bg, bg=Theme.BLUE, height=bar_thickness)
         self.bar_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
 
         # === 中间内容区域 ===
-        self.mid_frame = tk.Frame(self.main_frame, bg=Theme.BG)
+        self.mid_frame = tk.Frame(self.surface_frame, bg=Theme.BG)
         self.mid_frame.pack(side="top", fill="x", pady=(0, int(8*s)))
         self.mid_frame.columnconfigure(0, weight=1)
         self.mid_frame.columnconfigure(1, weight=1)
 
-        # 战区导航框架
-        self.zone_frame = tk.Frame(self.mid_frame, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
+        self.zone_frame = tk.Frame(
+            self.mid_frame,
+            bg=Theme.GRAYPILL,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.SEPARATOR,
+            highlightcolor=Theme.SEPARATOR,
+        )
         self._init_zone_ui()
 
-        # 检查清单框架
-        self.chk_frame = tk.Frame(self.mid_frame, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
-        self.chk_border_frame = tk.Frame(self.chk_frame, bg=Theme.SEPARATOR, width=1)
+        self.chk_frame = tk.Frame(
+            self.mid_frame,
+            bg=Theme.GRAYPILL,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.SEPARATOR,
+            highlightcolor=Theme.SEPARATOR,
+        )
+        self.chk_border_frame = tk.Frame(self.chk_frame, bg=Theme.BORDER, width=max(1, int(1*s)))
         self.chk_content_frame = tk.Frame(self.chk_frame, bg=Theme.GRAYPILL)
         self._rebuild_checklist()
 
@@ -658,25 +703,27 @@ class App:
         self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6*s), int(2*s)))
         
         font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
-        self.zone_title = tk.Label(self.zone_header_frame, text="🎯 战区导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        self.zone_title = tk.Label(self.zone_header_frame, text="导航面板", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.zone_title.pack(side="left")
         
         # 独立导航条模式按钮
         font_btn = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
         self.standalone_btn = tk.Label(
-            self.zone_header_frame, text="⧉独立导航条", font=font_btn,
-            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, cursor="hand2"
+            self.zone_header_frame, text="切换独立导航窗", font=font_btn,
+            fg=Theme.TEXT_MUTED, bg=Theme.BG, cursor="hand2",
+            padx=int(6*s), pady=max(1, int(1*s))
         )
         self.standalone_btn.pack(side="left", padx=(int(10*s), 0))
         self.standalone_btn.bind("<Button-1>", lambda e: self._toggle_navigation_mode())
         self.standalone_btn.bind("<Enter>", lambda e: self.standalone_btn.config(
-            fg=(Theme.BLUE if PanelConfig.navigation_mode != "standalone" else Theme.GREEN)))
+            fg=(Theme.BLUE if PanelConfig.navigation_mode != "standalone" else Theme.GREEN),
+            bg=Theme.BORDER))
         self.standalone_btn.bind("<Leave>", lambda e: self._update_nav_mode_button())
         self._update_nav_mode_button()
         
         font_heading = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
         font_item = font_heading
-        self.heading_lbl = tk.Label(self.zone_header_frame, text="HDG: ---", font=font_heading, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e")
+        self.heading_lbl = tk.Label(self.zone_header_frame, text="航向: ---°", font=font_heading, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e")
         self.heading_lbl.pack(side="right")
         
         # Row 1: v6.2重构 - 统一航向带(显示战区+机场+被摧毁目标)
@@ -699,7 +746,7 @@ class App:
             
             # 使用更小字体和紧凑间距
             legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.85))
-            legend_text = "⊚战区  ✈友方  ✈敌方  ✕摧毁"
+            legend_text = "⊚战区  ✈友方机场  ✈敌方机场  ✕摧毁目标"
             
             # v6.4: 图例行分为左侧图例和右侧阈值显示
             legend_left = tk.Label(
@@ -821,14 +868,14 @@ class App:
         # 紧凑模式 - 左栏：战区
         self.compact_zone_frame = tk.Frame(self.compact_nav_frame, bg=Theme.GRAYPILL)
         self.compact_zone_frame.grid(row=0, column=0, sticky="nsew", padx=(0, int(4*s)))
-        self.compact_zone_title = tk.Label(self.compact_zone_frame, text="⊚ 战区", font=font_title, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
+        self.compact_zone_title = tk.Label(self.compact_zone_frame, text="战区", font=font_title, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
         self.compact_zone_title.pack(fill="x")
         self.compact_zone_list = tk.Frame(self.compact_zone_frame, bg=Theme.GRAYPILL)
         self.compact_zone_list.pack(fill="x")
         # 紧凑模式 - 右栏：机场
         self.compact_airport_frame = tk.Frame(self.compact_nav_frame, bg=Theme.GRAYPILL)
         self.compact_airport_frame.grid(row=0, column=1, sticky="nsew", padx=(int(4*s), 0))
-        self.compact_airport_title = tk.Label(self.compact_airport_frame, text="✈ 机场", font=font_title, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
+        self.compact_airport_title = tk.Label(self.compact_airport_frame, text="机场", font=font_title, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
         self.compact_airport_title.pack(fill="x")
         self.compact_airport_list = tk.Frame(self.compact_airport_frame, bg=Theme.GRAYPILL)
         self.compact_airport_list.pack(fill="x")
@@ -841,7 +888,7 @@ class App:
         self.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
 
         # Row 4: 机场标题
-        self.airport_title_lbl = tk.Label(self.zone_frame, text="🛫 机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        self.airport_title_lbl = tk.Label(self.zone_frame, text="机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.airport_title_lbl.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
 
         # v6.2: 移除独立的机场航向带（已合并到主航向带）
@@ -855,7 +902,7 @@ class App:
         self.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
 
         # Row 7: 燃油标题
-        self.fuel_title_lbl = tk.Label(self.zone_frame, text="⛽ 燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        self.fuel_title_lbl = tk.Label(self.zone_frame, text="燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.fuel_title_lbl.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
         
         # Row 8: 燃油信息容器
@@ -896,7 +943,7 @@ class App:
             # Row 9: 投弹预测标题 (v6.1.1: 行号调整)
             self.bombing_title_lbl = tk.Label(
                 self.zone_frame, 
-                text="💣 投弹预测", 
+                text="投弹预测", 
                 font=font_title, 
                 fg=Theme.TEXT, 
                 bg=Theme.GRAYPILL, 
@@ -916,6 +963,8 @@ class App:
             )
             self.bomb_select_lbl.pack(fill="x")
             self.bomb_select_lbl.bind("<Button-1>", lambda e: self._show_bomb_selector())
+            self.bomb_select_lbl.bind("<Enter>", lambda e: self.bomb_select_lbl.config(fg=Theme.TEXT, bg=Theme.BG))
+            self.bomb_select_lbl.bind("<Leave>", lambda e: self.bomb_select_lbl.config(fg=Theme.BLUE, bg=Theme.GRAYPILL))
             
             # 弹道信息行
             self.bomb_trajectory_lbl = tk.Label(
@@ -945,12 +994,12 @@ class App:
         self.chk_content_frame.pack(side="left", fill="both", expand=True)
 
         font_title = (UIConfig.FONT_CHECKLIST_TITLE[0], int(UIConfig.FONT_CHECKLIST_TITLE[1]*s), UIConfig.FONT_CHECKLIST_TITLE[2])
-        self.chk_title = tk.Label(self.chk_content_frame, text="✅ 出击检查", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        self.chk_title = tk.Label(self.chk_content_frame, text="出击检查清单", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.chk_title.pack(fill="x", padx=int(6*s), pady=(int(6*s), int(2*s)))
 
         font_item = (UIConfig.FONT_CHECKLIST_ITEM[0], int(UIConfig.FONT_CHECKLIST_ITEM[1]*s))
         pad_x = int(6*s)
-        wrap_width = int(140*s)
+        wrap_width = int(180*s)
         
         # 使用 Label + ○ 符号（纯展示，无交互）
         for item in self.chk_items:
@@ -1444,11 +1493,11 @@ class App:
         
         # ⚠️ 徽章行最小宽度（确保起落架徽章等能完整显示）
         # 徽章行包含: badge_main + badge_flight + badge_gear(可选) + status_txt
-        # 估算: 80 + 80 + 100 + 60 = 320px 基础宽度
-        badge_min_width = int(320 * self.scale)
+        # 估算: 主状态 + 飞行状态 + 锁定状态 + 起落架 + 右侧状态文本
+        badge_min_width = int(390 * self.scale)
         
         # ⚠️ 提示文字最小宽度（动态测量，避免浪费或截断）
-        hint_min_width = int(320 * self.scale)
+        hint_min_width = int(380 * self.scale)
         try:
             hint_text = ""
             if hasattr(self, "hint_lbl") and self.hint_lbl:
@@ -1465,7 +1514,7 @@ class App:
                     cache["text"] = hint_text
                     cache["width"] = hint_min_width
         except Exception:
-            hint_min_width = int(320 * self.scale)
+            hint_min_width = int(380 * self.scale)
         
         # 基础最小宽度：取徽章行和提示行中较大的
         base_min_width = max(badge_min_width, hint_min_width)
@@ -1735,13 +1784,22 @@ class App:
             except Exception:
                 pass
 
+    def _update_lock_badge(self) -> None:
+        """更新锁定状态徽章，提升可见性。"""
+        if not hasattr(self, "badge_lock") or self.badge_lock is None:
+            return
+        if self._locked:
+            self.badge_lock.set("锁定", Theme.TEXT, Theme.BLUE)
+        else:
+            self.badge_lock.set("可拖动", Theme.TEXT, Theme.GREEN)
+
     def _hint_text(self) -> str:
         """生成提示文本
         
         注意: 修改提示文字长度时需同步修改_recalc_size()中的hint_min_width
         根据编译开关动态生成提示内容
         """
-        sound = "🔊开" if self.sound.is_enabled() else "🔇关"
+        sound = "开" if self.sound.is_enabled() else "关"
         
         # 使用配置的快捷键
         k_reset = HotkeyConfig.KEY_RESET
@@ -1750,28 +1808,38 @@ class App:
         k_beep = HotkeyConfig.KEY_BEEP
 
         if self._locked:
-            parts = [f"{k_reset}重置", f"{k_lock}解锁", f"{k_corner}角落", f"{k_beep}声音({sound})"]
+            parts = [
+                f"[{k_reset}]重置",
+                f"[{k_lock}]解锁拖动",
+                f"[{k_corner}]切换角落",
+                f"[{k_beep}]提示音:{sound}",
+            ]
             # 战区提示音仅在战区功能启用时显示
             if ENABLE_ZONES:
-                zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
+                zone_sound = "开" if self._zone_sound_enabled else "关"
                 k_zones = HotkeyConfig.KEY_ZONES
-                parts.append(f"{k_zones}战区({zone_sound})")
-            return " │ ".join(parts)
+                parts.append(f"[{k_zones}]战区音:{zone_sound}")
+            return "  ·  ".join(parts)
         else:
-            parts = ["拖动移动", f"{k_lock}锁定", f"{k_beep}声音({sound})"]
+            parts = [
+                "窗口可拖动",
+                f"[{k_lock}]重新锁定",
+                f"[{k_beep}]提示音:{sound}",
+            ]
             if ENABLE_ZONES:
-                zone_sound = "🔔开" if self._zone_sound_enabled else "🔕关"
+                zone_sound = "开" if self._zone_sound_enabled else "关"
                 k_zones = HotkeyConfig.KEY_ZONES
-                parts.append(f"{k_zones}战区({zone_sound})")
-            return " │ ".join(parts)
+                parts.append(f"[{k_zones}]战区音:{zone_sound}")
+            return "  ·  ".join(parts)
 
     def _nudge_text(self) -> str:
-        return "✨ 炸弹，爽！如果觉得好用，给项目点个 Star 支持一下（起飞自动隐藏）"
+        return "提示：如果 Bomana 对你有帮助，欢迎点一个 GitHub Star（起飞后自动隐藏）"
 
     def _update_hint(self) -> None:
         """更新提示文本"""
         if hasattr(self, "hint_lbl") and self.hint_lbl:
             self.hint_lbl.config(text=self._hint_text())
+        self._update_lock_badge()
         if hasattr(self, "_hint_width_cache") and self._hint_width_cache is not None:
             self._hint_width_cache["text"] = ""
         if hasattr(self, "nudge_lbl") and self.nudge_lbl:
@@ -1800,9 +1868,9 @@ class App:
         if not ENABLE_ZONES or not hasattr(self, "standalone_btn"):
             return
         if PanelConfig.navigation_mode == "standalone":
-            self.standalone_btn.config(text="⧉独立导航条(已开启)", fg=Theme.GREEN)
+            self.standalone_btn.config(text="独立导航窗: 已启用", fg=Theme.GREEN, bg=Theme.BG)
         else:
-            self.standalone_btn.config(text="⧉独立导航条", fg=Theme.TEXT_MUTED)
+            self.standalone_btn.config(text="切换独立导航窗", fg=Theme.TEXT_MUTED, bg=Theme.BG)
 
     def _next_corner(self):
         """切换到下一个角落"""
@@ -1872,7 +1940,7 @@ class App:
 
             self.root.configure(bg=Theme.BG)
             self.scale = Win32.get_dpi_scale(self.hwnd) * float(UIConfig.UI_SCALE_MULT)
-            self._hint_width_cache = {"text": "", "width": int(320 * self.scale)}
+            self._hint_width_cache = {"text": "", "width": int(380 * self.scale)}
             try:
                 self.root.tk.call("tk", "scaling", float(self.scale))
             except tk.TclError:
@@ -2163,9 +2231,9 @@ class App:
         
         # 更新航向显示
         if heading_available:
-            self.heading_lbl.config(text=f"HDG: {int(heading_deg):03d}°")
+            self.heading_lbl.config(text=f"航向: {int(heading_deg):03d}°")
         else:
-            self.heading_lbl.config(text="HDG: ---")
+            self.heading_lbl.config(text="航向: ---°")
         
         zone_count = 0
         airport_count = 0
@@ -2771,7 +2839,12 @@ class App:
             
             self.badge_gear.set(badge_text, Theme.TEXT, badge_bg)
             if not self.badge_gear.winfo_ismapped():
-                self.badge_gear.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*self.scale), 0), after=self.badge_flight)
+                anchor_widget = self.badge_lock if hasattr(self, "badge_lock") else self.badge_flight
+                self.badge_gear.pack(
+                    side="left",
+                    padx=(int(UIConfig.SPACING_BADGE*self.scale), 0),
+                    after=anchor_widget,
+                )
         else:
             if self.badge_gear.winfo_ismapped():
                 self.badge_gear.pack_forget()

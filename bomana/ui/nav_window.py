@@ -121,39 +121,31 @@ class NavigationWindow:
         self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
     
     def _init_ui(self):
-        """初始化导航条UI
-        
-        v6.6.1: 紧凑布局 - 清晰图例，保留状态行
-        """
+        """初始化导航条 UI（Fluent 风格）。"""
         s = self.scale
         pad = int(4 * s)
-        
-        # 主框架
-        self.main_frame = tk.Frame(self.window, bg=Theme.GRAYPILL)
+
+        self.main_frame = tk.Frame(self.window, bg=Theme.BORDER, bd=0, highlightthickness=0)
         self.main_frame.pack(fill="both", expand=True, padx=2, pady=2)
-        
-        # 内容区域
-        self.content_frame = tk.Frame(self.main_frame, bg=Theme.GRAYPILL)
-        self.content_frame.pack(fill="both", expand=True)
-        
-        # v6.6.1: 紧凑标题栏（标题 + 图例 + 提示 + 容差 + HDG + 关闭）
+
+        self.content_frame = tk.Frame(self.main_frame, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
+        self.content_frame.pack(fill="both", expand=True, padx=1, pady=1)
+
         self.title_bar = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.title_bar.pack(fill="x", padx=pad, pady=(pad, 0))
-        
-        font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s*0.85))
-        legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.7))
-        hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s*0.7))
-        
-        # 左侧：标题 🎯 导航
+
+        font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s*0.9))
+        legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.75))
+        hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s*0.75))
+
         self.title_lbl = tk.Label(
-            self.title_bar, text="🎯 导航", font=font_title,
+            self.title_bar, text="独立导航", font=font_title,
             fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w"
         )
         self.title_lbl.pack(side="left")
-        
-        # 图例（带文字说明，更清晰）
+
         legend_frame = tk.Frame(self.title_bar, bg=Theme.GRAYPILL)
-        legend_frame.pack(side="left", padx=(int(6*s), 0))
+        legend_frame.pack(side="left", padx=(int(8*s), 0))
         legend_kwargs = {
             "font": legend_font,
             "bg": Theme.GRAYPILL,
@@ -164,44 +156,39 @@ class NavigationWindow:
         tk.Label(legend_frame, text="⊚战区", fg=Theme.RED, **legend_kwargs).pack(side="left")
         tk.Label(legend_frame, text="✈友", fg=Theme.BLUE, **legend_kwargs).pack(side="left", padx=(int(4*s), 0))
         tk.Label(legend_frame, text="✈敌", fg=Theme.ORANGE, **legend_kwargs).pack(side="left", padx=(int(4*s), 0))
-        
-        # 解锁提示（动态引用按键配置）
+
         self.hint_lbl = tk.Label(
-            self.title_bar, text=f"{HotkeyConfig.KEY_LOCK}解锁后可拖动", font=hint_font,
+            self.title_bar, text=f"[{HotkeyConfig.KEY_LOCK}] 解锁后拖动", font=hint_font,
             fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
         )
         self.hint_lbl.pack(side="left", padx=(int(8*s), 0))
-        
-        # 右侧：关闭按钮
+
         self.close_btn = tk.Label(
             self.title_bar, text="✕", font=font_title,
-            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, cursor="hand2"
+            fg=Theme.TEXT_MUTED, bg=Theme.BG, cursor="hand2",
+            padx=int(5*s), pady=max(1, int(1*s))
         )
         self.close_btn.pack(side="right")
         self.close_btn.bind("<Button-1>", lambda e: self.hide())
-        self.close_btn.bind("<Enter>", lambda e: self.close_btn.config(fg=Theme.RED))
-        self.close_btn.bind("<Leave>", lambda e: self.close_btn.config(fg=Theme.TEXT_MUTED))
-        
-        # 航向显示
-        font_hdg = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.9))
+        self.close_btn.bind("<Enter>", lambda e: self.close_btn.config(fg=Theme.RED, bg=Theme.BORDER))
+        self.close_btn.bind("<Leave>", lambda e: self.close_btn.config(fg=Theme.TEXT_MUTED, bg=Theme.BG))
+
+        font_hdg = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.95))
         self.heading_lbl = tk.Label(
-            self.title_bar, text="---°", font=font_hdg,
+            self.title_bar, text="航向 ---°", font=font_hdg,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e"
         )
         self.heading_lbl.pack(side="right", padx=(0, int(4*s)))
-        
-        # 容差显示
+
         self.zone_tolerance_legend = tk.Label(
             self.title_bar, text="", font=hint_font,
             fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="center"
         )
         self.zone_tolerance_legend.pack(side="right", padx=(0, int(4*s)))
-        
-        # 航向带容器
+
         self.tape_frame = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.tape_frame.pack(fill="x", padx=pad, pady=(int(2*s), 0))
-        
-        # 航向带
+
         width_mult = PanelConfig.navigation_bar_width
         tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s * 1.2 * width_mult)
         tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
@@ -211,83 +198,79 @@ class NavigationWindow:
             height=tape_height
         )
         self.heading_tape.pack(fill="x", expand=True)
-        
-        # v6.6.1: 保留状态行（显示偏航和ETE信息）
-        status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.9))
-        
-        # 战区状态行
+
+        status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.92))
+
         self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        
+
         self._zone_row_left_spacer = tk.Frame(self.zone_row, bg=Theme.GRAYPILL)
         self._zone_row_left_spacer.pack(side="left", fill="x", expand=True)
-        
+
         self._zone_row_center = tk.Frame(self.zone_row, bg=Theme.GRAYPILL)
         self._zone_row_center.pack(side="left")
-        
+
         self._zone_row_right_spacer = tk.Frame(self.zone_row, bg=Theme.GRAYPILL)
         self._zone_row_right_spacer.pack(side="left", fill="x", expand=True)
-        
+
         self.zone_label = tk.Label(
-            self._zone_row_center, text="⊚战区:", font=status_font,
+            self._zone_row_center, text="战区:", font=status_font,
             fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w"
         )
         self.zone_label.pack(side="left")
-        
+
         self.zone_turn = tk.Label(
             self._zone_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.zone_turn.pack(side="left", padx=(int(4*s), 0))
-        
+
         self.zone_status = tk.Label(
             self._zone_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.zone_status.pack(side="left", padx=(int(6*s), 0))
-        
+
         self.zone_info = tk.Label(
             self._zone_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.zone_info.pack(side="left", padx=(int(6*s), 0))
-        
+
         self.zone_tolerance = tk.Label(
             self._zone_row_center, text="", font=status_font,
             fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
         )
-        # 不pack，容差已在标题栏显示
         self.zone_row.pack(fill="x", padx=int(4*self.scale), pady=(int(2*self.scale), 0))
-        
-        # 友方机场状态行
+
         self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        
+
         self._friendly_row_left_spacer = tk.Frame(self.friendly_row, bg=Theme.GRAYPILL)
         self._friendly_row_left_spacer.pack(side="left", fill="x", expand=True)
-        
+
         self._friendly_row_center = tk.Frame(self.friendly_row, bg=Theme.GRAYPILL)
         self._friendly_row_center.pack(side="left")
-        
+
         self._friendly_row_right_spacer = tk.Frame(self.friendly_row, bg=Theme.GRAYPILL)
         self._friendly_row_right_spacer.pack(side="left", fill="x", expand=True)
-        
+
         self.friendly_label = tk.Label(
-            self._friendly_row_center, text="✈友方:", font=status_font,
+            self._friendly_row_center, text="友方:", font=status_font,
             fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_label.pack(side="left")
-        
+
         self.friendly_turn = tk.Label(
             self._friendly_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_turn.pack(side="left", padx=(int(4*s), 0))
-        
+
         self.friendly_status = tk.Label(
             self._friendly_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
         )
         self.friendly_status.pack(side="left", padx=(int(6*s), 0))
-        
+
         self.friendly_info = tk.Label(
             self._friendly_row_center, text="", font=status_font,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
@@ -402,7 +385,7 @@ class NavigationWindow:
     def update_hint_text(self):
         """更新提示文本（当热键配置变更时调用）"""
         if hasattr(self, 'hint_lbl') and self.hint_lbl:
-            self.hint_lbl.config(text=f"{HotkeyConfig.KEY_LOCK}解锁后可拖动")
+            self.hint_lbl.config(text=f"[{HotkeyConfig.KEY_LOCK}] 解锁后拖动")
 
     def destroy(self):
         """销毁窗口实例（用于主题/缩放热重载）"""
@@ -441,9 +424,9 @@ class NavigationWindow:
 
         # 更新航向
         if heading_available:
-            self.heading_lbl.config(text=f"{int(heading_deg):03d}°")
+            self.heading_lbl.config(text=f"航向 {int(heading_deg):03d}°")
         else:
-            self.heading_lbl.config(text="---°")
+            self.heading_lbl.config(text="航向 ---°")
         
         # 更新航向带
         if heading_available:

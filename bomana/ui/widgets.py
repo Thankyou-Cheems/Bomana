@@ -17,14 +17,26 @@ class Pill(tk.Label):
     用于显示状态徽章，如"战斗中"、"就绪✓"等。
     """
     def __init__(self, parent, text="", fg=Theme.TEXT, bg=Theme.GRAYPILL, font=None):
-        super().__init__(parent, text=text, fg=fg, bg=bg, bd=0, highlightthickness=0)
+        super().__init__(
+            parent,
+            text=text,
+            fg=fg,
+            bg=bg,
+            bd=0,
+            relief="flat",
+            padx=8,
+            pady=1,
+            highlightthickness=1,
+            highlightbackground=Theme.SEPARATOR,
+            highlightcolor=Theme.SEPARATOR,
+        )
         if font:
             self.configure(font=font)
         self._apply_padding(text)
     
     def _apply_padding(self, text: str):
-        """添加内边距（通过空格）"""
-        self.configure(text=f"  {text}  ")
+        """更新标签文本。"""
+        self.configure(text=text)
     
     def set(self, text: str, fg: str, bg: str):
         """更新徽章内容和颜色"""
@@ -55,8 +67,16 @@ class HeadingTape(tk.Canvas):
             width: 宽度(像素)
             height: 高度(像素)
         """
-        super().__init__(parent, width=width, height=height, 
-                        bg=Theme.GRAYPILL, highlightthickness=0, **kwargs)
+        super().__init__(
+            parent,
+            width=width,
+            height=height,
+            bg=Theme.BG,
+            highlightthickness=1,
+            highlightbackground=Theme.SEPARATOR,
+            highlightcolor=Theme.SEPARATOR,
+            **kwargs,
+        )
         self.tape_width = width
         self.tape_height = height
         self.pixels_per_degree = ZoneConfig.HEADING_TAPE_PIXELS_PER_DEG
@@ -112,6 +132,14 @@ class HeadingTape(tk.Canvas):
 
         self.delete("all")
         self._current_hdg = current_hdg
+        self.create_rectangle(
+            0,
+            0,
+            self.tape_width - 1,
+            self.tape_height - 1,
+            outline=Theme.SEPARATOR,
+            width=1,
+        )
         
         # 找出主目标（用于偏航提示和缩放计算）
         primary = next((t for t in targets if t.get('is_primary')), None)
