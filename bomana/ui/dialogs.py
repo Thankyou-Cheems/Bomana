@@ -126,6 +126,49 @@ class _ScalableDialogMixin:
             except Exception:
                 pass
 
+    def _clamp_to_visible_screen(self, x, y):
+        """将窗口左上角坐标钳制在当前可见屏幕范围内。"""
+        self.update_idletasks()
+
+        win_w = max(1, int(self.winfo_width()))
+        win_h = max(1, int(self.winfo_height()))
+
+        # 优先使用虚拟根坐标，兼容多显示器；若异常则回退到主屏尺寸。
+        root_x = int(getattr(self, "winfo_vrootx", lambda: 0)())
+        root_y = int(getattr(self, "winfo_vrooty", lambda: 0)())
+        root_w = int(getattr(self, "winfo_vrootwidth", self.winfo_screenwidth)())
+        root_h = int(getattr(self, "winfo_vrootheight", self.winfo_screenheight)())
+
+        if root_w <= 0:
+            root_w = int(self.winfo_screenwidth())
+        if root_h <= 0:
+            root_h = int(self.winfo_screenheight())
+
+        min_x = root_x
+        min_y = root_y
+        max_x = root_x + max(0, root_w - win_w)
+        max_y = root_y + max(0, root_h - win_h)
+
+        safe_x = max(min_x, min(int(x), max_x))
+        safe_y = max(min_y, min(int(y), max_y))
+        return safe_x, safe_y
+
+    def _center_dialog_on_parent(self, parent):
+        """以父窗口为中心定位，并确保窗口不会超出屏幕。"""
+        self.update_idletasks()
+
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        ww = self.winfo_width()
+        wh = self.winfo_height()
+
+        x = px + (pw - ww) // 2
+        y = py + (ph - wh) // 2
+        x, y = self._clamp_to_visible_screen(x, y)
+        self.geometry(f"+{x}+{y}")
+
 class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
     """设置对话框
     
@@ -795,11 +838,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 self.ccrp_time_mult_var.set(defaults["time_correction_mult"])
     
     def _center_on_parent(self, parent):
-        """居中显示"""
-        self.update_idletasks()
-        x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
-        self.geometry(f"+{x}+{y}")
+        """居中显示并限制到可见屏幕。"""
+        self._center_dialog_on_parent(parent)
     
     def _save(self):
         """保存所有设置"""
@@ -1063,10 +1103,7 @@ class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
         ).pack(side="right", padx=(0, 8))
     
     def _center_on_parent(self, parent):
-        self.update_idletasks()
-        x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
-        self.geometry(f"+{x}+{y}")
+        self._center_dialog_on_parent(parent)
     
     def _save(self):
         """保存检查清单"""
@@ -1395,10 +1432,7 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         self.stats_lbl.config(text=f"显示 {total_count} / {len(BombConfig.BOMB_DATABASE)} 种炸弹")
     
     def _center_on_parent(self, parent):
-        self.update_idletasks()
-        x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
-        self.geometry(f"+{x}+{y}")
+        self._center_dialog_on_parent(parent)
     
     def _select(self):
         selection = self.listbox.curselection()
@@ -1749,16 +1783,4 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         self.destroy()
     
     def _center_on_parent(self, parent):
-        self.update_idletasks()
-        pw = parent.winfo_width()
-        ph = parent.winfo_height()
-        px = parent.winfo_x()
-        py = parent.winfo_y()
-        w = self.winfo_width()
-        h = self.winfo_height()
-        x = px + (pw - w) // 2
-        y = py + (ph - h) // 2
-        # 确保不超出屏幕
-        x = max(0, x)
-        y = max(0, y)
-        self.geometry(f"+{x}+{y}")
+        self._center_dialog_on_parent(parent)
