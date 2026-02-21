@@ -60,9 +60,14 @@ uv run python Bomana.pyw
 | 15 分钟计时器 | 自动识别出生/着陆/死亡并重置周期 |
 | 导航（战区/机场） | 方位、距离、ETE，目标切换 |
 | 燃油管理 | 油量、油耗率、返航估算 |
-| CCRP 投弹预测 | 基于弹道参数的投弹距离与时间估算 |
+| CCRP 投弹预测 | 基于弹道参数的估算值，不是游戏内真实算法 |
 | 超速提醒 | IAS/Mach 双通道分级告警（safe/caution/warning/critical） |
 | HUD 叠加层 | 可选开启，提供目标与航向参考 |
+
+CCRP 说明：
+
+- 该功能是工程化估计，不是游戏内部真实投弹算法，存在误差是正常现象。
+- 可在 `设置 -> 投弹` 中手动校准：`距离修正倍率`、`时间修正倍率`。
 
 超速提醒说明：
 
@@ -80,6 +85,9 @@ A: 检查当前通道（Lite 不含这些面板），并确认在多人全真战
 
 **Q: 看不到超速提醒？**  
 A: 需要匹配到机型 FM 限速库；若当前机型未匹配，会保持 `unknown/safe`。
+
+**Q: CCRP 预测有偏差？**  
+A: 这是估计算法，不是游戏内真实算法。可在 `设置 -> 投弹` 中调整 `距离修正倍率` 和 `时间修正倍率`。
 
 **Q: 计时器不准？**  
 A: 使用 `F7` 手动重置周期。
@@ -160,9 +168,14 @@ If you already use uv, Option B is enough.
 | 15-min timer | Tracks spawn/landing/death cycle automatically |
 | Navigation | Zone/airfield bearing, distance and ETE |
 | Fuel | Fuel amount, burn rate, return estimate |
-| CCRP | Ballistic-based bombing prediction |
+| CCRP | Ballistic-based estimate, not the in-game internal algorithm |
 | Overspeed | IAS/Mach dual-channel alerts (`safe/caution/warning/critical`) |
 | HUD overlay | Optional in-game navigation overlay |
+
+CCRP note:
+
+- This feature is an engineering estimate and not War Thunder's internal bombing algorithm.
+- Prediction error is expected; calibrate in `Settings -> Bombing` using `range correction` and `time correction`.
 
 Overspeed specifics:
 
@@ -180,5 +193,8 @@ A: Check your channel (Lite does not include them) and battle mode.
 
 **Q: No overspeed alert?**  
 A: Aircraft FM may not be matched in the current speed-limit database.
+
+**Q: CCRP prediction is off?**  
+A: Expected for an estimate-based model. Tune `range correction` and `time correction` in `Settings -> Bombing`.
 
 ---
