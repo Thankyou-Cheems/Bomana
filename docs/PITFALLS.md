@@ -122,4 +122,10 @@
   Cause: navigation geometry used normalized map coordinates with fixed `DISTANCE_SCALE=100` and ignored `map_info` axis scales (`map_min/map_max`), introducing distance and bearing distortion on non-square/variable-size maps
   Fix/Workaround: switched nav geometry to map_info-based meter scaling for bearing/distance/ground-speed (while preserving existing `distance * DISTANCE_SCALE` UI compatibility)
 
+- Date: 2026-02-21
+  Context: upgrading `bd` to `v0.55.4` and running `bd doctor --fix --yes` in Bomana
+  Symptom: `bd doctor` and `bd ready` intermittently crashed with `panic: runtime error: invalid memory address or nil pointer dereference` (Dolt embedded path), and `bd sync` refused to export because database was empty while JSONL had issues
+  Cause: migration left stale Dolt lock files and an empty Dolt DB; auto-fix/import path did not hydrate existing `issues.jsonl` records
+  Fix/Workaround: clear stale `LOCK` files under `.beads/dolt/**`, then run `bd import -i .beads/issues.jsonl --force` before `bd sync`
+
 
