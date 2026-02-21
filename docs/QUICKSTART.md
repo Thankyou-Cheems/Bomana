@@ -1,225 +1,92 @@
 # 快速入门指南 | Quick Start Guide
 
-欢迎使用 Bomana！这份指南将帮助你在 5 分钟内开始使用。
-
 [中文](#中文快速入门) | [English](#english-quick-start)
 
 ---
 
 ## 中文快速入门
 
-### 步骤 1：获取软件
+### 0. 运行前提
 
-#### 选项 A：下载启动器与 App 包（推荐新手）
+- 平台：Windows
+- 游戏：War Thunder 已启动并进入战斗（机库状态不会产生飞行数据）
+- 数据来源：`http://localhost:8111`
+- 说明：无需额外“开启本地服务器”开关
 
-1. 访问 [Releases 页面](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. 下载通用启动器：`Bomana_launcher_vX.X.X.exe`
+### 1. 获取程序
 
-启动器内可选版本通道：
+#### 方式 A：下载启动器（推荐）
 
-| 通道 | 包含功能 | 适合人群 |
-|------|----------|----------|
-| **Enhanced** | 计时器 + 导航 + 燃油 + CCRP | 推荐大多数玩家 |
-| **Standard** | 计时器 + 导航 + 燃油（无CCRP） | 不需要投弹预测 |
-| **Lite** | 仅计时器 | 只要极简与低占用 |
-3. 下载完成！跳到步骤 2
+1. 打开 [Releases](https://github.com/Thankyou-Cheems/Bomana/releases)
+2. 下载 `Bomana_launcher_vX.X.X.exe`
+3. 启动器会按通道下载对应 app 包并校验完整性
 
-下载器与 app 包分工：
-- `Bomana_launcher_vX.Y.Z.exe`：固定入口，负责检查更新、下载并校验 app 包
-- `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行程序包
-- `manifest_<Variant>.json`：版本、下载地址、SHA256 等元数据
+可选通道：
 
-#### 选项 B：从源码运行（开发者）
+| 通道 | 功能 | 适合人群 |
+|------|------|----------|
+| **Enhanced** | 计时 + 导航 + 燃油 + CCRP | 完整功能 |
+| **Standard** | 计时 + 导航 + 燃油 | 不使用 CCRP |
+| **Lite** | 计时 | 最低占用 |
+
+启动器与 app 包：
+
+- `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动入口
+- `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行包
+- `manifest_<Variant>.json`：版本、地址、SHA256 元数据
+
+#### 方式 B：源码运行（已安装 uv）
 
 ```bash
-# 克隆仓库
 git clone https://github.com/Thankyou-Cheems/Bomana.git
 cd Bomana
-
-# 首次使用请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
-# 安装依赖
 uv sync
-
-# 运行
 uv run python Bomana.pyw
 ```
 
-如果你本机已经有 uv 环境，可以直接走选项 B，不需要下载启动器。
+如果你已经有 uv 环境，可以直接使用方式 B，不需要下载启动器。
 
-### 步骤 2：启动战雷
+### 2. 启动流程
 
-1. **启动战雷客户端**
-2. **进入全真模式（Simulator Battles）**
-3. **选择载具并进入战斗**
+1. 启动 War Thunder 并进入战斗
+2. 运行 Bomana（启动器或 `uv run python Bomana.pyw`）
+3. 首次通过启动器运行时会下载 app 包；后续可离线启动本地版本
+4. 默认窗口在右上角，可通过 `F9` 切换角落
 
-> 提示：Bomana 需要在战斗中才能工作，在机库不会显示数据
+### 3. 核心功能速览
 
-### 步骤 3：运行 Bomana
+| 功能 | 说明 |
+|------|------|
+| 15 分钟计时器 | 自动识别出生/着陆/死亡并重置周期 |
+| 导航（战区/机场） | 方位、距离、ETE，目标切换 |
+| 燃油管理 | 油量、油耗率、返航估算 |
+| CCRP 投弹预测 | 基于弹道参数的投弹距离与时间估算 |
+| 超速提醒 | IAS/Mach 双通道分级告警（safe/caution/warning/critical） |
+| HUD 叠加层 | 可选开启，提供目标与航向参考 |
 
-1. **双击 `Bomana_launcher_vX.X.X.exe`**（或运行 `uv run python Bomana.pyw`）
-2. 窗口会出现在**屏幕右上角**
-3. 初始状态显示 "机库" 或 "等待中"
-4. 启动器打开后会自动检查当前通道（可手动切换），优先连接国内更新服务；失败时自动回退 GitHub
-5. 界面会先展示新版本来源与下载总大小，点击“下载更新”后还会二次确认
-6. 首次运行通常需要联网完成应用包下载，后续可离线启动本地版本
-7. 可使用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 验证下载完整性
-8. 程序显示名为 `Bomana香焦`
+超速提醒说明：
 
-### 步骤 4：出生后开始计时
+- 数据库：`bomana/data/fm_speed_limits.json`
+- 识别链路：`/indicators.type -> unit_to_fm -> fm_speed_limits`
+- 告警输出：状态徽章 + warning/critical 声音节奏
 
-1. **在游戏中出生**（选择载具进入战场）
-2. Bomana 会自动检测并开始计时
-3. 显示 **"战斗中"** 徽章和 **15:00** 倒计时
+### 4. 常见问题
 
-### 步骤 5：使用导航功能
+**Q: 显示“8111不可用”？**  
+A: 确认游戏正在战斗中；再访问 `http://localhost:8111` 检查是否可达；必要时重启战雷。
 
-当你在空中飞行时，Bomana 会自动显示：
+**Q: 看不到导航或燃油面板？**  
+A: 检查当前通道（Lite 不含这些面板），并确认在多人全真战斗中。
 
-#### 战区导航
-```
-战区导航                  HDG: 045°
-➤ 前 23.5km  (+12°)   03:45
-○ 右 31.2km  (+67°)
-○ 右 45.8km  (+89°)
-```
-- **➤** = 当前目标（前方 45° 内最近的战区）
-- **方位** = 前/后/左/右
-- **距离** = 到战区的直线距离（km）
-- **角度** = 相对航向（+右 / -左）
-- **时间** = 预计抵达时间
+**Q: 看不到超速提醒？**  
+A: 需要匹配到机型 FM 限速库；若当前机型未匹配，会保持 `unknown/safe`。
 
-#### 机场导航
-```
-机场导航
-友 ➤ 后 12.3km  (-175°)   02:15
-敌 ○ 前 45.6km  (+5°)
-```
-- **友** = 友方机场（返航点）
-- **敌** = 敌方机场
+**Q: 计时器不准？**  
+A: 使用 `F7` 手动重置周期。
 
-#### 燃油管理
-```
-燃油管理
-650kg (72%)  18:30
-油耗 35kg/min │ 高度 2500m
-返航: 需~180kg (20%)  充足
-```
-- **油量** = 当前燃油（kg）和百分比
-- **时间** = 剩余飞行时间
-- **油耗** = 平均消耗率（kg/分钟）
-- **返航** = 返回友方机场所需油量和状态
-  - 充足（绿色）
-  - 注意（黄色）
-  - 不足（红色）
+### 5. 开发者：更新数据文件
 
-### 步骤 6：熟悉快捷键
-
-| 按键 | 功能 | 说明 |
-|------|------|------|
-| **F7** | 重置计时器 | 手动重启 15 分钟周期 |
-| **F8** | 锁定/解锁 | 锁定后窗口点击穿透 |
-| **F9** | 切换角落 | 在四个屏幕角落间切换 |
-| **F10** | 声音开关 | 启用/禁用提示音 |
-| **F11** | 战区音效 | 战区被摧毁提示音开关 |
-
-### 步骤 7：自定义设置（可选）
-
-右键点击**系统托盘图标**（屏幕右下角），选择：
-
-- **设置**：调整透明度、缩放、主题
-- **显示面板**：选择显示哪些信息面板
-- **编辑检查清单**：自定义起飞前检查项
-
-### 完成
-
-现在你已经可以使用 Bomana 了！
-
----
-
-## 常见问题
-
-### 窗口显示 "8111不可用"？
-
-**原因**：战雷的 8111 接口未开启或无法访问
-
-**解决**：
-1. 确保战雷正在运行
-2. 进入战斗（不是机库）
-3. 如果还不行，重启战雷
-
-### 战区/机场信息不显示？
-
-**原因**：可能在机库或单人任务
-
-**解决**：
-1. 确保在多人全真模式战斗中
-2. 某些地图可能没有战区数据
-
-### 计时器不准确？
-
-**解决**：
-1. 按 **F7** 手动重置
-2. 或重启 Bomana
-
-### 想调整窗口大小？
-
-**解决**：
-1. 设置中调整 **UI 缩放**（默认 0.85）
-2. 范围：0.6 - 1.5
-
-### 声音太吵？
-
-**解决**：
-1. 按 **F10** 关闭所有声音
-2. 或按 **F11** 只关闭战区提示音
-
-### 如何隐藏某些面板？
-
-**解决**：
-1. 右键托盘图标 → **显示面板**
-2. 取消勾选不需要的面板
-
----
-
-## 进阶技巧
-
-### 技巧 1：利用目标锁定
-
-Bomana 会自动锁定前方 45° 内最近的战区。如果你想切换目标：
-
-1. **对准目标** <5° 持续 **3 秒**
-2. Bomana 自动切换到该目标
-
-### 技巧 2：返航油量判断
-
-观察燃油面板的返航估算：
-
-- **充足**：继续战斗，油量足够
-- **注意**：考虑返航，油量紧张
-- **不足**：立即返航，油量不够
-
-### 技巧 3：战区优先级
-
-当有多个战区时：
-- Bomana 优先选择**角度最小**的（正前方）
-- 而非**距离最近**的
-- 这更符合飞行逻辑
-
-### 技巧 4：多显示器用户
-
-1. 将 Bomana 放在副显示器
-2. 游戏在主显示器全屏
-3. 完美配合！
-
-### 技巧 5：自定义快捷键
-
-在设置中可以重新分配 F7-F11 的功能，避免与游戏快捷键冲突。
-
----
-
-## 开发者：更新 CCRP 炸弹参数
-
-如果需要更新 `bomana/data/ccrp_bomb_params.json`：
+更新 CCRP 炸弹参数：
 
 ```bash
 python tools/blkx_extractor.py ^
@@ -227,9 +94,7 @@ python tools/blkx_extractor.py ^
   -o bomana\data\ccrp_bomb_params.json
 ```
 
-## 开发者：更新机型超速限速库
-
-超速提醒数据文件为 `bomana/data/fm_speed_limits.json`。可用以下命令从 datamine 提取更新：
+更新机型超速限速库：
 
 ```bash
 python tools/fm_speed_extractor.py ^
@@ -239,135 +104,81 @@ python tools/fm_speed_extractor.py ^
 
 ---
 
-## 下一步
-
-- 阅读完整的 [README.md](../README.md)
-- 尝试不同的主题（设置中）
-- 自定义检查清单（右键托盘 → 编辑检查清单）
-- 给项目一个 Star
-
----
-
 ## English Quick Start
 
-### Step 1: Get the Software
+### 0. Prerequisites
 
-#### Option A: Launcher + App Package (Recommended)
+- Platform: Windows
+- Game state: War Thunder must be in battle (hangar provides no live flight data)
+- Data source: `http://localhost:8111`
+- Note: no extra in-game "local server" toggle is required
 
-1. Visit [Releases page](https://github.com/Thankyou-Cheems/Bomana/releases)
-2. Download the universal launcher: `Bomana_launcher_vX.X.X.exe`
+### 1. Get the App
 
-Choose channel inside launcher:
+#### Option A: Launcher (Recommended)
 
-| Channel | Features | Best for |
-|------|----------|----------|
-| **Enhanced** | Timer + navigation + fuel + CCRP | Most players (recommended) |
-| **Standard** | Timer + navigation + fuel (no CCRP) | Players not using bombing prediction |
-| **Lite** | Timer only | Minimal UI and lowest overhead |
-3. Done! Skip to Step 2
+1. Open [Releases](https://github.com/Thankyou-Cheems/Bomana/releases)
+2. Download `Bomana_launcher_vX.X.X.exe`
+3. Let launcher fetch and verify the app package for your channel
 
-Launcher/App package responsibilities:
-- `Bomana_launcher_vX.Y.Z.exe`: stable entry, checks updates, downloads/verifies app packages
-- `Bomana_app_<Variant>_vX.Y.Z.zip`: actual runnable app package
-- `manifest_<Variant>.json`: version, URL and SHA256 metadata
+Channels:
 
-#### Option B: Run from Source
+| Channel | Features |
+|---------|----------|
+| **Enhanced** | Timer + navigation + fuel + CCRP |
+| **Standard** | Timer + navigation + fuel |
+| **Lite** | Timer only |
+
+Launcher/package roles:
+
+- `Bomana_launcher_vX.Y.Z.exe`: update check/download/verify/start entry
+- `Bomana_app_<Variant>_vX.Y.Z.zip`: runnable app package
+- `manifest_<Variant>.json`: version/url/SHA256 metadata
+
+#### Option B: Run from Source (uv)
 
 ```bash
 git clone https://github.com/Thankyou-Cheems/Bomana.git
 cd Bomana
-# Install uv first if needed: https://docs.astral.sh/uv/getting-started/installation/
 uv sync
 uv run python Bomana.pyw
 ```
 
-If you already have uv, you can use Option B directly and skip the launcher.
+If you already use uv, Option B is enough.
 
-### Step 2: Start War Thunder
+### 2. Start Flow
 
-1. Launch War Thunder
-2. Enter Simulator Battles
-3. Select vehicle and enter battle
+1. Launch War Thunder and enter battle
+2. Start Bomana (launcher or source run)
+3. First launcher run usually downloads app package; later runs can be offline
+4. Use `F9` to cycle window corner if needed
 
-### Step 3: Run Bomana
+### 3. Feature Snapshot
 
-1. Double-click your `Bomana_launcher_vX.X.X.exe`
-2. Window appears in **top-right corner**
-3. Shows "Hangar" or "IDLE"
-4. Launcher auto-checks the current channel on startup (you can switch channels), using Tencent update service first and GitHub Releases as fallback
-5. The UI shows update source and total download size before downloading, and "Download Update" asks for confirmation
-6. First launch usually needs network access to fetch the app package; later you can launch offline from local files
-7. Use `checksums_launcher.txt` and `checksums_app_*.txt` to verify file integrity
-8. Display name: `Bomana香焦`
+| Feature | Description |
+|---------|-------------|
+| 15-min timer | Tracks spawn/landing/death cycle automatically |
+| Navigation | Zone/airfield bearing, distance and ETE |
+| Fuel | Fuel amount, burn rate, return estimate |
+| CCRP | Ballistic-based bombing prediction |
+| Overspeed | IAS/Mach dual-channel alerts (`safe/caution/warning/critical`) |
+| HUD overlay | Optional in-game navigation overlay |
 
-### Step 4: Spawn and Start Timer
+Overspeed specifics:
 
-1. Spawn in game
-2. Bomana auto-detects and starts timer
-3. Shows **"战斗中"** badge and **15:00** countdown
+- DB: `bomana/data/fm_speed_limits.json`
+- Matching path: `/indicators.type -> unit_to_fm -> fm_speed_limits`
+- Output: badge state + warning/critical sound cadence
 
-### Step 5: Use Navigation
+### 4. FAQ
 
-When airborne, Bomana shows:
+**Q: "8111 Unavailable"?**  
+A: Ensure you are in battle, then test `http://localhost:8111`; restart game if needed.
 
-#### Zone Navigation
-```
-Zone Navigation             HDG: 045°
-➤ Front 23.5km  (+12°)   03:45
-○ Right 31.2km  (+67°)
-```
+**Q: No navigation/fuel panels?**  
+A: Check your channel (Lite does not include them) and battle mode.
 
-#### Airfield Navigation
-```
-Airfield Navigation
-FRIEND ➤ Back 12.3km  (-175°)   02:15
-HOSTILE ○ Front 45.6km  (+5°)
-```
-
-#### Fuel Management
-```
-Fuel Management
-650kg (72%)  18:30
-Rate 35kg/min │ Alt 2500m
-Return: ~180kg (20%)  Safe
-```
-
-### Step 6: Learn Hotkeys
-
-| Key | Function | Description |
-|-----|----------|-------------|
-| **F7** | Reset Timer | Manual reset to 15:00 |
-| **F8** | Lock/Unlock | Lock = click-through |
-| **F9** | Switch Corner | Cycle through corners |
-| **F10** | Sound Toggle | Enable/disable sounds |
-| **F11** | Zone Sound | Zone destroyed alert |
-
-### Done
-
-You're ready to use Bomana!
+**Q: No overspeed alert?**  
+A: Aircraft FM may not be matched in the current speed-limit database.
 
 ---
-
-## FAQ
-
-**Q: Shows "8111 Unavailable"?**  
-A: Ensure War Thunder is running and you're in battle (not hangar)
-
-**Q: No zone/airfield data?**  
-A: Ensure you're in multiplayer Simulator Battle
-
-**Q: Timer inaccurate?**  
-A: Press **F7** to manually reset
-
-**Q: Too noisy?**  
-A: Press **F10** to disable sounds
-
----
-
-<div align="center">
-
-**Enjoy flying**
-
-祝你飞行愉快
-
-</div>
