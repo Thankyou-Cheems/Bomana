@@ -443,7 +443,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         tk.Label(frame, text="UI缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
             row=row, column=0, sticky="w", pady=5)
         self.scale_var = tk.DoubleVar(value=UIConfig.UI_SCALE_MULT)
-        tk.Scale(frame, from_=0.6, to=1.5, resolution=0.05, orient="horizontal", 
+        tk.Scale(frame, from_=0.6, to=2.5, resolution=0.05, orient="horizontal", 
                 length=180, variable=self.scale_var, bg=Theme.BG, fg=Theme.TEXT, 
                 highlightthickness=0, troughcolor=Theme.BORDER, 
                 activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)

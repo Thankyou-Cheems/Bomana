@@ -214,7 +214,7 @@ class App:
             # 用户已经设置过缩放，使用保存的值
             scale = config.get('scale')
             if isinstance(scale, (int, float)):
-                UIConfig.UI_SCALE_MULT = max(0.6, min(1.5, float(scale)))
+                UIConfig.UI_SCALE_MULT = max(0.6, min(2.5, float(scale)))
         else:
             # 首次启动，根据屏幕分辨率智能设置
             try:
@@ -543,10 +543,10 @@ class App:
             highlightbackground=Theme.SEPARATOR,
             highlightcolor=Theme.SEPARATOR,
         )
-        self.bottom_card.pack(side="bottom", fill="x", pady=(int(6*s), 0), padx=int(2*s))
+        self.bottom_card.pack(side="bottom", fill="x", pady=(int(4*s), 0), padx=int(1*s))
 
         bottom_frame = tk.Frame(self.bottom_card, bg=Theme.GRAYPILL)
-        bottom_frame.pack(fill="x", padx=int(8*s), pady=int(6*s))
+        bottom_frame.pack(fill="x", padx=int(6*s), pady=int(4*s))
 
         self.hint_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
         self.hint_row.pack(side="bottom", fill="x")
@@ -669,10 +669,10 @@ class App:
             highlightbackground=Theme.SEPARATOR,
             highlightcolor=Theme.SEPARATOR,
         )
-        self.top_frame.pack(side="top", fill="x", pady=(0, int(8*s)), padx=int(2*s))
+        self.top_frame.pack(side="top", fill="x", pady=(0, int(4*s)), padx=int(1*s))
 
         top_content = tk.Frame(self.top_frame, bg=Theme.GRAYPILL)
-        top_content.pack(fill="x", padx=int(10*s), pady=int(8*s))
+        top_content.pack(fill="x", padx=int(8*s), pady=int(6*s))
 
         # 第一行：计时器 + 复活信息
         row1 = tk.Frame(top_content, bg=Theme.GRAYPILL)
@@ -739,7 +739,7 @@ class App:
 
         # === 中间内容区域 ===
         self.mid_frame = tk.Frame(self.surface_frame, bg=Theme.BG)
-        self.mid_frame.pack(side="top", fill="x", pady=(0, int(8*s)))
+        self.mid_frame.pack(side="top", fill="x", pady=(0, int(4*s)))
         self.mid_frame.columnconfigure(0, weight=1)
         self.mid_frame.columnconfigure(1, weight=1)
 
@@ -792,7 +792,7 @@ class App:
         
         # Row 0: 标题栏（始终显示）
         self.zone_header_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6*s), int(2*s)))
+        self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(4*s), int(2*s)))
         
         font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
         self.zone_title = tk.Label(self.zone_header_frame, text="导航面板", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
@@ -821,7 +821,7 @@ class App:
         # Row 1: v6.2重构 - 统一航向带(显示战区+机场+被摧毁目标)
         if ZoneConfig.HEADING_TAPE_ENABLED:
             self.heading_tape_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-            self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2*s), int(4*s)))
+            self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(1*s), int(2*s)))
             
             tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s)
             tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
@@ -977,7 +977,7 @@ class App:
         
         # Row 3: 战区列表容器（完整模式）
         self.zone_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
+        self.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(4*s)))
 
         # Row 4: 机场标题
         self.airport_title_lbl = tk.Label(self.zone_frame, text="机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
@@ -991,7 +991,7 @@ class App:
 
         # Row 6: 机场列表容器
         self.airport_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
+        self.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(4*s)))
 
         # Row 7: 燃油标题
         self.fuel_title_lbl = tk.Label(self.zone_frame, text="燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
@@ -999,7 +999,7 @@ class App:
         
         # Row 8: 燃油信息容器
         self.fuel_info_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.fuel_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
+        self.fuel_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(4*s)))
         # v6.1.1: 移除旧的CDI字符指示器（已被航向带替代）
         # 保留变量引用以兼容旧代码，但不再使用
         self.zone_cdi_lbl = None
