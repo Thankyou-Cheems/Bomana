@@ -130,7 +130,9 @@ set "EXEC_NAME=Bomana_%VARIANT%"
 set "CCRP_DATA_ARG="
 set "FM_SPEED_DATA_ARG="
 if /I "%VARIANT%"=="Enhanced" (
-    if exist ccrp_bomb_params.json (
+    if exist bomana\data\ccrp_bomb_params.json (
+        set "CCRP_DATA_ARG=--add-data \"bomana/data/ccrp_bomb_params.json;bomana/data\""
+    ) else if exist ccrp_bomb_params.json (
         set "CCRP_DATA_ARG=--add-data \"ccrp_bomb_params.json;.\""
     ) else if exist ccrp_bomb_params.py (
         set "CCRP_DATA_ARG=--add-data \"ccrp_bomb_params.py;.\""

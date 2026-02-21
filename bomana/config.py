@@ -620,7 +620,7 @@ class BombConfig:
     ╔══════════════════════════════════════════════════════════════════════════╗
     ║ 投弹系统说明 (CCRP v2.0)                                                   ║
     ╠══════════════════════════════════════════════════════════════════════════╣
-    ║ 炸弹参数从外部ccrp_bomb_params.json模块加载                                   ║
+    ║ 炸弹参数从外部 bomana/data/ccrp_bomb_params.json 加载                        ║
     ║ 弹道计算参数集中到BallisticPhysicsParams配置块                              ║
     ║ 支持动态切换阻力模型（none/simple/advanced）                                ║
     ╚══════════════════════════════════════════════════════════════════════════╝
@@ -629,6 +629,8 @@ class BombConfig:
     selected_bomb = "su_fab100sv"
     BOMB_DATABASE = {}
     _database_loaded = False
+    JSON_FILE = "bomana/data/ccrp_bomb_params.json"
+    LEGACY_JSON_FILE = "ccrp_bomb_params.json"
 
     @classmethod
     def _ensure_database_loaded(cls):
@@ -638,10 +640,19 @@ class BombConfig:
 
         try:
             external_params = None
-            json_path = Path(__file__).resolve().parent.parent / "ccrp_bomb_params.json"
+            project_root = Path(__file__).resolve().parent.parent
+            json_path = project_root / cls.JSON_FILE
+            legacy_json_path = project_root / cls.LEGACY_JSON_FILE
+
+            source = "ccrp_bomb_params.py"
             if json_path.exists():
                 data = json.loads(json_path.read_text(encoding="utf-8"))
                 external_params = data.get("ballistic_params", {})
+                source = cls.JSON_FILE
+            elif legacy_json_path.exists():
+                data = json.loads(legacy_json_path.read_text(encoding="utf-8"))
+                external_params = data.get("ballistic_params", {})
+                source = cls.LEGACY_JSON_FILE
             else:
                 from ccrp_bomb_params import BALLISTIC_PARAMS as external_params
 
@@ -659,7 +670,6 @@ class BombConfig:
                 }
 
             cls._database_loaded = True
-            source = "ccrp_bomb_params.json" if json_path.exists() else "ccrp_bomb_params.json"
             print(f"[BombConfig] 已从{source}加载 {len(cls.BOMB_DATABASE)} 种炸弹参数")
 
         except ImportError as e:

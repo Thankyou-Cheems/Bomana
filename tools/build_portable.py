@@ -115,6 +115,11 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
     if out_zip.exists():
         out_zip.unlink()
 
+    ccrp_json_rel = Path("bomana/data/ccrp_bomb_params.json")
+    ccrp_json = root / ccrp_json_rel
+    legacy_ccrp_json = root / "ccrp_bomb_params.json"
+    legacy_ccrp_py = root / "ccrp_bomb_params.py"
+
     with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         add_file_to_zip(zf, root, root / APP_ENTRY)
 
@@ -126,6 +131,9 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
                 continue
             if path.suffix in {".pyc", ".pyo"}:
                 continue
+            rel_path = path.relative_to(root).as_posix()
+            if variant != "Enhanced" and rel_path == ccrp_json_rel.as_posix():
+                continue
             add_file_to_zip(zf, root, path)
 
         for asset in ("app.ico", "sponsor_wechat.png"):
@@ -133,13 +141,12 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
             if p.exists():
                 add_file_to_zip(zf, root, p)
 
-        if variant == "Enhanced":
-            ccrp_json = root / "ccrp_bomb_params.json"
-            ccrp_py = root / "ccrp_bomb_params.py"
-            if ccrp_json.exists():
-                add_file_to_zip(zf, root, ccrp_json)
-            elif ccrp_py.exists():
-                add_file_to_zip(zf, root, ccrp_py)
+        # Backward compatibility: legacy root-level CCRP file.
+        if variant == "Enhanced" and not ccrp_json.exists():
+            if legacy_ccrp_json.exists():
+                add_file_to_zip(zf, root, legacy_ccrp_json)
+            elif legacy_ccrp_py.exists():
+                add_file_to_zip(zf, root, legacy_ccrp_py)
 
     return out_zip
 

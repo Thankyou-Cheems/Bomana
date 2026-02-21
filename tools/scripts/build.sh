@@ -126,7 +126,9 @@ if [ -f "bomana/data/fm_speed_limits.json" ]; then
   ADD_DATA_ARGS+=("--add-data" "bomana/data/fm_speed_limits.json:bomana/data")
 fi
 if [ "$VARIANT" = "Enhanced" ]; then
-  if [ -f "ccrp_bomb_params.json" ]; then
+  if [ -f "bomana/data/ccrp_bomb_params.json" ]; then
+    ADD_DATA_ARGS+=("--add-data" "bomana/data/ccrp_bomb_params.json:bomana/data")
+  elif [ -f "ccrp_bomb_params.json" ]; then
     ADD_DATA_ARGS+=("--add-data" "ccrp_bomb_params.json:.")
   elif [ -f "ccrp_bomb_params.py" ]; then
     ADD_DATA_ARGS+=("--add-data" "ccrp_bomb_params.py:.")

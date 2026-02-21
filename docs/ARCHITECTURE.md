@@ -7,7 +7,7 @@
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
-- External data: `ccrp_bomb_params.json` (CCRP bomb parameters)
+- External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
 - Tools: `tools/blkx_extractor.py` (generate CCRP bomb parameters from .blkx)
 - Tools: `tools/fm_speed_extractor.py` (generate speed-limit DB from datamine flightmodels)
@@ -21,6 +21,7 @@
 ├─ bomana/
 │  ├─ config.py              # Metadata/flags/config classes
 │  ├─ data/
+│  │  ├─ ccrp_bomb_params.json # Bomb parameters (CCRP)
 │  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
 │  ├─ core/
 │  │  ├─ ballistics.py        # Bombing ballistics
@@ -40,11 +41,10 @@
 │     ├─ math_utils.py        # Navigation/math helpers
 │     ├─ sound.py             # Sound manager
 │     └─ system.py            # Windows/system helpers
-├─ ccrp_bomb_params.json       # Bomb parameters (CCRP)
 ├─ docs/                        # Architecture/changelog/privacy/contributing docs
 ├─ tools/
 │  ├─ build_portable.py      # Build launcher/app package/manifest
-│  ├─ blkx_extractor.py      # .blkx -> ccrp_bomb_params.json generator
+│  ├─ blkx_extractor.py      # .blkx -> bomana/data/ccrp_bomb_params.json generator
 │  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
 │  └─ update_service/        # Optional self-hosted update + DAU stats service

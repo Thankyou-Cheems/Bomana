@@ -1,4 +1,4 @@
-# Bomana 🍌
+# Bomana
 
 **战雷全真模式收益计时器** | War Thunder SB Timer
 
@@ -16,8 +16,8 @@ A powerful War Thunder timer made for the "Space Monkeys" who love dropping bomb
 
 ---
 
-## ⚠️ 重要：合规性声明 | Compliance Statement
-> ⚠️ 本合规性声明存在前发布的版本已经移除，下载新版默认为同意此声明 ⚠️
+## 重要：合规性声明 | Compliance Statement
+> 本合规性声明存在前发布的版本已经移除，下载新版默认为同意此声明。
 ### 官方立场引用 | Official Statement Reference
 
 根据 War Thunder 论坛中社区经理 **Stona_WT** 于 2024年5月13日的[官方回复](https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664/16)：
@@ -32,10 +32,10 @@ A powerful War Thunder timer made for the "Space Monkeys" who love dropping bomb
 
 | 使用方式 | 官方态度 | 说明 |
 |---------|---------|------|
-| ✅ 显示本机飞行数据（速度、高度、燃油等） | **允许** | 类似 WTRTI 等工具，获官方认可 |
-| ✅ 使用 8111 端口数据作为辅助参考 | **允许** | 本地数据本身是官方提供的 |
-| ⚠️ 在无标记模式下显示敌人位置叠加层 | **不认可** | 可能被视为 ESP，存在封禁风险 |
-| ❌ 任何获取超出 8111 端口提供信息的行为 | **禁止** | 违反用户协议 |
+| 显示本机飞行数据（速度、高度、燃油等） | **允许** | 类似 WTRTI 等工具，获官方认可 |
+| 使用 8111 端口数据作为辅助参考 | **允许** | 本地数据本身是官方提供的 |
+| 在无标记模式下显示敌人位置叠加层 | **不认可** | 可能被视为 ESP，存在封禁风险 |
+| 任何获取超出 8111 端口提供信息的行为 | **禁止** | 违反用户协议 |
 
 ### Bomana 的设计原则
 
@@ -48,7 +48,7 @@ Bomana 严格遵循以下原则，确保合规使用：
 5. **信息辅助而非游戏干预** - 计时器基于玩家自身出生时间，不涉及服务器数据操纵
 6. **HUD 叠加层仅用于目标导航参考** - 仅显示当前导航目标方向/距离，不提供敌方标记或超出 8111 公开数据的信息
 
-### ⚡ 关键结论 | Key Takeaway
+### 关键结论 | Key Takeaway
 
 **Bomana 作为基于 8111 端口数据的计时器工具，其核心功能（复活计时、飞行数据显示、投弹预测）属于官方认可的使用范畴。** 但用户应当：
 
@@ -57,84 +57,89 @@ Bomana 严格遵循以下原则，确保合规使用：
 
 ---
 
-## 🎯 功能特性 | Features
+## 功能特性 | Features
 
 ### 核心功能：15分钟复活周期计时器
 
 War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周期。Bomana 自动追踪这一周期：
 
-- ⏱️ **自动计时** - 检测出生、着陆、死亡事件，自动开始/重置计时
-- 🔢 **复活计数** - 显示当前是第几条命
-- 💾 **状态恢复** - 支持应用重启后继续计时
-- 🔔 **倒计时警告** - 30秒、20秒、10秒...语音/蜂鸣提醒
+- **自动计时** - 检测出生、着陆、死亡事件，自动开始/重置计时
+- **复活计数** - 显示当前是第几条命
+- **状态恢复** - 支持应用重启后继续计时
+- **倒计时警告** - 30秒、20秒、10秒...语音/蜂鸣提醒
 
 ### 投弹预测系统（CCRP v3.0）
 
 基于真实弹道物理的投弹辅助计算：
 
-- 🎯 **弹道计算** - 考虑空气阻力、大气密度、温度修正
-- 💣 **多型号支持** - 内置多国炸弹参数数据库（苏联、美国、德国、英国等）
-- 📐 **实时预测** - 根据当前高度、速度、俯仰角计算投弹距离和时间
-- 🪂 **减速伞支持** - 支持带减速伞炸弹的特殊弹道计算
+- **弹道计算** - 考虑空气阻力、大气密度、温度修正
+- **多型号支持** - 内置多国炸弹参数数据库（苏联、美国、德国、英国等）
+- **实时预测** - 根据当前高度、速度、俯仰角计算投弹距离和时间
+- **减速伞支持** - 支持带减速伞炸弹的特殊弹道计算
 
 ### 战区导航系统
 
 精确引导你飞向目标：
 
-- 🧭 **航向带（Heading Tape）** - 图形化显示目标方位
-- 📍 **CDI 指示器** - 航道偏差指示，精度随距离动态调整
-- 📏 **距离显示** - 到目标的距离（km）
-- ⏱️ **ETE 预估** - 按当前速度到达目标的预计时间
-- 🔄 **智能目标切换** - 持续对准某目标 3 秒后自动锁定
+- **航向带（Heading Tape）** - 图形化显示目标方位
+- **CDI 指示器** - 航道偏差指示，精度随距离动态调整
+- **距离显示** - 到目标的距离（km）
+- **ETE 预估** - 按当前速度到达目标的预计时间
+- **智能目标切换** - 持续对准某目标 3 秒后自动锁定
 
 ### HUD 导航叠加层（v6.8）
 
-- 🎯 **主目标靶子** - 基于相对方位与距离显示 HUD 目标提示
-- 🧩 **2.5D/2D 自动降级** - 姿态可靠时用 2.5D，缺失或抖动时自动回退 2D
-- 🧭 **顶部简化罗盘条** - 显示航向与目标方位偏移
-- 🛡️ **抖动与断连守护** - 8111 短时抖动保持最后有效目标，断连进入待机提示
-- ⚙️ **HUD 设置与持久化** - 支持开关、透明度、缩放、平滑、显示器策略、配色与罗盘开关
+- **主目标靶子** - 基于相对方位与距离显示 HUD 目标提示
+- **2.5D/2D 自动降级** - 姿态可靠时用 2.5D，缺失或抖动时自动回退 2D
+- **顶部简化罗盘条** - 显示航向与目标方位偏移
+- **抖动与断连守护** - 8111 短时抖动保持最后有效目标，断连进入待机提示
+- **HUD 设置与持久化** - 支持开关、透明度、缩放、平滑、显示器策略、配色与罗盘开关
 
 ### 机场导航
 
-- ✈️ **友方机场** - 显示返航方向和距离
-- 🎯 **敌方机场** - 显示敌方机场位置（可选）
+- **友方机场** - 显示返航方向和距离
+- **敌方机场** - 显示敌方机场位置（可选）
 
 ### 燃油管理
 
-- ⛽ **油量显示** - 当前燃油量（kg）
-- 📉 **油耗率** - 实时燃油消耗速率
-- ⚠️ **低油量警告** - 黄色（30%）、红色（15%）警告
-- 🏠 **返航估算** - 预估返回机场所需燃油
+- **油量显示** - 当前燃油量（kg）
+- **油耗率** - 实时燃油消耗速率
+- **低油量警告** - 黄色（30%）、红色（15%）警告
+- **返航估算** - 预估返回机场所需燃油
 
 ### 出击检查清单
 
 可自定义的起飞前检查项目：
 
-- ✅ 按 I 启动发动机
-- ✅ 等待发动机转速稳定
-- ✅ 收起落架
-- ✅ 开增稳系统
-- ✅ 设定打击目标
-- ✅ ...（可自定义）
+- 按 I 启动发动机
+- 等待发动机转速稳定
+- 收起落架
+- 开增稳系统
+- 设定打击目标
+- ...（可自定义）
 
 ### 界面特性
 
 | 特性 | 说明 |
 |------|------|
-| 🪟 透明覆盖 | 不遮挡游戏视野 |
-| 📌 窗口置顶 | 始终显示在游戏上方 |
-| 🔒 锁定/解锁 | 锁定后点击穿透，不影响游戏操作 |
-| 🖱️ 拖动定位 | 自由拖动到任意位置 |
-| 📐 边缘吸附 | 自动吸附到屏幕边缘 |
-| 🖥️ 多显示器 | 支持多显示器环境 |
-| 🎨 主题切换 | 暗色/亮色/高对比度 |
-| ⌨️ 全局热键 | F7-F11 快捷操作 |
-| 📱 系统托盘 | 最小化到托盘 |
+| 透明覆盖 | 不遮挡游戏视野 |
+| 窗口置顶 | 始终显示在游戏上方 |
+| 锁定/解锁 | 锁定后点击穿透，不影响游戏操作 |
+| 拖动定位 | 自由拖动到任意位置 |
+| 边缘吸附 | 自动吸附到屏幕边缘 |
+| 多显示器 | 支持多显示器环境 |
+| 主题切换 | 暗色/亮色/高对比度 |
+| 全局热键 | F7-F11 快捷操作 |
+| 系统托盘 | 最小化到托盘 |
 
 ---
 
-## 📥 安装与使用 | Installation & Usage
+## 安装与使用 | Installation & Usage
+
+### 安装路径选择
+
+- 启动器路径（推荐普通用户）：下载 `Bomana_launcher_vX.X.X.exe`，由启动器自动检查更新并按通道下载对应 app 包。
+- uv 直运行路径（适合开发者/已有 Python 环境）：如果本机已经有 uv 环境，可直接执行 `uv sync` 和 `uv run python Bomana.pyw`，无需下载启动器。
 
 ### 方式一：下载预编译版本（推荐）
 
@@ -148,6 +153,12 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 | **Enhanced** | 计时器 + 战区/机场导航 + 燃油管理 + CCRP投弹预测 | 需要完整功能的玩家（推荐） |
 | **Standard** | 计时器 + 战区/机场导航 + 燃油管理（无CCRP） | 不用投弹预测但需要导航/燃油信息 |
 | **Lite** | 仅核心计时器 | 只想要极简界面和最低占用 |
+
+启动器与 app 包的关系：
+
+- `Bomana_launcher_vX.Y.Z.exe`：固定入口，负责版本检查、下载/校验 app 包、离线启动本地版本。
+- `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行程序包（Enhanced / Standard / Lite）。
+- `manifest_<Variant>.json`：记录版本、下载地址、SHA256 等元数据。
 
 3. 下载后双击运行（绿色版，无需安装）
 4. 启动器打开后会自动检查当前通道版本（优先国内更新服务，必要时回退 GitHub），并在界面展示来源与下载总大小
@@ -205,7 +216,33 @@ uv run python Bomana.pyw
 
 ---
 
-## ⌨️ 快捷键 | Hotkeys
+## 项目目录结构（关键路径） | Project Layout
+
+```text
+.
+├─ Bomana.pyw
+├─ launcher.pyw
+├─ bomana/
+│  ├─ config.py
+│  ├─ core/
+│  ├─ data/
+│  │  ├─ ccrp_bomb_params.json
+│  │  └─ fm_speed_limits.json
+│  ├─ ui/
+│  └─ utils/
+├─ tools/
+│  ├─ blkx_extractor.py
+│  ├─ fm_speed_extractor.py
+│  └─ build_portable.py
+└─ docs/
+```
+
+- 超速限速数据库文件是 `bomana/data/fm_speed_limits.json`（不是仓库根目录）。
+- CCRP 炸弹参数文件是 `bomana/data/ccrp_bomb_params.json`（与限速库统一放在 `bomana/data/`）。
+
+---
+
+## 快捷键 | Hotkeys
 
 | 按键 | 功能 | 说明 |
 |------|------|------|
@@ -219,7 +256,7 @@ uv run python Bomana.pyw
 
 ---
 
-## 🔧 高级配置 | Advanced Configuration
+## 高级配置 | Advanced Configuration
 
 ### 编译开关
 
@@ -236,7 +273,7 @@ ENABLE_ADVANCED_SETTINGS = True # 高级设置（面板/快捷键自定义等）
 
 ### 更新 CCRP 炸弹参数（开发者）
 
-`ccrp_bomb_params.json` 由 War Thunder datamine 中的 `.blkx` 文件生成。仓库内集成了提取脚本，流程如下：
+`bomana/data/ccrp_bomb_params.json` 由 War Thunder datamine 中的 `.blkx` 文件生成。仓库内集成了提取脚本，流程如下：
 
 ```bash
 # 1) 准备 datamine 仓库（或直接指向已解包的 .blkx 目录）
@@ -245,10 +282,10 @@ git clone https://github.com/gszabi99/War-Thunder-Datamine.git
 # 2) 运行提取脚本
 python tools/blkx_extractor.py ^
   .\War-Thunder-Datamine\aces.vromfs.bin_u\gamedata\weapons\bombguns ^
-  -o ccrp_bomb_params.json
+  -o bomana\data\ccrp_bomb_params.json
 ```
 
-生成后的 `ccrp_bomb_params.json` 放在仓库根目录，Enhanced 版本会自动打包该文件。
+生成后的文件路径为 `bomana/data/ccrp_bomb_params.json`，Enhanced 版本会自动打包该文件。
 
 ### 更新机型超速限速库（开发者）
 
@@ -269,7 +306,7 @@ python tools/fm_speed_extractor.py ^
 
 ---
 
-## 🔌 技术原理 | Technical Details
+## 技术原理 | Technical Details
 
 ### 数据来源
 
@@ -298,7 +335,7 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 
 ---
 
-## ❓ 常见问题 | FAQ
+## 常见问题 | FAQ
 
 ### Q: 窗口不显示/显示异常？
 
@@ -324,19 +361,19 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 | 特性 | Bomana | WTRTI |
 |------|--------|-------|
 | 主要用途 | SB 模式计时+投弹 | 通用飞行数据显示 |
-| 15分钟计时 | ✅ 核心功能 | ❌ |
-| 投弹预测 | ✅ 内置 | ❌ |
-| 战区导航 | ✅ 内置 | ❌ |
-| 自定义指标 | ❌ | ✅ 高度自定义 |
+| 15分钟计时 | 核心功能 | 不提供 |
+| 投弹预测 | 内置 | 不提供 |
+| 战区导航 | 内置 | 不提供 |
+| 自定义指标 | 不提供 | 高度自定义 |
 | 平台 | Windows | 跨平台 |
 
 两者可以同时使用，功能互补。
 
 ---
 
-## 🔒 隐私与数据收集 | Privacy & Data Collection
+## 隐私与数据收集 | Privacy & Data Collection
 
-### 📊 匿名使用数据收集
+### 匿名使用数据收集
 
 为了改进产品质量并统计真实用户活跃度（DAU），**本应用会收集匿名化的使用数据**，包括：
 
@@ -344,15 +381,15 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 - **安装标识符** (install_id) - 本地随机UUID，用于区分多次安装
 - **应用版本、功能通道、事件类型** - 用于统计分析和问题定位
 
-### ✅ 我们的承诺
+### 我们的承诺
 
-- ✅ **完全匿名** - 不收集任何可识别个人的信息（IP、账号、邮箱等）
-- ✅ **数据最小化** - 仅收集统计必需的字段
-- ✅ **透明公开** - 代码开源，数据收集逻辑可审查
-- ✅ **用户可控** - 提供禁用方法（见隐私政策）
-- ✅ **不用于商业** - 不出售数据，不用于广告
+- **完全匿名** - 不收集任何可识别个人的信息（IP、账号、邮箱等）
+- **数据最小化** - 仅收集统计必需的字段
+- **透明公开** - 代码开源，数据收集逻辑可审查
+- **用户可控** - 提供禁用方法（见隐私政策）
+- **不用于商业** - 不出售数据，不用于广告
 
-### 📖 详细信息
+### 详细信息
 
 请查看完整的 **[隐私政策 (docs/PRIVACY.md)](docs/PRIVACY.md)**，了解：
 - 收集哪些数据及其用途
@@ -364,7 +401,7 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 
 ---
 
-## 📜 许可证与免责声明 | License & Disclaimer
+## 许可证与免责声明 | License & Disclaimer
 
 ### 许可证 | License
 
@@ -390,9 +427,9 @@ War Thunder® and all related trademarks, logos, and materials are the property 
 
 #### 使用警告 | Usage Warning
 
-⚠️ **IMPORTANT:** Misuse or abuse of this software may violate the Gaijin Entertainment User Agreement. Users are solely responsible for ensuring their usage complies with all applicable terms of service and game rules.
+**IMPORTANT:** Misuse or abuse of this software may violate the Gaijin Entertainment User Agreement. Users are solely responsible for ensuring their usage complies with all applicable terms of service and game rules.
 
-⚠️ **重要提示：** 滥用或不当使用本软件可能违反 Gaijin Entertainment 用户协议。用户需自行确保其使用行为符合所有适用的服务条款和游戏规则。
+**重要提示：** 滥用或不当使用本软件可能违反 Gaijin Entertainment 用户协议。用户需自行确保其使用行为符合所有适用的服务条款和游戏规则。
 
 #### 用户协议相关条款 | Relevant EULA Terms
 
@@ -410,7 +447,7 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 ---
 
-## 📚 参考资料 | References
+## 参考资料 | References
 
 - [War Thunder 官方论坛 - 关于 8111 端口工具的讨论](https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664)
 - [Stona_WT 官方回复 (Post #16)](https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664/16)
@@ -420,7 +457,7 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 ---
 
-## 🙏 赞助支持 | Sponsor
+## 赞助支持 | Sponsor
 
 如果 Bomana 对你有帮助，欢迎通过微信赞助支持开发！
 
@@ -428,15 +465,15 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 ---
 
-## 📝 更新日志 | Changelog
+## 更新日志 | Changelog
 
 详见 `docs/CHANGELOG.md`（源码版本以 `bomana/config.py` 中 `__version__` 为准；已发布版本见顶部 `app release` 徽章）。
 
 ---
 
-*Made with ❤️ by 猹Cheems for the Space Monkeys community*
+*Made by 猹Cheems for the Space Monkeys community*
 
-## 🔄 更新服务仓库说明
+## 更新服务仓库说明
 
 Bomana 的独立更新统计服务（Docker/FastAPI）已迁移到以下仓库维护：
 

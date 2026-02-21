@@ -92,7 +92,7 @@ pyinstaller --noconsole --onefile `
     --add-data "app.ico;." `
     --add-data "sponsor_wechat.png;." `
     --add-data "bomana/data/fm_speed_limits.json;bomana/data" `
-    --add-data "ccrp_bomb_params.json;." `
+    --add-data "bomana/data/ccrp_bomb_params.json;bomana/data" `
     --hidden-import "pystray._win32" `
     --collect-submodules "PIL" `
     --clean Bomana.pyw

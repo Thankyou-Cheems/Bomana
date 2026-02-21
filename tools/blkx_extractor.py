@@ -4,7 +4,7 @@
 War Thunder .blkx bomb parameter extractor.
 
 Input: the extracted .blkx files from the War Thunder datamine repo.
-Output: ccrp_bomb_params.json for Bomana.
+Output: bomana/data/ccrp_bomb_params.json for Bomana.
 """
 
 import argparse
@@ -186,7 +186,7 @@ class BlkxExtractor:
                 for t, c in sorted(type_counts.items()):
                     print(f"  - {t}: {c}")
 
-    def export_ccrp_params(self, output_file: str = "ccrp_bomb_params.json"):
+    def export_ccrp_params(self, output_file: str = "bomana/data/ccrp_bomb_params.json"):
         """Export BALLISTIC_PARAMS for Bomana (JSON)."""
         ccrp_params = {}
         collision_count = 0
@@ -252,8 +252,8 @@ def main():
     parser.add_argument(
         "-o",
         "--output",
-        default="ccrp_bomb_params.json",
-        help="output file (default: ccrp_bomb_params.json)",
+        default="bomana/data/ccrp_bomb_params.json",
+        help="output file (default: bomana/data/ccrp_bomb_params.json)",
     )
     parser.add_argument("--single", help="process a single .blkx file")
     parser.add_argument(

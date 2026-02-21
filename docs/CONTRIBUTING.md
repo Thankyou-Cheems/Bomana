@@ -8,7 +8,7 @@
 
 ## 中文
 
-### 🤝 如何贡献
+### 如何贡献
 
 #### 报告 Bug
 
@@ -116,7 +116,7 @@ def calculate_bearing(x1: float, y1: float, x2: float, y2: float) -> float:
 
 ```python
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║ ⚠️ 修改注意事项 - 窗口尺寸计算                                        ║
+# ║ 修改注意事项 - 窗口尺寸计算                                        ║
 # ╠══════════════════════════════════════════════════════════════════════╣
 # ║ 1. hint_min_width 必须足够容纳底部提示文字的完整显示                  ║
 # ║ 2. 面板可见性影响最小宽度计算                                         ║
@@ -197,7 +197,7 @@ git commit -m "bug"
    - 可能会提出修改建议
    - 请及时回复和修改
 
-### 📝 文档贡献
+### 文档贡献
 
 文档同样重要！你可以：
 
@@ -207,7 +207,7 @@ git commit -m "bug"
 - 翻译文档（中英文互译）
 - 补充常见问题
 
-### 🐛 测试
+### 测试
 
 如果你修改了代码，请：
 
@@ -226,7 +226,7 @@ git commit -m "bug"
    - 确保 UI 刷新流畅（20fps）
    - 网络请求不超时
 
-### 🎨 UI/UX 建议
+### UI/UX 建议
 
 如果你想改进界面：
 
@@ -235,7 +235,7 @@ git commit -m "bug"
 - **测试多 DPI**：在不同 DPI 设置下测试
 - **多显示器测试**：确保在多显示器环境下正常工作
 
-### 📦 发布流程
+### 发布流程
 
 仅维护者可以发布新版本：
 
@@ -268,7 +268,7 @@ git commit -m "bug"
 
 ## English
 
-### 🤝 How to Contribute
+### How to Contribute
 
 #### Reporting Bugs
 
@@ -344,7 +344,7 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
 3. **Fill PR description**
 4. **Wait for review**
 
-### 📝 Documentation
+### Documentation
 
 You can also contribute by:
 - Fixing typos
@@ -352,7 +352,7 @@ You can also contribute by:
 - Adding examples
 - Translating docs
 
-### 🐛 Testing
+### Testing
 
 Please test your changes:
 - Manual testing in War Thunder SB
@@ -363,8 +363,10 @@ Please test your changes:
 
 <div align="center">
 
-**Thank you for contributing to Bomana! 🎉**
+**Thank you for contributing to Bomana!**
 
-感谢你为 Bomana 做出贡献！🎉
+感谢你为 Bomana 做出贡献！
 
 </div>
+
+
