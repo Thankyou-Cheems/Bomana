@@ -128,4 +128,10 @@
   Cause: migration left stale Dolt lock files and an empty Dolt DB; auto-fix/import path did not hydrate existing `issues.jsonl` records
   Fix/Workaround: clear stale `LOCK` files under `.beads/dolt/**`, then run `bd import -i .beads/issues.jsonl --force` before `bd sync`
 
+- Date: 2026-02-26
+  Context: upgrading `bd` to `v0.56.1` on Windows
+  Symptom: `bd` commands failed with `Dolt server unreachable at 127.0.0.1:3307`, and `bd dolt` help did not expose a `start` subcommand
+  Cause: `v0.56.1` is server-only for Dolt access in this environment; embedded mode path is no longer used and a running external `dolt sql-server` is required
+  Fix/Workaround: install Dolt (`winget install DoltHub.Dolt`), start server from repo data dir (`dolt sql-server --host 127.0.0.1 --port 3307 --data-dir .beads/dolt`), then run `bd migrate --json` to update database version metadata
+
 
