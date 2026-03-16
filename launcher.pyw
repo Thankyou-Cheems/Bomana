@@ -67,7 +67,7 @@ PRIMARY_TIMEOUT_SEC = 4.0
 PRIMARY_RETRY_TIMEOUT_SEC = 8.0
 UA = f"BomanaLauncher/{LAUNCHER_VERSION}"
 PRIMARY_UPDATE_BASE_URL = (
-    os.environ.get("BOMANA_UPDATE_BASE_URL", "https://bomanaupdate.007985.xyz")
+    os.environ.get("BOMANA_UPDATE_BASE_URL", "https://bomanaupdate.ruikang.wang")
     .strip()
     .rstrip("/")
 )

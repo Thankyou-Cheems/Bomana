@@ -63,7 +63,7 @@ device_id = SHA256(原始字符串)[:32]  # 取前32位，单向哈希
 
 - **HTTPS加密传输** - 所有数据通过TLS 1.2+加密
 - **证书校验** - 使用certifi提供的Mozilla CA证书包
-- **国内加速节点** - 优先使用腾讯云CDN（`bomanaupdate.007985.xyz`），失败时回退GitHub
+- **国内加速节点** - 优先使用腾讯云CDN（`bomanaupdate.ruikang.wang`），失败时回退GitHub
 
 ---
 
@@ -113,7 +113,7 @@ Bomana_launcher_vX.X.X.exe
 #### 方法2：修改hosts文件
 ```
 # C:\Windows\System32\drivers\etc\hosts
-127.0.0.1 bomanaupdate.007985.xyz
+127.0.0.1 bomanaupdate.ruikang.wang
 ```
 
 #### 方法3：使用源码版本
@@ -193,7 +193,7 @@ Bomana_launcher_vX.X.X.exe
 
 ### 实时数据公开
 您可以通过以下公开API查看实时统计数据（仅聚合数据，无个人信息）：
-- **每日DAU统计：** `https://bomanaupdate.007985.xyz/api/v1/stats/daily`
+- **每日DAU统计：** `https://bomanaupdate.ruikang.wang/api/v1/stats/daily`
 - **展示位置：** GitHub主页README的DAU徽章
 
 ### 开源承诺
