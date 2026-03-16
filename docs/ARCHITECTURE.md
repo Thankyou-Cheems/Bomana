@@ -81,6 +81,16 @@
 
 Important constraint: default runtime data path is official 8111 API only; no memory reads, injection, or game file modifications. Experimental clog probe remains disabled unless explicitly enabled via config.
 
+## Static Data Provenance
+- `bomana/data/ccrp_bomb_params.json`
+  - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx`
+  - Generator: `tools/blkx_extractor.py`
+  - Runtime consumer: `BombConfig` / CCRP ballistics path
+- `bomana/data/fm_speed_limits.json`
+  - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/flightmodels/**`
+  - Generator: `tools/fm_speed_extractor.py`
+  - Runtime consumer: `OverspeedAnalyzer` via `/indicators.type -> unit_to_fm -> fm_speed_limits`
+
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config.py`.
 - User config/state stored as JSON in the user home directory (`FileConfig.CONFIG_FILE` / `STATE_FILE`).

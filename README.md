@@ -119,7 +119,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 - **双指标判定** - 同时考虑 IAS 限速与 Mach 限速
 - **分级告警** - `safe / caution / warning / critical`
 - **提示方式** - 徽章文本 + 节奏化告警音（warning/critical）
-- **数据来源** - `bomana/data/fm_speed_limits.json`
+- **静态限速库来源** - 从 War Thunder datamine 的 `aces.vromfs.bin_u/gamedata/flightmodels/` 提取生成，产物为 `bomana/data/fm_speed_limits.json`
 
 ### 出击检查清单
 
@@ -282,7 +282,7 @@ ENABLE_ADVANCED_SETTINGS = True # 高级设置（面板/快捷键自定义等）
 
 ### 更新 CCRP 炸弹参数（开发者）
 
-`bomana/data/ccrp_bomb_params.json` 由 War Thunder datamine 中的 `.blkx` 文件生成。仓库内集成了提取脚本，流程如下：
+`bomana/data/ccrp_bomb_params.json` 由 War Thunder datamine 中 `aces.vromfs.bin_u/gamedata/weapons/bombguns/` 下的炸弹 `.blkx` 文件生成。仓库内集成了提取脚本，会提取 `mass`、`caliber`、`dragCx`、`distFromCmToStab`、`brake*` 等弹道参数，流程如下：
 
 ```bash
 # 1) 准备 datamine 仓库（或直接指向已解包的 .blkx 目录）
@@ -298,7 +298,7 @@ python tools/blkx_extractor.py ^
 
 ### 更新机型超速限速库（开发者）
 
-超速提醒使用 `bomana/data/fm_speed_limits.json`。该文件由 War Thunder datamine 的 `flightmodels` 提取生成：
+超速提醒使用 `bomana/data/fm_speed_limits.json`。该文件由 War Thunder datamine 的 `aces.vromfs.bin_u/gamedata/flightmodels/` 提取生成，内容同时包含 `unit_to_fm` 映射和 IAS/Mach 限速：
 
 ```bash
 # 1) 准备 datamine 仓库（需包含 flightmodels 目录）
@@ -310,7 +310,7 @@ python tools/fm_speed_extractor.py ^
   -o bomana\data\fm_speed_limits.json
 ```
 
-`Bomana` 运行时会读取该 JSON，并基于 `/indicators.type` + `/state(IAS/Mach)` 进行超速分级提醒。
+`Bomana` 运行时会读取该 JSON，并按 `/indicators.type -> unit_to_fm -> fm_speed_limits`，结合 `/state` 的 IAS/Mach 数据进行超速分级提醒。
 
 
 ---
@@ -327,6 +327,15 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 | `/state` | 飞机状态数据（空速、垂直速度、高度等） |
 | `/map_obj.json` | 地图对象（战区、机场、玩家位置） |
 | `/map_info.json` | 地图元数据（格子坐标系统参数） |
+
+### 静态数据文件来源
+
+除 8111 实时端点外，Bomana 还会随应用携带两份静态数据文件：
+
+| 数据文件 | 原始来源 | 生成脚本 | 运行时用途 |
+|------|------|------|------|
+| `bomana/data/ccrp_bomb_params.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` | `tools/blkx_extractor.py` | `BombConfig` 读取炸弹质量、口径、阻力、减速伞参数，用于 CCRP 弹道估算 |
+| `bomana/data/fm_speed_limits.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/flightmodels/**` | `tools/fm_speed_extractor.py` | `OverspeedAnalyzer` 按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 做 IAS/Mach 超速分级 |
 
 ### 轮询频率
 

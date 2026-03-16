@@ -68,10 +68,12 @@ CCRP 说明：
 
 - 该功能是工程化估计，不是游戏内部真实投弹算法，存在误差是正常现象。
 - 可在 `设置 -> 投弹` 中手动校准：`距离修正倍率`、`时间修正倍率`。
+- 静态炸弹库来源：War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` -> `tools/blkx_extractor.py` -> `bomana/data/ccrp_bomb_params.json`
 
 超速提醒说明：
 
 - 数据库：`bomana/data/fm_speed_limits.json`
+- 静态限速库来源：War Thunder datamine `aces.vromfs.bin_u/gamedata/flightmodels/**` -> `tools/fm_speed_extractor.py`
 - 识别链路：`/indicators.type -> unit_to_fm -> fm_speed_limits`
 - 告警输出：状态徽章 + warning/critical 声音节奏
 
@@ -96,6 +98,9 @@ A: 使用 `F7` 手动重置周期。
 
 更新 CCRP 炸弹参数：
 
+- 原始目录：`<path-to-datamine>\aces.vromfs.bin_u\gamedata\weapons\bombguns`
+- 产物用途：CCRP 炸弹质量/阻力/减速伞参数库
+
 ```bash
 python tools/blkx_extractor.py ^
   <path-to-datamine>\aces.vromfs.bin_u\gamedata\weapons\bombguns ^
@@ -103,6 +108,9 @@ python tools/blkx_extractor.py ^
 ```
 
 更新机型超速限速库：
+
+- 原始目录：`<path-to-datamine-root>\aces.vromfs.bin_u\gamedata\flightmodels`
+- 产物用途：`unit_to_fm` 映射 + IAS/Mach 限速库
 
 ```bash
 python tools/fm_speed_extractor.py ^
@@ -176,10 +184,12 @@ CCRP note:
 
 - This feature is an engineering estimate and not War Thunder's internal bombing algorithm.
 - Prediction error is expected; calibrate in `Settings -> Bombing` using `range correction` and `time correction`.
+- Static bomb DB provenance: War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` -> `tools/blkx_extractor.py` -> `bomana/data/ccrp_bomb_params.json`
 
 Overspeed specifics:
 
 - DB: `bomana/data/fm_speed_limits.json`
+- Static speed-limit DB provenance: War Thunder datamine `aces.vromfs.bin_u/gamedata/flightmodels/**` -> `tools/fm_speed_extractor.py`
 - Matching path: `/indicators.type -> unit_to_fm -> fm_speed_limits`
 - Output: badge state + warning/critical sound cadence
 
