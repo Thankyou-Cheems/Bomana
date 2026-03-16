@@ -215,6 +215,12 @@ Temporary Items
 .wttimer_config.json
 .wttimer_state.json
 
+# 启动器运行时文件（本地源码目录调试时会生成）
+launcher_state.json
+.bomana_temp_meta.json
+.bomana_install_id
+.bomana_update.lock
+
 # 打包输出
 dist/
 build/
