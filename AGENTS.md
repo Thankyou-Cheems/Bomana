@@ -44,7 +44,7 @@ Keep it concise and update when workflows or boundaries change.
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd backup
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -58,7 +58,6 @@ Keep it concise and update when workflows or boundaries change.
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 - On `main` branch, every `git commit` MUST use `/gc` (`git-commit-smart`) to generate the commit message first
-- `beads-sync` commits are exempt from `/gc` (auto-sync/manual sync commits allowed)
 - On `main` branch, do NOT bypass `/gc` by writing a direct commit message and committing immediately
 Use 'bd' for task tracking
 
@@ -71,7 +70,7 @@ Use 'bd' for task tracking
 ### Why bd?
 
 - Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Auto-syncs to JSONL for version control
+- Dolt-backed: Issue state lives in beads' local Dolt database, not in git history
 - Agent-optimized: JSON output, ready work detection, discovered-from links
 - Prevents duplicate tracking systems and confusion
 
@@ -128,13 +127,13 @@ bd close bd-42 --reason "Completed" --json
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
 5. **Complete**: `bd close <id> --reason "Done"`
 
-### Auto-Sync
+### Storage Model
 
-bd automatically syncs with git:
+Bomana uses beads' default project mode:
 
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed!
+- Dolt is the source of truth for issue data
+- `bd backup` refreshes the local JSONL backup snapshot under `.beads/backup/`
+- Do not rely on old `bd sync` / `sync-branch` workflows in this repo
 
 ### Important Rules
 
