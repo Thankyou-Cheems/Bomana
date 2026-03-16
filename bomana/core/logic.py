@@ -981,7 +981,7 @@ class GameLogic:
                 wing_sweep=tel.wing_sweep,
                 enabled=(
                     OverspeedConfig.ENABLED and
-                    PanelConfig.show_speed and
+                    PanelConfig.is_effectively_enabled("speed") and
                     (s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
                     tel.state_resp_ok and
                     (not on_ground)

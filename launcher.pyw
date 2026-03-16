@@ -122,6 +122,26 @@ CHANNEL_DETAILS = {
     },
 }
 
+DOWNLOAD_SOURCE_MODE_AUTO = ""
+DOWNLOAD_SOURCE_MODE_PRIMARY = "primary"
+DOWNLOAD_SOURCE_MODE_GITHUB = "github"
+DOWNLOAD_SOURCE_CHOICES = (
+    (DOWNLOAD_SOURCE_MODE_AUTO, "自动（沿用现有逻辑）"),
+    (DOWNLOAD_SOURCE_MODE_PRIMARY, "腾讯云"),
+    (DOWNLOAD_SOURCE_MODE_GITHUB, "GitHub"),
+)
+DOWNLOAD_SOURCE_DETAILS = {
+    DOWNLOAD_SOURCE_MODE_AUTO: "默认：优先腾讯云，失败或缺少下载包时再回退 GitHub。",
+    DOWNLOAD_SOURCE_MODE_PRIMARY: "仅使用腾讯云更新服务。检查或下载失败时不再自动回退 GitHub。",
+    DOWNLOAD_SOURCE_MODE_GITHUB: "仅使用 GitHub Releases。适合手动排查国内更新链路问题。",
+}
+_DOWNLOAD_SOURCE_LABEL_TO_MODE = {
+    label: mode for mode, label in DOWNLOAD_SOURCE_CHOICES
+}
+_DOWNLOAD_SOURCE_MODE_TO_LABEL = {
+    mode: label for mode, label in DOWNLOAD_SOURCE_CHOICES
+}
+
 @dataclass
 class LaunchDecision:
     action: str  # "launch" | "exit"
@@ -150,6 +170,25 @@ def _resource_path(filename: str) -> Path:
 def _is_frozen_launcher() -> bool:
     return bool(getattr(sys, "frozen", False)) and bool(
         str(getattr(sys, "executable", "")).strip()
+    )
+
+
+def _normalize_download_source_mode(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in ("", "auto", "default"):
+        return DOWNLOAD_SOURCE_MODE_AUTO
+    if raw in ("primary", "tencent", "cn", "domestic"):
+        return DOWNLOAD_SOURCE_MODE_PRIMARY
+    if raw in ("github", "gh"):
+        return DOWNLOAD_SOURCE_MODE_GITHUB
+    return DOWNLOAD_SOURCE_MODE_AUTO
+
+
+def _download_source_label(mode: str) -> str:
+    normalized = _normalize_download_source_mode(mode)
+    return _DOWNLOAD_SOURCE_MODE_TO_LABEL.get(
+        normalized,
+        _DOWNLOAD_SOURCE_MODE_TO_LABEL[DOWNLOAD_SOURCE_MODE_AUTO],
     )
 
 
@@ -1135,6 +1174,7 @@ def _resolve_update_manifest(
     base: Path,
     channel: str,
     identity: Dict[str, str],
+    download_source_mode: str = DOWNLOAD_SOURCE_MODE_AUTO,
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
 ) -> Tuple[str, Dict[str, Any]]:
     def notify(
@@ -1147,10 +1187,16 @@ def _resolve_update_manifest(
             status_cb(title, detail, progress, level)
 
     local_version = _read_local_app_version(_app_runtime_dir(base))
+    source_mode = _normalize_download_source_mode(download_source_mode)
 
     manifest: Optional[Dict[str, Any]] = None
     primary_err: Optional[Exception] = None
-    if PRIMARY_UPDATE_BASE_URL and (not _is_source_test_run(base)):
+    should_try_primary = (
+        source_mode != DOWNLOAD_SOURCE_MODE_GITHUB
+        and PRIMARY_UPDATE_BASE_URL
+        and (not _is_source_test_run(base))
+    )
+    if should_try_primary:
         try:
             manifest = _attempt_primary_request(
                 base,
@@ -1174,6 +1220,8 @@ def _resolve_update_manifest(
                     (not PRIMARY_ALLOW_PACKAGE_DOWNLOAD) or (not package_url_preview)
                 )
                 if need_fallback:
+                    if source_mode == DOWNLOAD_SOURCE_MODE_PRIMARY:
+                        raise RuntimeError("腾讯云更新服务未提供应用下载包")
                     _log(base, "腾讯云更新服务仅用于版本检测，下载源切换为 GitHub")
                     notify(
                         "发现新版本",
@@ -1185,9 +1233,13 @@ def _resolve_update_manifest(
         except Exception as e:
             primary_err = e
             _log(base, f"腾讯云更新服务不可用：{e}")
+            if source_mode == DOWNLOAD_SOURCE_MODE_PRIMARY:
+                raise
             notify("国内服务暂不可用", "正在切换 GitHub 回退...", None, "warning")
 
     if manifest is None:
+        if source_mode == DOWNLOAD_SOURCE_MODE_PRIMARY:
+            raise RuntimeError("腾讯云更新服务未返回可用更新清单")
         notify("正在检查更新", "连接 GitHub 获取最新版本信息...", None, "info")
         try:
             manifest = _fetch_manifest_from_github(channel)
@@ -1206,6 +1258,7 @@ def _resolve_update_manifest(
 def _resolve_launcher_update_manifest(
     base: Path,
     identity: Dict[str, str],
+    download_source_mode: str = DOWNLOAD_SOURCE_MODE_AUTO,
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
 ) -> Dict[str, Any]:
     def notify(
@@ -1219,7 +1272,13 @@ def _resolve_launcher_update_manifest(
 
     manifest: Optional[Dict[str, Any]] = None
     primary_err: Optional[Exception] = None
-    if PRIMARY_UPDATE_BASE_URL and (not _is_source_test_run(base)):
+    source_mode = _normalize_download_source_mode(download_source_mode)
+    should_try_primary = (
+        source_mode != DOWNLOAD_SOURCE_MODE_GITHUB
+        and PRIMARY_UPDATE_BASE_URL
+        and (not _is_source_test_run(base))
+    )
+    if should_try_primary:
         try:
             manifest = _attempt_primary_request(
                 base,
@@ -1237,13 +1296,19 @@ def _resolve_launcher_update_manifest(
                 if _version_is_newer(remote_version, LAUNCHER_VERSION) and (
                     (not PRIMARY_ALLOW_PACKAGE_DOWNLOAD) or (not package_url)
                 ):
+                    if source_mode == DOWNLOAD_SOURCE_MODE_PRIMARY:
+                        raise RuntimeError("腾讯云启动器更新服务未提供下载包")
                     _log(base, "腾讯云启动器更新服务仅提供版本号，下载源切换为 GitHub")
                     manifest = None
         except Exception as e:
             primary_err = e
             _log(base, f"腾讯云启动器更新服务不可用：{e}")
+            if source_mode == DOWNLOAD_SOURCE_MODE_PRIMARY:
+                raise
 
     if manifest is None:
+        if source_mode == DOWNLOAD_SOURCE_MODE_PRIMARY:
+            raise RuntimeError("腾讯云启动器更新服务未返回可用更新清单")
         try:
             manifest = _fetch_launcher_manifest_from_github()
         except Exception as e:
@@ -1262,6 +1327,7 @@ def _check_for_update(
     base: Path,
     channel: str,
     identity: Dict[str, str],
+    download_source_mode: str = DOWNLOAD_SOURCE_MODE_AUTO,
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
 ) -> Dict[str, Any]:
     def notify(
@@ -1274,7 +1340,11 @@ def _check_for_update(
             status_cb(title, detail, progress, level)
 
     local_version, manifest = _resolve_update_manifest(
-        base, channel, identity, status_cb=notify
+        base,
+        channel,
+        identity,
+        download_source_mode=download_source_mode,
+        status_cb=notify,
     )
     remote_version = str(manifest.get("remote_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
@@ -1297,7 +1367,10 @@ def _check_for_update(
         package_size = _fetch_content_length(package_url, timeout_sec=NET_TIMEOUT_SEC)
 
     launcher_manifest = _resolve_launcher_update_manifest(
-        base, identity, status_cb=notify
+        base,
+        identity,
+        download_source_mode=download_source_mode,
+        status_cb=notify,
     )
     launcher_remote_version = str(launcher_manifest.get("remote_version", "")).strip()
     launcher_source_name = (
@@ -1929,6 +2002,9 @@ class LauncherWindow:
         self.saved_state = _read_state(base)
         self.channel = channel
         self.detected_channel = channel
+        self.download_source_mode = _normalize_download_source_mode(
+            self.saved_state.get("download_source_mode", "")
+        )
         raw_proxy = self.saved_state.get("use_system_proxy", True)
         if isinstance(raw_proxy, str):
             self.use_system_proxy = raw_proxy.strip().lower() in (
@@ -1999,6 +2075,10 @@ class LauncherWindow:
         self.root.protocol("WM_DELETE_WINDOW", self._on_exit)
         self.channel_var = tk.StringVar(master=self.root, value=channel)
         self.proxy_var = tk.BooleanVar(master=self.root, value=self.use_system_proxy)
+        self.download_source_var = tk.StringVar(
+            master=self.root,
+            value=_download_source_label(self.download_source_mode),
+        )
 
         self._build_ui()
         self._fit_window_to_screen()
@@ -2248,6 +2328,8 @@ class LauncherWindow:
             if win_w <= 1:
                 win_w = max(self._base_min_w, self.root.winfo_reqwidth())
             content_w = max(self._px(280), win_w - self._px(80))
+            if hasattr(self, "download_source_desc_lbl"):
+                self.download_source_desc_lbl.config(wraplength=content_w)
             if hasattr(self, "channel_desc_lbl"):
                 self.channel_desc_lbl.config(wraplength=content_w)
             if hasattr(self, "detail_lbl"):
@@ -2411,6 +2493,63 @@ class LauncherWindow:
         )
         self.proxy_chk.pack(side="right")
 
+        network_row = tk.Frame(top, bg=_THEME["BG"])
+        network_row.pack(fill="x", pady=(self._px(6), 0))
+
+        source_title = tk.Label(
+            network_row,
+            text="下载来源",
+            font=self._font(9, "bold"),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["BG"],
+            anchor="w",
+        )
+        source_title.pack(side="left")
+
+        source_choices = [
+            label for _mode, label in DOWNLOAD_SOURCE_CHOICES
+        ]
+        self.download_source_menu = tk.OptionMenu(
+            network_row,
+            self.download_source_var,
+            source_choices[0],
+            *source_choices[1:],
+            command=self._on_download_source_changed,
+        )
+        self.download_source_menu.config(
+            bg=_THEME["CARD"],
+            fg=_THEME["TEXT"],
+            activebackground=_THEME["BORDER"],
+            activeforeground=_THEME["TEXT"],
+            highlightthickness=1,
+            highlightbackground=_THEME["BORDER"],
+            bd=0,
+            width=18,
+            cursor="hand2",
+            font=self._font(9),
+        )
+        self.download_source_menu["menu"].config(
+            bg=_THEME["CARD"],
+            fg=_THEME["TEXT"],
+            activebackground=_THEME["BORDER"],
+            activeforeground=_THEME["TEXT"],
+            bd=0,
+            font=self._font(9),
+        )
+        self.download_source_menu.pack(side="left", padx=(self._px(8), 0))
+
+        self.download_source_desc_lbl = tk.Label(
+            top,
+            text="",
+            font=self._font(9),
+            fg=_THEME["TEXT_MUTED"],
+            bg=_THEME["BG"],
+            anchor="w",
+            justify="left",
+            wraplength=self._px(540),
+        )
+        self.download_source_desc_lbl.pack(fill="x", pady=(self._px(4), 0))
+
         self.channel_desc_lbl = tk.Label(
             top,
             text="",
@@ -2424,6 +2563,7 @@ class LauncherWindow:
         self.channel_desc_lbl.pack(fill="x", pady=(self._px(6), 0))
         self.channel_var.trace_add("write", self._on_channel_changed)
         self._refresh_channel_details()
+        self._refresh_download_source_details()
 
         card = tk.Frame(
             self.root,
@@ -2651,6 +2791,7 @@ class LauncherWindow:
                     self.base,
                     self.channel,
                     self.client_identity,
+                    download_source_mode=self.download_source_mode,
                     status_cb=self._emit_status,
                 )
                 self.events.put(("check_done", {"ok": True, **info}))
@@ -3244,6 +3385,10 @@ class LauncherWindow:
                 "state_updated_utc": _now_utc_iso(),
             }
         )
+        if self.download_source_mode:
+            state["download_source_mode"] = self.download_source_mode
+        else:
+            state.pop("download_source_mode", None)
         if extra:
             state.update(extra)
         _write_state(self.base, state)
@@ -3262,6 +3407,32 @@ class LauncherWindow:
             self.progress_value,
             "info",
         )
+
+    def _on_download_source_changed(self, *_args) -> None:
+        new_mode = _DOWNLOAD_SOURCE_LABEL_TO_MODE.get(
+            self.download_source_var.get(),
+            DOWNLOAD_SOURCE_MODE_AUTO,
+        )
+        if self.running:
+            self.download_source_var.set(_download_source_label(self.download_source_mode))
+            return
+        new_mode = _normalize_download_source_mode(new_mode)
+        if new_mode == self.download_source_mode:
+            self._refresh_download_source_details()
+            return
+        self.download_source_mode = new_mode
+        self._save_launcher_state()
+        self._refresh_download_source_details()
+        self._set_status(
+            "下载来源已更新",
+            DOWNLOAD_SOURCE_DETAILS.get(
+                self.download_source_mode,
+                DOWNLOAD_SOURCE_DETAILS[DOWNLOAD_SOURCE_MODE_AUTO],
+            ),
+            self.progress_value,
+            "info",
+        )
+        self._begin_check(automatic=True)
 
     def _on_start(self) -> None:
         if self.running:
@@ -3421,6 +3592,15 @@ class LauncherWindow:
         self.channel_desc_lbl.config(
             text=f"{info['title']}\n{info['desc']}\n{info['who']}"
         )
+        self._refresh_wraplengths()
+
+    def _refresh_download_source_details(self) -> None:
+        label = _download_source_label(self.download_source_mode)
+        detail = DOWNLOAD_SOURCE_DETAILS.get(
+            self.download_source_mode,
+            DOWNLOAD_SOURCE_DETAILS[DOWNLOAD_SOURCE_MODE_AUTO],
+        )
+        self.download_source_desc_lbl.config(text=f"{label}\n{detail}")
         self._refresh_wraplengths()
 
     def _on_launch(self) -> None:

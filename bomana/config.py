@@ -978,6 +978,7 @@ class PanelConfig:
     show_airfields = True    # 机场导航
     show_fuel = True         # 燃油管理
     show_speed = True        # 速度监视
+    speed_history_mode = False  # 空历模式：仅保留速度提醒，其它扩展面板临时关闭
     show_checklist = True    # 检查清单
     show_bombing = True      # v6.0新增：投弹预测（受ENABLE_CCRP开关控制）
     # v6.2.1: 导航条模式 - "integrated"(集成) / "standalone"(独立窗口)
@@ -1018,6 +1019,25 @@ class PanelConfig:
             'bombing': ENABLE_CCRP,
         }
         return feature_map.get(feature, True)
+
+    @classmethod
+    def is_effectively_enabled(cls, feature: str) -> bool:
+        """检查功能在当前运行模式下是否实际启用。"""
+        if not cls.is_feature_enabled(feature):
+            return False
+        if feature == "speed":
+            return bool(cls.show_speed or cls.speed_history_mode)
+        if cls.speed_history_mode:
+            return False
+
+        feature_state_map = {
+            'zones': cls.show_zones,
+            'airfields': cls.show_airfields,
+            'fuel': cls.show_fuel,
+            'checklist': cls.show_checklist,
+            'bombing': cls.show_bombing,
+        }
+        return bool(feature_state_map.get(feature, True))
 
 
 class SnapConfig:

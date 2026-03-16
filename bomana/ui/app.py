@@ -238,6 +238,7 @@ class App:
         PanelConfig.show_airfields = panels.get('show_airfields', True)
         PanelConfig.show_fuel = panels.get('show_fuel', True)
         PanelConfig.show_speed = panels.get('show_speed', True)
+        PanelConfig.speed_history_mode = panels.get('speed_history_mode', False)
         PanelConfig.show_checklist = panels.get('show_checklist', True)
         PanelConfig.show_bombing = panels.get('show_bombing', True)  # v6.0 新增
         
@@ -324,6 +325,7 @@ class App:
             'show_airfields': PanelConfig.show_airfields,
             'show_fuel': PanelConfig.show_fuel,
             'show_speed': PanelConfig.show_speed,
+            'speed_history_mode': PanelConfig.speed_history_mode,
             'show_checklist': PanelConfig.show_checklist,
         }
         # v6.0 新增：投弹预测面板（仅在CCRP启用时保存）
@@ -1169,6 +1171,15 @@ class App:
         self._recalc_size(force_shrink=True)
         self._update_ui()
         self._refresh_tray()
+
+    def _toggle_speed_history_mode(self):
+        """切换空历速度模式。"""
+        PanelConfig.speed_history_mode = not PanelConfig.speed_history_mode
+        self._save_config()
+        self._update_hint()
+        self._recalc_size(force_shrink=True)
+        self._update_ui()
+        self._refresh_tray()
     
     def _refresh_tray(self):
         """刷新系统托盘菜单状态
@@ -1293,6 +1304,9 @@ class App:
             def toggle_speed(icon, item):
                 app.root.after(0, lambda: app._toggle_panel('show_speed'))
 
+            def toggle_speed_history(icon, item):
+                app.root.after(0, app._toggle_speed_history_mode)
+
             def toggle_checklist(icon, item):
                 app.root.after(0, lambda: app._toggle_panel('show_checklist'))
             
@@ -1300,22 +1314,25 @@ class App:
                 app.root.after(0, lambda: app._toggle_panel('show_bombing'))
             
             def is_zone_panel(item):
-                return PanelConfig.show_zones
+                return PanelConfig.is_effectively_enabled('zones')
             
             def is_airfield_panel(item):
-                return PanelConfig.show_airfields
+                return PanelConfig.is_effectively_enabled('airfields')
             
             def is_fuel_panel(item):
-                return PanelConfig.show_fuel
+                return PanelConfig.is_effectively_enabled('fuel')
 
             def is_speed_panel(item):
-                return PanelConfig.show_speed
+                return PanelConfig.is_effectively_enabled('speed')
+
+            def is_speed_history_mode(item):
+                return PanelConfig.speed_history_mode
 
             def is_checklist_panel(item):
-                return PanelConfig.show_checklist
+                return PanelConfig.is_effectively_enabled('checklist')
             
             def is_bombing_panel(item):
-                return PanelConfig.show_bombing
+                return PanelConfig.is_effectively_enabled('bombing')
             
             panel_items = []
             if ENABLE_ZONES:
@@ -1325,6 +1342,7 @@ class App:
             if ENABLE_FUEL:
                 panel_items.append(pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel))
             panel_items.append(pystray.MenuItem("⚡ 速度监视", toggle_speed, checked=is_speed_panel))
+            panel_items.append(pystray.MenuItem("🕰 历史模式(仅速度)", toggle_speed_history, checked=is_speed_history_mode))
             if ENABLE_CCRP:
                 panel_items.append(pystray.MenuItem("💣 投弹预测", toggle_bombing, checked=is_bombing_panel))
             if ENABLE_CHECKLIST:
@@ -2611,6 +2629,11 @@ class App:
             base_text = "  ·  ".join(parts)
 
         confirm_text = self._manual_reset_confirm_text()
+        if PanelConfig.speed_history_mode:
+            history_text = "空历模式: 仅速度提醒"
+            if confirm_text:
+                return f"{confirm_text}  ·  {history_text}  ·  {base_text}"
+            return f"{history_text}  ·  {base_text}"
         if confirm_text:
             return f"{confirm_text}  ·  {base_text}"
         return base_text
@@ -3045,7 +3068,12 @@ class App:
         airport_count = 0
         
         # === 战区导航区块（根据编译开关和PanelConfig.show_zones控制）===
-        if ENABLE_ZONES and PanelConfig.show_zones:
+        zones_enabled = ENABLE_ZONES and PanelConfig.is_effectively_enabled("zones")
+        airfields_enabled = ENABLE_AIRFIELDS and PanelConfig.is_effectively_enabled("airfields")
+        fuel_enabled = ENABLE_FUEL and PanelConfig.is_effectively_enabled("fuel")
+        bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
+
+        if zones_enabled:
             # 使用grid显示（行号固定，顺序不会乱）
             self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6*s), int(2*s)))
             self.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
@@ -3192,7 +3220,6 @@ class App:
                 # 紧凑模式：显示紧凑布局，隐藏完整布局
                 self.compact_nav_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10*s)))
                 self.zone_list_frame.grid_remove()
-                airfields_enabled = ENABLE_AIRFIELDS and PanelConfig.show_airfields
                 if airfields_enabled:
                     self.compact_airport_frame.grid(row=0, column=1, sticky="nsew", padx=(int(4*s), 0))
                     self.compact_zone_frame.grid(row=0, column=0, columnspan=1, sticky="nsew", padx=(0, int(4*s)))
@@ -3266,7 +3293,7 @@ class App:
             self._zone_layout_mode = None
 
         # === 机场导航区块（根据编译开关和PanelConfig.show_airfields控制）===
-        if ENABLE_AIRFIELDS and PanelConfig.show_airfields:
+        if airfields_enabled:
             is_compact = (PanelConfig.navigation_mode == "standalone")
             airport_layout_mode = "compact" if is_compact else "full"
             if self._airport_layout_mode != airport_layout_mode:
@@ -3356,7 +3383,7 @@ class App:
             self._airport_layout_mode = None
         
         # === 燃油信息区块（根据编译开关和PanelConfig.show_fuel控制）===
-        if ENABLE_FUEL and PanelConfig.show_fuel:
+        if fuel_enabled:
             # 使用grid显示（行号固定）- v6.1.1: 调整行号
             self.fuel_title_lbl.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
             self.fuel_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
@@ -3368,7 +3395,7 @@ class App:
         
         # === v6.0 新增：投弹预测区块（仅在ENABLE_CCRP启用时处理）===
         if ENABLE_CCRP:
-            if PanelConfig.show_bombing:
+            if bombing_enabled:
                 # v6.1.1: 调整行号
                 self.bombing_title_lbl.grid(row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
                 self.bombing_info_frame.grid(row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
@@ -3380,10 +3407,10 @@ class App:
         # 智能触发尺寸重算：基于“布局签名”而非单一数量，减少漏判和误判
         layout_signature = (
             PanelConfig.navigation_mode,
-            bool(ENABLE_ZONES and PanelConfig.show_zones),
-            bool(ENABLE_AIRFIELDS and PanelConfig.show_airfields),
-            bool(ENABLE_FUEL and PanelConfig.show_fuel),
-            bool(ENABLE_CCRP and PanelConfig.show_bombing),
+            bool(zones_enabled),
+            bool(airfields_enabled),
+            bool(fuel_enabled),
+            bool(bombing_enabled),
             bool(snap.zone_destroyed_alert),
             int(zone_count),
             int(airport_count),
@@ -3574,16 +3601,23 @@ class App:
         if self._manual_reset_confirm_until > 0.0 and time.monotonic() >= self._manual_reset_confirm_until:
             self._clear_manual_reset_confirmation(refresh_hint=True)
 
+        zones_enabled = ENABLE_ZONES and PanelConfig.is_effectively_enabled("zones")
+        airfields_enabled = ENABLE_AIRFIELDS and PanelConfig.is_effectively_enabled("airfields")
+        fuel_enabled = ENABLE_FUEL and PanelConfig.is_effectively_enabled("fuel")
+        speed_enabled = PanelConfig.is_effectively_enabled("speed")
+        checklist_enabled = ENABLE_CHECKLIST and PanelConfig.is_effectively_enabled("checklist")
+        bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
+
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
         show_zone_panel = (
             (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
             (not snap.api_down) and
             (
-                (ENABLE_ZONES and PanelConfig.show_zones) or
-                (ENABLE_AIRFIELDS and PanelConfig.show_airfields) or
-                (ENABLE_FUEL and PanelConfig.show_fuel) or
-                (ENABLE_CCRP and PanelConfig.show_bombing)
+                zones_enabled or
+                airfields_enabled or
+                fuel_enabled or
+                bombing_enabled
             )
         )
         self._set_zone_panel_visible(show_zone_panel)
@@ -3599,11 +3633,10 @@ class App:
 
         # 检查清单面板（受编译开关控制）
         show_chk = (
-            ENABLE_CHECKLIST and
+            checklist_enabled and
             (snap.phase == Phase.ALIVE) and 
             (snap.on_ground or snap.landed_flash) and 
-            (not snap.api_down) and
-            PanelConfig.show_checklist
+            (not snap.api_down)
         )
         self._set_checklist_visible(show_chk)
 
@@ -3638,7 +3671,7 @@ class App:
         # 更新徽章
         self.badge_main.set(*snap.main_badge)
         self.badge_flight.set(*snap.flight_badge)
-        if PanelConfig.show_speed:
+        if speed_enabled:
             if not self.speed_row.winfo_ismapped():
                 self.speed_row.pack(
                     fill="x",
@@ -3689,9 +3722,9 @@ class App:
                 self.badge_gear.pack_forget()
 
         status_fg = Theme.YELLOW if snap.api_down else Theme.TEXT_DIM
-        if PanelConfig.show_speed and speed_level == "critical":
+        if speed_enabled and speed_level == "critical":
             status_fg = Theme.RED
-        elif PanelConfig.show_speed and speed_level == "warning" and not snap.api_down:
+        elif speed_enabled and speed_level == "warning" and not snap.api_down:
             status_fg = Theme.YELLOW
         self.status_txt.config(text=snap.status_text, fg=status_fg)
 

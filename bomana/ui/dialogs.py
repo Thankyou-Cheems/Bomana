@@ -501,6 +501,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if ENABLE_FUEL:
             panels.append(("show_fuel", "⛽ 燃油管理", "显示油量和返航估算"))
         panels.append(("show_speed", "⚡ 速度监视", "显示紧凑速度条和超速提示"))
+        panels.append(("speed_history_mode", "🕰 历史模式(仅速度)", "空历时保留速度提醒，并临时关闭其他扩展面板"))
         if ENABLE_CHECKLIST:
             panels.append(("show_checklist", "✅ 出击检查", "显示起飞前检查清单"))
         
@@ -815,7 +816,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             
             # 重置面板设置
             for key in self.panel_vars:
-                self.panel_vars[key].set(True)
+                self.panel_vars[key].set(key != "speed_history_mode")
             
             # 重置快捷键
             defaults = {
