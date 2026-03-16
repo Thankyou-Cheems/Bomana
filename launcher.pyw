@@ -15,7 +15,6 @@ import time
 import uuid
 import webbrowser
 import zipfile
-import locale
 import ctypes
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -37,6 +36,8 @@ from tkinter import font as tkfont
 
 # Configure SSL context for HTTPS connections (critical for PyInstaller)
 import ssl
+
+from bomana.utils.system import Win32, select_ui_font_family
 
 try:
     import certifi
@@ -118,87 +119,11 @@ CHANNEL_DETAILS = {
     },
 }
 
-_PREFERRED_LATIN_FONTS = [
-    "Segoe UI Variable",
-    "Segoe UI",
-    "Arial",
-    "Helvetica",
-]
-_PREFERRED_CJK_FONTS = [
-    "Microsoft YaHei UI",
-    "Microsoft YaHei",
-    "Noto Sans CJK SC",
-    "PingFang SC",
-    "Source Han Sans SC",
-    "WenQuanYi Micro Hei",
-]
-
-
 @dataclass
 class LaunchDecision:
     action: str  # "launch" | "exit"
     final_version: str
     warning: str = ""
-
-
-def _enable_dpi_awareness() -> None:
-    """Use the same DPI-awareness strategy as the main app."""
-    if os.name != "nt":
-        return
-    try:
-        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
-    except Exception:
-        try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        except Exception:
-            try:
-                ctypes.windll.user32.SetProcessDPIAware()
-            except Exception:
-                pass
-
-
-def _get_dpi_scale(hwnd: int) -> float:
-    if os.name != "nt":
-        return 1.0
-    try:
-        dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
-        return (float(dpi) / 96.0) if dpi else 1.0
-    except Exception:
-        return 1.0
-
-
-def _select_ui_font_family(root: tk.Misc) -> str:
-    """Pick a readable UI font family using the same priority as the main app."""
-    try:
-        families = set(tkfont.families(root))
-    except Exception:
-        return ""
-
-    loc = ""
-    try:
-        loc = locale.getdefaultlocale()[0] or ""
-    except Exception:
-        loc = ""
-
-    if os.name == "nt":
-        for fam in _PREFERRED_CJK_FONTS:
-            if fam in families:
-                return fam
-        for fam in _PREFERRED_LATIN_FONTS:
-            if fam in families:
-                return fam
-    else:
-        if loc.startswith(("zh", "ja", "ko")):
-            for fam in _PREFERRED_CJK_FONTS:
-                if fam in families:
-                    return fam
-        for fam in _PREFERRED_LATIN_FONTS:
-            if fam in families:
-                return fam
-        for fam in _PREFERRED_CJK_FONTS:
-            if fam in families:
-                return fam
-    return ""
 
 
 def _base_dir() -> Path:
@@ -243,7 +168,7 @@ def _log(base: Path, msg: str) -> None:
 
 def _show_error(title: str, msg: str) -> None:
     try:
-        _enable_dpi_awareness()
+        Win32.enable_dpi()
         root = tk.Tk()
         root.withdraw()
         messagebox.showerror(title, msg)
@@ -1795,7 +1720,7 @@ class LauncherWindow:
                     )
                 except Exception:
                     hwnd = int(internal_id)
-            dpi_scale = _get_dpi_scale(int(hwnd))
+            dpi_scale = Win32.get_dpi_scale(int(hwnd))
             self.dpi_scale = max(1.0, min(2.0, float(dpi_scale)))
         except Exception:
             self.dpi_scale = 1.0
@@ -1805,7 +1730,7 @@ class LauncherWindow:
         except Exception:
             pass
 
-        fam = _select_ui_font_family(self.root)
+        fam = select_ui_font_family(self.root)
         if fam:
             self.font_family = fam
 
@@ -2906,7 +2831,7 @@ def main() -> None:
     base = _base_dir()
     _recover_incomplete_install(base)
     _cleanup_temp_files_on_launcher_upgrade(base)
-    _enable_dpi_awareness()
+    Win32.enable_dpi()
     channel = _detect_channel()
     identity = _build_client_identity(base)
 

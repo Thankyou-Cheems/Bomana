@@ -4,15 +4,65 @@
 import os
 import sys
 import ctypes
+import locale
 import threading
 from typing import Optional, Tuple, Any, List, Dict
 
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import font as tkfont
 
 from bomana.config import FileConfig, HotkeyConfig
 
 _MUTEX_HANDLE = None
+_PREFERRED_LATIN_FONTS = [
+    "Segoe UI Variable",
+    "Segoe UI",
+    "Arial",
+    "Helvetica",
+]
+_PREFERRED_CJK_FONTS = [
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "PingFang SC",
+    "Source Han Sans SC",
+    "WenQuanYi Micro Hei",
+]
+
+
+def select_ui_font_family(root: tk.Misc) -> str:
+    """Pick a readable UI font family shared by app and launcher."""
+    try:
+        families = set(tkfont.families(root))
+    except Exception:
+        return ""
+
+    try:
+        loc = locale.getdefaultlocale()[0] or ""
+    except Exception:
+        loc = ""
+
+    if os.name == "nt":
+        for fam in _PREFERRED_CJK_FONTS:
+            if fam in families:
+                return fam
+        for fam in _PREFERRED_LATIN_FONTS:
+            if fam in families:
+                return fam
+        return ""
+
+    if loc.startswith(("zh", "ja", "ko")):
+        for fam in _PREFERRED_CJK_FONTS:
+            if fam in families:
+                return fam
+    for fam in _PREFERRED_LATIN_FONTS:
+        if fam in families:
+            return fam
+    for fam in _PREFERRED_CJK_FONTS:
+        if fam in families:
+            return fam
+    return ""
 
 # ============================================================================
 # Windows API封装

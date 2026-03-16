@@ -6,7 +6,6 @@ import os
 import threading
 import time
 import tkinter as tk
-import locale
 import webbrowser
 from dataclasses import replace
 from tkinter import font as tkfont
@@ -42,7 +41,7 @@ from bomana.core.logic import GameLogic
 from bomana.core.state import UISnapshot, Phase, ZoneDisplayInfo, AirfieldDisplayInfo
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.config import FileConfig
-from bomana.utils.system import Win32, GlobalHotkeys, SingleInstanceManager
+from bomana.utils.system import Win32, GlobalHotkeys, SingleInstanceManager, select_ui_font_family
 from bomana.utils.sound import SoundManager
 from bomana.utils.math_utils import (
     calculate_smart_scale,
@@ -446,44 +445,7 @@ class App:
 
     def _select_font_family(self) -> str:
         """Pick an available UI font family."""
-        preferred_latin = [
-            "Segoe UI Variable",
-            "Segoe UI",
-            "Arial",
-            "Helvetica",
-        ]
-        preferred_cjk = [
-            "Microsoft YaHei UI",
-            "Microsoft YaHei",
-            "Noto Sans CJK SC",
-            "PingFang SC",
-            "Source Han Sans SC",
-            "WenQuanYi Micro Hei",
-        ]
-        loc = locale.getdefaultlocale()[0] or ""
-        try:
-            fams = set(tkfont.families(self.root))
-        except Exception:
-            return ""
-        if os.name == "nt":
-            for fam in preferred_cjk:
-                if fam in fams:
-                    return fam
-            for fam in preferred_latin:
-                if fam in fams:
-                    return fam
-        else:
-            if loc.startswith(("zh", "ja", "ko")):
-                for fam in preferred_cjk:
-                    if fam in fams:
-                        return fam
-            for fam in preferred_latin:
-                if fam in fams:
-                    return fam
-            for fam in preferred_cjk:
-                if fam in fams:
-                    return fam
-        return ""
+        return select_ui_font_family(self.root)
 
     def _apply_font_family(self) -> None:
         """Apply a unified UI font family."""

@@ -18,6 +18,18 @@ from bomana.config import (
     ENABLE_CHECKLIST,
 )
 
+
+def _report_persistence_error(action: str, path: Path, exc: Exception) -> None:
+    """Emit a lightweight diagnostic without changing tolerant runtime behavior."""
+    msg = f"[Persistence] {action} failed for {path}: {exc}"
+    print(msg)
+    try:
+        log_path = FileConfig.CONFIG_FILE.with_name(".wttimer_persistence.log")
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+    except (IOError, OSError):
+        pass
+
 def resource_path(rel_path: str) -> str:
     """获取资源文件的绝对路径
     
@@ -57,8 +69,8 @@ class ConfigManager:
                 # 配置版本迁移
                 config = ConfigManager._migrate_config(config)
                 return config
-            except (json.JSONDecodeError, IOError):
-                pass
+            except (json.JSONDecodeError, IOError, OSError) as exc:
+                _report_persistence_error("config load", FileConfig.CONFIG_FILE, exc)
         return {}
     
     @staticmethod
@@ -118,10 +130,7 @@ class ConfigManager:
         config['compile_switches'] = current_switches
         
         # 自动保存迁移后的配置
-        try:
-            ConfigManager.save(config)
-        except:
-            pass
+        ConfigManager.save(config)
         
         return config
     
@@ -137,8 +146,8 @@ class ConfigManager:
             config['config_version'] = FileConfig.CONFIG_VERSION
             with open(FileConfig.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-        except IOError:
-            pass
+        except (IOError, OSError) as exc:
+            _report_persistence_error("config save", FileConfig.CONFIG_FILE, exc)
 
 class StateManager:
     """状态文件管理器
@@ -165,8 +174,8 @@ class StateManager:
         try:
             with open(FileConfig.STATE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(state_data, f, indent=2)
-        except (IOError, OSError):
-            pass
+        except (IOError, OSError) as exc:
+            _report_persistence_error("state save", FileConfig.STATE_FILE, exc)
     
     @staticmethod
     def load() -> Optional[Dict[str, Any]]:
@@ -205,15 +214,17 @@ class StateManager:
             data['computed_spawn_time'] = now - (GameConfig.CYCLE_SECONDS - new_remaining)
             
             return data
-        except (json.JSONDecodeError, IOError, KeyError, OSError):
-            StateManager.clear()
+        except (json.JSONDecodeError, IOError, KeyError, OSError) as exc:
+            _report_persistence_error("state load", FileConfig.STATE_FILE, exc)
+            StateManager.clear(report_error=False)
             return None
     
     @staticmethod
-    def clear() -> None:
+    def clear(report_error: bool = True) -> None:
         """清除状态文件"""
         try:
             if FileConfig.STATE_FILE.exists():
                 FileConfig.STATE_FILE.unlink()
-        except (IOError, OSError):
-            pass
+        except (IOError, OSError) as exc:
+            if report_error:
+                _report_persistence_error("state clear", FileConfig.STATE_FILE, exc)
