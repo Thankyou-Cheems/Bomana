@@ -175,12 +175,13 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 
 启动器与 app 包的关系：
 
-- `Bomana_launcher_vX.Y.Z.exe`：固定入口，负责版本检查、下载/校验 app 包、离线启动本地版本。
+- `Bomana_launcher_vX.Y.Z.exe`：固定入口，负责版本检查、下载/校验 app 包、启动器自更新、离线启动本地版本。
+- `launcher_manifest.json`：记录启动器版本、下载包名、SHA256 等元数据。
 - `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行程序包（Enhanced / Standard / Lite）。
 - `manifest_<Variant>.json`：记录版本、下载地址、SHA256 等元数据。
 
 3. 下载后双击运行（绿色版，无需安装）
-4. 启动器打开后会自动检查当前通道版本（优先国内更新服务，必要时回退 GitHub），并在界面展示来源与下载总大小
+4. 启动器打开后会后台自动检查当前通道版本与启动器版本（优先腾讯云/EdgeOne 更新服务，必要时回退 GitHub），并在界面展示来源与下载总大小
 5. 仅“下载更新”操作需要用户确认；首次运行通常需联网下载应用包，后续可离线启动本地已下载版本
 6. 可用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 校验文件完整性
 7. 程序显示名为 `Bomana香焦`

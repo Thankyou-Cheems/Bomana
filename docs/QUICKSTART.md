@@ -19,7 +19,7 @@
 
 1. 打开 [Releases](https://github.com/Thankyou-Cheems/Bomana/releases)
 2. 下载 `Bomana_launcher_vX.X.X.exe`
-3. 启动器会按通道下载对应 app 包并校验完整性
+3. 启动器会优先从腾讯云/EdgeOne 获取对应通道的 app 包，失败时自动回退 GitHub；启动器本体也支持独立自更新
 
 可选通道：
 
@@ -31,7 +31,7 @@
 
 启动器与 app 包：
 
-- `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动入口
+- `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动器自更新、启动入口
 - `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行包
 - `manifest_<Variant>.json`：版本、地址、SHA256 元数据
 

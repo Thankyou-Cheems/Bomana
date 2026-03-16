@@ -86,7 +86,7 @@ jobs:
             all)
               BUILD_DESC="完整发布（启动器 + 三通道应用包）"
               RELEASE_NAME="Bomana v$VERSION"
-              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt`'
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 启动器清单：`launcher_manifest.json`\n- 应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt`'
               ;;
             app)
               BUILD_DESC="应用包发布（Enhanced/Standard/Lite）"
@@ -96,7 +96,7 @@ jobs:
             launcher)
               BUILD_DESC="启动器发布（通用启动器）"
               RELEASE_NAME="Bomana v$VERSION · Launcher"
-              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 校验：`checksums_launcher.txt`'
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 启动器清单：`launcher_manifest.json`\n- 校验：`checksums_launcher.txt`'
               ;;
             *)
               echo "未知构建目标: $BUILD_TARGET"
@@ -231,6 +231,7 @@ jobs:
           name: Bomana-Launcher
           path: |
             dist/Bomana_launcher_v${{ needs.prepare.outputs.launcher_version }}.exe
+            dist/launcher_manifest.json
             dist/checksums_launcher.txt
 
   release:

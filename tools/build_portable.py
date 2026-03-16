@@ -263,6 +263,23 @@ def write_manifest(out_dir: Path, variant: str, version: str, app_zip_name: str,
     return path
 
 
+def write_launcher_manifest(
+    out_dir: Path,
+    version: str,
+    launcher_name: str,
+    launcher_sha256: str,
+) -> Path:
+    manifest = {
+        "schema_version": 1,
+        "launcher_version": version,
+        "launcher_asset": launcher_name,
+        "launcher_sha256": launcher_sha256,
+    }
+    path = out_dir / "launcher_manifest.json"
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
 def write_checksum_info(
     out_dir: Path,
     variant: str,
@@ -309,6 +326,7 @@ def main() -> int:
     app_zip: Optional[Path] = None
     manifest: Optional[Path] = None
     launcher: Optional[Path] = None
+    launcher_manifest: Optional[Path] = None
 
     try:
         version = args.version.strip() or read_version(original)
@@ -325,6 +343,10 @@ def main() -> int:
 
         if args.target in ("all", "launcher"):
             launcher = build_launcher(root, version, out_dir)
+            launcher_sha = sha256_file(launcher)
+            launcher_manifest = write_launcher_manifest(
+                out_dir, version, launcher.name, launcher_sha
+            )
 
         checksum_variant = "Universal" if args.target == "launcher" else args.variant
         checksum = write_checksum_info(out_dir, checksum_variant, version, app_zip, launcher, args.target)
@@ -336,6 +358,8 @@ def main() -> int:
             safe_print(f"  - manifest:    {manifest}")
         if launcher and launcher.exists():
             safe_print(f"  - launcher:    {launcher}")
+        if launcher_manifest and launcher_manifest.exists():
+            safe_print(f"  - launcher manifest: {launcher_manifest}")
         safe_print(f"  - checksum:    {checksum}")
         return 0
     finally:

@@ -2,7 +2,7 @@
 
 ## Overview
 - Entry point: `Bomana.pyw` (single-file app that currently contains UI, logic, and polling)
-- Portable launcher: `launcher.pyw` (startup auto-check, Tencent version check + GitHub fallback, check/download split, offline launch, details/support dialog)
+- Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, offline launch, details/support dialog)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app, widgets, dialogs, nav window)
@@ -68,16 +68,17 @@
    - Parser reads latest `.clog` with Windows shared-read flags, XOR-decrypts tail bytes, and extracts candidate player/vehicle lines.
    - Probe runs in a background thread and updates debug diagnostic state without blocking the main tick loop.
 7. Launcher check flow:
-   - On startup (and channel switch), launcher auto-checks update metadata.
-   - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for version/manifest when available.
+   - On startup (and channel switch), launcher auto-checks both app-package metadata and launcher metadata in a background thread.
+   - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for app and launcher manifests when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
 8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
    - Verifies SHA256 (when provided), replaces `app/`, and updates local version metadata.
-   - Launch action stays available for offline local app start.
-9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` events to Tencent API (best effort).
+   - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages a detached replacement script, exits, swaps the executable, and restarts.
+   - Launch action stays available for offline local app start while background checks are still running.
+9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 
 Important constraint: default runtime data path is official 8111 API only; no memory reads, injection, or game file modifications. Experimental clog probe remains disabled unless explicitly enabled via config.
 
@@ -114,6 +115,7 @@ Important constraint: default runtime data path is official 8111 API only; no me
 ## Build & Release
 Portable release uses:
 - `Bomana_launcher_vX.Y.Z.exe` (universal bootstrap runtime with channel selector)
+- `launcher_manifest.json` (launcher version/package metadata + SHA256)
 - `Bomana_app_<Variant>_vX.Y.Z.zip` (updatable application package)
 - `manifest_<Variant>.json` (channel/version/package metadata + SHA256)
 - `checksums_*.txt` (SHA256 checksum info)
@@ -126,10 +128,11 @@ Local build helper:
 CI:
 - `.github/workflows/build.yml` runs separate jobs for:
   - `build_app`: app package + manifest
-  - `build_launcher`: launcher exe
+  - `build_launcher`: launcher exe + `launcher_manifest.json`
 - tag-driven release targets:
   - `vX.Y.Z`: full release (launcher + app packages)
   - `vX.Y.Z-app`: app packages only
   - `vX.Y.Z-launcher`: launcher only
 - `workflow_dispatch` also supports `build_target=all|app|launcher`.
+- `.github/workflows/deploy-manifests-to-server.yml` syncs manifests, app zips, launcher exe, and `launcher_manifest.json` to the Tencent/EdgeOne update server.
 

@@ -1,4 +1,4 @@
-name: Deploy Manifests To Server
+name: Deploy Update Assets To Server
 
 on:
   workflow_run:
@@ -15,13 +15,15 @@ permissions:
   contents: read
 
 jobs:
-  deploy-manifests:
+  deploy-assets:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       should_deploy: ${{ steps.resolve.outputs.should_deploy }}
+      deploy_app: ${{ steps.resolve.outputs.deploy_app }}
+      deploy_launcher: ${{ steps.resolve.outputs.deploy_launcher }}
     steps:
-      - name: Resolve release and download manifests
+      - name: Resolve release and download update assets
         id: resolve
         shell: bash
         env:
@@ -33,7 +35,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          SHOULD_DEPLOY="true"
+          mkdir -p stage/manifests stage/downloads stage/root
+          SHOULD_DEPLOY="false"
+          DEPLOY_APP="false"
+          DEPLOY_LAUNCHER="false"
+
           if [[ -n "${INPUT_TAG:-}" ]]; then
             TAG="$INPUT_TAG"
             API_URL="https://api.github.com/repos/$REPO/releases/tags/$TAG"
@@ -45,30 +51,64 @@ jobs:
             API_URL="https://api.github.com/repos/$REPO/releases/latest"
           fi
 
-          if [[ "$TAG" =~ -launcher$ ]]; then
-            echo "Launcher-only tag detected ($TAG); skip manifest deployment."
-            SHOULD_DEPLOY="false"
-            echo "should_deploy=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "should_deploy=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
           echo "Using release source: $TAG"
           curl -fsSL \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "$API_URL" > release.json
 
-          for CH in Enhanced Standard Lite; do
-            NAME="manifest_${CH}.json"
-            URL="$(jq -r --arg NAME "$NAME" '.assets[] | select(.name == $NAME) | .browser_download_url' release.json | head -n 1)"
-            if [[ -z "$URL" || "$URL" == "null" ]]; then
-              echo "Missing asset in release: $NAME"
-              exit 1
+          download_asset() {
+            local name="$1"
+            local dest="$2"
+            local url
+            url="$(jq -r --arg NAME "$name" '.assets[] | select(.name == $NAME) | .browser_download_url' release.json | head -n 1)"
+            if [[ -z "$url" || "$url" == "null" ]]; then
+              return 1
             fi
-            curl -fL "$URL" -o "$NAME"
-            echo "Downloaded $NAME"
+            curl -fL "$url" -o "$dest"
+            return 0
+          }
+
+          app_complete="true"
+          for CH in Enhanced Standard Lite; do
+            MANIFEST_NAME="manifest_${CH}.json"
+            ZIP_NAME="$(jq -r --arg CH "$CH" '.assets[] | select(.name | test("^Bomana_app_" + $CH + "_v.+\\.zip$")) | .name' release.json | head -n 1)"
+            CHECKSUM_NAME="checksums_app_${CH}.txt"
+            if [[ -z "$ZIP_NAME" || "$ZIP_NAME" == "null" ]]; then
+              app_complete="false"
+              break
+            fi
+            download_asset "$MANIFEST_NAME" "stage/manifests/$MANIFEST_NAME" || { app_complete="false"; break; }
+            download_asset "$ZIP_NAME" "stage/downloads/$ZIP_NAME" || { app_complete="false"; break; }
+            download_asset "$CHECKSUM_NAME" "stage/downloads/$CHECKSUM_NAME" || true
           done
+
+          if [[ "$app_complete" == "true" ]]; then
+            SHOULD_DEPLOY="true"
+            DEPLOY_APP="true"
+          else
+            rm -f stage/manifests/* stage/downloads/Bomana_app_* stage/downloads/checksums_app_*
+          fi
+
+          LAUNCHER_NAME="$(jq -r '.assets[] | select(.name | test("^Bomana_launcher_v.+\\.exe$")) | .name' release.json | head -n 1)"
+          if [[ -n "$LAUNCHER_NAME" && "$LAUNCHER_NAME" != "null" ]]; then
+            if download_asset "$LAUNCHER_NAME" "stage/downloads/$LAUNCHER_NAME" && \
+               download_asset "launcher_manifest.json" "stage/root/launcher_manifest.json"; then
+              SHOULD_DEPLOY="true"
+              DEPLOY_LAUNCHER="true"
+              download_asset "checksums_launcher.txt" "stage/downloads/checksums_launcher.txt" || true
+            else
+              rm -f "stage/downloads/$LAUNCHER_NAME" stage/root/launcher_manifest.json stage/downloads/checksums_launcher.txt
+            fi
+          fi
+
+          if [[ "$SHOULD_DEPLOY" != "true" ]]; then
+            echo "No deployable update assets found in release $TAG."
+          fi
+
+          echo "should_deploy=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
+          echo "deploy_app=$DEPLOY_APP" >> "$GITHUB_OUTPUT"
+          echo "deploy_launcher=$DEPLOY_LAUNCHER" >> "$GITHUB_OUTPUT"
 
       - name: Setup SSH key
         if: steps.resolve.outputs.should_deploy == 'true'
@@ -85,7 +125,7 @@ jobs:
           printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Upload manifests to remote staging
+      - name: Upload update assets to remote staging
         if: steps.resolve.outputs.should_deploy == 'true'
         shell: bash
         env:
@@ -94,41 +134,93 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           set -euo pipefail
-          STAGE_DIR="/tmp/bomana-manifests-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          STAGE_DIR="/tmp/bomana-update-assets-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
             "mkdir -p '$STAGE_DIR' && chmod 700 '$STAGE_DIR'"
-          scp -P "$SERVER_PORT" -i ~/.ssh/id_ed25519 \
-            manifest_Enhanced.json manifest_Standard.json manifest_Lite.json \
+          scp -P "$SERVER_PORT" -i ~/.ssh/id_ed25519 -r stage \
             "$SERVER_USER@$SERVER_HOST:$STAGE_DIR/"
 
-      - name: Sync manifests into target directory
+      - name: Sync assets into target directories
         if: steps.resolve.outputs.should_deploy == 'true'
         shell: bash
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+          DEPLOY_APP: ${{ steps.resolve.outputs.deploy_app }}
+          DEPLOY_LAUNCHER: ${{ steps.resolve.outputs.deploy_launcher }}
         run: |
           set -euo pipefail
-          REMOTE_DIR="/opt/stacks/bomana-update/data/manifests"
-          STAGE_DIR="/tmp/bomana-manifests-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          STAGE_DIR="/tmp/bomana-update-assets-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/stage"
           ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
-            "set -euo pipefail
-            if mkdir -p '$REMOTE_DIR' 2>/dev/null && test -w '$REMOTE_DIR'; then
-              install -m 644 '$STAGE_DIR'/manifest_*.json '$REMOTE_DIR'/
-            elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-              sudo mkdir -p '$REMOTE_DIR'
-              sudo install -m 644 '$STAGE_DIR'/manifest_*.json '$REMOTE_DIR'/
-            else
-              echo 'ERROR: no write permission to target manifests directory.'
-              echo 'Run one of the following on server, then retry workflow:'
-              echo '  sudo chown -R $SERVER_USER:$SERVER_USER $REMOTE_DIR'
-              echo '  sudo chmod -R u+rwX $REMOTE_DIR'
-              ls -ld '$REMOTE_DIR' || true
-              id || true
-              exit 1
+            "export DEPLOY_APP='$DEPLOY_APP'
+            export DEPLOY_LAUNCHER='$DEPLOY_LAUNCHER'
+            export STAGE_DIR='$STAGE_DIR'
+            export MANIFEST_DIR='/opt/stacks/bomana-update/data/manifests'
+            export DOWNLOAD_DIR='/opt/stacks/bomana-update/data/downloads'
+            export LAUNCHER_MANIFEST='/opt/stacks/bomana-update/data/launcher_manifest.json'
+            bash -s" <<'EOF'
+          set -euo pipefail
+
+          install_many() {
+            local dest_dir="$1"
+            shift
+            if [[ "$#" -eq 0 ]]; then
+              return
             fi
-            rm -rf '$STAGE_DIR'"
+            if mkdir -p "$dest_dir" 2>/dev/null && test -w "$dest_dir"; then
+              install -m 644 "$@" "$dest_dir"/
+              return
+            fi
+            if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+              sudo mkdir -p "$dest_dir"
+              sudo install -m 644 "$@" "$dest_dir"/
+              return
+            fi
+            echo "ERROR: no write permission to $dest_dir"
+            exit 1
+          }
+
+          install_file() {
+            local src="$1"
+            local dest="$2"
+            local dest_dir
+            dest_dir="$(dirname "$dest")"
+            if mkdir -p "$dest_dir" 2>/dev/null && test -w "$dest_dir"; then
+              install -m 644 "$src" "$dest"
+              return
+            fi
+            if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+              sudo mkdir -p "$dest_dir"
+              sudo install -m 644 "$src" "$dest"
+              return
+            fi
+            echo "ERROR: no write permission to $dest"
+            exit 1
+          }
+
+          if [[ "$DEPLOY_APP" == "true" ]]; then
+            mapfile -t app_manifests < <(compgen -G "$STAGE_DIR/manifests/manifest_*.json" || true)
+            mapfile -t app_archives < <(compgen -G "$STAGE_DIR/downloads/Bomana_app_*.zip" || true)
+            mapfile -t app_checksums < <(compgen -G "$STAGE_DIR/downloads/checksums_app_*.txt" || true)
+            install_many "$MANIFEST_DIR" "${app_manifests[@]}"
+            install_many "$DOWNLOAD_DIR" "${app_archives[@]}"
+            if [[ "${#app_checksums[@]}" -gt 0 ]]; then
+              install_many "$DOWNLOAD_DIR" "${app_checksums[@]}"
+            fi
+          fi
+
+          if [[ "$DEPLOY_LAUNCHER" == "true" ]]; then
+            mapfile -t launcher_archives < <(compgen -G "$STAGE_DIR/downloads/Bomana_launcher_v*.exe" || true)
+            install_many "$DOWNLOAD_DIR" "${launcher_archives[@]}"
+            if [[ -f "$STAGE_DIR/downloads/checksums_launcher.txt" ]]; then
+              install_many "$DOWNLOAD_DIR" "$STAGE_DIR/downloads/checksums_launcher.txt"
+            fi
+            install_file "$STAGE_DIR/root/launcher_manifest.json" "$LAUNCHER_MANIFEST"
+          fi
+
+          rm -rf "$(dirname "$STAGE_DIR")"
+          EOF
 
       - name: Verify files on server
         if: steps.resolve.outputs.should_deploy == 'true'
@@ -137,16 +229,21 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+          DEPLOY_APP: ${{ steps.resolve.outputs.deploy_app }}
+          DEPLOY_LAUNCHER: ${{ steps.resolve.outputs.deploy_launcher }}
         run: |
           set -euo pipefail
           ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
-            "set -euo pipefail
-            TARGET='/opt/stacks/bomana-update/data/manifests/manifest_*.json'
-            if ls -l \$TARGET >/dev/null 2>&1; then
-              ls -l \$TARGET
-            elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-              sudo ls -l \$TARGET
-            else
-              echo 'ERROR: cannot verify remote manifests due to permissions.'
-              exit 1
-            fi"
+            "export DEPLOY_APP='$DEPLOY_APP'
+            export DEPLOY_LAUNCHER='$DEPLOY_LAUNCHER'
+            bash -s" <<'EOF'
+          set -euo pipefail
+          if [[ "$DEPLOY_APP" == "true" ]]; then
+            ls -l /opt/stacks/bomana-update/data/manifests/manifest_*.json
+            ls -l /opt/stacks/bomana-update/data/downloads/Bomana_app_*.zip
+          fi
+          if [[ "$DEPLOY_LAUNCHER" == "true" ]]; then
+            ls -l /opt/stacks/bomana-update/data/launcher_manifest.json
+            ls -l /opt/stacks/bomana-update/data/downloads/Bomana_launcher_v*.exe
+          fi
+          EOF

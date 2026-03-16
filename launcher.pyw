@@ -8,6 +8,7 @@ import queue
 import re
 import runpy
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -47,7 +48,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.2.0"
+LAUNCHER_VERSION = "1.3.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -71,11 +72,13 @@ PRIMARY_UPDATE_BASE_URL = (
     .rstrip("/")
 )
 PRIMARY_VERSION_API_PATH = "/api/v1/version"
+PRIMARY_LAUNCHER_API_PATH = "/api/v1/launcher"
 PRIMARY_EVENT_API_PATH = "/api/v1/event"
-# 默认将国内服务作为“版本检查源”；仅在显式开启时才使用其下载地址。
+# 默认优先使用国内服务分发下载包；只有显式关闭时才回退为“仅版本检查”。
 PRIMARY_ALLOW_PACKAGE_DOWNLOAD = os.environ.get(
-    "BOMANA_PRIMARY_ALLOW_PACKAGE_DOWNLOAD", ""
-).strip().lower() in ("1", "true", "yes", "on")
+    "BOMANA_PRIMARY_ALLOW_PACKAGE_DOWNLOAD", "1"
+).strip().lower() not in ("0", "false", "no", "off")
+LAUNCHER_ASSET_PREFIX = "Bomana_launcher_v"
 
 RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
@@ -142,6 +145,12 @@ def _resource_path(filename: str) -> Path:
     except Exception:
         pass
     return _base_dir() / filename
+
+
+def _is_frozen_launcher() -> bool:
+    return bool(getattr(sys, "frozen", False)) and bool(
+        str(getattr(sys, "executable", "")).strip()
+    )
 
 
 def _apply_window_icon(window: tk.Misc) -> None:
@@ -285,10 +294,10 @@ def _http_error_detail(err: HTTPError) -> str:
     return str(getattr(err, "reason", "") or getattr(err, "msg", "") or err)
 
 
-def _fetch_primary_version_payload(
-    version_url: str, params: Dict[str, str], timeout_sec: float
+def _fetch_primary_json_payload(
+    api_url: str, params: Dict[str, str], timeout_sec: float
 ) -> Dict[str, Any]:
-    request_url = f"{version_url}?{urlencode(params)}"
+    request_url = f"{api_url}?{urlencode(params)}"
     try:
         payload = _fetch_json_with_timeout(request_url, timeout_sec)
     except HTTPError as err:
@@ -300,6 +309,12 @@ def _fetch_primary_version_payload(
     if not isinstance(payload, dict):
         raise RuntimeError("国内更新服务返回格式异常")
     return payload
+
+
+def _fetch_primary_version_payload(
+    version_url: str, params: Dict[str, str], timeout_sec: float
+) -> Dict[str, Any]:
+    return _fetch_primary_json_payload(version_url, params, timeout_sec)
 
 
 def _fetch_content_length(
@@ -752,6 +767,77 @@ def _join_base_url_path(base_url: str, path: str) -> str:
     return f"{base_url}{path}"
 
 
+def _parse_launcher_version_from_asset_name(asset_name: str) -> str:
+    name = asset_name.strip()
+    suffix = ".exe"
+    if not name.lower().startswith(LAUNCHER_ASSET_PREFIX.lower()):
+        return ""
+    if not name.lower().endswith(suffix):
+        return ""
+    return name[len(LAUNCHER_ASSET_PREFIX) : -len(suffix)].strip()
+
+
+def _find_launcher_asset(assets: list) -> Optional[Dict[str, Any]]:
+    for asset in assets:
+        name = str(asset.get("name", "")).strip()
+        if _parse_launcher_version_from_asset_name(name):
+            return asset
+    return None
+
+
+def _attempt_primary_request(
+    base: Path,
+    request_name: str,
+    start_detail: str,
+    fetcher: Callable[[float], Dict[str, Any]],
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+) -> Dict[str, Any]:
+    def notify(
+        title: str,
+        detail: str = "",
+        progress: Optional[float] = None,
+        level: str = "info",
+    ) -> None:
+        if status_cb:
+            status_cb(title, detail, progress, level)
+
+    notify("正在检查更新", start_detail, None, "info")
+    original_proxy_mode = bool(_USE_SYSTEM_PROXY)
+    attempts = [
+        (original_proxy_mode, PRIMARY_TIMEOUT_SEC),
+        (original_proxy_mode, PRIMARY_RETRY_TIMEOUT_SEC),
+        ((not original_proxy_mode), PRIMARY_RETRY_TIMEOUT_SEC),
+    ]
+    tried_modes = []
+    try:
+        last_exc: Optional[Exception] = None
+        for use_proxy, timeout_sec in attempts:
+            key = (use_proxy, timeout_sec)
+            if key in tried_modes:
+                continue
+            tried_modes.append(key)
+            _set_use_system_proxy(use_proxy)
+            mode_name = "system-proxy" if use_proxy else "direct"
+            try:
+                result = fetcher(timeout_sec)
+                _log(
+                    base,
+                    f"{request_name}成功(mode={mode_name}, timeout={timeout_sec:.1f}s)",
+                )
+                return result
+            except Exception as e:
+                last_exc = e
+                _log(
+                    base,
+                    f"{request_name}失败(mode={mode_name}, timeout={timeout_sec:.1f}s)：{e}",
+                )
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError(f"{request_name}失败")
+    finally:
+        _set_use_system_proxy(original_proxy_mode)
+
+
 def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict[str, Any]:
     assets = release.get("assets", [])
     tag_name = str(release.get("tag_name", "")).strip()
@@ -794,6 +880,39 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
     }
 
 
+def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str, Any]:
+    assets = release.get("assets", [])
+    tag_name = str(release.get("tag_name", "")).strip()
+    launcher_asset = _find_launcher_asset(assets)
+    if not launcher_asset:
+        raise RuntimeError("未找到启动器安装包")
+
+    asset_name = str(launcher_asset.get("name", "")).strip()
+    remote_version = _parse_launcher_version_from_asset_name(asset_name)
+    package_url = str(launcher_asset.get("browser_download_url", "")).strip()
+    if not remote_version or not package_url:
+        raise RuntimeError("启动器发布字段缺失")
+
+    manifest_asset = _find_asset(assets, "launcher_manifest.json")
+    package_sha256 = ""
+    if manifest_asset:
+        manifest_url = str(manifest_asset.get("browser_download_url", "")).strip()
+        if manifest_url:
+            try:
+                manifest = _fetch_json(manifest_url)
+                package_sha256 = str(manifest.get("launcher_sha256", "")).strip()
+            except Exception:
+                package_sha256 = ""
+
+    return {
+        "remote_version": remote_version,
+        "package_url": package_url,
+        "package_sha256": package_sha256,
+        "package_size": launcher_asset.get("size", None),
+        "source_name": (f"GitHub ({tag_name})" if tag_name else "GitHub"),
+    }
+
+
 def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
     latest_release = _fetch_json(_latest_release_url())
     latest_err_msg = ""
@@ -830,6 +949,24 @@ def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
     raise RuntimeError(
         f"未找到可用发布清单: manifest_{channel}.json (latest={latest_tag}, err={latest_err_msg})"
     )
+
+
+def _fetch_launcher_manifest_from_github() -> Dict[str, Any]:
+    releases = _fetch_json(_releases_list_url(20))
+    if not isinstance(releases, list):
+        raise RuntimeError("GitHub releases 返回格式异常")
+
+    first_err = ""
+    for rel in releases:
+        if not isinstance(rel, dict):
+            continue
+        try:
+            return _launcher_manifest_from_github_release(rel)
+        except Exception as e:
+            if not first_err:
+                first_err = str(e)
+            continue
+    raise RuntimeError(f"未找到可用启动器发布（err={first_err or 'unknown'}）")
 
 
 def _fetch_manifest_from_primary(
@@ -895,6 +1032,63 @@ def _fetch_manifest_from_primary(
     }
 
 
+def _fetch_launcher_manifest_from_primary(
+    identity: Dict[str, str],
+    timeout_sec: float = PRIMARY_TIMEOUT_SEC,
+) -> Dict[str, Any]:
+    if not PRIMARY_UPDATE_BASE_URL:
+        raise RuntimeError("未配置国内更新服务")
+
+    params = {
+        "launcher_version": LAUNCHER_VERSION,
+        "device_id": identity.get("device_id", ""),
+        "install_id": identity.get("install_id", ""),
+    }
+    launcher_url = _join_base_url_path(PRIMARY_UPDATE_BASE_URL, PRIMARY_LAUNCHER_API_PATH)
+    used_anonymous_fallback = False
+    try:
+        payload = _fetch_primary_json_payload(launcher_url, params, timeout_sec)
+    except Exception as first_err:
+        anon_params = dict(params)
+        anon_params["device_id"] = ""
+        anon_params["install_id"] = ""
+        if anon_params == params:
+            raise
+        try:
+            payload = _fetch_primary_json_payload(launcher_url, anon_params, timeout_sec)
+            used_anonymous_fallback = True
+        except Exception as anon_err:
+            raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
+
+    remote_version = str(
+        payload.get("launcher_version", payload.get("app_version", ""))
+    ).strip()
+    raw_package_url = str(payload.get("package_url", "")).strip()
+    package_url = (
+        _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url)
+        if raw_package_url
+        else ""
+    )
+    package_sha256 = str(payload.get("package_sha256", "")).strip()
+    package_size = payload.get("package_size_bytes", payload.get("package_size"))
+    source_name = (
+        str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
+    )
+    if used_anonymous_fallback:
+        source_name = f"{source_name} (匿名回退)"
+
+    if not remote_version:
+        raise RuntimeError("国内启动器更新服务返回字段缺失")
+
+    return {
+        "remote_version": remote_version,
+        "package_url": package_url,
+        "package_sha256": package_sha256,
+        "package_size": package_size,
+        "source_name": source_name,
+    }
+
+
 def _report_primary_event(
     base: Path,
     identity: Dict[str, str],
@@ -945,47 +1139,19 @@ def _resolve_update_manifest(
     manifest: Optional[Dict[str, Any]] = None
     primary_err: Optional[Exception] = None
     if PRIMARY_UPDATE_BASE_URL:
-        notify("正在检查更新", "优先连接腾讯云更新服务...", None, "info")
-        original_proxy_mode = bool(_USE_SYSTEM_PROXY)
-        attempts = [
-            (original_proxy_mode, PRIMARY_TIMEOUT_SEC),
-            (original_proxy_mode, PRIMARY_RETRY_TIMEOUT_SEC),
-            ((not original_proxy_mode), PRIMARY_RETRY_TIMEOUT_SEC),
-        ]
-        tried_modes = []
         try:
-            last_exc: Optional[Exception] = None
-            for use_proxy, timeout_sec in attempts:
-                # 避免重复尝试相同组合
-                key = (use_proxy, timeout_sec)
-                if key in tried_modes:
-                    continue
-                tried_modes.append(key)
-                _set_use_system_proxy(use_proxy)
-                mode_name = "system-proxy" if use_proxy else "direct"
-                try:
-                    manifest = _fetch_manifest_from_primary(
-                        channel,
-                        local_version,
-                        identity,
-                        timeout_sec=timeout_sec,
-                    )
-                    _log(
-                        base,
-                        f"腾讯云版本检查成功(mode={mode_name}, timeout={timeout_sec:.1f}s)："
-                        f"local=v{local_version}, remote=v{str(manifest.get('remote_version', '')).strip() or 'unknown'}",
-                    )
-                    break
-                except Exception as e:
-                    last_exc = e
-                    _log(
-                        base,
-                        f"腾讯云版本检查失败(mode={mode_name}, timeout={timeout_sec:.1f}s)：{e}",
-                    )
-                    continue
-
-            if manifest is None and last_exc is not None:
-                raise last_exc
+            manifest = _attempt_primary_request(
+                base,
+                "腾讯云版本检查",
+                "优先连接腾讯云更新服务...",
+                lambda timeout_sec: _fetch_manifest_from_primary(
+                    channel,
+                    local_version,
+                    identity,
+                    timeout_sec=timeout_sec,
+                ),
+                status_cb=notify,
+            )
 
             if manifest is not None:
                 remote_version_preview = str(manifest.get("remote_version", "")).strip()
@@ -1008,8 +1174,6 @@ def _resolve_update_manifest(
             primary_err = e
             _log(base, f"腾讯云更新服务不可用：{e}")
             notify("国内服务暂不可用", "正在切换 GitHub 回退...", None, "warning")
-        finally:
-            _set_use_system_proxy(original_proxy_mode)
 
     if manifest is None:
         notify("正在检查更新", "连接 GitHub 获取最新版本信息...", None, "info")
@@ -1025,6 +1189,61 @@ def _resolve_update_manifest(
     if manifest is None:
         raise RuntimeError("更新清单字段缺失")
     return local_version, manifest
+
+
+def _resolve_launcher_update_manifest(
+    base: Path,
+    identity: Dict[str, str],
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+) -> Dict[str, Any]:
+    def notify(
+        title: str,
+        detail: str = "",
+        progress: Optional[float] = None,
+        level: str = "info",
+    ) -> None:
+        if status_cb:
+            status_cb(title, detail, progress, level)
+
+    manifest: Optional[Dict[str, Any]] = None
+    primary_err: Optional[Exception] = None
+    if PRIMARY_UPDATE_BASE_URL:
+        try:
+            manifest = _attempt_primary_request(
+                base,
+                "腾讯云启动器版本检查",
+                "正在检查启动器版本...",
+                lambda timeout_sec: _fetch_launcher_manifest_from_primary(
+                    identity,
+                    timeout_sec=timeout_sec,
+                ),
+                status_cb=notify,
+            )
+            if manifest is not None:
+                remote_version = str(manifest.get("remote_version", "")).strip()
+                package_url = str(manifest.get("package_url", "")).strip()
+                if _version_is_newer(remote_version, LAUNCHER_VERSION) and (
+                    (not PRIMARY_ALLOW_PACKAGE_DOWNLOAD) or (not package_url)
+                ):
+                    _log(base, "腾讯云启动器更新服务仅提供版本号，下载源切换为 GitHub")
+                    manifest = None
+        except Exception as e:
+            primary_err = e
+            _log(base, f"腾讯云启动器更新服务不可用：{e}")
+
+    if manifest is None:
+        try:
+            manifest = _fetch_launcher_manifest_from_github()
+        except Exception as e:
+            if primary_err is not None:
+                raise RuntimeError(
+                    f"启动器国内更新服务不可用({primary_err})，GitHub 回退失败({e})"
+                ) from e
+            raise
+
+    if manifest is None:
+        raise RuntimeError("启动器更新清单字段缺失")
+    return manifest
 
 
 def _check_for_update(
@@ -1065,6 +1284,33 @@ def _check_for_update(
     if update_available and package_size is None and package_url:
         package_size = _fetch_content_length(package_url, timeout_sec=NET_TIMEOUT_SEC)
 
+    launcher_manifest = _resolve_launcher_update_manifest(
+        base, identity, status_cb=notify
+    )
+    launcher_remote_version = str(launcher_manifest.get("remote_version", "")).strip()
+    launcher_source_name = (
+        str(launcher_manifest.get("source_name", "GitHub")).strip() or "GitHub"
+    )
+    launcher_update_available = _version_is_newer(
+        launcher_remote_version, LAUNCHER_VERSION
+    )
+    launcher_package_size_raw = launcher_manifest.get("package_size", None)
+    launcher_package_size: Optional[int] = None
+    try:
+        if (
+            launcher_package_size_raw is not None
+            and str(launcher_package_size_raw).strip() != ""
+        ):
+            launcher_package_size = int(str(launcher_package_size_raw).strip())
+    except Exception:
+        launcher_package_size = None
+    if launcher_update_available and launcher_package_size is None:
+        launcher_package_url = str(launcher_manifest.get("package_url", "")).strip()
+        if launcher_package_url:
+            launcher_package_size = _fetch_content_length(
+                launcher_package_url, timeout_sec=NET_TIMEOUT_SEC
+            )
+
     return {
         "local_version": local_version,
         "remote_version": remote_version,
@@ -1072,6 +1318,11 @@ def _check_for_update(
         "update_available": update_available,
         "package_size": package_size,
         "manifest": manifest,
+        "launcher_manifest": launcher_manifest,
+        "launcher_remote_version": launcher_remote_version,
+        "launcher_source_name": launcher_source_name,
+        "launcher_update_available": launcher_update_available,
+        "launcher_package_size": launcher_package_size,
     }
 
 
@@ -1158,6 +1409,144 @@ def _download_update_from_manifest(
         cancel_cb=cancel_cb,
     )
     notify("更新完成", f"已更新到 v{remote_version}", 1.0, "success")
+    return remote_version, source_name
+
+
+def _launch_updater_script(script_path: Path) -> None:
+    creation_flags = 0
+    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+        creation_flags |= getattr(subprocess, "CREATE_NO_WINDOW")
+    if hasattr(subprocess, "DETACHED_PROCESS"):
+        creation_flags |= getattr(subprocess, "DETACHED_PROCESS")
+    subprocess.Popen(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script_path),
+        ],
+        cwd=str(script_path.parent),
+        close_fds=True,
+        creationflags=creation_flags,
+    )
+
+
+def _stage_launcher_self_update(
+    base: Path,
+    launcher_bytes: bytes,
+    remote_version: str,
+) -> None:
+    if not _is_frozen_launcher():
+        raise RuntimeError("源码模式不支持启动器自更新")
+
+    target = Path(sys.executable).resolve()
+    staged = base / f"bomana_update_launcher_v{remote_version}.new.exe"
+    backup = base / f"bomana_update_launcher_v{LAUNCHER_VERSION}.bak.exe"
+    script_path = base / "bomana_update_launcher_apply.ps1"
+
+    staged.write_bytes(launcher_bytes)
+    script = f"""$ErrorActionPreference = 'SilentlyContinue'
+$target = {json.dumps(str(target))}
+$staged = {json.dumps(str(staged))}
+$backup = {json.dumps(str(backup))}
+$oldPid = {os.getpid()}
+
+for ($i = 0; $i -lt 120; $i++) {{
+    if (-not (Get-Process -Id $oldPid -ErrorAction SilentlyContinue)) {{
+        break
+    }}
+    Start-Sleep -Seconds 1
+}}
+
+Remove-Item $backup -Force -ErrorAction SilentlyContinue
+if (Test-Path $target) {{
+    Move-Item $target $backup -Force
+}}
+Move-Item $staged $target -Force
+if (-not (Test-Path $target)) {{
+    if (Test-Path $backup) {{
+        Move-Item $backup $target -Force
+    }}
+    exit 1
+}}
+Start-Process -FilePath $target
+Remove-Item $backup -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+"""
+    script_path.write_text(script, encoding="utf-8")
+    _launch_updater_script(script_path)
+
+
+def _download_launcher_update_from_manifest(
+    base: Path,
+    manifest: Dict[str, Any],
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+    cancel_cb: Optional[Callable[[], bool]] = None,
+) -> Tuple[str, str]:
+    def notify(
+        title: str,
+        detail: str = "",
+        progress: Optional[float] = None,
+        level: str = "info",
+    ) -> None:
+        if status_cb:
+            status_cb(title, detail, progress, level)
+
+    remote_version = str(manifest.get("remote_version", "")).strip()
+    package_url = str(manifest.get("package_url", "")).strip()
+    package_sha256 = str(manifest.get("package_sha256", "")).strip()
+    source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
+    if not remote_version or not package_url:
+        raise RuntimeError("启动器更新清单字段缺失")
+
+    notify(
+        "开始下载启动器",
+        f"正在下载启动器 v{remote_version}（来源：{source_name}）",
+        0.18,
+        "info",
+    )
+
+    last_emit = [0.0]
+
+    def on_progress(downloaded: int, total: Optional[int]) -> None:
+        now = time.monotonic()
+        if (now - last_emit[0]) < 0.15 and total and downloaded < total:
+            return
+        last_emit[0] = now
+        if total and total > 0:
+            progress = 0.18 + min(0.62, 0.62 * (downloaded / float(total)))
+            detail = (
+                f"正在下载启动器：{downloaded / 1048576:.1f} / {total / 1048576:.1f} MB"
+            )
+            notify("正在下载启动器", detail, progress, "info")
+        else:
+            notify(
+                "正在下载启动器",
+                f"正在下载启动器：{downloaded / 1048576:.1f} MB",
+                None,
+                "info",
+            )
+
+    launcher_bytes = _fetch_bytes(
+        package_url, progress_cb=on_progress, cancel_cb=cancel_cb
+    )
+    if cancel_cb and cancel_cb():
+        raise RuntimeError("已取消当前操作")
+    if package_sha256:
+        actual_sha256 = hashlib.sha256(launcher_bytes).hexdigest().lower()
+        if actual_sha256 != package_sha256.strip().lower():
+            raise RuntimeError("SHA256 校验失败")
+    notify("准备替换启动器", "正在准备关闭当前启动器并自动重启...", 0.9, "info")
+    _stage_launcher_self_update(base, launcher_bytes, remote_version)
+    notify(
+        "启动器更新已就绪",
+        f"已准备好升级到 v{remote_version}，关闭当前窗口后会自动替换并重启。",
+        1.0,
+        "success",
+    )
     return remote_version, source_name
 
 
@@ -1552,6 +1941,11 @@ class LauncherWindow:
         self.latest_source_name = ""
         self.latest_package_size: Optional[int] = None
         self.update_available = False
+        self.latest_launcher_manifest: Optional[Dict[str, Any]] = None
+        self.latest_launcher_version = LAUNCHER_VERSION
+        self.latest_launcher_source_name = ""
+        self.latest_launcher_package_size: Optional[int] = None
+        self.launcher_update_available = False
         self.last_check_ok = False
         self.last_check_error = ""
         self.install_dir = self.base / APP_DIR_NAME
@@ -2104,6 +2498,19 @@ class LauncherWindow:
         self.start_btn.pack(side="left")
         self._style_action_button(self.start_btn, "primary")
 
+        self.launcher_btn = tk.Button(
+            btn_row,
+            text="更新启动器",
+            width=12,
+            command=self._on_update_launcher,
+            cursor="hand2",
+            font=self._font(10),
+            padx=self._px(6),
+            pady=self._px(3),
+        )
+        self.launcher_btn.pack(side="left", padx=(self._px(8), 0))
+        self._style_action_button(self.launcher_btn, "secondary")
+
         self.retry_btn = tk.Button(
             btn_row,
             text="重新检查",
@@ -2174,6 +2581,9 @@ class LauncherWindow:
         self.latest_manifest = None
         self.latest_package_size = None
         self.update_available = False
+        self.latest_launcher_manifest = None
+        self.latest_launcher_package_size = None
+        self.launcher_update_available = False
         self.last_check_ok = False
         self.last_check_error = ""
         self.channel = self.channel_var.get().strip() or self.detected_channel
@@ -2184,7 +2594,7 @@ class LauncherWindow:
         if automatic:
             self._set_status(
                 "自动检查更新",
-                f"正在检查 {self.channel} 通道，并读取下载包大小...",
+                f"正在检查 {self.channel} 通道，并同步检查启动器版本...",
                 None,
                 "info",
             )
@@ -2209,6 +2619,59 @@ class LauncherWindow:
                 msg = _friendly_error_text(e, self.channel)
                 _log(self.base, f"更新检查失败：{e}")
                 self.events.put(("check_done", {"ok": False, "error": msg}))
+            return
+        if task == "launcher_download":
+            launcher_version = LAUNCHER_VERSION
+            update_ok = False
+            update_source = ""
+            update_error = ""
+            manifest = dict(self.latest_launcher_manifest or {})
+            try:
+                if not manifest:
+                    raise RuntimeError("请先完成启动器更新检查")
+                launcher_version, update_source = _download_launcher_update_from_manifest(
+                    self.base,
+                    manifest,
+                    status_cb=self._emit_status,
+                    cancel_cb=lambda: self._cancel_requested.is_set(),
+                )
+                update_ok = True
+            except Exception as e:
+                update_error = _friendly_error_text(e, self.channel)
+                _log(self.base, f"下载启动器更新失败：{e}")
+
+            _report_primary_event(
+                self.base,
+                self.client_identity,
+                "launcher_update_result",
+                self.channel,
+                self.local_version,
+                extra={
+                    "local_version": LAUNCHER_VERSION,
+                    "update_ok": update_ok,
+                    "update_source": update_source,
+                    "update_error": update_error,
+                },
+            )
+
+            self.events.put(
+                (
+                    "launcher_done",
+                    {
+                        "update_ok": update_ok,
+                        "final_version": launcher_version,
+                        "status": (
+                            "启动器更新已准备好" if update_ok else "启动器更新失败"
+                        ),
+                        "detail": (
+                            f"已准备好升级到启动器 v{launcher_version}，当前窗口关闭后将自动重启。"
+                            if update_ok
+                            else update_error
+                        ),
+                        "level": ("success" if update_ok else "warning"),
+                    },
+                )
+            )
             return
         if task == "import_zip":
             final_version = _read_local_app_version(self.base / APP_DIR_NAME)
@@ -2407,16 +2870,30 @@ class LauncherWindow:
                         self.update_available = bool(
                             payload.get("update_available", False)
                         )
+                        self.latest_launcher_manifest = payload.get(
+                            "launcher_manifest", None
+                        )
+                        self.latest_launcher_version = str(
+                            payload.get("launcher_remote_version", LAUNCHER_VERSION)
+                        )
+                        self.latest_launcher_source_name = str(
+                            payload.get("launcher_source_name", "GitHub")
+                        )
+                        self.latest_launcher_package_size = payload.get(
+                            "launcher_package_size", None
+                        )
+                        self.launcher_update_available = bool(
+                            payload.get("launcher_update_available", False)
+                        )
 
                         if self.update_available:
-                            size_text = _format_size_text(self.latest_package_size)
-                            detail = (
-                                f"v{self.local_version} -> v{self.latest_remote_version}（来源：{self.latest_source_name}）\n"
-                                f"下载总大小：{size_text}"
-                            )
+                            detail = self._compose_check_detail()
                             self._set_status("发现新版本", detail, 0.0, "success")
+                        elif self.launcher_update_available:
+                            detail = self._compose_check_detail()
+                            self._set_status("检测到启动器更新", detail, 0.0, "success")
                         else:
-                            detail = f"当前版本 v{self.local_version}（来源：{self.latest_source_name}）"
+                            detail = self._compose_check_detail()
                             self._set_status("已是最新版本", detail, 0.0, "success")
                     else:
                         self.last_check_ok = False
@@ -2424,6 +2901,10 @@ class LauncherWindow:
                         self.latest_manifest = None
                         self.latest_package_size = None
                         self.latest_source_name = ""
+                        self.latest_launcher_manifest = None
+                        self.latest_launcher_package_size = None
+                        self.latest_launcher_source_name = ""
+                        self.launcher_update_available = False
                         self.last_check_error = str(payload.get("error", "检查失败"))
                         self._set_status(
                             "检查失败", self.last_check_error, 0.0, "warning"
@@ -2474,6 +2955,21 @@ class LauncherWindow:
                         self._finalize_exit()
                         continue
                     if not bool(payload.get("update_ok", False)):
+                        self._show_error_actions()
+                elif typ == "launcher_done":
+                    ok = bool(payload.get("update_ok", False))
+                    self._set_status(
+                        str(payload.get("status", "")),
+                        str(payload.get("detail", "")),
+                        1.0 if ok else self.progress_value,
+                        str(payload.get("level", "info")),
+                    )
+                    self._set_running(False)
+                    if ok:
+                        self.launcher_update_available = False
+                        self.latest_launcher_manifest = None
+                        self.root.after(400, self._finalize_exit)
+                    else:
                         self._show_error_actions()
         except queue.Empty:
             pass
@@ -2540,6 +3036,24 @@ class LauncherWindow:
             )
         self._schedule_layout_reflow()
 
+    def _compose_check_detail(self) -> str:
+        lines = []
+        if self.last_check_ok and self.update_available:
+            size_text = _format_size_text(self.latest_package_size)
+            lines.append(
+                f"应用 v{self.local_version} -> v{self.latest_remote_version}（来源：{self.latest_source_name}，大小：{size_text}）"
+            )
+        elif self.last_check_ok:
+            lines.append(
+                f"应用当前版本 v{self.local_version}（来源：{self.latest_source_name or '本地/腾讯云'}）"
+            )
+        if self.launcher_update_available:
+            launcher_size_text = _format_size_text(self.latest_launcher_package_size)
+            lines.append(
+                f"启动器 v{LAUNCHER_VERSION} -> v{self.latest_launcher_version}（来源：{self.latest_launcher_source_name}，大小：{launcher_size_text}）"
+            )
+        return "\n".join(line for line in lines if line)
+
     def _update_launch_button_label(self) -> None:
         if self.last_download_success:
             self.launch_btn.config(text="启动（已下载更新）")
@@ -2556,12 +3070,22 @@ class LauncherWindow:
         self.launch_btn.config(text="启动应用（本地）")
         self._style_action_button(self.launch_btn, "secondary")
 
+    def _update_launcher_button_state(self) -> None:
+        if self.launcher_update_available:
+            self.launcher_btn.config(text="更新启动器", state="normal")
+            self._style_action_button(self.launcher_btn, "primary")
+            return
+        self.launcher_btn.config(text="启动器已最新", state="disabled")
+        self._style_action_button(self.launcher_btn, "secondary")
+
     def _set_running(self, running: bool) -> None:
         self.running = running
         self._render_status_text()
         self._update_launch_button_label()
+        self._update_launcher_button_state()
         state = "disabled" if running else "normal"
         self.start_btn.config(state=state)
+        self.launcher_btn.config(state=("disabled" if running else self.launcher_btn.cget("state")))
         self.retry_btn.config(state=state)
         if running and self.current_task == "check" and _is_local_app_ready(self.base):
             # Allow launching local app immediately while background check continues.
@@ -2580,8 +3104,10 @@ class LauncherWindow:
             self.retry_btn.pack_forget()
             if self.current_task == "check":
                 self.hint_lbl.config(
-                    text="正在自动检查版本并获取下载包总大小，请稍候..."
+                    text="正在后台检查应用与启动器更新；如本地已有应用，可直接点“启动应用”。"
                 )
+            elif self.current_task == "launcher_download":
+                self.hint_lbl.config(text="正在下载并准备替换启动器，请不要强制结束进程。")
             else:
                 self.hint_lbl.config(text="正在下载并安装更新，请稍候...")
         else:
@@ -2603,6 +3129,21 @@ class LauncherWindow:
                     text=(
                         f"可下载 v{self.latest_remote_version}（总大小：{size_text}）。点击“下载更新”会再次确认。\n"
                         f"安装位置：{self.install_dir}"
+                    )
+                )
+                if self.launcher_update_available:
+                    self.hint_lbl.config(
+                        text=(
+                            f"{self.hint_lbl.cget('text')}\n"
+                            f"同时检测到启动器 v{self.latest_launcher_version} 可更新，可单独点击“更新启动器”。"
+                        )
+                    )
+            elif self.last_check_ok and self.launcher_update_available:
+                launcher_size_text = _format_size_text(self.latest_launcher_package_size)
+                self.hint_lbl.config(
+                    text=(
+                        f"应用当前已是最新版本；启动器可升级到 v{self.latest_launcher_version}（总大小：{launcher_size_text}）。\n"
+                        "点击“更新启动器”后会关闭当前窗口并自动重启新版本。"
                     )
                 )
             elif self.last_check_ok and not self.update_available:
@@ -2704,6 +3245,52 @@ class LauncherWindow:
         )
         self._set_running(True)
         self._start_worker("download")
+
+    def _on_update_launcher(self) -> None:
+        if self.running:
+            return
+        if not self.last_check_ok:
+            messagebox.showwarning(
+                DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。"
+            )
+            return
+        if not self.launcher_update_available:
+            messagebox.showinfo(DISPLAY_NAME, "当前启动器已是最新版本。")
+            return
+        if not self.latest_launcher_manifest:
+            messagebox.showwarning(
+                DISPLAY_NAME, "缺少启动器下载清单，请先点击“重新检查”。"
+            )
+            return
+        if not _is_frozen_launcher():
+            messagebox.showinfo(
+                DISPLAY_NAME,
+                "当前是源码运行模式，无法直接替换启动器可执行文件。\n将为你打开发布页手动获取新版启动器。",
+            )
+            self._open_releases()
+            return
+        size_text = _format_size_text(self.latest_launcher_package_size)
+        ok = messagebox.askyesno(
+            DISPLAY_NAME,
+            (
+                f"将下载并升级启动器到 v{self.latest_launcher_version}。\n"
+                f"下载总大小：{size_text}\n"
+                "升级过程中会关闭当前启动器，并在替换后自动重启。\n"
+                "是否现在开始？"
+            ),
+        )
+        if not ok:
+            return
+        self.current_task = "launcher_download"
+        self.has_attempted_update = True
+        self._set_status(
+            "准备更新启动器",
+            f"即将下载启动器 v{self.latest_launcher_version}，总大小：{size_text}",
+            0.0,
+            "info",
+        )
+        self._set_running(True)
+        self._start_worker("launcher_download")
 
     def _on_retry(self) -> None:
         self._begin_check(automatic=False)
