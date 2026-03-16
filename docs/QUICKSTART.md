@@ -74,8 +74,9 @@ CCRP 说明：
 
 - 数据库：`bomana/data/fm_speed_limits.json`
 - 静态限速库来源：War Thunder datamine `aces.vromfs.bin_u/gamedata/flightmodels/**` -> `tools/fm_speed_extractor.py`
+- 参考实现：会对照 [KaerMorh/WTSpeeder](https://github.com/KaerMorh/WTSpeeder) 核验旧版 `Vne` / `VneMach` 字段和告警阈值
 - 识别链路：`/indicators.type -> unit_to_fm -> fm_speed_limits`
-- 告警输出：状态徽章 + warning/critical 声音节奏
+- 告警输出：紧凑速度条 + warning/critical 声音节奏
 
 ### 4. 常见问题
 
@@ -111,6 +112,7 @@ python tools/blkx_extractor.py ^
 
 - 原始目录：`<path-to-datamine-root>\aces.vromfs.bin_u\gamedata\flightmodels`
 - 产物用途：`unit_to_fm` 映射 + IAS/Mach 限速库
+- 交叉核验参考：`KaerMorh/WTSpeeder`
 
 ```bash
 python tools/fm_speed_extractor.py ^

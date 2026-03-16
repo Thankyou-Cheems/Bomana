@@ -60,7 +60,7 @@
 5. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
-   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives badge + alert sound.
+   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives compact speed strip + alert sound.
 6. Optional hybrid probe flow (default disabled):
    - `ENABLE_CLOG_PROBE=False` by default; no behavior change in normal builds.
    - Can be temporarily enabled for local validation with `BOMANA_ENABLE_CLOG_PROBE=1`.
@@ -90,6 +90,7 @@ Important constraint: default runtime data path is official 8111 API only; no me
 - `bomana/data/fm_speed_limits.json`
   - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/flightmodels/**`
   - Generator: `tools/fm_speed_extractor.py`
+  - Cross-check reference: [KaerMorh/WTSpeeder](https://github.com/KaerMorh/WTSpeeder) for legacy FM fields (`Vne` / `VneMach`) and alert thresholds
   - Runtime consumer: `OverspeedAnalyzer` via `/indicators.type -> unit_to_fm -> fm_speed_limits`
 
 ## Configuration & Persistence

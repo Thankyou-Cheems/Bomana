@@ -118,8 +118,9 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 - **机型匹配** - 基于 `/indicators.type` 映射到 flight model（FM）
 - **双指标判定** - 同时考虑 IAS 限速与 Mach 限速
 - **分级告警** - `safe / caution / warning / critical`
-- **提示方式** - 徽章文本 + 节奏化告警音（warning/critical）
+- **提示方式** - 紧凑速度条 + 节奏化告警音（warning/critical）
 - **静态限速库来源** - 从 War Thunder datamine 的 `aces.vromfs.bin_u/gamedata/flightmodels/` 提取生成，产物为 `bomana/data/fm_speed_limits.json`
+- **参考实现** - 数据提取字段与分级阈值会对照 [KaerMorh/WTSpeeder](https://github.com/KaerMorh/WTSpeeder) 交叉核验；`Bomana` 仍独立生成并维护自己的 `fm_speed_limits.json`
 
 ### 出击检查清单
 
@@ -313,6 +314,11 @@ python tools/fm_speed_extractor.py ^
 
 `Bomana` 运行时会读取该 JSON，并按 `/indicators.type -> unit_to_fm -> fm_speed_limits`，结合 `/state` 的 IAS/Mach 数据进行超速分级提醒。
 
+说明：
+
+- `Bomana` 的限速库仍以 War Thunder datamine 为原始来源。
+- 提取字段兼容和阈值分级会参考 [KaerMorh/WTSpeeder](https://github.com/KaerMorh/WTSpeeder) 做交叉核验，避免因 FM 旧字段差异造成误判。
+
 
 ---
 
@@ -336,7 +342,7 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 | 数据文件 | 原始来源 | 生成脚本 | 运行时用途 |
 |------|------|------|------|
 | `bomana/data/ccrp_bomb_params.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` | `tools/blkx_extractor.py` | `BombConfig` 读取炸弹质量、口径、阻力、减速伞参数，用于 CCRP 弹道估算 |
-| `bomana/data/fm_speed_limits.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/flightmodels/**` | `tools/fm_speed_extractor.py` | `OverspeedAnalyzer` 按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 做 IAS/Mach 超速分级 |
+| `bomana/data/fm_speed_limits.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/flightmodels/**`，并参考 [KaerMorh/WTSpeeder](https://github.com/KaerMorh/WTSpeeder) 交叉核验字段/阈值 | `tools/fm_speed_extractor.py` | `OverspeedAnalyzer` 按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 做 IAS/Mach 超速分级 |
 
 ### 轮询频率
 
@@ -473,6 +479,7 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 - [Stona_WT 官方回复 (Post #16)](https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664/16)
 - [Gaijin Entertainment 用户协议](https://legal.gaijin.net/termsofservice)
 - [WTRTI - 另一款官方认可的 8111 端口工具](https://mesofthorny.github.io/WTRTI/)
+- [KaerMorh/WTSpeeder - 战雷 IAS 防超速参考项目](https://github.com/KaerMorh/WTSpeeder)
 - [War Thunder localhost:8111 API 文档](https://github.com/lucasvmx/WarThunder-localhost-documentation)
 
 ---
