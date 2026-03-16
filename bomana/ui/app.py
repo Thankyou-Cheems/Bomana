@@ -670,8 +670,6 @@ class App:
         self.badge_main.pack(side="left")
         self.badge_flight = Pill(row2, text="—", fg=Theme.TEXT_DIM, bg=Theme.BG, font=pill_font)
         self.badge_flight.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
-        # v6.9.0: 超速分级徽章（按需显示）
-        self.badge_speed = Pill(row2, text="", fg=Theme.TEXT, bg=Theme.BLUE, font=pill_font)
         self.badge_lock = Pill(row2, text="锁定", fg=Theme.TEXT, bg=Theme.BLUE, font=pill_font)
         self.badge_lock.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
         self._update_lock_badge()
@@ -686,6 +684,55 @@ class App:
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e"
         )
         self.status_txt.pack(side="right")
+
+        # 第三行：紧凑速度指示条（常驻，接近极限时显著变色）
+        speed_row = tk.Frame(top_content, bg=Theme.GRAYPILL)
+        pad_top, pad_bot = UIConfig.PADDING_SPEED_STRIP
+        speed_row.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
+        speed_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s))
+        self.speed_state_lbl = tk.Label(
+            speed_row,
+            text="速度监视",
+            font=speed_font,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            width=9,
+        )
+        self.speed_state_lbl.pack(side="left")
+        self.speed_value_lbl = tk.Label(
+            speed_row,
+            text="--",
+            font=speed_font,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="e",
+        )
+        self.speed_value_lbl.pack(side="right")
+
+        speed_bar_height = max(8, int(UIConfig.SPEED_STRIP_HEIGHT * s))
+        speed_bar_thickness = max(3, int(UIConfig.SPEED_STRIP_THICKNESS * s))
+        self.speed_bar_host = tk.Frame(speed_row, bg=Theme.GRAYPILL, height=speed_bar_height)
+        self.speed_bar_host.pack(side="left", fill="x", expand=True, padx=(int(8*s), int(8*s)))
+        self.speed_bar_host.pack_propagate(False)
+        self.speed_bar_bg = tk.Frame(self.speed_bar_host, bg=Theme.SEPARATOR, height=speed_bar_thickness)
+        self.speed_bar_bg.place(relx=0, rely=0.5, relwidth=1, anchor="w")
+        self.speed_bar_fill = tk.Frame(self.speed_bar_bg, bg=Theme.GREEN, height=speed_bar_thickness)
+        self.speed_bar_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
+        self.speed_bar_markers = {}
+        for name, relx, color in (
+            ("caution", OverspeedConfig.CAUTION_RATIO, Theme.BLUE),
+            ("warning", OverspeedConfig.WARNING_RATIO, Theme.YELLOW),
+            ("critical", OverspeedConfig.CRITICAL_RATIO, Theme.RED),
+        ):
+            marker = tk.Frame(
+                self.speed_bar_bg,
+                bg=color,
+                width=max(1, int(2*s)),
+                height=max(speed_bar_thickness + 2, int(7*s)),
+            )
+            marker.place(relx=max(0.0, min(1.0, relx)), rely=0.5, anchor="center")
+            self.speed_bar_markers[name] = marker
 
         # 进度条
         bar_height = int(UIConfig.PROGRESS_BAR_HEIGHT * s)
@@ -1409,6 +1456,9 @@ class App:
         overspeed_defaults = {
             "overspeed_level": "safe",
             "overspeed_ratio": 0.0,
+            "overspeed_display_ratio": 0.0,
+            "overspeed_current_ias_kmh": 0.0,
+            "overspeed_current_mach": None,
             "overspeed_limit_kmh": 0.0,
             "overspeed_limit_mach": 0.0,
             "overspeed_match": False,
@@ -1812,6 +1862,9 @@ class App:
             hud_attitude_fallback_reason="",
             overspeed_level=os_level,
             overspeed_ratio=os_ratio,
+            overspeed_display_ratio=max(os_ratio, (0.86 / 0.88)),
+            overspeed_current_ias_kmh=980.0 * os_ratio,
+            overspeed_current_mach=0.86,
             overspeed_limit_kmh=980.0,
             overspeed_limit_mach=0.88,
             overspeed_match=True,
@@ -1852,6 +1905,87 @@ class App:
         if self._restored_state and (not self._debug_effective_mock) and render_snap.phase == Phase.ALIVE:
             lines.append("状态恢复: 已从保存状态恢复计时")
         return "\n".join(lines)
+
+    def _update_speed_strip(self, snap: UISnapshot, debug_mock_mode: bool) -> str:
+        """更新紧凑速度指示条，并返回当前超速等级。"""
+        speed_level = str(getattr(snap, "overspeed_level", "unknown") or "unknown")
+        speed_ratio = float(getattr(snap, "overspeed_ratio", 0.0) or 0.0)
+        display_ratio = float(getattr(snap, "overspeed_display_ratio", speed_ratio) or 0.0)
+        current_ias = float(getattr(snap, "overspeed_current_ias_kmh", 0.0) or 0.0)
+        current_mach = getattr(snap, "overspeed_current_mach", None)
+        limit_ias = float(getattr(snap, "overspeed_limit_kmh", 0.0) or 0.0)
+        limit_mach = float(getattr(snap, "overspeed_limit_mach", 0.0) or 0.0)
+        matched = bool(getattr(snap, "overspeed_match", False))
+        reason = str(getattr(snap, "overspeed_reason", "") or "")
+
+        if speed_level == "critical":
+            state_text = "超速危险"
+            state_fg = Theme.RED
+            fill_color = Theme.RED
+        elif speed_level == "warning":
+            state_text = "接近极限"
+            state_fg = Theme.YELLOW
+            fill_color = Theme.YELLOW
+        elif speed_level == "caution":
+            state_text = "高速预警"
+            state_fg = Theme.ORANGE
+            fill_color = Theme.ORANGE
+        elif reason == "limit_missing":
+            state_text = "阈值缺失"
+            state_fg = Theme.TEXT_MUTED
+            fill_color = Theme.TEXT_MUTED
+        elif matched:
+            state_text = "速度安全"
+            state_fg = Theme.GREEN
+            fill_color = Theme.GREEN
+        else:
+            state_text = "速度监视"
+            state_fg = Theme.TEXT_MUTED
+            fill_color = Theme.TEXT_MUTED
+
+        if matched:
+            value_parts = []
+            if limit_ias > 0.0:
+                value_parts.append(f"{current_ias:.0f}/{limit_ias:.0f} km/h")
+            elif current_ias > 0.0:
+                value_parts.append(f"{current_ias:.0f} km/h")
+            if current_mach is not None and limit_mach > 0.0:
+                value_parts.append(f"M{float(current_mach):.2f}/{limit_mach:.2f}")
+            value_text = "  ".join(value_parts) if value_parts else "已匹配机型，阈值缺失"
+        else:
+            if current_ias > 0.0:
+                value_text = f"{current_ias:.0f} km/h  阈值未匹配"
+            else:
+                value_text = "阈值未匹配"
+
+        self.speed_state_lbl.config(text=state_text, fg=state_fg)
+        self.speed_value_lbl.config(
+            text=value_text,
+            fg=state_fg if speed_level in ("caution", "warning", "critical") else Theme.TEXT_DIM,
+        )
+        self.speed_bar_fill.config(bg=fill_color if matched else Theme.TEXT_MUTED)
+        self.speed_bar_fill.place(relwidth=max(0.0, min(1.0, display_ratio if matched else 0.0)))
+
+        if speed_level != self._last_overspeed_level:
+            self._last_overspeed_level = speed_level
+            self._last_overspeed_sound_ts = 0.0
+
+        if not debug_mock_mode:
+            now_sound = time.monotonic()
+            if speed_level == "critical":
+                if (now_sound - self._last_overspeed_sound_ts) >= OverspeedConfig.CRITICAL_SOUND_INTERVAL_SEC:
+                    self.sound.play(pattern="overspeed_critical")
+                    self._last_overspeed_sound_ts = now_sound
+            elif speed_level == "warning":
+                if (now_sound - self._last_overspeed_sound_ts) >= OverspeedConfig.WARNING_SOUND_INTERVAL_SEC:
+                    self.sound.play(pattern="overspeed_warning")
+                    self._last_overspeed_sound_ts = now_sound
+            else:
+                self._last_overspeed_sound_ts = 0.0
+        elif speed_level not in ("critical", "warning"):
+            self._last_overspeed_sound_ts = 0.0
+
+        return speed_level
 
     def _toggle_zone_sound(self):
         """切换战区提示音"""
@@ -2088,8 +2222,8 @@ class App:
         
         pad = int(UIConfig.WINDOW_PADDING * self.scale)
         
-        # ⚠️ 徽章行最小宽度（确保超速/起落架徽章等能完整显示）
-        # 徽章行包含: badge_main + badge_flight + badge_speed(可选) + badge_gear(可选) + status_txt
+        # ⚠️ 徽章行最小宽度（确保主徽章、起落架和状态文本完整显示）
+        # 速度信息已迁移为独立紧凑速度条，避免在徽章行里挤占空间
         badge_min_width = int(460 * self.scale)
         
         # ⚠️ 提示文字最小宽度（动态测量，避免浪费或截断）
@@ -3420,56 +3554,7 @@ class App:
         # 更新徽章
         self.badge_main.set(*snap.main_badge)
         self.badge_flight.set(*snap.flight_badge)
-
-        # v6.9.0: 超速徽章（仅在接近极限时显示）
-        speed_level = str(getattr(snap, "overspeed_level", "unknown") or "unknown")
-        speed_ratio = float(getattr(snap, "overspeed_ratio", 0.0) or 0.0)
-        show_speed_badge = bool(getattr(snap, "overspeed_match", False)) and (
-            speed_level in ("caution", "warning", "critical")
-        )
-
-        if show_speed_badge:
-            speed_pct = int(max(0.0, speed_ratio) * 100.0)
-            if speed_level == "critical":
-                speed_text = f"🔴超速 {speed_pct}%"
-                speed_bg = Theme.RED
-            elif speed_level == "warning":
-                speed_text = f"⚠临界 {speed_pct}%"
-                speed_bg = Theme.YELLOW
-            else:
-                speed_text = f"高速 {speed_pct}%"
-                speed_bg = Theme.BLUE
-
-            self.badge_speed.set(speed_text, Theme.TEXT, speed_bg)
-            if not self.badge_speed.winfo_ismapped():
-                self.badge_speed.pack(
-                    side="left",
-                    padx=(int(UIConfig.SPACING_BADGE*self.scale), 0),
-                    after=self.badge_flight,
-                )
-        else:
-            if self.badge_speed.winfo_ismapped():
-                self.badge_speed.pack_forget()
-
-        # 超速声音节奏控制（低刺激，避免连续刺耳）
-        if speed_level != self._last_overspeed_level:
-            self._last_overspeed_level = speed_level
-            self._last_overspeed_sound_ts = 0.0
-
-        if not debug_mock_mode:
-            now_sound = time.monotonic()
-            if speed_level == "critical":
-                if (now_sound - self._last_overspeed_sound_ts) >= OverspeedConfig.CRITICAL_SOUND_INTERVAL_SEC:
-                    self.sound.play(pattern="overspeed_critical")
-                    self._last_overspeed_sound_ts = now_sound
-            elif speed_level == "warning":
-                if (now_sound - self._last_overspeed_sound_ts) >= OverspeedConfig.WARNING_SOUND_INTERVAL_SEC:
-                    self.sound.play(pattern="overspeed_warning")
-                    self._last_overspeed_sound_ts = now_sound
-            else:
-                self._last_overspeed_sound_ts = 0.0
-        elif speed_level not in ("critical", "warning"):
-            self._last_overspeed_sound_ts = 0.0
+        speed_level = self._update_speed_strip(snap, debug_mock_mode)
         
         # v6.6.1: 起落架徽章（集成警告和进度）
         # 显示条件：警告 或 正在移动

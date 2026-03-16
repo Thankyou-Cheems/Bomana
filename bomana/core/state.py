@@ -564,6 +564,9 @@ class UISnapshot:
     # v6.9.0 新增：超速提醒链路
     overspeed_level: str = "unknown"        # unknown/safe/caution/warning/critical
     overspeed_ratio: float = 0.0            # IAS占限速百分比（0~1）
+    overspeed_display_ratio: float = 0.0    # UI显示比例（IAS/Mach中更危险的一侧）
+    overspeed_current_ias_kmh: float = 0.0  # 当前IAS
+    overspeed_current_mach: Optional[float] = None  # 当前马赫
     overspeed_limit_kmh: float = 0.0        # 机型IAS限速
     overspeed_limit_mach: float = 0.0       # 机型马赫限速
     overspeed_match: bool = False           # 是否成功匹配机型限速

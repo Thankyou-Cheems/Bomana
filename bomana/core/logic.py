@@ -1273,6 +1273,20 @@ class GameLogic:
                 release_status = s.cached_release_status
                 target_zone_distance_m = s.cached_target_distance_m
 
+            mach_ratio_dbg = None
+            try:
+                if (
+                    overspeed.mach is not None
+                    and overspeed.mach_limit is not None
+                    and float(overspeed.mach_limit) > 0.0
+                ):
+                    mach_ratio_dbg = float(overspeed.mach) / float(overspeed.mach_limit)
+            except Exception:
+                mach_ratio_dbg = None
+            overspeed_display_ratio = max(
+                [r for r in (overspeed.ias_ratio, mach_ratio_dbg) if r is not None] or [0.0]
+            )
+
             return UISnapshot(
                 phase=s.phase, life_index=life_index, cycle=cycle, 
                 remaining_sec=remaining, progress=progress, sortie_id=s.sortie_id, 
@@ -1327,6 +1341,11 @@ class GameLogic:
                 hud_attitude_fallback_reason=attitude.fallback_reason,
                 overspeed_level=overspeed.level,
                 overspeed_ratio=float(overspeed.ias_ratio or 0.0),
+                overspeed_display_ratio=float(overspeed_display_ratio or 0.0),
+                overspeed_current_ias_kmh=float(overspeed.ias_kmh or 0.0),
+                overspeed_current_mach=(
+                    float(overspeed.mach) if overspeed.mach is not None else None
+                ),
                 overspeed_limit_kmh=float(overspeed.ias_limit_kmh or 0.0),
                 overspeed_limit_mach=float(overspeed.mach_limit or 0.0),
                 overspeed_match=bool(overspeed.resolved_fm),

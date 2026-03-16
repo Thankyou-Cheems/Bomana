@@ -258,6 +258,7 @@ class UIConfig:
     # 内边距定义（水平, 垂直）
     PADDING_MAIN = (14, 10)      # 主容器
     PADDING_ROW2 = (8, 4)        # 第二行（徽章行）
+    PADDING_SPEED_STRIP = (0, 4) # 速度条
     PADDING_PROGRESS = (4, 6)    # 进度条
 
     # 间距定义
@@ -269,6 +270,8 @@ class UIConfig:
     WINDOW_PADDING = 6           # 窗口内部留白
 
     # 进度条样式
+    SPEED_STRIP_HEIGHT = 12      # 速度条容器高度
+    SPEED_STRIP_THICKNESS = 5    # 速度条实际粗细
     PROGRESS_BAR_HEIGHT = 6      # 进度条容器高度
     PROGRESS_BAR_THICKNESS = 3   # 进度条实际粗细
 
