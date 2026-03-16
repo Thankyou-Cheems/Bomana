@@ -1335,6 +1335,7 @@ class GameLogic:
                 release_status=release_status,
                 target_zone_distance_m=target_zone_distance_m,
                 ground_speed_kmh=ground_speed_kmh_for_bombing,
+                aircraft_type_name=str(tel.type_name or ""),
                 attitude_pitch_deg=attitude.pitch_deg,
                 attitude_roll_deg=attitude.roll_deg,
                 attitude_bank_deg=attitude.bank_deg,

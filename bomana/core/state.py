@@ -552,6 +552,7 @@ class UISnapshot:
     release_status: str = "invalid"            # ready/approaching/too_far/passed/invalid
     target_zone_distance_m: float = 0.0        # 目标战区距离 (米)
     ground_speed_kmh: float = 0.0              # 地速 (km/h)
+    aircraft_type_name: str = ""               # 当前机型标识（来自 /indicators.type）
 
     # v6.8.0 新增：HUD姿态链路输出
     attitude_pitch_deg: float = 0.0

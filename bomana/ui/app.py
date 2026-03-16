@@ -692,18 +692,31 @@ class App:
         pad_top, pad_bot = UIConfig.PADDING_SPEED_STRIP
         self.speed_row.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
         speed_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s))
+        speed_model_font = (UIConfig.FONT_HINT[0], max(7, int(UIConfig.FONT_HINT[1]*s*0.92)))
+        self.speed_header_row = tk.Frame(self.speed_row, bg=Theme.GRAYPILL)
+        self.speed_header_row.pack(fill="x")
+        self.speed_meta_frame = tk.Frame(self.speed_header_row, bg=Theme.GRAYPILL)
+        self.speed_meta_frame.pack(side="left", fill="x", expand=True)
         self.speed_state_lbl = tk.Label(
-            self.speed_row,
+            self.speed_meta_frame,
             text="速度监视",
             font=speed_font,
             fg=Theme.TEXT_MUTED,
             bg=Theme.GRAYPILL,
             anchor="w",
-            width=9,
         )
-        self.speed_state_lbl.pack(side="left")
+        self.speed_state_lbl.pack(anchor="w")
+        self.speed_model_lbl = tk.Label(
+            self.speed_meta_frame,
+            text="机型未识别",
+            font=speed_model_font,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
+        self.speed_model_lbl.pack(anchor="w")
         self.speed_value_lbl = tk.Label(
-            self.speed_row,
+            self.speed_header_row,
             text="--",
             font=speed_font,
             fg=Theme.TEXT_MUTED,
@@ -715,7 +728,7 @@ class App:
         speed_bar_height = max(8, int(UIConfig.SPEED_STRIP_HEIGHT * s))
         speed_bar_thickness = max(3, int(UIConfig.SPEED_STRIP_THICKNESS * s))
         self.speed_bar_host = tk.Frame(self.speed_row, bg=Theme.GRAYPILL, height=speed_bar_height)
-        self.speed_bar_host.pack(side="left", fill="x", expand=True, padx=(int(8*s), int(8*s)))
+        self.speed_bar_host.pack(fill="x", pady=(max(1, int(2*s)), 0))
         self.speed_bar_host.pack_propagate(False)
         self.speed_bar_bg = tk.Frame(self.speed_bar_host, bg=Theme.SEPARATOR, height=speed_bar_thickness)
         self.speed_bar_bg.place(relx=0, rely=0.5, relwidth=1, anchor="w")
@@ -1463,6 +1476,7 @@ class App:
         idx = self._debug_scene_index % max(1, len(self._debug_scene_names))
         heading = (self._debug_frame_counter * 1.8) % 360.0
         overspeed_defaults = {
+            "aircraft_type_name": "mig-21_bison",
             "overspeed_level": "safe",
             "overspeed_ratio": 0.0,
             "overspeed_display_ratio": 0.0,
@@ -1915,6 +1929,16 @@ class App:
             lines.append("状态恢复: 已从保存状态恢复计时")
         return "\n".join(lines)
 
+    @staticmethod
+    def _format_aircraft_type_label(raw: str) -> str:
+        text = str(raw or "").strip().replace("_", " ")
+        text = " ".join(text.split())
+        if not text:
+            return "机型未识别"
+        if len(text) > 28:
+            return text[:25] + "..."
+        return text
+
     def _update_speed_strip(self, snap: UISnapshot, debug_mock_mode: bool) -> str:
         """更新紧凑速度指示条，并返回当前超速等级。"""
         speed_level = str(getattr(snap, "overspeed_level", "unknown") or "unknown")
@@ -1926,6 +1950,9 @@ class App:
         limit_mach = float(getattr(snap, "overspeed_limit_mach", 0.0) or 0.0)
         matched = bool(getattr(snap, "overspeed_match", False))
         reason = str(getattr(snap, "overspeed_reason", "") or "")
+        aircraft_type_name = self._format_aircraft_type_label(
+            str(getattr(snap, "aircraft_type_name", "") or "")
+        )
 
         if speed_level == "critical":
             state_text = "超速危险"
@@ -1953,21 +1980,32 @@ class App:
             fill_color = Theme.TEXT_MUTED
 
         if matched:
-            value_parts = []
             if limit_ias > 0.0:
-                value_parts.append(f"IAS {current_ias:.0f}/{limit_ias:.0f} km/h")
+                value_text = f"IAS {current_ias:.0f}/{limit_ias:.0f}"
             elif current_ias > 0.0:
-                value_parts.append(f"IAS {current_ias:.0f} km/h")
-            if current_mach is not None and limit_mach > 0.0:
-                value_parts.append(f"M{float(current_mach):.2f}/{limit_mach:.2f}")
-            value_text = "  ".join(value_parts) if value_parts else "已匹配机型，阈值缺失"
+                value_text = f"IAS {current_ias:.0f}"
+            else:
+                value_text = "IAS --"
         else:
             if current_ias > 0.0:
-                value_text = f"IAS {current_ias:.0f} km/h  阈值未匹配"
+                value_text = f"IAS {current_ias:.0f}"
             else:
-                value_text = "阈值未匹配"
+                value_text = "IAS --"
+
+        model_parts = [aircraft_type_name]
+        if current_mach is not None and limit_mach > 0.0:
+            model_parts.append(f"M{float(current_mach):.2f}/{limit_mach:.2f}")
+        elif reason == "limit_missing":
+            model_parts.append("阈值缺失")
+        elif not matched:
+            model_parts.append("阈值未匹配")
+        model_text = "  |  ".join(part for part in model_parts if part)
 
         self.speed_state_lbl.config(text=state_text, fg=state_fg)
+        self.speed_model_lbl.config(
+            text=model_text,
+            fg=(Theme.TEXT if speed_level in ("warning", "critical") else Theme.TEXT_DIM),
+        )
         self.speed_value_lbl.config(
             text=value_text,
             fg=state_fg if speed_level in ("caution", "warning", "critical") else Theme.TEXT_DIM,
