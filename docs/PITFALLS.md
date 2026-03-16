@@ -134,4 +134,10 @@
   Cause: `v0.56.1` is server-only for Dolt access in this environment; embedded mode path is no longer used and a running external `dolt sql-server` is required
   Fix/Workaround: install Dolt (`winget install DoltHub.Dolt`), start server from repo data dir (`dolt sql-server --host 127.0.0.1 --port 3307 --data-dir .beads/dolt`), then run `bd migrate --json` to update database version metadata
 
+- Date: 2026-03-16
+  Context: upgrading Bomana beads from `bd v0.58.0` to `v0.61.0`
+  Symptom: `bd ready` recovered, but `bd status`/`bd doctor` initially failed or warned because `issues.jsonl` lagged behind Dolt and the Dolt working set kept `config.schema_version = 7` uncommitted
+  Cause: the CLI upgrade auto-migrated UUID PKs and metadata, but the repo still had a stale exported JSONL plus an unapplied Dolt config change
+  Fix/Workaround: back up first, export Dolt back to `.beads/issues.jsonl`, run `bd doctor --fix --yes`, then use raw Dolt SQL (`call dolt_add('config')`, `call dolt_commit(...)`) if `schema_version` stays dirty after the normal `bd vc commit`
+
 

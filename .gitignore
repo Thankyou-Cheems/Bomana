@@ -265,3 +265,7 @@ TODO_PRIVATE.md
 # 但保留 Release 相关的压缩文件
 !releases/*.zip
 !releases/*.7z
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
