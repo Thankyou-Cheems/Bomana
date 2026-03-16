@@ -1955,15 +1955,15 @@ class App:
         if matched:
             value_parts = []
             if limit_ias > 0.0:
-                value_parts.append(f"{current_ias:.0f}/{limit_ias:.0f} km/h")
+                value_parts.append(f"IAS {current_ias:.0f}/{limit_ias:.0f} km/h")
             elif current_ias > 0.0:
-                value_parts.append(f"{current_ias:.0f} km/h")
+                value_parts.append(f"IAS {current_ias:.0f} km/h")
             if current_mach is not None and limit_mach > 0.0:
                 value_parts.append(f"M{float(current_mach):.2f}/{limit_mach:.2f}")
             value_text = "  ".join(value_parts) if value_parts else "已匹配机型，阈值缺失"
         else:
             if current_ias > 0.0:
-                value_text = f"{current_ias:.0f} km/h  阈值未匹配"
+                value_text = f"IAS {current_ias:.0f} km/h  阈值未匹配"
             else:
                 value_text = "阈值未匹配"
 

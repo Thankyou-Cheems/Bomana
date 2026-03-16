@@ -117,9 +117,15 @@ def _extract_fm_limits(path: Path) -> Optional[Tuple[str, Dict[str, Any]]]:
     fm_name = path.stem
     vne_raw = _safe_get(data, "Aerodynamics", "WingPlane", "Strength", "VNE", default=None)
     if vne_raw is None:
-        # Some files use legacy fallback key.
+        # Legacy FMs often expose VNE at the top level.
+        vne_raw = data.get("Vne")
+    if vne_raw is None:
+        # Final fallback used by some control-limited flightmodels.
         vne_raw = data.get("VneControl")
     mne_raw = _safe_get(data, "Aerodynamics", "WingPlane", "Strength", "MNE", default=None)
+    if mne_raw is None:
+        # Legacy FMs often expose MNE as top-level VneMach.
+        mne_raw = data.get("VneMach")
 
     vne = _normalize_limit_value(vne_raw)
     mne = _normalize_limit_value(mne_raw)
