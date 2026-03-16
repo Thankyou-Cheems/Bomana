@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generated_at": "2026-02-13 17:32:53",
-    "bombs": 406,
+    "generated_at": "2026-03-16 21:26:25",
+    "bombs": 410,
     "collisions": 0,
     "skipped_non_bomb": 17
   },
@@ -635,6 +635,21 @@
       "stab_enabled": true,
       "source_file": "cn_ls_6_500.blkx",
       "mesh": "ch_lgb_ls_6_500_na"
+    },
+    "cn_ls_6_500_ir": {
+      "mass": 640.0,
+      "caliber": 0.377,
+      "dragCx": 0.097,
+      "distFromCmToStab": 0.7,
+      "brakeTime": [
+        1.0,
+        1.2
+      ],
+      "brakeCxK": 0.1,
+      "brakeArm": 0.0,
+      "stab_enabled": true,
+      "source_file": "cn_ls_6_500_ir.blkx",
+      "mesh": "ch_lgb_ls_6_500_ir_na"
     },
     "cn_ts_250": {
       "mass": 260.0,
@@ -4161,6 +4176,21 @@
       "source_file": "sws_50_kg_sprengbombe.blkx",
       "mesh": "swiss_50kg_37_59_bomb"
     },
+    "uk_1000lb_enhanced_paveway2_mk13": {
+      "mass": 546.5,
+      "caliber": 0.42,
+      "dragCx": 0.0257,
+      "distFromCmToStab": 0.5,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "uk_1000lb_enhanced_paveway2_mk13.blkx",
+      "mesh": "uk_1000lb_enhanced_paveway2_mk13"
+    },
     "uk_1000lb_ld_he_mc_mk_1": {
       "mass": 453.6,
       "caliber": 0.356,
@@ -4564,6 +4594,21 @@
       "brakeArm": 0.0,
       "stab_enabled": false,
       "source_file": "uk_500lb_mc_mk1_mk4_long_tail_bomb.blkx",
+      "mesh": "uk_500lb_mc_mk1_mk4_long_tail_bomb"
+    },
+    "uk_500lb_mc_mk1_mk4_long_tail_bomb_default": {
+      "mass": 231.7,
+      "caliber": 0.327,
+      "dragCx": 0.0257,
+      "distFromCmToStab": 0.02,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "uk_500lb_mc_mk1_mk4_long_tail_bomb_default.blkx",
       "mesh": "uk_500lb_mc_mk1_mk4_long_tail_bomb"
     },
     "uk_500lb_sap_mkii_ap": {
@@ -5840,6 +5885,21 @@
       "stab_enabled": false,
       "source_file": "us_750lb_mk_78_mod_2.blkx",
       "mesh": "us_750lb_mk_78_mod_2"
+    },
+    "us_agm_154a1_jsow": {
+      "mass": 497.0,
+      "caliber": 0.3302,
+      "dragCx": 0.0257,
+      "distFromCmToStab": 0.8,
+      "brakeTime": [
+        2.0,
+        2.2
+      ],
+      "brakeCxK": 0.05,
+      "brakeArm": 0.0,
+      "stab_enabled": true,
+      "source_file": "us_agm_154a1_jsow.blkx",
+      "mesh": "us_agm_154a1_missile_na"
     },
     "us_agm_62a": {
       "mass": 505.53,

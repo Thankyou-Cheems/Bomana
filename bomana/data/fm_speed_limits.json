@@ -1,10 +1,10 @@
 {
   "meta": {
-    "generated_at": "2026-02-13 17:41:37",
+    "generated_at": "2026-03-16 21:26:37",
     "source_root_name": "War-Thunder-Datamine",
     "source_subdir": "aces.vromfs.bin_u/gamedata/flightmodels",
-    "fm_records": 880,
-    "unit_records": 1398
+    "fm_records": 911,
+    "unit_records": 1416
   },
   "unit_to_fm": {
     "a-20g": "a-20g",
@@ -72,11 +72,13 @@
     "ah_64a": "ah_64a",
     "ah_64a_greece_usa": "ah_64a",
     "ah_64a_iaf": "ah_64a_iaf",
+    "ah_64a_killstreak": "ah_64a",
     "ah_64a_peten": "ah_64a",
     "ah_64a_peten_iaf": "ah_64a",
     "ah_64d": "ah_64d",
     "ah_64d_i_saraph": "ah_64d_i_saraph",
     "ah_64d_japan": "ah_64d_japan",
+    "ah_64d_lightweight_japan": "ah_64d_japan",
     "ah_64d_netherlands": "ah_64d_netherlands",
     "ah_64e": "ah_64e",
     "ah_64e_britain": "ah_64e",
@@ -88,6 +90,7 @@
     "ahs": "ahs",
     "aichi_e13a": "aichi_e13a",
     "alpha_jet_a": "alpha_jet_a",
+    "alpha_jet_a_jabog41": "alpha_jet_a",
     "alpha_jet_a_thailand": "alpha_jet_th_phase_1",
     "alpha_jet_e": "alpha_jet_e",
     "alpha_jet_th_phase_1": "alpha_jet_th_phase_1",
@@ -148,6 +151,7 @@
     "b_34": "b_34",
     "b_48_firecrest": "b_48_firecrest",
     "b_66b": "b_66b",
+    "ba_65_a80": "ba_65_a80",
     "ba_65_k14_l": "ba_65_k14_l",
     "be_6": "be_6",
     "beaufighter_mk1_40mm": "beaufighter_mk1_40mm",
@@ -400,18 +404,21 @@
     "f_16a_block_10": "f_16a_block_10",
     "f_16a_block_10_iaf": "f_16a_block_10",
     "f_16a_block_10_netz_mod": "f_16a_block_10_mod",
+    "f_16a_block_10_norway": "f_16a_block_10_norway",
     "f_16a_block_15_adf": "f_16a_block_15_adf",
     "f_16a_block_15_adf_italy": "f_16a_block_15_adf_italy",
     "f_16a_block_15_belgium": "f_16a_block_15_belgium",
     "f_16a_block_15_ocu_belgium": "f_16a_block_15_ocu_belgium",
     "f_16a_block_15_ocu_thailand": "f_16a_block_15_ocu_thailand",
     "f_16a_block_20_mlu": "f_16a_block_20_mlu",
+    "f_16a_block_5_netherlands": "f_16a_block_5_netherlands",
     "f_16aj": "f_16aj",
     "f_16am_block_15_mlu_belgium": "f_16am_block_15_mlu_belgium",
     "f_16am_block_20_mlu_norway": "f_16a_block_20_mlu",
     "f_16c_block_40_barak_2": "f_16c_block_40_barak_2",
     "f_16c_block_50": "f_16c_block_50",
     "f_16c_block_50_missile_test": "f_16c_block_50",
+    "f_16c_block_52_aesa": "f_16c_block_52_aesa",
     "f_16d_block_40_barak_2": "f_16d_block_40_barak_2",
     "f_16d_block_40_barak_2_missile_test": "f_16d_block_40_barak_2",
     "f_16i_sufa": "f_16i_sufa",
@@ -432,6 +439,7 @@
     "fa_18c_switzerland": "fa_18c_late_switzerland",
     "fa_18d_late_malaysia": "fa_18d_late_malaysia",
     "fa_18e_block_2": "fa_18e_block_2",
+    "fa_18f_block_2_raaf": "fa_18f_block_2_raaf",
     "fairey_3f_mk3b": "fairey_3f_mk3b",
     "fc_20_bis": "fc_20_bis",
     "ffa_p16": "ffa_p16",
@@ -481,6 +489,7 @@
     "fw-190d-9_ussr": "fw-190d-9",
     "fw-190f-8": "fw-190f-8",
     "fw_190a_5_u14": "fw-190a-5_u14",
+    "fw_190f_8_hungary": "fw-190f-8",
     "fw_200c_1": "fw_200c_1",
     "g5n2": "g5n1",
     "g8n2": "g8n1",
@@ -647,6 +656,7 @@
     "j_11": "j_11",
     "j_11a": "j_11a",
     "j_11b": "j_11b",
+    "j_15t": "j_15t",
     "j_7_mk2": "j_7_mk2",
     "j_7d": "j_7d",
     "j_7e": "j_7e",
@@ -838,6 +848,7 @@
     "mi_28n": "mi_28n",
     "mi_28nm": "mi_28nm",
     "mi_35m": "mi_35m",
+    "mi_35m_killstreak": "mi_35m",
     "mi_35m_pakistan": "mi_35m",
     "mi_35p": "mi_35p",
     "mi_35p_indonesia": "mi_35p",
@@ -891,11 +902,13 @@
     "mig_25pd": "mig_25pd",
     "mig_27k": "mig_27k",
     "mig_27m": "mig_27m",
+    "mig_29_9_12": "mig_29_9_12_germany",
     "mig_29_9_12_germany": "mig_29_9_12_germany",
     "mig_29_9_12_sniper": "mig_29_9_12_germany",
     "mig_29_9_12b_hungary": "mig_29_9_12_germany",
     "mig_29_9_12g": "mig_29_9_12g",
     "mig_29_9_13": "mig_29_9_13",
+    "mig_29m_9_15": "mig_29m_9_15",
     "mig_29n": "mig_29_9_12g",
     "mig_29smt_9_19": "mig_29smt_9_19",
     "mig_29smt_9_19_missile_test": "mig_29smt_9_19",
@@ -1067,6 +1080,8 @@
     "rah_66": "rah_66",
     "re_2000_ga": "re_2000_ga",
     "re_2000_ga_ep": "re_2000_ga",
+    "re_2000_heja_1": "re_2000_heja_1",
+    "re_2000_heja_2": "re_2000_heja_2",
     "re_2000_int": "re_2000_int",
     "re_2000_j20": "re_2000_int",
     "re_2001_cb": "re_2001_cb",
@@ -1122,6 +1137,7 @@
     "saab_jas39c_south_africa": "saab_jas39c",
     "saab_jas39c_south_africa_missile_test": "saab_jas39c",
     "saab_jas39c_thailand": "saab_jas39c",
+    "saab_jas39d": "saab_jas39d",
     "saab_jas39e": "saab_jas39e",
     "saab_sk60b": "saab_sk60b",
     "saab_t18b_1": "saab_t18b_1",
@@ -1354,6 +1370,8 @@
     "wessex_mk5": "wessex_mk5",
     "whirlwind_mk1": "whirlwind_mk1",
     "whirlwind_p9": "whirlwind_p9",
+    "wm_21": "wm_21",
+    "wm_23": "wm_23",
     "wyvern_s4": "wyvern_s4",
     "xa_38": "xa_38",
     "xf5f": "xf5f",
@@ -1474,6 +1492,10 @@
     "a6m6c": {
       "ias": 777.0,
       "mach": 0.83
+    },
+    "a7he1": {
+      "ias": 730.0,
+      "mach": 0.8
     },
     "a_109_eoa2": {
       "ias": 280.0,
@@ -1701,7 +1723,7 @@
     },
     "b5n2": {
       "ias": 555.0,
-      "mach": null
+      "mach": 0.5
     },
     "b6n1": {
       "ias": 650.0,
@@ -1722,6 +1744,10 @@
     "b7a2_homare_23": {
       "ias": 680.0,
       "mach": 0.75
+    },
+    "b_10b": {
+      "ias": 564.0,
+      "mach": 0.65
     },
     "b_239_finland": {
       "ias": 761.0,
@@ -1750,6 +1776,10 @@
     "b_66b": {
       "ias": 1098.0,
       "mach": 0.99
+    },
+    "ba_65_a80": {
+      "ias": 590.0,
+      "mach": 0.65
     },
     "ba_65_k14_l": {
       "ias": 590.0,
@@ -2347,6 +2377,10 @@
       "ias": 1555.0,
       "mach": 2.2
     },
+    "f_16a_block_10_norway": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
     "f_16a_block_15_adf": {
       "ias": 1555.0,
       "mach": 2.2
@@ -2371,6 +2405,10 @@
       "ias": 1555.0,
       "mach": 2.2
     },
+    "f_16a_block_5_netherlands": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
     "f_16aj": {
       "ias": 1555.0,
       "mach": 2.2
@@ -2384,6 +2422,10 @@
       "mach": 2.2
     },
     "f_16c_block_50": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16c_block_52_aesa": {
       "ias": 1555.0,
       "mach": 2.2
     },
@@ -2483,6 +2525,10 @@
       "ias": 1497.0,
       "mach": 2.1
     },
+    "fa_18f_block_2_raaf": {
+      "ias": 1497.0,
+      "mach": 2.1
+    },
     "fairey_3f_mk3b": {
       "ias": 400.0,
       "mach": 0.6
@@ -2501,7 +2547,7 @@
     },
     "ffvs_j22_b": {
       "ias": 670.0,
-      "mach": null
+      "mach": 0.77
     },
     "fiat_g50_seria2": {
       "ias": 870.0,
@@ -2589,7 +2635,7 @@
     },
     "fw-190f-8": {
       "ias": 912.0,
-      "mach": null
+      "mach": 0.83
     },
     "fw_189a_1": {
       "ias": 525.0,
@@ -2725,7 +2771,7 @@
     },
     "he_112a_0": {
       "ias": 680.0,
-      "mach": null
+      "mach": 0.7
     },
     "he_112b_0": {
       "ias": 730.0,
@@ -2741,7 +2787,7 @@
     },
     "he_112v_5": {
       "ias": 680.0,
-      "mach": null
+      "mach": 0.7
     },
     "he_115a_2_sweden": {
       "ias": 480.0,
@@ -2847,17 +2893,25 @@
       "ias": 660.0,
       "mach": 0.79
     },
+    "i-153_m62": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
+    "i-153p": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
     "i-15_1934": {
-      "ias": 550.0,
-      "mach": null
+      "ias": 560.0,
+      "mach": 0.75
     },
     "i-15_1935": {
-      "ias": 550.0,
-      "mach": null
+      "ias": 560.0,
+      "mach": 0.75
     },
     "i-15_1935_moscow": {
-      "ias": 550.0,
-      "mach": null
+      "ias": 560.0,
+      "mach": 0.75
     },
     "i-15bis": {
       "ias": 580.0,
@@ -3016,6 +3070,10 @@
       "mach": 2.35
     },
     "j_11b": {
+      "ias": 1540.0,
+      "mach": 2.35
+    },
+    "j_15t": {
       "ias": 1540.0,
       "mach": 2.35
     },
@@ -3191,9 +3249,17 @@
       "ias": 762.0,
       "mach": 0.79
     },
+    "ki_10_1": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "ki_10_2": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
     "ki_32": {
       "ias": 600.0,
-      "mach": null
+      "mach": 0.7
     },
     "ki_43_1": {
       "ias": 630.0,
@@ -3347,6 +3413,10 @@
       "ias": 400.0,
       "mach": 0.63
     },
+    "martin_139wc": {
+      "ias": 564.0,
+      "mach": 0.65
+    },
     "marut_mk1": {
       "ias": 1296.0,
       "mach": 1.8
@@ -3470,6 +3540,22 @@
     "me-410b-6_r3": {
       "ias": 750.0,
       "mach": 0.75
+    },
+    "me_210_v22_japan": {
+      "ias": 650.0,
+      "mach": 0.65
+    },
+    "me_210a_1": {
+      "ias": 650.0,
+      "mach": 0.65
+    },
+    "me_210ca_1_40_mm_hungary": {
+      "ias": 650.0,
+      "mach": 0.65
+    },
+    "me_210ca_1_hungary": {
+      "ias": 650.0,
+      "mach": 0.65
     },
     "me_264": {
       "ias": 609.0,
@@ -3691,6 +3777,10 @@
       "ias": 1575.0,
       "mach": 2.35
     },
+    "mig_29m_9_15": {
+      "ias": 1575.0,
+      "mach": 2.35
+    },
     "mig_29smt_9_19": {
       "ias": 1575.0,
       "mach": 2.35
@@ -3850,6 +3940,10 @@
     "osprey_mk4": {
       "ias": 450.0,
       "mach": 0.75
+    },
+    "p-26a_34": {
+      "ias": 508.0,
+      "mach": 0.7
     },
     "p-26a_34_m2": {
       "ias": 508.0,
@@ -4159,6 +4253,38 @@
       "ias": 460.0,
       "mach": 0.79
     },
+    "re_2000_ga": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2000_heja_1": {
+      "ias": 740.0,
+      "mach": 0.7
+    },
+    "re_2000_heja_2": {
+      "ias": 740.0,
+      "mach": 0.7
+    },
+    "re_2000_int": {
+      "ias": 740.0,
+      "mach": 0.7
+    },
+    "re_2001_cb": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2001_cn": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2001_serie1": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2002_early": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
     "re_2005_serie0": {
       "ias": 800.0,
       "mach": null
@@ -4284,6 +4410,10 @@
       "mach": 2.0
     },
     "saab_jas39c": {
+      "ias": 1543.0,
+      "mach": 2.0
+    },
+    "saab_jas39d": {
       "ias": 1543.0,
       "mach": 2.0
     },
@@ -4727,6 +4857,10 @@
       "ias": 680.0,
       "mach": 0.77
     },
+    "v_156_f": {
+      "ias": 740.0,
+      "mach": 0.62
+    },
     "vb_10_02": {
       "ias": 820.0,
       "mach": null
@@ -4761,6 +4895,14 @@
     },
     "wirraway": {
       "ias": 580.0,
+      "mach": 0.8
+    },
+    "wm_21": {
+      "ias": 550.0,
+      "mach": 0.7
+    },
+    "wm_23": {
+      "ias": 650.0,
       "mach": 0.8
     },
     "wyvern_s4": {
