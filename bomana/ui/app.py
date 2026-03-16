@@ -236,6 +236,7 @@ class App:
         PanelConfig.show_zones = panels.get('show_zones', True)
         PanelConfig.show_airfields = panels.get('show_airfields', True)
         PanelConfig.show_fuel = panels.get('show_fuel', True)
+        PanelConfig.show_speed = panels.get('show_speed', True)
         PanelConfig.show_checklist = panels.get('show_checklist', True)
         PanelConfig.show_bombing = panels.get('show_bombing', True)  # v6.0 新增
         
@@ -321,6 +322,7 @@ class App:
             'show_zones': PanelConfig.show_zones,
             'show_airfields': PanelConfig.show_airfields,
             'show_fuel': PanelConfig.show_fuel,
+            'show_speed': PanelConfig.show_speed,
             'show_checklist': PanelConfig.show_checklist,
         }
         # v6.0 新增：投弹预测面板（仅在CCRP启用时保存）
@@ -686,12 +688,12 @@ class App:
         self.status_txt.pack(side="right")
 
         # 第三行：紧凑速度指示条（常驻，接近极限时显著变色）
-        speed_row = tk.Frame(top_content, bg=Theme.GRAYPILL)
+        self.speed_row = tk.Frame(top_content, bg=Theme.GRAYPILL)
         pad_top, pad_bot = UIConfig.PADDING_SPEED_STRIP
-        speed_row.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
+        self.speed_row.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
         speed_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s))
         self.speed_state_lbl = tk.Label(
-            speed_row,
+            self.speed_row,
             text="速度监视",
             font=speed_font,
             fg=Theme.TEXT_MUTED,
@@ -701,7 +703,7 @@ class App:
         )
         self.speed_state_lbl.pack(side="left")
         self.speed_value_lbl = tk.Label(
-            speed_row,
+            self.speed_row,
             text="--",
             font=speed_font,
             fg=Theme.TEXT_MUTED,
@@ -712,7 +714,7 @@ class App:
 
         speed_bar_height = max(8, int(UIConfig.SPEED_STRIP_HEIGHT * s))
         speed_bar_thickness = max(3, int(UIConfig.SPEED_STRIP_THICKNESS * s))
-        self.speed_bar_host = tk.Frame(speed_row, bg=Theme.GRAYPILL, height=speed_bar_height)
+        self.speed_bar_host = tk.Frame(self.speed_row, bg=Theme.GRAYPILL, height=speed_bar_height)
         self.speed_bar_host.pack(side="left", fill="x", expand=True, padx=(int(8*s), int(8*s)))
         self.speed_bar_host.pack_propagate(False)
         self.speed_bar_bg = tk.Frame(self.speed_bar_host, bg=Theme.SEPARATOR, height=speed_bar_thickness)
@@ -1273,7 +1275,10 @@ class App:
             
             def toggle_fuel(icon, item):
                 app.root.after(0, lambda: app._toggle_panel('show_fuel'))
-            
+
+            def toggle_speed(icon, item):
+                app.root.after(0, lambda: app._toggle_panel('show_speed'))
+
             def toggle_checklist(icon, item):
                 app.root.after(0, lambda: app._toggle_panel('show_checklist'))
             
@@ -1288,7 +1293,10 @@ class App:
             
             def is_fuel_panel(item):
                 return PanelConfig.show_fuel
-            
+
+            def is_speed_panel(item):
+                return PanelConfig.show_speed
+
             def is_checklist_panel(item):
                 return PanelConfig.show_checklist
             
@@ -1302,6 +1310,7 @@ class App:
                 panel_items.append(pystray.MenuItem("🛫 机场导航", toggle_airfield, checked=is_airfield_panel))
             if ENABLE_FUEL:
                 panel_items.append(pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel))
+            panel_items.append(pystray.MenuItem("⚡ 速度监视", toggle_speed, checked=is_speed_panel))
             if ENABLE_CCRP:
                 panel_items.append(pystray.MenuItem("💣 投弹预测", toggle_bombing, checked=is_bombing_panel))
             if ENABLE_CHECKLIST:
@@ -3554,7 +3563,23 @@ class App:
         # 更新徽章
         self.badge_main.set(*snap.main_badge)
         self.badge_flight.set(*snap.flight_badge)
-        speed_level = self._update_speed_strip(snap, debug_mock_mode)
+        if PanelConfig.show_speed:
+            if not self.speed_row.winfo_ismapped():
+                self.speed_row.pack(
+                    fill="x",
+                    pady=(
+                        int(UIConfig.PADDING_SPEED_STRIP[0] * self.scale),
+                        int(UIConfig.PADDING_SPEED_STRIP[1] * self.scale),
+                    ),
+                    before=self.bar_bg.master,
+                )
+            speed_level = self._update_speed_strip(snap, debug_mock_mode)
+        else:
+            speed_level = "unknown"
+            if self.speed_row.winfo_ismapped():
+                self.speed_row.pack_forget()
+            self._last_overspeed_level = "unknown"
+            self._last_overspeed_sound_ts = 0.0
         
         # v6.6.1: 起落架徽章（集成警告和进度）
         # 显示条件：警告 或 正在移动
@@ -3589,9 +3614,9 @@ class App:
                 self.badge_gear.pack_forget()
 
         status_fg = Theme.YELLOW if snap.api_down else Theme.TEXT_DIM
-        if speed_level == "critical":
+        if PanelConfig.show_speed and speed_level == "critical":
             status_fg = Theme.RED
-        elif speed_level == "warning" and not snap.api_down:
+        elif PanelConfig.show_speed and speed_level == "warning" and not snap.api_down:
             status_fg = Theme.YELLOW
         self.status_txt.config(text=snap.status_text, fg=status_fg)
 

@@ -500,6 +500,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             panels.append(("show_airfields", "🛫 机场导航", "显示友方/敌方机场"))
         if ENABLE_FUEL:
             panels.append(("show_fuel", "⛽ 燃油管理", "显示油量和返航估算"))
+        panels.append(("show_speed", "⚡ 速度监视", "显示紧凑速度条和超速提示"))
         if ENABLE_CHECKLIST:
             panels.append(("show_checklist", "✅ 出击检查", "显示起飞前检查清单"))
         

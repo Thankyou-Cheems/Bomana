@@ -974,6 +974,7 @@ class PanelConfig:
     show_zones = True        # 战区导航
     show_airfields = True    # 机场导航
     show_fuel = True         # 燃油管理
+    show_speed = True        # 速度监视
     show_checklist = True    # 检查清单
     show_bombing = True      # v6.0新增：投弹预测（受ENABLE_CCRP开关控制）
     # v6.2.1: 导航条模式 - "integrated"(集成) / "standalone"(独立窗口)
@@ -1009,6 +1010,7 @@ class PanelConfig:
             'zones': ENABLE_ZONES,
             'airfields': ENABLE_AIRFIELDS,
             'fuel': ENABLE_FUEL,
+            'speed': True,
             'checklist': ENABLE_CHECKLIST,
             'bombing': ENABLE_CCRP,
         }

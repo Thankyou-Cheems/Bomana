@@ -24,6 +24,7 @@ from bomana.config import (
     BombConfig,
     Theme,
     OverspeedConfig,
+    PanelConfig,
 )
 from bomana.core.state import (
     TelemetryData,
@@ -980,6 +981,7 @@ class GameLogic:
                 wing_sweep=tel.wing_sweep,
                 enabled=(
                     OverspeedConfig.ENABLED and
+                    PanelConfig.show_speed and
                     (s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
                     tel.state_resp_ok and
                     (not on_ground)
