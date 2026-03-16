@@ -10,7 +10,7 @@ import json
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.9.2"
+__version__ = "6.10.0"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -338,7 +338,7 @@ class HotkeyConfig:
 
     [快捷键自定义]
     - 支持功能键: F1-F12
-    - 默认绑定: F7=重置, F8=锁定, F9=角落, F10=声音, F11=战区
+    - 默认绑定: F7=双击重置, F8=锁定, F9=角落, F10=声音, F11=战区
     - 可在设置对话框中自定义
     - 注意: 避免与游戏快捷键冲突(F1-F4通常被游戏占用)
     """
@@ -353,7 +353,7 @@ class HotkeyConfig:
     AVAILABLE_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
 
     # 当前绑定（可运行时修改）
-    KEY_RESET = "F7"     # 重置计时器
+    KEY_RESET = "F7"     # 双击确认后重置计时器
     KEY_LOCK = "F8"      # 锁定/解锁
     KEY_CORNER = "F9"    # 切换角落
     KEY_BEEP = "F10"     # 声音开关
@@ -370,6 +370,9 @@ class HotkeyConfig:
 
     # 全局热键开关（用户可配置）
     GLOBAL_HOTKEYS = True
+
+    # 手动重置热键需要在该时间窗内连续按两次才会生效
+    RESET_CONFIRM_WINDOW_SEC = 1.6
 
     @classmethod
     def get_vk(cls, key_name: str) -> int:

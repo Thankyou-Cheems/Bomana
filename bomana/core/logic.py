@@ -854,8 +854,8 @@ class GameLogic:
         return False
 
     def manual_reset(self):
-        """手动重置计时器（F7热键）
-        
+        """手动重置计时器
+
         将当前生命的出生时间设为现在，重启15分钟周期。
         """
         with self._lock:

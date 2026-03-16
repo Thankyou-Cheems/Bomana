@@ -127,6 +127,7 @@ class App:
         self._last_overspeed_sound_ts = 0.0
         self._last_overspeed_level = "unknown"
         self._zone_sound_enabled = True
+        self._manual_reset_confirm_until = 0.0
 
         # 窗口状态
         self._user_moved = False
@@ -1191,7 +1192,7 @@ class App:
         
         # 使用配置的快捷键
         hotkeys = [
-            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.get_vk(HotkeyConfig.KEY_RESET), self._manual_reset),
+            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.get_vk(HotkeyConfig.KEY_RESET), self._manual_reset_hotkey),
             (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.get_vk(HotkeyConfig.KEY_LOCK), self._toggle_lock),
             (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.get_vk(HotkeyConfig.KEY_CORNER), self._next_corner),
             (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.get_vk(HotkeyConfig.KEY_BEEP), self._toggle_beep),
@@ -1271,7 +1272,7 @@ class App:
         
         # 构建菜单项列表
         menu_items = [
-            pystray.MenuItem(f"🔄 重置计时器 ({HotkeyConfig.KEY_RESET})", do_reset),
+            pystray.MenuItem("🔄 立即重置计时器", do_reset),
             pystray.MenuItem(f"🔓 锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
             pystray.MenuItem(f"📍 切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
             pystray.Menu.SEPARATOR,
@@ -2586,7 +2587,7 @@ class App:
 
         if self._locked:
             parts = [
-                f"[{k_reset}]重置",
+                f"[{k_reset}]双击重置",
                 f"[{k_lock}]解锁拖动",
                 f"[{k_corner}]切换角落",
                 f"[{k_beep}]提示音:{sound}",
@@ -2596,7 +2597,7 @@ class App:
                 zone_sound = "开" if self._zone_sound_enabled else "关"
                 k_zones = HotkeyConfig.KEY_ZONES
                 parts.append(f"[{k_zones}]战区音:{zone_sound}")
-            return "  ·  ".join(parts)
+            base_text = "  ·  ".join(parts)
         else:
             parts = [
                 "窗口可拖动",
@@ -2607,7 +2608,18 @@ class App:
                 zone_sound = "开" if self._zone_sound_enabled else "关"
                 k_zones = HotkeyConfig.KEY_ZONES
                 parts.append(f"[{k_zones}]战区音:{zone_sound}")
-            return "  ·  ".join(parts)
+            base_text = "  ·  ".join(parts)
+
+        confirm_text = self._manual_reset_confirm_text()
+        if confirm_text:
+            return f"{confirm_text}  ·  {base_text}"
+        return base_text
+
+    def _manual_reset_confirm_text(self) -> str:
+        """返回热键二次确认的弱提醒文案。"""
+        if time.monotonic() >= self._manual_reset_confirm_until:
+            return ""
+        return f"再按一次 [{HotkeyConfig.KEY_RESET}] 确认重置"
 
     def _nudge_text(self) -> str:
         return "提示：如果 Bomana 对你有帮助，欢迎点一个 GitHub Star（起飞后自动隐藏）"
@@ -2615,7 +2627,8 @@ class App:
     def _update_hint(self) -> None:
         """更新提示文本"""
         if hasattr(self, "hint_lbl") and self.hint_lbl:
-            self.hint_lbl.config(text=self._hint_text())
+            hint_fg = Theme.YELLOW if self._manual_reset_confirm_text() else Theme.TEXT_MUTED
+            self.hint_lbl.config(text=self._hint_text(), fg=hint_fg)
         self._update_lock_badge()
         if hasattr(self, "_hint_width_cache") and self._hint_width_cache is not None:
             self._hint_width_cache["text"] = ""
@@ -2669,8 +2682,29 @@ class App:
         if enabled:
             self.sound.play(pattern="on")
 
+    def _clear_manual_reset_confirmation(self, refresh_hint: bool = False) -> None:
+        """清理热键重置确认态。"""
+        if self._manual_reset_confirm_until <= 0.0:
+            return
+        self._manual_reset_confirm_until = 0.0
+        if refresh_hint:
+            self._update_hint()
+            self._recalc_size(force_shrink=True)
+
+    def _manual_reset_hotkey(self):
+        """处理重置热键，要求在短时间内连续按两次。"""
+        now = time.monotonic()
+        if now < self._manual_reset_confirm_until:
+            self._manual_reset()
+            return
+        self._manual_reset_confirm_until = now + HotkeyConfig.RESET_CONFIRM_WINDOW_SEC
+        self._update_hint()
+        self._recalc_size()
+        self.sound.play(*SoundConfig.BEEP_TICK)
+
     def _manual_reset(self):
-        """手动重置计时器（F7）"""
+        """立即执行手动重置。"""
+        self._clear_manual_reset_confirmation(refresh_hint=True)
         self.game.manual_reset()
         self.sound.play(*SoundConfig.BEEP_MANUAL_RESET)
 
@@ -3536,6 +3570,9 @@ class App:
         else:
             self._last_landed_flash = False
             self._nudge_airborne_seen = False
+
+        if self._manual_reset_confirm_until > 0.0 and time.monotonic() >= self._manual_reset_confirm_until:
+            self._clear_manual_reset_confirmation(refresh_hint=True)
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
