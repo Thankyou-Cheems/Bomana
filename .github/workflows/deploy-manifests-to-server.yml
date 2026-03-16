@@ -135,10 +135,18 @@ jobs:
         run: |
           set -euo pipefail
           STAGE_DIR="/tmp/bomana-update-assets-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
+          SSH_OPTS=(
+            -p "$SERVER_PORT"
+            -i ~/.ssh/id_ed25519
+            -o BatchMode=yes
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+          )
+          ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" \
             "mkdir -p '$STAGE_DIR' && chmod 700 '$STAGE_DIR'"
-          scp -P "$SERVER_PORT" -i ~/.ssh/id_ed25519 -r stage \
-            "$SERVER_USER@$SERVER_HOST:$STAGE_DIR/"
+          rsync -aW --partial --human-readable --info=progress2 \
+            -e "ssh ${SSH_OPTS[*]}" \
+            stage/ "$SERVER_USER@$SERVER_HOST:$STAGE_DIR/stage/"
 
       - name: Sync assets into target directories
         if: steps.resolve.outputs.should_deploy == 'true'
