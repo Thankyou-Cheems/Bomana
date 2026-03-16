@@ -153,6 +153,18 @@ def _is_frozen_launcher() -> bool:
     )
 
 
+def _is_source_test_run(base: Path) -> bool:
+    if _is_frozen_launcher():
+        return False
+    return (base / DEFAULT_ENTRYPOINT).exists() and (base / "bomana" / "config.py").exists()
+
+
+def _app_runtime_dir(base: Path) -> Path:
+    if _is_source_test_run(base):
+        return base
+    return base / APP_DIR_NAME
+
+
 def _apply_window_icon(window: tk.Misc) -> None:
     icon_path = _resource_path("app.ico")
     if not icon_path.exists():
@@ -429,7 +441,7 @@ def _read_local_app_version(app_dir: Path) -> str:
 
 
 def _is_local_app_ready(base: Path) -> bool:
-    return (base / APP_DIR_NAME / DEFAULT_ENTRYPOINT).exists()
+    return (_app_runtime_dir(base) / DEFAULT_ENTRYPOINT).exists()
 
 
 def _acquire_update_lock(base: Path) -> Path:
@@ -1097,7 +1109,7 @@ def _report_primary_event(
     app_version: str,
     extra: Optional[Dict[str, Any]] = None,
 ) -> None:
-    if not PRIMARY_UPDATE_BASE_URL:
+    if (not PRIMARY_UPDATE_BASE_URL) or _is_source_test_run(base):
         return
 
     payload: Dict[str, Any] = {
@@ -1134,11 +1146,11 @@ def _resolve_update_manifest(
         if status_cb:
             status_cb(title, detail, progress, level)
 
-    local_version = _read_local_app_version(base / APP_DIR_NAME)
+    local_version = _read_local_app_version(_app_runtime_dir(base))
 
     manifest: Optional[Dict[str, Any]] = None
     primary_err: Optional[Exception] = None
-    if PRIMARY_UPDATE_BASE_URL:
+    if PRIMARY_UPDATE_BASE_URL and (not _is_source_test_run(base)):
         try:
             manifest = _attempt_primary_request(
                 base,
@@ -1207,7 +1219,7 @@ def _resolve_launcher_update_manifest(
 
     manifest: Optional[Dict[str, Any]] = None
     primary_err: Optional[Exception] = None
-    if PRIMARY_UPDATE_BASE_URL:
+    if PRIMARY_UPDATE_BASE_URL and (not _is_source_test_run(base)):
         try:
             manifest = _attempt_primary_request(
                 base,
@@ -1552,7 +1564,7 @@ def _download_launcher_update_from_manifest(
 
 def _launch_app(base: Path, channel: str) -> None:
     _recover_incomplete_install(base)
-    app_dir = base / APP_DIR_NAME
+    app_dir = _app_runtime_dir(base)
     entry = app_dir / DEFAULT_ENTRYPOINT
     if not entry.exists():
         raise RuntimeError("本地应用不存在，请联网后重试。")
@@ -1913,6 +1925,7 @@ class LauncherWindow:
 
     def __init__(self, base: Path, channel: str):
         self.base = base
+        self.source_test_mode = _is_source_test_run(base)
         self.saved_state = _read_state(base)
         self.channel = channel
         self.detected_channel = channel
@@ -1928,7 +1941,7 @@ class LauncherWindow:
             self.use_system_proxy = bool(raw_proxy)
         _set_use_system_proxy(self.use_system_proxy)
         self.client_identity = _build_client_identity(base)
-        self.local_version = _read_local_app_version(base / APP_DIR_NAME)
+        self.local_version = _read_local_app_version(_app_runtime_dir(base))
         self.events: "queue.Queue[Tuple[str, Dict[str, Any]]]" = queue.Queue()
         self.running = False
         self.has_attempted_update = False
@@ -1948,7 +1961,7 @@ class LauncherWindow:
         self.launcher_update_available = False
         self.last_check_ok = False
         self.last_check_error = ""
-        self.install_dir = self.base / APP_DIR_NAME
+        self.install_dir = _app_runtime_dir(self.base)
         self.last_download_success = False
         self.decision = LaunchDecision(action="exit", final_version=self.local_version)
         self._worker: Optional[threading.Thread] = None
@@ -1992,29 +2005,39 @@ class LauncherWindow:
         self._init_dynamic_font_scaling()
         self._refresh_wraplengths()
         self._schedule_layout_reflow()
-        self._set_status(
-            "准备就绪", "启动后将自动检查更新，并展示可下载包总大小。", 0.0, "info"
-        )
+        if self.source_test_mode:
+            self._set_status(
+                "源码测试模式",
+                "检测到同目录 Bomana.pyw，已跳过自动在线更新检查，将直接启动本地源码。",
+                0.0,
+                "info",
+            )
+        else:
+            self._set_status(
+                "准备就绪", "启动后将自动检查更新，并展示可下载包总大小。", 0.0, "info"
+            )
         self._set_running(False)
         self._save_launcher_state()
         _log(
             self.base,
-            f"Launcher start, channel={self.channel}, version={LAUNCHER_VERSION}",
+            f"Launcher start, channel={self.channel}, version={LAUNCHER_VERSION}, source_test_mode={self.source_test_mode}",
         )
-        threading.Thread(
-            target=_report_primary_event,
-            args=(
-                self.base,
-                self.client_identity,
-                "launcher_start",
-                self.channel,
-                self.local_version,
-            ),
-            daemon=True,
-        ).start()
+        if not self.source_test_mode:
+            threading.Thread(
+                target=_report_primary_event,
+                args=(
+                    self.base,
+                    self.client_identity,
+                    "launcher_start",
+                    self.channel,
+                    self.local_version,
+                ),
+                daemon=True,
+            ).start()
         self.root.after(80, self._poll_events)
         self.root.after(100, self._animate)
-        self.root.after(120, lambda: self._begin_check(automatic=True))
+        if not self.source_test_mode:
+            self.root.after(120, lambda: self._begin_check(automatic=True))
 
     def _px(self, value: int) -> int:
         # Avoid DPI double-scaling: tk scaling handles DPI globally.
@@ -2576,6 +2599,22 @@ class LauncherWindow:
     def _begin_check(self, automatic: bool) -> None:
         if self.running:
             return
+        if self.source_test_mode:
+            self.has_attempted_update = False
+            self.last_check_ok = False
+            self.last_check_error = ""
+            self.latest_manifest = None
+            self.latest_launcher_manifest = None
+            self.update_available = False
+            self.launcher_update_available = False
+            self._set_status(
+                "源码测试模式",
+                "当前由 launcher.pyw 直接驱动同目录源码，已禁用在线更新检查。",
+                0.0,
+                "info",
+            )
+            self._set_running(False)
+            return
         self.has_attempted_update = True
         self.current_task = "check"
         self.latest_manifest = None
@@ -2587,7 +2626,7 @@ class LauncherWindow:
         self.last_check_ok = False
         self.last_check_error = ""
         self.channel = self.channel_var.get().strip() or self.detected_channel
-        self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
+        self.local_version = _read_local_app_version(_app_runtime_dir(self.base))
         self.sub_lbl.config(
             text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
         )
@@ -2674,7 +2713,7 @@ class LauncherWindow:
             )
             return
         if task == "import_zip":
-            final_version = _read_local_app_version(self.base / APP_DIR_NAME)
+            final_version = _read_local_app_version(_app_runtime_dir(self.base))
             update_ok = False
             update_error = ""
             package_path = str(getattr(self, "pending_import_zip_path", "")).strip()
@@ -2696,7 +2735,7 @@ class LauncherWindow:
                     status_cb=self._emit_status,
                     cancel_cb=lambda: self._cancel_requested.is_set(),
                 )
-                final_version = _read_local_app_version(self.base / APP_DIR_NAME)
+                final_version = _read_local_app_version(_app_runtime_dir(self.base))
                 update_ok = True
             except Exception as e:
                 update_error = str(e)
@@ -2738,7 +2777,7 @@ class LauncherWindow:
                 )
             return
 
-        final_version = _read_local_app_version(self.base / APP_DIR_NAME)
+        final_version = _read_local_app_version(_app_runtime_dir(self.base))
         update_ok = False
         update_source = ""
         update_error = ""
@@ -3055,6 +3094,10 @@ class LauncherWindow:
         return "\n".join(line for line in lines if line)
 
     def _update_launch_button_label(self) -> None:
+        if self.source_test_mode:
+            self.launch_btn.config(text="启动源码应用")
+            self._style_action_button(self.launch_btn, "secondary")
+            return
         if self.last_download_success:
             self.launch_btn.config(text="启动（已下载更新）")
             self._style_action_button(self.launch_btn, "success")
@@ -3071,6 +3114,10 @@ class LauncherWindow:
         self._style_action_button(self.launch_btn, "secondary")
 
     def _update_launcher_button_state(self) -> None:
+        if self.source_test_mode:
+            self.launcher_btn.config(text="源码模式不更新", state="disabled")
+            self._style_action_button(self.launcher_btn, "secondary")
+            return
         if self.launcher_update_available:
             self.launcher_btn.config(text="更新启动器", state="normal")
             self._style_action_button(self.launcher_btn, "primary")
@@ -3084,16 +3131,17 @@ class LauncherWindow:
         self._update_launch_button_label()
         self._update_launcher_button_state()
         state = "disabled" if running else "normal"
-        self.start_btn.config(state=state)
+        update_controls_state = "disabled" if self.source_test_mode else state
+        self.start_btn.config(state=update_controls_state)
         self.launcher_btn.config(state=("disabled" if running else self.launcher_btn.cget("state")))
-        self.retry_btn.config(state=state)
+        self.retry_btn.config(state=update_controls_state)
         if running and self.current_task == "check" and _is_local_app_ready(self.base):
             # Allow launching local app immediately while background check continues.
             self.launch_btn.config(state="normal")
         else:
             self.launch_btn.config(state=state)
         self.release_btn.config(state="normal")
-        self.import_btn.config(state="normal")
+        self.import_btn.config(state=("disabled" if self.source_test_mode else "normal"))
         self.details_btn.config(state="normal")
         self.exit_btn.config(state="normal")
         self.channel_menu.config(state=state)
@@ -3111,11 +3159,11 @@ class LauncherWindow:
             else:
                 self.hint_lbl.config(text="正在下载并安装更新，请稍候...")
         else:
-            if self.has_attempted_update:
+            if self.has_attempted_update and (not self.source_test_mode):
                 self.retry_btn.pack(side="left", padx=(8, 0))
             else:
                 self.retry_btn.pack_forget()
-            if self.last_check_ok and self.update_available:
+            if (not self.source_test_mode) and self.last_check_ok and self.update_available:
                 self.start_btn.config(state="normal")
             else:
                 self.start_btn.config(state="disabled")
@@ -3123,7 +3171,14 @@ class LauncherWindow:
                 self.launch_btn.config(state="normal")
             else:
                 self.launch_btn.config(state="disabled")
-            if self.last_check_ok and self.update_available:
+            if self.source_test_mode:
+                self.hint_lbl.config(
+                    text=(
+                        "当前处于源码测试模式：launcher.pyw 将直接启动同目录 Bomana.pyw，"
+                        "不会自动检查或覆盖安装线上版本。"
+                    )
+                )
+            elif self.last_check_ok and self.update_available:
                 size_text = _format_size_text(self.latest_package_size)
                 self.hint_lbl.config(
                     text=(
@@ -3211,6 +3266,12 @@ class LauncherWindow:
     def _on_start(self) -> None:
         if self.running:
             return
+        if self.source_test_mode:
+            messagebox.showinfo(
+                DISPLAY_NAME,
+                "当前处于源码测试模式，已禁用在线下载更新。\n如需验证发布包，请使用打包后的启动器或发布产物目录。",
+            )
+            return
         if not self.last_check_ok:
             messagebox.showwarning(
                 DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。"
@@ -3248,6 +3309,12 @@ class LauncherWindow:
 
     def _on_update_launcher(self) -> None:
         if self.running:
+            return
+        if self.source_test_mode:
+            messagebox.showinfo(
+                DISPLAY_NAME,
+                "当前处于源码测试模式，已禁用启动器自更新。\n如需验证启动器升级流程，请使用发布后的 exe。",
+            )
             return
         if not self.last_check_ok:
             messagebox.showwarning(
@@ -3293,10 +3360,22 @@ class LauncherWindow:
         self._start_worker("launcher_download")
 
     def _on_retry(self) -> None:
+        if self.source_test_mode:
+            messagebox.showinfo(
+                DISPLAY_NAME,
+                "当前处于源码测试模式，默认不执行在线更新检查。\n如需联机验证，请改用发布目录中的启动器。",
+            )
+            return
         self._begin_check(automatic=False)
 
     def _on_import_zip(self) -> None:
         if self.running:
+            return
+        if self.source_test_mode:
+            messagebox.showinfo(
+                DISPLAY_NAME,
+                "当前处于源码测试模式，已禁用本地 ZIP 安装，避免把发布包写入源码目录。",
+            )
             return
         selected = filedialog.askopenfilename(
             parent=self.root,
@@ -3328,7 +3407,7 @@ class LauncherWindow:
         if self.running:
             return
         self.channel = self.channel_var.get().strip() or self.detected_channel
-        self.local_version = _read_local_app_version(self.base / APP_DIR_NAME)
+        self.local_version = _read_local_app_version(_app_runtime_dir(self.base))
         self._save_launcher_state()
         self.sub_lbl.config(
             text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
@@ -3346,11 +3425,14 @@ class LauncherWindow:
 
     def _on_launch(self) -> None:
         if not _is_local_app_ready(self.base):
-            self._set_status(
-                "无法启动", "本地没有可用应用包，请先点击“下载更新”。", None, "error"
+            detail = (
+                "同目录源码入口缺失，请确认 Bomana.pyw 存在。"
+                if self.source_test_mode
+                else "本地没有可用应用包，请先点击“下载更新”。"
             )
+            self._set_status("无法启动", detail, None, "error")
             return
-        final_version = _read_local_app_version(self.base / APP_DIR_NAME)
+        final_version = _read_local_app_version(_app_runtime_dir(self.base))
         self.decision = LaunchDecision(
             action="launch", final_version=final_version, warning=""
         )
@@ -3383,7 +3465,7 @@ class LauncherWindow:
         self._exit_after_task = False
         self.decision = LaunchDecision(
             action="exit",
-            final_version=_read_local_app_version(self.base / APP_DIR_NAME),
+            final_version=_read_local_app_version(_app_runtime_dir(self.base)),
             warning=self.decision.warning,
         )
         self.root.destroy()
