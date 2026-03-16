@@ -5,7 +5,7 @@
 - Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, offline launch, details/support dialog)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
-- UI components: `bomana/ui/` (app, widgets, dialogs, nav window)
+- UI components: `bomana/ui/` (app coordinator, debug support, panel renderer, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
 - External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
@@ -31,10 +31,12 @@
 │  │  ├─ state.py             # Dataclasses/enums
 │  │  └─ telemetry.py         # 8111 fetchers
 │  ├─ ui/
-│  │  ├─ app.py               # App (Tk UI orchestrator)
+│  │  ├─ app.py               # App coordinator (window lifecycle + main UI loop)
+│  │  ├─ debug_support.py     # Debug mock snapshot + debug panel helpers
 │  │  ├─ dialogs.py           # Settings/About/etc dialogs
 │  │  ├─ hud_overlay.py       # Fullscreen HUD overlay skeleton (v6.8.0)
 │  │  ├─ nav_window.py        # Standalone navigation window
+│  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
 │     ├─ file_utils.py        # Config/state/resource helpers
@@ -56,6 +58,9 @@
 1. 8111 API polling via `requests` to `localhost:8111`.
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
 3. UI render with `tkinter` (timer, panels, hints, debug text).
+   - `App` keeps window lifecycle, hotkeys, tray, and the main refresh loop.
+   - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
+   - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
 4. Alerts and sounds via `SoundConfig` + Windows Beep.
 5. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
