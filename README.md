@@ -10,7 +10,7 @@ A powerful War Thunder timer made for the "Space Monkeys" who love dropping bomb
 
 [![App Release](https://img.shields.io/github/v/tag/Thankyou-Cheems/Bomana?sort=semver&filter=v*.*.*-app&label=app%20release)](https://github.com/Thankyou-Cheems/Bomana/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8+-yellow.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.14%2B-yellow.svg)](https://www.python.org/)
 [![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=brightgreen)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 [![Launches](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.launcher_start_total&label=Launches&color=blue)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 
@@ -191,7 +191,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 
 #### 环境要求
 
-- Python 3.8+
+- Python 3.14+
 - uv（Python 包管理器）
 - Windows 操作系统
 

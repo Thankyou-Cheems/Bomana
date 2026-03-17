@@ -63,7 +63,7 @@ VibeCoding / AI 助手协作规范 (请严格遵守)
 
 技术栈与依赖：
 -------------
-- Python 3.8+
+- Python 3.14+
 - tkinter: GUI框架 (标准库)
 - requests >= 2.25.0: HTTP请求
 - ctypes: Windows API调用 (标准库)

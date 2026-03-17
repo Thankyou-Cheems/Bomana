@@ -18,7 +18,7 @@
 2. **创建新 Issue**：如果没有找到，请创建新的 Issue
 3. **提供详细信息**：
    - 操作系统和版本（如 Windows 10 21H2）
-   - Python 版本（如 Python 3.9.7）
+   - Python 版本（如 Python 3.14.3）
    - 软件版本（如 v6.8.0）
    - 复现步骤
    - 错误截图或错误信息
@@ -278,7 +278,7 @@ If you find a bug:
 2. **Create new issue**: If not found, create a new one
 3. **Provide details**:
    - OS and version (e.g., Windows 10 21H2)
-   - Python version (e.g., Python 3.9.7)
+   - Python version (e.g., Python 3.14.3)
    - Software version (e.g., v6.8.0)
    - Steps to reproduce
    - Screenshots or error messages
