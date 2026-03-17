@@ -15,6 +15,17 @@ if TYPE_CHECKING:
 
 
 @dataclass(slots=True)
+class NavListRow:
+    """Stable multi-column row for zone/airport lists."""
+
+    frame: tk.Frame
+    icon_lbl: tk.Label
+    direction_lbl: tk.Label
+    distance_lbl: tk.Label
+    relative_lbl: tk.Label | None = None
+
+
+@dataclass(slots=True)
 class MainWindowBuilder:
     """Build a stable grid-based main window skeleton for the App."""
 
@@ -422,12 +433,76 @@ class MainWindowBuilder:
         app.chk_content_frame = tk.Frame(app.chk_frame, bg=Theme.GRAYPILL)
         app._rebuild_checklist()
 
-    def _build_fixed_label_pool(self, parent: tk.Misc, count: int, font: tuple[str, int], *, bg: str) -> list[tk.Label]:
-        pool: list[tk.Label] = []
+    def _build_nav_row_pool(
+        self,
+        parent: tk.Misc,
+        count: int,
+        font: tuple[str, int],
+        *,
+        bg: str,
+        show_relative: bool,
+    ) -> list[NavListRow]:
+        pool: list[NavListRow] = []
         for _ in range(count):
-            lbl = tk.Label(parent, text="", font=font, fg=Theme.TEXT_MUTED, bg=bg, anchor="w", justify="left")
-            lbl.pack(fill="x")
-            pool.append(lbl)
+            row = tk.Frame(parent, bg=bg)
+            row.pack(fill="x", pady=(0, max(1, int(self.app.scale))))
+            row.grid_columnconfigure(1, weight=1)
+
+            icon_lbl = tk.Label(
+                row,
+                text="",
+                font=font,
+                fg=Theme.TEXT_MUTED,
+                bg=bg,
+                anchor="w",
+                width=3,
+            )
+            icon_lbl.grid(row=0, column=0, sticky="w")
+
+            direction_lbl = tk.Label(
+                row,
+                text="",
+                font=font,
+                fg=Theme.TEXT_MUTED,
+                bg=bg,
+                anchor="w",
+                justify="left",
+            )
+            direction_lbl.grid(row=0, column=1, sticky="ew")
+
+            distance_lbl = tk.Label(
+                row,
+                text="",
+                font=font,
+                fg=Theme.TEXT_MUTED,
+                bg=bg,
+                anchor="e",
+                width=8,
+            )
+            distance_lbl.grid(row=0, column=2, sticky="e", padx=(int(6 * self.app.scale), 0))
+
+            relative_lbl = None
+            if show_relative:
+                relative_lbl = tk.Label(
+                    row,
+                    text="",
+                    font=font,
+                    fg=Theme.TEXT_MUTED,
+                    bg=bg,
+                    anchor="e",
+                    width=11,
+                )
+                relative_lbl.grid(row=0, column=3, sticky="e", padx=(int(8 * self.app.scale), 0))
+
+            pool.append(
+                NavListRow(
+                    frame=row,
+                    icon_lbl=icon_lbl,
+                    direction_lbl=direction_lbl,
+                    distance_lbl=distance_lbl,
+                    relative_lbl=relative_lbl,
+                )
+            )
         return pool
 
     def _build_zone_card(self) -> None:
@@ -512,26 +587,28 @@ class MainWindowBuilder:
 
             app.tape_zone_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
             app.tape_zone_row.pack(fill="x", pady=(int(2 * s), 0))
+            app.tape_zone_row.grid_columnconfigure(3, weight=1)
             app.tape_zone_label = tk.Label(app.tape_zone_row, text="⊚战区:", font=status_font, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
-            app.tape_zone_label.pack(side="left")
-            app.tape_zone_turn = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            app.tape_zone_turn.pack(side="left", padx=(int(6 * s), 0))
-            app.tape_zone_status = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            app.tape_zone_status.pack(side="left", padx=(int(8 * s), 0))
-            app.tape_zone_info = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            app.tape_zone_info.pack(side="left", padx=(int(8 * s), 0))
+            app.tape_zone_label.grid(row=0, column=0, sticky="w")
+            app.tape_zone_turn = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=8)
+            app.tape_zone_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+            app.tape_zone_status = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=8)
+            app.tape_zone_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
+            app.tape_zone_info = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e", width=15)
+            app.tape_zone_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
             app.tape_zone_tolerance = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e")
 
             app.tape_friendly_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
             app.tape_friendly_row.pack(fill="x", pady=(int(1 * s), 0))
+            app.tape_friendly_row.grid_columnconfigure(3, weight=1)
             app.tape_friendly_label = tk.Label(app.tape_friendly_row, text="✈友方:", font=status_font, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
-            app.tape_friendly_label.pack(side="left")
-            app.tape_friendly_turn = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            app.tape_friendly_turn.pack(side="left", padx=(int(6 * s), 0))
-            app.tape_friendly_status = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            app.tape_friendly_status.pack(side="left", padx=(int(8 * s), 0))
-            app.tape_friendly_info = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            app.tape_friendly_info.pack(side="left", padx=(int(8 * s), 0))
+            app.tape_friendly_label.grid(row=0, column=0, sticky="w")
+            app.tape_friendly_turn = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=8)
+            app.tape_friendly_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+            app.tape_friendly_status = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=8)
+            app.tape_friendly_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
+            app.tape_friendly_info = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e", width=15)
+            app.tape_friendly_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
 
             app.tape_turn_lbl = app.tape_zone_turn
             app.tape_deviation_lbl = app.tape_zone_status
@@ -625,27 +702,31 @@ class MainWindowBuilder:
             app.bomb_release_lbl = tk.Label(app.bombing_info_frame, text="⏱️ 等待目标", font=font_release, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
             app.bomb_release_lbl.pack(fill="x", pady=(int(4 * s), 0))
 
-        app._zone_label_pool = self._build_fixed_label_pool(
+        app._zone_row_pool = self._build_nav_row_pool(
             app.zone_list_frame,
             ZoneConfig.MAX_DISPLAY_ZONES,
             font_item,
             bg=Theme.GRAYPILL,
+            show_relative=True,
         )
-        app._compact_zone_label_pool = self._build_fixed_label_pool(
+        app._compact_zone_row_pool = self._build_nav_row_pool(
             app.compact_zone_list,
             ZoneConfig.MAX_DISPLAY_ZONES,
             font_item,
             bg=Theme.GRAYPILL,
+            show_relative=False,
         )
-        app._airport_label_pool = self._build_fixed_label_pool(
+        app._airport_row_pool = self._build_nav_row_pool(
             app.airport_list_frame,
             ZoneConfig.MAX_DISPLAY_AIRFIELDS,
             font_item,
             bg=Theme.GRAYPILL,
+            show_relative=True,
         )
-        app._compact_airport_label_pool = self._build_fixed_label_pool(
+        app._compact_airport_row_pool = self._build_nav_row_pool(
             app.compact_airport_list,
             ZoneConfig.MAX_DISPLAY_AIRFIELDS,
             font_item,
             bg=Theme.GRAYPILL,
+            show_relative=False,
         )

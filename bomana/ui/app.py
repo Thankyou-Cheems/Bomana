@@ -145,8 +145,10 @@ class App:
         
         # 性能优化: 字体缓存和Label复用池
         self._cached_fonts: Dict[str, tuple] = {}
-        self._zone_label_pool: List[tk.Label] = []
-        self._airport_label_pool: List[tk.Label] = []
+        self._zone_row_pool: List[Any] = []
+        self._compact_zone_row_pool: List[Any] = []
+        self._airport_row_pool: List[Any] = []
+        self._compact_airport_row_pool: List[Any] = []
         self._last_layout_signature = None
         self._last_expand_ts = 0.0
         self._last_zone_recalc_ts = 0.0
@@ -1611,8 +1613,10 @@ class App:
             self._cache_fonts()
 
             # 清理旧布局缓存，避免复用已销毁的控件引用。
-            self._zone_label_pool = []
-            self._airport_label_pool = []
+            self._zone_row_pool = []
+            self._compact_zone_row_pool = []
+            self._airport_row_pool = []
+            self._compact_airport_row_pool = []
             self._zone_panel_visible = False
             self._checklist_panel_visible = False
             self._last_layout_signature = None

@@ -195,11 +195,32 @@ class AppPanelRenderer:
             app._checklist_panel_visible = visible
             self.update_mid_panel_layout()
 
+    @staticmethod
+    def _set_nav_row(
+        row: Any,
+        *,
+        icon: str = "",
+        direction: str = "",
+        distance: str = "",
+        relative: str = "",
+        fg: str = Theme.TEXT_MUTED,
+    ) -> None:
+        """Update one prebuilt zone/airport row without changing geometry."""
+        row.icon_lbl.config(text=icon, fg=fg)
+        row.direction_lbl.config(text=direction, fg=fg)
+        row.distance_lbl.config(text=distance, fg=fg)
+        if getattr(row, "relative_lbl", None) is not None:
+            row.relative_lbl.config(text=relative, fg=fg)
+
+    def _clear_nav_rows(self, rows: list[Any], start: int = 0) -> None:
+        """Blank remaining prebuilt rows while keeping them mounted."""
+        for row in rows[start:]:
+            self._set_nav_row(row)
+
     def update_zone_display(self, snap: UISnapshot):
         """更新战区显示，并返回是否需要重算布局尺寸。"""
         app = self.app
         s = app.scale
-        font_item = app._get_font("zone_item")
         pad_x = int(8 * s)
 
         raw_heading = float(getattr(snap, "player_heading", 0.0) or 0.0)
@@ -211,8 +232,6 @@ class AppPanelRenderer:
         else:
             app.heading_lbl.config(text="航向: ---°")
 
-        zone_count = 0
-        airport_count = 0
         zones_enabled = ENABLE_ZONES and PanelConfig.is_effectively_enabled("zones")
         airfields_enabled = ENABLE_AIRFIELDS and PanelConfig.is_effectively_enabled("airfields")
         fuel_enabled = ENABLE_FUEL and PanelConfig.is_effectively_enabled("fuel")
@@ -336,10 +355,8 @@ class AppPanelRenderer:
             is_compact = (PanelConfig.navigation_mode == "standalone")
             zone_layout_mode = "compact" if is_compact else "full"
             if app._zone_layout_mode != zone_layout_mode:
-                for lbl in app._zone_label_pool:
-                    lbl.config(text="", fg=Theme.TEXT_MUTED)
-                for lbl in app._compact_zone_label_pool:
-                    lbl.config(text="", fg=Theme.TEXT_MUTED)
+                self._clear_nav_rows(app._zone_row_pool)
+                self._clear_nav_rows(app._compact_zone_row_pool)
                 app._zone_layout_mode = zone_layout_mode
 
             if is_compact:
@@ -355,116 +372,115 @@ class AppPanelRenderer:
                 self._grid_remove_if_needed(app.compact_nav_frame)
                 self._grid_if_needed(app.zone_list_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
 
-            zone_count = min(ZoneConfig.MAX_DISPLAY_ZONES, len(snap.zones)) if snap.zones else 1
             if is_compact:
-                label_pool = app._compact_zone_label_pool
+                row_pool = app._compact_zone_row_pool
             else:
-                label_pool = app._zone_label_pool
+                row_pool = app._zone_row_pool
 
             idx = 0
             if not snap.zones:
-                lbl = label_pool[idx]
-                lbl.config(text="无战区", fg=Theme.TEXT_MUTED)
+                self._set_nav_row(row_pool[idx], direction="无战区")
                 idx += 1
             else:
                 for zone in snap.zones[: ZoneConfig.MAX_DISPLAY_ZONES]:
                     marker = "➤" if zone.is_target else "○"
                     dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
+                    rel_sign = "+" if zone.relative > 0 else ""
+                    rel_text = f"{rel_sign}{zone.relative:.2f}°" if zone.is_target else f"{rel_sign}{int(zone.relative)}°"
                     if is_compact:
-                        text = f"{marker} {zone.direction} {dist_text}"
+                        relative_text = ""
                     else:
-                        rel_sign = "+" if zone.relative > 0 else ""
-                        rel_text = f"{rel_sign}{zone.relative:.2f}°" if zone.is_target else f"{rel_sign}{int(zone.relative)}°"
-                        text = f"{marker} {zone.direction} {dist_text}  ({rel_text})"
+                        relative_text = rel_text
                     fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
-                    lbl = label_pool[idx]
-                    lbl.config(text=text, fg=fg)
+                    self._set_nav_row(
+                        row_pool[idx],
+                        icon=marker,
+                        direction=zone.direction,
+                        distance=dist_text,
+                        relative=relative_text,
+                        fg=fg,
+                    )
                     idx += 1
-            for lbl in label_pool[idx:]:
-                lbl.config(text="", fg=Theme.TEXT_MUTED)
+            self._clear_nav_rows(row_pool, start=idx)
         else:
             self._grid_remove_if_needed(app.zone_header_frame)
             self._grid_remove_if_needed(app.zone_list_frame)
             self._grid_remove_if_needed(app.compact_nav_frame)
             app.zone_alert_lbl.config(text="")
-            for lbl in app._zone_label_pool:
-                lbl.config(text="", fg=Theme.TEXT_MUTED)
-            for lbl in app._compact_zone_label_pool:
-                lbl.config(text="", fg=Theme.TEXT_MUTED)
+            self._clear_nav_rows(app._zone_row_pool)
+            self._clear_nav_rows(app._compact_zone_row_pool)
             app._zone_layout_mode = None
 
         if airfields_enabled:
             is_compact = (PanelConfig.navigation_mode == "standalone")
             airport_layout_mode = "compact" if is_compact else "full"
             if app._airport_layout_mode != airport_layout_mode:
-                for lbl in app._airport_label_pool:
-                    lbl.config(text="", fg=Theme.TEXT_MUTED)
-                for lbl in app._compact_airport_label_pool:
-                    lbl.config(text="", fg=Theme.TEXT_MUTED)
+                self._clear_nav_rows(app._airport_row_pool)
+                self._clear_nav_rows(app._compact_airport_row_pool)
                 app._airport_layout_mode = airport_layout_mode
 
             if is_compact:
                 self._grid_if_needed(app.compact_nav_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
                 self._grid_remove_if_needed(app.airport_title_lbl)
                 self._grid_remove_if_needed(app.airport_list_frame)
-                label_pool = app._compact_airport_label_pool
+                row_pool = app._compact_airport_row_pool
             else:
                 self._grid_if_needed(app.airport_title_lbl, row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
                 self._grid_if_needed(app.airport_list_frame, row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
-                label_pool = app._airport_label_pool
-
-            airport_count = 0
-            if snap.friendly_airfield:
-                airport_count += 1
-            if snap.enemy_airfields:
-                airport_count += len(snap.enemy_airfields)
-            if airport_count == 0:
-                airport_count = 1
+                row_pool = app._airport_row_pool
 
             ap_idx = 0
             if snap.friendly_airfield:
                 af = snap.friendly_airfield
                 dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
+                rel_sign = "+" if af.relative > 0 else ""
+                rel_text = f"{rel_sign}{int(af.relative)}°"
                 if is_compact:
-                    text = f"🟢 {af.direction} {dist_text}"
+                    relative_text = ""
                 else:
-                    rel_sign = "+" if af.relative > 0 else ""
-                    rel_text = f"{rel_sign}{int(af.relative)}°"
-                    text = f"🟢 ➤ {af.direction} {dist_text}  ({rel_text})"
-                lbl = label_pool[ap_idx]
-                lbl.config(text=text, fg=Theme.GREEN)
+                    relative_text = rel_text
+                self._set_nav_row(
+                    row_pool[ap_idx],
+                    icon="🟢➤",
+                    direction=af.direction,
+                    distance=dist_text,
+                    relative=relative_text,
+                    fg=Theme.GREEN,
+                )
                 ap_idx += 1
 
             if snap.enemy_airfields:
                 for af in snap.enemy_airfields[: max(0, ZoneConfig.MAX_DISPLAY_AIRFIELDS - ap_idx)]:
                     marker = "➤" if af.is_target else "○"
                     dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
+                    rel_sign = "+" if af.relative > 0 else ""
+                    rel_text = f"{rel_sign}{int(af.relative)}°"
                     if is_compact:
-                        text = f"🔴 {af.direction} {dist_text}"
+                        relative_text = ""
                     else:
-                        rel_sign = "+" if af.relative > 0 else ""
-                        rel_text = f"{rel_sign}{int(af.relative)}°"
-                        text = f"🔴 {marker} {af.direction} {dist_text}  ({rel_text})"
+                        relative_text = rel_text
                     fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
-                    lbl = label_pool[ap_idx]
-                    lbl.config(text=text, fg=fg)
+                    self._set_nav_row(
+                        row_pool[ap_idx],
+                        icon=f"🔴{marker}",
+                        direction=af.direction,
+                        distance=dist_text,
+                        relative=relative_text,
+                        fg=fg,
+                    )
                     ap_idx += 1
 
             if ap_idx == 0:
-                lbl = label_pool[0]
-                lbl.config(text="无数据", fg=Theme.TEXT_MUTED)
+                self._set_nav_row(row_pool[0], direction="无数据")
                 ap_idx = 1
-            for lbl in label_pool[ap_idx:]:
-                lbl.config(text="", fg=Theme.TEXT_MUTED)
+            self._clear_nav_rows(row_pool, start=ap_idx)
         else:
             self._grid_remove_if_needed(app.airport_title_lbl)
             if app.airport_tape_frame:
                 self._grid_remove_if_needed(app.airport_tape_frame)
             self._grid_remove_if_needed(app.airport_list_frame)
-            for lbl in app._airport_label_pool:
-                lbl.config(text="", fg=Theme.TEXT_MUTED)
-            for lbl in app._compact_airport_label_pool:
-                lbl.config(text="", fg=Theme.TEXT_MUTED)
+            self._clear_nav_rows(app._airport_row_pool)
+            self._clear_nav_rows(app._compact_airport_row_pool)
             app._airport_layout_mode = None
 
         if fuel_enabled:
