@@ -413,7 +413,7 @@ class HotkeyConfig:
 class SoundConfig:
     """声音配置
 
-    使用Windows Beep API，频率和持续时间定义音效。
+    默认使用 Windows Beep API，用户也可为不同提示事件绑定自定义音频文件。
     """
     # 音效定义：(频率Hz, 持续时间ms)
     BEEP_TICK = (784, 28)              # 常规提示音
@@ -437,6 +437,67 @@ class SoundConfig:
     # 警告触发时间点（秒）
     WARNING_SECONDS = [30, 20, 10, 5, 4, 3, 2, 1]
     MAJOR_WARNINGS = [30, 20, 10]  # 重要警告点（双音）
+
+    # 自定义音频导入目录
+    CUSTOM_SOUND_DIR = Path.home() / ".wttimer_sounds"
+
+    # 支持的用户音频格式（基于 Windows 原生能力）
+    SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".wma", ".mid", ".midi"}
+
+    SOUND_EVENT_GROUPS = (
+        ("计时与操作", ("tick", "warning", "manual_reset", "on")),
+        ("导航提醒", ("zone_destroyed",)),
+        ("空速提醒", ("overspeed_warning", "overspeed_critical")),
+    )
+
+    SOUND_EVENT_META = {
+        "tick": {"label": "倒计时单响", "description": "倒计时普通提示"},
+        "warning": {"label": "倒计时重点警告", "description": "30/20/10 秒等重点倒计时"},
+        "manual_reset": {"label": "手动重置确认", "description": "双击热键确认重置后播放"},
+        "on": {"label": "功能开启反馈", "description": "提示音开关打开时的反馈"},
+        "zone_destroyed": {"label": "战区被摧毁", "description": "战区被摧毁时的提示"},
+        "overspeed_warning": {"label": "超速警告", "description": "空速接近限制时的循环提示"},
+        "overspeed_critical": {"label": "超速危险", "description": "空速进入危险区时的循环提示"},
+    }
+
+    _custom_sound_files = {}
+
+    @classmethod
+    def get_event_groups(cls) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        return cls.SOUND_EVENT_GROUPS
+
+    @classmethod
+    def get_event_meta(cls, pattern: str) -> dict[str, str]:
+        meta = cls.SOUND_EVENT_META.get(pattern, {})
+        return {
+            "label": meta.get("label", pattern),
+            "description": meta.get("description", ""),
+        }
+
+    @classmethod
+    def normalize_custom_sound_files(cls, data: dict | None) -> dict[str, str]:
+        normalized = {}
+        if not isinstance(data, dict):
+            return normalized
+        for pattern, raw_path in data.items():
+            if pattern not in cls.SOUND_EVENT_META:
+                continue
+            path_str = str(raw_path or "").strip()
+            if path_str:
+                normalized[pattern] = path_str
+        return normalized
+
+    @classmethod
+    def apply_user_config(cls, data: dict | None) -> None:
+        cls._custom_sound_files = cls.normalize_custom_sound_files(data)
+
+    @classmethod
+    def export_user_config(cls) -> dict[str, str]:
+        return dict(cls._custom_sound_files)
+
+    @classmethod
+    def get_custom_sound_file(cls, pattern: str) -> str:
+        return str(cls._custom_sound_files.get(pattern, "") or "")
 
 
 class OverspeedConfig:
@@ -619,6 +680,9 @@ class FileConfig:
 
     # 图标文件（用于托盘和窗口）
     ICON_FILE = "app.ico"
+
+    # 用户自定义提示音导入目录
+    CUSTOM_SOUND_DIR = SoundConfig.CUSTOM_SOUND_DIR
 
     # 互斥锁名称（防止多开）
     MUTEX_NAME = r"Global\WTtimer_SingleInstance"

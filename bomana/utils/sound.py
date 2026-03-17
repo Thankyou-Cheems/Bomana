@@ -4,6 +4,8 @@
 import ctypes
 import threading
 import time
+import winsound
+from pathlib import Path
 from typing import List, Tuple
 
 from bomana.config import SoundConfig
@@ -28,7 +30,15 @@ class SoundManager:
     def is_enabled(self) -> bool:
         return self._enabled
     
-    def play(self, pattern: str = "tick", freq: int = None, duration: int = None):
+    def play(
+        self,
+        pattern: str = "tick",
+        freq: int = None,
+        duration: int = None,
+        *,
+        force: bool = False,
+        custom_file: str | None = None,
+    ):
         """播放音效
         
         Args:
@@ -37,7 +47,7 @@ class SoundManager:
             duration: 直接指定持续时间（ms）
         """
         # "on"模式总是播放（用于功能开启反馈）
-        if not self._enabled and pattern != "on":
+        if not self._enabled and not force and pattern != "on":
             return
         
         # 防止多个音效重叠
@@ -59,21 +69,67 @@ class SoundManager:
             
             # 序列播放
             seq = self._get_pattern_sequence(pattern)
+            sound_file = self._resolve_custom_sound_file(pattern, custom_file)
+
             def _play():
                 try:
-                    for (f, ms, gap) in seq:
+                    if sound_file is not None:
                         try:
-                            ctypes.windll.kernel32.Beep(int(f), int(ms))
-                        except:
+                            self._play_audio_file(sound_file)
+                            return
+                        except Exception:
                             pass
-                        if gap:
-                            time.sleep(gap / 1000.0)
+                    self._play_sequence(seq)
                 finally:
                     self._lock.release()
             threading.Thread(target=_play, daemon=True).start()
         except Exception:
             self._lock.release()
             raise
+
+    @staticmethod
+    def _resolve_custom_sound_file(pattern: str, custom_file: str | None = None) -> Path | None:
+        candidate = str(custom_file or SoundConfig.get_custom_sound_file(pattern) or "").strip()
+        if not candidate:
+            return None
+        path = Path(candidate)
+        return path if path.exists() else None
+
+    @staticmethod
+    def _play_sequence(seq: List[Tuple[int, int, int]]) -> None:
+        for (f, ms, gap) in seq:
+            try:
+                ctypes.windll.kernel32.Beep(int(f), int(ms))
+            except Exception:
+                pass
+            if gap:
+                time.sleep(gap / 1000.0)
+
+    @staticmethod
+    def _play_audio_file(path: Path) -> None:
+        ext = path.suffix.lower()
+        if ext == ".wav":
+            winsound.PlaySound(str(path), winsound.SND_FILENAME)
+            return
+        SoundManager._play_audio_file_mci(path)
+
+    @staticmethod
+    def _play_audio_file_mci(path: Path) -> None:
+        alias = f"bomana_{time.monotonic_ns()}"
+        path_text = str(path).replace('"', '""')
+
+        def _mci(command: str) -> int:
+            return int(ctypes.windll.winmm.mciSendStringW(command, None, 0, None))
+
+        err = _mci(f'open "{path_text}" alias {alias}')
+        if err != 0:
+            raise OSError(f"mci open failed: {err}")
+        try:
+            err = _mci(f"play {alias} wait")
+            if err != 0:
+                raise OSError(f"mci play failed: {err}")
+        finally:
+            _mci(f"close {alias}")
     
     @staticmethod
     def _get_pattern_sequence(pattern: str) -> List[Tuple[int, int, int]]:
@@ -85,6 +141,8 @@ class SoundManager:
         if pattern == "on":
             return [(*SoundConfig.BEEP_ON_1, SoundConfig.ON_GAP_MS), 
                    (*SoundConfig.BEEP_ON_2, 0)]
+        elif pattern == "manual_reset":
+            return [(*SoundConfig.BEEP_MANUAL_RESET, 0)]
         elif pattern == "warning":
             return [(*SoundConfig.BEEP_WARNING_1, SoundConfig.WARNING_GAP_MS), 
                    (*SoundConfig.BEEP_WARNING_2, 0)]

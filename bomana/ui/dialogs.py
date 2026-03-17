@@ -2,9 +2,12 @@
 """Dialogs and popups."""
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 import webbrowser
+import shutil
+import time
 from tkinter import font as tkfont
+from pathlib import Path
 
 from bomana.config import (
     ENABLE_ADVANCED_SETTINGS,
@@ -20,6 +23,7 @@ from bomana.config import (
     SnapConfig,
     BombConfig,
     ChecklistConfig,
+    SoundConfig,
     OverspeedConfig,
     BallisticPhysicsParams,
     AboutConfig,
@@ -340,10 +344,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self.tab_buttons_frame = tk.Frame(tab_shell, bg=Theme.BG, bd=0, highlightthickness=0)
         self.tab_buttons_frame.pack(fill="x", padx=1, pady=1)
         
-        self.tabs = ["显示", "面板", "快捷键", "实验性", "其他"]
+        self.tabs = ["显示", "面板"]
         if ENABLE_CCRP:
-            self.tabs.insert(2, "投弹")
-        self.tabs.insert(2 if not ENABLE_CCRP else 3, "空速")
+            self.tabs.append("投弹")
+        self.tabs.extend(["空速", "音效", "快捷键", "实验性", "其他"])
         self.tab_frames = {}
         self.tab_btns = {}
         self.current_tab = "显示"
@@ -431,6 +435,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if ENABLE_CCRP:
             self._build_ccrp_tab()
         self._build_overspeed_tab()
+        self._build_sound_tab()
         self._build_hotkey_tab()
         self._build_experimental_tab()
         self._build_other_tab()
@@ -769,6 +774,227 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if count > 4:
             preview += f" 等 {count} 个机型"
         self.overspeed_override_summary_var.set(f"已配置 {count} 个机型覆盖：{preview}")
+
+    def _build_sound_tab(self):
+        """构建音效设置页。"""
+        frame = tk.Frame(self.content_frame, bg=Theme.BG)
+        self.tab_frames["音效"] = frame
+
+        self.sound_enabled_var = tk.BooleanVar(value=self.app.sound.is_enabled())
+        self.zone_sound_enabled_var = tk.BooleanVar(value=bool(getattr(self.app, "_zone_sound_enabled", True)))
+        self.sound_file_overrides = SoundConfig.export_user_config()
+        self.sound_row_vars = {}
+
+        tk.Checkbutton(
+            frame,
+            text="启用提示音",
+            variable=self.sound_enabled_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG,
+            activeforeground=Theme.TEXT,
+            highlightthickness=0,
+        ).pack(anchor="w", pady=(0, 4))
+        tk.Checkbutton(
+            frame,
+            text="启用战区摧毁提示音",
+            variable=self.zone_sound_enabled_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG,
+            activeforeground=Theme.TEXT,
+            highlightthickness=0,
+        ).pack(anchor="w", pady=(0, 10))
+
+        tk.Label(
+            frame,
+            text="支持导入 .wav / .mp3 / .wma / .mid / .midi，自定义文件会在保存时复制到软件自己的目录。",
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
+            justify="left",
+            anchor="w",
+            wraplength=640,
+        ).pack(fill="x", pady=(0, 10))
+
+        for group_name, event_keys in SoundConfig.get_event_groups():
+            section_shell = tk.Frame(frame, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+            section_shell.pack(fill="x", pady=(0, 10))
+            section = tk.Frame(section_shell, bg=Theme.BG, bd=0, highlightthickness=0)
+            section.pack(fill="x", padx=1, pady=1)
+
+            tk.Label(
+                section,
+                text=group_name,
+                bg=Theme.BG,
+                fg=Theme.TEXT,
+                font=("Segoe UI", 9, "bold"),
+                anchor="w",
+            ).pack(fill="x", padx=10, pady=(8, 4))
+
+            for key in event_keys:
+                meta = SoundConfig.get_event_meta(key)
+                row = tk.Frame(section, bg=Theme.BG)
+                row.pack(fill="x", padx=10, pady=(0, 8))
+
+                left = tk.Frame(row, bg=Theme.BG)
+                left.pack(side="left", fill="x", expand=True)
+
+                tk.Label(
+                    left,
+                    text=meta["label"],
+                    bg=Theme.BG,
+                    fg=Theme.TEXT,
+                    anchor="w",
+                ).pack(fill="x")
+                tk.Label(
+                    left,
+                    text=meta["description"],
+                    bg=Theme.BG,
+                    fg=Theme.TEXT_DIM,
+                    font=("Segoe UI", 8),
+                    anchor="w",
+                    justify="left",
+                    wraplength=380,
+                ).pack(fill="x")
+
+                self.sound_row_vars[key] = tk.StringVar()
+                tk.Label(
+                    left,
+                    textvariable=self.sound_row_vars[key],
+                    bg=Theme.GRAYPILL,
+                    fg=Theme.BLUE,
+                    anchor="w",
+                    justify="left",
+                    padx=8,
+                    pady=5,
+                ).pack(fill="x", pady=(5, 0))
+
+                actions = tk.Frame(row, bg=Theme.BG)
+                actions.pack(side="right", padx=(10, 0))
+                self._create_action_button(
+                    actions,
+                    "选择文件",
+                    lambda sound_key=key: self._choose_sound_file(sound_key),
+                    variant="neutral",
+                    width=9,
+                ).pack(side="left")
+                self._create_action_button(
+                    actions,
+                    "恢复默认",
+                    lambda sound_key=key: self._clear_sound_file(sound_key),
+                    variant="neutral",
+                    width=9,
+                ).pack(side="left", padx=(6, 0))
+                self._create_action_button(
+                    actions,
+                    "试听",
+                    lambda sound_key=key: self._preview_sound(sound_key),
+                    variant="primary",
+                    width=7,
+                ).pack(side="left", padx=(6, 0))
+
+                self._refresh_sound_override_label(key)
+
+    def _sound_file_dialog_types(self):
+        return [
+            ("支持的音频文件", "*.wav *.mp3 *.wma *.mid *.midi"),
+            ("WAV 文件", "*.wav"),
+            ("MP3 文件", "*.mp3"),
+            ("WMA 文件", "*.wma"),
+            ("MIDI 文件", "*.mid *.midi"),
+            ("所有文件", "*.*"),
+        ]
+
+    def _refresh_sound_override_label(self, sound_key: str) -> None:
+        display_var = self.sound_row_vars.get(sound_key)
+        if display_var is None:
+            return
+        path_str = str(self.sound_file_overrides.get(sound_key, "") or "").strip()
+        if not path_str:
+            display_var.set("当前：内置蜂鸣")
+            return
+        path = Path(path_str)
+        if path.exists():
+            display_var.set(f"当前：自定义文件 {path.name}")
+        else:
+            display_var.set(f"当前：自定义文件缺失 {path.name}")
+
+    def _choose_sound_file(self, sound_key: str) -> None:
+        file_path = filedialog.askopenfilename(
+            parent=self,
+            title=f"选择 {SoundConfig.get_event_meta(sound_key)['label']} 音频文件",
+            filetypes=self._sound_file_dialog_types(),
+        )
+        if not file_path:
+            return
+        path = Path(file_path)
+        if path.suffix.lower() not in SoundConfig.SUPPORTED_AUDIO_EXTS:
+            messagebox.showwarning(
+                "音效格式不支持",
+                "当前只支持 .wav / .mp3 / .wma / .mid / .midi 文件。",
+                parent=self,
+            )
+            return
+        self.sound_file_overrides[sound_key] = str(path)
+        self._refresh_sound_override_label(sound_key)
+
+    def _clear_sound_file(self, sound_key: str) -> None:
+        self.sound_file_overrides.pop(sound_key, None)
+        self._refresh_sound_override_label(sound_key)
+
+    def _preview_sound(self, sound_key: str) -> None:
+        custom_file = str(self.sound_file_overrides.get(sound_key, "") or "").strip() or None
+        self.app.sound.play(pattern=sound_key, force=True, custom_file=custom_file)
+
+    @staticmethod
+    def _is_managed_sound_file(path: Path) -> bool:
+        try:
+            return path.resolve().parent == FileConfig.CUSTOM_SOUND_DIR.resolve()
+        except Exception:
+            return False
+
+    def _persist_sound_overrides(self) -> dict[str, str]:
+        current_saved = SoundConfig.export_user_config()
+        final_overrides = {}
+        managed_dir = FileConfig.CUSTOM_SOUND_DIR
+        managed_dir.mkdir(parents=True, exist_ok=True)
+
+        for sound_key in SoundConfig.SOUND_EVENT_META.keys():
+            raw_path = str(self.sound_file_overrides.get(sound_key, "") or "").strip()
+            if not raw_path:
+                continue
+
+            source = Path(raw_path)
+            if not source.exists():
+                continue
+            if source.suffix.lower() not in SoundConfig.SUPPORTED_AUDIO_EXTS:
+                continue
+
+            if self._is_managed_sound_file(source):
+                final_path = source
+            else:
+                safe_suffix = source.suffix.lower()
+                target = managed_dir / f"{sound_key}_{int(time.time() * 1000)}{safe_suffix}"
+                shutil.copy2(source, target)
+                final_path = target
+
+            final_overrides[sound_key] = str(final_path)
+
+        for old_path_str in current_saved.values():
+            old_path_text = str(old_path_str or "").strip()
+            if not old_path_text:
+                continue
+            old_path = Path(old_path_text)
+            if self._is_managed_sound_file(old_path) and str(old_path) not in final_overrides.values():
+                try:
+                    old_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        return final_overrides
 
     def _build_hotkey_tab(self):
         """构建快捷键设置页"""
@@ -1146,6 +1372,15 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 defaults = BallisticPhysicsParams.get_default_tuning()
                 self.ccrp_range_mult_var.set(defaults["range_correction_mult"])
                 self.ccrp_time_mult_var.set(defaults["time_correction_mult"])
+
+            if hasattr(self, "sound_enabled_var"):
+                self.sound_enabled_var.set(False)
+            if hasattr(self, "zone_sound_enabled_var"):
+                self.zone_sound_enabled_var.set(True)
+            if hasattr(self, "sound_file_overrides"):
+                self.sound_file_overrides = {}
+            for sound_key in getattr(self, "sound_row_vars", {}).keys():
+                self._refresh_sound_override_label(sound_key)
     
     def _center_on_parent(self, parent):
         """居中显示并限制到可见屏幕。"""
@@ -1161,6 +1396,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         old_hud_alpha = int(HUDConfig.alpha)
         old_hud_follow_main = bool(HUDConfig.follow_main_window_monitor)
         old_hud_color_style = str(getattr(HUDConfig, "color_style", "auto"))
+        old_sound_enabled = bool(self.app.sound.is_enabled())
+        old_zone_sound_enabled = bool(getattr(self.app, "_zone_sound_enabled", True))
         
         # 显示设置
         UIConfig.WINDOW_ALPHA = self.alpha_var.get()
@@ -1211,6 +1448,19 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         config['snap_enabled'] = SnapConfig.enabled
         config['snap_distance'] = SnapConfig.SNAP_DISTANCE
 
+        # 音效设置
+        self.app.sound.set_enabled(bool(self.sound_enabled_var.get()))
+        self.app._zone_sound_enabled = bool(self.zone_sound_enabled_var.get())
+        try:
+            persisted_sound_overrides = self._persist_sound_overrides()
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("音效保存失败", f"无法保存自定义提示音：{exc}", parent=self)
+            return
+        SoundConfig.apply_user_config(persisted_sound_overrides)
+        config['beep_enabled'] = self.app.sound.is_enabled()
+        config['zone_sound_enabled'] = self.app._zone_sound_enabled
+        config['sound_settings'] = SoundConfig.export_user_config()
+
         overspeed_thresholds = {
             key: var.get()
             for key, var in getattr(self, "overspeed_vars", {}).items()
@@ -1245,6 +1495,15 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         
         # 应用透明度
         Win32.setup_window(self.app.hwnd, self.app._locked, UIConfig.WINDOW_ALPHA)
+
+        sound_flags_changed = (
+            old_sound_enabled != bool(self.app.sound.is_enabled())
+            or old_zone_sound_enabled != bool(self.app._zone_sound_enabled)
+        )
+        if sound_flags_changed and hasattr(self.app, "_update_hint"):
+            self.app._update_hint()
+            if hasattr(self.app, "nav_window") and self.app.nav_window:
+                self.app.nav_window.update_hint_text()
         
         # 重启热键服务（如果需要）
         need_restart_hotkeys = (

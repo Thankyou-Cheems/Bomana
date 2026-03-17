@@ -307,6 +307,7 @@ class App:
         
         beep_enabled = config.get('beep_enabled', False)
         self.sound.set_enabled(beep_enabled)
+        SoundConfig.apply_user_config(config.get('sound_settings', {}))
 
         OverspeedConfig.apply_user_config(config.get('overspeed', {}))
 
@@ -360,6 +361,7 @@ class App:
         config['checklist_items'] = self.chk_items
         config['beep_enabled'] = self.sound.is_enabled()
         config['zone_sound_enabled'] = self._zone_sound_enabled
+        config['sound_settings'] = SoundConfig.export_user_config()
         config['overspeed'] = OverspeedConfig.export_user_config()
         
         # 窗口位置（包含多显示器信息）
@@ -1559,13 +1561,13 @@ class App:
         self._manual_reset_confirm_until = now + HotkeyConfig.RESET_CONFIRM_WINDOW_SEC
         self._update_hint()
         self._recalc_size()
-        self.sound.play(*SoundConfig.BEEP_TICK)
+        self.sound.play(pattern="tick")
 
     def _manual_reset(self):
         """立即执行手动重置。"""
         self._clear_manual_reset_confirmation(refresh_hint=True)
         self.game.manual_reset()
-        self.sound.play(*SoundConfig.BEEP_MANUAL_RESET)
+        self.sound.play(pattern="manual_reset")
 
     def _show_settings(self, initial_tab: Optional[str] = None):
         """显示设置对话框
