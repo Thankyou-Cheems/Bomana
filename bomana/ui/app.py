@@ -1207,8 +1207,8 @@ class App:
         PanelConfig.speed_history_mode = not PanelConfig.speed_history_mode
         self._save_config()
         self._update_hint()
-        self._recalc_size(force_shrink=True)
         self._update_ui()
+        self._recalc_size(force_shrink=PanelConfig.speed_history_mode)
         self._refresh_tray()
 
     def _apply_speed_history_layout(self, active: bool) -> None:
@@ -1257,8 +1257,7 @@ class App:
                     fill="x",
                     pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
                 )
-            if state_changed:
-                self._update_mid_panel_layout()
+            self._update_mid_panel_layout()
 
     def _refresh_speed_history_ui(self, snap: UISnapshot, speed_level: str) -> None:
         """刷新历史模式专用头部文案。"""
@@ -2501,7 +2500,6 @@ class App:
         checklist_enabled = ENABLE_CHECKLIST and PanelConfig.is_effectively_enabled("checklist")
         bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
         history_mode_active = PanelConfig.speed_history_mode
-        self._apply_speed_history_layout(history_mode_active)
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
@@ -2534,6 +2532,7 @@ class App:
             (not snap.api_down)
         )
         self._set_checklist_visible(show_chk)
+        self._apply_speed_history_layout(history_mode_active)
 
         # 更新计时器显示
         if history_mode_active:
