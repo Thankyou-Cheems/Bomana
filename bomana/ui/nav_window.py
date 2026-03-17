@@ -121,9 +121,9 @@ class NavigationWindow:
         self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
     
     def _init_ui(self):
-        """初始化统一的简化导航 UI。"""
+        """初始化独立导航窗 UI（简洁版：标题 + 航向带 + 两条状态）。"""
         s = self.scale
-        pad = int(6 * s)
+        pad = int(4 * s)
 
         self.main_frame = tk.Frame(self.window, bg=Theme.BORDER, bd=0, highlightthickness=0)
         self.main_frame.pack(fill="both", expand=True, padx=2, pady=2)
@@ -131,9 +131,9 @@ class NavigationWindow:
         self.content_frame = tk.Frame(self.main_frame, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
         self.content_frame.pack(fill="both", expand=True, padx=1, pady=1)
 
-        title_font = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1] * s * 0.9), UIConfig.FONT_ZONE_TITLE[2])
-        item_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1] * s))
-        hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1] * s * 0.8))
+        title_font = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1] * s * 0.9))
+        item_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1] * s * 0.92))
+        hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1] * s * 0.75))
 
         self.title_bar = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.title_bar.pack(fill="x", padx=pad, pady=(pad, 0))
@@ -149,6 +149,16 @@ class NavigationWindow:
             anchor="w",
         )
         self.hint_lbl.pack(side="left", padx=(int(10 * s), 0))
+
+        self.tolerance_lbl = tk.Label(
+            self.title_bar,
+            text="",
+            font=hint_font,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="e",
+        )
+        self.tolerance_lbl.pack(side="right", padx=(0, int(6 * s)))
 
         self.close_btn = tk.Label(
             self.title_bar,
@@ -175,70 +185,38 @@ class NavigationWindow:
         )
         self.heading_lbl.pack(side="right", padx=(0, int(4 * s)))
 
-        self.zone_alert_lbl = tk.Label(
-            self.content_frame,
-            text="",
-            font=title_font,
-            fg=Theme.RED,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-            justify="left",
-        )
-        self.zone_alert_lbl.pack(fill="x", padx=pad, pady=(int(4 * s), 0))
+        width_mult = PanelConfig.navigation_bar_width
+        tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s * 1.2 * width_mult)
+        tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
+        self.tape_frame = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
+        self.tape_frame.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
+        self.heading_tape = HeadingTape(self.tape_frame, width=tape_width, height=tape_height)
+        self.heading_tape.pack(fill="x", expand=True)
 
-        self.zone_title_lbl = tk.Label(self.content_frame, text="战区导航", font=title_font, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-        self.zone_title_lbl.pack(fill="x", padx=pad, pady=(int(4 * s), 0))
-        self.zone_list_frame = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        self.zone_list_frame.pack(fill="x", padx=pad, pady=(0, int(4 * s)))
+        status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1] * s * 0.9))
+        self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
+        self.zone_row.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
+        self.zone_row.grid_columnconfigure(3, weight=1)
+        self.zone_label = tk.Label(self.zone_row, text="⊚战区", font=status_font, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
+        self.zone_label.grid(row=0, column=0, sticky="w")
+        self.zone_turn = tk.Label(self.zone_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w", width=8)
+        self.zone_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+        self.zone_status = tk.Label(self.zone_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w", width=8)
+        self.zone_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
+        self.zone_info = tk.Label(self.zone_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e", width=16)
+        self.zone_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
 
-        self.airport_title_lbl = tk.Label(self.content_frame, text="机场导航", font=title_font, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-        self.airport_title_lbl.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
-        self.airport_list_frame = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        self.airport_list_frame.pack(fill="x", padx=pad, pady=(0, int(6 * s)))
-
-        self._zone_rows = self._build_nav_rows(self.zone_list_frame, ZoneConfig.MAX_DISPLAY_ZONES, item_font)
-        self._airport_rows = self._build_nav_rows(self.airport_list_frame, ZoneConfig.MAX_DISPLAY_AIRFIELDS, item_font)
-
-    def _build_nav_rows(self, parent, count: int, font: tuple) -> list[tuple[tk.Label, tk.Label, tk.Label]]:
-        rows = []
-        parent.grid_columnconfigure(1, weight=1)
-        for row_index in range(count):
-            icon_lbl = tk.Label(parent, text="", font=font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=3)
-            icon_lbl.grid(row=row_index, column=0, sticky="w")
-            icon_lbl.grid_remove()
-            direction_lbl = tk.Label(parent, text="", font=font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            direction_lbl.grid(row=row_index, column=1, sticky="ew")
-            direction_lbl.grid_remove()
-            distance_lbl = tk.Label(parent, text="", font=font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e", width=8)
-            distance_lbl.grid(row=row_index, column=2, sticky="e", padx=(int(6 * self.scale), 0), pady=(0, max(1, int(self.scale))))
-            distance_lbl.grid_remove()
-            relative_lbl = tk.Label(parent, text="", font=font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e", width=9)
-            relative_lbl.grid(row=row_index, column=3, sticky="e", padx=(int(8 * self.scale), 0), pady=(0, max(1, int(self.scale))))
-            relative_lbl.grid_remove()
-            rows.append((icon_lbl, direction_lbl, distance_lbl, relative_lbl))
-        return rows
-
-    @staticmethod
-    def _set_nav_row(row, *, icon: str = "", direction: str = "", distance: str = "", relative: str = "", fg: str = Theme.TEXT_MUTED):
-        icon_lbl, direction_lbl, distance_lbl, relative_lbl = row
-        icon_lbl.config(text=icon, fg=fg)
-        direction_lbl.config(text=direction, fg=fg)
-        distance_lbl.config(text=distance, fg=fg)
-        relative_lbl.config(text=relative, fg=fg)
-
-    def _sync_nav_rows(self, rows, visible_count: int):
-        for idx, row in enumerate(rows):
-            for widget in row:
-                if idx < visible_count:
-                    widget.grid()
-                else:
-                    widget.grid_remove()
-
-    def _clear_nav_rows(self, rows):
-        for row in rows:
-            self._set_nav_row(row)
-            for widget in row:
-                widget.grid_remove()
+        self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
+        self.friendly_row.pack(fill="x", padx=pad, pady=(int(1 * s), int(4 * s)))
+        self.friendly_row.grid_columnconfigure(3, weight=1)
+        self.friendly_label = tk.Label(self.friendly_row, text="✈友方", font=status_font, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
+        self.friendly_label.grid(row=0, column=0, sticky="w")
+        self.friendly_turn = tk.Label(self.friendly_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w", width=8)
+        self.friendly_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+        self.friendly_status = tk.Label(self.friendly_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w", width=8)
+        self.friendly_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
+        self.friendly_info = tk.Label(self.friendly_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e", width=16)
+        self.friendly_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
 
     
     def _init_bindings(self):
@@ -338,9 +316,14 @@ class NavigationWindow:
     def clear_display(self):
         """Clear rendered nav content before hiding or mode switching."""
         self.heading_lbl.config(text="航向 ---°")
-        self.zone_alert_lbl.config(text="")
-        self._clear_nav_rows(self._zone_rows)
-        self._clear_nav_rows(self._airport_rows)
+        self.tolerance_lbl.config(text="")
+        self.heading_tape.clear()
+        self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
+        self.zone_status.config(text="", fg=Theme.TEXT_DIM)
+        self.zone_info.config(text="", fg=Theme.TEXT_DIM)
+        self.friendly_turn.config(text="", fg=Theme.TEXT_DIM)
+        self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
+        self.friendly_info.config(text="", fg=Theme.TEXT_DIM)
     
     def is_visible(self):
         """返回窗口是否可见"""
@@ -368,7 +351,7 @@ class NavigationWindow:
                 pass
     
     def update_display(self, snap: 'UISnapshot'):
-        """更新简化后的独立导航显示。"""
+        """更新独立导航窗显示（简洁航向带版）。"""
         if not self._visible:
             return
 
@@ -382,54 +365,91 @@ class NavigationWindow:
             self.heading_lbl.config(text=f"航向 {int(heading_deg):03d}°")
         else:
             self.heading_lbl.config(text="航向 ---°")
-        if getattr(snap, "zone_destroyed_alert", False):
-            alert_text = "💥 战区被摧毁："
-            destroyed_text = str(getattr(snap, "destroyed_zone_text", "") or "")
-            self.zone_alert_lbl.config(text=(alert_text + destroyed_text) if destroyed_text else "💥 战区已摧毁!")
-        else:
-            self.zone_alert_lbl.config(text="")
+        if not heading_available:
+            self.heading_tape.clear()
+            self.tolerance_lbl.config(text="")
+            self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
+            self.zone_status.config(text="无目标", fg=Theme.TEXT_MUTED)
+            self.zone_info.config(text="", fg=Theme.TEXT_DIM)
+            self.friendly_turn.config(text="", fg=Theme.TEXT_DIM)
+            self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
+            self.friendly_info.config(text="", fg=Theme.TEXT_DIM)
+            return
 
-        zone_rows = self._zone_rows
-        zone_idx = 0
-        if not snap.zones:
-            self._set_nav_row(zone_rows[0], direction="无战区")
-            zone_idx = 1
-        else:
-            for zone in snap.zones[: ZoneConfig.MAX_DISPLAY_ZONES]:
-                marker = "➤" if zone.is_target else "○"
-                dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
-                rel_sign = "+" if zone.relative > 0 else ""
-                rel_text = f"{rel_sign}{zone.relative:.2f}°" if zone.is_target else f"{rel_sign}{int(zone.relative)}°"
-                fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
-                self._set_nav_row(zone_rows[zone_idx], icon=marker, direction=zone.direction, distance=dist_text, relative=rel_text, fg=fg)
-                zone_idx += 1
-        for row in zone_rows[zone_idx:]:
-            self._set_nav_row(row)
-        self._sync_nav_rows(zone_rows, zone_idx)
+        targets = []
+        zone_info = None
+        primary_zone = next((z for z in snap.zones if z.is_target), None)
+        for zone in snap.zones:
+            targets.append({
+                "type": "zone",
+                "relative": zone.relative,
+                "distance_km": zone.distance_km,
+                "is_primary": zone.is_target,
+                "is_target": zone.is_target,
+            })
+            if zone.is_target:
+                zone_info = zone
 
-        airport_rows = self._airport_rows
-        airport_idx = 0
         if getattr(snap, "friendly_airfield", None):
             af = snap.friendly_airfield
-            dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
-            rel_sign = "+" if af.relative > 0 else ""
-            rel_text = f"{rel_sign}{int(af.relative)}°"
-            self._set_nav_row(airport_rows[airport_idx], icon="🟢➤", direction=af.direction, distance=dist_text, relative=rel_text, fg=Theme.GREEN)
-            airport_idx += 1
+            is_in_front = abs(af.relative) <= 90
+            targets.append({
+                "type": "friendly",
+                "relative": af.relative,
+                "distance_km": af.distance_km,
+                "is_primary": False,
+                "is_target": is_in_front,
+            })
 
         if getattr(snap, "enemy_airfields", None):
-            for af in snap.enemy_airfields[: max(0, ZoneConfig.MAX_DISPLAY_AIRFIELDS - airport_idx)]:
-                marker = "➤" if af.is_target else "○"
-                dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
-                rel_sign = "+" if af.relative > 0 else ""
-                rel_text = f"{rel_sign}{int(af.relative)}°"
-                fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
-                self._set_nav_row(airport_rows[airport_idx], icon=f"🔴{marker}", direction=af.direction, distance=dist_text, relative=rel_text, fg=fg)
-                airport_idx += 1
+            for af in snap.enemy_airfields:
+                is_in_front = abs(af.relative) <= 90
+                targets.append({
+                    "type": "enemy",
+                    "relative": af.relative,
+                    "distance_km": af.distance_km,
+                    "is_primary": False,
+                    "is_target": is_in_front,
+                })
 
-        if airport_idx == 0:
-            self._set_nav_row(airport_rows[0], direction="无数据")
-            airport_idx = 1
-        for row in airport_rows[airport_idx:]:
-            self._set_nav_row(row)
-        self._sync_nav_rows(airport_rows, airport_idx)
+        if getattr(snap, "zone_destroyed_alert", False) and hasattr(self.app.game.state.zone_nav, "destroyed_zones"):
+            for dz in self.app.game.state.zone_nav.destroyed_zones:
+                if hasattr(dz, "relative"):
+                    targets.append({
+                        "type": "destroyed",
+                        "relative": dz.relative,
+                        "distance_km": dz.distance * ZoneConfig.DISTANCE_SCALE,
+                        "is_primary": False,
+                    })
+
+        primary_dist = primary_zone.distance_km if primary_zone else 10.0
+        self.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
+
+        if primary_zone:
+            tolerance = get_cdi_tolerance(primary_zone.distance_km)
+            scale = calculate_heading_tape_scale(primary_zone.distance_km)
+            turn_text, turn_color = calculate_zone_turn_indicator(primary_zone.relative, tolerance)
+            status_text, status_color = calculate_zone_status(abs(primary_zone.relative), tolerance)
+            info_text = format_distance_ete(primary_zone.distance_km, getattr(primary_zone, "ete_str", ""))
+            self.tolerance_lbl.config(text=f"±{tolerance:.1f}° {scale:.1f}x")
+            self.zone_turn.config(text=turn_text, fg=turn_color)
+            self.zone_status.config(text=status_text, fg=status_color)
+            self.zone_info.config(text=info_text, fg=Theme.RED)
+        else:
+            self.tolerance_lbl.config(text="")
+            self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
+            self.zone_status.config(text="无目标", fg=Theme.TEXT_MUTED)
+            self.zone_info.config(text="", fg=Theme.TEXT_DIM)
+
+        friendly = getattr(snap, "friendly_airfield", None)
+        if friendly:
+            turn_text, turn_color = calculate_airfield_turn_indicator(friendly.relative)
+            status_text, status_color = calculate_airfield_status(abs(friendly.relative))
+            info_text = format_distance_ete(friendly.distance_km, friendly.ete_str)
+            self.friendly_turn.config(text=turn_text, fg=turn_color)
+            self.friendly_status.config(text=status_text, fg=status_color)
+            self.friendly_info.config(text=info_text, fg=Theme.BLUE)
+        else:
+            self.friendly_turn.config(text="", fg=Theme.TEXT_DIM)
+            self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
+            self.friendly_info.config(text="", fg=Theme.TEXT_DIM)

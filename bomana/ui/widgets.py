@@ -83,6 +83,9 @@ class HeadingTape(tk.Canvas):
         self._current_hdg = 0.0
         self._primary_target = None
         self._last_render_signature = None
+        self._last_targets = []
+        self._last_primary_distance_km = 0.0
+        self.bind("<Configure>", self._on_configure, add="+")
         
         # 目标类型颜色配置
         self._target_colors = {
@@ -110,6 +113,8 @@ class HeadingTape(tk.Canvas):
         """
         if targets is None:
             targets = []
+        self._last_targets = [dict(t) for t in targets]
+        self._last_primary_distance_km = float(primary_distance_km or 0.0)
 
         # 高频刷新场景下跳过等效帧重绘，降低Canvas CPU/GDI开销
         render_signature = (
@@ -244,6 +249,17 @@ class HeadingTape(tk.Canvas):
             center_x + tri_size, tri_size + 2,
             fill=Theme.GREEN, outline=""
         )
+
+    def _on_configure(self, event) -> None:
+        """Redraw when the widget gets resized by layout."""
+        new_width = max(1, int(getattr(event, "width", self.tape_width)))
+        new_height = max(1, int(getattr(event, "height", self.tape_height)))
+        if new_width == self.tape_width and new_height == self.tape_height:
+            return
+        self.tape_width = new_width
+        self.tape_height = new_height
+        self._last_render_signature = None
+        self.update_tape_multi(self._current_hdg, self._last_targets, self._last_primary_distance_km)
     
     def _draw_target_marker(self, x: float, t_type: str, is_primary: bool, 
                            relative: float, distance_km: float, is_target: bool = True,
