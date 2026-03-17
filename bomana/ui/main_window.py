@@ -445,7 +445,6 @@ class MainWindowBuilder:
         pool: list[NavListRow] = []
         for _ in range(count):
             row = tk.Frame(parent, bg=bg)
-            row.pack(fill="x", pady=(0, max(1, int(self.app.scale))))
             row.grid_columnconfigure(1, weight=1)
 
             icon_lbl = tk.Label(

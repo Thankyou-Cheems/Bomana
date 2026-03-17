@@ -213,9 +213,18 @@ class AppPanelRenderer:
             row.relative_lbl.config(text=relative, fg=fg)
 
     def _clear_nav_rows(self, rows: list[Any], start: int = 0) -> None:
-        """Blank remaining prebuilt rows while keeping them mounted."""
+        """Blank remaining prebuilt rows."""
         for row in rows[start:]:
             self._set_nav_row(row)
+
+    def _sync_nav_row_visibility(self, rows: list[Any], visible_count: int) -> None:
+        """Show only the visible prefix of prebuilt rows."""
+        pady = (0, max(1, int(self.app.scale)))
+        for idx, row in enumerate(rows):
+            if idx < visible_count:
+                self._pack_if_needed(row.frame, fill="x", pady=pady)
+            else:
+                self._pack_forget_if_needed(row.frame)
 
     def update_zone_display(self, snap: UISnapshot):
         """更新战区显示，并返回是否需要重算布局尺寸。"""
@@ -402,6 +411,7 @@ class AppPanelRenderer:
                     )
                     idx += 1
             self._clear_nav_rows(row_pool, start=idx)
+            self._sync_nav_row_visibility(row_pool, idx)
         else:
             self._grid_remove_if_needed(app.zone_header_frame)
             self._grid_remove_if_needed(app.zone_list_frame)
@@ -409,6 +419,8 @@ class AppPanelRenderer:
             app.zone_alert_lbl.config(text="")
             self._clear_nav_rows(app._zone_row_pool)
             self._clear_nav_rows(app._compact_zone_row_pool)
+            self._sync_nav_row_visibility(app._zone_row_pool, 0)
+            self._sync_nav_row_visibility(app._compact_zone_row_pool, 0)
             app._zone_layout_mode = None
 
         if airfields_enabled:
@@ -474,6 +486,7 @@ class AppPanelRenderer:
                 self._set_nav_row(row_pool[0], direction="无数据")
                 ap_idx = 1
             self._clear_nav_rows(row_pool, start=ap_idx)
+            self._sync_nav_row_visibility(row_pool, ap_idx)
         else:
             self._grid_remove_if_needed(app.airport_title_lbl)
             if app.airport_tape_frame:
@@ -481,6 +494,8 @@ class AppPanelRenderer:
             self._grid_remove_if_needed(app.airport_list_frame)
             self._clear_nav_rows(app._airport_row_pool)
             self._clear_nav_rows(app._compact_airport_row_pool)
+            self._sync_nav_row_visibility(app._airport_row_pool, 0)
+            self._sync_nav_row_visibility(app._compact_airport_row_pool, 0)
             app._airport_layout_mode = None
 
         if fuel_enabled:
