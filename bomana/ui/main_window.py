@@ -662,24 +662,58 @@ class MainWindowBuilder:
         app.airport_list_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
 
-        app.fuel_title_lbl = tk.Label(app.zone_frame, text="燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-        app.fuel_title_lbl.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+        app.fuel_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
+        app.fuel_header_frame.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+        app.fuel_header_frame.grid_columnconfigure(1, weight=1)
+        app.fuel_title_lbl = tk.Label(app.fuel_header_frame, text="燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        app.fuel_title_lbl.grid(row=0, column=0, sticky="w")
+        fuel_header_right = tk.Frame(app.fuel_header_frame, bg=Theme.GRAYPILL)
+        fuel_header_right.grid(row=0, column=1, sticky="e")
+        app.fuel_time_lbl = tk.Label(
+            fuel_header_right,
+            text="⏱️ --:--",
+            font=font_item,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="e",
+        )
+        app.fuel_time_lbl.pack(side="left")
+        app.fuel_return_lbl = tk.Label(
+            fuel_header_right,
+            text="返航 --",
+            font=font_item,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="e",
+        )
+        app.fuel_return_lbl.pack(side="left", padx=(int(10 * s), 0))
         app.fuel_info_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.fuel_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
         app.zone_cdi_lbl = None
         app.friendly_cdi_lbl = None
         app.enemy_cdi_lbl = None
 
-        app.fuel_main_lbl = tk.Label(app.fuel_info_frame, text="-- kg (--%)  ⏱️ --:--", font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
+        app.fuel_main_lbl = tk.Label(app.fuel_info_frame, text="-- kg (--%)", font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
         app.fuel_main_lbl.pack(fill="x")
-        app.fuel_detail_lbl = tk.Label(app.fuel_info_frame, text="油耗 --kg/min │ 高度 --m", font=font_item, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
+        app.fuel_detail_lbl = tk.Label(app.fuel_info_frame, text="油耗 --kg/min │ 高度 --m │ 返航 --", font=font_item, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
         app.fuel_detail_lbl.pack(fill="x")
-        app.fuel_return_lbl = tk.Label(app.fuel_info_frame, text="🏠 返航: --", font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
-        app.fuel_return_lbl.pack(fill="x")
 
         if ENABLE_CCRP:
-            app.bombing_title_lbl = tk.Label(app.zone_frame, text="投弹预测", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-            app.bombing_title_lbl.grid(row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+            app.bombing_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
+            app.bombing_header_frame.grid(row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+            app.bombing_header_frame.grid_columnconfigure(1, weight=1)
+            app.bombing_title_lbl = tk.Label(app.bombing_header_frame, text="投弹预测", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+            app.bombing_title_lbl.grid(row=0, column=0, sticky="w")
+            font_release = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1] * s), UIConfig.FONT_ZONE_TITLE[2])
+            app.bomb_release_lbl = tk.Label(
+                app.bombing_header_frame,
+                text="等待目标",
+                font=font_release,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="e",
+            )
+            app.bomb_release_lbl.grid(row=0, column=1, sticky="e")
             app.bombing_info_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
             app.bombing_info_frame.grid(row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
             app.bomb_select_lbl = tk.Label(
@@ -697,9 +731,6 @@ class MainWindowBuilder:
             app.bomb_select_lbl.bind("<Leave>", lambda e: app.bomb_select_lbl.config(fg=Theme.BLUE, bg=Theme.GRAYPILL))
             app.bomb_trajectory_lbl = tk.Label(app.bombing_info_frame, text="弹道: -- m │ 飞行: -- s", font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
             app.bomb_trajectory_lbl.pack(fill="x")
-            font_release = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1] * s * 1.2), UIConfig.FONT_ZONE_TITLE[2])
-            app.bomb_release_lbl = tk.Label(app.bombing_info_frame, text="⏱️ 等待目标", font=font_release, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
-            app.bomb_release_lbl.pack(fill="x", pady=(int(4 * s), 0))
 
         app._zone_row_pool = self._build_nav_row_pool(
             app.zone_list_frame,

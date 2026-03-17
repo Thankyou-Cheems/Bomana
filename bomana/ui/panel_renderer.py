@@ -499,20 +499,20 @@ class AppPanelRenderer:
             app._airport_layout_mode = None
 
         if fuel_enabled:
-            self._grid_if_needed(app.fuel_title_lbl, row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+            self._grid_if_needed(app.fuel_header_frame, row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
             self._grid_if_needed(app.fuel_info_frame, row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
             self.update_fuel_display(snap)
         else:
-            self._grid_remove_if_needed(app.fuel_title_lbl)
+            self._grid_remove_if_needed(app.fuel_header_frame)
             self._grid_remove_if_needed(app.fuel_info_frame)
 
         if ENABLE_CCRP:
             if bombing_enabled:
-                self._grid_if_needed(app.bombing_title_lbl, row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+                self._grid_if_needed(app.bombing_header_frame, row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
                 self._grid_if_needed(app.bombing_info_frame, row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
                 self.update_bombing_display(snap)
             else:
-                self._grid_remove_if_needed(app.bombing_title_lbl)
+                self._grid_remove_if_needed(app.bombing_header_frame)
                 self._grid_remove_if_needed(app.bombing_info_frame)
 
         layout_signature = (
@@ -533,10 +533,6 @@ class AppPanelRenderer:
         app = self.app
         if snap.fuel_kg > 0:
             fuel_text = f"{int(snap.fuel_kg)}kg ({snap.fuel_percent:.0f}%)"
-            if snap.fuel_time_remaining_str:
-                fuel_text += f"  ⏱️ {snap.fuel_time_remaining_str}"
-            else:
-                fuel_text += "  ⏱️ 计算中..."
 
             if snap.fuel_percent <= FuelConfig.DANGER_PERCENT:
                 fuel_color = Theme.RED
@@ -549,13 +545,18 @@ class AppPanelRenderer:
         else:
             app.fuel_main_lbl.config(text="-- kg (--%)", fg=Theme.TEXT_MUTED)
 
+        if snap.fuel_time_remaining_str:
+            app.fuel_time_lbl.config(text=f"⏱️ {snap.fuel_time_remaining_str}", fg=Theme.TEXT)
+        else:
+            app.fuel_time_lbl.config(text="⏱️ 计算中...", fg=Theme.TEXT_MUTED)
+
         if snap.fuel_rate_stable and snap.fuel_rate_kg_min > 0:
             rate_text = f"油耗 {snap.fuel_rate_kg_min:.0f}kg/min"
         else:
             rate_text = "油耗 --"
 
         alt_text = f"高度 {int(snap.altitude_m)}m" if snap.altitude_m > 0 else "高度 --"
-        app.fuel_detail_lbl.config(text=f"{rate_text} │ {alt_text}")
+        detail_suffix = "返航 --"
 
         if snap.return_status != "unknown" and snap.return_fuel_needed_kg > 0:
             needed_text = f"需~{int(snap.return_fuel_needed_kg)}kg"
@@ -573,14 +574,16 @@ class AppPanelRenderer:
                 status_icon = "🔴 不足!"
                 return_color = Theme.RED
 
-            app.fuel_return_lbl.config(text=f"🏠 返航: {needed_text}  {status_icon}", fg=return_color)
+            app.fuel_return_lbl.config(text=status_icon, fg=return_color)
+            detail_suffix = f"返航 {needed_text}"
         elif snap.friendly_distance_km > 0:
-            app.fuel_return_lbl.config(
-                text=f"🏠 返航: 距离{snap.friendly_distance_km:.0f}km (估算中...)",
-                fg=Theme.TEXT_MUTED,
-            )
+            app.fuel_return_lbl.config(text="↻ 估算中", fg=Theme.TEXT_MUTED)
+            detail_suffix = f"返航距离 {snap.friendly_distance_km:.0f}km"
         else:
-            app.fuel_return_lbl.config(text="🏠 返航: 无机场数据", fg=Theme.TEXT_MUTED)
+            app.fuel_return_lbl.config(text="无机场", fg=Theme.TEXT_MUTED)
+            detail_suffix = "返航无机场数据"
+
+        app.fuel_detail_lbl.config(text=f"{rate_text} │ {alt_text} │ {detail_suffix}")
 
     def update_bombing_display(self, snap: UISnapshot) -> None:
         """更新投弹预测信息显示。"""
@@ -603,21 +606,21 @@ class AppPanelRenderer:
 
             if status == "ready":
                 time_str = f"{snap.time_to_release:.2f}s"
-                release_text = f"💣 投弹! {time_str} ({dist_str})"
+                release_text = f"💣 投弹 {time_str} │ {dist_str}"
                 release_color = Theme.GREEN
             elif status == "approaching":
                 time_str = f"{snap.time_to_release:.1f}s"
-                release_text = f"⏱️ {time_str} ({dist_str})"
+                release_text = f"⏱️ {time_str} │ {dist_str}"
                 release_color = Theme.YELLOW
             elif status == "passed":
                 release_text = f"❌ 已飞过 {dist_str}"
                 release_color = Theme.RED
             elif status == "too_far":
                 time_str = f"{snap.time_to_release:.0f}s"
-                release_text = f"🎯 {dist_str} ({time_str})"
+                release_text = f"🎯 {dist_str} │ {time_str}"
                 release_color = Theme.TEXT_DIM
             else:
-                release_text = "⏳ 计算中..."
+                release_text = "⏳ 计算中"
                 release_color = Theme.TEXT_MUTED
 
             app.bomb_release_lbl.config(text=release_text, fg=release_color)
