@@ -35,6 +35,63 @@ class AppPanelRenderer:
     def __init__(self, app: Any):
         self.app = app
 
+    @staticmethod
+    def _normalize_geom_value(value: Any) -> str:
+        """Normalize geometry-manager values for stable comparisons."""
+        if isinstance(value, bool):
+            return "1" if value else "0"
+        if isinstance(value, (tuple, list)):
+            return " ".join(str(v) for v in value)
+        return str(value)
+
+    def _grid_if_needed(self, widget: tk.Widget, **kwargs: Any) -> bool:
+        """Only call grid() when placement actually changes."""
+        if widget.winfo_manager() == "grid":
+            info = widget.grid_info()
+            unchanged = True
+            for key, value in kwargs.items():
+                if self._normalize_geom_value(info.get(key, "")) != self._normalize_geom_value(value):
+                    unchanged = False
+                    break
+            if unchanged:
+                return False
+            widget.grid_configure(**kwargs)
+            return True
+        widget.grid(**kwargs)
+        return True
+
+    @staticmethod
+    def _grid_remove_if_needed(widget: tk.Widget) -> bool:
+        """Only remove grid-managed widgets when visible."""
+        if widget.winfo_manager() == "grid":
+            widget.grid_remove()
+            return True
+        return False
+
+    def _pack_if_needed(self, widget: tk.Widget, **kwargs: Any) -> bool:
+        """Only call pack() when placement actually changes."""
+        if widget.winfo_manager() == "pack":
+            info = widget.pack_info()
+            unchanged = True
+            for key, value in kwargs.items():
+                if self._normalize_geom_value(info.get(key, "")) != self._normalize_geom_value(value):
+                    unchanged = False
+                    break
+            if unchanged:
+                return False
+            widget.pack_configure(**kwargs)
+            return True
+        widget.pack(**kwargs)
+        return True
+
+    @staticmethod
+    def _pack_forget_if_needed(widget: tk.Widget) -> bool:
+        """Only forget packed widgets when they are currently packed."""
+        if widget.winfo_manager() == "pack":
+            widget.pack_forget()
+            return True
+        return False
+
     def update_mid_panel_layout(self) -> None:
         """更新中间面板布局（战区/检查清单）。"""
         app = self.app
@@ -98,7 +155,7 @@ class AppPanelRenderer:
             app.tape_tolerance_lbl.config(text="")
 
             if app.tape_zone_row:
-                app.tape_zone_row.pack(fill="x", pady=(int(2 * app.scale), 0))
+                self._pack_if_needed(app.tape_zone_row, fill="x", pady=(int(2 * app.scale), 0))
         elif app.tape_turn_lbl and app.tape_deviation_lbl and app.tape_tolerance_lbl:
             app.tape_turn_lbl.config(text="", fg=Theme.TEXT_MUTED)
             app.tape_deviation_lbl.config(text="无目标", fg=Theme.TEXT_MUTED)
@@ -106,7 +163,7 @@ class AppPanelRenderer:
                 app.tape_zone_info.config(text="")
             app.tape_tolerance_lbl.config(text="")
             if app.tape_zone_row:
-                app.tape_zone_row.pack_forget()
+                self._pack_forget_if_needed(app.tape_zone_row)
 
         friendly_info = next((t for t in targets_info if t["type"] == "friendly"), None)
         if friendly_info and app.tape_friendly_turn and app.tape_friendly_info:
@@ -124,9 +181,9 @@ class AppPanelRenderer:
             app.tape_friendly_info.config(text=info_text, fg=Theme.BLUE)
 
             if app.tape_friendly_row:
-                app.tape_friendly_row.pack(fill="x", pady=(int(1 * app.scale), 0))
+                self._pack_if_needed(app.tape_friendly_row, fill="x", pady=(int(1 * app.scale), 0))
         elif app.tape_friendly_row:
-            app.tape_friendly_row.pack_forget()
+            self._pack_forget_if_needed(app.tape_friendly_row)
 
     def set_checklist_visible(self, visible: bool) -> None:
         """设置检查清单可见性。"""
@@ -159,8 +216,8 @@ class AppPanelRenderer:
         bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
 
         if zones_enabled:
-            app.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6 * s), int(2 * s)))
-            app.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+            self._grid_if_needed(app.zone_header_frame, row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6 * s), int(2 * s)))
+            self._grid_if_needed(app.zone_list_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
 
             if app.heading_tape is not None and heading_available:
                 targets = []
@@ -243,9 +300,9 @@ class AppPanelRenderer:
                 self.update_tape_info_labels(active_targets_info, target_zone)
 
                 if PanelConfig.navigation_mode == "integrated":
-                    app.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
+                    self._grid_if_needed(app.heading_tape_frame, row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
                 else:
-                    app.heading_tape_frame.grid_remove()
+                    self._grid_remove_if_needed(app.heading_tape_frame)
 
                 if hasattr(app, "nav_window") and app.nav_window and app.nav_window.is_visible():
                     app.nav_window.update_display(snap, targets, active_targets_info, target_zone)
@@ -255,7 +312,9 @@ class AppPanelRenderer:
                     for lbl in app._tape_info_labels:
                         lbl.pack_forget()
                 if PanelConfig.navigation_mode == "integrated":
-                    app.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
+                    self._grid_if_needed(app.heading_tape_frame, row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
+                else:
+                    self._grid_remove_if_needed(app.heading_tape_frame)
                 if hasattr(app, "nav_window") and app.nav_window and app.nav_window.is_visible():
                     app.nav_window.update_display(snap, [], [], None)
 
@@ -267,12 +326,12 @@ class AppPanelRenderer:
                     alert_text = "💥 战区已摧毁!"
                 wrap = max(int(220 * s), app.zone_frame.winfo_width() - int(16 * s))
                 app.zone_alert_lbl.config(text=alert_text, wraplength=wrap, justify="left")
-                app.zone_alert_lbl.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
+                self._grid_if_needed(app.zone_alert_lbl, row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
                 if snap.should_play_destroyed_sound and not app._last_zone_destroyed_alert and app._zone_sound_enabled:
                     app.sound.play(pattern="zone_destroyed")
                 app._last_zone_destroyed_alert = True
             else:
-                app.zone_alert_lbl.grid_remove()
+                self._grid_remove_if_needed(app.zone_alert_lbl)
                 app._last_zone_destroyed_alert = False
 
             is_compact = (PanelConfig.navigation_mode == "standalone")
@@ -283,17 +342,17 @@ class AppPanelRenderer:
                 app._zone_layout_mode = zone_layout_mode
 
             if is_compact:
-                app.compact_nav_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
-                app.zone_list_frame.grid_remove()
+                self._grid_if_needed(app.compact_nav_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+                self._grid_remove_if_needed(app.zone_list_frame)
                 if airfields_enabled:
-                    app.compact_airport_frame.grid(row=0, column=1, sticky="nsew", padx=(int(4 * s), 0))
-                    app.compact_zone_frame.grid(row=0, column=0, columnspan=1, sticky="nsew", padx=(0, int(4 * s)))
+                    self._grid_if_needed(app.compact_airport_frame, row=0, column=1, sticky="nsew", padx=(int(4 * s), 0))
+                    self._grid_if_needed(app.compact_zone_frame, row=0, column=0, columnspan=1, sticky="nsew", padx=(0, int(4 * s)))
                 else:
-                    app.compact_airport_frame.grid_remove()
-                    app.compact_zone_frame.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=(0, 0))
+                    self._grid_remove_if_needed(app.compact_airport_frame)
+                    self._grid_if_needed(app.compact_zone_frame, row=0, column=0, columnspan=2, sticky="nsew", padx=(0, 0))
             else:
-                app.compact_nav_frame.grid_remove()
-                app.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+                self._grid_remove_if_needed(app.compact_nav_frame)
+                self._grid_if_needed(app.zone_list_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
 
             zone_count = len(snap.zones) if snap.zones else 1
             if is_compact:
@@ -332,10 +391,10 @@ class AppPanelRenderer:
                     idx += 1
             app._hide_label_pool(label_pool, idx)
         else:
-            app.zone_header_frame.grid_remove()
-            app.zone_list_frame.grid_remove()
-            app.compact_nav_frame.grid_remove()
-            app.zone_alert_lbl.grid_remove()
+            self._grid_remove_if_needed(app.zone_header_frame)
+            self._grid_remove_if_needed(app.zone_list_frame)
+            self._grid_remove_if_needed(app.compact_nav_frame)
+            self._grid_remove_if_needed(app.zone_alert_lbl)
             app._hide_label_pool(app._zone_label_pool)
             app._hide_label_pool(app._compact_zone_label_pool)
             app._zone_layout_mode = None
@@ -349,14 +408,14 @@ class AppPanelRenderer:
                 app._airport_layout_mode = airport_layout_mode
 
             if is_compact:
-                app.compact_nav_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
-                app.airport_title_lbl.grid_remove()
-                app.airport_list_frame.grid_remove()
+                self._grid_if_needed(app.compact_nav_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+                self._grid_remove_if_needed(app.airport_title_lbl)
+                self._grid_remove_if_needed(app.airport_list_frame)
                 target_frame = app.compact_airport_list
                 label_pool = app._compact_airport_label_pool
             else:
-                app.airport_title_lbl.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
-                app.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+                self._grid_if_needed(app.airport_title_lbl, row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+                self._grid_if_needed(app.airport_list_frame, row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
                 target_frame = app.airport_list_frame
                 label_pool = app._airport_label_pool
 
@@ -413,30 +472,30 @@ class AppPanelRenderer:
                 ap_idx = 1
             app._hide_label_pool(label_pool, ap_idx)
         else:
-            app.airport_title_lbl.grid_remove()
+            self._grid_remove_if_needed(app.airport_title_lbl)
             if app.airport_tape_frame:
-                app.airport_tape_frame.grid_remove()
-            app.airport_list_frame.grid_remove()
+                self._grid_remove_if_needed(app.airport_tape_frame)
+            self._grid_remove_if_needed(app.airport_list_frame)
             app._hide_label_pool(app._airport_label_pool)
             app._hide_label_pool(app._compact_airport_label_pool)
             app._airport_layout_mode = None
 
         if fuel_enabled:
-            app.fuel_title_lbl.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
-            app.fuel_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
+            self._grid_if_needed(app.fuel_title_lbl, row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+            self._grid_if_needed(app.fuel_info_frame, row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
             self.update_fuel_display(snap)
         else:
-            app.fuel_title_lbl.grid_remove()
-            app.fuel_info_frame.grid_remove()
+            self._grid_remove_if_needed(app.fuel_title_lbl)
+            self._grid_remove_if_needed(app.fuel_info_frame)
 
         if ENABLE_CCRP:
             if bombing_enabled:
-                app.bombing_title_lbl.grid(row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
-                app.bombing_info_frame.grid(row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
+                self._grid_if_needed(app.bombing_title_lbl, row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+                self._grid_if_needed(app.bombing_info_frame, row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
                 self.update_bombing_display(snap)
             else:
-                app.bombing_title_lbl.grid_remove()
-                app.bombing_info_frame.grid_remove()
+                self._grid_remove_if_needed(app.bombing_title_lbl)
+                self._grid_remove_if_needed(app.bombing_info_frame)
 
         layout_signature = (
             PanelConfig.navigation_mode,
