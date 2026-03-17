@@ -20,11 +20,13 @@ from bomana.config import (
     SnapConfig,
     BombConfig,
     ChecklistConfig,
+    OverspeedConfig,
     BallisticPhysicsParams,
     AboutConfig,
     FileConfig,
     Theme,
 )
+from bomana.core.overspeed import SpeedLimitDatabase
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.system import Win32
 
@@ -340,9 +342,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self.tabs = ["显示", "面板", "快捷键", "实验性", "其他"]
         if ENABLE_CCRP:
             self.tabs.insert(2, "投弹")
+        self.tabs.insert(2 if not ENABLE_CCRP else 3, "空速")
         self.tab_frames = {}
         self.tab_btns = {}
         self.current_tab = "显示"
+        self.overspeed_override_map = OverspeedConfig.get_aircraft_overrides()
         
         # 选项卡按钮
         for tab in self.tabs:
@@ -379,6 +383,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self._build_panel_tab()
         if ENABLE_CCRP:
             self._build_ccrp_tab()
+        self._build_overspeed_tab()
         self._build_hotkey_tab()
         self._build_experimental_tab()
         self._build_other_tab()
@@ -526,7 +531,143 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             
             tk.Label(item_frame, text=f"  - {desc}", bg=Theme.BG, fg=Theme.TEXT_DIM,
                     font=("Segoe UI", 8)).pack(side="left")
-    
+
+    def _build_overspeed_tab(self):
+        """构建空速预警设置页。"""
+        frame = tk.Frame(self.content_frame, bg=Theme.BG)
+        self.tab_frames["空速"] = frame
+
+        warn_frame = tk.Frame(
+            frame,
+            bg=Theme.GRAYPILL,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.SEPARATOR,
+        )
+        warn_frame.pack(fill="x", pady=(0, 12))
+        tk.Label(
+            warn_frame,
+            text="超速预警支持全局阈值和按机型覆盖；机型覆盖会优先于全局阈值。",
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT_MUTED,
+            justify="left",
+            anchor="w",
+            padx=8,
+            pady=6,
+            wraplength=500,
+        ).pack(fill="x")
+
+        defaults = OverspeedConfig.get_default_thresholds()
+        global_thresholds = OverspeedConfig.get_global_thresholds()
+        self.overspeed_vars = {
+            "caution_ratio": tk.DoubleVar(value=global_thresholds["caution_ratio"]),
+            "warning_ratio": tk.DoubleVar(value=global_thresholds["warning_ratio"]),
+            "critical_ratio": tk.DoubleVar(value=global_thresholds["critical_ratio"]),
+            "mach_caution_margin": tk.DoubleVar(value=global_thresholds["mach_caution_margin"]),
+            "mach_warning_margin": tk.DoubleVar(value=global_thresholds["mach_warning_margin"]),
+            "mach_critical_margin": tk.DoubleVar(value=global_thresholds["mach_critical_margin"]),
+        }
+
+        grid = tk.Frame(frame, bg=Theme.BG)
+        grid.pack(anchor="w")
+
+        threshold_rows = [
+            ("IAS 提示阈值", "caution_ratio", "IAS / 限速", defaults["caution_ratio"], 0.001),
+            ("IAS 警告阈值", "warning_ratio", "IAS / 限速", defaults["warning_ratio"], 0.001),
+            ("IAS 危险阈值", "critical_ratio", "IAS / 限速", defaults["critical_ratio"], 0.001),
+            ("Mach 提示余量", "mach_caution_margin", "Mach 余量", defaults["mach_caution_margin"], 0.005),
+            ("Mach 警告余量", "mach_warning_margin", "Mach 余量", defaults["mach_warning_margin"], 0.005),
+            ("Mach 危险余量", "mach_critical_margin", "Mach 余量", defaults["mach_critical_margin"], 0.005),
+        ]
+
+        for row, (label, key, suffix, default_value, step) in enumerate(threshold_rows):
+            tk.Label(grid, text=f"{label}:", bg=Theme.BG, fg=Theme.TEXT).grid(
+                row=row, column=0, sticky="w", pady=4
+            )
+            tk.Spinbox(
+                grid,
+                from_=0.0,
+                to=1.2,
+                increment=step,
+                width=8,
+                textvariable=self.overspeed_vars[key],
+                bg=Theme.GRAYPILL,
+                fg=Theme.TEXT,
+                bd=0,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+            ).grid(row=row, column=1, sticky="w", padx=(10, 6), pady=4)
+            tk.Label(
+                grid,
+                text=suffix,
+                bg=Theme.BG,
+                fg=Theme.TEXT_DIM,
+                font=("Segoe UI", 8),
+            ).grid(row=row, column=2, sticky="w", pady=4)
+            tk.Label(
+                grid,
+                text=f"默认 {default_value:.3f}",
+                bg=Theme.BG,
+                fg=Theme.TEXT_MUTED,
+                font=("Segoe UI", 8),
+            ).grid(row=row, column=3, sticky="w", padx=(12, 0), pady=4)
+
+        action_frame = tk.Frame(frame, bg=Theme.BG)
+        action_frame.pack(fill="x", pady=(14, 4))
+        self._create_action_button(
+            action_frame,
+            "管理机型覆盖",
+            self._open_overspeed_override_dialog,
+            variant="neutral",
+            width=12,
+        ).pack(side="left")
+
+        self.overspeed_override_summary_var = tk.StringVar()
+        tk.Label(
+            frame,
+            textvariable=self.overspeed_override_summary_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            justify="left",
+            anchor="w",
+            wraplength=520,
+        ).pack(fill="x", pady=(2, 0))
+
+        tk.Label(
+            frame,
+            text="说明：IAS 阈值会自动按 提示 ≤ 警告 ≤ 危险 排序；Mach 余量会自动按 提示 ≥ 警告 ≥ 危险 排序。",
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
+            justify="left",
+            anchor="w",
+            wraplength=520,
+        ).pack(fill="x", pady=(10, 0))
+
+        self._refresh_overspeed_override_summary()
+
+    def _open_overspeed_override_dialog(self):
+        dialog = OverspeedAircraftOverrideDialog(self, self.overspeed_override_map)
+        self.wait_window(dialog)
+        if getattr(dialog, "result", None) is not None:
+            self.overspeed_override_map = dialog.result
+            self._refresh_overspeed_override_summary()
+
+    @staticmethod
+    def _format_aircraft_label(raw: str) -> str:
+        return str(raw or "").strip().replace("_", " ") or "未知机型"
+
+    def _refresh_overspeed_override_summary(self):
+        count = len(self.overspeed_override_map)
+        if count <= 0:
+            self.overspeed_override_summary_var.set("当前没有机型覆盖，所有飞机使用全局阈值。")
+            return
+        names = sorted(self._format_aircraft_label(name) for name in self.overspeed_override_map.keys())
+        preview = ", ".join(names[:4])
+        if count > 4:
+            preview += f" 等 {count} 个机型"
+        self.overspeed_override_summary_var.set(f"已配置 {count} 个机型覆盖：{preview}")
+
     def _build_hotkey_tab(self):
         """构建快捷键设置页"""
         frame = tk.Frame(self.content_frame, bg=Theme.BG)
@@ -833,6 +974,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             self.hotkeys_enabled_var.set(True)
             self.snap_var.set(True)
             self.snap_dist_var.set(20)
+            default_thresholds = OverspeedConfig.get_default_thresholds()
+            for key, value in default_thresholds.items():
+                if hasattr(self, "overspeed_vars") and key in self.overspeed_vars:
+                    self.overspeed_vars[key].set(value)
+            self.overspeed_override_map = {}
+            if hasattr(self, "overspeed_override_summary_var"):
+                self._refresh_overspeed_override_summary()
 
             if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
                 defaults = BallisticPhysicsParams.get_default_tuning()
@@ -902,6 +1050,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         SnapConfig.SNAP_DISTANCE = self.snap_dist_var.get()
         config['snap_enabled'] = SnapConfig.enabled
         config['snap_distance'] = SnapConfig.SNAP_DISTANCE
+
+        overspeed_thresholds = {
+            key: var.get()
+            for key, var in getattr(self, "overspeed_vars", {}).items()
+        }
+        OverspeedConfig.apply_user_thresholds(overspeed_thresholds, self.overspeed_override_map)
+        config['overspeed'] = OverspeedConfig.export_user_config()
 
         # 投弹预测调参（仅在CCRP启用时保存）
         if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
@@ -1132,6 +1287,432 @@ class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
         """恢复默认清单"""
         self.text.delete("1.0", "end")
         self.text.insert("1.0", "\n".join(ChecklistConfig.DEFAULT_ITEMS))
+
+
+class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
+    """机型级超速阈值覆盖编辑器。"""
+
+    def __init__(self, parent, initial_overrides: dict[str, dict[str, float]] | None = None):
+        super().__init__(parent)
+        self.db = SpeedLimitDatabase()
+        self.result = None
+        self.override_map = {
+            key: OverspeedConfig.normalize_thresholds(value)
+            for key, value in (initial_overrides or {}).items()
+            if str(key or "").strip()
+        }
+        self.selected_aircraft_key = None
+        self._listbox_keys = []
+
+        self.title("机型空速覆盖")
+        self.configure(bg=Theme.BG)
+        self.resizable(True, True)
+        self.transient(parent)
+        self.grab_set()
+
+        self._build_ui()
+        self._fit_window_to_screen()
+        self._init_dynamic_scaling()
+        self._center_dialog_on_parent(parent)
+
+    def _create_action_button(
+        self,
+        parent: tk.Widget,
+        text: str,
+        command,
+        variant: str = "neutral",
+        width: int = 10,
+    ) -> tk.Button:
+        palette = {
+            "primary": (Theme.BLUE, Theme.GREEN, Theme.BLUE, Theme.GREEN),
+            "neutral": (Theme.GRAYPILL, Theme.SEPARATOR, Theme.BORDER, Theme.BLUE),
+            "accent": (Theme.YELLOW, Theme.ORANGE, Theme.YELLOW, Theme.ORANGE),
+        }
+        bg, hover_bg, border, hover_border = palette.get(variant, palette["neutral"])
+        button = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=bg,
+            fg=Theme.TEXT,
+            bd=0,
+            relief="flat",
+            width=width,
+            padx=10,
+            pady=5,
+            activebackground=hover_bg,
+            activeforeground=Theme.TEXT,
+            highlightthickness=1,
+            highlightbackground=border,
+            highlightcolor=border,
+            cursor="hand2",
+        )
+
+        def _on_enter(_event=None):
+            button.configure(bg=hover_bg, highlightbackground=hover_border)
+
+        def _on_leave(_event=None):
+            button.configure(bg=bg, highlightbackground=border)
+
+        button.bind("<Enter>", _on_enter, add="+")
+        button.bind("<Leave>", _on_leave, add="+")
+        return button
+
+    @staticmethod
+    def _format_aircraft_title(entry: dict[str, object]) -> str:
+        fm_name = str(entry.get("fm_name", "") or "")
+        display_name = str(entry.get("display_name", "") or fm_name)
+        if not display_name or display_name.lower() == fm_name.lower():
+            return fm_name
+        return f"{display_name} [{fm_name}]"
+
+    def _build_ui(self):
+        shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
+        shell.pack(fill="both", expand=True, padx=15, pady=12)
+        main = tk.Frame(shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        main.pack(fill="both", expand=True, padx=1, pady=1)
+
+        header = tk.Frame(main, bg=Theme.BG)
+        header.pack(fill="x", padx=12, pady=(10, 6))
+        tk.Label(
+            header,
+            text="机型空速阈值覆盖",
+            font=("Segoe UI", 13, "bold"),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            anchor="w",
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text="从限速数据库中搜索机型并覆盖该机型的 IAS / Mach 预警阈值",
+            font=("Segoe UI", 9),
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            anchor="w",
+        ).pack(anchor="w", pady=(2, 0))
+
+        if not self.db.loaded:
+            tk.Label(
+                main,
+                text=f"机型数据库不可用：{self.db.load_error or '未知错误'}",
+                bg=Theme.BG,
+                fg=Theme.RED,
+                anchor="w",
+            ).pack(fill="x", padx=12, pady=(0, 8))
+
+        search_frame = tk.Frame(main, bg=Theme.BG)
+        search_frame.pack(fill="x", padx=12, pady=(4, 8))
+
+        self.search_var = tk.StringVar()
+        self.search_var.trace("w", lambda *args: self._on_search())
+        self.search_entry = tk.Entry(
+            search_frame,
+            textvariable=self.search_var,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT_MUTED,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BLUE,
+            insertbackground=Theme.TEXT,
+            font=("Segoe UI", 10),
+        )
+        self.search_entry.pack(fill="x", ipady=6)
+        self.search_entry.insert(0, "搜索机型 / FM / 别名...")
+        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
+        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
+
+        body = tk.Frame(main, bg=Theme.BG)
+        body.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        list_shell = tk.Frame(body, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        list_shell.pack(side="left", fill="both", expand=True)
+        list_frame = tk.Frame(list_shell, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
+        list_frame.pack(fill="both", expand=True, padx=1, pady=1)
+
+        scrollbar = tk.Scrollbar(
+            list_frame,
+            troughcolor=Theme.BG,
+            bg=Theme.GRAYPILL,
+            activebackground=Theme.SEPARATOR,
+            bd=0,
+            highlightthickness=0,
+        )
+        scrollbar.pack(side="right", fill="y")
+
+        self.listbox = tk.Listbox(
+            list_frame,
+            width=40,
+            height=18,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            selectbackground=Theme.BLUE,
+            selectforeground=Theme.TEXT,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BLUE,
+            yscrollcommand=scrollbar.set,
+            font=("Consolas", 9),
+        )
+        self.listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=self.listbox.yview)
+        self.listbox.bind("<<ListboxSelect>>", self._on_list_selection)
+        self.listbox.bind("<Double-Button-1>", lambda _e: self._apply_override())
+
+        editor_shell = tk.Frame(body, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        editor_shell.pack(side="left", fill="both", padx=(12, 0))
+        editor = tk.Frame(editor_shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        editor.pack(fill="both", expand=True, padx=1, pady=1)
+
+        self.aircraft_name_var = tk.StringVar(value="未选择机型")
+        self.aircraft_alias_var = tk.StringVar(value="别名：-")
+        self.aircraft_mode_var = tk.StringVar(value="状态：继承全局")
+
+        tk.Label(
+            editor,
+            textvariable=self.aircraft_name_var,
+            font=("Segoe UI", 11, "bold"),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            anchor="w",
+            justify="left",
+            wraplength=320,
+        ).pack(fill="x", padx=10, pady=(10, 2))
+        tk.Label(
+            editor,
+            textvariable=self.aircraft_alias_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            anchor="w",
+            justify="left",
+            wraplength=320,
+        ).pack(fill="x", padx=10)
+        tk.Label(
+            editor,
+            textvariable=self.aircraft_mode_var,
+            bg=Theme.BG,
+            fg=Theme.GREEN,
+            anchor="w",
+        ).pack(fill="x", padx=10, pady=(2, 10))
+
+        form = tk.Frame(editor, bg=Theme.BG)
+        form.pack(fill="x", padx=10)
+
+        base_thresholds = OverspeedConfig.get_global_thresholds()
+        self.editor_vars = {
+            "caution_ratio": tk.DoubleVar(value=base_thresholds["caution_ratio"]),
+            "warning_ratio": tk.DoubleVar(value=base_thresholds["warning_ratio"]),
+            "critical_ratio": tk.DoubleVar(value=base_thresholds["critical_ratio"]),
+            "mach_caution_margin": tk.DoubleVar(value=base_thresholds["mach_caution_margin"]),
+            "mach_warning_margin": tk.DoubleVar(value=base_thresholds["mach_warning_margin"]),
+            "mach_critical_margin": tk.DoubleVar(value=base_thresholds["mach_critical_margin"]),
+        }
+        rows = [
+            ("IAS 提示", "caution_ratio"),
+            ("IAS 警告", "warning_ratio"),
+            ("IAS 危险", "critical_ratio"),
+            ("Mach 提示", "mach_caution_margin"),
+            ("Mach 警告", "mach_warning_margin"),
+            ("Mach 危险", "mach_critical_margin"),
+        ]
+        for row, (label, key) in enumerate(rows):
+            tk.Label(form, text=f"{label}:", bg=Theme.BG, fg=Theme.TEXT).grid(
+                row=row, column=0, sticky="w", pady=4
+            )
+            tk.Spinbox(
+                form,
+                from_=0.0,
+                to=1.2,
+                increment=0.001 if "ratio" in key else 0.005,
+                width=8,
+                textvariable=self.editor_vars[key],
+                bg=Theme.GRAYPILL,
+                fg=Theme.TEXT,
+                bd=0,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+            ).grid(row=row, column=1, sticky="w", padx=(10, 0), pady=4)
+
+        editor_actions = tk.Frame(editor, bg=Theme.BG)
+        editor_actions.pack(fill="x", padx=10, pady=(12, 10))
+        self._create_action_button(
+            editor_actions,
+            "继承全局值",
+            self._reset_editor_to_global,
+            variant="neutral",
+            width=10,
+        ).pack(side="left")
+        self._create_action_button(
+            editor_actions,
+            "删除覆盖",
+            self._remove_override,
+            variant="accent",
+            width=10,
+        ).pack(side="left", padx=(8, 0))
+        self._create_action_button(
+            editor_actions,
+            "应用覆盖",
+            self._apply_override,
+            variant="primary",
+            width=10,
+        ).pack(side="right")
+
+        self.stats_var = tk.StringVar()
+        tk.Label(
+            main,
+            textvariable=self.stats_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT_DIM,
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).pack(fill="x", padx=12, pady=(0, 0))
+
+        btn_frame = tk.Frame(main, bg=Theme.BG)
+        btn_frame.pack(fill="x", padx=12, pady=(10, 10))
+        self._create_action_button(
+            btn_frame, "确定", self._confirm, variant="primary", width=9
+        ).pack(side="right")
+        self._create_action_button(
+            btn_frame, "取消", self.destroy, variant="neutral", width=9
+        ).pack(side="right", padx=(0, 8))
+
+        self._populate_list()
+
+    def _on_search_focus_in(self, _event):
+        if self.search_entry.get() == "搜索机型 / FM / 别名...":
+            self.search_entry.delete(0, "end")
+            self.search_entry.config(fg=Theme.TEXT)
+
+    def _on_search_focus_out(self, _event):
+        if not self.search_entry.get():
+            self.search_entry.insert(0, "搜索机型 / FM / 别名...")
+            self.search_entry.config(fg=Theme.TEXT_MUTED)
+
+    def _on_search(self):
+        if not hasattr(self, "listbox"):
+            return
+        query = self.search_var.get()
+        if query == "搜索机型 / FM / 别名...":
+            query = ""
+        self._populate_list(query)
+
+    def _populate_list(self, search_query: str = ""):
+        self.listbox.delete(0, "end")
+        self._listbox_keys = []
+        if not self.db.loaded:
+            self.stats_var.set("机型数据库未加载，无法编辑覆盖。")
+            return
+
+        if search_query:
+            aircraft_keys = self.db.search_aircraft(search_query, limit=200)
+        else:
+            aircraft_keys = [entry["fm_name"] for entry in self.db.get_aircraft_entries()[:200]]
+
+        selected_index = 0
+        for index, aircraft_key in enumerate(aircraft_keys):
+            entry = self.db.get_aircraft_entry(aircraft_key) or {
+                "fm_name": aircraft_key,
+                "display_name": aircraft_key,
+                "aliases": [],
+            }
+            label = self._format_aircraft_title(entry)
+            if aircraft_key in self.override_map:
+                label += "  [已覆盖]"
+            self.listbox.insert("end", label)
+            if aircraft_key in self.override_map:
+                self.listbox.itemconfig(index, fg=Theme.GREEN)
+            self._listbox_keys.append(aircraft_key)
+            if self.selected_aircraft_key == aircraft_key:
+                selected_index = index
+
+        if self._listbox_keys:
+            if self.selected_aircraft_key not in self._listbox_keys:
+                self.selected_aircraft_key = self._listbox_keys[0]
+                selected_index = 0
+            self.listbox.selection_set(selected_index)
+            self.listbox.see(selected_index)
+            self._load_selected_aircraft(self.selected_aircraft_key)
+        else:
+            self.selected_aircraft_key = None
+            self._load_selected_aircraft(None)
+
+        self.stats_var.set(
+            f"显示 {len(self._listbox_keys)} / {len(self.db.get_aircraft_entries())} 个机型，已覆盖 {len(self.override_map)} 个"
+        )
+
+    def _on_list_selection(self, _event=None):
+        selection = self.listbox.curselection()
+        if not selection:
+            return
+        index = selection[0]
+        if index < 0 or index >= len(self._listbox_keys):
+            return
+        self.selected_aircraft_key = self._listbox_keys[index]
+        self._load_selected_aircraft(self.selected_aircraft_key)
+
+    def _load_selected_aircraft(self, aircraft_key: str | None):
+        global_thresholds = OverspeedConfig.get_global_thresholds()
+        if not aircraft_key:
+            self.aircraft_name_var.set("未选择机型")
+            self.aircraft_alias_var.set("别名：-")
+            self.aircraft_mode_var.set("状态：继承全局")
+            for key, value in global_thresholds.items():
+                self.editor_vars[key].set(value)
+            return
+
+        entry = self.db.get_aircraft_entry(aircraft_key) or {
+            "fm_name": aircraft_key,
+            "display_name": aircraft_key,
+            "aliases": [],
+        }
+        self.aircraft_name_var.set(self._format_aircraft_title(entry))
+        aliases = ", ".join(entry.get("aliases", [])[:6]) or "-"
+        self.aircraft_alias_var.set(f"别名：{aliases}")
+        has_override = aircraft_key in self.override_map
+        self.aircraft_mode_var.set(f"状态：{'已覆盖' if has_override else '继承全局'}")
+        thresholds = self.override_map.get(aircraft_key, global_thresholds)
+        for key, value in thresholds.items():
+            self.editor_vars[key].set(value)
+
+    def _reset_editor_to_global(self):
+        global_thresholds = OverspeedConfig.get_global_thresholds()
+        for key, value in global_thresholds.items():
+            self.editor_vars[key].set(value)
+
+    def _collect_editor_thresholds(self) -> dict[str, float]:
+        return OverspeedConfig.normalize_thresholds(
+            {key: var.get() for key, var in self.editor_vars.items()}
+        )
+
+    def _apply_override(self):
+        if not self.selected_aircraft_key:
+            messagebox.showwarning("提示", "请先从左侧选择一个机型。", parent=self)
+            return
+        self.override_map[self.selected_aircraft_key] = self._collect_editor_thresholds()
+        self._populate_list(self._effective_search_query())
+        self.aircraft_mode_var.set("状态：已覆盖")
+
+    def _remove_override(self):
+        if not self.selected_aircraft_key:
+            return
+        if self.selected_aircraft_key in self.override_map:
+            self.override_map.pop(self.selected_aircraft_key, None)
+            self._populate_list(self._effective_search_query())
+        else:
+            self._reset_editor_to_global()
+        self.aircraft_mode_var.set("状态：继承全局")
+
+    def _effective_search_query(self) -> str:
+        query = self.search_var.get()
+        return "" if query == "搜索机型 / FM / 别名..." else query
+
+    def _confirm(self):
+        self.result = {
+            key: OverspeedConfig.normalize_thresholds(value)
+            for key, value in self.override_map.items()
+        }
+        self.destroy()
 
 
 class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):

@@ -308,6 +308,8 @@ class App:
         beep_enabled = config.get('beep_enabled', False)
         self.sound.set_enabled(beep_enabled)
 
+        OverspeedConfig.apply_user_config(config.get('overspeed', {}))
+
     def _save_config(self):
         """保存用户配置"""
         config = ConfigManager.load()
@@ -358,6 +360,7 @@ class App:
         config['checklist_items'] = self.chk_items
         config['beep_enabled'] = self.sound.is_enabled()
         config['zone_sound_enabled'] = self._zone_sound_enabled
+        config['overspeed'] = OverspeedConfig.export_user_config()
         
         # 窗口位置（包含多显示器信息）
         monitor_index = 0

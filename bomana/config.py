@@ -3,6 +3,7 @@
 配置与元数据集中管理。
 """
 
+from copy import deepcopy
 from pathlib import Path
 import json
 
@@ -449,18 +450,159 @@ class OverspeedConfig:
     # 限速数据库文件（相对项目根目录，resource_path可解析）
     LIMITS_FILE = "bomana/data/fm_speed_limits.json"
 
-    # 级别阈值（保持与 WTSpeeder 关键逻辑一致，并增加全真提前感知层）
-    CAUTION_RATIO = 0.94      # 提前提示（全真模式保守）
-    WARNING_RATIO = 0.97      # WTSpeeder warn_percent 默认值
-    CRITICAL_RATIO = 0.992    # WTSpeeder 临界 IAS 阈值
+    # 默认级别阈值（保持与 WTSpeeder 关键逻辑一致，并增加全真提前感知层）
+    _DEFAULT_THRESHOLDS = {
+        "caution_ratio": 0.94,
+        "warning_ratio": 0.97,
+        "critical_ratio": 0.992,
+        "mach_caution_margin": 0.06,
+        "mach_warning_margin": 0.04,
+        "mach_critical_margin": 0.02,
+    }
+    _THRESHOLD_LIMITS = {
+        "caution_ratio": (0.80, 0.999),
+        "warning_ratio": (0.85, 0.999),
+        "critical_ratio": (0.90, 0.9995),
+        "mach_caution_margin": (0.0, 0.20),
+        "mach_warning_margin": (0.0, 0.20),
+        "mach_critical_margin": (0.0, 0.20),
+    }
+    _global_thresholds = dict(_DEFAULT_THRESHOLDS)
+    _aircraft_overrides = {}
 
-    MACH_CAUTION_MARGIN = 0.06
-    MACH_WARNING_MARGIN = 0.04
-    MACH_CRITICAL_MARGIN = 0.02
+    # 兼容旧调用路径的运行时常量镜像
+    CAUTION_RATIO = _DEFAULT_THRESHOLDS["caution_ratio"]
+    WARNING_RATIO = _DEFAULT_THRESHOLDS["warning_ratio"]
+    CRITICAL_RATIO = _DEFAULT_THRESHOLDS["critical_ratio"]
+    MACH_CAUTION_MARGIN = _DEFAULT_THRESHOLDS["mach_caution_margin"]
+    MACH_WARNING_MARGIN = _DEFAULT_THRESHOLDS["mach_warning_margin"]
+    MACH_CRITICAL_MARGIN = _DEFAULT_THRESHOLDS["mach_critical_margin"]
 
     # 声音节奏（秒）
     WARNING_SOUND_INTERVAL_SEC = 1.10
     CRITICAL_SOUND_INTERVAL_SEC = 0.55
+
+    @classmethod
+    def _clamp_threshold_value(cls, key: str, raw_value, fallback: float) -> float:
+        low, high = cls._THRESHOLD_LIMITS[key]
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            value = float(fallback)
+        return max(low, min(high, value))
+
+    @classmethod
+    def _normalize_thresholds(cls, values: dict | None) -> dict[str, float]:
+        merged = dict(cls._DEFAULT_THRESHOLDS)
+        if isinstance(values, dict):
+            for key, default in cls._DEFAULT_THRESHOLDS.items():
+                if key in values:
+                    merged[key] = cls._clamp_threshold_value(key, values.get(key), default)
+
+        ias_values = sorted(
+            [
+                merged["caution_ratio"],
+                merged["warning_ratio"],
+                merged["critical_ratio"],
+            ]
+        )
+        merged["caution_ratio"], merged["warning_ratio"], merged["critical_ratio"] = ias_values
+
+        mach_values = sorted(
+            [
+                merged["mach_caution_margin"],
+                merged["mach_warning_margin"],
+                merged["mach_critical_margin"],
+            ],
+            reverse=True,
+        )
+        (
+            merged["mach_caution_margin"],
+            merged["mach_warning_margin"],
+            merged["mach_critical_margin"],
+        ) = mach_values
+        return merged
+
+    @classmethod
+    def _sync_runtime_constants(cls) -> None:
+        thresholds = cls._global_thresholds
+        cls.CAUTION_RATIO = thresholds["caution_ratio"]
+        cls.WARNING_RATIO = thresholds["warning_ratio"]
+        cls.CRITICAL_RATIO = thresholds["critical_ratio"]
+        cls.MACH_CAUTION_MARGIN = thresholds["mach_caution_margin"]
+        cls.MACH_WARNING_MARGIN = thresholds["mach_warning_margin"]
+        cls.MACH_CRITICAL_MARGIN = thresholds["mach_critical_margin"]
+
+    @classmethod
+    def get_default_thresholds(cls) -> dict[str, float]:
+        return dict(cls._DEFAULT_THRESHOLDS)
+
+    @classmethod
+    def normalize_thresholds(cls, values: dict | None) -> dict[str, float]:
+        return cls._normalize_thresholds(values)
+
+    @classmethod
+    def get_global_thresholds(cls) -> dict[str, float]:
+        return dict(cls._global_thresholds)
+
+    @classmethod
+    def get_aircraft_overrides(cls) -> dict[str, dict[str, float]]:
+        return deepcopy(cls._aircraft_overrides)
+
+    @classmethod
+    def get_thresholds_for_aircraft(cls, resolved_fm: str | None = None) -> dict[str, float]:
+        thresholds = dict(cls._global_thresholds)
+        if resolved_fm:
+            override = cls._aircraft_overrides.get(str(resolved_fm).strip())
+            if override:
+                thresholds.update(override)
+        return cls._normalize_thresholds(thresholds)
+
+    @classmethod
+    def apply_user_thresholds(
+        cls,
+        global_thresholds: dict | None = None,
+        aircraft_overrides: dict | None = None,
+    ) -> None:
+        cls._global_thresholds = cls._normalize_thresholds(global_thresholds)
+
+        normalized_overrides = {}
+        if isinstance(aircraft_overrides, dict):
+            for aircraft_key, raw_override in aircraft_overrides.items():
+                aircraft_name = str(aircraft_key or "").strip()
+                if not aircraft_name or not isinstance(raw_override, dict):
+                    continue
+                normalized_overrides[aircraft_name] = cls._normalize_thresholds(raw_override)
+        cls._aircraft_overrides = normalized_overrides
+        cls._sync_runtime_constants()
+
+    @classmethod
+    def apply_user_config(cls, payload: dict | None) -> None:
+        if not isinstance(payload, dict):
+            cls.apply_user_thresholds()
+            return
+
+        if "global" in payload or "aircraft_overrides" in payload:
+            cls.apply_user_thresholds(
+                payload.get("global"),
+                payload.get("aircraft_overrides"),
+            )
+            return
+
+        # 兼容未来可能出现的扁平结构。
+        flat_thresholds = {
+            key: payload.get(key)
+            for key in cls._DEFAULT_THRESHOLDS.keys()
+            if key in payload
+        }
+        cls.apply_user_thresholds(flat_thresholds, payload.get("aircraft_overrides"))
+
+    @classmethod
+    def export_user_config(cls) -> dict[str, dict]:
+        return {
+            "global": cls.get_global_thresholds(),
+            "aircraft_overrides": cls.get_aircraft_overrides(),
+        }
 
 
 class FileConfig:

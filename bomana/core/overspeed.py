@@ -42,6 +42,7 @@ class SpeedLimitDatabase:
         self.unit_to_fm: Dict[str, str] = {}
         self.fm_limits: Dict[str, Dict[str, LimitValue]] = {}
         self._fm_alias: Dict[str, str] = {}
+        self._aircraft_entries: List[Dict[str, Any]] = []
         self._load()
 
     @staticmethod
@@ -111,6 +112,15 @@ class SpeedLimitDatabase:
                         pairs.sort(key=lambda x: x[0])
                         return pairs
         return None
+
+    @staticmethod
+    def _format_aircraft_label(name: str) -> str:
+        text = str(name or "").strip().replace("_", " ").replace("  ", " ")
+        return text or "未知机型"
+
+    @staticmethod
+    def _normalize_search_text(text: str) -> str:
+        return str(text or "").lower().replace("_", "").replace("-", "").replace(" ", "")
 
     @staticmethod
     def _interpolate(points: List[List[float]], sweep: Optional[float]) -> Optional[float]:
@@ -185,6 +195,26 @@ class SpeedLimitDatabase:
             for alias in self._name_variants(fm_name):
                 self._fm_alias[self._normalize_name(alias)] = fm_name
 
+        fm_to_units: Dict[str, set[str]] = {}
+        for unit_name, fm_name in self.unit_to_fm.items():
+            resolved = self._fm_alias.get(self._normalize_name(fm_name), str(fm_name or "").strip())
+            if not resolved:
+                continue
+            fm_to_units.setdefault(resolved, set()).add(str(unit_name or "").strip())
+
+        self._aircraft_entries = []
+        for fm_name in sorted(self.fm_limits.keys()):
+            aliases = sorted(alias for alias in fm_to_units.get(fm_name, set()) if alias)
+            search_parts = [fm_name, self._format_aircraft_label(fm_name), *aliases]
+            self._aircraft_entries.append(
+                {
+                    "fm_name": fm_name,
+                    "display_name": self._format_aircraft_label(fm_name),
+                    "aliases": aliases,
+                    "search_text": " ".join(search_parts),
+                }
+            )
+
         self.loaded = bool(self.fm_limits and self.unit_to_fm)
         if not self.loaded and not self.load_error:
             self.load_error = "limits database empty"
@@ -227,6 +257,44 @@ class SpeedLimitDatabase:
         ias_limit = self._value_by_sweep(row.get("ias"), wing_sweep)
         mach_limit = self._value_by_sweep(row.get("mach"), wing_sweep)
         return resolved, ias_limit, mach_limit
+
+    def get_aircraft_entries(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "fm_name": entry["fm_name"],
+                "display_name": entry["display_name"],
+                "aliases": list(entry["aliases"]),
+            }
+            for entry in self._aircraft_entries
+        ]
+
+    def get_aircraft_entry(self, fm_name: str) -> Optional[Dict[str, Any]]:
+        key = str(fm_name or "").strip()
+        for entry in self._aircraft_entries:
+            if entry["fm_name"] == key:
+                return {
+                    "fm_name": entry["fm_name"],
+                    "display_name": entry["display_name"],
+                    "aliases": list(entry["aliases"]),
+                }
+        return None
+
+    def search_aircraft(self, query: str, limit: int = 100) -> List[str]:
+        if not query:
+            return [entry["fm_name"] for entry in self._aircraft_entries[:limit]]
+
+        normalized_query = self._normalize_search_text(query)
+        results: List[str] = []
+        for entry in self._aircraft_entries:
+            search_text = str(entry.get("search_text", "") or "")
+            if (
+                normalized_query in self._normalize_search_text(search_text)
+                or str(query or "").lower() in search_text.lower()
+            ):
+                results.append(entry["fm_name"])
+                if len(results) >= limit:
+                    break
+        return results
 
 
 class OverspeedAnalyzer:
@@ -284,13 +352,15 @@ class OverspeedAnalyzer:
         ias_ratio = (ias / ias_limit) if (ias_limit and ias_limit > 0.0) else None
         mach_margin = (mach_limit - mach_val) if (mach_limit is not None and mach_val is not None) else None
 
-        crit_ias = bool(ias_ratio is not None and ias_ratio >= OverspeedConfig.CRITICAL_RATIO)
-        warn_ias = bool(ias_ratio is not None and ias_ratio >= OverspeedConfig.WARNING_RATIO)
-        caut_ias = bool(ias_ratio is not None and ias_ratio >= OverspeedConfig.CAUTION_RATIO)
+        thresholds = OverspeedConfig.get_thresholds_for_aircraft(resolved)
 
-        crit_mach = bool(mach_margin is not None and mach_margin <= OverspeedConfig.MACH_CRITICAL_MARGIN)
-        warn_mach = bool(mach_margin is not None and mach_margin <= OverspeedConfig.MACH_WARNING_MARGIN)
-        caut_mach = bool(mach_margin is not None and mach_margin <= OverspeedConfig.MACH_CAUTION_MARGIN)
+        crit_ias = bool(ias_ratio is not None and ias_ratio >= thresholds["critical_ratio"])
+        warn_ias = bool(ias_ratio is not None and ias_ratio >= thresholds["warning_ratio"])
+        caut_ias = bool(ias_ratio is not None and ias_ratio >= thresholds["caution_ratio"])
+
+        crit_mach = bool(mach_margin is not None and mach_margin <= thresholds["mach_critical_margin"])
+        warn_mach = bool(mach_margin is not None and mach_margin <= thresholds["mach_warning_margin"])
+        caut_mach = bool(mach_margin is not None and mach_margin <= thresholds["mach_caution_margin"])
 
         if crit_ias or crit_mach:
             level = "critical"
