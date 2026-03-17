@@ -674,7 +674,7 @@ class App:
         self._update_lock_badge()
 
         # v5.9.6 新增：起落架警告徽章（v6.6.1: 集成进度条）
-        self.badge_gear = Pill(row2, text="", fg=Theme.TEXT, bg=Theme.ORANGE, font=pill_font)
+        self.badge_gear = Pill(self.top_row2, text="", fg=Theme.TEXT, bg=Theme.ORANGE, font=pill_font)
         self.gear_progress_bar = tk.Frame(self.badge_gear, bg=Theme.BLUE, height=int(3*s))
 
         font_status = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s))
