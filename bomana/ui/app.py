@@ -157,6 +157,8 @@ class App:
         self._hud_last_target = None
         self._hud_target_hold_sec = 1.2
         self._hud_render_error_count = 0
+        self._history_mode_layout_active = False
+        self._history_mode_nav_was_visible = False
         self.debug_support = AppDebugSupport(self)
         self.panel_renderer = AppPanelRenderer(self)
 
@@ -1211,7 +1213,16 @@ class App:
 
     def _apply_speed_history_layout(self, active: bool) -> None:
         """根据历史模式切换顶部主卡布局。"""
+        state_changed = (self._history_mode_layout_active != active)
+        self._history_mode_layout_active = active
+
         if active:
+            if self.mid_frame.winfo_ismapped():
+                self.mid_frame.pack_forget()
+            if state_changed and self.nav_window:
+                self._history_mode_nav_was_visible = bool(self.nav_window.is_visible())
+            if self.nav_window and self.nav_window.is_visible():
+                self.nav_window.hide()
             if self.top_row1.winfo_ismapped():
                 self.top_row1.pack_forget()
             if self.top_row2.winfo_ismapped():
@@ -1225,6 +1236,10 @@ class App:
                     before=self.speed_row,
                 )
         else:
+            if state_changed:
+                if self.nav_window and self._history_mode_nav_was_visible and ENABLE_ZONES and PanelConfig.navigation_mode == "standalone":
+                    self.nav_window.show()
+                self._history_mode_nav_was_visible = False
             if self.history_mode_frame.winfo_ismapped():
                 self.history_mode_frame.pack_forget()
             if not self.top_row1.winfo_ismapped():
@@ -1242,6 +1257,8 @@ class App:
                     fill="x",
                     pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
                 )
+            if state_changed:
+                self._update_mid_panel_layout()
 
     def _refresh_speed_history_ui(self, snap: UISnapshot, speed_level: str) -> None:
         """刷新历史模式专用头部文案。"""
