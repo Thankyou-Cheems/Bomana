@@ -1661,6 +1661,24 @@ def _download_launcher_update_from_manifest(
     return remote_version, source_name
 
 
+def _source_site_packages(base: Path) -> Tuple[Path, ...]:
+    venv_dir = base / ".venv"
+    version_tag = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    candidates = (
+        venv_dir / "Lib" / "site-packages",
+        venv_dir / "lib" / version_tag / "site-packages",
+        venv_dir / "lib" / "site-packages",
+    )
+    return tuple(path for path in candidates if path.exists())
+
+
+def _prepare_source_test_runtime(base: Path) -> None:
+    for site_packages in reversed(_source_site_packages(base)):
+        site_text = str(site_packages)
+        if site_text not in sys.path:
+            sys.path.insert(0, site_text)
+
+
 def _launch_app(base: Path, channel: str) -> None:
     _recover_incomplete_install(base)
     app_dir = _app_runtime_dir(base)
@@ -1668,6 +1686,8 @@ def _launch_app(base: Path, channel: str) -> None:
     if not entry.exists():
         raise RuntimeError("本地应用不存在，请联网后重试。")
 
+    if _is_source_test_run(base):
+        _prepare_source_test_runtime(base)
     os.environ["BOMANA_CHANNEL"] = channel
     os.chdir(app_dir)
     if str(app_dir) not in sys.path:
@@ -1698,6 +1718,40 @@ def _friendly_error_text(err: Exception, channel: str) -> str:
     if "更新清单字段缺失" in msg:
         return "在线更新接口返回异常。请稍后重试。"
     return f"更新失败：{msg}"
+
+
+def _format_app_launch_error(
+    base: Path, err: Exception, final_version: str, channel: str, source_test_mode: bool
+) -> str:
+    if source_test_mode and isinstance(err, ModuleNotFoundError):
+        missing = getattr(err, "name", "") or str(err)
+        site_packages = _source_site_packages(base)
+        venv_hint = (
+            f"已检测到项目虚拟环境：{base / '.venv'}\n"
+            "请优先使用 `uv run --python 3.14 python launcher.pyw` 启动；"
+            "如果刚升级过解释器，也可重新执行 `uv sync --python 3.14 --extra build`。"
+            if site_packages
+            else "当前源码模式未检测到可复用的项目虚拟环境。\n请先执行 `uv sync --python 3.14 --extra build`。"
+        )
+        return (
+            "无法启动应用。\n"
+            f"名称: {DISPLAY_NAME}\n"
+            f"版本: {final_version}\n"
+            f"通道: {channel}\n"
+            f"错误: 缺少依赖模块 {missing}\n"
+            f"当前解释器: {sys.executable}\n"
+            "原因: 源码模式会直接用当前 Python 运行 Bomana.pyw。\n"
+            f"{venv_hint}\n"
+            "详细栈信息请检查 launcher.log。"
+        )
+    return (
+        "无法启动应用。\n"
+        f"名称: {DISPLAY_NAME}\n"
+        f"版本: {final_version}\n"
+        f"通道: {channel}\n"
+        f"错误: {err}\n"
+        "请检查 launcher.log。"
+    )
 
 
 class LauncherDetailsDialog(tk.Toplevel):
@@ -3818,12 +3872,13 @@ def main() -> None:
         _log(base, f"App launch failed: {e}")
         _show_error(
             f"{DISPLAY_NAME} 启动失败",
-            "无法启动应用。\n"
-            f"名称: {DISPLAY_NAME}\n"
-            f"版本: {decision.final_version}\n"
-            f"通道: {selected_channel}\n"
-            f"错误: {e}\n"
-            "请检查 launcher.log。",
+            _format_app_launch_error(
+                base,
+                e,
+                decision.final_version,
+                selected_channel,
+                gui.source_test_mode,
+            ),
         )
 
 

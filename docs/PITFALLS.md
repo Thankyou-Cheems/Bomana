@@ -141,3 +141,7 @@
   Fix/Workaround: back up first, export Dolt back to `.beads/issues.jsonl`, run `bd doctor --fix --yes`, then use raw Dolt SQL (`call dolt_add('config')`, `call dolt_commit(...)`) if `schema_version` stays dirty after the normal `bd vc commit`
 
 
+- Context: source-mode launcher (`launcher.pyw`) after switching Windows `.pyw` association to a new Python runtime
+  Symptom: launcher GUI opened, but app launch failed with `No module named 'requests'`
+  Root cause: source mode runs `Bomana.pyw` with the current interpreter, while the project dependencies only existed inside repo `.venv`
+  Fix/Workaround: prepend repo `.venv` `site-packages` during source-mode launch; if `.venv` is missing, run `uv sync --python 3.14 --extra build`
