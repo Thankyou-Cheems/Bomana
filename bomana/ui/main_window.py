@@ -656,6 +656,8 @@ class MainWindowBuilder:
         app.compact_airport_list = tk.Frame(app.compact_airport_frame, bg=Theme.GRAYPILL)
         app.compact_airport_list.pack(fill="x")
 
+        app.zone_list_title_lbl = tk.Label(app.zone_frame, text="战区导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        app.zone_list_title_lbl.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
         app.zone_list_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.zone_list_frame.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
         app.airport_title_lbl = tk.Label(app.zone_frame, text="机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")

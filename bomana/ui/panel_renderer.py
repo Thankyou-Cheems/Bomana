@@ -285,103 +285,10 @@ class AppPanelRenderer:
 
         if zones_enabled:
             self._grid_if_needed(app.zone_header_frame, row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6 * s), int(2 * s)))
-            self._grid_if_needed(app.zone_list_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
-
-            if app.heading_tape is not None and heading_available:
-                targets = []
-                active_targets_info = []
-                target_zone = next((z for z in snap.zones if z.is_target), None)
-                for zone in snap.zones:
-                    is_target = zone.is_target
-                    targets.append({
-                        "type": "zone",
-                        "relative": zone.relative,
-                        "distance_km": zone.distance_km,
-                        "is_primary": is_target,
-                        "is_target": is_target,
-                    })
-                    if is_target:
-                        active_targets_info.append({
-                            "type": "zone",
-                            "name": "战区",
-                            "icon": "⊚",
-                            "relative": zone.relative,
-                            "distance_km": zone.distance_km,
-                            "ete_str": zone.ete_str if hasattr(zone, "ete_str") else "",
-                            "color": Theme.RED,
-                        })
-
-                if snap.zone_destroyed_alert and hasattr(app.game.state.zone_nav, "destroyed_zones"):
-                    for dz in app.game.state.zone_nav.destroyed_zones:
-                        if hasattr(dz, "relative"):
-                            targets.append({
-                                "type": "destroyed",
-                                "relative": dz.relative,
-                                "distance_km": dz.distance * ZoneConfig.DISTANCE_SCALE,
-                                "is_primary": False,
-                            })
-
-                if snap.friendly_airfield:
-                    af = snap.friendly_airfield
-                    is_in_front = abs(af.relative) <= 90
-                    targets.append({
-                        "type": "friendly",
-                        "relative": af.relative,
-                        "distance_km": af.distance_km,
-                        "is_primary": False,
-                        "is_target": is_in_front,
-                    })
-                    if is_in_front:
-                        active_targets_info.append({
-                            "type": "friendly",
-                            "name": "友方",
-                            "icon": "✈",
-                            "relative": af.relative,
-                            "distance_km": af.distance_km,
-                            "ete_str": af.ete_str,
-                            "color": Theme.BLUE,
-                        })
-
-                if snap.enemy_airfields:
-                    for af in snap.enemy_airfields:
-                        is_in_front = abs(af.relative) <= 90
-                        targets.append({
-                            "type": "enemy",
-                            "relative": af.relative,
-                            "distance_km": af.distance_km,
-                            "is_primary": False,
-                            "is_target": is_in_front,
-                        })
-                        if af.is_target and is_in_front:
-                            active_targets_info.append({
-                                "type": "enemy",
-                                "name": "敌方",
-                                "icon": "✈",
-                                "relative": af.relative,
-                                "distance_km": af.distance_km,
-                                "ete_str": af.ete_str,
-                                "color": Theme.ORANGE,
-                            })
-
-                primary_dist = target_zone.distance_km if target_zone else 10.0
-                app.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
-                self.update_tape_info_labels(active_targets_info, target_zone)
-
-                if PanelConfig.navigation_mode == "integrated":
-                    self._grid_if_needed(app.heading_tape_frame, row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
-                else:
-                    self._grid_remove_if_needed(app.heading_tape_frame)
-
-                if hasattr(app, "nav_window") and app.nav_window and app.nav_window.is_visible():
-                    app.nav_window.update_display(snap, targets, active_targets_info, target_zone)
-            elif app.heading_tape is not None:
-                app.heading_tape.clear()
-                if PanelConfig.navigation_mode == "integrated":
-                    self._grid_if_needed(app.heading_tape_frame, row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
-                else:
-                    self._grid_remove_if_needed(app.heading_tape_frame)
-                if hasattr(app, "nav_window") and app.nav_window and app.nav_window.is_visible():
-                    app.nav_window.update_display(snap, [], [], None)
+            self._grid_remove_if_needed(app.heading_tape_frame)
+            self._grid_remove_if_needed(app.compact_nav_frame)
+            if hasattr(app, "nav_window") and app.nav_window and app.nav_window.is_visible():
+                app.nav_window.update_display(snap)
 
             if snap.zone_destroyed_alert:
                 alert_text = "💥 战区被摧毁："
@@ -398,30 +305,24 @@ class AppPanelRenderer:
                 app.zone_alert_lbl.config(text="")
                 app._last_zone_destroyed_alert = False
 
-            is_compact = (PanelConfig.navigation_mode == "standalone")
-            zone_layout_mode = "compact" if is_compact else "full"
+            nav_in_main = (PanelConfig.navigation_mode == "integrated")
+            zone_layout_mode = "full" if nav_in_main else "hidden"
             if app._zone_layout_mode != zone_layout_mode:
                 self._clear_nav_rows(app._zone_row_pool)
                 self._clear_nav_rows(app._compact_zone_row_pool)
                 app._zone_layout_mode = zone_layout_mode
 
-            if is_compact:
-                self._grid_if_needed(app.compact_nav_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+            if nav_in_main:
+                self._grid_if_needed(app.zone_list_title_lbl, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+                self._grid_if_needed(app.zone_list_frame, row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+            else:
+                self._grid_remove_if_needed(app.zone_list_title_lbl)
                 self._grid_remove_if_needed(app.zone_list_frame)
-                if airfields_enabled:
-                    self._grid_if_needed(app.compact_airport_frame, row=0, column=1, sticky="nsew", padx=(int(4 * s), 0))
-                    self._grid_if_needed(app.compact_zone_frame, row=0, column=0, columnspan=1, sticky="nsew", padx=(0, int(4 * s)))
-                else:
-                    self._grid_remove_if_needed(app.compact_airport_frame)
-                    self._grid_if_needed(app.compact_zone_frame, row=0, column=0, columnspan=2, sticky="nsew", padx=(0, 0))
-            else:
-                self._grid_remove_if_needed(app.compact_nav_frame)
-                self._grid_if_needed(app.zone_list_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
 
-            if is_compact:
-                row_pool = app._compact_zone_row_pool
-            else:
+            if nav_in_main:
                 row_pool = app._zone_row_pool
+            else:
+                row_pool = app._compact_zone_row_pool
 
             idx = 0
             if not snap.zones:
@@ -433,10 +334,7 @@ class AppPanelRenderer:
                     dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
                     rel_sign = "+" if zone.relative > 0 else ""
                     rel_text = f"{rel_sign}{zone.relative:.2f}°" if zone.is_target else f"{rel_sign}{int(zone.relative)}°"
-                    if is_compact:
-                        relative_text = ""
-                    else:
-                        relative_text = rel_text
+                    relative_text = rel_text if nav_in_main else ""
                     fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
                     self._set_nav_row(
                         row_pool[idx],
@@ -448,9 +346,11 @@ class AppPanelRenderer:
                     )
                     idx += 1
             self._clear_nav_rows(row_pool, start=idx)
-            self._sync_nav_row_visibility(row_pool, idx)
+            self._sync_nav_row_visibility(app._zone_row_pool, idx if nav_in_main else 0)
+            self._sync_nav_row_visibility(app._compact_zone_row_pool, 0)
         else:
             self._grid_remove_if_needed(app.zone_header_frame)
+            self._grid_remove_if_needed(app.zone_list_title_lbl)
             self._grid_remove_if_needed(app.zone_list_frame)
             self._grid_remove_if_needed(app.compact_nav_frame)
             app.zone_alert_lbl.config(text="")
@@ -461,22 +361,21 @@ class AppPanelRenderer:
             app._zone_layout_mode = None
 
         if airfields_enabled:
-            is_compact = (PanelConfig.navigation_mode == "standalone")
-            airport_layout_mode = "compact" if is_compact else "full"
+            nav_in_main = (PanelConfig.navigation_mode == "integrated")
+            airport_layout_mode = "full" if nav_in_main else "hidden"
             if app._airport_layout_mode != airport_layout_mode:
                 self._clear_nav_rows(app._airport_row_pool)
                 self._clear_nav_rows(app._compact_airport_row_pool)
                 app._airport_layout_mode = airport_layout_mode
 
-            if is_compact:
-                self._grid_if_needed(app.compact_nav_frame, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+            if nav_in_main:
+                self._grid_if_needed(app.airport_title_lbl, row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+                self._grid_if_needed(app.airport_list_frame, row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+                row_pool = app._airport_row_pool
+            else:
                 self._grid_remove_if_needed(app.airport_title_lbl)
                 self._grid_remove_if_needed(app.airport_list_frame)
                 row_pool = app._compact_airport_row_pool
-            else:
-                self._grid_if_needed(app.airport_title_lbl, row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
-                self._grid_if_needed(app.airport_list_frame, row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
-                row_pool = app._airport_row_pool
 
             ap_idx = 0
             if snap.friendly_airfield:
@@ -484,10 +383,7 @@ class AppPanelRenderer:
                 dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
                 rel_sign = "+" if af.relative > 0 else ""
                 rel_text = f"{rel_sign}{int(af.relative)}°"
-                if is_compact:
-                    relative_text = ""
-                else:
-                    relative_text = rel_text
+                relative_text = rel_text if nav_in_main else ""
                 self._set_nav_row(
                     row_pool[ap_idx],
                     icon="🟢➤",
@@ -504,10 +400,7 @@ class AppPanelRenderer:
                     dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
                     rel_sign = "+" if af.relative > 0 else ""
                     rel_text = f"{rel_sign}{int(af.relative)}°"
-                    if is_compact:
-                        relative_text = ""
-                    else:
-                        relative_text = rel_text
+                    relative_text = rel_text if nav_in_main else ""
                     fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
                     self._set_nav_row(
                         row_pool[ap_idx],
@@ -523,7 +416,8 @@ class AppPanelRenderer:
                 self._set_nav_row(row_pool[0], direction="无数据")
                 ap_idx = 1
             self._clear_nav_rows(row_pool, start=ap_idx)
-            self._sync_nav_row_visibility(row_pool, ap_idx)
+            self._sync_nav_row_visibility(app._airport_row_pool, ap_idx if nav_in_main else 0)
+            self._sync_nav_row_visibility(app._compact_airport_row_pool, 0)
         else:
             self._grid_remove_if_needed(app.airport_title_lbl)
             if app.airport_tape_frame:
