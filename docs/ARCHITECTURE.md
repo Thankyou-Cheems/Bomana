@@ -5,7 +5,7 @@
 - Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, offline launch, details/support dialog)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
-- UI components: `bomana/ui/` (app coordinator, debug support, panel renderer, widgets, dialogs, nav window)
+- UI components: `bomana/ui/` (app coordinator, main-window builder, debug support, panel renderer, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
 - External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
@@ -35,6 +35,7 @@
 │  │  ├─ debug_support.py     # Debug mock snapshot + debug panel helpers
 │  │  ├─ dialogs.py           # Settings/About/etc dialogs
 │  │  ├─ hud_overlay.py       # Fullscreen HUD overlay skeleton (v6.8.0)
+│  │  ├─ main_window.py       # Stable main-window skeleton/card layout builder
 │  │  ├─ nav_window.py        # Standalone navigation window
 │  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
@@ -59,6 +60,7 @@
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
 3. UI render with `tkinter` (timer, panels, hints, debug text).
    - `App` keeps window lifecycle, hotkeys, tray, and the main refresh loop.
+   - `MainWindowBuilder` owns the static card/grid skeleton and pre-allocates fixed label pools for the main window.
    - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
    - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
 4. Alerts and sounds via `SoundConfig` + Windows Beep.
@@ -113,7 +115,8 @@ Important constraint: default runtime data path is official 8111 API only; no me
 ## UI Stability & Performance Guardrails
 - Keep panel containers structurally stable during transient 8111 data drops (avoid frame-level mount/unmount churn).
 - In `ALIVE/LOSS_PENDING`, treat short `/map_obj.json` jitter conservatively by combining map presence with telemetry entity signals.
-- Prefer incremental list updates in `bomana/ui/app.py` (update visible labels and hide only overflow items) instead of per-frame full `pack_forget()/pack()` cycles.
+- Prefer incremental list updates against prebuilt label pools instead of per-frame widget creation or full `pack_forget()/pack()` cycles.
+- Keep the main window on a stable grid/card skeleton (`bomana/ui/main_window.py`) and limit `_recalc_size()` to real structural changes.
 - Keep integrated heading-tape row mounted and clear content only when heading is temporarily unavailable.
 - `HeadingTape` (`bomana/ui/widgets.py`) uses render-signature dedup to skip equivalent canvas redraw frames.
 - Standalone nav window rows (`bomana/ui/nav_window.py`) stay mounted; update text/color only to reduce micro-flicker.

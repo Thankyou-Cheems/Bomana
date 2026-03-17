@@ -43,11 +43,11 @@ from bomana.utils.system import Win32, GlobalHotkeys, SingleInstanceManager, sel
 from bomana.utils.sound import SoundManager
 from bomana.utils.math_utils import calculate_smart_scale
 from bomana.ui.debug_support import AppDebugSupport
-from bomana.ui.widgets import Pill, HeadingTape
 from bomana.ui.dialogs import SettingsDialog, ChecklistEditor, BombSelectorDialog, AboutDialog
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.hud_overlay import HUDOverlay
 from bomana.ui.panel_renderer import AppPanelRenderer
+from bomana.ui.main_window import MainWindowBuilder
 
 try:
     from PIL import Image
@@ -435,15 +435,6 @@ class App:
         """获取缓存的字体"""
         return self._cached_fonts.get(name, ('Segoe UI', 10))
 
-    def _hide_label_pool(self, pool: List[tk.Label], start: int = 0) -> None:
-        """隐藏标签池中从start开始的已显示标签。"""
-        for lbl in pool[start:]:
-            try:
-                if lbl.winfo_ismapped():
-                    lbl.pack_forget()
-            except tk.TclError:
-                continue
-
     def _select_font_family(self) -> str:
         """Pick an available UI font family."""
         return select_ui_font_family(self.root)
@@ -484,650 +475,8 @@ class App:
         Win32.setup_window(self.hwnd, click_through=True, alpha=UIConfig.WINDOW_ALPHA)
 
     def _init_ui(self):
-        """初始化 UI 布局（Fluent 风格层级）。"""
-        s = self.scale
-
-        # 主窗口不再保留外围 Fluent 壳，避免形成额外阴影边框。
-        self.main_frame = tk.Frame(self.root, bg=Theme.BG, bd=0, highlightthickness=0)
-        self.main_frame.pack(fill="both", expand=True)
-
-        self.surface_frame = tk.Frame(self.main_frame, bg=Theme.BG, bd=0, highlightthickness=0)
-        self.surface_frame.pack(fill="both", expand=True)
-
-        # === 底部区域（操作提示卡）===
-        self.bottom_card = tk.Frame(
-            self.surface_frame,
-            bg=Theme.GRAYPILL,
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=Theme.SEPARATOR,
-            highlightcolor=Theme.SEPARATOR,
-        )
-        self.bottom_card.pack(side="bottom", fill="x", pady=(int(4*s), 0), padx=int(1*s))
-
-        bottom_frame = tk.Frame(self.bottom_card, bg=Theme.GRAYPILL)
-        bottom_frame.pack(fill="x", padx=int(6*s), pady=int(4*s))
-
-        self.hint_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
-        self.hint_row.pack(side="bottom", fill="x")
-
-        font_hint = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s))
-        self.hint_lbl = tk.Label(
-            self.hint_row, text=self._hint_text(),
-            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL
-        )
-        self.hint_lbl.pack(side="left", fill="x", expand=True)
-
-        self.nudge_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
-        self.nudge_row.columnconfigure(0, weight=1)
-
-        nudge_wrap = int(420 * s)
-        self.nudge_lbl = tk.Label(
-            self.nudge_row, text=self._nudge_text(),
-            font=font_hint, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL,
-            anchor="w", justify="left", wraplength=nudge_wrap
-        )
-        self.nudge_lbl.grid(row=0, column=0, sticky="ew")
-
-        self.star_lbl = tk.Label(
-            self.nudge_row, text="GitHub Star",
-            font=font_hint, fg=Theme.BLUE, bg=Theme.BG, cursor="hand2",
-            padx=int(8*s), pady=max(1, int(1*s))
-        )
-        self.star_lbl.bind("<Button-1>", lambda e: self._open_star_url())
-        self.star_lbl.bind("<Enter>", lambda e: self.star_lbl.config(fg=Theme.TEXT, bg=Theme.BORDER))
-        self.star_lbl.bind("<Leave>", lambda e: self.star_lbl.config(fg=Theme.BLUE, bg=Theme.BG))
-        self.star_lbl.grid(row=0, column=1, sticky="e", padx=(int(8*s), 0))
-
-        font_debug = (UIConfig.FONT_DEBUG[0], int(UIConfig.FONT_DEBUG[1]*s))
-        self.diag_lbl = tk.Label(
-            bottom_frame, text="",
-            font=font_debug, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL,
-            anchor="w", justify="left",
-            wraplength=int(UIConfig.DEBUG_WRAP_LENGTH*s)
-        )
-        self.debug_ctrl_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
-        btn_pad_x = int(6 * s)
-        btn_pad_y = max(1, int(1 * s))
-        debug_btn_font = font_hint
-
-        self.debug_source_btn = tk.Label(
-            self.debug_ctrl_row,
-            text="数据源: 模拟",
-            font=debug_btn_font,
-            fg=Theme.GREEN,
-            bg=Theme.BG,
-            cursor="hand2",
-            padx=btn_pad_x,
-            pady=btn_pad_y,
-        )
-        self.debug_source_btn.pack(side="left")
-        self.debug_source_btn.bind("<Button-1>", lambda e: self._toggle_debug_mock_mode())
-        self.debug_source_btn.bind(
-            "<Enter>",
-            lambda e: self.debug_source_btn.config(bg=Theme.BORDER, fg=Theme.TEXT),
-        )
-        self.debug_source_btn.bind("<Leave>", lambda e: self._update_debug_controls())
-
-        self.debug_prev_btn = tk.Label(
-            self.debug_ctrl_row,
-            text="◀",
-            font=debug_btn_font,
-            fg=Theme.TEXT,
-            bg=Theme.BG,
-            cursor="hand2",
-            padx=btn_pad_x,
-            pady=btn_pad_y,
-        )
-        self.debug_prev_btn.pack(side="left", padx=(int(6*s), 0))
-        self.debug_prev_btn.bind("<Button-1>", lambda e: self._cycle_debug_scene(-1))
-        self.debug_prev_btn.bind("<Enter>", lambda e: self.debug_prev_btn.config(bg=Theme.BORDER))
-        self.debug_prev_btn.bind("<Leave>", lambda e: self.debug_prev_btn.config(bg=Theme.BG))
-
-        self.debug_scene_lbl = tk.Label(
-            self.debug_ctrl_row,
-            text="",
-            font=debug_btn_font,
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-        )
-        self.debug_scene_lbl.pack(side="left", padx=(int(6*s), int(4*s)))
-
-        self.debug_next_btn = tk.Label(
-            self.debug_ctrl_row,
-            text="▶",
-            font=debug_btn_font,
-            fg=Theme.TEXT,
-            bg=Theme.BG,
-            cursor="hand2",
-            padx=btn_pad_x,
-            pady=btn_pad_y,
-        )
-        self.debug_next_btn.pack(side="left")
-        self.debug_next_btn.bind("<Button-1>", lambda e: self._cycle_debug_scene(1))
-        self.debug_next_btn.bind("<Enter>", lambda e: self.debug_next_btn.config(bg=Theme.BORDER))
-        self.debug_next_btn.bind("<Leave>", lambda e: self.debug_next_btn.config(bg=Theme.BG))
-
-        self.debug_hint_lbl = tk.Label(
-            self.debug_ctrl_row,
-            text="提示: 无 8111 数据时将自动使用模拟场景",
-            font=debug_btn_font,
-            fg=Theme.TEXT_MUTED,
-            bg=Theme.GRAYPILL,
-            anchor="e",
-        )
-        self.debug_hint_lbl.pack(side="right", fill="x", expand=True)
-        self._update_debug_controls()
-
-        # === 顶部区域（主信息卡）===
-        self.top_frame = tk.Frame(
-            self.surface_frame,
-            bg=Theme.GRAYPILL,
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=Theme.SEPARATOR,
-            highlightcolor=Theme.SEPARATOR,
-        )
-        self.top_frame.pack(side="top", fill="x", pady=(0, int(4*s)), padx=int(1*s))
-
-        self.top_content = tk.Frame(self.top_frame, bg=Theme.GRAYPILL)
-        self.top_content.pack(fill="x", padx=int(8*s), pady=int(6*s))
-
-        # 第一行：计时器 + 复活信息
-        self.top_row1 = tk.Frame(self.top_content, bg=Theme.GRAYPILL)
-        self.top_row1.pack(fill="x")
-        font_timer = (UIConfig.FONT_TIMER[0], int(UIConfig.FONT_TIMER[1]*s), UIConfig.FONT_TIMER[2])
-        self.timer_lbl = tk.Label(
-            self.top_row1, text="--:--", font=font_timer,
-            fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
-        )
-        self.timer_lbl.pack(side="left")
-
-        right = tk.Frame(self.top_row1, bg=Theme.GRAYPILL)
-        right.pack(side="right", padx=(int(12*s), 0))
-        font_life = (UIConfig.FONT_LIFE[0], int(UIConfig.FONT_LIFE[1]*s), UIConfig.FONT_LIFE[2])
-        self.life_lbl = tk.Label(
-            right, text="未复活", font=font_life,
-            fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="e"
-        )
-        self.life_lbl.pack(anchor="e")
-        font_cycle = (UIConfig.FONT_CYCLE[0], int(UIConfig.FONT_CYCLE[1]*s))
-        self.cycle_lbl = tk.Label(
-            right, text="未开始", font=font_cycle,
-            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e"
-        )
-        self.cycle_lbl.pack(anchor="e", pady=(int(2*s), 0))
-
-        # 第二行：状态徽章
-        self.top_row2 = tk.Frame(self.top_content, bg=Theme.GRAYPILL)
-        pad_top, pad_bot = UIConfig.PADDING_ROW2
-        self.top_row2.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
-        pill_font = (UIConfig.FONT_PILL[0], int(UIConfig.FONT_PILL[1]*s), UIConfig.FONT_PILL[2])
-        self.badge_main = Pill(self.top_row2, text="IDLE", fg=Theme.TEXT, bg=Theme.BG, font=pill_font)
-        self.badge_main.pack(side="left")
-        self.badge_flight = Pill(self.top_row2, text="—", fg=Theme.TEXT_DIM, bg=Theme.BG, font=pill_font)
-        self.badge_flight.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
-        self.badge_lock = Pill(self.top_row2, text="锁定", fg=Theme.TEXT, bg=Theme.BLUE, font=pill_font)
-        self.badge_lock.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
-        self._update_lock_badge()
-
-        # v5.9.6 新增：起落架警告徽章（v6.6.1: 集成进度条）
-        self.badge_gear = Pill(self.top_row2, text="", fg=Theme.TEXT, bg=Theme.ORANGE, font=pill_font)
-        self.gear_progress_bar = tk.Frame(self.badge_gear, bg=Theme.BLUE, height=int(3*s))
-
-        font_status = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s))
-        self.status_txt = tk.Label(
-            self.top_row2, text="等待中", font=font_status,
-            fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e"
-        )
-        self.status_txt.pack(side="right")
-
-        self._history_mode_pad_y = (int(pad_top*s), int(max(4, pad_bot*s)))
-        self.history_mode_frame = tk.Frame(self.top_content, bg=Theme.GRAYPILL)
-        history_header = tk.Frame(self.history_mode_frame, bg=Theme.GRAYPILL)
-        history_header.pack(fill="x")
-        history_title_font = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s), "bold")
-        self.history_mode_title_lbl = tk.Label(
-            history_header,
-            text="🕰 空历速度监视",
-            font=history_title_font,
-            fg=Theme.TEXT,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-        )
-        self.history_mode_title_lbl.pack(side="left")
-        self.history_mode_phase_lbl = tk.Label(
-            history_header,
-            text="等待中",
-            font=(UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s)),
-            fg=Theme.TEXT_MUTED,
-            bg=Theme.GRAYPILL,
-            anchor="e",
-        )
-        self.history_mode_phase_lbl.pack(side="right")
-        self.history_mode_hint_lbl = tk.Label(
-            self.history_mode_frame,
-            text="历史模式已隐藏计时和其他扩展，仅保留速度提醒。",
-            font=(UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s)),
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-            justify="left",
-        )
-        self.history_mode_hint_lbl.pack(fill="x", pady=(int(2*s), 0))
-
-        # 第三行：紧凑速度指示条（常驻，接近极限时显著变色）
-        self.speed_row = tk.Frame(self.top_content, bg=Theme.GRAYPILL)
-        pad_top, pad_bot = UIConfig.PADDING_SPEED_STRIP
-        self.speed_row.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
-        speed_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s))
-        speed_model_font = (UIConfig.FONT_HINT[0], max(7, int(UIConfig.FONT_HINT[1]*s*0.92)))
-        self.speed_header_row = tk.Frame(self.speed_row, bg=Theme.GRAYPILL)
-        self.speed_header_row.pack(fill="x")
-        self.speed_meta_frame = tk.Frame(self.speed_header_row, bg=Theme.GRAYPILL)
-        self.speed_meta_frame.pack(side="left", fill="x", expand=True)
-        self.speed_state_lbl = tk.Label(
-            self.speed_meta_frame,
-            text="速度监视",
-            font=speed_font,
-            fg=Theme.TEXT_MUTED,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-        )
-        self.speed_state_lbl.pack(anchor="w")
-        self.speed_model_lbl = tk.Label(
-            self.speed_meta_frame,
-            text="机型未识别",
-            font=speed_model_font,
-            fg=Theme.TEXT_MUTED,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-        )
-        self.speed_model_lbl.pack(anchor="w")
-        self.speed_value_lbl = tk.Label(
-            self.speed_header_row,
-            text="--",
-            font=speed_font,
-            fg=Theme.TEXT_MUTED,
-            bg=Theme.GRAYPILL,
-            anchor="e",
-        )
-        self.speed_value_lbl.pack(side="right")
-
-        speed_bar_height = max(8, int(UIConfig.SPEED_STRIP_HEIGHT * s))
-        speed_bar_thickness = max(3, int(UIConfig.SPEED_STRIP_THICKNESS * s))
-        self.speed_bar_host = tk.Frame(self.speed_row, bg=Theme.GRAYPILL, height=speed_bar_height)
-        self.speed_bar_host.pack(fill="x", pady=(max(1, int(2*s)), 0))
-        self.speed_bar_host.pack_propagate(False)
-        self.speed_bar_bg = tk.Frame(self.speed_bar_host, bg=Theme.SEPARATOR, height=speed_bar_thickness)
-        self.speed_bar_bg.place(relx=0, rely=0.5, relwidth=1, anchor="w")
-        self.speed_bar_fill = tk.Frame(self.speed_bar_bg, bg=Theme.GREEN, height=speed_bar_thickness)
-        self.speed_bar_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
-        self.speed_bar_markers = {}
-        for name, relx, color in (
-            ("caution", OverspeedConfig.CAUTION_RATIO, Theme.BLUE),
-            ("warning", OverspeedConfig.WARNING_RATIO, Theme.YELLOW),
-            ("critical", OverspeedConfig.CRITICAL_RATIO, Theme.RED),
-        ):
-            marker = tk.Frame(
-                self.speed_bar_bg,
-                bg=color,
-                width=max(1, int(2*s)),
-                height=max(speed_bar_thickness + 2, int(7*s)),
-            )
-            marker.place(relx=max(0.0, min(1.0, relx)), rely=0.5, anchor="center")
-            self.speed_bar_markers[name] = marker
-
-        # 进度条
-        bar_height = int(UIConfig.PROGRESS_BAR_HEIGHT * s)
-        self.progress_frame = tk.Frame(self.top_content, bg=Theme.GRAYPILL, height=bar_height)
-        pad_top, pad_bot = UIConfig.PADDING_PROGRESS
-        self.progress_frame.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
-        self.progress_frame.pack_propagate(False)
-        bar_thickness = int(UIConfig.PROGRESS_BAR_THICKNESS * s)
-        self.bar_bg = tk.Frame(self.progress_frame, bg=Theme.SEPARATOR, height=bar_thickness)
-        self.bar_bg.place(relx=0, rely=0.5, relwidth=1, anchor="w")
-        self.bar_fill = tk.Frame(self.bar_bg, bg=Theme.BLUE, height=bar_thickness)
-        self.bar_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
-
-        # === 中间内容区域 ===
-        self.mid_frame = tk.Frame(self.surface_frame, bg=Theme.BG)
-        self.mid_frame.pack(side="top", fill="x", pady=(0, int(4*s)))
-        self.mid_frame.columnconfigure(0, weight=1)
-        self.mid_frame.columnconfigure(1, weight=1)
-
-        self.zone_frame = tk.Frame(
-            self.mid_frame,
-            bg=Theme.GRAYPILL,
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=Theme.SEPARATOR,
-            highlightcolor=Theme.SEPARATOR,
-        )
-        self._init_zone_ui()
-
-        self.chk_frame = tk.Frame(
-            self.mid_frame,
-            bg=Theme.GRAYPILL,
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=Theme.SEPARATOR,
-            highlightcolor=Theme.SEPARATOR,
-        )
-        self.chk_border_frame = tk.Frame(self.chk_frame, bg=Theme.BORDER, width=max(1, int(1*s)))
-        self.chk_content_frame = tk.Frame(self.chk_frame, bg=Theme.GRAYPILL)
-        self._rebuild_checklist()
-
-    def _init_zone_ui(self):
-        """初始化战区导航UI
-        
-        v6.1更新: 新增航向带(Heading Tape)组件
-        
-        使用Grid布局确保区块顺序固定:
-        Row 0: zone_header_frame (标题+HDG)
-        Row 1: heading_tape_frame (航向带) - v6.1新增
-        Row 2: zone_alert_lbl (摧毁警告)
-        Row 3: zone_list_frame (战区列表)
-        Row 4: airport_title_lbl (机场标题)
-        Row 5: airport_list_frame (机场列表)
-        Row 6: fuel_title_lbl (燃油标题)
-        Row 7: fuel_info_frame (燃油信息)
-        Row 8: bombing_title_lbl (投弹标题)
-        Row 9: bombing_info_frame (投弹信息)
-        
-        使用grid_remove()/grid()切换可见性,保持行号不变
-        """
-        s = self.scale
-        pad_x = int(8*s)
-        
-        # 配置grid列宽
-        self.zone_frame.columnconfigure(0, weight=1)
-        
-        # Row 0: 标题栏（始终显示）
-        self.zone_header_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(4*s), int(2*s)))
-        
-        font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
-        self.zone_title = tk.Label(self.zone_header_frame, text="导航面板", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-        self.zone_title.pack(side="left")
-        
-        # 独立导航条模式按钮
-        font_btn = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
-        self.standalone_btn = tk.Label(
-            self.zone_header_frame, text="切换独立导航窗", font=font_btn,
-            fg=Theme.TEXT_MUTED, bg=Theme.BG, cursor="hand2",
-            padx=int(6*s), pady=max(1, int(1*s))
-        )
-        self.standalone_btn.pack(side="left", padx=(int(10*s), 0))
-        self.standalone_btn.bind("<Button-1>", lambda e: self._toggle_navigation_mode())
-        self.standalone_btn.bind("<Enter>", lambda e: self.standalone_btn.config(
-            fg=(Theme.BLUE if PanelConfig.navigation_mode != "standalone" else Theme.GREEN),
-            bg=Theme.BORDER))
-        self.standalone_btn.bind("<Leave>", lambda e: self._update_nav_mode_button())
-        self._update_nav_mode_button()
-        
-        font_heading = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s))
-        font_item = font_heading
-        self.heading_lbl = tk.Label(self.zone_header_frame, text="航向: ---°", font=font_heading, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e")
-        self.heading_lbl.pack(side="right")
-        
-        # Row 1: v6.2重构 - 统一航向带(显示战区+机场+被摧毁目标)
-        if ZoneConfig.HEADING_TAPE_ENABLED:
-            self.heading_tape_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-            self.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(1*s), int(2*s)))
-            
-            tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s)
-            tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
-            self.heading_tape = HeadingTape(
-                self.heading_tape_frame, 
-                width=tape_width, 
-                height=tape_height
-            )
-            self.heading_tape.pack(fill="x", expand=True)
-            
-            # 图例行 - v6.2.2: 优化为紧凑单行布局
-            self.tape_legend_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
-            self.tape_legend_row.pack(fill="x", pady=(int(1*s), 0))
-            
-            # 使用更小字体和紧凑间距
-            legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.85))
-            legend_text = "⊚战区  ✈友方机场  ✈敌方机场  ✕摧毁目标"
-            
-            # v6.4: 图例行分为左侧图例和右侧阈值显示
-            legend_left = tk.Label(
-                self.tape_legend_row, text=legend_text, font=legend_font,
-                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
-            )
-            legend_left.pack(side="left", fill="x", expand=True)
-            
-            # 角度阈值显示（移至图例行右侧）
-            self.tape_tolerance_legend = tk.Label(
-                self.tape_legend_row, text="", font=legend_font,
-                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
-            )
-            self.tape_tolerance_legend.pack(side="right", padx=(0, int(4*s)))
-            
-            # v6.2.1: 战区状态提示行
-            self.tape_zone_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
-            self.tape_zone_row.pack(fill="x", pady=(int(2*s), 0))
-            
-            status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s*0.95))
-            
-            # 战区标签
-            self.tape_zone_label = tk.Label(
-                self.tape_zone_row, text="⊚战区:", font=status_font,
-                fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.tape_zone_label.pack(side="left")
-            
-            # 战区转向指示
-            self.tape_zone_turn = tk.Label(
-                self.tape_zone_row, text="", font=status_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.tape_zone_turn.pack(side="left", padx=(int(6*s), 0))
-            
-            # 战区状态描述
-            self.tape_zone_status = tk.Label(
-                self.tape_zone_row, text="", font=status_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.tape_zone_status.pack(side="left", padx=(int(8*s), 0))
-            
-            # 战区距离/ETE信息
-            self.tape_zone_info = tk.Label(
-                self.tape_zone_row, text="", font=status_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.tape_zone_info.pack(side="left", padx=(int(8*s), 0))
-            
-            # v6.4: 战区容差已移至图例行，保留变量引用
-            self.tape_zone_tolerance = tk.Label(
-                self.tape_zone_row, text="", font=status_font,
-                fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e"
-            )
-            # 不再pack，让状态行布局更居中
-            
-            # v6.2.1: 友方机场状态提示行
-            self.tape_friendly_row = tk.Frame(self.heading_tape_frame, bg=Theme.GRAYPILL)
-            self.tape_friendly_row.pack(fill="x", pady=(int(1*s), 0))
-            
-            # 友方机场标签
-            self.tape_friendly_label = tk.Label(
-                self.tape_friendly_row, text="✈友方:", font=status_font,
-                fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.tape_friendly_label.pack(side="left")
-            
-            # 友方机场转向指示
-            self.tape_friendly_turn = tk.Label(
-                self.tape_friendly_row, text="", font=status_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.tape_friendly_turn.pack(side="left", padx=(int(6*s), 0))
-            
-            # 友方机场状态
-            self.tape_friendly_status = tk.Label(
-                self.tape_friendly_row, text="", font=status_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.tape_friendly_status.pack(side="left", padx=(int(8*s), 0))
-            
-            # 友方机场距离/ETE
-            self.tape_friendly_info = tk.Label(
-                self.tape_friendly_row, text="", font=status_font,
-                fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.tape_friendly_info.pack(side="left", padx=(int(8*s), 0))
-            
-            # 保留旧变量兼容
-            self.tape_turn_lbl = self.tape_zone_turn
-            self.tape_deviation_lbl = self.tape_zone_status
-            self.tape_tolerance_lbl = self.tape_zone_tolerance
-            self.tape_info_container = None
-            self._tape_info_labels = []
-        else:
-            self.heading_tape = None
-            self.tape_info_container = None
-            self._tape_info_labels = []
-            self.tape_turn_lbl = None
-            self.tape_deviation_lbl = None
-            self.tape_tolerance_lbl = None
-            self.tape_zone_row = None
-            self.tape_friendly_row = None
-            self.tape_friendly_turn = None
-            self.tape_friendly_info = None
-            self.tape_friendly_status = None
-            self.tape_zone_info = None
-        
-        # Row 2: 被摧毁警告标签（动态显示）
-        font_alert = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2])
-        self.zone_alert_lbl = tk.Label(self.zone_frame, text="", font=font_alert, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
-        # 初始不显示，由_update_zone_display控制
-        
-        # v6.6.1: Row 3: 紧凑模式两栏容器（战区+机场并排）
-        self.compact_nav_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.compact_nav_frame.grid_propagate(True)
-        self.compact_nav_frame.columnconfigure(0, weight=1)
-        self.compact_nav_frame.columnconfigure(1, weight=1)
-        # 紧凑模式 - 左栏：战区
-        self.compact_zone_frame = tk.Frame(self.compact_nav_frame, bg=Theme.GRAYPILL)
-        self.compact_zone_frame.grid(row=0, column=0, sticky="nsew", padx=(0, int(4*s)))
-        self.compact_zone_title = tk.Label(self.compact_zone_frame, text="战区", font=font_title, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
-        self.compact_zone_title.pack(fill="x")
-        self.compact_zone_list = tk.Frame(self.compact_zone_frame, bg=Theme.GRAYPILL)
-        self.compact_zone_list.pack(fill="x")
-        # 紧凑模式 - 右栏：机场
-        self.compact_airport_frame = tk.Frame(self.compact_nav_frame, bg=Theme.GRAYPILL)
-        self.compact_airport_frame.grid(row=0, column=1, sticky="nsew", padx=(int(4*s), 0))
-        self.compact_airport_title = tk.Label(self.compact_airport_frame, text="机场", font=font_title, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
-        self.compact_airport_title.pack(fill="x")
-        self.compact_airport_list = tk.Frame(self.compact_airport_frame, bg=Theme.GRAYPILL)
-        self.compact_airport_list.pack(fill="x")
-        # 紧凑模式标签池
-        self._compact_zone_label_pool = []
-        self._compact_airport_label_pool = []
-        
-        # Row 3: 战区列表容器（完整模式）
-        self.zone_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.zone_list_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(4*s)))
-
-        # Row 4: 机场标题
-        self.airport_title_lbl = tk.Label(self.zone_frame, text="机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-        self.airport_title_lbl.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
-
-        # v6.2: 移除独立的机场航向带（已合并到主航向带）
-        # 保留变量引用以兼容
-        self.airport_tape_frame = None
-        self.friendly_heading_tape = None
-        self.enemy_heading_tape = None
-
-        # Row 6: 机场列表容器
-        self.airport_list_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(4*s)))
-
-        # Row 7: 燃油标题
-        self.fuel_title_lbl = tk.Label(self.zone_frame, text="燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
-        self.fuel_title_lbl.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
-        
-        # Row 8: 燃油信息容器
-        self.fuel_info_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-        self.fuel_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(4*s)))
-        # v6.1.1: 移除旧的CDI字符指示器（已被航向带替代）
-        # 保留变量引用以兼容旧代码，但不再使用
-        self.zone_cdi_lbl = None
-        self.friendly_cdi_lbl = None
-        self.enemy_cdi_lbl = None
-        
-        # 燃油主信息行
-        self.fuel_main_lbl = tk.Label(
-            self.fuel_info_frame, 
-            text="-- kg (--%)  ⏱️ --:--",
-            font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-        )
-        self.fuel_main_lbl.pack(fill="x")
-        
-        # 油耗率和高度行
-        self.fuel_detail_lbl = tk.Label(
-            self.fuel_info_frame,
-            text="油耗 --kg/min │ 高度 --m",
-            font=font_item, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
-        )
-        self.fuel_detail_lbl.pack(fill="x")
-        
-        # 返航估算行
-        self.fuel_return_lbl = tk.Label(
-            self.fuel_info_frame,
-            text="🏠 返航: --",
-            font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-        )
-        self.fuel_return_lbl.pack(fill="x")
-        
-        # === v6.0 新增：投弹预测区域（仅在ENABLE_CCRP启用时创建）===
-        if ENABLE_CCRP:
-            # Row 9: 投弹预测标题 (v6.1.1: 行号调整)
-            self.bombing_title_lbl = tk.Label(
-                self.zone_frame, 
-                text="投弹预测", 
-                font=font_title, 
-                fg=Theme.TEXT, 
-                bg=Theme.GRAYPILL, 
-                anchor="w"
-            )
-            self.bombing_title_lbl.grid(row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2*s)))
-            
-            # Row 10: 投弹预测信息容器
-            self.bombing_info_frame = tk.Frame(self.zone_frame, bg=Theme.GRAYPILL)
-            self.bombing_info_frame.grid(row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6*s)))
-            
-            # 当前炸弹行（可点击选择）
-            self.bomb_select_lbl = tk.Label(
-                self.bombing_info_frame,
-                text=f"炸弹: {BombConfig.format_bomb_name(BombConfig.selected_bomb)} (点击更换)",
-                font=font_item, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w", cursor="hand2"
-            )
-            self.bomb_select_lbl.pack(fill="x")
-            self.bomb_select_lbl.bind("<Button-1>", lambda e: self._show_bomb_selector())
-            self.bomb_select_lbl.bind("<Enter>", lambda e: self.bomb_select_lbl.config(fg=Theme.TEXT, bg=Theme.BG))
-            self.bomb_select_lbl.bind("<Leave>", lambda e: self.bomb_select_lbl.config(fg=Theme.BLUE, bg=Theme.GRAYPILL))
-            
-            # 弹道信息行
-            self.bomb_trajectory_lbl = tk.Label(
-                self.bombing_info_frame,
-                text="弹道: -- m │ 飞行: -- s",
-                font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.bomb_trajectory_lbl.pack(fill="x")
-            
-            # 投弹时机行（大号显示）
-            font_release = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s*1.2), UIConfig.FONT_ZONE_TITLE[2])
-            self.bomb_release_lbl = tk.Label(
-                self.bombing_info_frame,
-                text="⏱️ 等待目标",
-                font=font_release, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
-            )
-            self.bomb_release_lbl.pack(fill="x", pady=(int(4*s), 0))
+        """初始化 UI 布局（稳定的主窗口骨架）。"""
+        MainWindowBuilder(self).build()
 
     def _rebuild_checklist(self):
         """重建检查清单UI（纯展示模式）"""
@@ -1214,44 +563,51 @@ class App:
         self._history_mode_layout_active = active
 
         if active:
-            if self.mid_frame.winfo_ismapped():
-                self.mid_frame.pack_forget()
+            if self.mid_frame.winfo_manager() == "grid":
+                self.mid_frame.grid_remove()
             if state_changed and self.nav_window:
                 self._history_mode_nav_was_visible = bool(self.nav_window.is_visible())
             if self.nav_window and self.nav_window.is_visible():
                 self.nav_window.hide()
-            if self.top_row1.winfo_ismapped():
-                self.top_row1.pack_forget()
-            if self.top_row2.winfo_ismapped():
-                self.top_row2.pack_forget()
-            if self.progress_frame.winfo_ismapped():
-                self.progress_frame.pack_forget()
-            if not self.history_mode_frame.winfo_ismapped():
-                self.history_mode_frame.pack(
-                    fill="x",
+            if self.top_row1.winfo_manager() == "grid":
+                self.top_row1.grid_remove()
+            if self.top_row2.winfo_manager() == "grid":
+                self.top_row2.grid_remove()
+            if self.progress_frame.winfo_manager() == "grid":
+                self.progress_frame.grid_remove()
+            if self.history_mode_frame.winfo_manager() != "grid":
+                self.history_mode_frame.grid(
+                    row=2,
+                    column=0,
+                    sticky="ew",
+                    padx=int(8 * self.scale),
                     pady=self._history_mode_pad_y,
-                    before=self.speed_row,
                 )
         else:
             if state_changed:
                 if self.nav_window and self._history_mode_nav_was_visible and ENABLE_ZONES and PanelConfig.navigation_mode == "standalone":
                     self.nav_window.show()
                 self._history_mode_nav_was_visible = False
-            if self.history_mode_frame.winfo_ismapped():
-                self.history_mode_frame.pack_forget()
-            if not self.top_row1.winfo_ismapped():
-                self.top_row1.pack(fill="x", before=self.top_row2)
-            if not self.top_row2.winfo_ismapped():
+            if self.history_mode_frame.winfo_manager() == "grid":
+                self.history_mode_frame.grid_remove()
+            if self.top_row1.winfo_manager() != "grid":
+                self.top_row1.grid(row=0, column=0, sticky="ew", padx=int(8 * self.scale), pady=(int(6 * self.scale), 0))
+            if self.top_row2.winfo_manager() != "grid":
                 pad_top, pad_bot = UIConfig.PADDING_ROW2
-                self.top_row2.pack(
-                    fill="x",
+                self.top_row2.grid(
+                    row=1,
+                    column=0,
+                    sticky="ew",
+                    padx=int(8 * self.scale),
                     pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
-                    before=self.speed_row,
                 )
-            if not self.progress_frame.winfo_ismapped():
+            if self.progress_frame.winfo_manager() != "grid":
                 pad_top, pad_bot = UIConfig.PADDING_PROGRESS
-                self.progress_frame.pack(
-                    fill="x",
+                self.progress_frame.grid(
+                    row=4,
+                    column=0,
+                    sticky="ew",
+                    padx=int(8 * self.scale),
                     pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
                 )
             self._update_mid_panel_layout()
@@ -2137,17 +1493,9 @@ class App:
         if hasattr(self, "_hint_width_cache") and self._hint_width_cache is not None:
             self._hint_width_cache["text"] = ""
         if hasattr(self, "nudge_lbl") and self.nudge_lbl:
-            self.nudge_lbl.config(text=self._nudge_text())
-        if hasattr(self, "nudge_row") and self.nudge_row:
-            was_mapped = self.nudge_row.winfo_ismapped()
-            if self._nudge_visible:
-                if not self.nudge_row.winfo_ismapped():
-                    self.nudge_row.pack(side="bottom", fill="x")
-            else:
-                if self.nudge_row.winfo_ismapped():
-                    self.nudge_row.pack_forget()
-            if was_mapped != self.nudge_row.winfo_ismapped():
-                self._recalc_size()
+            self.nudge_lbl.config(text=(self._nudge_text() if self._nudge_visible else ""))
+        if hasattr(self, "star_lbl") and self.star_lbl:
+            self.star_lbl.config(text=("GitHub Star" if self._nudge_visible else ""), cursor=("hand2" if self._nudge_visible else "arrow"))
 
     def _open_star_url(self) -> None:
         url = AboutConfig.GITHUB_URL
@@ -2500,7 +1848,6 @@ class App:
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
         show_zone_panel = (
             (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
-            (not snap.api_down) and
             (
                 zones_enabled or
                 airfields_enabled or
@@ -2523,8 +1870,7 @@ class App:
         show_chk = (
             checklist_enabled and
             (snap.phase == Phase.ALIVE) and 
-            (snap.on_ground or snap.landed_flash) and 
-            (not snap.api_down)
+            (snap.on_ground or snap.landed_flash)
         )
         self._set_checklist_visible(show_chk)
         self._apply_speed_history_layout(history_mode_active)
@@ -2566,20 +1912,22 @@ class App:
         self.badge_main.set(*snap.main_badge)
         self.badge_flight.set(*snap.flight_badge)
         if speed_enabled:
-            if not self.speed_row.winfo_ismapped():
-                self.speed_row.pack(
-                    fill="x",
+            if self.speed_row.winfo_manager() != "grid":
+                self.speed_row.grid(
+                    row=3,
+                    column=0,
+                    sticky="ew",
+                    padx=int(8 * self.scale),
                     pady=(
                         int(UIConfig.PADDING_SPEED_STRIP[0] * self.scale),
                         int(UIConfig.PADDING_SPEED_STRIP[1] * self.scale),
                     ),
-                    before=self.bar_bg.master,
                 )
             speed_level = self._update_speed_strip(snap, debug_mock_mode)
         else:
             speed_level = "unknown"
-            if self.speed_row.winfo_ismapped():
-                self.speed_row.pack_forget()
+            if self.speed_row.winfo_manager() == "grid":
+                self.speed_row.grid_remove()
             self._last_overspeed_level = "unknown"
             self._last_overspeed_sound_ts = 0.0
         self._refresh_speed_history_ui(snap, speed_level)

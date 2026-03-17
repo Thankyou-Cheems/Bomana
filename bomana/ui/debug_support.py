@@ -34,28 +34,30 @@ class AppDebugSupport:
         """显示 Debug 控制区和诊断区。"""
         app = self.app
         self.update_debug_controls()
-        if hasattr(app, "debug_ctrl_row") and app.debug_ctrl_row and (not app.debug_ctrl_row.winfo_ismapped()):
-            app.debug_ctrl_row.pack(
-                side="bottom",
-                fill="x",
+        if hasattr(app, "debug_ctrl_row") and app.debug_ctrl_row and app.debug_ctrl_row.winfo_manager() != "grid":
+            app.debug_ctrl_row.grid(
+                row=2,
+                column=0,
+                sticky="ew",
+                padx=int(6 * app.scale),
                 pady=(0, int(4 * app.scale)),
-                before=app.hint_row,
             )
-        if hasattr(app, "diag_lbl") and app.diag_lbl and (not app.diag_lbl.winfo_ismapped()):
-            app.diag_lbl.pack(
-                side="bottom",
-                fill="x",
+        if hasattr(app, "diag_lbl") and app.diag_lbl and app.diag_lbl.winfo_manager() != "grid":
+            app.diag_lbl.grid(
+                row=3,
+                column=0,
+                sticky="ew",
+                padx=int(6 * app.scale),
                 pady=(0, int(UIConfig.SPACING_DEBUG * app.scale)),
-                before=app.hint_row,
             )
 
     def hide_debug_ui(self) -> None:
         """隐藏 Debug 控制区和诊断区。"""
         app = self.app
-        if hasattr(app, "debug_ctrl_row") and app.debug_ctrl_row and app.debug_ctrl_row.winfo_ismapped():
-            app.debug_ctrl_row.pack_forget()
-        if hasattr(app, "diag_lbl") and app.diag_lbl and app.diag_lbl.winfo_ismapped():
-            app.diag_lbl.pack_forget()
+        if hasattr(app, "debug_ctrl_row") and app.debug_ctrl_row and app.debug_ctrl_row.winfo_manager() == "grid":
+            app.debug_ctrl_row.grid_remove()
+        if hasattr(app, "diag_lbl") and app.diag_lbl and app.diag_lbl.winfo_manager() == "grid":
+            app.diag_lbl.grid_remove()
 
     def toggle_debug_mock_mode(self) -> None:
         """切换 Debug 数据源（模拟/实时）。"""
