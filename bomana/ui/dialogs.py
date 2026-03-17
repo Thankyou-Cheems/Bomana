@@ -548,14 +548,18 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         warn_frame.pack(fill="x", pady=(0, 12))
         tk.Label(
             warn_frame,
-            text="超速预警支持全局阈值和按机型覆盖；机型覆盖会优先于全局阈值。",
+            text=(
+                "先看 IAS，再看 Mach：\n"
+                "IAS 是表速，主要反映机体承受的气动载荷；Mach 是马赫数，主要反映高速/高空下的压缩性风险。\n"
+                "程序会同时监视这两条线，任意一条先危险，就按更危险的级别提示。"
+            ),
             bg=Theme.GRAYPILL,
-            fg=Theme.TEXT_MUTED,
+            fg=Theme.TEXT,
             justify="left",
             anchor="w",
             padx=8,
-            pady=6,
-            wraplength=500,
+            pady=8,
+            wraplength=540,
         ).pack(fill="x")
 
         defaults = OverspeedConfig.get_default_thresholds()
@@ -573,12 +577,12 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         grid.pack(anchor="w")
 
         threshold_rows = [
-            ("IAS 提示阈值", "caution_ratio", "IAS / 限速", defaults["caution_ratio"], 0.001),
-            ("IAS 警告阈值", "warning_ratio", "IAS / 限速", defaults["warning_ratio"], 0.001),
-            ("IAS 危险阈值", "critical_ratio", "IAS / 限速", defaults["critical_ratio"], 0.001),
-            ("Mach 提示余量", "mach_caution_margin", "Mach 余量", defaults["mach_caution_margin"], 0.005),
-            ("Mach 警告余量", "mach_warning_margin", "Mach 余量", defaults["mach_warning_margin"], 0.005),
-            ("Mach 危险余量", "mach_critical_margin", "Mach 余量", defaults["mach_critical_margin"], 0.005),
+            ("IAS 提示线", "caution_ratio", "达到 IAS 限速的比例", defaults["caution_ratio"], 0.001),
+            ("IAS 警告线", "warning_ratio", "达到 IAS 限速的比例", defaults["warning_ratio"], 0.001),
+            ("IAS 危险线", "critical_ratio", "达到 IAS 限速的比例", defaults["critical_ratio"], 0.001),
+            ("Mach 提示线", "mach_caution_margin", "距 Mach 限速还剩多少", defaults["mach_caution_margin"], 0.005),
+            ("Mach 警告线", "mach_warning_margin", "距 Mach 限速还剩多少", defaults["mach_warning_margin"], 0.005),
+            ("Mach 危险线", "mach_critical_margin", "距 Mach 限速还剩多少", defaults["mach_critical_margin"], 0.005),
         ]
 
         for row, (label, key, suffix, default_value, step) in enumerate(threshold_rows):
@@ -636,13 +640,18 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
 
         tk.Label(
             frame,
-            text="说明：IAS 阈值会自动按 提示 ≤ 警告 ≤ 危险 排序；Mach 余量会自动按 提示 ≥ 警告 ≥ 危险 排序。",
+            text=(
+                "怎么理解这些数：\n"
+                "IAS 线填 0.940，表示当前 IAS 到达该机型 IAS 限速的 94% 时开始提示；数值越小，提示越早。\n"
+                "Mach 线填 0.040，表示当前 Mach 距离该机型 Mach 限速只剩 0.04 时开始提示；数值越大，提示越早。\n"
+                "如果你并不清楚机型特性，建议优先只改“提示线”，警告线和危险线尽量贴近默认值。"
+            ),
             bg=Theme.BG,
             fg=Theme.TEXT_MUTED,
             font=("Segoe UI", 8),
             justify="left",
             anchor="w",
-            wraplength=520,
+            wraplength=540,
         ).pack(fill="x", pady=(10, 0))
 
         self._refresh_overspeed_override_summary()
@@ -1393,6 +1402,16 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
             fg=Theme.TEXT_MUTED,
             anchor="w",
         ).pack(anchor="w", pady=(2, 0))
+        tk.Label(
+            header,
+            text="只在某个机型明显过早或过晚提醒时再做覆盖；没问题的机型继续继承全局值即可。",
+            font=("Segoe UI", 8),
+            bg=Theme.BG,
+            fg=Theme.TEXT_DIM,
+            anchor="w",
+            wraplength=620,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 0))
 
         if not self.db.loaded:
             tk.Label(
@@ -1498,6 +1517,15 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
             fg=Theme.GREEN,
             anchor="w",
         ).pack(fill="x", padx=10, pady=(2, 10))
+        tk.Label(
+            editor,
+            text="IAS 线看“占限速百分比”，Mach 线看“距离 Mach 限速还剩多少”。",
+            bg=Theme.BG,
+            fg=Theme.TEXT_DIM,
+            anchor="w",
+            justify="left",
+            wraplength=320,
+        ).pack(fill="x", padx=10, pady=(0, 8))
 
         form = tk.Frame(editor, bg=Theme.BG)
         form.pack(fill="x", padx=10)
@@ -1570,6 +1598,16 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
             font=("Segoe UI", 9),
             anchor="w",
         ).pack(fill="x", padx=12, pady=(0, 0))
+        tk.Label(
+            main,
+            text="提示：如果只是想让大多数机型更早提醒，请回到“空速”页修改全局值；这里只处理个别机型例外。",
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
+            anchor="w",
+            justify="left",
+            wraplength=640,
+        ).pack(fill="x", padx=12, pady=(4, 0))
 
         btn_frame = tk.Frame(main, bg=Theme.BG)
         btn_frame.pack(fill="x", padx=12, pady=(10, 10))
