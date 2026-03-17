@@ -157,3 +157,9 @@
   Symptom: speed monitoring stopped showing current IAS or failed to match aircraft limits even though the panel toggle stayed enabled
   Cause: telemetry parsing only accepted a narrow set of `/state` and `/indicators` keys (`IAS, km/h`, `TAS, km/h`, `M`, `type`)
   Fix/Workaround: parse multiple compatible key variants for IAS/TAS/Mach/type so minor payload name changes do not break the speed panel
+
+- Date: 2026-03-17
+  Context: portable app launched from the PyInstaller onefile launcher
+  Symptom: the aircraft override dialog later reported `limits file not found` under a launcher `_MEI...` temp path, and speed matching stopped working
+  Cause: `resource_path()` preferred `sys._MEIPASS`, but under launcher `runpy` mode that temporary directory belonged to the launcher exe instead of the unpacked app runtime
+  Fix/Workaround: have launcher export the stable app runtime root (for example `BOMANA_RUNTIME_ROOT`) and make app resource lookup prefer it over `_MEIPASS`

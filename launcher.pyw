@@ -1689,6 +1689,7 @@ def _launch_app(base: Path, channel: str) -> None:
     if _is_source_test_run(base):
         _prepare_source_test_runtime(base)
     os.environ["BOMANA_CHANNEL"] = channel
+    os.environ["BOMANA_RUNTIME_ROOT"] = str(app_dir)
     os.chdir(app_dir)
     if str(app_dir) not in sys.path:
         sys.path.insert(0, str(app_dir))

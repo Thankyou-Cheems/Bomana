@@ -41,7 +41,10 @@ def resource_path(rel_path: str) -> str:
     Returns:
         绝对路径字符串
     """
-    if hasattr(sys, "_MEIPASS"):
+    runtime_root = os.environ.get("BOMANA_RUNTIME_ROOT", "").strip()
+    if runtime_root:
+        base = runtime_root
+    elif hasattr(sys, "_MEIPASS"):
         base = getattr(sys, "_MEIPASS")
     else:
         # Use project/app root instead of CWD so launcher runpy startup can still resolve assets.
