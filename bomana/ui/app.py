@@ -1083,9 +1083,11 @@ class App:
         """
         if not ENABLE_ZONES or not self.nav_window:
             return
-        
+
+        self._reset_navigation_layout_state()
         if PanelConfig.navigation_mode == "integrated":
             PanelConfig.navigation_mode = "standalone"
+            self.nav_window.clear_display()
             self.nav_window.show()
         else:
             PanelConfig.navigation_mode = "integrated"
@@ -1771,6 +1773,9 @@ class App:
 
     def _update_zone_display(self, snap: UISnapshot):
         return self.panel_renderer.update_zone_display(snap)
+
+    def _reset_navigation_layout_state(self):
+        self.panel_renderer.reset_navigation_layout_state()
 
     def _update_fuel_display(self, snap: UISnapshot, font_item):
         _ = font_item

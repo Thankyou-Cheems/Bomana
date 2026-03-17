@@ -129,6 +129,38 @@ class AppPanelRenderer:
             if layout_changed:
                 app._recalc_size(force_shrink=True)
 
+    def reset_navigation_layout_state(self) -> None:
+        """Clear both integrated and compact nav layouts before a mode switch."""
+        app = self.app
+        for rows in (
+            getattr(app, "_zone_row_pool", []),
+            getattr(app, "_compact_zone_row_pool", []),
+            getattr(app, "_airport_row_pool", []),
+            getattr(app, "_compact_airport_row_pool", []),
+        ):
+            self._clear_nav_rows(rows)
+            self._sync_nav_row_visibility(rows, 0)
+
+        for widget_name in (
+            "compact_nav_frame",
+            "zone_list_frame",
+            "airport_title_lbl",
+            "airport_list_frame",
+            "heading_tape_frame",
+        ):
+            widget = getattr(app, widget_name, None)
+            if widget is not None:
+                self._grid_remove_if_needed(widget)
+
+        if getattr(app, "heading_tape", None) is not None:
+            app.heading_tape.clear()
+        if getattr(app, "zone_alert_lbl", None) is not None:
+            app.zone_alert_lbl.config(text="")
+
+        app._zone_layout_mode = None
+        app._airport_layout_mode = None
+        app._last_layout_signature = None
+
     def set_zone_panel_visible(self, visible: bool) -> None:
         """设置战区面板可见性。"""
         app = self.app

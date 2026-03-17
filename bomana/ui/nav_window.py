@@ -333,13 +333,8 @@ class NavigationWindow:
     
     def _switch_to_integrated(self):
         """切换到集成模式"""
-        PanelConfig.navigation_mode = "integrated"
-        self.hide()
-        self.app._save_config()
-        self.app._update_nav_mode_button()
-        self.app._refresh_tray()
-        # 强制触发UI刷新，确保投弹预测等面板正确显示
-        self.app.root.after(50, self.app._recalc_size)
+        if PanelConfig.navigation_mode == "standalone":
+            self.app._toggle_navigation_mode()
     
     def _reset_position(self):
         """重置窗口位置到屏幕中央"""
@@ -375,8 +370,30 @@ class NavigationWindow:
     def hide(self):
         """隐藏窗口"""
         if self._visible:
+            self.clear_display()
             self._visible = False
             self.window.withdraw()
+
+    def clear_display(self):
+        """Clear rendered nav content before hiding or mode switching."""
+        try:
+            self.heading_tape.clear()
+        except tk.TclError:
+            pass
+        for widget, kwargs in (
+            (self.heading_lbl, {"text": "航向 ---°"}),
+            (self.zone_turn, {"text": "", "fg": Theme.TEXT_DIM}),
+            (self.zone_status, {"text": "", "fg": Theme.TEXT_DIM}),
+            (self.zone_info, {"text": "", "fg": Theme.TEXT_DIM}),
+            (self.zone_tolerance_legend, {"text": ""}),
+            (self.friendly_turn, {"text": "", "fg": Theme.TEXT_DIM}),
+            (self.friendly_status, {"text": "", "fg": Theme.TEXT_DIM}),
+            (self.friendly_info, {"text": "", "fg": Theme.TEXT_DIM}),
+        ):
+            try:
+                widget.config(**kwargs)
+            except tk.TclError:
+                continue
     
     def is_visible(self):
         """返回窗口是否可见"""
