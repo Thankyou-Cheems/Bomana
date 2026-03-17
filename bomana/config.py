@@ -853,7 +853,7 @@ class BombConfig:
                 }
 
             if cls.selected_bomb not in cls.BOMB_DATABASE and cls.BOMB_DATABASE:
-                cls.selected_bomb = next(iter(sorted(cls.BOMB_DATABASE.keys())))
+                cls.selected_bomb = "su_fab100" if "su_fab100" in cls.BOMB_DATABASE else next(iter(sorted(cls.BOMB_DATABASE.keys())))
 
             cls._database_loaded = True
             cls.database_source = source
