@@ -351,7 +351,7 @@ class MainWindowBuilder:
         app.speed_state_lbl.grid(row=0, column=0, sticky="w")
         app.speed_threshold_btn = tk.Label(
             app.speed_meta_frame,
-            text="阈值",
+            text="点我调速度阈值",
             font=(UIConfig.FONT_HINT[0], max(7, int(UIConfig.FONT_HINT[1] * s * 0.88))),
             fg=Theme.BLUE,
             bg=Theme.GRAYPILL,

@@ -548,18 +548,34 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         warn_frame.pack(fill="x", pady=(0, 12))
         tk.Label(
             warn_frame,
-            text=(
-                "先看 IAS，再看 Mach：\n"
-                "IAS 是表速，主要反映机体承受的气动载荷；Mach 是马赫数，主要反映高速/高空下的压缩性风险。\n"
-                "程序会同时监视这两条线，任意一条先危险，就按更危险的级别提示。"
-            ),
+            text="监视逻辑",
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            anchor="w",
+            padx=8,
+            pady=(8, 2),
+            font=("Segoe UI", 9, "bold"),
+        ).pack(fill="x")
+        tk.Label(
+            warn_frame,
+            text="常规飞行主要看 IAS；高速或高空时再看 Mach。",
             bg=Theme.GRAYPILL,
             fg=Theme.TEXT,
             justify="left",
             anchor="w",
             padx=8,
-            pady=8,
-            wraplength=540,
+            wraplength=620,
+        ).pack(fill="x")
+        tk.Label(
+            warn_frame,
+            text="两边任意一项先到线，就按更高一级提示。",
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT_DIM,
+            justify="left",
+            anchor="w",
+            padx=8,
+            pady=(0, 8),
+            wraplength=620,
         ).pack(fill="x")
 
         defaults = OverspeedConfig.get_default_thresholds()
@@ -640,19 +656,44 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
 
         tk.Label(
             frame,
-            text=(
-                "怎么理解这些数：\n"
-                "IAS 线填 0.940，表示当前 IAS 到达该机型 IAS 限速的 94% 时开始提示；数值越小，提示越早。\n"
-                "Mach 线填 0.040，表示当前 Mach 距离该机型 Mach 限速只剩 0.04 时开始提示；数值越大，提示越早。\n"
-                "如果你并不清楚机型特性，建议优先只改“提示线”，警告线和危险线尽量贴近默认值。"
-            ),
+            text="调参规则",
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            font=("Segoe UI", 9, "bold"),
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", pady=(10, 2))
+
+        tk.Label(
+            frame,
+            text="IAS：数值越小，越早提醒。0.940 表示到该机型 IAS 限速的 94% 开始提示。",
             bg=Theme.BG,
             fg=Theme.TEXT_MUTED,
             font=("Segoe UI", 8),
             justify="left",
             anchor="w",
-            wraplength=540,
-        ).pack(fill="x", pady=(10, 0))
+            wraplength=620,
+        ).pack(fill="x")
+        tk.Label(
+            frame,
+            text="Mach：数值越大，越早提醒。0.040 表示距离该机型 Mach 限速只剩 0.04 开始提示。",
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
+            justify="left",
+            anchor="w",
+            wraplength=620,
+        ).pack(fill="x", pady=(2, 0))
+        tk.Label(
+            frame,
+            text="拿不准时，先只改“提示线”；警告线和危险线尽量先保持默认。",
+            bg=Theme.BG,
+            fg=Theme.TEXT_DIM,
+            font=("Segoe UI", 8),
+            justify="left",
+            anchor="w",
+            wraplength=620,
+        ).pack(fill="x", pady=(2, 0))
 
         self._refresh_overspeed_override_summary()
 
