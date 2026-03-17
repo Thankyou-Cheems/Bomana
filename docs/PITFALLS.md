@@ -145,3 +145,15 @@
   Symptom: launcher GUI opened, but app launch failed with `No module named 'requests'`
   Root cause: source mode runs `Bomana.pyw` with the current interpreter, while the project dependencies only existed inside repo `.venv`
   Fix/Workaround: prepend repo `.venv` `site-packages` during source-mode launch; if `.venv` is missing, run `uv sync --python 3.14 --extra build`
+
+- Date: 2026-03-17
+  Context: settings dialog opened directly on the overspeed tab after the tab copy/fields expanded
+  Symptom: the dialog appeared vertically cramped and the bottom Save/Cancel buttons could be pushed below the visible area
+  Cause: `SettingsDialog` used a fixed content container without scrolling, while the overspeed page became taller than the initial fitted height
+  Fix/Workaround: make the settings body scrollable and keep the footer action row fixed outside the scroll area
+
+- Date: 2026-03-17
+  Context: in-game 8111 payload field naming drift for airspeed/type fields
+  Symptom: speed monitoring stopped showing current IAS or failed to match aircraft limits even though the panel toggle stayed enabled
+  Cause: telemetry parsing only accepted a narrow set of `/state` and `/indicators` keys (`IAS, km/h`, `TAS, km/h`, `M`, `type`)
+  Fix/Workaround: parse multiple compatible key variants for IAS/TAS/Mach/type so minor payload name changes do not break the speed panel

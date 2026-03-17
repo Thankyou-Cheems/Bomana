@@ -109,6 +109,31 @@ class TelemetryFetcher:
                 return value, True
         return 0.0, False
 
+    def _read_scaled_float(
+        self, payload: dict, keys: Tuple[Tuple[str, float], ...]
+    ) -> Tuple[float, bool]:
+        """按候选键顺序读取数值并应用倍率，返回(值, 是否命中键)。"""
+        for key, scale in keys:
+            if key in payload:
+                value = self._to_float(payload.get(key), 0.0)
+                return value * float(scale), True
+        return 0.0, False
+
+    @staticmethod
+    def _read_first_text(payload: dict, keys: Tuple[str, ...]) -> str:
+        for key in keys:
+            if key not in payload:
+                continue
+            value = payload.get(key)
+            if isinstance(value, dict):
+                value = value.get("value", "")
+            elif isinstance(value, (list, tuple)):
+                value = value[0] if value else ""
+            text = str(value or "").strip()
+            if text:
+                return text
+        return ""
+
     def _merge_attitude_fields(self, payload: dict, data: TelemetryData) -> None:
         """合并姿态字段（支持不同机型/端点键名差异）。"""
         pitch, pitch_present = self._read_float(
@@ -150,7 +175,10 @@ class TelemetryFetcher:
         data.ind_ok = ok
         if ok and isinstance(j, dict):
             data.valid = bool(j.get("valid", False))
-            data.type_name = str(j.get("type", "") or "").strip()
+            data.type_name = self._read_first_text(
+                j,
+                ("type", "unit", "aircraft", "aircraft_type", "name"),
+            )
             data.compass = self._to_float(j.get("compass1") or j.get("compass"), 0.0)
             data.wing_sweep = self._to_optional_float(
                 j.get("wing_sweep_indicator", j.get("wing_sweep"))
@@ -164,16 +192,36 @@ class TelemetryFetcher:
         ok, j = self.http.get_json(f"{NetworkConfig.API_BASE}/state", budget)
         data.state_resp_ok = ok
         if ok and isinstance(j, dict):
-            data.ias_kmh = self._to_float(j.get("IAS, km/h", 0), 0.0)
+            data.ias_kmh, _ = self._read_scaled_float(
+                j,
+                (
+                    ("IAS, km/h", 1.0),
+                    ("IAS", 1.0),
+                    ("ias", 1.0),
+                    ("IAS, m/s", 3.6),
+                    ("ias, m/s", 3.6),
+                ),
+            )
             data.vy_ms = self._to_float(j.get("Vy, m/s", 0), 0.0)
             data.fuel_kg = self._to_float(j.get("Mfuel, kg", 0), 0.0)
             
             # v5.8 新增：解析燃油管理相关字段
             data.fuel0_kg = self._to_float(j.get("Mfuel0, kg", 0), 0.0)
             data.altitude_m = self._to_float(j.get("H, m", 0), 0.0)
-            data.tas_kmh = self._to_float(j.get("TAS, km/h", 0), 0.0)
+            data.tas_kmh, _ = self._read_scaled_float(
+                j,
+                (
+                    ("TAS, km/h", 1.0),
+                    ("TAS", 1.0),
+                    ("tas", 1.0),
+                    ("TAS, m/s", 3.6),
+                    ("tas, m/s", 3.6),
+                ),
+            )
             data.throttle_pct = self._to_float(j.get("throttle 1, %", 0), 0.0)
-            data.mach = self._to_optional_float(j.get("M"))
+            data.mach = self._to_optional_float(
+                j.get("M", j.get("Mach", j.get("mach")))
+            )
             
             # v5.9.6 + v6.6.0：解析起落架状态和百分比
             gear_pct = self._to_float(j.get("gear, %", 0), 0.0)

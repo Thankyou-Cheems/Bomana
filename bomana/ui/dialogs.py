@@ -376,9 +376,55 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 选项卡内容容器
         content_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
         content_shell.pack(fill="both", expand=True, padx=12)
-        self.content_frame = tk.Frame(content_shell, bg=Theme.BG, bd=0, highlightthickness=0)
-        self.content_frame.pack(fill="both", expand=True, padx=1, pady=1)
-        
+        content_body = tk.Frame(content_shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        content_body.pack(fill="both", expand=True, padx=1, pady=1)
+        self._content_canvas = tk.Canvas(
+            content_body,
+            bg=Theme.BG,
+            bd=0,
+            highlightthickness=0,
+            yscrollincrement=18,
+        )
+        self._content_scrollbar = tk.Scrollbar(
+            content_body,
+            orient="vertical",
+            command=self._content_canvas.yview,
+            troughcolor=Theme.BG,
+            bg=Theme.GRAYPILL,
+            activebackground=Theme.SEPARATOR,
+            bd=0,
+            highlightthickness=0,
+        )
+        self._content_canvas.configure(yscrollcommand=self._content_scrollbar.set)
+        self._content_scrollbar.pack(side="right", fill="y")
+        self._content_canvas.pack(side="left", fill="both", expand=True)
+        self.content_frame = tk.Frame(self._content_canvas, bg=Theme.BG, bd=0, highlightthickness=0)
+        self._content_window = self._content_canvas.create_window(
+            (0, 0), window=self.content_frame, anchor="nw"
+        )
+
+        def _sync_content_scrollregion(_event=None):
+            bbox = self._content_canvas.bbox("all")
+            if bbox:
+                self._content_canvas.configure(scrollregion=bbox)
+
+        def _sync_content_width(event):
+            self._content_canvas.itemconfigure(self._content_window, width=event.width)
+            _sync_content_scrollregion()
+
+        self.content_frame.bind("<Configure>", _sync_content_scrollregion, add="+")
+        self._content_canvas.bind("<Configure>", _sync_content_width, add="+")
+        self._content_canvas.bind(
+            "<Enter>",
+            lambda _e: self._content_canvas.bind_all("<MouseWheel>", self._on_content_mousewheel),
+            add="+",
+        )
+        self._content_canvas.bind(
+            "<Leave>",
+            lambda _e: self._content_canvas.unbind_all("<MouseWheel>"),
+            add="+",
+        )
+
         # 创建各选项卡页面
         self._build_display_tab()
         self._build_panel_tab()
@@ -401,6 +447,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         
         # 显示第一个选项卡
         self._switch_tab(self.initial_tab if self.initial_tab in self.tabs else "显示")
+
+    def _on_content_mousewheel(self, event):
+        if hasattr(self, "_content_canvas"):
+            self._content_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
     
     def _switch_tab(self, tab_name: str):
         """切换选项卡"""
@@ -415,6 +465,9 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 显示当前页面
         if tab_name in self.tab_frames:
             self.tab_frames[tab_name].pack(fill="both", expand=True)
+            self.update_idletasks()
+            if hasattr(self, "_content_canvas"):
+                self._content_canvas.yview_moveto(0.0)
         
         self.current_tab = tab_name
     
@@ -553,9 +606,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             fg=Theme.TEXT,
             anchor="w",
             padx=8,
-            pady=(8, 2),
             font=("Segoe UI", 9, "bold"),
-        ).pack(fill="x")
+        ).pack(fill="x", pady=(8, 2))
         tk.Label(
             warn_frame,
             text="常规飞行主要看 IAS；高速或高空时再看 Mach。",
@@ -574,9 +626,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             justify="left",
             anchor="w",
             padx=8,
-            pady=(0, 8),
             wraplength=620,
-        ).pack(fill="x")
+        ).pack(fill="x", pady=(0, 8))
 
         defaults = OverspeedConfig.get_default_thresholds()
         global_thresholds = OverspeedConfig.get_global_thresholds()
