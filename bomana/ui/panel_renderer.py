@@ -263,6 +263,87 @@ class AppPanelRenderer:
                 for widget in widgets:
                     self._grid_remove_if_needed(widget)
 
+    def _build_heading_targets(self, snap: UISnapshot) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any]:
+        """Build integrated heading-tape targets and status items."""
+        app = self.app
+        targets: list[dict[str, Any]] = []
+        active_targets_info: list[dict[str, Any]] = []
+        target_zone = next((z for z in snap.zones if z.is_target), None)
+
+        for zone in snap.zones:
+            is_target = zone.is_target
+            targets.append({
+                "type": "zone",
+                "relative": zone.relative,
+                "distance_km": zone.distance_km,
+                "is_primary": is_target,
+                "is_target": is_target,
+            })
+            if is_target:
+                active_targets_info.append({
+                    "type": "zone",
+                    "name": "战区",
+                    "icon": "⊚",
+                    "relative": zone.relative,
+                    "distance_km": zone.distance_km,
+                    "ete_str": zone.ete_str if hasattr(zone, "ete_str") else "",
+                    "color": Theme.RED,
+                })
+
+        if snap.zone_destroyed_alert and hasattr(app.game.state.zone_nav, "destroyed_zones"):
+            for dz in app.game.state.zone_nav.destroyed_zones:
+                if hasattr(dz, "relative"):
+                    targets.append({
+                        "type": "destroyed",
+                        "relative": dz.relative,
+                        "distance_km": dz.distance * ZoneConfig.DISTANCE_SCALE,
+                        "is_primary": False,
+                    })
+
+        if snap.friendly_airfield:
+            af = snap.friendly_airfield
+            is_in_front = abs(af.relative) <= 90
+            targets.append({
+                "type": "friendly",
+                "relative": af.relative,
+                "distance_km": af.distance_km,
+                "is_primary": False,
+                "is_target": is_in_front,
+            })
+            if is_in_front:
+                active_targets_info.append({
+                    "type": "friendly",
+                    "name": "友方",
+                    "icon": "✈",
+                    "relative": af.relative,
+                    "distance_km": af.distance_km,
+                    "ete_str": af.ete_str,
+                    "color": Theme.BLUE,
+                })
+
+        if snap.enemy_airfields:
+            for af in snap.enemy_airfields:
+                is_in_front = abs(af.relative) <= 90
+                targets.append({
+                    "type": "enemy",
+                    "relative": af.relative,
+                    "distance_km": af.distance_km,
+                    "is_primary": False,
+                    "is_target": is_in_front,
+                })
+                if af.is_target and is_in_front:
+                    active_targets_info.append({
+                        "type": "enemy",
+                        "name": "敌方",
+                        "icon": "✈",
+                        "relative": af.relative,
+                        "distance_km": af.distance_km,
+                        "ete_str": af.ete_str,
+                        "color": Theme.ORANGE,
+                    })
+
+        return targets, active_targets_info, target_zone
+
     def update_zone_display(self, snap: UISnapshot):
         """更新战区显示，并返回是否需要重算布局尺寸。"""
         app = self.app
@@ -285,10 +366,26 @@ class AppPanelRenderer:
 
         if zones_enabled:
             self._grid_if_needed(app.zone_header_frame, row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6 * s), int(2 * s)))
-            self._grid_remove_if_needed(app.heading_tape_frame)
             self._grid_remove_if_needed(app.compact_nav_frame)
             if hasattr(app, "nav_window") and app.nav_window and app.nav_window.is_visible():
                 app.nav_window.update_display(snap)
+
+            nav_in_main = (PanelConfig.navigation_mode == "integrated")
+            if app.heading_tape is not None:
+                if nav_in_main and heading_available:
+                    targets, active_targets_info, target_zone = self._build_heading_targets(snap)
+                    primary_dist = target_zone.distance_km if target_zone else 10.0
+                    app.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
+                    self.update_tape_info_labels(active_targets_info, target_zone)
+                    self._grid_if_needed(app.heading_tape_frame, row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
+                elif nav_in_main:
+                    app.heading_tape.clear()
+                    self.update_tape_info_labels([], None)
+                    self._grid_if_needed(app.heading_tape_frame, row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
+                else:
+                    app.heading_tape.clear()
+                    self.update_tape_info_labels([], None)
+                    self._grid_remove_if_needed(app.heading_tape_frame)
 
             if snap.zone_destroyed_alert:
                 alert_text = "💥 战区被摧毁："
@@ -305,7 +402,6 @@ class AppPanelRenderer:
                 app.zone_alert_lbl.config(text="")
                 app._last_zone_destroyed_alert = False
 
-            nav_in_main = (PanelConfig.navigation_mode == "integrated")
             zone_layout_mode = "full" if nav_in_main else "hidden"
             if app._zone_layout_mode != zone_layout_mode:
                 self._clear_nav_rows(app._zone_row_pool)
