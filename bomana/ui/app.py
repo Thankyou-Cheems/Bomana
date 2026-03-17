@@ -256,7 +256,7 @@ class App:
         
         # v6.0 新增：炸弹选择（仅在CCRP启用时）
         if ENABLE_CCRP:
-            selected_bomb = config.get('selected_bomb', 'su_fab100sv')
+            selected_bomb = config.get('selected_bomb', 'su_fab100')
             if BombConfig.get_bomb_data(selected_bomb):
                 BombConfig.selected_bomb = selected_bomb
             tuning = config.get('ccrp_tuning', {})

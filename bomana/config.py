@@ -775,35 +775,69 @@ class BombConfig:
     ╚══════════════════════════════════════════════════════════════════════════╝
     """
 
-    selected_bomb = "su_fab100sv"
+    selected_bomb = "su_fab100"
     BOMB_DATABASE = {}
     _database_loaded = False
+    load_error: str | None = None
+    database_source: str | None = None
     JSON_FILE = "bomana/data/ccrp_bomb_params.json"
     LEGACY_JSON_FILE = "ccrp_bomb_params.json"
 
     @classmethod
+    def _resolve_database_path(cls) -> tuple[Path | None, str]:
+        """Resolve the packaged/source bomb database path without relying on temp dirs."""
+        candidates: list[tuple[Path, str]] = []
+
+        try:
+            from bomana.utils.file_utils import resource_path
+
+            for rel_path in (cls.JSON_FILE, cls.LEGACY_JSON_FILE):
+                resolved = Path(resource_path(rel_path))
+                candidates.append((resolved, rel_path))
+        except Exception:
+            pass
+
+        project_root = Path(__file__).resolve().parent.parent
+        for candidate, label in (
+            (project_root / cls.JSON_FILE, cls.JSON_FILE),
+            (project_root / cls.LEGACY_JSON_FILE, cls.LEGACY_JSON_FILE),
+            (Path.cwd() / cls.JSON_FILE, f"cwd/{cls.JSON_FILE}"),
+            (Path.cwd() / cls.LEGACY_JSON_FILE, f"cwd/{cls.LEGACY_JSON_FILE}"),
+        ):
+            candidates.append((candidate, label))
+
+        seen: set[Path] = set()
+        for candidate, label in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            if candidate.exists():
+                return candidate, label
+        return None, ""
+
+    @classmethod
     def _ensure_database_loaded(cls):
         """确保炸弹数据库已加载"""
-        if cls._database_loaded:
+        if cls._database_loaded and cls.BOMB_DATABASE:
             return
 
         try:
+            cls.BOMB_DATABASE.clear()
+            cls.load_error = None
+            cls.database_source = None
             external_params = None
-            project_root = Path(__file__).resolve().parent.parent
-            json_path = project_root / cls.JSON_FILE
-            legacy_json_path = project_root / cls.LEGACY_JSON_FILE
+            json_path, source = cls._resolve_database_path()
 
-            source = "ccrp_bomb_params.py"
-            if json_path.exists():
+            source = source or "ccrp_bomb_params.py"
+            if json_path and json_path.exists():
                 data = json.loads(json_path.read_text(encoding="utf-8"))
                 external_params = data.get("ballistic_params", {})
-                source = cls.JSON_FILE
-            elif legacy_json_path.exists():
-                data = json.loads(legacy_json_path.read_text(encoding="utf-8"))
-                external_params = data.get("ballistic_params", {})
-                source = cls.LEGACY_JSON_FILE
+                source = str(json_path)
             else:
                 from ccrp_bomb_params import BALLISTIC_PARAMS as external_params
+
+            if not external_params:
+                raise RuntimeError("炸弹数据库为空")
 
             for bomb_id, params in external_params.items():
                 cls.BOMB_DATABASE[bomb_id] = {
@@ -818,15 +852,23 @@ class BombConfig:
                     'category': cls._infer_category(bomb_id),
                 }
 
+            if cls.selected_bomb not in cls.BOMB_DATABASE and cls.BOMB_DATABASE:
+                cls.selected_bomb = next(iter(sorted(cls.BOMB_DATABASE.keys())))
+
             cls._database_loaded = True
+            cls.database_source = source
             print(f"[BombConfig] 已从{source}加载 {len(cls.BOMB_DATABASE)} 种炸弹参数")
 
         except ImportError as e:
             print(f"[BombConfig] 警告: 无法加载ccrp_bomb_params模块: {e}")
-            cls._database_loaded = True
+            cls.BOMB_DATABASE.clear()
+            cls.load_error = str(e)
+            cls._database_loaded = False
         except Exception as e:
             print(f"[BombConfig] 加载炸弹参数时出错: {e}")
-            cls._database_loaded = True
+            cls.BOMB_DATABASE.clear()
+            cls.load_error = str(e)
+            cls._database_loaded = False
 
     @classmethod
     def _infer_category(cls, bomb_id: str) -> str:

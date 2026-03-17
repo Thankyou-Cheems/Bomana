@@ -163,3 +163,9 @@
   Symptom: the aircraft override dialog later reported `limits file not found` under a launcher `_MEI...` temp path, and speed matching stopped working
   Cause: `resource_path()` preferred `sys._MEIPASS`, but under launcher `runpy` mode that temporary directory belonged to the launcher exe instead of the unpacked app runtime
   Fix/Workaround: have launcher export the stable app runtime root (for example `BOMANA_RUNTIME_ROOT`), and make app resource lookup prefer the app module/current working directory before `_MEIPASS` so old launchers still work with new app packages
+
+- Date: 2026-03-17
+  Context: opening the CCRP bomb selector in packaged/runtime environments
+  Symptom: the bomb selector showed `0/0` bombs with no clear reason, even though `ccrp_bomb_params.json` was shipped
+  Cause: bomb database loading still used its own path resolution and swallowed load failures into an empty in-memory database, instead of sharing the app's stable runtime resource lookup
+  Fix/Workaround: resolve bomb JSON through the same runtime-aware path search used for other packaged assets, keep a visible `load_error`, and surface that error directly in the bomb selector/settings page

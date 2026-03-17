@@ -945,6 +945,41 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         frame = tk.Frame(self.content_frame, bg=Theme.BG)
         self.tab_frames["投弹"] = frame
 
+        self.selected_bomb_id = BombConfig.selected_bomb
+        self.ccrp_selected_bomb_var = tk.StringVar()
+        self._refresh_ccrp_selected_bomb_text()
+
+        tk.Label(frame, text="当前炸弹:", bg=Theme.BG, fg=Theme.TEXT).pack(anchor="w")
+        bomb_row = tk.Frame(frame, bg=Theme.BG)
+        bomb_row.pack(fill="x", pady=(6, 12))
+        tk.Label(
+            bomb_row,
+            textvariable=self.ccrp_selected_bomb_var,
+            bg=Theme.GRAYPILL,
+            fg=Theme.BLUE,
+            padx=10,
+            pady=6,
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True)
+        self._create_action_button(
+            bomb_row,
+            "更换当前炸弹",
+            self._open_ccrp_bomb_selector,
+            variant="neutral",
+            width=12,
+        ).pack(side="left", padx=(10, 0))
+
+        if BombConfig.load_error:
+            tk.Label(
+                frame,
+                text=f"炸弹数据库不可用：{BombConfig.load_error}",
+                bg=Theme.BG,
+                fg=Theme.RED,
+                anchor="w",
+                justify="left",
+                wraplength=640,
+            ).pack(fill="x", pady=(0, 10))
+
         tk.Label(frame, text="CCRP校准参数（全局生效）:", bg=Theme.BG, fg=Theme.TEXT).pack(
             anchor="w", pady=(0, 10))
 
@@ -988,6 +1023,29 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             text="说明：倍率 > 1 代表提前投弹（预测更远/更久），< 1 代表延后投弹。",
             bg=Theme.BG, fg=Theme.TEXT_MUTED, font=("Segoe UI", 8)
         ).pack(anchor="w", pady=(10, 0))
+
+    def _refresh_ccrp_selected_bomb_text(self):
+        bomb_id = getattr(self, "selected_bomb_id", BombConfig.selected_bomb)
+        if BombConfig.get_bomb_data(bomb_id):
+            text = BombConfig.format_bomb_name(bomb_id)
+        elif BombConfig.load_error:
+            text = f"{bomb_id}（数据库不可用）"
+        else:
+            text = bomb_id or "未选择炸弹"
+        if hasattr(self, "ccrp_selected_bomb_var"):
+            self.ccrp_selected_bomb_var.set(text)
+
+    def _open_ccrp_bomb_selector(self):
+        dialog = BombSelectorDialog(
+            self,
+            self.app,
+            initial_bomb=getattr(self, "selected_bomb_id", BombConfig.selected_bomb),
+            persist_selection=False,
+        )
+        self.wait_window(dialog)
+        if getattr(dialog, "result", None):
+            self.selected_bomb_id = dialog.result
+            self._refresh_ccrp_selected_bomb_text()
     
     def _build_other_tab(self):
         """构建其他设置页"""
@@ -1170,6 +1228,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             }
             BallisticPhysicsParams.apply_user_tuning(tuning)
             config['ccrp_tuning'] = BallisticPhysicsParams.get_user_tuning()
+            if hasattr(self, "selected_bomb_id") and self.selected_bomb_id:
+                BombConfig.selected_bomb = self.selected_bomb_id
+                config['selected_bomb'] = self.selected_bomb_id
+                if hasattr(self.app, 'bomb_select_lbl'):
+                    self.app.bomb_select_lbl.config(
+                        text=f"炸弹: {BombConfig.format_bomb_name(self.selected_bomb_id)} (点击更换)"
+                    )
         
         # 保存配置
         ConfigManager.save(config)
@@ -1851,10 +1916,12 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
 class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
     """炸弹选择对话框"""
     
-    def __init__(self, parent, app):
+    def __init__(self, parent, app, initial_bomb: str | None = None, persist_selection: bool = True):
         super().__init__(parent)
         self.app = app
-        self.selected_bomb = BombConfig.selected_bomb
+        self.persist_selection = persist_selection
+        self.result = None
+        self.selected_bomb = initial_bomb or BombConfig.selected_bomb
         self._current_category = None
         
         self.title("选择炸弹")
@@ -1886,6 +1953,17 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
             fg=Theme.TEXT_MUTED,
             anchor="w",
         ).pack(anchor="w", pady=(2, 0))
+
+        if BombConfig.load_error:
+            tk.Label(
+                main,
+                text=f"炸弹数据库不可用：{BombConfig.load_error}",
+                bg=Theme.BG,
+                fg=Theme.RED,
+                anchor="w",
+                justify="left",
+                wraplength=620,
+            ).pack(fill="x", padx=12, pady=(0, 8))
 
         # 搜索框
         search_frame = tk.Frame(main, bg=Theme.BG)
@@ -2144,8 +2222,11 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         if select_index > 0:
             self.listbox.selection_set(select_index)
             self.listbox.see(select_index)
-        
-        self.stats_lbl.config(text=f"显示 {total_count} / {len(BombConfig.BOMB_DATABASE)} 种炸弹")
+
+        if BombConfig.load_error and not BombConfig.BOMB_DATABASE:
+            self.stats_lbl.config(text=f"炸弹数据库未加载：{BombConfig.load_error}")
+        else:
+            self.stats_lbl.config(text=f"显示 {total_count} / {len(BombConfig.BOMB_DATABASE)} 种炸弹")
     
     def _center_on_parent(self, parent):
         self._center_dialog_on_parent(parent)
@@ -2162,15 +2243,17 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         bomb_id = text.split(" (")[0].strip()
         
         if BombConfig.get_bomb_data(bomb_id):
-            BombConfig.selected_bomb = bomb_id
-            config = ConfigManager.load()
-            config['selected_bomb'] = bomb_id
-            ConfigManager.save(config)
-            
-            if hasattr(self.app, 'bomb_select_lbl'):
-                self.app.bomb_select_lbl.config(
-                    text=f"炸弹: {BombConfig.format_bomb_name(bomb_id)} (点击更换)"
-                )
+            self.result = bomb_id
+            if self.persist_selection:
+                BombConfig.selected_bomb = bomb_id
+                config = ConfigManager.load()
+                config['selected_bomb'] = bomb_id
+                ConfigManager.save(config)
+                
+                if hasattr(self.app, 'bomb_select_lbl'):
+                    self.app.bomb_select_lbl.config(
+                        text=f"炸弹: {BombConfig.format_bomb_name(bomb_id)} (点击更换)"
+                    )
             
             self.destroy()
 
