@@ -219,12 +219,17 @@ class AppPanelRenderer:
 
     def _sync_nav_row_visibility(self, rows: list[Any], visible_count: int) -> None:
         """Show only the visible prefix of prebuilt rows."""
-        pady = (0, max(1, int(self.app.scale)))
         for idx, row in enumerate(rows):
+            widgets = [row.icon_lbl, row.direction_lbl, row.distance_lbl]
+            if getattr(row, "relative_lbl", None) is not None:
+                widgets.append(row.relative_lbl)
             if idx < visible_count:
-                self._pack_if_needed(row.frame, fill="x", pady=pady)
+                for widget in widgets:
+                    if widget.winfo_manager() != "grid" or not widget.winfo_ismapped():
+                        widget.grid()
             else:
-                self._pack_forget_if_needed(row.frame)
+                for widget in widgets:
+                    self._grid_remove_if_needed(widget)
 
     def update_zone_display(self, snap: UISnapshot):
         """更新战区显示，并返回是否需要重算布局尺寸。"""

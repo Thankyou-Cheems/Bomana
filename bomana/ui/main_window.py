@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class NavListRow:
     """Stable multi-column row for zone/airport lists."""
 
-    frame: tk.Frame
+    row_index: int
     icon_lbl: tk.Label
     direction_lbl: tk.Label
     distance_lbl: tk.Label
@@ -443,12 +443,12 @@ class MainWindowBuilder:
         show_relative: bool,
     ) -> list[NavListRow]:
         pool: list[NavListRow] = []
+        parent.grid_columnconfigure(1, weight=1)
         for _ in range(count):
-            row = tk.Frame(parent, bg=bg)
-            row.grid_columnconfigure(1, weight=1)
+            row_index = len(pool)
 
             icon_lbl = tk.Label(
-                row,
+                parent,
                 text="",
                 font=font,
                 fg=Theme.TEXT_MUTED,
@@ -456,10 +456,11 @@ class MainWindowBuilder:
                 anchor="w",
                 width=3,
             )
-            icon_lbl.grid(row=0, column=0, sticky="w")
+            icon_lbl.grid(row=row_index, column=0, sticky="w")
+            icon_lbl.grid_remove()
 
             direction_lbl = tk.Label(
-                row,
+                parent,
                 text="",
                 font=font,
                 fg=Theme.TEXT_MUTED,
@@ -467,10 +468,11 @@ class MainWindowBuilder:
                 anchor="w",
                 justify="left",
             )
-            direction_lbl.grid(row=0, column=1, sticky="ew")
+            direction_lbl.grid(row=row_index, column=1, sticky="ew")
+            direction_lbl.grid_remove()
 
             distance_lbl = tk.Label(
-                row,
+                parent,
                 text="",
                 font=font,
                 fg=Theme.TEXT_MUTED,
@@ -478,12 +480,13 @@ class MainWindowBuilder:
                 anchor="e",
                 width=8,
             )
-            distance_lbl.grid(row=0, column=2, sticky="e", padx=(int(6 * self.app.scale), 0))
+            distance_lbl.grid(row=row_index, column=2, sticky="e", padx=(int(6 * self.app.scale), 0), pady=(0, max(1, int(self.app.scale))))
+            distance_lbl.grid_remove()
 
             relative_lbl = None
             if show_relative:
                 relative_lbl = tk.Label(
-                    row,
+                    parent,
                     text="",
                     font=font,
                     fg=Theme.TEXT_MUTED,
@@ -491,11 +494,12 @@ class MainWindowBuilder:
                     anchor="e",
                     width=11,
                 )
-                relative_lbl.grid(row=0, column=3, sticky="e", padx=(int(8 * self.app.scale), 0))
+                relative_lbl.grid(row=row_index, column=3, sticky="e", padx=(int(8 * self.app.scale), 0), pady=(0, max(1, int(self.app.scale))))
+                relative_lbl.grid_remove()
 
             pool.append(
                 NavListRow(
-                    frame=row,
+                    row_index=row_index,
                     icon_lbl=icon_lbl,
                     direction_lbl=direction_lbl,
                     distance_lbl=distance_lbl,
