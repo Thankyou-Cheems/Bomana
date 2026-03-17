@@ -784,57 +784,33 @@ class BombConfig:
     LEGACY_JSON_FILE = "ccrp_bomb_params.json"
 
     @classmethod
-    def _resolve_database_path(cls) -> tuple[Path | None, str]:
-        """Resolve the packaged/source bomb database path without relying on temp dirs."""
-        candidates: list[tuple[Path, str]] = []
-
-        try:
-            from bomana.utils.file_utils import resource_path
-
-            for rel_path in (cls.JSON_FILE, cls.LEGACY_JSON_FILE):
-                resolved = Path(resource_path(rel_path))
-                candidates.append((resolved, rel_path))
-        except Exception:
-            pass
-
-        project_root = Path(__file__).resolve().parent.parent
-        for candidate, label in (
-            (project_root / cls.JSON_FILE, cls.JSON_FILE),
-            (project_root / cls.LEGACY_JSON_FILE, cls.LEGACY_JSON_FILE),
-            (Path.cwd() / cls.JSON_FILE, f"cwd/{cls.JSON_FILE}"),
-            (Path.cwd() / cls.LEGACY_JSON_FILE, f"cwd/{cls.LEGACY_JSON_FILE}"),
-        ):
-            candidates.append((candidate, label))
-
-        seen: set[Path] = set()
-        for candidate, label in candidates:
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            if candidate.exists():
-                return candidate, label
-        return None, ""
-
-    @classmethod
     def _ensure_database_loaded(cls):
         """确保炸弹数据库已加载"""
         if cls._database_loaded and cls.BOMB_DATABASE:
             return
 
         try:
+            from bomana.utils.file_utils import load_json_resource
+
             cls.BOMB_DATABASE.clear()
             cls.load_error = None
             cls.database_source = None
             external_params = None
-            json_path, source = cls._resolve_database_path()
+            result = load_json_resource(
+                [cls.JSON_FILE, cls.LEGACY_JSON_FILE],
+                missing_error_prefix="bomb params file not found",
+                parse_error_prefix="bomb params json parse failed",
+            )
 
-            source = source or "ccrp_bomb_params.py"
-            if json_path and json_path.exists():
-                data = json.loads(json_path.read_text(encoding="utf-8"))
-                external_params = data.get("ballistic_params", {})
-                source = str(json_path)
-            else:
+            if result.error:
+                if result.path is not None and result.path.exists():
+                    raise RuntimeError(result.error)
                 from ccrp_bomb_params import BALLISTIC_PARAMS as external_params
+                source = "ccrp_bomb_params.py"
+            else:
+                payload = result.payload if isinstance(result.payload, dict) else {}
+                external_params = payload.get("ballistic_params", {})
+                source = str(result.path or result.source_label or cls.JSON_FILE)
 
             if not external_params:
                 raise RuntimeError("炸弹数据库为空")

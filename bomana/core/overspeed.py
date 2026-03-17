@@ -2,12 +2,10 @@
 """Overspeed model identification and alert grading."""
 
 from dataclasses import dataclass
-import json
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from bomana.config import OverspeedConfig
-from bomana.utils.file_utils import resource_path
+from bomana.utils.file_utils import load_json_resource
 
 LimitValue = Union[float, List[List[float]]]
 
@@ -39,6 +37,7 @@ class SpeedLimitDatabase:
     def __init__(self):
         self.loaded = False
         self.load_error = ""
+        self.database_source = ""
         self.unit_to_fm: Dict[str, str] = {}
         self.fm_limits: Dict[str, Dict[str, LimitValue]] = {}
         self._fm_alias: Dict[str, str] = {}
@@ -152,17 +151,20 @@ class SpeedLimitDatabase:
         return float(points[-1][1])
 
     def _load(self) -> None:
-        path = Path(resource_path(OverspeedConfig.LIMITS_FILE))
-        if not path.exists():
-            self.load_error = f"limits file not found: {path}"
+        result = load_json_resource(
+            [OverspeedConfig.LIMITS_FILE],
+            missing_error_prefix="limits file not found",
+            parse_error_prefix="limits json parse failed",
+        )
+        if result.error:
+            self.load_error = result.error
+            return
+        if not isinstance(result.payload, dict):
+            self.load_error = "limits json schema invalid"
             return
 
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as exc:  # noqa: BLE001
-            self.load_error = f"limits json parse failed: {exc}"
-            return
-
+        self.database_source = str(result.path or "")
+        payload = result.payload
         unit_map = payload.get("unit_to_fm", {})
         fm_map = payload.get("fm_speed_limits", {})
         if not isinstance(unit_map, dict) or not isinstance(fm_map, dict):

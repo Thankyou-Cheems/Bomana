@@ -5,8 +5,9 @@ import os
 import sys
 import json
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Sequence
 
 from bomana.config import (
     FileConfig,
@@ -63,6 +64,67 @@ def resource_path(rel_path: str) -> str:
         if os.path.exists(full_path):
             return full_path
     return os.path.join(candidates[0], rel_path)
+
+
+@dataclass(slots=True)
+class JsonResourceLoadResult:
+    """Resolved JSON resource metadata and payload."""
+
+    payload: Any | None = None
+    path: Path | None = None
+    source_label: str = ""
+    error: str = ""
+
+
+def resolve_existing_resource(rel_paths: Sequence[str]) -> tuple[Path | None, str]:
+    """Resolve the first existing runtime-aware resource path from a list of candidates."""
+    seen: set[Path] = set()
+    first_candidate: Path | None = None
+    first_label = ""
+
+    for rel_path in rel_paths:
+        candidate = Path(resource_path(rel_path))
+        if first_candidate is None:
+            first_candidate = candidate
+            first_label = rel_path
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate, rel_path
+    return first_candidate, first_label
+
+
+def load_json_resource(
+    rel_paths: Sequence[str],
+    *,
+    missing_error_prefix: str,
+    parse_error_prefix: str,
+) -> JsonResourceLoadResult:
+    """Load JSON from a runtime-aware resource path with consistent diagnostics."""
+    path, label = resolve_existing_resource(rel_paths)
+    if path is None or not path.exists():
+        return JsonResourceLoadResult(
+            path=path,
+            source_label=label,
+            error=f"{missing_error_prefix}: {path}" if path is not None else missing_error_prefix,
+        )
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        return JsonResourceLoadResult(
+            path=path,
+            source_label=label,
+            error=f"{parse_error_prefix}: {exc}",
+        )
+
+    return JsonResourceLoadResult(
+        payload=payload,
+        path=path,
+        source_label=label,
+        error="",
+    )
 
 class ConfigManager:
     """配置文件管理器
