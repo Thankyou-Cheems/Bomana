@@ -162,4 +162,4 @@
   Context: portable app launched from the PyInstaller onefile launcher
   Symptom: the aircraft override dialog later reported `limits file not found` under a launcher `_MEI...` temp path, and speed matching stopped working
   Cause: `resource_path()` preferred `sys._MEIPASS`, but under launcher `runpy` mode that temporary directory belonged to the launcher exe instead of the unpacked app runtime
-  Fix/Workaround: have launcher export the stable app runtime root (for example `BOMANA_RUNTIME_ROOT`) and make app resource lookup prefer it over `_MEIPASS`
+  Fix/Workaround: have launcher export the stable app runtime root (for example `BOMANA_RUNTIME_ROOT`), and make app resource lookup prefer the app module/current working directory before `_MEIPASS` so old launchers still work with new app packages

@@ -42,14 +42,27 @@ def resource_path(rel_path: str) -> str:
         绝对路径字符串
     """
     runtime_root = os.environ.get("BOMANA_RUNTIME_ROOT", "").strip()
+    module_root = str(Path(__file__).resolve().parents[2])
+    cwd_root = os.getcwd()
+    candidates = []
     if runtime_root:
-        base = runtime_root
-    elif hasattr(sys, "_MEIPASS"):
-        base = getattr(sys, "_MEIPASS")
-    else:
-        # Use project/app root instead of CWD so launcher runpy startup can still resolve assets.
-        base = str(Path(__file__).resolve().parents[2])
-    return os.path.join(base, rel_path)
+        candidates.append(runtime_root)
+    # Prefer the actual app/module directory before PyInstaller temp roots.
+    for base in (module_root, cwd_root):
+        if base and base not in candidates:
+            candidates.append(base)
+    if hasattr(sys, "_MEIPASS"):
+        mei_root = str(getattr(sys, "_MEIPASS"))
+        if mei_root and mei_root not in candidates:
+            candidates.append(mei_root)
+    if not candidates:
+        candidates.append(module_root)
+
+    for base in candidates:
+        full_path = os.path.join(base, rel_path)
+        if os.path.exists(full_path):
+            return full_path
+    return os.path.join(candidates[0], rel_path)
 
 class ConfigManager:
     """配置文件管理器
