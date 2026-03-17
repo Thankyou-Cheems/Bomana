@@ -477,9 +477,8 @@ class App:
         self.root.update_idletasks()
         req_w = self.root.winfo_reqwidth()
         req_h = self.root.winfo_reqheight()
-        pad = int(UIConfig.WINDOW_PADDING * self.scale)
-        self.W = req_w + pad
-        self.H = req_h + pad
+        self.W = req_w
+        self.H = req_h
         self._position()
         self.root.update_idletasks()
         Win32.setup_window(self.hwnd, click_through=True, alpha=UIConfig.WINDOW_ALPHA)
@@ -487,15 +486,13 @@ class App:
     def _init_ui(self):
         """初始化 UI 布局（Fluent 风格层级）。"""
         s = self.scale
-        pad_x, pad_y = UIConfig.PADDING_MAIN
 
-        # 外层壳：边框 + 内容表面，模拟 Fluent 的分层容器
-        self.main_frame = tk.Frame(self.root, bg=Theme.BORDER, bd=0, highlightthickness=0)
-        self.main_frame.pack(fill="both", expand=True, padx=int(pad_x*s), pady=int(pad_y*s))
+        # 主窗口不再保留外围 Fluent 壳，避免形成额外阴影边框。
+        self.main_frame = tk.Frame(self.root, bg=Theme.BG, bd=0, highlightthickness=0)
+        self.main_frame.pack(fill="both", expand=True)
 
-        inset = max(1, int(1 * s))
         self.surface_frame = tk.Frame(self.main_frame, bg=Theme.BG, bd=0, highlightthickness=0)
-        self.surface_frame.pack(fill="both", expand=True, padx=inset, pady=inset)
+        self.surface_frame.pack(fill="both", expand=True)
 
         # === 底部区域（操作提示卡）===
         self.bottom_card = tk.Frame(
@@ -1772,8 +1769,6 @@ class App:
         req_w = self.main_frame.winfo_reqwidth()
         req_h = self.main_frame.winfo_reqheight()
         
-        pad = int(UIConfig.WINDOW_PADDING * self.scale)
-        
         # ⚠️ 徽章行最小宽度（确保主徽章、起落架和状态文本完整显示）
         # 速度信息已迁移为独立紧凑速度条，避免在徽章行里挤占空间
         badge_min_width = int(460 * self.scale)
@@ -1807,8 +1802,8 @@ class App:
         else:
             min_width = base_min_width
         
-        new_w = max(min_width, req_w + pad)
-        new_h = req_h + pad + int(8 * self.scale)
+        new_w = max(min_width, req_w)
+        new_h = req_h + int(8 * self.scale)
 
         # 手动拖拽后若贴边，记录贴边锚点；尺寸变化时优先保持贴边体验
         edge_anchor = None
