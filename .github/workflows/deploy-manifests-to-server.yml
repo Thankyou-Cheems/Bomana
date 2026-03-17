@@ -144,9 +144,26 @@ jobs:
           )
           ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" \
             "mkdir -p '$STAGE_DIR' && chmod 700 '$STAGE_DIR'"
-          rsync -aW --partial --human-readable --info=progress2 \
-            -e "ssh ${SSH_OPTS[*]}" \
-            stage/ "$SERVER_USER@$SERVER_HOST:$STAGE_DIR/stage/"
+
+          mapfile -t stage_files < <(cd stage && find . -type f | sort)
+          if [[ "${#stage_files[@]}" -eq 0 ]]; then
+            echo "ERROR: no staged files found to upload"
+            exit 1
+          fi
+
+          total_files="${#stage_files[@]}"
+          for idx in "${!stage_files[@]}"; do
+            rel_path="${stage_files[$idx]#./}"
+            local_path="stage/$rel_path"
+            remote_path="$STAGE_DIR/stage/$rel_path"
+            remote_dir="$(dirname "$remote_path")"
+            size_h="$(du -h "$local_path" | cut -f1)"
+            echo "[$((idx + 1))/$total_files] Uploading $rel_path ($size_h)"
+            ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "mkdir -p '$remote_dir'"
+            rsync -aW --partial --human-readable --progress \
+              -e "ssh ${SSH_OPTS[*]}" \
+              "$local_path" "$SERVER_USER@$SERVER_HOST:$remote_path"
+          done
 
       - name: Sync assets into target directories
         if: steps.resolve.outputs.should_deploy == 'true'
