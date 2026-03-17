@@ -104,6 +104,25 @@ def read_version(config_text: str) -> str:
     return m.group(1).strip()
 
 
+def read_min_launcher_version(config_text: str) -> str:
+    m = re.search(
+        r'PORTABLE_MIN_LAUNCHER_VERSION\s*=\s*["\']([^"\']+)["\']',
+        config_text,
+    )
+    if not m:
+        raise RuntimeError(
+            "Failed to find PORTABLE_MIN_LAUNCHER_VERSION in bomana/config.py"
+        )
+    return m.group(1).strip()
+
+
+def read_launcher_version(launcher_text: str) -> str:
+    m = re.search(r'LAUNCHER_VERSION\s*=\s*["\']([^"\']+)["\']', launcher_text)
+    if not m:
+        raise RuntimeError("Failed to find LAUNCHER_VERSION in launcher.pyw")
+    return m.group(1).strip()
+
+
 def add_file_to_zip(zf: zipfile.ZipFile, root: Path, path: Path) -> None:
     rel = path.relative_to(root).as_posix()
     zf.write(path, rel)
@@ -249,11 +268,19 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
     return out_dir / f"{name}.exe"
 
 
-def write_manifest(out_dir: Path, variant: str, version: str, app_zip_name: str, app_sha256: str) -> Path:
+def write_manifest(
+    out_dir: Path,
+    variant: str,
+    version: str,
+    app_zip_name: str,
+    app_sha256: str,
+    min_launcher_version: str,
+) -> Path:
     manifest = {
         "schema_version": 1,
         "channel": variant,
         "app_version": version,
+        "min_launcher_version": min_launcher_version,
         "entrypoint": APP_ENTRY,
         "package_asset": app_zip_name,
         "package_sha256": app_sha256,
@@ -283,7 +310,8 @@ def write_launcher_manifest(
 def write_checksum_info(
     out_dir: Path,
     variant: str,
-    version: str,
+    app_version: Optional[str],
+    launcher_version: Optional[str],
     app_zip: Optional[Path],
     launcher: Optional[Path],
     target: str,
@@ -293,10 +321,17 @@ def write_checksum_info(
         "====================",
         "",
         f"variant: {variant}",
-        f"version: {version}",
-        f"target:  {target}",
-        "",
     ]
+    if app_version:
+        lines.append(f"app_version: {app_version}")
+    if launcher_version:
+        lines.append(f"launcher_version: {launcher_version}")
+    lines.extend(
+        [
+            f"target:  {target}",
+            "",
+        ]
+    )
     if app_zip and app_zip.exists():
         lines.append(f"{app_zip.name}  SHA256  {sha256_file(app_zip)}")
     if launcher and launcher.exists():
@@ -319,39 +354,64 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     config_path = root / "bomana" / "config.py"
+    launcher_path = root / "launcher.pyw"
     config_stat = config_path.stat()
     original = config_path.read_text(encoding="utf-8")
+    launcher_text = launcher_path.read_text(encoding="utf-8")
     config_patched = False
 
     app_zip: Optional[Path] = None
     manifest: Optional[Path] = None
     launcher: Optional[Path] = None
     launcher_manifest: Optional[Path] = None
+    app_version: Optional[str] = None
+    launcher_version = read_launcher_version(launcher_text)
 
     try:
-        version = args.version.strip() or read_version(original)
+        app_version = args.version.strip() or read_version(original)
+        min_launcher_version = read_min_launcher_version(original)
 
         if args.target in ("all", "app"):
             patched = replace_switches(original, VARIANT_SWITCHES[args.variant])
             if patched != original:
                 config_path.write_text(patched, encoding="utf-8")
                 config_patched = True
-            version = args.version.strip() or read_version(patched)
-            app_zip = build_app_zip(root, args.variant, version, out_dir)
+            app_version = args.version.strip() or read_version(patched)
+            min_launcher_version = read_min_launcher_version(patched)
+            app_zip = build_app_zip(root, args.variant, app_version, out_dir)
             app_sha = sha256_file(app_zip)
-            manifest = write_manifest(out_dir, args.variant, version, app_zip.name, app_sha)
+            manifest = write_manifest(
+                out_dir,
+                args.variant,
+                app_version,
+                app_zip.name,
+                app_sha,
+                min_launcher_version,
+            )
 
         if args.target in ("all", "launcher"):
-            launcher = build_launcher(root, version, out_dir)
+            launcher = build_launcher(root, launcher_version, out_dir)
             launcher_sha = sha256_file(launcher)
             launcher_manifest = write_launcher_manifest(
-                out_dir, version, launcher.name, launcher_sha
+                out_dir, launcher_version, launcher.name, launcher_sha
             )
 
         checksum_variant = "Universal" if args.target == "launcher" else args.variant
-        checksum = write_checksum_info(out_dir, checksum_variant, version, app_zip, launcher, args.target)
+        checksum = write_checksum_info(
+            out_dir,
+            checksum_variant,
+            app_version,
+            launcher_version if args.target in ("all", "launcher") else None,
+            app_zip,
+            launcher,
+            args.target,
+        )
 
-        safe_print(f"[OK] variant={checksum_variant} version={version} target={args.target}")
+        safe_print(
+            f"[OK] variant={checksum_variant} app_version={app_version or '-'} "
+            f"launcher_version={launcher_version if args.target in ('all', 'launcher') else '-'} "
+            f"target={args.target}"
+        )
         if app_zip and app_zip.exists():
             safe_print(f"  - app package: {app_zip}")
         if manifest and manifest.exists():

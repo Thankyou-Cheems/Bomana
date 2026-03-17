@@ -48,7 +48,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.4.0"
+LAUNCHER_VERSION = "1.5.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -463,6 +463,15 @@ def _version_is_newer(remote: str, local: str) -> bool:
     aa = a + (0,) * (n - len(a))
     bb = b + (0,) * (n - len(b))
     return aa > bb
+
+
+def _version_is_older(current: str, required: str) -> bool:
+    return _version_is_newer(required, current)
+
+
+def _format_min_launcher_requirement(required_version: str) -> str:
+    ver = str(required_version or "").strip()
+    return f"启动器 v{ver}+" if ver else "新版启动器"
 
 
 def _read_local_app_version(app_dir: Path) -> str:
@@ -904,6 +913,7 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
 
     manifest = _fetch_json(manifest_url)
     remote_version = str(manifest.get("app_version", "")).strip()
+    min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_asset = str(manifest.get("package_asset", "")).strip()
     package_sha256 = str(manifest.get("package_sha256", "")).strip()
     entrypoint = (
@@ -923,6 +933,7 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
 
     return {
         "remote_version": remote_version,
+        "min_launcher_version": min_launcher_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
         "entrypoint": entrypoint,
@@ -1064,6 +1075,7 @@ def _fetch_manifest_from_primary(
     entrypoint = (
         str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
     )
+    min_launcher_version = str(payload.get("min_launcher_version", "")).strip()
     source_name = (
         str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     )
@@ -1075,6 +1087,7 @@ def _fetch_manifest_from_primary(
 
     return {
         "remote_version": remote_version,
+        "min_launcher_version": min_launcher_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
         "entrypoint": entrypoint,
@@ -1347,12 +1360,18 @@ def _check_for_update(
         status_cb=notify,
     )
     remote_version = str(manifest.get("remote_version", "")).strip()
+    min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
     if not remote_version:
         raise RuntimeError("更新清单字段缺失")
 
     update_available = _version_is_newer(remote_version, local_version)
+    app_requires_launcher_update = bool(
+        update_available
+        and min_launcher_version
+        and _version_is_older(LAUNCHER_VERSION, min_launcher_version)
+    )
     if update_available and not package_url:
         raise RuntimeError("更新清单字段缺失")
 
@@ -1399,8 +1418,10 @@ def _check_for_update(
     return {
         "local_version": local_version,
         "remote_version": remote_version,
+        "min_launcher_version": min_launcher_version,
         "source_name": source_name,
         "update_available": update_available,
+        "app_requires_launcher_update": app_requires_launcher_update,
         "package_size": package_size,
         "manifest": manifest,
         "launcher_manifest": launcher_manifest,
@@ -1427,6 +1448,7 @@ def _download_update_from_manifest(
             status_cb(title, detail, progress, level)
 
     remote_version = str(manifest.get("remote_version", "")).strip()
+    min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
     package_sha256 = str(manifest.get("package_sha256", "")).strip()
     entrypoint = (
@@ -1436,6 +1458,10 @@ def _download_update_from_manifest(
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
     if not remote_version or not package_url:
         raise RuntimeError("更新清单字段缺失")
+    if min_launcher_version and _version_is_older(LAUNCHER_VERSION, min_launcher_version):
+        raise RuntimeError(
+            f"此版本要求先更新启动器（当前 v{LAUNCHER_VERSION}，要求 >= v{min_launcher_version}）"
+        )
 
     notify(
         "开始下载", f"正在下载 v{remote_version}（来源：{source_name}）", 0.24, "info"
@@ -1653,6 +1679,8 @@ def _friendly_error_text(err: Exception, channel: str) -> str:
     msg = str(err)
     if "已取消" in msg:
         return "已取消当前操作。"
+    if "要求先更新启动器" in msg:
+        return f"{msg}。请先更新启动器后再安装 {channel} 通道的新版本。"
     if isinstance(err, (URLError, TimeoutError)):
         return "网络连接失败。请确认网络可用后点击“重试”。"
     if isinstance(err, HTTPError):
@@ -2027,9 +2055,11 @@ class LauncherWindow:
         self.current_task = ""
         self.latest_manifest: Optional[Dict[str, Any]] = None
         self.latest_remote_version = self.local_version
+        self.latest_min_launcher_version = ""
         self.latest_source_name = ""
         self.latest_package_size: Optional[int] = None
         self.update_available = False
+        self.app_requires_launcher_update = False
         self.latest_launcher_manifest: Optional[Dict[str, Any]] = None
         self.latest_launcher_version = LAUNCHER_VERSION
         self.latest_launcher_source_name = ""
@@ -2744,8 +2774,10 @@ class LauncherWindow:
             self.last_check_ok = False
             self.last_check_error = ""
             self.latest_manifest = None
+            self.latest_min_launcher_version = ""
             self.latest_launcher_manifest = None
             self.update_available = False
+            self.app_requires_launcher_update = False
             self.launcher_update_available = False
             self._set_status(
                 "源码测试模式",
@@ -2758,8 +2790,10 @@ class LauncherWindow:
         self.has_attempted_update = True
         self.current_task = "check"
         self.latest_manifest = None
+        self.latest_min_launcher_version = ""
         self.latest_package_size = None
         self.update_available = False
+        self.app_requires_launcher_update = False
         self.latest_launcher_manifest = None
         self.latest_launcher_package_size = None
         self.launcher_update_available = False
@@ -3043,12 +3077,18 @@ class LauncherWindow:
                         self.latest_remote_version = str(
                             payload.get("remote_version", self.local_version)
                         )
+                        self.latest_min_launcher_version = str(
+                            payload.get("min_launcher_version", "")
+                        ).strip()
                         self.latest_source_name = str(
                             payload.get("source_name", "GitHub")
                         )
                         self.latest_package_size = payload.get("package_size", None)
                         self.update_available = bool(
                             payload.get("update_available", False)
+                        )
+                        self.app_requires_launcher_update = bool(
+                            payload.get("app_requires_launcher_update", False)
                         )
                         self.latest_launcher_manifest = payload.get(
                             "launcher_manifest", None
@@ -3066,7 +3106,12 @@ class LauncherWindow:
                             payload.get("launcher_update_available", False)
                         )
 
-                        if self.update_available:
+                        if self.app_requires_launcher_update:
+                            detail = self._compose_check_detail()
+                            self._set_status(
+                                "需要先更新启动器", detail, 0.0, "warning"
+                            )
+                        elif self.update_available:
                             detail = self._compose_check_detail()
                             self._set_status("发现新版本", detail, 0.0, "success")
                         elif self.launcher_update_available:
@@ -3078,7 +3123,9 @@ class LauncherWindow:
                     else:
                         self.last_check_ok = False
                         self.update_available = False
+                        self.app_requires_launcher_update = False
                         self.latest_manifest = None
+                        self.latest_min_launcher_version = ""
                         self.latest_package_size = None
                         self.latest_source_name = ""
                         self.latest_launcher_manifest = None
@@ -3125,6 +3172,8 @@ class LauncherWindow:
                     )
                     if bool(payload.get("update_ok", False)):
                         self.update_available = False
+                        self.app_requires_launcher_update = False
+                        self.latest_min_launcher_version = ""
                         self.latest_package_size = None
                         self.last_check_ok = True
                         self.last_download_success = True
@@ -3220,9 +3269,17 @@ class LauncherWindow:
         lines = []
         if self.last_check_ok and self.update_available:
             size_text = _format_size_text(self.latest_package_size)
-            lines.append(
-                f"应用 v{self.local_version} -> v{self.latest_remote_version}（来源：{self.latest_source_name}，大小：{size_text}）"
-            )
+            if self.app_requires_launcher_update and self.latest_min_launcher_version:
+                lines.append(
+                    f"应用 v{self.latest_remote_version} 需要 {_format_min_launcher_requirement(self.latest_min_launcher_version)}"
+                )
+                lines.append(
+                    f"当前启动器版本：v{LAUNCHER_VERSION}；应用来源：{self.latest_source_name}；包大小：{size_text}"
+                )
+            else:
+                lines.append(
+                    f"应用 v{self.local_version} -> v{self.latest_remote_version}（来源：{self.latest_source_name}，大小：{size_text}）"
+                )
         elif self.last_check_ok:
             lines.append(
                 f"应用当前版本 v{self.local_version}（来源：{self.latest_source_name or '本地/腾讯云'}）"
@@ -3254,6 +3311,21 @@ class LauncherWindow:
         self.launch_btn.config(text="启动应用（本地）")
         self._style_action_button(self.launch_btn, "secondary")
 
+    def _update_download_button_state(self) -> None:
+        if self.source_test_mode:
+            self.start_btn.config(text="源码模式不下载")
+            self._style_action_button(self.start_btn, "secondary")
+            return
+        if self.last_check_ok and self.update_available and self.app_requires_launcher_update:
+            self.start_btn.config(text="需先更新启动器")
+            self._style_action_button(self.start_btn, "secondary")
+            return
+        self.start_btn.config(text="下载更新")
+        self._style_action_button(
+            self.start_btn,
+            "primary" if (self.last_check_ok and self.update_available) else "secondary",
+        )
+
     def _update_launcher_button_state(self) -> None:
         if self.source_test_mode:
             self.launcher_btn.config(text="源码模式不更新", state="disabled")
@@ -3269,6 +3341,7 @@ class LauncherWindow:
     def _set_running(self, running: bool) -> None:
         self.running = running
         self._render_status_text()
+        self._update_download_button_state()
         self._update_launch_button_label()
         self._update_launcher_button_state()
         state = "disabled" if running else "normal"
@@ -3304,7 +3377,12 @@ class LauncherWindow:
                 self.retry_btn.pack(side="left", padx=(8, 0))
             else:
                 self.retry_btn.pack_forget()
-            if (not self.source_test_mode) and self.last_check_ok and self.update_available:
+            if (
+                (not self.source_test_mode)
+                and self.last_check_ok
+                and self.update_available
+                and (not self.app_requires_launcher_update)
+            ):
                 self.start_btn.config(state="normal")
             else:
                 self.start_btn.config(state="disabled")
@@ -3319,6 +3397,21 @@ class LauncherWindow:
                         "不会自动检查或覆盖安装线上版本。"
                     )
                 )
+            elif self.last_check_ok and self.update_available and self.app_requires_launcher_update:
+                if self.launcher_update_available:
+                    self.hint_lbl.config(
+                        text=(
+                            f"应用 v{self.latest_remote_version} 要求 {_format_min_launcher_requirement(self.latest_min_launcher_version)}。\n"
+                            f"请先点击“更新启动器”，再安装新应用包。"
+                        )
+                    )
+                else:
+                    self.hint_lbl.config(
+                        text=(
+                            f"应用 v{self.latest_remote_version} 要求 {_format_min_launcher_requirement(self.latest_min_launcher_version)}，"
+                            "当前启动器过旧。\n请先获取最新版启动器，再安装这次更新。"
+                        )
+                    )
             elif self.last_check_ok and self.update_available:
                 size_text = _format_size_text(self.latest_package_size)
                 self.hint_lbl.config(
@@ -3447,6 +3540,28 @@ class LauncherWindow:
             messagebox.showwarning(
                 DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。"
             )
+            return
+        if self.app_requires_launcher_update:
+            required_text = _format_min_launcher_requirement(
+                self.latest_min_launcher_version
+            )
+            if self.launcher_update_available:
+                messagebox.showwarning(
+                    DISPLAY_NAME,
+                    (
+                        f"应用 v{self.latest_remote_version} 要求 {required_text}。\n"
+                        "请先点击“更新启动器”，更新完成后再下载应用更新。"
+                    ),
+                )
+            else:
+                messagebox.showwarning(
+                    DISPLAY_NAME,
+                    (
+                        f"应用 v{self.latest_remote_version} 要求 {required_text}，"
+                        f"当前启动器是 v{LAUNCHER_VERSION}。\n"
+                        "请先下载最新版启动器，再安装这次更新。"
+                    ),
+                )
             return
         if not self.update_available:
             messagebox.showinfo(DISPLAY_NAME, "当前已是最新版本，无需下载。")

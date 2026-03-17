@@ -100,6 +100,8 @@ pyinstaller --noconsole --onefile `
 ===============================================================================
 """
 import tkinter as tk
+import sys
+from tkinter import messagebox
 
 from bomana.utils.system import SingleInstanceManager, Win32
 from bomana.ui.app import App
@@ -110,6 +112,23 @@ from bomana.ui.app import App
 
 def main():
     """主函数"""
+    if sys.version_info < (3, 14):
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror(
+                "Bomana",
+                (
+                    "当前运行时过旧，Bomana 6.11.0 需要 Python 3.14+。\n"
+                    "如果你是通过绿色版启动器启动，请先更新启动器到 1.5.0 或更高版本。"
+                ),
+                parent=root,
+            )
+            root.destroy()
+        except Exception:
+            pass
+        raise SystemExit("Bomana 6.11.0 requires Python 3.14+.")
+
     # 确保单实例运行
     SingleInstanceManager.ensure_single_instance_or_exit()
     

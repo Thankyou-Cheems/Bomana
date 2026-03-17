@@ -126,7 +126,7 @@ Portable release uses:
 - `Bomana_launcher_vX.Y.Z.exe` (universal bootstrap runtime with channel selector)
 - `launcher_manifest.json` (launcher version/package metadata + SHA256)
 - `Bomana_app_<Variant>_vX.Y.Z.zip` (updatable application package)
-- `manifest_<Variant>.json` (channel/version/package metadata + SHA256)
+- `manifest_<Variant>.json` (channel/version/package metadata + SHA256 + `min_launcher_version`)
 - `checksums_*.txt` (SHA256 checksum info)
 
 Local build helper:

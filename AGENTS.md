@@ -20,7 +20,7 @@ Keep it concise and update when workflows or boundaries change.
 
 ## Header Facts (Condensed)
 - Data sources: `/indicators`, `/state`, `/map_obj.json`, `/map_info.json`.
-- Tech stack: Python 3.8+, `tkinter`, `requests`, `ctypes` (optional: Pillow, pystray).
+- Tech stack: Python 3.14+, `tkinter`, `requests`, `ctypes` (optional: Pillow, pystray).
 - Builds: portable launcher + app package (primary), PyInstaller onefile (legacy).
 
 ## Documentation Rules
