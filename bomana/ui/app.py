@@ -632,20 +632,20 @@ class App:
         )
         self.top_frame.pack(side="top", fill="x", pady=(0, int(4*s)), padx=int(1*s))
 
-        top_content = tk.Frame(self.top_frame, bg=Theme.GRAYPILL)
-        top_content.pack(fill="x", padx=int(8*s), pady=int(6*s))
+        self.top_content = tk.Frame(self.top_frame, bg=Theme.GRAYPILL)
+        self.top_content.pack(fill="x", padx=int(8*s), pady=int(6*s))
 
         # 第一行：计时器 + 复活信息
-        row1 = tk.Frame(top_content, bg=Theme.GRAYPILL)
-        row1.pack(fill="x")
+        self.top_row1 = tk.Frame(self.top_content, bg=Theme.GRAYPILL)
+        self.top_row1.pack(fill="x")
         font_timer = (UIConfig.FONT_TIMER[0], int(UIConfig.FONT_TIMER[1]*s), UIConfig.FONT_TIMER[2])
         self.timer_lbl = tk.Label(
-            row1, text="--:--", font=font_timer,
+            self.top_row1, text="--:--", font=font_timer,
             fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w"
         )
         self.timer_lbl.pack(side="left")
 
-        right = tk.Frame(row1, bg=Theme.GRAYPILL)
+        right = tk.Frame(self.top_row1, bg=Theme.GRAYPILL)
         right.pack(side="right", padx=(int(12*s), 0))
         font_life = (UIConfig.FONT_LIFE[0], int(UIConfig.FONT_LIFE[1]*s), UIConfig.FONT_LIFE[2])
         self.life_lbl = tk.Label(
@@ -661,15 +661,15 @@ class App:
         self.cycle_lbl.pack(anchor="e", pady=(int(2*s), 0))
 
         # 第二行：状态徽章
-        row2 = tk.Frame(top_content, bg=Theme.GRAYPILL)
+        self.top_row2 = tk.Frame(self.top_content, bg=Theme.GRAYPILL)
         pad_top, pad_bot = UIConfig.PADDING_ROW2
-        row2.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
+        self.top_row2.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
         pill_font = (UIConfig.FONT_PILL[0], int(UIConfig.FONT_PILL[1]*s), UIConfig.FONT_PILL[2])
-        self.badge_main = Pill(row2, text="IDLE", fg=Theme.TEXT, bg=Theme.BG, font=pill_font)
+        self.badge_main = Pill(self.top_row2, text="IDLE", fg=Theme.TEXT, bg=Theme.BG, font=pill_font)
         self.badge_main.pack(side="left")
-        self.badge_flight = Pill(row2, text="—", fg=Theme.TEXT_DIM, bg=Theme.BG, font=pill_font)
+        self.badge_flight = Pill(self.top_row2, text="—", fg=Theme.TEXT_DIM, bg=Theme.BG, font=pill_font)
         self.badge_flight.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
-        self.badge_lock = Pill(row2, text="锁定", fg=Theme.TEXT, bg=Theme.BLUE, font=pill_font)
+        self.badge_lock = Pill(self.top_row2, text="锁定", fg=Theme.TEXT, bg=Theme.BLUE, font=pill_font)
         self.badge_lock.pack(side="left", padx=(int(UIConfig.SPACING_BADGE*s), 0))
         self._update_lock_badge()
 
@@ -679,13 +679,47 @@ class App:
 
         font_status = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s))
         self.status_txt = tk.Label(
-            row2, text="等待中", font=font_status,
+            self.top_row2, text="等待中", font=font_status,
             fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e"
         )
         self.status_txt.pack(side="right")
 
+        self._history_mode_pad_y = (int(pad_top*s), int(max(4, pad_bot*s)))
+        self.history_mode_frame = tk.Frame(self.top_content, bg=Theme.GRAYPILL)
+        history_header = tk.Frame(self.history_mode_frame, bg=Theme.GRAYPILL)
+        history_header.pack(fill="x")
+        history_title_font = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s), "bold")
+        self.history_mode_title_lbl = tk.Label(
+            history_header,
+            text="🕰 空历速度监视",
+            font=history_title_font,
+            fg=Theme.TEXT,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
+        self.history_mode_title_lbl.pack(side="left")
+        self.history_mode_phase_lbl = tk.Label(
+            history_header,
+            text="等待中",
+            font=(UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s)),
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="e",
+        )
+        self.history_mode_phase_lbl.pack(side="right")
+        self.history_mode_hint_lbl = tk.Label(
+            self.history_mode_frame,
+            text="历史模式已隐藏计时和其他扩展，仅保留速度提醒。",
+            font=(UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s)),
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            justify="left",
+        )
+        self.history_mode_hint_lbl.pack(fill="x", pady=(int(2*s), 0))
+
         # 第三行：紧凑速度指示条（常驻，接近极限时显著变色）
-        self.speed_row = tk.Frame(top_content, bg=Theme.GRAYPILL)
+        self.speed_row = tk.Frame(self.top_content, bg=Theme.GRAYPILL)
         pad_top, pad_bot = UIConfig.PADDING_SPEED_STRIP
         self.speed_row.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
         speed_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s))
@@ -748,12 +782,12 @@ class App:
 
         # 进度条
         bar_height = int(UIConfig.PROGRESS_BAR_HEIGHT * s)
-        bar_frame = tk.Frame(top_content, bg=Theme.GRAYPILL, height=bar_height)
+        self.progress_frame = tk.Frame(self.top_content, bg=Theme.GRAYPILL, height=bar_height)
         pad_top, pad_bot = UIConfig.PADDING_PROGRESS
-        bar_frame.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
-        bar_frame.pack_propagate(False)
+        self.progress_frame.pack(fill="x", pady=(int(pad_top*s), int(pad_bot*s)))
+        self.progress_frame.pack_propagate(False)
         bar_thickness = int(UIConfig.PROGRESS_BAR_THICKNESS * s)
-        self.bar_bg = tk.Frame(bar_frame, bg=Theme.SEPARATOR, height=bar_thickness)
+        self.bar_bg = tk.Frame(self.progress_frame, bg=Theme.SEPARATOR, height=bar_thickness)
         self.bar_bg.place(relx=0, rely=0.5, relwidth=1, anchor="w")
         self.bar_fill = tk.Frame(self.bar_bg, bg=Theme.BLUE, height=bar_thickness)
         self.bar_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
@@ -1174,6 +1208,69 @@ class App:
         self._recalc_size(force_shrink=True)
         self._update_ui()
         self._refresh_tray()
+
+    def _apply_speed_history_layout(self, active: bool) -> None:
+        """根据历史模式切换顶部主卡布局。"""
+        if active:
+            if self.top_row1.winfo_ismapped():
+                self.top_row1.pack_forget()
+            if self.top_row2.winfo_ismapped():
+                self.top_row2.pack_forget()
+            if self.progress_frame.winfo_ismapped():
+                self.progress_frame.pack_forget()
+            if not self.history_mode_frame.winfo_ismapped():
+                self.history_mode_frame.pack(
+                    fill="x",
+                    pady=self._history_mode_pad_y,
+                    before=self.speed_row,
+                )
+        else:
+            if self.history_mode_frame.winfo_ismapped():
+                self.history_mode_frame.pack_forget()
+            if not self.top_row1.winfo_ismapped():
+                self.top_row1.pack(fill="x", before=self.top_row2)
+            if not self.top_row2.winfo_ismapped():
+                pad_top, pad_bot = UIConfig.PADDING_ROW2
+                self.top_row2.pack(
+                    fill="x",
+                    pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
+                    before=self.speed_row,
+                )
+            if not self.progress_frame.winfo_ismapped():
+                pad_top, pad_bot = UIConfig.PADDING_PROGRESS
+                self.progress_frame.pack(
+                    fill="x",
+                    pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
+                )
+
+    def _refresh_speed_history_ui(self, snap: UISnapshot, speed_level: str) -> None:
+        """刷新历史模式专用头部文案。"""
+        if not PanelConfig.speed_history_mode:
+            return
+
+        if snap.api_down:
+            phase_text = "8111 离线"
+            phase_fg = Theme.YELLOW
+        elif snap.phase == Phase.ALIVE and not snap.on_ground:
+            phase_text = "飞行中"
+            phase_fg = Theme.GREEN if speed_level not in ("warning", "critical") else Theme.YELLOW
+        elif snap.phase == Phase.ALIVE:
+            phase_text = "地面待命"
+            phase_fg = Theme.TEXT_DIM
+        elif snap.phase == Phase.LOSS_PENDING:
+            phase_text = "状态切换中"
+            phase_fg = Theme.YELLOW
+        else:
+            phase_text = "等待进入战局"
+            phase_fg = Theme.TEXT_MUTED
+
+        aircraft_text = self._format_aircraft_type_label(
+            str(getattr(snap, "aircraft_type_name", "") or "")
+        )
+        self.history_mode_phase_lbl.config(text=phase_text, fg=phase_fg)
+        self.history_mode_hint_lbl.config(
+            text=f"计时和导航已隐藏，当前机型：{aircraft_text}",
+        )
     
     def _refresh_tray(self):
         """刷新系统托盘菜单状态
@@ -1244,6 +1341,9 @@ class App:
         def do_zone_sound(icon, item):
             app.root.after(0, app._toggle_zone_sound)
 
+        def do_speed_history(icon, item):
+            app.root.after(0, app._toggle_speed_history_mode)
+
         def do_edit_checklist(icon, item):
             app.root.after(0, app._edit_checklist)
         
@@ -1274,12 +1374,16 @@ class App:
 
         def is_debug_on(item):
             return app._debug
+
+        def is_speed_history_mode(item):
+            return PanelConfig.speed_history_mode
         
         # 构建菜单项列表
         menu_items = [
             pystray.MenuItem("🔄 立即重置计时器", do_reset),
             pystray.MenuItem(f"🔓 锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
             pystray.MenuItem(f"📍 切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
+            pystray.MenuItem("🕰 空历速度模式", do_speed_history, checked=is_speed_history_mode),
             pystray.Menu.SEPARATOR,
         ]
         
@@ -1297,9 +1401,6 @@ class App:
 
             def toggle_speed(icon, item):
                 app.root.after(0, lambda: app._toggle_panel('show_speed'))
-
-            def toggle_speed_history(icon, item):
-                app.root.after(0, app._toggle_speed_history_mode)
 
             def toggle_checklist(icon, item):
                 app.root.after(0, lambda: app._toggle_panel('show_checklist'))
@@ -1319,9 +1420,6 @@ class App:
             def is_speed_panel(item):
                 return PanelConfig.is_effectively_enabled('speed')
 
-            def is_speed_history_mode(item):
-                return PanelConfig.speed_history_mode
-
             def is_checklist_panel(item):
                 return PanelConfig.is_effectively_enabled('checklist')
             
@@ -1336,7 +1434,6 @@ class App:
             if ENABLE_FUEL:
                 panel_items.append(pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel))
             panel_items.append(pystray.MenuItem("⚡ 速度监视", toggle_speed, checked=is_speed_panel))
-            panel_items.append(pystray.MenuItem("🕰 历史模式(仅速度)", toggle_speed_history, checked=is_speed_history_mode))
             if ENABLE_CCRP:
                 panel_items.append(pystray.MenuItem("💣 投弹预测", toggle_bombing, checked=is_bombing_panel))
             if ENABLE_CHECKLIST:
@@ -2003,7 +2100,7 @@ class App:
 
         confirm_text = self._manual_reset_confirm_text()
         if PanelConfig.speed_history_mode:
-            history_text = "空历模式: 仅速度提醒"
+            history_text = "空历模式: 独立速度界面"
             if confirm_text:
                 return f"{confirm_text}  ·  {history_text}  ·  {base_text}"
             return f"{history_text}  ·  {base_text}"
@@ -2386,6 +2483,8 @@ class App:
         speed_enabled = PanelConfig.is_effectively_enabled("speed")
         checklist_enabled = ENABLE_CHECKLIST and PanelConfig.is_effectively_enabled("checklist")
         bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
+        history_mode_active = PanelConfig.speed_history_mode
+        self._apply_speed_history_layout(history_mode_active)
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
@@ -2420,28 +2519,33 @@ class App:
         self._set_checklist_visible(show_chk)
 
         # 更新计时器显示
-        self.timer_lbl.config(text=fmt_time(snap.remaining_sec))
-        if snap.remaining_sec is None:
-            self.timer_lbl.config(fg=Theme.TEXT_MUTED)
+        if history_mode_active:
+            self._last_beep_sec = -1
             self.bar_fill.place(relwidth=0)
             self.bar_fill.config(bg=Theme.BLUE)
         else:
-            remain = snap.remaining_sec
-            color = Theme.RED if remain <= 10 else Theme.YELLOW if remain <= GameConfig.FINAL_WARNING_SEC else Theme.TEXT
-            bar = Theme.RED if remain <= 10 else Theme.YELLOW if remain <= GameConfig.FINAL_WARNING_SEC else Theme.BLUE
-            self.timer_lbl.config(fg=color)
-            self.bar_fill.place(relwidth=snap.progress)
-            self.bar_fill.config(bg=bar)
-            
-            # 播放警告音
-            remain_int = int(remain)
-            if (remain <= GameConfig.FINAL_WARNING_SEC) and (not debug_mock_mode):
-                if remain_int in SoundConfig.WARNING_SECONDS and remain_int != self._last_beep_sec:
-                    pattern = "warning" if remain_int in SoundConfig.MAJOR_WARNINGS else "tick"
-                    self.sound.play(pattern=pattern)
-                    self._last_beep_sec = remain_int
+            self.timer_lbl.config(text=fmt_time(snap.remaining_sec))
+            if snap.remaining_sec is None:
+                self.timer_lbl.config(fg=Theme.TEXT_MUTED)
+                self.bar_fill.place(relwidth=0)
+                self.bar_fill.config(bg=Theme.BLUE)
             else:
-                self._last_beep_sec = -1
+                remain = snap.remaining_sec
+                color = Theme.RED if remain <= 10 else Theme.YELLOW if remain <= GameConfig.FINAL_WARNING_SEC else Theme.TEXT
+                bar = Theme.RED if remain <= 10 else Theme.YELLOW if remain <= GameConfig.FINAL_WARNING_SEC else Theme.BLUE
+                self.timer_lbl.config(fg=color)
+                self.bar_fill.place(relwidth=snap.progress)
+                self.bar_fill.config(bg=bar)
+                
+                # 播放警告音
+                remain_int = int(remain)
+                if (remain <= GameConfig.FINAL_WARNING_SEC) and (not debug_mock_mode):
+                    if remain_int in SoundConfig.WARNING_SECONDS and remain_int != self._last_beep_sec:
+                        pattern = "warning" if remain_int in SoundConfig.MAJOR_WARNINGS else "tick"
+                        self.sound.play(pattern=pattern)
+                        self._last_beep_sec = remain_int
+                else:
+                    self._last_beep_sec = -1
 
         # 更新生命/周期信息
         self.life_lbl.config(text=(f"第{snap.life_index}次复活" if snap.life_index is not None else "未复活"))
@@ -2467,6 +2571,7 @@ class App:
                 self.speed_row.pack_forget()
             self._last_overspeed_level = "unknown"
             self._last_overspeed_sound_ts = 0.0
+        self._refresh_speed_history_ui(snap, speed_level)
         
         # v6.6.1: 起落架徽章（集成警告和进度）
         # 显示条件：警告 或 正在移动
