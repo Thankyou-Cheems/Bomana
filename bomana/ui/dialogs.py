@@ -180,9 +180,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
     - 快捷键：自定义热键绑定
     - 其他：吸附、全局热键等
     """
-    def __init__(self, parent, app):
+    def __init__(self, parent, app, initial_tab: str | None = None):
         super().__init__(parent)
         self.app = app
+        self.initial_tab = initial_tab or "显示"
         self.title("⚙️ 设置")
         self.resizable(True, True)
         self.configure(bg=Theme.BG)
@@ -399,7 +400,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         ).pack(side="right", padx=(0, 8))
         
         # 显示第一个选项卡
-        self._switch_tab("显示")
+        self._switch_tab(self.initial_tab if self.initial_tab in self.tabs else "显示")
     
     def _switch_tab(self, tab_name: str):
         """切换选项卡"""
@@ -1057,6 +1058,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         }
         OverspeedConfig.apply_user_thresholds(overspeed_thresholds, self.overspeed_override_map)
         config['overspeed'] = OverspeedConfig.export_user_config()
+        if hasattr(self.app, "_refresh_overspeed_threshold_ui"):
+            self.app._refresh_overspeed_threshold_ui()
 
         # 投弹预测调参（仅在CCRP启用时保存）
         if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):

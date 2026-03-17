@@ -1567,12 +1567,26 @@ class App:
         self.game.manual_reset()
         self.sound.play(*SoundConfig.BEEP_MANUAL_RESET)
 
-    def _show_settings(self):
+    def _show_settings(self, initial_tab: Optional[str] = None):
         """显示设置对话框
         
         从托盘菜单调用，不受窗口锁定状态影响。
         """
-        SettingsDialog(self.root, self)
+        SettingsDialog(self.root, self, initial_tab=initial_tab)
+
+    def _refresh_overspeed_threshold_ui(self) -> None:
+        """刷新速度条上的阈值刻度位置。"""
+        markers = getattr(self, "speed_bar_markers", None)
+        if not markers:
+            return
+        for name, relx in (
+            ("caution", OverspeedConfig.CAUTION_RATIO),
+            ("warning", OverspeedConfig.WARNING_RATIO),
+            ("critical", OverspeedConfig.CRITICAL_RATIO),
+        ):
+            marker = markers.get(name)
+            if marker:
+                marker.place_configure(relx=max(0.0, min(1.0, relx)))
 
     def apply_display_settings_runtime(
         self,

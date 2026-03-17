@@ -339,6 +339,7 @@ class MainWindowBuilder:
         app.speed_header_row.grid_columnconfigure(0, weight=1)
         app.speed_meta_frame = tk.Frame(app.speed_header_row, bg=Theme.GRAYPILL)
         app.speed_meta_frame.grid(row=0, column=0, sticky="ew")
+        app.speed_meta_frame.grid_columnconfigure(2, weight=1)
         app.speed_state_lbl = tk.Label(
             app.speed_meta_frame,
             text="速度监视",
@@ -348,6 +349,30 @@ class MainWindowBuilder:
             anchor="w",
         )
         app.speed_state_lbl.grid(row=0, column=0, sticky="w")
+        app.speed_threshold_btn = tk.Label(
+            app.speed_meta_frame,
+            text="阈值",
+            font=(UIConfig.FONT_HINT[0], max(7, int(UIConfig.FONT_HINT[1] * s * 0.88))),
+            fg=Theme.BLUE,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            cursor="hand2",
+            padx=max(5, int(6 * s)),
+            pady=max(1, int(1 * s)),
+        )
+        app.speed_threshold_btn.grid(row=0, column=1, sticky="w", padx=(max(6, int(8 * s)), 0))
+        app.speed_threshold_btn.bind(
+            "<Button-1>",
+            lambda _e: app._show_settings(initial_tab="空速"),
+        )
+        app.speed_threshold_btn.bind(
+            "<Enter>",
+            lambda _e: app.speed_threshold_btn.config(fg=Theme.TEXT, bg=Theme.BG),
+        )
+        app.speed_threshold_btn.bind(
+            "<Leave>",
+            lambda _e: app.speed_threshold_btn.config(fg=Theme.BLUE, bg=Theme.GRAYPILL),
+        )
         app.speed_model_lbl = tk.Label(
             app.speed_meta_frame,
             text="机型未识别",
@@ -356,7 +381,7 @@ class MainWindowBuilder:
             bg=Theme.GRAYPILL,
             anchor="w",
         )
-        app.speed_model_lbl.grid(row=1, column=0, sticky="w")
+        app.speed_model_lbl.grid(row=1, column=0, columnspan=3, sticky="w")
         app.speed_value_lbl = tk.Label(
             app.speed_header_row,
             text="--",
