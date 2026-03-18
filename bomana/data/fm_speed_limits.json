@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-03-16 23:00:53",
+    "generated_at": "2026-03-18 18:47:40",
     "source_root_name": "War-Thunder-Datamine",
     "source_subdir": "aces.vromfs.bin_u/gamedata/flightmodels",
     "fm_records": 1188,
@@ -3575,7 +3575,7 @@
     },
     "j_15t": {
       "ias": 1540.0,
-      "mach": 2.35
+      "mach": 2.4
     },
     "j_7_mk2": {
       "ias": 1365.0,
