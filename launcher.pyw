@@ -2,6 +2,7 @@
 """Bomana portable launcher with user-friendly GUI update flow."""
 
 import hashlib
+import ipaddress
 import json
 import os
 import queue
@@ -10,6 +11,7 @@ import runpy
 import shutil
 import subprocess
 import sys
+import socket
 import tempfile
 import threading
 import time
@@ -22,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import (
     Request,
     build_opener,
@@ -48,7 +50,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.5.1"
+LAUNCHER_VERSION = "1.5.2"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -84,6 +86,10 @@ RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
 _USE_SYSTEM_PROXY = True
 _URL_OPENERS: Dict[str, Any] = {}
+_FAKE_IP_NETWORKS = (
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("100.64.0.0/10"),
+)
 
 _CHANNEL_MAP = {
     "enhanced": "Enhanced",
@@ -263,6 +269,49 @@ def _open_url(req: Request, timeout: float):
     return opener.open(req, timeout=timeout)
 
 
+def _resolved_ipv4_addrs(hostname: str) -> Tuple[str, ...]:
+    host = str(hostname or "").strip()
+    if not host:
+        return ()
+    try:
+        infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+    except Exception:
+        return ()
+    addrs = []
+    for info in infos:
+        try:
+            addr = str(info[4][0]).strip()
+        except Exception:
+            addr = ""
+        if addr and (addr not in addrs):
+            addrs.append(addr)
+    return tuple(addrs)
+
+
+def _is_fake_ip_address(address: str) -> bool:
+    try:
+        ip_obj = ipaddress.ip_address(str(address).strip())
+    except Exception:
+        return False
+    return any(ip_obj in network for network in _FAKE_IP_NETWORKS)
+
+
+def _primary_network_hint(api_url: str) -> str:
+    host = str(urlparse(api_url).hostname or "").strip()
+    if not host:
+        return ""
+    addrs = _resolved_ipv4_addrs(host)
+    fake_addrs = [addr for addr in addrs if _is_fake_ip_address(addr)]
+    if not fake_addrs:
+        return ""
+    fake_text = ", ".join(fake_addrs)
+    return (
+        f"检测到更新域名 {host} 被解析到代理/TUN fake-ip ({fake_text})。"
+        "这通常是 Clash/Mihomo TUN fake-ip 模式导致的，不是腾讯云文件缺失。"
+        "请切换 GitHub 下载源，或让该域名走真实 DNS/关闭 fake-ip 后再试。"
+    )
+
+
 def _fetch_bytes(
     url: str,
     progress_cb: Optional[Callable[[int, Optional[int]], None]] = None,
@@ -355,7 +404,11 @@ def _fetch_primary_json_payload(
         raise RuntimeError(f"HTTP {err.code}: {_http_error_detail(err)}") from err
     except URLError as err:
         reason = str(getattr(err, "reason", "") or err).strip()
-        raise RuntimeError(reason or str(err)) from err
+        hint = _primary_network_hint(api_url)
+        message = reason or str(err)
+        if hint:
+            message = f"{message}; {hint}"
+        raise RuntimeError(message) from err
 
     if not isinstance(payload, dict):
         raise RuntimeError("国内更新服务返回格式异常")

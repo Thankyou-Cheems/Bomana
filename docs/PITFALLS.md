@@ -169,3 +169,9 @@
   Symptom: the bomb selector showed `0/0` bombs with no clear reason, even though `ccrp_bomb_params.json` was shipped
   Cause: bomb database loading still used its own path resolution and swallowed load failures into an empty in-memory database, instead of sharing the app's stable runtime resource lookup
   Fix/Workaround: resolve bomb JSON through the same runtime-aware path search used for other packaged assets, keep a visible `load_error`, and surface that error directly in the bomb selector/settings page
+
+- Date: 2026-03-18
+  Context: launcher checking the Tencent Cloud update source while a local TUN/fake-ip proxy is active
+  Symptom: update checks failed with generic TLS errors such as `UNEXPECTED_EOF_WHILE_READING`, even though GitHub source still worked
+  Cause: the update domain was resolved to a synthetic proxy fake-ip in `198.18.0.0/15`, so the launcher looked like it was hitting a broken Tencent endpoint when it was actually running into a local proxy DNS mode mismatch
+  Fix/Workaround: detect fake-ip resolution for the Tencent update domain and surface a targeted hint telling the user to switch to GitHub or let that domain use real DNS instead of showing a misleading raw SSL failure
