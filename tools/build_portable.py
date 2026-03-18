@@ -234,6 +234,8 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         str(root / "app.ico"),
         "--hidden-import",
         "pystray._win32",
+        "--hidden-import",
+        "winsound",
         "--collect-submodules",
         "PIL",
         "--collect-submodules",
