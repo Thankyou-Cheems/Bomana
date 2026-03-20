@@ -86,16 +86,19 @@ class _ScalableDialogMixin:
                     base_font = tkfont.Font(font=font_name)
                     actual = base_font.actual()
                     base_size = actual.get("size", 10)
+                    scaled_size = UIConfig.scaled_font_size(base_size, 1.0, min_size=1)
+                    if base_size < 0:
+                        scaled_size = -scaled_size
                     new_font = tkfont.Font(
                         family=actual.get("family", "Segoe UI"),
-                        size=base_size,
+                        size=scaled_size,
                         weight=actual.get("weight", "normal"),
                         slant=actual.get("slant", "roman"),
                         underline=actual.get("underline", 0),
                         overstrike=actual.get("overstrike", 0),
                     )
                     widget.configure(font=new_font)
-                    self._scaled_fonts[widget] = (new_font, base_size)
+                    self._scaled_fonts[widget] = (new_font, scaled_size)
                 except Exception:
                     pass
 
@@ -512,7 +515,17 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 highlightthickness=0, troughcolor=Theme.BORDER, 
                 activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
         row += 1
-        
+
+        tk.Label(frame, text="文本缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5)
+        self.text_scale_var = tk.DoubleVar(value=float(UIConfig.TEXT_SCALE_MULT))
+        tk.Scale(
+            frame, from_=0.75, to=2.5, resolution=0.05, orient="horizontal",
+            length=180, variable=self.text_scale_var, bg=Theme.BG, fg=Theme.TEXT,
+            highlightthickness=0, troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
+        row += 1
+
         # 主题选择
         tk.Label(frame, text="颜色主题:", bg=Theme.BG, fg=Theme.TEXT).grid(
             row=row, column=0, sticky="w", pady=5)
@@ -1331,6 +1344,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             self.alpha_var.set(210)
             self.nav_width_var.set(1.0)
             self.scale_var.set(0.85)
+            self.text_scale_var.set(1.0)
             self.theme_var.set("fluent_dark")
             self.hud_enabled_var.set(False)
             self.hud_alpha_var.set(255)
@@ -1391,9 +1405,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 收集设置值
         config = ConfigManager.load()
         old_scale = float(UIConfig.UI_SCALE_MULT)
+        old_text_scale = float(UIConfig.TEXT_SCALE_MULT)
         old_nav_width = float(PanelConfig.navigation_bar_width)
         old_hud_enabled = bool(HUDConfig.enabled)
         old_hud_alpha = int(HUDConfig.alpha)
+        old_hud_scale = float(HUDConfig.scale)
         old_hud_follow_main = bool(HUDConfig.follow_main_window_monitor)
         old_hud_color_style = str(getattr(HUDConfig, "color_style", "auto"))
         old_sound_enabled = bool(self.app.sound.is_enabled())
@@ -1402,7 +1418,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 显示设置
         UIConfig.WINDOW_ALPHA = self.alpha_var.get()
         PanelConfig.navigation_bar_width = self.nav_width_var.get()
-        UIConfig.UI_SCALE_MULT = self.scale_var.get()
+        UIConfig.UI_SCALE_MULT = UIConfig.clamp_ui_scale(self.scale_var.get())
+        UIConfig.TEXT_SCALE_MULT = UIConfig.clamp_text_scale(self.text_scale_var.get())
         new_theme = self.theme_var.get()
         old_theme = Theme.get_current()
         HUDConfig.enabled = bool(self.hud_enabled_var.get())
@@ -1417,6 +1434,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         
         config['alpha'] = UIConfig.WINDOW_ALPHA
         config['scale'] = UIConfig.UI_SCALE_MULT
+        config['text_scale'] = UIConfig.TEXT_SCALE_MULT
         config['theme'] = new_theme
         config['hud_enabled'] = HUDConfig.enabled
         config['hud'] = HUDConfig.to_dict()
@@ -1523,7 +1541,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 self.app.nav_window.update_hint_text()
         
         theme_changed = new_theme != old_theme
-        scale_changed = abs(UIConfig.UI_SCALE_MULT - old_scale) > 1e-6
+        scale_changed = (
+            abs(UIConfig.UI_SCALE_MULT - old_scale) > 1e-6
+            or abs(UIConfig.TEXT_SCALE_MULT - old_text_scale) > 1e-6
+        )
         nav_width_changed = abs(PanelConfig.navigation_bar_width - old_nav_width) > 1e-6
         Theme.apply(new_theme)
 
@@ -1537,6 +1558,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
 
         hud_enabled_changed = old_hud_enabled != bool(HUDConfig.enabled)
         hud_alpha_changed = old_hud_alpha != int(HUDConfig.alpha)
+        hud_scale_changed = abs(float(HUDConfig.scale) - old_hud_scale) > 1e-6
         hud_follow_changed = old_hud_follow_main != bool(HUDConfig.follow_main_window_monitor)
         hud_color_changed = old_hud_color_style != str(HUDConfig.color_style)
 
@@ -1546,6 +1568,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             if getattr(self.app, "hud_overlay", None):
                 if hud_follow_changed:
                     self.app.hud_overlay.refresh_monitor_geometry()
+                if hud_scale_changed and hasattr(self.app.hud_overlay, "refresh_text_scale"):
+                    self.app.hud_overlay.refresh_text_scale()
                 self.app.hud_overlay.update_transparency()
         else:
             if getattr(self.app, "hud_overlay", None) and self.app.hud_overlay.is_visible():

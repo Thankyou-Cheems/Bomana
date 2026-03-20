@@ -6,7 +6,7 @@ import math
 import tkinter as tk
 from typing import Any, Dict, List, Optional
 
-from bomana.config import HUDConfig
+from bomana.config import HUDConfig, UIConfig
 from bomana.utils.system import Win32
 
 
@@ -143,6 +143,27 @@ class HUDOverlay:
         self.apply_window_styles(click_through=True, alpha=HUDConfig.alpha)
         self._set_reticle_visible(False)
         self._set_compass_visible(False)
+
+    def _hud_font(self, size: float, *styles: str) -> tuple:
+        scaled_size = UIConfig.scaled_font_size(size, float(HUDConfig.scale), min_size=6)
+        if styles:
+            return ("Segoe UI", scaled_size, *styles)
+        return ("Segoe UI", scaled_size)
+
+    def refresh_text_scale(self) -> None:
+        """在不重建 HUD 的情况下刷新文字字号。"""
+        if self._reticle_mode_id is not None:
+            self.canvas.itemconfig(self._reticle_mode_id, font=self._hud_font(10, "bold"))
+        if self._reticle_dist_id is not None:
+            self.canvas.itemconfig(self._reticle_dist_id, font=self._hud_font(9))
+        for label_id in self._secondary_label_ids:
+            self.canvas.itemconfig(label_id, font=self._hud_font(8, "bold"))
+        if self._standby_id is not None:
+            self.canvas.itemconfig(self._standby_id, font=self._hud_font(12, "bold"))
+        for label_id in self._compass_label_ids:
+            self.canvas.itemconfig(label_id, font=self._hud_font(8, "bold"))
+        if self._compass_heading_id is not None:
+            self.canvas.itemconfig(self._compass_heading_id, font=self._hud_font(9, "bold"))
 
     @staticmethod
     def _clamp(value: float, low: float, high: float) -> float:
@@ -468,7 +489,7 @@ class HUDOverlay:
             0, 0,
             text="",
             fill=color,
-            font=("Segoe UI", 10, "bold"),
+            font=self._hud_font(10, "bold"),
             state="hidden",
             tags=("hud_reticle",),
         )
@@ -476,7 +497,7 @@ class HUDOverlay:
             0, 0,
             text="",
             fill=color,
-            font=("Segoe UI", 9),
+            font=self._hud_font(9),
             state="hidden",
             tags=("hud_reticle",),
         )
@@ -495,7 +516,7 @@ class HUDOverlay:
                 0, 0,
                 text="",
                 fill=color,
-                font=("Segoe UI", 8, "bold"),
+                font=self._hud_font(8, "bold"),
                 state="hidden",
                 tags=("hud_secondary",),
             )
@@ -504,7 +525,7 @@ class HUDOverlay:
             0, 0,
             text="HUD STANDBY",
             fill="#8fb5a0",
-            font=("Segoe UI", 12, "bold"),
+            font=self._hud_font(12, "bold"),
             state="hidden",
             tags=("hud_standby",),
         )
@@ -546,7 +567,7 @@ class HUDOverlay:
                 0, 0,
                 text="",
                 fill=color,
-                font=("Segoe UI", 8, "bold"),
+                font=self._hud_font(8, "bold"),
                 state="hidden",
                 tags=("hud_compass",),
             )
@@ -556,7 +577,7 @@ class HUDOverlay:
             0, 0,
             text="",
             fill=color,
-            font=("Segoe UI", 9, "bold"),
+            font=self._hud_font(9, "bold"),
             state="hidden",
             tags=("hud_compass",),
         )

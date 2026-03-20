@@ -131,9 +131,9 @@ class NavigationWindow:
         self.content_frame = tk.Frame(self.main_frame, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
         self.content_frame.pack(fill="both", expand=True, padx=1, pady=1)
 
-        title_font = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1] * s * 0.9))
-        item_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1] * s * 0.92))
-        hint_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1] * s * 0.75))
+        title_font = self.app._scaled_font(UIConfig.FONT_ZONE_TITLE, size_mult=0.9, min_size=8)
+        item_font = self.app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.92, min_size=7)
+        hint_font = self.app._scaled_font(UIConfig.FONT_HINT, size_mult=0.75, min_size=7)
 
         self.title_bar = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.title_bar.pack(fill="x", padx=pad, pady=(pad, 0))
@@ -190,10 +190,15 @@ class NavigationWindow:
         tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
         self.tape_frame = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.tape_frame.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
-        self.heading_tape = HeadingTape(self.tape_frame, width=tape_width, height=tape_height)
+        self.heading_tape = HeadingTape(
+            self.tape_frame,
+            width=tape_width,
+            height=tape_height,
+            text_scale=UIConfig.TEXT_SCALE_MULT,
+        )
         self.heading_tape.pack(fill="x", expand=True)
 
-        status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1] * s * 0.9))
+        status_font = self.app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.9, min_size=7)
         self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.zone_row.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
         self.zone_row.grid_columnconfigure(3, weight=1)

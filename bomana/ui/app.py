@@ -212,7 +212,7 @@ class App:
             # 用户已经设置过缩放，使用保存的值
             scale = config.get('scale')
             if isinstance(scale, (int, float)):
-                UIConfig.UI_SCALE_MULT = max(0.6, min(2.5, float(scale)))
+                UIConfig.UI_SCALE_MULT = UIConfig.clamp_ui_scale(scale)
         else:
             # 首次启动，根据屏幕分辨率智能设置
             try:
@@ -225,6 +225,10 @@ class App:
                 # 出错时使用默认值1.2
                 UIConfig.UI_SCALE_MULT = 1.2
                 print(f"[智能缩放] 检测失败，使用默认缩放1.2x: {e}")
+
+        text_scale = config.get('text_scale', UIConfig.TEXT_SCALE_MULT)
+        if isinstance(text_scale, (int, float)):
+            UIConfig.TEXT_SCALE_MULT = UIConfig.clamp_text_scale(text_scale)
         
         # 主题设置（必须在UI创建前应用）
         theme_name = config.get('theme', 'fluent_dark')
@@ -318,6 +322,7 @@ class App:
         # 显示设置
         config['alpha'] = UIConfig.WINDOW_ALPHA
         config['scale'] = UIConfig.UI_SCALE_MULT
+        config['text_scale'] = UIConfig.TEXT_SCALE_MULT
         config['theme'] = Theme.get_current()
         
         # 面板设置
@@ -423,20 +428,37 @@ class App:
         性能优化: 预计算字体避免每帧重复计算
         添加新字体时需在此方法中添加缓存项
         """
-        s = self.scale
         self._cached_fonts = {
-            'timer': (UIConfig.FONT_TIMER[0], int(UIConfig.FONT_TIMER[1]*s), UIConfig.FONT_TIMER[2]),
-            'life': (UIConfig.FONT_LIFE[0], int(UIConfig.FONT_LIFE[1]*s), UIConfig.FONT_LIFE[2]),
-            'cycle': (UIConfig.FONT_CYCLE[0], int(UIConfig.FONT_CYCLE[1]*s)),
-            'pill': (UIConfig.FONT_PILL[0], int(UIConfig.FONT_PILL[1]*s), UIConfig.FONT_PILL[2]),
-            'status': (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1]*s)),
-            'checklist_title': (UIConfig.FONT_CHECKLIST_TITLE[0], int(UIConfig.FONT_CHECKLIST_TITLE[1]*s), UIConfig.FONT_CHECKLIST_TITLE[2]),
-            'checklist_item': (UIConfig.FONT_CHECKLIST_ITEM[0], int(UIConfig.FONT_CHECKLIST_ITEM[1]*s)),
-            'zone_title': (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1]*s), UIConfig.FONT_ZONE_TITLE[2]),
-            'zone_item': (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1]*s)),
-            'debug': (UIConfig.FONT_DEBUG[0], int(UIConfig.FONT_DEBUG[1]*s)),
-            'hint': (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1]*s)),
+            'timer': self._scaled_font(UIConfig.FONT_TIMER),
+            'life': self._scaled_font(UIConfig.FONT_LIFE),
+            'cycle': self._scaled_font(UIConfig.FONT_CYCLE),
+            'pill': self._scaled_font(UIConfig.FONT_PILL),
+            'status': self._scaled_font(UIConfig.FONT_STATUS),
+            'checklist_title': self._scaled_font(UIConfig.FONT_CHECKLIST_TITLE),
+            'checklist_item': self._scaled_font(UIConfig.FONT_CHECKLIST_ITEM),
+            'zone_title': self._scaled_font(UIConfig.FONT_ZONE_TITLE),
+            'zone_item': self._scaled_font(UIConfig.FONT_ZONE_ITEM),
+            'debug': self._scaled_font(UIConfig.FONT_DEBUG),
+            'hint': self._scaled_font(UIConfig.FONT_HINT),
         }
+
+    def _scaled_font(self, font_def: tuple, *, size_mult: float = 1.0, min_size: int = 1) -> tuple:
+        """按布局缩放和独立文本缩放生成字体元组。"""
+        return UIConfig.scaled_font(
+            font_def,
+            self.scale,
+            size_mult=size_mult,
+            min_size=min_size,
+        )
+
+    def _scaled_font_size(self, base_size: float, *, size_mult: float = 1.0, min_size: int = 1) -> int:
+        """仅返回缩放后的字号，用于 Canvas 或临时字体。"""
+        return UIConfig.scaled_font_size(
+            base_size,
+            self.scale,
+            size_mult=size_mult,
+            min_size=min_size,
+        )
     
     def _get_font(self, name: str) -> tuple:
         """获取缓存的字体"""
@@ -495,11 +517,11 @@ class App:
         self.chk_border_frame.pack(side="left", fill="y", padx=(0, 2))
         self.chk_content_frame.pack(side="left", fill="both", expand=True)
 
-        font_title = (UIConfig.FONT_CHECKLIST_TITLE[0], int(UIConfig.FONT_CHECKLIST_TITLE[1]*s), UIConfig.FONT_CHECKLIST_TITLE[2])
+        font_title = self._get_font("checklist_title")
         self.chk_title = tk.Label(self.chk_content_frame, text="出击检查清单", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
         self.chk_title.pack(fill="x", padx=int(6*s), pady=(int(6*s), int(2*s)))
 
-        font_item = (UIConfig.FONT_CHECKLIST_ITEM[0], int(UIConfig.FONT_CHECKLIST_ITEM[1]*s))
+        font_item = self._get_font("checklist_item")
         pad_x = int(6*s)
         wrap_width = int(180*s)
         
@@ -1663,6 +1685,8 @@ class App:
         if ENABLE_ZONES and getattr(self, "nav_window", None):
             self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
         if self.hud_overlay:
+            if scale_changed and hasattr(self.hud_overlay, "refresh_text_scale"):
+                self.hud_overlay.refresh_text_scale()
             self.hud_overlay.set_lock_state(self._locked)
             self.hud_overlay.update_transparency()
         self._refresh_tray()

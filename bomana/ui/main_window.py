@@ -73,8 +73,8 @@ class MainWindowBuilder:
     def _build_bottom_card(self) -> None:
         app = self.app
         s = app.scale
-        font_hint = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1] * s))
-        font_debug = (UIConfig.FONT_DEBUG[0], int(UIConfig.FONT_DEBUG[1] * s))
+        font_hint = app._get_font("hint")
+        font_debug = app._get_font("debug")
         btn_pad_x = int(6 * s)
         btn_pad_y = max(1, int(1 * s))
 
@@ -224,12 +224,12 @@ class MainWindowBuilder:
         )
         app.top_content.grid_columnconfigure(0, weight=1)
 
-        font_timer = (UIConfig.FONT_TIMER[0], int(UIConfig.FONT_TIMER[1] * s), UIConfig.FONT_TIMER[2])
-        font_life = (UIConfig.FONT_LIFE[0], int(UIConfig.FONT_LIFE[1] * s), UIConfig.FONT_LIFE[2])
-        font_cycle = (UIConfig.FONT_CYCLE[0], int(UIConfig.FONT_CYCLE[1] * s))
-        pill_font = (UIConfig.FONT_PILL[0], int(UIConfig.FONT_PILL[1] * s), UIConfig.FONT_PILL[2])
-        font_status = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1] * s))
-        font_hint = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1] * s))
+        font_timer = app._get_font("timer")
+        font_life = app._get_font("life")
+        font_cycle = app._get_font("cycle")
+        pill_font = app._get_font("pill")
+        font_status = app._get_font("status")
+        font_hint = app._get_font("hint")
 
         app.top_row1 = tk.Frame(app.top_content, bg=Theme.GRAYPILL)
         app.top_row1.grid(row=0, column=0, sticky="ew", padx=int(8 * s), pady=(int(6 * s), 0))
@@ -298,7 +298,7 @@ class MainWindowBuilder:
         history_header = tk.Frame(app.history_mode_frame, bg=Theme.GRAYPILL)
         history_header.grid(row=0, column=0, sticky="ew")
         history_header.grid_columnconfigure(0, weight=1)
-        history_title_font = (UIConfig.FONT_STATUS[0], int(UIConfig.FONT_STATUS[1] * s), "bold")
+        history_title_font = app._scaled_font((UIConfig.FONT_STATUS[0], UIConfig.FONT_STATUS[1], "bold"))
         app.history_mode_title_lbl = tk.Label(
             history_header,
             text="🕰 空历速度监视",
@@ -332,8 +332,8 @@ class MainWindowBuilder:
         pad_top, pad_bot = UIConfig.PADDING_SPEED_STRIP
         app.speed_row.grid(row=3, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s)))
         app.speed_row.grid_columnconfigure(0, weight=1)
-        speed_font = (UIConfig.FONT_HINT[0], int(UIConfig.FONT_HINT[1] * s))
-        speed_model_font = (UIConfig.FONT_HINT[0], max(7, int(UIConfig.FONT_HINT[1] * s * 0.92)))
+        speed_font = app._get_font("hint")
+        speed_model_font = app._scaled_font(UIConfig.FONT_HINT, size_mult=0.92, min_size=7)
         app.speed_header_row = tk.Frame(app.speed_row, bg=Theme.GRAYPILL)
         app.speed_header_row.grid(row=0, column=0, sticky="ew")
         app.speed_header_row.grid_columnconfigure(0, weight=1)
@@ -352,7 +352,7 @@ class MainWindowBuilder:
         app.speed_threshold_btn = tk.Label(
             app.speed_meta_frame,
             text="点我调速度阈值",
-            font=(UIConfig.FONT_HINT[0], max(7, int(UIConfig.FONT_HINT[1] * s * 0.88))),
+            font=app._scaled_font(UIConfig.FONT_HINT, size_mult=0.88, min_size=7),
             fg=Theme.BLUE,
             bg=Theme.GRAYPILL,
             anchor="w",
@@ -539,11 +539,11 @@ class MainWindowBuilder:
         pad_x = int(8 * s)
         app.zone_frame.grid_columnconfigure(0, weight=1)
 
-        font_title = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1] * s), UIConfig.FONT_ZONE_TITLE[2])
-        font_item = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1] * s))
+        font_title = app._get_font("zone_title")
+        font_item = app._get_font("zone_item")
         font_heading = font_item
-        legend_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1] * s * 0.85))
-        status_font = (UIConfig.FONT_ZONE_ITEM[0], int(UIConfig.FONT_ZONE_ITEM[1] * s * 0.95))
+        legend_font = app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.85, min_size=7)
+        status_font = app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.95, min_size=7)
 
         app.zone_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(4 * s), int(2 * s)))
@@ -589,6 +589,7 @@ class MainWindowBuilder:
                 app.heading_tape_frame,
                 width=int(ZoneConfig.HEADING_TAPE_WIDTH * s),
                 height=int(ZoneConfig.HEADING_TAPE_HEIGHT * s),
+                text_scale=UIConfig.TEXT_SCALE_MULT,
             )
             app.heading_tape.pack(fill="x", expand=True)
 
@@ -658,7 +659,7 @@ class MainWindowBuilder:
             app.tape_friendly_status = None
             app.tape_zone_info = None
 
-        font_alert = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1] * s), UIConfig.FONT_ZONE_TITLE[2])
+        font_alert = app._get_font("zone_title")
         app.zone_alert_lbl = tk.Label(app.zone_frame, text="", font=font_alert, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w", justify="left")
         app.zone_alert_lbl.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
 
@@ -735,7 +736,7 @@ class MainWindowBuilder:
             app.bombing_header_frame.grid_columnconfigure(1, weight=1)
             app.bombing_title_lbl = tk.Label(app.bombing_header_frame, text="投弹预测", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
             app.bombing_title_lbl.grid(row=0, column=0, sticky="w")
-            font_release = (UIConfig.FONT_ZONE_TITLE[0], int(UIConfig.FONT_ZONE_TITLE[1] * s), UIConfig.FONT_ZONE_TITLE[2])
+            font_release = app._get_font("zone_title")
             app.bomb_release_lbl = tk.Label(
                 app.bombing_header_frame,
                 text="等待目标",

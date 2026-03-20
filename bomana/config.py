@@ -238,6 +238,9 @@ class UIConfig:
     # 注意：此值可能被智能缩放逻辑覆盖（首次启动时）
     UI_SCALE_MULT = 1.0
 
+    # 文本缩放倍数：独立于窗口/布局缩放，专门控制字体大小
+    TEXT_SCALE_MULT = 1.0
+
     # 窗口不透明度：210/255（约82%）
     WINDOW_ALPHA = 210
 
@@ -279,6 +282,46 @@ class UIConfig:
 
     # 调试文本换行宽度
     DEBUG_WRAP_LENGTH = 600
+
+    @classmethod
+    def clamp_ui_scale(cls, value: float) -> float:
+        return max(0.6, min(2.5, float(value)))
+
+    @classmethod
+    def clamp_text_scale(cls, value: float) -> float:
+        return max(0.75, min(2.5, float(value)))
+
+    @classmethod
+    def scaled_font_size(
+        cls,
+        base_size: float,
+        layout_scale: float,
+        *,
+        size_mult: float = 1.0,
+        min_size: int = 1,
+    ) -> int:
+        size = int(abs(float(base_size)) * float(layout_scale) * float(cls.TEXT_SCALE_MULT) * float(size_mult))
+        return max(int(min_size), size)
+
+    @classmethod
+    def scaled_font(
+        cls,
+        font_def: tuple,
+        layout_scale: float,
+        *,
+        size_mult: float = 1.0,
+        min_size: int = 1,
+    ) -> tuple:
+        if not isinstance(font_def, (tuple, list)) or len(font_def) < 2:
+            return tuple(font_def)
+        signed_size = -1 if float(font_def[1]) < 0 else 1
+        scaled_size = cls.scaled_font_size(
+            float(font_def[1]),
+            layout_scale,
+            size_mult=size_mult,
+            min_size=min_size,
+        )
+        return (font_def[0], signed_size * scaled_size, *font_def[2:])
 
 
 class HUDConfig:

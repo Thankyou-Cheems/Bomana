@@ -3,7 +3,7 @@
 
 import tkinter as tk
 
-from bomana.config import Theme, ZoneConfig
+from bomana.config import Theme, ZoneConfig, UIConfig
 from bomana.utils.math_utils import (
     calculate_heading_tape_scale,
     get_cdi_tolerance,
@@ -59,7 +59,7 @@ class HeadingTape(tk.Canvas):
     - 被摧毁的战区用特殊标记显示
     """
     
-    def __init__(self, parent, width: int = 280, height: int = 36, **kwargs):
+    def __init__(self, parent, width: int = 280, height: int = 36, text_scale: float = 1.0, **kwargs):
         """初始化航向带
         
         Args:
@@ -79,6 +79,7 @@ class HeadingTape(tk.Canvas):
         )
         self.tape_width = width
         self.tape_height = height
+        self.text_scale = UIConfig.clamp_text_scale(text_scale)
         self.pixels_per_degree = ZoneConfig.HEADING_TAPE_PIXELS_PER_DEG
         self._current_hdg = 0.0
         self._primary_target = None
@@ -94,6 +95,9 @@ class HeadingTape(tk.Canvas):
             "enemy": Theme.ORANGE,
             "destroyed": Theme.TEXT_MUTED,
         }
+
+    def _scaled_text_size(self, base_size: float, *, min_size: int = 1) -> int:
+        return max(int(min_size), int(float(base_size) * float(self.text_scale)))
     
     def update_tape_multi(self, current_hdg: float, targets: list = None,
                           primary_distance_km: float = 0.0):
@@ -203,8 +207,9 @@ class HeadingTape(tk.Canvas):
             
             if display_d % 10 == 0:
                 self.create_line(x, 2, x, 14, fill=Theme.TEXT, width=2)
+                degree_font_size = self._scaled_text_size(8, min_size=7)
                 self.create_text(x, 22, text=f"{display_d:03d}", fill=Theme.TEXT, 
-                               font=("Consolas", 8), anchor="n")
+                               font=("Consolas", degree_font_size), anchor="n")
             elif display_d % 5 == 0:
                 self.create_line(x, 4, x, 12, fill=Theme.TEXT_DIM, width=1)
             elif scale_factor >= 2.0:
@@ -417,7 +422,11 @@ class HeadingTape(tk.Canvas):
         
         # 根据目标类型和距离确定样式
         # v6.6.1: 非目标使用更小的字体
-        font_size = max(7, int(9 * icon_scale)) if is_target else max(6, int(7 * icon_scale))
+        font_size = (
+            self._scaled_text_size(9 * icon_scale, min_size=7)
+            if is_target
+            else self._scaled_text_size(7 * icon_scale, min_size=6)
+        )
         
         if t_type == 'zone':
             # v6.6.0: 战区距离标签 - 使用偏差颜色
@@ -561,7 +570,7 @@ class HeadingTape(tk.Canvas):
         elif prefix:
             dist_text = prefix
         
-        font_size = max(6, int(7 * icon_scale))
+        font_size = self._scaled_text_size(7 * icon_scale, min_size=6)
         
         if relative < 0:
             # 左侧小三角
@@ -592,15 +601,17 @@ class HeadingTape(tk.Canvas):
             # 左侧大箭头
             arrow_points = [5, y, 25, y - 10, 20, y, 25, y + 10]
             self.create_polygon(arrow_points, fill=Theme.RED, outline=Theme.BG)
+            arrow_font_size = self._scaled_text_size(10, min_size=8)
             self.create_text(40, y, text=f"◀ {abs(int(diff))}°",
-                           fill=Theme.RED, font=("Arial", 10, "bold"), anchor="w")
+                           fill=Theme.RED, font=("Arial", arrow_font_size, "bold"), anchor="w")
         else:
             # 右侧大箭头
             arrow_points = [self.tape_width - 5, y, self.tape_width - 25, y - 10,
                           self.tape_width - 20, y, self.tape_width - 25, y + 10]
             self.create_polygon(arrow_points, fill=Theme.RED, outline=Theme.BG)
+            arrow_font_size = self._scaled_text_size(10, min_size=8)
             self.create_text(self.tape_width - 40, y, text=f"{abs(int(diff))}° ▶",
-                           fill=Theme.RED, font=("Arial", 10, "bold"), anchor="e")
+                           fill=Theme.RED, font=("Arial", arrow_font_size, "bold"), anchor="e")
     
     def update_tape(self, current_hdg: float, target_hdg: float = None, 
                     distance_km: float = 0.0, tolerance: float = 5.0,
