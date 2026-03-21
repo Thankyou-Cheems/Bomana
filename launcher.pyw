@@ -2,6 +2,7 @@
 """Bomana portable launcher with user-friendly GUI update flow."""
 
 import hashlib
+import importlib
 import ipaddress
 import json
 import os
@@ -50,7 +51,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.5.2"
+LAUNCHER_VERSION = "1.5.3"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -1732,6 +1733,18 @@ def _prepare_source_test_runtime(base: Path) -> None:
             sys.path.insert(0, site_text)
 
 
+def _reset_embedded_app_modules() -> None:
+    """Clear launcher-bundled bomana modules before handing off to the app package."""
+    stale_modules = [
+        name
+        for name in tuple(sys.modules.keys())
+        if name == "bomana" or name.startswith("bomana.")
+    ]
+    for name in stale_modules:
+        sys.modules.pop(name, None)
+    importlib.invalidate_caches()
+
+
 def _launch_app(base: Path, channel: str) -> None:
     _recover_incomplete_install(base)
     app_dir = _app_runtime_dir(base)
@@ -1741,6 +1754,7 @@ def _launch_app(base: Path, channel: str) -> None:
 
     if _is_source_test_run(base):
         _prepare_source_test_runtime(base)
+    _reset_embedded_app_modules()
     os.environ["BOMANA_CHANNEL"] = channel
     os.environ["BOMANA_RUNTIME_ROOT"] = str(app_dir)
     os.chdir(app_dir)

@@ -175,3 +175,9 @@
   Symptom: update checks failed with generic TLS errors such as `UNEXPECTED_EOF_WHILE_READING`, even though GitHub source still worked
   Cause: the update domain was resolved to a synthetic proxy fake-ip in `198.18.0.0/15`, so the launcher looked like it was hitting a broken Tencent endpoint when it was actually running into a local proxy DNS mode mismatch
   Fix/Workaround: detect fake-ip resolution for the Tencent update domain and surface a targeted hint telling the user to switch to GitHub or let that domain use real DNS instead of showing a misleading raw SSL failure
+
+- Date: 2026-03-21
+  Context: portable launcher `1.5.2` starting app package `6.12.4` after the text-scaling release
+  Symptom: app launch failed immediately with `type object 'UIConfig' has no attribute 'clamp_ui_scale'`
+  Cause: the launcher imports `bomana.utils.system` for its own UI, so PyInstaller keeps a launcher-bundled `bomana` package in `sys.modules`; when the app later starts in-process via `runpy`, `import bomana.config` can reuse the stale launcher module cache instead of the freshly extracted app package
+  Fix/Workaround: clear cached `bomana` / `bomana.*` modules before handing off to the app package, then let imports resolve again from the extracted runtime directory
