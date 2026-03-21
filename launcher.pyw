@@ -51,7 +51,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.5.3"
+LAUNCHER_VERSION = "1.5.4"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -1607,10 +1607,13 @@ def _stage_launcher_self_update(
         raise RuntimeError("源码模式不支持启动器自更新")
 
     target = Path(sys.executable).resolve()
-    staged = base / f"bomana_update_launcher_v{remote_version}.new.exe"
-    backup = base / f"bomana_update_launcher_v{LAUNCHER_VERSION}.bak.exe"
+    target_name = target.name
+    staged = base / "BomanaLauncher_update.new.exe"
+    backup = base / "BomanaLauncher_backup.old.exe"
     script_path = base / "bomana_update_launcher_apply.ps1"
 
+    staged.unlink(missing_ok=True)
+    backup.unlink(missing_ok=True)
     staged.write_bytes(launcher_bytes)
     script = f"""$ErrorActionPreference = 'SilentlyContinue'
 $target = {json.dumps(str(target))}
@@ -1669,7 +1672,7 @@ def _download_launcher_update_from_manifest(
 
     notify(
         "开始下载启动器",
-        f"正在下载启动器 v{remote_version}（来源：{source_name}）",
+        f"正在下载新版启动器文件 v{remote_version}（来源：{source_name}）",
         0.18,
         "info",
     )
@@ -1684,13 +1687,13 @@ def _download_launcher_update_from_manifest(
         if total and total > 0:
             progress = 0.18 + min(0.62, 0.62 * (downloaded / float(total)))
             detail = (
-                f"正在下载启动器：{downloaded / 1048576:.1f} / {total / 1048576:.1f} MB"
+                f"正在下载新版启动器文件：{downloaded / 1048576:.1f} / {total / 1048576:.1f} MB"
             )
             notify("正在下载启动器", detail, progress, "info")
         else:
             notify(
                 "正在下载启动器",
-                f"正在下载启动器：{downloaded / 1048576:.1f} MB",
+                f"正在下载新版启动器文件：{downloaded / 1048576:.1f} MB",
                 None,
                 "info",
             )
@@ -1704,11 +1707,17 @@ def _download_launcher_update_from_manifest(
         actual_sha256 = hashlib.sha256(launcher_bytes).hexdigest().lower()
         if actual_sha256 != package_sha256.strip().lower():
             raise RuntimeError("SHA256 校验失败")
-    notify("准备替换启动器", "正在准备关闭当前启动器并自动重启...", 0.9, "info")
+    current_name = Path(sys.executable).name
+    notify(
+        "准备替换启动器",
+        f"新版启动器文件已下载完成；关闭当前窗口后会替换 {current_name} 并自动重启。",
+        0.9,
+        "info",
+    )
     _stage_launcher_self_update(base, launcher_bytes, remote_version)
     notify(
         "启动器更新已就绪",
-        f"已准备好升级到 v{remote_version}，关闭当前窗口后会自动替换并重启。",
+        f"已准备好升级到 v{remote_version}；关闭当前窗口后会用新版启动器文件替换当前 exe 并自动重启。",
         1.0,
         "success",
     )
@@ -3000,7 +3009,7 @@ class LauncherWindow:
                             "启动器更新已准备好" if update_ok else "启动器更新失败"
                         ),
                         "detail": (
-                            f"已准备好升级到启动器 v{launcher_version}，当前窗口关闭后将自动重启。"
+                            "已准备好下载并接管新版启动器；当前窗口关闭后会自动替换当前 exe 并重启。"
                             if update_ok
                             else update_error
                         ),
@@ -3491,7 +3500,9 @@ class LauncherWindow:
                     text="正在后台检查应用与启动器更新；如本地已有应用，可直接点“启动应用”。"
                 )
             elif self.current_task == "launcher_download":
-                self.hint_lbl.config(text="正在下载并准备替换启动器，请不要强制结束进程。")
+                self.hint_lbl.config(
+                    text="正在下载临时新版启动器文件，并准备替换当前 exe；请不要强制结束进程。"
+                )
             else:
                 self.hint_lbl.config(text="正在下载并安装更新，请稍候...")
         else:
@@ -3554,7 +3565,7 @@ class LauncherWindow:
                 self.hint_lbl.config(
                     text=(
                         f"应用当前已是最新版本；启动器可升级到 v{self.latest_launcher_version}（总大小：{launcher_size_text}）。\n"
-                        "点击“更新启动器”后会关闭当前窗口并自动重启新版本。"
+                        "点击“更新启动器”后会先下载一个临时的新启动器文件，再自动替换当前 exe 并重启。"
                     )
                 )
             elif self.last_check_ok and not self.update_available:
@@ -3750,7 +3761,8 @@ class LauncherWindow:
             (
                 f"将下载并升级启动器到 v{self.latest_launcher_version}。\n"
                 f"下载总大小：{size_text}\n"
-                "升级过程中会关闭当前启动器，并在替换后自动重启。\n"
+                "升级时会先下载一个临时的新版启动器文件，不需要你手动双击它。\n"
+                f"当前窗口关闭后，它会自动替换当前启动器 exe（{Path(sys.executable).name}）并重启。\n"
                 "是否现在开始？"
             ),
         )
@@ -3760,7 +3772,7 @@ class LauncherWindow:
         self.has_attempted_update = True
         self._set_status(
             "准备更新启动器",
-            f"即将下载启动器 v{self.latest_launcher_version}，总大小：{size_text}",
+            f"即将下载新版启动器文件 v{self.latest_launcher_version}，总大小：{size_text}",
             0.0,
             "info",
         )
