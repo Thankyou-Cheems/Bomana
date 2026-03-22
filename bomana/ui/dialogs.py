@@ -1541,10 +1541,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 self.app.nav_window.update_hint_text()
         
         theme_changed = new_theme != old_theme
-        scale_changed = (
-            abs(UIConfig.UI_SCALE_MULT - old_scale) > 1e-6
-            or abs(UIConfig.TEXT_SCALE_MULT - old_text_scale) > 1e-6
-        )
+        ui_scale_changed = abs(UIConfig.UI_SCALE_MULT - old_scale) > 1e-6
+        text_scale_changed = abs(UIConfig.TEXT_SCALE_MULT - old_text_scale) > 1e-6
         nav_width_changed = abs(PanelConfig.navigation_bar_width - old_nav_width) > 1e-6
         Theme.apply(new_theme)
 
@@ -1552,7 +1550,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if hasattr(self.app, "apply_display_settings_runtime"):
             self.app.apply_display_settings_runtime(
                 theme_changed=theme_changed,
-                scale_changed=scale_changed,
+                ui_scale_changed=ui_scale_changed,
+                text_scale_changed=text_scale_changed,
                 nav_width_changed=nav_width_changed,
             )
 

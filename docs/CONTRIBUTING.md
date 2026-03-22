@@ -241,13 +241,17 @@ git commit -m "bug"
 
 1. 更新 `docs/CHANGELOG.md`
 2. 更新版本号（`bomana/config.py` 中的 `__version__`）
-3. 创建 Git Tag（按发布目标选择）：
+3. 如果发布目标包含应用包（`vX.Y.Z` / `vX.Y.Z-app`），先检查启动器兼容性：
+   - 明确这次 app 变更是否依赖新的启动器行为
+   - 如依赖，请同步更新 `PORTABLE_MIN_LAUNCHER_VERSION`
+   - 至少用当前计划支持的启动器版本做一次真实启动验证
+4. 创建 Git Tag（按发布目标选择）：
    - `vX.Y.Z`：完整发布（启动器 + 应用包）
    - `vX.Y.Z-app`：仅应用包
    - `vX.Y.Z-launcher`：仅启动器
-4. 推送 Tag：`git push origin <tag>`（触发 GitHub Actions 云端自动打包）
-5. 等待 Actions 自动创建/更新 GitHub Release
-6. 检查产物是否齐全：
+5. 推送 Tag：`git push origin <tag>`（触发 GitHub Actions 云端自动打包）
+6. 等待 Actions 自动创建/更新 GitHub Release
+7. 检查产物是否齐全：
    - 通用启动器：`Bomana_launcher_vX.Y.Z.exe`
    - 应用包：`Bomana_app_*_vX.Y.Z.zip`
    - 清单：`manifest_*.json`

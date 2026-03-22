@@ -1615,24 +1615,48 @@ class App:
     def apply_display_settings_runtime(
         self,
         theme_changed: bool,
-        scale_changed: bool,
+        ui_scale_changed: bool,
+        text_scale_changed: bool = False,
         nav_width_changed: bool = False,
     ) -> None:
         """运行时应用显示设置（主题/缩放/导航宽度）
 
         通过局部重建UI避免强制重启应用。
         """
-        need_main_rebuild = bool(theme_changed or scale_changed)
+        need_main_rebuild = bool(theme_changed or ui_scale_changed or text_scale_changed)
         need_nav_rebuild = bool(need_main_rebuild or nav_width_changed)
         if not (need_main_rebuild or need_nav_rebuild):
             return
 
         nav_was_visible = False
+        preserve_text_only_geometry = bool(text_scale_changed and not ui_scale_changed)
+        main_geometry = None
+        nav_geometry = None
+        if preserve_text_only_geometry:
+            try:
+                main_geometry = (
+                    self.root.winfo_x(),
+                    self.root.winfo_y(),
+                    self.root.winfo_width(),
+                    self.root.winfo_height(),
+                )
+            except tk.TclError:
+                main_geometry = None
         if ENABLE_ZONES and need_nav_rebuild and getattr(self, "nav_window", None):
             try:
                 nav_was_visible = bool(self.nav_window.is_visible())
             except Exception:
                 nav_was_visible = False
+            if preserve_text_only_geometry and nav_was_visible:
+                try:
+                    nav_geometry = (
+                        self.nav_window.window.winfo_x(),
+                        self.nav_window.window.winfo_y(),
+                        self.nav_window.window.winfo_width(),
+                        self.nav_window.window.winfo_height(),
+                    )
+                except Exception:
+                    nav_geometry = None
             try:
                 self.nav_window.destroy()
             except Exception:
@@ -1672,12 +1696,25 @@ class App:
                 self._show_debug_ui()
             self._update_hint()
             self._update_nav_mode_button()
-            self._recalc_size(force_shrink=True)
+            if preserve_text_only_geometry and main_geometry:
+                old_x, old_y, old_w, old_h = main_geometry
+                clamp_margin = 0 if self._user_moved else None
+                x, y = self._clamp_to_screen(old_x, old_y, margin=clamp_margin)
+                self.W = old_w
+                self.H = old_h
+                self.root.geometry(f"{old_w}x{old_h}+{x}+{y}")
+                if self._user_moved:
+                    self._manual_pos = (x, y)
+            else:
+                self._recalc_size(force_shrink=True)
 
         if ENABLE_ZONES and need_nav_rebuild:
             self.nav_window = NavigationWindow(self)
             if PanelConfig.navigation_mode == "standalone" and nav_was_visible:
                 self.nav_window.show()
+                if preserve_text_only_geometry and nav_geometry:
+                    nav_x, nav_y, nav_w, nav_h = nav_geometry
+                    self.nav_window.window.geometry(f"{nav_w}x{nav_h}+{nav_x}+{nav_y}")
 
         # 重新应用窗口样式（锁定态穿透 + 透明度）
         alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
@@ -1685,7 +1722,7 @@ class App:
         if ENABLE_ZONES and getattr(self, "nav_window", None):
             self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
         if self.hud_overlay:
-            if scale_changed and hasattr(self.hud_overlay, "refresh_text_scale"):
+            if (ui_scale_changed or text_scale_changed) and hasattr(self.hud_overlay, "refresh_text_scale"):
                 self.hud_overlay.refresh_text_scale()
             self.hud_overlay.set_lock_state(self._locked)
             self.hud_overlay.update_transparency()
