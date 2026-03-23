@@ -18,7 +18,7 @@ Bomana（以下简称"本应用"）致力于保护用户隐私。本应用仅收
 | **设备标识符** (device_id) | SHA256哈希（基于Windows MachineGUID或本地随机UUID） | 统计独立设备数量，计算真实DAU | 否 - 已脱敏 |
 | **安装标识符** (install_id) | 本地随机生成的UUID | 区分同一设备上的多次安装 | 否 - 随机生成 |
 | **应用版本** (app_version) | 主应用版本号（如"6.7.0"） | 了解版本分布，定位版本特定问题 | 否 |
-| **启动器版本** (launcher_version) | 启动器版本号（如"1.1.0"） | 统计启动器使用情况 | 否 |
+| **启动器版本** (launcher_version) | 启动器版本号（如"1.5.5"） | 统计启动器使用情况 | 否 |
 | **功能通道** (channel) | Enhanced/Standard/Lite | 分析功能偏好 | 否 |
 | **事件时间戳** (event_time_utc) | UTC标准时间 | 计算DAU、活跃时段分析 | 否 |
 | **事件类型** (event) | 如：launcher_start、app_launch、update_complete | 追踪关键用户行为 | 否 |
@@ -63,7 +63,7 @@ device_id = SHA256(原始字符串)[:32]  # 取前32位，单向哈希
 
 - **HTTPS加密传输** - 所有数据通过TLS 1.2+加密
 - **证书校验** - 使用certifi提供的Mozilla CA证书包
-- **国内加速节点** - 优先使用腾讯云CDN（`bomanaupdate.ruikang.wang`），失败时回退GitHub
+- **国内加速节点** - 优先使用腾讯云CDN（`bomanaupdate.ruikang.wang`），失败时回退GitHub；用户也可在启动器中手动切换来源
 
 ---
 

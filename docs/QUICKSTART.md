@@ -20,6 +20,7 @@
 1. 打开 [Releases](https://github.com/Thankyou-Cheems/Bomana/releases)
 2. 下载 `Bomana_launcher_vX.X.X.exe`
 3. 启动器会优先从腾讯云/EdgeOne 获取对应通道的 app 包，失败时自动回退 GitHub；启动器本体也支持独立自更新
+4. 新版启动器会保留一个上一版本应用，可在出现坏版本时直接回退
 
 可选通道：
 
@@ -31,7 +32,7 @@
 
 启动器与 app 包：
 
-- `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动器自更新、启动入口
+- `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动器自更新、启动入口，并保留一个上一版回退槽
 - `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行包
 - `manifest_<Variant>.json`：版本、地址、SHA256、`min_launcher_version` 元数据
 
@@ -51,7 +52,9 @@ uv run python Bomana.pyw
 1. 启动 War Thunder 并进入战斗
 2. 运行 Bomana（启动器或 `uv run python Bomana.pyw`）
 3. 首次通过启动器运行时会下载 app 包；后续可离线启动本地版本
-4. 默认窗口在右上角，可通过 `F9` 切换角落
+4. 检查过程中如果切换通道/下载来源/代理，启动器会在当前检查结束后自动按新条件重查
+5. 下载新版本后会保留一个 `app_previous/` 目录，必要时可直接用启动器按钮回退
+6. 默认窗口在右上角，可通过 `F9` 切换角落
 
 ### 3. 核心功能速览
 
@@ -138,6 +141,7 @@ python tools/fm_speed_extractor.py ^
 1. Open [Releases](https://github.com/Thankyou-Cheems/Bomana/releases)
 2. Download `Bomana_launcher_vX.X.X.exe`
 3. Let launcher fetch and verify the app package for your channel
+4. New launcher builds retain one previous app version so you can roll back quickly if a bad app package ships
 
 Channels:
 
@@ -149,7 +153,7 @@ Channels:
 
 Launcher/package roles:
 
-- `Bomana_launcher_vX.Y.Z.exe`: update check/download/verify/start entry
+- `Bomana_launcher_vX.Y.Z.exe`: update check/download/verify/start entry, plus one-version rollback retention
 - `Bomana_app_<Variant>_vX.Y.Z.zip`: runnable app package
 - `manifest_<Variant>.json`: version/url/SHA256/`min_launcher_version` metadata
 
@@ -169,7 +173,9 @@ If you already use uv, Option B is enough.
 1. Launch War Thunder and enter battle
 2. Start Bomana (launcher or source run)
 3. First launcher run usually downloads app package; later runs can be offline
-4. Use `F9` to cycle window corner if needed
+4. Changing channel/source during a check queues an automatic follow-up re-check
+5. After an app update, launcher keeps one previous version for rollback
+6. Use `F9` to cycle window corner if needed
 
 ### 3. Feature Snapshot
 
