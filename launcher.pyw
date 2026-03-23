@@ -51,7 +51,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.5.4"
+LAUNCHER_VERSION = "1.5.5"
 MIN_SUPPORTED_APP_VERSION = "6.7.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
@@ -2291,7 +2291,7 @@ class LauncherWindow:
         self._button_styles: Dict[str, Dict[str, str]] = {}
         self._layout_after_id: Optional[str] = None
         self._base_min_w = self._px(760)
-        self._base_min_h = self._px(560)
+        self._base_min_h = self._px(520)
         self._max_w = self._base_min_w
         self._max_h = self._base_min_h
         self._min_w = self._base_min_w
@@ -2301,7 +2301,7 @@ class LauncherWindow:
         self.root.title(DISPLAY_NAME)
         _apply_window_icon(self.root)
         self._init_window_scale_context()
-        self.root.geometry(f"{self._px(760)}x{self._px(560)}")
+        self.root.geometry(f"{self._px(760)}x{self._px(520)}")
         self.root.resizable(True, True)
         self.root.configure(bg=_THEME["BG"])
         self.root.protocol("WM_DELETE_WINDOW", self._on_exit)
@@ -2647,7 +2647,7 @@ class LauncherWindow:
 
         self.meta_lbl = tk.Label(
             title_stack,
-            text=f"启动器 v{LAUNCHER_VERSION}  |  兼容应用包 v{MIN_SUPPORTED_APP_VERSION}+",
+            text=f"启动器 v{LAUNCHER_VERSION}  |  最低兼容应用包 v{MIN_SUPPORTED_APP_VERSION}+",
             font=self._font(10),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["BG"],
@@ -4090,7 +4090,7 @@ class LauncherWindow:
         self.selection_summary_lbl.config(
             text=(
                 f"{info['title']}  |  推荐：{self.detected_channel}  |  来源：{label}\n"
-                f"{info['desc']} {info['who']} {source_detail}"
+                f"{info['desc']} {source_detail}"
             )
         )
         self._refresh_wraplengths()
