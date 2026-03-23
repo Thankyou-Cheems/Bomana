@@ -52,6 +52,7 @@ except ImportError:
 
 # Launcher metadata
 LAUNCHER_VERSION = "1.5.4"
+MIN_SUPPORTED_APP_VERSION = "6.7.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -2646,7 +2647,7 @@ class LauncherWindow:
 
         self.meta_lbl = tk.Label(
             title_stack,
-            text=f"启动器 v{LAUNCHER_VERSION}  |  先检查、再下载、可回退",
+            text=f"启动器 v{LAUNCHER_VERSION}  |  兼容应用包 v{MIN_SUPPORTED_APP_VERSION}+",
             font=self._font(10),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["BG"],
@@ -2821,7 +2822,7 @@ class LauncherWindow:
             pady=(self._px(4), self._px(10)),
         )
 
-        status_header = tk.Frame(card, bg=_THEME["CARD_ALT"])
+        status_header = tk.Frame(card, bg=_THEME["CARD"])
         status_header.pack(
             fill="x", padx=(self._px(16), self._px(6)), pady=(self._px(12), self._px(6))
         )
@@ -2865,7 +2866,7 @@ class LauncherWindow:
             card,
             width=self.progress_width,
             height=self.progress_height,
-            bg=_THEME["CARD_ALT"],
+            bg=_THEME["CARD"],
             bd=0,
             highlightthickness=0,
         )
@@ -2879,7 +2880,7 @@ class LauncherWindow:
             text="首次使用请先下载应用包；后续更新会自动保留一个上一版本供回退。",
             font=self._font(9),
             fg=_THEME["TEXT_MUTED"],
-            bg=_THEME["CARD_ALT"],
+            bg=_THEME["CARD"],
             anchor="w",
             justify="left",
             wraplength=self._px(520),
@@ -3523,6 +3524,16 @@ class LauncherWindow:
         text = f"{symbol} {title}" if title else symbol
         self.status_lbl.config(text=text, fg=self._status_color(self.status_level))
 
+    def _refresh_progress_visibility(self) -> None:
+        if not hasattr(self, "progress_canvas"):
+            return
+        should_show = bool(self.running)
+        manager = self.progress_canvas.winfo_manager()
+        if should_show and manager != "pack":
+            self.progress_canvas.pack(padx=self._px(16), pady=(self._px(14), self._px(6)))
+        elif (not should_show) and manager == "pack":
+            self.progress_canvas.pack_forget()
+
     def _set_status(
         self, title: str, detail: str, progress: Optional[float], level: str
     ) -> None:
@@ -3541,6 +3552,7 @@ class LauncherWindow:
             self.progress_canvas.coords(
                 self.progress_bar, 0, 0, width, self.progress_height
             )
+        self._refresh_progress_visibility()
         self._schedule_layout_reflow()
 
     def _compose_check_detail(self) -> str:
@@ -3647,6 +3659,7 @@ class LauncherWindow:
     def _set_running(self, running: bool) -> None:
         self.running = running
         self._render_status_text()
+        self._refresh_progress_visibility()
         self._update_download_button_state()
         self._update_launch_button_label()
         self._update_launcher_button_state()
@@ -4076,9 +4089,8 @@ class LauncherWindow:
         )
         self.selection_summary_lbl.config(
             text=(
-                f"{info['title']}  |  默认推荐：{self.detected_channel}  |  来源：{label}\n"
-                f"{info['desc']}  {info['who']}\n"
-                f"{source_detail}"
+                f"{info['title']}  |  推荐：{self.detected_channel}  |  来源：{label}\n"
+                f"{info['desc']} {info['who']} {source_detail}"
             )
         )
         self._refresh_wraplengths()
