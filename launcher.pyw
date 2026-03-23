@@ -58,6 +58,8 @@ REPO_NAME = "Bomana"
 PROJECT_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
 DEFAULT_CHANNEL = "Enhanced"
 APP_DIR_NAME = "app"
+APP_PREVIOUS_DIR_NAME = "app_previous"
+APP_BACKUP_DIR_NAME = f"{APP_DIR_NAME}_backup"
 STATE_FILE_NAME = "launcher_state.json"
 LOG_FILE_NAME = "launcher.log"
 INSTALL_ID_FILE_NAME = ".bomana_install_id"
@@ -99,16 +101,18 @@ _CHANNEL_MAP = {
 }
 
 _THEME = {
-    "BG": "#0a0e13",
-    "CARD": "#161b22",
-    "BORDER": "#30363d",
-    "TEXT": "#e6edf3",
-    "TEXT_DIM": "#8b949e",
-    "TEXT_MUTED": "#484f58",
-    "BLUE": "#58a6ff",
-    "GREEN": "#3fb950",
-    "YELLOW": "#d29922",
-    "RED": "#f85149",
+    "BG": "#10151d",
+    "CARD": "#18202c",
+    "CARD_ALT": "#111821",
+    "BORDER": "#354258",
+    "TEXT": "#edf4fd",
+    "TEXT_DIM": "#bac7d8",
+    "TEXT_MUTED": "#6d7f96",
+    "BLUE": "#5ab0ff",
+    "GREEN": "#6ed081",
+    "YELLOW": "#f1c55e",
+    "RED": "#ff7a74",
+    "ORANGE": "#ffb066",
 }
 
 CHANNEL_DETAILS = {
@@ -209,6 +213,10 @@ def _app_runtime_dir(base: Path) -> Path:
     if _is_source_test_run(base):
         return base
     return base / APP_DIR_NAME
+
+
+def _previous_app_dir(base: Path) -> Path:
+    return base / APP_PREVIOUS_DIR_NAME
 
 
 def _apply_window_icon(window: tk.Misc) -> None:
@@ -546,6 +554,10 @@ def _is_local_app_ready(base: Path) -> bool:
     return (_app_runtime_dir(base) / DEFAULT_ENTRYPOINT).exists()
 
 
+def _is_previous_app_ready(base: Path) -> bool:
+    return (_previous_app_dir(base) / DEFAULT_ENTRYPOINT).exists()
+
+
 def _acquire_update_lock(base: Path) -> Path:
     lock_path = base / UPDATE_LOCK_FILE_NAME
     try:
@@ -585,7 +597,8 @@ def _release_update_lock(lock_path: Optional[Path]) -> None:
 
 def _recover_incomplete_install(base: Path) -> None:
     app_dir = base / APP_DIR_NAME
-    backup_dir = base / f"{APP_DIR_NAME}_backup"
+    backup_dir = base / APP_BACKUP_DIR_NAME
+    previous_dir = base / APP_PREVIOUS_DIR_NAME
     new_dir = base / f"{APP_DIR_NAME}_new"
     steps = []
 
@@ -595,8 +608,10 @@ def _recover_incomplete_install(base: Path) -> None:
             steps.append("restore_backup")
 
         if app_dir.exists() and backup_dir.exists():
-            shutil.rmtree(backup_dir, ignore_errors=True)
-            steps.append("cleanup_backup")
+            if previous_dir.exists():
+                shutil.rmtree(previous_dir, ignore_errors=True)
+            os.replace(str(backup_dir), str(previous_dir))
+            steps.append("promote_backup_to_previous")
 
         if new_dir.exists():
             if not app_dir.exists():
@@ -799,7 +814,8 @@ def _install_zip_package(
         raise RuntimeError("已取消当前操作")
 
     app_dir = base / APP_DIR_NAME
-    backup_dir = base / f"{APP_DIR_NAME}_backup"
+    backup_dir = base / APP_BACKUP_DIR_NAME
+    previous_dir = base / APP_PREVIOUS_DIR_NAME
     new_dir = base / f"{APP_DIR_NAME}_new"
     lock_path = _acquire_update_lock(base)
     work_dir = Path(tempfile.mkdtemp(prefix="bomana_update_", dir=str(base)))
@@ -839,7 +855,9 @@ def _install_zip_package(
         replaced_app = True
 
         if backup_dir.exists():
-            shutil.rmtree(backup_dir, ignore_errors=True)
+            if previous_dir.exists():
+                shutil.rmtree(previous_dir, ignore_errors=True)
+            os.replace(str(backup_dir), str(previous_dir))
     except Exception:
         # rollback
         try:
@@ -851,6 +869,56 @@ def _install_zip_package(
                 os.replace(str(backup_dir), str(app_dir))
             if new_dir.exists():
                 shutil.rmtree(new_dir, ignore_errors=True)
+        except Exception:
+            pass
+        raise
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        _release_update_lock(lock_path)
+
+
+def _rollback_to_previous_app(
+    base: Path,
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+) -> Tuple[str, str]:
+    app_dir = base / APP_DIR_NAME
+    previous_dir = base / APP_PREVIOUS_DIR_NAME
+    if not app_dir.exists():
+        raise RuntimeError("当前没有可用应用，无法执行回退。")
+    if not previous_dir.exists():
+        raise RuntimeError("未找到可回退的上一版本。")
+
+    current_version = _read_local_app_version(app_dir)
+    previous_version = _read_local_app_version(previous_dir)
+    lock_path = _acquire_update_lock(base)
+    work_dir = Path(tempfile.mkdtemp(prefix="bomana_rollback_", dir=str(base)))
+    swap_dir = work_dir / "app_swap"
+
+    try:
+        if status_cb:
+            status_cb(
+                "正在回退版本",
+                f"正在切换到上一版本 v{previous_version}...",
+                0.55,
+                "warning",
+            )
+
+        os.replace(str(app_dir), str(swap_dir))
+        os.replace(str(previous_dir), str(app_dir))
+        os.replace(str(swap_dir), str(previous_dir))
+
+        if status_cb:
+            status_cb(
+                "回退完成",
+                f"已切换到 v{previous_version}，当前保留的上一版本为 v{current_version}。",
+                1.0,
+                "success",
+            )
+        return previous_version, current_version
+    except Exception:
+        try:
+            if swap_dir.exists() and not app_dir.exists():
+                os.replace(str(swap_dir), str(app_dir))
         except Exception:
             pass
         raise
@@ -2177,6 +2245,7 @@ class LauncherWindow:
         _set_use_system_proxy(self.use_system_proxy)
         self.client_identity = _build_client_identity(base)
         self.local_version = _read_local_app_version(_app_runtime_dir(base))
+        self.previous_version = _read_local_app_version(_previous_app_dir(base))
         self.events: "queue.Queue[Tuple[str, Dict[str, Any]]]" = queue.Queue()
         self.running = False
         self.has_attempted_update = False
@@ -2204,6 +2273,7 @@ class LauncherWindow:
         self._worker: Optional[threading.Thread] = None
         self._cancel_requested = threading.Event()
         self._exit_after_task = False
+        self._recheck_requested = False
         self._spin = ["◜", "◠", "◝", "◞", "◡", "◟"]
         self.status_title = "正在准备"
         self.status_level = "info"
@@ -2297,18 +2367,25 @@ class LauncherWindow:
                 "border": "#8cc2ff",
             },
             "success": {
-                "bg": "#2f6f44",
-                "fg": "#0a0e13",
-                "hover_bg": "#3f8f58",
-                "press_bg": "#2d7348",
-                "border": "#58a36f",
+                "bg": "#3d8458",
+                "fg": "#08110d",
+                "hover_bg": "#4c9a68",
+                "press_bg": "#34724d",
+                "border": "#78c896",
             },
             "secondary": {
-                "bg": "#2b3542",
+                "bg": "#243040",
                 "fg": _THEME["TEXT"],
-                "hover_bg": "#3b4654",
-                "press_bg": "#2f3946",
-                "border": "#4c5a6b",
+                "hover_bg": "#314154",
+                "press_bg": "#273646",
+                "border": "#465a72",
+            },
+            "warning": {
+                "bg": "#7f5a22",
+                "fg": "#fff6e8",
+                "hover_bg": "#9a6d2a",
+                "press_bg": "#6b4b1b",
+                "border": "#c79245",
             },
         }
         st = styles.get(variant, styles["secondary"])
@@ -2556,19 +2633,42 @@ class LauncherWindow:
         title_row = tk.Frame(top, bg=_THEME["BG"])
         title_row.pack(fill="x")
 
+        title_stack = tk.Frame(title_row, bg=_THEME["BG"])
+        title_stack.pack(side="left", fill="x", expand=True)
+
+        self.eyebrow_lbl = tk.Label(
+            title_stack,
+            text="PORTABLE UPDATE HUB",
+            font=self._font(8, "bold"),
+            fg=_THEME["BLUE"],
+            bg=_THEME["BG"],
+            anchor="w",
+        )
+        self.eyebrow_lbl.pack(anchor="w")
+
         self.title_lbl = tk.Label(
-            title_row,
+            title_stack,
             text=DISPLAY_NAME,
-            font=self._font(18, "bold"),
+            font=self._font(20, "bold"),
             fg=_THEME["TEXT"],
             bg=_THEME["BG"],
             anchor="w",
         )
-        self.title_lbl.pack(side="left", fill="x", expand=True)
+        self.title_lbl.pack(anchor="w")
+
+        self.meta_lbl = tk.Label(
+            title_stack,
+            text=f"启动器 v{LAUNCHER_VERSION}  |  先检查、再下载、可回退",
+            font=self._font(10),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["BG"],
+            anchor="w",
+        )
+        self.meta_lbl.pack(anchor="w", pady=(self._px(3), 0))
 
         self.details_btn = tk.Button(
             title_row,
-            text="详情/支持作者",
+            text="关于 / 支持作者",
             width=14,
             command=self._open_details,
             cursor="hand2",
@@ -2581,7 +2681,7 @@ class LauncherWindow:
 
         self.sub_lbl = tk.Label(
             top,
-            text=f"通道：{self.channel}  |  本地版本：v{self.local_version}",
+            text=self._subline_text(),
             font=self._font(10),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["BG"],
@@ -2739,7 +2839,10 @@ class LauncherWindow:
             pady=(self._px(4), self._px(10)),
         )
 
-        status_header = tk.Frame(card, bg=_THEME["CARD"])
+        accent = tk.Frame(card, bg=_THEME["BLUE"], height=self._px(3))
+        accent.pack(fill="x")
+
+        status_header = tk.Frame(card, bg=_THEME["CARD_ALT"])
         status_header.pack(
             fill="x", padx=(self._px(16), self._px(6)), pady=(self._px(12), self._px(6))
         )
@@ -2756,7 +2859,7 @@ class LauncherWindow:
 
         self.launch_btn = tk.Button(
             status_header,
-            text="离线启动（本地）",
+            text="启动本地应用",
             width=16,
             command=self._on_launch,
             cursor="hand2",
@@ -2783,7 +2886,7 @@ class LauncherWindow:
             card,
             width=self.progress_width,
             height=self.progress_height,
-            bg=_THEME["BORDER"],
+            bg=_THEME["CARD_ALT"],
             bd=0,
             highlightthickness=0,
         )
@@ -2794,10 +2897,10 @@ class LauncherWindow:
 
         self.hint_lbl = tk.Label(
             card,
-            text="首次使用请先下载应用包，下载完成后再启动应用。",
+            text="首次使用请先下载应用包；后续更新会自动保留一个上一版本供回退。",
             font=self._font(9),
             fg=_THEME["TEXT_MUTED"],
-            bg=_THEME["CARD"],
+            bg=_THEME["CARD_ALT"],
             anchor="w",
             justify="left",
             wraplength=self._px(520),
@@ -2848,6 +2951,19 @@ class LauncherWindow:
         self.retry_btn.pack(side="left")
         self._style_action_button(self.retry_btn, "secondary")
 
+        self.rollback_btn = tk.Button(
+            btn_row,
+            text="无回退版本",
+            width=12,
+            command=self._on_rollback,
+            cursor="hand2",
+            font=self._font(10),
+            padx=self._px(6),
+            pady=self._px(3),
+        )
+        self.rollback_btn.pack(side="left", padx=(self._px(8), 0))
+        self._style_action_button(self.rollback_btn, "secondary")
+
         self.release_btn = tk.Button(
             btn_row,
             text="打开下载页",
@@ -2863,7 +2979,7 @@ class LauncherWindow:
 
         self.import_btn = tk.Button(
             btn_row,
-            text="手动丢入ZIP",
+            text="导入本地包",
             width=11,
             command=self._on_import_zip,
             cursor="hand2",
@@ -2919,6 +3035,7 @@ class LauncherWindow:
             self._set_running(False)
             return
         self.has_attempted_update = True
+        self._recheck_requested = False
         self.current_task = "check"
         self.latest_manifest = None
         self.latest_min_launcher_version = ""
@@ -2931,10 +3048,7 @@ class LauncherWindow:
         self.last_check_ok = False
         self.last_check_error = ""
         self.channel = self.channel_var.get().strip() or self.detected_channel
-        self.local_version = _read_local_app_version(_app_runtime_dir(self.base))
-        self.sub_lbl.config(
-            text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
-        )
+        self._refresh_installed_versions()
         if automatic:
             self._set_status(
                 "自动检查更新",
@@ -3018,6 +3132,37 @@ class LauncherWindow:
                 )
             )
             return
+        if task == "rollback":
+            final_version = _read_local_app_version(_app_runtime_dir(self.base))
+            preserved_version = _read_local_app_version(_previous_app_dir(self.base))
+            update_ok = False
+            detail = ""
+            try:
+                final_version, preserved_version = _rollback_to_previous_app(
+                    self.base,
+                    status_cb=self._emit_status,
+                )
+                update_ok = True
+                detail = (
+                    f"已回退到 v{final_version}。当前保留的上一版本为 v{preserved_version}。"
+                )
+            except Exception as e:
+                detail = str(e) or "回退失败"
+                _log(self.base, f"回退上一版本失败：{e}")
+
+            self.events.put(
+                (
+                    "rollback_done",
+                    {
+                        "update_ok": update_ok,
+                        "final_version": final_version,
+                        "status": ("回退完成" if update_ok else "回退失败"),
+                        "detail": detail,
+                        "level": ("success" if update_ok else "warning"),
+                    },
+                )
+            )
+            return
         if task == "import_zip":
             final_version = _read_local_app_version(_app_runtime_dir(self.base))
             update_ok = False
@@ -3056,7 +3201,14 @@ class LauncherWindow:
                             "final_version": final_version,
                             "warning": "",
                             "status": "安装完成",
-                            "detail": f"已导入本地应用包，当前版本 v{final_version}",
+                            "detail": (
+                                f"已导入本地应用包，当前版本 v{final_version}"
+                                + (
+                                    f"；已保留上一版本 v{_read_local_app_version(_previous_app_dir(self.base))}"
+                                    if _is_previous_app_ready(self.base)
+                                    else ""
+                                )
+                            ),
                             "level": "success",
                         },
                     )
@@ -3142,6 +3294,11 @@ class LauncherWindow:
                         "detail": (
                             f"已更新到 v{final_version}（来源：{update_source}）。现在可点击“启动应用”。\n"
                             f"安装位置：{self.install_dir}"
+                            + (
+                                f"\n已保留上一版本 v{_read_local_app_version(_previous_app_dir(self.base))}，可随时回退。"
+                                if _is_previous_app_ready(self.base)
+                                else ""
+                            )
                         ),
                         "level": "success",
                     },
@@ -3267,15 +3424,15 @@ class LauncherWindow:
                         self._set_status(
                             "检查失败", self.last_check_error, 0.0, "warning"
                         )
-                    self.local_version = _read_local_app_version(
-                        self.base / APP_DIR_NAME
-                    )
-                    self.sub_lbl.config(
-                        text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
-                    )
+                    self._refresh_installed_versions()
+                    self.current_task = ""
                     self._set_running(False)
                     if self._exit_after_task:
                         self._finalize_exit()
+                        continue
+                    if self._recheck_requested:
+                        self._recheck_requested = False
+                        self._begin_check(automatic=False)
                         continue
                     if not ok:
                         self._show_error_actions()
@@ -3295,12 +3452,8 @@ class LauncherWindow:
                         self.progress_value,
                         str(payload.get("level", "info")),
                     )
-                    self.local_version = _read_local_app_version(
-                        self.base / APP_DIR_NAME
-                    )
-                    self.sub_lbl.config(
-                        text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
-                    )
+                    self._refresh_installed_versions()
+                    self.current_task = ""
                     if bool(payload.get("update_ok", False)):
                         self.update_available = False
                         self.app_requires_launcher_update = False
@@ -3316,6 +3469,20 @@ class LauncherWindow:
                         continue
                     if not bool(payload.get("update_ok", False)):
                         self._show_error_actions()
+                elif typ == "rollback_done":
+                    ok = bool(payload.get("update_ok", False))
+                    self._set_status(
+                        str(payload.get("status", "")),
+                        str(payload.get("detail", "")),
+                        self.progress_value,
+                        str(payload.get("level", "info")),
+                    )
+                    self.last_download_success = False
+                    self.current_task = ""
+                    self._refresh_installed_versions()
+                    self._set_running(False)
+                    if not ok:
+                        self._show_error_actions()
                 elif typ == "launcher_done":
                     ok = bool(payload.get("update_ok", False))
                     self._set_status(
@@ -3324,6 +3491,7 @@ class LauncherWindow:
                         1.0 if ok else self.progress_value,
                         str(payload.get("level", "info")),
                     )
+                    self.current_task = ""
                     self._set_running(False)
                     if ok:
                         self.launcher_update_available = False
@@ -3422,6 +3590,22 @@ class LauncherWindow:
             )
         return "\n".join(line for line in lines if line)
 
+    def _subline_text(self) -> str:
+        base = f"通道：{self.channel}  |  本地版本：v{self.local_version}"
+        if self.previous_version != "0.0.0":
+            return f"{base}  |  可回退：v{self.previous_version}"
+        return base
+
+    def _refresh_installed_versions(self) -> None:
+        self.local_version = _read_local_app_version(_app_runtime_dir(self.base))
+        self.previous_version = _read_local_app_version(_previous_app_dir(self.base))
+        self.sub_lbl.config(text=self._subline_text())
+
+    def _queue_recheck_after_check(self, reason: str) -> None:
+        self._recheck_requested = True
+        detail = str(reason or "").strip() or "当前检查结束后将自动重新检查。"
+        self._set_status("已记录新的检查条件", detail, None, "info")
+
     def _update_launch_button_label(self) -> None:
         if self.source_test_mode:
             self.launch_btn.config(text="启动源码应用")
@@ -3469,12 +3653,25 @@ class LauncherWindow:
         self.launcher_btn.config(text="启动器已最新", state="disabled")
         self._style_action_button(self.launcher_btn, "secondary")
 
+    def _update_rollback_button_state(self) -> None:
+        if self.source_test_mode:
+            self.rollback_btn.config(text="源码模式不回退", state="disabled")
+            self._style_action_button(self.rollback_btn, "secondary")
+            return
+        if self.previous_version != "0.0.0":
+            self.rollback_btn.config(text=f"回退 v{self.previous_version}", state="normal")
+            self._style_action_button(self.rollback_btn, "warning")
+            return
+        self.rollback_btn.config(text="无回退版本", state="disabled")
+        self._style_action_button(self.rollback_btn, "secondary")
+
     def _set_running(self, running: bool) -> None:
         self.running = running
         self._render_status_text()
         self._update_download_button_state()
         self._update_launch_button_label()
         self._update_launcher_button_state()
+        self._update_rollback_button_state()
         state = "disabled" if running else "normal"
         update_controls_state = "disabled" if self.source_test_mode else state
         self.start_btn.config(state=update_controls_state)
@@ -3489,15 +3686,19 @@ class LauncherWindow:
         self.import_btn.config(state=("disabled" if self.source_test_mode else "normal"))
         self.details_btn.config(state="normal")
         self.exit_btn.config(state="normal")
-        self.channel_menu.config(state=state)
+        self.rollback_btn.config(state=("disabled" if running else self.rollback_btn.cget("state")))
+        self.channel_menu.config(state=("normal" if running and self.current_task == "check" else state))
+        self.download_source_menu.config(
+            state=("normal" if (not running or self.current_task == "check") else "disabled")
+        )
         if hasattr(self, "proxy_chk"):
-            self.proxy_chk.config(state=state)
+            self.proxy_chk.config(state=("normal" if running and self.current_task == "check" else state))
 
         if running:
             self.retry_btn.pack_forget()
             if self.current_task == "check":
                 self.hint_lbl.config(
-                    text="正在后台检查应用与启动器更新；如本地已有应用，可直接点“启动应用”。"
+                    text="正在后台检查应用与启动器更新；此时可继续切换通道/下载来源，当前检查结束后会自动按新条件重查。"
                 )
             elif self.current_task == "launcher_download":
                 self.hint_lbl.config(
@@ -3588,13 +3789,18 @@ class LauncherWindow:
                     )
             else:
                 self.hint_lbl.config(text="启动后会自动检查更新。")
+            if (not self.source_test_mode) and self.previous_version != "0.0.0":
+                self.hint_lbl.config(
+                    text=f"{self.hint_lbl.cget('text')}\n可通过“回退 v{self.previous_version}”快速切回上一版。"
+                )
         self._schedule_layout_reflow()
 
     def _show_error_actions(self) -> None:
         if _is_local_app_ready(self.base):
-            self.hint_lbl.config(
-                text="可点击“重新检查”或“打开下载页”。也可直接点击“启动应用”。"
-            )
+            text = "可点击“重新检查”或“打开下载页”。也可直接点击“启动应用”。"
+            if self.previous_version != "0.0.0":
+                text += f"\n如果新版异常，也可以点击“回退 v{self.previous_version}”。"
+            self.hint_lbl.config(text=text)
         else:
             self.hint_lbl.config(
                 text="可点击“重新检查”或“打开下载页”。首次使用请先完成下载。"
@@ -3620,13 +3826,18 @@ class LauncherWindow:
         _write_state(self.base, state)
 
     def _on_proxy_changed(self) -> None:
-        if self.running:
+        if self.running and self.current_task != "check":
             self.proxy_var.set(bool(self.use_system_proxy))
             return
         self.use_system_proxy = bool(self.proxy_var.get())
         _set_use_system_proxy(self.use_system_proxy)
         self._save_launcher_state()
         mode = "系统代理" if self.use_system_proxy else "直连模式"
+        if self.running and self.current_task == "check":
+            self._queue_recheck_after_check(
+                f"当前使用：{mode}。本次检查结束后会按新的网络设置自动重查。"
+            )
+            return
         self._set_status(
             "网络设置已更新",
             f"当前使用：{mode}。后续检查/下载将按此设置进行。",
@@ -3639,7 +3850,7 @@ class LauncherWindow:
             self.download_source_var.get(),
             DOWNLOAD_SOURCE_MODE_AUTO,
         )
-        if self.running:
+        if self.running and self.current_task != "check":
             self.download_source_var.set(_download_source_label(self.download_source_mode))
             return
         new_mode = _normalize_download_source_mode(new_mode)
@@ -3649,6 +3860,14 @@ class LauncherWindow:
         self.download_source_mode = new_mode
         self._save_launcher_state()
         self._refresh_download_source_details()
+        if self.running and self.current_task == "check":
+            self._queue_recheck_after_check(
+                DOWNLOAD_SOURCE_DETAILS.get(
+                    self.download_source_mode,
+                    DOWNLOAD_SOURCE_DETAILS[DOWNLOAD_SOURCE_MODE_AUTO],
+                )
+            )
+            return
         self._set_status(
             "下载来源已更新",
             DOWNLOAD_SOURCE_DETAILS.get(
@@ -3779,6 +3998,38 @@ class LauncherWindow:
         self._set_running(True)
         self._start_worker("launcher_download")
 
+    def _on_rollback(self) -> None:
+        if self.running:
+            return
+        if self.source_test_mode:
+            messagebox.showinfo(
+                DISPLAY_NAME,
+                "当前处于源码测试模式，不使用应用包安装目录，因此不提供版本回退。",
+            )
+            return
+        if self.previous_version == "0.0.0" or not _is_previous_app_ready(self.base):
+            messagebox.showinfo(DISPLAY_NAME, "当前没有可回退的上一版本。")
+            return
+        ok = messagebox.askyesno(
+            DISPLAY_NAME,
+            (
+                f"将把当前应用 v{self.local_version} 与上一版本 v{self.previous_version} 对调。\n"
+                "回退完成后会立即保留当前版本作为新的“上一版本”，方便再次切回。\n"
+                "是否继续？"
+            ),
+        )
+        if not ok:
+            return
+        self.current_task = "rollback"
+        self._set_status(
+            "准备回退",
+            f"即将从 v{self.local_version} 回退到 v{self.previous_version}。",
+            0.0,
+            "warning",
+        )
+        self._set_running(True)
+        self._start_worker("rollback")
+
     def _on_retry(self) -> None:
         if self.source_test_mode:
             messagebox.showinfo(
@@ -3824,15 +4075,16 @@ class LauncherWindow:
         self._start_worker("import_zip")
 
     def _on_channel_changed(self, *_args) -> None:
-        if self.running:
+        if self.running and self.current_task != "check":
+            self.channel_var.set(self.channel)
             return
         self.channel = self.channel_var.get().strip() or self.detected_channel
-        self.local_version = _read_local_app_version(_app_runtime_dir(self.base))
         self._save_launcher_state()
-        self.sub_lbl.config(
-            text=f"通道：{self.channel}  |  本地版本：v{self.local_version}"
-        )
+        self._refresh_installed_versions()
         self._refresh_channel_details()
+        if self.running and self.current_task == "check":
+            self._queue_recheck_after_check(f"通道已切换到 {self.channel}，当前检查结束后将自动重查。")
+            return
         self._begin_check(automatic=True)
 
     def _refresh_channel_details(self) -> None:
