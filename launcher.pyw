@@ -2566,10 +2566,8 @@ class LauncherWindow:
             if win_w <= 1:
                 win_w = max(self._base_min_w, self.root.winfo_reqwidth())
             content_w = max(self._px(280), win_w - self._px(80))
-            if hasattr(self, "download_source_desc_lbl"):
-                self.download_source_desc_lbl.config(wraplength=content_w)
-            if hasattr(self, "channel_desc_lbl"):
-                self.channel_desc_lbl.config(wraplength=content_w)
+            if hasattr(self, "selection_summary_lbl"):
+                self.selection_summary_lbl.config(wraplength=content_w)
             if hasattr(self, "detail_lbl"):
                 self.detail_lbl.config(wraplength=content_w)
             if hasattr(self, "hint_lbl"):
@@ -2636,16 +2634,6 @@ class LauncherWindow:
         title_stack = tk.Frame(title_row, bg=_THEME["BG"])
         title_stack.pack(side="left", fill="x", expand=True)
 
-        self.eyebrow_lbl = tk.Label(
-            title_stack,
-            text="PORTABLE UPDATE HUB",
-            font=self._font(8, "bold"),
-            fg=_THEME["BLUE"],
-            bg=_THEME["BG"],
-            anchor="w",
-        )
-        self.eyebrow_lbl.pack(anchor="w")
-
         self.title_lbl = tk.Label(
             title_stack,
             text=DISPLAY_NAME,
@@ -2665,6 +2653,16 @@ class LauncherWindow:
             anchor="w",
         )
         self.meta_lbl.pack(anchor="w", pady=(self._px(3), 0))
+
+        self.eyebrow_lbl = tk.Label(
+            title_stack,
+            text="Portable update hub",
+            font=self._font(8, "bold"),
+            fg=_THEME["TEXT_MUTED"],
+            bg=_THEME["BG"],
+            anchor="w",
+        )
+        self.eyebrow_lbl.pack(anchor="w", pady=(self._px(2), 0))
 
         self.details_btn = tk.Button(
             title_row,
@@ -2689,21 +2687,32 @@ class LauncherWindow:
         )
         self.sub_lbl.pack(fill="x", pady=(self._px(3), 0))
 
-        channel_row = tk.Frame(top, bg=_THEME["BG"])
-        channel_row.pack(fill="x", pady=(self._px(8), 0))
-
-        channel_title = tk.Label(
-            channel_row,
-            text="版本通道",
-            font=self._font(10, "bold"),
-            fg=_THEME["TEXT"],
-            bg=_THEME["BG"],
-            anchor="w",
+        controls_card = tk.Frame(
+            top,
+            bg=_THEME["CARD_ALT"],
+            highlightthickness=1,
+            highlightbackground=_THEME["BORDER"],
         )
-        channel_title.pack(side="left")
+        controls_card.pack(fill="x", pady=(self._px(10), 0))
+
+        controls_row = tk.Frame(controls_card, bg=_THEME["CARD_ALT"])
+        controls_row.pack(fill="x", padx=self._px(12), pady=(self._px(10), self._px(8)))
+
+        picker_row = tk.Frame(controls_row, bg=_THEME["CARD_ALT"])
+        picker_row.pack(side="left", fill="x", expand=True)
+
+        channel_cluster = tk.Frame(picker_row, bg=_THEME["CARD_ALT"])
+        channel_cluster.pack(side="left")
+        tk.Label(
+            channel_cluster,
+            text="通道",
+            font=self._font(9, "bold"),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["CARD_ALT"],
+        ).pack(side="left")
 
         self.channel_menu = tk.OptionMenu(
-            channel_row, self.channel_var, "Enhanced", "Standard", "Lite"
+            channel_cluster, self.channel_var, "Enhanced", "Standard", "Lite"
         )
         self.channel_menu.config(
             bg=_THEME["CARD"],
@@ -2713,7 +2722,7 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
             bd=0,
-            width=10,
+            width=9,
             cursor="hand2",
             font=self._font(10),
         )
@@ -2727,51 +2736,19 @@ class LauncherWindow:
         )
         self.channel_menu.pack(side="left", padx=(self._px(8), 0))
 
-        auto_tip = tk.Label(
-            channel_row,
-            text=f"默认推荐通道：{self.detected_channel}",
-            font=self._font(9),
-            fg=_THEME["TEXT_MUTED"],
-            bg=_THEME["BG"],
-            anchor="w",
-        )
-        auto_tip.pack(side="left", padx=(self._px(10), 0))
-
-        self.proxy_chk = tk.Checkbutton(
-            channel_row,
-            text="使用系统代理",
-            variable=self.proxy_var,
-            command=self._on_proxy_changed,
-            bg=_THEME["BG"],
-            fg=_THEME["TEXT_DIM"],
-            activebackground=_THEME["BG"],
-            activeforeground=_THEME["TEXT"],
-            selectcolor=_THEME["CARD"],
-            bd=0,
-            highlightthickness=0,
-            cursor="hand2",
-            font=self._font(9),
-        )
-        self.proxy_chk.pack(side="right")
-
-        network_row = tk.Frame(top, bg=_THEME["BG"])
-        network_row.pack(fill="x", pady=(self._px(6), 0))
-
-        source_title = tk.Label(
-            network_row,
-            text="下载来源",
+        source_cluster = tk.Frame(picker_row, bg=_THEME["CARD_ALT"])
+        source_cluster.pack(side="left", padx=(self._px(18), 0))
+        tk.Label(
+            source_cluster,
+            text="来源",
             font=self._font(9, "bold"),
             fg=_THEME["TEXT_DIM"],
-            bg=_THEME["BG"],
-            anchor="w",
-        )
-        source_title.pack(side="left")
+            bg=_THEME["CARD_ALT"],
+        ).pack(side="left")
 
-        source_choices = [
-            label for _mode, label in DOWNLOAD_SOURCE_CHOICES
-        ]
+        source_choices = [label for _mode, label in DOWNLOAD_SOURCE_CHOICES]
         self.download_source_menu = tk.OptionMenu(
-            network_row,
+            source_cluster,
             self.download_source_var,
             source_choices[0],
             *source_choices[1:],
@@ -2785,7 +2762,7 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
             bd=0,
-            width=18,
+            width=14,
             cursor="hand2",
             font=self._font(9),
         )
@@ -2799,29 +2776,34 @@ class LauncherWindow:
         )
         self.download_source_menu.pack(side="left", padx=(self._px(8), 0))
 
-        self.download_source_desc_lbl = tk.Label(
-            top,
-            text="",
+        self.proxy_chk = tk.Checkbutton(
+            controls_row,
+            text="使用系统代理",
+            variable=self.proxy_var,
+            command=self._on_proxy_changed,
+            bg=_THEME["CARD_ALT"],
+            fg=_THEME["TEXT_DIM"],
+            activebackground=_THEME["CARD_ALT"],
+            activeforeground=_THEME["TEXT"],
+            selectcolor=_THEME["CARD"],
+            bd=0,
+            highlightthickness=0,
+            cursor="hand2",
             font=self._font(9),
-            fg=_THEME["TEXT_MUTED"],
-            bg=_THEME["BG"],
-            anchor="w",
-            justify="left",
-            wraplength=self._px(540),
         )
-        self.download_source_desc_lbl.pack(fill="x", pady=(self._px(4), 0))
+        self.proxy_chk.pack(side="right")
 
-        self.channel_desc_lbl = tk.Label(
-            top,
+        self.selection_summary_lbl = tk.Label(
+            controls_card,
             text="",
             font=self._font(9),
             fg=_THEME["TEXT_DIM"],
-            bg=_THEME["BG"],
+            bg=_THEME["CARD_ALT"],
             anchor="w",
             justify="left",
             wraplength=self._px(540),
         )
-        self.channel_desc_lbl.pack(fill="x", pady=(self._px(6), 0))
+        self.selection_summary_lbl.pack(fill="x", padx=self._px(12), pady=(0, self._px(10)))
         self.channel_var.trace_add("write", self._on_channel_changed)
         self._refresh_channel_details()
         self._refresh_download_source_details()
@@ -2838,9 +2820,6 @@ class LauncherWindow:
             padx=self._px(20),
             pady=(self._px(4), self._px(10)),
         )
-
-        accent = tk.Frame(card, bg=_THEME["BLUE"], height=self._px(3))
-        accent.pack(fill="x")
 
         status_header = tk.Frame(card, bg=_THEME["CARD_ALT"])
         status_header.pack(
@@ -4090,19 +4069,22 @@ class LauncherWindow:
     def _refresh_channel_details(self) -> None:
         ch = self.channel_var.get().strip() or self.detected_channel
         info = CHANNEL_DETAILS.get(ch, CHANNEL_DETAILS["Enhanced"])
-        self.channel_desc_lbl.config(
-            text=f"{info['title']}\n{info['desc']}\n{info['who']}"
+        label = _download_source_label(self.download_source_mode)
+        source_detail = DOWNLOAD_SOURCE_DETAILS.get(
+            self.download_source_mode,
+            DOWNLOAD_SOURCE_DETAILS[DOWNLOAD_SOURCE_MODE_AUTO],
+        )
+        self.selection_summary_lbl.config(
+            text=(
+                f"{info['title']}  |  默认推荐：{self.detected_channel}  |  来源：{label}\n"
+                f"{info['desc']}  {info['who']}\n"
+                f"{source_detail}"
+            )
         )
         self._refresh_wraplengths()
 
     def _refresh_download_source_details(self) -> None:
-        label = _download_source_label(self.download_source_mode)
-        detail = DOWNLOAD_SOURCE_DETAILS.get(
-            self.download_source_mode,
-            DOWNLOAD_SOURCE_DETAILS[DOWNLOAD_SOURCE_MODE_AUTO],
-        )
-        self.download_source_desc_lbl.config(text=f"{label}\n{detail}")
-        self._refresh_wraplengths()
+        self._refresh_channel_details()
 
     def _on_launch(self) -> None:
         if not _is_local_app_ready(self.base):
