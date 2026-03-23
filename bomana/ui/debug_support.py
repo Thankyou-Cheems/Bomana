@@ -551,13 +551,15 @@ class AppDebugSupport:
         scene_name = app._debug_scene_names[app._debug_scene_index % len(app._debug_scene_names)]
         source_text = "模拟" if app._debug_effective_mock else "实时"
         clog_line = "CLOG: -"
+        perf_line = "PERF: -"
         raw_diag = str(getattr(live_snap, "diag_text", "") or "")
         if raw_diag:
             for line in raw_diag.splitlines():
                 txt = str(line or "").strip()
                 if txt.startswith("CLOG:"):
                     clog_line = txt
-                    break
+                elif txt.startswith("PERF:"):
+                    perf_line = txt
         lines = [
             f"[Debug] 数据源={source_text} | 场景={scene_name}",
             "操作: 点击[数据源]切实时/模拟，点击[◀/▶]切换场景",
@@ -565,6 +567,8 @@ class AppDebugSupport:
                 f"Live: phase={live_snap.phase.name} api_down={int(live_snap.api_down)} "
                 f"zones={len(live_snap.zones)} target={int(live_snap.has_target)}"
             ),
+            perf_line,
+            f"UI: gap={app._last_ui_gap_ms:.1f}ms work={app._last_ui_work_ms:.1f}ms",
             clog_line,
             (
                 f"Render: phase={render_snap.phase.name} on_ground={int(render_snap.on_ground)} "

@@ -450,6 +450,12 @@ class GameState:
     clog_probe_players: List[str] = field(default_factory=list)  # 玩家名（截断）
     clog_probe_error: str = ""                                   # 最近错误
 
+    # 轻量性能诊断（用于排查 UI/锁/8111 卡顿来源）
+    perf_tick_total_ms: float = 0.0
+    perf_tick_net_ms: float = 0.0
+    perf_tick_lock_ms: float = 0.0
+    perf_snapshot_wait_ms: float = 0.0
+
 
 @dataclass(frozen=True)
 class ZoneDisplayInfo:

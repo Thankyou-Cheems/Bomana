@@ -138,6 +138,9 @@ class App:
 
         # UI刷新控制
         self._ui_after_id = None
+        self._last_ui_frame_ts = 0.0
+        self._last_ui_gap_ms = 0.0
+        self._last_ui_work_ms = 0.0
         
         # 布局可见性
         self._zone_panel_visible = False
@@ -1881,6 +1884,9 @@ class App:
             return
         self._ui_after_id = None
         loop_start = time.monotonic()
+        if self._last_ui_frame_ts > 0.0:
+            self._last_ui_gap_ms = max(0.0, (loop_start - self._last_ui_frame_ts) * 1000.0)
+        self._last_ui_frame_ts = loop_start
         live_snap = self.game.snapshot()
         if self._debug:
             snap = self._build_debug_snapshot(live_snap)
@@ -2069,6 +2075,7 @@ class App:
 
         # 继续下一帧（基于实际耗时补偿）
         elapsed_ms = (time.monotonic() - loop_start) * 1000.0
+        self._last_ui_work_ms = elapsed_ms
         delay = max(0, int(UIConfig.UI_REFRESH_MS - elapsed_ms))
         if not self._stop:
             self._ui_after_id = self.root.after(delay, self._update_ui)

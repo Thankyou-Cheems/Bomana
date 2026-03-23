@@ -267,220 +267,218 @@ class GameLogic:
         4. 更新游戏状态（状态机）
         5. 更新导航信息
         """
+        tick_start = time.monotonic()
         now = time.time()
         budget = Budget(NetworkConfig.MAX_TICK_NET_BUDGET)
 
         # ALIVE 后延迟触发一次性 clog 解析（后台执行）
         self._maybe_start_clog_probe_worker(now)
-        
+
         # 1. 获取遥测数据
         tel = self.tel.fetch(budget)
         raw_tel = tel
-        
+
         # 2. 检查是否需要更新地图元数据（30秒缓存）
         with self._lock:
             map_info = self.state.map_info
             need_map_info = (
-                map_info is None or 
-                not map_info.valid or 
+                map_info is None or
+                not map_info.valid or
                 (now - map_info.fetch_time) > ZoneConfig.MAP_INFO_CACHE_SEC
             )
-        
+
         if need_map_info and budget.remaining() > 0.05:
             new_map_info = self.map_info_fetcher.fetch(budget)
             if new_map_info:
                 with self._lock:
                     self.state.map_info = new_map_info
                     map_info = new_map_info
-        
+
         # 3. 获取地图对象
         mp = self.map.fetch(budget, map_info)
-        
+
         # 4. 记录原始API状态（后续可能在锁内应用短时缓存兜底）
         raw_api_up = bool(tel.ind_ok or tel.state_resp_ok or mp.ok)
 
         # 5. 更新游戏状态（线程安全）
+        net_stage_ms = max(0.0, (time.monotonic() - tick_start) * 1000.0)
+        lock_enter = time.monotonic()
         with self._lock:
-            s = self.state
-            prev_tel = s.last_tel
-            prev_map = s.last_map
+            try:
+                s = self.state
+                prev_tel = s.last_tel
+                prev_map = s.last_map
 
-            # 在战斗阶段对瞬时空帧做“上一帧有效数据”兜底，避免UI/状态机被单帧抖动拉偏。
-            phase_allows_grace = s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
-            recently_seen = (
-                s.last_player_present_ts > 0.0 and
-                (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
-            )
-            used_tel_fallback = False
-            used_map_fallback = False
-
-            if phase_allows_grace and recently_seen:
-                tel_unstable = (not tel.ind_ok) or (not tel.state_resp_ok)
-                if tel_unstable and prev_tel and (prev_tel.ind_ok or prev_tel.state_resp_ok):
-                    tel = prev_tel
-                    used_tel_fallback = True
-
-                map_unstable = (
-                    (not mp.ok) or
-                    (mp.ok and (mp.obj_count == 0) and (not mp.player_aircraft_present))
+                # 在战斗阶段对瞬时空帧做“上一帧有效数据”兜底，避免UI/状态机被单帧抖动拉偏。
+                phase_allows_grace = s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
+                recently_seen = (
+                    s.last_player_present_ts > 0.0 and
+                    (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
                 )
-                if map_unstable and prev_map and prev_map.ok:
-                    mp = prev_map
-                    used_map_fallback = True
+                used_tel_fallback = False
+                used_map_fallback = False
 
-            api_up = bool(raw_api_up or used_tel_fallback or used_map_fallback)
-            s.last_tel = tel
-            s.last_map = mp
-            self._update_attitude_confidence_locked(raw_tel, now)
+                if phase_allows_grace and recently_seen:
+                    tel_unstable = (not tel.ind_ok) or (not tel.state_resp_ok)
+                    if tel_unstable and prev_tel and (prev_tel.ind_ok or prev_tel.state_resp_ok):
+                        tel = prev_tel
+                        used_tel_fallback = True
 
-            # API状态管理
-            if api_up:
-                s.api_down = False
-                s.api_down_candidate_since = None
-            else:
-                # API断线确认（5秒）
-                if s.api_down_candidate_since is None:
-                    s.api_down_candidate_since = now
-                if (now - s.api_down_candidate_since) >= GameConfig.API_DOWN_CONFIRM_SEC:
-                    s.api_down = True
-            
-            if s.api_down:
-                if s.phase != Phase.HANGAR:
-                    s.phase = Phase.IDLE
-                return
-
-            # 判断玩家是否存在
-            # 地图/对象接口在个别时刻会瞬时抖动（例如游戏内打开/关闭地图），
-            # 在 ALIVE/LOSS_PENDING 阶段允许短时兜底，但不能无限延长宽限窗口。
-            phase_allows_player_grace = s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
-            player_present = bool(mp.ok and mp.player_aircraft_present)
-            # 仅真实 map 帧（非上一帧兜底）可以刷新“最近见到玩家”时间，
-            # 否则回机库时可能被兜底数据无限续期。
-            if player_present and (not used_map_fallback):
-                s.last_player_present_ts = now
-
-            presence_recently_seen = (
-                s.last_player_present_ts > 0.0 and
-                (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
-            )
-
-            # 实体特征兜底：仅在“最近确实见过玩家”的短时间窗口内生效，
-            # 避免回机库后因遥测仍有残留值而长期保持 ALIVE。
-            if (not player_present) and phase_allows_player_grace and tel.entity_like and presence_recently_seen:
-                player_present = True
-
-            # 数据短抖动宽限：计分板/地图等场景可能导致8111瞬时空帧，避免ALIVE阶段立即判死。
-            if (not player_present) and phase_allows_player_grace:
-                data_unstable = (not mp.ok) or (not tel.ind_ok) or (not tel.state_resp_ok)
-                if data_unstable and presence_recently_seen:
-                    player_present = True
-            spawn_candidate = player_present and tel.entity_like
-
-            # 更新导航信息（战区、地速）
-            self._update_zone_navigation_locked(mp, tel, now)
-
-            # v6.0.1 优化：弹道计算移至tick线程（每250ms计算一次，而非每50ms）
-            self._update_bombing_calculation_locked(tel, now)
-            
-            # === 状态机逻辑 ===
-            
-            # 机库检测：无地图数据或对象为空
-            hangar_like = (not mp.ok) or (mp.obj_count == 0)
-            if hangar_like and (not player_present) and s.phase != Phase.ALIVE:
-                if s.hangar_candidate_since is None:
-                    s.hangar_candidate_since = now
-                elif (now - s.hangar_candidate_since) >= GameConfig.HANGAR_CONFIRM_SEC:
-                    s.phase = Phase.HANGAR
-                    self._reset_life_state_locked()
-            else:
-                s.hangar_candidate_since = None
-
-            # 各阶段处理
-            if s.phase == Phase.HANGAR:
-                # 机库 → 准备出生
-                if spawn_candidate:
-                    s.phase = Phase.ARMING
-                    s.spawn_candidate_since = now
-                return
-
-            if s.phase == Phase.IDLE:
-                # 空闲 → 准备出生
-                if spawn_candidate:
-                    s.phase = Phase.ARMING
-                    s.spawn_candidate_since = now
-
-            elif s.phase == Phase.ARMING:
-                # 准备出生 → 确认出生（1秒）
-                if spawn_candidate:
-                    if s.spawn_candidate_since is None:
-                        s.spawn_candidate_since = now
-                    if (now - s.spawn_candidate_since) >= GameConfig.SPAWN_CONFIRM_SEC:
-                        self._start_new_life_locked(now)
-                        s.phase = Phase.ALIVE
-                        self._clear_transient_state_locked()
-                else:
-                    s.spawn_candidate_since = None
-                    s.phase = Phase.IDLE
-
-            elif s.phase == Phase.ALIVE:
-                # 存活中：检测补给、着陆、死亡
-                
-                # v5.8 新增：更新燃油状态
-                if tel.state_resp_ok:
-                    s.fuel_state.update(
-                        fuel_kg=tel.fuel_kg,
-                        fuel0_kg=tel.fuel0_kg,
-                        altitude_m=tel.altitude_m,
-                        ias_kmh=tel.ias_kmh,
-                        now=now
+                    map_unstable = (
+                        (not mp.ok) or
+                        (mp.ok and (mp.obj_count == 0) and (not mp.player_aircraft_present))
                     )
-                
-                # 补给检测：燃油突增
-                if prev_tel and prev_tel.state_resp_ok and tel.state_resp_ok:
-                    fuel_jump = tel.fuel_kg - prev_tel.fuel_kg
-                    if (fuel_jump >= GameConfig.REFIT_FUEL_JUMP_KG and
-                        tel.ias_kmh <= GameConfig.REFIT_SPEED_KMH and
-                        abs(tel.vy_ms) <= GameConfig.REFIT_VSPEED_MS and
-                        (now - s.last_refit_ts) >= GameConfig.REFIT_MIN_GAP_SEC):
-                        s.sortie_id += 1
-                        s.last_refit_ts = now
-                        s.landing_start_time = None
-                        s.landed_flash_until = 0.0
+                    if map_unstable and prev_map and prev_map.ok:
+                        mp = prev_map
+                        used_map_fallback = True
 
-                # 着陆检测
-                self._update_landing_locked(tel, now)
-                
-                # 死亡检测：玩家消失
-                if not player_present:
-                    s.phase = Phase.LOSS_PENDING
-                    s.missing_player_since = now
-                    s.spawn_candidate_since = None
+                api_up = bool(raw_api_up or used_tel_fallback or used_map_fallback)
+                s.last_tel = tel
+                s.last_map = mp
+                self._update_attitude_confidence_locked(raw_tel, now)
+                self._update_gear_state_locked(tel, now)
+
+                # API状态管理
+                if api_up:
+                    s.api_down = False
+                    s.api_down_candidate_since = None
                 else:
-                    s.missing_player_since = None
+                    # API断线确认（5秒）
+                    if s.api_down_candidate_since is None:
+                        s.api_down_candidate_since = now
+                    if (now - s.api_down_candidate_since) >= GameConfig.API_DOWN_CONFIRM_SEC:
+                        s.api_down = True
 
-            elif s.phase == Phase.LOSS_PENDING:
-                # 可能死亡 → 确认死亡（1.2秒）
-                if player_present:
-                    s.phase = Phase.ALIVE
-                    s.missing_player_since = None
+                if s.api_down:
+                    if s.phase != Phase.HANGAR:
+                        s.phase = Phase.IDLE
+                    return
+
+                # 判断玩家是否存在
+                # 地图/对象接口在个别时刻会瞬时抖动（例如游戏内打开/关闭地图），
+                # 在 ALIVE/LOSS_PENDING 阶段允许短时兜底，但不能无限延长宽限窗口。
+                phase_allows_player_grace = s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
+                player_present = bool(mp.ok and mp.player_aircraft_present)
+                # 仅真实 map 帧（非上一帧兜底）可以刷新“最近见到玩家”时间，
+                # 否则回机库时可能被兜底数据无限续期。
+                if player_present and (not used_map_fallback):
+                    s.last_player_present_ts = now
+
+                presence_recently_seen = (
+                    s.last_player_present_ts > 0.0 and
+                    (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
+                )
+
+                # 实体特征兜底：仅在“最近确实见过玩家”的短时间窗口内生效，
+                # 避免回机库后因遥测仍有残留值而长期保持 ALIVE。
+                if (not player_present) and phase_allows_player_grace and tel.entity_like and presence_recently_seen:
+                    player_present = True
+
+                # 数据短抖动宽限：计分板/地图等场景可能导致8111瞬时空帧，避免ALIVE阶段立即判死。
+                if (not player_present) and phase_allows_player_grace:
+                    data_unstable = (not mp.ok) or (not tel.ind_ok) or (not tel.state_resp_ok)
+                    if data_unstable and presence_recently_seen:
+                        player_present = True
+                spawn_candidate = player_present and tel.entity_like
+
+                # 更新导航信息（战区、地速）
+                self._update_zone_navigation_locked(mp, tel, now)
+
+                # v6.0.1 优化：弹道计算移至tick线程（每250ms计算一次，而非每50ms）
+                self._update_bombing_calculation_locked(tel, now)
+
+                # === 状态机逻辑 ===
+                hangar_like = (not mp.ok) or (mp.obj_count == 0)
+                if hangar_like and (not player_present) and s.phase != Phase.ALIVE:
+                    if s.hangar_candidate_since is None:
+                        s.hangar_candidate_since = now
+                    elif (now - s.hangar_candidate_since) >= GameConfig.HANGAR_CONFIRM_SEC:
+                        s.phase = Phase.HANGAR
+                        self._reset_life_state_locked()
                 else:
-                    if s.missing_player_since is None:
-                        s.missing_player_since = now
-                    if (now - s.missing_player_since) >= GameConfig.DEAD_CONFIRM_SEC:
-                        s.phase = Phase.WAIT_NEXT
-                        s.spawn_candidate_since = None
+                    s.hangar_candidate_since = None
 
-            elif s.phase == Phase.WAIT_NEXT:
-                # 等待复活 → 下次出生
-                if spawn_candidate:
-                    if s.spawn_candidate_since is None:
+                if s.phase == Phase.HANGAR:
+                    if spawn_candidate:
+                        s.phase = Phase.ARMING
                         s.spawn_candidate_since = now
-                    if (now - s.spawn_candidate_since) >= GameConfig.SPAWN_CONFIRM_SEC:
-                        self._start_new_life_locked(now)
+                    return
+
+                if s.phase == Phase.IDLE:
+                    if spawn_candidate:
+                        s.phase = Phase.ARMING
+                        s.spawn_candidate_since = now
+
+                elif s.phase == Phase.ARMING:
+                    if spawn_candidate:
+                        if s.spawn_candidate_since is None:
+                            s.spawn_candidate_since = now
+                        if (now - s.spawn_candidate_since) >= GameConfig.SPAWN_CONFIRM_SEC:
+                            self._start_new_life_locked(now)
+                            s.phase = Phase.ALIVE
+                            self._clear_transient_state_locked()
+                    else:
+                        s.spawn_candidate_since = None
+                        s.phase = Phase.IDLE
+
+                elif s.phase == Phase.ALIVE:
+                    if tel.state_resp_ok:
+                        s.fuel_state.update(
+                            fuel_kg=tel.fuel_kg,
+                            fuel0_kg=tel.fuel0_kg,
+                            altitude_m=tel.altitude_m,
+                            ias_kmh=tel.ias_kmh,
+                            now=now,
+                        )
+
+                    if prev_tel and prev_tel.state_resp_ok and tel.state_resp_ok:
+                        fuel_jump = tel.fuel_kg - prev_tel.fuel_kg
+                        if (
+                            fuel_jump >= GameConfig.REFIT_FUEL_JUMP_KG and
+                            tel.ias_kmh <= GameConfig.REFIT_SPEED_KMH and
+                            abs(tel.vy_ms) <= GameConfig.REFIT_VSPEED_MS and
+                            (now - s.last_refit_ts) >= GameConfig.REFIT_MIN_GAP_SEC
+                        ):
+                            s.sortie_id += 1
+                            s.last_refit_ts = now
+                            s.landing_start_time = None
+                            s.landed_flash_until = 0.0
+
+                    self._update_landing_locked(tel, now)
+
+                    if not player_present:
+                        s.phase = Phase.LOSS_PENDING
+                        s.missing_player_since = now
+                        s.spawn_candidate_since = None
+                    else:
+                        s.missing_player_since = None
+
+                elif s.phase == Phase.LOSS_PENDING:
+                    if player_present:
                         s.phase = Phase.ALIVE
-                        self._clear_transient_state_locked()
-                else:
-                    s.spawn_candidate_since = None
+                        s.missing_player_since = None
+                    else:
+                        if s.missing_player_since is None:
+                            s.missing_player_since = now
+                        if (now - s.missing_player_since) >= GameConfig.DEAD_CONFIRM_SEC:
+                            s.phase = Phase.WAIT_NEXT
+                            s.spawn_candidate_since = None
+
+                elif s.phase == Phase.WAIT_NEXT:
+                    if spawn_candidate:
+                        if s.spawn_candidate_since is None:
+                            s.spawn_candidate_since = now
+                        if (now - s.spawn_candidate_since) >= GameConfig.SPAWN_CONFIRM_SEC:
+                            self._start_new_life_locked(now)
+                            s.phase = Phase.ALIVE
+                            self._clear_transient_state_locked()
+                    else:
+                        s.spawn_candidate_since = None
+            finally:
+                s = self.state
+                s.perf_tick_net_ms = net_stage_ms
+                s.perf_tick_lock_ms = max(0.0, (time.monotonic() - lock_enter) * 1000.0)
+                s.perf_tick_total_ms = max(0.0, (time.monotonic() - tick_start) * 1000.0)
 
     @staticmethod
     def _angle_delta_deg(current: float, previous: float) -> float:
@@ -613,6 +611,41 @@ class GameLogic:
             att.fallback_reason = "jitter"
         else:
             att.fallback_reason = ""
+
+    def _update_gear_state_locked(self, tel: TelemetryData, now: float) -> None:
+        """更新起落架显示状态（须在锁内调用）。"""
+        s = self.state
+
+        # /state 不可用时保持最近稳定值，避免零值抖动污染状态。
+        if not tel.state_resp_ok:
+            return
+
+        raw_gear_pct = float(tel.gear_pct or 0.0)
+
+        if s.last_gear_pct < 0:
+            s.last_gear_pct = raw_gear_pct
+            s.gear_stable_pct = raw_gear_pct
+            s.gear_stable_direction = False
+            s.gear_change_time = 0.0
+            return
+
+        pct_diff = abs(raw_gear_pct - s.gear_stable_pct)
+        if pct_diff > 2.0:
+            if s.gear_change_time == 0.0:
+                s.gear_change_time = now
+            elif now - s.gear_change_time > 0.1:
+                s.gear_stable_direction = (raw_gear_pct < s.last_gear_pct)
+                s.gear_stable_pct = raw_gear_pct
+                s.gear_change_time = 0.0
+        else:
+            s.gear_change_time = 0.0
+            if pct_diff > 0.5:
+                s.gear_stable_pct = raw_gear_pct
+
+        delta = raw_gear_pct - s.last_gear_pct
+        if abs(delta) >= 0.5:
+            s.gear_stable_direction = (delta < 0)
+        s.last_gear_pct = raw_gear_pct
 
     def _update_zone_navigation_locked(self, mp: MapObjData, tel: TelemetryData, now: float):
         """更新战区导航状态(须在锁内调用)
@@ -909,8 +942,11 @@ class GameLogic:
             UISnapshot对象
         """
         now = time.time()
+        wait_start = time.monotonic()
         with self._lock:
             s = self.state
+            wait_ms = max(0.0, (time.monotonic() - wait_start) * 1000.0)
+            s.perf_snapshot_wait_ms = wait_ms
             tel = s.last_tel or TelemetryData()
             mp = s.last_map or MapObjData()
             life = s.current_life
@@ -1009,6 +1045,7 @@ class GameLogic:
                 f"STATE: ok={int(tel.state_resp_ok)} | fuel={tel.fuel_kg:.0f}kg | ias={tel.ias_kmh:.0f}km/h",
                 f"SPD: lvl={overspeed.level} | ratio={ratio_dbg:.1f}% | lim={lim_ias_dbg:.0f}km/h M{lim_mach_dbg:.3f}",
                 f"ATT: ok={int(attitude.available)} | rel={int(attitude.reliable)} | fb={attitude.fallback_reason or '-'}",
+                f"PERF: tick={s.perf_tick_total_ms:.1f}ms | net={s.perf_tick_net_ms:.1f}ms | lock={s.perf_tick_lock_ms:.1f}ms | snap_wait={wait_ms:.1f}ms",
                 f"CLOG: st={clog_status} | players={clog_players} | names={clog_names} | err={clog_err}",
             ]
             diag = "\n".join(diag_lines)
@@ -1212,47 +1249,11 @@ class GameLogic:
                     gear_warning = True
             
             # v6.6.0 新增：起落架进度指示器
-            # v6.6.1: 添加消抖 - 变化超过2%且持续100ms才更新
-            # v6.6.3: 修复方向判断 - 使用前后帧比较而非与初始值比较
+            # 进度消抖已前移到 tick 线程，这里只读稳定状态，避免 UI 线程写共享状态。
             raw_gear_pct = tel.gear_pct
             gear_pct = s.gear_stable_pct if s.gear_stable_pct >= 0 else raw_gear_pct
-            gear_retracting = s.gear_stable_direction
-            
-            # 首次初始化：确保状态变量有正确的起始值
-            if s.last_gear_pct < 0:
-                s.last_gear_pct = raw_gear_pct
-                s.gear_stable_pct = raw_gear_pct
-                gear_pct = raw_gear_pct
-            
-            # 检测变化并消抖
-            pct_diff = abs(raw_gear_pct - s.gear_stable_pct)
-            if pct_diff > 2.0:  # 变化超过2%
-                if s.gear_change_time == 0.0:
-                    s.gear_change_time = now
-                elif now - s.gear_change_time > 0.1:  # 持续100ms
-                    # v6.6.3 修复：使用前后帧比较判断方向
-                    # raw_gear_pct 减小 = 收起（从100向0）
-                    # raw_gear_pct 增大 = 放下（从0向100）
-                    gear_retracting = (raw_gear_pct < s.last_gear_pct)
-                    gear_pct = raw_gear_pct
-                    s.gear_stable_pct = raw_gear_pct
-                    s.gear_stable_direction = gear_retracting
-                    s.gear_change_time = 0.0
-            else:
-                s.gear_change_time = 0.0
-                # 小幅度波动时平滑更新
-                if pct_diff > 0.5:
-                    gear_pct = raw_gear_pct
-                    s.gear_stable_pct = raw_gear_pct
-            
-            delta = raw_gear_pct - s.last_gear_pct
-            if abs(delta) >= 0.5:
-                gear_retracting = (delta < 0)
-                s.gear_stable_direction = gear_retracting
             gear_moving = (0 < raw_gear_pct < 100)
-            if not gear_moving:
-                gear_retracting = False
-            s.last_gear_pct = raw_gear_pct
+            gear_retracting = s.gear_stable_direction if gear_moving else False
 
             # v6.0.1 优化：从缓存读取弹道计算结果（计算已移至tick线程）
             bombing_valid = False
