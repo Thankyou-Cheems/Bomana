@@ -40,6 +40,9 @@ from bomana.core.state import (
     GameState,
     ZoneDisplayInfo,
     AirfieldDisplayInfo,
+    PerfDebugInfo,
+    SourceDebugInfo,
+    ClogDebugInfo,
     UISnapshot,
 )
 from bomana.core.telemetry import Budget, HttpJson, TelemetryFetcher, MapInfoFetcher, MapObjectsFetcher
@@ -302,8 +305,9 @@ class GameLogic:
 
         # 5. 更新游戏状态（线程安全）
         net_stage_ms = max(0.0, (time.monotonic() - tick_start) * 1000.0)
-        lock_enter = time.monotonic()
+        lock_wait_start = time.monotonic()
         with self._lock:
+            lock_hold_start = time.monotonic()
             try:
                 s = self.state
                 prev_tel = s.last_tel
@@ -477,7 +481,8 @@ class GameLogic:
             finally:
                 s = self.state
                 s.perf_tick_net_ms = net_stage_ms
-                s.perf_tick_lock_ms = max(0.0, (time.monotonic() - lock_enter) * 1000.0)
+                s.perf_tick_lock_wait_ms = max(0.0, (lock_hold_start - lock_wait_start) * 1000.0)
+                s.perf_tick_lock_hold_ms = max(0.0, (time.monotonic() - lock_hold_start) * 1000.0)
                 s.perf_tick_total_ms = max(0.0, (time.monotonic() - tick_start) * 1000.0)
 
     @staticmethod
@@ -886,6 +891,166 @@ class GameLogic:
         # 其他情况（前方远距离或大角度）不关注
         return False
 
+    def _build_zone_display_list(
+        self,
+        zones: List[Zone],
+        ground_speed: float,
+    ) -> List[ZoneDisplayInfo]:
+        """根据导航状态构建战区显示列表。"""
+        items: List[ZoneDisplayInfo] = []
+        for zone in zones[:ZoneConfig.MAX_DISPLAY_ZONES]:
+            ete_text = ""
+            if zone.is_target and ground_speed > 1e-7:
+                seconds_left = zone.distance / ground_speed
+                if seconds_left < 5999:
+                    m, s_time = divmod(int(seconds_left), 60)
+                    ete_text = f"{m:02d}:{s_time:02d}"
+
+            cdi_str = ""
+            cdi_clr = ""
+            if zone.is_target:
+                dist_km = zone.distance * ZoneConfig.DISTANCE_SCALE
+                cdi_str, cdi_clr = generate_cdi_indicator(zone.relative, dist_km)
+
+            items.append(
+                ZoneDisplayInfo(
+                    id=zone.id,
+                    distance_km=zone.distance * ZoneConfig.DISTANCE_SCALE,
+                    direction=get_direction_text(zone.relative),
+                    relative=zone.relative,
+                    is_target=zone.is_target,
+                    ete_str=ete_text,
+                    cdi_indicator=cdi_str,
+                    cdi_color=cdi_clr,
+                )
+            )
+        return items
+
+    def _build_airfield_display(
+        self,
+        mp: MapObjData,
+        map_axis_scale_m: Optional[Tuple[float, float]],
+        player_heading: float,
+        ground_speed: float,
+    ) -> Tuple[Optional[AirfieldDisplayInfo], List[AirfieldDisplayInfo], bool]:
+        """根据地图对象构建机场显示列表。"""
+        if not (mp.ok and mp.player_pos and getattr(mp, "airfields", None)):
+            return None, [], False
+
+        px, py = mp.player_pos
+        friendly_infos: List[Tuple[float, AirfieldDisplayInfo]] = []
+        enemy_infos: List[Tuple[float, AirfieldDisplayInfo]] = []
+
+        for af in mp.airfields:
+            if (not math.isfinite(float(af.x))) or (not math.isfinite(float(af.y))):
+                continue
+
+            bearing, distance = self._bearing_distance_norm(px, py, af.x, af.y, map_axis_scale_m)
+            relative = calculate_relative_bearing(player_heading, bearing)
+            info = AirfieldDisplayInfo(
+                id=af.id,
+                side="friendly" if af.is_friendly else "enemy",
+                distance_km=distance * ZoneConfig.DISTANCE_SCALE,
+                direction=get_direction_text(relative),
+                relative=relative,
+                is_target=False,
+            )
+            if af.is_friendly:
+                friendly_infos.append((distance, info))
+            else:
+                enemy_infos.append((distance, info))
+
+        friendly_display: Optional[AirfieldDisplayInfo] = None
+        if friendly_infos:
+            friendly_infos.sort(key=lambda item: item[0])
+            dist, info = friendly_infos[0]
+            ete_text = ""
+            if abs(info.relative) <= 90 and ground_speed > 1e-7:
+                seconds_left = dist / ground_speed
+                if seconds_left < 3600:
+                    mm, ss = divmod(int(seconds_left), 60)
+                    ete_text = f"{mm:02d}:{ss:02d}"
+            cdi_str, cdi_clr = generate_cdi_indicator(info.relative, info.distance_km)
+            friendly_display = AirfieldDisplayInfo(
+                id=info.id,
+                side=info.side,
+                distance_km=info.distance_km,
+                direction=info.direction,
+                relative=info.relative,
+                is_target=True,
+                ete_str=ete_text,
+                cdi_indicator=cdi_str,
+                cdi_color=cdi_clr,
+            )
+
+        enemy_display: List[AirfieldDisplayInfo] = []
+        has_airfield_target = False
+        if enemy_infos:
+            enemy_infos.sort(key=lambda item: item[0])
+            max_total = ZoneConfig.MAX_DISPLAY_AIRFIELDS
+            max_enemy = max(0, max_total - (1 if friendly_infos else 0))
+            enemy_infos = enemy_infos[:max_enemy] if max_enemy > 0 else []
+
+            target_idx = -1
+            for i, (_, info) in enumerate(enemy_infos):
+                if abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE:
+                    target_idx = i
+                    break
+
+            for i, (dist, info) in enumerate(enemy_infos):
+                is_target = (i == target_idx)
+                ete_text = ""
+                cdi_str = ""
+                cdi_clr = ""
+                if is_target and abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE and ground_speed > 1e-7:
+                    seconds_left = dist / ground_speed
+                    if seconds_left < 3600:
+                        mm, ss = divmod(int(seconds_left), 60)
+                        ete_text = f"{mm:02d}:{ss:02d}"
+                    cdi_str, cdi_clr = generate_cdi_indicator(info.relative, info.distance_km)
+                enemy_display.append(
+                    AirfieldDisplayInfo(
+                        id=info.id,
+                        side=info.side,
+                        distance_km=info.distance_km,
+                        direction=info.direction,
+                        relative=info.relative,
+                        is_target=is_target,
+                        ete_str=ete_text,
+                        cdi_indicator=cdi_str,
+                        cdi_color=cdi_clr,
+                    )
+                )
+            has_airfield_target = (target_idx >= 0)
+
+        return friendly_display, enemy_display, has_airfield_target
+
+    def _build_destroyed_zone_text(
+        self,
+        destroyed_zones: List[Zone],
+        player_pos: Optional[Tuple[float, float]],
+        map_axis_scale_m: Optional[Tuple[float, float]],
+        player_heading: float,
+    ) -> str:
+        """构建被摧毁战区的提示文字。"""
+        if not destroyed_zones:
+            return ""
+
+        if player_pos is None:
+            return "  |  ".join(f"#{zone.index}" for zone in destroyed_zones)
+
+        px, py = player_pos
+        items: List[str] = []
+        for zone in destroyed_zones:
+            try:
+                bearing, dist_norm = self._bearing_distance_norm(px, py, zone.x, zone.y, map_axis_scale_m)
+                dist_km = dist_norm * ZoneConfig.DISTANCE_SCALE
+                rel = calculate_relative_bearing(player_heading, bearing)
+                items.append(f"#{zone.index} {get_direction_text(rel)} {dist_km:.1f}km")
+            except Exception:
+                items.append(f"#{zone.index}")
+        return "  |  ".join(items)
+
     def manual_reset(self):
         """手动重置计时器
 
@@ -944,417 +1109,306 @@ class GameLogic:
         now = time.time()
         wait_start = time.monotonic()
         with self._lock:
+            snapshot_wait_ms = max(0.0, (time.monotonic() - wait_start) * 1000.0)
             s = self.state
-            wait_ms = max(0.0, (time.monotonic() - wait_start) * 1000.0)
-            s.perf_snapshot_wait_ms = wait_ms
             tel = s.last_tel or TelemetryData()
             mp = s.last_map or MapObjData()
-            life = s.current_life
-            attitude = s.attitude
-            
-            # 计算时间相关
-            remaining = None
-            cycle = None
-            progress = 0.0
-            life_index = life.life_index if life else None
+            map_info = s.map_info
+            phase = s.phase
+            life_spawn_time = s.current_life.spawn_time if s.current_life else None
+            life_index = s.current_life.life_index if s.current_life else None
+            sortie_id = s.sortie_id
+            api_down = s.api_down
+            api_down_candidate_since = s.api_down_candidate_since
+            landed_flash_until = s.landed_flash_until
 
-            if s.phase in (Phase.ALIVE, Phase.LOSS_PENDING) and life:
-                remaining = life.cycle_remaining(now)
-                cycle = life.current_cycle(now)
-                progress = life.cycle_progress(now)
-
-            # 确定主徽章和状态文字
-            api_down_pending = False
-            if (s.api_down_candidate_since is not None) and (not s.api_down):
-                api_down_pending = (
-                    (now - s.api_down_candidate_since) >= GameConfig.API_PENDING_HINT_DELAY_SEC
-                )
-
-            if s.api_down:
-                main_badge = ("❌8111不可用", Theme.TEXT, Theme.RED)
-                status_text = "未检测到 8111"
-            elif api_down_pending and (s.phase in (Phase.IDLE, Phase.HANGAR, Phase.ARMING) or not life):
-                main_badge = ("⏳加入战斗中", Theme.TEXT, Theme.BLUE)
-                status_text = "加入战斗中"
-            else:
-                if s.phase == Phase.ALIVE:
-                    main_badge = ("战斗中", Theme.TEXT, Theme.GREEN)
-                    status_text = "计时中"
-                elif s.phase == Phase.WAIT_NEXT:
-                    main_badge = ("等待复活", Theme.TEXT, Theme.YELLOW)
-                    status_text = "等待复活"
-                elif s.phase == Phase.LOSS_PENDING:
-                    main_badge = ("坠毁/弹射", Theme.TEXT, Theme.YELLOW)
-                    status_text = "坠毁/弹射"
-                elif s.phase == Phase.ARMING:
-                    main_badge = ("部署中", Theme.TEXT, Theme.BLUE)
-                    status_text = "部署中"
-                elif s.phase == Phase.HANGAR:
-                    main_badge = ("🏠机库", Theme.TEXT, Theme.GRAYPILL)
-                    status_text = "等待游戏开始"
-                else:
-                    main_badge = ("IDLE", Theme.TEXT, Theme.GRAYPILL)
-                    status_text = "等待中"
-
-            # 飞行徽章
-            landed_flash = s.landed_flash_until > now
-            on_ground = tel.is_on_ground if tel.state_resp_ok else False
-
-            if s.phase not in (Phase.ALIVE, Phase.LOSS_PENDING) or not life:
-                flight_badge = ("—", Theme.TEXT_DIM, Theme.GRAYPILL)
-            else:
-                if landed_flash:
-                    flight_badge = ("就绪✓", Theme.TEXT, Theme.GREEN)
-                else:
-                    flight_badge = ("着陆中", Theme.TEXT_DIM, Theme.GRAYPILL) if on_ground else ("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL)
-
-            # v6.9.0 新增：超速判定（IAS/Mach 双通道）
-            overspeed = self.overspeed.evaluate(
-                plane_type=tel.type_name,
-                ias_kmh=tel.ias_kmh,
-                tas_kmh=tel.tas_kmh,
-                mach=tel.mach,
-                wing_sweep=tel.wing_sweep,
-                enabled=(
-                    OverspeedConfig.ENABLED and
-                    PanelConfig.is_effectively_enabled("speed") and
-                    (s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
-                    tel.state_resp_ok and
-                    (not on_ground)
-                ),
-            )
-
-            if s.phase == Phase.ALIVE:
-                if overspeed.level == "critical":
-                    status_text = "超速危险，立即减速"
-                elif overspeed.level == "warning":
-                    status_text = "接近结构极限"
-
-            # 调试信息
-            player_present = bool(mp.ok and mp.player_aircraft_present)
-            ratio_dbg = (overspeed.ias_ratio * 100.0) if overspeed.ias_ratio is not None else 0.0
-            lim_ias_dbg = overspeed.ias_limit_kmh or 0.0
-            lim_mach_dbg = overspeed.mach_limit or 0.0
-            clog_status = s.clog_probe_status
-            clog_players = s.clog_probe_player_count
-            clog_names = ",".join(s.clog_probe_players) if s.clog_probe_players else "-"
-            clog_err = s.clog_probe_error[:24] if s.clog_probe_error else "-"
-            diag_lines = [
-                f"MAP: ok={int(mp.ok)} | objs={mp.obj_count} | player={int(player_present)}",
-                f"IND: ok={int(tel.ind_ok)} | valid={int(tel.valid)} | type={'✓' if tel.type_name else '✗'}",
-                f"STATE: ok={int(tel.state_resp_ok)} | fuel={tel.fuel_kg:.0f}kg | ias={tel.ias_kmh:.0f}km/h",
-                f"SPD: lvl={overspeed.level} | ratio={ratio_dbg:.1f}% | lim={lim_ias_dbg:.0f}km/h M{lim_mach_dbg:.3f}",
-                f"ATT: ok={int(attitude.available)} | rel={int(attitude.reliable)} | fb={attitude.fallback_reason or '-'}",
-                f"PERF: tick={s.perf_tick_total_ms:.1f}ms | net={s.perf_tick_net_ms:.1f}ms | lock={s.perf_tick_lock_ms:.1f}ms | snap_wait={wait_ms:.1f}ms",
-                f"CLOG: st={clog_status} | players={clog_players} | names={clog_names} | err={clog_err}",
-            ]
-            diag = "\n".join(diag_lines)
-
-            # 战区导航信息
             nav = s.zone_nav
-            zone_display_list = []
-            gs = nav.ground_speed
-            map_axis_scale_m = self._map_axis_scale_m(s.map_info)
+            nav_zones = list(nav.zones)
+            nav_target_zone = nav.target_zone
+            nav_destroyed_zones = list(nav.destroyed_zones)
+            nav_destroyed_alert_until = nav.destroyed_alert_until
+            nav_is_deviating = nav.is_deviating
+            nav_player_heading = nav.player_heading
+            nav_ground_speed = nav.ground_speed
+            nav_should_play_destroyed_sound = nav.should_play_destroyed_sound
 
-            for zone in nav.zones[:ZoneConfig.MAX_DISPLAY_ZONES]:
-                # ETE计算（仅目标战区）
-                ete_text = ""
-                if zone.is_target and gs > 1e-7:
-                    seconds_left = zone.distance / gs
-                    if seconds_left < 5999:
-                        m, s_time = divmod(int(seconds_left), 60)
-                        ete_text = f"{m:02d}:{s_time:02d}"
-                
-                # CDI指示器（仅目标战区显示）
-                cdi_str = ""
-                cdi_clr = ""
-                if zone.is_target:
-                    # 转换距离单位为公里
-                    dist_km = zone.distance * ZoneConfig.DISTANCE_SCALE
-                    # 接收函数返回的两个值：指示器字符串和颜色
-                    cdi_str, cdi_clr = generate_cdi_indicator(zone.relative, dist_km)
+            attitude_pitch_deg = s.attitude.pitch_deg
+            attitude_roll_deg = s.attitude.roll_deg
+            attitude_bank_deg = s.attitude.bank_deg
+            attitude_reliable = s.attitude.reliable
+            attitude_fallback = s.attitude.fallback
+            attitude_fallback_reason = s.attitude.fallback_reason
 
-                # 所有战区都添加到显示列表（CDI仅目标战区有值）
-                zone_display_list.append(ZoneDisplayInfo(
-                    id=zone.id,
-                    distance_km=zone.distance * ZoneConfig.DISTANCE_SCALE,
-                    direction=get_direction_text(zone.relative), 
-                    relative=zone.relative, is_target=zone.is_target,
-                    ete_str=ete_text,
-                    cdi_indicator=cdi_str,
-                    cdi_color=cdi_clr
-                ))
-            
-            # 机场导航信息
-            friendly_airfield_display = None
-            enemy_airfields_display: List[AirfieldDisplayInfo] = []
-            has_airfield_target = False
+            fuel_current_kg = s.fuel_state.current_kg
+            fuel_initial_kg = s.fuel_state.initial_kg
+            fuel_percent = s.fuel_state.fuel_percent
+            fuel_consumption_rate = s.fuel_state.consumption_rate
+            fuel_rate_stable = s.fuel_state.rate_stable
+            fuel_remaining_time_min = s.fuel_state.remaining_time_min
 
-            if mp.ok and mp.player_pos and getattr(mp, "airfields", None):
-                px, py = mp.player_pos
-                heading = nav.player_heading
+            gear_stable_pct = s.gear_stable_pct
+            gear_stable_direction = s.gear_stable_direction
 
-                friendly_infos: List[Tuple[float, AirfieldDisplayInfo]] = []
-                enemy_infos: List[Tuple[float, AirfieldDisplayInfo]] = []
+            bombing_calc_valid = s.bombing_calc_valid
+            cached_bomb_flight_time = s.cached_bomb_flight_time
+            cached_bomb_range_m = s.cached_bomb_range_m
+            cached_release_distance_m = s.cached_release_distance_m
+            cached_time_to_release = s.cached_time_to_release
+            cached_release_status = s.cached_release_status
+            cached_target_distance_m = s.cached_target_distance_m
 
-                for af in mp.airfields:
-                    if (not math.isfinite(float(af.x))) or (not math.isfinite(float(af.y))):
-                        continue
+            perf_debug = PerfDebugInfo(
+                tick_total_ms=s.perf_tick_total_ms,
+                tick_net_ms=s.perf_tick_net_ms,
+                tick_lock_wait_ms=s.perf_tick_lock_wait_ms,
+                tick_lock_hold_ms=s.perf_tick_lock_hold_ms,
+                snapshot_wait_ms=snapshot_wait_ms,
+            )
+            source_debug = SourceDebugInfo(
+                map_ok=bool(mp.ok),
+                map_obj_count=int(mp.obj_count),
+                player_present=bool(mp.ok and mp.player_aircraft_present),
+                indicators_ok=bool(tel.ind_ok),
+                indicators_valid=bool(tel.valid),
+                has_type_name=bool(tel.type_name),
+                state_ok=bool(tel.state_resp_ok),
+            )
+            clog_debug = ClogDebugInfo(
+                status=str(s.clog_probe_status or '-'),
+                player_count=int(s.clog_probe_player_count or 0),
+                player_names=','.join(s.clog_probe_players) if s.clog_probe_players else '-',
+                error=s.clog_probe_error[:24] if s.clog_probe_error else '-',
+            )
 
-                    bearing, distance = self._bearing_distance_norm(px, py, af.x, af.y, map_axis_scale_m)
-                    relative = calculate_relative_bearing(heading, bearing)
-                    info = AirfieldDisplayInfo(
-                        id=af.id,
-                        side="friendly" if af.is_friendly else "enemy",
-                        distance_km=distance * ZoneConfig.DISTANCE_SCALE,
-                        direction=get_direction_text(relative),
-                        relative=relative,
-                        is_target=False,
-                        ete_str=""
-                    )
-                    if af.is_friendly:
-                        friendly_infos.append((distance, info))
-                    else:
-                        enemy_infos.append((distance, info))
+        remaining = None
+        cycle = None
+        progress = 0.0
+        if phase in (Phase.ALIVE, Phase.LOSS_PENDING) and life_spawn_time is not None:
+            elapsed = max(0.0, now - life_spawn_time)
+            remaining = GameConfig.CYCLE_SECONDS - (elapsed % GameConfig.CYCLE_SECONDS)
+            cycle = int(elapsed // GameConfig.CYCLE_SECONDS) + 1
+            progress = (elapsed % GameConfig.CYCLE_SECONDS) / GameConfig.CYCLE_SECONDS
 
-                # 友方机场：只显示最近的
-                if friendly_infos:
-                    friendly_infos.sort(key=lambda t: t[0])
-                    dist, info = friendly_infos[0]
-                    ete_text = ""
-                    # 只在航向前方（±90°）显示ETE
-                    if abs(info.relative) <= 90 and nav.ground_speed > 1e-7:
-                        seconds_left = dist / nav.ground_speed
-                        if seconds_left < 3600:
-                            mm, ss = divmod(int(seconds_left), 60)
-                            ete_text = f"{mm:02d}:{ss:02d}"
-                    # CDI指示器（友方机场始终显示）
-                    cdi_str, cdi_clr = generate_cdi_indicator(info.relative, info.distance_km)
-                    friendly_airfield_display = AirfieldDisplayInfo(
-                        id=info.id, side=info.side,
-                        distance_km=info.distance_km, direction=info.direction, 
-                        relative=info.relative,
-                        is_target=True, ete_str=ete_text,
-                        cdi_indicator=cdi_str, cdi_color=cdi_clr
-                    )
+        api_down_pending = False
+        if (api_down_candidate_since is not None) and (not api_down):
+            api_down_pending = (
+                (now - api_down_candidate_since) >= GameConfig.API_PENDING_HINT_DELAY_SEC
+            )
 
-                # 敌方机场：显示部分（上限），但只在朝向时显示ETE（v5.7改进）
-                if enemy_infos:
-                    enemy_infos.sort(key=lambda t: t[0])
-                    max_total = ZoneConfig.MAX_DISPLAY_AIRFIELDS
-                    max_enemy = max(0, max_total - (1 if friendly_infos else 0))
-                    if max_enemy == 0:
-                        enemy_infos = []
-                    else:
-                        enemy_infos = enemy_infos[:max_enemy]
-                    # 查找45°内最近的敌方机场作为目标
-                    target_idx = -1  # -1表示没有目标
-                    for i, (dist, info) in enumerate(enemy_infos):
-                        if abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE:
-                            target_idx = i
-                            break
+        if api_down:
+            main_badge = ("❌8111不可用", Theme.TEXT, Theme.RED)
+            status_text = "未检测到 8111"
+        elif api_down_pending and (phase in (Phase.IDLE, Phase.HANGAR, Phase.ARMING) or life_spawn_time is None):
+            main_badge = ("⏳加入战斗中", Theme.TEXT, Theme.BLUE)
+            status_text = "加入战斗中"
+        else:
+            if phase == Phase.ALIVE:
+                main_badge = ("战斗中", Theme.TEXT, Theme.GREEN)
+                status_text = "计时中"
+            elif phase == Phase.WAIT_NEXT:
+                main_badge = ("等待复活", Theme.TEXT, Theme.YELLOW)
+                status_text = "等待复活"
+            elif phase == Phase.LOSS_PENDING:
+                main_badge = ("坠毁/弹射", Theme.TEXT, Theme.YELLOW)
+                status_text = "坠毁/弹射"
+            elif phase == Phase.ARMING:
+                main_badge = ("部署中", Theme.TEXT, Theme.BLUE)
+                status_text = "部署中"
+            elif phase == Phase.HANGAR:
+                main_badge = ("🏠机库", Theme.TEXT, Theme.GRAYPILL)
+                status_text = "等待游戏开始"
+            else:
+                main_badge = ("IDLE", Theme.TEXT, Theme.GRAYPILL)
+                status_text = "等待中"
 
-                    for i, (dist, info) in enumerate(enemy_infos):
-                        is_target = (i == target_idx)
-                        ete_text = ""
-                        cdi_str = ""
-                        cdi_clr = ""
-                        # 只在目标机场且在航向前方（<45°）时显示ETE和CDI
-                        if is_target and abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE and nav.ground_speed > 1e-7:
-                            seconds_left = dist / nav.ground_speed
-                            if seconds_left < 3600:
-                                mm, ss = divmod(int(seconds_left), 60)
-                                ete_text = f"{mm:02d}:{ss:02d}"
-                            cdi_str, cdi_clr = generate_cdi_indicator(info.relative, info.distance_km)
-                        enemy_airfields_display.append(AirfieldDisplayInfo(
-                            id=info.id, side=info.side,
-                            distance_km=info.distance_km, direction=info.direction, 
-                            relative=info.relative,
-                            is_target=is_target, ete_str=ete_text,
-                            cdi_indicator=cdi_str, cdi_color=cdi_clr
-                        ))
-                    has_airfield_target = (target_idx >= 0)
-            
-            has_target = nav.target_zone is not None
-            deviation_angle = nav.target_zone.relative if nav.target_zone else 0.0
-            
-            # 战区被摧毁警告
-            zone_destroyed_alert = nav.destroyed_alert_until > now
-            destroyed_count = len(nav.destroyed_zones) if zone_destroyed_alert else 0
-            destroyed_zone_text = ""
-            
-            # v5.4.2: 实时计算被摧毁战区的位置信息（不显示格子坐标）
-            if zone_destroyed_alert and nav.destroyed_zones:
-                items = []
-                has_pos = mp.player_pos is not None
-                if has_pos:
-                    px, py = mp.player_pos
-                    for dz in nav.destroyed_zones:
-                        try:
-                            bearing, dist_norm = self._bearing_distance_norm(px, py, dz.x, dz.y, map_axis_scale_m)
-                            dist_km = dist_norm * ZoneConfig.DISTANCE_SCALE
-                            if nav.player_heading is not None:
-                                rel = calculate_relative_bearing(nav.player_heading, bearing)
-                                dir_text = get_direction_text(rel)
-                                items.append(f"#{dz.index} {dir_text} {dist_km:.1f}km")
-                            else:
-                                items.append(f"#{dz.index} {dist_km:.1f}km")
-                        except Exception:
-                            items.append(f"#{dz.index}")
+        landed_flash = landed_flash_until > now
+        on_ground = tel.is_on_ground if tel.state_resp_ok else False
+        if phase not in (Phase.ALIVE, Phase.LOSS_PENDING) or life_spawn_time is None:
+            flight_badge = ("—", Theme.TEXT_DIM, Theme.GRAYPILL)
+        elif landed_flash:
+            flight_badge = ("就绪✓", Theme.TEXT, Theme.GREEN)
+        elif on_ground:
+            flight_badge = ("着陆中", Theme.TEXT_DIM, Theme.GRAYPILL)
+        else:
+            flight_badge = ("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL)
+
+        overspeed = self.overspeed.evaluate(
+            plane_type=tel.type_name,
+            ias_kmh=tel.ias_kmh,
+            tas_kmh=tel.tas_kmh,
+            mach=tel.mach,
+            wing_sweep=tel.wing_sweep,
+            enabled=(
+                OverspeedConfig.ENABLED and
+                PanelConfig.is_effectively_enabled("speed") and
+                (phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
+                tel.state_resp_ok and
+                (not on_ground)
+            ),
+        )
+        if phase == Phase.ALIVE:
+            if overspeed.level == "critical":
+                status_text = "超速危险，立即减速"
+            elif overspeed.level == "warning":
+                status_text = "接近结构极限"
+
+        map_axis_scale_m = self._map_axis_scale_m(map_info)
+        zone_display_list = self._build_zone_display_list(nav_zones, nav_ground_speed)
+        friendly_airfield_display, enemy_airfields_display, has_airfield_target = self._build_airfield_display(
+            mp=mp,
+            map_axis_scale_m=map_axis_scale_m,
+            player_heading=nav_player_heading,
+            ground_speed=nav_ground_speed,
+        )
+
+        has_target = nav_target_zone is not None
+        deviation_angle = nav_target_zone.relative if nav_target_zone else 0.0
+        zone_destroyed_alert = nav_destroyed_alert_until > now
+        destroyed_count = len(nav_destroyed_zones) if zone_destroyed_alert else 0
+        destroyed_zone_text = self._build_destroyed_zone_text(
+            destroyed_zones=nav_destroyed_zones if zone_destroyed_alert else [],
+            player_pos=mp.player_pos,
+            map_axis_scale_m=map_axis_scale_m,
+            player_heading=nav_player_heading,
+        )
+
+        fuel_rate_kg_min = fuel_consumption_rate if fuel_rate_stable else 0.0
+        fuel_time_remaining_str = ""
+        if fuel_remaining_time_min is not None:
+            if fuel_remaining_time_min > 60:
+                fuel_time_remaining_str = ">60:00"
+            else:
+                rm, rs = divmod(int(fuel_remaining_time_min * 60), 60)
+                fuel_time_remaining_str = f"{rm:02d}:{rs:02d}"
+
+        ground_speed_kmh_for_bombing = nav_ground_speed * ZoneConfig.DISTANCE_SCALE * 3600
+        return_fuel_needed_kg = 0.0
+        return_status = "unknown"
+        friendly_distance_km = friendly_airfield_display.distance_km if friendly_airfield_display else 0.0
+        if friendly_airfield_display and fuel_rate_stable and ground_speed_kmh_for_bombing >= 50 and friendly_distance_km > 0:
+            time_min = (friendly_distance_km / ground_speed_kmh_for_bombing) * 60.0
+            return_fuel_needed_kg = fuel_consumption_rate * time_min * FuelConfig.RETURN_SAFETY_FACTOR
+            if return_fuel_needed_kg > 0:
+                if fuel_current_kg >= return_fuel_needed_kg * FuelConfig.RETURN_WARNING_FACTOR:
+                    return_status = "safe"
+                elif fuel_current_kg >= return_fuel_needed_kg:
+                    return_status = "warning"
                 else:
-                    for dz in nav.destroyed_zones:
-                        items.append(f"#{dz.index}")
-                destroyed_zone_text = "  |  ".join(items)
+                    return_status = "danger"
 
-            # v5.8 新增：燃油管理数据
-            fuel = s.fuel_state
-            fuel_kg = fuel.current_kg
-            fuel_initial_kg = fuel.initial_kg
-            fuel_percent = fuel.fuel_percent
-            fuel_rate_kg_min = fuel.consumption_rate if fuel.rate_stable else 0.0
-            fuel_rate_stable = fuel.rate_stable
-            altitude_m = tel.altitude_m
-            
-            # 剩余飞行时间字符串
-            fuel_time_remaining_str = ""
-            remaining_min = fuel.remaining_time_min
-            if remaining_min is not None:
-                if remaining_min > 60:
-                    fuel_time_remaining_str = ">60:00"
-                else:
-                    rm, rs = divmod(int(remaining_min * 60), 60)
-                    fuel_time_remaining_str = f"{rm:02d}:{rs:02d}"
-            
-            # 返航估算
-            return_fuel_needed_kg = 0.0
-            return_status = "unknown"
-            friendly_distance_km = 0.0
-            
-            if friendly_airfield_display and nav.ground_speed > 0:
-                friendly_distance_km = friendly_airfield_display.distance_km
-                # 将地速转换为 km/h
-                ground_speed_kmh = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 3600
-                return_fuel_needed = fuel.estimate_return_fuel(friendly_distance_km, ground_speed_kmh)
-                if return_fuel_needed is not None:
-                    return_fuel_needed_kg = return_fuel_needed
-                    return_status = fuel.get_return_status(return_fuel_needed)
-            
-            # v5.9.6 新增：起落架警告判断
-            # 判断条件：在空中（速度>80km/h 或 高度>50m）且起落架未收起
-            gear_warning = False
-            if s.phase == Phase.ALIVE and tel.state_resp_ok:
-                is_airborne = (tel.ias_kmh > 80) or (tel.altitude_m > 50)
-                # gear_down=True 表示起落架放下（未收起）
-                if is_airborne and tel.gear_down:
-                    gear_warning = True
-            
-            # v6.6.0 新增：起落架进度指示器
-            # 进度消抖已前移到 tick 线程，这里只读稳定状态，避免 UI 线程写共享状态。
-            raw_gear_pct = tel.gear_pct
-            gear_pct = s.gear_stable_pct if s.gear_stable_pct >= 0 else raw_gear_pct
-            gear_moving = (0 < raw_gear_pct < 100)
-            gear_retracting = s.gear_stable_direction if gear_moving else False
+        gear_warning = False
+        if phase == Phase.ALIVE and tel.state_resp_ok:
+            is_airborne = (tel.ias_kmh > 80) or (tel.altitude_m > 50)
+            if is_airborne and tel.gear_down:
+                gear_warning = True
 
-            # v6.0.1 优化：从缓存读取弹道计算结果（计算已移至tick线程）
-            bombing_valid = False
-            bomb_name = BombConfig.selected_bomb if ENABLE_CCRP else ""
-            bomb_range_m = 0.0
-            bomb_flight_time = 0.0
-            release_distance_m = 0.0
-            time_to_release = 0.0
-            release_status = "invalid"
-            target_zone_distance_m = 0.0
-            ground_speed_kmh_for_bombing = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 3600
-            
-            # 从缓存读取弹道计算结果（避免在UI线程重复计算）
-            if ENABLE_CCRP and s.bombing_calc_valid:
-                bombing_valid = True
-                bomb_flight_time = s.cached_bomb_flight_time
-                bomb_range_m = s.cached_bomb_range_m
-                release_distance_m = s.cached_release_distance_m
-                time_to_release = s.cached_time_to_release
-                release_status = s.cached_release_status
-                target_zone_distance_m = s.cached_target_distance_m
+        raw_gear_pct = float(tel.gear_pct or 0.0)
+        gear_pct = gear_stable_pct if gear_stable_pct >= 0 else raw_gear_pct
+        gear_moving = (0 < raw_gear_pct < 100)
+        gear_retracting = gear_stable_direction if gear_moving else False
 
+        bombing_valid = False
+        bomb_name = BombConfig.selected_bomb if ENABLE_CCRP else ""
+        bomb_range_m = 0.0
+        bomb_flight_time = 0.0
+        release_distance_m = 0.0
+        time_to_release = 0.0
+        release_status = "invalid"
+        target_zone_distance_m = 0.0
+        if ENABLE_CCRP and bombing_calc_valid:
+            bombing_valid = True
+            bomb_flight_time = cached_bomb_flight_time
+            bomb_range_m = cached_bomb_range_m
+            release_distance_m = cached_release_distance_m
+            time_to_release = cached_time_to_release
+            release_status = cached_release_status
+            target_zone_distance_m = cached_target_distance_m
+
+        mach_ratio_dbg = None
+        try:
+            if (
+                overspeed.mach is not None
+                and overspeed.mach_limit is not None
+                and float(overspeed.mach_limit) > 0.0
+            ):
+                mach_ratio_dbg = float(overspeed.mach) / float(overspeed.mach_limit)
+        except Exception:
             mach_ratio_dbg = None
-            try:
-                if (
-                    overspeed.mach is not None
-                    and overspeed.mach_limit is not None
-                    and float(overspeed.mach_limit) > 0.0
-                ):
-                    mach_ratio_dbg = float(overspeed.mach) / float(overspeed.mach_limit)
-            except Exception:
-                mach_ratio_dbg = None
-            overspeed_display_ratio = max(
-                [r for r in (overspeed.ias_ratio, mach_ratio_dbg) if r is not None] or [0.0]
-            )
+        overspeed_display_ratio = max(
+            [r for r in (overspeed.ias_ratio, mach_ratio_dbg) if r is not None] or [0.0]
+        )
 
-            return UISnapshot(
-                phase=s.phase, life_index=life_index, cycle=cycle, 
-                remaining_sec=remaining, progress=progress, sortie_id=s.sortie_id, 
-                main_badge=main_badge, flight_badge=flight_badge,
-                status_text=status_text, diag_text=diag, 
-                api_down=s.api_down, api_down_pending=api_down_pending,
-                on_ground=on_ground, landed_flash=landed_flash, 
-                zones=zone_display_list, 
-                friendly_airfield=friendly_airfield_display, 
-                enemy_airfields=enemy_airfields_display, 
-                has_airfield_target=has_airfield_target, 
-                has_target=has_target,
-                is_deviating=nav.is_deviating, 
-                deviation_angle=deviation_angle, 
-                zone_destroyed_alert=zone_destroyed_alert,
-                destroyed_zone_count=destroyed_count, 
-                destroyed_zone_text=destroyed_zone_text,
-                should_play_destroyed_sound=nav.should_play_destroyed_sound,
-                player_heading=nav.player_heading,
-                # v5.8 新增：燃油管理字段
-                fuel_kg=fuel_kg,
-                fuel_initial_kg=fuel_initial_kg,
-                fuel_percent=fuel_percent,
-                fuel_rate_kg_min=fuel_rate_kg_min,
-                fuel_rate_stable=fuel_rate_stable,
-                fuel_time_remaining_str=fuel_time_remaining_str,
-                altitude_m=altitude_m,
-                return_fuel_needed_kg=return_fuel_needed_kg,
-                return_status=return_status,
-                friendly_distance_km=friendly_distance_km,
-                # v5.9.6 新增：起落架警告
-                gear_warning=gear_warning,
-                # v6.6.0 新增：起落架进度指示器
-                gear_pct=gear_pct,
-                gear_moving=gear_moving,
-                gear_retracting=gear_retracting,
-                # v6.0 新增：投弹预测
-                bombing_valid=bombing_valid,
-                bomb_name=bomb_name,
-                bomb_range_m=bomb_range_m,
-                bomb_flight_time=bomb_flight_time,
-                release_distance_m=release_distance_m,
-                time_to_release=time_to_release,
-                release_status=release_status,
-                target_zone_distance_m=target_zone_distance_m,
-                ground_speed_kmh=ground_speed_kmh_for_bombing,
-                aircraft_type_name=str(tel.type_name or ""),
-                attitude_pitch_deg=attitude.pitch_deg,
-                attitude_roll_deg=attitude.roll_deg,
-                attitude_bank_deg=attitude.bank_deg,
-                attitude_reliable=attitude.reliable,
-                hud_attitude_fallback=attitude.fallback,
-                hud_attitude_fallback_reason=attitude.fallback_reason,
-                overspeed_level=overspeed.level,
-                overspeed_ratio=float(overspeed.ias_ratio or 0.0),
-                overspeed_display_ratio=float(overspeed_display_ratio or 0.0),
-                overspeed_current_ias_kmh=float(overspeed.ias_kmh or 0.0),
-                overspeed_current_mach=(
-                    float(overspeed.mach) if overspeed.mach is not None else None
-                ),
-                overspeed_limit_kmh=float(overspeed.ias_limit_kmh or 0.0),
-                overspeed_limit_mach=float(overspeed.mach_limit or 0.0),
-                overspeed_match=bool(overspeed.resolved_fm),
-                overspeed_reason=overspeed.reason,
-            )
+        return UISnapshot(
+            phase=phase,
+            life_index=life_index,
+            cycle=cycle,
+            remaining_sec=remaining,
+            progress=progress,
+            sortie_id=sortie_id,
+            main_badge=main_badge,
+            flight_badge=flight_badge,
+            status_text=status_text,
+            api_down=api_down,
+            api_down_pending=api_down_pending,
+            on_ground=on_ground,
+            landed_flash=landed_flash,
+            perf_debug=perf_debug,
+            source_debug=source_debug,
+            clog_debug=clog_debug,
+            zones=zone_display_list,
+            friendly_airfield=friendly_airfield_display,
+            enemy_airfields=enemy_airfields_display,
+            has_airfield_target=has_airfield_target,
+            has_target=has_target,
+            is_deviating=nav_is_deviating,
+            deviation_angle=deviation_angle,
+            zone_destroyed_alert=zone_destroyed_alert,
+            destroyed_zone_count=destroyed_count,
+            destroyed_zone_text=destroyed_zone_text,
+            should_play_destroyed_sound=nav_should_play_destroyed_sound,
+            player_heading=nav_player_heading,
+            fuel_kg=fuel_current_kg,
+            fuel_initial_kg=fuel_initial_kg,
+            fuel_percent=fuel_percent,
+            fuel_rate_kg_min=fuel_rate_kg_min,
+            fuel_rate_stable=fuel_rate_stable,
+            fuel_time_remaining_str=fuel_time_remaining_str,
+            altitude_m=tel.altitude_m,
+            return_fuel_needed_kg=return_fuel_needed_kg,
+            return_status=return_status,
+            friendly_distance_km=friendly_distance_km,
+            gear_warning=gear_warning,
+            gear_pct=gear_pct,
+            gear_moving=gear_moving,
+            gear_retracting=gear_retracting,
+            bombing_valid=bombing_valid,
+            bomb_name=bomb_name,
+            bomb_range_m=bomb_range_m,
+            bomb_flight_time=bomb_flight_time,
+            release_distance_m=release_distance_m,
+            time_to_release=time_to_release,
+            release_status=release_status,
+            target_zone_distance_m=target_zone_distance_m,
+            ground_speed_kmh=ground_speed_kmh_for_bombing,
+            aircraft_type_name=str(tel.type_name or ''),
+            attitude_pitch_deg=attitude_pitch_deg,
+            attitude_roll_deg=attitude_roll_deg,
+            attitude_bank_deg=attitude_bank_deg,
+            attitude_reliable=attitude_reliable,
+            hud_attitude_fallback=attitude_fallback,
+            hud_attitude_fallback_reason=attitude_fallback_reason,
+            overspeed_level=overspeed.level,
+            overspeed_ratio=float(overspeed.ias_ratio or 0.0),
+            overspeed_display_ratio=float(overspeed_display_ratio or 0.0),
+            overspeed_current_ias_kmh=float(overspeed.ias_kmh or 0.0),
+            overspeed_current_mach=(
+                float(overspeed.mach) if overspeed.mach is not None else None
+            ),
+            overspeed_limit_kmh=float(overspeed.ias_limit_kmh or 0.0),
+            overspeed_limit_mach=float(overspeed.mach_limit or 0.0),
+            overspeed_match=bool(overspeed.resolved_fm),
+            overspeed_reason=overspeed.reason,
+        )
 
     def _start_new_life_locked(self, now: float):
         """开始新的生命（必须在锁内调用）"""
@@ -1489,3 +1543,4 @@ class GameLogic:
             s.bombing_calc_valid = True
         else:
             s.bombing_calc_valid = False
+

@@ -453,8 +453,8 @@ class GameState:
     # 轻量性能诊断（用于排查 UI/锁/8111 卡顿来源）
     perf_tick_total_ms: float = 0.0
     perf_tick_net_ms: float = 0.0
-    perf_tick_lock_ms: float = 0.0
-    perf_snapshot_wait_ms: float = 0.0
+    perf_tick_lock_wait_ms: float = 0.0
+    perf_tick_lock_hold_ms: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -488,6 +488,37 @@ class AirfieldDisplayInfo:
 
 
 @dataclass(frozen=True)
+class PerfDebugInfo:
+    """性能诊断信息。"""
+    tick_total_ms: float = 0.0
+    tick_net_ms: float = 0.0
+    tick_lock_wait_ms: float = 0.0
+    tick_lock_hold_ms: float = 0.0
+    snapshot_wait_ms: float = 0.0
+
+
+@dataclass(frozen=True)
+class SourceDebugInfo:
+    """8111 数据源诊断信息。"""
+    map_ok: bool = False
+    map_obj_count: int = 0
+    player_present: bool = False
+    indicators_ok: bool = False
+    indicators_valid: bool = False
+    has_type_name: bool = False
+    state_ok: bool = False
+
+
+@dataclass(frozen=True)
+class ClogDebugInfo:
+    """clog 一次性解析诊断信息。"""
+    status: str = "-"
+    player_count: int = 0
+    player_names: str = "-"
+    error: str = "-"
+
+
+@dataclass(frozen=True)
 class UISnapshot:
     """UI快照（逻辑层 → UI层的数据传递）
     
@@ -503,11 +534,13 @@ class UISnapshot:
     main_badge: Tuple[str, str, str]      # (文本, 前景色, 背景色)
     flight_badge: Tuple[str, str, str]
     status_text: str
-    diag_text: str
     api_down: bool
     api_down_pending: bool
     on_ground: bool
     landed_flash: bool
+    perf_debug: PerfDebugInfo = field(default_factory=PerfDebugInfo)
+    source_debug: SourceDebugInfo = field(default_factory=SourceDebugInfo)
+    clog_debug: ClogDebugInfo = field(default_factory=ClogDebugInfo)
     
     # 导航相关
     zones: List[ZoneDisplayInfo] = field(default_factory=list)

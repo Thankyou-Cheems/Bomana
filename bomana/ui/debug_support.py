@@ -550,16 +550,9 @@ class AppDebugSupport:
         app = self.app
         scene_name = app._debug_scene_names[app._debug_scene_index % len(app._debug_scene_names)]
         source_text = "模拟" if app._debug_effective_mock else "实时"
-        clog_line = "CLOG: -"
-        perf_line = "PERF: -"
-        raw_diag = str(getattr(live_snap, "diag_text", "") or "")
-        if raw_diag:
-            for line in raw_diag.splitlines():
-                txt = str(line or "").strip()
-                if txt.startswith("CLOG:"):
-                    clog_line = txt
-                elif txt.startswith("PERF:"):
-                    perf_line = txt
+        perf = live_snap.perf_debug
+        source_dbg = live_snap.source_debug
+        clog_dbg = live_snap.clog_debug
         lines = [
             f"[Debug] 数据源={source_text} | 场景={scene_name}",
             "操作: 点击[数据源]切实时/模拟，点击[◀/▶]切换场景",
@@ -567,9 +560,22 @@ class AppDebugSupport:
                 f"Live: phase={live_snap.phase.name} api_down={int(live_snap.api_down)} "
                 f"zones={len(live_snap.zones)} target={int(live_snap.has_target)}"
             ),
-            perf_line,
+            (
+                f"SRC: map={int(source_dbg.map_ok)} objs={source_dbg.map_obj_count} "
+                f"player={int(source_dbg.player_present)} ind={int(source_dbg.indicators_ok)} "
+                f"valid={int(source_dbg.indicators_valid)} state={int(source_dbg.state_ok)} "
+                f"type={int(source_dbg.has_type_name)}"
+            ),
+            (
+                f"PERF: tick={perf.tick_total_ms:.1f}ms net={perf.tick_net_ms:.1f}ms "
+                f"lock_wait={perf.tick_lock_wait_ms:.1f}ms lock_hold={perf.tick_lock_hold_ms:.1f}ms "
+                f"snap_wait={perf.snapshot_wait_ms:.1f}ms"
+            ),
             f"UI: gap={app._last_ui_gap_ms:.1f}ms work={app._last_ui_work_ms:.1f}ms",
-            clog_line,
+            (
+                f"CLOG: st={clog_dbg.status} players={clog_dbg.player_count} "
+                f"names={clog_dbg.player_names} err={clog_dbg.error}"
+            ),
             (
                 f"Render: phase={render_snap.phase.name} on_ground={int(render_snap.on_ground)} "
                 f"fuel={render_snap.fuel_kg:.0f}kg ({render_snap.fuel_percent:.0f}%) "
