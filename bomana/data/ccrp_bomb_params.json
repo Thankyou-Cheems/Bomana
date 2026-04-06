@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generated_at": "2026-03-18 18:47:30",
-    "bombs": 410,
+    "generated_at": "2026-04-06 11:40:54",
+    "bombs": 422,
     "collisions": 0,
     "skipped_non_bomb": 17
   },
@@ -3021,6 +3021,21 @@
       "source_file": "su_fab5000.blkx",
       "mesh": "su_fab5000"
     },
+    "su_fab5000_m54": {
+      "mass": 5247.0,
+      "caliber": 1.06,
+      "dragCx": 0.154,
+      "distFromCmToStab": 2.11,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "su_fab5000_m54.blkx",
+      "mesh": "su_fab_5000_m54"
+    },
     "su_fab500_m54": {
       "mass": 478.0,
       "caliber": 0.45,
@@ -3110,6 +3125,21 @@
       "stab_enabled": false,
       "source_file": "su_fab50x.blkx",
       "mesh": "su_fab_50sv_37_x"
+    },
+    "su_fab9000": {
+      "mass": 9407.0,
+      "caliber": 1.2,
+      "dragCx": 0.154,
+      "distFromCmToStab": 2.11,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "su_fab9000.blkx",
+      "mesh": "su_fab_9000"
     },
     "su_fab_1000m_43": {
       "mass": 1077.0,
@@ -3741,6 +3771,21 @@
       "source_file": "su_ofab_250_270.blkx",
       "mesh": "su_ofab_250_270"
     },
+    "su_rds37": {
+      "mass": 5570.0,
+      "caliber": 1.5,
+      "dragCx": 0.097,
+      "distFromCmToStab": 1.05,
+      "brakeTime": [
+        2.0,
+        4.0
+      ],
+      "brakeCxK": 0.2,
+      "brakeArm": 0.0,
+      "stab_enabled": true,
+      "source_file": "su_rds37.blkx",
+      "mesh": "su_rds37_nuclear_bomb_na"
+    },
     "su_rds4": {
       "mass": 2983.0,
       "caliber": 0.82,
@@ -3769,6 +3814,36 @@
       "brakeArm": 0.0,
       "stab_enabled": false,
       "source_file": "su_rn_28.blkx",
+      "mesh": "su_nuclear_bomb_rn_28"
+    },
+    "su_rn_28_nt": {
+      "mass": 480.0,
+      "caliber": 0.45,
+      "dragCx": 0.097,
+      "distFromCmToStab": 1.05,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "su_rn_28_nt.blkx",
+      "mesh": "su_nuclear_bomb_rn_28"
+    },
+    "su_rn_40": {
+      "mass": 370.0,
+      "caliber": 0.45,
+      "dragCx": 0.097,
+      "distFromCmToStab": 1.05,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "su_rn_40.blkx",
       "mesh": "su_nuclear_bomb_rn_28"
     },
     "su_umpk_3000": {
@@ -5301,6 +5376,21 @@
       "source_file": "us_2000lb_mk_84_ldgp_air.blkx",
       "mesh": "us_2000lb_mk_84_air_na"
     },
+    "us_2000lb_mk_84_ldgp_cone_90": {
+      "mass": 893.6,
+      "caliber": 0.457,
+      "dragCx": 0.0793,
+      "distFromCmToStab": 1.3,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "us_2000lb_mk_84_ldgp_cone_90.blkx",
+      "mesh": "us_2000lb_mk_84_ldgp_cone_90"
+    },
     "us_2000lbs": {
       "mass": 907.2,
       "caliber": 0.591,
@@ -5811,6 +5901,21 @@
       "source_file": "us_750_lb_m116a2.blkx",
       "mesh": "us_750_lb_m116a2"
     },
+    "us_750lb_m117_air": {
+      "mass": 362.42,
+      "caliber": 0.408,
+      "dragCx": 0.038,
+      "distFromCmToStab": 0.77,
+      "brakeTime": [
+        0.5,
+        1.0
+      ],
+      "brakeCxK": 110.0,
+      "brakeArm": 5.0,
+      "stab_enabled": true,
+      "source_file": "us_750lb_m117_air.blkx",
+      "mesh": "us_750lb_m117_air_na"
+    },
     "us_750lb_m117_cone_45": {
       "mass": 362.42,
       "caliber": 0.408,
@@ -5946,6 +6051,36 @@
       "source_file": "us_agm_62a_er.blkx",
       "mesh": "us_1000lb_agm62a_walleye_1er"
     },
+    "us_b28": {
+      "mass": 1053.0,
+      "caliber": 0.58,
+      "dragCx": 0.097,
+      "distFromCmToStab": 1.5,
+      "brakeTime": [
+        2.0,
+        4.0
+      ],
+      "brakeCxK": 0.2,
+      "brakeArm": 0.0,
+      "stab_enabled": true,
+      "source_file": "us_b28.blkx",
+      "mesh": "us_b28fi_y5_1_45mt_nuclear_bomb_na"
+    },
+    "us_b28_ang45": {
+      "mass": 1053.0,
+      "caliber": 0.58,
+      "dragCx": 0.097,
+      "distFromCmToStab": 1.5,
+      "brakeTime": [
+        2.0,
+        4.0
+      ],
+      "brakeCxK": 0.2,
+      "brakeArm": 0.0,
+      "stab_enabled": true,
+      "source_file": "us_b28_ang45.blkx",
+      "mesh": "us_b28fi_y5_1_45mt_nuclear_bomb_45_na"
+    },
     "us_b61": {
       "mass": 996.3,
       "caliber": 0.591,
@@ -5959,6 +6094,51 @@
       "brakeArm": 0.0,
       "stab_enabled": false,
       "source_file": "us_b61.blkx",
+      "mesh": "us_b61_nuclear_bomb"
+    },
+    "us_b61_30kt": {
+      "mass": 350.0,
+      "caliber": 0.34,
+      "dragCx": 0.097,
+      "distFromCmToStab": 1.2,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "us_b61_30kt.blkx",
+      "mesh": "us_b61_nuclear_bomb"
+    },
+    "us_b61_5kt": {
+      "mass": 350.0,
+      "caliber": 0.34,
+      "dragCx": 0.097,
+      "distFromCmToStab": 1.2,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "us_b61_5kt.blkx",
+      "mesh": "us_b61_nuclear_bomb"
+    },
+    "us_b83": {
+      "mass": 1118.0,
+      "caliber": 0.46,
+      "dragCx": 0.097,
+      "distFromCmToStab": 1.5,
+      "brakeTime": [
+        0.0,
+        0.0
+      ],
+      "brakeCxK": 0.0,
+      "brakeArm": 0.0,
+      "stab_enabled": false,
+      "source_file": "us_b83.blkx",
       "mesh": "us_b61_nuclear_bomb"
     },
     "us_blu27b": {

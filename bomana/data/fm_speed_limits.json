@@ -1,10 +1,10 @@
 {
   "meta": {
-    "generated_at": "2026-03-18 18:47:40",
+    "generated_at": "2026-04-06 11:41:06",
     "source_root_name": "War-Thunder-Datamine",
     "source_subdir": "aces.vromfs.bin_u/gamedata/flightmodels",
-    "fm_records": 1188,
-    "unit_records": 1416
+    "fm_records": 1191,
+    "unit_records": 1427
   },
   "unit_to_fm": {
     "a-20g": "a-20g",
@@ -150,6 +150,7 @@
     "b_26c_france": "b_26b_c",
     "b_34": "b_34",
     "b_48_firecrest": "b_48_firecrest",
+    "b_52h": "nt_b_52h",
     "b_66b": "b_66b",
     "ba_65_a80": "ba_65_a80",
     "ba_65_k14_l": "ba_65_k14_l",
@@ -960,6 +961,15 @@
     "night_fighter_mk_2": "boston_mk_1",
     "nimrod_mk1": "nimrod_mk1",
     "nimrod_mk2": "nimrod_mk2",
+    "nt_a_10a_early": "a-10a_early",
+    "nt_a_6e_tram": "a_6e_tram",
+    "nt_a_7e": "a_7e",
+    "nt_b_52h": "nt_b_52h",
+    "nt_f_4e": "f-4e",
+    "nt_mig_23mld": "mig_23mld",
+    "nt_su_24m": "su_24m",
+    "nt_su_25t": "su_25t",
+    "nt_tu_95m": "nt_tu_95m",
     "o3u_1": "o3u_1",
     "oh_58d": "oh_58d",
     "oh_58d_china": "oh_58d",
@@ -1319,6 +1329,7 @@
     "tu_4_china": "tu_4",
     "tu_4_china_killstreak": "tu_4",
     "tu_4_killstreak": "tu_4",
+    "tu_95m": "nt_tu_95m",
     "typhoon_mk1a": "typhoon_mk1a",
     "typhoon_mk1b": "typhoon_mk1b",
     "typhoon_mk1b_late": "typhoon_mk1b_late",
@@ -1832,6 +1843,10 @@
     "b_48_firecrest": {
       "ias": 750.0,
       "mach": 0.76
+    },
+    "b_52h": {
+      "ias": 910.0,
+      "mach": 0.95
     },
     "b_66b": {
       "ias": 1098.0,
@@ -4628,6 +4643,14 @@
     "nimrod_mk2": {
       "ias": 600.0,
       "mach": 0.75
+    },
+    "nt_b_52h": {
+      "ias": 910.0,
+      "mach": 0.95
+    },
+    "nt_tu_95m": {
+      "ias": 690.0,
+      "mach": 0.86
     },
     "o3u_1": {
       "ias": 450.0,
