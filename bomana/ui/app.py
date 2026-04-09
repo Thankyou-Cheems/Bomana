@@ -695,14 +695,34 @@ class App:
         
         # 使用配置的快捷键
         hotkeys = [
-            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.get_vk(HotkeyConfig.KEY_RESET), self._manual_reset_hotkey),
-            (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.get_vk(HotkeyConfig.KEY_LOCK), self._toggle_lock),
-            (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.get_vk(HotkeyConfig.KEY_CORNER), self._next_corner),
-            (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.get_vk(HotkeyConfig.KEY_BEEP), self._toggle_beep),
-            (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.get_vk(HotkeyConfig.KEY_ZONES), self._toggle_zone_sound),
+            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.KEY_RESET, self._manual_reset_hotkey),
+            (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.KEY_LOCK, self._toggle_lock),
+            (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.KEY_CORNER, self._next_corner),
+            (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.KEY_BEEP, self._toggle_beep),
+            (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.KEY_ZONES, self._toggle_zone_sound),
         ]
-        self._ghk = GlobalHotkeys(self.root, hotkeys)
+        self._ghk = GlobalHotkeys(
+            self.root,
+            hotkeys,
+            error_cb=self._on_hotkey_registration_error,
+        )
         self._ghk.start()
+
+    def _on_hotkey_registration_error(self, key_names) -> None:
+        unique_keys = [str(name) for name in key_names if str(name).strip()]
+        if not unique_keys:
+            return
+        joined = "、".join(unique_keys)
+        messagebox.showwarning(
+            "快捷键注册失败",
+            (
+                "以下全局快捷键未能注册："
+                f"{joined}\n\n"
+                "可能原因：与其他程序或系统快捷键冲突。"
+                "\n请在设置中改用其他按键。"
+            ),
+            parent=self.root,
+        )
 
     def _init_tray(self):
         """初始化系统托盘

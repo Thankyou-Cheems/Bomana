@@ -1051,9 +1051,18 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             menu_btn["menu"] = menu
         
         # 提示
-        tk.Label(frame, text="* 避免与游戏快捷键冲突\n* 更改后需要重启热键服务\n* HUD 开关与参数已迁移到“实验性”页", 
-                bg=Theme.BG, fg=Theme.TEXT_MUTED, font=("Segoe UI", 8),
-                justify="left").pack(anchor="w", pady=(15, 0))
+        tk.Label(
+            frame,
+            text=(
+                "* 避免与游戏快捷键冲突\n"
+                "* 不允许多个功能绑定同一个按键\n"
+                "* HUD 仅能在“实验性”页中启用/关闭，默认关闭且不提供全局热键"
+            ),
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
+            justify="left",
+        ).pack(anchor="w", pady=(15, 0))
 
     def _build_experimental_tab(self):
         """构建实验性功能页（HUD 等尚未稳定能力）。"""
@@ -1414,6 +1423,14 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         old_hud_color_style = str(getattr(HUDConfig, "color_style", "auto"))
         old_sound_enabled = bool(self.app.sound.is_enabled())
         old_zone_sound_enabled = bool(getattr(self.app, "_zone_sound_enabled", True))
+        old_hotkeys_enabled = HotkeyConfig.GLOBAL_HOTKEYS
+        old_hotkey_bindings = HotkeyConfig.get_bindings()
+        new_hotkeys_enabled = bool(self.hotkeys_enabled_var.get())
+        try:
+            hotkey_bindings = self._collect_hotkey_bindings()
+        except ValueError as exc:
+            messagebox.showwarning("快捷键冲突", str(exc), parent=self)
+            return
         
         # 显示设置
         UIConfig.WINDOW_ALPHA = self.alpha_var.get()
@@ -1447,14 +1464,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         config['panels'] = panel_config
         
         # 快捷键设置
-        old_hotkeys_enabled = HotkeyConfig.GLOBAL_HOTKEYS
-        HotkeyConfig.GLOBAL_HOTKEYS = self.hotkeys_enabled_var.get()
-        
-        hotkey_bindings = {}
-        for key, var in self.hotkey_vars.items():
-            hotkey_bindings[key] = var.get()
-        # HUD 热键入口已停用，保留配置字段兼容旧配置结构。
-        hotkey_bindings["hud"] = HotkeyConfig.KEY_HUD
+        HotkeyConfig.GLOBAL_HOTKEYS = new_hotkeys_enabled
         HotkeyConfig.set_bindings(hotkey_bindings)
         
         config['global_hotkeys'] = HotkeyConfig.GLOBAL_HOTKEYS
@@ -1526,15 +1536,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 重启热键服务（如果需要）
         need_restart_hotkeys = (
             old_hotkeys_enabled != HotkeyConfig.GLOBAL_HOTKEYS or
-            hotkey_bindings != HotkeyConfig.get_bindings()
+            hotkey_bindings != old_hotkey_bindings
         )
         if need_restart_hotkeys:
             if hasattr(self.app, '_ghk') and self.app._ghk:
                 self.app._ghk.stop()
             if HotkeyConfig.GLOBAL_HOTKEYS:
                 self.app._init_global_hotkeys()
-                if hasattr(self.app, '_ghk') and self.app._ghk:
-                    self.app._ghk.start()
             # 刷新提示文本（主窗口 + 导航窗口）
             self.app._update_hint()
             if hasattr(self.app, 'nav_window') and self.app.nav_window:
@@ -1585,6 +1593,43 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         messagebox.showinfo("设置", "设置已保存", parent=self)
         
         self.destroy()
+
+    def _collect_hotkey_bindings(self) -> dict[str, str]:
+        """收集并校验快捷键绑定。"""
+        hotkey_bindings = {
+            key: str(var.get() or "").strip()
+            for key, var in self.hotkey_vars.items()
+        }
+
+        key_to_actions: dict[str, list[str]] = {}
+        for action, key_name in hotkey_bindings.items():
+            if not key_name:
+                continue
+            key_to_actions.setdefault(key_name, []).append(action)
+
+        duplicate_groups = [
+            (key_name, actions)
+            for key_name, actions in key_to_actions.items()
+            if len(actions) > 1
+        ]
+        if duplicate_groups:
+            action_labels = {
+                "reset": "重置计时器",
+                "lock": "锁定/解锁",
+                "corner": "切换角落",
+                "beep": "声音开关",
+                "zones": "战区提示音",
+            }
+            details = []
+            for key_name, actions in duplicate_groups:
+                labels = "、".join(action_labels.get(action, action) for action in actions)
+                details.append(f"{key_name}: {labels}")
+            raise ValueError(
+                "检测到重复快捷键绑定：\n"
+                + "\n".join(details)
+                + "\n\n请为每个功能选择不同的快捷键。"
+            )
+        return hotkey_bindings
 
 
 class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):

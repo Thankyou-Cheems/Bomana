@@ -403,7 +403,6 @@ class HotkeyConfig:
     KEY_CORNER = "F9"    # 切换角落
     KEY_BEEP = "F10"     # 声音开关
     KEY_ZONES = "F11"    # 战区提示音
-    KEY_HUD = "F12"      # HUD开关（兼容保留，默认不绑定）
 
     # 热键ID（用于注册/注销）
     HK_ID_RESET = 7007
@@ -411,7 +410,6 @@ class HotkeyConfig:
     HK_ID_CORNER = 7009
     HK_ID_BEEP = 7010
     HK_ID_ZONES = 7011
-    HK_ID_HUD = 7012
 
     # 全局热键开关（用户可配置）
     GLOBAL_HOTKEYS = True
@@ -433,7 +431,6 @@ class HotkeyConfig:
             "corner": cls.KEY_CORNER,
             "beep": cls.KEY_BEEP,
             "zones": cls.KEY_ZONES,
-            "hud": cls.KEY_HUD,
         }
 
     @classmethod
@@ -449,8 +446,6 @@ class HotkeyConfig:
             cls.KEY_BEEP = bindings["beep"]
         if "zones" in bindings:
             cls.KEY_ZONES = bindings["zones"]
-        if "hud" in bindings:
-            cls.KEY_HUD = bindings["hud"]
 
 
 class SoundConfig:

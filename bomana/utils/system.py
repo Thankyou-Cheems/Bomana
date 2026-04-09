@@ -6,7 +6,7 @@ import sys
 import ctypes
 import locale
 import threading
-from typing import Optional, Tuple, Any, List, Dict
+from typing import Optional, Tuple, Any, List, Dict, Callable
 
 import tkinter as tk
 from tkinter import messagebox
@@ -384,15 +384,21 @@ class GlobalHotkeys:
     WM_QUIT = 0x0012        # 退出消息
     MOD_NOREPEAT = 0x4000   # 禁止重复触发
 
-    def __init__(self, root: tk.Tk, hotkeys: List[Tuple[int, int, callable]]):
+    def __init__(
+        self,
+        root: tk.Tk,
+        hotkeys: List[Tuple[int, str, Callable[[], None]]],
+        error_cb: Callable[[Tuple[str, ...]], None] | None = None,
+    ):
         """初始化热键管理器
         
         Args:
             root: tkinter主窗口
-            hotkeys: 热键列表 [(ID, VK码, 回调函数), ...]
+            hotkeys: 热键列表 [(ID, 键名, 回调函数), ...]
         """
         self.root = root
         self.hotkeys = hotkeys
+        self.error_cb = error_cb
         self._thread = None
         self._tid = None
         self._stop_event = threading.Event()
@@ -432,10 +438,28 @@ class GlobalHotkeys:
             return
 
         # 注册所有热键
-        for hk_id, vk, _cb in self.hotkeys:
+        failed_keys: list[str] = []
+        for hk_id, key_name, _cb in self.hotkeys:
             try:
-                Win32.user32.RegisterHotKey(None, int(hk_id), int(self.MOD_NOREPEAT), int(vk))
+                vk = HotkeyConfig.get_vk(str(key_name))
+                ok = bool(
+                    Win32.user32.RegisterHotKey(
+                        None,
+                        int(hk_id),
+                        int(self.MOD_NOREPEAT),
+                        int(vk),
+                    )
+                )
+                if not ok:
+                    failed_keys.append(str(key_name))
             except (OSError, AttributeError):
+                failed_keys.append(str(key_name))
+
+        if failed_keys and self.error_cb:
+            unique_keys = tuple(dict.fromkeys(failed_keys))
+            try:
+                self.root.after(0, lambda keys=unique_keys: self.error_cb(keys))
+            except tk.TclError:
                 pass
 
         # 定义消息结构体
@@ -466,7 +490,7 @@ class GlobalHotkeys:
                 if msg.message == self.WM_HOTKEY:
                     hk_id = int(msg.wParam)
                     # 查找对应的回调函数
-                    for _id, _vk, cb in self.hotkeys:
+                    for _id, _key_name, cb in self.hotkeys:
                         if _id == hk_id:
                             try:
                                 # 在主线程执行回调
@@ -478,7 +502,7 @@ class GlobalHotkeys:
                 break
 
         # 注销所有热键
-        for hk_id, _vk, _cb in self.hotkeys:
+        for hk_id, _key_name, _cb in self.hotkeys:
             try:
                 Win32.user32.UnregisterHotKey(None, int(hk_id))
             except (OSError, AttributeError):

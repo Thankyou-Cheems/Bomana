@@ -67,6 +67,7 @@ INSTALL_ID_FILE_NAME = ".bomana_install_id"
 UPDATE_LOCK_FILE_NAME = ".bomana_update.lock"
 UPDATE_LOCK_STALE_SEC = 30 * 60
 TEMP_META_FILE_NAME = ".bomana_temp_meta.json"
+LAUNCHER_UPDATE_RESULT_FILE_NAME = ".bomana_launcher_update_result.json"
 DEFAULT_ENTRYPOINT = "Bomana.pyw"
 NET_TIMEOUT_SEC = 8.0
 PRIMARY_TIMEOUT_SEC = 4.0
@@ -723,6 +724,43 @@ def _cleanup_temp_files_on_launcher_upgrade(base: Path) -> None:
         )
 
 
+def _consume_launcher_update_result(base: Path) -> None:
+    path = base / LAUNCHER_UPDATE_RESULT_FILE_NAME
+    if not path.exists():
+        return
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        _log(base, f"读取启动器自更新结果失败：{e}")
+        try:
+            path.unlink()
+        except Exception:
+            pass
+        return
+
+    try:
+        status = str(payload.get("status", "")).strip().lower()
+        version = str(payload.get("target_version", "")).strip()
+        message = str(payload.get("message", "")).strip()
+        if status == "success":
+            _log(base, f"启动器自更新成功：v{version or LAUNCHER_VERSION} {message}".strip())
+        elif status == "error":
+            detail = message or "未知错误"
+            _log(base, f"启动器自更新失败：{detail}")
+            _show_error(
+                f"{DISPLAY_NAME} 启动器更新失败",
+                "上一次启动器自更新未完成。\n"
+                f"错误：{detail}\n"
+                "详细信息请查看 launcher.log。",
+            )
+    finally:
+        try:
+            path.unlink()
+        except Exception:
+            pass
+
+
 def _load_or_create_install_id(base: Path) -> str:
     path = base / INSTALL_ID_FILE_NAME
     try:
@@ -797,6 +835,13 @@ def _safe_extract_zip(zip_path: Path, target_dir: Path) -> None:
             if target_root not in [member_path] + list(member_path.parents):
                 raise RuntimeError("应用包包含非法路径")
         zf.extractall(target_dir)
+
+
+def _require_remote_checksum(checksum_value: str, *, artifact_label: str) -> str:
+    checksum = str(checksum_value or "").strip().lower()
+    if not checksum:
+        raise RuntimeError(f"{artifact_label}缺少 SHA256 校验值")
+    return checksum
 
 
 def _install_zip_package(
@@ -1581,6 +1626,10 @@ def _download_update_from_manifest(
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
     if not remote_version or not package_url:
         raise RuntimeError("更新清单字段缺失")
+    package_sha256 = _require_remote_checksum(
+        package_sha256,
+        artifact_label="应用更新清单",
+    )
     if min_launcher_version and _version_is_older(LAUNCHER_VERSION, min_launcher_version):
         raise RuntimeError(
             f"此版本要求先更新启动器（当前 v{LAUNCHER_VERSION}，要求 >= v{min_launcher_version}）"
@@ -1676,42 +1725,68 @@ def _stage_launcher_self_update(
         raise RuntimeError("源码模式不支持启动器自更新")
 
     target = Path(sys.executable).resolve()
-    target_name = target.name
     staged = base / "BomanaLauncher_update.new.exe"
     backup = base / "BomanaLauncher_backup.old.exe"
     script_path = base / "bomana_update_launcher_apply.ps1"
+    result_path = base / LAUNCHER_UPDATE_RESULT_FILE_NAME
 
     staged.unlink(missing_ok=True)
     backup.unlink(missing_ok=True)
+    result_path.unlink(missing_ok=True)
     staged.write_bytes(launcher_bytes)
-    script = f"""$ErrorActionPreference = 'SilentlyContinue'
+    script = f"""$ErrorActionPreference = 'Stop'
 $target = {json.dumps(str(target))}
 $staged = {json.dumps(str(staged))}
 $backup = {json.dumps(str(backup))}
+$resultPath = {json.dumps(str(result_path))}
 $oldPid = {os.getpid()}
+$targetVersion = {json.dumps(str(remote_version))}
 
-for ($i = 0; $i -lt 120; $i++) {{
-    if (-not (Get-Process -Id $oldPid -ErrorAction SilentlyContinue)) {{
-        break
+function Write-Result([string]$status, [string]$message) {{
+    $payload = [ordered]@{{
+        status = $status
+        target_version = $targetVersion
+        message = $message
+        updated_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     }}
-    Start-Sleep -Seconds 1
+    $payload | ConvertTo-Json -Compress | Set-Content -Path $resultPath -Encoding UTF8
 }}
 
-Remove-Item $backup -Force -ErrorAction SilentlyContinue
-if (Test-Path $target) {{
-    Move-Item $target $backup -Force
-}}
-Move-Item $staged $target -Force
-if (-not (Test-Path $target)) {{
-    if (Test-Path $backup) {{
-        Move-Item $backup $target -Force
+try {{
+    for ($i = 0; $i -lt 120; $i++) {{
+        if (-not (Get-Process -Id $oldPid -ErrorAction SilentlyContinue)) {{
+            break
+        }}
+        Start-Sleep -Seconds 1
     }}
+
+    Remove-Item $backup -Force -ErrorAction SilentlyContinue
+    if (Test-Path $target) {{
+        Move-Item $target $backup -Force
+    }}
+    if (-not (Test-Path $staged)) {{
+        throw "staged launcher file missing"
+    }}
+    Move-Item $staged $target -Force
+    if (-not (Test-Path $target)) {{
+        throw "launcher target missing after replace"
+    }}
+    Start-Process -FilePath $target | Out-Null
+    Write-Result "success" ("Launcher replaced and restarted: " + $targetVersion)
+    Remove-Item $backup -Force -ErrorAction SilentlyContinue
+}}
+catch {{
+    $detail = ($_ | Out-String).Trim()
+    if ((-not (Test-Path $target)) -and (Test-Path $backup)) {{
+        Move-Item $backup $target -Force -ErrorAction SilentlyContinue
+    }}
+    Write-Result "error" $detail
     exit 1
 }}
-Start-Process -FilePath $target
-Remove-Item $backup -Force -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 500
-Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+finally {{
+    Start-Sleep -Milliseconds 500
+    Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+}}
 """
     script_path.write_text(script, encoding="utf-8")
     _launch_updater_script(script_path)
@@ -1738,6 +1813,10 @@ def _download_launcher_update_from_manifest(
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
     if not remote_version or not package_url:
         raise RuntimeError("启动器更新清单字段缺失")
+    package_sha256 = _require_remote_checksum(
+        package_sha256,
+        artifact_label="启动器更新清单",
+    )
 
     notify(
         "开始下载启动器",
@@ -1772,10 +1851,9 @@ def _download_launcher_update_from_manifest(
     )
     if cancel_cb and cancel_cb():
         raise RuntimeError("已取消当前操作")
-    if package_sha256:
-        actual_sha256 = hashlib.sha256(launcher_bytes).hexdigest().lower()
-        if actual_sha256 != package_sha256.strip().lower():
-            raise RuntimeError("SHA256 校验失败")
+    actual_sha256 = hashlib.sha256(launcher_bytes).hexdigest().lower()
+    if actual_sha256 != package_sha256:
+        raise RuntimeError("SHA256 校验失败")
     current_name = Path(sys.executable).name
     notify(
         "准备替换启动器",
@@ -1859,6 +1937,8 @@ def _friendly_error_text(err: Exception, channel: str) -> str:
         return "国内更新服务与 GitHub 回退均不可用。请检查网络后重试，或点击“打开下载页”手动下载。"
     if "SHA256 校验失败" in msg:
         return "下载文件校验失败，已自动拦截。请点击“重试”。"
+    if "缺少 SHA256 校验值" in msg:
+        return "更新清单缺少 SHA256 校验值，已拒绝下载或安装。请稍后重试或联系维护者。"
     if "发布清单字段缺失" in msg:
         return "更新清单格式异常。请稍后重试或联系维护者。"
     if "更新清单字段缺失" in msg:
@@ -4175,6 +4255,7 @@ def main() -> None:
     base = _base_dir()
     _recover_incomplete_install(base)
     _cleanup_temp_files_on_launcher_upgrade(base)
+    _consume_launcher_update_result(base)
     Win32.enable_dpi()
     channel = _detect_channel()
     identity = _build_client_identity(base)
