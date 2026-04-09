@@ -12,6 +12,7 @@
 - 游戏：War Thunder 已启动并进入战斗（机库状态不会产生飞行数据）
 - 数据来源：`http://localhost:8111`
 - 说明：无需额外“开启本地服务器”开关
+- 相关文档：更完整的功能与架构说明见 [README](../README.md) 与 [ARCHITECTURE](./ARCHITECTURE.md)
 
 ### 1. 获取程序
 
@@ -66,6 +67,7 @@ uv run python Bomana.pyw
 | CCRP 投弹预测 | 基于弹道参数的估算值，不是游戏内真实算法 |
 | 超速提醒 | IAS/Mach 双通道分级告警（safe/caution/warning/critical） |
 | HUD 叠加层 | 可选开启，提供目标与航向参考 |
+| 界面个性化 | 独立文字缩放、主题切换、自定义提示音 |
 
 CCRP 说明：
 
@@ -133,6 +135,7 @@ python tools/fm_speed_extractor.py ^
 - Game state: War Thunder must be in battle (hangar provides no live flight data)
 - Data source: `http://localhost:8111`
 - Note: no extra in-game "local server" toggle is required
+- Further reading: see [README](../README.md) and [ARCHITECTURE](./ARCHITECTURE.md) for the full feature and implementation overview
 
 ### 1. Get the App
 
@@ -187,6 +190,7 @@ If you already use uv, Option B is enough.
 | CCRP | Ballistic-based estimate, not the in-game internal algorithm |
 | Overspeed | IAS/Mach dual-channel alerts (`safe/caution/warning/critical`) |
 | HUD overlay | Optional in-game navigation overlay |
+| UI personalization | Independent text scale, theme switching, custom alert sounds |
 
 CCRP note:
 

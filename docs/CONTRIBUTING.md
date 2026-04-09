@@ -1,6 +1,6 @@
 # 贡献指南 | Contributing Guide
 
-感谢你对 Bomana 项目的关注！我们欢迎任何形式的贡献。
+感谢你对 Bomana 的关注。这个仓库当前以 Windows 本地开发、`uv` 环境、`bd` 任务跟踪和 GitHub PR 为主线协作。
 
 [中文](#中文) | [English](#english)
 
@@ -8,373 +8,224 @@
 
 ## 中文
 
-### 如何贡献
+### 提交前先了解的规则
 
-#### 报告 Bug
+- 只使用 War Thunder 官方 `localhost:8111` 数据；禁止内存读取、注入或修改游戏文件。
+- 所有任务跟踪都使用 `bd (beads)`，不要新增 markdown TODO 或外部任务列表。
+- 修改架构或代码流时，必须同步更新 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+- 遇到新的失败模式时，必须在 [PITFALLS.md](./PITFALLS.md) 追加简短记录。
+- 功能开关受 `bomana/config.py` 中的 `ENABLE_*` 控制，三种构建变体共用同一份配置逻辑。
 
-如果你发现了 Bug，请：
-
-1. **检查是否已存在相同问题**：在 [Issues](https://github.com/Thankyou-Cheems/Bomana/issues) 中搜索
-2. **创建新 Issue**：如果没有找到，请创建新的 Issue
-3. **提供详细信息**：
-   - 操作系统和版本（如 Windows 10 21H2）
-   - Python 版本（如 Python 3.14.3）
-   - 软件版本（如 v6.8.0）
-   - 复现步骤
-   - 错误截图或错误信息
-   - 预期行为 vs 实际行为
-
-#### 建议新功能
-
-欢迎提出新功能建议！请：
-
-1. **检查是否已有类似建议**
-2. **创建 Feature Request**
-3. **说明**：
-   - 功能描述
-   - 使用场景
-   - 为什么需要这个功能
-   - 可能的实现方案（可选）
-
-#### 提交代码
-
-##### 准备工作
-
-1. **Fork 仓库**
-   ```bash
-   # 点击仓库右上角的 "Fork" 按钮
-   ```
-
-2. **克隆到本地**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/Bomana.git
-   cd Bomana
-   ```
-
-3. **创建新分支**
-   ```bash
-   git checkout -b feature/your-feature-name
-   # 或
-   git checkout -b fix/bug-description
-   ```
-
-4. **安装依赖**
-   ```bash
-   # 首次使用请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
-   uv sync
-   ```
-
-##### 开发规范
-
-**代码风格**
-
-- 遵循 [PEP 8](https://pep8.org/) 规范
-- 使用 4 个空格缩进（不使用 Tab）
-- 最大行长度：100 字符（注释可适当放宽）
-- 中文注释优先（英文注释也可接受）
-
-**命名规范**
-
-```python
-# 类名：大驼峰（PascalCase）
-class GameLogic:
-    pass
-
-# 函数/变量名：小写+下划线（snake_case）
-def calculate_distance(x1, y1, x2, y2):
-    player_position = (x1, y1)
-    
-# 常量：全大写+下划线
-MAX_ZONE_COUNT = 6
-API_BASE_URL = "http://127.0.0.1:8111"
-
-# 私有方法/变量：单下划线前缀
-def _internal_method(self):
-    pass
-```
-
-**注释规范**
-
-```python
-def calculate_bearing(x1: float, y1: float, x2: float, y2: float) -> float:
-    """计算从点1到点2的方位角
-    
-    Args:
-        x1, y1: 起点坐标
-        x2, y2: 终点坐标
-    
-    Returns:
-        方位角（0°=北，90°=东，顺时针）
-    """
-    # 具体实现
-    pass
-```
-
-**重要提示框**
-
-对于关键代码段，使用提示框注释：
-
-```python
-# ╔══════════════════════════════════════════════════════════════════════╗
-# ║ 修改注意事项 - 窗口尺寸计算                                        ║
-# ╠══════════════════════════════════════════════════════════════════════╣
-# ║ 1. hint_min_width 必须足够容纳底部提示文字的完整显示                  ║
-# ║ 2. 面板可见性影响最小宽度计算                                         ║
-# ╚══════════════════════════════════════════════════════════════════════╝
-```
-
-**数据类和配置类**
-
-- 使用 `@dataclass` 装饰器
-- 配置类继承规范：
-  ```python
-  class GameConfig:
-      """游戏逻辑相关配置
-      
-      这些参数直接影响游戏状态判断的准确性，修改时需谨慎测试。
-      """
-      CYCLE_SECONDS = 15 * 60
-      LAND_SPEED_KMH = 40
-  ```
-
-##### 提交规范
-
-**Commit Message 格式**
-
-使用约定式提交（Conventional Commits）：
-
-```
-<类型>: <简短描述>
-
-<详细描述>（可选）
-
-<关联 Issue>（可选）
-```
-
-**类型**：
-- `feat`: 新功能
-- `fix`: Bug 修复
-- `docs`: 文档更新
-- `style`: 代码格式（不影响功能）
-- `refactor`: 重构（不改变功能）
-- `perf`: 性能优化
-- `test`: 测试相关
-- `chore`: 构建/工具相关
-
-**示例**：
+### 环境准备
 
 ```bash
-# 好的示例
-git commit -m "feat: 添加燃油管理系统"
-git commit -m "fix: 修复多显示器窗口位置错误 (#123)"
-git commit -m "docs: 更新 README 安装说明"
-
-# 不好的示例
-git commit -m "修改了一些东西"
-git commit -m "bug"
+git clone https://github.com/YOUR_USERNAME/Bomana.git
+cd Bomana
+uv sync
 ```
 
-##### 提交 Pull Request
+如果要本地打包绿色版，再安装构建依赖：
 
-1. **推送到你的 Fork**
-   ```bash
-   git push origin feature/your-feature-name
-   ```
+```bash
+uv sync --extra build
+```
 
-2. **创建 Pull Request**
-   - 访问原仓库页面
-   - 点击 "New Pull Request"
-   - 选择你的分支
+源码运行：
 
-3. **填写 PR 描述**
-   - 说明修改内容
-   - 关联相关 Issue（如果有）
-   - 提供测试步骤
-   - 附上截图（UI 变更）
+```bash
+uv run python Bomana.pyw
+```
 
-4. **等待审查**
-   - 维护者会审查你的代码
-   - 可能会提出修改建议
-   - 请及时回复和修改
+### 任务跟踪（必须使用 bd）
 
-### 文档贡献
+开始工作前：
 
-文档同样重要！你可以：
+```bash
+bd ready --json
+```
 
-- 修正错别字
-- 改进说明文字
-- 添加使用示例
-- 翻译文档（中英文互译）
-- 补充常见问题
+认领已有任务：
 
-### 测试
+```bash
+bd update <issue-id> --status in_progress --json
+```
 
-如果你修改了代码，请：
+发现了新工作：
 
-1. **手动测试**
-   - 在战雷全真模式中实际测试
-   - 覆盖主要使用场景
-   - 测试边界情况
+```bash
+bd create "Issue title" --description="Context" -t task -p 2 --deps discovered-from:<parent-id> --json
+```
 
-2. **回归测试**
-   - 确保没有破坏现有功能
-   - 检查各个面板显示是否正常
-   - 验证热键功能
+完成后关闭：
 
-3. **性能测试**
-   - 监控 CPU/内存占用
-   - 确保 UI 刷新流畅（20fps）
-   - 网络请求不超时
+```bash
+bd close <issue-id> --reason "Completed" --json
+```
 
-### UI/UX 建议
+如果你是外部贡献者，PR 里请直接写明对应的 `bd` 编号；若没有权限操作 `bd` 数据库，请在 PR 描述里说明原因和上下文。
 
-如果你想改进界面：
+### 开发规范
 
-- **保持风格一致**：遵循现有的配色方案（Theme 类）
-- **考虑可访问性**：对比度、字体大小
-- **测试多 DPI**：在不同 DPI 设置下测试
-- **多显示器测试**：确保在多显示器环境下正常工作
+- Python 版本要求：`3.14+`
+- 代码风格：PEP 8、4 空格缩进、尽量保持单行不超过 100 字符
+- 注释：保留现有注释与文件头，新增注释只写必要背景，不写显而易见的语句复述
+- 配置/状态类优先集中在 `bomana/config.py` 与 `bomana/core/state.py`
+- UI 改动请同时检查多 DPI、多显示器、历史速度模式、独立导航窗口和 HUD 开关
 
-### 发布流程
+### 提交与 PR
 
-仅维护者可以发布新版本：
+- 分支命名建议：`feature/...`、`fix/...`、`docs/...`
+- Commit message 使用 Conventional Commits，例如 `docs: refresh contribution and privacy docs`
+- 如果直接在 `main` 分支提交，先运行 `/gc`（`git-commit-smart`）生成提交信息，再执行 `git commit`
+- PR 描述请包含：
+  - 变更目标
+  - 对应 `bd` 编号
+  - 测试步骤
+  - UI 变更截图（如适用）
+
+### 文档要求
+
+这些文档默认需要一起考虑：
+
+- [../README.md](../README.md)：面向用户的安装、功能和合规说明
+- [ARCHITECTURE.md](./ARCHITECTURE.md)：目录结构、运行数据流、构建链路
+- [PRIVACY.md](./PRIVACY.md)：匿名统计和更新服务行为
+- [CHANGELOG.md](./CHANGELOG.md)：对用户可见的版本变化
+
+### 测试与验证
+
+代码改动至少应覆盖其中相关项：
+
+- `uv run python Bomana.pyw` 基础启动验证
+- 受影响功能的静态自测
+- 真实 War Thunder SB 实测（如果改动涉及 8111 数据、UI 刷新、热键、导航、HUD、启动器）
+- 打包链路验证：`tools\scripts\build_portable.bat <Variant> <all|app|launcher>`（如果改动涉及发布或资源）
+
+### 发布流程（维护者）
 
 1. 更新 `docs/CHANGELOG.md`
-2. 更新版本号（`bomana/config.py` 中的 `__version__`）
-3. 如果发布目标包含应用包（`vX.Y.Z` / `vX.Y.Z-app`），先检查启动器兼容性：
-   - 明确这次 app 变更是否依赖新的启动器行为
-   - 如依赖，请同步更新 `PORTABLE_MIN_LAUNCHER_VERSION`
-   - 至少用当前计划支持的启动器版本做一次真实启动验证
-4. 如果发布目标是仅启动器（`vX.Y.Z-launcher`），至少补做这些真实交互验证：
-   - 检查进行中切换通道/下载来源/代理设置是否会在完成后自动重查
-   - 下载新 app 后是否正确保留一个 `app_previous` 回退槽
-   - “回退上一版本”是否能把当前版与上一版安全互换
-5. 创建 Git Tag（按发布目标选择）：
-   - `vX.Y.Z`：完整发布（启动器 + 应用包）
+2. 更新 `bomana/config.py` 中的 `__version__`
+3. 若 app 包需要新启动器能力，更新 `PORTABLE_MIN_LAUNCHER_VERSION`
+4. 根据发布目标做最少真实验证：
+   - app 发布：启动器兼容性、下载/启动正常
+   - launcher 发布：重查排队、保留一个 `app_previous/`、回退互换正常
+5. 推送标签：
+   - `vX.Y.Z`：完整发布
    - `vX.Y.Z-app`：仅应用包
    - `vX.Y.Z-launcher`：仅启动器
-6. 推送 Tag：`git push origin <tag>`（触发 GitHub Actions 云端自动打包）
-7. 等待 Actions 自动创建/更新 GitHub Release
-8. 检查产物是否齐全：
-   - 通用启动器：`Bomana_launcher_vX.Y.Z.exe`
-   - 应用包：`Bomana_app_*_vX.Y.Z.zip`
-   - 清单：`manifest_*.json`
-   - 校验：`checksums_app_*.txt`、`checksums_launcher.txt`
+6. GitHub Actions 会构建对应产物并创建/更新 Release
+7. 如需同步到国内更新服务，等待 `deploy-manifests-to-server.yml` 完成
 
-手动触发工作流时可选择构建目标：
-- `all`：启动器 + 应用包
-- `app`：仅应用包（常规更新）
-- `launcher`：仅启动器
+### 有问题？
 
-### ❓ 有问题？
-
-- 查看 [README.md](../README.md)
-- 查看 [Issues](https://github.com/Thankyou-Cheems/Bomana/issues)
-- 创建新 Issue 提问
+- 先看 [../README.md](../README.md)
+- 再看 [ARCHITECTURE.md](./ARCHITECTURE.md) 和 [PITFALLS.md](./PITFALLS.md)
+- 需要讨论时，请在 PR 中带上复现步骤、日志和对应 `bd` 编号
 
 ---
 
 ## English
 
-### How to Contribute
+### Project Rules First
 
-#### Reporting Bugs
+- Use only the official War Thunder `localhost:8111` API. No memory reads, injection, or game-file edits.
+- Track work in `bd (beads)` only; do not add markdown TODO systems.
+- Update [ARCHITECTURE.md](./ARCHITECTURE.md) when module boundaries or data flow change.
+- Add a short note to [PITFALLS.md](./PITFALLS.md) when you hit a new failure mode.
+- Respect `ENABLE_*` feature flags in `bomana/config.py`; all build variants share the same config model.
 
-If you find a bug:
+### Setup
 
-1. **Check existing issues**: Search in [Issues](https://github.com/Thankyou-Cheems/Bomana/issues)
-2. **Create new issue**: If not found, create a new one
-3. **Provide details**:
-   - OS and version (e.g., Windows 10 21H2)
-   - Python version (e.g., Python 3.14.3)
-   - Software version (e.g., v6.8.0)
-   - Steps to reproduce
-   - Screenshots or error messages
-   - Expected vs actual behavior
-
-#### Suggesting Features
-
-We welcome feature suggestions! Please:
-
-1. **Check for similar suggestions**
-2. **Create Feature Request**
-3. **Explain**:
-   - Feature description
-   - Use case
-   - Why this feature is needed
-   - Possible implementation (optional)
-
-#### Submitting Code
-
-##### Preparation
-
-1. **Fork the repository**
-2. **Clone locally**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/Bomana.git
-   cd Bomana
-   ```
-3. **Create new branch**
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-4. **Install dependencies**
-   ```bash
-   # Install uv first if needed: https://docs.astral.sh/uv/getting-started/installation/
-   uv sync
-   ```
-
-##### Development Guidelines
-
-**Code Style**
-- Follow [PEP 8](https://pep8.org/)
-- Use 4 spaces for indentation
-- Max line length: 100 characters
-- Comments in Chinese or English
-
-**Commit Message**
-Use Conventional Commits:
-```
-<type>: <short description>
-
-<detailed description> (optional)
+```bash
+git clone https://github.com/YOUR_USERNAME/Bomana.git
+cd Bomana
+uv sync
 ```
 
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
+If you need packaging locally:
 
-##### Pull Request
+```bash
+uv sync --extra build
+```
 
-1. **Push to your fork**
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-2. **Create Pull Request**
-3. **Fill PR description**
-4. **Wait for review**
+Run from source:
 
-### Documentation
+```bash
+uv run python Bomana.pyw
+```
 
-You can also contribute by:
-- Fixing typos
-- Improving explanations
-- Adding examples
-- Translating docs
+### Task Tracking With bd
 
-### Testing
+Check ready work:
 
-Please test your changes:
-- Manual testing in War Thunder SB
-- Regression testing
-- Performance testing
+```bash
+bd ready --json
+```
 
----
+Claim work:
 
-<div align="center">
+```bash
+bd update <issue-id> --status in_progress --json
+```
 
-**Thank you for contributing to Bomana!**
+Create discovered follow-up work:
 
-感谢你为 Bomana 做出贡献！
+```bash
+bd create "Issue title" --description="Context" -t task -p 2 --deps discovered-from:<parent-id> --json
+```
 
-</div>
+Close finished work:
+
+```bash
+bd close <issue-id> --reason "Completed" --json
+```
+
+If you are contributing from a fork and cannot update the project beads database directly, mention the intended `bd` linkage in your PR description.
+
+### Development Expectations
+
+- Python `3.14+`
+- PEP 8, 4-space indentation, preferably <= 100 columns
+- Preserve existing headers and comments; add comments only when they provide real context
+- Re-check multi-DPI, multi-monitor, history-speed mode, standalone nav window, and HUD behavior when UI changes
+
+### Commits And PRs
+
+- Suggested branch names: `feature/...`, `fix/...`, `docs/...`
+- Use Conventional Commits
+- On `main`, generate the commit message with `/gc` (`git-commit-smart`) before `git commit`
+- PRs should include:
+  - scope of change
+  - linked `bd` issue id
+  - test steps
+  - screenshots for UI changes
+
+### Documentation Set
+
+Keep these in sync with the code:
+
+- [../README.md](../README.md)
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [PRIVACY.md](./PRIVACY.md)
+- [CHANGELOG.md](./CHANGELOG.md)
+
+### Validation
+
+Relevant changes should be validated with some combination of:
+
+- `uv run python Bomana.pyw`
+- focused local static checks
+- real War Thunder SB smoke testing
+- `tools\scripts\build_portable.bat <Variant> <all|app|launcher>` for packaging/release changes
+
+### Release Notes For Maintainers
+
+1. Update `docs/CHANGELOG.md`
+2. Bump `__version__` in `bomana/config.py`
+3. Update `PORTABLE_MIN_LAUNCHER_VERSION` if the app now requires newer launcher behavior
+4. Smoke test the relevant release path
+5. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
+6. Let GitHub Actions build and publish the assets
+7. Wait for the deploy workflow if the Tencent/EdgeOne update service should receive the new artifacts
 
 

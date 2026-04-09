@@ -7,6 +7,8 @@
 - Cause: short root-cause guess
 - Fix/Workaround: what resolved it
 
+Note: older entries are historical snapshots. Some workarounds predate the current repo tooling rules and should be read as incident records, not always as the preferred workflow today.
+
 ## Entries
 - Date: 2026-01-25
   Context: editing Bomana.pyw with apply_patch

@@ -147,6 +147,12 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 | 全局热键 | F7-F11 可自定义快捷操作 |
 | 系统托盘 | 最小化到托盘 |
 
+补充说明：
+
+- **独立文字缩放** - 可单独调大字体而不放大整个窗口布局
+- **自定义提示音** - 可按“计时/导航/空速”分类导入本地音频文件
+- **历史速度模式** - 可切换为仅保留速度提醒的极简飞行界面
+
 ---
 
 ## 安装与使用 | Installation & Usage
@@ -231,6 +237,19 @@ uv run python Bomana.pyw
 
 ---
 
+## 文档导航 | Documentation Map
+
+- [docs/QUICKSTART.md](docs/QUICKSTART.md) - 面向玩家的快速上手说明
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 当前代码结构、运行数据流与构建发布链路
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) - 基于 `bd` 的协作、提交流程与发布约定
+- [docs/PRIVACY.md](docs/PRIVACY.md) - 启动器更新检查与匿名统计上报说明
+- [docs/CHANGELOG.md](docs/CHANGELOG.md) - 版本变更记录
+- [docs/PITFALLS.md](docs/PITFALLS.md) - 维护过程中的已知坑点与排障记录
+- [docs/HUD_BASELINE.md](docs/HUD_BASELINE.md) - HUD 首版采样基线（历史设计文档）
+- [docs/bomana_v680_plan.md](docs/bomana_v680_plan.md) - HUD v6.8 架构方案归档（历史设计文档）
+
+---
+
 ## 项目目录结构（关键路径） | Project Layout
 
 ```text
@@ -252,6 +271,8 @@ uv run python Bomana.pyw
 └─ docs/
 ```
 
+- `Bomana.pyw` 现在主要负责单实例、DPI、窗口创建和启动 `bomana.ui.app.App`；主要业务逻辑已拆分到 `bomana/`。
+- `launcher.pyw` 是绿色版启动器，负责通道选择、更新检查、下载校验、回退与离线启动。
 - 超速限速数据库文件是 `bomana/data/fm_speed_limits.json`（不是仓库根目录）。
 - CCRP 炸弹参数文件是 `bomana/data/ccrp_bomb_params.json`（与限速库统一放在 `bomana/data/`）。
 

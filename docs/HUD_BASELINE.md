@@ -2,6 +2,8 @@
 
 Date: 2026-02-12
 
+Historical note: this file is an archived launch-baseline document for the first HUD release. Treat it as reference material, not the source of truth for the current runtime architecture.
+
 ## First-principles Success Metrics
 
 - `T_acq` (target acquisition): from spawn/readiness to the first correct HUD target pick.

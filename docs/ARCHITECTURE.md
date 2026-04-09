@@ -1,7 +1,7 @@
 # Project Architecture (Bomana)
 
 ## Overview
-- Entry point: `Bomana.pyw` (single-file app that currently contains UI, logic, and polling)
+- Bootstrap entry point: `Bomana.pyw` (single-instance guard, DPI setup, root window creation, `App` startup)
 - Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, details/support dialog)
 - Central config: `bomana/config.py` (metadata, feature flags, config classes)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
@@ -11,12 +11,13 @@
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
 - Tools: `tools/blkx_extractor.py` (generate CCRP bomb parameters from .blkx)
 - Tools: `tools/fm_speed_extractor.py` (generate speed-limit DB from datamine flightmodels)
+- Tools: `tools/create_version_info.py` / `tools/sample_8111_attitude.py` / `tools/probe_hybrid_8111_clog.py` (build metadata + diagnostics)
 - Assets: `app.png`, `sponsor_wechat.png`, `app.ico`
 
 ## Repository Layout
 ```
 .
-├─ Bomana.pyw                # Main program (GUI + logic + polling)
+├─ Bomana.pyw                # Thin bootstrap entrypoint
 ├─ launcher.pyw              # Green launcher (auto update + bootstrap)
 ├─ bomana/
 │  ├─ config.py              # Metadata/flags/config classes
@@ -47,13 +48,17 @@
 ├─ docs/                        # Architecture/changelog/privacy/contributing docs
 ├─ tools/
 │  ├─ build_portable.py      # Build launcher/app package/manifest
+│  ├─ create_version_info.py # Windows version-info helper for packaging
 │  ├─ blkx_extractor.py      # .blkx -> bomana/data/ccrp_bomb_params.json generator
 │  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
+│  ├─ sample_8111_attitude.py # HUD baseline sampler
+│  ├─ probe_hybrid_8111_clog.py # Optional clog-probe helper
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
-│  └─ update_service/        # Optional self-hosted update + DAU stats service
 ├─ assets (root files)       # Icons/sponsor image, etc.
 └─ README.md                 # Main landing page for GitHub visitors
 ```
+
+Note: the self-hosted update/statistics service was moved out of this repo; see the README section about `bomana-worker` for the current service repository.
 
 ## Runtime Data Flow
 1. 8111 API polling via `requests` to `localhost:8111`.
@@ -146,4 +151,12 @@ CI:
   - `vX.Y.Z-launcher`: launcher only
 - `workflow_dispatch` also supports `build_target=all|app|launcher`.
 - `.github/workflows/deploy-manifests-to-server.yml` syncs manifests, app zips, launcher exe, and `launcher_manifest.json` to the Tencent/EdgeOne update server.
+
+## Documentation Map
+- `README.md`: public landing page, install paths, feature overview, compliance statement
+- `docs/QUICKSTART.md`: condensed player/developer quick start
+- `docs/CONTRIBUTING.md`: current contribution workflow, `bd` tracking, release expectations
+- `docs/PRIVACY.md`: launcher telemetry/update-service privacy disclosure
+- `docs/PITFALLS.md`: operational failure log for maintainers
+- `docs/HUD_BASELINE.md` and `docs/bomana_v680_plan.md`: historical HUD design/reference docs
 
