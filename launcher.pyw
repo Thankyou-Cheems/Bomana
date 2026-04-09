@@ -51,7 +51,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.5.5"
+LAUNCHER_VERSION = "1.5.6"
 MIN_SUPPORTED_APP_VERSION = "6.7.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
@@ -1083,7 +1083,10 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
     remote_version = str(manifest.get("app_version", "")).strip()
     min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_asset = str(manifest.get("package_asset", "")).strip()
-    package_sha256 = str(manifest.get("package_sha256", "")).strip()
+    package_sha256 = _require_remote_checksum(
+        manifest.get("package_sha256", ""),
+        artifact_label=f"{manifest_name} ",
+    )
     entrypoint = (
         str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip()
         or DEFAULT_ENTRYPOINT
@@ -1124,15 +1127,16 @@ def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str,
         raise RuntimeError("启动器发布字段缺失")
 
     manifest_asset = _find_asset(assets, "launcher_manifest.json")
-    package_sha256 = ""
-    if manifest_asset:
-        manifest_url = str(manifest_asset.get("browser_download_url", "")).strip()
-        if manifest_url:
-            try:
-                manifest = _fetch_json(manifest_url)
-                package_sha256 = str(manifest.get("launcher_sha256", "")).strip()
-            except Exception:
-                package_sha256 = ""
+    if not manifest_asset:
+        raise RuntimeError("未找到启动器发布清单")
+    manifest_url = str(manifest_asset.get("browser_download_url", "")).strip()
+    if not manifest_url:
+        raise RuntimeError("启动器发布清单下载地址无效")
+    manifest = _fetch_json(manifest_url)
+    package_sha256 = _require_remote_checksum(
+        manifest.get("launcher_sha256", ""),
+        artifact_label="launcher_manifest.json ",
+    )
 
     return {
         "remote_version": remote_version,
@@ -1238,7 +1242,10 @@ def _fetch_manifest_from_primary(
         if raw_package_url
         else ""
     )
-    package_sha256 = str(payload.get("package_sha256", "")).strip()
+    package_sha256 = _require_remote_checksum(
+        payload.get("package_sha256", ""),
+        artifact_label="国内应用更新清单 ",
+    )
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
     entrypoint = (
         str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
@@ -1301,7 +1308,10 @@ def _fetch_launcher_manifest_from_primary(
         if raw_package_url
         else ""
     )
-    package_sha256 = str(payload.get("package_sha256", "")).strip()
+    package_sha256 = _require_remote_checksum(
+        payload.get("package_sha256", ""),
+        artifact_label="国内启动器更新清单 ",
+    )
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
     source_name = (
         str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
@@ -1618,7 +1628,10 @@ def _download_update_from_manifest(
     remote_version = str(manifest.get("remote_version", "")).strip()
     min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
-    package_sha256 = str(manifest.get("package_sha256", "")).strip()
+    package_sha256 = _require_remote_checksum(
+        manifest.get("package_sha256", ""),
+        artifact_label="应用更新清单 ",
+    )
     entrypoint = (
         str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip()
         or DEFAULT_ENTRYPOINT
@@ -1809,7 +1822,10 @@ def _download_launcher_update_from_manifest(
 
     remote_version = str(manifest.get("remote_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
-    package_sha256 = str(manifest.get("package_sha256", "")).strip()
+    package_sha256 = _require_remote_checksum(
+        manifest.get("package_sha256", ""),
+        artifact_label="启动器更新清单 ",
+    )
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
     if not remote_version or not package_url:
         raise RuntimeError("启动器更新清单字段缺失")

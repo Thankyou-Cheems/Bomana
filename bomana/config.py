@@ -11,7 +11,7 @@ import json
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.13.1"
+__version__ = "6.13.2"
 PORTABLE_MIN_LAUNCHER_VERSION = "1.5.4"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"

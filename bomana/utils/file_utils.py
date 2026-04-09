@@ -213,7 +213,7 @@ class ConfigManager:
         return config
     
     @staticmethod
-    def save(config: Dict[str, Any]) -> None:
+    def save(config: Dict[str, Any]) -> bool:
         """保存配置文件
         
         Args:
@@ -224,8 +224,10 @@ class ConfigManager:
             config['config_version'] = FileConfig.CONFIG_VERSION
             with open(FileConfig.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
+            return True
         except (IOError, OSError) as exc:
             _report_persistence_error("config save", FileConfig.CONFIG_FILE, exc)
+            return False
 
 class StateManager:
     """状态文件管理器

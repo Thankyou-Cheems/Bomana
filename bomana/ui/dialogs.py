@@ -969,9 +969,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         except Exception:
             return False
 
-    def _persist_sound_overrides(self) -> dict[str, str]:
+    def _persist_sound_overrides(self) -> tuple[dict[str, str], list[Path], list[Path]]:
         current_saved = SoundConfig.export_user_config()
         final_overrides = {}
+        created_paths: list[Path] = []
+        old_paths_to_remove: list[Path] = []
         managed_dir = FileConfig.CUSTOM_SOUND_DIR
         managed_dir.mkdir(parents=True, exist_ok=True)
 
@@ -992,6 +994,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 safe_suffix = source.suffix.lower()
                 target = managed_dir / f"{sound_key}_{int(time.time() * 1000)}{safe_suffix}"
                 shutil.copy2(source, target)
+                created_paths.append(target)
                 final_path = target
 
             final_overrides[sound_key] = str(final_path)
@@ -1002,12 +1005,9 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 continue
             old_path = Path(old_path_text)
             if self._is_managed_sound_file(old_path) and str(old_path) not in final_overrides.values():
-                try:
-                    old_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
+                old_paths_to_remove.append(old_path)
 
-        return final_overrides
+        return final_overrides, created_paths, old_paths_to_remove
 
     def _build_hotkey_tab(self):
         """构建快捷键设置页"""
@@ -1425,97 +1425,161 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         old_zone_sound_enabled = bool(getattr(self.app, "_zone_sound_enabled", True))
         old_hotkeys_enabled = HotkeyConfig.GLOBAL_HOTKEYS
         old_hotkey_bindings = HotkeyConfig.get_bindings()
+
+        new_window_alpha = int(self.alpha_var.get())
+        new_nav_width = float(self.nav_width_var.get())
+        new_ui_scale = UIConfig.clamp_ui_scale(self.scale_var.get())
+        new_text_scale = UIConfig.clamp_text_scale(self.text_scale_var.get())
+        new_theme = self.theme_var.get()
+        old_theme = Theme.get_current()
+        new_hud_enabled = bool(self.hud_enabled_var.get())
+        new_hud_alpha = max(30, min(255, int(self.hud_alpha_var.get())))
+        new_hud_scale = max(0.5, min(2.0, float(self.hud_scale_var.get())))
+        new_hud_smoothing = max(0.0, min(1.0, float(self.hud_smoothing_var.get())))
+        new_hud_follow_main = bool(self.hud_follow_main_monitor_var.get())
+        new_hud_color_style = str(self.hud_color_style_var.get() or "auto").strip().lower()
+        if new_hud_color_style not in {"auto", "green", "amber", "cyan", "white"}:
+            new_hud_color_style = "auto"
+        pending_hud_config = {
+            "alpha": new_hud_alpha,
+            "scale": new_hud_scale,
+            "smoothing": new_hud_smoothing,
+            "follow_main_window_monitor": new_hud_follow_main,
+            "color_style": new_hud_color_style,
+            "horizontal_fov_deg": float(HUDConfig.horizontal_fov_deg),
+            "vertical_fov_deg": float(HUDConfig.vertical_fov_deg),
+        }
+
         new_hotkeys_enabled = bool(self.hotkeys_enabled_var.get())
         try:
             hotkey_bindings = self._collect_hotkey_bindings()
         except ValueError as exc:
             messagebox.showwarning("快捷键冲突", str(exc), parent=self)
             return
-        
-        # 显示设置
-        UIConfig.WINDOW_ALPHA = self.alpha_var.get()
-        PanelConfig.navigation_bar_width = self.nav_width_var.get()
-        UIConfig.UI_SCALE_MULT = UIConfig.clamp_ui_scale(self.scale_var.get())
-        UIConfig.TEXT_SCALE_MULT = UIConfig.clamp_text_scale(self.text_scale_var.get())
-        new_theme = self.theme_var.get()
-        old_theme = Theme.get_current()
-        HUDConfig.enabled = bool(self.hud_enabled_var.get())
-        HUDConfig.alpha = max(30, min(255, int(self.hud_alpha_var.get())))
-        HUDConfig.scale = max(0.5, min(2.0, float(self.hud_scale_var.get())))
-        HUDConfig.smoothing = max(0.0, min(1.0, float(self.hud_smoothing_var.get())))
-        HUDConfig.follow_main_window_monitor = bool(self.hud_follow_main_monitor_var.get())
-        new_hud_color_style = str(self.hud_color_style_var.get() or "auto").strip().lower()
-        if new_hud_color_style not in {"auto", "green", "amber", "cyan", "white"}:
-            new_hud_color_style = "auto"
-        HUDConfig.color_style = new_hud_color_style
-        
-        config['alpha'] = UIConfig.WINDOW_ALPHA
-        config['scale'] = UIConfig.UI_SCALE_MULT
-        config['text_scale'] = UIConfig.TEXT_SCALE_MULT
+
+        config['alpha'] = new_window_alpha
+        config['scale'] = new_ui_scale
+        config['text_scale'] = new_text_scale
         config['theme'] = new_theme
-        config['hud_enabled'] = HUDConfig.enabled
-        config['hud'] = HUDConfig.to_dict()
+        config['hud_enabled'] = new_hud_enabled
+        config['hud'] = pending_hud_config
         
         # 面板设置
         panel_config = {}
         for key, var in self.panel_vars.items():
-            setattr(PanelConfig, key, var.get())
             panel_config[key] = var.get()
         config['panels'] = panel_config
         
         # 快捷键设置
-        HotkeyConfig.GLOBAL_HOTKEYS = new_hotkeys_enabled
-        HotkeyConfig.set_bindings(hotkey_bindings)
-        
-        config['global_hotkeys'] = HotkeyConfig.GLOBAL_HOTKEYS
+        config['global_hotkeys'] = new_hotkeys_enabled
         config['hotkey_bindings'] = hotkey_bindings
         
         # 吸附设置
-        SnapConfig.enabled = self.snap_var.get()
-        SnapConfig.SNAP_DISTANCE = self.snap_dist_var.get()
-        config['snap_enabled'] = SnapConfig.enabled
-        config['snap_distance'] = SnapConfig.SNAP_DISTANCE
+        new_snap_enabled = bool(self.snap_var.get())
+        new_snap_distance = int(self.snap_dist_var.get())
+        config['snap_enabled'] = new_snap_enabled
+        config['snap_distance'] = new_snap_distance
 
         # 音效设置
-        self.app.sound.set_enabled(bool(self.sound_enabled_var.get()))
-        self.app._zone_sound_enabled = bool(self.zone_sound_enabled_var.get())
+        new_sound_enabled = bool(self.sound_enabled_var.get())
+        new_zone_sound_enabled = bool(self.zone_sound_enabled_var.get())
         try:
-            persisted_sound_overrides = self._persist_sound_overrides()
+            (
+                normalized_sound_overrides,
+                created_sound_files,
+                old_sound_files_to_remove,
+            ) = self._persist_sound_overrides()
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("音效保存失败", f"无法保存自定义提示音：{exc}", parent=self)
             return
-        SoundConfig.apply_user_config(persisted_sound_overrides)
-        config['beep_enabled'] = self.app.sound.is_enabled()
-        config['zone_sound_enabled'] = self.app._zone_sound_enabled
-        config['sound_settings'] = SoundConfig.export_user_config()
+        config['beep_enabled'] = new_sound_enabled
+        config['zone_sound_enabled'] = new_zone_sound_enabled
+        config['sound_settings'] = normalized_sound_overrides
 
         overspeed_thresholds = {
             key: var.get()
             for key, var in getattr(self, "overspeed_vars", {}).items()
         }
-        OverspeedConfig.apply_user_thresholds(overspeed_thresholds, self.overspeed_override_map)
-        config['overspeed'] = OverspeedConfig.export_user_config()
-        if hasattr(self.app, "_refresh_overspeed_threshold_ui"):
-            self.app._refresh_overspeed_threshold_ui()
+        normalized_overspeed_thresholds = OverspeedConfig.normalize_thresholds(
+            overspeed_thresholds
+        )
+        normalized_overspeed_overrides = {}
+        if isinstance(self.overspeed_override_map, dict):
+            for aircraft_key, raw_override in self.overspeed_override_map.items():
+                aircraft_name = str(aircraft_key or "").strip()
+                if not aircraft_name or not isinstance(raw_override, dict):
+                    continue
+                normalized_overspeed_overrides[aircraft_name] = (
+                    OverspeedConfig.normalize_thresholds(raw_override)
+                )
+        config['overspeed'] = {
+            'global': normalized_overspeed_thresholds,
+            'aircraft_overrides': normalized_overspeed_overrides,
+        }
 
         # 投弹预测调参（仅在CCRP启用时保存）
+        pending_ccrp_tuning = None
+        pending_selected_bomb = None
         if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
-            tuning = {
+            pending_ccrp_tuning = {
                 "range_correction_mult": self.ccrp_range_mult_var.get(),
                 "time_correction_mult": self.ccrp_time_mult_var.get(),
             }
-            BallisticPhysicsParams.apply_user_tuning(tuning)
-            config['ccrp_tuning'] = BallisticPhysicsParams.get_user_tuning()
+            config['ccrp_tuning'] = dict(pending_ccrp_tuning)
             if hasattr(self, "selected_bomb_id") and self.selected_bomb_id:
-                BombConfig.selected_bomb = self.selected_bomb_id
-                config['selected_bomb'] = self.selected_bomb_id
-                if hasattr(self.app, 'bomb_select_lbl'):
-                    self.app.bomb_select_lbl.config(
-                        text=f"炸弹: {BombConfig.format_bomb_name(self.selected_bomb_id)} (点击更换)"
-                    )
+                pending_selected_bomb = self.selected_bomb_id
+                config['selected_bomb'] = pending_selected_bomb
         
         # 保存配置
-        ConfigManager.save(config)
+        if not ConfigManager.save(config):
+            for path in created_sound_files:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            messagebox.showerror(
+                "设置保存失败",
+                "配置文件写入失败，本次更改未应用。",
+                parent=self,
+            )
+            return
+
+        for path in old_sound_files_to_remove:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        # 配置写入成功后，再应用运行时状态
+        UIConfig.WINDOW_ALPHA = new_window_alpha
+        PanelConfig.navigation_bar_width = new_nav_width
+        UIConfig.UI_SCALE_MULT = new_ui_scale
+        UIConfig.TEXT_SCALE_MULT = new_text_scale
+        HUDConfig.enabled = new_hud_enabled
+        HUDConfig.apply_dict(pending_hud_config)
+        for key, value in panel_config.items():
+            setattr(PanelConfig, key, value)
+        HotkeyConfig.GLOBAL_HOTKEYS = new_hotkeys_enabled
+        HotkeyConfig.set_bindings(hotkey_bindings)
+        SnapConfig.enabled = new_snap_enabled
+        SnapConfig.SNAP_DISTANCE = new_snap_distance
+        self.app.sound.set_enabled(new_sound_enabled)
+        self.app._zone_sound_enabled = new_zone_sound_enabled
+        SoundConfig.apply_user_config(normalized_sound_overrides)
+        OverspeedConfig.apply_user_thresholds(
+            normalized_overspeed_thresholds,
+            normalized_overspeed_overrides,
+        )
+        if hasattr(self.app, "_refresh_overspeed_threshold_ui"):
+            self.app._refresh_overspeed_threshold_ui()
+        if pending_ccrp_tuning is not None:
+            BallisticPhysicsParams.apply_user_tuning(pending_ccrp_tuning)
+        if pending_selected_bomb:
+            BombConfig.selected_bomb = pending_selected_bomb
+            if hasattr(self.app, 'bomb_select_lbl'):
+                self.app.bomb_select_lbl.config(
+                    text=f"炸弹: {BombConfig.format_bomb_name(pending_selected_bomb)} (点击更换)"
+                )
 
         # 刷新托盘菜单勾选状态
         if hasattr(self.app, "_refresh_tray"):
@@ -1772,7 +1836,9 @@ class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
         
         config = ConfigManager.load()
         config['checklist_items'] = items
-        ConfigManager.save(config)
+        if not ConfigManager.save(config):
+            messagebox.showerror("失败", "检查清单保存失败", parent=self)
+            return
         self.app.chk_items = items
         self.app._rebuild_checklist()
         
@@ -2572,10 +2638,12 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         if BombConfig.get_bomb_data(bomb_id):
             self.result = bomb_id
             if self.persist_selection:
-                BombConfig.selected_bomb = bomb_id
                 config = ConfigManager.load()
                 config['selected_bomb'] = bomb_id
-                ConfigManager.save(config)
+                if not ConfigManager.save(config):
+                    messagebox.showerror("失败", "炸弹选择保存失败", parent=self)
+                    return
+                BombConfig.selected_bomb = bomb_id
                 
                 if hasattr(self.app, 'bomb_select_lbl'):
                     self.app.bomb_select_lbl.config(
