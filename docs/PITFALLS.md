@@ -183,3 +183,9 @@ Note: older entries are historical snapshots. Some workarounds predate the curre
   Symptom: app launch failed immediately with `type object 'UIConfig' has no attribute 'clamp_ui_scale'`
   Cause: the launcher imports `bomana.utils.system` for its own UI, so PyInstaller keeps a launcher-bundled `bomana` package in `sys.modules`; when the app later starts in-process via `runpy`, `import bomana.config` can reuse the stale launcher module cache instead of the freshly extracted app package
   Fix/Workaround: clear cached `bomana` / `bomana.*` modules before handing off to the app package, then let imports resolve again from the extracted runtime directory
+
+- Date: 2026-04-15
+  Context: integrated / standalone heading tape on maps such as Maginot Line
+  Symptom: zone and airport rows populated normally, but the heading tape looked blank or stayed near `无目标`
+  Cause: core nav leaves all zones with `is_target=False` when every zone starts outside the current heading gate; the tape only renders overflow cues for active targets, so valid off-screen zones could disappear visually
+  Fix/Workaround: for tape rendering only, fall back to the smallest-angle zone as the display-primary target when no explicit target exists, without changing core lock semantics

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Panel rendering helpers for the main App coordinator."""
 
+import math
 import time
 import tkinter as tk
 from typing import Any
@@ -228,6 +229,34 @@ class AppPanelRenderer:
             self.update_mid_panel_layout()
 
     @staticmethod
+    def _select_display_primary_zone(zones: list[Any]) -> Any:
+        """Pick a UI primary zone even when core nav has no active target.
+
+        Some spawn headings can leave all zones outside the target gate. The
+        list still has valid rows, but the tape can look empty because it only
+        shows overflow cues for active targets. For tape rendering only, fall
+        back to the smallest-angle zone without changing core lock state.
+        """
+        target_zone = next((zone for zone in zones if getattr(zone, "is_target", False)), None)
+        if target_zone is not None or not zones:
+            return target_zone
+
+        ranked: list[tuple[float, float, Any]] = []
+        for zone in zones:
+            try:
+                rel = float(getattr(zone, "relative", 0.0))
+                dist = float(getattr(zone, "distance_km", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(rel) and math.isfinite(dist):
+                ranked.append((abs(rel), dist, zone))
+
+        if ranked:
+            ranked.sort(key=lambda item: (item[0], item[1]))
+            return ranked[0][2]
+        return zones[0]
+
+    @staticmethod
     def _set_nav_row(
         row: Any,
         *,
@@ -268,18 +297,19 @@ class AppPanelRenderer:
         app = self.app
         targets: list[dict[str, Any]] = []
         active_targets_info: list[dict[str, Any]] = []
-        target_zone = next((z for z in snap.zones if z.is_target), None)
+        target_zone = self._select_display_primary_zone(snap.zones)
 
         for zone in snap.zones:
-            is_target = zone.is_target
+            is_primary = bool(target_zone is not None and zone.id == target_zone.id)
+            is_target = bool(zone.is_target or is_primary)
             targets.append({
                 "type": "zone",
                 "relative": zone.relative,
                 "distance_km": zone.distance_km,
-                "is_primary": is_target,
+                "is_primary": is_primary,
                 "is_target": is_target,
             })
-            if is_target:
+            if is_primary:
                 active_targets_info.append({
                     "type": "zone",
                     "name": "战区",

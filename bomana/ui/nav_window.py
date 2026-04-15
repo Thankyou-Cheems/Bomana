@@ -2,6 +2,7 @@
 """Standalone navigation window."""
 
 import ctypes
+import math
 import tkinter as tk
 
 from bomana.config import UIConfig, Theme, HotkeyConfig, PanelConfig, ZoneConfig
@@ -339,6 +340,28 @@ class NavigationWindow:
         if hasattr(self, 'hint_lbl') and self.hint_lbl:
             self.hint_lbl.config(text=f"[{HotkeyConfig.KEY_LOCK}] 解锁后拖动")
 
+    @staticmethod
+    def _select_display_primary_zone(zones):
+        """Mirror the integrated tape fallback when no explicit target exists."""
+        target_zone = next((zone for zone in zones if getattr(zone, "is_target", False)), None)
+        if target_zone is not None or not zones:
+            return target_zone
+
+        ranked = []
+        for zone in zones:
+            try:
+                rel = float(getattr(zone, "relative", 0.0))
+                dist = float(getattr(zone, "distance_km", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(rel) and math.isfinite(dist):
+                ranked.append((abs(rel), dist, zone))
+
+        if ranked:
+            ranked.sort(key=lambda item: (item[0], item[1]))
+            return ranked[0][2]
+        return zones[0]
+
     def destroy(self):
         """销毁窗口实例（用于主题/缩放热重载）"""
         self._visible = False
@@ -383,16 +406,17 @@ class NavigationWindow:
 
         targets = []
         zone_info = None
-        primary_zone = next((z for z in snap.zones if z.is_target), None)
+        primary_zone = self._select_display_primary_zone(snap.zones)
         for zone in snap.zones:
+            is_primary = bool(primary_zone is not None and zone.id == primary_zone.id)
             targets.append({
                 "type": "zone",
                 "relative": zone.relative,
                 "distance_km": zone.distance_km,
-                "is_primary": zone.is_target,
-                "is_target": zone.is_target,
+                "is_primary": is_primary,
+                "is_target": bool(zone.is_target or is_primary),
             })
-            if zone.is_target:
+            if is_primary:
                 zone_info = zone
 
         if getattr(snap, "friendly_airfield", None):
