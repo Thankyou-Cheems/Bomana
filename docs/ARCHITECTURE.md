@@ -90,7 +90,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Streams package with progress and transfer speed updates.
    - Verifies SHA256 (when provided), replaces `app/`, promotes the previous app into `app_previous/`, and updates local version metadata.
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
-   - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages a detached replacement script, exits, swaps the executable, and restarts.
+   - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
 9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 

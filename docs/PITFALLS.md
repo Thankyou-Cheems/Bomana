@@ -10,6 +10,12 @@
 Note: older entries are historical snapshots. Some workarounds predate the current repo tooling rules and should be read as incident records, not always as the preferred workflow today.
 
 ## Entries
+- Date: 2026-04-16
+  Context: launcher `1.5.6` self-update from a desktop install path like `C:\Users\...\Desktop\[Bomana]\`
+  Symptom: launcher update could fail before restart with `WinError 5` on `BomanaLauncher_update.new.exe`, and even successful downloads risked replacement failure in paths containing `[]`
+  Cause: self-update wrote a fixed staging exe back into the install directory, so stale/locked temp files or protected-folder policies could block the write; the PowerShell apply script also used non-literal paths, so `[]` in folder names were treated as wildcards
+  Fix/Workaround: stage launcher self-update files in a unique OS temp workspace, keep only the result marker in the install dir, and use `-LiteralPath` / `-Destination` for all PowerShell file operations
+
 - Date: 2026-01-25
   Context: editing Bomana.pyw with apply_patch
   Symptom: apply_patch panicked with 'byte index ... is not a char boundary'

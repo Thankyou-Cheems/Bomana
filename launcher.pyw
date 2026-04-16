@@ -51,7 +51,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.5.6"
+LAUNCHER_VERSION = "1.5.7"
 MIN_SUPPORTED_APP_VERSION = "6.7.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
@@ -68,6 +68,13 @@ UPDATE_LOCK_FILE_NAME = ".bomana_update.lock"
 UPDATE_LOCK_STALE_SEC = 30 * 60
 TEMP_META_FILE_NAME = ".bomana_temp_meta.json"
 LAUNCHER_UPDATE_RESULT_FILE_NAME = ".bomana_launcher_update_result.json"
+LAUNCHER_SELF_UPDATE_WORKDIR_PREFIX = "bomana_launcher_update_"
+LAUNCHER_SELF_UPDATE_TEMP_STALE_SEC = 3 * 24 * 60 * 60
+LEGACY_LAUNCHER_SELF_UPDATE_FILES = (
+    "BomanaLauncher_update.new.exe",
+    "BomanaLauncher_backup.old.exe",
+    "bomana_update_launcher_apply.ps1",
+)
 DEFAULT_ENTRYPOINT = "Bomana.pyw"
 NET_TIMEOUT_SEC = 8.0
 PRIMARY_TIMEOUT_SEC = 4.0
@@ -677,6 +684,66 @@ def _write_temp_meta(base: Path, data: Dict[str, Any]) -> None:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
+
+
+def _cleanup_stale_launcher_self_update_temp(base: Path) -> None:
+    temp_root = Path(tempfile.gettempdir())
+    cleaned = []
+    try:
+        for path in temp_root.iterdir():
+            if not path.name.startswith(LAUNCHER_SELF_UPDATE_WORKDIR_PREFIX):
+                continue
+            try:
+                age = time.time() - path.stat().st_mtime
+            except Exception:
+                age = 0
+            if age < LAUNCHER_SELF_UPDATE_TEMP_STALE_SEC:
+                continue
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                try:
+                    path.unlink()
+                except Exception:
+                    continue
+            cleaned.append(path.name)
+    except Exception as e:
+        _log(base, f"清理启动器自更新临时目录失败：{e}")
+        return
+
+    if cleaned:
+        detail = ", ".join(cleaned[:5])
+        if len(cleaned) > 5:
+            detail += " ..."
+        _log(base, f"已清理过期启动器自更新临时目录：{detail}")
+
+
+def _cleanup_legacy_launcher_self_update_files(base: Path) -> None:
+    current_target: Optional[Path] = None
+    if _is_frozen_launcher():
+        try:
+            current_target = Path(sys.executable).resolve()
+        except Exception:
+            current_target = None
+
+    cleaned = []
+    for name in LEGACY_LAUNCHER_SELF_UPDATE_FILES:
+        path = base / name
+        try:
+            if current_target is not None and path.exists() and path.resolve() == current_target:
+                continue
+        except Exception:
+            pass
+        try:
+            path.unlink()
+            cleaned.append(name)
+        except FileNotFoundError:
+            continue
+        except Exception:
+            continue
+
+    if cleaned:
+        _log(base, f"已清理旧版启动器自更新残留文件：{', '.join(cleaned)}")
 
 
 def _cleanup_temp_files_on_launcher_upgrade(base: Path) -> None:
@@ -1738,16 +1805,17 @@ def _stage_launcher_self_update(
         raise RuntimeError("源码模式不支持启动器自更新")
 
     target = Path(sys.executable).resolve()
-    staged = base / "BomanaLauncher_update.new.exe"
-    backup = base / "BomanaLauncher_backup.old.exe"
-    script_path = base / "bomana_update_launcher_apply.ps1"
+    work_dir = Path(tempfile.mkdtemp(prefix=LAUNCHER_SELF_UPDATE_WORKDIR_PREFIX))
+    staged = work_dir / f"{target.stem}.update.new{target.suffix}"
+    backup = target.with_name(f"{target.stem}.bomana_backup_{os.getpid()}{target.suffix}")
+    script_path = work_dir / "bomana_update_launcher_apply.ps1"
     result_path = base / LAUNCHER_UPDATE_RESULT_FILE_NAME
 
-    staged.unlink(missing_ok=True)
-    backup.unlink(missing_ok=True)
-    result_path.unlink(missing_ok=True)
-    staged.write_bytes(launcher_bytes)
-    script = f"""$ErrorActionPreference = 'Stop'
+    try:
+        result_path.unlink(missing_ok=True)
+        staged.write_bytes(launcher_bytes)
+        _log(base, f"已在临时目录准备启动器自更新文件：{staged}")
+        script = f"""$ErrorActionPreference = 'Stop'
 $target = {json.dumps(str(target))}
 $staged = {json.dumps(str(staged))}
 $backup = {json.dumps(str(backup))}
@@ -1762,7 +1830,7 @@ function Write-Result([string]$status, [string]$message) {{
         message = $message
         updated_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     }}
-    $payload | ConvertTo-Json -Compress | Set-Content -Path $resultPath -Encoding UTF8
+    $payload | ConvertTo-Json -Compress | Set-Content -LiteralPath $resultPath -Encoding UTF8
 }}
 
 try {{
@@ -1773,36 +1841,40 @@ try {{
         Start-Sleep -Seconds 1
     }}
 
-    Remove-Item $backup -Force -ErrorAction SilentlyContinue
-    if (Test-Path $target) {{
-        Move-Item $target $backup -Force
+    Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $target) {{
+        Move-Item -LiteralPath $target -Destination $backup -Force
     }}
-    if (-not (Test-Path $staged)) {{
+    if (-not (Test-Path -LiteralPath $staged)) {{
         throw "staged launcher file missing"
     }}
-    Move-Item $staged $target -Force
-    if (-not (Test-Path $target)) {{
+    Move-Item -LiteralPath $staged -Destination $target -Force
+    if (-not (Test-Path -LiteralPath $target)) {{
         throw "launcher target missing after replace"
     }}
     Start-Process -FilePath $target | Out-Null
     Write-Result "success" ("Launcher replaced and restarted: " + $targetVersion)
-    Remove-Item $backup -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
 }}
 catch {{
     $detail = ($_ | Out-String).Trim()
-    if ((-not (Test-Path $target)) -and (Test-Path $backup)) {{
-        Move-Item $backup $target -Force -ErrorAction SilentlyContinue
+    if ((-not (Test-Path -LiteralPath $target)) -and (Test-Path -LiteralPath $backup)) {{
+        Move-Item -LiteralPath $backup -Destination $target -Force -ErrorAction SilentlyContinue
     }}
     Write-Result "error" $detail
     exit 1
 }}
 finally {{
     Start-Sleep -Milliseconds 500
-    Remove-Item $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 }}
 """
-    script_path.write_text(script, encoding="utf-8")
-    _launch_updater_script(script_path)
+        script_path.write_text(script, encoding="utf-8")
+        _launch_updater_script(script_path)
+    except Exception:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise
 
 
 def _download_launcher_update_from_manifest(
@@ -4271,6 +4343,8 @@ def main() -> None:
     base = _base_dir()
     _recover_incomplete_install(base)
     _cleanup_temp_files_on_launcher_upgrade(base)
+    _cleanup_stale_launcher_self_update_temp(base)
+    _cleanup_legacy_launcher_self_update_files(base)
     _consume_launcher_update_result(base)
     Win32.enable_dpi()
     channel = _detect_channel()
