@@ -1,185 +1,121 @@
 # Pitfalls Log (Bomana)
 
-## Format
-- Date: YYYY-MM-DD
-- Context: what you were trying to do
-- Symptom: error message or behavior
-- Cause: short root-cause guess
-- Fix/Workaround: what resolved it
+This file keeps reusable maintenance lessons only. It is not a full incident
+timeline; short-lived mistakes, already-obvious missing imports, and retired
+implementation plans belong in git history, not here.
 
-Note: older entries are historical snapshots. Some workarounds predate the current repo tooling rules and should be read as incident records, not always as the preferred workflow today.
+## Current Rules
+
+- Treat the official `localhost:8111` API as the only runtime data source.
+- Keep update/apply flows transactional: stage first, verify, then swap.
+- Keep packaged resource lookup rooted in the app runtime, not the launcher temp directory.
+- Use `bd where`, `bd status`, `bd list`, and `bd backup status` for current beads health checks.
+- In embedded bd mode, `bd doctor` being unsupported is not a project failure.
 
 ## Entries
-- Date: 2026-04-16
-  Context: launcher `1.5.6` self-update from a desktop install path like `C:\Users\...\Desktop\[Bomana]\`
-  Symptom: launcher update could fail before restart with `WinError 5` on `BomanaLauncher_update.new.exe`, and even successful downloads risked replacement failure in paths containing `[]`
-  Cause: self-update wrote a fixed staging exe back into the install directory, so stale/locked temp files or protected-folder policies could block the write; the PowerShell apply script also used non-literal paths, so `[]` in folder names were treated as wildcards
-  Fix/Workaround: stage launcher self-update files in a unique OS temp workspace, keep only the result marker in the install dir, and use `-LiteralPath` / `-Destination` for all PowerShell file operations
 
-- Date: 2026-01-25
-  Context: editing Bomana.pyw with apply_patch
-  Symptom: apply_patch panicked with 'byte index ... is not a char boundary'
-  Cause: patch tool choking on non-ASCII/emoji in large file
-  Fix/Workaround: use a Python script (read/replace) instead of apply_patch
+### Launcher Update Safety
 
-- Date: 2026-01-25
-  Context: after UI split, flight state stopped updating
-  Symptom: UI no longer reflected live state updates
-  Cause: GameLogic thread crashed on NameError (missing math import)
-  Fix/Workaround: add `import math` to bomana/core/logic.py
+- Context: launcher self-update from protected or unusual install paths such as `Desktop\[Bomana]\`
+  Symptom: update failed before restart with `WinError 5`, or replacement failed when paths contained wildcard characters like `[]`
+  Cause: self-update staged a fixed temp exe inside the install directory and the apply script used non-literal PowerShell paths
+  Fix/Workaround: stage self-update files in a unique OS temp workspace, keep only the result marker in the install dir, and use literal-path PowerShell operations for every file move/remove
 
-- Date: 2026-02-06
-  Context: GitHub Actions Windows packaging (`tools/build_portable.py`)
-  Symptom: `UnicodeEncodeError: 'charmap' codec can't encode characters` when printing paths
-  Cause: CI console encoding was cp1252, but output included Chinese file names (e.g. checksum file path)
-  Fix/Workaround: route status logs through `safe_print()` with encoding fallback (`backslashreplace`)
+- Context: interrupted app update or concurrent launchers
+  Symptom: `app/` could disappear after rollback, or two launchers could race on the install target
+  Cause: rollback deleted `app/` too early and there was no cross-process install lock or startup recovery for leftover staging directories
+  Fix/Workaround: make rollback state-aware, add a cross-process update lock with stale-lock cleanup, and recover `app_new` / `app_backup` on startup
 
-- Date: 2026-02-06
-  Context: GitHub Release asset naming in Actions
-  Symptom: uploaded asset names containing Chinese were rewritten on GitHub (e.g. became underscored names)
-  Cause: GitHub Release asset upload normalizes non-ASCII/special characters in file names
-  Fix/Workaround: use ASCII-only artifact names (`Bomana_launcher_v*.exe`, `checksums_*.txt`) and put Chinese text in release notes, not in file names
+- Context: launcher checking GitHub releases after a launcher-only latest release
+  Symptom: app update check failed with `未找到发布清单: manifest_<Channel>.json` even though older app releases existed
+  Cause: fallback queried only `/releases/latest`, but launcher-only releases do not include app manifests
+  Fix/Workaround: after a latest-release miss, inspect recent releases and pick the first one containing the app manifest and matching asset
 
-- Date: 2026-02-06
-  Context: launcher progress animation during update check
-  Symptom: progress bar looked like it was finishing download during "check" stage, and window size could drift while status text kept changing
-  Cause: check phase reused download-like progress behavior and did not separate indeterminate animation/layout reflow from real download progress
-  Fix/Workaround: split check/download states, keep check phase indeterminate, and recalc layout/progress geometry from current canvas width instead of fixed assumptions
+### Update Service Networking
 
-- Date: 2026-02-08
-  Context: in-battle map toggle (`M`) caused UI flash and frame drop spikes
-  Symptom: app flashed briefly when opening/closing game map; occasional CPU/load spike
-  Cause: transient 8111 `/map_obj.json` jitter (player/map fields briefly invalid) triggered state/UI oscillation, plus per-frame full list relayout and full heading-tape redraw amplified cost
-  Fix/Workaround: add ALIVE/LOSS_PENDING telemetry fallback for player presence, keep integrated tape row mounted, switch to incremental zone/airport label updates, deduplicate equivalent heading-tape renders, and keep standalone nav status rows mounted
+- Context: Tencent update source under unstable networks or proxy modes
+  Symptom: launcher reported primary service unavailable too aggressively, hid useful `HTTP 5xx` details, or showed generic TLS errors such as `UNEXPECTED_EOF_WHILE_READING`
+  Cause: single short timeout attempts, swallowed HTTP error bodies, identity-bound request failures, and local fake-ip DNS modes all looked like the same endpoint failure
+  Fix/Workaround: use multi-attempt checks, surface HTTP error body detail, retry once anonymously before fallback, and detect fake-ip resolution so users get a targeted proxy/DNS hint
 
-- Date: 2026-02-09
-  Context: users still reported severe jitter when holding scoreboard/map in battle
-  Symptom: timer UI could momentarily collapse, status flickered to "加入战斗中", then quickly returned
-  Cause: ALIVE state reacted to short 8111 empty frames too aggressively (transient player-loss + immediate pending hint), causing rapid panel resize oscillation
-  Fix/Workaround: add `PLAYER_PRESENCE_GRACE_SEC` debounce in `GameLogic.tick`, delay `api_down_pending` hint via `API_PENDING_HINT_DELAY_SEC`, keep zone panel visible during `LOSS_PENDING`, reuse previous valid telemetry/map snapshot during short unstable windows, guard landing/on-ground logic from `/state` failed frames, throttle zone-driven `_recalc_size()` calls, and relax localhost API timeouts (`0.05/0.08`) for packaged runtime stability
+- Context: Actions deploy-manifests workflow uploading to the update server
+  Symptom: `scp` failed with `Permission denied` on `/opt/stacks/bomana-update/data/manifests/manifest_*.json`
+  Cause: CI SSH user lacked direct write permission after ownership/ACL drift
+  Fix/Workaround: upload to remote `/tmp` staging first, then sync into the target directory with a direct-write check and passwordless-`sudo` fallback
 
-- Date: 2026-02-09
-  Context: launcher update interrupted/failure path hardening
-  Symptom: under specific install exceptions, local app could disappear after rollback; concurrent launchers could race on install target
-  Cause: rollback removed `app/` unconditionally on exception and there was no cross-process install lock or startup recovery for leftover `app_new`/`app_backup`
-  Fix/Workaround: make rollback state-aware (only restore when replacement actually started), add cross-process update lock + stale-lock cleanup, add startup recovery for `app_new`/`app_backup`, and support graceful cancel-exit during running tasks
+### Packaging And Release Hygiene
 
-- Date: 2026-02-09
-  Context: GitHub fallback when latest release is launcher-only
-  Symptom: update check could fail with `未找到发布清单: manifest_<Channel>.json` even though older app releases existed
-  Cause: fallback logic queried only `/releases/latest`, and launcher-only releases do not include app manifests
-  Fix/Workaround: after latest-release miss, iterate recent releases and select the first one containing `manifest_<Channel>.json` and matching app asset
+- Context: Windows CI packaging or release asset upload
+  Symptom: `UnicodeEncodeError` when printing paths, or GitHub rewrote Chinese asset names into underscored names
+  Cause: Windows CI console encoding can be cp1252, and GitHub normalizes non-ASCII/special characters in release asset names
+  Fix/Workaround: log through encoding-safe output and keep release asset names ASCII-only; put localized text in release notes
 
-- Date: 2026-02-09
-  Context: primary Tencent version check under unstable/filtered networks
-  Symptom: launcher could report primary service unavailable too aggressively (`TimeoutError`), regardless of proxy toggle
-  Cause: single short timeout attempt (`PRIMARY_TIMEOUT_SEC=4`) was sensitive to transient RTT spikes and proxy path latency
-  Fix/Workaround: add multi-attempt primary check (normal timeout, longer retry, alternate network path retry) and restore user-selected proxy mode after probing
+- Context: running `tools/build_portable.py` builds concurrently
+  Symptom: sporadic `Failed to find __version__ in bomana/config.py`, or `config.py` remained dirty after build
+  Cause: variant packaging temporarily patches `bomana/config.py`, so parallel builds race on the same file
+  Fix/Workaround: do not run build variants in parallel; preserve/restore the original file only when the build script actually patched it
 
-- Date: 2026-02-09
-  Context: primary Tencent API occasionally returned `HTTP 5xx` while launcher only logged generic failure
-  Symptom: users reported "cannot fetch version from Tencent" even with proxy toggle; root cause detail was hidden
-  Cause: `urllib` raised `HTTPError` without surfacing response JSON detail, and identity-bound request path could intermittently fail
-  Fix/Workaround: parse and propagate HTTP error body detail (e.g. upstream timeout reason), and add one-shot anonymous retry (drop `device_id/install_id`) before falling back
+- Context: portable app launched from the PyInstaller onefile launcher
+  Symptom: app code resolved assets under the launcher's `_MEI...` temp path, causing missing aircraft limits or data files
+  Cause: launcher and app ran in one process, so `sys._MEIPASS` and cached `bomana.*` modules could point at the launcher bundle instead of the extracted app runtime
+  Fix/Workaround: export a stable app runtime root such as `BOMANA_RUNTIME_ROOT`, prefer app/module paths over `_MEIPASS`, and clear cached `bomana` modules before handing off to the app package
 
-- Date: 2026-02-09
-  Context: Actions deploy-manifests workflow (`scp` to server manifests directory)
-  Symptom: upload failed with `Permission denied` on `/opt/stacks/bomana-update/data/manifests/manifest_*.json`
-  Cause: CI SSH user lacked direct write permission to target directory (owner/ACL drift after manual ops or container writes)
-  Fix/Workaround: upload manifests to remote `/tmp` staging first, then sync into target dir with direct-write check and passwordless-`sudo` fallback; keep verify step with same permission fallback and actionable remediation hints
+- Context: source-mode launch after changing the Windows `.pyw` association
+  Symptom: launcher opened, but app launch failed with `No module named 'requests'`
+  Cause: source mode used the current interpreter while dependencies existed only in the repo `.venv`
+  Fix/Workaround: prepend repo `.venv` `site-packages` during source-mode launch; if missing, run `uv sync --python 3.14 --extra build`
 
-- Date: 2026-02-12
-  Context: running v6.8.0 HUD baseline sampling (`tools/sample_8111_attitude.py`) in local dev environment
-  Symptom: `/indicators` and `/state` requests timed out; collected sample count stayed 0
-  Cause: no active War Thunder battle session exposing local 8111 API
-  Fix/Workaround: run sampler only while in battle with 8111 enabled; keep `duration>=120s` and collect per-aircraft runs before closing baseline task
+### 8111 Runtime Stability
 
-- Date: 2026-02-12
-  Context: running `tools/build_portable.py` builds concurrently in separate terminals
-  Symptom: sporadic `RuntimeError: Failed to find __version__ in bomana/config.py` and occasional `config.py` dirty/needs-update state after build
-  Cause: script patches `bomana/config.py` for variant app packaging; parallel runs race on read/write timing
-  Fix/Workaround: do not run build variants in parallel; script now restores `config.py` only when patched and preserves original timestamps to avoid launcher-only false dirty status
+- Context: opening map/scoreboard in battle
+  Symptom: UI flashed, timer briefly collapsed to `加入战斗中`, or CPU/frame time spiked
+  Cause: short `/map_obj.json` and `/state` empty frames were treated as real player loss, while full panel relayout/redraw amplified the visual jitter
+  Fix/Workaround: debounce player loss in `ALIVE`, delay pending API hints, reuse the last valid telemetry/map snapshot during short unstable windows, keep nav rows mounted, and avoid full relayout/redraw when data is equivalent
 
-- Date: 2026-02-12
-  Context: HUD overlay transparency refactor (trying to remove tinted background layer)
-  Symptom: HUD window became opaque black on some systems instead of transparent overlay
-  Cause: relying on Tk `-transparentcolor` plus Win32 `LWA_ALPHA` only is not stable across environments; when color-key transparency is not actually applied, canvas background is rendered as a full black layer
-  Fix/Workaround: pass Win32 color key explicitly via `SetLayeredWindowAttributes(..., LWA_COLORKEY | LWA_ALPHA)` and keep HUD background/canvas on the same key color
+- Context: in-game 8111 field naming drift
+  Symptom: speed monitoring stopped showing IAS/Mach or failed to match aircraft limits while the feature remained enabled
+  Cause: telemetry parsing accepted only a narrow set of `/state` and `/indicators` keys
+  Fix/Workaround: parse compatible aliases for IAS/TAS/Mach/type and keep future payload parsing tolerant
 
-- Date: 2026-02-12
-  Context: HUD warzone target reticle position deviates significantly from actual game position
-  Symptom: target marker appeared too close to screen center, especially at larger angles (20-45°), with up to 51% position error at 45°
-  Cause: `_project_point()` used linear mapping `rel / 90 * width * 0.42` instead of perspective `tan(rel) / tan(fov/2)` projection — game uses perspective rendering where screen position ∝ tan(angle), not angle
-  Fix/Workaround: replaced horizontal projection with `tan(rel_rad) / tan(fov_half_rad) * (width * 0.5)`, added configurable FOV (default 73° horizontal, 55° vertical) to `HUDConfig`, and harmonised vertical `pixels_per_deg` calculation
+### HUD And Navigation Geometry
 
-- Date: 2026-02-12
-  Context: after horizontal tan() fix, HUD target goes above horizon during dives and aggressive maneuvers
-  Symptom: target marker flew into the sky during dives; roll caused misaligned offsets
-  Cause: pitch_offset and geometry_offset (lookdown) were separate additive terms with different scales (ppd vs ppd×0.78); ppd increase from previous fix amplified the imbalance; roll was Y-only approximation
-  Fix/Workaround: merged pitch+lookdown into single `vertical_angle = lookdown + pitch`, applied tan() projection to vertical axis, replaced roll with full 2D rotation matrix `(cos/sin)`, removed `_ROLL_COUPLING_RATIO` and `_LOOKDOWN_COUPLING_RATIO`
+- Context: transparent HUD overlay on Windows
+  Symptom: HUD became an opaque black window on some systems
+  Cause: Tk `-transparentcolor` plus alpha alone is not reliable; if color-key transparency is not applied, the canvas background renders as black
+  Fix/Workaround: set the Win32 color key explicitly with `SetLayeredWindowAttributes(..., LWA_COLORKEY | LWA_ALPHA)` and keep HUD background/canvas colors identical to that key
 
-- Date: 2026-02-12
-  Context: HUD projection after vertical-axis merge still had large far-range error during steep dives
-  Symptom: targets were acceptable around 3-4km, but far targets drifted heavily in vertical position when nose-down
-  Cause: direct `vertical_angle = lookdown + pitch` over-weighted body pitch for far targets (small lookdown + large negative pitch), amplifying vertical error without camera-input telemetry
-  Fix/Workaround: introduced distance-adaptive pitch gain in HUD projection (full pitch near 4km, linearly reduced by 14km, plus extra damp in far dives) and use `vertical_angle = lookdown + effective_pitch`
+- Context: HUD target projection
+  Symptom: target marker was too close to screen center at larger angles, went above the horizon during dives, or drifted heavily at long range
+  Cause: projection mixed linear angle mapping, separate pitch/lookdown scales, Y-only roll approximation, and normalized map-distance assumptions
+  Fix/Workaround: use perspective `tan(angle) / tan(fov/2)` projection, merge lookdown and pitch into one vertical angle with distance-adaptive pitch gain, rotate offsets with a full 2D matrix, and use `map_info` axis scaling for bearing/distance/ground-speed
 
-- Date: 2026-02-12
-  Context: HUD/nav still showed large far-range mismatch after pitch-gain tuning
-  Symptom: near-range looked acceptable, but far targets and dive scenarios still drifted; distance/bearing felt map-dependent
-  Cause: navigation geometry used normalized map coordinates with fixed `DISTANCE_SCALE=100` and ignored `map_info` axis scales (`map_min/map_max`), introducing distance and bearing distortion on non-square/variable-size maps
-  Fix/Workaround: switched nav geometry to map_info-based meter scaling for bearing/distance/ground-speed (while preserving existing `distance * DISTANCE_SCALE` UI compatibility)
+- Context: integrated or standalone heading tape on maps where no zone enters the heading gate
+  Symptom: zone rows populated, but the tape looked blank or stayed near `无目标`
+  Cause: core navigation can leave every zone with `is_target=False`; the tape previously rendered overflow cues only for active targets
+  Fix/Workaround: for tape rendering only, fall back to the smallest-angle zone as display-primary without changing core target-lock semantics
 
-- Date: 2026-05-11
-  Context: beads cleanup after upgrading Bomana to `bd 1.0.4`
-  Symptom: old maintenance notes and in-progress issues still described pre-1.0 migration failures, external Dolt server setup, and legacy sync commands
-  Cause: historical upgrade work was left open after the project moved to the current embedded Dolt backend
-  Fix/Workaround: treat those old migration recipes as retired; use `bd where`, `bd status`, `bd list`, and `bd backup status` for current health checks. `bd doctor` is not supported in embedded mode and should not be treated as a project failure. Do not revive old `bd sync`, manual `.beads/dolt/**/LOCK` cleanup, raw Dolt SQL schema commits, or a hand-started `127.0.0.1:3307` server unless a future bd release explicitly reintroduces that flow. If auto-export writes warn because `.beads/` is ignored, prefer `bd config set export.git-add false` over changing the repo ignore policy.
+### UI And Dialog Layout
 
+- Context: settings dialog opened on taller tabs such as overspeed
+  Symptom: Save/Cancel buttons could be pushed below the visible area
+  Cause: fixed-height dialog content without a scroll body
+  Fix/Workaround: make settings content scrollable and keep the footer action row fixed
 
-- Context: source-mode launcher (`launcher.pyw`) after switching Windows `.pyw` association to a new Python runtime
-  Symptom: launcher GUI opened, but app launch failed with `No module named 'requests'`
-  Root cause: source mode runs `Bomana.pyw` with the current interpreter, while the project dependencies only existed inside repo `.venv`
-  Fix/Workaround: prepend repo `.venv` `site-packages` during source-mode launch; if `.venv` is missing, run `uv sync --python 3.14 --extra build`
+- Context: launcher progress during update check
+  Symptom: progress looked like a download was finishing during the check phase, and status text changes could resize the window
+  Cause: check phase reused download-like progress behavior and allowed layout reflow from changing status text
+  Fix/Workaround: split check/download states, keep check progress indeterminate, and calculate geometry from the current canvas width
 
-- Date: 2026-03-17
-  Context: settings dialog opened directly on the overspeed tab after the tab copy/fields expanded
-  Symptom: the dialog appeared vertically cramped and the bottom Save/Cancel buttons could be pushed below the visible area
-  Cause: `SettingsDialog` used a fixed content container without scrolling, while the overspeed page became taller than the initial fitted height
-  Fix/Workaround: make the settings body scrollable and keep the footer action row fixed outside the scroll area
+### Data Files
 
-- Date: 2026-03-17
-  Context: in-game 8111 payload field naming drift for airspeed/type fields
-  Symptom: speed monitoring stopped showing current IAS or failed to match aircraft limits even though the panel toggle stayed enabled
-  Cause: telemetry parsing only accepted a narrow set of `/state` and `/indicators` keys (`IAS, km/h`, `TAS, km/h`, `M`, `type`)
-  Fix/Workaround: parse multiple compatible key variants for IAS/TAS/Mach/type so minor payload name changes do not break the speed panel
+- Context: CCRP bomb selector in packaged/runtime environments
+  Symptom: bomb selector showed `0/0` bombs with no clear reason even though `ccrp_bomb_params.json` was shipped
+  Cause: bomb database loading used separate path resolution and swallowed load failures into an empty in-memory database
+  Fix/Workaround: resolve bomb JSON through the shared runtime-aware resource search, preserve a visible `load_error`, and surface it in the selector/settings UI
 
-- Date: 2026-03-17
-  Context: portable app launched from the PyInstaller onefile launcher
-  Symptom: the aircraft override dialog later reported `limits file not found` under a launcher `_MEI...` temp path, and speed matching stopped working
-  Cause: `resource_path()` preferred `sys._MEIPASS`, but under launcher `runpy` mode that temporary directory belonged to the launcher exe instead of the unpacked app runtime
-  Fix/Workaround: have launcher export the stable app runtime root (for example `BOMANA_RUNTIME_ROOT`), and make app resource lookup prefer the app module/current working directory before `_MEIPASS` so old launchers still work with new app packages
+### Beads Maintenance
 
-- Date: 2026-03-17
-  Context: opening the CCRP bomb selector in packaged/runtime environments
-  Symptom: the bomb selector showed `0/0` bombs with no clear reason, even though `ccrp_bomb_params.json` was shipped
-  Cause: bomb database loading still used its own path resolution and swallowed load failures into an empty in-memory database, instead of sharing the app's stable runtime resource lookup
-  Fix/Workaround: resolve bomb JSON through the same runtime-aware path search used for other packaged assets, keep a visible `load_error`, and surface that error directly in the bomb selector/settings page
-
-- Date: 2026-03-18
-  Context: launcher checking the Tencent Cloud update source while a local TUN/fake-ip proxy is active
-  Symptom: update checks failed with generic TLS errors such as `UNEXPECTED_EOF_WHILE_READING`, even though GitHub source still worked
-  Cause: the update domain was resolved to a synthetic proxy fake-ip in `198.18.0.0/15`, so the launcher looked like it was hitting a broken Tencent endpoint when it was actually running into a local proxy DNS mode mismatch
-  Fix/Workaround: detect fake-ip resolution for the Tencent update domain and surface a targeted hint telling the user to switch to GitHub or let that domain use real DNS instead of showing a misleading raw SSL failure
-
-- Date: 2026-03-21
-  Context: portable launcher `1.5.2` starting app package `6.12.4` after the text-scaling release
-  Symptom: app launch failed immediately with `type object 'UIConfig' has no attribute 'clamp_ui_scale'`
-  Cause: the launcher imports `bomana.utils.system` for its own UI, so PyInstaller keeps a launcher-bundled `bomana` package in `sys.modules`; when the app later starts in-process via `runpy`, `import bomana.config` can reuse the stale launcher module cache instead of the freshly extracted app package
-  Fix/Workaround: clear cached `bomana` / `bomana.*` modules before handing off to the app package, then let imports resolve again from the extracted runtime directory
-
-- Date: 2026-04-15
-  Context: integrated / standalone heading tape on maps such as Maginot Line
-  Symptom: zone and airport rows populated normally, but the heading tape looked blank or stayed near `无目标`
-  Cause: core nav leaves all zones with `is_target=False` when every zone starts outside the current heading gate; the tape only renders overflow cues for active targets, so valid off-screen zones could disappear visually
-  Fix/Workaround: for tape rendering only, fall back to the smallest-angle zone as the display-primary target when no explicit target exists, without changing core lock semantics
+- Context: cleanup after upgrading Bomana to `bd 1.0.4`
+  Symptom: old issues and notes still described pre-1.0 migration failures, external Dolt server setup, and legacy sync commands
+  Cause: historical upgrade work remained after the project moved to the current embedded Dolt backend
+  Fix/Workaround: retire old `bd sync`, manual `.beads/dolt/**/LOCK` cleanup, raw Dolt SQL schema commits, and hand-started `127.0.0.1:3307` server recipes. If auto-export warns because `.beads/` is ignored, prefer `bd config set export.git-add false` over changing repo ignore policy.
