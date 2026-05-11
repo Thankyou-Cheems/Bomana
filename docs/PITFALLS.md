@@ -134,7 +134,7 @@ Note: older entries are historical snapshots. Some workarounds predate the curre
   Context: beads cleanup after upgrading Bomana to `bd 1.0.4`
   Symptom: old maintenance notes and in-progress issues still described pre-1.0 migration failures, external Dolt server setup, and legacy sync commands
   Cause: historical upgrade work was left open after the project moved to the current embedded Dolt backend
-  Fix/Workaround: treat those old migration recipes as retired; use `bd where`, `bd status`, `bd list`, and `bd backup status` for current health checks. `bd doctor` is not supported in embedded mode and should not be treated as a project failure.
+  Fix/Workaround: treat those old migration recipes as retired; use `bd where`, `bd status`, `bd list`, and `bd backup status` for current health checks. `bd doctor` is not supported in embedded mode and should not be treated as a project failure. Do not revive old `bd sync`, manual `.beads/dolt/**/LOCK` cleanup, raw Dolt SQL schema commits, or a hand-started `127.0.0.1:3307` server unless a future bd release explicitly reintroduces that flow. If auto-export writes warn because `.beads/` is ignored, prefer `bd config set export.git-add false` over changing the repo ignore policy.
 
 
 - Context: source-mode launcher (`launcher.pyw`) after switching Windows `.pyw` association to a new Python runtime
