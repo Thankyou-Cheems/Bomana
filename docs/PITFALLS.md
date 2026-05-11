@@ -130,23 +130,11 @@ Note: older entries are historical snapshots. Some workarounds predate the curre
   Cause: navigation geometry used normalized map coordinates with fixed `DISTANCE_SCALE=100` and ignored `map_info` axis scales (`map_min/map_max`), introducing distance and bearing distortion on non-square/variable-size maps
   Fix/Workaround: switched nav geometry to map_info-based meter scaling for bearing/distance/ground-speed (while preserving existing `distance * DISTANCE_SCALE` UI compatibility)
 
-- Date: 2026-02-21
-  Context: upgrading `bd` to `v0.55.4` and running `bd doctor --fix --yes` in Bomana
-  Symptom: `bd doctor` and `bd ready` intermittently crashed with `panic: runtime error: invalid memory address or nil pointer dereference` (Dolt embedded path), and `bd sync` refused to export because database was empty while JSONL had issues
-  Cause: migration left stale Dolt lock files and an empty Dolt DB; auto-fix/import path did not hydrate existing `issues.jsonl` records
-  Fix/Workaround: clear stale `LOCK` files under `.beads/dolt/**`, then run `bd import -i .beads/issues.jsonl --force` before `bd sync`
-
-- Date: 2026-02-26
-  Context: upgrading `bd` to `v0.56.1` on Windows
-  Symptom: `bd` commands failed with `Dolt server unreachable at 127.0.0.1:3307`, and `bd dolt` help did not expose a `start` subcommand
-  Cause: `v0.56.1` is server-only for Dolt access in this environment; embedded mode path is no longer used and a running external `dolt sql-server` is required
-  Fix/Workaround: install Dolt (`winget install DoltHub.Dolt`), start server from repo data dir (`dolt sql-server --host 127.0.0.1 --port 3307 --data-dir .beads/dolt`), then run `bd migrate --json` to update database version metadata
-
-- Date: 2026-03-16
-  Context: upgrading Bomana beads from `bd v0.58.0` to `v0.61.0`
-  Symptom: `bd ready` recovered, but `bd status`/`bd doctor` initially failed or warned because `issues.jsonl` lagged behind Dolt and the Dolt working set kept `config.schema_version = 7` uncommitted
-  Cause: the CLI upgrade auto-migrated UUID PKs and metadata, but the repo still had a stale exported JSONL plus an unapplied Dolt config change
-  Fix/Workaround: back up first, export Dolt back to `.beads/issues.jsonl`, run `bd doctor --fix --yes`, then use raw Dolt SQL (`call dolt_add('config')`, `call dolt_commit(...)`) if `schema_version` stays dirty after the normal `bd vc commit`
+- Date: 2026-05-11
+  Context: beads cleanup after upgrading Bomana to `bd 1.0.4`
+  Symptom: old maintenance notes and in-progress issues still described pre-1.0 migration failures, external Dolt server setup, and legacy sync commands
+  Cause: historical upgrade work was left open after the project moved to the current embedded Dolt backend
+  Fix/Workaround: treat those old migration recipes as retired; use `bd where`, `bd status`, `bd list`, and `bd backup status` for current health checks. `bd doctor` is not supported in embedded mode and should not be treated as a project failure.
 
 
 - Context: source-mode launcher (`launcher.pyw`) after switching Windows `.pyw` association to a new Python runtime

@@ -44,7 +44,7 @@ Keep it concise and update when workflows or boundaries change.
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd backup
+   bd backup status
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -132,7 +132,7 @@ bd close bd-42 --reason "Completed" --json
 Bomana uses beads' default project mode:
 
 - Dolt is the source of truth for issue data
-- `bd backup` refreshes the local JSONL backup snapshot under `.beads/backup/`
+- `bd backup status` verifies the local backup state; configure a remote before using `bd backup sync`
 - Do not rely on old `bd sync` / `sync-branch` workflows in this repo
 
 ### Important Rules

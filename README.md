@@ -245,8 +245,6 @@ uv run python Bomana.pyw
 - [docs/PRIVACY.md](docs/PRIVACY.md) - 启动器更新检查与匿名统计上报说明
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) - 版本变更记录
 - [docs/PITFALLS.md](docs/PITFALLS.md) - 维护过程中的已知坑点与排障记录
-- [docs/HUD_BASELINE.md](docs/HUD_BASELINE.md) - HUD 首版采样基线（历史设计文档）
-- [docs/bomana_v680_plan.md](docs/bomana_v680_plan.md) - HUD v6.8 架构方案归档（历史设计文档）
 
 ---
 

@@ -11,7 +11,7 @@
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
 - Tools: `tools/blkx_extractor.py` (generate CCRP bomb parameters from .blkx)
 - Tools: `tools/fm_speed_extractor.py` (generate speed-limit DB from datamine flightmodels)
-- Tools: `tools/create_version_info.py` / `tools/sample_8111_attitude.py` / `tools/probe_hybrid_8111_clog.py` (build metadata + diagnostics)
+- Tools: `tools/create_version_info.py` / `tools/sample_8111_attitude.py` (build metadata + diagnostics)
 - Assets: `app.png`, `sponsor_wechat.png`, `app.ico`
 
 ## Repository Layout
@@ -26,7 +26,6 @@
 │  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
 │  ├─ core/
 │  │  ├─ ballistics.py        # Bombing ballistics
-│  │  ├─ clog_probe.py        # Optional one-shot clog parser (shared-read + XOR)
 │  │  ├─ logic.py             # GameLogic core loop
 │  │  ├─ overspeed.py         # Aircraft speed-limit matching + alert grading
 │  │  ├─ state.py             # Dataclasses/enums
@@ -52,7 +51,6 @@
 │  ├─ blkx_extractor.py      # .blkx -> bomana/data/ccrp_bomb_params.json generator
 │  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
 │  ├─ sample_8111_attitude.py # HUD baseline sampler
-│  ├─ probe_hybrid_8111_clog.py # Optional clog-probe helper
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
 ├─ assets (root files)       # Icons/sponsor image, etc.
 └─ README.md                 # Main landing page for GitHub visitors
@@ -73,28 +71,22 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
    - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives compact speed strip + alert sound.
-6. Optional hybrid probe flow (default disabled):
-   - `ENABLE_CLOG_PROBE=False` by default; no behavior change in normal builds.
-   - Can be temporarily enabled for local validation with `BOMANA_ENABLE_CLOG_PROBE=1`.
-   - When enabled, `GameLogic` schedules one-shot clog parse after ALIVE confirmation (`ClogConfig.TRIGGER_DELAY_SEC`).
-   - Parser reads latest `.clog` with Windows shared-read flags, XOR-decrypts tail bytes, and extracts candidate player/vehicle lines.
-   - Probe runs in a background thread and updates debug diagnostic state without blocking the main tick loop.
-7. Launcher check flow:
+6. Launcher check flow:
    - On startup (and channel switch), launcher auto-checks both app-package metadata and launcher metadata in a background thread.
    - Channel/source/proxy changes during an in-flight check are queued and trigger an automatic follow-up re-check instead of being blocked.
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for app and launcher manifests when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
-8. Launcher download/apply flow:
+7. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
    - Verifies SHA256 (when provided), replaces `app/`, promotes the previous app into `app_previous/`, and updates local version metadata.
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
-9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
+8. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 
-Important constraint: default runtime data path is official 8111 API only; no memory reads, injection, or game file modifications. Experimental clog probe remains disabled unless explicitly enabled via config.
+Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.
 
 ## Static Data Provenance
 - `bomana/data/ccrp_bomb_params.json`
@@ -158,5 +150,4 @@ CI:
 - `docs/CONTRIBUTING.md`: current contribution workflow, `bd` tracking, release expectations
 - `docs/PRIVACY.md`: launcher telemetry/update-service privacy disclosure
 - `docs/PITFALLS.md`: operational failure log for maintainers
-- `docs/HUD_BASELINE.md` and `docs/bomana_v680_plan.md`: historical HUD design/reference docs
 

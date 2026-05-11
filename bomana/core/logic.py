@@ -2,7 +2,6 @@
 """Game logic core."""
 
 import math
-import os
 import threading
 import time
 from typing import Optional, Tuple, Any, List, Dict
@@ -15,12 +14,10 @@ from bomana.config import (
     ENABLE_AIRFIELDS,
     ENABLE_FUEL,
     ENABLE_CHECKLIST,
-    ENABLE_CLOG_PROBE,
     GameConfig,
     ZoneConfig,
     FuelConfig,
     NetworkConfig,
-    ClogConfig,
     BombConfig,
     Theme,
     OverspeedConfig,
@@ -42,12 +39,10 @@ from bomana.core.state import (
     AirfieldDisplayInfo,
     PerfDebugInfo,
     SourceDebugInfo,
-    ClogDebugInfo,
     UISnapshot,
 )
 from bomana.core.telemetry import Budget, HttpJson, TelemetryFetcher, MapInfoFetcher, MapObjectsFetcher
 from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing
-from bomana.core.clog_probe import collect_players_one_shot
 from bomana.core.overspeed import OverspeedAnalyzer
 from bomana.utils.math_utils import (
     calculate_heading_from_vector,
@@ -112,11 +107,6 @@ class GameLogic:
         self.map = MapObjectsFetcher(self.http)
         self.overspeed = OverspeedAnalyzer()
         self.state = GameState()
-        self._clog_probe_thread: Optional[threading.Thread] = None
-        if self._is_clog_probe_enabled():
-            self.state.clog_probe_status = "idle"
-        else:
-            self.state.clog_probe_status = "disabled"
     
     @property
     def is_api_down(self) -> bool:
@@ -126,139 +116,6 @@ class GameLogic:
         """
         with self._lock:
             return self.state.api_down
-
-    def _is_clog_probe_enabled(self) -> bool:
-        """是否启用 clog 一次性解析（实验功能）。"""
-        env_force = str(os.environ.get("BOMANA_ENABLE_CLOG_PROBE", "")).strip().lower()
-        env_enabled = env_force in ("1", "true", "yes", "on")
-        return bool((ENABLE_CLOG_PROBE and ClogConfig.ENABLED) or env_enabled)
-
-    def _schedule_clog_probe_locked(self, now: float, life_index: int) -> None:
-        """为当前生命安排一次延迟 clog 解析（锁内）。"""
-        s = self.state
-        if not self._is_clog_probe_enabled():
-            s.clog_probe_status = "disabled"
-            s.clog_probe_life_index = 0
-            s.clog_probe_scheduled_at = None
-            s.clog_probe_last_run_ts = 0.0
-            s.clog_probe_player_count = 0
-            s.clog_probe_players = []
-            s.clog_probe_error = ""
-            return
-
-        s.clog_probe_status = "pending"
-        s.clog_probe_life_index = int(life_index)
-        s.clog_probe_scheduled_at = float(now) + max(0.0, float(ClogConfig.TRIGGER_DELAY_SEC))
-        s.clog_probe_last_run_ts = 0.0
-        s.clog_probe_player_count = 0
-        s.clog_probe_players = []
-        s.clog_probe_error = ""
-
-    def _maybe_start_clog_probe_worker(self, now: float) -> None:
-        """到时后启动一次性 clog 解析后台任务。"""
-        if not self._is_clog_probe_enabled():
-            return
-
-        life_index = 0
-        with self._lock:
-            s = self.state
-            if s.clog_probe_status != "pending":
-                return
-            if s.clog_probe_scheduled_at is None:
-                return
-            if now < s.clog_probe_scheduled_at:
-                return
-            if not s.current_life:
-                s.clog_probe_status = "skip"
-                s.clog_probe_scheduled_at = None
-                s.clog_probe_error = "no current life"
-                return
-            if s.phase not in (Phase.ALIVE, Phase.LOSS_PENDING):
-                s.clog_probe_status = "skip"
-                s.clog_probe_scheduled_at = None
-                s.clog_probe_error = "phase not alive"
-                return
-            if s.current_life.life_index != s.clog_probe_life_index:
-                s.clog_probe_status = "skip"
-                s.clog_probe_scheduled_at = None
-                s.clog_probe_error = "life index changed"
-                return
-            t = self._clog_probe_thread
-            if t is not None and t.is_alive():
-                return
-            life_index = int(s.current_life.life_index)
-            s.clog_probe_status = "running"
-            s.clog_probe_last_run_ts = now
-            s.clog_probe_error = ""
-
-        t = threading.Thread(
-            target=self._run_clog_probe_worker,
-            args=(life_index,),
-            daemon=True,
-            name="bomana-clog-probe",
-        )
-        self._clog_probe_thread = t
-        t.start()
-
-    def _run_clog_probe_worker(self, life_index: int) -> None:
-        """后台执行一次 clog 解析，不阻塞 tick。"""
-        result = collect_players_one_shot(
-            clog_file=(ClogConfig.CLOG_FILE or None),
-            clog_dir=(ClogConfig.CLOG_DIR or None),
-            key_file=(ClogConfig.KEY_FILE or None),
-            max_log_bytes=int(ClogConfig.MAX_LOG_BYTES),
-            max_log_lines=int(ClogConfig.MAX_LOG_LINES),
-        )
-
-        status = str(result.get("status", "error"))
-        error = str(result.get("error", "") or "")
-        extract = result.get("extract", {}) if isinstance(result.get("extract"), dict) else {}
-        players_raw = extract.get("players", []) if isinstance(extract, dict) else []
-        players: List[str] = []
-        if isinstance(players_raw, list):
-            for item in players_raw:
-                if isinstance(item, dict):
-                    name = str(item.get("name", "") or "").strip()
-                    if name:
-                        players.append(name)
-                elif isinstance(item, str) and item.strip():
-                    players.append(item.strip())
-        players = players[: max(1, int(ClogConfig.MAX_DEBUG_NAMES))]
-
-        with self._lock:
-            s = self.state
-            current_life = s.current_life.life_index if s.current_life else 0
-            if current_life != int(life_index):
-                return
-            if s.clog_probe_life_index != int(life_index):
-                return
-
-            s.clog_probe_scheduled_at = None
-            s.clog_probe_last_run_ts = time.time()
-            scan_stats = extract.get("scan_stats", {}) if isinstance(extract, dict) else {}
-            if isinstance(scan_stats, dict):
-                s.clog_probe_player_count = int(scan_stats.get("players_detected", len(players_raw)))
-            else:
-                s.clog_probe_player_count = len(players_raw)
-            s.clog_probe_players = players
-            s.clog_probe_error = error[:120]
-
-            if not bool(result.get("ok")):
-                s.clog_probe_status = "error"
-                if not s.clog_probe_error:
-                    s.clog_probe_error = "probe failed"
-                return
-
-            if status in ("no_clog_dir", "no_clog_file"):
-                s.clog_probe_status = "skip"
-                return
-            if status == "empty":
-                s.clog_probe_status = "empty"
-                return
-            if status == "parsed":
-                s.clog_probe_status = "parsed"
-                return
-            s.clog_probe_status = status or "parsed"
 
     def tick(self) -> None:
         """主逻辑循环（每250ms执行一次）
@@ -273,9 +130,6 @@ class GameLogic:
         tick_start = time.monotonic()
         now = time.time()
         budget = Budget(NetworkConfig.MAX_TICK_NET_BUDGET)
-
-        # ALIVE 后延迟触发一次性 clog 解析（后台执行）
-        self._maybe_start_clog_probe_worker(now)
 
         # 1. 获取遥测数据
         tel = self.tel.fetch(budget)
@@ -1094,7 +948,6 @@ class GameLogic:
             self.state.phase = Phase.ALIVE
             self.state.last_refit_ts = data['computed_spawn_time']
             self.state.last_player_present_ts = time.time()
-            self._schedule_clog_probe_locked(time.time(), self.state.current_life.life_index)
         return True
 
     def snapshot(self) -> UISnapshot:
@@ -1172,12 +1025,6 @@ class GameLogic:
                 indicators_valid=bool(tel.valid),
                 has_type_name=bool(tel.type_name),
                 state_ok=bool(tel.state_resp_ok),
-            )
-            clog_debug = ClogDebugInfo(
-                status=str(s.clog_probe_status or '-'),
-                player_count=int(s.clog_probe_player_count or 0),
-                player_names=','.join(s.clog_probe_players) if s.clog_probe_players else '-',
-                error=s.clog_probe_error[:24] if s.clog_probe_error else '-',
             )
 
         remaining = None
@@ -1354,7 +1201,6 @@ class GameLogic:
             landed_flash=landed_flash,
             perf_debug=perf_debug,
             source_debug=source_debug,
-            clog_debug=clog_debug,
             zones=zone_display_list,
             friendly_airfield=friendly_airfield_display,
             enemy_airfields=enemy_airfields_display,
@@ -1419,7 +1265,6 @@ class GameLogic:
         s.last_refit_ts = now
         s.last_player_present_ts = now
         s.attitude = AttitudeConfidenceState()
-        self._schedule_clog_probe_locked(now, next_index)
 
     def _reset_life_state_locked(self):
         """重置生命状态（必须在锁内调用）"""
@@ -1436,16 +1281,6 @@ class GameLogic:
         s.attitude = AttitudeConfidenceState()
         s.map_info = None
         s.fuel_state.reset()  # v5.8 新增：重置燃油状态
-        if self._is_clog_probe_enabled():
-            s.clog_probe_status = "idle"
-        else:
-            s.clog_probe_status = "disabled"
-        s.clog_probe_life_index = 0
-        s.clog_probe_scheduled_at = None
-        s.clog_probe_last_run_ts = 0.0
-        s.clog_probe_player_count = 0
-        s.clog_probe_players = []
-        s.clog_probe_error = ""
 
     def _clear_transient_state_locked(self):
         """清除瞬态状态（必须在锁内调用）"""

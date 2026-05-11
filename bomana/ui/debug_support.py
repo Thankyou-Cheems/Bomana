@@ -552,7 +552,6 @@ class AppDebugSupport:
         source_text = "模拟" if app._debug_effective_mock else "实时"
         perf = live_snap.perf_debug
         source_dbg = live_snap.source_debug
-        clog_dbg = live_snap.clog_debug
         lines = [
             f"[Debug] 数据源={source_text} | 场景={scene_name}",
             "操作: 点击[数据源]切实时/模拟，点击[◀/▶]切换场景",
@@ -572,10 +571,6 @@ class AppDebugSupport:
                 f"snap_wait={perf.snapshot_wait_ms:.1f}ms"
             ),
             f"UI: gap={app._last_ui_gap_ms:.1f}ms work={app._last_ui_work_ms:.1f}ms",
-            (
-                f"CLOG: st={clog_dbg.status} players={clog_dbg.player_count} "
-                f"names={clog_dbg.player_names} err={clog_dbg.error}"
-            ),
             (
                 f"Render: phase={render_snap.phase.name} on_ground={int(render_snap.on_ground)} "
                 f"fuel={render_snap.fuel_kg:.0f}kg ({render_snap.fuel_percent:.0f}%) "

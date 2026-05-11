@@ -441,15 +441,6 @@ class GameState:
     gear_stable_direction: bool = False                          # 稳定后的方向（True=收起）
     gear_change_time: float = 0.0                                # 上次变化时间
 
-    # v6.9.2 新增：clog 一次性解析状态（方案C实验集成）
-    clog_probe_status: str = "disabled"                          # disabled/idle/pending/running/parsed/empty/error/skip
-    clog_probe_life_index: int = 0                               # 计划或执行对应的 life_index
-    clog_probe_scheduled_at: Optional[float] = None              # 计划触发时间（epoch秒）
-    clog_probe_last_run_ts: float = 0.0                          # 最近执行时间
-    clog_probe_player_count: int = 0                             # 解析到的玩家数
-    clog_probe_players: List[str] = field(default_factory=list)  # 玩家名（截断）
-    clog_probe_error: str = ""                                   # 最近错误
-
     # 轻量性能诊断（用于排查 UI/锁/8111 卡顿来源）
     perf_tick_total_ms: float = 0.0
     perf_tick_net_ms: float = 0.0
@@ -510,15 +501,6 @@ class SourceDebugInfo:
 
 
 @dataclass(frozen=True)
-class ClogDebugInfo:
-    """clog 一次性解析诊断信息。"""
-    status: str = "-"
-    player_count: int = 0
-    player_names: str = "-"
-    error: str = "-"
-
-
-@dataclass(frozen=True)
 class UISnapshot:
     """UI快照（逻辑层 → UI层的数据传递）
     
@@ -540,7 +522,6 @@ class UISnapshot:
     landed_flash: bool
     perf_debug: PerfDebugInfo = field(default_factory=PerfDebugInfo)
     source_debug: SourceDebugInfo = field(default_factory=SourceDebugInfo)
-    clog_debug: ClogDebugInfo = field(default_factory=ClogDebugInfo)
     
     # 导航相关
     zones: List[ZoneDisplayInfo] = field(default_factory=list)
