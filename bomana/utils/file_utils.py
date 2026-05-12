@@ -5,6 +5,7 @@ import os
 import sys
 import json
 import time
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Any, Dict, Sequence
@@ -30,6 +31,34 @@ def _report_persistence_error(action: str, path: Path, exc: Exception) -> None:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
     except (IOError, OSError):
         pass
+
+
+def atomic_write_json(path: Path, payload: Any, *, ensure_ascii: bool = False) -> None:
+    """Atomically write JSON by replacing the target from the same directory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as f:
+            temp_path = Path(f.name)
+            json.dump(payload, f, indent=2, ensure_ascii=ensure_ascii)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, path)
+        temp_path = None
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except FileNotFoundError:
+                pass
 
 def resource_path(rel_path: str) -> str:
     """获取资源文件的绝对路径
@@ -144,33 +173,39 @@ class ConfigManager:
             try:
                 with open(FileConfig.CONFIG_FILE, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                # 配置版本迁移
-                config = ConfigManager._migrate_config(config)
+                if not isinstance(config, dict):
+                    raise ValueError("config root must be a JSON object")
+                # 配置版本迁移仅更新内存对象；显式保存路径负责落盘。
+                config, _changed = ConfigManager._migrate_config(config)
                 return config
-            except (json.JSONDecodeError, IOError, OSError) as exc:
+            except (json.JSONDecodeError, ValueError, IOError, OSError) as exc:
                 _report_persistence_error("config load", FileConfig.CONFIG_FILE, exc)
         return {}
     
     @staticmethod
-    def _migrate_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    def _migrate_config(config: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
         """配置版本迁移
         
         处理旧版本配置的兼容性问题，自动升级配置结构
         v6.1.1: 添加编译开关状态记简版/完整版配置冲突
         """
         version = config.get('config_version', 1)
+        changed = False
         
         # v1 -> v2: 添加投弹面板配置
         if version < 2:
             panels = config.get('panels', {})
             if 'show_bombing' not in panels:
                 panels['show_bombing'] = True
+                changed = True
             config['panels'] = panels
             config['config_version'] = 2
+            changed = True
         
         # v2 -> v3: 添加编译开关状态记录
         if version < 3:
             config['config_version'] = 3
+            changed = True
         
         # 检查编译开关是否变化（精简版 <-> 完整版切换）
         saved_switches = config.get('compile_switches', {})
@@ -200,17 +235,17 @@ class ConfigManager:
                 if panel_key:
                     panels[panel_key] = True
                     switches_changed = True
+                    changed = True
         
         if switches_changed:
             config['panels'] = panels
         
         # 更新保存的编译开关状态
-        config['compile_switches'] = current_switches
+        if saved_switches != current_switches:
+            config['compile_switches'] = current_switches
+            changed = True
         
-        # 自动保存迁移后的配置
-        ConfigManager.save(config)
-        
-        return config
+        return config, changed
     
     @staticmethod
     def save(config: Dict[str, Any]) -> bool:
@@ -222,10 +257,9 @@ class ConfigManager:
         try:
             # 确保保存时带有版本号
             config['config_version'] = FileConfig.CONFIG_VERSION
-            with open(FileConfig.CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
+            atomic_write_json(FileConfig.CONFIG_FILE, config, ensure_ascii=False)
             return True
-        except (IOError, OSError) as exc:
+        except (TypeError, ValueError, IOError, OSError) as exc:
             _report_persistence_error("config save", FileConfig.CONFIG_FILE, exc)
             return False
 
@@ -252,9 +286,8 @@ class StateManager:
             'sortie_id': sortie_id
         }
         try:
-            with open(FileConfig.STATE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(state_data, f, indent=2)
-        except (IOError, OSError) as exc:
+            atomic_write_json(FileConfig.STATE_FILE, state_data, ensure_ascii=False)
+        except (TypeError, ValueError, IOError, OSError) as exc:
             _report_persistence_error("state save", FileConfig.STATE_FILE, exc)
     
     @staticmethod
@@ -269,6 +302,8 @@ class StateManager:
         try:
             with open(FileConfig.STATE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("state root must be a JSON object")
             
             # 提取保存时的剩余时间和时间戳
             saved_remaining = data.get('remaining_sec', 0)
@@ -281,7 +316,6 @@ class StateManager:
             
             # 如果过期太久（超过一个完整周期），放弃恢复
             if new_remaining < -GameConfig.CYCLE_SECONDS:
-                StateManager.clear()
                 return None
             
             # 如果时间为负（已进入下一周期），计算新周期的剩余时间
@@ -294,9 +328,8 @@ class StateManager:
             data['computed_spawn_time'] = now - (GameConfig.CYCLE_SECONDS - new_remaining)
             
             return data
-        except (json.JSONDecodeError, IOError, KeyError, OSError) as exc:
+        except (json.JSONDecodeError, ValueError, IOError, KeyError, OSError) as exc:
             _report_persistence_error("state load", FileConfig.STATE_FILE, exc)
-            StateManager.clear(report_error=False)
             return None
     
     @staticmethod
