@@ -36,6 +36,30 @@ uv sync --extra build
 uv run python Bomana.pyw
 ```
 
+### 轻量本地验证
+
+默认本地 smoke 只跑不依赖游戏的快速回归，不设置覆盖率目标：
+
+```bash
+tools\scripts\check_smoke.bat
+```
+
+等价命令：
+
+```bash
+uv run python -m unittest discover -s tests -p "test_*.py"
+```
+
+如果需要可选开发工具：
+
+```bash
+uv sync --extra dev
+uv run pytest
+uv run ruff check <本次修改的 Python 路径>
+```
+
+`ruff`/`pytest` 是开发辅助，不应阻塞导航、遥测、启动器等主功能维护任务，除非当前改动明确要求它们作为验收项。
+
 ### 任务跟踪（必须使用 bd）
 
 开始工作前：
@@ -96,10 +120,18 @@ bd close <issue-id> --reason "Completed" --json
 
 代码改动至少应覆盖其中相关项：
 
+- `tools\scripts\check_smoke.bat` 轻量本地回归
 - `uv run python Bomana.pyw` 基础启动验证
 - 受影响功能的静态自测
 - 真实 War Thunder SB 实测（如果改动涉及 8111 数据、UI 刷新、热键、导航、HUD、启动器）
 - 打包链路验证：`tools\scripts\build_portable.bat <Variant> <all|app|launcher>`（如果改动涉及发布或资源）
+
+需要实机 8111 的手工 smoke 建议至少记录：
+
+- War Thunder 已进入战斗，`http://localhost:8111` 可访问
+- `/indicators`、`/state`、`/map_obj.json`、`/map_info.json` 有符合当前场景的数据
+- Bomana 能启动、断连提示合理，恢复 8111 后 UI/导航状态能继续刷新
+- 涉及 HUD、热键、托盘、音效或启动器时，额外验证对应入口的关闭与恢复流程
 
 ### 发布流程（维护者）
 
@@ -153,6 +185,30 @@ Run from source:
 ```bash
 uv run python Bomana.pyw
 ```
+
+### Lightweight Local Validation
+
+The default local smoke path runs only fast regressions that do not require the game. There is no coverage target:
+
+```bash
+tools\scripts\check_smoke.bat
+```
+
+Equivalent command:
+
+```bash
+uv run python -m unittest discover -s tests -p "test_*.py"
+```
+
+Optional development tools:
+
+```bash
+uv sync --extra dev
+uv run pytest
+uv run ruff check <changed Python paths>
+```
+
+`ruff` and `pytest` are development aids. They should not block navigation, telemetry, launcher, or other functional maintenance unless the current change explicitly makes them acceptance criteria.
 
 ### Task Tracking With bd
 
@@ -213,10 +269,18 @@ Keep these in sync with the code:
 
 Relevant changes should be validated with some combination of:
 
+- `tools\scripts\check_smoke.bat`
 - `uv run python Bomana.pyw`
 - focused local static checks
 - real War Thunder SB smoke testing
 - `tools\scripts\build_portable.bat <Variant> <all|app|launcher>` for packaging/release changes
+
+Manual 8111 smoke notes should cover:
+
+- War Thunder is in a battle and `http://localhost:8111` is reachable
+- `/indicators`, `/state`, `/map_obj.json`, and `/map_info.json` return data that matches the current scene
+- Bomana starts, shows a reasonable disconnected state, and resumes UI/navigation updates when 8111 data returns
+- HUD, hotkey, tray, sound, or launcher changes also verify the affected close/recovery path
 
 ### Release Notes For Maintainers
 
