@@ -571,6 +571,36 @@ class MainWindowBuilder:
             )
         return pool
 
+    def _build_panel_close_button(
+        self,
+        parent: tk.Misc,
+        *,
+        panel_key: str,
+        font,
+        scale: float,
+    ) -> tk.Label:
+        app = self.app
+        close_btn = tk.Label(
+            parent,
+            text="×",
+            font=font,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            cursor="hand2",
+            padx=max(4, int(4 * scale)),
+            pady=0,
+        )
+        close_btn.bind("<Button-1>", lambda e, key=panel_key: app._toggle_panel(key))
+        close_btn.bind(
+            "<Enter>",
+            lambda e, btn=close_btn: btn.config(fg=Theme.RED, bg=Theme.BG),
+        )
+        close_btn.bind(
+            "<Leave>",
+            lambda e, btn=close_btn: btn.config(fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL),
+        )
+        return close_btn
+
     def _build_zone_card(self) -> None:
         app = self.app
         s = app.scale
@@ -587,6 +617,7 @@ class MainWindowBuilder:
         app.zone_header_frame.grid(
             row=0, column=0, sticky="ew", padx=pad_x, pady=(int(4 * s), int(2 * s))
         )
+        app.zone_header_frame.grid_columnconfigure(2, weight=1)
         app.zone_title = tk.Label(
             app.zone_header_frame,
             text="导航面板",
@@ -595,7 +626,17 @@ class MainWindowBuilder:
             bg=Theme.GRAYPILL,
             anchor="w",
         )
-        app.zone_title.pack(side="left")
+        app.zone_title.grid(row=0, column=0, sticky="w")
+
+        app.heading_lbl = tk.Label(
+            app.zone_header_frame,
+            text="航向: ---°",
+            font=font_heading,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
+        app.heading_lbl.grid(row=0, column=1, sticky="w", padx=(int(10 * s), 0))
 
         app.standalone_btn = tk.Label(
             app.zone_header_frame,
@@ -607,7 +648,7 @@ class MainWindowBuilder:
             padx=int(6 * s),
             pady=max(1, int(1 * s)),
         )
-        app.standalone_btn.pack(side="left", padx=(int(10 * s), 0))
+        app.standalone_btn.grid(row=0, column=3, sticky="e")
         app.standalone_btn.bind("<Button-1>", lambda e: app._toggle_navigation_mode())
         app.standalone_btn.bind(
             "<Enter>",
@@ -618,16 +659,6 @@ class MainWindowBuilder:
         )
         app.standalone_btn.bind("<Leave>", lambda e: app._update_nav_mode_button())
         app._update_nav_mode_button()
-
-        app.heading_lbl = tk.Label(
-            app.zone_header_frame,
-            text="航向: ---°",
-            font=font_heading,
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="e",
-        )
-        app.heading_lbl.pack(side="right")
 
         if ZoneConfig.HEADING_TAPE_ENABLED:
             app.heading_tape_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
@@ -822,26 +853,50 @@ class MainWindowBuilder:
         app.compact_airport_list = tk.Frame(app.compact_airport_frame, bg=Theme.GRAYPILL)
         app.compact_airport_list.pack(fill="x")
 
+        app.zone_list_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
+        app.zone_list_header_frame.grid(
+            row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s))
+        )
+        app.zone_list_header_frame.grid_columnconfigure(0, weight=1)
         app.zone_list_title_lbl = tk.Label(
-            app.zone_frame,
+            app.zone_list_header_frame,
             text="战区导航",
             font=font_title,
             fg=Theme.TEXT,
             bg=Theme.GRAYPILL,
             anchor="w",
         )
-        app.zone_list_title_lbl.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+        app.zone_list_title_lbl.grid(row=0, column=0, sticky="w")
+        app.zone_close_btn = self._build_panel_close_button(
+            app.zone_list_header_frame,
+            panel_key="show_zones",
+            font=font_item,
+            scale=s,
+        )
+        app.zone_close_btn.grid(row=0, column=1, sticky="e")
         app.zone_list_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.zone_list_frame.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
+        app.airport_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
+        app.airport_header_frame.grid(
+            row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s))
+        )
+        app.airport_header_frame.grid_columnconfigure(0, weight=1)
         app.airport_title_lbl = tk.Label(
-            app.zone_frame,
+            app.airport_header_frame,
             text="机场导航",
             font=font_title,
             fg=Theme.TEXT,
             bg=Theme.GRAYPILL,
             anchor="w",
         )
-        app.airport_title_lbl.grid(row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+        app.airport_title_lbl.grid(row=0, column=0, sticky="w")
+        app.airport_close_btn = self._build_panel_close_button(
+            app.airport_header_frame,
+            panel_key="show_airfields",
+            font=font_item,
+            scale=s,
+        )
+        app.airport_close_btn.grid(row=0, column=1, sticky="e")
         app.airport_tape_frame = None
         app.friendly_heading_tape = None
         app.enemy_heading_tape = None
@@ -880,6 +935,13 @@ class MainWindowBuilder:
             anchor="e",
         )
         app.fuel_return_lbl.pack(side="left", padx=(int(10 * s), 0))
+        app.fuel_close_btn = self._build_panel_close_button(
+            app.fuel_header_frame,
+            panel_key="show_fuel",
+            font=font_item,
+            scale=s,
+        )
+        app.fuel_close_btn.grid(row=0, column=2, sticky="e", padx=(int(10 * s), 0))
         app.fuel_info_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.fuel_info_frame.grid(row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
         app.zone_cdi_lbl = None
@@ -930,6 +992,13 @@ class MainWindowBuilder:
                 anchor="e",
             )
             app.bomb_release_lbl.grid(row=0, column=1, sticky="e")
+            app.bombing_close_btn = self._build_panel_close_button(
+                app.bombing_header_frame,
+                panel_key="show_bombing",
+                font=font_item,
+                scale=s,
+            )
+            app.bombing_close_btn.grid(row=0, column=2, sticky="e", padx=(int(10 * s), 0))
             app.bombing_info_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
             app.bombing_info_frame.grid(
                 row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s))

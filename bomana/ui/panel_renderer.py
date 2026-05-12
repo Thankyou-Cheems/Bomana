@@ -163,7 +163,8 @@ class AppPanelRenderer:
         for widget_name in (
             "compact_nav_frame",
             "zone_list_frame",
-            "airport_title_lbl",
+            "zone_list_header_frame",
+            "airport_header_frame",
             "airport_list_frame",
             "heading_tape_frame",
         ):
@@ -386,7 +387,7 @@ class AppPanelRenderer:
 
             if nav_in_main:
                 self._grid_if_needed(
-                    app.zone_list_title_lbl,
+                    app.zone_list_header_frame,
                     row=3,
                     column=0,
                     sticky="ew",
@@ -402,7 +403,7 @@ class AppPanelRenderer:
                     pady=(0, int(10 * s)),
                 )
             else:
-                self._grid_remove_if_needed(app.zone_list_title_lbl)
+                self._grid_remove_if_needed(app.zone_list_header_frame)
                 self._grid_remove_if_needed(app.zone_list_frame)
 
             if nav_in_main:
@@ -450,7 +451,7 @@ class AppPanelRenderer:
             self._sync_nav_row_visibility(app._compact_zone_row_pool, 0)
         else:
             self._grid_remove_if_needed(app.zone_header_frame)
-            self._grid_remove_if_needed(app.zone_list_title_lbl)
+            self._grid_remove_if_needed(app.zone_list_header_frame)
             self._grid_remove_if_needed(app.zone_list_frame)
             self._grid_remove_if_needed(app.compact_nav_frame)
             app.zone_alert_lbl.config(text="")
@@ -470,7 +471,7 @@ class AppPanelRenderer:
 
             if nav_in_main:
                 self._grid_if_needed(
-                    app.airport_title_lbl,
+                    app.airport_header_frame,
                     row=5,
                     column=0,
                     sticky="ew",
@@ -487,7 +488,7 @@ class AppPanelRenderer:
                 )
                 row_pool = app._airport_row_pool
             else:
-                self._grid_remove_if_needed(app.airport_title_lbl)
+                self._grid_remove_if_needed(app.airport_header_frame)
                 self._grid_remove_if_needed(app.airport_list_frame)
                 row_pool = app._compact_airport_row_pool
 
@@ -539,7 +540,7 @@ class AppPanelRenderer:
             self._sync_nav_row_visibility(app._airport_row_pool, ap_idx if nav_in_main else 0)
             self._sync_nav_row_visibility(app._compact_airport_row_pool, 0)
         else:
-            self._grid_remove_if_needed(app.airport_title_lbl)
+            self._grid_remove_if_needed(app.airport_header_frame)
             if app.airport_tape_frame:
                 self._grid_remove_if_needed(app.airport_tape_frame)
             self._grid_remove_if_needed(app.airport_list_frame)
