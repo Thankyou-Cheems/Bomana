@@ -2,10 +2,10 @@
 """Standalone navigation window."""
 
 import ctypes
-import math
 import tkinter as tk
 
 from bomana.config import UIConfig, Theme, HotkeyConfig, PanelConfig, ZoneConfig
+from bomana.ui.navigation_presenter import build_navigation_tape_model
 from bomana.utils.math_utils import (
     calculate_heading_tape_scale,
     get_cdi_tolerance,
@@ -340,28 +340,6 @@ class NavigationWindow:
         if hasattr(self, 'hint_lbl') and self.hint_lbl:
             self.hint_lbl.config(text=f"[{HotkeyConfig.KEY_LOCK}] 解锁后拖动")
 
-    @staticmethod
-    def _select_display_primary_zone(zones):
-        """Mirror the integrated tape fallback when no explicit target exists."""
-        target_zone = next((zone for zone in zones if getattr(zone, "is_target", False)), None)
-        if target_zone is not None or not zones:
-            return target_zone
-
-        ranked = []
-        for zone in zones:
-            try:
-                rel = float(getattr(zone, "relative", 0.0))
-                dist = float(getattr(zone, "distance_km", 0.0))
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(rel) and math.isfinite(dist):
-                ranked.append((abs(rel), dist, zone))
-
-        if ranked:
-            ranked.sort(key=lambda item: (item[0], item[1]))
-            return ranked[0][2]
-        return zones[0]
-
     def destroy(self):
         """销毁窗口实例（用于主题/缩放热重载）"""
         self._visible = False
@@ -404,52 +382,15 @@ class NavigationWindow:
             self.friendly_info.config(text="", fg=Theme.TEXT_DIM)
             return
 
-        targets = []
-        zone_info = None
-        primary_zone = self._select_display_primary_zone(snap.zones)
-        for zone in snap.zones:
-            is_primary = bool(primary_zone is not None and zone.id == primary_zone.id)
-            targets.append({
-                "type": "zone",
-                "relative": zone.relative,
-                "distance_km": zone.distance_km,
-                "is_primary": is_primary,
-                "is_target": bool(zone.is_target or is_primary),
-            })
-            if is_primary:
-                zone_info = zone
-
-        if getattr(snap, "friendly_airfield", None):
-            af = snap.friendly_airfield
-            is_in_front = abs(af.relative) <= 90
-            targets.append({
-                "type": "friendly",
-                "relative": af.relative,
-                "distance_km": af.distance_km,
-                "is_primary": False,
-                "is_target": is_in_front,
-            })
-
-        if getattr(snap, "enemy_airfields", None):
-            for af in snap.enemy_airfields:
-                is_in_front = abs(af.relative) <= 90
-                targets.append({
-                    "type": "enemy",
-                    "relative": af.relative,
-                    "distance_km": af.distance_km,
-                    "is_primary": False,
-                    "is_target": is_in_front,
-                })
-
-        if getattr(snap, "zone_destroyed_alert", False) and hasattr(self.app.game.state.zone_nav, "destroyed_zones"):
-            for dz in self.app.game.state.zone_nav.destroyed_zones:
-                if hasattr(dz, "relative"):
-                    targets.append({
-                        "type": "destroyed",
-                        "relative": dz.relative,
-                        "distance_km": dz.distance * ZoneConfig.DISTANCE_SCALE,
-                        "is_primary": False,
-                    })
+        destroyed_zones = (
+            self.app.game.state.zone_nav.destroyed_zones
+            if getattr(snap, "zone_destroyed_alert", False)
+            and hasattr(self.app.game.state.zone_nav, "destroyed_zones")
+            else None
+        )
+        model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)
+        targets = model.targets
+        primary_zone = model.primary_zone
 
         primary_dist = primary_zone.distance_km if primary_zone else 10.0
         self.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)

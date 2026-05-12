@@ -37,6 +37,7 @@
 │  │  ├─ hud_overlay.py       # Fullscreen HUD overlay skeleton (v6.8.0)
 │  │  ├─ main_window.py       # Stable main-window skeleton/card layout builder
 │  │  ├─ nav_window.py        # Standalone navigation window
+│  │  ├─ navigation_presenter.py # Shared heading-tape target selection/model helpers
 │  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
@@ -66,6 +67,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `MainWindowBuilder` owns the static card/grid skeleton and pre-allocates fixed label pools for the main window.
    - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
    - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
+   - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
 4. Alerts and sounds via `SoundConfig` + Windows Beep.
 5. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.

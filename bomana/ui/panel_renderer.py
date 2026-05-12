@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Panel rendering helpers for the main App coordinator."""
 
-import math
 import time
 import tkinter as tk
 from typing import Any
@@ -19,6 +18,7 @@ from bomana.config import (
     Theme,
 )
 from bomana.core.state import UISnapshot
+from bomana.ui.navigation_presenter import build_navigation_tape_model
 from bomana.utils.math_utils import (
     calculate_heading_tape_scale,
     get_cdi_tolerance,
@@ -229,34 +229,6 @@ class AppPanelRenderer:
             self.update_mid_panel_layout()
 
     @staticmethod
-    def _select_display_primary_zone(zones: list[Any]) -> Any:
-        """Pick a UI primary zone even when core nav has no active target.
-
-        Some spawn headings can leave all zones outside the target gate. The
-        list still has valid rows, but the tape can look empty because it only
-        shows overflow cues for active targets. For tape rendering only, fall
-        back to the smallest-angle zone without changing core lock state.
-        """
-        target_zone = next((zone for zone in zones if getattr(zone, "is_target", False)), None)
-        if target_zone is not None or not zones:
-            return target_zone
-
-        ranked: list[tuple[float, float, Any]] = []
-        for zone in zones:
-            try:
-                rel = float(getattr(zone, "relative", 0.0))
-                dist = float(getattr(zone, "distance_km", 0.0))
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(rel) and math.isfinite(dist):
-                ranked.append((abs(rel), dist, zone))
-
-        if ranked:
-            ranked.sort(key=lambda item: (item[0], item[1]))
-            return ranked[0][2]
-        return zones[0]
-
-    @staticmethod
     def _set_nav_row(
         row: Any,
         *,
@@ -295,84 +267,13 @@ class AppPanelRenderer:
     def _build_heading_targets(self, snap: UISnapshot) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any]:
         """Build integrated heading-tape targets and status items."""
         app = self.app
-        targets: list[dict[str, Any]] = []
-        active_targets_info: list[dict[str, Any]] = []
-        target_zone = self._select_display_primary_zone(snap.zones)
-
-        for zone in snap.zones:
-            is_primary = bool(target_zone is not None and zone.id == target_zone.id)
-            is_target = bool(zone.is_target or is_primary)
-            targets.append({
-                "type": "zone",
-                "relative": zone.relative,
-                "distance_km": zone.distance_km,
-                "is_primary": is_primary,
-                "is_target": is_target,
-            })
-            if is_primary:
-                active_targets_info.append({
-                    "type": "zone",
-                    "name": "战区",
-                    "icon": "⊚",
-                    "relative": zone.relative,
-                    "distance_km": zone.distance_km,
-                    "ete_str": zone.ete_str if hasattr(zone, "ete_str") else "",
-                    "color": Theme.RED,
-                })
-
-        if snap.zone_destroyed_alert and hasattr(app.game.state.zone_nav, "destroyed_zones"):
-            for dz in app.game.state.zone_nav.destroyed_zones:
-                if hasattr(dz, "relative"):
-                    targets.append({
-                        "type": "destroyed",
-                        "relative": dz.relative,
-                        "distance_km": dz.distance * ZoneConfig.DISTANCE_SCALE,
-                        "is_primary": False,
-                    })
-
-        if snap.friendly_airfield:
-            af = snap.friendly_airfield
-            is_in_front = abs(af.relative) <= 90
-            targets.append({
-                "type": "friendly",
-                "relative": af.relative,
-                "distance_km": af.distance_km,
-                "is_primary": False,
-                "is_target": is_in_front,
-            })
-            if is_in_front:
-                active_targets_info.append({
-                    "type": "friendly",
-                    "name": "友方",
-                    "icon": "✈",
-                    "relative": af.relative,
-                    "distance_km": af.distance_km,
-                    "ete_str": af.ete_str,
-                    "color": Theme.BLUE,
-                })
-
-        if snap.enemy_airfields:
-            for af in snap.enemy_airfields:
-                is_in_front = abs(af.relative) <= 90
-                targets.append({
-                    "type": "enemy",
-                    "relative": af.relative,
-                    "distance_km": af.distance_km,
-                    "is_primary": False,
-                    "is_target": is_in_front,
-                })
-                if af.is_target and is_in_front:
-                    active_targets_info.append({
-                        "type": "enemy",
-                        "name": "敌方",
-                        "icon": "✈",
-                        "relative": af.relative,
-                        "distance_km": af.distance_km,
-                        "ete_str": af.ete_str,
-                        "color": Theme.ORANGE,
-                    })
-
-        return targets, active_targets_info, target_zone
+        destroyed_zones = (
+            app.game.state.zone_nav.destroyed_zones
+            if snap.zone_destroyed_alert and hasattr(app.game.state.zone_nav, "destroyed_zones")
+            else None
+        )
+        model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)
+        return model.targets, model.active_targets_info, model.primary_zone
 
     def update_zone_display(self, snap: UISnapshot):
         """更新战区显示，并返回是否需要重算布局尺寸。"""
