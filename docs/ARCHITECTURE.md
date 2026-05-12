@@ -68,7 +68,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
    - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
-4. Alerts and sounds via `SoundConfig` + Windows Beep.
+4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.

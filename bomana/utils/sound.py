@@ -2,9 +2,11 @@
 """Sound helpers."""
 
 import ctypes
+import queue
 import threading
 import time
 import winsound
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
 
@@ -14,15 +16,34 @@ from bomana.config import SoundConfig
 # 音效管理
 # ============================================================================
 
+@dataclass(frozen=True)
+class _SoundJob:
+    pattern: str
+    freq: int | None
+    duration: int | None
+    custom_file: str | None
+
+
 class SoundManager:
     """音效管理器
     
     使用Windows Beep API播放提示音。
-    在独立线程播放，避免阻塞UI。
+    在单 worker 线程播放，避免阻塞UI和高频创建线程。
     """
+    _STOP = object()
+
     def __init__(self):
         self._lock = threading.Lock()
         self._enabled = False
+        self._busy = False
+        self._stopped = False
+        self._queue: queue.Queue[_SoundJob | object] = queue.Queue()
+        self._worker = threading.Thread(
+            target=self._worker_loop,
+            name="BomanaSoundWorker",
+            daemon=True,
+        )
+        self._worker.start()
     
     def set_enabled(self, enabled: bool):
         self._enabled = enabled
@@ -50,42 +71,75 @@ class SoundManager:
         if not self._enabled and not force and pattern != "on":
             return
         
-        # 防止多个音效重叠
-        if not self._lock.acquire(blocking=False):
-            return
-        
-        try:
-            if freq is not None and duration is not None:
-                # 单音播放
-                def _play_single():
-                    try:
-                        ctypes.windll.kernel32.Beep(int(freq), int(duration))
-                    except:
-                        pass
-                    finally:
-                        self._lock.release()
-                threading.Thread(target=_play_single, daemon=True).start()
+        with self._lock:
+            if self._stopped or self._busy:
                 return
-            
-            # 序列播放
-            seq = self._get_pattern_sequence(pattern)
-            sound_file = self._resolve_custom_sound_file(pattern, custom_file)
+            self._busy = True
 
-            def _play():
+        self._queue.put(_SoundJob(pattern, freq, duration, custom_file))
+
+    def stop(self, *, drain: bool = True, timeout: float = 1.0) -> None:
+        """停止音效 worker。
+
+        Args:
+            drain: True 时等待已接收的播放任务自然结束；False 时丢弃尚未开始的任务。
+            timeout: join 等待秒数，避免长音频文件阻塞退出。
+        """
+        with self._lock:
+            if self._stopped:
+                return
+            self._stopped = True
+
+        if not drain:
+            self._discard_pending_jobs()
+
+        self._queue.put(self._STOP)
+        self._worker.join(timeout=max(0.0, float(timeout)))
+
+    def close(self) -> None:
+        self.stop(drain=True)
+
+    def _discard_pending_jobs(self) -> None:
+        while True:
+            try:
+                job = self._queue.get_nowait()
+            except queue.Empty:
+                return
+            else:
+                self._queue.task_done()
+                if job is self._STOP:
+                    return
+
+    def _worker_loop(self) -> None:
+        while True:
+            job = self._queue.get()
+            try:
+                if job is self._STOP:
+                    return
+                self._play_job(job)
+            finally:
+                if job is not self._STOP:
+                    with self._lock:
+                        self._busy = False
+                self._queue.task_done()
+
+    def _play_job(self, job: _SoundJob) -> None:
+        try:
+            if job.freq is not None and job.duration is not None:
+                ctypes.windll.kernel32.Beep(int(job.freq), int(job.duration))
+                return
+
+            seq = self._get_pattern_sequence(job.pattern)
+            sound_file = self._resolve_custom_sound_file(job.pattern, job.custom_file)
+            if sound_file is not None:
                 try:
-                    if sound_file is not None:
-                        try:
-                            self._play_audio_file(sound_file)
-                            return
-                        except Exception:
-                            pass
-                    self._play_sequence(seq)
-                finally:
-                    self._lock.release()
-            threading.Thread(target=_play, daemon=True).start()
+                    self._play_audio_file(sound_file)
+                    return
+                except Exception:
+                    pass
+            self._play_sequence(seq)
         except Exception:
-            self._lock.release()
-            raise
+            pass
 
     @staticmethod
     def _resolve_custom_sound_file(pattern: str, custom_file: str | None = None) -> Path | None:

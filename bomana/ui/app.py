@@ -1794,6 +1794,11 @@ class App:
             except Exception:
                 pass
             self.hud_overlay = None
+
+        try:
+            self.sound.stop(drain=False)
+        except Exception:
+            pass
         
         SingleInstanceManager.release()
         self.root.destroy()
