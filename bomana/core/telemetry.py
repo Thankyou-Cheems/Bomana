@@ -3,7 +3,9 @@
 
 import math
 import time
+from dataclasses import dataclass
 from typing import Optional, Tuple, Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -13,6 +15,17 @@ from bomana.core.state import TelemetryData, MapInfo, MapObjData, Zone, Airfield
 # ============================================================================
 # 网络请求层
 # ============================================================================
+
+@dataclass(frozen=True)
+class FetchResult:
+    """Diagnostic result for one 8111 JSON endpoint fetch."""
+
+    endpoint: str
+    ok: bool
+    payload: Any | None = None
+    error_kind: str = ""
+    elapsed_ms: float = 0.0
+    status_code: int | None = None
 
 class Budget:
     """时间预算管理
@@ -35,7 +48,12 @@ class HttpJson:
     def __init__(self, session: requests.Session):
         self.session = session
     
-    def get_json(self, url: str, budget: Budget) -> Tuple[bool, Optional[Any]]:
+    @staticmethod
+    def _endpoint_label(url: str) -> str:
+        path = urlparse(url).path
+        return path or url
+
+    def get_json(self, url: str, budget: Budget) -> FetchResult:
         """发起GET请求并解析JSON
         
         Args:
@@ -43,11 +61,13 @@ class HttpJson:
             budget: 时间预算
         
         Returns:
-            (成功标志, JSON数据或None)
+            FetchResult，失败时包含分类诊断信息
         """
+        endpoint = self._endpoint_label(url)
+        start = time.monotonic()
         rem = budget.remaining()
         if rem <= 0.0:
-            return False, None
+            return FetchResult(endpoint=endpoint, ok=False, error_kind="budget_exhausted")
         
         # 计算超时时间
         connect_t = min(NetworkConfig.API_CONNECT_TIMEOUT, max(0.01, rem))
@@ -56,10 +76,44 @@ class HttpJson:
         try:
             r = self.session.get(url, timeout=(connect_t, read_t))
             if not r.ok:
-                return False, None
-            return True, r.json()
-        except (requests.RequestException, ValueError):
-            return False, None
+                return FetchResult(
+                    endpoint=endpoint,
+                    ok=False,
+                    error_kind="status",
+                    elapsed_ms=max(0.0, (time.monotonic() - start) * 1000.0),
+                    status_code=int(r.status_code),
+                )
+            try:
+                payload = r.json()
+            except ValueError:
+                return FetchResult(
+                    endpoint=endpoint,
+                    ok=False,
+                    error_kind="invalid_json",
+                    elapsed_ms=max(0.0, (time.monotonic() - start) * 1000.0),
+                    status_code=int(r.status_code),
+                )
+            return FetchResult(
+                endpoint=endpoint,
+                ok=True,
+                payload=payload,
+                elapsed_ms=max(0.0, (time.monotonic() - start) * 1000.0),
+                status_code=int(r.status_code),
+            )
+        except requests.Timeout:
+            return FetchResult(
+                endpoint=endpoint,
+                ok=False,
+                error_kind="timeout",
+                elapsed_ms=max(0.0, (time.monotonic() - start) * 1000.0),
+            )
+        except requests.RequestException:
+            return FetchResult(
+                endpoint=endpoint,
+                ok=False,
+                error_kind="request_error",
+                elapsed_ms=max(0.0, (time.monotonic() - start) * 1000.0),
+            )
 
 
 class TelemetryFetcher:
@@ -171,9 +225,12 @@ class TelemetryFetcher:
         data = TelemetryData()
         
         # 请求 /indicators (飞机基本信息)
-        ok, j = self.http.get_json(f"{NetworkConfig.API_BASE}/indicators", budget)
-        data.ind_ok = ok
-        if ok and isinstance(j, dict):
+        indicators_result = self.http.get_json(f"{NetworkConfig.API_BASE}/indicators", budget)
+        data.ind_ok = indicators_result.ok
+        data.ind_error_kind = indicators_result.error_kind
+        data.ind_elapsed_ms = indicators_result.elapsed_ms
+        j = indicators_result.payload
+        if indicators_result.ok and isinstance(j, dict):
             data.valid = bool(j.get("valid", False))
             data.type_name = self._read_first_text(
                 j,
@@ -192,9 +249,12 @@ class TelemetryFetcher:
             return data
         
         # 请求 /state (飞机状态)
-        ok, j = self.http.get_json(f"{NetworkConfig.API_BASE}/state", budget)
-        data.state_resp_ok = ok
-        if ok and isinstance(j, dict):
+        state_result = self.http.get_json(f"{NetworkConfig.API_BASE}/state", budget)
+        data.state_resp_ok = state_result.ok
+        data.state_error_kind = state_result.error_kind
+        data.state_elapsed_ms = state_result.elapsed_ms
+        j = state_result.payload
+        if state_result.ok and isinstance(j, dict):
             data.ias_kmh, _ = self._read_scaled_float(
                 j,
                 (
@@ -313,6 +373,7 @@ class MapInfoFetcher:
     """
     def __init__(self, http: HttpJson):
         self.http = http
+        self.last_result = FetchResult(endpoint="/map_info.json", ok=False, error_kind="not_fetched")
     
     def fetch(self, budget: Budget) -> Optional[MapInfo]:
         """获取地图元数据
@@ -323,8 +384,10 @@ class MapInfoFetcher:
         Returns:
             MapInfo对象或None
         """
-        ok, j = self.http.get_json(f"{NetworkConfig.API_BASE}/map_info.json", budget)
-        if not ok or not isinstance(j, dict) or not j.get("valid", False):
+        result = self.http.get_json(f"{NetworkConfig.API_BASE}/map_info.json", budget)
+        self.last_result = result
+        j = result.payload
+        if not result.ok or not isinstance(j, dict) or not j.get("valid", False):
             return None
         
         return MapInfo(
@@ -345,6 +408,7 @@ class MapObjectsFetcher:
     """
     def __init__(self, http: HttpJson):
         self.http = http
+        self.last_result = FetchResult(endpoint="/map_obj.json", ok=False, error_kind="not_fetched")
 
     @staticmethod
     def _text(value: Any) -> str:
@@ -472,8 +536,12 @@ class MapObjectsFetcher:
             MapObjData对象
         """
         out = MapObjData()
-        ok, j = self.http.get_json(f"{NetworkConfig.API_BASE}/map_obj.json", budget)
-        if not ok:
+        result = self.http.get_json(f"{NetworkConfig.API_BASE}/map_obj.json", budget)
+        self.last_result = result
+        out.error_kind = result.error_kind
+        out.elapsed_ms = result.elapsed_ms
+        j = result.payload
+        if not result.ok:
             return out
         
         out.ok = True

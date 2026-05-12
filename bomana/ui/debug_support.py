@@ -566,6 +566,13 @@ class AppDebugSupport:
                 f"type={int(source_dbg.has_type_name)}"
             ),
             (
+                f"FETCH: ind={source_dbg.indicators_error_kind or 'ok'} "
+                f"{source_dbg.indicators_elapsed_ms:.1f}ms | "
+                f"state={source_dbg.state_error_kind or 'ok'} {source_dbg.state_elapsed_ms:.1f}ms | "
+                f"map={source_dbg.map_error_kind or 'ok'} {source_dbg.map_elapsed_ms:.1f}ms | "
+                f"map_info={source_dbg.map_info_error_kind or 'ok'} {source_dbg.map_info_elapsed_ms:.1f}ms"
+            ),
+            (
                 f"PERF: tick={perf.tick_total_ms:.1f}ms net={perf.tick_net_ms:.1f}ms "
                 f"lock_wait={perf.tick_lock_wait_ms:.1f}ms lock_hold={perf.tick_lock_hold_ms:.1f}ms "
                 f"snap_wait={perf.snapshot_wait_ms:.1f}ms"

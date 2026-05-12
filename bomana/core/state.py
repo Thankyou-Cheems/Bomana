@@ -49,6 +49,10 @@ class TelemetryData:
     attitude_roll_present: bool = False
     attitude_bank_present: bool = False
     attitude_available: bool = False
+    ind_error_kind: str = ""
+    ind_elapsed_ms: float = 0.0
+    state_error_kind: str = ""
+    state_elapsed_ms: float = 0.0
 
     @property
     def entity_like(self) -> bool:
@@ -121,6 +125,8 @@ class MapObjData:
     player_dx: float = 0.0                          # 玩家速度向量X
     player_dy: float = 0.0                          # 玩家速度向量Y
     obj_count: int = 0                              # 对象总数
+    error_kind: str = ""
+    elapsed_ms: float = 0.0
     zones: List[Zone] = field(default_factory=list)           # 战区列表
     airfields: List[Airfield] = field(default_factory=list)   # 机场列表
 
@@ -446,6 +452,8 @@ class GameState:
     perf_tick_net_ms: float = 0.0
     perf_tick_lock_wait_ms: float = 0.0
     perf_tick_lock_hold_ms: float = 0.0
+    map_info_error_kind: str = "not_fetched"
+    map_info_elapsed_ms: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -498,6 +506,14 @@ class SourceDebugInfo:
     indicators_valid: bool = False
     has_type_name: bool = False
     state_ok: bool = False
+    indicators_error_kind: str = ""
+    state_error_kind: str = ""
+    map_error_kind: str = ""
+    map_info_error_kind: str = ""
+    indicators_elapsed_ms: float = 0.0
+    state_elapsed_ms: float = 0.0
+    map_elapsed_ms: float = 0.0
+    map_info_elapsed_ms: float = 0.0
 
 
 @dataclass(frozen=True)

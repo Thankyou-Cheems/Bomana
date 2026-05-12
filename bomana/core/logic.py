@@ -146,10 +146,17 @@ class GameLogic:
 
         if need_map_info and budget.remaining() > 0.05:
             new_map_info = self.map_info_fetcher.fetch(budget)
+            map_info_result = self.map_info_fetcher.last_result
             if new_map_info:
                 with self._lock:
                     self.state.map_info = new_map_info
                     map_info = new_map_info
+                    self.state.map_info_error_kind = ""
+                    self.state.map_info_elapsed_ms = map_info_result.elapsed_ms
+            else:
+                with self._lock:
+                    self.state.map_info_error_kind = map_info_result.error_kind
+                    self.state.map_info_elapsed_ms = map_info_result.elapsed_ms
 
         # 3. 获取地图对象
         mp = self.map.fetch(budget, map_info)
@@ -1001,6 +1008,8 @@ class GameLogic:
 
             gear_stable_pct = s.gear_stable_pct
             gear_stable_direction = s.gear_stable_direction
+            map_info_error_kind = s.map_info_error_kind
+            map_info_elapsed_ms = s.map_info_elapsed_ms
 
             bombing_calc_valid = s.bombing_calc_valid
             cached_bomb_flight_time = s.cached_bomb_flight_time
@@ -1025,6 +1034,14 @@ class GameLogic:
                 indicators_valid=bool(tel.valid),
                 has_type_name=bool(tel.type_name),
                 state_ok=bool(tel.state_resp_ok),
+                indicators_error_kind=str(tel.ind_error_kind or ""),
+                state_error_kind=str(tel.state_error_kind or ""),
+                map_error_kind=str(mp.error_kind or ""),
+                map_info_error_kind=str(map_info_error_kind or ""),
+                indicators_elapsed_ms=float(tel.ind_elapsed_ms or 0.0),
+                state_elapsed_ms=float(tel.state_elapsed_ms or 0.0),
+                map_elapsed_ms=float(mp.elapsed_ms or 0.0),
+                map_info_elapsed_ms=float(map_info_elapsed_ms or 0.0),
             )
 
         remaining = None
