@@ -159,7 +159,7 @@ class GameLogic:
                     self.state.map_info_elapsed_ms = map_info_result.elapsed_ms
 
         # 3. 获取地图对象
-        mp = self.map.fetch(budget, map_info)
+        mp = self.map.fetch(budget)
 
         # 4. 记录原始API状态（后续可能在锁内应用短时缓存兜底）
         raw_api_up = bool(tel.ind_ok or tel.state_resp_ok or mp.ok)

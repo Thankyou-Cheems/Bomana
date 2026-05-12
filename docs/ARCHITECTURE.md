@@ -113,6 +113,11 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - CCRP bombing predictor
 - UI overlays & global hotkeys
 
+## 8111 Map Coordinate Contract
+- `MapInfoFetcher` owns `/map_info.json` retrieval and cache refresh timing on `GameState.map_info`.
+- `MapObjectsFetcher` owns `/map_obj.json` parsing only. It returns player, zone, and airfield positions in the normalized coordinates provided by 8111 and does not accept or interpret `map_info`.
+- `GameLogic` owns coordinate semantics for navigation. It derives X/Y meter scale from cached `MapInfo.map_min/map_max` and applies that scale when calculating bearing, distance, ground speed, and airfield/zone display values.
+
 ## UI Stability & Performance Guardrails
 - Keep panel containers structurally stable during transient 8111 data drops (avoid frame-level mount/unmount churn).
 - In `ALIVE/LOSS_PENDING`, treat short `/map_obj.json` jitter conservatively by combining map presence with telemetry entity signals.

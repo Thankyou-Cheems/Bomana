@@ -405,6 +405,7 @@ class MapObjectsFetcher:
     """地图对象获取器
     
     解析/map_obj.json，提取玩家、战区、机场信息。
+    坐标保持8111返回的归一化地图坐标；map_info 尺度换算由逻辑层负责。
     """
     def __init__(self, http: HttpJson):
         self.http = http
@@ -525,12 +526,11 @@ class MapObjectsFetcher:
             "bomb_target" in icon
         )
     
-    def fetch(self, budget: Budget, map_info: Optional[MapInfo] = None) -> MapObjData:
+    def fetch(self, budget: Budget) -> MapObjData:
         """获取地图对象
         
         Args:
             budget: 时间预算
-            map_info: 地图元数据（为兼容保留，当前不用于格子转换）
         
         Returns:
             MapObjData对象
@@ -586,7 +586,7 @@ class MapObjectsFetcher:
                     if cx is None or cy is None:
                         continue
 
-                # 仅保留归一化坐标。格子坐标换算已停用。
+                # 仅保留归一化坐标。距离/方位的米制尺度换算在 GameLogic 中完成。
                 wx, wy = cx, cy
 
                 # 判断归属：优先 side/team 字段，回退到蓝色通道启发式。
