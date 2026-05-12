@@ -136,6 +136,7 @@ class GameLogic:
         raw_tel = tel
 
         # 2. 检查是否需要更新地图元数据（30秒缓存）
+        map_info_result = None
         with self._lock:
             map_info = self.state.map_info
             need_map_info = (
@@ -160,6 +161,7 @@ class GameLogic:
 
         # 3. 获取地图对象
         mp = self.map.fetch(budget)
+        raw_mp = mp
 
         # 4. 记录原始API状态（后续可能在锁内应用短时缓存兜底）
         raw_api_up = bool(tel.ind_ok or tel.state_resp_ok or mp.ok)
@@ -196,6 +198,14 @@ class GameLogic:
                     if map_unstable and prev_map and prev_map.ok:
                         mp = prev_map
                         used_map_fallback = True
+
+                self._update_source_diagnostics_locked(
+                    raw_tel=raw_tel,
+                    raw_map=raw_mp,
+                    map_info_result=map_info_result,
+                    used_tel_fallback=used_tel_fallback,
+                    used_map_fallback=used_map_fallback,
+                )
 
                 api_up = bool(raw_api_up or used_tel_fallback or used_map_fallback)
                 s.last_tel = tel
@@ -399,6 +409,53 @@ class GameLogic:
         bearing = calculate_bearing(px, py, tx, ty)
         distance_norm = calculate_distance(px, py, tx, ty)
         return bearing, distance_norm
+
+    def _record_endpoint_diagnostic_locked(self, ok: bool, streak_attr: str, count_attr: str) -> None:
+        """Update per-endpoint failure counters (must be called with lock held)."""
+        if ok:
+            setattr(self.state, streak_attr, 0)
+            return
+        setattr(self.state, streak_attr, getattr(self.state, streak_attr) + 1)
+        setattr(self.state, count_attr, getattr(self.state, count_attr) + 1)
+
+    def _update_source_diagnostics_locked(
+        self,
+        raw_tel: TelemetryData,
+        raw_map: MapObjData,
+        map_info_result: Optional[Any],
+        used_tel_fallback: bool,
+        used_map_fallback: bool,
+    ) -> None:
+        """Record raw 8111 endpoint health before sticky fallbacks are applied."""
+        s = self.state
+        self._record_endpoint_diagnostic_locked(
+            bool(raw_tel.ind_ok),
+            "indicators_failure_streak",
+            "indicators_failure_count",
+        )
+        self._record_endpoint_diagnostic_locked(
+            bool(raw_tel.state_resp_ok),
+            "state_failure_streak",
+            "state_failure_count",
+        )
+        self._record_endpoint_diagnostic_locked(
+            bool(raw_map.ok),
+            "map_failure_streak",
+            "map_failure_count",
+        )
+        if map_info_result is not None:
+            self._record_endpoint_diagnostic_locked(
+                bool(map_info_result.ok),
+                "map_info_failure_streak",
+                "map_info_failure_count",
+            )
+
+        s.tel_fallback_active = bool(used_tel_fallback)
+        s.map_fallback_active = bool(used_map_fallback)
+        if used_tel_fallback:
+            s.tel_fallback_count += 1
+        if used_map_fallback:
+            s.map_fallback_count += 1
 
     def _update_attitude_confidence_locked(self, tel: TelemetryData, now: float) -> None:
         """更新姿态可信度（须在锁内调用）。"""
@@ -1042,6 +1099,18 @@ class GameLogic:
                 state_elapsed_ms=float(tel.state_elapsed_ms or 0.0),
                 map_elapsed_ms=float(mp.elapsed_ms or 0.0),
                 map_info_elapsed_ms=float(map_info_elapsed_ms or 0.0),
+                indicators_failure_streak=int(s.indicators_failure_streak),
+                state_failure_streak=int(s.state_failure_streak),
+                map_failure_streak=int(s.map_failure_streak),
+                map_info_failure_streak=int(s.map_info_failure_streak),
+                indicators_failure_count=int(s.indicators_failure_count),
+                state_failure_count=int(s.state_failure_count),
+                map_failure_count=int(s.map_failure_count),
+                map_info_failure_count=int(s.map_info_failure_count),
+                tel_fallback_count=int(s.tel_fallback_count),
+                map_fallback_count=int(s.map_fallback_count),
+                tel_fallback_active=bool(s.tel_fallback_active),
+                map_fallback_active=bool(s.map_fallback_active),
             )
 
         remaining = None

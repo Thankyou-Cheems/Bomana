@@ -573,6 +573,14 @@ class AppDebugSupport:
                 f"map_info={source_dbg.map_info_error_kind or 'ok'} {source_dbg.map_info_elapsed_ms:.1f}ms"
             ),
             (
+                f"STREAK: ind={source_dbg.indicators_failure_streak}/{source_dbg.indicators_failure_count} "
+                f"state={source_dbg.state_failure_streak}/{source_dbg.state_failure_count} "
+                f"map={source_dbg.map_failure_streak}/{source_dbg.map_failure_count} "
+                f"info={source_dbg.map_info_failure_streak}/{source_dbg.map_info_failure_count} "
+                f"sticky=tel:{int(source_dbg.tel_fallback_active)}/{source_dbg.tel_fallback_count} "
+                f"map:{int(source_dbg.map_fallback_active)}/{source_dbg.map_fallback_count}"
+            ),
+            (
                 f"PERF: tick={perf.tick_total_ms:.1f}ms net={perf.tick_net_ms:.1f}ms "
                 f"lock_wait={perf.tick_lock_wait_ms:.1f}ms lock_hold={perf.tick_lock_hold_ms:.1f}ms "
                 f"snap_wait={perf.snapshot_wait_ms:.1f}ms"

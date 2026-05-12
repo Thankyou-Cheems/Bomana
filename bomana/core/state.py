@@ -454,6 +454,18 @@ class GameState:
     perf_tick_lock_hold_ms: float = 0.0
     map_info_error_kind: str = "not_fetched"
     map_info_elapsed_ms: float = 0.0
+    indicators_failure_streak: int = 0
+    state_failure_streak: int = 0
+    map_failure_streak: int = 0
+    map_info_failure_streak: int = 0
+    indicators_failure_count: int = 0
+    state_failure_count: int = 0
+    map_failure_count: int = 0
+    map_info_failure_count: int = 0
+    tel_fallback_count: int = 0
+    map_fallback_count: int = 0
+    tel_fallback_active: bool = False
+    map_fallback_active: bool = False
 
 
 @dataclass(frozen=True)
@@ -514,6 +526,18 @@ class SourceDebugInfo:
     state_elapsed_ms: float = 0.0
     map_elapsed_ms: float = 0.0
     map_info_elapsed_ms: float = 0.0
+    indicators_failure_streak: int = 0
+    state_failure_streak: int = 0
+    map_failure_streak: int = 0
+    map_info_failure_streak: int = 0
+    indicators_failure_count: int = 0
+    state_failure_count: int = 0
+    map_failure_count: int = 0
+    map_info_failure_count: int = 0
+    tel_fallback_count: int = 0
+    map_fallback_count: int = 0
+    tel_fallback_active: bool = False
+    map_fallback_active: bool = False
 
 
 @dataclass(frozen=True)
