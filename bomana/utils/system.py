@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
 """System/Windows helpers."""
 
-import os
-import sys
 import ctypes
 import locale
+import os
+import sys
 import threading
-from typing import Optional, Tuple, Any, List, Dict, Callable
-
 import tkinter as tk
-from tkinter import messagebox
 from tkinter import font as tkfont
+from tkinter import messagebox
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from bomana.config import FileConfig, HotkeyConfig
 

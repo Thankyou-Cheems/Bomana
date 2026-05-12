@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """Core state models and enums."""
 
-from dataclasses import dataclass, field
 from collections import deque
+from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional, Tuple, Any, List, Dict
+from typing import List, Optional, Tuple
 
-from bomana.config import GameConfig, FuelConfig
+from bomana.config import FuelConfig, GameConfig
 
 # ============================================================================
 # 数据结构定义

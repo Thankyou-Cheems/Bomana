@@ -39,6 +39,7 @@
 │  │  ├─ nav_window.py        # Standalone navigation window
 │  │  ├─ navigation_presenter.py # Shared heading-tape target selection/model helpers
 │  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
+│  │  ├─ runtime.py           # Tk dispatch + runtime worker thread helpers
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
 │     ├─ file_utils.py        # Config/state/resource helpers
@@ -68,6 +69,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
    - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
+   - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
@@ -112,6 +114,13 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - Fuel management
 - CCRP bombing predictor
 - UI overlays & global hotkeys
+
+## Runtime Thread Boundary
+- Tk widgets are owned by the Tk main thread. Background callbacks must use `TkEventDispatcher.post()` or an existing `root.after(0, ...)` bridge before touching UI state.
+- `LogicPoller` owns the `GameLogic.tick()` background loop. It samples 8111 data and updates core state only; UI reads immutable `UISnapshot` values from the main refresh loop.
+- `GlobalHotkeys` listens on a Windows message thread and posts configured callbacks back to Tk.
+- `pystray` runs on a daemon tray thread. Menu callbacks must dispatch UI actions through `TkEventDispatcher` instead of calling app methods directly.
+- `SoundManager` owns its own worker queue for audio playback. UI code enqueues sound requests and does not block on playback.
 
 ## 8111 Map Coordinate Contract
 - `MapInfoFetcher` owns `/map_info.json` retrieval and cache refresh timing on `GameState.map_info`.

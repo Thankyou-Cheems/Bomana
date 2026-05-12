@@ -1,22 +1,28 @@
 # -*- coding: utf-8 -*-
 """Standalone navigation window."""
 
+from __future__ import annotations
+
 import ctypes
 import tkinter as tk
+from typing import TYPE_CHECKING
 
-from bomana.config import UIConfig, Theme, HotkeyConfig, PanelConfig, ZoneConfig
+from bomana.config import HotkeyConfig, PanelConfig, Theme, UIConfig, ZoneConfig
 from bomana.ui.navigation_presenter import build_navigation_tape_model
-from bomana.utils.math_utils import (
-    calculate_heading_tape_scale,
-    get_cdi_tolerance,
-    calculate_zone_turn_indicator,
-    calculate_zone_status,
-    calculate_airfield_turn_indicator,
-    calculate_airfield_status,
-    format_distance_ete,
-)
 from bomana.ui.widgets import HeadingTape
+from bomana.utils.math_utils import (
+    calculate_airfield_status,
+    calculate_airfield_turn_indicator,
+    calculate_heading_tape_scale,
+    calculate_zone_status,
+    calculate_zone_turn_indicator,
+    format_distance_ete,
+    get_cdi_tolerance,
+)
 from bomana.utils.system import Win32
+
+if TYPE_CHECKING:
+    from bomana.core.state import UISnapshot
 
 # ============================================================================
 # 独立导航窗口
@@ -283,9 +289,8 @@ class NavigationWindow:
     
     def _reset_position(self):
         """重置窗口位置到屏幕中央"""
-        sw, sh = Win32.screen_size()
+        sw, _ = Win32.screen_size()
         w = self.window.winfo_width()
-        h = self.window.winfo_height()
         x = (sw - w) // 2
         y = 50  # 靠近顶部
         self.window.geometry(f"+{x}+{y}")
@@ -356,7 +361,7 @@ class NavigationWindow:
             except Exception:
                 pass
     
-    def update_display(self, snap: 'UISnapshot'):
+    def update_display(self, snap: UISnapshot):
         """更新独立导航窗显示（简洁航向带版）。"""
         if not self._visible:
             return

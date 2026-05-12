@@ -2,7 +2,7 @@
 import argparse
 import re
 from pathlib import Path
-import sys
+
 
 def read_version(config_path):
     try:

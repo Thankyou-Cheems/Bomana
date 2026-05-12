@@ -4,13 +4,13 @@
 import math
 import time
 from dataclasses import dataclass
-from typing import Optional, Tuple, Any
+from typing import Any, Optional, Tuple
 from urllib.parse import urlparse
 
 import requests
 
 from bomana.config import NetworkConfig
-from bomana.core.state import TelemetryData, MapInfo, MapObjData, Zone, Airfield
+from bomana.core.state import Airfield, MapInfo, MapObjData, TelemetryData, Zone
 
 # ============================================================================
 # 网络请求层

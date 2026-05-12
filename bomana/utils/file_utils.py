@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
 """File/config helpers."""
 
+import json
 import os
 import sys
-import json
-import time
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Any, Dict, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from bomana.config import (
+    ENABLE_AIRFIELDS,
+    ENABLE_CCRP,
+    ENABLE_CHECKLIST,
+    ENABLE_FUEL,
+    ENABLE_ZONES,
     FileConfig,
     GameConfig,
-    ENABLE_CCRP,
-    ENABLE_ZONES,
-    ENABLE_AIRFIELDS,
-    ENABLE_FUEL,
-    ENABLE_CHECKLIST,
 )
 
 
@@ -82,7 +82,7 @@ def resource_path(rel_path: str) -> str:
         if base and base not in candidates:
             candidates.append(base)
     if hasattr(sys, "_MEIPASS"):
-        mei_root = str(getattr(sys, "_MEIPASS"))
+        mei_root = str(sys._MEIPASS)
         if mei_root and mei_root not in candidates:
             candidates.append(mei_root)
     if not candidates:

@@ -4,7 +4,8 @@
 import math
 from typing import Optional, Tuple
 
-from bomana.config import ZoneConfig, Theme
+from bomana.config import Theme, ZoneConfig
+
 
 def calculate_smart_scale(screen_width: int, screen_height: int, base_dpi_scale: float) -> float:
     """根据屏幕分辨率智能计算UI缩放倍数（v5.9.3新增）

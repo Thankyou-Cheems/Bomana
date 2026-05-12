@@ -5,7 +5,7 @@ from dataclasses import replace
 from typing import Any
 
 from bomana.config import BombConfig, Theme, UIConfig
-from bomana.core.state import UISnapshot, Phase, ZoneDisplayInfo, AirfieldDisplayInfo
+from bomana.core.state import AirfieldDisplayInfo, Phase, UISnapshot, ZoneDisplayInfo
 
 
 class AppDebugSupport:

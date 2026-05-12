@@ -3,12 +3,20 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import tkinter as tk
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from bomana.config import ENABLE_CCRP, UIConfig, ZoneConfig, OverspeedConfig, Theme, BombConfig, PanelConfig
-from bomana.ui.widgets import Pill, HeadingTape
+from bomana.config import (
+    ENABLE_CCRP,
+    BombConfig,
+    OverspeedConfig,
+    PanelConfig,
+    Theme,
+    UIConfig,
+    ZoneConfig,
+)
+from bomana.ui.widgets import HeadingTape, Pill
 
 if TYPE_CHECKING:
     from bomana.ui.app import App

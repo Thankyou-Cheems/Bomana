@@ -31,6 +31,7 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 100
+respect-gitignore = false
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]

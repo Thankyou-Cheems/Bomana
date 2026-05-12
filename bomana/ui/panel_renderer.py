@@ -6,27 +6,27 @@ import tkinter as tk
 from typing import Any
 
 from bomana.config import (
-    ENABLE_CCRP,
-    ENABLE_ZONES,
     ENABLE_AIRFIELDS,
+    ENABLE_CCRP,
     ENABLE_FUEL,
-    PanelConfig,
-    ZoneConfig,
+    ENABLE_ZONES,
     BombConfig,
     FuelConfig,
     OverspeedConfig,
+    PanelConfig,
     Theme,
+    ZoneConfig,
 )
 from bomana.core.state import UISnapshot
 from bomana.ui.navigation_presenter import build_navigation_tape_model
 from bomana.utils.math_utils import (
-    calculate_heading_tape_scale,
-    get_cdi_tolerance,
-    calculate_zone_turn_indicator,
-    calculate_zone_status,
-    calculate_airfield_turn_indicator,
     calculate_airfield_status,
+    calculate_airfield_turn_indicator,
+    calculate_heading_tape_scale,
+    calculate_zone_status,
+    calculate_zone_turn_indicator,
     format_distance_ete,
+    get_cdi_tolerance,
 )
 
 

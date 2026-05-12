@@ -1,57 +1,58 @@
-# -*- coding: utf-8 -*-        - hint_min_width: 提示文字最小宽度，根据编译开关动态计算
+# -*- coding: utf-8 -*-
 """Main Tk app container."""
 
 import ctypes
 import os
-import threading
 import time
 import tkinter as tk
 import webbrowser
-from tkinter import font as tkfont
 from enum import Enum
-from typing import Optional, Tuple, Any, List, Dict
+from tkinter import font as tkfont
+from tkinter import messagebox
+from typing import Any, Dict, List, Optional, Tuple
 
 from bomana.config import (
-    __title__,
-    ENABLE_CCRP,
-    ENABLE_ZONES,
-    ENABLE_AIRFIELDS,
-    ENABLE_FUEL,
-    ENABLE_CHECKLIST,
     ENABLE_ADVANCED_SETTINGS,
-    UIConfig,
-    ZoneConfig,
-    PanelConfig,
-    HUDConfig,
-    HotkeyConfig,
-    SnapConfig,
+    ENABLE_AIRFIELDS,
+    ENABLE_CCRP,
+    ENABLE_CHECKLIST,
+    ENABLE_FUEL,
+    ENABLE_ZONES,
+    AboutConfig,
+    BallisticPhysicsParams,
     BombConfig,
     ChecklistConfig,
-    SoundConfig,
+    FileConfig,
     GameConfig,
-    NetworkConfig,
+    HotkeyConfig,
+    HUDConfig,
     OverspeedConfig,
-    BallisticPhysicsParams,
+    PanelConfig,
+    SnapConfig,
+    SoundConfig,
     Theme,
-    AboutConfig,
+    UIConfig,
+    ZoneConfig,
+    __title__,
 )
 from bomana.core.logic import GameLogic
-from bomana.core.state import UISnapshot, Phase
-from bomana.utils.file_utils import ConfigManager, resource_path
-from bomana.config import FileConfig
-from bomana.utils.system import Win32, GlobalHotkeys, SingleInstanceManager, select_ui_font_family
-from bomana.utils.sound import SoundManager
-from bomana.utils.math_utils import calculate_smart_scale
+from bomana.core.state import Phase, UISnapshot
 from bomana.ui.debug_support import AppDebugSupport
-from bomana.ui.dialogs import SettingsDialog, ChecklistEditor, BombSelectorDialog, AboutDialog
-from bomana.ui.nav_window import NavigationWindow
+from bomana.ui.dialogs import AboutDialog, BombSelectorDialog, ChecklistEditor, SettingsDialog
 from bomana.ui.hud_overlay import HUDOverlay
-from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.main_window import MainWindowBuilder
+from bomana.ui.nav_window import NavigationWindow
+from bomana.ui.panel_renderer import AppPanelRenderer
+from bomana.ui.runtime import LogicPoller, TkEventDispatcher, start_daemon_thread
+from bomana.utils.file_utils import ConfigManager, resource_path
+from bomana.utils.math_utils import calculate_smart_scale
+from bomana.utils.sound import SoundManager
+from bomana.utils.system import GlobalHotkeys, SingleInstanceManager, Win32, select_ui_font_family
 
 try:
-    from PIL import Image
     import pystray
+    from PIL import Image
+
     HAS_TRAY = True
 except ImportError:
     HAS_TRAY = False
@@ -95,6 +96,8 @@ class App:
         self.root = root
         self.game = GameLogic()
         self.sound = SoundManager()
+        self.dispatcher = TkEventDispatcher(root)
+        self.logic_poller = LogicPoller(self.game, lambda: self._stop)
         
         # 控制标志
         self._stop = False
@@ -191,7 +194,7 @@ class App:
 
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
-        threading.Thread(target=self._poll_loop, daemon=True).start()
+        self.logic_poller.start()
         self._update_ui()
 
         if HAS_TRAY:
@@ -748,40 +751,40 @@ class App:
         
         # 回调函数（需要在主线程执行）
         def do_reset(icon, item):
-            app.root.after(0, app._manual_reset)
+            app.dispatcher.post(app._manual_reset)
         
         def do_lock(icon, item):
-            app.root.after(0, app._toggle_lock)
+            app.dispatcher.post(app._toggle_lock)
         
         def do_corner(icon, item):
-            app.root.after(0, app._next_corner)
+            app.dispatcher.post(app._next_corner)
         
         def do_beep(icon, item):
-            app.root.after(0, app._toggle_beep)
+            app.dispatcher.post(app._toggle_beep)
         
         def do_zone_sound(icon, item):
-            app.root.after(0, app._toggle_zone_sound)
+            app.dispatcher.post(app._toggle_zone_sound)
 
         def do_speed_history(icon, item):
-            app.root.after(0, app._toggle_speed_history_mode)
+            app.dispatcher.post(app._toggle_speed_history_mode)
 
         def do_edit_checklist(icon, item):
-            app.root.after(0, app._edit_checklist)
+            app.dispatcher.post(app._edit_checklist)
         
         def do_settings(icon, item):
-            app.root.after(0, app._show_settings)
+            app.dispatcher.post(app._show_settings)
         
         def do_debug(icon, item):
-            app.root.after(0, app._toggle_debug)
+            app.dispatcher.post(app._toggle_debug)
         
         def do_quit(icon, item):
-            app.root.after(0, app._quit)
+            app.dispatcher.post(app._quit)
 
         def do_about(icon, item):
-            app.root.after(0, app._show_about)
+            app.dispatcher.post(app._show_about)
         
         def do_star(icon, item):
-            app.root.after(0, app._open_star_url)
+            app.dispatcher.post(app._open_star_url)
 
         # 状态检查函数
         def is_locked(item):
@@ -812,22 +815,22 @@ class App:
         if ENABLE_ADVANCED_SETTINGS:
             # 面板开关回调
             def toggle_zone(icon, item):
-                app.root.after(0, lambda: app._toggle_panel('show_zones'))
+                app.dispatcher.post(app._toggle_panel, 'show_zones')
             
             def toggle_airfield(icon, item):
-                app.root.after(0, lambda: app._toggle_panel('show_airfields'))
+                app.dispatcher.post(app._toggle_panel, 'show_airfields')
             
             def toggle_fuel(icon, item):
-                app.root.after(0, lambda: app._toggle_panel('show_fuel'))
+                app.dispatcher.post(app._toggle_panel, 'show_fuel')
 
             def toggle_speed(icon, item):
-                app.root.after(0, lambda: app._toggle_panel('show_speed'))
+                app.dispatcher.post(app._toggle_panel, 'show_speed')
 
             def toggle_checklist(icon, item):
-                app.root.after(0, lambda: app._toggle_panel('show_checklist'))
+                app.dispatcher.post(app._toggle_panel, 'show_checklist')
             
             def toggle_bombing(icon, item):
-                app.root.after(0, lambda: app._toggle_panel('show_bombing'))
+                app.dispatcher.post(app._toggle_panel, 'show_bombing')
             
             def is_zone_panel(item):
                 return PanelConfig.is_effectively_enabled('zones')
@@ -867,7 +870,7 @@ class App:
             # v6.2.1: 导航条模式切换
             if ENABLE_ZONES:
                 def toggle_nav_mode(icon, item):
-                    app.root.after(0, app._toggle_navigation_mode)
+                    app.dispatcher.post(app._toggle_navigation_mode)
                 
                 def is_standalone_nav(item):
                     return PanelConfig.navigation_mode == "standalone"
@@ -901,7 +904,7 @@ class App:
         menu = pystray.Menu(*menu_items)
         
         self.tray = pystray.Icon(__title__, icon(), __title__, menu)
-        threading.Thread(target=self.tray.run, daemon=True).start()
+        start_daemon_thread("BomanaTray", self.tray.run)
 
     def _toggle_debug(self):
         self.debug_support.toggle_debug()
@@ -1779,13 +1782,13 @@ class App:
         try:
             if getattr(self, "_ghk", None):
                 self._ghk.stop()
-        except:
+        except Exception:
             pass
         
         if HAS_TRAY and hasattr(self, "tray"):
             try:
                 self.tray.stop()
-            except:
+            except Exception:
                 pass
 
         if self.hud_overlay:
@@ -1849,23 +1852,6 @@ class App:
             self._save_config()
         except tk.TclError:
             pass
-
-    def _poll_loop(self):
-        """逻辑轮询循环(独立线程)
-        
-        优化: 使用轻量级is_api_down属性而非完整snapshot()决定轮询间隔
-        """
-        while not self._stop:
-            loop_start = time.monotonic()
-            try:
-                self.game.tick()
-            except Exception:
-                time.sleep(NetworkConfig.BACKOFF_MAX)
-                continue
-            # 使用轻量级属性替代完整snapshot
-            interval = NetworkConfig.BACKOFF_MAX if self.game.is_api_down else NetworkConfig.POLL_INTERVAL
-            elapsed = time.monotonic() - loop_start
-            time.sleep(max(0.0, interval - elapsed))
 
     def _update_mid_panel_layout(self):
         self.panel_renderer.update_mid_panel_layout()

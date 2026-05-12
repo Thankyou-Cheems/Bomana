@@ -1,46 +1,42 @@
 # -*- coding: utf-8 -*-
 """Dialogs and popups."""
 
-import tkinter as tk
-from tkinter import filedialog, messagebox
-import webbrowser
 import shutil
 import time
-from tkinter import font as tkfont
+import tkinter as tk
+import webbrowser
+from importlib.util import find_spec
 from pathlib import Path
+from tkinter import filedialog, messagebox
+from tkinter import font as tkfont
 
 from bomana.config import (
     ENABLE_ADVANCED_SETTINGS,
-    ENABLE_ZONES,
     ENABLE_AIRFIELDS,
-    ENABLE_FUEL,
-    ENABLE_CHECKLIST,
     ENABLE_CCRP,
-    UIConfig,
-    HUDConfig,
-    PanelConfig,
-    HotkeyConfig,
-    SnapConfig,
+    ENABLE_CHECKLIST,
+    ENABLE_FUEL,
+    ENABLE_ZONES,
+    AboutConfig,
+    BallisticPhysicsParams,
     BombConfig,
     ChecklistConfig,
-    SoundConfig,
-    OverspeedConfig,
-    BallisticPhysicsParams,
-    AboutConfig,
     FileConfig,
+    HotkeyConfig,
+    HUDConfig,
+    OverspeedConfig,
+    PanelConfig,
+    SnapConfig,
+    SoundConfig,
     Theme,
+    UIConfig,
 )
 from bomana.core.overspeed import SpeedLimitDatabase
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.system import Win32
 
-# Optional dependencies for images (match HAS_TRAY behavior)
-try:
-    from PIL import Image
-    import pystray  # noqa: F401
-    HAS_TRAY = True
-except ImportError:
-    HAS_TRAY = False
+# Optional dependencies for images (match HAS_TRAY behavior).
+HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 
 class _ScalableDialogMixin:
     """可缩放窗口通用逻辑（适配屏幕 + 动态字体缩放）"""
@@ -127,7 +123,7 @@ class _ScalableDialogMixin:
             self._init_dynamic_scaling()
             return
 
-        for widget, (font_obj, base_size) in list(self._scaled_fonts.items()):
+        for _widget, (font_obj, base_size) in list(self._scaled_fonts.items()):
             try:
                 size = int(abs(base_size) * scale)
                 size = max(8, size)
@@ -467,7 +463,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             frame.pack_forget()
         
         # 更新按钮样式
-        for name, btn in self.tab_btns.items():
+        for name, _btn in self.tab_btns.items():
             self._style_tab_button(name, active=(name == tab_name))
         
         # 显示当前页面
@@ -1175,7 +1171,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         for style, label in self._hud_color_style_labels.items():
             menu.add_command(
                 label=label,
-                command=lambda s=style, l=label: (self.hud_color_style_var.set(s), self._hud_color_btn_text.set(l))
+                command=lambda s=style, label_text=label: (
+                    self.hud_color_style_var.set(s),
+                    self._hud_color_btn_text.set(label_text),
+                )
             )
         menu_btn["menu"] = menu
         row += 1
@@ -2972,7 +2971,7 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         # 解绑鼠标滚轮事件，防止关闭后影响其他窗口
         try:
             self.unbind_all("<MouseWheel>")
-        except:
+        except Exception:
             pass
         self.destroy()
     

@@ -5,7 +5,6 @@
 
 from copy import deepcopy
 from pathlib import Path
-import json
 
 # =============================================================================
 # 标准元数据 (Standard Metadata)

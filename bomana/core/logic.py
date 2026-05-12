@@ -4,65 +4,56 @@
 import math
 import threading
 import time
-from typing import Optional, Tuple, Any, List, Dict
+from typing import Any, List, Optional, Tuple
 
 import requests
 
 from bomana.config import (
     ENABLE_CCRP,
-    ENABLE_ZONES,
-    ENABLE_AIRFIELDS,
-    ENABLE_FUEL,
-    ENABLE_CHECKLIST,
-    GameConfig,
-    ZoneConfig,
-    FuelConfig,
-    NetworkConfig,
     BombConfig,
-    Theme,
+    FuelConfig,
+    GameConfig,
+    NetworkConfig,
     OverspeedConfig,
     PanelConfig,
+    Theme,
+    ZoneConfig,
 )
-from bomana.core.state import (
-    TelemetryData,
-    Zone,
-    Airfield,
-    MapObjData,
-    MapInfo,
-    Phase,
-    LifeState,
-    FuelState,
-    ZoneNavigationState,
-    AttitudeConfidenceState,
-    GameState,
-    ZoneDisplayInfo,
-    AirfieldDisplayInfo,
-    PerfDebugInfo,
-    SourceDebugInfo,
-    UISnapshot,
-)
-from bomana.core.telemetry import Budget, HttpJson, TelemetryFetcher, MapInfoFetcher, MapObjectsFetcher
 from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing
 from bomana.core.overspeed import OverspeedAnalyzer
-from bomana.utils.math_utils import (
-    calculate_heading_from_vector,
-    calculate_bearing,
-    calculate_distance,
-    normalize_angle,
-    calculate_relative_bearing,
-    get_direction_text,
-    calculate_heading_tape_scale,
-    get_cdi_tolerance,
-    calculate_zone_turn_indicator,
-    calculate_zone_status,
-    calculate_airfield_turn_indicator,
-    calculate_airfield_status,
-    format_distance_ete,
-    format_distance_dynamic,
-    get_deviation_color,
-    generate_cdi_indicator,
+from bomana.core.state import (
+    AirfieldDisplayInfo,
+    AttitudeConfidenceState,
+    GameState,
+    LifeState,
+    MapInfo,
+    MapObjData,
+    PerfDebugInfo,
+    Phase,
+    SourceDebugInfo,
+    TelemetryData,
+    UISnapshot,
+    Zone,
+    ZoneDisplayInfo,
+    ZoneNavigationState,
+)
+from bomana.core.telemetry import (
+    Budget,
+    HttpJson,
+    MapInfoFetcher,
+    MapObjectsFetcher,
+    TelemetryFetcher,
 )
 from bomana.utils.file_utils import StateManager
+from bomana.utils.math_utils import (
+    calculate_bearing,
+    calculate_distance,
+    calculate_heading_from_vector,
+    calculate_relative_bearing,
+    generate_cdi_indicator,
+    get_direction_text,
+    normalize_angle,
+)
 
 # ============================================================================
 # 游戏逻辑核心

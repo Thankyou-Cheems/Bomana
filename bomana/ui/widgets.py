@@ -3,13 +3,14 @@
 
 import tkinter as tk
 
-from bomana.config import Theme, ZoneConfig, UIConfig
+from bomana.config import Theme, UIConfig, ZoneConfig
 from bomana.utils.math_utils import (
     calculate_heading_tape_scale,
-    get_cdi_tolerance,
     format_distance_dynamic,
+    get_cdi_tolerance,
     get_deviation_color,
 )
+
 
 class Pill(tk.Label):
     """徽章组件（圆角矩形标签）
@@ -512,7 +513,7 @@ class HeadingTape(tk.Canvas):
             g = int(int(hex_color[2:4], 16) * factor)
             b = int(int(hex_color[4:6], 16) * factor)
             return f"#{r:02x}{g:02x}{b:02x}"
-        except:
+        except Exception:
             return "#333333"
     
     def _get_urgency_blue(self, distance: float) -> str:
