@@ -177,11 +177,14 @@ class TelemetryFetcher:
             data.valid = bool(j.get("valid", False))
             data.type_name = self._read_first_text(
                 j,
-                ("type", "unit", "aircraft", "aircraft_type", "name"),
+                ("type", "unit", "aircraft", "aircraft_type", "vehicle", "model", "name"),
             )
-            data.compass = self._to_float(j.get("compass1") or j.get("compass"), 0.0)
+            data.compass, _ = self._read_float(
+                j,
+                ("compass1", "compass", "compass1, deg", "compass, deg", "compass1, rad", "compass, rad"),
+            )
             data.wing_sweep = self._to_optional_float(
-                j.get("wing_sweep_indicator", j.get("wing_sweep"))
+                j.get("wing_sweep_indicator", j.get("wing_sweep", j.get("sweep")))
             )
             self._merge_attitude_fields(j, data)
         
@@ -198,33 +201,98 @@ class TelemetryFetcher:
                     ("IAS, km/h", 1.0),
                     ("IAS", 1.0),
                     ("ias", 1.0),
+                    ("indicated_air_speed, km/h", 1.0),
+                    ("indicated_air_speed", 1.0),
+                    ("indicated_airspeed, km/h", 1.0),
+                    ("indicated_airspeed", 1.0),
                     ("IAS, m/s", 3.6),
                     ("ias, m/s", 3.6),
+                    ("indicated_air_speed, m/s", 3.6),
+                    ("indicated_airspeed, m/s", 3.6),
                 ),
             )
-            data.vy_ms = self._to_float(j.get("Vy, m/s", 0), 0.0)
-            data.fuel_kg = self._to_float(j.get("Mfuel, kg", 0), 0.0)
+            data.vy_ms, _ = self._read_scaled_float(
+                j,
+                (
+                    ("Vy, m/s", 1.0),
+                    ("Vy", 1.0),
+                    ("vy", 1.0),
+                    ("vertical_speed, m/s", 1.0),
+                    ("vertical_speed", 1.0),
+                    ("climb_speed, m/s", 1.0),
+                ),
+            )
+            data.fuel_kg, _ = self._read_scaled_float(
+                j,
+                (
+                    ("Mfuel, kg", 1.0),
+                    ("Mfuel", 1.0),
+                    ("fuel, kg", 1.0),
+                    ("fuel", 1.0),
+                ),
+            )
             
             # v5.8 新增：解析燃油管理相关字段
-            data.fuel0_kg = self._to_float(j.get("Mfuel0, kg", 0), 0.0)
-            data.altitude_m = self._to_float(j.get("H, m", 0), 0.0)
+            data.fuel0_kg, _ = self._read_scaled_float(
+                j,
+                (
+                    ("Mfuel0, kg", 1.0),
+                    ("Mfuel0", 1.0),
+                    ("fuel0, kg", 1.0),
+                    ("fuel0", 1.0),
+                ),
+            )
+            data.altitude_m, _ = self._read_scaled_float(
+                j,
+                (
+                    ("H, m", 1.0),
+                    ("H", 1.0),
+                    ("altitude, m", 1.0),
+                    ("altitude", 1.0),
+                    ("height, m", 1.0),
+                    ("height", 1.0),
+                ),
+            )
             data.tas_kmh, _ = self._read_scaled_float(
                 j,
                 (
                     ("TAS, km/h", 1.0),
                     ("TAS", 1.0),
                     ("tas", 1.0),
+                    ("true_air_speed, km/h", 1.0),
+                    ("true_air_speed", 1.0),
+                    ("true_airspeed, km/h", 1.0),
+                    ("true_airspeed", 1.0),
                     ("TAS, m/s", 3.6),
                     ("tas, m/s", 3.6),
+                    ("true_air_speed, m/s", 3.6),
+                    ("true_airspeed, m/s", 3.6),
                 ),
             )
-            data.throttle_pct = self._to_float(j.get("throttle 1, %", 0), 0.0)
+            data.throttle_pct, _ = self._read_scaled_float(
+                j,
+                (
+                    ("throttle 1, %", 1.0),
+                    ("throttle, %", 1.0),
+                    ("throttle", 1.0),
+                    ("Throttle 1, %", 1.0),
+                ),
+            )
             data.mach = self._to_optional_float(
-                j.get("M", j.get("Mach", j.get("mach")))
+                j.get("M", j.get("Mach", j.get("mach", j.get("mach_number"))))
             )
             
             # v5.9.6 + v6.6.0：解析起落架状态和百分比
-            gear_pct = self._to_float(j.get("gear, %", 0), 0.0)
+            gear_pct, _ = self._read_scaled_float(
+                j,
+                (
+                    ("gear, %", 1.0),
+                    ("gear", 1.0),
+                    ("gear_1, %", 1.0),
+                    ("landing_gear, %", 1.0),
+                    ("gear_down, %", 1.0),
+                ),
+            )
             data.gear_pct = gear_pct  # v6.6.0: 保存原始百分比
             data.gear_down = (gear_pct > 50)  # 超过50%视为放下状态
             self._merge_attitude_fields(j, data)
@@ -277,6 +345,121 @@ class MapObjectsFetcher:
     """
     def __init__(self, http: HttpJson):
         self.http = http
+
+    @staticmethod
+    def _text(value: Any) -> str:
+        if isinstance(value, dict):
+            value = value.get("value", "")
+        elif isinstance(value, (list, tuple)):
+            value = value[0] if value else ""
+        return str(value or "").strip()
+
+    @staticmethod
+    def _lower_text(value: Any) -> str:
+        return MapObjectsFetcher._text(value).lower()
+
+    @staticmethod
+    def _float_or_none(value: Any) -> Optional[float]:
+        if isinstance(value, dict):
+            value = value.get("value")
+        elif isinstance(value, (list, tuple)):
+            value = value[0] if value else None
+        try:
+            result = float(value)
+        except (TypeError, ValueError):
+            return None
+        return result if math.isfinite(result) else None
+
+    @staticmethod
+    def _first_float(o: dict, keys: Tuple[str, ...]) -> Optional[float]:
+        for key in keys:
+            if key in o:
+                value = MapObjectsFetcher._float_or_none(o.get(key))
+                if value is not None:
+                    return value
+        return None
+
+    @staticmethod
+    def _extract_objects(payload: Any) -> list[Any]:
+        if isinstance(payload, list):
+            return payload
+        if not isinstance(payload, dict):
+            return []
+        for key in ("objects", "map_objects", "items", "data"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+        return []
+
+    @staticmethod
+    def _read_rgb(o: dict) -> Optional[Tuple[float, float, float]]:
+        value = o.get("color[]", o.get("color_rgb", o.get("rgb")))
+        if isinstance(value, dict):
+            value = value.get("value")
+        if isinstance(value, (list, tuple)) and len(value) >= 3:
+            try:
+                return float(value[0]), float(value[1]), float(value[2])
+            except (TypeError, ValueError):
+                return None
+
+        text = MapObjectsFetcher._text(o.get("color", ""))
+        if text.startswith("#") and len(text) >= 7:
+            try:
+                return (
+                    float(int(text[1:3], 16)),
+                    float(int(text[3:5], 16)),
+                    float(int(text[5:7], 16)),
+                )
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _is_friendly_airfield(o: dict) -> bool:
+        side = MapObjectsFetcher._lower_text(o.get("side", o.get("team", o.get("army"))))
+        color_name = MapObjectsFetcher._lower_text(o.get("color", ""))
+        if side in {"friendly", "ally", "allied", "blue", "team_a", "1"}:
+            return True
+        if side in {"enemy", "hostile", "red", "team_b", "2"}:
+            return False
+        if "blue" in color_name or color_name in {"#0000ff", "0x0000ff"}:
+            return True
+        if "red" in color_name:
+            return False
+
+        rgb = MapObjectsFetcher._read_rgb(o)
+        if rgb is None:
+            return False
+        r, g, b = rgb
+        return bool(b >= 120 and b >= (r + 30) and b >= (g + 10))
+
+    @staticmethod
+    def _is_player_object(o: dict) -> bool:
+        obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
+        icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
+        name = MapObjectsFetcher._lower_text(o.get("name", o.get("label", "")))
+        if o.get("is_player") is True or o.get("player") is True:
+            return True
+        return bool(
+            obj_type in {"aircraft", "plane", "player", "player_aircraft"} and
+            (icon == "player" or name == "player" or "player" in icon)
+        )
+
+    @staticmethod
+    def _is_airfield_object(o: dict) -> bool:
+        obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
+        icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
+        return obj_type in {"airfield", "airport", "runway"} or icon in {"airfield", "airport", "runway"}
+
+    @staticmethod
+    def _is_zone_object(o: dict) -> bool:
+        obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
+        icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
+        return bool(
+            obj_type in {"bombing_point", "bombingpoint", "bombing point", "bomb_target", "bomb_target_point"} or
+            "bombing" in icon or
+            "bomb_target" in icon
+        )
     
     def fetch(self, budget: Budget, map_info: Optional[MapInfo] = None) -> MapObjData:
         """获取地图对象
@@ -296,7 +479,7 @@ class MapObjectsFetcher:
         out.ok = True
         
         # 提取对象列表
-        objs = j if isinstance(j, list) else j.get("objects", []) if isinstance(j, dict) else []
+        objs = self._extract_objects(j)
         out.obj_count = len(objs)
         
         zone_index = 1
@@ -307,39 +490,39 @@ class MapObjectsFetcher:
             if not isinstance(o, dict):
                 continue
             
-            obj_type = o.get("type", "")
-            icon = o.get("icon", "")
-            
-            if obj_type == "aircraft" and icon == "Player":
+            if self._is_player_object(o):
                 # 玩家飞机
-                out.player_aircraft_present = True
-                out.player_pos = (o.get("x", 0), o.get("y", 0))
-                out.player_dx = float(o.get("dx", 0) or 0)
-                out.player_dy = float(o.get("dy", 0) or 0)
-                
-            elif obj_type == "airfield":
-                # 机场：使用跑道起止点的中心
-                sx = o.get("sx")
-                sy = o.get("sy")
-                ex = o.get("ex")
-                ey = o.get("ey")
-                
-                if sx is None or sy is None or ex is None or ey is None:
+                px = self._first_float(o, ("x", "X", "pos_x", "position_x"))
+                py = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
+                if px is None or py is None:
                     continue
+                out.player_aircraft_present = True
+                out.player_pos = (px, py)
+                out.player_dx = self._first_float(o, ("dx", "DX", "vel_x", "vx")) or 0.0
+                out.player_dy = self._first_float(o, ("dy", "DY", "vel_y", "vy")) or 0.0
                 
-                # 计算跑道中心点
-                cx = (float(sx) + float(ex)) / 2.0
-                cy = (float(sy) + float(ey)) / 2.0
+            elif self._is_airfield_object(o):
+                # 机场：使用跑道起止点的中心
+                sx = self._first_float(o, ("sx", "start_x", "runway_start_x"))
+                sy = self._first_float(o, ("sy", "start_y", "runway_start_y"))
+                ex = self._first_float(o, ("ex", "end_x", "runway_end_x"))
+                ey = self._first_float(o, ("ey", "end_y", "runway_end_y"))
+
+                if sx is not None and sy is not None and ex is not None and ey is not None:
+                    # 计算跑道中心点
+                    cx = (sx + ex) / 2.0
+                    cy = (sy + ey) / 2.0
+                else:
+                    cx = self._first_float(o, ("x", "X", "pos_x", "position_x"))
+                    cy = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
+                    if cx is None or cy is None:
+                        continue
 
                 # 仅保留归一化坐标。格子坐标换算已停用。
                 wx, wy = cx, cy
 
-                # 判断归属：蓝色通道高 = 友方
-                rgb = o.get("color[]", [0, 0, 0])
-                is_friendly = False
-                if isinstance(rgb, list) and len(rgb) >= 3:
-                    r, g, b = rgb[:3]
-                    is_friendly = (b > 200 and b > r)
+                # 判断归属：优先 side/team 字段，回退到蓝色通道启发式。
+                is_friendly = self._is_friendly_airfield(o)
 
                 out.airfields.append(Airfield(
                     id=f"airfield_{airfield_index}",
@@ -350,10 +533,12 @@ class MapObjectsFetcher:
                 ))
                 airfield_index += 1
 
-            elif obj_type == "bombing_point":
+            elif self._is_zone_object(o):
                 # 战区
-                zone_x = o.get("x", 0)
-                zone_y = o.get("y", 0)
+                zone_x = self._first_float(o, ("x", "X", "pos_x", "position_x"))
+                zone_y = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
+                if zone_x is None or zone_y is None:
+                    continue
                 out.zones.append(Zone(
                     id=f"zone_{zone_x:.4f}_{zone_y:.4f}",
                     index=zone_index,
