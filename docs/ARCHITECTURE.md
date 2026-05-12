@@ -42,6 +42,7 @@
 │  │  ├─ runtime.py           # Tk dispatch + runtime worker thread helpers
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
+│     ├─ diagnostics.py      # Structured async diagnostics logging
 │     ├─ file_utils.py        # Config/state/resource helpers
 │     ├─ math_utils.py        # Navigation/math helpers
 │     ├─ sound.py             # Sound manager
@@ -71,24 +72,29 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
-5. Overspeed flow:
+5. Diagnostics flow:
+   - `Bomana.pyw` initializes `bomana/utils/diagnostics.py` at startup.
+   - Runtime diagnostics are JSONL records written to `.wttimer_diagnostics.log` next to the user config file.
+   - UI and 8111 polling threads enqueue structured events through `QueueHandler`; the background listener owns disk I/O.
+   - Initial coverage includes app start/exit, config migration/persistence errors, endpoint failures/recovery, navigation target changes, and HUD lifecycle/toggle failures.
+6. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
    - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives compact speed strip + alert sound.
-6. Launcher check flow:
+7. Launcher check flow:
    - On startup (and channel switch), launcher auto-checks both app-package metadata and launcher metadata in a background thread.
    - Channel/source/proxy changes during an in-flight check are queued and trigger an automatic follow-up re-check instead of being blocked.
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for app and launcher manifests when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
-7. Launcher download/apply flow:
+8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
    - Verifies SHA256 (when provided), replaces `app/`, promotes the previous app into `app_previous/`, and updates local version metadata.
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
-8. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
+9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 
 Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.
 

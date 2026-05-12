@@ -19,15 +19,21 @@ from bomana.config import (
     FileConfig,
     GameConfig,
 )
+from bomana.utils.diagnostics import log_event, log_exception
 
 
 def _report_persistence_error(action: str, path: Path, exc: Exception) -> None:
-    """Emit a lightweight diagnostic without changing tolerant runtime behavior."""
-    msg = f"[Persistence] {action} failed for {path}: {exc}"
-    print(msg)
+    """Emit persistence diagnostics without changing tolerant runtime behavior."""
+    log_exception(
+        "persistence_error",
+        exc,
+        action=action,
+        path=str(path),
+    )
     try:
         log_path = FileConfig.CONFIG_FILE.with_name(".wttimer_persistence.log")
         with open(log_path, "a", encoding="utf-8") as f:
+            msg = f"[Persistence] {action} failed for {path}: {exc}"
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
     except IOError, OSError:
         pass
@@ -178,7 +184,15 @@ class ConfigManager:
                 if not isinstance(config, dict):
                     raise ValueError("config root must be a JSON object")
                 # 配置版本迁移仅更新内存对象；显式保存路径负责落盘。
-                config, _changed = ConfigManager._migrate_config(config)
+                old_version = config.get("config_version", 1)
+                config, changed = ConfigManager._migrate_config(config)
+                if changed:
+                    log_event(
+                        "config_migrated",
+                        path=str(FileConfig.CONFIG_FILE),
+                        from_version=old_version,
+                        to_version=config.get("config_version", old_version),
+                    )
                 return config
             except (json.JSONDecodeError, ValueError, IOError, OSError) as exc:
                 _report_persistence_error("config load", FileConfig.CONFIG_FILE, exc)

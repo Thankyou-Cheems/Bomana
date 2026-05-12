@@ -44,6 +44,7 @@ from bomana.core.telemetry import (
     MapObjectsFetcher,
     TelemetryFetcher,
 )
+from bomana.utils.diagnostics import log_event
 from bomana.utils.file_utils import StateManager
 from bomana.utils.math_utils import (
     calculate_bearing,
@@ -99,6 +100,7 @@ class GameLogic:
         self.map = MapObjectsFetcher(self.http)
         self.overspeed = OverspeedAnalyzer()
         self.state = GameState()
+        self._endpoint_diag_state: dict[str, int] = {}
 
     @property
     def is_api_down(self) -> bool:
@@ -418,6 +420,41 @@ class GameLogic:
         setattr(self.state, streak_attr, getattr(self.state, streak_attr) + 1)
         setattr(self.state, count_attr, getattr(self.state, count_attr) + 1)
 
+    def _emit_endpoint_diagnostic(
+        self,
+        *,
+        endpoint: str,
+        ok: bool,
+        error_kind: str,
+        elapsed_ms: float,
+        failure_streak: int,
+        status_code: Optional[int] = None,
+    ) -> None:
+        """Emit endpoint health changes without logging every polling tick."""
+        previous_streak = self._endpoint_diag_state.get(endpoint, 0)
+        if ok:
+            if previous_streak > 0:
+                log_event(
+                    "endpoint_recovered",
+                    endpoint=endpoint,
+                    previous_failure_streak=previous_streak,
+                    elapsed_ms=elapsed_ms,
+                )
+            self._endpoint_diag_state[endpoint] = 0
+            return
+
+        self._endpoint_diag_state[endpoint] = failure_streak
+        if failure_streak not in {1, 5, 20} and (failure_streak % 100) != 0:
+            return
+        log_event(
+            "endpoint_failed",
+            endpoint=endpoint,
+            error_kind=error_kind or "unknown",
+            elapsed_ms=elapsed_ms,
+            failure_streak=failure_streak,
+            status_code=status_code,
+        )
+
     def _update_source_diagnostics_locked(
         self,
         raw_tel: TelemetryData,
@@ -448,6 +485,36 @@ class GameLogic:
                 bool(map_info_result.ok),
                 "map_info_failure_streak",
                 "map_info_failure_count",
+            )
+        self._emit_endpoint_diagnostic(
+            endpoint="/indicators",
+            ok=bool(raw_tel.ind_ok),
+            error_kind=str(raw_tel.ind_error_kind or ""),
+            elapsed_ms=float(raw_tel.ind_elapsed_ms or 0.0),
+            failure_streak=int(s.indicators_failure_streak),
+        )
+        self._emit_endpoint_diagnostic(
+            endpoint="/state",
+            ok=bool(raw_tel.state_resp_ok),
+            error_kind=str(raw_tel.state_error_kind or ""),
+            elapsed_ms=float(raw_tel.state_elapsed_ms or 0.0),
+            failure_streak=int(s.state_failure_streak),
+        )
+        self._emit_endpoint_diagnostic(
+            endpoint="/map_obj.json",
+            ok=bool(raw_map.ok),
+            error_kind=str(raw_map.error_kind or ""),
+            elapsed_ms=float(raw_map.elapsed_ms or 0.0),
+            failure_streak=int(s.map_failure_streak),
+        )
+        if map_info_result is not None:
+            self._emit_endpoint_diagnostic(
+                endpoint="/map_info.json",
+                ok=bool(map_info_result.ok),
+                error_kind=str(map_info_result.error_kind or ""),
+                elapsed_ms=float(map_info_result.elapsed_ms or 0.0),
+                failure_streak=int(s.map_info_failure_streak),
+                status_code=getattr(map_info_result, "status_code", None),
             )
 
         s.tel_fallback_active = bool(used_tel_fallback)
@@ -585,6 +652,7 @@ class GameLogic:
         功能: 计算地速/检测战区摧毁/计算导航信息/选择目标战区
         """
         nav = self.state.zone_nav
+        previous_target_id = nav.target_zone.id if nav.target_zone else None
 
         if not mp.ok or not mp.player_pos:
             # 无数据时重置
@@ -593,6 +661,13 @@ class GameLogic:
             nav.is_deviating = False
             nav.last_pos = None
             nav.ground_speed = 0.0
+            if previous_target_id is not None:
+                log_event(
+                    "navigation_target_changed",
+                    previous_target_id=previous_target_id,
+                    target_id=None,
+                    reason="source_unavailable",
+                )
             return
 
         px, py = mp.player_pos
@@ -798,6 +873,18 @@ class GameLogic:
         nav.is_deviating = (
             (abs(target.relative) > ZoneConfig.DEVIATION_WARNING) if target else False
         )
+        target_id = target.id if target else None
+        if target_id != previous_target_id:
+            log_event(
+                "navigation_target_changed",
+                previous_target_id=previous_target_id,
+                target_id=target_id,
+                relative_deg=(float(target.relative) if target else None),
+                distance_km=(
+                    float(target.distance * ZoneConfig.DISTANCE_SCALE) if target else None
+                ),
+                airborne=bool(is_airborne),
+            )
 
     def _is_zone_of_interest(self, zone: Zone, target_zone: Optional[Zone]) -> bool:
         """判断战区是否是玩家感兴趣的（v5.5新增）

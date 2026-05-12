@@ -99,12 +99,14 @@ pyinstaller --noconsole --onefile `
 
 ===============================================================================
 """
-import tkinter as tk
 import sys
+import tkinter as tk
 from tkinter import messagebox
 
-from bomana.utils.system import SingleInstanceManager, Win32
+from bomana.config import FileConfig, __version__
 from bomana.ui.app import App
+from bomana.utils.diagnostics import app_context, configure_diagnostics, log_event, shutdown_diagnostics
+from bomana.utils.system import SingleInstanceManager, Win32
 
 # ============================================================================
 # 程序入口
@@ -112,6 +114,9 @@ from bomana.ui.app import App
 
 def main():
     """主函数"""
+    log_path = configure_diagnostics(FileConfig.CONFIG_FILE.with_name(".wttimer_diagnostics.log"))
+    log_event("app_start", version=__version__, log_path=str(log_path or ""), **app_context())
+
     if sys.version_info < (3, 14):
         try:
             root = tk.Tk()
@@ -141,7 +146,11 @@ def main():
     # 创建主窗口和应用
     root = tk.Tk()
     App(root)
-    root.mainloop()
+    try:
+        root.mainloop()
+    finally:
+        log_event("app_exit", version=__version__)
+        shutdown_diagnostics()
 
 
 if __name__ == "__main__":

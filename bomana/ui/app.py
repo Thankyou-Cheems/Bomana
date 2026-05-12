@@ -44,6 +44,7 @@ from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.runtime import LogicPoller, TkEventDispatcher, start_daemon_thread
+from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.math_utils import calculate_smart_scale
 from bomana.utils.sound import SoundManager
@@ -230,11 +231,16 @@ class App:
                 # 临时获取DPI缩放（此时窗口还未创建，使用默认值1.2）
                 smart_scale = calculate_smart_scale(sw, sh, 1.2)
                 UIConfig.UI_SCALE_MULT = smart_scale
-                print(f"[智能缩放] 检测到屏幕分辨率 {sw}x{sh}，设置缩放为 {smart_scale:.2f}x")
+                log_event(
+                    "smart_scale_detected",
+                    screen_width=sw,
+                    screen_height=sh,
+                    scale=smart_scale,
+                )
             except Exception as e:
                 # 出错时使用默认值1.2
                 UIConfig.UI_SCALE_MULT = 1.2
-                print(f"[智能缩放] 检测失败，使用默认缩放1.2x: {e}")
+                log_exception("smart_scale_failed", e, fallback_scale=1.2)
 
         text_scale = config.get("text_scale", UIConfig.TEXT_SCALE_MULT)
         if isinstance(text_scale, (int, float)):
@@ -1017,10 +1023,11 @@ class App:
             self.hud_overlay = HUDOverlay(self)
             self.hud_overlay.set_lock_state(self._locked)
             self._hud_monitor_refresh_ts = 0.0
+            log_event("hud_overlay_created", locked=self._locked)
             return True
         except Exception as e:
             self.hud_overlay = None
-            print(f"[HUD] 初始化失败: {e}")
+            log_exception("hud_overlay_init_failed", e)
             return False
 
     def _show_hud_overlay(self) -> bool:
@@ -1033,7 +1040,7 @@ class App:
             self._hud_monitor_refresh_ts = 0.0
             return True
         except Exception as e:
-            print(f"[HUD] 显示失败: {e}")
+            log_exception("hud_overlay_show_failed", e)
             return False
 
     def _update_hud_overlay(self, snap: UISnapshot) -> None:
@@ -1167,7 +1174,11 @@ class App:
         except Exception as e:
             self._hud_render_error_count += 1
             if self._hud_render_error_count in (1, 10, 30):
-                print(f"[HUD] 渲染降级: {e}")
+                log_exception(
+                    "hud_render_degraded",
+                    e,
+                    error_count=self._hud_render_error_count,
+                )
             degraded_alpha = max(60, int(HUDConfig.alpha * 0.55))
             try:
                 overlay.apply_window_styles(click_through=self._locked, alpha=degraded_alpha)
@@ -1177,6 +1188,7 @@ class App:
 
     def _toggle_hud(self):
         """切换 HUD 叠加层开关。"""
+        requested_enabled = not HUDConfig.enabled
         HUDConfig.enabled = not HUDConfig.enabled
         if HUDConfig.enabled:
             if not self._show_hud_overlay():
@@ -1193,6 +1205,12 @@ class App:
         self._refresh_tray()
         if HUDConfig.enabled:
             self.sound.play(pattern="on")
+        log_event(
+            "hud_toggle",
+            requested_enabled=requested_enabled,
+            enabled=HUDConfig.enabled,
+            has_overlay=bool(self.hud_overlay),
+        )
 
     def _toggle_navigation_mode(self):
         """切换导航条模式（集成/独立）
@@ -1216,6 +1234,7 @@ class App:
         self._update_ui()
         self._recalc_size(force_shrink=True)
         self._refresh_tray()
+        log_event("navigation_mode_toggle", mode=PanelConfig.navigation_mode)
 
     def _recalc_size(self, keep_pos: bool = True, force_shrink: bool = False):
         """重新计算窗口尺寸
