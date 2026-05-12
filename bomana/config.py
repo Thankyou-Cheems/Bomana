@@ -36,11 +36,13 @@ ENABLE_ADVANCED_SETTINGS = True
 # 配置类 - 所有可调参数集中管理
 # ============================================================================
 
+
 class GameConfig:
     """游戏逻辑相关配置
 
     这些参数直接影响游戏状态判断的准确性，修改时需谨慎测试。
     """
+
     # 复活周期：15分钟（战雷SB标准）
     CYCLE_SECONDS = 15 * 60
 
@@ -48,23 +50,23 @@ class GameConfig:
     FINAL_WARNING_SEC = 30
 
     # 着陆判断参数
-    LAND_SPEED_KMH = 40          # 低于此速度视为可能着陆
-    LAND_CONFIRM_SEC = 3.0       # 持续低速3秒确认着陆
-    LANDED_FLASH_SEC = 10.0      # 着陆后"就绪"状态闪烁10秒
+    LAND_SPEED_KMH = 40  # 低于此速度视为可能着陆
+    LAND_CONFIRM_SEC = 3.0  # 持续低速3秒确认着陆
+    LANDED_FLASH_SEC = 10.0  # 着陆后"就绪"状态闪烁10秒
 
     # 状态确认时间（防止误判）
-    SPAWN_CONFIRM_SEC = 1.0      # 出生确认：连续1秒有实体数据
-    DEAD_CONFIRM_SEC = 1.2       # 死亡确认：连续1.2秒无玩家
-    HANGAR_CONFIRM_SEC = 1.2     # 机库确认：连续1.2秒无地图数据
-    API_DOWN_CONFIRM_SEC = 5.0   # API断线确认：连续5秒无响应
-    PLAYER_PRESENCE_GRACE_SEC = 1.2   # ALIVE阶段短时数据抖动宽限（按计分板/地图常见）
-    API_PENDING_HINT_DELAY_SEC = 0.35 # 断线候选需持续到该时长才显示“加入战斗中”
+    SPAWN_CONFIRM_SEC = 1.0  # 出生确认：连续1秒有实体数据
+    DEAD_CONFIRM_SEC = 1.2  # 死亡确认：连续1.2秒无玩家
+    HANGAR_CONFIRM_SEC = 1.2  # 机库确认：连续1.2秒无地图数据
+    API_DOWN_CONFIRM_SEC = 5.0  # API断线确认：连续5秒无响应
+    PLAYER_PRESENCE_GRACE_SEC = 1.2  # ALIVE阶段短时数据抖动宽限（按计分板/地图常见）
+    API_PENDING_HINT_DELAY_SEC = 0.35  # 断线候选需持续到该时长才显示“加入战斗中”
 
     # 补给判断参数（检测地面补给站）
-    REFIT_FUEL_JUMP_KG = 50.0    # 油量突增50kg以上
-    REFIT_MIN_GAP_SEC = 8.0      # 两次补给最小间隔
-    REFIT_SPEED_KMH = 12.0       # 补给时速度很低
-    REFIT_VSPEED_MS = 1.2        # 补给时垂直速度很小
+    REFIT_FUEL_JUMP_KG = 50.0  # 油量突增50kg以上
+    REFIT_MIN_GAP_SEC = 8.0  # 两次补给最小间隔
+    REFIT_SPEED_KMH = 12.0  # 补给时速度很低
+    REFIT_VSPEED_MS = 1.2  # 补给时垂直速度很小
 
 
 class ZoneConfig:
@@ -76,30 +78,30 @@ class ZoneConfig:
     # 动态容差: (距离上限km, 容差角度°) - 距离越近要求越精确
     # v6.1优化: 针对高空投弹场景，在12km处就开始收紧阈值
     CDI_TOLERANCE_THRESHOLDS = [
-        (2.0, 0.5),     # <2km: ±0.5° 极限精准（投弹瞬间）
-        (5.0, 1.0),     # <5km: ±1.0° 投弹窗口
-        (8.0, 2.0),     # <8km: ±2.0° 精确瞄准
-        (12.0, 3.0),    # <12km: ±3.0° 投弹准备（高空投弹关键区间）
-        (20.0, 5.0),    # <20km: ±5.0° 接近目标
-        (35.0, 8.0),    # <35km: ±8.0° 中距离
-        (float('inf'), 12.0)  # >35km: ±12.0° 远距离巡航
+        (2.0, 0.5),  # <2km: ±0.5° 极限精准（投弹瞬间）
+        (5.0, 1.0),  # <5km: ±1.0° 投弹窗口
+        (8.0, 2.0),  # <8km: ±2.0° 精确瞄准
+        (12.0, 3.0),  # <12km: ±3.0° 投弹准备（高空投弹关键区间）
+        (20.0, 5.0),  # <20km: ±5.0° 接近目标
+        (35.0, 8.0),  # <35km: ±8.0° 中距离
+        (float("inf"), 12.0),  # >35km: ±12.0° 远距离巡航
     ]
 
     # v6.1新增: 航向带(Heading Tape)配置
-    HEADING_TAPE_ENABLED = True           # 是否启用航向带
-    HEADING_TAPE_WIDTH = 280              # 航向带宽度(像素)
-    HEADING_TAPE_HEIGHT = 32              # 航向带高度(像素)
-    HEADING_TAPE_PIXELS_PER_DEG = 8       # 基础缩放: 每度8像素
-    HEADING_TAPE_MAX_SCALE = 4.0          # 最大缩放倍数(近距离时)
-    HEADING_TAPE_SCALE_START_KM = 15.0    # 开始缩放的距离(km)
-    HEADING_TAPE_SCALE_END_KM = 3.0       # 达到最大缩放的距离(km)
+    HEADING_TAPE_ENABLED = True  # 是否启用航向带
+    HEADING_TAPE_WIDTH = 280  # 航向带宽度(像素)
+    HEADING_TAPE_HEIGHT = 32  # 航向带高度(像素)
+    HEADING_TAPE_PIXELS_PER_DEG = 8  # 基础缩放: 每度8像素
+    HEADING_TAPE_MAX_SCALE = 4.0  # 最大缩放倍数(近距离时)
+    HEADING_TAPE_SCALE_START_KM = 15.0  # 开始缩放的距离(km)
+    HEADING_TAPE_SCALE_END_KM = 3.0  # 达到最大缩放的距离(km)
 
     # CDI符号定义
-    CDI_CENTER = "●"      # 中心指示点
-    CDI_TRACK = "━"       # 轨道线
-    CDI_LEFT = "◁"        # 左边界
-    CDI_RIGHT = "▷"       # 右边界
-    CDI_OVERFLOW_LEFT = "◀◀"   # 严重偏左指示
+    CDI_CENTER = "●"  # 中心指示点
+    CDI_TRACK = "━"  # 轨道线
+    CDI_LEFT = "◁"  # 左边界
+    CDI_RIGHT = "▷"  # 右边界
+    CDI_OVERFLOW_LEFT = "◀◀"  # 严重偏左指示
     CDI_OVERFLOW_RIGHT = "▶▶"  # 严重偏右指示
 
     # 航向容差：±45°内视为正对目标
@@ -143,26 +145,27 @@ class FuelConfig:
 
     燃油采样、警告阈值、返航估算参数。
     """
+
     # 采样参数
-    SAMPLE_INTERVAL_SEC = 1.0        # 采样间隔缩短至1秒，使燃油流速计算更灵敏
-    SAMPLE_WINDOW_SEC = 60.0         # 历史窗口（秒）
-    MIN_STABLE_SAMPLES = 5           # 最少稳定样本数
+    SAMPLE_INTERVAL_SEC = 1.0  # 采样间隔缩短至1秒，使燃油流速计算更灵敏
+    SAMPLE_WINDOW_SEC = 60.0  # 历史窗口（秒）
+    MIN_STABLE_SAMPLES = 5  # 最少稳定样本数
 
     # 补给检测（油量突增）
-    REFUEL_JUMP_KG = 30.0            # 油量增加超过此值视为补给
+    REFUEL_JUMP_KG = 30.0  # 油量增加超过此值视为补给
 
     # 警告阈值（基于百分比）
-    WARNING_PERCENT = 30             # 黄色警告阈值
-    DANGER_PERCENT = 15              # 红色警告阈值
+    WARNING_PERCENT = 30  # 黄色警告阈值
+    DANGER_PERCENT = 15  # 红色警告阈值
 
     # 返航安全系数
-    RETURN_SAFETY_FACTOR = 1.3       # 返航油量估算的安全系数（30%余量）
-    RETURN_WARNING_FACTOR = 1.5      # 低于此倍数时提醒返航
+    RETURN_SAFETY_FACTOR = 1.3  # 返航油量估算的安全系数（30%余量）
+    RETURN_WARNING_FACTOR = 1.5  # 低于此倍数时提醒返航
 
     # 显示开关
-    SHOW_FUEL_PANEL = True           # 是否显示燃油面板
-    SHOW_CONSUMPTION_RATE = True     # 是否显示油耗率
-    SHOW_ALTITUDE = True             # 是否显示高度
+    SHOW_FUEL_PANEL = True  # 是否显示燃油面板
+    SHOW_CONSUMPTION_RATE = True  # 是否显示油耗率
+    SHOW_ALTITUDE = True  # 是否显示高度
 
     # 最小飞行速度（低于此速度不计算油耗率）
     MIN_FLIGHT_SPEED_KMH = 50.0
@@ -173,6 +176,7 @@ class NetworkConfig:
 
     8111接口的超时和轮询参数，影响响应速度和资源占用。
     """
+
     # 8111接口基础URL（本地回环地址）
     API_BASE = "http://127.0.0.1:8111"
 
@@ -206,6 +210,7 @@ class UIConfig:
 
     最终缩放 = DPI缩放 × UI_SCALE_MULT
     """
+
     # UI缩放倍数：1.0（相对于系统DPI的额外缩放）
     # v5.9.3: 从0.85提升到1.0，让界面在1080p/2k下更清晰
     # 注意：此值可能被智能缩放逻辑覆盖（首次启动时）
@@ -221,37 +226,37 @@ class UIConfig:
     UI_REFRESH_MS = 50
 
     # 字体定义（字体名, 大小, 样式）
-    FONT_TIMER = ("Segoe UI", 44, "bold")           # 主计时器
-    FONT_LIFE = ("Segoe UI", 13, "bold")            # 复活次数
-    FONT_CYCLE = ("Segoe UI", 12)                   # 当前轮次
-    FONT_PILL = ("Segoe UI", 10, "bold")            # 状态徽章
-    FONT_STATUS = ("Segoe UI", 11)                  # 状态文本
+    FONT_TIMER = ("Segoe UI", 44, "bold")  # 主计时器
+    FONT_LIFE = ("Segoe UI", 13, "bold")  # 复活次数
+    FONT_CYCLE = ("Segoe UI", 12)  # 当前轮次
+    FONT_PILL = ("Segoe UI", 10, "bold")  # 状态徽章
+    FONT_STATUS = ("Segoe UI", 11)  # 状态文本
     FONT_CHECKLIST_TITLE = ("Segoe UI", 9, "bold")  # 检查清单标题
-    FONT_CHECKLIST_ITEM = ("Segoe UI", 8)           # 检查清单项目
-    FONT_ZONE_TITLE = ("Segoe UI", 9, "bold")       # 战区标题
-    FONT_ZONE_ITEM = ("Segoe UI", 8)                # 战区项目
-    FONT_DEBUG = ("Consolas", 9)                    # 调试信息
-    FONT_HINT = ("Segoe UI", 8)                     # 底部提示
+    FONT_CHECKLIST_ITEM = ("Segoe UI", 8)  # 检查清单项目
+    FONT_ZONE_TITLE = ("Segoe UI", 9, "bold")  # 战区标题
+    FONT_ZONE_ITEM = ("Segoe UI", 8)  # 战区项目
+    FONT_DEBUG = ("Consolas", 9)  # 调试信息
+    FONT_HINT = ("Segoe UI", 8)  # 底部提示
 
     # 内边距定义（水平, 垂直）
-    PADDING_MAIN = (14, 10)      # 主容器
-    PADDING_ROW2 = (8, 4)        # 第二行（徽章行）
-    PADDING_SPEED_STRIP = (0, 4) # 速度条
-    PADDING_PROGRESS = (4, 6)    # 进度条
+    PADDING_MAIN = (14, 10)  # 主容器
+    PADDING_ROW2 = (8, 4)  # 第二行（徽章行）
+    PADDING_SPEED_STRIP = (0, 4)  # 速度条
+    PADDING_PROGRESS = (4, 6)  # 进度条
 
     # 间距定义
-    SPACING_BADGE = 6            # 徽章间距
-    SPACING_DEBUG = 8            # 调试信息间距
+    SPACING_BADGE = 6  # 徽章间距
+    SPACING_DEBUG = 8  # 调试信息间距
 
     # 窗口定位参数
-    WINDOW_MARGIN = 20           # 屏幕边缘留白
-    WINDOW_PADDING = 6           # 窗口内部留白
+    WINDOW_MARGIN = 20  # 屏幕边缘留白
+    WINDOW_PADDING = 6  # 窗口内部留白
 
     # 进度条样式
-    SPEED_STRIP_HEIGHT = 12      # 速度条容器高度
-    SPEED_STRIP_THICKNESS = 5    # 速度条实际粗细
-    PROGRESS_BAR_HEIGHT = 6      # 进度条容器高度
-    PROGRESS_BAR_THICKNESS = 3   # 进度条实际粗细
+    SPEED_STRIP_HEIGHT = 12  # 速度条容器高度
+    SPEED_STRIP_THICKNESS = 5  # 速度条实际粗细
+    PROGRESS_BAR_HEIGHT = 6  # 进度条容器高度
+    PROGRESS_BAR_THICKNESS = 3  # 进度条实际粗细
 
     # 调试文本换行宽度
     DEBUG_WRAP_LENGTH = 600
@@ -273,7 +278,12 @@ class UIConfig:
         size_mult: float = 1.0,
         min_size: int = 1,
     ) -> int:
-        size = int(abs(float(base_size)) * float(layout_scale) * float(cls.TEXT_SCALE_MULT) * float(size_mult))
+        size = int(
+            abs(float(base_size))
+            * float(layout_scale)
+            * float(cls.TEXT_SCALE_MULT)
+            * float(size_mult)
+        )
         return max(int(min_size), size)
 
     @classmethod
@@ -302,19 +312,20 @@ class HUDConfig:
 
     v6.8.0 首版仅提供开关与基础参数，具体渲染由后续模块实现。
     """
+
     # HUD 总开关（仅由设置页和配置控制）
     enabled = False
 
     # 基础显示参数
-    alpha = 255                  # 叠加层透明度（0-255）
-    scale = 1.0                  # 全局缩放倍率
-    smoothing = 0.35             # 位移平滑系数（0-1）
+    alpha = 255  # 叠加层透明度（0-255）
+    scale = 1.0  # 全局缩放倍率
+    smoothing = 0.35  # 位移平滑系数（0-1）
     follow_main_window_monitor = True  # True=跟随主窗口显示器，False=跟随鼠标所在显示器
-    color_style = "auto"         # 配色风格：auto/green/amber/cyan/white
+    color_style = "auto"  # 配色风格：auto/green/amber/cyan/white
 
     # 透视投影FOV参数（v6.8.1新增：匹配游戏画面）
-    horizontal_fov_deg = 73.0    # 水平FOV（度），战雷16:9默认约73°
-    vertical_fov_deg = 55.0      # 垂直FOV（度），战雷16:9默认约55°
+    horizontal_fov_deg = 73.0  # 水平FOV（度），战雷16:9默认约73°
+    vertical_fov_deg = 55.0  # 垂直FOV（度），战雷16:9默认约55°
 
     @classmethod
     def to_dict(cls) -> dict:
@@ -360,22 +371,32 @@ class HotkeyConfig:
     - 可在设置对话框中自定义
     - 注意: 避免与游戏快捷键冲突(F1-F4通常被游戏占用)
     """
+
     # 功能键VK码映射表
     VK_CODES = {
-        "F1": 0x70, "F2": 0x71, "F3": 0x72, "F4": 0x73,
-        "F5": 0x74, "F6": 0x75, "F7": 0x76, "F8": 0x77,
-        "F9": 0x78, "F10": 0x79, "F11": 0x7A, "F12": 0x7B,
+        "F1": 0x70,
+        "F2": 0x71,
+        "F3": 0x72,
+        "F4": 0x73,
+        "F5": 0x74,
+        "F6": 0x75,
+        "F7": 0x76,
+        "F8": 0x77,
+        "F9": 0x78,
+        "F10": 0x79,
+        "F11": 0x7A,
+        "F12": 0x7B,
     }
 
     # 可用功能键列表（供UI选择）
     AVAILABLE_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
 
     # 当前绑定（可运行时修改）
-    KEY_RESET = "F7"     # 双击确认后重置计时器
-    KEY_LOCK = "F8"      # 锁定/解锁
-    KEY_CORNER = "F9"    # 切换角落
-    KEY_BEEP = "F10"     # 声音开关
-    KEY_ZONES = "F11"    # 战区提示音
+    KEY_RESET = "F7"  # 双击确认后重置计时器
+    KEY_LOCK = "F8"  # 锁定/解锁
+    KEY_CORNER = "F9"  # 切换角落
+    KEY_BEEP = "F10"  # 声音开关
+    KEY_ZONES = "F11"  # 战区提示音
 
     # 热键ID（用于注册/注销）
     HK_ID_RESET = 7007
@@ -426,18 +447,19 @@ class SoundConfig:
 
     默认使用 Windows Beep API，用户也可为不同提示事件绑定自定义音频文件。
     """
+
     # 音效定义：(频率Hz, 持续时间ms)
-    BEEP_TICK = (784, 28)              # 常规提示音
-    BEEP_WARNING_1 = (784, 35)         # 警告音1
-    BEEP_WARNING_2 = (988, 35)         # 警告音2
-    BEEP_MANUAL_RESET = (1000, 80)     # 手动重置
-    BEEP_ON_1 = (988, 40)              # 功能开启1
-    BEEP_ON_2 = (1319, 70)             # 功能开启2
-    BEEP_ZONE_DESTROYED = (440, 100)   # 战区被摧毁
+    BEEP_TICK = (784, 28)  # 常规提示音
+    BEEP_WARNING_1 = (784, 35)  # 警告音1
+    BEEP_WARNING_2 = (988, 35)  # 警告音2
+    BEEP_MANUAL_RESET = (1000, 80)  # 手动重置
+    BEEP_ON_1 = (988, 40)  # 功能开启1
+    BEEP_ON_2 = (1319, 70)  # 功能开启2
+    BEEP_ZONE_DESTROYED = (440, 100)  # 战区被摧毁
 
     # 音效间隔
-    WARNING_GAP_MS = 20   # 警告双音间隔
-    ON_GAP_MS = 25        # 开启双音间隔
+    WARNING_GAP_MS = 20  # 警告双音间隔
+    ON_GAP_MS = 25  # 开启双音间隔
 
     # 超速提醒音（低刺激，避免刺耳）
     BEEP_OVERSPEED_WARN = (620, 45)
@@ -517,6 +539,7 @@ class OverspeedConfig:
     数据源为 War-Thunder-Datamine 的 flightmodels 提取结果：
     `bomana/data/fm_speed_limits.json`
     """
+
     # 总开关
     ENABLED = True
 
@@ -560,7 +583,7 @@ class OverspeedConfig:
         low, high = cls._THRESHOLD_LIMITS[key]
         try:
             value = float(raw_value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             value = float(fallback)
         return max(low, min(high, value))
 
@@ -664,9 +687,7 @@ class OverspeedConfig:
 
         # 兼容未来可能出现的扁平结构。
         flat_thresholds = {
-            key: payload.get(key)
-            for key in cls._DEFAULT_THRESHOLDS.keys()
-            if key in payload
+            key: payload.get(key) for key in cls._DEFAULT_THRESHOLDS.keys() if key in payload
         }
         cls.apply_user_thresholds(flat_thresholds, payload.get("aircraft_overrides"))
 
@@ -683,6 +704,7 @@ class FileConfig:
 
     所有配置文件都存储在用户主目录下。
     """
+
     # 配置文件（JSON格式）
     CONFIG_FILE = Path.home() / ".wttimer_config.json"
 
@@ -706,6 +728,7 @@ class FileConfig:
 # ============================================================================
 # 弹道物理计算参数（用于公式校准）
 # ============================================================================
+
 
 class BallisticPhysicsParams:
     """弹道物理计算参数 (CCRP v3.0)
@@ -773,11 +796,19 @@ class BallisticPhysicsParams:
             low, high = cls._TUNING_LIMITS[name]
             return max(low, min(high, float(value)))
 
-        if "range_correction_mult" in tuning and isinstance(tuning["range_correction_mult"], (int, float)):
-            cls.RANGE_CORRECTION_MULT = _clamp("range_correction_mult", tuning["range_correction_mult"])
+        if "range_correction_mult" in tuning and isinstance(
+            tuning["range_correction_mult"], (int, float)
+        ):
+            cls.RANGE_CORRECTION_MULT = _clamp(
+                "range_correction_mult", tuning["range_correction_mult"]
+            )
 
-        if "time_correction_mult" in tuning and isinstance(tuning["time_correction_mult"], (int, float)):
-            cls.TIME_CORRECTION_MULT = _clamp("time_correction_mult", tuning["time_correction_mult"])
+        if "time_correction_mult" in tuning and isinstance(
+            tuning["time_correction_mult"], (int, float)
+        ):
+            cls.TIME_CORRECTION_MULT = _clamp(
+                "time_correction_mult", tuning["time_correction_mult"]
+            )
 
     @classmethod
     def get_user_tuning(cls) -> dict:
@@ -799,6 +830,7 @@ class AboutConfig:
     注意: APP_NAME, VERSION, AUTHOR, GITHUB_URL 引用自文件头的标准元数据，
     修改版本号请更新 __version__ 变量，无需在此处重复修改。
     """
+
     # 软件信息 (引用标准元数据，保持单一数据源)
     APP_NAME = __title__
     APP_NAME_CN = "战雷全真模式收益计时器"
@@ -822,6 +854,7 @@ class ChecklistConfig:
 
     用户可以自定义起飞前的检查项目。
     """
+
     # 最多允许的检查项数量
     MAX_ITEMS = 8
 
@@ -834,7 +867,7 @@ class ChecklistConfig:
         "Y66或地图设定打击目标",
         "取消武器选择模式",
         "火控系统Y67调节炸弹自动",
-        "降落后Y65关闭座舱盖防噪音"
+        "降落后Y65关闭座舱盖防噪音",
     ]
 
 
@@ -881,6 +914,7 @@ class BombConfig:
                 if result.path is not None and result.path.exists():
                     raise RuntimeError(result.error)
                 from ccrp_bomb_params import BALLISTIC_PARAMS as external_params
+
                 source = "ccrp_bomb_params.py"
             else:
                 payload = result.payload if isinstance(result.payload, dict) else {}
@@ -892,19 +926,23 @@ class BombConfig:
 
             for bomb_id, params in external_params.items():
                 cls.BOMB_DATABASE[bomb_id] = {
-                    'mass': params.get('mass', 100.0),
-                    'drag_cx': params.get('dragCx', 0.04),
-                    'caliber': params.get('caliber', 0.2),
-                    'distFromCmToStab': params.get('distFromCmToStab', 0.5),
-                    'brakeTime': params.get('brakeTime', [0.0, 0.0]),
-                    'brakeCxK': params.get('brakeCxK', 0.0),
-                    'brakeArm': params.get('brakeArm', 0.0),
-                    'stab_enabled': params.get('stab_enabled', False),
-                    'category': cls._infer_category(bomb_id),
+                    "mass": params.get("mass", 100.0),
+                    "drag_cx": params.get("dragCx", 0.04),
+                    "caliber": params.get("caliber", 0.2),
+                    "distFromCmToStab": params.get("distFromCmToStab", 0.5),
+                    "brakeTime": params.get("brakeTime", [0.0, 0.0]),
+                    "brakeCxK": params.get("brakeCxK", 0.0),
+                    "brakeArm": params.get("brakeArm", 0.0),
+                    "stab_enabled": params.get("stab_enabled", False),
+                    "category": cls._infer_category(bomb_id),
                 }
 
             if cls.selected_bomb not in cls.BOMB_DATABASE and cls.BOMB_DATABASE:
-                cls.selected_bomb = "su_fab100" if "su_fab100" in cls.BOMB_DATABASE else next(iter(sorted(cls.BOMB_DATABASE.keys())))
+                cls.selected_bomb = (
+                    "su_fab100"
+                    if "su_fab100" in cls.BOMB_DATABASE
+                    else next(iter(sorted(cls.BOMB_DATABASE.keys())))
+                )
 
             cls._database_loaded = True
             cls.database_source = source
@@ -927,28 +965,36 @@ class BombConfig:
         bomb_id_lower = bomb_id.lower()
 
         category_prefixes = {
-            'us_': '美国', 'su_': '苏联', 'uk_': '英国', 'de_': '德国',
-            'jp_': '日本', 'it_': '意大利', 'fr_': '法国', 'cn_': '中国',
-            'swd_': '瑞典', 'sws_': '瑞典', 'il_': '以色列',
+            "us_": "美国",
+            "su_": "苏联",
+            "uk_": "英国",
+            "de_": "德国",
+            "jp_": "日本",
+            "it_": "意大利",
+            "fr_": "法国",
+            "cn_": "中国",
+            "swd_": "瑞典",
+            "sws_": "瑞典",
+            "il_": "以色列",
         }
 
         for prefix, category in category_prefixes.items():
             if bomb_id_lower.startswith(prefix):
                 return category
 
-        if 'fab' in bomb_id_lower or 'ofab' in bomb_id_lower:
-            return '苏联'
-        if 'mk_' in bomb_id_lower or 'gbu' in bomb_id_lower:
-            return '美国'
+        if "fab" in bomb_id_lower or "ofab" in bomb_id_lower:
+            return "苏联"
+        if "mk_" in bomb_id_lower or "gbu" in bomb_id_lower:
+            return "美国"
 
-        return '通用'
+        return "通用"
 
     @classmethod
     def get_categories(cls) -> list:
         """获取所有炸弹分类"""
         cls._ensure_database_loaded()
         categories = {bomb.get("category", "通用") for bomb in cls.BOMB_DATABASE.values()}
-        priority = ['苏联', '美国', '德国', '英国', '日本', '中国']
+        priority = ["苏联", "美国", "德国", "英国", "日本", "中国"]
         result = [p for p in priority if p in categories]
         result.extend(sorted(categories - set(priority)))
         return result
@@ -957,8 +1003,10 @@ class BombConfig:
     def get_bombs_by_category(cls, category: str) -> list:
         """获取指定分类的所有炸弹"""
         cls._ensure_database_loaded()
-        bombs = [name for name, data in cls.BOMB_DATABASE.items() if data.get("category") == category]
-        return sorted(bombs, key=lambda x: cls.BOMB_DATABASE[x].get('mass', 0))
+        bombs = [
+            name for name, data in cls.BOMB_DATABASE.items() if data.get("category") == category
+        ]
+        return sorted(bombs, key=lambda x: cls.BOMB_DATABASE[x].get("mass", 0))
 
     @classmethod
     def get_all_bomb_names(cls) -> list:
@@ -977,7 +1025,9 @@ class BombConfig:
         """获取当前选中炸弹的数据"""
         cls._ensure_database_loaded()
         data = cls.BOMB_DATABASE.get(cls.selected_bomb)
-        return data if data else {"mass": 100.0, "drag_cx": 0.04, "caliber": 0.2, "category": "苏联"}
+        return (
+            data if data else {"mass": 100.0, "drag_cx": 0.04, "caliber": 0.2, "category": "苏联"}
+        )
 
     @classmethod
     def search_bombs(cls, query: str, limit: int = 100) -> list:
@@ -987,13 +1037,15 @@ class BombConfig:
             return list(cls.BOMB_DATABASE.keys())[:limit]
 
         def normalize(s):
-            return s.lower().replace('_', '').replace('-', '').replace(' ', '')
+            return s.lower().replace("_", "").replace("-", "").replace(" ", "")
 
         query_norm = normalize(query)
         results = []
 
         for bomb_id, data in cls.BOMB_DATABASE.items():
-            keywords = bomb_id + ' ' + data.get('category', '') + ' ' + str(int(data.get('mass', 0)))
+            keywords = (
+                bomb_id + " " + data.get("category", "") + " " + str(int(data.get("mass", 0)))
+            )
             if query_norm in normalize(keywords) or query.lower() in keywords.lower():
                 results.append(bomb_id)
                 if len(results) >= limit:
@@ -1007,9 +1059,9 @@ class BombConfig:
         data = cls.get_bomb_data(bomb_id)
         if data is None:
             return bomb_id
-        mass = data.get('mass', 0)
-        mass_str = f"{mass/1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
-        name = bomb_id.replace('_', ' ').replace(' default', '')
+        mass = data.get("mass", 0)
+        mass_str = f"{mass / 1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
+        name = bomb_id.replace("_", " ").replace(" default", "")
         return f"{name} ({mass_str})"
 
     @classmethod
@@ -1018,15 +1070,15 @@ class BombConfig:
         cls._ensure_database_loaded()
         data = cls.get_selected_bomb_data() if name is None else (cls.get_bomb_data(name) or {})
         return {
-            'mass': data.get('mass', 100.0),
-            'caliber': data.get('caliber', 0.2),
-            'drag_cx': data.get('drag_cx', 0.04),
-            'distFromCmToStab': data.get('distFromCmToStab', 0.5),
-            'brakeTime': data.get('brakeTime', [0.0, 0.0]),
-            'brakeCxK': data.get('brakeCxK', 0.0),
-            'brakeArm': data.get('brakeArm', 0.0),
-            'stab_enabled': data.get('stab_enabled', False),
-            'reference_area': 3.14159 * (data.get('caliber', 0.2) / 2) ** 2,
+            "mass": data.get("mass", 100.0),
+            "caliber": data.get("caliber", 0.2),
+            "drag_cx": data.get("drag_cx", 0.04),
+            "distFromCmToStab": data.get("distFromCmToStab", 0.5),
+            "brakeTime": data.get("brakeTime", [0.0, 0.0]),
+            "brakeCxK": data.get("brakeCxK", 0.0),
+            "brakeArm": data.get("brakeArm", 0.0),
+            "stab_enabled": data.get("stab_enabled", False),
+            "reference_area": 3.14159 * (data.get("caliber", 0.2) / 2) ** 2,
         }
 
 
@@ -1042,6 +1094,7 @@ class Theme:
 
     注意: 主题切换由App在运行时重建UI以即时生效
     """
+
     # 当前活动主题名称
     _current = "fluent_dark"
 
@@ -1209,18 +1262,19 @@ class PanelConfig:
     控制各个信息面板的显示/隐藏状态。
     受编译开关控制：如果编译开关禁用某功能，则对应面板强制隐藏。
     """
+
     # 默认全部显示
-    show_zones = True        # 战区导航
-    show_airfields = True    # 机场导航
-    show_fuel = True         # 燃油管理
-    show_speed = True        # 速度监视
+    show_zones = True  # 战区导航
+    show_airfields = True  # 机场导航
+    show_fuel = True  # 燃油管理
+    show_speed = True  # 速度监视
     speed_history_mode = False  # 空历模式：仅保留速度提醒，其它扩展面板临时关闭
-    show_checklist = True    # 检查清单
-    show_bombing = True      # v6.0新增：投弹预测（受ENABLE_CCRP开关控制）
+    show_checklist = True  # 检查清单
+    show_bombing = True  # v6.0新增：投弹预测（受ENABLE_CCRP开关控制）
     # v6.2.1: 导航条模式 - "integrated"(集成) / "standalone"(独立窗口)
     navigation_mode = "integrated"
     navigation_window_pos = None  # 独立窗口位置 (x, y)
-    navigation_bar_width = 1.0    # 独立导航栏宽度倍率（0.5-2.0）
+    navigation_bar_width = 1.0  # 独立导航栏宽度倍率（0.5-2.0）
 
     @classmethod
     def init_from_compile_switches(cls):
@@ -1247,12 +1301,12 @@ class PanelConfig:
         用于UI判断是否显示相关设置选项
         """
         feature_map = {
-            'zones': ENABLE_ZONES,
-            'airfields': ENABLE_AIRFIELDS,
-            'fuel': ENABLE_FUEL,
-            'speed': True,
-            'checklist': ENABLE_CHECKLIST,
-            'bombing': ENABLE_CCRP,
+            "zones": ENABLE_ZONES,
+            "airfields": ENABLE_AIRFIELDS,
+            "fuel": ENABLE_FUEL,
+            "speed": True,
+            "checklist": ENABLE_CHECKLIST,
+            "bombing": ENABLE_CCRP,
         }
         return feature_map.get(feature, True)
 
@@ -1267,17 +1321,18 @@ class PanelConfig:
             return False
 
         feature_state_map = {
-            'zones': cls.show_zones,
-            'airfields': cls.show_airfields,
-            'fuel': cls.show_fuel,
-            'checklist': cls.show_checklist,
-            'bombing': cls.show_bombing,
+            "zones": cls.show_zones,
+            "airfields": cls.show_airfields,
+            "fuel": cls.show_fuel,
+            "checklist": cls.show_checklist,
+            "bombing": cls.show_bombing,
         }
         return bool(feature_state_map.get(feature, True))
 
 
 class SnapConfig:
     """窗口吸附配置"""
+
     # 吸附距离（像素）：窗口边缘距离屏幕边缘小于此值时自动吸附
     SNAP_DISTANCE = 20
     # 是否启用吸附

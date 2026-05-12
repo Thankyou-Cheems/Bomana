@@ -59,20 +59,21 @@ from bomana.utils.math_utils import (
 # 游戏逻辑核心
 # ============================================================================
 
+
 class GameLogic:
     """游戏逻辑核心类
-    
+
     职责：
     1. 轮询8111接口获取数据
     2. 状态机管理（IDLE → HANGAR → ARMING → ALIVE → ...）
     3. 导航计算（战区目标选择、地速计算）
     4. 生成UI快照（线程安全的数据传递）
-    
+
     设计模式：
     - 使用锁保护共享状态
     - 独立线程执行tick循环
     - 通过snapshot()传递数据给UI
-    
+
     v6.0.1 优化：
     - Session禁用代理检查，减少网络延迟
     - 弹道计算移至tick线程，降低UI线程负载
@@ -86,7 +87,7 @@ class GameLogic:
     ATTITUDE_JITTER_TRIGGER_SCORE = 3.0
     ATTITUDE_JITTER_PITCH_RATE_DEG_S = 260.0
     ATTITUDE_JITTER_ROLL_RATE_DEG_S = 420.0
-    
+
     def __init__(self):
         self._lock = threading.Lock()
         self.session = requests.Session()
@@ -98,11 +99,11 @@ class GameLogic:
         self.map = MapObjectsFetcher(self.http)
         self.overspeed = OverspeedAnalyzer()
         self.state = GameState()
-    
+
     @property
     def is_api_down(self) -> bool:
         """轻量级API状态检查（用于轮询间隔控制）
-        
+
         避免在_poll_loop中生成完整snapshot只为检查api_down状态。
         """
         with self._lock:
@@ -110,7 +111,7 @@ class GameLogic:
 
     def tick(self) -> None:
         """主逻辑循环（每250ms执行一次）
-        
+
         流程：
         1. 获取遥测数据
         2. 获取/缓存地图元数据
@@ -131,9 +132,9 @@ class GameLogic:
         with self._lock:
             map_info = self.state.map_info
             need_map_info = (
-                map_info is None or
-                not map_info.valid or
-                (now - map_info.fetch_time) > ZoneConfig.MAP_INFO_CACHE_SEC
+                map_info is None
+                or not map_info.valid
+                or (now - map_info.fetch_time) > ZoneConfig.MAP_INFO_CACHE_SEC
             )
 
         if need_map_info and budget.remaining() > 0.05:
@@ -170,8 +171,8 @@ class GameLogic:
                 # 在战斗阶段对瞬时空帧做“上一帧有效数据”兜底，避免UI/状态机被单帧抖动拉偏。
                 phase_allows_grace = s.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
                 recently_seen = (
-                    s.last_player_present_ts > 0.0 and
-                    (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
+                    s.last_player_present_ts > 0.0
+                    and (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
                 )
                 used_tel_fallback = False
                 used_map_fallback = False
@@ -182,9 +183,8 @@ class GameLogic:
                         tel = prev_tel
                         used_tel_fallback = True
 
-                    map_unstable = (
-                        (not mp.ok) or
-                        (mp.ok and (mp.obj_count == 0) and (not mp.player_aircraft_present))
+                    map_unstable = (not mp.ok) or (
+                        mp.ok and (mp.obj_count == 0) and (not mp.player_aircraft_present)
                     )
                     if map_unstable and prev_map and prev_map.ok:
                         mp = prev_map
@@ -231,13 +231,18 @@ class GameLogic:
                     s.last_player_present_ts = now
 
                 presence_recently_seen = (
-                    s.last_player_present_ts > 0.0 and
-                    (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
+                    s.last_player_present_ts > 0.0
+                    and (now - s.last_player_present_ts) <= GameConfig.PLAYER_PRESENCE_GRACE_SEC
                 )
 
                 # 实体特征兜底：仅在“最近确实见过玩家”的短时间窗口内生效，
                 # 避免回机库后因遥测仍有残留值而长期保持 ALIVE。
-                if (not player_present) and phase_allows_player_grace and tel.entity_like and presence_recently_seen:
+                if (
+                    (not player_present)
+                    and phase_allows_player_grace
+                    and tel.entity_like
+                    and presence_recently_seen
+                ):
                     player_present = True
 
                 # 数据短抖动宽限：计分板/地图等场景可能导致8111瞬时空帧，避免ALIVE阶段立即判死。
@@ -300,10 +305,10 @@ class GameLogic:
                     if prev_tel and prev_tel.state_resp_ok and tel.state_resp_ok:
                         fuel_jump = tel.fuel_kg - prev_tel.fuel_kg
                         if (
-                            fuel_jump >= GameConfig.REFIT_FUEL_JUMP_KG and
-                            tel.ias_kmh <= GameConfig.REFIT_SPEED_KMH and
-                            abs(tel.vy_ms) <= GameConfig.REFIT_VSPEED_MS and
-                            (now - s.last_refit_ts) >= GameConfig.REFIT_MIN_GAP_SEC
+                            fuel_jump >= GameConfig.REFIT_FUEL_JUMP_KG
+                            and tel.ias_kmh <= GameConfig.REFIT_SPEED_KMH
+                            and abs(tel.vy_ms) <= GameConfig.REFIT_VSPEED_MS
+                            and (now - s.last_refit_ts) >= GameConfig.REFIT_MIN_GAP_SEC
                         ):
                             s.sortie_id += 1
                             s.last_refit_ts = now
@@ -365,11 +370,13 @@ class GameLogic:
             if scale_x <= 1e-6 or scale_y <= 1e-6:
                 return None
             return scale_x, scale_y
-        except (TypeError, ValueError, IndexError):
+        except TypeError, ValueError, IndexError:
             return None
 
     @staticmethod
-    def _distance_norm_from_delta(dx: float, dy: float, map_axis_scale_m: Optional[Tuple[float, float]]) -> float:
+    def _distance_norm_from_delta(
+        dx: float, dy: float, map_axis_scale_m: Optional[Tuple[float, float]]
+    ) -> float:
         """计算兼容旧语义的 distance（实际km / DISTANCE_SCALE）。"""
         dx = float(dx)
         dy = float(dy)
@@ -401,7 +408,9 @@ class GameLogic:
         distance_norm = calculate_distance(px, py, tx, ty)
         return bearing, distance_norm
 
-    def _record_endpoint_diagnostic_locked(self, ok: bool, streak_attr: str, count_attr: str) -> None:
+    def _record_endpoint_diagnostic_locked(
+        self, ok: bool, streak_attr: str, count_attr: str
+    ) -> None:
         """Update per-endpoint failure counters (must be called with lock held)."""
         if ok:
             setattr(self.state, streak_attr, 0)
@@ -456,14 +465,16 @@ class GameLogic:
         if att.last_sample_ts > 0:
             dt = max(0.0, now - att.last_sample_ts)
             if dt > 0:
-                att.jitter_score = max(0.0, att.jitter_score - dt * self.ATTITUDE_JITTER_DECAY_PER_SEC)
+                att.jitter_score = max(
+                    0.0, att.jitter_score - dt * self.ATTITUDE_JITTER_DECAY_PER_SEC
+                )
         else:
             dt = 0.0
 
         available = bool(
-            tel.attitude_available and
-            tel.attitude_pitch_present and
-            (tel.attitude_roll_present or tel.attitude_bank_present)
+            tel.attitude_available
+            and tel.attitude_pitch_present
+            and (tel.attitude_roll_present or tel.attitude_bank_present)
         )
         airborne = bool(tel.state_resp_ok and ((tel.ias_kmh > 120.0) or (tel.altitude_m > 150.0)))
 
@@ -478,7 +489,11 @@ class GameLogic:
             att.missing_since = None
 
             # 长期恒零检测（仅在空中启用，避免地面状态误判）。
-            if airborne and abs(pitch) <= self.ATTITUDE_ZERO_EPS_DEG and abs(lateral) <= self.ATTITUDE_ZERO_EPS_DEG:
+            if (
+                airborne
+                and abs(pitch) <= self.ATTITUDE_ZERO_EPS_DEG
+                and abs(lateral) <= self.ATTITUDE_ZERO_EPS_DEG
+            ):
                 if att.zero_since is None:
                     att.zero_since = now
             else:
@@ -488,7 +503,10 @@ class GameLogic:
             if dt > 0 and (att.last_pitch_deg is not None) and (att.last_roll_deg is not None):
                 pitch_rate = self._angle_delta_deg(pitch, att.last_pitch_deg) / dt
                 roll_rate = self._angle_delta_deg(lateral, att.last_roll_deg) / dt
-                if pitch_rate >= self.ATTITUDE_JITTER_PITCH_RATE_DEG_S or roll_rate >= self.ATTITUDE_JITTER_ROLL_RATE_DEG_S:
+                if (
+                    pitch_rate >= self.ATTITUDE_JITTER_PITCH_RATE_DEG_S
+                    or roll_rate >= self.ATTITUDE_JITTER_ROLL_RATE_DEG_S
+                ):
                     att.jitter_score += 1.0
 
             att.last_pitch_deg = pitch
@@ -505,12 +523,12 @@ class GameLogic:
             att.last_sample_ts = now
 
         missing_unreliable = bool(
-            (att.missing_since is not None) and
-            ((now - att.missing_since) >= self.ATTITUDE_MISSING_CONFIRM_SEC)
+            (att.missing_since is not None)
+            and ((now - att.missing_since) >= self.ATTITUDE_MISSING_CONFIRM_SEC)
         )
         zero_unreliable = bool(
-            (att.zero_since is not None) and
-            ((now - att.zero_since) >= self.ATTITUDE_ZERO_CONFIRM_SEC)
+            (att.zero_since is not None)
+            and ((now - att.zero_since) >= self.ATTITUDE_ZERO_CONFIRM_SEC)
         )
         jitter_unreliable = bool(att.jitter_score >= self.ATTITUDE_JITTER_TRIGGER_SCORE)
 
@@ -548,7 +566,7 @@ class GameLogic:
             if s.gear_change_time == 0.0:
                 s.gear_change_time = now
             elif now - s.gear_change_time > 0.1:
-                s.gear_stable_direction = (raw_gear_pct < s.last_gear_pct)
+                s.gear_stable_direction = raw_gear_pct < s.last_gear_pct
                 s.gear_stable_pct = raw_gear_pct
                 s.gear_change_time = 0.0
         else:
@@ -558,16 +576,16 @@ class GameLogic:
 
         delta = raw_gear_pct - s.last_gear_pct
         if abs(delta) >= 0.5:
-            s.gear_stable_direction = (delta < 0)
+            s.gear_stable_direction = delta < 0
         s.last_gear_pct = raw_gear_pct
 
     def _update_zone_navigation_locked(self, mp: MapObjData, tel: TelemetryData, now: float):
         """更新战区导航状态(须在锁内调用)
-        
+
         功能: 计算地速/检测战区摧毁/计算导航信息/选择目标战区
         """
         nav = self.state.zone_nav
-        
+
         if not mp.ok or not mp.player_pos:
             # 无数据时重置
             nav.zones = []
@@ -576,10 +594,10 @@ class GameLogic:
             nav.last_pos = None
             nav.ground_speed = 0.0
             return
-        
+
         px, py = mp.player_pos
         map_axis_scale_m = self._map_axis_scale_m(self.state.map_info)
-        
+
         # 计算航向：
         # HUD/导航优先使用机头罗盘（更贴近驾驶视角），
         # 罗盘不可用时再回退到地速向量航向。
@@ -595,28 +613,30 @@ class GameLogic:
         if heading is None:
             heading = 0.0
         nav.player_heading = heading
-        
+
         # === 地速(SOG)计算 ===
         # 原理：通过位置微分计算真实地速，不受风速影响
         if nav.last_pos and tel.ias_kmh > 40:
             dt = now - nav.last_pos_ts
-            
+
             # 限制计算频率（>0.4s），避免除法震荡
             if dt >= 0.4:
                 dx = px - nav.last_pos[0]
                 dy = py - nav.last_pos[1]
                 dist_moved = self._distance_norm_from_delta(dx, dy, map_axis_scale_m)
-                
+
                 if dist_moved > 0:
                     current_speed = dist_moved / dt
-                    
+
                     # 指数平滑滤波（EMA）
                     alpha = 0.2
                     if nav.ground_speed == 0:
                         nav.ground_speed = current_speed
                     else:
-                        nav.ground_speed = (nav.ground_speed * (1 - alpha)) + (current_speed * alpha)
-                
+                        nav.ground_speed = (nav.ground_speed * (1 - alpha)) + (
+                            current_speed * alpha
+                        )
+
                 nav.last_pos = (px, py)
                 nav.last_pos_ts = now
         else:
@@ -637,11 +657,10 @@ class GameLogic:
                 if destroyed:
                     nav.destroyed_zones = destroyed
                     nav.destroyed_alert_until = now + ZoneConfig.DESTROYED_ALERT_SEC
-                    
+
                     # v5.5: 判断是否有感兴趣的战区被摧毁
                     has_interesting = any(
-                        self._is_zone_of_interest(z, nav.target_zone)
-                        for z in destroyed
+                        self._is_zone_of_interest(z, nav.target_zone) for z in destroyed
                     )
                     nav.should_play_destroyed_sound = has_interesting
                 else:
@@ -649,42 +668,52 @@ class GameLogic:
             else:
                 nav.should_play_destroyed_sound = False
         nav.previous_zone_ids = current_zone_ids
-        
+
         # === 计算所有战区的导航信息 ===
         zones_with_nav = []
         for zone in mp.zones:
-            bearing, distance = self._bearing_distance_norm(px, py, zone.x, zone.y, map_axis_scale_m)
+            bearing, distance = self._bearing_distance_norm(
+                px, py, zone.x, zone.y, map_axis_scale_m
+            )
             relative = calculate_relative_bearing(heading, bearing)
-            zones_with_nav.append(Zone(
-                id=zone.id, index=zone.index, x=zone.x, y=zone.y,
-                color=zone.color, distance=distance,
-                bearing=bearing, relative=relative, is_target=False
-            ))
-        
+            zones_with_nav.append(
+                Zone(
+                    id=zone.id,
+                    index=zone.index,
+                    x=zone.x,
+                    y=zone.y,
+                    color=zone.color,
+                    distance=distance,
+                    bearing=bearing,
+                    relative=relative,
+                    is_target=False,
+                )
+            )
+
         # 按距离排序
         zones_with_nav.sort(key=lambda z: z.distance)
-        
+
         # [目标选择算法]
         # 核心原则:
         # 1. 目标粘性: 锁定后在90°内保持,避免频繁切换
         # 2. 精确对准优先: 持续对准(<5°)3秒后切换
         # 3. 角度优先于距离: ±45°内选角度最小的
-        # 
+        #
         # 关键配置(ZoneConfig):
         # - HEADING_TOLERANCE=45 (角度门)
         # - TARGET_HOLD_ANGLE=90 (保持角度)
         # - PRECISE_AIM_THRESHOLD=5 (精确对准阈值)
         # - PRECISE_AIM_CONFIRM_SEC=3 (确认时间)
-        
+
         # === 选择目标战区（v5.7改进：目标粘性 + 精确对准切换）===
         # === v5.9改进：角度门内优先选择角度最小的目标 ===
         target = None
         is_airborne = not tel.is_on_ground  # 判断是否在空中
-        
+
         if is_airborne and zones_with_nav:
             # 创建ID到Zone的映射，方便查找
             zone_by_id = {z.id: z for z in zones_with_nav}
-            
+
             # Step 1: 检查当前锁定目标是否仍然有效
             locked_zone = None
             if nav.locked_target_id and nav.locked_target_id in zone_by_id:
@@ -699,16 +728,17 @@ class GameLogic:
             else:
                 # 目标消失，清除锁定
                 nav.locked_target_id = None
-            
+
             # Step 2: 检测精确对准（<5°）的候选目标
             # ⚠️ 从精确对准范围内选择角度最小的目标（不是距离最近的）
-            precise_candidates = [z for z in zones_with_nav 
-                                  if abs(z.relative) <= ZoneConfig.PRECISE_AIM_THRESHOLD]
+            precise_candidates = [
+                z for z in zones_with_nav if abs(z.relative) <= ZoneConfig.PRECISE_AIM_THRESHOLD
+            ]
             precise_candidate = None
             if precise_candidates:
                 # 按角度排序，选择角度最小的
                 precise_candidate = min(precise_candidates, key=lambda z: abs(z.relative))
-            
+
             if precise_candidate:
                 # 检查是否是新的候选目标
                 if nav.precise_aim_candidate_id != precise_candidate.id:
@@ -727,12 +757,13 @@ class GameLogic:
                 # 没有精确对准的目标，清除候选
                 nav.precise_aim_candidate_id = None
                 nav.precise_aim_since = 0.0
-            
+
             # Step 3: 如果还没有目标，从45°角度门内选择角度最小的
             # ⚠️ 优先角度最小，而不是距离最近
             if target is None:
-                candidates_in_gate = [z for z in zones_with_nav 
-                                      if abs(z.relative) <= ZoneConfig.HEADING_TOLERANCE]
+                candidates_in_gate = [
+                    z for z in zones_with_nav if abs(z.relative) <= ZoneConfig.HEADING_TOLERANCE
+                ]
                 if candidates_in_gate:
                     # 按角度排序，选择角度最小的
                     best_candidate = min(candidates_in_gate, key=lambda z: abs(z.relative))
@@ -743,60 +774,68 @@ class GameLogic:
             nav.locked_target_id = None
             nav.precise_aim_candidate_id = None
             nav.precise_aim_since = 0.0
-        
+
         # 标记目标
         if target:
             for i, zone in enumerate(zones_with_nav):
                 if zone.id == target.id:
                     zones_with_nav[i] = Zone(
-                        id=zone.id, index=zone.index, x=zone.x, y=zone.y,
-                        color=zone.color, distance=zone.distance,
-                        bearing=zone.bearing, relative=zone.relative, is_target=True
+                        id=zone.id,
+                        index=zone.index,
+                        x=zone.x,
+                        y=zone.y,
+                        color=zone.color,
+                        distance=zone.distance,
+                        bearing=zone.bearing,
+                        relative=zone.relative,
+                        is_target=True,
                     )
                     target = zones_with_nav[i]
                     break
-        
+
         nav.zones = zones_with_nav
         nav.target_zone = target
-        nav.is_deviating = (abs(target.relative) > ZoneConfig.DEVIATION_WARNING) if target else False
+        nav.is_deviating = (
+            (abs(target.relative) > ZoneConfig.DEVIATION_WARNING) if target else False
+        )
 
     def _is_zone_of_interest(self, zone: Zone, target_zone: Optional[Zone]) -> bool:
         """判断战区是否是玩家感兴趣的（v5.5新增）
-        
+
         判断标准：
         1. 是当前目标战区 → 关注
         2. 后方战区（>90°）→ 不关注
         3. 前方近距离战区：≤75° 且 <35km → 关注
         4. 正前方中距离战区：≤45° 且 <60km → 关注
-        
+
         Args:
             zone: 待判断的战区
             target_zone: 当前目标战区
-        
+
         Returns:
             True 表示该战区是感兴趣的
         """
         # 1. 是当前目标战区
         if target_zone and zone.id == target_zone.id:
             return True
-        
+
         abs_relative = abs(zone.relative)
-        
+
         # 2. 后方战区（>90°）不关注
         if abs_relative > 90:
             return False
-        
+
         # 3. 前方战区需要结合距离判断
         distance_km = zone.distance * ZoneConfig.DISTANCE_SCALE
-        
+
         # 前方近距离：≤75° 且 <35km
         if abs_relative <= 75 and distance_km < 35:
             return True
-        
+
         # 正前方中距离：≤45° 且 <60km
         if abs_relative <= 45 and distance_km < 60:
             return True
-        
+
         # 其他情况（前方远距离或大角度）不关注
         return False
 
@@ -807,7 +846,7 @@ class GameLogic:
     ) -> List[ZoneDisplayInfo]:
         """根据导航状态构建战区显示列表。"""
         items: List[ZoneDisplayInfo] = []
-        for zone in zones[:ZoneConfig.MAX_DISPLAY_ZONES]:
+        for zone in zones[: ZoneConfig.MAX_DISPLAY_ZONES]:
             ete_text = ""
             if zone.is_target and ground_speed > 1e-7:
                 seconds_left = zone.distance / ground_speed
@@ -907,11 +946,15 @@ class GameLogic:
                     break
 
             for i, (dist, info) in enumerate(enemy_infos):
-                is_target = (i == target_idx)
+                is_target = i == target_idx
                 ete_text = ""
                 cdi_str = ""
                 cdi_clr = ""
-                if is_target and abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE and ground_speed > 1e-7:
+                if (
+                    is_target
+                    and abs(info.relative) <= ZoneConfig.ENEMY_AIRFIELD_ETE_ANGLE
+                    and ground_speed > 1e-7
+                ):
                     seconds_left = dist / ground_speed
                     if seconds_left < 3600:
                         mm, ss = divmod(int(seconds_left), 60)
@@ -930,7 +973,7 @@ class GameLogic:
                         cdi_color=cdi_clr,
                     )
                 )
-            has_airfield_target = (target_idx >= 0)
+            has_airfield_target = target_idx >= 0
 
         return friendly_display, enemy_display, has_airfield_target
 
@@ -952,7 +995,9 @@ class GameLogic:
         items: List[str] = []
         for zone in destroyed_zones:
             try:
-                bearing, dist_norm = self._bearing_distance_norm(px, py, zone.x, zone.y, map_axis_scale_m)
+                bearing, dist_norm = self._bearing_distance_norm(
+                    px, py, zone.x, zone.y, map_axis_scale_m
+                )
                 dist_km = dist_norm * ZoneConfig.DISTANCE_SCALE
                 rel = calculate_relative_bearing(player_heading, bearing)
                 items.append(f"#{zone.index} {get_direction_text(rel)} {dist_km:.1f}km")
@@ -973,7 +1018,7 @@ class GameLogic:
 
     def save_timer_state(self):
         """保存计时器状态到文件
-        
+
         用于应用退出时保存进度。
         """
         with self._lock:
@@ -986,31 +1031,30 @@ class GameLogic:
 
     def restore_timer_state(self) -> bool:
         """从文件恢复计时器状态
-        
+
         Returns:
             是否成功恢复
         """
         data = StateManager.load()
         if not data:
             return False
-        
+
         with self._lock:
             self.state.current_life = LifeState(
-                spawn_time=data['computed_spawn_time'],
-                life_index=data.get('life_index', 1)
+                spawn_time=data["computed_spawn_time"], life_index=data.get("life_index", 1)
             )
-            self.state.sortie_id = data.get('sortie_id', 0)
+            self.state.sortie_id = data.get("sortie_id", 0)
             self.state.phase = Phase.ALIVE
-            self.state.last_refit_ts = data['computed_spawn_time']
+            self.state.last_refit_ts = data["computed_spawn_time"]
             self.state.last_player_present_ts = time.time()
         return True
 
     def snapshot(self) -> UISnapshot:
         """生成UI快照（线程安全）
-        
+
         将当前游戏状态转换为不可变的UISnapshot对象。
         这是逻辑层与UI层的唯一数据通道。
-        
+
         Returns:
             UISnapshot对象
         """
@@ -1116,13 +1160,15 @@ class GameLogic:
         api_down_pending = False
         if (api_down_candidate_since is not None) and (not api_down):
             api_down_pending = (
-                (now - api_down_candidate_since) >= GameConfig.API_PENDING_HINT_DELAY_SEC
-            )
+                now - api_down_candidate_since
+            ) >= GameConfig.API_PENDING_HINT_DELAY_SEC
 
         if api_down:
             main_badge = ("❌8111不可用", Theme.TEXT, Theme.RED)
             status_text = "未检测到 8111"
-        elif api_down_pending and (phase in (Phase.IDLE, Phase.HANGAR, Phase.ARMING) or life_spawn_time is None):
+        elif api_down_pending and (
+            phase in (Phase.IDLE, Phase.HANGAR, Phase.ARMING) or life_spawn_time is None
+        ):
             main_badge = ("⏳加入战斗中", Theme.TEXT, Theme.BLUE)
             status_text = "加入战斗中"
         else:
@@ -1163,11 +1209,11 @@ class GameLogic:
             mach=tel.mach,
             wing_sweep=tel.wing_sweep,
             enabled=(
-                OverspeedConfig.ENABLED and
-                PanelConfig.is_effectively_enabled("speed") and
-                (phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and
-                tel.state_resp_ok and
-                (not on_ground)
+                OverspeedConfig.ENABLED
+                and PanelConfig.is_effectively_enabled("speed")
+                and (phase in (Phase.ALIVE, Phase.LOSS_PENDING))
+                and tel.state_resp_ok
+                and (not on_ground)
             ),
         )
         if phase == Phase.ALIVE:
@@ -1178,11 +1224,13 @@ class GameLogic:
 
         map_axis_scale_m = self._map_axis_scale_m(map_info)
         zone_display_list = self._build_zone_display_list(nav_zones, nav_ground_speed)
-        friendly_airfield_display, enemy_airfields_display, has_airfield_target = self._build_airfield_display(
-            mp=mp,
-            map_axis_scale_m=map_axis_scale_m,
-            player_heading=nav_player_heading,
-            ground_speed=nav_ground_speed,
+        friendly_airfield_display, enemy_airfields_display, has_airfield_target = (
+            self._build_airfield_display(
+                mp=mp,
+                map_axis_scale_m=map_axis_scale_m,
+                player_heading=nav_player_heading,
+                ground_speed=nav_ground_speed,
+            )
         )
 
         has_target = nav_target_zone is not None
@@ -1208,10 +1256,19 @@ class GameLogic:
         ground_speed_kmh_for_bombing = nav_ground_speed * ZoneConfig.DISTANCE_SCALE * 3600
         return_fuel_needed_kg = 0.0
         return_status = "unknown"
-        friendly_distance_km = friendly_airfield_display.distance_km if friendly_airfield_display else 0.0
-        if friendly_airfield_display and fuel_rate_stable and ground_speed_kmh_for_bombing >= 50 and friendly_distance_km > 0:
+        friendly_distance_km = (
+            friendly_airfield_display.distance_km if friendly_airfield_display else 0.0
+        )
+        if (
+            friendly_airfield_display
+            and fuel_rate_stable
+            and ground_speed_kmh_for_bombing >= 50
+            and friendly_distance_km > 0
+        ):
             time_min = (friendly_distance_km / ground_speed_kmh_for_bombing) * 60.0
-            return_fuel_needed_kg = fuel_consumption_rate * time_min * FuelConfig.RETURN_SAFETY_FACTOR
+            return_fuel_needed_kg = (
+                fuel_consumption_rate * time_min * FuelConfig.RETURN_SAFETY_FACTOR
+            )
             if return_fuel_needed_kg > 0:
                 if fuel_current_kg >= return_fuel_needed_kg * FuelConfig.RETURN_WARNING_FACTOR:
                     return_status = "safe"
@@ -1228,7 +1285,7 @@ class GameLogic:
 
         raw_gear_pct = float(tel.gear_pct or 0.0)
         gear_pct = gear_stable_pct if gear_stable_pct >= 0 else raw_gear_pct
-        gear_moving = (0 < raw_gear_pct < 100)
+        gear_moving = 0 < raw_gear_pct < 100
         gear_retracting = gear_stable_direction if gear_moving else False
 
         bombing_valid = False
@@ -1313,7 +1370,7 @@ class GameLogic:
             release_status=release_status,
             target_zone_distance_m=target_zone_distance_m,
             ground_speed_kmh=ground_speed_kmh_for_bombing,
-            aircraft_type_name=str(tel.type_name or ''),
+            aircraft_type_name=str(tel.type_name or ""),
             attitude_pitch_deg=attitude_pitch_deg,
             attitude_roll_deg=attitude_roll_deg,
             attitude_bank_deg=attitude_bank_deg,
@@ -1324,9 +1381,7 @@ class GameLogic:
             overspeed_ratio=float(overspeed.ias_ratio or 0.0),
             overspeed_display_ratio=float(overspeed_display_ratio or 0.0),
             overspeed_current_ias_kmh=float(overspeed.ias_kmh or 0.0),
-            overspeed_current_mach=(
-                float(overspeed.mach) if overspeed.mach is not None else None
-            ),
+            overspeed_current_mach=(float(overspeed.mach) if overspeed.mach is not None else None),
             overspeed_limit_kmh=float(overspeed.ias_limit_kmh or 0.0),
             overspeed_limit_mach=float(overspeed.mach_limit or 0.0),
             overspeed_match=bool(overspeed.resolved_fm),
@@ -1369,7 +1424,7 @@ class GameLogic:
 
     def _update_landing_locked(self, tel: TelemetryData, now: float):
         """更新着陆状态（必须在锁内调用）
-        
+
         着陆判断：低速3秒 → 触发"就绪"闪烁10秒
         """
         s = self.state
@@ -1379,7 +1434,7 @@ class GameLogic:
         # /state 失败时不要用默认零值参与着陆判断，避免误判为“在地面”。
         if not tel.state_resp_ok:
             return
-        
+
         if tel.is_on_ground:
             if s.landing_start_time is None:
                 s.landing_start_time = now
@@ -1388,53 +1443,58 @@ class GameLogic:
                     s.landed_flash_until = now + GameConfig.LANDED_FLASH_SEC
         else:
             s.landing_start_time = None
+
     def _update_bombing_calculation_locked(self, tel: TelemetryData, now: float):
         """更新弹道计算缓存（必须在锁内调用）
-        
+
         v6.0.1 优化：将弹道计算从UI线程(50ms)移至tick线程(250ms)
         减少UI线程的计算负载，提高界面流畅度
         """
         s = self.state
         nav = s.zone_nav
-        
+
         # 检查是否需要计算
         if not ENABLE_CCRP:
             s.bombing_calc_valid = False
             return
-        
+
         # 计算频率控制：至少间隔200ms
         if (now - s.last_bombing_calc_time) < 0.2:
             return
-        
+
         s.last_bombing_calc_time = now
-        
+
         # 检查计算条件
         has_target = nav.target_zone is not None
         on_ground = tel.is_on_ground
         altitude_m = tel.altitude_m
-        
-        if not (has_target and s.phase == Phase.ALIVE and 
-                not on_ground and altitude_m > 50 and 
-                nav.ground_speed > 0.0002):
+
+        if not (
+            has_target
+            and s.phase == Phase.ALIVE
+            and not on_ground
+            and altitude_m > 50
+            and nav.ground_speed > 0.0002
+        ):
             s.bombing_calc_valid = False
             return
-        
+
         # 执行弹道计算
         target_zone = nav.target_zone
         target_distance_m = target_zone.distance * ZoneConfig.DISTANCE_SCALE * 1000
         ground_speed_ms = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 1000
-        
+
         bomb_params = BombConfig.get_bomb_physics_params()
-        
+
         flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
             release_alt_m=altitude_m,
             release_speed_ms=ground_speed_ms,
             target_alt_m=0.0,
             dive_angle_deg=0.0,
             initial_vz_ms=None,
-            bomb_params=bomb_params
+            bomb_params=bomb_params,
         )
-        
+
         if bomb_range_m > 0:
             release_distance_m, time_to_release, release_status = calculate_release_timing(
                 current_distance_m=target_distance_m,
@@ -1442,9 +1502,9 @@ class GameLogic:
                 ground_speed_ms=ground_speed_ms,
                 target_alt_m=0.0,
                 dive_angle_deg=0.0,
-                initial_vz_ms=None
+                initial_vz_ms=None,
             )
-            
+
             # 缓存结果
             s.cached_bomb_flight_time = flight_time
             s.cached_bomb_range_m = bomb_range_m
@@ -1455,4 +1515,3 @@ class GameLogic:
             s.bombing_calc_valid = True
         else:
             s.bombing_calc_valid = False
-

@@ -45,7 +45,9 @@ class LogicPoller:
                 time.sleep(NetworkConfig.BACKOFF_MAX)
                 continue
 
-            interval = NetworkConfig.BACKOFF_MAX if self.game.is_api_down else NetworkConfig.POLL_INTERVAL
+            interval = (
+                NetworkConfig.BACKOFF_MAX if self.game.is_api_down else NetworkConfig.POLL_INTERVAL
+            )
             elapsed = time.monotonic() - loop_start
             time.sleep(max(0.0, interval - elapsed))
 

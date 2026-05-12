@@ -16,6 +16,7 @@ from bomana.config import SoundConfig
 # 音效管理
 # ============================================================================
 
+
 @dataclass(frozen=True)
 class _SoundJob:
     pattern: str
@@ -26,10 +27,11 @@ class _SoundJob:
 
 class SoundManager:
     """音效管理器
-    
+
     使用Windows Beep API播放提示音。
     在单 worker 线程播放，避免阻塞UI和高频创建线程。
     """
+
     _STOP = object()
 
     def __init__(self):
@@ -44,13 +46,13 @@ class SoundManager:
             daemon=True,
         )
         self._worker.start()
-    
+
     def set_enabled(self, enabled: bool):
         self._enabled = enabled
-    
+
     def is_enabled(self) -> bool:
         return self._enabled
-    
+
     def play(
         self,
         pattern: str = "tick",
@@ -61,7 +63,7 @@ class SoundManager:
         custom_file: str | None = None,
     ):
         """播放音效
-        
+
         Args:
             pattern: 音效模式（"tick", "warning", "on", "zone_destroyed", "overspeed_warning", "overspeed_critical"）
             freq: 直接指定频率（Hz）
@@ -70,7 +72,7 @@ class SoundManager:
         # "on"模式总是播放（用于功能开启反馈）
         if not self._enabled and not force and pattern != "on":
             return
-        
+
         with self._lock:
             if self._stopped or self._busy:
                 return
@@ -151,7 +153,7 @@ class SoundManager:
 
     @staticmethod
     def _play_sequence(seq: List[Tuple[int, int, int]]) -> None:
-        for (f, ms, gap) in seq:
+        for f, ms, gap in seq:
             try:
                 ctypes.windll.kernel32.Beep(int(f), int(ms))
             except Exception:
@@ -184,25 +186,25 @@ class SoundManager:
                 raise OSError(f"mci play failed: {err}")
         finally:
             _mci(f"close {alias}")
-    
+
     @staticmethod
     def _get_pattern_sequence(pattern: str) -> List[Tuple[int, int, int]]:
         """获取音效序列
-        
+
         Returns:
             [(频率, 持续时间, 间隔), ...]
         """
         if pattern == "on":
-            return [(*SoundConfig.BEEP_ON_1, SoundConfig.ON_GAP_MS), 
-                   (*SoundConfig.BEEP_ON_2, 0)]
+            return [(*SoundConfig.BEEP_ON_1, SoundConfig.ON_GAP_MS), (*SoundConfig.BEEP_ON_2, 0)]
         elif pattern == "manual_reset":
             return [(*SoundConfig.BEEP_MANUAL_RESET, 0)]
         elif pattern == "warning":
-            return [(*SoundConfig.BEEP_WARNING_1, SoundConfig.WARNING_GAP_MS), 
-                   (*SoundConfig.BEEP_WARNING_2, 0)]
+            return [
+                (*SoundConfig.BEEP_WARNING_1, SoundConfig.WARNING_GAP_MS),
+                (*SoundConfig.BEEP_WARNING_2, 0),
+            ]
         elif pattern == "zone_destroyed":
-            return [(*SoundConfig.BEEP_ZONE_DESTROYED, 50), 
-                   (*SoundConfig.BEEP_ZONE_DESTROYED, 0)]
+            return [(*SoundConfig.BEEP_ZONE_DESTROYED, 50), (*SoundConfig.BEEP_ZONE_DESTROYED, 0)]
         elif pattern == "overspeed_warning":
             return [(*SoundConfig.BEEP_OVERSPEED_WARN, 0)]
         elif pattern == "overspeed_critical":

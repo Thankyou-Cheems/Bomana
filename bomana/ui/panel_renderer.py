@@ -51,7 +51,9 @@ class AppPanelRenderer:
             info = widget.grid_info()
             unchanged = True
             for key, value in kwargs.items():
-                if self._normalize_geom_value(info.get(key, "")) != self._normalize_geom_value(value):
+                if self._normalize_geom_value(info.get(key, "")) != self._normalize_geom_value(
+                    value
+                ):
                     unchanged = False
                     break
             if unchanged:
@@ -75,7 +77,9 @@ class AppPanelRenderer:
             info = widget.pack_info()
             unchanged = True
             for key, value in kwargs.items():
-                if self._normalize_geom_value(info.get(key, "")) != self._normalize_geom_value(value):
+                if self._normalize_geom_value(info.get(key, "")) != self._normalize_geom_value(
+                    value
+                ):
                     unchanged = False
                     break
             if unchanged:
@@ -98,9 +102,15 @@ class AppPanelRenderer:
         app = self.app
         layout_changed = False
         if app._zone_panel_visible and app._checklist_panel_visible:
-            layout_changed |= self._grid_if_needed(app.mid_frame, row=1, column=0, sticky="ew", pady=(0, int(4 * app.scale)))
-            layout_changed |= self._grid_if_needed(app.zone_frame, row=0, column=0, sticky="new", padx=(0, int(2 * app.scale)))
-            layout_changed |= self._grid_if_needed(app.chk_frame, row=0, column=1, sticky="new", padx=(int(2 * app.scale), 0))
+            layout_changed |= self._grid_if_needed(
+                app.mid_frame, row=1, column=0, sticky="ew", pady=(0, int(4 * app.scale))
+            )
+            layout_changed |= self._grid_if_needed(
+                app.zone_frame, row=0, column=0, sticky="new", padx=(0, int(2 * app.scale))
+            )
+            layout_changed |= self._grid_if_needed(
+                app.chk_frame, row=0, column=1, sticky="new", padx=(int(2 * app.scale), 0)
+            )
             layout_changed |= self._pack_if_needed(
                 app.chk_border_frame,
                 side="left",
@@ -111,15 +121,23 @@ class AppPanelRenderer:
             if layout_changed:
                 app._recalc_size()
         elif app._zone_panel_visible:
-            layout_changed |= self._grid_if_needed(app.mid_frame, row=1, column=0, sticky="ew", pady=(0, int(4 * app.scale)))
-            layout_changed |= self._grid_if_needed(app.zone_frame, row=0, column=0, columnspan=2, sticky="new")
+            layout_changed |= self._grid_if_needed(
+                app.mid_frame, row=1, column=0, sticky="ew", pady=(0, int(4 * app.scale))
+            )
+            layout_changed |= self._grid_if_needed(
+                app.zone_frame, row=0, column=0, columnspan=2, sticky="new"
+            )
             layout_changed |= self._grid_remove_if_needed(app.chk_frame)
             if layout_changed:
                 app._recalc_size()
         elif app._checklist_panel_visible:
-            layout_changed |= self._grid_if_needed(app.mid_frame, row=1, column=0, sticky="ew", pady=(0, int(4 * app.scale)))
+            layout_changed |= self._grid_if_needed(
+                app.mid_frame, row=1, column=0, sticky="ew", pady=(0, int(4 * app.scale))
+            )
             layout_changed |= self._grid_remove_if_needed(app.zone_frame)
-            layout_changed |= self._grid_if_needed(app.chk_frame, row=0, column=0, columnspan=2, sticky="new")
+            layout_changed |= self._grid_if_needed(
+                app.chk_frame, row=0, column=0, columnspan=2, sticky="new"
+            )
             layout_changed |= self._pack_forget_if_needed(app.chk_border_frame)
             if layout_changed:
                 app._recalc_size()
@@ -264,7 +282,9 @@ class AppPanelRenderer:
                 for widget in widgets:
                     self._grid_remove_if_needed(widget)
 
-    def _build_heading_targets(self, snap: UISnapshot) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any]:
+    def _build_heading_targets(
+        self, snap: UISnapshot
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any]:
         """Build integrated heading-tape targets and status items."""
         app = self.app
         destroyed_zones = (
@@ -296,23 +316,44 @@ class AppPanelRenderer:
         bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
 
         if zones_enabled:
-            self._grid_if_needed(app.zone_header_frame, row=0, column=0, sticky="ew", padx=pad_x, pady=(int(6 * s), int(2 * s)))
+            self._grid_if_needed(
+                app.zone_header_frame,
+                row=0,
+                column=0,
+                sticky="ew",
+                padx=pad_x,
+                pady=(int(6 * s), int(2 * s)),
+            )
             self._grid_remove_if_needed(app.compact_nav_frame)
             if hasattr(app, "nav_window") and app.nav_window and app.nav_window.is_visible():
                 app.nav_window.update_display(snap)
 
-            nav_in_main = (PanelConfig.navigation_mode == "integrated")
+            nav_in_main = PanelConfig.navigation_mode == "integrated"
             if app.heading_tape is not None:
                 if nav_in_main and heading_available:
                     targets, active_targets_info, target_zone = self._build_heading_targets(snap)
                     primary_dist = target_zone.distance_km if target_zone else 10.0
                     app.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
                     self.update_tape_info_labels(active_targets_info, target_zone)
-                    self._grid_if_needed(app.heading_tape_frame, row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
+                    self._grid_if_needed(
+                        app.heading_tape_frame,
+                        row=1,
+                        column=0,
+                        sticky="ew",
+                        padx=pad_x,
+                        pady=(int(2 * s), int(4 * s)),
+                    )
                 elif nav_in_main:
                     app.heading_tape.clear()
                     self.update_tape_info_labels([], None)
-                    self._grid_if_needed(app.heading_tape_frame, row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
+                    self._grid_if_needed(
+                        app.heading_tape_frame,
+                        row=1,
+                        column=0,
+                        sticky="ew",
+                        padx=pad_x,
+                        pady=(int(2 * s), int(4 * s)),
+                    )
                 else:
                     app.heading_tape.clear()
                     self.update_tape_info_labels([], None)
@@ -326,7 +367,11 @@ class AppPanelRenderer:
                     alert_text = "💥 战区已摧毁!"
                 wrap = max(int(220 * s), app.zone_frame.winfo_width() - int(16 * s))
                 app.zone_alert_lbl.config(text=alert_text, wraplength=wrap, justify="left")
-                if snap.should_play_destroyed_sound and not app._last_zone_destroyed_alert and app._zone_sound_enabled:
+                if (
+                    snap.should_play_destroyed_sound
+                    and not app._last_zone_destroyed_alert
+                    and app._zone_sound_enabled
+                ):
                     app.sound.play(pattern="zone_destroyed")
                 app._last_zone_destroyed_alert = True
             else:
@@ -340,8 +385,22 @@ class AppPanelRenderer:
                 app._zone_layout_mode = zone_layout_mode
 
             if nav_in_main:
-                self._grid_if_needed(app.zone_list_title_lbl, row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
-                self._grid_if_needed(app.zone_list_frame, row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+                self._grid_if_needed(
+                    app.zone_list_title_lbl,
+                    row=3,
+                    column=0,
+                    sticky="ew",
+                    padx=pad_x,
+                    pady=(0, int(2 * s)),
+                )
+                self._grid_if_needed(
+                    app.zone_list_frame,
+                    row=4,
+                    column=0,
+                    sticky="ew",
+                    padx=pad_x,
+                    pady=(0, int(10 * s)),
+                )
             else:
                 self._grid_remove_if_needed(app.zone_list_title_lbl)
                 self._grid_remove_if_needed(app.zone_list_frame)
@@ -358,11 +417,25 @@ class AppPanelRenderer:
             else:
                 for zone in snap.zones[: ZoneConfig.MAX_DISPLAY_ZONES]:
                     marker = "➤" if zone.is_target else "○"
-                    dist_text = f"{zone.distance_km:.1f}km" if zone.distance_km < 10 else f"{int(zone.distance_km)}km"
+                    dist_text = (
+                        f"{zone.distance_km:.1f}km"
+                        if zone.distance_km < 10
+                        else f"{int(zone.distance_km)}km"
+                    )
                     rel_sign = "+" if zone.relative > 0 else ""
-                    rel_text = f"{rel_sign}{zone.relative:.2f}°" if zone.is_target else f"{rel_sign}{int(zone.relative)}°"
+                    rel_text = (
+                        f"{rel_sign}{zone.relative:.2f}°"
+                        if zone.is_target
+                        else f"{rel_sign}{int(zone.relative)}°"
+                    )
                     relative_text = rel_text if nav_in_main else ""
-                    fg = Theme.GREEN if zone.is_target and not snap.is_deviating else Theme.ORANGE if zone.is_target else Theme.TEXT_DIM
+                    fg = (
+                        Theme.GREEN
+                        if zone.is_target and not snap.is_deviating
+                        else Theme.ORANGE
+                        if zone.is_target
+                        else Theme.TEXT_DIM
+                    )
                     self._set_nav_row(
                         row_pool[idx],
                         icon=marker,
@@ -388,7 +461,7 @@ class AppPanelRenderer:
             app._zone_layout_mode = None
 
         if airfields_enabled:
-            nav_in_main = (PanelConfig.navigation_mode == "integrated")
+            nav_in_main = PanelConfig.navigation_mode == "integrated"
             airport_layout_mode = "full" if nav_in_main else "hidden"
             if app._airport_layout_mode != airport_layout_mode:
                 self._clear_nav_rows(app._airport_row_pool)
@@ -396,8 +469,22 @@ class AppPanelRenderer:
                 app._airport_layout_mode = airport_layout_mode
 
             if nav_in_main:
-                self._grid_if_needed(app.airport_title_lbl, row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
-                self._grid_if_needed(app.airport_list_frame, row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+                self._grid_if_needed(
+                    app.airport_title_lbl,
+                    row=5,
+                    column=0,
+                    sticky="ew",
+                    padx=pad_x,
+                    pady=(0, int(2 * s)),
+                )
+                self._grid_if_needed(
+                    app.airport_list_frame,
+                    row=6,
+                    column=0,
+                    sticky="ew",
+                    padx=pad_x,
+                    pady=(0, int(10 * s)),
+                )
                 row_pool = app._airport_row_pool
             else:
                 self._grid_remove_if_needed(app.airport_title_lbl)
@@ -407,7 +494,9 @@ class AppPanelRenderer:
             ap_idx = 0
             if snap.friendly_airfield:
                 af = snap.friendly_airfield
-                dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
+                dist_text = (
+                    f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
+                )
                 rel_sign = "+" if af.relative > 0 else ""
                 rel_text = f"{rel_sign}{int(af.relative)}°"
                 relative_text = rel_text if nav_in_main else ""
@@ -424,7 +513,11 @@ class AppPanelRenderer:
             if snap.enemy_airfields:
                 for af in snap.enemy_airfields[: max(0, ZoneConfig.MAX_DISPLAY_AIRFIELDS - ap_idx)]:
                     marker = "➤" if af.is_target else "○"
-                    dist_text = f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
+                    dist_text = (
+                        f"{af.distance_km:.1f}km"
+                        if af.distance_km < 10
+                        else f"{int(af.distance_km)}km"
+                    )
                     rel_sign = "+" if af.relative > 0 else ""
                     rel_text = f"{rel_sign}{int(af.relative)}°"
                     relative_text = rel_text if nav_in_main else ""
@@ -457,8 +550,17 @@ class AppPanelRenderer:
             app._airport_layout_mode = None
 
         if fuel_enabled:
-            self._grid_if_needed(app.fuel_header_frame, row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
-            self._grid_if_needed(app.fuel_info_frame, row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
+            self._grid_if_needed(
+                app.fuel_header_frame,
+                row=7,
+                column=0,
+                sticky="ew",
+                padx=pad_x,
+                pady=(0, int(2 * s)),
+            )
+            self._grid_if_needed(
+                app.fuel_info_frame, row=8, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s))
+            )
             self.update_fuel_display(snap)
         else:
             self._grid_remove_if_needed(app.fuel_header_frame)
@@ -466,8 +568,22 @@ class AppPanelRenderer:
 
         if ENABLE_CCRP:
             if bombing_enabled:
-                self._grid_if_needed(app.bombing_header_frame, row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
-                self._grid_if_needed(app.bombing_info_frame, row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
+                self._grid_if_needed(
+                    app.bombing_header_frame,
+                    row=9,
+                    column=0,
+                    sticky="ew",
+                    padx=pad_x,
+                    pady=(0, int(2 * s)),
+                )
+                self._grid_if_needed(
+                    app.bombing_info_frame,
+                    row=10,
+                    column=0,
+                    sticky="ew",
+                    padx=pad_x,
+                    pady=(0, int(6 * s)),
+                )
                 self.update_bombing_display(snap)
             else:
                 self._grid_remove_if_needed(app.bombing_header_frame)
@@ -546,7 +662,9 @@ class AppPanelRenderer:
     def update_bombing_display(self, snap: UISnapshot) -> None:
         """更新投弹预测信息显示。"""
         app = self.app
-        app.bomb_select_lbl.config(text=f"炸弹: {BombConfig.format_bomb_name(snap.bomb_name)} (点击更换)")
+        app.bomb_select_lbl.config(
+            text=f"炸弹: {BombConfig.format_bomb_name(snap.bomb_name)} (点击更换)"
+        )
 
         if snap.bombing_valid:
             bomb_range_km = snap.bomb_range_m / 1000.0
@@ -556,7 +674,7 @@ class AppPanelRenderer:
             status = snap.release_status
             dist_m = snap.release_distance_m
             if dist_m > 1000:
-                dist_str = f"{dist_m/1000:.2f}km"
+                dist_str = f"{dist_m / 1000:.2f}km"
             elif dist_m > 100:
                 dist_str = f"{int(dist_m)}m"
             else:
@@ -618,7 +736,9 @@ class AppPanelRenderer:
         limit_mach = float(getattr(snap, "overspeed_limit_mach", 0.0) or 0.0)
         matched = bool(getattr(snap, "overspeed_match", False))
         reason = str(getattr(snap, "overspeed_reason", "") or "")
-        aircraft_type_name = self.format_aircraft_type_label(str(getattr(snap, "aircraft_type_name", "") or ""))
+        aircraft_type_name = self.format_aircraft_type_label(
+            str(getattr(snap, "aircraft_type_name", "") or "")
+        )
 
         if speed_level == "critical":
             state_text = "超速危险"
@@ -683,11 +803,15 @@ class AppPanelRenderer:
         if not debug_mock_mode:
             now_sound = time.monotonic()
             if speed_level == "critical":
-                if (now_sound - app._last_overspeed_sound_ts) >= OverspeedConfig.CRITICAL_SOUND_INTERVAL_SEC:
+                if (
+                    now_sound - app._last_overspeed_sound_ts
+                ) >= OverspeedConfig.CRITICAL_SOUND_INTERVAL_SEC:
                     app.sound.play(pattern="overspeed_critical")
                     app._last_overspeed_sound_ts = now_sound
             elif speed_level == "warning":
-                if (now_sound - app._last_overspeed_sound_ts) >= OverspeedConfig.WARNING_SOUND_INTERVAL_SEC:
+                if (
+                    now_sound - app._last_overspeed_sound_ts
+                ) >= OverspeedConfig.WARNING_SOUND_INTERVAL_SEC:
                     app.sound.play(pattern="overspeed_warning")
                     app._last_overspeed_sound_ts = now_sound
             else:

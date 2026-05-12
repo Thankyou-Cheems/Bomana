@@ -90,7 +90,9 @@ class GameLogic8111StabilityTests(unittest.TestCase):
         old = time.time() - GameConfig.PLAYER_PRESENCE_GRACE_SEC - 1.0
         with game._lock:
             game.state.last_player_present_ts = old
-            game.state.api_down_candidate_since = time.time() - GameConfig.API_DOWN_CONFIRM_SEC - 0.1
+            game.state.api_down_candidate_since = (
+                time.time() - GameConfig.API_DOWN_CONFIRM_SEC - 0.1
+            )
         game.tel = _StaticFetcher(TelemetryData(ind_ok=False, state_resp_ok=False))
         game.map = _StaticFetcher(MapObjData(ok=False, error_kind="timeout"))
 

@@ -28,11 +28,12 @@ if TYPE_CHECKING:
 # 独立导航窗口
 # ============================================================================
 
+
 class NavigationWindow:
     """独立导航条窗口
-    
+
     v6.2.1新增：可拖动的独立导航窗口，方便放置在屏幕任意位置
-    
+
     特性:
     - 无边框透明窗口
     - 支持拖动
@@ -40,10 +41,10 @@ class NavigationWindow:
     - 位置自动保存
     - 与主窗口数据同步
     """
-    
+
     def __init__(self, parent_app):
         """初始化独立导航窗口
-        
+
         Args:
             parent_app: 主App实例，用于访问游戏数据和配置
         """
@@ -52,42 +53,42 @@ class NavigationWindow:
         self.scale = parent_app.scale
         self._visible = False
         self._drag_data = {"x": 0, "y": 0}
-        
+
         # 创建顶层窗口
         # 定义透明键颜色（用于背景透明，内容不透明）
         self._transparent_color = "#010101"  # 接近黑色但不影响正常UI
-        
+
         self.window = tk.Toplevel(self.root)
         self.window.title("导航条")
         self.window.overrideredirect(True)
         self.window.attributes("-topmost", True)
         # 窗口背景设置为透明键颜色
         self.window.configure(bg=self._transparent_color)
-        
+
         # 初始隐藏
         self.window.withdraw()
-        
+
         # 获取窗口句柄
         self.window.update_idletasks()  # 确保窗口已创建
         # v6.6.3: 兼容 overrideredirect 的真实句柄获取
         internal_id = self.window.winfo_id()
         self.hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
-        
+
         # 使用Win32 API设置分层窗口：背景透明，内容保持不透明 + 点击穿透
         self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
-        
+
         # 初始化UI
         self._init_ui()
-        
+
         # 绑定事件
         self._init_bindings()
-        
+
         # 恢复位置
         self._restore_position()
-    
+
     def apply_window_styles(self, click_through: bool, alpha: int):
         """设置分层窗口属性 + 点击穿透
-        
+
         使用透明键颜色实现背景透明、内容不透明的效果，
         同时根据锁定状态启用点击穿透。
         """
@@ -99,34 +100,34 @@ class NavigationWindow:
         WS_EX_TOOLWINDOW = 0x00000080
         LWA_COLORKEY = 0x1
         LWA_ALPHA = 0x2
-        
+
         try:
             user32 = ctypes.windll.user32
             # 获取当前样式并添加分层窗口样式
             style = user32.GetWindowLongW(self.hwnd, GWL_EXSTYLE)
-            style |= (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW)
+            style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW
             if click_through:
-                style |= (WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
+                style |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
             else:
                 style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
             user32.SetWindowLongW(self.hwnd, GWL_EXSTYLE, style)
-            
+
             # 将透明键颜色转换为COLORREF (BGR格式)
-            color_hex = self._transparent_color.lstrip('#')
+            color_hex = self._transparent_color.lstrip("#")
             r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
             colorref = r | (g << 8) | (b << 16)
-            
+
             # 同时应用透明键和整体透明度
             alpha = int(alpha)
             user32.SetLayeredWindowAttributes(self.hwnd, colorref, alpha, LWA_COLORKEY | LWA_ALPHA)
-        except (OSError, AttributeError):
+        except OSError, AttributeError:
             # 降级：使用Tkinter的alpha属性
             self.window.attributes("-alpha", alpha / 255.0)
-    
+
     def update_transparency(self):
         """更新窗口透明度（响应透明度配置变化）"""
         self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
-    
+
     def _init_ui(self):
         """初始化独立导航窗 UI（简洁版：标题 + 航向带 + 两条状态）。"""
         s = self.scale
@@ -135,7 +136,9 @@ class NavigationWindow:
         self.main_frame = tk.Frame(self.window, bg=Theme.BORDER, bd=0, highlightthickness=0)
         self.main_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
-        self.content_frame = tk.Frame(self.main_frame, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
+        self.content_frame = tk.Frame(
+            self.main_frame, bg=Theme.GRAYPILL, bd=0, highlightthickness=0
+        )
         self.content_frame.pack(fill="both", expand=True, padx=1, pady=1)
 
         title_font = self.app._scaled_font(UIConfig.FONT_ZONE_TITLE, size_mult=0.9, min_size=8)
@@ -144,7 +147,14 @@ class NavigationWindow:
 
         self.title_bar = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.title_bar.pack(fill="x", padx=pad, pady=(pad, 0))
-        self.title_lbl = tk.Label(self.title_bar, text="独立导航", font=title_font, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        self.title_lbl = tk.Label(
+            self.title_bar,
+            text="独立导航",
+            font=title_font,
+            fg=Theme.TEXT,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         self.title_lbl.pack(side="left")
 
         self.hint_lbl = tk.Label(
@@ -179,8 +189,12 @@ class NavigationWindow:
         )
         self.close_btn.pack(side="right")
         self.close_btn.bind("<Button-1>", lambda e: self.hide())
-        self.close_btn.bind("<Enter>", lambda e: self.close_btn.config(fg=Theme.RED, bg=Theme.BORDER))
-        self.close_btn.bind("<Leave>", lambda e: self.close_btn.config(fg=Theme.TEXT_MUTED, bg=Theme.BG))
+        self.close_btn.bind(
+            "<Enter>", lambda e: self.close_btn.config(fg=Theme.RED, bg=Theme.BORDER)
+        )
+        self.close_btn.bind(
+            "<Leave>", lambda e: self.close_btn.config(fg=Theme.TEXT_MUTED, bg=Theme.BG)
+        )
 
         self.heading_lbl = tk.Label(
             self.title_bar,
@@ -209,40 +223,101 @@ class NavigationWindow:
         self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.zone_row.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
         self.zone_row.grid_columnconfigure(3, weight=1)
-        self.zone_label = tk.Label(self.zone_row, text="⊚战区", font=status_font, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
+        self.zone_label = tk.Label(
+            self.zone_row,
+            text="⊚战区",
+            font=status_font,
+            fg=Theme.RED,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         self.zone_label.grid(row=0, column=0, sticky="w")
-        self.zone_turn = tk.Label(self.zone_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w", width=8)
+        self.zone_turn = tk.Label(
+            self.zone_row,
+            text="",
+            font=status_font,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            width=8,
+        )
         self.zone_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
-        self.zone_status = tk.Label(self.zone_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w", width=8)
+        self.zone_status = tk.Label(
+            self.zone_row,
+            text="",
+            font=status_font,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            width=8,
+        )
         self.zone_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
-        self.zone_info = tk.Label(self.zone_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e", width=16)
+        self.zone_info = tk.Label(
+            self.zone_row,
+            text="",
+            font=status_font,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="e",
+            width=16,
+        )
         self.zone_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
 
         self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.friendly_row.pack(fill="x", padx=pad, pady=(int(1 * s), int(4 * s)))
         self.friendly_row.grid_columnconfigure(3, weight=1)
-        self.friendly_label = tk.Label(self.friendly_row, text="✈友方", font=status_font, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
+        self.friendly_label = tk.Label(
+            self.friendly_row,
+            text="✈友方",
+            font=status_font,
+            fg=Theme.BLUE,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         self.friendly_label.grid(row=0, column=0, sticky="w")
-        self.friendly_turn = tk.Label(self.friendly_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w", width=8)
+        self.friendly_turn = tk.Label(
+            self.friendly_row,
+            text="",
+            font=status_font,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            width=8,
+        )
         self.friendly_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
-        self.friendly_status = tk.Label(self.friendly_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w", width=8)
+        self.friendly_status = tk.Label(
+            self.friendly_row,
+            text="",
+            font=status_font,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            width=8,
+        )
         self.friendly_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
-        self.friendly_info = tk.Label(self.friendly_row, text="", font=status_font, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="e", width=16)
+        self.friendly_info = tk.Label(
+            self.friendly_row,
+            text="",
+            font=status_font,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="e",
+            width=16,
+        )
         self.friendly_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
 
-    
     def _init_bindings(self):
         """初始化事件绑定"""
         # 全窗口拖动
         self._bind_drag_recursive(self.window)
-        
+
         # 右键菜单
         self.window.bind("<Button-3>", self._show_context_menu)
-        
+
         # 窗口关闭事件（点X或Alt+F4）
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.bind("<FocusIn>", self._on_focus_in)
-    
+
     def _bind_drag_recursive(self, widget):
         widget.bind("<Button-1>", self._on_drag_start, add="+")
         widget.bind("<B1-Motion>", self._on_drag_motion, add="+")
@@ -257,7 +332,7 @@ class NavigationWindow:
         self._drag_data["y"] = event.y_root
         self._drag_data["win_x"] = self.window.winfo_x()
         self._drag_data["win_y"] = self.window.winfo_y()
-    
+
     def _on_drag_motion(self, event):
         """拖动中（仅在主窗口解锁时允许）"""
         if self.app._locked:
@@ -269,24 +344,24 @@ class NavigationWindow:
         self.window.geometry(f"+{x}+{y}")
         # 保存位置
         PanelConfig.navigation_window_pos = (x, y)
-    
+
     def _show_context_menu(self, event):
         """显示右键菜单"""
         menu = tk.Menu(self.window, tearoff=0)
         menu.add_command(label="🔄 切换到集成模式", command=self._switch_to_integrated)
         menu.add_separator()
         menu.add_command(label="📍 重置位置", command=self._reset_position)
-        
+
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
-    
+
     def _switch_to_integrated(self):
         """切换到集成模式"""
         if PanelConfig.navigation_mode == "standalone":
             self.app._toggle_navigation_mode()
-    
+
     def _reset_position(self):
         """重置窗口位置到屏幕中央"""
         sw, _ = Win32.screen_size()
@@ -295,7 +370,7 @@ class NavigationWindow:
         y = 50  # 靠近顶部
         self.window.geometry(f"+{x}+{y}")
         PanelConfig.navigation_window_pos = (x, y)
-    
+
     def _restore_position(self):
         """恢复保存的窗口位置"""
         if PanelConfig.navigation_window_pos:
@@ -307,16 +382,18 @@ class NavigationWindow:
             self.window.geometry(f"+{x}+{y}")
         else:
             self._reset_position()
-    
+
     def show(self):
         """显示窗口"""
         if not self._visible:
             self._visible = True
             self.window.deiconify()
             self.window.lift()
-            alpha = UIConfig.WINDOW_ALPHA if self.app._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
+            alpha = (
+                UIConfig.WINDOW_ALPHA if self.app._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
+            )
             self.apply_window_styles(click_through=self.app._locked, alpha=alpha)
-    
+
     def hide(self):
         """隐藏窗口"""
         if self._visible:
@@ -335,14 +412,14 @@ class NavigationWindow:
         self.friendly_turn.config(text="", fg=Theme.TEXT_DIM)
         self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
         self.friendly_info.config(text="", fg=Theme.TEXT_DIM)
-    
+
     def is_visible(self):
         """返回窗口是否可见"""
         return self._visible
-    
+
     def update_hint_text(self):
         """更新提示文本（当热键配置变更时调用）"""
-        if hasattr(self, 'hint_lbl') and self.hint_lbl:
+        if hasattr(self, "hint_lbl") and self.hint_lbl:
             self.hint_lbl.config(text=f"[{HotkeyConfig.KEY_LOCK}] 解锁后拖动")
 
     def destroy(self):
@@ -360,7 +437,7 @@ class NavigationWindow:
                 self.apply_window_styles(click_through=True, alpha=UIConfig.WINDOW_ALPHA)
             except Exception:
                 pass
-    
+
     def update_display(self, snap: UISnapshot):
         """更新独立导航窗显示（简洁航向带版）。"""
         if not self._visible:
@@ -369,7 +446,9 @@ class NavigationWindow:
         raw_heading = float(getattr(snap, "player_heading", 0.0) or 0.0)
         heading_deg = raw_heading % 360.0
         phase_name = str(getattr(getattr(snap, "phase", None), "name", "") or "")
-        heading_available = (phase_name in {"ALIVE", "LOSS_PENDING"}) and (not bool(getattr(snap, "api_down", False)))
+        heading_available = (phase_name in {"ALIVE", "LOSS_PENDING"}) and (
+            not bool(getattr(snap, "api_down", False))
+        )
 
         # 更新航向
         if heading_available:
@@ -405,7 +484,9 @@ class NavigationWindow:
             scale = calculate_heading_tape_scale(primary_zone.distance_km)
             turn_text, turn_color = calculate_zone_turn_indicator(primary_zone.relative, tolerance)
             status_text, status_color = calculate_zone_status(abs(primary_zone.relative), tolerance)
-            info_text = format_distance_ete(primary_zone.distance_km, getattr(primary_zone, "ete_str", ""))
+            info_text = format_distance_ete(
+                primary_zone.distance_km, getattr(primary_zone, "ete_str", "")
+            )
             self.tolerance_lbl.config(text=f"±{tolerance:.1f}° {scale:.1f}x")
             self.zone_turn.config(text=turn_text, fg=turn_color)
             self.zone_status.config(text=status_text, fg=status_color)

@@ -38,8 +38,10 @@ from bomana.utils.system import Win32
 # Optional dependencies for images (match HAS_TRAY behavior).
 HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 
+
 class _ScalableDialogMixin:
     """可缩放窗口通用逻辑（适配屏幕 + 动态字体缩放）"""
+
     def _fit_window_to_screen(self):
         """固定初始尺寸，适配屏幕，同时允许手动调整"""
         self.update_idletasks()
@@ -174,15 +176,17 @@ class _ScalableDialogMixin:
         x, y = self._clamp_to_visible_screen(x, y)
         self.geometry(f"+{x}+{y}")
 
+
 class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
     """设置对话框
-    
+
     使用选项卡组织设置项：
     - 显示：透明度、缩放、主题
     - 面板：各信息面板的显示开关
     - 快捷键：自定义热键绑定
     - 其他：吸附、全局热键等
     """
+
     def __init__(self, parent, app, initial_tab: str | None = None):
         super().__init__(parent)
         self.app = app
@@ -206,6 +210,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         hover_border: str,
     ) -> None:
         """统一按钮悬停反馈，保持 Tk 原生控件下的 Fluent 触感。"""
+
         def _on_enter(_event=None):
             button.configure(bg=hover_bg, highlightbackground=hover_border)
 
@@ -310,7 +315,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             )
         else:
             self._style_tab_button(tab_name, active=False)
-    
+
     def _build_ui(self):
         # Fluent 外层边框 + 内容表面，保持与主界面一致的分层节奏。
         shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
@@ -342,7 +347,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         tab_shell.pack(fill="x", padx=12, pady=(4, 10))
         self.tab_buttons_frame = tk.Frame(tab_shell, bg=Theme.BG, bd=0, highlightthickness=0)
         self.tab_buttons_frame.pack(fill="x", padx=1, pady=1)
-        
+
         self.tabs = ["显示", "面板"]
         if ENABLE_CCRP:
             self.tabs.append("投弹")
@@ -351,7 +356,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self.tab_btns = {}
         self.current_tab = "显示"
         self.overspeed_override_map = OverspeedConfig.get_aircraft_overrides()
-        
+
         # 选项卡按钮
         for tab in self.tabs:
             btn = tk.Button(
@@ -375,7 +380,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             self.tab_btns[tab] = btn
             btn.bind("<Enter>", lambda _e, t=tab: self._on_tab_hover(t, True), add="+")
             btn.bind("<Leave>", lambda _e, t=tab: self._on_tab_hover(t, False), add="+")
-        
+
         # 选项卡内容容器
         content_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
         content_shell.pack(fill="both", expand=True, padx=12)
@@ -438,104 +443,153 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self._build_hotkey_tab()
         self._build_experimental_tab()
         self._build_other_tab()
-        
+
         # 按钮行
         btn_frame = tk.Frame(main, bg=Theme.BG)
         btn_frame.pack(fill="x", padx=12, pady=(10, 10))
-        self._create_action_button(
-            btn_frame, "保存", self._save, variant="primary", width=9
-        ).pack(side="right")
+        self._create_action_button(btn_frame, "保存", self._save, variant="primary", width=9).pack(
+            side="right"
+        )
         self._create_action_button(
             btn_frame, "取消", self.destroy, variant="neutral", width=9
         ).pack(side="right", padx=(0, 8))
-        
+
         # 显示第一个选项卡
         self._switch_tab(self.initial_tab if self.initial_tab in self.tabs else "显示")
 
     def _on_content_mousewheel(self, event):
         if hasattr(self, "_content_canvas"):
             self._content_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-    
+
     def _switch_tab(self, tab_name: str):
         """切换选项卡"""
         # 隐藏所有页面
         for frame in self.tab_frames.values():
             frame.pack_forget()
-        
+
         # 更新按钮样式
         for name, _btn in self.tab_btns.items():
             self._style_tab_button(name, active=(name == tab_name))
-        
+
         # 显示当前页面
         if tab_name in self.tab_frames:
             self.tab_frames[tab_name].pack(fill="both", expand=True)
             self.update_idletasks()
             if hasattr(self, "_content_canvas"):
                 self._content_canvas.yview_moveto(0.0)
-        
+
         self.current_tab = tab_name
-    
+
     def _build_display_tab(self):
         """构建显示设置页"""
         frame = tk.Frame(self.content_frame, bg=Theme.BG)
         self.tab_frames["显示"] = frame
-        
+
         row = 0
-        
+
         # 透明度
         tk.Label(frame, text="窗口透明度:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         self.alpha_var = tk.IntVar(value=UIConfig.WINDOW_ALPHA)
-        tk.Scale(frame, from_=100, to=255, orient="horizontal", length=180, 
-                variable=self.alpha_var, bg=Theme.BG, fg=Theme.TEXT, 
-                highlightthickness=0, troughcolor=Theme.BORDER, 
-                activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
+        tk.Scale(
+            frame,
+            from_=100,
+            to=255,
+            orient="horizontal",
+            length=180,
+            variable=self.alpha_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
+        ).grid(row=row, column=1, padx=10, pady=5)
         row += 1
-        
+
         # 独立导航栏宽度
         tk.Label(frame, text="导航栏宽度:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         self.nav_width_var = tk.DoubleVar(value=PanelConfig.navigation_bar_width)
-        tk.Scale(frame, from_=0.5, to=2.0, resolution=0.1, orient="horizontal", 
-                length=180, variable=self.nav_width_var, bg=Theme.BG, fg=Theme.TEXT, 
-                highlightthickness=0, troughcolor=Theme.BORDER, 
-                activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
+        tk.Scale(
+            frame,
+            from_=0.5,
+            to=2.0,
+            resolution=0.1,
+            orient="horizontal",
+            length=180,
+            variable=self.nav_width_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
+        ).grid(row=row, column=1, padx=10, pady=5)
         row += 1
-        
+
         # 缩放
         tk.Label(frame, text="UI缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         self.scale_var = tk.DoubleVar(value=UIConfig.UI_SCALE_MULT)
-        tk.Scale(frame, from_=0.6, to=2.5, resolution=0.05, orient="horizontal", 
-                length=180, variable=self.scale_var, bg=Theme.BG, fg=Theme.TEXT, 
-                highlightthickness=0, troughcolor=Theme.BORDER, 
-                activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
+        tk.Scale(
+            frame,
+            from_=0.6,
+            to=2.5,
+            resolution=0.05,
+            orient="horizontal",
+            length=180,
+            variable=self.scale_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
+        ).grid(row=row, column=1, padx=10, pady=5)
         row += 1
 
         tk.Label(frame, text="文本缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         self.text_scale_var = tk.DoubleVar(value=float(UIConfig.TEXT_SCALE_MULT))
         tk.Scale(
-            frame, from_=0.75, to=2.5, resolution=0.05, orient="horizontal",
-            length=180, variable=self.text_scale_var, bg=Theme.BG, fg=Theme.TEXT,
-            highlightthickness=0, troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5)
+            frame,
+            from_=0.75,
+            to=2.5,
+            resolution=0.05,
+            orient="horizontal",
+            length=180,
+            variable=self.text_scale_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
+        ).grid(row=row, column=1, padx=10, pady=5)
         row += 1
 
         # 主题选择
         tk.Label(frame, text="颜色主题:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         theme_frame = tk.Frame(frame, bg=Theme.BG)
         theme_frame.grid(row=row, column=1, sticky="w", padx=10, pady=5)
-        
+
         self.theme_var = tk.StringVar(value=Theme.get_current())
         for theme_name in Theme.get_theme_names():
             display_name = Theme.get_theme_display_name(theme_name)
             tk.Radiobutton(
-                theme_frame, text=display_name, variable=self.theme_var, value=theme_name,
-                bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-                activebackground=Theme.BG, activeforeground=Theme.TEXT,
-                highlightthickness=0
+                theme_frame,
+                text=display_name,
+                variable=self.theme_var,
+                value=theme_name,
+                bg=Theme.BG,
+                fg=Theme.TEXT,
+                selectcolor=Theme.GRAYPILL,
+                activebackground=Theme.BG,
+                activeforeground=Theme.TEXT,
+                highlightthickness=0,
             ).pack(anchor="w")
         row += 1
 
@@ -548,25 +602,27 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             font=("Segoe UI", 8),
             justify="left",
         ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
-    
+
     def _build_panel_tab(self):
         """构建面板设置页"""
         frame = tk.Frame(self.content_frame, bg=Theme.BG)
         self.tab_frames["面板"] = frame
-        
+
         # 如果高级设置被禁用，显示简化提示
         if not ENABLE_ADVANCED_SETTINGS:
-            tk.Label(frame, text="面板设置在精简模式下不可用", 
-                    bg=Theme.BG, fg=Theme.TEXT_MUTED).pack(anchor="w", pady=10)
+            tk.Label(
+                frame, text="面板设置在精简模式下不可用", bg=Theme.BG, fg=Theme.TEXT_MUTED
+            ).pack(anchor="w", pady=10)
             return
-        
+
         tk.Label(frame, text="选择显示的信息面板:", bg=Theme.BG, fg=Theme.TEXT).pack(
-            anchor="w", pady=(0, 10))
-        
+            anchor="w", pady=(0, 10)
+        )
+
         # 面板开关（根据编译开关动态生成）
         self.panel_vars = {}
         panels = []
-        
+
         if ENABLE_ZONES:
             panels.append(("show_zones", "🎯 战区导航", "显示战区位置和距离"))
         if ENABLE_AIRFIELDS:
@@ -574,31 +630,45 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if ENABLE_FUEL:
             panels.append(("show_fuel", "⛽ 燃油管理", "显示油量和返航估算"))
         panels.append(("show_speed", "⚡ 速度监视", "显示紧凑速度条和超速提示"))
-        panels.append(("speed_history_mode", "🕰 历史模式(独立速度界面)", "隐藏计时和其他扩展面板，切换为仅速度提醒的专用界面"))
+        panels.append(
+            (
+                "speed_history_mode",
+                "🕰 历史模式(独立速度界面)",
+                "隐藏计时和其他扩展面板，切换为仅速度提醒的专用界面",
+            )
+        )
         if ENABLE_CHECKLIST:
             panels.append(("show_checklist", "✅ 出击检查", "显示起飞前检查清单"))
-        
+
         if not panels:
-            tk.Label(frame, text="所有扩展面板已在编译时禁用", 
-                    bg=Theme.BG, fg=Theme.TEXT_MUTED).pack(anchor="w")
+            tk.Label(
+                frame, text="所有扩展面板已在编译时禁用", bg=Theme.BG, fg=Theme.TEXT_MUTED
+            ).pack(anchor="w")
             return
-        
+
         for key, label, desc in panels:
             var = tk.BooleanVar(value=getattr(PanelConfig, key))
             self.panel_vars[key] = var
-            
+
             item_frame = tk.Frame(frame, bg=Theme.BG)
             item_frame.pack(fill="x", pady=3)
-            
+
             tk.Checkbutton(
-                item_frame, text=label, variable=var,
-                bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-                activebackground=Theme.BG, activeforeground=Theme.TEXT,
-                highlightthickness=0, anchor="w"
+                item_frame,
+                text=label,
+                variable=var,
+                bg=Theme.BG,
+                fg=Theme.TEXT,
+                selectcolor=Theme.GRAYPILL,
+                activebackground=Theme.BG,
+                activeforeground=Theme.TEXT,
+                highlightthickness=0,
+                anchor="w",
             ).pack(side="left")
-            
-            tk.Label(item_frame, text=f"  - {desc}", bg=Theme.BG, fg=Theme.TEXT_DIM,
-                    font=("Segoe UI", 8)).pack(side="left")
+
+            tk.Label(
+                item_frame, text=f"  - {desc}", bg=Theme.BG, fg=Theme.TEXT_DIM, font=("Segoe UI", 8)
+            ).pack(side="left")
 
     def _build_overspeed_tab(self):
         """构建空速预警设置页。"""
@@ -658,12 +728,48 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         grid.pack(anchor="w")
 
         threshold_rows = [
-            ("IAS 提示线", "caution_ratio", "达到 IAS 限速的比例", defaults["caution_ratio"], 0.001),
-            ("IAS 警告线", "warning_ratio", "达到 IAS 限速的比例", defaults["warning_ratio"], 0.001),
-            ("IAS 危险线", "critical_ratio", "达到 IAS 限速的比例", defaults["critical_ratio"], 0.001),
-            ("Mach 提示线", "mach_caution_margin", "距 Mach 限速还剩多少", defaults["mach_caution_margin"], 0.005),
-            ("Mach 警告线", "mach_warning_margin", "距 Mach 限速还剩多少", defaults["mach_warning_margin"], 0.005),
-            ("Mach 危险线", "mach_critical_margin", "距 Mach 限速还剩多少", defaults["mach_critical_margin"], 0.005),
+            (
+                "IAS 提示线",
+                "caution_ratio",
+                "达到 IAS 限速的比例",
+                defaults["caution_ratio"],
+                0.001,
+            ),
+            (
+                "IAS 警告线",
+                "warning_ratio",
+                "达到 IAS 限速的比例",
+                defaults["warning_ratio"],
+                0.001,
+            ),
+            (
+                "IAS 危险线",
+                "critical_ratio",
+                "达到 IAS 限速的比例",
+                defaults["critical_ratio"],
+                0.001,
+            ),
+            (
+                "Mach 提示线",
+                "mach_caution_margin",
+                "距 Mach 限速还剩多少",
+                defaults["mach_caution_margin"],
+                0.005,
+            ),
+            (
+                "Mach 警告线",
+                "mach_warning_margin",
+                "距 Mach 限速还剩多少",
+                defaults["mach_warning_margin"],
+                0.005,
+            ),
+            (
+                "Mach 危险线",
+                "mach_critical_margin",
+                "距 Mach 限速还剩多少",
+                defaults["mach_critical_margin"],
+                0.005,
+            ),
         ]
 
         for row, (label, key, suffix, default_value, step) in enumerate(threshold_rows):
@@ -778,7 +884,9 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if count <= 0:
             self.overspeed_override_summary_var.set("当前没有机型覆盖，所有飞机使用全局阈值。")
             return
-        names = sorted(self._format_aircraft_label(name) for name in self.overspeed_override_map.keys())
+        names = sorted(
+            self._format_aircraft_label(name) for name in self.overspeed_override_map.keys()
+        )
         preview = ", ".join(names[:4])
         if count > 4:
             preview += f" 等 {count} 个机型"
@@ -790,7 +898,9 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self.tab_frames["音效"] = frame
 
         self.sound_enabled_var = tk.BooleanVar(value=self.app.sound.is_enabled())
-        self.zone_sound_enabled_var = tk.BooleanVar(value=bool(getattr(self.app, "_zone_sound_enabled", True)))
+        self.zone_sound_enabled_var = tk.BooleanVar(
+            value=bool(getattr(self.app, "_zone_sound_enabled", True))
+        )
         self.sound_file_overrides = SoundConfig.export_user_config()
         self.sound_row_vars = {}
 
@@ -1000,7 +1110,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             if not old_path_text:
                 continue
             old_path = Path(old_path_text)
-            if self._is_managed_sound_file(old_path) and str(old_path) not in final_overrides.values():
+            if (
+                self._is_managed_sound_file(old_path)
+                and str(old_path) not in final_overrides.values()
+            ):
                 old_paths_to_remove.append(old_path)
 
         return final_overrides, created_paths, old_paths_to_remove
@@ -1009,10 +1122,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         """构建快捷键设置页"""
         frame = tk.Frame(self.content_frame, bg=Theme.BG)
         self.tab_frames["快捷键"] = frame
-        
+
         tk.Label(frame, text="自定义快捷键绑定:", bg=Theme.BG, fg=Theme.TEXT).pack(
-            anchor="w", pady=(0, 10))
-        
+            anchor="w", pady=(0, 10)
+        )
+
         # 快捷键配置
         self.hotkey_vars = {}
         hotkeys = [
@@ -1022,30 +1136,38 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             ("beep", "声音开关", HotkeyConfig.KEY_BEEP),
             ("zones", "战区提示音", HotkeyConfig.KEY_ZONES),
         ]
-        
+
         for key, label, current in hotkeys:
             row_frame = tk.Frame(frame, bg=Theme.BG)
             row_frame.pack(fill="x", pady=3)
-            
-            tk.Label(row_frame, text=f"{label}:", bg=Theme.BG, fg=Theme.TEXT, 
-                    width=12, anchor="w").pack(side="left")
-            
+
+            tk.Label(
+                row_frame, text=f"{label}:", bg=Theme.BG, fg=Theme.TEXT, width=12, anchor="w"
+            ).pack(side="left")
+
             var = tk.StringVar(value=current)
             self.hotkey_vars[key] = var
-            
+
             # 下拉选择框
             menu_btn = tk.Menubutton(
-                row_frame, textvariable=var, bg=Theme.GRAYPILL, fg=Theme.TEXT,
-                bd=0, padx=10, pady=2, highlightthickness=1, 
-                highlightbackground=Theme.BORDER, relief="flat"
+                row_frame,
+                textvariable=var,
+                bg=Theme.GRAYPILL,
+                fg=Theme.TEXT,
+                bd=0,
+                padx=10,
+                pady=2,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+                relief="flat",
             )
             menu_btn.pack(side="left", padx=(10, 0))
-            
+
             menu = tk.Menu(menu_btn, tearoff=0, bg=Theme.GRAYPILL, fg=Theme.TEXT)
             for fkey in HotkeyConfig.AVAILABLE_KEYS:
                 menu.add_command(label=fkey, command=lambda v=var, k=fkey: v.set(k))
             menu_btn["menu"] = menu
-        
+
         # 提示
         tk.Label(
             frame,
@@ -1089,65 +1211,106 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         row += 1
 
         tk.Label(frame, text="HUD叠加层:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
+            row=row, column=0, sticky="w", pady=3
+        )
         self.hud_enabled_var = tk.BooleanVar(value=HUDConfig.enabled)
         tk.Checkbutton(
-            frame, text="启用实验性HUD", variable=self.hud_enabled_var,
-            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG, activeforeground=Theme.TEXT,
-            highlightthickness=0
+            frame,
+            text="启用实验性HUD",
+            variable=self.hud_enabled_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG,
+            activeforeground=Theme.TEXT,
+            highlightthickness=0,
         ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
         row += 1
 
         tk.Label(frame, text="HUD透明度:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
+            row=row, column=0, sticky="w", pady=3
+        )
         self.hud_alpha_var = tk.IntVar(value=int(HUDConfig.alpha))
         tk.Scale(
-            frame, from_=30, to=255, orient="horizontal", length=200,
-            variable=self.hud_alpha_var, bg=Theme.BG, fg=Theme.TEXT,
-            highlightthickness=0, troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE
+            frame,
+            from_=30,
+            to=255,
+            orient="horizontal",
+            length=200,
+            variable=self.hud_alpha_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
         ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
         row += 1
 
         tk.Label(frame, text="HUD缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
+            row=row, column=0, sticky="w", pady=3
+        )
         self.hud_scale_var = tk.DoubleVar(value=float(HUDConfig.scale))
         tk.Scale(
-            frame, from_=0.5, to=2.0, resolution=0.05, orient="horizontal", length=200,
-            variable=self.hud_scale_var, bg=Theme.BG, fg=Theme.TEXT,
-            highlightthickness=0, troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE
+            frame,
+            from_=0.5,
+            to=2.0,
+            resolution=0.05,
+            orient="horizontal",
+            length=200,
+            variable=self.hud_scale_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
         ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
         row += 1
 
         tk.Label(frame, text="HUD平滑:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
+            row=row, column=0, sticky="w", pady=3
+        )
         self.hud_smoothing_var = tk.DoubleVar(value=float(HUDConfig.smoothing))
         tk.Scale(
-            frame, from_=0.0, to=1.0, resolution=0.05, orient="horizontal", length=200,
-            variable=self.hud_smoothing_var, bg=Theme.BG, fg=Theme.TEXT,
-            highlightthickness=0, troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE
+            frame,
+            from_=0.0,
+            to=1.0,
+            resolution=0.05,
+            orient="horizontal",
+            length=200,
+            variable=self.hud_smoothing_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
         ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
         row += 1
 
         tk.Label(frame, text="HUD显示器策略:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
+            row=row, column=0, sticky="w", pady=3
+        )
         self.hud_follow_main_monitor_var = tk.BooleanVar(
             value=bool(HUDConfig.follow_main_window_monitor)
         )
         tk.Checkbutton(
-            frame, text="跟随主窗口显示器（关闭=跟随鼠标）", variable=self.hud_follow_main_monitor_var,
-            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG, activeforeground=Theme.TEXT,
-            highlightthickness=0
+            frame,
+            text="跟随主窗口显示器（关闭=跟随鼠标）",
+            variable=self.hud_follow_main_monitor_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG,
+            activeforeground=Theme.TEXT,
+            highlightthickness=0,
         ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
         row += 1
 
         tk.Label(frame, text="HUD配色:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3)
-        self.hud_color_style_var = tk.StringVar(value=str(getattr(HUDConfig, "color_style", "auto")))
+            row=row, column=0, sticky="w", pady=3
+        )
+        self.hud_color_style_var = tk.StringVar(
+            value=str(getattr(HUDConfig, "color_style", "auto"))
+        )
         self._hud_color_style_labels = {
             "auto": "自动(可靠绿/降级琥珀)",
             "green": "绿色",
@@ -1162,9 +1325,16 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         )
         self._hud_color_btn_text = color_btn_text
         menu_btn = tk.Menubutton(
-            frame, textvariable=self._hud_color_btn_text, bg=Theme.GRAYPILL, fg=Theme.TEXT,
-            bd=0, padx=10, pady=2, highlightthickness=1,
-            highlightbackground=Theme.BORDER, relief="flat"
+            frame,
+            textvariable=self._hud_color_btn_text,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            bd=0,
+            padx=10,
+            pady=2,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            relief="flat",
         )
         menu_btn.grid(row=row, column=1, sticky="w", padx=10, pady=3)
         menu = tk.Menu(menu_btn, tearoff=0, bg=Theme.GRAYPILL, fg=Theme.TEXT)
@@ -1174,7 +1344,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 command=lambda s=style, label_text=label: (
                     self.hud_color_style_var.set(s),
                     self._hud_color_btn_text.set(label_text),
-                )
+                ),
             )
         menu_btn["menu"] = menu
         row += 1
@@ -1228,47 +1398,74 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             ).pack(fill="x", pady=(0, 10))
 
         tk.Label(frame, text="CCRP校准参数（全局生效）:", bg=Theme.BG, fg=Theme.TEXT).pack(
-            anchor="w", pady=(0, 10))
+            anchor="w", pady=(0, 10)
+        )
 
         defaults = BallisticPhysicsParams.get_default_tuning()
 
         grid = tk.Frame(frame, bg=Theme.BG)
         grid.pack(anchor="w")
 
-        self.ccrp_range_mult_var = tk.DoubleVar(
-            value=BallisticPhysicsParams.RANGE_CORRECTION_MULT)
-        self.ccrp_time_mult_var = tk.DoubleVar(
-            value=BallisticPhysicsParams.TIME_CORRECTION_MULT)
+        self.ccrp_range_mult_var = tk.DoubleVar(value=BallisticPhysicsParams.RANGE_CORRECTION_MULT)
+        self.ccrp_time_mult_var = tk.DoubleVar(value=BallisticPhysicsParams.TIME_CORRECTION_MULT)
 
         row = 0
 
         tk.Label(grid, text="距离修正倍率:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         tk.Spinbox(
-            grid, from_=0.6, to=1.6, increment=0.01, width=8,
-            textvariable=self.ccrp_range_mult_var, bg=Theme.GRAYPILL, fg=Theme.TEXT,
-            bd=0, highlightthickness=1, highlightbackground=Theme.BORDER
+            grid,
+            from_=0.6,
+            to=1.6,
+            increment=0.01,
+            width=8,
+            textvariable=self.ccrp_range_mult_var,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
         ).grid(row=row, column=1, padx=10, pady=5, sticky="w")
-        tk.Label(grid, text=f"默认 {defaults['range_correction_mult']:.2f}",
-                 bg=Theme.BG, fg=Theme.TEXT_DIM, font=("Segoe UI", 8)).grid(
-            row=row, column=2, sticky="w")
+        tk.Label(
+            grid,
+            text=f"默认 {defaults['range_correction_mult']:.2f}",
+            bg=Theme.BG,
+            fg=Theme.TEXT_DIM,
+            font=("Segoe UI", 8),
+        ).grid(row=row, column=2, sticky="w")
         row += 1
 
         tk.Label(grid, text="时间修正倍率:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         tk.Spinbox(
-            grid, from_=0.6, to=1.6, increment=0.01, width=8,
-            textvariable=self.ccrp_time_mult_var, bg=Theme.GRAYPILL, fg=Theme.TEXT,
-            bd=0, highlightthickness=1, highlightbackground=Theme.BORDER
+            grid,
+            from_=0.6,
+            to=1.6,
+            increment=0.01,
+            width=8,
+            textvariable=self.ccrp_time_mult_var,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
         ).grid(row=row, column=1, padx=10, pady=5, sticky="w")
-        tk.Label(grid, text=f"默认 {defaults['time_correction_mult']:.2f}",
-                 bg=Theme.BG, fg=Theme.TEXT_DIM, font=("Segoe UI", 8)).grid(
-            row=row, column=2, sticky="w")
+        tk.Label(
+            grid,
+            text=f"默认 {defaults['time_correction_mult']:.2f}",
+            bg=Theme.BG,
+            fg=Theme.TEXT_DIM,
+            font=("Segoe UI", 8),
+        ).grid(row=row, column=2, sticky="w")
 
         tk.Label(
             frame,
             text="说明：倍率 > 1 代表提前投弹（预测更远/更久），< 1 代表延后投弹。",
-            bg=Theme.BG, fg=Theme.TEXT_MUTED, font=("Segoe UI", 8)
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
         ).pack(anchor="w", pady=(10, 0))
 
     def _refresh_ccrp_selected_bomb_text(self):
@@ -1293,58 +1490,88 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if getattr(dialog, "result", None):
             self.selected_bomb_id = dialog.result
             self._refresh_ccrp_selected_bomb_text()
-    
+
     def _build_other_tab(self):
         """构建其他设置页"""
         frame = tk.Frame(self.content_frame, bg=Theme.BG)
         self.tab_frames["其他"] = frame
-        
+
         row = 0
-        
+
         # 全局热键开关
         tk.Label(frame, text="全局热键:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         self.hotkeys_enabled_var = tk.BooleanVar(value=HotkeyConfig.GLOBAL_HOTKEYS)
         tk.Checkbutton(
-            frame, text="启用全局热键", variable=self.hotkeys_enabled_var,
-            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG, activeforeground=Theme.TEXT,
-            highlightthickness=0
+            frame,
+            text="启用全局热键",
+            variable=self.hotkeys_enabled_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG,
+            activeforeground=Theme.TEXT,
+            highlightthickness=0,
         ).grid(row=row, column=1, sticky="w", padx=10, pady=5)
         row += 1
-        
+
         # 窗口吸附
         tk.Label(frame, text="窗口吸附:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         self.snap_var = tk.BooleanVar(value=SnapConfig.enabled)
         tk.Checkbutton(
-            frame, text="拖动时吸附到屏幕边缘", variable=self.snap_var,
-            bg=Theme.BG, fg=Theme.TEXT, selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG, activeforeground=Theme.TEXT,
-            highlightthickness=0
+            frame,
+            text="拖动时吸附到屏幕边缘",
+            variable=self.snap_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            selectcolor=Theme.GRAYPILL,
+            activebackground=Theme.BG,
+            activeforeground=Theme.TEXT,
+            highlightthickness=0,
         ).grid(row=row, column=1, sticky="w", padx=10, pady=5)
         row += 1
-        
+
         # 吸附距离
         tk.Label(frame, text="吸附距离:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5)
+            row=row, column=0, sticky="w", pady=5
+        )
         self.snap_dist_var = tk.IntVar(value=SnapConfig.SNAP_DISTANCE)
-        tk.Scale(frame, from_=5, to=50, orient="horizontal", length=150, 
-                variable=self.snap_dist_var, bg=Theme.BG, fg=Theme.TEXT, 
-                highlightthickness=0, troughcolor=Theme.BORDER, 
-                activebackground=Theme.BLUE).grid(row=row, column=1, padx=10, pady=5, sticky="w")
+        tk.Scale(
+            frame,
+            from_=5,
+            to=50,
+            orient="horizontal",
+            length=150,
+            variable=self.snap_dist_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
+        ).grid(row=row, column=1, padx=10, pady=5, sticky="w")
         row += 1
-        
+
         # 分隔线
         tk.Frame(frame, bg=Theme.SEPARATOR, height=1).grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=10)
+            row=row, column=0, columnspan=2, sticky="ew", pady=10
+        )
         row += 1
-        
+
         # 重置按钮
-        tk.Button(frame, text="重置所有设置为默认", command=self._reset_defaults,
-                 bg=Theme.YELLOW, fg=Theme.BG, bd=0, padx=15, pady=5).grid(
-            row=row, column=0, columnspan=2, pady=10)
-    
+        tk.Button(
+            frame,
+            text="重置所有设置为默认",
+            command=self._reset_defaults,
+            bg=Theme.YELLOW,
+            fg=Theme.BG,
+            bd=0,
+            padx=15,
+            pady=5,
+        ).grid(row=row, column=0, columnspan=2, pady=10)
+
     def _reset_defaults(self):
         """重置为默认设置"""
         if messagebox.askyesno("确认", "确定要重置所有设置为默认值吗？", parent=self):
@@ -1362,11 +1589,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             self.hud_color_style_var.set("auto")
             if hasattr(self, "_hud_color_btn_text"):
                 self._hud_color_btn_text.set("自动(可靠绿/降级琥珀)")
-            
+
             # 重置面板设置
             for key in self.panel_vars:
                 self.panel_vars[key].set(key != "speed_history_mode")
-            
+
             # 重置快捷键
             defaults = {
                 "reset": "F7",
@@ -1377,7 +1604,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             }
             for key, val in defaults.items():
                 self.hotkey_vars[key].set(val)
-            
+
             # 重置其他设置
             self.hotkeys_enabled_var.set(True)
             self.snap_var.set(True)
@@ -1403,11 +1630,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 self.sound_file_overrides = {}
             for sound_key in getattr(self, "sound_row_vars", {}).keys():
                 self._refresh_sound_override_label(sound_key)
-    
+
     def _center_on_parent(self, parent):
         """居中显示并限制到可见屏幕。"""
         self._center_dialog_on_parent(parent)
-    
+
     def _save(self):
         """保存所有设置"""
         # 收集设置值
@@ -1456,28 +1683,28 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             messagebox.showwarning("快捷键冲突", str(exc), parent=self)
             return
 
-        config['alpha'] = new_window_alpha
-        config['scale'] = new_ui_scale
-        config['text_scale'] = new_text_scale
-        config['theme'] = new_theme
-        config['hud_enabled'] = new_hud_enabled
-        config['hud'] = pending_hud_config
-        
+        config["alpha"] = new_window_alpha
+        config["scale"] = new_ui_scale
+        config["text_scale"] = new_text_scale
+        config["theme"] = new_theme
+        config["hud_enabled"] = new_hud_enabled
+        config["hud"] = pending_hud_config
+
         # 面板设置
         panel_config = {}
         for key, var in self.panel_vars.items():
             panel_config[key] = var.get()
-        config['panels'] = panel_config
-        
+        config["panels"] = panel_config
+
         # 快捷键设置
-        config['global_hotkeys'] = new_hotkeys_enabled
-        config['hotkey_bindings'] = hotkey_bindings
-        
+        config["global_hotkeys"] = new_hotkeys_enabled
+        config["hotkey_bindings"] = hotkey_bindings
+
         # 吸附设置
         new_snap_enabled = bool(self.snap_var.get())
         new_snap_distance = int(self.snap_dist_var.get())
-        config['snap_enabled'] = new_snap_enabled
-        config['snap_distance'] = new_snap_distance
+        config["snap_enabled"] = new_snap_enabled
+        config["snap_distance"] = new_snap_distance
 
         # 音效设置
         new_sound_enabled = bool(self.sound_enabled_var.get())
@@ -1491,17 +1718,14 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("音效保存失败", f"无法保存自定义提示音：{exc}", parent=self)
             return
-        config['beep_enabled'] = new_sound_enabled
-        config['zone_sound_enabled'] = new_zone_sound_enabled
-        config['sound_settings'] = normalized_sound_overrides
+        config["beep_enabled"] = new_sound_enabled
+        config["zone_sound_enabled"] = new_zone_sound_enabled
+        config["sound_settings"] = normalized_sound_overrides
 
         overspeed_thresholds = {
-            key: var.get()
-            for key, var in getattr(self, "overspeed_vars", {}).items()
+            key: var.get() for key, var in getattr(self, "overspeed_vars", {}).items()
         }
-        normalized_overspeed_thresholds = OverspeedConfig.normalize_thresholds(
-            overspeed_thresholds
-        )
+        normalized_overspeed_thresholds = OverspeedConfig.normalize_thresholds(overspeed_thresholds)
         normalized_overspeed_overrides = {}
         if isinstance(self.overspeed_override_map, dict):
             for aircraft_key, raw_override in self.overspeed_override_map.items():
@@ -1511,9 +1735,9 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 normalized_overspeed_overrides[aircraft_name] = (
                     OverspeedConfig.normalize_thresholds(raw_override)
                 )
-        config['overspeed'] = {
-            'global': normalized_overspeed_thresholds,
-            'aircraft_overrides': normalized_overspeed_overrides,
+        config["overspeed"] = {
+            "global": normalized_overspeed_thresholds,
+            "aircraft_overrides": normalized_overspeed_overrides,
         }
 
         # 投弹预测调参（仅在CCRP启用时保存）
@@ -1524,11 +1748,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 "range_correction_mult": self.ccrp_range_mult_var.get(),
                 "time_correction_mult": self.ccrp_time_mult_var.get(),
             }
-            config['ccrp_tuning'] = dict(pending_ccrp_tuning)
+            config["ccrp_tuning"] = dict(pending_ccrp_tuning)
             if hasattr(self, "selected_bomb_id") and self.selected_bomb_id:
                 pending_selected_bomb = self.selected_bomb_id
-                config['selected_bomb'] = pending_selected_bomb
-        
+                config["selected_bomb"] = pending_selected_bomb
+
         # 保存配置
         if not ConfigManager.save(config):
             for path in created_sound_files:
@@ -1575,7 +1799,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             BallisticPhysicsParams.apply_user_tuning(pending_ccrp_tuning)
         if pending_selected_bomb:
             BombConfig.selected_bomb = pending_selected_bomb
-            if hasattr(self.app, 'bomb_select_lbl'):
+            if hasattr(self.app, "bomb_select_lbl"):
                 self.app.bomb_select_lbl.config(
                     text=f"炸弹: {BombConfig.format_bomb_name(pending_selected_bomb)} (点击更换)"
                 )
@@ -1583,34 +1807,33 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 刷新托盘菜单勾选状态
         if hasattr(self.app, "_refresh_tray"):
             self.app._refresh_tray()
-        
+
         # 应用透明度
         Win32.setup_window(self.app.hwnd, self.app._locked, UIConfig.WINDOW_ALPHA)
 
-        sound_flags_changed = (
-            old_sound_enabled != bool(self.app.sound.is_enabled())
-            or old_zone_sound_enabled != bool(self.app._zone_sound_enabled)
-        )
+        sound_flags_changed = old_sound_enabled != bool(
+            self.app.sound.is_enabled()
+        ) or old_zone_sound_enabled != bool(self.app._zone_sound_enabled)
         if sound_flags_changed and hasattr(self.app, "_update_hint"):
             self.app._update_hint()
             if hasattr(self.app, "nav_window") and self.app.nav_window:
                 self.app.nav_window.update_hint_text()
-        
+
         # 重启热键服务（如果需要）
         need_restart_hotkeys = (
-            old_hotkeys_enabled != HotkeyConfig.GLOBAL_HOTKEYS or
-            hotkey_bindings != old_hotkey_bindings
+            old_hotkeys_enabled != HotkeyConfig.GLOBAL_HOTKEYS
+            or hotkey_bindings != old_hotkey_bindings
         )
         if need_restart_hotkeys:
-            if hasattr(self.app, '_ghk') and self.app._ghk:
+            if hasattr(self.app, "_ghk") and self.app._ghk:
                 self.app._ghk.stop()
             if HotkeyConfig.GLOBAL_HOTKEYS:
                 self.app._init_global_hotkeys()
             # 刷新提示文本（主窗口 + 导航窗口）
             self.app._update_hint()
-            if hasattr(self.app, 'nav_window') and self.app.nav_window:
+            if hasattr(self.app, "nav_window") and self.app.nav_window:
                 self.app.nav_window.update_hint_text()
-        
+
         theme_changed = new_theme != old_theme
         ui_scale_changed = abs(UIConfig.UI_SCALE_MULT - old_scale) > 1e-6
         text_scale_changed = abs(UIConfig.TEXT_SCALE_MULT - old_text_scale) > 1e-6
@@ -1654,14 +1877,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 self.app._refresh_tray()
 
         messagebox.showinfo("设置", "设置已保存", parent=self)
-        
+
         self.destroy()
 
     def _collect_hotkey_bindings(self) -> dict[str, str]:
         """收集并校验快捷键绑定。"""
         hotkey_bindings = {
-            key: str(var.get() or "").strip()
-            for key, var in self.hotkey_vars.items()
+            key: str(var.get() or "").strip() for key, var in self.hotkey_vars.items()
         }
 
         key_to_actions: dict[str, list[str]] = {}
@@ -1671,9 +1893,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             key_to_actions.setdefault(key_name, []).append(action)
 
         duplicate_groups = [
-            (key_name, actions)
-            for key_name, actions in key_to_actions.items()
-            if len(actions) > 1
+            (key_name, actions) for key_name, actions in key_to_actions.items() if len(actions) > 1
         ]
         if duplicate_groups:
             action_labels = {
@@ -1697,9 +1917,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
 
 class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
     """检查清单编辑器
-    
+
     允许用户自定义起飞前的检查项目。
     """
+
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
@@ -1755,7 +1976,7 @@ class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
         btn.bind("<Enter>", _on_enter, add="+")
         btn.bind("<Leave>", _on_leave, add="+")
         return btn
-    
+
     def _build_ui(self):
         shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
         shell.pack(fill="both", expand=True, padx=15, pady=12)
@@ -1808,42 +2029,44 @@ class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
 
         btn_frame = tk.Frame(main, bg=Theme.BG)
         btn_frame.pack(fill="x", padx=12, pady=(0, 10))
-        self._create_action_button(
-            btn_frame, "保存", self._save, variant="primary", width=9
-        ).pack(side="right")
+        self._create_action_button(btn_frame, "保存", self._save, variant="primary", width=9).pack(
+            side="right"
+        )
         self._create_action_button(
             btn_frame, "恢复默认", self._restore_default, variant="accent", width=10
         ).pack(side="right", padx=(0, 8))
         self._create_action_button(
             btn_frame, "取消", self.destroy, variant="neutral", width=9
         ).pack(side="right", padx=(0, 8))
-    
+
     def _center_on_parent(self, parent):
         self._center_dialog_on_parent(parent)
-    
+
     def _save(self):
         """保存检查清单"""
         content = self.text.get("1.0", "end-1c")
         items = [line.strip() for line in content.split("\n") if line.strip()]
-        
+
         if not items:
             messagebox.showwarning("警告", "检查清单不能为空", parent=self)
             return
         if len(items) > ChecklistConfig.MAX_ITEMS:
-            messagebox.showwarning("警告", f"检查项数量不能超过{ChecklistConfig.MAX_ITEMS}个", parent=self)
+            messagebox.showwarning(
+                "警告", f"检查项数量不能超过{ChecklistConfig.MAX_ITEMS}个", parent=self
+            )
             return
-        
+
         config = ConfigManager.load()
-        config['checklist_items'] = items
+        config["checklist_items"] = items
         if not ConfigManager.save(config):
             messagebox.showerror("失败", "检查清单保存失败", parent=self)
             return
         self.app.chk_items = items
         self.app._rebuild_checklist()
-        
+
         messagebox.showinfo("成功", "检查清单已保存", parent=self)
         self.destroy()
-    
+
     def _restore_default(self):
         """恢复默认清单"""
         self.text.delete("1.0", "end")
@@ -2307,15 +2530,17 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
 
 class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
     """炸弹选择对话框"""
-    
-    def __init__(self, parent, app, initial_bomb: str | None = None, persist_selection: bool = True):
+
+    def __init__(
+        self, parent, app, initial_bomb: str | None = None, persist_selection: bool = True
+    ):
         super().__init__(parent)
         self.app = app
         self.persist_selection = persist_selection
         self.result = None
         self.selected_bomb = initial_bomb or BombConfig.selected_bomb
         self._current_category = None
-        
+
         self.title("选择炸弹")
         self.configure(bg=Theme.BG)
         self.resizable(True, True)
@@ -2364,10 +2589,16 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         self.search_var = tk.StringVar()
         self.search_var.trace("w", lambda *args: self._on_search())
         self.search_entry = tk.Entry(
-            search_frame, textvariable=self.search_var,
-            bg=Theme.GRAYPILL, fg=Theme.TEXT_MUTED, bd=0, highlightthickness=1,
-            highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE,
-            insertbackground=Theme.TEXT, font=("Segoe UI", 10)
+            search_frame,
+            textvariable=self.search_var,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT_MUTED,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BLUE,
+            insertbackground=Theme.TEXT,
+            font=("Segoe UI", 10),
         )
         self.search_entry.pack(fill="x", ipady=6)
         self.search_entry.insert(0, "搜索...")
@@ -2381,11 +2612,12 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         cat_frame.pack(fill="x", padx=1, pady=1)
 
         self.cat_buttons = {}
-        categories = ['全部'] + BombConfig.get_categories()
+        categories = ["全部"] + BombConfig.get_categories()
         for cat in categories:
             btn = tk.Button(
-                cat_frame, text=cat,
-                bg=Theme.GRAYPILL if cat != '全部' else Theme.BLUE,
+                cat_frame,
+                text=cat,
+                bg=Theme.GRAYPILL if cat != "全部" else Theme.BLUE,
                 fg=Theme.TEXT if cat == "全部" else Theme.TEXT_DIM,
                 bd=0,
                 relief="flat",
@@ -2402,8 +2634,12 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
             )
             btn.pack(side="left", padx=2)
             self.cat_buttons[cat] = btn
-            btn.bind("<Enter>", lambda _e, c=cat: self._style_category_button(c, hover=True), add="+")
-            btn.bind("<Leave>", lambda _e, c=cat: self._style_category_button(c, hover=False), add="+")
+            btn.bind(
+                "<Enter>", lambda _e, c=cat: self._style_category_button(c, hover=True), add="+"
+            )
+            btn.bind(
+                "<Leave>", lambda _e, c=cat: self._style_category_button(c, hover=False), add="+"
+            )
 
         # 列表区域
         list_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
@@ -2422,12 +2658,19 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         scrollbar.pack(side="right", fill="y")
 
         self.listbox = tk.Listbox(
-            list_frame, width=55, height=20,
-            bg=Theme.GRAYPILL, fg=Theme.TEXT, selectbackground=Theme.BLUE,
-            selectforeground=Theme.TEXT, bd=0, highlightthickness=1,
-            highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE,
+            list_frame,
+            width=55,
+            height=20,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            selectbackground=Theme.BLUE,
+            selectforeground=Theme.TEXT,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BLUE,
             yscrollcommand=scrollbar.set,
-            font=("Consolas", 9)
+            font=("Consolas", 9),
         )
         self.listbox.pack(side="left", fill="both", expand=True)
         scrollbar.config(command=self.listbox.yview)
@@ -2435,8 +2678,7 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
 
         # 统计
         self.stats_lbl = tk.Label(
-            main, text="", bg=Theme.BG, fg=Theme.TEXT_DIM, 
-            font=("Segoe UI", 9), anchor="w"
+            main, text="", bg=Theme.BG, fg=Theme.TEXT_DIM, font=("Segoe UI", 9), anchor="w"
         )
         self.stats_lbl.pack(fill="x", padx=12, pady=(6, 0))
 
@@ -2501,7 +2743,9 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         btn = self.cat_buttons.get(category)
         if not btn:
             return
-        is_active = ((self._current_category is None and category == "全部") or (self._current_category == category))
+        is_active = (self._current_category is None and category == "全部") or (
+            self._current_category == category
+        )
         if is_active:
             btn.configure(
                 bg=Theme.BLUE,
@@ -2527,17 +2771,17 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
     def _refresh_category_button_styles(self) -> None:
         for cat in self.cat_buttons.keys():
             self._style_category_button(cat, hover=False)
-    
+
     def _on_search_focus_in(self, event):
         if self.search_entry.get() == "搜索...":
             self.search_entry.delete(0, "end")
             self.search_entry.config(fg=Theme.TEXT)
-    
+
     def _on_search_focus_out(self, event):
         if not self.search_entry.get():
             self.search_entry.insert(0, "搜索...")
             self.search_entry.config(fg=Theme.TEXT_MUTED)
-    
+
     def _on_search(self):
         if not hasattr(self, "listbox"):
             return
@@ -2545,18 +2789,18 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         if query == "搜索...":
             query = ""
         self._populate_list(query)
-    
+
     def _filter_category(self, category):
-        self._current_category = None if category == '全部' else category
+        self._current_category = None if category == "全部" else category
         self.search_var.set("")
         self._refresh_category_button_styles()
         self._populate_list()
-    
+
     def _populate_list(self, search_query: str = ""):
         if not hasattr(self, "listbox"):
             return
         self.listbox.delete(0, "end")
-        
+
         if search_query and search_query != "搜索...":
             bombs = BombConfig.search_bombs(search_query, limit=100)
             show_categories = False
@@ -2566,9 +2810,9 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         else:
             bombs = None
             show_categories = True
-        
+
         current_index, select_index, total_count = 0, 0, 0
-        
+
         if show_categories:
             for category in BombConfig.get_categories():
                 cat_bombs = BombConfig.get_bombs_by_category(category)
@@ -2577,16 +2821,16 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
                 self.listbox.insert("end", f"━━━ {category} ({len(cat_bombs)}种) ━━━")
                 self.listbox.itemconfig(current_index, fg=Theme.YELLOW)
                 current_index += 1
-                
+
                 for bomb_id in cat_bombs:
                     bomb_data = BombConfig.get_bomb_data(bomb_id)
                     if bomb_data:
-                        mass = bomb_data['mass']
-                        mass_str = f"{mass/1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
+                        mass = bomb_data["mass"]
+                        mass_str = f"{mass / 1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
                         text = f"  {bomb_id} ({mass_str}, Cx={bomb_data.get('drag_cx', 0.04):.4f})"
                     else:
                         text = f"  {bomb_id}"
-                    
+
                     self.listbox.insert("end", text)
                     if bomb_id == self.selected_bomb:
                         select_index = current_index
@@ -2597,20 +2841,22 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
             for bomb_id in bombs:
                 bomb_data = BombConfig.get_bomb_data(bomb_id)
                 if bomb_data:
-                    mass = bomb_data['mass']
-                    mass_str = f"{mass/1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
-                    cat = bomb_data.get('category', '?')
-                    text = f"{bomb_id} ({mass_str}, Cx={bomb_data.get('drag_cx', 0.04):.4f}) [{cat}]"
+                    mass = bomb_data["mass"]
+                    mass_str = f"{mass / 1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
+                    cat = bomb_data.get("category", "?")
+                    text = (
+                        f"{bomb_id} ({mass_str}, Cx={bomb_data.get('drag_cx', 0.04):.4f}) [{cat}]"
+                    )
                 else:
                     text = bomb_id
-                
+
                 self.listbox.insert("end", text)
                 if bomb_id == self.selected_bomb:
                     select_index = current_index
                     self.listbox.itemconfig(current_index, fg=Theme.GREEN)
                 current_index += 1
                 total_count += 1
-        
+
         if select_index > 0:
             self.listbox.selection_set(select_index)
             self.listbox.see(select_index)
@@ -2618,42 +2864,45 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         if BombConfig.load_error and not BombConfig.BOMB_DATABASE:
             self.stats_lbl.config(text=f"炸弹数据库未加载：{BombConfig.load_error}")
         else:
-            self.stats_lbl.config(text=f"显示 {total_count} / {len(BombConfig.BOMB_DATABASE)} 种炸弹")
-    
+            self.stats_lbl.config(
+                text=f"显示 {total_count} / {len(BombConfig.BOMB_DATABASE)} 种炸弹"
+            )
+
     def _center_on_parent(self, parent):
         self._center_dialog_on_parent(parent)
-    
+
     def _select(self):
         selection = self.listbox.curselection()
         if not selection:
             return
-        
+
         text = self.listbox.get(selection[0]).strip()
         if text.startswith("━━"):
             return
-        
+
         bomb_id = text.split(" (")[0].strip()
-        
+
         if BombConfig.get_bomb_data(bomb_id):
             self.result = bomb_id
             if self.persist_selection:
                 config = ConfigManager.load()
-                config['selected_bomb'] = bomb_id
+                config["selected_bomb"] = bomb_id
                 if not ConfigManager.save(config):
                     messagebox.showerror("失败", "炸弹选择保存失败", parent=self)
                     return
                 BombConfig.selected_bomb = bomb_id
-                
-                if hasattr(self.app, 'bomb_select_lbl'):
+
+                if hasattr(self.app, "bomb_select_lbl"):
                     self.app.bomb_select_lbl.config(
                         text=f"炸弹: {BombConfig.format_bomb_name(bomb_id)} (点击更换)"
                     )
-            
+
             self.destroy()
 
 
 class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
     """关于对话框"""
+
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
@@ -2662,33 +2911,33 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         self.transient(parent)
         self.grab_set()
         self._images = []
-        
+
         self._build_ui()
-        
+
         # 让窗口自适应内容大小
         self.update_idletasks()
-        
+
         # 获取内容实际需要的尺寸
         req_width = self.winfo_reqwidth()
         req_height = self.winfo_reqheight()
-        
+
         # 设置最小尺寸，确保不会太小
         min_width = max(800, req_width)
         min_height = max(1200, req_height)
-        
+
         # 限制最大尺寸不超过屏幕
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
         final_width = min(min_width, screen_w - 100)
         final_height = min(min_height, screen_h - 100)
-        
+
         self.geometry(f"{final_width}x{final_height}")
         self.minsize(400, 500)
         self.resizable(True, True)  # 允许用户调整大小
-        
+
         self._init_dynamic_scaling()
         self._center_on_parent(parent)
-    
+
     def _build_ui(self):
         shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
         shell.pack(fill="both", expand=True, padx=16, pady=12)
@@ -2740,10 +2989,13 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
             icon_path = resource_path(FileConfig.ICON_FILE)
             if HAS_TRAY:
                 from PIL import Image, ImageTk
+
                 img = Image.open(icon_path).convert("RGBA")
                 img = img.resize((56, 56), Image.Resampling.LANCZOS)
                 self._app_icon = ImageTk.PhotoImage(img)
-                tk.Label(title_row, image=self._app_icon, bg=Theme.GRAYPILL).pack(side="left", padx=(0, 12))
+                tk.Label(title_row, image=self._app_icon, bg=Theme.GRAYPILL).pack(
+                    side="left", padx=(0, 12)
+                )
         except Exception:
             pass
 
@@ -2911,19 +3163,20 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
                 anchor="w",
             ).pack(anchor="w", pady=(0, 8))
         return body
-    
+
     def _add_sponsor_item(self, parent, name: str, url: str, img_file: str):
         bg = str(parent.cget("bg") or Theme.GRAYPILL)
         item_frame = tk.Frame(parent, bg=bg)
         item_frame.pack(side="left", padx=(0, 20), pady=10)
-        
+
         img_loaded = False
         if img_file and HAS_TRAY:
             try:
                 from PIL import Image, ImageTk
+
                 img_path = resource_path(img_file)
                 img = Image.open(img_path).convert("RGBA")
-                
+
                 # 更大的图片尺寸
                 target_width = AboutConfig.SPONSOR_IMAGE_WIDTH
                 ratio = target_width / img.width
@@ -2931,42 +3184,48 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
                 img = img.resize((target_width, new_height), Image.Resampling.LANCZOS)
                 photo = ImageTk.PhotoImage(img)
                 self._images.append(photo)
-                
+
                 img_lbl = tk.Label(item_frame, image=photo, bg=bg, cursor="hand2" if url else "")
                 img_lbl.pack()
                 if url:
                     img_lbl.bind("<Button-1>", lambda e, u=url: self._open_url(u))
-                
+
                 tk.Label(
-                    item_frame, text=name,
-                    font=("Segoe UI", 10),
-                    fg=Theme.TEXT_DIM, bg=bg
+                    item_frame, text=name, font=("Segoe UI", 10), fg=Theme.TEXT_DIM, bg=bg
                 ).pack(pady=(5, 0))
                 img_loaded = True
             except Exception:
                 pass
-        
+
         if not img_loaded:
             btn = tk.Button(
-                item_frame, text=f"💝 {name}",
+                item_frame,
+                text=f"💝 {name}",
                 font=("Segoe UI", 11),
-                bg=Theme.GRAYPILL, fg=Theme.TEXT, bd=0, padx=18, pady=8,
-                relief="flat", highlightthickness=1,
-                highlightbackground=Theme.BORDER, highlightcolor=Theme.BORDER,
-                activebackground=Theme.SEPARATOR, activeforeground=Theme.TEXT,
+                bg=Theme.GRAYPILL,
+                fg=Theme.TEXT,
+                bd=0,
+                padx=18,
+                pady=8,
+                relief="flat",
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+                highlightcolor=Theme.BORDER,
+                activebackground=Theme.SEPARATOR,
+                activeforeground=Theme.TEXT,
                 cursor="hand2" if url else "",
             )
             btn.pack()
             if url:
                 btn.config(command=lambda u=url: self._open_url(u))
-    
+
     def _open_url(self, url: str):
         if url:
             try:
                 webbrowser.open(url)
             except Exception:
                 pass
-    
+
     def _close(self):
         # 解绑鼠标滚轮事件，防止关闭后影响其他窗口
         try:
@@ -2974,6 +3233,6 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         except Exception:
             pass
         self.destroy()
-    
+
     def _center_on_parent(self, parent):
         self._center_dialog_on_parent(parent)

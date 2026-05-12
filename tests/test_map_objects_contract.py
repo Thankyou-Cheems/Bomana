@@ -20,11 +20,29 @@ class FakeHttp:
 
 class MapObjectsContractTests(unittest.TestCase):
     def test_fetch_parses_normalized_player_zones_and_airfields(self):
-        fetcher = MapObjectsFetcher(FakeHttp([
-            {"type": "aircraft", "icon": "player", "x": 0.25, "y": 0.75, "dx": 0.01, "dy": -0.02},
-            {"type": "bombing_point", "x": 0.6, "y": 0.4, "color": "red"},
-            {"type": "airfield", "sx": 0.1, "sy": 0.2, "ex": 0.3, "ey": 0.4, "side": "blue"},
-        ]))
+        fetcher = MapObjectsFetcher(
+            FakeHttp(
+                [
+                    {
+                        "type": "aircraft",
+                        "icon": "player",
+                        "x": 0.25,
+                        "y": 0.75,
+                        "dx": 0.01,
+                        "dy": -0.02,
+                    },
+                    {"type": "bombing_point", "x": 0.6, "y": 0.4, "color": "red"},
+                    {
+                        "type": "airfield",
+                        "sx": 0.1,
+                        "sy": 0.2,
+                        "ex": 0.3,
+                        "ey": 0.4,
+                        "side": "blue",
+                    },
+                ]
+            )
+        )
 
         data = fetcher.fetch(Budget(1.0))
 

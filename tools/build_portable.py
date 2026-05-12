@@ -110,9 +110,7 @@ def read_min_launcher_version(config_text: str) -> str:
         config_text,
     )
     if not m:
-        raise RuntimeError(
-            "Failed to find PORTABLE_MIN_LAUNCHER_VERSION in bomana/config.py"
-        )
+        raise RuntimeError("Failed to find PORTABLE_MIN_LAUNCHER_VERSION in bomana/config.py")
     return m.group(1).strip()
 
 
@@ -173,12 +171,12 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
 def generate_version_info(work_dir: Path, version: str) -> Path:
     """Generate a version info file for PyInstaller to reduce AV false positives."""
     # Convert "1.1.0" -> (1, 1, 0, 0)
-    nums = re.findall(r'\d+', version)
+    nums = re.findall(r"\d+", version)
     parts = [int(x) for x in nums]
     while len(parts) < 4:
         parts.append(0)
     ver_tuple = tuple(parts[:4])
-    
+
     content = f"""# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
@@ -212,7 +210,6 @@ VSVersionInfo(
     path = work_dir / "file_version_info.txt"
     path.write_text(content, encoding="utf-8")
     return path
-
 
 
 def build_launcher(root: Path, version: str, out_dir: Path) -> Path:

@@ -16,6 +16,7 @@ from bomana.core.state import Airfield, MapInfo, MapObjData, TelemetryData, Zone
 # 网络请求层
 # ============================================================================
 
+
 @dataclass(frozen=True)
 class FetchResult:
     """Diagnostic result for one 8111 JSON endpoint fetch."""
@@ -27,14 +28,16 @@ class FetchResult:
     elapsed_ms: float = 0.0
     status_code: int | None = None
 
+
 class Budget:
     """时间预算管理
-    
+
     限制单次tick的总网络耗时，避免阻塞主循环。
     """
+
     def __init__(self, seconds: float):
         self.deadline = time.monotonic() + max(0.0, seconds)
-    
+
     def remaining(self) -> float:
         """返回剩余时间（秒）"""
         return self.deadline - time.monotonic()
@@ -42,12 +45,13 @@ class Budget:
 
 class HttpJson:
     """HTTP JSON请求封装
-    
+
     使用requests库，支持超时和预算管理。
     """
+
     def __init__(self, session: requests.Session):
         self.session = session
-    
+
     @staticmethod
     def _endpoint_label(url: str) -> str:
         path = urlparse(url).path
@@ -55,11 +59,11 @@ class HttpJson:
 
     def get_json(self, url: str, budget: Budget) -> FetchResult:
         """发起GET请求并解析JSON
-        
+
         Args:
             url: 目标URL
             budget: 时间预算
-        
+
         Returns:
             FetchResult，失败时包含分类诊断信息
         """
@@ -68,11 +72,11 @@ class HttpJson:
         rem = budget.remaining()
         if rem <= 0.0:
             return FetchResult(endpoint=endpoint, ok=False, error_kind="budget_exhausted")
-        
+
         # 计算超时时间
         connect_t = min(NetworkConfig.API_CONNECT_TIMEOUT, max(0.01, rem))
         read_t = min(NetworkConfig.API_READ_TIMEOUT, max(0.01, rem))
-        
+
         try:
             r = self.session.get(url, timeout=(connect_t, read_t))
             if not r.ok:
@@ -118,10 +122,11 @@ class HttpJson:
 
 class TelemetryFetcher:
     """遥测数据获取器
-    
+
     负责从8111接口获取飞机状态数据。
     同时请求/indicators和/state两个端点。
     """
+
     def __init__(self, http: HttpJson):
         self.http = http
 
@@ -136,7 +141,7 @@ class TelemetryFetcher:
             raw = raw[0] if raw else default
         try:
             return float(raw)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return float(default)
 
     @staticmethod
@@ -150,7 +155,7 @@ class TelemetryFetcher:
             raw = raw[0] if raw else None
         try:
             return float(raw)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
 
     def _read_float(self, payload: dict, keys: Tuple[str, ...]) -> Tuple[float, bool]:
@@ -192,15 +197,34 @@ class TelemetryFetcher:
         """合并姿态字段（支持不同机型/端点键名差异）。"""
         pitch, pitch_present = self._read_float(
             payload,
-            ("aviahorizon_pitch", "aviahorizon_pitch, deg", "aviahorizon_pitch, rad", "pitch", "pitch, deg"),
+            (
+                "aviahorizon_pitch",
+                "aviahorizon_pitch, deg",
+                "aviahorizon_pitch, rad",
+                "pitch",
+                "pitch, deg",
+            ),
         )
         roll, roll_present = self._read_float(
             payload,
-            ("aviahorizon_roll", "aviahorizon_roll, deg", "aviahorizon_roll, rad", "roll", "roll, deg"),
+            (
+                "aviahorizon_roll",
+                "aviahorizon_roll, deg",
+                "aviahorizon_roll, rad",
+                "roll",
+                "roll, deg",
+            ),
         )
         bank, bank_present = self._read_float(
             payload,
-            ("bank", "bank, deg", "bank, rad", "aviahorizon_bank", "aviahorizon_bank, deg", "aviahorizon_bank, rad"),
+            (
+                "bank",
+                "bank, deg",
+                "bank, rad",
+                "aviahorizon_bank",
+                "aviahorizon_bank, deg",
+                "aviahorizon_bank, rad",
+            ),
         )
 
         if pitch_present:
@@ -212,18 +236,18 @@ class TelemetryFetcher:
         if bank_present:
             data.attitude_bank_deg = bank
             data.attitude_bank_present = True
-    
+
     def fetch(self, budget: Budget) -> TelemetryData:
         """获取遥测数据
-        
+
         Args:
             budget: 时间预算
-        
+
         Returns:
             TelemetryData对象（即使失败也返回默认值）
         """
         data = TelemetryData()
-        
+
         # 请求 /indicators (飞机基本信息)
         indicators_result = self.http.get_json(f"{NetworkConfig.API_BASE}/indicators", budget)
         data.ind_ok = indicators_result.ok
@@ -238,16 +262,23 @@ class TelemetryFetcher:
             )
             data.compass, _ = self._read_float(
                 j,
-                ("compass1", "compass", "compass1, deg", "compass, deg", "compass1, rad", "compass, rad"),
+                (
+                    "compass1",
+                    "compass",
+                    "compass1, deg",
+                    "compass, deg",
+                    "compass1, rad",
+                    "compass, rad",
+                ),
             )
             data.wing_sweep = self._to_optional_float(
                 j.get("wing_sweep_indicator", j.get("wing_sweep", j.get("sweep")))
             )
             self._merge_attitude_fields(j, data)
-        
+
         if not data.ind_ok:
             return data
-        
+
         # 请求 /state (飞机状态)
         state_result = self.http.get_json(f"{NetworkConfig.API_BASE}/state", budget)
         data.state_resp_ok = state_result.ok
@@ -291,7 +322,7 @@ class TelemetryFetcher:
                     ("fuel", 1.0),
                 ),
             )
-            
+
             # v5.8 新增：解析燃油管理相关字段
             data.fuel0_kg, _ = self._read_scaled_float(
                 j,
@@ -341,7 +372,7 @@ class TelemetryFetcher:
             data.mach = self._to_optional_float(
                 j.get("M", j.get("Mach", j.get("mach", j.get("mach_number"))))
             )
-            
+
             # v5.9.6 + v6.6.0：解析起落架状态和百分比
             gear_pct, _ = self._read_scaled_float(
                 j,
@@ -354,33 +385,36 @@ class TelemetryFetcher:
                 ),
             )
             data.gear_pct = gear_pct  # v6.6.0: 保存原始百分比
-            data.gear_down = (gear_pct > 50)  # 超过50%视为放下状态
+            data.gear_down = gear_pct > 50  # 超过50%视为放下状态
             self._merge_attitude_fields(j, data)
 
         data.attitude_available = bool(
-            data.state_resp_ok and
-            data.attitude_pitch_present and
-            (data.attitude_roll_present or data.attitude_bank_present)
+            data.state_resp_ok
+            and data.attitude_pitch_present
+            and (data.attitude_roll_present or data.attitude_bank_present)
         )
-        
+
         return data
 
 
 class MapInfoFetcher:
     """地图元数据获取器
-    
+
     获取地图尺度参数，结果会缓存30秒。
     """
+
     def __init__(self, http: HttpJson):
         self.http = http
-        self.last_result = FetchResult(endpoint="/map_info.json", ok=False, error_kind="not_fetched")
-    
+        self.last_result = FetchResult(
+            endpoint="/map_info.json", ok=False, error_kind="not_fetched"
+        )
+
     def fetch(self, budget: Budget) -> Optional[MapInfo]:
         """获取地图元数据
-        
+
         Args:
             budget: 时间预算
-        
+
         Returns:
             MapInfo对象或None
         """
@@ -389,7 +423,7 @@ class MapInfoFetcher:
         j = result.payload
         if not result.ok or not isinstance(j, dict) or not j.get("valid", False):
             return None
-        
+
         return MapInfo(
             valid=True,
             grid_size=j.get("grid_size", [52719.0, 55385.0]),
@@ -397,16 +431,17 @@ class MapInfoFetcher:
             grid_zero=j.get("grid_zero", [0.0, 0.0]),
             map_min=j.get("map_min", [-65536.0, -65536.0]),
             map_max=j.get("map_max", [65536.0, 65536.0]),
-            fetch_time=time.time()
+            fetch_time=time.time(),
         )
 
 
 class MapObjectsFetcher:
     """地图对象获取器
-    
+
     解析/map_obj.json，提取玩家、战区、机场信息。
     坐标保持8111返回的归一化地图坐标；map_info 尺度换算由逻辑层负责。
     """
+
     def __init__(self, http: HttpJson):
         self.http = http
         self.last_result = FetchResult(endpoint="/map_obj.json", ok=False, error_kind="not_fetched")
@@ -431,7 +466,7 @@ class MapObjectsFetcher:
             value = value[0] if value else None
         try:
             result = float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
         return result if math.isfinite(result) else None
 
@@ -464,7 +499,7 @@ class MapObjectsFetcher:
         if isinstance(value, (list, tuple)) and len(value) >= 3:
             try:
                 return float(value[0]), float(value[1]), float(value[2])
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return None
 
         text = MapObjectsFetcher._text(o.get("color", ""))
@@ -506,32 +541,43 @@ class MapObjectsFetcher:
         if o.get("is_player") is True or o.get("player") is True:
             return True
         return bool(
-            obj_type in {"aircraft", "plane", "player", "player_aircraft"} and
-            (icon == "player" or name == "player" or "player" in icon)
+            obj_type in {"aircraft", "plane", "player", "player_aircraft"}
+            and (icon == "player" or name == "player" or "player" in icon)
         )
 
     @staticmethod
     def _is_airfield_object(o: dict) -> bool:
         obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
         icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
-        return obj_type in {"airfield", "airport", "runway"} or icon in {"airfield", "airport", "runway"}
+        return obj_type in {"airfield", "airport", "runway"} or icon in {
+            "airfield",
+            "airport",
+            "runway",
+        }
 
     @staticmethod
     def _is_zone_object(o: dict) -> bool:
         obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
         icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
         return bool(
-            obj_type in {"bombing_point", "bombingpoint", "bombing point", "bomb_target", "bomb_target_point"} or
-            "bombing" in icon or
-            "bomb_target" in icon
+            obj_type
+            in {
+                "bombing_point",
+                "bombingpoint",
+                "bombing point",
+                "bomb_target",
+                "bomb_target_point",
+            }
+            or "bombing" in icon
+            or "bomb_target" in icon
         )
-    
+
     def fetch(self, budget: Budget) -> MapObjData:
         """获取地图对象
-        
+
         Args:
             budget: 时间预算
-        
+
         Returns:
             MapObjData对象
         """
@@ -543,21 +589,21 @@ class MapObjectsFetcher:
         j = result.payload
         if not result.ok:
             return out
-        
+
         out.ok = True
-        
+
         # 提取对象列表
         objs = self._extract_objects(j)
         out.obj_count = len(objs)
-        
+
         zone_index = 1
         airfield_index = 1
-        
+
         # 遍历对象
         for o in objs:
             if not isinstance(o, dict):
                 continue
-            
+
             if self._is_player_object(o):
                 # 玩家飞机
                 px = self._first_float(o, ("x", "X", "pos_x", "position_x"))
@@ -568,7 +614,7 @@ class MapObjectsFetcher:
                 out.player_pos = (px, py)
                 out.player_dx = self._first_float(o, ("dx", "DX", "vel_x", "vx")) or 0.0
                 out.player_dy = self._first_float(o, ("dy", "DY", "vel_y", "vy")) or 0.0
-                
+
             elif self._is_airfield_object(o):
                 # 机场：使用跑道起止点的中心
                 sx = self._first_float(o, ("sx", "start_x", "runway_start_x"))
@@ -592,13 +638,16 @@ class MapObjectsFetcher:
                 # 判断归属：优先 side/team 字段，回退到蓝色通道启发式。
                 is_friendly = self._is_friendly_airfield(o)
 
-                out.airfields.append(Airfield(
-                    id=f"airfield_{airfield_index}",
-                    index=airfield_index,
-                    x=wx, y=wy,
-                    color=o.get("color", ""),
-                    is_friendly=is_friendly
-                ))
+                out.airfields.append(
+                    Airfield(
+                        id=f"airfield_{airfield_index}",
+                        index=airfield_index,
+                        x=wx,
+                        y=wy,
+                        color=o.get("color", ""),
+                        is_friendly=is_friendly,
+                    )
+                )
                 airfield_index += 1
 
             elif self._is_zone_object(o):
@@ -607,12 +656,15 @@ class MapObjectsFetcher:
                 zone_y = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
                 if zone_x is None or zone_y is None:
                     continue
-                out.zones.append(Zone(
-                    id=f"zone_{zone_x:.4f}_{zone_y:.4f}",
-                    index=zone_index,
-                    x=zone_x, y=zone_y,
-                    color=o.get("color", "")
-                ))
+                out.zones.append(
+                    Zone(
+                        id=f"zone_{zone_x:.4f}_{zone_y:.4f}",
+                        index=zone_index,
+                        x=zone_x,
+                        y=zone_y,
+                        color=o.get("color", ""),
+                    )
+                )
                 zone_index += 1
-        
+
         return out

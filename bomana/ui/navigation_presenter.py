@@ -33,7 +33,7 @@ def select_display_primary_zone(zones: list[Any]) -> Any | None:
         try:
             rel = float(getattr(zone, "relative", 0.0))
             dist = float(getattr(zone, "distance_km", 0.0))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         if math.isfinite(rel) and math.isfinite(dist):
             ranked.append((abs(rel), dist, zone))
@@ -56,74 +56,88 @@ def build_navigation_tape_model(
 
     for zone in getattr(snap, "zones", []):
         is_primary = bool(primary_zone is not None and zone.id == primary_zone.id)
-        targets.append({
-            "type": "zone",
-            "relative": zone.relative,
-            "distance_km": zone.distance_km,
-            "is_primary": is_primary,
-            "is_target": bool(zone.is_target or is_primary),
-        })
-        if is_primary:
-            active_targets_info.append({
+        targets.append(
+            {
                 "type": "zone",
-                "name": "战区",
-                "icon": "⊚",
                 "relative": zone.relative,
                 "distance_km": zone.distance_km,
-                "ete_str": getattr(zone, "ete_str", ""),
-                "color": Theme.RED,
-            })
+                "is_primary": is_primary,
+                "is_target": bool(zone.is_target or is_primary),
+            }
+        )
+        if is_primary:
+            active_targets_info.append(
+                {
+                    "type": "zone",
+                    "name": "战区",
+                    "icon": "⊚",
+                    "relative": zone.relative,
+                    "distance_km": zone.distance_km,
+                    "ete_str": getattr(zone, "ete_str", ""),
+                    "color": Theme.RED,
+                }
+            )
 
     if getattr(snap, "friendly_airfield", None):
         af = snap.friendly_airfield
         is_in_front = abs(af.relative) <= 90
-        targets.append({
-            "type": "friendly",
-            "relative": af.relative,
-            "distance_km": af.distance_km,
-            "is_primary": False,
-            "is_target": is_in_front,
-        })
-        if is_in_front:
-            active_targets_info.append({
+        targets.append(
+            {
                 "type": "friendly",
-                "name": "友方",
-                "icon": "✈",
                 "relative": af.relative,
                 "distance_km": af.distance_km,
-                "ete_str": getattr(af, "ete_str", ""),
-                "color": Theme.BLUE,
-            })
+                "is_primary": False,
+                "is_target": is_in_front,
+            }
+        )
+        if is_in_front:
+            active_targets_info.append(
+                {
+                    "type": "friendly",
+                    "name": "友方",
+                    "icon": "✈",
+                    "relative": af.relative,
+                    "distance_km": af.distance_km,
+                    "ete_str": getattr(af, "ete_str", ""),
+                    "color": Theme.BLUE,
+                }
+            )
 
     for af in getattr(snap, "enemy_airfields", []) or []:
         is_in_front = abs(af.relative) <= 90
-        targets.append({
-            "type": "enemy",
-            "relative": af.relative,
-            "distance_km": af.distance_km,
-            "is_primary": False,
-            "is_target": is_in_front,
-        })
-        if getattr(af, "is_target", False) and is_in_front:
-            active_targets_info.append({
+        targets.append(
+            {
                 "type": "enemy",
-                "name": "敌方",
-                "icon": "✈",
                 "relative": af.relative,
                 "distance_km": af.distance_km,
-                "ete_str": getattr(af, "ete_str", ""),
-                "color": Theme.ORANGE,
-            })
+                "is_primary": False,
+                "is_target": is_in_front,
+            }
+        )
+        if getattr(af, "is_target", False) and is_in_front:
+            active_targets_info.append(
+                {
+                    "type": "enemy",
+                    "name": "敌方",
+                    "icon": "✈",
+                    "relative": af.relative,
+                    "distance_km": af.distance_km,
+                    "ete_str": getattr(af, "ete_str", ""),
+                    "color": Theme.ORANGE,
+                }
+            )
 
     if getattr(snap, "zone_destroyed_alert", False):
         for dz in destroyed_zones or []:
             if hasattr(dz, "relative"):
-                targets.append({
-                    "type": "destroyed",
-                    "relative": dz.relative,
-                    "distance_km": dz.distance * ZoneConfig.DISTANCE_SCALE,
-                    "is_primary": False,
-                })
+                targets.append(
+                    {
+                        "type": "destroyed",
+                        "relative": dz.relative,
+                        "distance_km": dz.distance * ZoneConfig.DISTANCE_SCALE,
+                        "is_primary": False,
+                    }
+                )
 
     return NavigationTapeModel(
         targets=targets,

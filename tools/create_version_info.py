@@ -14,13 +14,14 @@ def read_version(config_path):
         print(f"Error reading config: {e}")
     return "0.0.0"
 
+
 def generate_content(version):
-    nums = re.findall(r'\d+', version)
+    nums = re.findall(r"\d+", version)
     parts = [int(x) for x in nums]
     while len(parts) < 4:
         parts.append(0)
     ver_tuple = tuple(parts[:4])
-    
+
     return f"""# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
@@ -52,12 +53,13 @@ VSVersionInfo(
 )
 """
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    
+
     ver = read_version(args.config)
     content = generate_content(ver)
     Path(args.output).write_text(content, encoding="utf-8")

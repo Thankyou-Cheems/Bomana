@@ -27,7 +27,7 @@ def _to_float(raw, default=0.0):
         raw = raw[0] if raw else default
     try:
         return float(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return float(default)
 
 
@@ -75,7 +75,9 @@ def _calc_ratios(stat):
 
 def main():
     parser = argparse.ArgumentParser(description="Collect 8111 attitude baseline samples.")
-    parser.add_argument("--duration", type=float, default=120.0, help="Sampling duration in seconds.")
+    parser.add_argument(
+        "--duration", type=float, default=120.0, help="Sampling duration in seconds."
+    )
     parser.add_argument("--interval", type=float, default=0.2, help="Sampling interval in seconds.")
     parser.add_argument("--output", type=str, default="", help="Output json path.")
     args = parser.parse_args()
@@ -128,15 +130,34 @@ def main():
 
         pitch, pitch_present = _read_float(
             state or ind or {},
-            ("aviahorizon_pitch", "aviahorizon_pitch, deg", "aviahorizon_pitch, rad", "pitch", "pitch, deg"),
+            (
+                "aviahorizon_pitch",
+                "aviahorizon_pitch, deg",
+                "aviahorizon_pitch, rad",
+                "pitch",
+                "pitch, deg",
+            ),
         )
         roll, roll_present = _read_float(
             state or ind or {},
-            ("aviahorizon_roll", "aviahorizon_roll, deg", "aviahorizon_roll, rad", "roll", "roll, deg"),
+            (
+                "aviahorizon_roll",
+                "aviahorizon_roll, deg",
+                "aviahorizon_roll, rad",
+                "roll",
+                "roll, deg",
+            ),
         )
         bank, bank_present = _read_float(
             state or ind or {},
-            ("bank", "bank, deg", "bank, rad", "aviahorizon_bank", "aviahorizon_bank, deg", "aviahorizon_bank, rad"),
+            (
+                "bank",
+                "bank, deg",
+                "bank, rad",
+                "aviahorizon_bank",
+                "aviahorizon_bank, deg",
+                "aviahorizon_bank, rad",
+            ),
         )
         lateral = roll if roll_present else bank
         attitude_available = bool(pitch_present and (roll_present or bank_present))

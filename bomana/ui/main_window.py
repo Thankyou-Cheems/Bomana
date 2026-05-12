@@ -74,7 +74,13 @@ class MainWindowBuilder:
         shell.grid_columnconfigure(0, weight=1)
 
         body = tk.Frame(shell, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
-        body.grid(row=0, column=0, sticky="ew", padx=max(1, int(self.app.scale)), pady=max(1, int(self.app.scale)))
+        body.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=max(1, int(self.app.scale)),
+            pady=max(1, int(self.app.scale)),
+        )
         body.grid_columnconfigure(0, weight=1)
         return shell, body
 
@@ -156,7 +162,9 @@ class MainWindowBuilder:
         )
         app.debug_source_btn.grid(row=0, column=0, sticky="w")
         app.debug_source_btn.bind("<Button-1>", lambda e: app._toggle_debug_mock_mode())
-        app.debug_source_btn.bind("<Enter>", lambda e: app.debug_source_btn.config(bg=Theme.BORDER, fg=Theme.TEXT))
+        app.debug_source_btn.bind(
+            "<Enter>", lambda e: app.debug_source_btn.config(bg=Theme.BORDER, fg=Theme.TEXT)
+        )
         app.debug_source_btn.bind("<Leave>", lambda e: app._update_debug_controls())
 
         app.debug_prev_btn = tk.Label(
@@ -276,7 +284,9 @@ class MainWindowBuilder:
 
         app.top_row2 = tk.Frame(app.top_content, bg=Theme.GRAYPILL)
         pad_top, pad_bot = UIConfig.PADDING_ROW2
-        app.top_row2.grid(row=1, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s)))
+        app.top_row2.grid(
+            row=1, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s))
+        )
         app.top_row2.grid_columnconfigure(1, weight=1)
 
         badge_row = tk.Frame(app.top_row2, bg=Theme.GRAYPILL)
@@ -306,7 +316,9 @@ class MainWindowBuilder:
         history_header = tk.Frame(app.history_mode_frame, bg=Theme.GRAYPILL)
         history_header.grid(row=0, column=0, sticky="ew")
         history_header.grid_columnconfigure(0, weight=1)
-        history_title_font = app._scaled_font((UIConfig.FONT_STATUS[0], UIConfig.FONT_STATUS[1], "bold"))
+        history_title_font = app._scaled_font(
+            (UIConfig.FONT_STATUS[0], UIConfig.FONT_STATUS[1], "bold")
+        )
         app.history_mode_title_lbl = tk.Label(
             history_header,
             text="🕰 空历速度监视",
@@ -338,7 +350,9 @@ class MainWindowBuilder:
 
         app.speed_row = tk.Frame(app.top_content, bg=Theme.GRAYPILL)
         pad_top, pad_bot = UIConfig.PADDING_SPEED_STRIP
-        app.speed_row.grid(row=3, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s)))
+        app.speed_row.grid(
+            row=3, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s))
+        )
         app.speed_row.grid_columnconfigure(0, weight=1)
         speed_font = app._get_font("hint")
         speed_model_font = app._scaled_font(UIConfig.FONT_HINT, size_mult=0.92, min_size=7)
@@ -405,7 +419,9 @@ class MainWindowBuilder:
         app.speed_bar_host = tk.Frame(app.speed_row, bg=Theme.GRAYPILL, height=speed_bar_height)
         app.speed_bar_host.grid(row=1, column=0, sticky="ew", pady=(max(1, int(2 * s)), 0))
         app.speed_bar_host.grid_propagate(False)
-        app.speed_bar_bg = tk.Frame(app.speed_bar_host, bg=Theme.SEPARATOR, height=speed_bar_thickness)
+        app.speed_bar_bg = tk.Frame(
+            app.speed_bar_host, bg=Theme.SEPARATOR, height=speed_bar_thickness
+        )
         app.speed_bar_bg.place(relx=0, rely=0.5, relwidth=1, anchor="w")
         app.speed_bar_fill = tk.Frame(app.speed_bar_bg, bg=Theme.GREEN, height=speed_bar_thickness)
         app.speed_bar_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
@@ -427,7 +443,9 @@ class MainWindowBuilder:
         bar_height = int(UIConfig.PROGRESS_BAR_HEIGHT * s)
         app.progress_frame = tk.Frame(app.top_content, bg=Theme.GRAYPILL, height=bar_height)
         pad_top, pad_bot = UIConfig.PADDING_PROGRESS
-        app.progress_frame.grid(row=4, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s)))
+        app.progress_frame.grid(
+            row=4, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s))
+        )
         app.progress_frame.grid_propagate(False)
         bar_thickness = int(UIConfig.PROGRESS_BAR_THICKNESS * s)
         app.bar_bg = tk.Frame(app.progress_frame, bg=Theme.SEPARATOR, height=bar_thickness)
@@ -513,7 +531,13 @@ class MainWindowBuilder:
                 anchor="e",
                 width=8,
             )
-            distance_lbl.grid(row=row_index, column=2, sticky="e", padx=(int(6 * self.app.scale), 0), pady=(0, max(1, int(self.app.scale))))
+            distance_lbl.grid(
+                row=row_index,
+                column=2,
+                sticky="e",
+                padx=(int(6 * self.app.scale), 0),
+                pady=(0, max(1, int(self.app.scale))),
+            )
             distance_lbl.grid_remove()
 
             relative_lbl = None
@@ -527,7 +551,13 @@ class MainWindowBuilder:
                     anchor="e",
                     width=11,
                 )
-                relative_lbl.grid(row=row_index, column=3, sticky="e", padx=(int(8 * self.app.scale), 0), pady=(0, max(1, int(self.app.scale))))
+                relative_lbl.grid(
+                    row=row_index,
+                    column=3,
+                    sticky="e",
+                    padx=(int(8 * self.app.scale), 0),
+                    pady=(0, max(1, int(self.app.scale))),
+                )
                 relative_lbl.grid_remove()
 
             pool.append(
@@ -554,8 +584,17 @@ class MainWindowBuilder:
         status_font = app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.95, min_size=7)
 
         app.zone_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-        app.zone_header_frame.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(int(4 * s), int(2 * s)))
-        app.zone_title = tk.Label(app.zone_header_frame, text="导航面板", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        app.zone_header_frame.grid(
+            row=0, column=0, sticky="ew", padx=pad_x, pady=(int(4 * s), int(2 * s))
+        )
+        app.zone_title = tk.Label(
+            app.zone_header_frame,
+            text="导航面板",
+            font=font_title,
+            fg=Theme.TEXT,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         app.zone_title.pack(side="left")
 
         app.standalone_btn = tk.Label(
@@ -592,7 +631,9 @@ class MainWindowBuilder:
 
         if ZoneConfig.HEADING_TAPE_ENABLED:
             app.heading_tape_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-            app.heading_tape_frame.grid(row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s)))
+            app.heading_tape_frame.grid(
+                row=1, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(4 * s))
+            )
             app.heading_tape = HeadingTape(
                 app.heading_tape_frame,
                 width=int(ZoneConfig.HEADING_TAPE_WIDTH * s),
@@ -625,26 +666,95 @@ class MainWindowBuilder:
             app.tape_zone_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
             app.tape_zone_row.pack(fill="x", pady=(int(2 * s), 0))
             app.tape_zone_row.grid_columnconfigure(3, weight=1)
-            app.tape_zone_label = tk.Label(app.tape_zone_row, text="⊚战区:", font=status_font, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
+            app.tape_zone_label = tk.Label(
+                app.tape_zone_row,
+                text="⊚战区:",
+                font=status_font,
+                fg=Theme.RED,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+            )
             app.tape_zone_label.grid(row=0, column=0, sticky="w")
-            app.tape_zone_turn = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=8)
+            app.tape_zone_turn = tk.Label(
+                app.tape_zone_row,
+                text="",
+                font=status_font,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+                width=8,
+            )
             app.tape_zone_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
-            app.tape_zone_status = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=8)
+            app.tape_zone_status = tk.Label(
+                app.tape_zone_row,
+                text="",
+                font=status_font,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+                width=8,
+            )
             app.tape_zone_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
-            app.tape_zone_info = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e", width=15)
+            app.tape_zone_info = tk.Label(
+                app.tape_zone_row,
+                text="",
+                font=status_font,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="e",
+                width=15,
+            )
             app.tape_zone_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
-            app.tape_zone_tolerance = tk.Label(app.tape_zone_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e")
+            app.tape_zone_tolerance = tk.Label(
+                app.tape_zone_row,
+                text="",
+                font=status_font,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="e",
+            )
 
             app.tape_friendly_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
             app.tape_friendly_row.pack(fill="x", pady=(int(1 * s), 0))
             app.tape_friendly_row.grid_columnconfigure(3, weight=1)
-            app.tape_friendly_label = tk.Label(app.tape_friendly_row, text="✈友方:", font=status_font, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
+            app.tape_friendly_label = tk.Label(
+                app.tape_friendly_row,
+                text="✈友方:",
+                font=status_font,
+                fg=Theme.BLUE,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+            )
             app.tape_friendly_label.grid(row=0, column=0, sticky="w")
-            app.tape_friendly_turn = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=8)
+            app.tape_friendly_turn = tk.Label(
+                app.tape_friendly_row,
+                text="",
+                font=status_font,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+                width=8,
+            )
             app.tape_friendly_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
-            app.tape_friendly_status = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w", width=8)
+            app.tape_friendly_status = tk.Label(
+                app.tape_friendly_row,
+                text="",
+                font=status_font,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+                width=8,
+            )
             app.tape_friendly_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
-            app.tape_friendly_info = tk.Label(app.tape_friendly_row, text="", font=status_font, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="e", width=15)
+            app.tape_friendly_info = tk.Label(
+                app.tape_friendly_row,
+                text="",
+                font=status_font,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="e",
+                width=15,
+            )
             app.tape_friendly_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
 
             app.tape_turn_lbl = app.tape_zone_turn
@@ -668,7 +778,15 @@ class MainWindowBuilder:
             app.tape_zone_info = None
 
         font_alert = app._get_font("zone_title")
-        app.zone_alert_lbl = tk.Label(app.zone_frame, text="", font=font_alert, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w", justify="left")
+        app.zone_alert_lbl = tk.Label(
+            app.zone_frame,
+            text="",
+            font=font_alert,
+            fg=Theme.RED,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            justify="left",
+        )
         app.zone_alert_lbl.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
 
         app.compact_nav_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
@@ -678,23 +796,51 @@ class MainWindowBuilder:
 
         app.compact_zone_frame = tk.Frame(app.compact_nav_frame, bg=Theme.GRAYPILL)
         app.compact_zone_frame.grid(row=0, column=0, sticky="nsew", padx=(0, int(4 * s)))
-        app.compact_zone_title = tk.Label(app.compact_zone_frame, text="战区", font=font_title, fg=Theme.RED, bg=Theme.GRAYPILL, anchor="w")
+        app.compact_zone_title = tk.Label(
+            app.compact_zone_frame,
+            text="战区",
+            font=font_title,
+            fg=Theme.RED,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         app.compact_zone_title.pack(fill="x")
         app.compact_zone_list = tk.Frame(app.compact_zone_frame, bg=Theme.GRAYPILL)
         app.compact_zone_list.pack(fill="x")
 
         app.compact_airport_frame = tk.Frame(app.compact_nav_frame, bg=Theme.GRAYPILL)
         app.compact_airport_frame.grid(row=0, column=1, sticky="nsew", padx=(int(4 * s), 0))
-        app.compact_airport_title = tk.Label(app.compact_airport_frame, text="机场", font=font_title, fg=Theme.BLUE, bg=Theme.GRAYPILL, anchor="w")
+        app.compact_airport_title = tk.Label(
+            app.compact_airport_frame,
+            text="机场",
+            font=font_title,
+            fg=Theme.BLUE,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         app.compact_airport_title.pack(fill="x")
         app.compact_airport_list = tk.Frame(app.compact_airport_frame, bg=Theme.GRAYPILL)
         app.compact_airport_list.pack(fill="x")
 
-        app.zone_list_title_lbl = tk.Label(app.zone_frame, text="战区导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        app.zone_list_title_lbl = tk.Label(
+            app.zone_frame,
+            text="战区导航",
+            font=font_title,
+            fg=Theme.TEXT,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         app.zone_list_title_lbl.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
         app.zone_list_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.zone_list_frame.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
-        app.airport_title_lbl = tk.Label(app.zone_frame, text="机场导航", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        app.airport_title_lbl = tk.Label(
+            app.zone_frame,
+            text="机场导航",
+            font=font_title,
+            fg=Theme.TEXT,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         app.airport_title_lbl.grid(row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
         app.airport_tape_frame = None
         app.friendly_heading_tape = None
@@ -705,7 +851,14 @@ class MainWindowBuilder:
         app.fuel_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.fuel_header_frame.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
         app.fuel_header_frame.grid_columnconfigure(1, weight=1)
-        app.fuel_title_lbl = tk.Label(app.fuel_header_frame, text="燃油管理", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+        app.fuel_title_lbl = tk.Label(
+            app.fuel_header_frame,
+            text="燃油管理",
+            font=font_title,
+            fg=Theme.TEXT,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         app.fuel_title_lbl.grid(row=0, column=0, sticky="w")
         fuel_header_right = tk.Frame(app.fuel_header_frame, bg=Theme.GRAYPILL)
         fuel_header_right.grid(row=0, column=1, sticky="e")
@@ -733,16 +886,39 @@ class MainWindowBuilder:
         app.friendly_cdi_lbl = None
         app.enemy_cdi_lbl = None
 
-        app.fuel_main_lbl = tk.Label(app.fuel_info_frame, text="-- kg (--%)", font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
+        app.fuel_main_lbl = tk.Label(
+            app.fuel_info_frame,
+            text="-- kg (--%)",
+            font=font_item,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         app.fuel_main_lbl.pack(fill="x")
-        app.fuel_detail_lbl = tk.Label(app.fuel_info_frame, text="油耗 --kg/min │ 高度 --m │ 返航 --", font=font_item, fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL, anchor="w")
+        app.fuel_detail_lbl = tk.Label(
+            app.fuel_info_frame,
+            text="油耗 --kg/min │ 高度 --m │ 返航 --",
+            font=font_item,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+        )
         app.fuel_detail_lbl.pack(fill="x")
 
         if ENABLE_CCRP:
             app.bombing_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-            app.bombing_header_frame.grid(row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
+            app.bombing_header_frame.grid(
+                row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s))
+            )
             app.bombing_header_frame.grid_columnconfigure(1, weight=1)
-            app.bombing_title_lbl = tk.Label(app.bombing_header_frame, text="投弹预测", font=font_title, fg=Theme.TEXT, bg=Theme.GRAYPILL, anchor="w")
+            app.bombing_title_lbl = tk.Label(
+                app.bombing_header_frame,
+                text="投弹预测",
+                font=font_title,
+                fg=Theme.TEXT,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+            )
             app.bombing_title_lbl.grid(row=0, column=0, sticky="w")
             font_release = app._get_font("zone_title")
             app.bomb_release_lbl = tk.Label(
@@ -755,7 +931,9 @@ class MainWindowBuilder:
             )
             app.bomb_release_lbl.grid(row=0, column=1, sticky="e")
             app.bombing_info_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-            app.bombing_info_frame.grid(row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
+            app.bombing_info_frame.grid(
+                row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s))
+            )
             app.bomb_select_lbl = tk.Label(
                 app.bombing_info_frame,
                 text=f"炸弹: {BombConfig.format_bomb_name(BombConfig.selected_bomb)} (点击更换)",
@@ -767,9 +945,20 @@ class MainWindowBuilder:
             )
             app.bomb_select_lbl.pack(fill="x")
             app.bomb_select_lbl.bind("<Button-1>", lambda e: app._show_bomb_selector())
-            app.bomb_select_lbl.bind("<Enter>", lambda e: app.bomb_select_lbl.config(fg=Theme.TEXT, bg=Theme.BG))
-            app.bomb_select_lbl.bind("<Leave>", lambda e: app.bomb_select_lbl.config(fg=Theme.BLUE, bg=Theme.GRAYPILL))
-            app.bomb_trajectory_lbl = tk.Label(app.bombing_info_frame, text="弹道: -- m │ 飞行: -- s", font=font_item, fg=Theme.TEXT_DIM, bg=Theme.GRAYPILL, anchor="w")
+            app.bomb_select_lbl.bind(
+                "<Enter>", lambda e: app.bomb_select_lbl.config(fg=Theme.TEXT, bg=Theme.BG)
+            )
+            app.bomb_select_lbl.bind(
+                "<Leave>", lambda e: app.bomb_select_lbl.config(fg=Theme.BLUE, bg=Theme.GRAYPILL)
+            )
+            app.bomb_trajectory_lbl = tk.Label(
+                app.bombing_info_frame,
+                text="弹道: -- m │ 飞行: -- s",
+                font=font_item,
+                fg=Theme.TEXT_DIM,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+            )
             app.bomb_trajectory_lbl.pack(fill="x")
 
         app._zone_row_pool = self._build_nav_row_pool(

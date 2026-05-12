@@ -13,7 +13,8 @@ LimitValue = Union[float, List[List[float]]]
 @dataclass(frozen=True)
 class OverspeedDecision:
     """超速判定结果（逻辑层 -> UI）。"""
-    level: str = "unknown"                 # unknown/safe/caution/warning/critical
+
+    level: str = "unknown"  # unknown/safe/caution/warning/critical
     plane_type: str = ""
     resolved_fm: str = ""
     ias_kmh: float = 0.0
@@ -21,8 +22,8 @@ class OverspeedDecision:
     mach: Optional[float] = None
     ias_limit_kmh: Optional[float] = None
     mach_limit: Optional[float] = None
-    ias_ratio: Optional[float] = None      # IAS / ias_limit_kmh
-    mach_margin: Optional[float] = None    # mach_limit - mach
+    ias_ratio: Optional[float] = None  # IAS / ias_limit_kmh
+    mach_margin: Optional[float] = None  # mach_limit - mach
     reason: str = ""
 
 
@@ -79,7 +80,7 @@ class SpeedLimitDatabase:
                 for item in raw:
                     try:
                         pairs.append([float(item[0]), float(item[1])])
-                    except (TypeError, ValueError, IndexError):
+                    except TypeError, ValueError, IndexError:
                         return None
                 pairs.sort(key=lambda x: x[0])
                 return pairs
@@ -88,7 +89,7 @@ class SpeedLimitDatabase:
                 for i in range(0, len(raw), 2):
                     try:
                         pairs.append([float(raw[i]), float(raw[i + 1])])
-                    except (TypeError, ValueError):
+                    except TypeError, ValueError:
                         return None
                 pairs.sort(key=lambda x: x[0])
                 return pairs
@@ -106,7 +107,7 @@ class SpeedLimitDatabase:
                         for i in range(0, len(parts), 2):
                             try:
                                 pairs.append([float(parts[i]), float(parts[i + 1])])
-                            except (TypeError, ValueError):
+                            except TypeError, ValueError:
                                 return None
                         pairs.sort(key=lambda x: x[0])
                         return pairs
@@ -132,7 +133,7 @@ class SpeedLimitDatabase:
 
         try:
             x = float(sweep)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return float(points[-1][1])
 
         if x <= points[0][0]:
@@ -241,7 +242,9 @@ class SpeedLimitDatabase:
 
         return None
 
-    def _value_by_sweep(self, value: Optional[LimitValue], sweep: Optional[float]) -> Optional[float]:
+    def _value_by_sweep(
+        self, value: Optional[LimitValue], sweep: Optional[float]
+    ) -> Optional[float]:
         if value is None:
             return None
         if isinstance(value, (int, float)):
@@ -250,7 +253,9 @@ class SpeedLimitDatabase:
             return self._interpolate(value, sweep)
         return None
 
-    def get_limits(self, plane_type: str, wing_sweep: Optional[float]) -> Tuple[Optional[str], Optional[float], Optional[float]]:
+    def get_limits(
+        self, plane_type: str, wing_sweep: Optional[float]
+    ) -> Tuple[Optional[str], Optional[float], Optional[float]]:
         resolved = self.resolve_fm_name(plane_type)
         if resolved is None:
             return None, None, None
@@ -318,7 +323,9 @@ class OverspeedAnalyzer:
             return OverspeedDecision(level="unknown", plane_type=plane_type, reason="disabled")
 
         if not self.db.loaded:
-            return OverspeedDecision(level="unknown", plane_type=plane_type, reason=self.db.load_error or "db_not_loaded")
+            return OverspeedDecision(
+                level="unknown", plane_type=plane_type, reason=self.db.load_error or "db_not_loaded"
+            )
 
         ias = float(ias_kmh or 0.0)
         tas = float(tas_kmh or 0.0)
@@ -326,7 +333,7 @@ class OverspeedAnalyzer:
         if mach is not None:
             try:
                 mach_val = float(mach)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 mach_val = None
 
         resolved, ias_limit, mach_limit = self.db.get_limits(plane_type, wing_sweep)
@@ -352,7 +359,9 @@ class OverspeedAnalyzer:
             )
 
         ias_ratio = (ias / ias_limit) if (ias_limit and ias_limit > 0.0) else None
-        mach_margin = (mach_limit - mach_val) if (mach_limit is not None and mach_val is not None) else None
+        mach_margin = (
+            (mach_limit - mach_val) if (mach_limit is not None and mach_val is not None) else None
+        )
 
         thresholds = OverspeedConfig.get_thresholds_for_aircraft(resolved)
 
@@ -360,9 +369,15 @@ class OverspeedAnalyzer:
         warn_ias = bool(ias_ratio is not None and ias_ratio >= thresholds["warning_ratio"])
         caut_ias = bool(ias_ratio is not None and ias_ratio >= thresholds["caution_ratio"])
 
-        crit_mach = bool(mach_margin is not None and mach_margin <= thresholds["mach_critical_margin"])
-        warn_mach = bool(mach_margin is not None and mach_margin <= thresholds["mach_warning_margin"])
-        caut_mach = bool(mach_margin is not None and mach_margin <= thresholds["mach_caution_margin"])
+        crit_mach = bool(
+            mach_margin is not None and mach_margin <= thresholds["mach_critical_margin"]
+        )
+        warn_mach = bool(
+            mach_margin is not None and mach_margin <= thresholds["mach_warning_margin"]
+        )
+        caut_mach = bool(
+            mach_margin is not None and mach_margin <= thresholds["mach_caution_margin"]
+        )
 
         if crit_ias or crit_mach:
             level = "critical"

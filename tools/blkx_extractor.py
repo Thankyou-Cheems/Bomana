@@ -87,8 +87,8 @@ class BlkxExtractor:
             extracted["cross_section"] = 3.1415926535 * (cal / 2) ** 2
 
         if all(k in extracted for k in ("mass", "dragCx", "cross_section")):
-            extracted["ballistic_coeff"] = (
-                extracted["mass"] / (extracted["dragCx"] * extracted["cross_section"])
+            extracted["ballistic_coeff"] = extracted["mass"] / (
+                extracted["dragCx"] * extracted["cross_section"]
             )
 
         extracted["type_tags"] = []
@@ -168,7 +168,7 @@ class BlkxExtractor:
             cal = bomb.get("caliber", 0.0)
             bc = bomb.get("ballistic_coeff", 0.0) / 1e6
             print(
-                f"{i+1:<3} {bomb['filename'][:31]:<32} "
+                f"{i + 1:<3} {bomb['filename'][:31]:<32} "
                 f"{mass:>8.1f} {drag:>7.4f} {cal:>6.3f} {bc:>9.3f}"
             )
 
@@ -245,9 +245,7 @@ class BlkxExtractor:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="War Thunder .blkx bomb parameter extractor"
-    )
+    parser = argparse.ArgumentParser(description="War Thunder .blkx bomb parameter extractor")
     parser.add_argument("directory", nargs="?", help="root directory with .blkx files")
     parser.add_argument(
         "-o",

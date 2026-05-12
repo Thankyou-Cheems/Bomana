@@ -63,24 +63,26 @@ def select_ui_font_family(root: tk.Misc) -> str:
             return fam
     return ""
 
+
 # ============================================================================
 # Windows API封装
 # ============================================================================
 
+
 class Win32:
     """Windows API封装类
-    
+
     提供DPI感知、窗口样式设置等Windows特有功能。
     使用ctypes调用user32.dll和kernel32.dll。
     """
-    
+
     user32 = ctypes.windll.user32
     kernel32 = ctypes.windll.kernel32
 
     @classmethod
     def enable_dpi(cls):
         """启用DPI感知
-        
+
         确保在高DPI显示器上正确渲染，按优先级尝试三种方法：
         1. SetProcessDpiAwarenessContext (Windows 10 1703+)
         2. SetProcessDpiAwareness (Windows 8.1+)
@@ -89,77 +91,79 @@ class Win32:
         try:
             # 方法1: Per-Monitor V2 DPI感知（最佳）
             cls.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
-        except (OSError, AttributeError):
+        except OSError, AttributeError:
             try:
                 # 方法2: Per-Monitor DPI感知
                 ctypes.windll.shcore.SetProcessDpiAwareness(2)
-            except (OSError, AttributeError):
+            except OSError, AttributeError:
                 try:
                     # 方法3: System DPI感知（后备）
                     cls.user32.SetProcessDPIAware()
-                except (OSError, AttributeError):
+                except OSError, AttributeError:
                     pass
 
     @classmethod
     def get_dpi_scale(cls, hwnd: int) -> float:
         """获取窗口的DPI缩放比例
-        
+
         Args:
             hwnd: 窗口句柄
-        
+
         Returns:
             DPI缩放倍数（1.0 = 96 DPI, 1.5 = 144 DPI等）
         """
         try:
             dpi = cls.user32.GetDpiForWindow(hwnd)
             return (dpi / 96.0) if dpi else 1.0
-        except (OSError, AttributeError):
+        except OSError, AttributeError:
             return 1.0
 
     @classmethod
     def screen_size(cls) -> Tuple[int, int]:
         """获取主屏幕尺寸
-        
+
         Returns:
             (宽度, 高度) 元组
         """
         return cls.user32.GetSystemMetrics(0), cls.user32.GetSystemMetrics(1)
 
     @classmethod
-    def setup_window(cls, hwnd: int, click_through: bool, alpha: int = 210, color_key: Optional[int] = None):
+    def setup_window(
+        cls, hwnd: int, click_through: bool, alpha: int = 210, color_key: Optional[int] = None
+    ):
         """设置窗口样式（透明、置顶、穿透）
-        
+
         Args:
             hwnd: 窗口句柄
             click_through: 是否允许点击穿透
             alpha: 不透明度 (0-255)
             color_key: 颜色键透明（COLORREF, 0x00bbggrr）。传入后背景色匹配像素将被完全透明。
-        
+
         v6.6.3: 添加 WS_EX_NOACTIVATE 标志，解决窗口被激活后点击穿透失效的问题
         """
         # 窗口扩展样式标志
         GWL_EXSTYLE = -20
-        WS_EX_LAYERED = 0x00080000      # 分层窗口（支持透明度）
-        WS_EX_TRANSPARENT = 0x00000020   # 点击穿透（使窗口在点击测试中透明）
-        WS_EX_NOACTIVATE = 0x08000000    # 防止窗口被激活（关键：防止点击后窗口获得焦点）
-        WS_EX_TOPMOST = 0x00000008       # 窗口置顶
-        WS_EX_TOOLWINDOW = 0x00000080    # 工具窗口（不显示在任务栏）
-        LWA_COLORKEY = 0x1              # 颜色键透明标志
-        LWA_ALPHA = 0x2                 # 透明度标志
+        WS_EX_LAYERED = 0x00080000  # 分层窗口（支持透明度）
+        WS_EX_TRANSPARENT = 0x00000020  # 点击穿透（使窗口在点击测试中透明）
+        WS_EX_NOACTIVATE = 0x08000000  # 防止窗口被激活（关键：防止点击后窗口获得焦点）
+        WS_EX_TOPMOST = 0x00000008  # 窗口置顶
+        WS_EX_TOOLWINDOW = 0x00000080  # 工具窗口（不显示在任务栏）
+        LWA_COLORKEY = 0x1  # 颜色键透明标志
+        LWA_ALPHA = 0x2  # 透明度标志
 
         try:
             # 获取当前样式
             style = cls.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            
+
             # 添加必要样式
-            style |= (WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW)
+            style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW
 
             # 根据锁定状态切换点击穿透
             # 关键：同时设置 WS_EX_TRANSPARENT 和 WS_EX_NOACTIVATE
             # - WS_EX_TRANSPARENT: 让点击穿透到下层窗口
             # - WS_EX_NOACTIVATE: 防止窗口被激活，确保持续穿透
             if click_through:
-                style |= (WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
+                style |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
             else:
                 style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
 
@@ -172,36 +176,36 @@ class Win32:
                 flags |= LWA_COLORKEY
                 key = int(color_key) & 0x00FFFFFF
             cls.user32.SetLayeredWindowAttributes(hwnd, key, target_alpha, flags)
-        except (OSError, AttributeError):
+        except OSError, AttributeError:
             pass
 
     @classmethod
     def hide_console(cls):
         """隐藏控制台窗口
-        
+
         用于.pyw脚本，确保没有黑窗口显示。
         """
         try:
             hwnd = cls.kernel32.GetConsoleWindow()
             if hwnd:
                 cls.user32.ShowWindow(hwnd, 0)
-        except (OSError, AttributeError):
+        except OSError, AttributeError:
             pass
 
     @classmethod
     def get_all_monitors(cls) -> List[Dict[str, Any]]:
         """获取所有显示器信息
-        
+
         返回所有显示器的工作区域(排除任务栏),用于:
         - 记忆窗口所在显示器
         - 窗口边缘吸附
         - 边界检查
-        
+
         Returns:
             显示器信息列表, 每项包含index/x/y/width/height/is_primary
         """
         monitors = []
-        
+
         try:
             # 定义回调函数类型
             MONITORENUMPROC = ctypes.WINFUNCTYPE(
@@ -209,79 +213,84 @@ class Win32:
                 ctypes.c_void_p,  # hMonitor
                 ctypes.c_void_p,  # hdcMonitor
                 ctypes.POINTER(ctypes.c_long * 4),  # lprcMonitor (RECT)
-                ctypes.c_void_p   # dwData
+                ctypes.c_void_p,  # dwData
             )
-            
+
             # MONITORINFO 结构体
             class MONITORINFO(ctypes.Structure):
                 _fields_ = [
                     ("cbSize", ctypes.c_uint),
                     ("rcMonitor", ctypes.c_long * 4),  # 显示器完整区域
-                    ("rcWork", ctypes.c_long * 4),     # 工作区域（排除任务栏）
+                    ("rcWork", ctypes.c_long * 4),  # 工作区域（排除任务栏）
                     ("dwFlags", ctypes.c_uint),
                 ]
-            
+
             monitor_list = []
-            
+
             def callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
                 info = MONITORINFO()
                 info.cbSize = ctypes.sizeof(MONITORINFO)
                 cls.user32.GetMonitorInfoW(hMonitor, ctypes.byref(info))
-                
+
                 # 使用工作区域（排除任务栏）
                 work = info.rcWork
-                monitor_list.append({
-                    "index": len(monitor_list),
-                    "x": work[0],
-                    "y": work[1],
-                    "width": work[2] - work[0],
-                    "height": work[3] - work[1],
-                    "is_primary": bool(info.dwFlags & 1),
-                })
+                monitor_list.append(
+                    {
+                        "index": len(monitor_list),
+                        "x": work[0],
+                        "y": work[1],
+                        "width": work[2] - work[0],
+                        "height": work[3] - work[1],
+                        "is_primary": bool(info.dwFlags & 1),
+                    }
+                )
                 return 1  # 继续枚举
-            
+
             # 枚举所有显示器
             enum_proc = MONITORENUMPROC(callback)
             cls.user32.EnumDisplayMonitors(None, None, enum_proc, 0)
-            
+
             monitors = monitor_list
-        except (OSError, AttributeError, Exception):
+        except OSError, AttributeError, Exception:
             # 失败时返回主屏幕
             w, h = cls.screen_size()
             monitors = [{"index": 0, "x": 0, "y": 0, "width": w, "height": h, "is_primary": True}]
-        
-        return monitors if monitors else [{"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1080, "is_primary": True}]
-    
+
+        return (
+            monitors
+            if monitors
+            else [{"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1080, "is_primary": True}]
+        )
+
     @classmethod
     def get_monitor_at(cls, x: int, y: int) -> Optional[Dict[str, Any]]:
         """获取指定坐标所在的显示器
-        
+
         Args:
             x, y: 屏幕坐标
-        
+
         Returns:
             显示器信息字典，或None
         """
         monitors = cls.get_all_monitors()
         for mon in monitors:
-            if (mon["x"] <= x < mon["x"] + mon["width"] and
-                mon["y"] <= y < mon["y"] + mon["height"]):
+            if mon["x"] <= x < mon["x"] + mon["width"] and mon["y"] <= y < mon["y"] + mon["height"]:
                 return mon
         # 默认返回主显示器
         for mon in monitors:
             if mon.get("is_primary"):
                 return mon
         return monitors[0] if monitors else None
-    
+
     @classmethod
     def snap_to_edges(cls, x: int, y: int, w: int, h: int, snap_dist: int = 20) -> Tuple[int, int]:
         """计算窗口吸附后的位置
-        
+
         Args:
             x, y: 窗口左上角坐标
             w, h: 窗口尺寸
             snap_dist: 吸附距离
-        
+
         Returns:
             吸附后的 (x, y) 坐标
         """
@@ -289,51 +298,51 @@ class Win32:
         center_x = x + w // 2
         center_y = y + h // 2
         monitor = cls.get_monitor_at(center_x, center_y)
-        
+
         if not monitor:
             return x, y
-        
+
         mon_x = monitor["x"]
         mon_y = monitor["y"]
         mon_w = monitor["width"]
         mon_h = monitor["height"]
-        
+
         new_x, new_y = x, y
-        
+
         # 左边缘吸附
         if abs(x - mon_x) < snap_dist:
             new_x = mon_x
         # 右边缘吸附
         elif abs((x + w) - (mon_x + mon_w)) < snap_dist:
             new_x = mon_x + mon_w - w
-        
+
         # 上边缘吸附
         if abs(y - mon_y) < snap_dist:
             new_y = mon_y
         # 下边缘吸附
         elif abs((y + h) - (mon_y + mon_h)) < snap_dist:
             new_y = mon_y + mon_h - h
-        
+
         return new_x, new_y
 
 
 class SingleInstanceManager:
     """单实例管理器
-    
+
     确保程序同时只运行一个实例，避免多个计时器冲突。
     使用Windows全局命名互斥锁实现。
     """
-    
+
     @staticmethod
     def ensure_single_instance_or_exit():
         """检查单实例，如果已运行则退出
-        
+
         创建全局互斥锁，如果已存在则弹窗提示并退出。
         """
         global _MUTEX_HANDLE
         try:
             kernel32 = ctypes.windll.kernel32
-            
+
             # 配置API签名
             kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
             kernel32.CreateMutexW.restype = ctypes.c_void_p
@@ -356,9 +365,9 @@ class SingleInstanceManager:
                 except tk.TclError:
                     pass
                 sys.exit(0)
-        except (OSError, AttributeError):
+        except OSError, AttributeError:
             pass
-    
+
     @staticmethod
     def release():
         """释放互斥锁"""
@@ -366,22 +375,22 @@ class SingleInstanceManager:
         if _MUTEX_HANDLE:
             try:
                 ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(_MUTEX_HANDLE))
-            except (OSError, AttributeError):
+            except OSError, AttributeError:
                 pass
             _MUTEX_HANDLE = None
 
 
 class GlobalHotkeys:
     """全局热键管理器
-    
+
     在独立线程中监听Windows消息队列，响应热键事件。
     使用RegisterHotKey API注册全局热键。
     """
-    
+
     # Windows消息常量
-    WM_HOTKEY = 0x0312      # 热键消息
-    WM_QUIT = 0x0012        # 退出消息
-    MOD_NOREPEAT = 0x4000   # 禁止重复触发
+    WM_HOTKEY = 0x0312  # 热键消息
+    WM_QUIT = 0x0012  # 退出消息
+    MOD_NOREPEAT = 0x4000  # 禁止重复触发
 
     def __init__(
         self,
@@ -390,7 +399,7 @@ class GlobalHotkeys:
         error_cb: Callable[[Tuple[str, ...]], None] | None = None,
     ):
         """初始化热键管理器
-        
+
         Args:
             root: tkinter主窗口
             hotkeys: 热键列表 [(ID, 键名, 回调函数), ...]
@@ -420,7 +429,7 @@ class GlobalHotkeys:
             # 向监听线程发送退出消息
             self._stop_event.set()
             Win32.user32.PostThreadMessageW(int(self._tid), int(self.WM_QUIT), 0, 0)
-        except (OSError, AttributeError):
+        except OSError, AttributeError:
             pass
         if self._thread:
             self._thread.join(timeout=1.0)
@@ -432,7 +441,7 @@ class GlobalHotkeys:
             kernel32 = ctypes.windll.kernel32
             kernel32.GetCurrentThreadId.restype = ctypes.c_uint
             self._tid = int(kernel32.GetCurrentThreadId())
-        except (OSError, AttributeError):
+        except OSError, AttributeError:
             self._tid = None
             return
 
@@ -451,7 +460,7 @@ class GlobalHotkeys:
                 )
                 if not ok:
                     failed_keys.append(str(key_name))
-            except (OSError, AttributeError):
+            except OSError, AttributeError:
                 failed_keys.append(str(key_name))
 
         if failed_keys and self.error_cb:
@@ -497,12 +506,12 @@ class GlobalHotkeys:
                             except tk.TclError:
                                 pass
                             break
-            except (OSError, AttributeError):
+            except OSError, AttributeError:
                 break
 
         # 注销所有热键
         for hk_id, _key_name, _cb in self.hotkeys:
             try:
                 Win32.user32.UnregisterHotKey(None, int(hk_id))
-            except (OSError, AttributeError):
+            except OSError, AttributeError:
                 pass

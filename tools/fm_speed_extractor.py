@@ -235,10 +235,7 @@ def main() -> int:
     output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     meta = payload.get("meta", {})
-    print(
-        f"[ok] fm={meta.get('fm_records', 0)} "
-        f"unit={meta.get('unit_records', 0)} -> {output}"
-    )
+    print(f"[ok] fm={meta.get('fm_records', 0)} unit={meta.get('unit_records', 0)} -> {output}")
     return 0
 
 

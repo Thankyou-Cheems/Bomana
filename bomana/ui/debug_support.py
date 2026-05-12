@@ -34,7 +34,11 @@ class AppDebugSupport:
         """显示 Debug 控制区和诊断区。"""
         app = self.app
         self.update_debug_controls()
-        if hasattr(app, "debug_ctrl_row") and app.debug_ctrl_row and app.debug_ctrl_row.winfo_manager() != "grid":
+        if (
+            hasattr(app, "debug_ctrl_row")
+            and app.debug_ctrl_row
+            and app.debug_ctrl_row.winfo_manager() != "grid"
+        ):
             app.debug_ctrl_row.grid(
                 row=2,
                 column=0,
@@ -54,7 +58,11 @@ class AppDebugSupport:
     def hide_debug_ui(self) -> None:
         """隐藏 Debug 控制区和诊断区。"""
         app = self.app
-        if hasattr(app, "debug_ctrl_row") and app.debug_ctrl_row and app.debug_ctrl_row.winfo_manager() == "grid":
+        if (
+            hasattr(app, "debug_ctrl_row")
+            and app.debug_ctrl_row
+            and app.debug_ctrl_row.winfo_manager() == "grid"
+        ):
             app.debug_ctrl_row.grid_remove()
         if hasattr(app, "diag_lbl") and app.diag_lbl and app.diag_lbl.winfo_manager() == "grid":
             app.diag_lbl.grid_remove()
@@ -146,10 +154,16 @@ class AppDebugSupport:
                 ZoneDisplayInfo("dbg-z2", 22.3, self.debug_direction(21.0), 21.0, False, ""),
                 ZoneDisplayInfo("dbg-z3", 31.2, self.debug_direction(-56.0), -56.0, False, ""),
             ]
-            friendly = AirfieldDisplayInfo("dbg-af-f", "friendly", 14.2, self.debug_direction(-18.0), -18.0, True, "01:18")
+            friendly = AirfieldDisplayInfo(
+                "dbg-af-f", "friendly", 14.2, self.debug_direction(-18.0), -18.0, True, "01:18"
+            )
             enemies = [
-                AirfieldDisplayInfo("dbg-af-e1", "enemy", 19.0, self.debug_direction(35.0), 35.0, True, "01:02"),
-                AirfieldDisplayInfo("dbg-af-e2", "enemy", 28.8, self.debug_direction(-74.0), -74.0, False, ""),
+                AirfieldDisplayInfo(
+                    "dbg-af-e1", "enemy", 19.0, self.debug_direction(35.0), 35.0, True, "01:02"
+                ),
+                AirfieldDisplayInfo(
+                    "dbg-af-e2", "enemy", 28.8, self.debug_direction(-74.0), -74.0, False, ""
+                ),
             ]
             return replace(
                 base_snap,
@@ -210,7 +224,9 @@ class AppDebugSupport:
                 ZoneDisplayInfo("dbg-z1", 10.4, self.debug_direction(rel), rel, True, "00:55"),
                 ZoneDisplayInfo("dbg-z2", 15.6, self.debug_direction(-14.0), -14.0, False, ""),
             ]
-            friendly = AirfieldDisplayInfo("dbg-af-f", "friendly", 9.8, self.debug_direction(-10.0), -10.0, True, "00:50")
+            friendly = AirfieldDisplayInfo(
+                "dbg-af-f", "friendly", 9.8, self.debug_direction(-10.0), -10.0, True, "00:50"
+            )
             return replace(
                 base_snap,
                 phase=Phase.ALIVE,
@@ -269,7 +285,9 @@ class AppDebugSupport:
                 ZoneDisplayInfo("dbg-z1", 18.2, self.debug_direction(-6.0), -6.0, True, "02:36"),
                 ZoneDisplayInfo("dbg-z2", 30.1, self.debug_direction(42.0), 42.0, False, ""),
             ]
-            friendly = AirfieldDisplayInfo("dbg-af-f", "friendly", 7.4, self.debug_direction(-3.0), -3.0, True, "01:06")
+            friendly = AirfieldDisplayInfo(
+                "dbg-af-f", "friendly", 7.4, self.debug_direction(-3.0), -3.0, True, "01:06"
+            )
             return replace(
                 base_snap,
                 phase=Phase.ALIVE,
@@ -362,9 +380,13 @@ class AppDebugSupport:
                 on_ground=False,
                 landed_flash=False,
                 zones=zones,
-                friendly_airfield=AirfieldDisplayInfo("dbg-af-f", "friendly", 13.0, self.debug_direction(-20.0), -20.0, True, "01:20"),
+                friendly_airfield=AirfieldDisplayInfo(
+                    "dbg-af-f", "friendly", 13.0, self.debug_direction(-20.0), -20.0, True, "01:20"
+                ),
                 enemy_airfields=[
-                    AirfieldDisplayInfo("dbg-af-e1", "enemy", 11.2, self.debug_direction(26.0), 26.0, True, "00:52"),
+                    AirfieldDisplayInfo(
+                        "dbg-af-e1", "enemy", 11.2, self.debug_direction(26.0), 26.0, True, "00:52"
+                    ),
                 ],
                 has_airfield_target=True,
                 has_target=True,
@@ -427,7 +449,9 @@ class AppDebugSupport:
                 on_ground=True,
                 landed_flash=True,
                 zones=zones,
-                friendly_airfield=AirfieldDisplayInfo("dbg-af-f", "friendly", 2.1, "正前", 0.0, True, ""),
+                friendly_airfield=AirfieldDisplayInfo(
+                    "dbg-af-f", "friendly", 2.1, "正前", 0.0, True, ""
+                ),
                 enemy_airfields=[],
                 has_airfield_target=True,
                 has_target=False,
@@ -500,7 +524,9 @@ class AppDebugSupport:
                 ZoneDisplayInfo("dbg-z1", 11.6, self.debug_direction(-1.2), -1.2, True, "01:12"),
                 ZoneDisplayInfo("dbg-z2", 23.1, self.debug_direction(18.0), 18.0, False, ""),
             ],
-            friendly_airfield=AirfieldDisplayInfo("dbg-af-f", "friendly", 10.2, self.debug_direction(-8.0), -8.0, True, "01:02"),
+            friendly_airfield=AirfieldDisplayInfo(
+                "dbg-af-f", "friendly", 10.2, self.debug_direction(-8.0), -8.0, True, "01:02"
+            ),
             enemy_airfields=[],
             has_airfield_target=True,
             has_target=True,
@@ -593,10 +619,14 @@ class AppDebugSupport:
             ),
             (
                 f"Overspeed: match={int(render_snap.overspeed_match)} "
-                f"level={render_snap.overspeed_level} ratio={render_snap.overspeed_ratio*100:.1f}% "
+                f"level={render_snap.overspeed_level} ratio={render_snap.overspeed_ratio * 100:.1f}% "
                 f"limit={render_snap.overspeed_limit_kmh:.0f}km/h M{render_snap.overspeed_limit_mach:.3f}"
             ),
         ]
-        if app._restored_state and (not app._debug_effective_mock) and render_snap.phase == Phase.ALIVE:
+        if (
+            app._restored_state
+            and (not app._debug_effective_mock)
+            and render_snap.phase == Phase.ALIVE
+        ):
             lines.append("状态恢复: 已从保存状态恢复计时")
         return "\n".join(lines)

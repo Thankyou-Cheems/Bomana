@@ -26,13 +26,13 @@ class HUDOverlay:
     """
 
     # 透视投影参数（v6.8.2: 统一垂直轴 + 2D roll 旋转）
-    _MAX_RELATIVE_DEG = 80.0           # tan()安全裁剪上限（避免极端值）
+    _MAX_RELATIVE_DEG = 80.0  # tan()安全裁剪上限（避免极端值）
     _MAX_LOOKDOWN_DEG = 78.0
-    _PITCH_BLEND_NEAR_KM = 4.0         # 用户反馈近距(3-4km)表现较好，保留全量pitch
+    _PITCH_BLEND_NEAR_KM = 4.0  # 用户反馈近距(3-4km)表现较好，保留全量pitch
     _PITCH_BLEND_FAR_KM = 14.0
     _PITCH_GAIN_NEAR = 1.0
     _PITCH_GAIN_FAR = 0.62
-    _DIVE_EXTRA_DAMP_MAX = 0.18        # 俯冲远距额外抑制比例上限
+    _DIVE_EXTRA_DAMP_MAX = 0.18  # 俯冲远距额外抑制比例上限
 
     # 距离 -> 尺寸/亮度映射参数
     _DIST_NEAR_KM = 2.0
@@ -200,15 +200,19 @@ class HUDOverlay:
         if cls._PITCH_BLEND_FAR_KM <= cls._PITCH_BLEND_NEAR_KM:
             gain = cls._PITCH_GAIN_NEAR
         else:
-            t = (d - cls._PITCH_BLEND_NEAR_KM) / (cls._PITCH_BLEND_FAR_KM - cls._PITCH_BLEND_NEAR_KM)
+            t = (d - cls._PITCH_BLEND_NEAR_KM) / (
+                cls._PITCH_BLEND_FAR_KM - cls._PITCH_BLEND_NEAR_KM
+            )
             t = max(0.0, min(1.0, t))
             gain = cls._PITCH_GAIN_NEAR + (cls._PITCH_GAIN_FAR - cls._PITCH_GAIN_NEAR) * t
 
         # 远距俯冲额外抑制，避免目标在屏幕上方过度漂移
         if float(pitch_deg) < 0.0:
-            t_dive = (d - cls._PITCH_BLEND_NEAR_KM) / max(1.0, (cls._PITCH_BLEND_FAR_KM - cls._PITCH_BLEND_NEAR_KM))
+            t_dive = (d - cls._PITCH_BLEND_NEAR_KM) / max(
+                1.0, (cls._PITCH_BLEND_FAR_KM - cls._PITCH_BLEND_NEAR_KM)
+            )
             t_dive = max(0.0, min(1.0, t_dive))
-            gain *= (1.0 - cls._DIVE_EXTRA_DAMP_MAX * t_dive)
+            gain *= 1.0 - cls._DIVE_EXTRA_DAMP_MAX * t_dive
 
         return float(gain)
 
@@ -287,6 +291,7 @@ class HUDOverlay:
         else:
             monitor = None
             try:
+
                 class POINT(ctypes.Structure):
                     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
@@ -297,7 +302,9 @@ class HUDOverlay:
                 monitor = None
             if not monitor:
                 monitors = Win32.get_all_monitors()
-                monitor = next((m for m in monitors if m.get("is_primary")), monitors[0] if monitors else None)
+                monitor = next(
+                    (m for m in monitors if m.get("is_primary")), monitors[0] if monitors else None
+                )
                 if not monitor:
                     sw, sh = Win32.screen_size()
                     monitor = {"x": 0, "y": 0, "width": sw, "height": sh, "is_primary": True}
@@ -465,28 +472,38 @@ class HUDOverlay:
         """初始化靶子图元（仅执行一次）。"""
         color = "#5fffa8"
         self._reticle_ring_id = self.canvas.create_oval(
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             outline=color,
             width=2,
             state="hidden",
             tags=("hud_reticle",),
         )
         self._reticle_hline_id = self.canvas.create_line(
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             fill=color,
             width=2,
             state="hidden",
             tags=("hud_reticle",),
         )
         self._reticle_vline_id = self.canvas.create_line(
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             fill=color,
             width=2,
             state="hidden",
             tags=("hud_reticle",),
         )
         self._reticle_mode_id = self.canvas.create_text(
-            0, 0,
+            0,
+            0,
             text="",
             fill=color,
             font=self._hud_font(10, "bold"),
@@ -494,7 +511,8 @@ class HUDOverlay:
             tags=("hud_reticle",),
         )
         self._reticle_dist_id = self.canvas.create_text(
-            0, 0,
+            0,
+            0,
             text="",
             fill=color,
             font=self._hud_font(9),
@@ -505,7 +523,10 @@ class HUDOverlay:
         self._secondary_label_ids = []
         for _ in range(self._MAX_SECONDARY_TARGETS):
             marker_id = self.canvas.create_oval(
-                0, 0, 0, 0,
+                0,
+                0,
+                0,
+                0,
                 outline=color,
                 width=2,
                 state="hidden",
@@ -513,7 +534,8 @@ class HUDOverlay:
             )
             self._secondary_marker_ids.append(marker_id)
             label_id = self.canvas.create_text(
-                0, 0,
+                0,
+                0,
                 text="",
                 fill=color,
                 font=self._hud_font(8, "bold"),
@@ -522,7 +544,8 @@ class HUDOverlay:
             )
             self._secondary_label_ids.append(label_id)
         self._standby_id = self.canvas.create_text(
-            0, 0,
+            0,
+            0,
             text="HUD STANDBY",
             fill="#8fb5a0",
             font=self._hud_font(12, "bold"),
@@ -534,7 +557,10 @@ class HUDOverlay:
         """初始化顶部简化罗盘图元（仅执行一次）。"""
         color = "#5fffa8"
         self._compass_bg_id = self.canvas.create_rectangle(
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             outline="#2f5742",
             fill="#11261b",
             width=1,
@@ -542,14 +568,20 @@ class HUDOverlay:
             tags=("hud_compass",),
         )
         self._compass_axis_id = self.canvas.create_line(
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             fill=color,
             width=2,
             state="hidden",
             tags=("hud_compass",),
         )
         self._compass_center_id = self.canvas.create_line(
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             fill="#f8ffdc",
             width=2,
             state="hidden",
@@ -557,14 +589,18 @@ class HUDOverlay:
         )
         for _ in self._compass_offsets:
             tick_id = self.canvas.create_line(
-                0, 0, 0, 0,
+                0,
+                0,
+                0,
+                0,
                 fill=color,
                 width=1,
                 state="hidden",
                 tags=("hud_compass",),
             )
             label_id = self.canvas.create_text(
-                0, 0,
+                0,
+                0,
                 text="",
                 fill=color,
                 font=self._hud_font(8, "bold"),
@@ -574,7 +610,8 @@ class HUDOverlay:
             self._compass_tick_ids.append(tick_id)
             self._compass_label_ids.append(label_id)
         self._compass_heading_id = self.canvas.create_text(
-            0, 0,
+            0,
+            0,
             text="",
             fill=color,
             font=self._hud_font(9, "bold"),
@@ -582,7 +619,12 @@ class HUDOverlay:
             tags=("hud_compass",),
         )
         self._compass_target_id = self.canvas.create_polygon(
-            0, 0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
             outline="",
             fill=color,
             state="hidden",
@@ -646,7 +688,9 @@ class HUDOverlay:
         else:
             self.canvas.itemconfig(self._standby_id, state="hidden")
 
-    def _project_point(self, width: int, height: int, relative_deg: float, distance_km: float) -> tuple:
+    def _project_point(
+        self, width: int, height: int, relative_deg: float, distance_km: float
+    ) -> tuple:
         """根据相对方位 + 姿态 + 几何关系估计目标屏幕位置。
 
         v6.8.2: 垂直轴 pitch+lookdown 合并为统一 vertical_angle，
@@ -673,8 +717,7 @@ class HUDOverlay:
 
             # 目标俯角（高度/水平距离）
             horiz_m = max(120.0, float(distance_km) * 1000.0)
-            lookdown_deg = math.degrees(math.atan2(
-                max(0.0, self._player_altitude_m), horiz_m))
+            lookdown_deg = math.degrees(math.atan2(max(0.0, self._player_altitude_m), horiz_m))
             lookdown_deg = self._clamp(lookdown_deg, 0.0, self._MAX_LOOKDOWN_DEG)
 
             # 合并: vertical_angle = lookdown + pitch
@@ -685,9 +728,9 @@ class HUDOverlay:
             pitch_gain = self._pitch_gain_for_distance(distance_km, self._attitude_pitch_deg)
             effective_pitch_deg = self._attitude_pitch_deg * pitch_gain
             vertical_angle = lookdown_deg + effective_pitch_deg
-            vert_clamped = self._clamp(vertical_angle,
-                                       -self._MAX_LOOKDOWN_DEG,
-                                        self._MAX_LOOKDOWN_DEG)
+            vert_clamped = self._clamp(
+                vertical_angle, -self._MAX_LOOKDOWN_DEG, self._MAX_LOOKDOWN_DEG
+            )
             dy = (math.tan(math.radians(vert_clamped)) / tan_hv) * (height * 0.5)
 
         # === Roll: 完整 2D 旋转 ===
@@ -703,7 +746,9 @@ class HUDOverlay:
         return target_x, target_y, rel
 
     def _project_target(self, width: int, height: int) -> tuple:
-        return self._project_point(width, height, self._target_relative_deg, self._target_distance_km)
+        return self._project_point(
+            width, height, self._target_relative_deg, self._target_distance_km
+        )
 
     def _direction_prompt(self, rel: float) -> str:
         """2D 降级时的方向提示文本。"""
@@ -727,8 +772,10 @@ class HUDOverlay:
         if not self._secondary_marker_ids:
             return
 
-        candidates = sorted(self._secondary_targets, key=lambda t: abs(float(t.get("relative", 0.0))))
-        selected = candidates[:len(self._secondary_marker_ids)]
+        candidates = sorted(
+            self._secondary_targets, key=lambda t: abs(float(t.get("relative", 0.0)))
+        )
+        selected = candidates[: len(self._secondary_marker_ids)]
         if not selected:
             for item_id in self._secondary_marker_ids:
                 self.canvas.itemconfig(item_id, state="hidden")
@@ -763,7 +810,9 @@ class HUDOverlay:
 
         secondary_color = self._color_from_brightness(0.62, self._attitude_fallback)
         for idx, item_id in enumerate(self._secondary_marker_ids):
-            label_id = self._secondary_label_ids[idx] if idx < len(self._secondary_label_ids) else None
+            label_id = (
+                self._secondary_label_ids[idx] if idx < len(self._secondary_label_ids) else None
+            )
             if idx >= len(selected):
                 self.canvas.itemconfig(item_id, state="hidden")
                 if label_id is not None:
@@ -787,7 +836,9 @@ class HUDOverlay:
             x = self._clamp(x, width * 0.05, width * 0.95)
             y = self._clamp(y, height * 0.08, height * 0.92)
             dist_t = self._normalize_distance(dist)
-            marker_r = self._BASE_RADIUS_PX * float(HUDConfig.scale) * self._lerp(1.0, 0.58, dist_t) * 0.52
+            marker_r = (
+                self._BASE_RADIUS_PX * float(HUDConfig.scale) * self._lerp(1.0, 0.58, dist_t) * 0.52
+            )
             marker_r = max(7.0, marker_r)
             self.canvas.coords(item_id, x - marker_r, y - marker_r, x + marker_r, y + marker_r)
             self.canvas.itemconfig(item_id, outline=secondary_color, width=2, state="normal")
@@ -861,13 +912,17 @@ class HUDOverlay:
         self._last_signature = signature
 
         self._set_reticle_visible(True)
-        self.canvas.coords(self._reticle_ring_id, cx - radius, cy - radius, cx + radius, cy + radius)
+        self.canvas.coords(
+            self._reticle_ring_id, cx - radius, cy - radius, cx + radius, cy + radius
+        )
         self.canvas.coords(self._reticle_hline_id, cx - line_len, cy, cx + line_len, cy)
         self.canvas.coords(self._reticle_vline_id, cx, cy - line_len, cx, cy + line_len)
         self.canvas.coords(self._reticle_mode_id, cx, cy + radius + 16)
         self.canvas.coords(self._reticle_dist_id, cx, cy + radius + 32)
 
-        self.canvas.itemconfig(self._reticle_mode_id, text=mode_text, state="normal" if mode_text else "hidden")
+        self.canvas.itemconfig(
+            self._reticle_mode_id, text=mode_text, state="normal" if mode_text else "hidden"
+        )
         self.canvas.itemconfig(self._reticle_dist_id, text=dist_text)
 
         self.canvas.itemconfig(self._reticle_ring_id, outline=color, width=stroke)
