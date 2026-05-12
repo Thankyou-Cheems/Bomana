@@ -273,12 +273,14 @@ class GameLogic:
 
                 if s.phase == Phase.HANGAR:
                     if spawn_candidate:
+                        self._prepare_new_battle_context_locked()
                         s.phase = Phase.ARMING
                         s.spawn_candidate_since = now
                     return
 
                 if s.phase == Phase.IDLE:
                     if spawn_candidate:
+                        self._prepare_new_battle_context_locked()
                         s.phase = Phase.ARMING
                         s.spawn_candidate_since = now
 
@@ -677,11 +679,11 @@ class GameLogic:
         # HUD/导航优先使用机头罗盘（更贴近驾驶视角），
         # 罗盘不可用时再回退到地速向量航向。
         heading = None
-        if tel.ind_ok and math.isfinite(float(tel.compass)):
+        if tel.ind_ok and tel.compass_present and math.isfinite(float(tel.compass)):
             heading = float(tel.compass) % 360.0
         if heading is None:
             heading = calculate_heading_from_vector(mp.player_dx, mp.player_dy)
-        if heading is None:
+        if heading is None and tel.compass_present:
             fallback_compass = float(tel.compass)
             if math.isfinite(fallback_compass):
                 heading = fallback_compass % 360.0
@@ -1484,6 +1486,12 @@ class GameLogic:
         s.last_refit_ts = now
         s.last_player_present_ts = now
         s.attitude = AttitudeConfidenceState()
+
+    def _prepare_new_battle_context_locked(self):
+        """丢弃机库期缓存，让战局建立阶段重取地图尺度。"""
+        s = self.state
+        s.zone_nav = ZoneNavigationState()
+        s.map_info = None
 
     def _reset_life_state_locked(self):
         """重置生命状态（必须在锁内调用）"""

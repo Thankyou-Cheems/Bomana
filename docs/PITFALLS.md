@@ -77,6 +77,11 @@ implementation plans belong in git history, not here.
   Cause: telemetry parsing accepted only a narrow set of `/state` and `/indicators` keys
   Fix/Workaround: parse compatible aliases for IAS/TAS/Mach/type and keep future payload parsing tolerant
 
+- Context: Bomana starts in hangar, then the player enters battle without restarting the app
+  Symptom: heading could stay wrong/unavailable and zone geometry could use the wrong battle scale
+  Cause: battle setup could reuse hangar-period `map_info` cache, and a missing compass key was interpreted as a valid `0°` heading instead of falling back to the map velocity vector
+  Fix/Workaround: clear battle-scoped map/navigation cache when arming a new battle, refetch `map_info` in battle context, and track whether the compass field was actually present before preferring it
+
 ### HUD And Navigation Geometry
 
 - Context: transparent HUD overlay on Windows

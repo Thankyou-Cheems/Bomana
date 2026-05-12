@@ -260,7 +260,7 @@ class TelemetryFetcher:
                 j,
                 ("type", "unit", "aircraft", "aircraft_type", "vehicle", "model", "name"),
             )
-            data.compass, _ = self._read_float(
+            data.compass, data.compass_present = self._read_float(
                 j,
                 (
                     "compass1",

@@ -28,6 +28,7 @@ class TelemetryData:
     vy_ms: float = 0  # 垂直速度 (m/s)
     fuel_kg: float = 0  # 燃油量 (kg)
     compass: float = 0  # 罗盘航向 (度)
+    compass_present: bool = False  # 是否命中罗盘字段，避免把默认0误当有效航向
 
     # v5.8 新增：燃油管理相关字段
     fuel0_kg: float = 0  # 起飞油量 (kg) - 来自 Mfuel0
