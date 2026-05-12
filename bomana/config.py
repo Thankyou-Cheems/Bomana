@@ -947,7 +947,7 @@ class BombConfig:
     def get_categories(cls) -> list:
         """获取所有炸弹分类"""
         cls._ensure_database_loaded()
-        categories = set(bomb.get("category", "通用") for bomb in cls.BOMB_DATABASE.values())
+        categories = {bomb.get("category", "通用") for bomb in cls.BOMB_DATABASE.values()}
         priority = ['苏联', '美国', '德国', '英国', '日本', '中国']
         result = [p for p in priority if p in categories]
         result.extend(sorted(categories - set(priority)))
@@ -964,7 +964,7 @@ class BombConfig:
     def get_all_bomb_names(cls) -> list:
         """获取所有炸弹名称"""
         cls._ensure_database_loaded()
-        return sorted(list(cls.BOMB_DATABASE.keys()))
+        return sorted(cls.BOMB_DATABASE.keys())
 
     @classmethod
     def get_bomb_data(cls, name: str):
