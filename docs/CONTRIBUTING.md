@@ -56,9 +56,17 @@ uv run python -m unittest discover -s tests -p "test_*.py"
 uv sync --extra dev
 uv run pytest
 uv run ruff check <本次修改的 Python 路径>
+uv run ruff format --check <本次修改的 Python 路径>
 ```
 
-`ruff`/`pytest` 是开发辅助，不应阻塞导航、遥测、启动器等主功能维护任务，除非当前改动明确要求它们作为验收项。
+代码类任务（包括 `bd`/beads 任务）完成前必须运行 Ruff。推荐最终门禁：
+
+```bash
+uv run --extra dev ruff check .
+uv run --extra dev ruff format --check .
+```
+
+纯文档或仅变更 issue 状态的任务可在交接中说明 Ruff 不适用。
 
 ### 任务跟踪（必须使用 bd）
 
@@ -85,6 +93,8 @@ bd create "Issue title" --description="Context" -t task -p 2 --deps discovered-f
 ```bash
 bd close <issue-id> --reason "Completed" --json
 ```
+
+关闭代码类 `bd` 任务前，先运行 Ruff 和相关测试/构建门禁，并在提交或交接中记录结果。
 
 如果你是外部贡献者，PR 里请直接写明对应的 `bd` 编号；若没有权限操作 `bd` 数据库，请在 PR 描述里说明原因和上下文。
 
@@ -120,6 +130,8 @@ bd close <issue-id> --reason "Completed" --json
 
 代码改动至少应覆盖其中相关项：
 
+- `uv run --extra dev ruff check .`
+- `uv run --extra dev ruff format --check .`
 - `tools\scripts\check_smoke.bat` 轻量本地回归
 - `uv run python Bomana.pyw` 基础启动验证
 - 受影响功能的静态自测
@@ -206,9 +218,17 @@ Optional development tools:
 uv sync --extra dev
 uv run pytest
 uv run ruff check <changed Python paths>
+uv run ruff format --check <changed Python paths>
 ```
 
-`ruff` and `pytest` are development aids. They should not block navigation, telemetry, launcher, or other functional maintenance unless the current change explicitly makes them acceptance criteria.
+Code-changing tasks, including `bd`/beads tasks, must run Ruff before completion. Recommended final gates:
+
+```bash
+uv run --extra dev ruff check .
+uv run --extra dev ruff format --check .
+```
+
+Pure documentation or issue-status-only tasks may state that Ruff is not applicable in the handoff.
 
 ### Task Tracking With bd
 
@@ -235,6 +255,8 @@ Close finished work:
 ```bash
 bd close <issue-id> --reason "Completed" --json
 ```
+
+Before closing a code-changing `bd` task, run Ruff plus the relevant tests/build checks and record the result in the commit or handoff.
 
 If you are contributing from a fork and cannot update the project beads database directly, mention the intended `bd` linkage in your PR description.
 
@@ -269,6 +291,8 @@ Keep these in sync with the code:
 
 Relevant changes should be validated with some combination of:
 
+- `uv run --extra dev ruff check .`
+- `uv run --extra dev ruff format --check .`
 - `tools\scripts\check_smoke.bat`
 - `uv run python Bomana.pyw`
 - focused local static checks

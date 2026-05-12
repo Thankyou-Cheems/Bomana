@@ -32,6 +32,15 @@ Keep it concise and update when workflows or boundaries change.
 2. Make minimal, safe edits; preserve existing comments and header rules.
 3. Update docs per rules above.
 
+## Quality Gates
+- For every code-changing task, including `bd`/beads tasks, run Ruff before closing the task:
+  ```bash
+  uv run --extra dev ruff check .
+  uv run --extra dev ruff format --check .
+  ```
+- Run the focused tests/smoke/build checks relevant to the touched area.
+- Pure documentation or issue-tracking-only tasks may mark Ruff as not applicable in the handoff.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
@@ -39,7 +48,7 @@ Keep it concise and update when workflows or boundaries change.
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
+2. **Run quality gates** (if code changed) - Ruff, tests, builds
 3. **Update issue status** - Close finished work, update in-progress items
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
@@ -125,7 +134,7 @@ bd close bd-42 --reason "Completed" --json
 3. **Work on it**: Implement, test, document
 4. **Discover new work?** Create linked issue:
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
+5. **Complete**: run required quality gates, then `bd close <id> --reason "Done"`
 
 ### Storage Model
 
