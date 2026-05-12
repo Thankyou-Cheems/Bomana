@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Bomana portable launcher with user-friendly GUI update flow."""
 
+import ctypes
 import hashlib
 import importlib
 import ipaddress
@@ -10,36 +11,34 @@ import queue
 import re
 import runpy
 import shutil
+import socket
+
+# Configure SSL context for HTTPS connections (critical for PyInstaller)
+import ssl
 import subprocess
 import sys
-import socket
 import tempfile
 import threading
 import time
+import tkinter as tk
 import uuid
 import webbrowser
 import zipfile
-import ctypes
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from tkinter import filedialog, messagebox
+from tkinter import font as tkfont
 from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import (
-    Request,
-    build_opener,
     HTTPHandler,
     HTTPSHandler,
     ProxyHandler,
+    Request,
+    build_opener,
 )
-
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from tkinter import font as tkfont
-
-# Configure SSL context for HTTPS connections (critical for PyInstaller)
-import ssl
 
 from bomana.utils.system import Win32, select_ui_font_family
 
@@ -155,12 +154,9 @@ DOWNLOAD_SOURCE_DETAILS = {
     DOWNLOAD_SOURCE_MODE_PRIMARY: "仅使用腾讯云更新服务。检查或下载失败时不再自动回退 GitHub。",
     DOWNLOAD_SOURCE_MODE_GITHUB: "仅使用 GitHub Releases。适合手动排查国内更新链路问题。",
 }
-_DOWNLOAD_SOURCE_LABEL_TO_MODE = {
-    label: mode for mode, label in DOWNLOAD_SOURCE_CHOICES
-}
-_DOWNLOAD_SOURCE_MODE_TO_LABEL = {
-    mode: label for mode, label in DOWNLOAD_SOURCE_CHOICES
-}
+_DOWNLOAD_SOURCE_LABEL_TO_MODE = {label: mode for mode, label in DOWNLOAD_SOURCE_CHOICES}
+_DOWNLOAD_SOURCE_MODE_TO_LABEL = dict(DOWNLOAD_SOURCE_CHOICES)
+
 
 @dataclass
 class LaunchDecision:
@@ -178,7 +174,7 @@ def _base_dir() -> Path:
 def _resource_path(filename: str) -> Path:
     """Resolve resource path for source mode and PyInstaller onefile mode."""
     try:
-        bundle_root = Path(getattr(sys, "_MEIPASS"))
+        bundle_root = Path(sys._MEIPASS)
         candidate = bundle_root / filename
         if candidate.exists():
             return candidate
@@ -188,9 +184,7 @@ def _resource_path(filename: str) -> Path:
 
 
 def _is_frozen_launcher() -> bool:
-    return bool(getattr(sys, "frozen", False)) and bool(
-        str(getattr(sys, "executable", "")).strip()
-    )
+    return bool(getattr(sys, "frozen", False)) and bool(str(getattr(sys, "executable", "")).strip())
 
 
 def _normalize_download_source_mode(value: Any) -> str:
@@ -348,7 +342,9 @@ def _fetch_bytes(
         url,
         headers=req_headers,
     )
-    with _open_url(req, timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)) as resp:
+    with _open_url(
+        req, timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)
+    ) as resp:
         total: Optional[int] = None
         try:
             header = resp.headers.get("Content-Length")
@@ -439,9 +435,7 @@ def _fetch_primary_version_payload(
     return _fetch_primary_json_payload(version_url, params, timeout_sec)
 
 
-def _fetch_content_length(
-    url: str, timeout_sec: Optional[float] = None
-) -> Optional[int]:
+def _fetch_content_length(url: str, timeout_sec: Optional[float] = None) -> Optional[int]:
     timeout = timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC
     req = Request(url, method="HEAD", headers={"User-Agent": UA, "Accept": "*/*"})
     try:
@@ -455,9 +449,7 @@ def _fetch_content_length(
 
     # Some CDNs reject HEAD; fallback to a 1-byte range request.
     try:
-        req2 = Request(
-            url, headers={"User-Agent": UA, "Accept": "*/*", "Range": "bytes=0-0"}
-        )
+        req2 = Request(url, headers={"User-Agent": UA, "Accept": "*/*", "Range": "bytes=0-0"})
         with _open_url(req2, timeout=timeout) as resp2:
             content_range = str(resp2.headers.get("Content-Range", "")).strip()
             m = re.search(r"/(\d+)$", content_range)
@@ -510,9 +502,7 @@ def _detect_channel() -> str:
         return _CHANNEL_MAP[env]
 
     exe_name = (
-        Path(sys.executable).name
-        if getattr(sys, "frozen", False)
-        else Path(__file__).name
+        Path(sys.executable).name if getattr(sys, "frozen", False) else Path(__file__).name
     ).lower()
     for key, value in _CHANNEL_MAP.items():
         if key in exe_name:
@@ -579,8 +569,8 @@ def _acquire_update_lock(base: Path) -> Path:
 
     try:
         fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        raise RuntimeError("检测到另一个更新任务正在进行，请稍后重试。")
+    except FileExistsError as e:
+        raise RuntimeError("检测到另一个更新任务正在进行，请稍后重试。") from e
 
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -605,41 +595,7 @@ def _release_update_lock(lock_path: Optional[Path]) -> None:
 
 
 def _recover_incomplete_install(base: Path) -> None:
-    app_dir = base / APP_DIR_NAME
-    backup_dir = base / APP_BACKUP_DIR_NAME
-    previous_dir = base / APP_PREVIOUS_DIR_NAME
-    new_dir = base / f"{APP_DIR_NAME}_new"
-    steps = []
-
-    try:
-        if (not app_dir.exists()) and backup_dir.exists():
-            os.replace(str(backup_dir), str(app_dir))
-            steps.append("restore_backup")
-
-        if app_dir.exists() and backup_dir.exists():
-            if previous_dir.exists():
-                shutil.rmtree(previous_dir, ignore_errors=True)
-            os.replace(str(backup_dir), str(previous_dir))
-            steps.append("promote_backup_to_previous")
-
-        if new_dir.exists():
-            if not app_dir.exists():
-                os.replace(str(new_dir), str(app_dir))
-                steps.append("promote_new")
-            else:
-                shutil.rmtree(new_dir, ignore_errors=True)
-                steps.append("cleanup_new")
-
-        lock_path = base / UPDATE_LOCK_FILE_NAME
-        if lock_path.exists():
-            age = time.time() - lock_path.stat().st_mtime
-            if age >= UPDATE_LOCK_STALE_SEC:
-                lock_path.unlink()
-                steps.append("cleanup_stale_lock")
-    except Exception as e:
-        _log(base, f"安装恢复失败：{e}")
-        return
-
+    steps = InstallTransaction.recover_incomplete(base)
     if steps:
         _log(base, f"检测到上次安装未完成，已恢复：{', '.join(steps)}")
 
@@ -647,9 +603,7 @@ def _recover_incomplete_install(base: Path) -> None:
 def _write_state(base: Path, state: Dict[str, Any]) -> None:
     path = base / STATE_FILE_NAME
     try:
-        path.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
 
@@ -749,7 +703,7 @@ def _cleanup_legacy_launcher_self_update_files(base: Path) -> None:
 def _cleanup_temp_files_on_launcher_upgrade(base: Path) -> None:
     meta = _read_temp_meta(base)
     prev_version = str(meta.get("launcher_version", "")).strip()
-    should_update_meta = (prev_version != LAUNCHER_VERSION)
+    should_update_meta = prev_version != LAUNCHER_VERSION
     if prev_version and prev_version != LAUNCHER_VERSION:
         cleaned = []
         lock_path = base / UPDATE_LOCK_FILE_NAME
@@ -776,9 +730,15 @@ def _cleanup_temp_files_on_launcher_upgrade(base: Path) -> None:
             except Exception:
                 pass
             if cleaned:
-                _log(base, f"检测到启动器升级（v{prev_version} -> v{LAUNCHER_VERSION}），已清理临时文件：{', '.join(cleaned)}")
+                _log(
+                    base,
+                    f"检测到启动器升级（v{prev_version} -> v{LAUNCHER_VERSION}），已清理临时文件：{', '.join(cleaned)}",
+                )
         else:
-            _log(base, f"检测到启动器升级（v{prev_version} -> v{LAUNCHER_VERSION}），存在进行中的更新任务，暂不清理临时文件。")
+            _log(
+                base,
+                f"检测到启动器升级（v{prev_version} -> v{LAUNCHER_VERSION}），存在进行中的更新任务，暂不清理临时文件。",
+            )
             should_update_meta = False
 
     if should_update_meta:
@@ -817,9 +777,7 @@ def _consume_launcher_update_result(base: Path) -> None:
             _log(base, f"启动器自更新失败：{detail}")
             _show_error(
                 f"{DISPLAY_NAME} 启动器更新失败",
-                "上一次启动器自更新未完成。\n"
-                f"错误：{detail}\n"
-                "详细信息请查看 launcher.log。",
+                f"上一次启动器自更新未完成。\n错误：{detail}\n详细信息请查看 launcher.log。",
             )
     finally:
         try:
@@ -850,9 +808,7 @@ def _read_machine_guid() -> str:
     try:
         import winreg  # type: ignore
 
-        with winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography"
-        ) as key:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as key:
             guid, _ = winreg.QueryValueEx(key, "MachineGuid")
         return str(guid).strip()
     except Exception:
@@ -911,6 +867,114 @@ def _require_remote_checksum(checksum_value: str, *, artifact_label: str) -> str
     return checksum
 
 
+class InstallTransaction:
+    """Owns update lock, staging paths, replacement, and rollback cleanup."""
+
+    def __init__(self, base: Path) -> None:
+        self.base = base
+        self.app_dir = base / APP_DIR_NAME
+        self.backup_dir = base / APP_BACKUP_DIR_NAME
+        self.previous_dir = base / APP_PREVIOUS_DIR_NAME
+        self.new_dir = base / f"{APP_DIR_NAME}_new"
+        self.lock_path: Optional[Path] = None
+        self.work_dir: Optional[Path] = None
+        self.zip_path: Optional[Path] = None
+        self.stage_dir: Optional[Path] = None
+        self.moved_to_backup = False
+        self.replaced_app = False
+
+    def __enter__(self) -> "InstallTransaction":
+        self.lock_path = _acquire_update_lock(self.base)
+        self.work_dir = Path(tempfile.mkdtemp(prefix="bomana_update_", dir=str(self.base)))
+        self.zip_path = self.work_dir / "app.zip"
+        self.stage_dir = self.work_dir / "stage"
+        self.stage_dir.mkdir(parents=True, exist_ok=True)
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if exc_type is not None:
+            self.rollback()
+        if self.work_dir is not None:
+            shutil.rmtree(self.work_dir, ignore_errors=True)
+        _release_update_lock(self.lock_path)
+
+    def extract_package(self, package_bytes: bytes, entrypoint: str) -> Path:
+        if self.zip_path is None or self.stage_dir is None:
+            raise RuntimeError("安装事务未启动")
+        self.zip_path.write_bytes(package_bytes)
+        _safe_extract_zip(self.zip_path, self.stage_dir)
+        src_root = _normalize_package_root(self.stage_dir, entrypoint)
+        if not (src_root / entrypoint).exists():
+            raise RuntimeError("应用包缺少入口文件 Bomana.pyw")
+        return src_root
+
+    def stage_new_app(self, src_root: Path) -> None:
+        if self.new_dir.exists():
+            shutil.rmtree(self.new_dir, ignore_errors=True)
+        shutil.copytree(src_root, self.new_dir)
+
+    def replace_app(self) -> None:
+        if self.backup_dir.exists():
+            shutil.rmtree(self.backup_dir, ignore_errors=True)
+        if self.app_dir.exists():
+            os.replace(str(self.app_dir), str(self.backup_dir))
+            self.moved_to_backup = True
+        os.replace(str(self.new_dir), str(self.app_dir))
+        self.replaced_app = True
+
+        if self.backup_dir.exists():
+            if self.previous_dir.exists():
+                shutil.rmtree(self.previous_dir, ignore_errors=True)
+            os.replace(str(self.backup_dir), str(self.previous_dir))
+
+    def rollback(self) -> None:
+        try:
+            if self.replaced_app and self.moved_to_backup and self.backup_dir.exists():
+                if self.app_dir.exists():
+                    shutil.rmtree(self.app_dir, ignore_errors=True)
+                os.replace(str(self.backup_dir), str(self.app_dir))
+            elif self.moved_to_backup and self.backup_dir.exists() and not self.app_dir.exists():
+                os.replace(str(self.backup_dir), str(self.app_dir))
+            if self.new_dir.exists():
+                shutil.rmtree(self.new_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    @classmethod
+    def recover_incomplete(cls, base: Path) -> list[str]:
+        transaction = cls(base)
+        steps: list[str] = []
+        try:
+            if (not transaction.app_dir.exists()) and transaction.backup_dir.exists():
+                os.replace(str(transaction.backup_dir), str(transaction.app_dir))
+                steps.append("restore_backup")
+
+            if transaction.app_dir.exists() and transaction.backup_dir.exists():
+                if transaction.previous_dir.exists():
+                    shutil.rmtree(transaction.previous_dir, ignore_errors=True)
+                os.replace(str(transaction.backup_dir), str(transaction.previous_dir))
+                steps.append("promote_backup_to_previous")
+
+            if transaction.new_dir.exists():
+                if not transaction.app_dir.exists():
+                    os.replace(str(transaction.new_dir), str(transaction.app_dir))
+                    steps.append("promote_new")
+                else:
+                    shutil.rmtree(transaction.new_dir, ignore_errors=True)
+                    steps.append("cleanup_new")
+
+            lock_path = base / UPDATE_LOCK_FILE_NAME
+            if lock_path.exists():
+                age = time.time() - lock_path.stat().st_mtime
+                if age >= UPDATE_LOCK_STALE_SEC:
+                    lock_path.unlink()
+                    steps.append("cleanup_stale_lock")
+        except Exception as e:
+            _log(base, f"安装恢复失败：{e}")
+            return []
+        return steps
+
+
 def _install_zip_package(
     base: Path,
     package_bytes: bytes,
@@ -926,68 +990,20 @@ def _install_zip_package(
     if cancel_cb and cancel_cb():
         raise RuntimeError("已取消当前操作")
 
-    app_dir = base / APP_DIR_NAME
-    backup_dir = base / APP_BACKUP_DIR_NAME
-    previous_dir = base / APP_PREVIOUS_DIR_NAME
-    new_dir = base / f"{APP_DIR_NAME}_new"
-    lock_path = _acquire_update_lock(base)
-    work_dir = Path(tempfile.mkdtemp(prefix="bomana_update_", dir=str(base)))
-    zip_path = work_dir / "app.zip"
-    stage_dir = work_dir / "stage"
-    stage_dir.mkdir(parents=True, exist_ok=True)
-    moved_to_backup = False
-    replaced_app = False
-
-    try:
+    with InstallTransaction(base) as transaction:
         if status_cb:
             status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
-        zip_path.write_bytes(package_bytes)
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
-        _safe_extract_zip(zip_path, stage_dir)
-
-        src_root = _normalize_package_root(stage_dir, entrypoint)
-        if not (src_root / entrypoint).exists():
-            raise RuntimeError("应用包缺少入口文件 Bomana.pyw")
+        src_root = transaction.extract_package(package_bytes, entrypoint)
 
         if status_cb:
             status_cb("正在安装更新", "正在替换旧版本文件...", 0.94, "info")
 
-        if new_dir.exists():
-            shutil.rmtree(new_dir, ignore_errors=True)
-        shutil.copytree(src_root, new_dir)
+        transaction.stage_new_app(src_root)
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
-
-        if backup_dir.exists():
-            shutil.rmtree(backup_dir, ignore_errors=True)
-        if app_dir.exists():
-            os.replace(str(app_dir), str(backup_dir))
-            moved_to_backup = True
-        os.replace(str(new_dir), str(app_dir))
-        replaced_app = True
-
-        if backup_dir.exists():
-            if previous_dir.exists():
-                shutil.rmtree(previous_dir, ignore_errors=True)
-            os.replace(str(backup_dir), str(previous_dir))
-    except Exception:
-        # rollback
-        try:
-            if replaced_app and moved_to_backup and backup_dir.exists():
-                if app_dir.exists():
-                    shutil.rmtree(app_dir, ignore_errors=True)
-                os.replace(str(backup_dir), str(app_dir))
-            elif moved_to_backup and backup_dir.exists() and not app_dir.exists():
-                os.replace(str(backup_dir), str(app_dir))
-            if new_dir.exists():
-                shutil.rmtree(new_dir, ignore_errors=True)
-        except Exception:
-            pass
-        raise
-    finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
-        _release_update_lock(lock_path)
+        transaction.replace_app()
 
 
 def _rollback_to_previous_app(
@@ -1046,10 +1062,7 @@ def _latest_release_url() -> str:
 
 def _releases_list_url(limit: int = 20) -> str:
     safe_limit = max(1, min(int(limit), 100))
-    return (
-        f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases"
-        f"?per_page={safe_limit}"
-    )
+    return f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases?per_page={safe_limit}"
 
 
 def _join_base_url_path(base_url: str, path: str) -> str:
@@ -1154,10 +1167,7 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
         manifest.get("package_sha256", ""),
         artifact_label=f"{manifest_name} ",
     )
-    entrypoint = (
-        str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip()
-        or DEFAULT_ENTRYPOINT
-    )
+    entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
     if not remote_version or not package_asset:
         raise RuntimeError("发布清单字段缺失")
 
@@ -1239,9 +1249,7 @@ def _fetch_manifest_from_github(channel: str) -> Dict[str, Any]:
         try:
             manifest = _manifest_from_github_release(rel, channel)
             if checked > 0:
-                manifest["source_name"] = (
-                    f"{manifest.get('source_name', 'GitHub')} fallback"
-                )
+                manifest["source_name"] = f"{manifest.get('source_name', 'GitHub')} fallback"
             return manifest
         except Exception:
             checked += 1
@@ -1305,22 +1313,16 @@ def _fetch_manifest_from_primary(
     remote_version = str(payload.get("app_version", "")).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
-        _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url)
-        if raw_package_url
-        else ""
+        _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
     )
     package_sha256 = _require_remote_checksum(
         payload.get("package_sha256", ""),
         artifact_label="国内应用更新清单 ",
     )
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
-    entrypoint = (
-        str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
-    )
+    entrypoint = str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
     min_launcher_version = str(payload.get("min_launcher_version", "")).strip()
-    source_name = (
-        str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
-    )
+    source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     if used_anonymous_fallback:
         source_name = f"{source_name} (匿名回退)"
 
@@ -1366,23 +1368,17 @@ def _fetch_launcher_manifest_from_primary(
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
 
-    remote_version = str(
-        payload.get("launcher_version", payload.get("app_version", ""))
-    ).strip()
+    remote_version = str(payload.get("launcher_version", payload.get("app_version", ""))).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
-        _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url)
-        if raw_package_url
-        else ""
+        _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
     )
     package_sha256 = _require_remote_checksum(
         payload.get("package_sha256", ""),
         artifact_label="国内启动器更新清单 ",
     )
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
-    source_name = (
-        str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
-    )
+    source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     if used_anonymous_fallback:
         source_name = f"{source_name} (匿名回退)"
 
@@ -1472,9 +1468,7 @@ def _resolve_update_manifest(
             if manifest is not None:
                 remote_version_preview = str(manifest.get("remote_version", "")).strip()
                 package_url_preview = str(manifest.get("package_url", "")).strip()
-                need_fallback = _version_is_newer(
-                    remote_version_preview, local_version
-                ) and (
+                need_fallback = _version_is_newer(remote_version_preview, local_version) and (
                     (not PRIMARY_ALLOW_PACKAGE_DOWNLOAD) or (not package_url_preview)
                 )
                 if need_fallback:
@@ -1581,6 +1575,131 @@ def _resolve_launcher_update_manifest(
     return manifest
 
 
+class UpdateService:
+    """Coordinates manifest resolution, update checks, and download operations."""
+
+    def __init__(
+        self,
+        base: Path,
+        channel: str,
+        identity: Dict[str, str],
+        download_source_mode: str = DOWNLOAD_SOURCE_MODE_AUTO,
+        status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+        cancel_cb: Optional[Callable[[], bool]] = None,
+    ) -> None:
+        self.base = base
+        self.channel = channel
+        self.identity = identity
+        self.download_source_mode = download_source_mode
+        self.status_cb = status_cb
+        self.cancel_cb = cancel_cb
+
+    def notify(
+        self,
+        title: str,
+        detail: str = "",
+        progress: Optional[float] = None,
+        level: str = "info",
+    ) -> None:
+        if self.status_cb:
+            self.status_cb(title, detail, progress, level)
+
+    def resolve_app_manifest(self) -> Tuple[str, Dict[str, Any]]:
+        return _resolve_update_manifest(
+            self.base,
+            self.channel,
+            self.identity,
+            download_source_mode=self.download_source_mode,
+            status_cb=self.notify,
+        )
+
+    def resolve_launcher_manifest(self) -> Dict[str, Any]:
+        return _resolve_launcher_update_manifest(
+            self.base,
+            self.identity,
+            download_source_mode=self.download_source_mode,
+            status_cb=self.notify,
+        )
+
+    def check(self) -> Dict[str, Any]:
+        local_version, manifest = self.resolve_app_manifest()
+        remote_version = str(manifest.get("remote_version", "")).strip()
+        min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
+        package_url = str(manifest.get("package_url", "")).strip()
+        source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
+        if not remote_version:
+            raise RuntimeError("更新清单字段缺失")
+
+        update_available = _version_is_newer(remote_version, local_version)
+        app_requires_launcher_update = bool(
+            update_available
+            and min_launcher_version
+            and _version_is_older(LAUNCHER_VERSION, min_launcher_version)
+        )
+        if update_available and not package_url:
+            raise RuntimeError("更新清单字段缺失")
+
+        package_size = self._manifest_package_size(manifest)
+        if update_available and package_size is None and package_url:
+            package_size = _fetch_content_length(package_url, timeout_sec=NET_TIMEOUT_SEC)
+
+        launcher_manifest = self.resolve_launcher_manifest()
+        launcher_remote_version = str(launcher_manifest.get("remote_version", "")).strip()
+        launcher_source_name = (
+            str(launcher_manifest.get("source_name", "GitHub")).strip() or "GitHub"
+        )
+        launcher_update_available = _version_is_newer(launcher_remote_version, LAUNCHER_VERSION)
+        launcher_package_size = self._manifest_package_size(launcher_manifest)
+        if launcher_update_available and launcher_package_size is None:
+            launcher_package_url = str(launcher_manifest.get("package_url", "")).strip()
+            if launcher_package_url:
+                launcher_package_size = _fetch_content_length(
+                    launcher_package_url, timeout_sec=NET_TIMEOUT_SEC
+                )
+
+        return {
+            "local_version": local_version,
+            "remote_version": remote_version,
+            "min_launcher_version": min_launcher_version,
+            "source_name": source_name,
+            "update_available": update_available,
+            "app_requires_launcher_update": app_requires_launcher_update,
+            "package_size": package_size,
+            "manifest": manifest,
+            "launcher_manifest": launcher_manifest,
+            "launcher_remote_version": launcher_remote_version,
+            "launcher_source_name": launcher_source_name,
+            "launcher_update_available": launcher_update_available,
+            "launcher_package_size": launcher_package_size,
+        }
+
+    def download_app_update(self, manifest: Dict[str, Any]) -> Tuple[str, str]:
+        return _download_update_from_manifest(
+            self.base,
+            manifest,
+            status_cb=self.notify,
+            cancel_cb=self.cancel_cb,
+        )
+
+    def download_launcher_update(self, manifest: Dict[str, Any]) -> Tuple[str, str]:
+        return _download_launcher_update_from_manifest(
+            self.base,
+            manifest,
+            status_cb=self.notify,
+            cancel_cb=self.cancel_cb,
+        )
+
+    @staticmethod
+    def _manifest_package_size(manifest: Dict[str, Any]) -> Optional[int]:
+        package_size_raw = manifest.get("package_size", None)
+        try:
+            if package_size_raw is not None and str(package_size_raw).strip() != "":
+                return int(str(package_size_raw).strip())
+        except Exception:
+            return None
+        return None
+
+
 def _check_for_update(
     base: Path,
     channel: str,
@@ -1597,84 +1716,13 @@ def _check_for_update(
         if status_cb:
             status_cb(title, detail, progress, level)
 
-    local_version, manifest = _resolve_update_manifest(
+    return UpdateService(
         base,
         channel,
         identity,
         download_source_mode=download_source_mode,
         status_cb=notify,
-    )
-    remote_version = str(manifest.get("remote_version", "")).strip()
-    min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
-    package_url = str(manifest.get("package_url", "")).strip()
-    source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
-    if not remote_version:
-        raise RuntimeError("更新清单字段缺失")
-
-    update_available = _version_is_newer(remote_version, local_version)
-    app_requires_launcher_update = bool(
-        update_available
-        and min_launcher_version
-        and _version_is_older(LAUNCHER_VERSION, min_launcher_version)
-    )
-    if update_available and not package_url:
-        raise RuntimeError("更新清单字段缺失")
-
-    package_size_raw = manifest.get("package_size", None)
-    package_size: Optional[int] = None
-    try:
-        if package_size_raw is not None and str(package_size_raw).strip() != "":
-            package_size = int(str(package_size_raw).strip())
-    except Exception:
-        package_size = None
-    if update_available and package_size is None and package_url:
-        package_size = _fetch_content_length(package_url, timeout_sec=NET_TIMEOUT_SEC)
-
-    launcher_manifest = _resolve_launcher_update_manifest(
-        base,
-        identity,
-        download_source_mode=download_source_mode,
-        status_cb=notify,
-    )
-    launcher_remote_version = str(launcher_manifest.get("remote_version", "")).strip()
-    launcher_source_name = (
-        str(launcher_manifest.get("source_name", "GitHub")).strip() or "GitHub"
-    )
-    launcher_update_available = _version_is_newer(
-        launcher_remote_version, LAUNCHER_VERSION
-    )
-    launcher_package_size_raw = launcher_manifest.get("package_size", None)
-    launcher_package_size: Optional[int] = None
-    try:
-        if (
-            launcher_package_size_raw is not None
-            and str(launcher_package_size_raw).strip() != ""
-        ):
-            launcher_package_size = int(str(launcher_package_size_raw).strip())
-    except Exception:
-        launcher_package_size = None
-    if launcher_update_available and launcher_package_size is None:
-        launcher_package_url = str(launcher_manifest.get("package_url", "")).strip()
-        if launcher_package_url:
-            launcher_package_size = _fetch_content_length(
-                launcher_package_url, timeout_sec=NET_TIMEOUT_SEC
-            )
-
-    return {
-        "local_version": local_version,
-        "remote_version": remote_version,
-        "min_launcher_version": min_launcher_version,
-        "source_name": source_name,
-        "update_available": update_available,
-        "app_requires_launcher_update": app_requires_launcher_update,
-        "package_size": package_size,
-        "manifest": manifest,
-        "launcher_manifest": launcher_manifest,
-        "launcher_remote_version": launcher_remote_version,
-        "launcher_source_name": launcher_source_name,
-        "launcher_update_available": launcher_update_available,
-        "launcher_package_size": launcher_package_size,
-    }
+    ).check()
 
 
 def _download_update_from_manifest(
@@ -1699,10 +1747,7 @@ def _download_update_from_manifest(
         manifest.get("package_sha256", ""),
         artifact_label="应用更新清单 ",
     )
-    entrypoint = (
-        str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip()
-        or DEFAULT_ENTRYPOINT
-    )
+    entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
     if not remote_version or not package_url:
         raise RuntimeError("更新清单字段缺失")
@@ -1715,9 +1760,7 @@ def _download_update_from_manifest(
             f"此版本要求先更新启动器（当前 v{LAUNCHER_VERSION}，要求 >= v{min_launcher_version}）"
         )
 
-    notify(
-        "开始下载", f"正在下载 v{remote_version}（来源：{source_name}）", 0.24, "info"
-    )
+    notify("开始下载", f"正在下载 v{remote_version}（来源：{source_name}）", 0.24, "info")
     last_emit = [0.0]
     speed_state = {
         "time": time.monotonic(),
@@ -1743,9 +1786,7 @@ def _download_update_from_manifest(
         if dt > 0 and db >= 0:
             inst_bps = db / dt
             prev_bps = float(speed_state["bps"])
-            speed_state["bps"] = (
-                inst_bps if prev_bps <= 0 else (prev_bps * 0.65 + inst_bps * 0.35)
-            )
+            speed_state["bps"] = inst_bps if prev_bps <= 0 else (prev_bps * 0.65 + inst_bps * 0.35)
             speed_state["time"] = now
             speed_state["downloaded"] = downloaded
 
@@ -1778,9 +1819,9 @@ def _download_update_from_manifest(
 def _launch_updater_script(script_path: Path) -> None:
     creation_flags = 0
     if hasattr(subprocess, "CREATE_NO_WINDOW"):
-        creation_flags |= getattr(subprocess, "CREATE_NO_WINDOW")
+        creation_flags |= subprocess.CREATE_NO_WINDOW
     if hasattr(subprocess, "DETACHED_PROCESS"):
-        creation_flags |= getattr(subprocess, "DETACHED_PROCESS")
+        creation_flags |= subprocess.DETACHED_PROCESS
     subprocess.Popen(
         [
             "powershell.exe",
@@ -1934,9 +1975,7 @@ def _download_launcher_update_from_manifest(
                 "info",
             )
 
-    launcher_bytes = _fetch_bytes(
-        package_url, progress_cb=on_progress, cancel_cb=cancel_cb
-    )
+    launcher_bytes = _fetch_bytes(package_url, progress_cb=on_progress, cancel_cb=cancel_cb)
     if cancel_cb and cancel_cb():
         raise RuntimeError("已取消当前操作")
     actual_sha256 = hashlib.sha256(launcher_bytes).hexdigest().lower()
@@ -1980,9 +2019,7 @@ def _prepare_source_test_runtime(base: Path) -> None:
 def _reset_embedded_app_modules() -> None:
     """Clear launcher-bundled bomana modules before handing off to the app package."""
     stale_modules = [
-        name
-        for name in tuple(sys.modules.keys())
-        if name == "bomana" or name.startswith("bomana.")
+        name for name in tuple(sys.modules.keys()) if name == "bomana" or name.startswith("bomana.")
     ]
     for name in stale_modules:
         sys.modules.pop(name, None)
@@ -2144,9 +2181,7 @@ class LauncherDetailsDialog(tk.Toplevel):
                 img = img.resize((56, 56), Image.Resampling.LANCZOS)
                 icon_img = ImageTk.PhotoImage(img)
                 self._images.append(icon_img)
-                tk.Label(title_row, image=icon_img, bg=_THEME["BG"]).pack(
-                    side="left", padx=(0, 12)
-                )
+                tk.Label(title_row, image=icon_img, bg=_THEME["BG"]).pack(side="left", padx=(0, 12))
         except Exception:
             pass
 
@@ -2574,7 +2609,7 @@ class LauncherWindow:
     def _bind_button_motion(self, btn: tk.Button) -> None:
         if getattr(btn, "_bomana_motion_bound", False):
             return
-        setattr(btn, "_bomana_motion_bound", True)
+        btn._bomana_motion_bound = True
 
         def on_enter(_event: tk.Event) -> None:
             if str(btn.cget("state")) == "disabled":
@@ -2619,9 +2654,7 @@ class LauncherWindow:
             hwnd = internal_id
             if os.name == "nt":
                 try:
-                    hwnd = ctypes.windll.user32.GetParent(internal_id) or int(
-                        internal_id
-                    )
+                    hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
                 except Exception:
                     hwnd = int(internal_id)
             dpi_scale = Win32.get_dpi_scale(int(hwnd))
@@ -2744,19 +2777,13 @@ class LauncherWindow:
             self.progress_width = max(self._px(320), content_w)
             self.progress_height = self._px(12)
             if hasattr(self, "progress_canvas"):
-                self.progress_canvas.config(
-                    width=self.progress_width, height=self.progress_height
-                )
+                self.progress_canvas.config(width=self.progress_width, height=self.progress_height)
                 if self.indeterminate:
                     block = max(self._px(70), int(self.progress_width * 0.2))
-                    x = (self.anim_phase * self._px(14)) % (
-                        self.progress_width + block
-                    ) - block
+                    x = (self.anim_phase * self._px(14)) % (self.progress_width + block) - block
                     x0 = max(0, x)
                     x1 = min(self.progress_width, x + block)
-                    self.progress_canvas.coords(
-                        self.progress_bar, x0, 0, x1, self.progress_height
-                    )
+                    self.progress_canvas.coords(self.progress_bar, x0, 0, x1, self.progress_height)
                 else:
                     width = int(self.progress_width * self.progress_value)
                     self.progress_canvas.coords(
@@ -3053,9 +3080,7 @@ class LauncherWindow:
             justify="left",
             wraplength=self._px(520),
         )
-        self.hint_lbl.pack(
-            fill="x", padx=self._px(16), pady=(self._px(2), self._px(10))
-        )
+        self.hint_lbl.pack(fill="x", padx=self._px(16), pady=(self._px(2), self._px(10)))
 
         btn_row = tk.Frame(card, bg=_THEME["CARD"])
         btn_row.pack(fill="x", padx=self._px(16), pady=(0, self._px(14)))
@@ -3156,9 +3181,7 @@ class LauncherWindow:
             return
         self._cancel_requested.clear()
         self._exit_after_task = False
-        self._worker = threading.Thread(
-            target=self._worker_main, args=(task,), daemon=True
-        )
+        self._worker = threading.Thread(target=self._worker_main, args=(task,), daemon=True)
         self._worker.start()
 
     def _begin_check(self, automatic: bool) -> None:
@@ -3205,22 +3228,22 @@ class LauncherWindow:
                 "info",
             )
         else:
-            self._set_status(
-                "正在检查更新", f"正在重新检查 {self.channel} 通道...", None, "info"
-            )
+            self._set_status("正在检查更新", f"正在重新检查 {self.channel} 通道...", None, "info")
         self._set_running(True)
         self._start_worker("check")
 
     def _worker_main(self, task: str) -> None:
+        service = UpdateService(
+            self.base,
+            self.channel,
+            self.client_identity,
+            download_source_mode=self.download_source_mode,
+            status_cb=self._emit_status,
+            cancel_cb=lambda: self._cancel_requested.is_set(),
+        )
         if task == "check":
             try:
-                info = _check_for_update(
-                    self.base,
-                    self.channel,
-                    self.client_identity,
-                    download_source_mode=self.download_source_mode,
-                    status_cb=self._emit_status,
-                )
+                info = service.check()
                 self.events.put(("check_done", {"ok": True, **info}))
             except Exception as e:
                 msg = _friendly_error_text(e, self.channel)
@@ -3236,12 +3259,7 @@ class LauncherWindow:
             try:
                 if not manifest:
                     raise RuntimeError("请先完成启动器更新检查")
-                launcher_version, update_source = _download_launcher_update_from_manifest(
-                    self.base,
-                    manifest,
-                    status_cb=self._emit_status,
-                    cancel_cb=lambda: self._cancel_requested.is_set(),
-                )
+                launcher_version, update_source = service.download_launcher_update(manifest)
                 update_ok = True
             except Exception as e:
                 update_error = _friendly_error_text(e, self.channel)
@@ -3267,9 +3285,7 @@ class LauncherWindow:
                     {
                         "update_ok": update_ok,
                         "final_version": launcher_version,
-                        "status": (
-                            "启动器更新已准备好" if update_ok else "启动器更新失败"
-                        ),
+                        "status": ("启动器更新已准备好" if update_ok else "启动器更新失败"),
                         "detail": (
                             "已准备好下载并接管新版启动器；当前窗口关闭后会自动替换当前 exe 并重启。"
                             if update_ok
@@ -3291,9 +3307,7 @@ class LauncherWindow:
                     status_cb=self._emit_status,
                 )
                 update_ok = True
-                detail = (
-                    f"已回退到 v{final_version}。当前保留的上一版本为 v{preserved_version}。"
-                )
+                detail = f"已回退到 v{final_version}。当前保留的上一版本为 v{preserved_version}。"
             except Exception as e:
                 detail = str(e) or "回退失败"
                 _log(self.base, f"回退上一版本失败：{e}")
@@ -3322,9 +3336,7 @@ class LauncherWindow:
                 zip_file = Path(package_path)
                 if not zip_file.exists():
                     raise RuntimeError("ZIP 包不存在")
-                self._emit_status(
-                    "开始安装", f"正在导入本地包：{zip_file.name}", 0.2, "info"
-                )
+                self._emit_status("开始安装", f"正在导入本地包：{zip_file.name}", 0.2, "info")
                 package_bytes = zip_file.read_bytes()
                 _install_zip_package(
                     self.base,
@@ -3371,9 +3383,7 @@ class LauncherWindow:
                             "warning": "",
                             "status": "导入失败",
                             "detail": (
-                                _friendly_error_text(
-                                    RuntimeError(update_error), self.channel
-                                )
+                                _friendly_error_text(RuntimeError(update_error), self.channel)
                                 if update_error
                                 else "导入失败"
                             ),
@@ -3392,12 +3402,7 @@ class LauncherWindow:
         try:
             if not manifest:
                 raise RuntimeError("请先完成更新检查")
-            final_version, update_source = _download_update_from_manifest(
-                self.base,
-                manifest,
-                status_cb=self._emit_status,
-                cancel_cb=lambda: self._cancel_requested.is_set(),
-            )
+            final_version, update_source = service.download_app_update(manifest)
             update_ok = True
             local_ready = _is_local_app_ready(self.base)
         except Exception as e:
@@ -3454,9 +3459,7 @@ class LauncherWindow:
             )
         else:
             if local_ready:
-                detail = (
-                    f"{update_error}\n可点击“启动应用”使用本地版本 v{final_version}。"
-                )
+                detail = f"{update_error}\n可点击“启动应用”使用本地版本 v{final_version}。"
                 level = "warning"
                 status = "更新失败"
             else:
@@ -3477,9 +3480,7 @@ class LauncherWindow:
                 )
             )
 
-    def _emit_status(
-        self, title: str, detail: str, progress: Optional[float], level: str
-    ) -> None:
+    def _emit_status(self, title: str, detail: str, progress: Optional[float], level: str) -> None:
         self.events.put(
             (
                 "status",
@@ -3516,19 +3517,13 @@ class LauncherWindow:
                         self.latest_min_launcher_version = str(
                             payload.get("min_launcher_version", "")
                         ).strip()
-                        self.latest_source_name = str(
-                            payload.get("source_name", "GitHub")
-                        )
+                        self.latest_source_name = str(payload.get("source_name", "GitHub"))
                         self.latest_package_size = payload.get("package_size", None)
-                        self.update_available = bool(
-                            payload.get("update_available", False)
-                        )
+                        self.update_available = bool(payload.get("update_available", False))
                         self.app_requires_launcher_update = bool(
                             payload.get("app_requires_launcher_update", False)
                         )
-                        self.latest_launcher_manifest = payload.get(
-                            "launcher_manifest", None
-                        )
+                        self.latest_launcher_manifest = payload.get("launcher_manifest", None)
                         self.latest_launcher_version = str(
                             payload.get("launcher_remote_version", LAUNCHER_VERSION)
                         )
@@ -3544,9 +3539,7 @@ class LauncherWindow:
 
                         if self.app_requires_launcher_update:
                             detail = self._compose_check_detail()
-                            self._set_status(
-                                "需要先更新启动器", detail, 0.0, "warning"
-                            )
+                            self._set_status("需要先更新启动器", detail, 0.0, "warning")
                         elif self.update_available:
                             detail = self._compose_check_detail()
                             self._set_status("发现新版本", detail, 0.0, "success")
@@ -3569,9 +3562,7 @@ class LauncherWindow:
                         self.latest_launcher_source_name = ""
                         self.launcher_update_available = False
                         self.last_check_error = str(payload.get("error", "检查失败"))
-                        self._set_status(
-                            "检查失败", self.last_check_error, 0.0, "warning"
-                        )
+                        self._set_status("检查失败", self.last_check_error, 0.0, "warning")
                     self._refresh_installed_versions()
                     self.current_task = ""
                     self._set_running(False)
@@ -3585,9 +3576,7 @@ class LauncherWindow:
                     if not ok:
                         self._show_error_actions()
                 elif typ == "download_done":
-                    final_version = str(
-                        payload.get("final_version", self.local_version)
-                    )
+                    final_version = str(payload.get("final_version", self.local_version))
                     warning = str(payload.get("warning", ""))
                     self.decision = LaunchDecision(
                         action="exit",
@@ -3662,9 +3651,7 @@ class LauncherWindow:
                 x = (self.anim_phase * self._px(14)) % (width + block) - block
                 x0 = max(0, x)
                 x1 = min(width, x + block)
-                self.progress_canvas.coords(
-                    self.progress_bar, x0, 0, x1, self.progress_height
-                )
+                self.progress_canvas.coords(self.progress_bar, x0, 0, x1, self.progress_height)
         self.root.after(100, self._animate)
 
     def _status_color(self, level: str) -> str:
@@ -3702,9 +3689,7 @@ class LauncherWindow:
         elif (not should_show) and manager == "pack":
             self.progress_canvas.pack_forget()
 
-    def _set_status(
-        self, title: str, detail: str, progress: Optional[float], level: str
-    ) -> None:
+    def _set_status(self, title: str, detail: str, progress: Optional[float], level: str) -> None:
         if title:
             self.status_title = title
         self.status_level = level
@@ -3717,9 +3702,7 @@ class LauncherWindow:
             self.indeterminate = False
             self.progress_value = max(0.0, min(1.0, progress))
             width = int(self.progress_width * self.progress_value)
-            self.progress_canvas.coords(
-                self.progress_bar, 0, 0, width, self.progress_height
-            )
+            self.progress_canvas.coords(self.progress_bar, 0, 0, width, self.progress_height)
         self._refresh_progress_visibility()
         self._schedule_layout_reflow()
 
@@ -3847,12 +3830,16 @@ class LauncherWindow:
         self.details_btn.config(state="normal")
         self.exit_btn.config(state="normal")
         self.rollback_btn.config(state=("disabled" if running else self.rollback_btn.cget("state")))
-        self.channel_menu.config(state=("normal" if running and self.current_task == "check" else state))
+        self.channel_menu.config(
+            state=("normal" if running and self.current_task == "check" else state)
+        )
         self.download_source_menu.config(
             state=("normal" if (not running or self.current_task == "check") else "disabled")
         )
         if hasattr(self, "proxy_chk"):
-            self.proxy_chk.config(state=("normal" if running and self.current_task == "check" else state))
+            self.proxy_chk.config(
+                state=("normal" if running and self.current_task == "check" else state)
+            )
 
         if running:
             self.retry_btn.pack_forget()
@@ -3935,9 +3922,7 @@ class LauncherWindow:
                         text=f"当前已是最新版本，可直接点击“启动应用”。\n安装位置：{self.install_dir}"
                     )
                 else:
-                    self.hint_lbl.config(
-                        text="当前设备没有本地版本，请等待在线更新可用后下载。"
-                    )
+                    self.hint_lbl.config(text="当前设备没有本地版本，请等待在线更新可用后下载。")
             elif self.last_check_error:
                 if _is_local_app_ready(self.base):
                     self.hint_lbl.config(
@@ -3962,9 +3947,7 @@ class LauncherWindow:
                 text += f"\n如果新版异常，也可以点击“回退 v{self.previous_version}”。"
             self.hint_lbl.config(text=text)
         else:
-            self.hint_lbl.config(
-                text="可点击“重新检查”或“打开下载页”。首次使用请先完成下载。"
-            )
+            self.hint_lbl.config(text="可点击“重新检查”或“打开下载页”。首次使用请先完成下载。")
         self._schedule_layout_reflow()
 
     def _save_launcher_state(self, extra: Optional[Dict[str, Any]] = None) -> None:
@@ -4049,14 +4032,10 @@ class LauncherWindow:
             )
             return
         if not self.last_check_ok:
-            messagebox.showwarning(
-                DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。"
-            )
+            messagebox.showwarning(DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。")
             return
         if self.app_requires_launcher_update:
-            required_text = _format_min_launcher_requirement(
-                self.latest_min_launcher_version
-            )
+            required_text = _format_min_launcher_requirement(self.latest_min_launcher_version)
             if self.launcher_update_available:
                 messagebox.showwarning(
                     DISPLAY_NAME,
@@ -4115,17 +4094,13 @@ class LauncherWindow:
             )
             return
         if not self.last_check_ok:
-            messagebox.showwarning(
-                DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。"
-            )
+            messagebox.showwarning(DISPLAY_NAME, "尚未完成更新检查，请稍候或点击“重新检查”。")
             return
         if not self.launcher_update_available:
             messagebox.showinfo(DISPLAY_NAME, "当前启动器已是最新版本。")
             return
         if not self.latest_launcher_manifest:
-            messagebox.showwarning(
-                DISPLAY_NAME, "缺少启动器下载清单，请先点击“重新检查”。"
-            )
+            messagebox.showwarning(DISPLAY_NAME, "缺少启动器下载清单，请先点击“重新检查”。")
             return
         if not _is_frozen_launcher():
             messagebox.showinfo(
@@ -4243,7 +4218,9 @@ class LauncherWindow:
         self._refresh_installed_versions()
         self._refresh_channel_details()
         if self.running and self.current_task == "check":
-            self._queue_recheck_after_check(f"通道已切换到 {self.channel}，当前检查结束后将自动重查。")
+            self._queue_recheck_after_check(
+                f"通道已切换到 {self.channel}，当前检查结束后将自动重查。"
+            )
             return
         self._begin_check(automatic=True)
 
@@ -4276,9 +4253,7 @@ class LauncherWindow:
             self._set_status("无法启动", detail, None, "error")
             return
         final_version = _read_local_app_version(_app_runtime_dir(self.base))
-        self.decision = LaunchDecision(
-            action="launch", final_version=final_version, warning=""
-        )
+        self.decision = LaunchDecision(action="launch", final_version=final_version, warning="")
         self._set_status("准备启动", f"将启动本地版本 v{final_version}", 1.0, "success")
         self.root.after(300, self._commit_launch)
 

@@ -83,6 +83,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives compact speed strip + alert sound.
 7. Launcher check flow:
    - On startup (and channel switch), launcher auto-checks both app-package metadata and launcher metadata in a background thread.
+   - `UpdateService` coordinates manifest resolution, size probing, app update checks, and launcher update checks while the GUI keeps only worker/event handling.
    - Channel/source/proxy changes during an in-flight check are queued and trigger an automatic follow-up re-check instead of being blocked.
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for app and launcher manifests when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
@@ -90,7 +91,8 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
-   - Verifies SHA256 (when provided), replaces `app/`, promotes the previous app into `app_previous/`, and updates local version metadata.
+   - Verifies SHA256 (when provided); `InstallTransaction` owns the update lock, staging directory, `app/` replacement, rollback cleanup, and incomplete-install recovery.
+   - Successful app installs promote the previous app into `app_previous/` and update local version metadata.
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
