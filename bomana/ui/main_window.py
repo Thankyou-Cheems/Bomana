@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Main window layout builder."""
 
 from __future__ import annotations

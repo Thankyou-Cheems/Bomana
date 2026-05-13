@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 War Thunder .blkx bomb parameter extractor.
 
@@ -121,9 +120,8 @@ class BlkxExtractor:
         if not params:
             print("  Missing bomb section or no params extracted")
             self.no_bomb_files.append(filepath.name)
-            if isinstance(config, dict):
-                if "rocketGun" in config:
-                    self.skipped_types[filepath.name] = "rocketGun"
+            if isinstance(config, dict) and "rocketGun" in config:
+                self.skipped_types[filepath.name] = "rocketGun"
             return
 
         params["source_file"] = filepath.name

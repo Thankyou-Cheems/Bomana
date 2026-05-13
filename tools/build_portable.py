@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Build Bomana portable release assets (launcher + updatable app package)."""
 
 import argparse
@@ -12,7 +11,6 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
-from typing import Dict, Optional
 
 VARIANT_SWITCHES = {
     "Enhanced": {
@@ -91,7 +89,7 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def replace_switches(code: str, switches: Dict[str, str]) -> str:
+def replace_switches(code: str, switches: dict[str, str]) -> str:
     for key, value in switches.items():
         code = re.sub(rf"(?m)^{key}\s*=.*$", f"{key} = {value}", code)
     return code
@@ -309,10 +307,10 @@ def write_launcher_manifest(
 def write_checksum_info(
     out_dir: Path,
     variant: str,
-    app_version: Optional[str],
-    launcher_version: Optional[str],
-    app_zip: Optional[Path],
-    launcher: Optional[Path],
+    app_version: str | None,
+    launcher_version: str | None,
+    app_zip: Path | None,
+    launcher: Path | None,
     target: str,
 ) -> Path:
     lines = [
@@ -359,11 +357,11 @@ def main() -> int:
     launcher_text = launcher_path.read_text(encoding="utf-8")
     config_patched = False
 
-    app_zip: Optional[Path] = None
-    manifest: Optional[Path] = None
-    launcher: Optional[Path] = None
-    launcher_manifest: Optional[Path] = None
-    app_version: Optional[str] = None
+    app_zip: Path | None = None
+    manifest: Path | None = None
+    launcher: Path | None = None
+    launcher_manifest: Path | None = None
+    app_version: str | None = None
     launcher_version = read_launcher_version(launcher_text)
 
     try:

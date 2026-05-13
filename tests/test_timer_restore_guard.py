@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Regression coverage for battle-scoped timer restore."""
 
 import tempfile

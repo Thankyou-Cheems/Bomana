@@ -201,7 +201,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 
 #### 环境要求
 
-- Python 3.14+
+- Python 3.14+（仓库通过 `.python-version` 默认 pin 到 3.14.5）
 - uv（Python 包管理器）
 - Windows 操作系统
 
@@ -209,7 +209,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 
 ```bash
 # 首次使用请先安装 uv: https://docs.astral.sh/uv/getting-started/installation/
-uv sync
+uv sync --python 3.14.5
 ```
 
 > 打包绿色版（启动器+应用包）可执行：`tools\scripts\build_portable.bat <Enhanced|Standard|Lite> <all|app|launcher> [version]`

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 配置与元数据集中管理。
 """
@@ -687,7 +686,7 @@ class OverspeedConfig:
 
         # 兼容未来可能出现的扁平结构。
         flat_thresholds = {
-            key: payload.get(key) for key in cls._DEFAULT_THRESHOLDS.keys() if key in payload
+            key: payload.get(key) for key in cls._DEFAULT_THRESHOLDS if key in payload
         }
         cls.apply_user_thresholds(flat_thresholds, payload.get("aircraft_overrides"))
 

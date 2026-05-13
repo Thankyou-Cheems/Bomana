@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
 """Sound helpers."""
 
+import contextlib
 import ctypes
 import queue
 import threading
@@ -8,7 +8,6 @@ import time
 import winsound
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
 
 from bomana.config import SoundConfig
 
@@ -152,12 +151,10 @@ class SoundManager:
         return path if path.exists() else None
 
     @staticmethod
-    def _play_sequence(seq: List[Tuple[int, int, int]]) -> None:
+    def _play_sequence(seq: list[tuple[int, int, int]]) -> None:
         for f, ms, gap in seq:
-            try:
+            with contextlib.suppress(Exception):
                 ctypes.windll.kernel32.Beep(int(f), int(ms))
-            except Exception:
-                pass
             if gap:
                 time.sleep(gap / 1000.0)
 
@@ -188,29 +185,31 @@ class SoundManager:
             _mci(f"close {alias}")
 
     @staticmethod
-    def _get_pattern_sequence(pattern: str) -> List[Tuple[int, int, int]]:
+    def _get_pattern_sequence(pattern: str) -> list[tuple[int, int, int]]:
         """获取音效序列
 
         Returns:
             [(频率, 持续时间, 间隔), ...]
         """
-        if pattern == "on":
-            return [(*SoundConfig.BEEP_ON_1, SoundConfig.ON_GAP_MS), (*SoundConfig.BEEP_ON_2, 0)]
-        elif pattern == "manual_reset":
-            return [(*SoundConfig.BEEP_MANUAL_RESET, 0)]
-        elif pattern == "warning":
-            return [
+        sequences = {
+            "on": [
+                (*SoundConfig.BEEP_ON_1, SoundConfig.ON_GAP_MS),
+                (*SoundConfig.BEEP_ON_2, 0),
+            ],
+            "manual_reset": [(*SoundConfig.BEEP_MANUAL_RESET, 0)],
+            "warning": [
                 (*SoundConfig.BEEP_WARNING_1, SoundConfig.WARNING_GAP_MS),
                 (*SoundConfig.BEEP_WARNING_2, 0),
-            ]
-        elif pattern == "zone_destroyed":
-            return [(*SoundConfig.BEEP_ZONE_DESTROYED, 50), (*SoundConfig.BEEP_ZONE_DESTROYED, 0)]
-        elif pattern == "overspeed_warning":
-            return [(*SoundConfig.BEEP_OVERSPEED_WARN, 0)]
-        elif pattern == "overspeed_critical":
-            return [
+            ],
+            "zone_destroyed": [
+                (*SoundConfig.BEEP_ZONE_DESTROYED, 50),
+                (*SoundConfig.BEEP_ZONE_DESTROYED, 0),
+            ],
+            "overspeed_warning": [(*SoundConfig.BEEP_OVERSPEED_WARN, 0)],
+            "overspeed_critical": [
                 (*SoundConfig.BEEP_OVERSPEED_CRIT_1, SoundConfig.OVERSPEED_CRIT_GAP_MS),
                 (*SoundConfig.BEEP_OVERSPEED_CRIT_2, 0),
-            ]
-        else:  # "tick"
-            return [(*SoundConfig.BEEP_TICK, 0)]
+            ],
+            "tick": [(*SoundConfig.BEEP_TICK, 0)],
+        }
+        return sequences.get(pattern, sequences["tick"])

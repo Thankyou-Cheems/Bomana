@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Reusable UI widgets."""
 
 import tkinter as tk
@@ -129,13 +128,13 @@ class HeadingTape(tk.Canvas):
 
         # 高频刷新场景下跳过等效帧重绘，降低Canvas CPU/GDI开销
         render_signature = (
-            int(round(float(current_hdg) * 5)),  # 0.2°精度
-            int(round(float(primary_distance_km) * 10)),  # 0.1km精度
+            round(float(current_hdg) * 5),  # 0.2°精度
+            round(float(primary_distance_km) * 10),  # 0.1km精度
             tuple(
                 (
                     t.get("type", "zone"),
-                    int(round(float(t.get("relative", 0.0)) * 5)),
-                    int(round(float(t.get("distance_km", 0.0)) * 10)),
+                    round(float(t.get("relative", 0.0)) * 5),
+                    round(float(t.get("distance_km", 0.0)) * 10),
                     bool(t.get("is_primary", False)),
                     bool(t.get("is_target", True)),
                 )
@@ -724,10 +723,7 @@ class HeadingTape(tk.Canvas):
         # v6.5: 格式化距离文本
         dist_text = ""
         if distance > 0:
-            if distance < 10:
-                dist_text = f"{prefix}{distance:.1f}"
-            else:
-                dist_text = f"{prefix}{int(distance)}"
+            dist_text = f"{prefix}{distance:.1f}" if distance < 10 else f"{prefix}{int(distance)}"
         elif prefix:
             dist_text = prefix
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """Sample 8111 attitude capability baseline for HUD v6.8.0."""
 
 import argparse
@@ -176,9 +175,13 @@ def main():
             stat["attitude_available"] += int(attitude_available)
             stat["airborne_samples"] += int(airborne)
 
-            if attitude_available and airborne:
-                if abs(pitch) <= ATT_ZERO_EPS_DEG and abs(lateral) <= ATT_ZERO_EPS_DEG:
-                    stat["zero_like_airborne"] += 1
+            if (
+                attitude_available
+                and airborne
+                and abs(pitch) <= ATT_ZERO_EPS_DEG
+                and abs(lateral) <= ATT_ZERO_EPS_DEG
+            ):
+                stat["zero_like_airborne"] += 1
 
         if attitude_available:
             prev = last_attitude.get(type_name)

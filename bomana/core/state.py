@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 """Core state models and enums."""
 
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Optional, Tuple
 
 from bomana.config import FuelConfig, GameConfig
 
@@ -35,8 +33,8 @@ class TelemetryData:
     altitude_m: float = 0  # 飞行高度 (m)
     tas_kmh: float = 0  # 真空速 (km/h)
     throttle_pct: float = 0  # 油门百分比 (%)
-    mach: Optional[float] = None  # 马赫数
-    wing_sweep: Optional[float] = None  # 后掠翼位置 (0~1, 可为空)
+    mach: float | None = None  # 马赫数
+    wing_sweep: float | None = None  # 后掠翼位置 (0~1, 可为空)
 
     # v5.9.6 新增：起落架状态
     gear_down: bool = False  # 起落架是否放下 (True=放下, False=收起)
@@ -127,14 +125,14 @@ class MapObjData:
 
     ok: bool = False  # 请求成功
     player_aircraft_present: bool = False  # 玩家飞机存在
-    player_pos: Optional[Tuple[float, float]] = None  # 玩家位置
+    player_pos: tuple[float, float] | None = None  # 玩家位置
     player_dx: float = 0.0  # 玩家速度向量X
     player_dy: float = 0.0  # 玩家速度向量Y
     obj_count: int = 0  # 对象总数
     error_kind: str = ""
     elapsed_ms: float = 0.0
-    zones: List[Zone] = field(default_factory=list)  # 战区列表
-    airfields: List[Airfield] = field(default_factory=list)  # 机场列表
+    zones: list[Zone] = field(default_factory=list)  # 战区列表
+    airfields: list[Airfield] = field(default_factory=list)  # 机场列表
 
 
 @dataclass
@@ -145,11 +143,11 @@ class MapInfo:
     """
 
     valid: bool = False
-    grid_size: List[float] = field(default_factory=lambda: [52719.0, 55385.0])
-    grid_steps: List[float] = field(default_factory=lambda: [5500.0, 5500.0])
-    grid_zero: List[float] = field(default_factory=lambda: [0.0, 0.0])
-    map_min: List[float] = field(default_factory=lambda: [-65536.0, -65536.0])
-    map_max: List[float] = field(default_factory=lambda: [65536.0, 65536.0])
+    grid_size: list[float] = field(default_factory=lambda: [52719.0, 55385.0])
+    grid_steps: list[float] = field(default_factory=lambda: [5500.0, 5500.0])
+    grid_zero: list[float] = field(default_factory=lambda: [0.0, 0.0])
+    map_min: list[float] = field(default_factory=lambda: [-65536.0, -65536.0])
+    map_max: list[float] = field(default_factory=lambda: [65536.0, 65536.0])
     fetch_time: float = 0.0  # 获取时间（用于判断是否过期）
 
 
@@ -319,13 +317,13 @@ class FuelState:
         return min(100.0, (self.current_kg / self.initial_kg) * 100)
 
     @property
-    def remaining_time_min(self) -> Optional[float]:
+    def remaining_time_min(self) -> float | None:
         """剩余飞行时间（分钟）"""
         if not self.rate_stable or self.consumption_rate <= 0:
             return None
         return self.current_kg / self.consumption_rate
 
-    def estimate_return_fuel(self, distance_km: float, ground_speed_kmh: float) -> Optional[float]:
+    def estimate_return_fuel(self, distance_km: float, ground_speed_kmh: float) -> float | None:
         """估算返航所需油量（kg）
 
         Args:
@@ -342,7 +340,7 @@ class FuelState:
         time_min = time_hours * 60
         return self.consumption_rate * time_min * FuelConfig.RETURN_SAFETY_FACTOR
 
-    def get_return_status(self, return_fuel_needed: Optional[float]) -> str:
+    def get_return_status(self, return_fuel_needed: float | None) -> str:
         """获取返航状态
 
         Args:
@@ -369,23 +367,23 @@ class ZoneNavigationState:
     管理战区列表、目标选择、被摧毁战区追踪、地速计算。
     """
 
-    zones: List[Zone] = field(default_factory=list)  # 当前战区列表
-    target_zone: Optional[Zone] = None  # 当前目标战区
+    zones: list[Zone] = field(default_factory=list)  # 当前战区列表
+    target_zone: Zone | None = None  # 当前目标战区
     previous_zone_ids: set = field(default_factory=set)  # 上一帧战区ID集合
-    destroyed_zones: List[Zone] = field(default_factory=list)  # 被摧毁的战区
+    destroyed_zones: list[Zone] = field(default_factory=list)  # 被摧毁的战区
     destroyed_alert_until: float = 0.0  # 摧毁警告持续到的时间戳
     is_deviating: bool = False  # 是否偏航
     player_heading: float = 0.0  # 玩家航向
     should_play_destroyed_sound: bool = False  # 是否应该播放摧毁音效（v5.5新增）
 
     # 地速计算相关（v5.2新增）
-    last_pos: Optional[Tuple[float, float]] = None  # 上次位置
+    last_pos: tuple[float, float] | None = None  # 上次位置
     last_pos_ts: float = 0.0  # 上次位置时间戳
     ground_speed: float = 0.0  # 地速（归一化单位/秒）
 
     # v5.7: 目标锁定相关（智能目标切换）
-    locked_target_id: Optional[str] = None  # 当前锁定的目标ID（粘性）
-    precise_aim_candidate_id: Optional[str] = None  # 精确对准候选目标ID
+    locked_target_id: str | None = None  # 当前锁定的目标ID（粘性）
+    precise_aim_candidate_id: str | None = None  # 精确对准候选目标ID
     precise_aim_since: float = 0.0  # 开始精确对准的时间戳
 
 
@@ -400,11 +398,11 @@ class AttitudeConfidenceState:
     reliable: bool = False
     fallback: bool = True
     fallback_reason: str = "missing"
-    missing_since: Optional[float] = None
-    zero_since: Optional[float] = None
+    missing_since: float | None = None
+    zero_since: float | None = None
     jitter_score: float = 0.0
-    last_pitch_deg: Optional[float] = None
-    last_roll_deg: Optional[float] = None
+    last_pitch_deg: float | None = None
+    last_roll_deg: float | None = None
     last_sample_ts: float = 0.0
 
 
@@ -425,26 +423,26 @@ class GameState:
     cached_target_distance_m: float = 0.0
     bombing_calc_valid: bool = False
     last_bombing_calc_time: float = 0.0
-    current_life: Optional[LifeState] = None  # 当前生命
+    current_life: LifeState | None = None  # 当前生命
     sortie_id: int = 0  # 出击计数（补给时递增）
     last_refit_ts: float = 0.0  # 上次补给时间
 
     # 状态确认相关（防止误判）
-    spawn_candidate_since: Optional[float] = None  # 出生候选开始时间
-    missing_player_since: Optional[float] = None  # 玩家消失开始时间
+    spawn_candidate_since: float | None = None  # 出生候选开始时间
+    missing_player_since: float | None = None  # 玩家消失开始时间
     last_player_present_ts: float = 0.0  # 最近一次确认玩家存在（用于短时抖动宽限）
-    landing_start_time: Optional[float] = None  # 着陆开始时间
+    landing_start_time: float | None = None  # 着陆开始时间
     landed_flash_until: float = 0.0  # 着陆闪烁持续到
-    hangar_candidate_since: Optional[float] = None  # 机库候选开始时间
+    hangar_candidate_since: float | None = None  # 机库候选开始时间
 
     # API状态
     api_down: bool = False  # API是否断线
-    api_down_candidate_since: Optional[float] = None  # API断线候选时间
+    api_down_candidate_since: float | None = None  # API断线候选时间
 
     # 缓存的数据
-    last_tel: Optional[TelemetryData] = None  # 上一帧遥测数据
-    last_map: Optional[MapObjData] = None  # 上一帧地图数据
-    map_info: Optional[MapInfo] = None  # 地图元数据（缓存）
+    last_tel: TelemetryData | None = None  # 上一帧遥测数据
+    last_map: MapObjData | None = None  # 上一帧地图数据
+    map_info: MapInfo | None = None  # 地图元数据（缓存）
 
     # 导航状态
     zone_nav: ZoneNavigationState = field(default_factory=ZoneNavigationState)
@@ -568,13 +566,13 @@ class UISnapshot:
     """
 
     phase: Phase
-    life_index: Optional[int]
-    cycle: Optional[int]
-    remaining_sec: Optional[float]
+    life_index: int | None
+    cycle: int | None
+    remaining_sec: float | None
     progress: float
     sortie_id: int
-    main_badge: Tuple[str, str, str]  # (文本, 前景色, 背景色)
-    flight_badge: Tuple[str, str, str]
+    main_badge: tuple[str, str, str]  # (文本, 前景色, 背景色)
+    flight_badge: tuple[str, str, str]
     status_text: str
     api_down: bool
     api_down_pending: bool
@@ -584,9 +582,9 @@ class UISnapshot:
     source_debug: SourceDebugInfo = field(default_factory=SourceDebugInfo)
 
     # 导航相关
-    zones: List[ZoneDisplayInfo] = field(default_factory=list)
-    friendly_airfield: Optional[AirfieldDisplayInfo] = None
-    enemy_airfields: List[AirfieldDisplayInfo] = field(default_factory=list)
+    zones: list[ZoneDisplayInfo] = field(default_factory=list)
+    friendly_airfield: AirfieldDisplayInfo | None = None
+    enemy_airfields: list[AirfieldDisplayInfo] = field(default_factory=list)
     has_airfield_target: bool = False
     has_target: bool = False
     is_deviating: bool = False
@@ -647,7 +645,7 @@ class UISnapshot:
     overspeed_ratio: float = 0.0  # IAS占限速百分比（0~1）
     overspeed_display_ratio: float = 0.0  # UI显示比例（IAS/Mach中更危险的一侧）
     overspeed_current_ias_kmh: float = 0.0  # 当前IAS
-    overspeed_current_mach: Optional[float] = None  # 当前马赫
+    overspeed_current_mach: float | None = None  # 当前马赫
     overspeed_limit_kmh: float = 0.0  # 机型IAS限速
     overspeed_limit_mach: float = 0.0  # 机型马赫限速
     overspeed_match: bool = False  # 是否成功匹配机型限速

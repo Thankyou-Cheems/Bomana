@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Panel rendering helpers for the main App coordinator."""
 
 import time
@@ -406,10 +405,7 @@ class AppPanelRenderer:
                 self._grid_remove_if_needed(app.zone_list_header_frame)
                 self._grid_remove_if_needed(app.zone_list_frame)
 
-            if nav_in_main:
-                row_pool = app._zone_row_pool
-            else:
-                row_pool = app._compact_zone_row_pool
+            row_pool = app._zone_row_pool if nav_in_main else app._compact_zone_row_pool
 
             idx = 0
             if not snap.zones:

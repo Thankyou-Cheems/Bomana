@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 """Ballistics calculations (CCRP)."""
 
 import math
-from typing import Optional, Tuple
 
 from bomana.config import BallisticPhysicsParams, BombConfig
 
@@ -233,8 +231,8 @@ def calculate_release_timing(
     bomb_bc: float = 0.0,
     target_alt_m: float = 0.0,
     dive_angle_deg: float = 0.0,
-    initial_vz_ms: Optional[float] = None,
-) -> Tuple[float, float, str]:
+    initial_vz_ms: float | None = None,
+) -> tuple[float, float, str]:
     """计算投弹时机
 
     Returns:
@@ -244,7 +242,7 @@ def calculate_release_timing(
     if ground_speed_ms < 10.0 or current_alt_m <= target_alt_m:
         return 0.0, 0.0, "invalid"
 
-    flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
+    _flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
         release_alt_m=current_alt_m,
         release_speed_ms=ground_speed_ms,
         bomb_mass_kg=bomb_mass_kg,

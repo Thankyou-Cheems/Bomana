@@ -1,14 +1,15 @@
-# -*- coding: utf-8 -*-
 """File/config helpers."""
 
+import contextlib
 import json
 import os
 import sys
 import tempfile
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any
 
 from bomana.config import (
     ENABLE_AIRFIELDS,
@@ -35,7 +36,7 @@ def _report_persistence_error(action: str, path: Path, exc: Exception) -> None:
         with open(log_path, "a", encoding="utf-8") as f:
             msg = f"[Persistence] {action} failed for {path}: {exc}"
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
-    except IOError, OSError:
+    except OSError:
         pass
 
 
@@ -61,10 +62,8 @@ def atomic_write_json(path: Path, payload: Any, *, ensure_ascii: bool = False) -
         temp_path = None
     finally:
         if temp_path is not None:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 temp_path.unlink()
-            except FileNotFoundError:
-                pass
 
 
 def resource_path(rel_path: str) -> str:
@@ -148,7 +147,7 @@ def load_json_resource(
 
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return JsonResourceLoadResult(
             path=path,
             source_label=label,
@@ -171,7 +170,7 @@ class ConfigManager:
     """
 
     @staticmethod
-    def load() -> Dict[str, Any]:
+    def load() -> dict[str, Any]:
         """加载配置文件
 
         Returns:
@@ -179,7 +178,7 @@ class ConfigManager:
         """
         if FileConfig.CONFIG_FILE.exists():
             try:
-                with open(FileConfig.CONFIG_FILE, "r", encoding="utf-8") as f:
+                with open(FileConfig.CONFIG_FILE, encoding="utf-8") as f:
                     config = json.load(f)
                 if not isinstance(config, dict):
                     raise ValueError("config root must be a JSON object")
@@ -194,12 +193,12 @@ class ConfigManager:
                         to_version=config.get("config_version", old_version),
                     )
                 return config
-            except (json.JSONDecodeError, ValueError, IOError, OSError) as exc:
+            except (json.JSONDecodeError, ValueError, OSError) as exc:
                 _report_persistence_error("config load", FileConfig.CONFIG_FILE, exc)
         return {}
 
     @staticmethod
-    def _migrate_config(config: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
+    def _migrate_config(config: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """配置版本迁移
 
         处理旧版本配置的兼容性问题，自动升级配置结构
@@ -264,7 +263,7 @@ class ConfigManager:
         return config, changed
 
     @staticmethod
-    def save(config: Dict[str, Any]) -> bool:
+    def save(config: dict[str, Any]) -> bool:
         """保存配置文件
 
         Args:
@@ -275,7 +274,7 @@ class ConfigManager:
             config["config_version"] = FileConfig.CONFIG_VERSION
             atomic_write_json(FileConfig.CONFIG_FILE, config, ensure_ascii=False)
             return True
-        except (TypeError, ValueError, IOError, OSError) as exc:
+        except (TypeError, ValueError, OSError) as exc:
             _report_persistence_error("config save", FileConfig.CONFIG_FILE, exc)
             return False
 
@@ -312,11 +311,11 @@ class StateManager:
         }
         try:
             atomic_write_json(FileConfig.STATE_FILE, state_data, ensure_ascii=False)
-        except (TypeError, ValueError, IOError, OSError) as exc:
+        except (TypeError, ValueError, OSError) as exc:
             _report_persistence_error("state save", FileConfig.STATE_FILE, exc)
 
     @staticmethod
-    def load() -> Optional[Dict[str, Any]]:
+    def load() -> dict[str, Any] | None:
         """加载并计算恢复后的状态
 
         Returns:
@@ -325,7 +324,7 @@ class StateManager:
         if not FileConfig.STATE_FILE.exists():
             return None
         try:
-            with open(FileConfig.STATE_FILE, "r", encoding="utf-8") as f:
+            with open(FileConfig.STATE_FILE, encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict):
                 raise ValueError("state root must be a JSON object")
@@ -353,7 +352,7 @@ class StateManager:
             data["computed_spawn_time"] = now - (GameConfig.CYCLE_SECONDS - new_remaining)
 
             return data
-        except (json.JSONDecodeError, ValueError, IOError, KeyError, OSError) as exc:
+        except (json.JSONDecodeError, ValueError, KeyError, OSError) as exc:
             _report_persistence_error("state load", FileConfig.STATE_FILE, exc)
             return None
 
@@ -363,6 +362,6 @@ class StateManager:
         try:
             if FileConfig.STATE_FILE.exists():
                 FileConfig.STATE_FILE.unlink()
-        except (IOError, OSError) as exc:
+        except OSError as exc:
             if report_error:
                 _report_persistence_error("state clear", FileConfig.STATE_FILE, exc)

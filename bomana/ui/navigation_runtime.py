@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Standalone navigation window runtime ownership."""
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from bomana.config import ENABLE_ZONES, PanelConfig
@@ -101,10 +101,8 @@ class AppNavigationServices:
                     )
                 except Exception:
                     nav_geometry = None
-            try:
+            with contextlib.suppress(Exception):
                 window.destroy()
-            except Exception:
-                pass
 
         self.window = NavigationWindow(self.app)
         if PanelConfig.navigation_mode == "standalone" and nav_was_visible:
@@ -119,7 +117,5 @@ class AppNavigationServices:
         self.window = None
         if window is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             window.destroy()
-        except Exception:
-            pass

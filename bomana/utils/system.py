@@ -1,15 +1,16 @@
-# -*- coding: utf-8 -*-
 """System/Windows helpers."""
 
+import contextlib
 import ctypes
 import locale
 import os
 import sys
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import font as tkfont
 from tkinter import messagebox
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from bomana.config import FileConfig, HotkeyConfig
 
@@ -96,11 +97,9 @@ class Win32:
                 # 方法2: Per-Monitor DPI感知
                 ctypes.windll.shcore.SetProcessDpiAwareness(2)
             except OSError, AttributeError:
-                try:
+                with contextlib.suppress(OSError, AttributeError):
                     # 方法3: System DPI感知（后备）
                     cls.user32.SetProcessDPIAware()
-                except OSError, AttributeError:
-                    pass
 
     @classmethod
     def get_dpi_scale(cls, hwnd: int) -> float:
@@ -119,7 +118,7 @@ class Win32:
             return 1.0
 
     @classmethod
-    def screen_size(cls) -> Tuple[int, int]:
+    def screen_size(cls) -> tuple[int, int]:
         """获取主屏幕尺寸
 
         Returns:
@@ -129,7 +128,7 @@ class Win32:
 
     @classmethod
     def setup_window(
-        cls, hwnd: int, click_through: bool, alpha: int = 210, color_key: Optional[int] = None
+        cls, hwnd: int, click_through: bool, alpha: int = 210, color_key: int | None = None
     ):
         """设置窗口样式（透明、置顶、穿透）
 
@@ -193,7 +192,7 @@ class Win32:
             pass
 
     @classmethod
-    def get_all_monitors(cls) -> List[Dict[str, Any]]:
+    def get_all_monitors(cls) -> list[dict[str, Any]]:
         """获取所有显示器信息
 
         返回所有显示器的工作区域(排除任务栏),用于:
@@ -263,7 +262,7 @@ class Win32:
         )
 
     @classmethod
-    def get_monitor_at(cls, x: int, y: int) -> Optional[Dict[str, Any]]:
+    def get_monitor_at(cls, x: int, y: int) -> dict[str, Any] | None:
         """获取指定坐标所在的显示器
 
         Args:
@@ -283,7 +282,7 @@ class Win32:
         return monitors[0] if monitors else None
 
     @classmethod
-    def snap_to_edges(cls, x: int, y: int, w: int, h: int, snap_dist: int = 20) -> Tuple[int, int]:
+    def snap_to_edges(cls, x: int, y: int, w: int, h: int, snap_dist: int = 20) -> tuple[int, int]:
         """计算窗口吸附后的位置
 
         Args:
@@ -373,10 +372,8 @@ class SingleInstanceManager:
         """释放互斥锁"""
         global _MUTEX_HANDLE
         if _MUTEX_HANDLE:
-            try:
+            with contextlib.suppress(OSError, AttributeError):
                 ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(_MUTEX_HANDLE))
-            except OSError, AttributeError:
-                pass
             _MUTEX_HANDLE = None
 
 
@@ -395,8 +392,8 @@ class GlobalHotkeys:
     def __init__(
         self,
         root: tk.Tk,
-        hotkeys: List[Tuple[int, str, Callable[[], None]]],
-        error_cb: Callable[[Tuple[str, ...]], None] | None = None,
+        hotkeys: list[tuple[int, str, Callable[[], None]]],
+        error_cb: Callable[[tuple[str, ...]], None] | None = None,
     ):
         """初始化热键管理器
 
@@ -413,7 +410,7 @@ class GlobalHotkeys:
 
     def start(self):
         """启动热键监听线程"""
-        if not os.name == "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
+        if os.name != "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
             return
         if self._thread and self._thread.is_alive():
             return
@@ -423,7 +420,7 @@ class GlobalHotkeys:
 
     def stop(self):
         """停止热键监听"""
-        if not os.name == "nt" or not self._tid:
+        if os.name != "nt" or not self._tid:
             return
         try:
             # 向监听线程发送退出消息
@@ -465,10 +462,8 @@ class GlobalHotkeys:
 
         if failed_keys and self.error_cb:
             unique_keys = tuple(dict.fromkeys(failed_keys))
-            try:
+            with contextlib.suppress(tk.TclError):
                 self.root.after(0, lambda keys=unique_keys: self.error_cb(keys))
-            except tk.TclError:
-                pass
 
         # 定义消息结构体
         class POINT(ctypes.Structure):
@@ -500,18 +495,14 @@ class GlobalHotkeys:
                     # 查找对应的回调函数
                     for _id, _key_name, cb in self.hotkeys:
                         if _id == hk_id:
-                            try:
+                            with contextlib.suppress(tk.TclError):
                                 # 在主线程执行回调
                                 self.root.after(0, cb)
-                            except tk.TclError:
-                                pass
                             break
             except OSError, AttributeError:
                 break
 
         # 注销所有热键
         for hk_id, _key_name, _cb in self.hotkeys:
-            try:
+            with contextlib.suppress(OSError, AttributeError):
                 Win32.user32.UnregisterHotKey(None, int(hk_id))
-            except OSError, AttributeError:
-                pass

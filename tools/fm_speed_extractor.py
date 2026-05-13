@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 War Thunder flightmodel speed-limit extractor.
 
@@ -15,9 +14,9 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
-Number = Union[int, float]
+Number = int | float
 
 
 def _remove_json_comments(text: str) -> str:
@@ -27,7 +26,7 @@ def _remove_json_comments(text: str) -> str:
     return text
 
 
-def _parse_blkx(path: Path) -> Optional[Dict[str, Any]]:
+def _parse_blkx(path: Path) -> dict[str, Any] | None:
     try:
         raw = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
@@ -38,7 +37,7 @@ def _parse_blkx(path: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _safe_get(data: Dict[str, Any], *keys: str, default: Any = None) -> Any:
+def _safe_get(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
     cur: Any = data
     for key in keys:
         if isinstance(cur, dict) and key in cur:
@@ -48,7 +47,7 @@ def _safe_get(data: Dict[str, Any], *keys: str, default: Any = None) -> Any:
     return cur
 
 
-def _to_float(value: Any) -> Optional[float]:
+def _to_float(value: Any) -> float | None:
     if value is None:
         return None
     if isinstance(value, bool):
@@ -66,7 +65,7 @@ def _to_float(value: Any) -> Optional[float]:
     return None
 
 
-def _normalize_limit_value(value: Any) -> Optional[Union[float, List[List[float]]]]:
+def _normalize_limit_value(value: Any) -> float | list[list[float]] | None:
     """
     Normalize VNE/MNE value from .blkx:
     - scalar -> float
@@ -81,7 +80,7 @@ def _normalize_limit_value(value: Any) -> Optional[Union[float, List[List[float]
             return None
         if len(value) % 2 != 0:
             return None
-        out: List[List[float]] = []
+        out: list[list[float]] = []
         for i in range(0, len(value), 2):
             sweep = _to_float(value[i])
             limit = _to_float(value[i + 1])
@@ -108,7 +107,7 @@ def _normalize_limit_value(value: Any) -> Optional[Union[float, List[List[float]
     return None
 
 
-def _extract_fm_limits(path: Path) -> Optional[Tuple[str, Dict[str, Any]]]:
+def _extract_fm_limits(path: Path) -> tuple[str, dict[str, Any]] | None:
     data = _parse_blkx(path)
     if not isinstance(data, dict):
         return None
@@ -138,7 +137,7 @@ def _extract_fm_limits(path: Path) -> Optional[Tuple[str, Dict[str, Any]]]:
     }
 
 
-def _extract_unit_mapping(path: Path) -> Optional[Tuple[str, str]]:
+def _extract_unit_mapping(path: Path) -> tuple[str, str] | None:
     data = _parse_blkx(path)
     if not isinstance(data, dict):
         return None
@@ -162,7 +161,7 @@ def _extract_unit_mapping(path: Path) -> Optional[Tuple[str, str]]:
     return unit_name, fm_name
 
 
-def extract_from_root(root: Path) -> Dict[str, Any]:
+def extract_from_root(root: Path) -> dict[str, Any]:
     flightmodels_dir = root / "aces.vromfs.bin_u" / "gamedata" / "flightmodels"
     fm_dir = flightmodels_dir / "fm"
 
@@ -171,8 +170,8 @@ def extract_from_root(root: Path) -> Dict[str, Any]:
     if not fm_dir.exists():
         raise FileNotFoundError(f"missing directory: {fm_dir}")
 
-    fm_limits: Dict[str, Dict[str, Any]] = {}
-    unit_to_fm: Dict[str, str] = {}
+    fm_limits: dict[str, dict[str, Any]] = {}
+    unit_to_fm: dict[str, str] = {}
 
     fm_files = sorted(fm_dir.glob("*.blkx"))
     for fm_file in fm_files:
@@ -227,7 +226,7 @@ def main() -> int:
     except FileNotFoundError as exc:
         print(f"[error] {exc}")
         return 1
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[error] extraction failed: {exc}")
         return 1
 

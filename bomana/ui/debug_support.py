@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Debug support helpers for the main App coordinator."""
 
 from dataclasses import replace

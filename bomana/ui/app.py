@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
 """Main Tk app container."""
 
+import contextlib
 import ctypes
 import time
 import tkinter as tk
@@ -8,7 +8,7 @@ import webbrowser
 from enum import Enum
 from tkinter import font as tkfont
 from tkinter import messagebox
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from bomana.config import (
     ENABLE_AIRFIELDS,
@@ -47,7 +47,7 @@ from bomana.utils.sound import SoundManager
 from bomana.utils.system import SingleInstanceManager, Win32, select_ui_font_family
 
 
-def fmt_time(sec: Optional[float]) -> str:
+def fmt_time(sec: float | None) -> str:
     """格式化时间为 MM:SS 格式"""
     if sec is None:
         return "--:--"
@@ -145,11 +145,11 @@ class App:
         self._checklist_panel_visible = False
 
         # 性能优化: 字体缓存和Label复用池
-        self._cached_fonts: Dict[str, tuple] = {}
-        self._zone_row_pool: List[Any] = []
-        self._compact_zone_row_pool: List[Any] = []
-        self._airport_row_pool: List[Any] = []
-        self._compact_airport_row_pool: List[Any] = []
+        self._cached_fonts: dict[str, tuple] = {}
+        self._zone_row_pool: list[Any] = []
+        self._compact_zone_row_pool: list[Any] = []
+        self._airport_row_pool: list[Any] = []
+        self._compact_airport_row_pool: list[Any] = []
         self._last_layout_signature = None
         self._last_expand_ts = 0.0
         self._last_zone_recalc_ts = 0.0
@@ -172,9 +172,8 @@ class App:
         self.navigation_services.init_window()
 
         # v6.8.0: 初始化 HUD 叠加层（按配置决定是否显示）
-        if HUDConfig.enabled:
-            if not self._show_hud_overlay():
-                HUDConfig.enabled = False
+        if HUDConfig.enabled and not self._show_hud_overlay():
+            HUDConfig.enabled = False
 
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
@@ -301,10 +300,8 @@ class App:
         if saved_pos and isinstance(saved_pos, dict):
             corner_name = saved_pos.get("corner")
             if corner_name:
-                try:
+                with contextlib.suppress(KeyError):
                     self._corner = Corner[corner_name]
-                except KeyError:
-                    pass
             manual_pos = saved_pos.get("manual_pos")
             if manual_pos and isinstance(manual_pos, list) and len(manual_pos) == 2:
                 self._manual_pos = tuple(manual_pos)
@@ -419,10 +416,8 @@ class App:
         self.hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
         self.scale = Win32.get_dpi_scale(self.hwnd) * float(UIConfig.UI_SCALE_MULT)
 
-        try:
+        with contextlib.suppress(tk.TclError):
             self.root.tk.call("tk", "scaling", float(self.scale))
-        except tk.TclError:
-            pass
 
         # 缓存常用字体（避免每帧重新计算）
         self._cache_fonts()
@@ -884,12 +879,14 @@ class App:
             self._last_expand_ts = now
 
         if not force_shrink:
-            if dw < 0:
-                if abs(dw) < minor_shrink_px or (now - self._last_expand_ts) < shrink_cooldown_sec:
-                    new_w = old_w
-            if dh < 0:
-                if abs(dh) < minor_shrink_px or (now - self._last_expand_ts) < shrink_cooldown_sec:
-                    new_h = old_h
+            if dw < 0 and (
+                abs(dw) < minor_shrink_px or (now - self._last_expand_ts) < shrink_cooldown_sec
+            ):
+                new_w = old_w
+            if dh < 0 and (
+                abs(dh) < minor_shrink_px or (now - self._last_expand_ts) < shrink_cooldown_sec
+            ):
+                new_h = old_h
 
         if new_w == old_w and new_h == old_h:
             # 同步内部缓存，避免后续geometry误用过期的self.W/self.H
@@ -928,7 +925,7 @@ class App:
         else:
             self._position()
 
-    def _capture_snap_anchor(self, x: int, y: int, w: int, h: int) -> Optional[Dict[str, Any]]:
+    def _capture_snap_anchor(self, x: int, y: int, w: int, h: int) -> dict[str, Any] | None:
         """捕获窗口当前贴边锚点（仅在手动拖拽场景使用）。"""
         if not SnapConfig.enabled:
             return None
@@ -965,8 +962,8 @@ class App:
         return {"monitor": monitor, "horizontal": horizontal, "vertical": vertical}
 
     def _apply_snap_anchor(
-        self, x: int, y: int, w: int, h: int, anchor: Dict[str, Any]
-    ) -> Tuple[int, int]:
+        self, x: int, y: int, w: int, h: int, anchor: dict[str, Any]
+    ) -> tuple[int, int]:
         """按捕获的贴边锚点修正新尺寸下的位置。"""
         monitor = anchor.get("monitor") or {}
         mon_x = int(monitor.get("x", 0))
@@ -1051,7 +1048,7 @@ class App:
         x, y = self._clamp_to_screen(x, y)
         self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
 
-    def _clamp_to_screen(self, x: int, y: int, margin: Optional[int] = None) -> Tuple[int, int]:
+    def _clamp_to_screen(self, x: int, y: int, margin: int | None = None) -> tuple[int, int]:
         """确保窗口位置不超出屏幕边界(支持多显示器)
 
         Args:
@@ -1121,10 +1118,8 @@ class App:
         """
         if self._locked:
             # 重新应用窗口样式，确保穿透标志生效
-            try:
+            with contextlib.suppress(Exception):
                 Win32.setup_window(self.hwnd, click_through=True, alpha=UIConfig.WINDOW_ALPHA)
-            except Exception:
-                pass
 
     def _update_lock_badge(self) -> None:
         """更新锁定状态徽章，提升可见性。"""
@@ -1212,10 +1207,8 @@ class App:
     def _open_star_url(self) -> None:
         url = AboutConfig.GITHUB_URL
         if url:
-            try:
+            with contextlib.suppress(Exception):
                 webbrowser.open(url)
-            except Exception:
-                pass
 
     def _update_nav_mode_button(self):
         """更新独立导航条按钮状态显示"""
@@ -1272,7 +1265,7 @@ class App:
         self.game.manual_reset()
         self.sound.play(pattern="manual_reset")
 
-    def _show_settings(self, initial_tab: Optional[str] = None):
+    def _show_settings(self, initial_tab: str | None = None):
         """显示设置对话框
 
         从托盘菜单调用，不受窗口锁定状态影响。
@@ -1323,18 +1316,14 @@ class App:
                 main_geometry = None
         if need_main_rebuild:
             if hasattr(self, "main_frame") and self.main_frame:
-                try:
+                with contextlib.suppress(tk.TclError):
                     self.main_frame.destroy()
-                except tk.TclError:
-                    pass
 
             self.root.configure(bg=Theme.BG)
             self.scale = Win32.get_dpi_scale(self.hwnd) * float(UIConfig.UI_SCALE_MULT)
             self._hint_width_cache = {"text": "", "width": int(380 * self.scale)}
-            try:
+            with contextlib.suppress(tk.TclError):
                 self.root.tk.call("tk", "scaling", float(self.scale))
-            except tk.TclError:
-                pass
             self._cache_fonts()
 
             # 清理旧布局缓存，避免复用已销毁的控件引用。
@@ -1410,10 +1399,8 @@ class App:
         self.runtime_services.stop()
         self.navigation_services.stop()
 
-        try:
+        with contextlib.suppress(Exception):
             self.sound.stop(drain=False)
-        except Exception:
-            pass
 
         SingleInstanceManager.release()
         self.root.destroy()
@@ -1533,12 +1520,16 @@ class App:
             if snap.phase == Phase.ALIVE and not snap.on_ground:
                 self._nudge_airborne_seen = True
 
-            if snap.phase == Phase.ALIVE and snap.landed_flash and not self._last_landed_flash:
-                if snap.sortie_id != self._nudge_sortie_id:
-                    self._nudge_sortie_id = snap.sortie_id
-                    if self._nudge_airborne_seen and not self._nudge_visible:
-                        self._nudge_visible = True
-                        self._update_hint()
+            if (
+                snap.phase == Phase.ALIVE
+                and snap.landed_flash
+                and not self._last_landed_flash
+                and snap.sortie_id != self._nudge_sortie_id
+            ):
+                self._nudge_sortie_id = snap.sortie_id
+                if self._nudge_airborne_seen and not self._nudge_visible:
+                    self._nudge_visible = True
+                    self._update_hint()
             self._last_landed_flash = snap.landed_flash
 
             # 起飞后清除提示

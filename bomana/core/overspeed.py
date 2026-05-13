@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 """Overspeed model identification and alert grading."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 from bomana.config import OverspeedConfig
 from bomana.utils.file_utils import load_json_resource
 
-LimitValue = Union[float, List[List[float]]]
+LimitValue = float | list[list[float]]
 
 
 @dataclass(frozen=True)
@@ -19,11 +18,11 @@ class OverspeedDecision:
     resolved_fm: str = ""
     ias_kmh: float = 0.0
     tas_kmh: float = 0.0
-    mach: Optional[float] = None
-    ias_limit_kmh: Optional[float] = None
-    mach_limit: Optional[float] = None
-    ias_ratio: Optional[float] = None  # IAS / ias_limit_kmh
-    mach_margin: Optional[float] = None  # mach_limit - mach
+    mach: float | None = None
+    ias_limit_kmh: float | None = None
+    mach_limit: float | None = None
+    ias_ratio: float | None = None  # IAS / ias_limit_kmh
+    mach_margin: float | None = None  # mach_limit - mach
     reason: str = ""
 
 
@@ -39,10 +38,10 @@ class SpeedLimitDatabase:
         self.loaded = False
         self.load_error = ""
         self.database_source = ""
-        self.unit_to_fm: Dict[str, str] = {}
-        self.fm_limits: Dict[str, Dict[str, LimitValue]] = {}
-        self._fm_alias: Dict[str, str] = {}
-        self._aircraft_entries: List[Dict[str, Any]] = []
+        self.unit_to_fm: dict[str, str] = {}
+        self.fm_limits: dict[str, dict[str, LimitValue]] = {}
+        self._fm_alias: dict[str, str] = {}
+        self._aircraft_entries: list[dict[str, Any]] = []
         self._load()
 
     @staticmethod
@@ -50,7 +49,7 @@ class SpeedLimitDatabase:
         return str(name or "").strip().lower()
 
     @classmethod
-    def _name_variants(cls, name: str) -> List[str]:
+    def _name_variants(cls, name: str) -> list[str]:
         raw = str(name or "").strip()
         if not raw:
             return []
@@ -66,7 +65,7 @@ class SpeedLimitDatabase:
         return [v for v in variants if v]
 
     @staticmethod
-    def _parse_limit_value(raw: Any) -> Optional[LimitValue]:
+    def _parse_limit_value(raw: Any) -> LimitValue | None:
         if raw is None:
             return None
         if isinstance(raw, (int, float)):
@@ -123,7 +122,7 @@ class SpeedLimitDatabase:
         return str(text or "").lower().replace("_", "").replace("-", "").replace(" ", "")
 
     @staticmethod
-    def _interpolate(points: List[List[float]], sweep: Optional[float]) -> Optional[float]:
+    def _interpolate(points: list[list[float]], sweep: float | None) -> float | None:
         if not points:
             return None
 
@@ -194,11 +193,11 @@ class SpeedLimitDatabase:
             if mach is not None:
                 self.fm_limits[name]["mach"] = mach
 
-        for fm_name in self.fm_limits.keys():
+        for fm_name in self.fm_limits:
             for alias in self._name_variants(fm_name):
                 self._fm_alias[self._normalize_name(alias)] = fm_name
 
-        fm_to_units: Dict[str, set[str]] = {}
+        fm_to_units: dict[str, set[str]] = {}
         for unit_name, fm_name in self.unit_to_fm.items():
             resolved = self._fm_alias.get(self._normalize_name(fm_name), str(fm_name or "").strip())
             if not resolved:
@@ -222,7 +221,7 @@ class SpeedLimitDatabase:
         if not self.loaded and not self.load_error:
             self.load_error = "limits database empty"
 
-    def resolve_fm_name(self, plane_type: str) -> Optional[str]:
+    def resolve_fm_name(self, plane_type: str) -> str | None:
         raw = str(plane_type or "").strip()
         if not raw:
             return None
@@ -242,9 +241,7 @@ class SpeedLimitDatabase:
 
         return None
 
-    def _value_by_sweep(
-        self, value: Optional[LimitValue], sweep: Optional[float]
-    ) -> Optional[float]:
+    def _value_by_sweep(self, value: LimitValue | None, sweep: float | None) -> float | None:
         if value is None:
             return None
         if isinstance(value, (int, float)):
@@ -254,8 +251,8 @@ class SpeedLimitDatabase:
         return None
 
     def get_limits(
-        self, plane_type: str, wing_sweep: Optional[float]
-    ) -> Tuple[Optional[str], Optional[float], Optional[float]]:
+        self, plane_type: str, wing_sweep: float | None
+    ) -> tuple[str | None, float | None, float | None]:
         resolved = self.resolve_fm_name(plane_type)
         if resolved is None:
             return None, None, None
@@ -265,7 +262,7 @@ class SpeedLimitDatabase:
         mach_limit = self._value_by_sweep(row.get("mach"), wing_sweep)
         return resolved, ias_limit, mach_limit
 
-    def get_aircraft_entries(self) -> List[Dict[str, Any]]:
+    def get_aircraft_entries(self) -> list[dict[str, Any]]:
         return [
             {
                 "fm_name": entry["fm_name"],
@@ -275,7 +272,7 @@ class SpeedLimitDatabase:
             for entry in self._aircraft_entries
         ]
 
-    def get_aircraft_entry(self, fm_name: str) -> Optional[Dict[str, Any]]:
+    def get_aircraft_entry(self, fm_name: str) -> dict[str, Any] | None:
         key = str(fm_name or "").strip()
         for entry in self._aircraft_entries:
             if entry["fm_name"] == key:
@@ -286,12 +283,12 @@ class SpeedLimitDatabase:
                 }
         return None
 
-    def search_aircraft(self, query: str, limit: int = 100) -> List[str]:
+    def search_aircraft(self, query: str, limit: int = 100) -> list[str]:
         if not query:
             return [entry["fm_name"] for entry in self._aircraft_entries[:limit]]
 
         normalized_query = self._normalize_search_text(query)
-        results: List[str] = []
+        results: list[str] = []
         for entry in self._aircraft_entries:
             search_text = str(entry.get("search_text", "") or "")
             if (
@@ -315,8 +312,8 @@ class OverspeedAnalyzer:
         plane_type: str,
         ias_kmh: float,
         tas_kmh: float,
-        mach: Optional[float],
-        wing_sweep: Optional[float],
+        mach: float | None,
+        wing_sweep: float | None,
         enabled: bool = True,
     ) -> OverspeedDecision:
         if not OverspeedConfig.ENABLED or not enabled:

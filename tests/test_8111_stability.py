@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Regression coverage for transient 8111 endpoint jitter."""
 
 import time

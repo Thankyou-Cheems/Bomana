@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
 """Dialogs and popups."""
 
+import contextlib
 import shutil
 import time
 import tkinter as tk
@@ -76,7 +76,7 @@ class _ScalableDialogMixin:
         def collect(widget):
             for child in widget.winfo_children():
                 collect(child)
-            if "font" in widget.keys():
+            if "font" in widget:
                 try:
                     font_name = widget.cget("font")
                     if not font_name:
@@ -105,10 +105,8 @@ class _ScalableDialogMixin:
 
     def _on_scale_configure(self, event):
         if self._scale_after_id:
-            try:
+            with contextlib.suppress(Exception):
                 self.after_cancel(self._scale_after_id)
-            except Exception:
-                pass
         self._scale_after_id = self.after(120, self._apply_dynamic_scale)
 
     def _apply_dynamic_scale(self):
@@ -884,9 +882,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         if count <= 0:
             self.overspeed_override_summary_var.set("当前没有机型覆盖，所有飞机使用全局阈值。")
             return
-        names = sorted(
-            self._format_aircraft_label(name) for name in self.overspeed_override_map.keys()
-        )
+        names = sorted(self._format_aircraft_label(name) for name in self.overspeed_override_map)
         preview = ", ".join(names[:4])
         if count > 4:
             preview += f" 等 {count} 个机型"
@@ -1083,7 +1079,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         managed_dir = FileConfig.CUSTOM_SOUND_DIR
         managed_dir.mkdir(parents=True, exist_ok=True)
 
-        for sound_key in SoundConfig.SOUND_EVENT_META.keys():
+        for sound_key in SoundConfig.SOUND_EVENT_META:
             raw_path = str(self.sound_file_overrides.get(sound_key, "") or "").strip()
             if not raw_path:
                 continue
@@ -1628,7 +1624,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 self.zone_sound_enabled_var.set(True)
             if hasattr(self, "sound_file_overrides"):
                 self.sound_file_overrides = {}
-            for sound_key in getattr(self, "sound_row_vars", {}).keys():
+            for sound_key in getattr(self, "sound_row_vars", {}):
                 self._refresh_sound_override_label(sound_key)
 
     def _center_on_parent(self, parent):
@@ -1715,7 +1711,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 created_sound_files,
                 old_sound_files_to_remove,
             ) = self._persist_sound_overrides()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             messagebox.showerror("音效保存失败", f"无法保存自定义提示音：{exc}", parent=self)
             return
         config["beep_enabled"] = new_sound_enabled
@@ -1756,10 +1752,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 保存配置
         if not ConfigManager.save(config):
             for path in created_sound_files:
-                try:
+                with contextlib.suppress(OSError):
                     path.unlink(missing_ok=True)
-                except OSError:
-                    pass
             messagebox.showerror(
                 "设置保存失败",
                 "配置文件写入失败，本次更改未应用。",
@@ -1768,10 +1762,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             return
 
         for path in old_sound_files_to_remove:
-            try:
+            with contextlib.suppress(OSError):
                 path.unlink(missing_ok=True)
-            except OSError:
-                pass
 
         # 配置写入成功后，再应用运行时状态
         UIConfig.WINDOW_ALPHA = new_window_alpha
@@ -2612,7 +2604,7 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         cat_frame.pack(fill="x", padx=1, pady=1)
 
         self.cat_buttons = {}
-        categories = ["全部"] + BombConfig.get_categories()
+        categories = ["全部", *BombConfig.get_categories()]
         for cat in categories:
             btn = tk.Button(
                 cat_frame,
@@ -2769,7 +2761,7 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
             )
 
     def _refresh_category_button_styles(self) -> None:
-        for cat in self.cat_buttons.keys():
+        for cat in self.cat_buttons:
             self._style_category_button(cat, hover=False)
 
     def _on_search_focus_in(self, event):
@@ -3221,17 +3213,13 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
 
     def _open_url(self, url: str):
         if url:
-            try:
+            with contextlib.suppress(Exception):
                 webbrowser.open(url)
-            except Exception:
-                pass
 
     def _close(self):
         # 解绑鼠标滚轮事件，防止关闭后影响其他窗口
-        try:
+        with contextlib.suppress(Exception):
             self.unbind_all("<MouseWheel>")
-        except Exception:
-            pass
         self.destroy()
 
     def _center_on_parent(self, parent):

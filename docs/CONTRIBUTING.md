@@ -113,6 +113,7 @@ bd close <issue-id> --reason "Completed" --json
 ### 开发规范
 
 - Python 版本要求：`3.14+`
+- 本仓库通过 `.python-version` 默认 pin 到 `3.14.5`；本地初始化建议直接执行 `uv sync --python 3.14.5 --extra dev`
 - 代码风格：PEP 8、4 空格缩进、尽量保持单行不超过 100 字符
 - 注释：保留现有注释与文件头，新增注释只写必要背景，不写显而易见的语句复述
 - 配置/状态类优先集中在 `bomana/config.py` 与 `bomana/core/state.py`

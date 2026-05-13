@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Standalone navigation window."""
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import tkinter as tk
 from typing import TYPE_CHECKING
@@ -425,18 +425,14 @@ class NavigationWindow:
     def destroy(self):
         """销毁窗口实例（用于主题/缩放热重载）"""
         self._visible = False
-        try:
+        with contextlib.suppress(tk.TclError):
             self.window.destroy()
-        except tk.TclError:
-            pass
 
     def _on_focus_in(self, event=None):
         """Focus guard to keep click-through when locked."""
         if self.app._locked:
-            try:
+            with contextlib.suppress(Exception):
                 self.apply_window_styles(click_through=True, alpha=UIConfig.WINDOW_ALPHA)
-            except Exception:
-                pass
 
     def update_display(self, snap: UISnapshot):
         """更新独立导航窗显示（简洁航向带版）。"""

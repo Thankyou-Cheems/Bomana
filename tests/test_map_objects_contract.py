@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Map object parsing and coordinate contract tests."""
 
 import math

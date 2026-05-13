@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 """Math/navigation helpers."""
 
 import math
-from typing import Optional, Tuple
 
 from bomana.config import Theme, ZoneConfig
 
@@ -55,7 +53,7 @@ def calculate_smart_scale(screen_width: int, screen_height: int, base_dpi_scale:
 # ============================================================================
 
 
-def calculate_heading_from_vector(dx: float, dy: float) -> Optional[float]:
+def calculate_heading_from_vector(dx: float, dy: float) -> float | None:
     """从方向向量计算航向角度
 
     战雷8111地图坐标系：Y轴向下（屏幕坐标系），需要翻转。
@@ -203,7 +201,7 @@ def get_cdi_tolerance(distance_km: float) -> float:
 # ============================================================================
 
 
-def calculate_zone_turn_indicator(rel: float, tolerance: float) -> Tuple[str, str]:
+def calculate_zone_turn_indicator(rel: float, tolerance: float) -> tuple[str, str]:
     """计算战区转向指示文本和颜色
 
     根据相对方位角计算需要显示的转向指示（左转/右转/保持）
@@ -236,7 +234,7 @@ def calculate_zone_turn_indicator(rel: float, tolerance: float) -> Tuple[str, st
         return f"右转 {abs_rel:.1f}° ▶", color
 
 
-def calculate_zone_status(abs_rel: float, tolerance: float) -> Tuple[str, str]:
+def calculate_zone_status(abs_rel: float, tolerance: float) -> tuple[str, str]:
     """计算战区状态描述文本和颜色
 
     根据相对方位角计算当前对准状态。
@@ -263,7 +261,7 @@ def calculate_zone_status(abs_rel: float, tolerance: float) -> Tuple[str, str]:
         return "⚠ 偏航", Theme.ORANGE
 
 
-def calculate_airfield_turn_indicator(rel: float) -> Tuple[str, str]:
+def calculate_airfield_turn_indicator(rel: float) -> tuple[str, str]:
     """计算机场转向指示文本和颜色
 
     独立导航条和集成导航条共用此逻辑。
@@ -292,7 +290,7 @@ def calculate_airfield_turn_indicator(rel: float) -> Tuple[str, str]:
         return f"右转 {abs_rel:.1f}° ▶", Theme.BLUE
 
 
-def calculate_airfield_status(abs_rel: float) -> Tuple[str, str]:
+def calculate_airfield_status(abs_rel: float) -> tuple[str, str]:
     """计算机场状态描述文本和颜色
 
     独立导航条和集成导航条共用此逻辑。
@@ -317,7 +315,7 @@ def calculate_airfield_status(abs_rel: float) -> Tuple[str, str]:
         return "偏离", Theme.TEXT_DIM
 
 
-def format_distance_ete(dist_km: float, ete_str: Optional[str] = None) -> str:
+def format_distance_ete(dist_km: float, ete_str: str | None = None) -> str:
     """格式化距离和预计到达时间
 
     独立导航条和集成导航条共用此逻辑。
@@ -389,7 +387,7 @@ def get_deviation_color(relative_angle: float, distance_km: float) -> str:
         return Theme.RED
 
 
-def generate_cdi_indicator(relative_angle: float, distance_km: float) -> Tuple[str, str]:
+def generate_cdi_indicator(relative_angle: float, distance_km: float) -> tuple[str, str]:
     """生成高精度航道偏差指示器(CDI)字符串
 
     v6.1升级: 精度从10-20阶梯提升到30阶梯
@@ -412,10 +410,7 @@ def generate_cdi_indicator(relative_angle: float, distance_km: float) -> Tuple[s
 
     # 计算偏差比例：relative_angle / tolerance
     # 正值 = 目标在右 = 指示点显示在右边
-    if tolerance > 0:
-        deviation_ratio = relative_angle / tolerance
-    else:
-        deviation_ratio = 0.0
+    deviation_ratio = relative_angle / tolerance if tolerance > 0 else 0.0
 
     # 限制在 -1.5 到 1.5 范围（超出1.0表示溢出）
     clamped_ratio = max(-1.5, min(1.5, deviation_ratio))

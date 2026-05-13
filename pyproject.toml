@@ -17,7 +17,7 @@ build = [
 ]
 dev = [
     "pytest>=8.0.0",
-    "ruff>=0.8.0",
+    "ruff>=0.15.12",
 ]
 
 [tool.uv]
@@ -34,7 +34,7 @@ line-length = 100
 respect-gitignore = false
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "C4"]
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "RUF005", "RUF046", "RUF059", "RUF100"]
 ignore = [
     "E501",
 ]

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Game logic core."""
 
 import hashlib
@@ -6,7 +5,7 @@ import json
 import math
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import requests
 
@@ -103,7 +102,7 @@ class GameLogic:
         self.overspeed = OverspeedAnalyzer()
         self.state = GameState()
         self._endpoint_diag_state: dict[str, int] = {}
-        self._pending_timer_restore: Optional[Dict[str, Any]] = None
+        self._pending_timer_restore: dict[str, Any] | None = None
         self.timer_restore_applied = False
 
     @property
@@ -373,7 +372,7 @@ class GameLogic:
         return abs(normalize_angle(float(current) - float(previous)))
 
     @staticmethod
-    def _map_axis_scale_m(map_info: Optional[MapInfo]) -> Optional[Tuple[float, float]]:
+    def _map_axis_scale_m(map_info: MapInfo | None) -> tuple[float, float] | None:
         """从 map_info 提取归一化坐标在 X/Y 轴对应的米制尺度。"""
         if map_info is None or not getattr(map_info, "valid", False):
             return None
@@ -396,9 +395,9 @@ class GameLogic:
     @classmethod
     def _build_battle_signature(
         cls,
-        map_info: Optional[MapInfo],
-        mp: Optional[MapObjData],
-    ) -> Optional[str]:
+        map_info: MapInfo | None,
+        mp: MapObjData | None,
+    ) -> str | None:
         """基于 8111 当前可见的地图上下文构造战局指纹。"""
         if map_info is None or not map_info.valid or mp is None or not mp.ok:
             return None
@@ -480,7 +479,7 @@ class GameLogic:
 
     @staticmethod
     def _distance_norm_from_delta(
-        dx: float, dy: float, map_axis_scale_m: Optional[Tuple[float, float]]
+        dx: float, dy: float, map_axis_scale_m: tuple[float, float] | None
     ) -> float:
         """计算兼容旧语义的 distance（实际km / DISTANCE_SCALE）。"""
         dx = float(dx)
@@ -497,8 +496,8 @@ class GameLogic:
         py: float,
         tx: float,
         ty: float,
-        map_axis_scale_m: Optional[Tuple[float, float]],
-    ) -> Tuple[float, float]:
+        map_axis_scale_m: tuple[float, float] | None,
+    ) -> tuple[float, float]:
         """计算目标方位角与兼容距离值。"""
         dx = float(tx) - float(px)
         dy = float(ty) - float(py)
@@ -531,7 +530,7 @@ class GameLogic:
         error_kind: str,
         elapsed_ms: float,
         failure_streak: int,
-        status_code: Optional[int] = None,
+        status_code: int | None = None,
     ) -> None:
         """Emit endpoint health changes without logging every polling tick."""
         previous_streak = self._endpoint_diag_state.get(endpoint, 0)
@@ -562,7 +561,7 @@ class GameLogic:
         self,
         raw_tel: TelemetryData,
         raw_map: MapObjData,
-        map_info_result: Optional[Any],
+        map_info_result: Any | None,
         used_tel_fallback: bool,
         used_map_fallback: bool,
     ) -> None:
@@ -926,11 +925,13 @@ class GameLogic:
                 else:
                     # 相同候选，检查是否超过确认时间
                     aim_duration = now - nav.precise_aim_since
-                    if aim_duration >= ZoneConfig.PRECISE_AIM_CONFIRM_SEC:
+                    if (
+                        aim_duration >= ZoneConfig.PRECISE_AIM_CONFIRM_SEC
+                        and nav.locked_target_id != precise_candidate.id
+                    ):
                         # 确认切换到新目标
-                        if nav.locked_target_id != precise_candidate.id:
-                            nav.locked_target_id = precise_candidate.id
-                            target = precise_candidate
+                        nav.locked_target_id = precise_candidate.id
+                        target = precise_candidate
             else:
                 # 没有精确对准的目标，清除候选
                 nav.precise_aim_candidate_id = None
@@ -989,7 +990,7 @@ class GameLogic:
                 airborne=bool(is_airborne),
             )
 
-    def _is_zone_of_interest(self, zone: Zone, target_zone: Optional[Zone]) -> bool:
+    def _is_zone_of_interest(self, zone: Zone, target_zone: Zone | None) -> bool:
         """判断战区是否是玩家感兴趣的（v5.5新增）
 
         判断标准：
@@ -1023,19 +1024,15 @@ class GameLogic:
             return True
 
         # 正前方中距离：≤45° 且 <60km
-        if abs_relative <= 45 and distance_km < 60:
-            return True
-
-        # 其他情况（前方远距离或大角度）不关注
-        return False
+        return abs_relative <= 45 and distance_km < 60
 
     def _build_zone_display_list(
         self,
-        zones: List[Zone],
+        zones: list[Zone],
         ground_speed: float,
-    ) -> List[ZoneDisplayInfo]:
+    ) -> list[ZoneDisplayInfo]:
         """根据导航状态构建战区显示列表。"""
-        items: List[ZoneDisplayInfo] = []
+        items: list[ZoneDisplayInfo] = []
         for zone in zones[: ZoneConfig.MAX_DISPLAY_ZONES]:
             ete_text = ""
             if zone.is_target and ground_speed > 1e-7:
@@ -1067,17 +1064,17 @@ class GameLogic:
     def _build_airfield_display(
         self,
         mp: MapObjData,
-        map_axis_scale_m: Optional[Tuple[float, float]],
+        map_axis_scale_m: tuple[float, float] | None,
         player_heading: float,
         ground_speed: float,
-    ) -> Tuple[Optional[AirfieldDisplayInfo], List[AirfieldDisplayInfo], bool]:
+    ) -> tuple[AirfieldDisplayInfo | None, list[AirfieldDisplayInfo], bool]:
         """根据地图对象构建机场显示列表。"""
         if not (mp.ok and mp.player_pos and getattr(mp, "airfields", None)):
             return None, [], False
 
         px, py = mp.player_pos
-        friendly_infos: List[Tuple[float, AirfieldDisplayInfo]] = []
-        enemy_infos: List[Tuple[float, AirfieldDisplayInfo]] = []
+        friendly_infos: list[tuple[float, AirfieldDisplayInfo]] = []
+        enemy_infos: list[tuple[float, AirfieldDisplayInfo]] = []
 
         for af in mp.airfields:
             if (not math.isfinite(float(af.x))) or (not math.isfinite(float(af.y))):
@@ -1098,7 +1095,7 @@ class GameLogic:
             else:
                 enemy_infos.append((distance, info))
 
-        friendly_display: Optional[AirfieldDisplayInfo] = None
+        friendly_display: AirfieldDisplayInfo | None = None
         if friendly_infos:
             friendly_infos.sort(key=lambda item: item[0])
             dist, info = friendly_infos[0]
@@ -1121,7 +1118,7 @@ class GameLogic:
                 cdi_color=cdi_clr,
             )
 
-        enemy_display: List[AirfieldDisplayInfo] = []
+        enemy_display: list[AirfieldDisplayInfo] = []
         has_airfield_target = False
         if enemy_infos:
             enemy_infos.sort(key=lambda item: item[0])
@@ -1169,9 +1166,9 @@ class GameLogic:
 
     def _build_destroyed_zone_text(
         self,
-        destroyed_zones: List[Zone],
-        player_pos: Optional[Tuple[float, float]],
-        map_axis_scale_m: Optional[Tuple[float, float]],
+        destroyed_zones: list[Zone],
+        player_pos: tuple[float, float] | None,
+        map_axis_scale_m: tuple[float, float] | None,
         player_heading: float,
     ) -> str:
         """构建被摧毁战区的提示文字。"""
@@ -1182,7 +1179,7 @@ class GameLogic:
             return "  |  ".join(f"#{zone.index}" for zone in destroyed_zones)
 
         px, py = player_pos
-        items: List[str] = []
+        items: list[str] = []
         for zone in destroyed_zones:
             try:
                 bearing, dist_norm = self._bearing_distance_norm(
@@ -1650,9 +1647,10 @@ class GameLogic:
         if tel.is_on_ground:
             if s.landing_start_time is None:
                 s.landing_start_time = now
-            elif (now - s.landing_start_time) >= GameConfig.LAND_CONFIRM_SEC:
-                if s.landed_flash_until <= now:
-                    s.landed_flash_until = now + GameConfig.LANDED_FLASH_SEC
+            elif (
+                now - s.landing_start_time
+            ) >= GameConfig.LAND_CONFIRM_SEC and s.landed_flash_until <= now:
+                s.landed_flash_until = now + GameConfig.LANDED_FLASH_SEC
         else:
             s.landing_start_time = None
 

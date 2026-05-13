@@ -39,7 +39,7 @@ requires-dist = [
     { name = "pystray", specifier = ">=0.17.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "requests", specifier = ">=2.25.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.12" },
 ]
 provides-extras = ["build", "dev"]
 

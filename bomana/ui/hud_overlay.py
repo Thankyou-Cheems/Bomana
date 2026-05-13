@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
 """HUD overlay with reticle projection."""
 
+import contextlib
 import ctypes
 import math
 import tkinter as tk
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from bomana.config import HUDConfig, UIConfig
 from bomana.utils.system import Win32
@@ -99,16 +99,16 @@ class HUDOverlay:
         self._player_altitude_m = 0.0
 
         # 轻量平滑缓存
-        self._smoothed_x: Optional[float] = None
-        self._smoothed_y: Optional[float] = None
-        self._smoothed_radius: Optional[float] = None
-        self._last_signature: Optional[tuple] = None
-        self._compass_signature: Optional[tuple] = None
-        self._secondary_signature: Optional[tuple] = None
+        self._smoothed_x: float | None = None
+        self._smoothed_y: float | None = None
+        self._smoothed_radius: float | None = None
+        self._last_signature: tuple | None = None
+        self._compass_signature: tuple | None = None
+        self._secondary_signature: tuple | None = None
         self._standby_visible = False
         self._standby_text = "HUD STANDBY"
-        self._secondary_targets: List[Dict[str, float]] = []
-        self._compass_offsets: List[float] = [
+        self._secondary_targets: list[dict[str, float]] = []
+        self._compass_offsets: list[float] = [
             float(v)
             for v in range(
                 int(-self._COMPASS_VISIBLE_HALF_DEG),
@@ -118,21 +118,21 @@ class HUDOverlay:
         ]
 
         # 图元初始化：仅创建一次，后续只更新
-        self._reticle_ring_id: Optional[int] = None
-        self._reticle_hline_id: Optional[int] = None
-        self._reticle_vline_id: Optional[int] = None
-        self._reticle_mode_id: Optional[int] = None
-        self._reticle_dist_id: Optional[int] = None
-        self._secondary_marker_ids: List[int] = []
-        self._secondary_label_ids: List[int] = []
-        self._compass_bg_id: Optional[int] = None
-        self._compass_axis_id: Optional[int] = None
-        self._compass_center_id: Optional[int] = None
-        self._compass_heading_id: Optional[int] = None
-        self._compass_target_id: Optional[int] = None
-        self._compass_tick_ids: List[int] = []
-        self._compass_label_ids: List[int] = []
-        self._standby_id: Optional[int] = None
+        self._reticle_ring_id: int | None = None
+        self._reticle_hline_id: int | None = None
+        self._reticle_vline_id: int | None = None
+        self._reticle_mode_id: int | None = None
+        self._reticle_dist_id: int | None = None
+        self._secondary_marker_ids: list[int] = []
+        self._secondary_label_ids: list[int] = []
+        self._compass_bg_id: int | None = None
+        self._compass_axis_id: int | None = None
+        self._compass_center_id: int | None = None
+        self._compass_heading_id: int | None = None
+        self._compass_target_id: int | None = None
+        self._compass_tick_ids: list[int] = []
+        self._compass_label_ids: list[int] = []
+        self._standby_id: int | None = None
         self._init_reticle_items()
         self._init_compass_items()
 
@@ -218,7 +218,7 @@ class HUDOverlay:
 
     @classmethod
     def _compass_label(cls, heading_deg: float) -> str:
-        value = int(round(cls._normalize_heading_deg(heading_deg))) % 360
+        value = round(cls._normalize_heading_deg(heading_deg)) % 360
         cards = {0: "N", 90: "E", 180: "S", 270: "W"}
         return cards.get(value, f"{value:03d}")
 
@@ -248,7 +248,7 @@ class HUDOverlay:
         b = int(base[2] * brightness)
         return f"#{r:02x}{g:02x}{b:02x}"
 
-    def _smooth(self, current: Optional[float], target: float) -> float:
+    def _smooth(self, current: float | None, target: float) -> float:
         if current is None:
             return float(target)
         alpha = self._clamp(getattr(HUDConfig, "smoothing", 0.35), 0.05, 1.0)
@@ -259,7 +259,7 @@ class HUDOverlay:
                 alpha = max(alpha, 0.62)
         return current + (float(target) - current) * alpha
 
-    def _get_main_window_monitor(self) -> Dict[str, Any]:
+    def _get_main_window_monitor(self) -> dict[str, Any]:
         try:
             x = int(self.root.winfo_x())
             y = int(self.root.winfo_y())
@@ -315,7 +315,7 @@ class HUDOverlay:
         h = max(1, int(monitor["height"]))
         self.window.geometry(f"{w}x{h}+{x}+{y}")
 
-    def apply_window_styles(self, click_through: bool, alpha: Optional[int] = None) -> None:
+    def apply_window_styles(self, click_through: bool, alpha: int | None = None) -> None:
         """应用 HUD 窗口样式。
 
         优先使用 Win32 color key 保证背景透明，避免出现整屏黑底/蒙层。
@@ -358,10 +358,8 @@ class HUDOverlay:
 
     def destroy(self) -> None:
         self._visible = False
-        try:
+        with contextlib.suppress(tk.TclError):
             self.window.destroy()
-        except tk.TclError:
-            pass
 
     def clear_target(self) -> None:
         """清空目标并隐藏靶子。"""
@@ -388,7 +386,7 @@ class HUDOverlay:
         attitude_fallback: bool = True,
         heading_deg: float = 0.0,
         own_altitude_m: float = 0.0,
-        secondary_targets: Optional[List[Dict[str, float]]] = None,
+        secondary_targets: list[dict[str, float]] | None = None,
     ) -> None:
         """更新目标渲染输入。
 
@@ -411,7 +409,7 @@ class HUDOverlay:
         self._attitude_fallback = bool(attitude_fallback)
         self._heading_deg = float(heading_deg)
         self._player_altitude_m = max(0.0, float(own_altitude_m))
-        cleaned_secondary: List[Dict[str, float]] = []
+        cleaned_secondary: list[dict[str, float]] = []
         if secondary_targets:
             for item in secondary_targets:
                 if not isinstance(item, dict):
@@ -429,8 +427,8 @@ class HUDOverlay:
     def update_from_snapshot(
         self,
         snapshot: Any,
-        target_relative_deg: Optional[float],
-        target_distance_km: Optional[float],
+        target_relative_deg: float | None,
+        target_distance_km: float | None,
     ) -> None:
         """从 UISnapshot 风格对象更新 HUD。
 
@@ -845,10 +843,7 @@ class HUDOverlay:
 
             if label_id is not None:
                 label = str(selected[idx].get("label", "") or "").strip()
-                if label:
-                    text = f"{label} {dist:.1f}km"
-                else:
-                    text = f"{dist:.1f}km"
+                text = f"{label} {dist:.1f}km" if label else f"{dist:.1f}km"
                 self.canvas.coords(label_id, x, y - marker_r - 10.0)
                 self.canvas.itemconfig(label_id, text=text, fill=secondary_color, state="normal")
 

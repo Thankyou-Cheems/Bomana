@@ -1,5 +1,6 @@
 """Runtime threading helpers for the Tk app."""
 
+import contextlib
 import threading
 import time
 import tkinter as tk
@@ -17,10 +18,8 @@ class TkEventDispatcher:
         self.root = root
 
     def post(self, callback: Callable[..., Any], *args: Any) -> None:
-        try:
+        with contextlib.suppress(tk.TclError):
             self.root.after(0, callback, *args)
-        except tk.TclError:
-            pass
 
 
 class LogicPoller:

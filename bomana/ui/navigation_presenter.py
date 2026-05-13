@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Shared navigation presentation helpers for UI surfaces."""
 
 import math

@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """Runtime-facing UI services split out of the main App coordinator."""
 
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 from typing import Any
@@ -54,7 +54,7 @@ class AppRuntimeServices:
     def init_global_hotkeys(self) -> None:
         """Initialize runtime-configurable Windows global hotkeys."""
         self.global_hotkeys = None
-        if not os.name == "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
+        if os.name != "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
             return
 
         hotkeys = [
@@ -76,20 +76,16 @@ class AppRuntimeServices:
         self.global_hotkeys = None
         if manager is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             manager.stop()
-        except Exception:
-            pass
 
     def refresh_tray(self) -> None:
         """Refresh the system tray menu if it exists."""
         tray = self.tray
         if not HAS_TRAY or tray is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             tray.update_menu()
-        except Exception:
-            pass
 
     def init_tray(self) -> None:
         """Create and start the optional system tray integration."""
@@ -281,10 +277,8 @@ class AppRuntimeServices:
         self.tray = None
         if tray is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             tray.stop()
-        except Exception:
-            pass
 
     def ensure_hud_overlay(self) -> bool:
         """Ensure a HUD overlay exists and is ready for updates."""
@@ -509,10 +503,8 @@ class AppRuntimeServices:
         self._hud_last_target = None
         if not overlay:
             return
-        try:
+        with contextlib.suppress(Exception):
             overlay.destroy()
-        except Exception:
-            pass
 
     def stop(self) -> None:
         """Stop all optional runtime services during app shutdown."""

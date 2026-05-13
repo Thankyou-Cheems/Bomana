@@ -87,9 +87,11 @@ class LauncherUpdateServiceTests(unittest.TestCase):
     def test_check_propagates_resolver_failure_without_network_fallback_hiding_it(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
 
-        with patch.object(service, "resolve_app_manifest", side_effect=RuntimeError("offline")):
-            with self.assertRaisesRegex(RuntimeError, "offline"):
-                service.check()
+        with (
+            patch.object(service, "resolve_app_manifest", side_effect=RuntimeError("offline")),
+            self.assertRaisesRegex(RuntimeError, "offline"),
+        ):
+            service.check()
 
     def test_primary_attempt_restores_proxy_mode_after_failures(self) -> None:
         self.launcher._set_use_system_proxy(True)

@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 """Telemetry/network fetchers."""
 
 import math
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -145,7 +144,7 @@ class TelemetryFetcher:
             return float(default)
 
     @staticmethod
-    def _to_optional_float(raw: Any) -> Optional[float]:
+    def _to_optional_float(raw: Any) -> float | None:
         """将8111字段值转换为可空float。"""
         if raw is None:
             return None
@@ -158,7 +157,7 @@ class TelemetryFetcher:
         except TypeError, ValueError:
             return None
 
-    def _read_float(self, payload: dict, keys: Tuple[str, ...]) -> Tuple[float, bool]:
+    def _read_float(self, payload: dict, keys: tuple[str, ...]) -> tuple[float, bool]:
         """按候选键顺序读取数值，返回(值, 是否命中键)。"""
         for key in keys:
             if key in payload:
@@ -169,8 +168,8 @@ class TelemetryFetcher:
         return 0.0, False
 
     def _read_scaled_float(
-        self, payload: dict, keys: Tuple[Tuple[str, float], ...]
-    ) -> Tuple[float, bool]:
+        self, payload: dict, keys: tuple[tuple[str, float], ...]
+    ) -> tuple[float, bool]:
         """按候选键顺序读取数值并应用倍率，返回(值, 是否命中键)。"""
         for key, scale in keys:
             if key in payload:
@@ -179,7 +178,7 @@ class TelemetryFetcher:
         return 0.0, False
 
     @staticmethod
-    def _read_first_text(payload: dict, keys: Tuple[str, ...]) -> str:
+    def _read_first_text(payload: dict, keys: tuple[str, ...]) -> str:
         for key in keys:
             if key not in payload:
                 continue
@@ -409,7 +408,7 @@ class MapInfoFetcher:
             endpoint="/map_info.json", ok=False, error_kind="not_fetched"
         )
 
-    def fetch(self, budget: Budget) -> Optional[MapInfo]:
+    def fetch(self, budget: Budget) -> MapInfo | None:
         """获取地图元数据
 
         Args:
@@ -459,7 +458,7 @@ class MapObjectsFetcher:
         return MapObjectsFetcher._text(value).lower()
 
     @staticmethod
-    def _float_or_none(value: Any) -> Optional[float]:
+    def _float_or_none(value: Any) -> float | None:
         if isinstance(value, dict):
             value = value.get("value")
         elif isinstance(value, (list, tuple)):
@@ -471,7 +470,7 @@ class MapObjectsFetcher:
         return result if math.isfinite(result) else None
 
     @staticmethod
-    def _first_float(o: dict, keys: Tuple[str, ...]) -> Optional[float]:
+    def _first_float(o: dict, keys: tuple[str, ...]) -> float | None:
         for key in keys:
             if key in o:
                 value = MapObjectsFetcher._float_or_none(o.get(key))
@@ -492,7 +491,7 @@ class MapObjectsFetcher:
         return []
 
     @staticmethod
-    def _read_rgb(o: dict) -> Optional[Tuple[float, float, float]]:
+    def _read_rgb(o: dict) -> tuple[float, float, float] | None:
         value = o.get("color[]", o.get("color_rgb", o.get("rgb")))
         if isinstance(value, dict):
             value = value.get("value")

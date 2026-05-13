@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """Structured diagnostics logging."""
 
 from __future__ import annotations
 
 import atexit
+import contextlib
 import json
 import logging
 import logging.handlers
@@ -116,15 +116,11 @@ def shutdown_diagnostics() -> None:
         _LOG_PATH = None
 
     if listener is not None:
-        try:
+        with contextlib.suppress(OSError, RuntimeError, ValueError):
             listener.stop()
-        except OSError, RuntimeError, ValueError:
-            pass
     if handler is not None:
-        try:
+        with contextlib.suppress(OSError, RuntimeError, ValueError):
             handler.close()
-        except OSError, RuntimeError, ValueError:
-            pass
 
 
 def log_event(event: str, level: int = logging.INFO, **fields: Any) -> None:
