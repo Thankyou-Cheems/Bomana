@@ -1,103 +1,28 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-===============================================================================
-War Thunder SB Timer - 战雷全真模式收益计时器
-软件名：Bomana
-===============================================================================
+Bomana app entrypoint for the War Thunder SB timer and navigation UI.
 
-项目说明：
----------
-本软件是一个用于战雷全真模式的辅助计时工具，帮助玩家管理15分钟的复活周期。
-设计理念是提供合法的信息展示，不涉及任何作弊行为。
+This file intentionally stays thin. It wires startup diagnostics, runtime
+compatibility checks, single-instance protection, Windows DPI setup, and the
+top-level `App` object. Feature logic belongs under `bomana/`.
 
-核心原则：
----------
-1. **仅使用官方8111接口**
-   - 所有数据来源于战雷官方的localhost:8111 API
-   - 不读取游戏内存，不注入代码，不修改游戏文件
-   - 8111接口是战雷官方提供给玩家的合法数据接口
+Compliance boundary:
+- Use only the official localhost:8111 API.
+- Do not read game memory, inject code, or modify game files.
+- Do not surface enemy-only or otherwise player-invisible information.
 
-2. **避免反作弊风险**
-   - 不提供任何游戏内不可见的信息（如敌机位置、敌方数据等）
-   - 只展示玩家自己可见的地图信息（战区、机场位置）
-   - 计时器基于玩家自身的出生时间，不涉及服务器数据
-   - 所有功能都是"信息辅助"而非"游戏干预"
+Runtime inputs:
+- `/indicators`
+- `/state`
+- `/map_obj.json`
+- `/map_info.json`
 
-3. **开发规范**
-   - 保持代码清晰可读，便于审计
-   - 使用合理的数据结构和设计模式
-   - 避免过度优化导致的可读性下降
-   - 所有网络请求都有超时保护
-
-4. **用户体验**
-   - 界面透明覆盖，不遮挡游戏视野
-   - 支持拖动、锁定、热键控制
-   - 配置自动保存，支持状态恢复
-   - 低性能开销，不影响游戏帧率
-
--------------------------------------------------------------------------------
-VibeCoding / AI 助手协作规范 (请严格遵守)
--------------------------------------------------------------------------------
-⚠️ 1. 【文件头保护】始终维护本注释块，永远不要删除或精简开头的注释
-⚠️ 2. 【注释保留】不要随意删除代码中的注释，仅针对修改部分增删注释
-⚠️ 3. 【核心原则】任何修改都必须遵守上述"核心原则"，不得引入违规功能
-⚠️ 4. 【输出方式】由于本文件体量较大(8000+行)，修改后请勿流式输出全文，
-      应直接调用 present_files / file_create 等工具提供完整文件，
-      避免因 Token 限制导致输出被截断而丢失代码
-⚠️ 5. 【版本同步】修改功能后请同步更新 __version__ 变量
-⚠️ 6. 【编译开关】本项目通过 ENABLE_* 开关编译为三个版本（增强/标准/精简），
-      修改任何功能时必须考虑：
-      - 该功能是否受某个 ENABLE_* 开关控制？
-      - 是否需要添加 `if ENABLE_XXX:` 条件判断？
-      - 配置文件加载/保存是否需要检查开关状态？
-      - 三个版本共享同一配置文件，精简版不应继承完整版的专属功能状态
-⚠️ 7. 【协作规范】其余协作与文档维护要求见 AGENTS.md（含 docs/ARCHITECTURE.md / docs/PITFALLS.md）
-
-数据来源说明：
--------------
-- /indicators: 飞机仪表数据（速度、油量、有效性）
-- /state: 飞机状态数据（空速、垂直速度等）
-- /map_obj.json: 地图对象（战区、机场、玩家位置）
-- /map_info.json: 地图元数据（格子坐标系统参数）
-
-技术栈与依赖：
--------------
-- Python 3.14+
-- tkinter: GUI框架 (标准库)
-- requests >= 2.25.0: HTTP请求
-- ctypes: Windows API调用 (标准库)
-- Pillow >= 8.0.0: 图像处理 (可选，系统托盘需要)
-- pystray >= 0.17.0: 系统托盘 (可选)
-
-构建说明：
----------
-推荐使用 GitHub Actions 自动构建（见 .github/workflows/build.yml）
-手动构建请使用 PowerShell，反引号(`)换行；CMD 用户请改用脱字符(^)
-
-版本矩阵 (与 CI/CD 保持一致)：
-┌──────────┬─────────────────────────────────────────────────────────┬────────────────────────┐
-│ 版本     │ 编译开关                                                │ 说明                   │
-├──────────┼─────────────────────────────────────────────────────────┼────────────────────────┤
-│ Enhanced │ CCRP=True,  ZONES=True,  FUEL=True,  ADVANCED=True      │ 全功能，含投弹预测     │
-│ Standard │ CCRP=False, ZONES=True,  FUEL=True,  ADVANCED=True      │ 导航+燃油，无CCRP      │
-│ Lite     │ CCRP=False, ZONES=False, FUEL=False, ADVANCED=True      │ 仅计时器，极致轻量     │
-└──────────┴─────────────────────────────────────────────────────────┴────────────────────────┘
-注: AIRFIELDS/CHECKLIST 跟随 ZONES 开关
-
-手动打包命令示例 (Enhanced 增强版)：
-pyinstaller --noconsole --onefile `
-    --name "Bomana_Enhanced" `
-    --icon "app.ico" `
-    --add-data "app.ico;." `
-    --add-data "sponsor_wechat.png;." `
-    --add-data "bomana/data/fm_speed_limits.json;bomana/data" `
-    --add-data "bomana/data/ccrp_bomb_params.json;bomana/data" `
-    --hidden-import "pystray._win32" `
-    --collect-submodules "PIL" `
-    --clean Bomana.pyw
-
-===============================================================================
+Maintenance notes:
+- Respect `ENABLE_*` feature flags and shared variant behavior in
+  `bomana/config.py`.
+- Bump `__version__` in `bomana/config.py` for user-visible releases.
+- Project-wide workflow and documentation rules live in `AGENTS.md` and
+  `docs/`.
 """
 import sys
 import tkinter as tk
@@ -124,7 +49,7 @@ def main():
             messagebox.showerror(
                 "Bomana",
                 (
-                    "当前运行时过旧，Bomana 6.11.0 需要 Python 3.14+。\n"
+                    f"当前运行时过旧，Bomana {__version__} 需要 Python 3.14+。\n"
                     "如果你是通过绿色版启动器启动，请先更新启动器到 1.5.0 或更高版本。"
                 ),
                 parent=root,
@@ -132,7 +57,7 @@ def main():
             root.destroy()
         except Exception:
             pass
-        raise SystemExit("Bomana 6.11.0 requires Python 3.14+.")
+        raise SystemExit(f"Bomana {__version__} requires Python 3.14+.")
 
     # 确保单实例运行
     SingleInstanceManager.ensure_single_instance_or_exit()
