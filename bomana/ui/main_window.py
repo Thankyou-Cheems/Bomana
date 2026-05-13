@@ -582,22 +582,35 @@ class MainWindowBuilder:
         app = self.app
         close_btn = tk.Label(
             parent,
-            text="×",
+            text="关闭",
             font=font,
-            fg=Theme.TEXT_MUTED,
-            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            bg=Theme.BG,
             cursor="hand2",
-            padx=max(4, int(4 * scale)),
-            pady=0,
+            padx=max(8, int(8 * scale)),
+            pady=max(1, int(1 * scale)),
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER,
         )
         close_btn.bind("<Button-1>", lambda e, key=panel_key: app._toggle_panel(key))
         close_btn.bind(
             "<Enter>",
-            lambda e, btn=close_btn: btn.config(fg=Theme.RED, bg=Theme.BG),
+            lambda e, btn=close_btn: btn.config(
+                fg=Theme.RED,
+                bg=Theme.BORDER,
+                highlightbackground=Theme.RED,
+                highlightcolor=Theme.RED,
+            ),
         )
         close_btn.bind(
             "<Leave>",
-            lambda e, btn=close_btn: btn.config(fg=Theme.TEXT_MUTED, bg=Theme.GRAYPILL),
+            lambda e, btn=close_btn: btn.config(
+                fg=Theme.TEXT,
+                bg=Theme.BG,
+                highlightbackground=Theme.BORDER,
+                highlightcolor=Theme.BORDER,
+            ),
         )
         return close_btn
 
