@@ -162,6 +162,12 @@ Local build helper:
 - `tools\scripts\build_launcher.bat [version]` (only universal launcher exe)
 
 CI:
+- `.github/workflows/quality.yml` runs lightweight pull-request / `main` push gates on `windows-latest`:
+  - Python 3.14 + `uv sync --extra dev --frozen`
+  - `uv run --extra dev ruff check .`
+  - `uv run --extra dev ruff format --check .`
+  - `tools\scripts\check_smoke.bat`
+  - This workflow intentionally does not enforce a coverage threshold or pretend to replace real War Thunder / `localhost:8111` smoke validation.
 - `.github/workflows/build.yml` runs separate jobs for:
   - `build_app`: app package + manifest
   - `build_launcher`: launcher exe + `launcher_manifest.json`

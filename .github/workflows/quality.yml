@@ -1,0 +1,53 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-quality:
+    name: Windows Ruff and smoke
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install development dependencies
+        shell: pwsh
+        run: |
+          uv sync --extra dev --frozen
+
+      - name: Ruff check
+        shell: pwsh
+        run: |
+          uv run --extra dev ruff check .
+
+      - name: Ruff format check
+        shell: pwsh
+        run: |
+          uv run --extra dev ruff format --check .
+
+      - name: Lightweight smoke
+        shell: cmd
+        run: |
+          tools\scripts\check_smoke.bat

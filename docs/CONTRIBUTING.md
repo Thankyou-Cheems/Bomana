@@ -68,6 +68,18 @@ uv run --extra dev ruff format --check .
 
 纯文档或仅变更 issue 状态的任务可在交接中说明 Ruff 不适用。
 
+### CI 质量门
+
+`.github/workflows/quality.yml` 会在 PR 和 `main` 推送时运行 Windows 轻量门禁：
+
+- Python 3.14
+- `uv sync --extra dev --frozen`
+- `uv run --extra dev ruff check .`
+- `uv run --extra dev ruff format --check .`
+- `tools\scripts\check_smoke.bat`
+
+当前阶段不设置覆盖率阈值，也不把 CI 伪装成真实 War Thunder / `localhost:8111` 实机验证。涉及 8111、HUD、热键、托盘、导航或启动器的改动，仍需按下文手工 smoke 记录验证结果。
+
 ### 任务跟踪（必须使用 bd）
 
 开始工作前：
@@ -229,6 +241,18 @@ uv run --extra dev ruff format --check .
 ```
 
 Pure documentation or issue-status-only tasks may state that Ruff is not applicable in the handoff.
+
+### CI Quality Gate
+
+`.github/workflows/quality.yml` runs lightweight Windows checks for pull requests and pushes to `main`:
+
+- Python 3.14
+- `uv sync --extra dev --frozen`
+- `uv run --extra dev ruff check .`
+- `uv run --extra dev ruff format --check .`
+- `tools\scripts\check_smoke.bat`
+
+There is intentionally no coverage threshold yet, and CI is not treated as a replacement for real War Thunder / `localhost:8111` smoke validation. Changes touching 8111, HUD, hotkeys, tray, navigation, or launcher behavior still need the manual runtime checks documented below.
 
 ### Task Tracking With bd
 
