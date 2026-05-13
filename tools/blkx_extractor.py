@@ -13,6 +13,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from datamine_utils import (
+    BOMBGUNS_SUBDIR,
+    build_source_metadata,
+    require_datamine_dir,
+)
+
 
 class BlkxExtractor:
     """Batch-extract bomb ballistic parameters from .blkx files."""
@@ -40,11 +46,16 @@ class BlkxExtractor:
         "heavy_strategic": ["12000lb", "4000lb", "8000lb", "10000lb"],
     }
 
-    def __init__(self):
+    def __init__(self, *, verbose: bool = True):
         self.results = []
         self.error_count = 0
         self.no_bomb_files = []
         self.skipped_types = {}
+        self.verbose = verbose
+
+    def _log(self, message: str) -> None:
+        if self.verbose:
+            print(message)
 
     def parse_blkx_content(self, content: str):
         """Remove comments then parse JSON."""
@@ -53,7 +64,7 @@ class BlkxExtractor:
             content_clean = re.sub(r"/\*.*?\*/", "", content_clean, flags=re.DOTALL)
             return json.loads(content_clean)
         except json.JSONDecodeError as exc:
-            print(f"  JSON parse error: {exc}")
+            self._log(f"  JSON parse error: {exc}")
             return None
 
     @staticmethod
@@ -112,13 +123,13 @@ class BlkxExtractor:
 
         config = self.parse_blkx_content(content)
         if not config:
-            print("  JSON parse failed")
+            self._log("  JSON parse failed")
             self.error_count += 1
             return
 
         params = self.extract_ballistic_params(config)
         if not params:
-            print("  Missing bomb section or no params extracted")
+            self._log("  Missing bomb section or no params extracted")
             self.no_bomb_files.append(filepath.name)
             if isinstance(config, dict) and "rocketGun" in config:
                 self.skipped_types[filepath.name] = "rocketGun"
@@ -126,7 +137,7 @@ class BlkxExtractor:
 
         params["source_file"] = filepath.name
         self.results.append(params)
-        print(f"  OK: {params['filename'][:40]}")
+        self._log(f"  OK: {params['filename'][:40]}")
 
     def process_directory(self, directory: str):
         """Recursively scan for .blkx files."""
@@ -136,7 +147,7 @@ class BlkxExtractor:
         print(f"Found {len(files)} .blkx files")
 
         for idx, fp in enumerate(files, 1):
-            print(f"[{idx:3d}/{len(files):3d}] {fp.name}")
+            self._log(f"[{idx:3d}/{len(files):3d}] {fp.name}")
             self.process_file(fp)
 
         print(f"Valid bomb configs: {len(self.results)}")
@@ -184,7 +195,13 @@ class BlkxExtractor:
                 for t, c in sorted(type_counts.items()):
                     print(f"  - {t}: {c}")
 
-    def export_ccrp_params(self, output_file: str = "bomana/data/ccrp_bomb_params.json"):
+    def export_ccrp_params(
+        self,
+        output_file: str = "bomana/data/ccrp_bomb_params.json",
+        *,
+        source_root: Path | None = None,
+        source_subdir: Path | None = None,
+    ):
         """Export BALLISTIC_PARAMS for Bomana (JSON)."""
         ccrp_params = {}
         collision_count = 0
@@ -221,13 +238,17 @@ class BlkxExtractor:
                 "mesh": bomb.get("filename", ""),
             }
 
+        meta = {
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "bombs": len(ccrp_params),
+            "collisions": collision_count,
+            "skipped_non_bomb": len(self.no_bomb_files),
+        }
+        if source_root is not None and source_subdir is not None:
+            meta.update(build_source_metadata(source_root, source_subdir))
+
         payload = {
-            "meta": {
-                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "bombs": len(ccrp_params),
-                "collisions": collision_count,
-                "skipped_non_bomb": len(self.no_bomb_files),
-            },
+            "meta": meta,
             "ballistic_params": ccrp_params,
         }
 
@@ -246,6 +267,10 @@ def main():
     parser = argparse.ArgumentParser(description="War Thunder .blkx bomb parameter extractor")
     parser.add_argument("directory", nargs="?", help="root directory with .blkx files")
     parser.add_argument(
+        "--datamine-root",
+        help="War-Thunder-Datamine repo root; resolves the bombguns directory automatically",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         default="bomana/data/ccrp_bomb_params.json",
@@ -261,9 +286,20 @@ def main():
     args = parser.parse_args()
     extractor = BlkxExtractor()
 
+    source_root: Path | None = None
+    source_subdir: Path | None = None
+
     if args.single:
         print(f"Processing file: {args.single}")
         extractor.process_file(Path(args.single))
+    elif args.datamine_root:
+        source_root = Path(args.datamine_root).resolve()
+        source_subdir = BOMBGUNS_SUBDIR
+        try:
+            extractor.process_directory(require_datamine_dir(source_root, source_subdir))
+        except FileNotFoundError as exc:
+            print(f"[error] {exc}")
+            sys.exit(1)
     elif args.directory:
         extractor.process_directory(args.directory)
     else:
@@ -273,7 +309,11 @@ def main():
     if extractor.results:
         if not args.no_report:
             extractor.generate_report()
-        extractor.export_ccrp_params(args.output)
+        extractor.export_ccrp_params(
+            args.output,
+            source_root=source_root,
+            source_subdir=source_subdir,
+        )
     else:
         print("No bomb parameters extracted.")
         sys.exit(1)

@@ -1,9 +1,13 @@
 {
   "meta": {
-    "generated_at": "2026-04-06 11:40:54",
+    "generated_at": "2026-05-13 16:04:39",
     "bombs": 422,
     "collisions": 0,
-    "skipped_non_bomb": 17
+    "skipped_non_bomb": 17,
+    "source_root_name": "War-Thunder-Datamine",
+    "source_subdir": "aces.vromfs.bin_u/gamedata/weapons/bombguns",
+    "source_version": "2.55.1.107",
+    "source_commit": "4cfba6c6ebec3f5cd5b4c106b2e3d8edb9bc2864"
   },
   "ballistic_params": {
     "bomb_it_bas": {

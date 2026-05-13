@@ -16,6 +16,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from datamine_utils import (
+    FLIGHTMODELS_SUBDIR,
+    build_source_metadata,
+    require_datamine_dir,
+)
+
 Number = int | float
 
 
@@ -162,11 +168,9 @@ def _extract_unit_mapping(path: Path) -> tuple[str, str] | None:
 
 
 def extract_from_root(root: Path) -> dict[str, Any]:
-    flightmodels_dir = root / "aces.vromfs.bin_u" / "gamedata" / "flightmodels"
+    flightmodels_dir = require_datamine_dir(root, FLIGHTMODELS_SUBDIR)
     fm_dir = flightmodels_dir / "fm"
 
-    if not flightmodels_dir.exists():
-        raise FileNotFoundError(f"missing directory: {flightmodels_dir}")
     if not fm_dir.exists():
         raise FileNotFoundError(f"missing directory: {fm_dir}")
 
@@ -192,8 +196,7 @@ def extract_from_root(root: Path) -> dict[str, Any]:
     return {
         "meta": {
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "source_root_name": root.name,
-            "source_subdir": "aces.vromfs.bin_u/gamedata/flightmodels",
+            **build_source_metadata(root, FLIGHTMODELS_SUBDIR),
             "fm_records": len(fm_limits),
             "unit_records": len(unit_to_fm),
         },

@@ -9,8 +9,8 @@
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
 - External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
-- Tools: `tools/blkx_extractor.py` (generate CCRP bomb parameters from .blkx)
-- Tools: `tools/fm_speed_extractor.py` (generate speed-limit DB from datamine flightmodels)
+- Tools: `tools/update_datamine_assets.py` (refresh both generated datamine assets)
+- Tools: `tools/blkx_extractor.py` / `tools/fm_speed_extractor.py` (single-asset extractors)
 - Tools: `tools/create_version_info.py` / `tools/sample_8111_attitude.py` (build metadata + diagnostics)
 - Assets: `app.png`, `sponsor_wechat.png`, `app.ico`
 
@@ -55,6 +55,7 @@
 │  ├─ create_version_info.py # Windows version-info helper for packaging
 │  ├─ blkx_extractor.py      # .blkx -> bomana/data/ccrp_bomb_params.json generator
 │  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
+│  ├─ update_datamine_assets.py # One command to refresh both generated data assets
 │  ├─ sample_8111_attitude.py # HUD baseline sampler
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
 ├─ assets (root files)       # Icons/sponsor image, etc.
@@ -107,13 +108,15 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 ## Static Data Provenance
 - `bomana/data/ccrp_bomb_params.json`
   - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx`
-  - Generator: `tools/blkx_extractor.py`
+  - Recommended updater: `tools/update_datamine_assets.py`
+  - Dedicated generator: `tools/blkx_extractor.py`
   - Runtime consumer: `BombConfig` / CCRP ballistics path
 - `bomana/data/fm_speed_limits.json`
   - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/flightmodels/**`
-  - Generator: `tools/fm_speed_extractor.py`
-  - Cross-check reference: [KaerMorh/WTSpeeder](https://github.com/KaerMorh/WTSpeeder) for legacy FM fields (`Vne` / `VneMach`) and alert thresholds
+  - Recommended updater: `tools/update_datamine_assets.py`
+  - Dedicated generator: `tools/fm_speed_extractor.py`
   - Runtime consumer: `OverspeedAnalyzer` via `/indicators.type -> unit_to_fm -> fm_speed_limits`
+- Generated JSON metadata records the datamine source version and git commit when available.
 
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config.py`.

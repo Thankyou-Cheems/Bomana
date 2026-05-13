@@ -265,6 +265,7 @@ uv run python Bomana.pyw
 ├─ tools/
 │  ├─ blkx_extractor.py
 │  ├─ fm_speed_extractor.py
+│  ├─ update_datamine_assets.py
 │  └─ build_portable.py
 └─ docs/
 ```
@@ -305,42 +306,38 @@ ENABLE_CHECKLIST = True         # 出击检查清单功能
 ENABLE_ADVANCED_SETTINGS = True # 高级设置（面板/快捷键自定义等）
 ```
 
-### 更新 CCRP 炸弹参数（开发者）
+### 更新 datamine 静态数据（开发者）
 
-`bomana/data/ccrp_bomb_params.json` 由 War Thunder datamine 中 `aces.vromfs.bin_u/gamedata/weapons/bombguns/` 下的炸弹 `.blkx` 文件生成。仓库内集成了提取脚本，会提取 `mass`、`caliber`、`dragCx`、`distFromCmToStab`、`brake*` 等弹道参数，流程如下：
+炸弹参数与机型超速限速库都来自同一份 War Thunder datamine checkout。维护者优先使用统一更新入口，它会同时刷新：
+
+- `bomana/data/ccrp_bomb_params.json`
+- `bomana/data/fm_speed_limits.json`
+- JSON `meta` 中的 datamine `source_version` / `source_commit`
 
 ```bash
-# 1) 准备 datamine 仓库（或直接指向已解包的 .blkx 目录）
+# 1) 准备或更新 datamine 仓库
 git clone https://github.com/gszabi99/War-Thunder-Datamine.git
+git -C .\War-Thunder-Datamine pull --ff-only
 
-# 2) 运行提取脚本
-python tools/blkx_extractor.py ^
-  .\War-Thunder-Datamine\aces.vromfs.bin_u\gamedata\weapons\bombguns ^
-  -o bomana\data\ccrp_bomb_params.json
+# 2) 一次性刷新两份数据；默认输出适合提交前快速审阅
+uv run python tools/update_datamine_assets.py ^
+  .\War-Thunder-Datamine ^
+  --no-bomb-report
 ```
 
-生成后的文件路径为 `bomana/data/ccrp_bomb_params.json`，Enhanced 版本会自动打包该文件。
-
-### 更新机型超速限速库（开发者）
-
-超速提醒使用 `bomana/data/fm_speed_limits.json`。该文件由 War Thunder datamine 的 `aces.vromfs.bin_u/gamedata/flightmodels/` 提取生成，内容同时包含 `unit_to_fm` 映射和 IAS/Mach 限速：
+仅调试单项提取时，也可以直接调用底层脚本：
 
 ```bash
-# 1) 准备 datamine 仓库（需包含 flightmodels 目录）
-git clone https://github.com/gszabi99/War-Thunder-Datamine.git
+uv run python tools/blkx_extractor.py ^
+  --datamine-root .\War-Thunder-Datamine ^
+  -o bomana\data\ccrp_bomb_params.json
 
-# 2) 运行提取脚本（生成 unit->fm 映射 + IAS/Mach 限速）
-python tools/fm_speed_extractor.py ^
+uv run python tools/fm_speed_extractor.py ^
   .\War-Thunder-Datamine ^
   -o bomana\data\fm_speed_limits.json
 ```
 
-`Bomana` 运行时会读取该 JSON，并按 `/indicators.type -> unit_to_fm -> fm_speed_limits`，结合 `/state` 的 IAS/Mach 数据进行超速分级提醒。
-
-说明：
-
-- `Bomana` 的限速库仍以 War Thunder datamine 为原始来源。
-- 提取字段兼容和阈值分级会参考 [KaerMorh/WTSpeeder](https://github.com/KaerMorh/WTSpeeder) 做交叉核验，避免因 FM 旧字段差异造成误判。
+`Bomana` 运行时会读取这两份 JSON：炸弹库供 CCRP 估算使用，限速库按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 结合 `/state` IAS/Mach 数据做超速分级提醒。
 
 
 ---
@@ -364,8 +361,8 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 
 | 数据文件 | 原始来源 | 生成脚本 | 运行时用途 |
 |------|------|------|------|
-| `bomana/data/ccrp_bomb_params.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` | `tools/blkx_extractor.py` | `BombConfig` 读取炸弹质量、口径、阻力、减速伞参数，用于 CCRP 弹道估算 |
-| `bomana/data/fm_speed_limits.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/flightmodels/**`，并参考 [KaerMorh/WTSpeeder](https://github.com/KaerMorh/WTSpeeder) 交叉核验字段/阈值 | `tools/fm_speed_extractor.py` | `OverspeedAnalyzer` 按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 做 IAS/Mach 超速分级 |
+| `bomana/data/ccrp_bomb_params.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` | `tools/update_datamine_assets.py` -> `tools/blkx_extractor.py` | `BombConfig` 读取炸弹质量、口径、阻力、减速伞参数，用于 CCRP 弹道估算 |
+| `bomana/data/fm_speed_limits.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/flightmodels/**` | `tools/update_datamine_assets.py` -> `tools/fm_speed_extractor.py` | `OverspeedAnalyzer` 按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 做 IAS/Mach 超速分级 |
 
 ### 轮询频率
 

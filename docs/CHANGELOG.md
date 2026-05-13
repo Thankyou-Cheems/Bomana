@@ -7,6 +7,8 @@
 ---
 ## [Unreleased]
 
+- 同步 War-Thunder-Datamine `2.55.1.107`，刷新 FM 限速库，并为炸弹/限速 JSON 补充来源版本与提交元数据
+- 新增 `tools/update_datamine_assets.py` 统一静态数据更新入口，协作者可直接通过 Python 命令同时刷新两份 datamine 产物
 - 清理过期实验线和历史方案文档：移除禁用的混合日志探测代码、旧 ChatGPT 调研导出以及 HUD v6.8 归档方案文件，收紧项目合规边界到官方 8111 API
 - 更新 beads 工作流文档，移除会误导维护者的旧版 `bd sync` / 外部 Dolt server 迁移说明
 
