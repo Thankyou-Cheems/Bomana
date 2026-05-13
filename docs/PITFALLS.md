@@ -82,6 +82,11 @@ implementation plans belong in git history, not here.
   Cause: battle setup could reuse hangar-period `map_info` cache, and a missing compass key was interpreted as a valid `0°` heading instead of falling back to the map velocity vector
   Fix/Workaround: clear battle-scoped map/navigation cache when arming a new battle, refetch `map_info` in battle context, and track whether the compass field was actually present before preferring it
 
+- Context: Bomana resumes after quitting a live sortie, then the player later enters a different battle
+  Symptom: the saved 15-minute countdown could leak into the new battle and continue from an unrelated remaining time
+  Cause: timer restore used only persisted remaining time and did not verify whether the next observed battle context matched the saved one
+  Fix/Workaround: persist a battle signature derived from current 8111 map metadata/object layout, hold restore in a pending state on startup, and apply it only after the next live battle context matches; otherwise discard the stale timer state
+
 ### HUD And Navigation Geometry
 
 - Context: transparent HUD overlay on Windows

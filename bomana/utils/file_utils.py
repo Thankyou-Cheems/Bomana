@@ -288,19 +288,27 @@ class StateManager:
     """
 
     @staticmethod
-    def save(remaining_sec: float, life_index: int, sortie_id: int) -> None:
+    def save(
+        remaining_sec: float,
+        life_index: int,
+        sortie_id: int,
+        battle_signature: str,
+    ) -> None:
         """保存当前状态
 
         Args:
             remaining_sec: 剩余秒数
             life_index: 复活次数
             sortie_id: 出击次数（补给计数器）
+            battle_signature: 当前战局上下文指纹
         """
         state_data = {
             "remaining_sec": remaining_sec,
             "save_timestamp": time.time(),
             "life_index": life_index,
             "sortie_id": sortie_id,
+            "battle_signature": battle_signature,
+            "battle_signature_version": 1,
         }
         try:
             atomic_write_json(FileConfig.STATE_FILE, state_data, ensure_ascii=False)

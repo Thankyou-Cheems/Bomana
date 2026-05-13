@@ -68,12 +68,19 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(list(self.tmp_path.glob(".config.json.*.tmp")), [])
 
     def test_state_save_uses_atomic_json_write(self) -> None:
-        StateManager.save(remaining_sec=42.0, life_index=2, sortie_id=3)
+        StateManager.save(
+            remaining_sec=42.0,
+            life_index=2,
+            sortie_id=3,
+            battle_signature="sig-1",
+        )
 
         data = json.loads(self.state_file.read_text(encoding="utf-8"))
         self.assertEqual(data["remaining_sec"], 42.0)
         self.assertEqual(data["life_index"], 2)
         self.assertEqual(data["sortie_id"], 3)
+        self.assertEqual(data["battle_signature"], "sig-1")
+        self.assertEqual(data["battle_signature_version"], 1)
 
     def test_state_load_non_object_json_does_not_clear_file(self) -> None:
         self.state_file.write_text("[1, 2, 3]", encoding="utf-8")

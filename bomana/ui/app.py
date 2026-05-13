@@ -1511,6 +1511,7 @@ class App:
             self._last_ui_gap_ms = max(0.0, (loop_start - self._last_ui_frame_ts) * 1000.0)
         self._last_ui_frame_ts = loop_start
         live_snap = self.game.snapshot()
+        self._restored_state = self.game.timer_restore_applied
         if self._debug:
             snap = self._build_debug_snapshot(live_snap)
         else:

@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """Game logic core."""
 
+import hashlib
+import json
 import math
 import threading
 import time
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
@@ -101,6 +103,8 @@ class GameLogic:
         self.overspeed = OverspeedAnalyzer()
         self.state = GameState()
         self._endpoint_diag_state: dict[str, int] = {}
+        self._pending_timer_restore: Optional[Dict[str, Any]] = None
+        self.timer_restore_applied = False
 
     @property
     def is_api_down(self) -> bool:
@@ -260,6 +264,13 @@ class GameLogic:
                 # v6.0.1 优化：弹道计算移至tick线程（每250ms计算一次，而非每50ms）
                 self._update_bombing_calculation_locked(tel, now)
 
+                self._resolve_pending_timer_restore_locked(
+                    mp=mp,
+                    player_present=player_present,
+                    spawn_candidate=spawn_candidate,
+                    now=now,
+                )
+
                 # === 状态机逻辑 ===
                 hangar_like = (not mp.ok) or (mp.obj_count == 0)
                 if hangar_like and (not player_present) and s.phase != Phase.ALIVE:
@@ -376,6 +387,96 @@ class GameLogic:
             return scale_x, scale_y
         except TypeError, ValueError, IndexError:
             return None
+
+    @staticmethod
+    def _rounded_float(value: float) -> float:
+        """将参与指纹的浮点值规整到稳定精度。"""
+        return round(float(value), 6)
+
+    @classmethod
+    def _build_battle_signature(
+        cls,
+        map_info: Optional[MapInfo],
+        mp: Optional[MapObjData],
+    ) -> Optional[str]:
+        """基于 8111 当前可见的地图上下文构造战局指纹。"""
+        if map_info is None or not map_info.valid or mp is None or not mp.ok:
+            return None
+
+        try:
+            payload = {
+                "map_min": [cls._rounded_float(value) for value in map_info.map_min],
+                "map_max": [cls._rounded_float(value) for value in map_info.map_max],
+                "grid_size": [cls._rounded_float(value) for value in map_info.grid_size],
+                "grid_steps": [cls._rounded_float(value) for value in map_info.grid_steps],
+                "grid_zero": [cls._rounded_float(value) for value in map_info.grid_zero],
+                "zones": sorted(
+                    (
+                        cls._rounded_float(zone.x),
+                        cls._rounded_float(zone.y),
+                        str(zone.color or ""),
+                    )
+                    for zone in mp.zones
+                ),
+                "airfields": sorted(
+                    (
+                        cls._rounded_float(airfield.x),
+                        cls._rounded_float(airfield.y),
+                        str(airfield.color or ""),
+                        bool(airfield.is_friendly),
+                    )
+                    for airfield in mp.airfields
+                ),
+            }
+        except TypeError, ValueError:
+            return None
+
+        encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("ascii")).hexdigest()
+
+    def _resolve_pending_timer_restore_locked(
+        self,
+        *,
+        mp: MapObjData,
+        player_present: bool,
+        spawn_candidate: bool,
+        now: float,
+    ) -> None:
+        """在识别到战局上下文后决定是否落地旧倒计时。"""
+        pending = self._pending_timer_restore
+        if not pending or not player_present or not spawn_candidate:
+            return
+
+        expected_signature = str(pending.get("battle_signature") or "")
+        current_signature = self._build_battle_signature(self.state.map_info, mp)
+        if not expected_signature or not current_signature:
+            return
+
+        if current_signature != expected_signature:
+            self._pending_timer_restore = None
+            self.timer_restore_applied = False
+            StateManager.clear(report_error=False)
+            log_event(
+                "timer_restore_discarded",
+                reason="battle_signature_mismatch",
+            )
+            return
+
+        self.state.current_life = LifeState(
+            spawn_time=pending["computed_spawn_time"],
+            life_index=pending.get("life_index", 1),
+        )
+        self.state.sortie_id = pending.get("sortie_id", 0)
+        self.state.phase = Phase.ALIVE
+        self.state.last_refit_ts = pending["computed_spawn_time"]
+        self.state.last_player_present_ts = now
+        self._pending_timer_restore = None
+        self.timer_restore_applied = True
+        log_event(
+            "timer_restore_applied",
+            sortie_id=int(self.state.sortie_id),
+            life_index=int(self.state.current_life.life_index),
+        )
 
     @staticmethod
     def _distance_norm_from_delta(
@@ -1111,12 +1212,27 @@ class GameLogic:
         用于应用退出时保存进度。
         """
         with self._lock:
+            if self._pending_timer_restore is not None:
+                return
             if self.state.phase != Phase.ALIVE or not self.state.current_life:
                 StateManager.clear()
                 return
+            battle_signature = self._build_battle_signature(
+                self.state.map_info,
+                self.state.last_map,
+            )
+            if not battle_signature:
+                StateManager.clear()
+                log_event("timer_state_not_saved", reason="missing_battle_signature")
+                return
             now = time.time()
             remaining = self.state.current_life.cycle_remaining(now)
-            StateManager.save(remaining, self.state.current_life.life_index, self.state.sortie_id)
+            StateManager.save(
+                remaining,
+                self.state.current_life.life_index,
+                self.state.sortie_id,
+                battle_signature,
+            )
 
     def restore_timer_state(self) -> bool:
         """从文件恢复计时器状态
@@ -1127,15 +1243,16 @@ class GameLogic:
         data = StateManager.load()
         if not data:
             return False
+        if not data.get("battle_signature"):
+            StateManager.clear(report_error=False)
+            self.timer_restore_applied = False
+            log_event("timer_restore_discarded", reason="missing_battle_signature")
+            return False
 
         with self._lock:
-            self.state.current_life = LifeState(
-                spawn_time=data["computed_spawn_time"], life_index=data.get("life_index", 1)
-            )
-            self.state.sortie_id = data.get("sortie_id", 0)
-            self.state.phase = Phase.ALIVE
-            self.state.last_refit_ts = data["computed_spawn_time"]
-            self.state.last_player_present_ts = time.time()
+            self._pending_timer_restore = data
+            self.timer_restore_applied = False
+        log_event("timer_restore_pending")
         return True
 
     def snapshot(self) -> UISnapshot:

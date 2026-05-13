@@ -118,6 +118,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config.py`.
 - User config/state stored as JSON in the user home directory (`FileConfig.CONFIG_FILE` / `STATE_FILE`).
+- Timer state restore is battle-scoped: `STATE_FILE` stores a 8111-derived battle signature and `GameLogic` applies the pending timer only after the next live battle context matches it.
 - Feature flags (`ENABLE_*`) drive compile-time variants and UI availability. All variants share the same config file.
 
 ## Functional Areas (Conceptual)
