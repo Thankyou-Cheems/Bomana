@@ -2,7 +2,6 @@
 """Main Tk app container."""
 
 import ctypes
-import os
 import time
 import tkinter as tk
 import webbrowser
@@ -12,7 +11,6 @@ from tkinter import messagebox
 from typing import Any, Dict, List, Optional, Tuple
 
 from bomana.config import (
-    ENABLE_ADVANCED_SETTINGS,
     ENABLE_AIRFIELDS,
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
@@ -32,31 +30,21 @@ from bomana.config import (
     SoundConfig,
     Theme,
     UIConfig,
-    ZoneConfig,
-    __title__,
 )
 from bomana.core.logic import GameLogic
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui.debug_support import AppDebugSupport
 from bomana.ui.dialogs import AboutDialog, BombSelectorDialog, ChecklistEditor, SettingsDialog
-from bomana.ui.hud_overlay import HUDOverlay
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.panel_renderer import AppPanelRenderer
-from bomana.ui.runtime import LogicPoller, TkEventDispatcher, start_daemon_thread
+from bomana.ui.runtime import LogicPoller, TkEventDispatcher
+from bomana.ui.runtime_services import HAS_TRAY, AppRuntimeServices
 from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.math_utils import calculate_smart_scale
 from bomana.utils.sound import SoundManager
-from bomana.utils.system import GlobalHotkeys, SingleInstanceManager, Win32, select_ui_font_family
-
-try:
-    import pystray
-    from PIL import Image
-
-    HAS_TRAY = True
-except ImportError:
-    HAS_TRAY = False
+from bomana.utils.system import SingleInstanceManager, Win32, select_ui_font_family
 
 
 def fmt_time(sec: Optional[float]) -> str:
@@ -103,6 +91,7 @@ class App:
         self.sound = SoundManager()
         self.dispatcher = TkEventDispatcher(root)
         self.logic_poller = LogicPoller(self.game, lambda: self._stop)
+        self.runtime_services = AppRuntimeServices(self)
 
         # 控制标志
         self._stop = False
@@ -165,11 +154,6 @@ class App:
         self._last_zone_recalc_ts = 0.0
         self._zone_layout_mode = None
         self._airport_layout_mode = None
-        self.hud_overlay = None
-        self._hud_monitor_refresh_ts = 0.0
-        self._hud_last_target = None
-        self._hud_target_hold_sec = 1.2
-        self._hud_render_error_count = 0
         self._history_mode_layout_active = False
         self._history_mode_nav_was_visible = False
         self.debug_support = AppDebugSupport(self)
@@ -204,6 +188,11 @@ class App:
 
         if HAS_TRAY:
             self._init_tray()
+
+    @property
+    def hud_overlay(self):
+        """Compatibility view for dialog code that inspects the active HUD surface."""
+        return self.runtime_services.hud_overlay
 
     def _load_config(self):
         """加载用户配置
@@ -717,35 +706,14 @@ class App:
 
         调用此方法以确保托盘菜单的勾选状态与实际状态同步。
         """
-        if HAS_TRAY and hasattr(self, "tray") and self.tray:
-            try:
-                self.tray.update_menu()
-            except Exception:
-                pass
+        self.runtime_services.refresh_tray()
 
     def _init_global_hotkeys(self):
         """初始化全局热键
 
         使用HotkeyConfig中配置的快捷键，支持运行时自定义。
         """
-        self._ghk = None
-        if not os.name == "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
-            return
-
-        # 使用配置的快捷键
-        hotkeys = [
-            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.KEY_RESET, self._manual_reset_hotkey),
-            (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.KEY_LOCK, self._toggle_lock),
-            (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.KEY_CORNER, self._next_corner),
-            (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.KEY_BEEP, self._toggle_beep),
-            (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.KEY_ZONES, self._toggle_zone_sound),
-        ]
-        self._ghk = GlobalHotkeys(
-            self.root,
-            hotkeys,
-            error_cb=self._on_hotkey_registration_error,
-        )
-        self._ghk.start()
+        self.runtime_services.init_global_hotkeys()
 
     def _on_hotkey_registration_error(self, key_names) -> None:
         unique_keys = [str(name) for name in key_names if str(name).strip()]
@@ -770,200 +738,7 @@ class App:
         - Lite模式: 仅保留基本功能（重置/锁定/声音/退出）
         - 完整模式: 包含所有功能
         """
-        # 保存self引用供嵌套函数使用
-        app = self
-
-        def icon():
-            # Prefer configured icon; fallback to .ico for better Windows compatibility.
-            candidates = [FileConfig.ICON_FILE, "app.ico"]
-            for name in candidates:
-                try:
-                    p = resource_path(name)
-                    if os.path.exists(p):
-                        return Image.open(p).convert("RGBA")
-                except Exception:
-                    continue
-            return Image.new("RGBA", (64, 64), Theme.BLUE)
-
-        # 回调函数（需要在主线程执行）
-        def do_reset(icon, item):
-            app.dispatcher.post(app._manual_reset)
-
-        def do_lock(icon, item):
-            app.dispatcher.post(app._toggle_lock)
-
-        def do_corner(icon, item):
-            app.dispatcher.post(app._next_corner)
-
-        def do_beep(icon, item):
-            app.dispatcher.post(app._toggle_beep)
-
-        def do_zone_sound(icon, item):
-            app.dispatcher.post(app._toggle_zone_sound)
-
-        def do_speed_history(icon, item):
-            app.dispatcher.post(app._toggle_speed_history_mode)
-
-        def do_edit_checklist(icon, item):
-            app.dispatcher.post(app._edit_checklist)
-
-        def do_settings(icon, item):
-            app.dispatcher.post(app._show_settings)
-
-        def do_debug(icon, item):
-            app.dispatcher.post(app._toggle_debug)
-
-        def do_quit(icon, item):
-            app.dispatcher.post(app._quit)
-
-        def do_about(icon, item):
-            app.dispatcher.post(app._show_about)
-
-        def do_star(icon, item):
-            app.dispatcher.post(app._open_star_url)
-
-        # 状态检查函数
-        def is_locked(item):
-            return app._locked
-
-        def is_beep_on(item):
-            return app.sound.is_enabled()
-
-        def is_zone_sound_on(item):
-            return app._zone_sound_enabled
-
-        def is_debug_on(item):
-            return app._debug
-
-        def is_speed_history_mode(item):
-            return PanelConfig.speed_history_mode
-
-        # 构建菜单项列表
-        menu_items = [
-            pystray.MenuItem("🔄 立即重置计时器", do_reset),
-            pystray.MenuItem(f"🔓 锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
-            pystray.MenuItem(f"📍 切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
-            pystray.MenuItem("🕰 空历速度模式", do_speed_history, checked=is_speed_history_mode),
-            pystray.Menu.SEPARATOR,
-        ]
-
-        # 面板子菜单（仅在有可配置面板时显示）
-        if ENABLE_ADVANCED_SETTINGS:
-            # 面板开关回调
-            def toggle_zone(icon, item):
-                app.dispatcher.post(app._toggle_panel, "show_zones")
-
-            def toggle_airfield(icon, item):
-                app.dispatcher.post(app._toggle_panel, "show_airfields")
-
-            def toggle_fuel(icon, item):
-                app.dispatcher.post(app._toggle_panel, "show_fuel")
-
-            def toggle_speed(icon, item):
-                app.dispatcher.post(app._toggle_panel, "show_speed")
-
-            def toggle_checklist(icon, item):
-                app.dispatcher.post(app._toggle_panel, "show_checklist")
-
-            def toggle_bombing(icon, item):
-                app.dispatcher.post(app._toggle_panel, "show_bombing")
-
-            def is_zone_panel(item):
-                return PanelConfig.is_effectively_enabled("zones")
-
-            def is_airfield_panel(item):
-                return PanelConfig.is_effectively_enabled("airfields")
-
-            def is_fuel_panel(item):
-                return PanelConfig.is_effectively_enabled("fuel")
-
-            def is_speed_panel(item):
-                return PanelConfig.is_effectively_enabled("speed")
-
-            def is_checklist_panel(item):
-                return PanelConfig.is_effectively_enabled("checklist")
-
-            def is_bombing_panel(item):
-                return PanelConfig.is_effectively_enabled("bombing")
-
-            panel_items = []
-            if ENABLE_ZONES:
-                panel_items.append(
-                    pystray.MenuItem("🎯 战区导航", toggle_zone, checked=is_zone_panel)
-                )
-            if ENABLE_AIRFIELDS:
-                panel_items.append(
-                    pystray.MenuItem("🛫 机场导航", toggle_airfield, checked=is_airfield_panel)
-                )
-            if ENABLE_FUEL:
-                panel_items.append(
-                    pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel)
-                )
-            panel_items.append(
-                pystray.MenuItem("⚡ 速度监视", toggle_speed, checked=is_speed_panel)
-            )
-            if ENABLE_CCRP:
-                panel_items.append(
-                    pystray.MenuItem("💣 投弹预测", toggle_bombing, checked=is_bombing_panel)
-                )
-            if ENABLE_CHECKLIST:
-                panel_items.append(
-                    pystray.MenuItem("✅ 出击检查", toggle_checklist, checked=is_checklist_panel)
-                )
-
-            if panel_items:
-                panel_menu = pystray.Menu(*panel_items)
-                menu_items.append(pystray.MenuItem("📊 显示面板", panel_menu))
-
-            # v6.2.1: 导航条模式切换
-            if ENABLE_ZONES:
-
-                def toggle_nav_mode(icon, item):
-                    app.dispatcher.post(app._toggle_navigation_mode)
-
-                def is_standalone_nav(item):
-                    return PanelConfig.navigation_mode == "standalone"
-
-                menu_items.append(
-                    pystray.MenuItem("🧭 独立导航窗口", toggle_nav_mode, checked=is_standalone_nav)
-                )
-
-            menu_items.append(pystray.Menu.SEPARATOR)
-
-        # 声音设置
-        menu_items.append(
-            pystray.MenuItem(f"🔊 声音 ({HotkeyConfig.KEY_BEEP})", do_beep, checked=is_beep_on)
-        )
-
-        # 战区提示音（仅在战区功能启用时显示）
-        if ENABLE_ZONES:
-            menu_items.append(
-                pystray.MenuItem(
-                    f"🔔 战区提示音 ({HotkeyConfig.KEY_ZONES})",
-                    do_zone_sound,
-                    checked=is_zone_sound_on,
-                )
-            )
-
-        # 检查清单编辑（仅在检查清单功能启用时显示）
-        if ENABLE_CHECKLIST:
-            menu_items.append(pystray.MenuItem("📝 编辑检查清单", do_edit_checklist))
-
-        # 设置（仅在高级设置启用时显示）
-        if ENABLE_ADVANCED_SETTINGS:
-            menu_items.append(pystray.MenuItem("⚙️ 设置", do_settings))
-
-        menu_items.append(pystray.Menu.SEPARATOR)
-        menu_items.append(pystray.MenuItem("⭐ 给作者点个Star", do_star))
-        menu_items.append(pystray.MenuItem("🐛 Debug模式", do_debug, checked=is_debug_on))
-        menu_items.append(pystray.MenuItem("ℹ️ 关于", do_about))
-        menu_items.append(pystray.MenuItem("❌ 退出", do_quit))
-
-        # 主菜单
-        menu = pystray.Menu(*menu_items)
-
-        self.tray = pystray.Icon(__title__, icon(), __title__, menu)
-        start_daemon_thread("BomanaTray", self.tray.run)
+        self.runtime_services.init_tray()
 
     def _toggle_debug(self):
         self.debug_support.toggle_debug()
@@ -1017,200 +792,19 @@ class App:
 
     def _ensure_hud_overlay(self) -> bool:
         """确保 HUD 叠加层实例可用。"""
-        if self.hud_overlay:
-            return True
-        try:
-            self.hud_overlay = HUDOverlay(self)
-            self.hud_overlay.set_lock_state(self._locked)
-            self._hud_monitor_refresh_ts = 0.0
-            log_event("hud_overlay_created", locked=self._locked)
-            return True
-        except Exception as e:
-            self.hud_overlay = None
-            log_exception("hud_overlay_init_failed", e)
-            return False
+        return self.runtime_services.ensure_hud_overlay()
 
     def _show_hud_overlay(self) -> bool:
         """显示 HUD 叠加层。"""
-        if not self._ensure_hud_overlay():
-            return False
-        try:
-            self.hud_overlay.show()
-            self.hud_overlay.set_lock_state(self._locked)
-            self._hud_monitor_refresh_ts = 0.0
-            return True
-        except Exception as e:
-            log_exception("hud_overlay_show_failed", e)
-            return False
+        return self.runtime_services.show_hud_overlay()
 
     def _update_hud_overlay(self, snap: UISnapshot) -> None:
         """在 UI 刷新中更新 HUD 叠加层。"""
-        overlay = self.hud_overlay
-        if not HUDConfig.enabled:
-            if overlay and overlay.is_visible():
-                overlay.hide()
-            self._hud_last_target = None
-            return
-
-        if not self._show_hud_overlay():
-            HUDConfig.enabled = False
-            self._update_hint()
-            self._save_config()
-            self._refresh_tray()
-            self._hud_last_target = None
-            return
-
-        overlay = self.hud_overlay
-        if not overlay:
-            return
-
-        try:
-            now = time.monotonic()
-            if (now - self._hud_monitor_refresh_ts) >= 0.35:
-                self._hud_monitor_refresh_ts = now
-                overlay.refresh_monitor_geometry()
-
-            target_zone = None
-            secondary_targets = []
-            secondary_limit = max(2, int(getattr(ZoneConfig, "MAX_DISPLAY_ZONES", 6)))
-            if snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING):
-                target_zone = next((z for z in snap.zones if z.is_target), None)
-                if target_zone is None and snap.zones:
-                    target_zone = min(snap.zones, key=lambda z: abs(z.relative))
-                if snap.zones:
-                    for zone in sorted(snap.zones, key=lambda z: abs(z.relative)):
-                        if target_zone is not None and zone.id == target_zone.id:
-                            continue
-                        secondary_targets.append(
-                            {
-                                "relative": float(zone.relative),
-                                "distance": float(zone.distance_km),
-                                "label": "",
-                            }
-                        )
-                        if len(secondary_targets) >= secondary_limit:
-                            break
-
-            if target_zone:
-                self._hud_last_target = {
-                    "ts": now,
-                    "relative": float(target_zone.relative),
-                    "distance": float(target_zone.distance_km),
-                    "pitch": float(getattr(snap, "attitude_pitch_deg", 0.0) or 0.0),
-                    "roll": float(getattr(snap, "attitude_roll_deg", 0.0) or 0.0),
-                    "fallback": bool(getattr(snap, "hud_attitude_fallback", True)),
-                    "heading": float(getattr(snap, "player_heading", 0.0) or 0.0),
-                    "altitude": float(getattr(snap, "altitude_m", 0.0) or 0.0),
-                    "secondary_targets": list(secondary_targets),
-                }
-                overlay.clear_standby()
-                overlay.update_target(
-                    has_target=True,
-                    relative_deg=self._hud_last_target["relative"],
-                    distance_km=self._hud_last_target["distance"],
-                    attitude_pitch_deg=self._hud_last_target["pitch"],
-                    attitude_roll_deg=self._hud_last_target["roll"],
-                    attitude_fallback=self._hud_last_target["fallback"],
-                    heading_deg=self._hud_last_target["heading"],
-                    own_altitude_m=self._hud_last_target["altitude"],
-                    secondary_targets=self._hud_last_target["secondary_targets"],
-                )
-            else:
-                can_hold = False
-                if (
-                    self._hud_last_target
-                    and snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
-                    and not snap.api_down
-                ):
-                    age = now - float(self._hud_last_target.get("ts", 0.0))
-                    can_hold = age <= self._hud_target_hold_sec
-
-                if can_hold:
-                    cached = self._hud_last_target
-                    heading = float(
-                        getattr(snap, "player_heading", cached.get("heading", 0.0)) or 0.0
-                    )
-                    altitude = float(
-                        getattr(snap, "altitude_m", cached.get("altitude", 0.0)) or 0.0
-                    )
-                    pitch = float(
-                        getattr(snap, "attitude_pitch_deg", cached.get("pitch", 0.0)) or 0.0
-                    )
-                    roll = float(getattr(snap, "attitude_roll_deg", cached.get("roll", 0.0)) or 0.0)
-                    fallback = bool(
-                        getattr(snap, "hud_attitude_fallback", cached.get("fallback", True))
-                    )
-                    cached["heading"] = heading
-                    cached["altitude"] = altitude
-                    cached["pitch"] = pitch
-                    cached["roll"] = roll
-                    cached["fallback"] = fallback
-                    overlay.clear_standby()
-                    overlay.update_target(
-                        has_target=True,
-                        relative_deg=float(cached["relative"]),
-                        distance_km=float(cached["distance"]),
-                        attitude_pitch_deg=pitch,
-                        attitude_roll_deg=roll,
-                        attitude_fallback=fallback,
-                        heading_deg=heading,
-                        own_altitude_m=altitude,
-                        secondary_targets=list(cached.get("secondary_targets", [])),
-                    )
-                else:
-                    overlay.clear_target()
-                    if snap.api_down:
-                        overlay.show_standby("8111 DELAY")
-                    elif snap.api_down_pending:
-                        overlay.show_standby("8111 PENDING")
-                    elif snap.phase not in (Phase.ALIVE, Phase.LOSS_PENDING):
-                        overlay.show_standby("HUD STANDBY")
-                    else:
-                        overlay.show_standby("NO TARGET")
-
-            if self._hud_render_error_count > 0:
-                self._hud_render_error_count = 0
-                overlay.update_transparency()
-        except Exception as e:
-            self._hud_render_error_count += 1
-            if self._hud_render_error_count in (1, 10, 30):
-                log_exception(
-                    "hud_render_degraded",
-                    e,
-                    error_count=self._hud_render_error_count,
-                )
-            degraded_alpha = max(60, int(HUDConfig.alpha * 0.55))
-            try:
-                overlay.apply_window_styles(click_through=self._locked, alpha=degraded_alpha)
-                overlay.show_standby("HUD DEGRADED")
-            except Exception:
-                pass
+        self.runtime_services.update_hud_overlay(snap)
 
     def _toggle_hud(self):
         """切换 HUD 叠加层开关。"""
-        requested_enabled = not HUDConfig.enabled
-        HUDConfig.enabled = not HUDConfig.enabled
-        if HUDConfig.enabled:
-            if not self._show_hud_overlay():
-                HUDConfig.enabled = False
-            else:
-                self._hud_render_error_count = 0
-        else:
-            if self.hud_overlay:
-                self.hud_overlay.hide()
-            self._hud_last_target = None
-
-        self._update_hint()
-        self._save_config()
-        self._refresh_tray()
-        if HUDConfig.enabled:
-            self.sound.play(pattern="on")
-        log_event(
-            "hud_toggle",
-            requested_enabled=requested_enabled,
-            enabled=HUDConfig.enabled,
-            has_overlay=bool(self.hud_overlay),
-        )
+        self.runtime_services.toggle_hud()
 
     def _toggle_navigation_mode(self):
         """切换导航条模式（集成/独立）
@@ -1539,8 +1133,7 @@ class App:
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
         if self.nav_window:
             self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
-        if self.hud_overlay:
-            self.hud_overlay.set_lock_state(self._locked)
+        self.runtime_services.apply_hud_lock_state(self._locked)
         self._update_hint()
         self._refresh_tray()
 
@@ -1838,13 +1431,11 @@ class App:
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
         if ENABLE_ZONES and getattr(self, "nav_window", None):
             self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
-        if self.hud_overlay:
-            if (ui_scale_changed or text_scale_changed) and hasattr(
-                self.hud_overlay, "refresh_text_scale"
-            ):
-                self.hud_overlay.refresh_text_scale()
-            self.hud_overlay.set_lock_state(self._locked)
-            self.hud_overlay.update_transparency()
+        self.runtime_services.refresh_hud_after_display_change(
+            ui_scale_changed=ui_scale_changed,
+            text_scale_changed=text_scale_changed,
+            locked=self._locked,
+        )
         self._refresh_tray()
 
     def _edit_checklist(self):
@@ -1872,24 +1463,7 @@ class App:
         self.game.save_timer_state()
         self._save_config()
 
-        try:
-            if getattr(self, "_ghk", None):
-                self._ghk.stop()
-        except Exception:
-            pass
-
-        if HAS_TRAY and hasattr(self, "tray"):
-            try:
-                self.tray.stop()
-            except Exception:
-                pass
-
-        if self.hud_overlay:
-            try:
-                self.hud_overlay.destroy()
-            except Exception:
-                pass
-            self.hud_overlay = None
+        self.runtime_services.stop()
 
         try:
             self.sound.stop(drain=False)

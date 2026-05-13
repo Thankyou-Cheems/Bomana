@@ -40,6 +40,7 @@
 │  │  ├─ navigation_presenter.py # Shared heading-tape target selection/model helpers
 │  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
 │  │  ├─ runtime.py           # Tk dispatch + runtime worker thread helpers
+│  │  ├─ runtime_services.py  # Global hotkeys, tray, and HUD runtime integrations
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
 │     ├─ diagnostics.py      # Structured async diagnostics logging
@@ -65,7 +66,8 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 1. 8111 API polling via `requests` to `localhost:8111`.
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
 3. UI render with `tkinter` (timer, panels, hints, debug text).
-   - `App` keeps window lifecycle, hotkeys, tray, and the main refresh loop.
+   - `App` keeps window lifecycle and the main refresh loop.
+   - `AppRuntimeServices` owns global hotkey, tray, and HUD overlay lifecycle while preserving the existing `App` callback surface for dialogs and tray actions.
    - `MainWindowBuilder` owns the static card/grid skeleton and pre-allocates fixed label pools for the main window.
    - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
    - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
