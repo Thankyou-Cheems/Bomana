@@ -40,7 +40,7 @@ HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 
 
 class _ScalableDialogMixin:
-    """可缩放窗口通用逻辑（适配屏幕 + 动态字体缩放）"""
+    """可缩放窗口通用逻辑（适配屏幕 + 稳定字体初始化）"""
 
     def _fit_window_to_screen(self):
         """固定初始尺寸，适配屏幕，同时允许手动调整"""
@@ -65,13 +65,8 @@ class _ScalableDialogMixin:
         self.maxsize(int(max_w), int(max_h))
 
     def _init_dynamic_scaling(self):
-        """初始化窗口的动态字体缩放"""
+        """按当前文本缩放配置初始化字体，不再随窗口尺寸反复重算。"""
         self.update_idletasks()
-        self._scale_base_w = max(1, self.winfo_width())
-        self._scale_base_h = max(1, self.winfo_height())
-        self._last_scale = 1.0
-        self._scale_after_id = None
-        self._scaled_fonts = {}
 
         def collect(widget):
             for child in widget.winfo_children():
@@ -84,7 +79,7 @@ class _ScalableDialogMixin:
                     base_font = tkfont.Font(font=font_name)
                     actual = base_font.actual()
                     base_size = actual.get("size", 10)
-                    scaled_size = UIConfig.scaled_font_size(base_size, 1.0, min_size=1)
+                    scaled_size = UIConfig.scaled_font_size(abs(base_size), 1.0, min_size=1)
                     if base_size < 0:
                         scaled_size = -scaled_size
                     new_font = tkfont.Font(
@@ -96,40 +91,10 @@ class _ScalableDialogMixin:
                         overstrike=actual.get("overstrike", 0),
                     )
                     widget.configure(font=new_font)
-                    self._scaled_fonts[widget] = (new_font, scaled_size)
                 except Exception:
                     pass
 
         collect(self)
-        self.bind("<Configure>", self._on_scale_configure)
-
-    def _on_scale_configure(self, event):
-        if self._scale_after_id:
-            with contextlib.suppress(Exception):
-                self.after_cancel(self._scale_after_id)
-        self._scale_after_id = self.after(120, self._apply_dynamic_scale)
-
-    def _apply_dynamic_scale(self):
-        self._scale_after_id = None
-        w = max(1, self.winfo_width())
-        h = max(1, self.winfo_height())
-        scale = (w / self._scale_base_w + h / self._scale_base_h) / 2.0
-        scale = max(0.85, min(3.0, scale))
-        if abs(scale - self._last_scale) < 0.01:
-            return
-        self._last_scale = scale
-
-        if not self._scaled_fonts:
-            self._init_dynamic_scaling()
-            return
-
-        for _widget, (font_obj, base_size) in list(self._scaled_fonts.items()):
-            try:
-                size = int(abs(base_size) * scale)
-                size = max(8, size)
-                font_obj.configure(size=-size if base_size < 0 else size)
-            except Exception:
-                pass
 
     def _clamp_to_visible_screen(self, x, y):
         """将窗口左上角坐标钳制在当前可见屏幕范围内。"""

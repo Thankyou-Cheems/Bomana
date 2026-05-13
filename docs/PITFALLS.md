@@ -116,6 +116,11 @@ implementation plans belong in git history, not here.
   Cause: check phase reused download-like progress behavior and allowed layout reflow from changing status text
   Fix/Workaround: split check/download states, keep check progress indeterminate, and calculate geometry from the current canvas width
 
+- Context: launcher or dialogs resized after opening
+  Symptom: text and controls visibly changed size while dragging the window, making the interface feel unstable and occasionally shifting layout more than the resize itself
+  Cause: legacy UI code treated window width/height deltas as a font scaling signal on top of DPI and user text scaling
+  Fix/Workaround: keep font sizing DPI/config driven, allow only wrap-length/layout reflow on resize, and avoid resize-triggered recursive font replacement
+
 ### Data Files
 
 - Context: CCRP bomb selector in packaged/runtime environments

@@ -151,6 +151,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - Keep integrated heading-tape row mounted and clear content only when heading is temporarily unavailable.
 - `HeadingTape` (`bomana/ui/widgets.py`) uses render-signature dedup to skip equivalent canvas redraw frames.
 - Standalone nav window rows (`bomana/ui/nav_window.py`) stay mounted; update text/color only to reduce micro-flicker.
+- Launcher and modal dialogs must treat DPI/text preferences as the font scale source of truth; normal window resize may reflow text, but must not continuously recalculate widget font sizes.
 
 ## Build & Release
 Portable release uses:

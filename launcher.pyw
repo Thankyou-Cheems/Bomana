@@ -28,7 +28,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import filedialog, messagebox
-from tkinter import font as tkfont
 from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
@@ -110,17 +109,19 @@ _CHANNEL_MAP = {
 
 _THEME = {
     "BG": "#10151d",
-    "CARD": "#18202c",
-    "CARD_ALT": "#111821",
+    "CARD": "#1a2330",
+    "CARD_ALT": "#131b25",
+    "CARD_SOFT": "#202b39",
     "BORDER": "#354258",
-    "TEXT": "#edf4fd",
+    "SEPARATOR": "#2a3648",
+    "TEXT": "#f2f6fb",
     "TEXT_DIM": "#bac7d8",
-    "TEXT_MUTED": "#6d7f96",
+    "TEXT_MUTED": "#7f8da0",
     "BLUE": "#5ab0ff",
     "GREEN": "#6ed081",
-    "YELLOW": "#f1c55e",
-    "RED": "#ff7a74",
-    "ORANGE": "#ffb066",
+    "YELLOW": "#f2c14e",
+    "RED": "#ff6b6b",
+    "ORANGE": "#ff9a52",
 }
 
 CHANNEL_DETAILS = {
@@ -2486,11 +2487,6 @@ class LauncherWindow:
         self.font_family = "Segoe UI"
         self.progress_width = 520
         self.progress_height = 12
-        self._scale_base_w = 1
-        self._scale_base_h = 1
-        self._last_scale = 1.0
-        self._scale_after_id: Optional[str] = None
-        self._scaled_fonts: Dict[Any, Tuple[tkfont.Font, int]] = {}
         self._button_styles: Dict[str, Dict[str, str]] = {}
         self._layout_after_id: Optional[str] = None
         self._base_min_w = self._px(760)
@@ -2517,7 +2513,7 @@ class LauncherWindow:
 
         self._build_ui()
         self._fit_window_to_screen()
-        self._init_dynamic_font_scaling()
+        self.root.bind("<Configure>", self._on_window_configure, add="+")
         self._refresh_wraplengths()
         self._schedule_layout_reflow()
         if self.source_test_mode:
@@ -2695,81 +2691,20 @@ class LauncherWindow:
         self._max_w = int(max_w)
         self._max_h = int(max_h)
 
-    def _init_dynamic_font_scaling(self) -> None:
-        self.root.update_idletasks()
-        self._scale_base_w = max(1, self.root.winfo_width())
-        self._scale_base_h = max(1, self.root.winfo_height())
-        self._last_scale = 1.0
-        self._scale_after_id = None
-        self._scaled_fonts = {}
-
-        def collect(widget: tk.Misc) -> None:
-            for child in widget.winfo_children():
-                collect(child)
-            try:
-                keys = widget.keys()
-            except Exception:
-                return
-            if "font" not in keys:
-                return
-            try:
-                font_name = widget.cget("font") or "TkDefaultFont"
-                base_font = tkfont.Font(font=font_name)
-                actual = base_font.actual()
-                base_size = int(actual.get("size", 10))
-                new_font = tkfont.Font(
-                    family=actual.get("family", self.font_family),
-                    size=base_size,
-                    weight=actual.get("weight", "normal"),
-                    slant=actual.get("slant", "roman"),
-                    underline=actual.get("underline", 0),
-                    overstrike=actual.get("overstrike", 0),
-                )
-                widget.configure(font=new_font)
-                self._scaled_fonts[widget] = (new_font, base_size)
-            except Exception:
-                pass
-
-        collect(self.root)
-        self.root.bind("<Configure>", self._on_scale_configure, add="+")
-
-    def _on_scale_configure(self, _event: tk.Event) -> None:
-        if self._scale_after_id:
-            try:
-                self.root.after_cancel(self._scale_after_id)
-            except Exception:
-                pass
-        self._scale_after_id = self.root.after(120, self._apply_dynamic_scale)
-
-    def _apply_dynamic_scale(self) -> None:
-        self._scale_after_id = None
-        w = max(1, self.root.winfo_width())
-        h = max(1, self.root.winfo_height())
-        scale = (w / self._scale_base_w + h / self._scale_base_h) / 2.0
-        scale = max(0.9, min(2.2, scale))
-        if abs(scale - self._last_scale) < 0.01:
-            self._refresh_wraplengths()
+    def _on_window_configure(self, event: tk.Event) -> None:
+        if event.widget is not self.root:
             return
-        self._last_scale = scale
-
-        if not self._scaled_fonts:
-            return
-        for _widget, (font_obj, base_size) in list(self._scaled_fonts.items()):
-            try:
-                size = max(8, int(abs(base_size) * scale))
-                font_obj.configure(size=(-size if base_size < 0 else size))
-            except Exception:
-                pass
         self._refresh_wraplengths()
+        self._schedule_layout_reflow()
 
     def _refresh_wraplengths(self) -> None:
         try:
             win_w = self.root.winfo_width()
             if win_w <= 1:
                 win_w = max(self._base_min_w, self.root.winfo_reqwidth())
-            content_w = max(self._px(280), win_w - self._px(80))
+            content_w = max(self._px(300), win_w - self._px(354))
             if hasattr(self, "selection_summary_lbl"):
-                self.selection_summary_lbl.config(wraplength=content_w)
+                self.selection_summary_lbl.config(wraplength=max(self._px(220), win_w // 3))
             if hasattr(self, "detail_lbl"):
                 self.detail_lbl.config(wraplength=content_w)
             if hasattr(self, "hint_lbl"):
@@ -2821,14 +2756,35 @@ class LauncherWindow:
             pass
 
     def _build_ui(self) -> None:
-        top = tk.Frame(self.root, bg=_THEME["BG"])
-        top.pack(fill="x", padx=self._px(20), pady=(self._px(16), self._px(8)))
+        shell = tk.Frame(
+            self.root,
+            bg=_THEME["SEPARATOR"],
+            bd=0,
+            highlightthickness=0,
+        )
+        shell.pack(fill="both", expand=True, padx=self._px(16), pady=self._px(16))
+
+        top = tk.Frame(shell, bg=_THEME["BG"])
+        top.pack(fill="both", expand=True, padx=self._px(1), pady=self._px(1))
+
+        brand_strip = tk.Frame(top, bg=_THEME["CARD_SOFT"], height=self._px(4))
+        brand_strip.pack(fill="x")
 
         title_row = tk.Frame(top, bg=_THEME["BG"])
-        title_row.pack(fill="x")
+        title_row.pack(fill="x", padx=self._px(18), pady=(self._px(14), self._px(10)))
 
         title_stack = tk.Frame(title_row, bg=_THEME["BG"])
         title_stack.pack(side="left", fill="x", expand=True)
+
+        self.eyebrow_lbl = tk.Label(
+            title_stack,
+            text="WAR THUNDER FIELD CONSOLE",
+            font=self._font(8, "bold"),
+            fg=_THEME["BLUE"],
+            bg=_THEME["BG"],
+            anchor="w",
+        )
+        self.eyebrow_lbl.pack(anchor="w", pady=(0, self._px(2)))
 
         self.title_lbl = tk.Label(
             title_stack,
@@ -2849,16 +2805,6 @@ class LauncherWindow:
             anchor="w",
         )
         self.meta_lbl.pack(anchor="w", pady=(self._px(3), 0))
-
-        self.eyebrow_lbl = tk.Label(
-            title_stack,
-            text="Portable update hub",
-            font=self._font(8, "bold"),
-            fg=_THEME["TEXT_MUTED"],
-            bg=_THEME["BG"],
-            anchor="w",
-        )
-        self.eyebrow_lbl.pack(anchor="w", pady=(self._px(2), 0))
 
         self.details_btn = tk.Button(
             title_row,
@@ -2881,31 +2827,58 @@ class LauncherWindow:
             bg=_THEME["BG"],
             anchor="w",
         )
-        self.sub_lbl.pack(fill="x", pady=(self._px(3), 0))
+        self.sub_lbl.pack(fill="x", padx=self._px(18), pady=(0, self._px(12)))
+
+        content_row = tk.Frame(top, bg=_THEME["BG"])
+        content_row.pack(
+            fill="both",
+            expand=True,
+            padx=self._px(18),
+            pady=(0, self._px(12)),
+        )
+        content_row.grid_columnconfigure(0, weight=0, minsize=self._px(258))
+        content_row.grid_columnconfigure(1, weight=1)
+        content_row.grid_rowconfigure(0, weight=1)
 
         controls_card = tk.Frame(
-            top,
+            content_row,
             bg=_THEME["CARD_ALT"],
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
         )
-        controls_card.pack(fill="x", pady=(self._px(10), 0))
+        controls_card.grid(row=0, column=0, sticky="nsew", padx=(0, self._px(12)))
 
-        controls_row = tk.Frame(controls_card, bg=_THEME["CARD_ALT"])
-        controls_row.pack(fill="x", padx=self._px(12), pady=(self._px(10), self._px(8)))
+        controls_head = tk.Frame(controls_card, bg=_THEME["CARD_ALT"])
+        controls_head.pack(fill="x", padx=self._px(12), pady=(self._px(12), self._px(8)))
+        tk.Label(
+            controls_head,
+            text="部署配置",
+            font=self._font(10, "bold"),
+            fg=_THEME["TEXT"],
+            bg=_THEME["CARD_ALT"],
+            anchor="w",
+        ).pack(anchor="w")
+        tk.Label(
+            controls_head,
+            text="通道、下载源与代理",
+            font=self._font(8),
+            fg=_THEME["TEXT_MUTED"],
+            bg=_THEME["CARD_ALT"],
+            anchor="w",
+        ).pack(anchor="w", pady=(self._px(2), 0))
 
-        picker_row = tk.Frame(controls_row, bg=_THEME["CARD_ALT"])
-        picker_row.pack(side="left", fill="x", expand=True)
+        picker_row = tk.Frame(controls_card, bg=_THEME["CARD_ALT"])
+        picker_row.pack(fill="x", padx=self._px(12), pady=(0, self._px(10)))
 
         channel_cluster = tk.Frame(picker_row, bg=_THEME["CARD_ALT"])
-        channel_cluster.pack(side="left")
+        channel_cluster.pack(fill="x", pady=(0, self._px(10)))
         tk.Label(
             channel_cluster,
             text="通道",
             font=self._font(9, "bold"),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["CARD_ALT"],
-        ).pack(side="left")
+        ).pack(anchor="w")
 
         self.channel_menu = tk.OptionMenu(
             channel_cluster, self.channel_var, "Enhanced", "Standard", "Lite"
@@ -2930,17 +2903,17 @@ class LauncherWindow:
             bd=0,
             font=self._font(10),
         )
-        self.channel_menu.pack(side="left", padx=(self._px(8), 0))
+        self.channel_menu.pack(anchor="w", pady=(self._px(5), 0))
 
         source_cluster = tk.Frame(picker_row, bg=_THEME["CARD_ALT"])
-        source_cluster.pack(side="left", padx=(self._px(18), 0))
+        source_cluster.pack(fill="x", pady=(0, self._px(10)))
         tk.Label(
             source_cluster,
             text="来源",
             font=self._font(9, "bold"),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["CARD_ALT"],
-        ).pack(side="left")
+        ).pack(anchor="w")
 
         source_choices = [label for _mode, label in DOWNLOAD_SOURCE_CHOICES]
         self.download_source_menu = tk.OptionMenu(
@@ -2970,10 +2943,10 @@ class LauncherWindow:
             bd=0,
             font=self._font(9),
         )
-        self.download_source_menu.pack(side="left", padx=(self._px(8), 0))
+        self.download_source_menu.pack(anchor="w", pady=(self._px(5), 0))
 
         self.proxy_chk = tk.Checkbutton(
-            controls_row,
+            picker_row,
             text="使用系统代理",
             variable=self.proxy_var,
             command=self._on_proxy_changed,
@@ -2987,7 +2960,7 @@ class LauncherWindow:
             cursor="hand2",
             font=self._font(9),
         )
-        self.proxy_chk.pack(side="right")
+        self.proxy_chk.pack(anchor="w", pady=(0, self._px(4)))
 
         self.selection_summary_lbl = tk.Label(
             controls_card,
@@ -2999,23 +2972,22 @@ class LauncherWindow:
             justify="left",
             wraplength=self._px(540),
         )
-        self.selection_summary_lbl.pack(fill="x", padx=self._px(12), pady=(0, self._px(10)))
+        self.selection_summary_lbl.pack(
+            fill="x",
+            padx=self._px(12),
+            pady=(self._px(2), self._px(12)),
+        )
         self.channel_var.trace_add("write", self._on_channel_changed)
         self._refresh_channel_details()
         self._refresh_download_source_details()
 
         card = tk.Frame(
-            self.root,
+            content_row,
             bg=_THEME["CARD"],
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
         )
-        card.pack(
-            fill="both",
-            expand=True,
-            padx=self._px(20),
-            pady=(self._px(4), self._px(10)),
-        )
+        card.grid(row=0, column=1, sticky="nsew")
 
         status_header = tk.Frame(card, bg=_THEME["CARD"])
         status_header.pack(
@@ -3082,8 +3054,16 @@ class LauncherWindow:
         )
         self.hint_lbl.pack(fill="x", padx=self._px(16), pady=(self._px(2), self._px(10)))
 
-        btn_row = tk.Frame(card, bg=_THEME["CARD"])
-        btn_row.pack(fill="x", padx=self._px(16), pady=(0, self._px(14)))
+        btn_shell = tk.Frame(
+            top,
+            bg=_THEME["CARD_ALT"],
+            highlightthickness=1,
+            highlightbackground=_THEME["BORDER"],
+        )
+        btn_shell.pack(fill="x", padx=self._px(18), pady=(0, self._px(16)))
+
+        btn_row = tk.Frame(btn_shell, bg=_THEME["CARD_ALT"])
+        btn_row.pack(fill="x", padx=self._px(12), pady=self._px(10))
 
         self.start_btn = tk.Button(
             btn_row,
