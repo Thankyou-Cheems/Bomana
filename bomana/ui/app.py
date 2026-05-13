@@ -36,7 +36,7 @@ from bomana.core.state import Phase, UISnapshot
 from bomana.ui.debug_support import AppDebugSupport
 from bomana.ui.dialogs import AboutDialog, BombSelectorDialog, ChecklistEditor, SettingsDialog
 from bomana.ui.main_window import MainWindowBuilder
-from bomana.ui.nav_window import NavigationWindow
+from bomana.ui.navigation_runtime import AppNavigationServices
 from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.runtime import LogicPoller, TkEventDispatcher
 from bomana.ui.runtime_services import HAS_TRAY, AppRuntimeServices
@@ -91,6 +91,7 @@ class App:
         self.sound = SoundManager()
         self.dispatcher = TkEventDispatcher(root)
         self.logic_poller = LogicPoller(self.game, lambda: self._stop)
+        self.navigation_services = AppNavigationServices(self)
         self.runtime_services = AppRuntimeServices(self)
 
         # 控制标志
@@ -155,7 +156,6 @@ class App:
         self._zone_layout_mode = None
         self._airport_layout_mode = None
         self._history_mode_layout_active = False
-        self._history_mode_nav_was_visible = False
         self.debug_support = AppDebugSupport(self)
         self.panel_renderer = AppPanelRenderer(self)
 
@@ -169,12 +169,7 @@ class App:
         self._init_global_hotkeys()
 
         # v6.2.1: 初始化独立导航窗口（仅在战区功能启用时）
-        if ENABLE_ZONES:
-            self.nav_window = NavigationWindow(self)
-            if PanelConfig.navigation_mode == "standalone":
-                self.nav_window.show()
-        else:
-            self.nav_window = None
+        self.navigation_services.init_window()
 
         # v6.8.0: 初始化 HUD 叠加层（按配置决定是否显示）
         if HUDConfig.enabled:
@@ -193,6 +188,11 @@ class App:
     def hud_overlay(self):
         """Compatibility view for dialog code that inspects the active HUD surface."""
         return self.runtime_services.hud_overlay
+
+    @property
+    def nav_window(self):
+        """Compatibility view for dialog code that inspects the standalone nav surface."""
+        return self.navigation_services.window
 
     def _load_config(self):
         """加载用户配置
@@ -614,10 +614,7 @@ class App:
         if active:
             if self.mid_frame.winfo_manager() == "grid":
                 self.mid_frame.grid_remove()
-            if state_changed and self.nav_window:
-                self._history_mode_nav_was_visible = bool(self.nav_window.is_visible())
-            if self.nav_window and self.nav_window.is_visible():
-                self.nav_window.hide()
+            self.navigation_services.suspend_for_history_mode(state_changed=state_changed)
             if self.top_row1.winfo_manager() == "grid":
                 self.top_row1.grid_remove()
             if self.top_row2.winfo_manager() == "grid":
@@ -633,15 +630,7 @@ class App:
                     pady=self._history_mode_pad_y,
                 )
         else:
-            if state_changed:
-                if (
-                    self.nav_window
-                    and self._history_mode_nav_was_visible
-                    and ENABLE_ZONES
-                    and PanelConfig.navigation_mode == "standalone"
-                ):
-                    self.nav_window.show()
-                self._history_mode_nav_was_visible = False
+            self.navigation_services.restore_after_history_mode(state_changed=state_changed)
             if self.history_mode_frame.winfo_manager() == "grid":
                 self.history_mode_frame.grid_remove()
             if self.top_row1.winfo_manager() != "grid":
@@ -811,24 +800,7 @@ class App:
 
         仅在战区功能启用时可用。
         """
-        if not ENABLE_ZONES or not self.nav_window:
-            return
-
-        self._reset_navigation_layout_state()
-        if PanelConfig.navigation_mode == "integrated":
-            PanelConfig.navigation_mode = "standalone"
-            self.nav_window.clear_display()
-            self.nav_window.show()
-        else:
-            PanelConfig.navigation_mode = "integrated"
-            self.nav_window.hide()
-        self._update_nav_mode_button()
-        self._save_config()
-        # 先刷新布局，再强制收缩，避免残留空白
-        self._update_ui()
-        self._recalc_size(force_shrink=True)
-        self._refresh_tray()
-        log_event("navigation_mode_toggle", mode=PanelConfig.navigation_mode)
+        self.navigation_services.toggle_mode()
 
     def _recalc_size(self, keep_pos: bool = True, force_shrink: bool = False):
         """重新计算窗口尺寸
@@ -1131,8 +1103,7 @@ class App:
         # 解锁时提高不透明度，让用户更容易看到可拖动区域
         alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
-        if self.nav_window:
-            self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
+        self.navigation_services.apply_lock_state(locked=self._locked, alpha=alpha)
         self.runtime_services.apply_hud_lock_state(self._locked)
         self._update_hint()
         self._refresh_tray()
@@ -1338,10 +1309,8 @@ class App:
         if not (need_main_rebuild or need_nav_rebuild):
             return
 
-        nav_was_visible = False
         preserve_text_only_geometry = bool(text_scale_changed and not ui_scale_changed)
         main_geometry = None
-        nav_geometry = None
         if preserve_text_only_geometry:
             try:
                 main_geometry = (
@@ -1352,27 +1321,6 @@ class App:
                 )
             except tk.TclError:
                 main_geometry = None
-        if ENABLE_ZONES and need_nav_rebuild and getattr(self, "nav_window", None):
-            try:
-                nav_was_visible = bool(self.nav_window.is_visible())
-            except Exception:
-                nav_was_visible = False
-            if preserve_text_only_geometry and nav_was_visible:
-                try:
-                    nav_geometry = (
-                        self.nav_window.window.winfo_x(),
-                        self.nav_window.window.winfo_y(),
-                        self.nav_window.window.winfo_width(),
-                        self.nav_window.window.winfo_height(),
-                    )
-                except Exception:
-                    nav_geometry = None
-            try:
-                self.nav_window.destroy()
-            except Exception:
-                pass
-            self.nav_window = None
-
         if need_main_rebuild:
             if hasattr(self, "main_frame") and self.main_frame:
                 try:
@@ -1419,18 +1367,14 @@ class App:
                 self._recalc_size(force_shrink=True)
 
         if ENABLE_ZONES and need_nav_rebuild:
-            self.nav_window = NavigationWindow(self)
-            if PanelConfig.navigation_mode == "standalone" and nav_was_visible:
-                self.nav_window.show()
-                if preserve_text_only_geometry and nav_geometry:
-                    nav_x, nav_y, nav_w, nav_h = nav_geometry
-                    self.nav_window.window.geometry(f"{nav_w}x{nav_h}+{nav_x}+{nav_y}")
+            self.navigation_services.rebuild_after_display_change(
+                preserve_text_only_geometry=preserve_text_only_geometry
+            )
 
         # 重新应用窗口样式（锁定态穿透 + 透明度）
         alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
-        if ENABLE_ZONES and getattr(self, "nav_window", None):
-            self.nav_window.apply_window_styles(click_through=self._locked, alpha=alpha)
+        self.navigation_services.apply_lock_state(locked=self._locked, alpha=alpha)
         self.runtime_services.refresh_hud_after_display_change(
             ui_scale_changed=ui_scale_changed,
             text_scale_changed=text_scale_changed,
@@ -1464,6 +1408,7 @@ class App:
         self._save_config()
 
         self.runtime_services.stop()
+        self.navigation_services.stop()
 
         try:
             self.sound.stop(drain=False)
