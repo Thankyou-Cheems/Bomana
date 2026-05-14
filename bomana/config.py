@@ -9,8 +9,8 @@ from pathlib import Path
 # 标准元数据 (Standard Metadata)
 # =============================================================================
 __title__ = "Bomana"
-__version__ = "6.13.4"
-PORTABLE_MIN_LAUNCHER_VERSION = "1.5.4"
+__version__ = "6.14.0"
+PORTABLE_MIN_LAUNCHER_VERSION = "1.6.0"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"
 __copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
@@ -860,13 +860,12 @@ class ChecklistConfig:
     # 默认检查清单
     DEFAULT_ITEMS = [
         "按I启动发动机",
-        "等待发动机转速稳定",
-        "收起落架",
-        "开增稳系统",
-        "Y66或地图设定打击目标",
-        "取消武器选择模式",
-        "火控系统Y67调节炸弹自动",
-        "降落后Y65关闭座舱盖防噪音",
+        "检查襟翼/起落架",
+        "开启增稳系统",
+        "关闭武器选择模式",
+        "Y66设定打击目标",
+        "Y67开启CCRP",
+        "Y65关闭座舱盖",
     ]
 
 
