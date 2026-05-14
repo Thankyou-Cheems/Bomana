@@ -1,6 +1,7 @@
 """Reusable UI widgets."""
 
 import tkinter as tk
+import tkinter.font as tkfont
 
 from bomana.config import Theme, UIConfig, ZoneConfig
 from bomana.utils.math_utils import (
@@ -82,9 +83,11 @@ class HeadingTape(tk.Canvas):
             highlightcolor=Theme.SEPARATOR,
             **kwargs,
         )
-        self.tape_width = width
-        self.tape_height = height
         self.text_scale = UIConfig.clamp_text_scale(text_scale)
+        self.tape_width = width
+        self.tape_height = max(height, self._required_tape_height())
+        if self.tape_height != height:
+            self.configure(height=self.tape_height)
         self.pixels_per_degree = ZoneConfig.HEADING_TAPE_PIXELS_PER_DEG
         self._current_hdg = 0.0
         self._primary_target = None
@@ -103,6 +106,98 @@ class HeadingTape(tk.Canvas):
 
     def _scaled_text_size(self, base_size: float, *, min_size: int = 1) -> int:
         return max(int(min_size), int(float(base_size) * float(self.text_scale)))
+
+    def _font(self, size: int, *, weight: str | None = None, family: str = "Consolas"):
+        if weight:
+            return (family, size, weight)
+        return (family, size)
+
+    def _font_linespace(self, font) -> int:
+        return int(tkfont.Font(master=self, font=font).metrics("linespace"))
+
+    def _measure_text(self, text: str, font) -> int:
+        return int(tkfont.Font(master=self, font=font).measure(text))
+
+    def _layout_metrics(self) -> dict[str, float | int | tuple]:
+        scale = float(self.text_scale)
+        degree_font_size = self._scaled_text_size(8, min_size=7)
+        distance_font_size = self._scaled_text_size(9, min_size=7)
+        distance_small_font_size = self._scaled_text_size(7, min_size=6)
+        overflow_font_size = self._scaled_text_size(7, min_size=6)
+        arrow_font_size = self._scaled_text_size(10, min_size=8)
+
+        degree_font = self._font(degree_font_size)
+        distance_font = self._font(distance_font_size)
+        distance_bold_font = self._font(distance_font_size, weight="bold")
+        distance_small_font = self._font(distance_small_font_size)
+        overflow_font = self._font(overflow_font_size, weight="bold")
+        arrow_font = self._font(arrow_font_size, weight="bold", family="Arial")
+
+        distance_linespace = max(
+            self._font_linespace(distance_font),
+            self._font_linespace(distance_bold_font),
+            self._font_linespace(distance_small_font),
+        )
+
+        top_pad = max(2, int(2 * scale))
+        bottom_pad = max(2, int(2 * scale))
+        row_gap = max(2, int(2 * scale))
+        marker_scale = max(0.85, scale)
+        marker_half = max(8, int(9 * marker_scale))
+        tick_major = max(12, int(12 * scale))
+        tick_mid = max(8, int(tick_major * 0.65))
+        tick_small = max(5, int(tick_major * 0.45))
+
+        tick_top = top_pad
+        tick_major_bottom = tick_top + tick_major
+        degree_text_y = tick_major_bottom + row_gap
+        distance_y = self.tape_height - bottom_pad
+        distance_top = distance_y - distance_linespace
+        marker_top_limit = top_pad + marker_half
+        marker_bottom_limit = distance_top - row_gap - marker_half
+        if marker_bottom_limit >= marker_top_limit:
+            marker_center_y = int((marker_top_limit + marker_bottom_limit) / 2)
+        else:
+            marker_center_y = int(marker_top_limit)
+
+        return {
+            "top_pad": top_pad,
+            "bottom_pad": bottom_pad,
+            "row_gap": row_gap,
+            "tick_top": tick_top,
+            "tick_major_bottom": tick_major_bottom,
+            "tick_mid_bottom": tick_top + tick_mid,
+            "tick_small_bottom": tick_top + tick_small,
+            "degree_text_y": degree_text_y,
+            "degree_font": degree_font,
+            "distance_y": distance_y,
+            "distance_linespace": distance_linespace,
+            "distance_font": distance_font,
+            "distance_bold_font": distance_bold_font,
+            "distance_small_font": distance_small_font,
+            "overflow_font": overflow_font,
+            "arrow_font": arrow_font,
+            "marker_scale": marker_scale,
+            "marker_center_y": marker_center_y,
+            "marker_half": marker_half,
+        }
+
+    def _required_tape_height(self) -> int:
+        degree_font_size = self._scaled_text_size(8, min_size=7)
+        distance_font_size = self._scaled_text_size(9, min_size=7)
+        scale = float(self.text_scale)
+        top_pad = max(2, int(2 * scale))
+        bottom_pad = max(2, int(2 * scale))
+        row_gap = max(2, int(2 * scale))
+        tick_major = max(12, int(12 * scale))
+        marker_half = max(8, int(9 * max(0.85, scale)))
+        degree_linespace = self._font_linespace(self._font(degree_font_size))
+        distance_linespace = self._font_linespace(self._font(distance_font_size))
+        top_band_height = max(
+            tick_major + row_gap + degree_linespace,
+            marker_half * 2,
+        )
+        return top_pad + top_band_height + row_gap + distance_linespace + bottom_pad
 
     def update_tape_multi(
         self, current_hdg: float, targets: list = None, primary_distance_km: float = 0.0
@@ -145,6 +240,12 @@ class HeadingTape(tk.Canvas):
             return
         self._last_render_signature = render_signature
 
+        required_height = self._required_tape_height()
+        if self.tape_height < required_height:
+            self.tape_height = required_height
+            self.configure(height=required_height)
+
+        layout = self._layout_metrics()
         self.delete("all")
         self._current_hdg = current_hdg
         self.create_rectangle(
@@ -228,20 +329,40 @@ class HeadingTape(tk.Canvas):
                 continue
 
             if display_d % 10 == 0:
-                self.create_line(x, 2, x, 14, fill=Theme.TEXT, width=2)
-                degree_font_size = self._scaled_text_size(8, min_size=7)
+                self.create_line(
+                    x,
+                    layout["tick_top"],
+                    x,
+                    layout["tick_major_bottom"],
+                    fill=Theme.TEXT,
+                    width=2,
+                )
                 self.create_text(
                     x,
-                    22,
+                    layout["degree_text_y"],
                     text=f"{display_d:03d}",
                     fill=Theme.TEXT,
-                    font=("Consolas", degree_font_size),
+                    font=layout["degree_font"],
                     anchor="n",
                 )
             elif display_d % 5 == 0:
-                self.create_line(x, 4, x, 12, fill=Theme.TEXT_DIM, width=1)
+                self.create_line(
+                    x,
+                    layout["tick_top"] + 2,
+                    x,
+                    layout["tick_mid_bottom"],
+                    fill=Theme.TEXT_DIM,
+                    width=1,
+                )
             elif scale_factor >= 2.0:
-                self.create_line(x, 6, x, 10, fill=Theme.TEXT_MUTED, width=1)
+                self.create_line(
+                    x,
+                    layout["tick_top"] + 4,
+                    x,
+                    layout["tick_small_bottom"],
+                    fill=Theme.TEXT_MUTED,
+                    width=1,
+                )
 
         # 5. 绘制所有目标标记（按优先级：destroyed < enemy < friendly < zone）
         sorted_targets = sorted(
@@ -299,7 +420,11 @@ class HeadingTape(tk.Canvas):
     def _on_configure(self, event) -> None:
         """Redraw when the widget gets resized by layout."""
         new_width = max(1, int(getattr(event, "width", self.tape_width)))
-        new_height = max(1, int(getattr(event, "height", self.tape_height)))
+        min_height = self._required_tape_height()
+        event_height = int(getattr(event, "height", self.tape_height))
+        new_height = max(min_height, event_height)
+        if event_height < min_height:
+            self.configure(height=min_height)
         if new_width == self.tape_width and new_height == self.tape_height:
             return
         self.tape_width = new_width
@@ -344,10 +469,9 @@ class HeadingTape(tk.Canvas):
             color = color_map.get(base_color, Theme.TEXT_DIM)
         else:
             color = base_color
-        # 根据高度计算图标缩放（基于32px基准高度）
-        icon_scale = self.tape_height / 32.0
-        # v6.5.2: 图标偏上，给底部距离标签留空间
-        y_center = int(self.tape_height * 0.42)
+        layout = self._layout_metrics()
+        icon_scale = float(layout["marker_scale"])
+        y_center = int(layout["marker_center_y"])
 
         # v6.6.1: 为所有目标显示距离标签（非目标使用弱化样式）
         if show_distance > 0:
@@ -518,7 +642,8 @@ class HeadingTape(tk.Canvas):
             is_target: 是否为活动目标（v6.6.1新增）
         """
         # v6.6.0: 距离标签放在图标下方（航向带底部）
-        dist_y = self.tape_height - 2
+        layout = self._layout_metrics()
+        dist_y = int(layout["distance_y"])
 
         # v6.6.0: 使用动态精度格式化距离
         dist_text = format_distance_dynamic(distance)
@@ -526,13 +651,8 @@ class HeadingTape(tk.Canvas):
         # v6.6.0: 获取基于偏差的语义颜色
         deviation_color = get_deviation_color(relative_angle, distance)
 
-        # 根据目标类型和距离确定样式
-        # v6.6.1: 非目标使用更小的字体
-        font_size = (
-            self._scaled_text_size(9 * icon_scale, min_size=7)
-            if is_target
-            else self._scaled_text_size(7 * icon_scale, min_size=6)
-        )
+        text_font = layout["distance_font"] if is_target else layout["distance_small_font"]
+        bold_font = layout["distance_bold_font"] if is_target else layout["distance_small_font"]
 
         if t_type == "zone":
             # v6.6.0: 战区距离标签 - 使用偏差颜色
@@ -543,11 +663,11 @@ class HeadingTape(tk.Canvas):
                 text_color = "#FFFFFF"
 
                 # 绘制带底色的标签
-                text_width = len(dist_text) * font_size * 0.6
+                text_width = self._measure_text(dist_text, bold_font)
                 pad = 2
                 self.create_rectangle(
                     x - text_width / 2 - pad,
-                    dist_y - font_size,
+                    dist_y - int(layout["distance_linespace"]),
                     x + text_width / 2 + pad,
                     dist_y + pad,
                     fill=bg_color,
@@ -558,7 +678,7 @@ class HeadingTape(tk.Canvas):
                     dist_y,
                     text=dist_text,
                     fill=text_color,
-                    font=("Consolas", font_size, "bold"),
+                    font=bold_font,
                     anchor="s",
                 )
             elif is_target:
@@ -568,7 +688,7 @@ class HeadingTape(tk.Canvas):
                     dist_y,
                     text=dist_text,
                     fill=deviation_color,
-                    font=("Consolas", font_size),
+                    font=text_font,
                     anchor="s",
                 )
             else:
@@ -578,7 +698,7 @@ class HeadingTape(tk.Canvas):
                     dist_y,
                     text=dist_text,
                     fill=Theme.TEXT_MUTED,
-                    font=("Consolas", font_size),
+                    font=text_font,
                     anchor="s",
                 )
 
@@ -590,11 +710,11 @@ class HeadingTape(tk.Canvas):
 
                 # 友方机场添加"⌂"标记
                 label_text = f"⌂{dist_text}"
-                text_width = len(label_text) * font_size * 0.55
+                text_width = self._measure_text(label_text, bold_font)
                 pad = 2
                 self.create_rectangle(
                     x - text_width / 2 - pad,
-                    dist_y - font_size,
+                    dist_y - int(layout["distance_linespace"]),
                     x + text_width / 2 + pad,
                     dist_y + pad,
                     fill=bg_color,
@@ -605,7 +725,7 @@ class HeadingTape(tk.Canvas):
                     dist_y,
                     text=label_text,
                     fill=text_color,
-                    font=("Consolas", font_size, "bold"),
+                    font=bold_font,
                     anchor="s",
                 )
             else:
@@ -616,7 +736,7 @@ class HeadingTape(tk.Canvas):
                     dist_y,
                     text=label_text,
                     fill="#5577AA",
-                    font=("Consolas", font_size),
+                    font=text_font,
                     anchor="s",
                 )
 
@@ -630,7 +750,7 @@ class HeadingTape(tk.Canvas):
                     dist_y,
                     text=label_text,
                     fill=urgency_color,
-                    font=("Consolas", font_size),
+                    font=text_font,
                     anchor="s",
                 )
             else:
@@ -641,7 +761,7 @@ class HeadingTape(tk.Canvas):
                     dist_y,
                     text=label_text,
                     fill="#997755",
-                    font=("Consolas", font_size),
+                    font=text_font,
                     anchor="s",
                 )
 
@@ -652,7 +772,7 @@ class HeadingTape(tk.Canvas):
                 dist_y,
                 text=dist_text,
                 fill=Theme.TEXT_DIM,
-                font=("Consolas", font_size),
+                font=text_font,
                 anchor="s",
             )
 
@@ -706,9 +826,9 @@ class HeadingTape(tk.Canvas):
             distance: 目标距离（公里）
         """
         color = self._target_colors.get(t_type, Theme.TEXT_DIM)
-        icon_scale = self.tape_height / 32.0
-        # v6.5.2: 与图标位置保持一致
-        y = int(self.tape_height * 0.42)
+        layout = self._layout_metrics()
+        icon_scale = float(layout["marker_scale"])
+        y = int(layout["marker_center_y"])
         tri_size = int(6 * icon_scale)
 
         # v6.5: 根据类型添加前缀标记
@@ -727,7 +847,7 @@ class HeadingTape(tk.Canvas):
         elif prefix:
             dist_text = prefix
 
-        font_size = self._scaled_text_size(7 * icon_scale, min_size=6)
+        overflow_font = layout["overflow_font"]
 
         if relative < 0:
             # 左侧小三角
@@ -748,7 +868,7 @@ class HeadingTape(tk.Canvas):
                     y,
                     text=dist_text,
                     fill=color,
-                    font=("Consolas", font_size, "bold"),
+                    font=overflow_font,
                     anchor="w",
                 )
         else:
@@ -770,26 +890,27 @@ class HeadingTape(tk.Canvas):
                     y,
                     text=dist_text,
                     fill=color,
-                    font=("Consolas", font_size, "bold"),
+                    font=overflow_font,
                     anchor="e",
                 )
 
     def _draw_primary_overflow(self, diff: float):
         """绘制主目标的大偏航箭头"""
-        # v6.5.2: 与图标位置保持一致
-        y = int(self.tape_height * 0.42)
+        layout = self._layout_metrics()
+        y = int(layout["marker_center_y"])
+        arrow_half = max(10, int(10 * float(layout["marker_scale"])))
+        arrow_font = layout["arrow_font"]
 
         if diff < 0:
             # 左侧大箭头
-            arrow_points = [5, y, 25, y - 10, 20, y, 25, y + 10]
+            arrow_points = [5, y, 25, y - arrow_half, 20, y, 25, y + arrow_half]
             self.create_polygon(arrow_points, fill=Theme.RED, outline=Theme.BG)
-            arrow_font_size = self._scaled_text_size(10, min_size=8)
             self.create_text(
                 40,
                 y,
                 text=f"◀ {abs(int(diff))}°",
                 fill=Theme.RED,
-                font=("Arial", arrow_font_size, "bold"),
+                font=arrow_font,
                 anchor="w",
             )
         else:
@@ -798,20 +919,19 @@ class HeadingTape(tk.Canvas):
                 self.tape_width - 5,
                 y,
                 self.tape_width - 25,
-                y - 10,
+                y - arrow_half,
                 self.tape_width - 20,
                 y,
                 self.tape_width - 25,
-                y + 10,
+                y + arrow_half,
             ]
             self.create_polygon(arrow_points, fill=Theme.RED, outline=Theme.BG)
-            arrow_font_size = self._scaled_text_size(10, min_size=8)
             self.create_text(
                 self.tape_width - 40,
                 y,
                 text=f"{abs(int(diff))}° ▶",
                 fill=Theme.RED,
-                font=("Arial", arrow_font_size, "bold"),
+                font=arrow_font,
                 anchor="e",
             )
 
