@@ -119,8 +119,7 @@ echo ""
 
 EXEC_NAME="Bomana_${VARIANT}"
 ADD_DATA_ARGS=(
-  "--add-data" "app.png:."
-  "--add-data" "sponsor_wechat.png:."
+  "--add-data" "bomana/assets:bomana/assets"
 )
 if [ -f "bomana/data/fm_speed_limits.json" ]; then
   ADD_DATA_ARGS+=("--add-data" "bomana/data/fm_speed_limits.json:bomana/data")
@@ -137,7 +136,7 @@ fi
 
 "${UV_CMD[@]}" run pyinstaller --onefile \
             --noconsole \
-            --icon=app.ico \
+            --icon=bomana/assets/branding/app.ico \
             --name="$EXEC_NAME" \
             "${ADD_DATA_ARGS[@]}" \
             --hidden-import "pystray._win32" \

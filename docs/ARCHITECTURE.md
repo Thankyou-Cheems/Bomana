@@ -13,7 +13,7 @@
 - Tools: `tools/update_datamine_assets.py` (refresh both generated datamine assets)
 - Tools: `tools/blkx_extractor.py` / `tools/fm_speed_extractor.py` (single-asset extractors)
 - Tools: `tools/create_version_info.py` / `tools/sample_8111_attitude.py` (build metadata + diagnostics)
-- Assets: `app.png`, `sponsor_wechat.png`, `app.ico`
+- Branding assets: `bomana/assets/branding/` (`app.ico`, `app.png`, sponsor images)
 
 ## Repository Layout
 ```
@@ -26,6 +26,7 @@
 │  │  ├─ ccrp_bomb_params.json # Bomb parameters (CCRP)
 │  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
 │  ├─ assets/
+│  │  ├─ branding/             # App icon, promo image, sponsor image
 │  │  ├─ fonts/                # Private Bomana UI Sans font subsets + OFL license
 │  │  └─ icons/                # PNG icon assets used instead of emoji glyphs
 │  ├─ core/
@@ -64,7 +65,6 @@
 │  ├─ update_datamine_assets.py # One command to refresh both generated data assets
 │  ├─ sample_8111_attitude.py # HUD baseline sampler
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
-├─ assets (root files)       # Icons/sponsor image, etc.
 └─ README.md                 # Main landing page for GitHub visitors
 ```
 
@@ -172,6 +172,7 @@ Portable release uses:
 Bundled assets:
 - App packages include `bomana/assets/` automatically because `build_app_zip()` packages the whole `bomana/` tree.
 - Launcher builds also add `bomana/assets/` so launcher/dialog text can use the same private UI font when running as a onefile executable.
+- Root-level branding files were folded into `bomana/assets/branding/`; runtime path resolution keeps legacy root filenames only as fallbacks.
 
 Local build helper:
 - `tools\scripts\build_portable.bat <Variant> <all|app|launcher>`

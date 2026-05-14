@@ -711,7 +711,11 @@ class FileConfig:
     STATE_FILE = Path.home() / ".wttimer_state.json"
 
     # 图标文件（用于托盘和窗口）
-    ICON_FILE = "app.ico"
+    ICON_FILE = "bomana/assets/branding/app.ico"
+    ICON_FILE_CANDIDATES = (
+        ICON_FILE,
+        "app.ico",
+    )
 
     # 用户自定义提示音导入目录
     CUSTOM_SOUND_DIR = SoundConfig.CUSTOM_SOUND_DIR
@@ -841,7 +845,7 @@ class AboutConfig:
     # 赞助链接配置（可以添加多个）
     SPONSOR_LINKS = [
         # ("显示名称", "链接URL", "图片文件名"),
-        ("微信赞赏", "", "sponsor_wechat.png"),  # 空链接表示只显示图片
+        ("微信赞赏", "", "bomana/assets/branding/sponsor_wechat.png"),  # 空链接表示只显示图片
     ]
 
     # 赞助图片尺寸

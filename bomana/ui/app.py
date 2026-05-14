@@ -394,12 +394,14 @@ class App:
         self.root.title("WT Timer")
 
         # 加载图标
-        try:
-            p = resource_path(FileConfig.ICON_FILE)
-            self._tk_icon = tk.PhotoImage(file=p)
-            self.root.iconphoto(True, self._tk_icon)
-        except tk.TclError, FileNotFoundError:
-            pass
+        for icon_file in getattr(FileConfig, "ICON_FILE_CANDIDATES", (FileConfig.ICON_FILE,)):
+            try:
+                p = resource_path(icon_file)
+                self._tk_icon = tk.PhotoImage(file=p)
+                self.root.iconphoto(True, self._tk_icon)
+                break
+            except tk.TclError:
+                continue
 
         # 无边框窗口
         self.root.overrideredirect(True)

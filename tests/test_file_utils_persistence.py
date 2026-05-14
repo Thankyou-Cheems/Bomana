@@ -8,6 +8,17 @@ from bomana.config import FileConfig
 from bomana.utils.file_utils import ConfigManager, StateManager, atomic_write_json
 
 
+class ResourcePathTests(unittest.TestCase):
+    def test_branding_assets_live_under_bundled_assets(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+
+        self.assertEqual(FileConfig.ICON_FILE, "bomana/assets/branding/app.ico")
+        self.assertIn("app.ico", FileConfig.ICON_FILE_CANDIDATES)
+        self.assertTrue((root / FileConfig.ICON_FILE).is_file())
+        self.assertTrue((root / "bomana/assets/branding/app.png").is_file())
+        self.assertTrue((root / "bomana/assets/branding/sponsor_wechat.png").is_file())
+
+
 class PersistenceTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()

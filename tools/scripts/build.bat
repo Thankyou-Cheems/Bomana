@@ -145,9 +145,8 @@ if exist bomana\data\fm_speed_limits.json (
 if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
     %UV_CMD% run pyinstaller --noconsole --onefile ^
                 --name=%EXEC_NAME% ^
-                --icon=app.ico ^
-                --add-data "app.png;." ^
-                --add-data "sponsor_wechat.png;." ^
+                --icon=bomana\assets\branding\app.ico ^
+                --add-data "bomana/assets;bomana/assets" ^
                 %CCRP_DATA_ARG% ^
                 %FM_SPEED_DATA_ARG% ^
                 --hidden-import "pystray._win32" ^
@@ -157,9 +156,8 @@ if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
 ) else (
     %UV_CMD% run pyinstaller --noconsole --onefile ^
                 --name=%EXEC_NAME% ^
-                --icon=app.ico ^
-                --add-data "app.png;." ^
-                --add-data "sponsor_wechat.png;." ^
+                --icon=bomana\assets\branding\app.ico ^
+                --add-data "bomana/assets;bomana/assets" ^
                 %FM_SPEED_DATA_ARG% ^
                 --hidden-import "pystray._win32" ^
                 --collect-submodules "PIL" ^

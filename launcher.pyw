@@ -91,6 +91,8 @@ PRIMARY_ALLOW_PACKAGE_DOWNLOAD = os.environ.get(
     "BOMANA_PRIMARY_ALLOW_PACKAGE_DOWNLOAD", "1"
 ).strip().lower() not in ("0", "false", "no", "off")
 LAUNCHER_ASSET_PREFIX = "Bomana_launcher_v"
+BRANDING_ICON_FILE = "bomana/assets/branding/app.ico"
+BRANDING_SPONSOR_FILE = "bomana/assets/branding/sponsor_wechat.png"
 
 RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
@@ -184,6 +186,14 @@ def _resource_path(filename: str) -> Path:
     return _base_dir() / filename
 
 
+def _first_resource_path(filenames: tuple[str, ...]) -> Path:
+    for filename in filenames:
+        path = _resource_path(filename)
+        if path.exists():
+            return path
+    return _resource_path(filenames[0])
+
+
 def _is_frozen_launcher() -> bool:
     return bool(getattr(sys, "frozen", False)) and bool(str(getattr(sys, "executable", "")).strip())
 
@@ -224,7 +234,7 @@ def _previous_app_dir(base: Path) -> Path:
 
 
 def _apply_window_icon(window: tk.Misc) -> None:
-    icon_path = _resource_path("app.ico")
+    icon_path = _first_resource_path((BRANDING_ICON_FILE, "app.ico"))
     if not icon_path.exists():
         return
     try:
@@ -2176,7 +2186,7 @@ class LauncherDetailsDialog(tk.Toplevel):
         try:
             from PIL import Image, ImageTk  # type: ignore
 
-            icon_file = _resource_path("app.ico")
+            icon_file = _first_resource_path((BRANDING_ICON_FILE, "app.ico"))
             if icon_file.exists():
                 img = Image.open(icon_file).convert("RGBA")
                 img = img.resize((56, 56), Image.Resampling.LANCZOS)
@@ -2301,7 +2311,7 @@ class LauncherDetailsDialog(tk.Toplevel):
         try:
             from PIL import Image, ImageTk  # type: ignore
 
-            sponsor_file = _resource_path("sponsor_wechat.png")
+            sponsor_file = _first_resource_path((BRANDING_SPONSOR_FILE, "sponsor_wechat.png"))
             if sponsor_file.exists():
                 img = Image.open(sponsor_file).convert("RGBA")
                 target_w = 360

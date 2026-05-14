@@ -2948,19 +2948,21 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         header = self._make_card(content)
         title_row = tk.Frame(header, bg=Theme.GRAYPILL)
         title_row.pack(fill="x")
-        try:
-            icon_path = resource_path(FileConfig.ICON_FILE)
-            if HAS_TRAY:
-                from PIL import Image, ImageTk
+        if HAS_TRAY:
+            for icon_file in getattr(FileConfig, "ICON_FILE_CANDIDATES", (FileConfig.ICON_FILE,)):
+                try:
+                    from PIL import Image, ImageTk
 
-                img = Image.open(icon_path).convert("RGBA")
-                img = img.resize((56, 56), Image.Resampling.LANCZOS)
-                self._app_icon = ImageTk.PhotoImage(img)
-                tk.Label(title_row, image=self._app_icon, bg=Theme.GRAYPILL).pack(
-                    side="left", padx=(0, 12)
-                )
-        except Exception:
-            pass
+                    icon_path = resource_path(icon_file)
+                    img = Image.open(icon_path).convert("RGBA")
+                    img = img.resize((56, 56), Image.Resampling.LANCZOS)
+                    self._app_icon = ImageTk.PhotoImage(img)
+                    tk.Label(title_row, image=self._app_icon, bg=Theme.GRAYPILL).pack(
+                        side="left", padx=(0, 12)
+                    )
+                    break
+                except Exception:
+                    continue
 
         title_txt = tk.Frame(title_row, bg=Theme.GRAYPILL)
         title_txt.pack(side="left", fill="both", expand=True)

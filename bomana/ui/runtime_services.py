@@ -95,7 +95,7 @@ class AppRuntimeServices:
         app = self.app
 
         def icon():
-            candidates = [FileConfig.ICON_FILE, "app.ico"]
+            candidates = getattr(FileConfig, "ICON_FILE_CANDIDATES", (FileConfig.ICON_FILE,))
             for name in candidates:
                 try:
                     p = resource_path(name)

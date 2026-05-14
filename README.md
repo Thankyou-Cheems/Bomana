@@ -5,7 +5,7 @@
 A powerful War Thunder timer made for the "Space Monkeys" who love dropping bombs and eating bananas
 
 <p align="center">
-  <img src="app.png" width="320" alt="Bomana promotional art">
+  <img src="bomana/assets/branding/app.png" width="320" alt="Bomana promotional art">
 </p>
 
 [![App Release](https://img.shields.io/github/v/tag/Thankyou-Cheems/Bomana?sort=semver&filter=v*.*.*-app&label=app%20release)](https://github.com/Thankyou-Cheems/Bomana/releases)
@@ -508,7 +508,7 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 如果 Bomana 对你有帮助，欢迎通过微信赞助支持开发！
 
-<img src="sponsor_wechat.png" width="200" alt="微信赞赏二维码">
+<img src="bomana/assets/branding/sponsor_wechat.png" width="200" alt="微信赞赏二维码">
 
 ---
 

@@ -42,6 +42,7 @@ VARIANT_SWITCHES = {
 APP_ENTRY = "Bomana.pyw"
 APP_DIR = "bomana"
 UNIVERSAL_LAUNCHER_NAME = "Bomana_launcher"
+BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
 
 
 def safe_print(msg: str) -> None:
@@ -151,11 +152,6 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
                 continue
             add_file_to_zip(zf, root, path)
 
-        for asset in ("app.ico", "sponsor_wechat.png"):
-            p = root / asset
-            if p.exists():
-                add_file_to_zip(zf, root, p)
-
         # Backward compatibility: legacy root-level CCRP file.
         if variant == "Enhanced" and not ccrp_json.exists():
             if legacy_ccrp_json.exists():
@@ -226,7 +222,7 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         "--name",
         name,
         "--icon",
-        str(root / "app.ico"),
+        str(root / BRANDING_ICON),
         "--hidden-import",
         "pystray._win32",
         "--hidden-import",
@@ -253,12 +249,6 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
     cmd.extend(["--version-file", str(version_file)])
 
     # Launcher runtime resources (window icon + details dialog assets)
-    icon_file = root / "app.ico"
-    if icon_file.exists():
-        cmd.extend(["--add-data", f"{icon_file};."])
-    sponsor_file = root / "sponsor_wechat.png"
-    if sponsor_file.exists():
-        cmd.extend(["--add-data", f"{sponsor_file};."])
     assets_dir = root / APP_DIR / "assets"
     if assets_dir.exists():
         cmd.extend(["--add-data", f"{assets_dir};{APP_DIR}/assets"])
