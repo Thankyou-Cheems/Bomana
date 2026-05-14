@@ -8,6 +8,7 @@ import sys
 import threading
 import tkinter as tk
 from collections.abc import Callable
+from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import messagebox
 from typing import Any
@@ -16,12 +17,14 @@ from bomana.config import FileConfig, HotkeyConfig
 
 _MUTEX_HANDLE = None
 _PREFERRED_LATIN_FONTS = [
+    "Bomana UI Sans",
     "Segoe UI Variable",
     "Segoe UI",
     "Arial",
     "Helvetica",
 ]
 _PREFERRED_CJK_FONTS = [
+    "Bomana UI Sans",
     "Microsoft YaHei UI",
     "Microsoft YaHei",
     "Noto Sans CJK SC",
@@ -29,14 +32,78 @@ _PREFERRED_CJK_FONTS = [
     "Source Han Sans SC",
     "WenQuanYi Micro Hei",
 ]
+_BUNDLED_FONT_FAMILY = "Bomana UI Sans"
+_BUNDLED_FONT_FILES = (
+    "BomanaUiSans-Regular.ttf",
+    "BomanaUiSans-Bold.ttf",
+)
+_BUNDLED_FONTS_LOADED = False
+
+
+def _candidate_resource_roots() -> list[Path]:
+    roots: list[Path] = []
+    runtime_root = os.environ.get("BOMANA_RUNTIME_ROOT", "").strip()
+    if runtime_root:
+        roots.append(Path(runtime_root))
+    roots.append(Path(__file__).resolve().parents[2])
+    roots.append(Path.cwd())
+    if hasattr(sys, "_MEIPASS"):
+        roots.append(Path(str(sys._MEIPASS)))
+    return roots
+
+
+def _resolve_resource(rel_path: str) -> Path | None:
+    seen: set[Path] = set()
+    for root in _candidate_resource_roots():
+        path = root / rel_path
+        if path in seen:
+            continue
+        seen.add(path)
+        if path.exists():
+            return path
+    return None
+
+
+def load_bundled_ui_fonts() -> bool:
+    """Privately load Bomana's bundled UI fonts when available."""
+    global _BUNDLED_FONTS_LOADED
+    if _BUNDLED_FONTS_LOADED:
+        return True
+    if os.name != "nt":
+        return False
+
+    gdi32 = getattr(ctypes, "windll", None)
+    if gdi32 is None:
+        return False
+    add_font = getattr(gdi32.gdi32, "AddFontResourceExW", None)
+    if add_font is None:
+        return False
+
+    loaded_any = False
+    for filename in _BUNDLED_FONT_FILES:
+        font_path = _resolve_resource(f"bomana/assets/fonts/{filename}")
+        if font_path is None:
+            continue
+        try:
+            # FR_PRIVATE keeps the bundled font scoped to this process.
+            loaded_any = bool(add_font(str(font_path), 0x10, 0)) or loaded_any
+        except OSError:
+            continue
+
+    _BUNDLED_FONTS_LOADED = loaded_any
+    return loaded_any
 
 
 def select_ui_font_family(root: tk.Misc) -> str:
     """Pick a readable UI font family shared by app and launcher."""
+    load_bundled_ui_fonts()
     try:
         families = set(tkfont.families(root))
     except Exception:
         return ""
+
+    if _BUNDLED_FONT_FAMILY in families:
+        return _BUNDLED_FONT_FAMILY
 
     try:
         loc = locale.getdefaultlocale()[0] or ""

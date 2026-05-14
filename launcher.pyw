@@ -2282,7 +2282,7 @@ class LauncherDetailsDialog(tk.Toplevel):
 
         tk.Label(
             content,
-            text="❤️ 支持作者",
+            text="支持作者",
             font=("Segoe UI", 14, "bold"),
             fg=_THEME["TEXT"],
             bg=_THEME["BG"],
@@ -2335,7 +2335,7 @@ class LauncherDetailsDialog(tk.Toplevel):
 
         tk.Label(
             privacy_frame,
-            text="📊 隐私说明：",
+            text="隐私说明：",
             font=("Segoe UI", 10, "bold"),
             fg=_THEME["BLUE"],
             bg=_THEME["BG"],

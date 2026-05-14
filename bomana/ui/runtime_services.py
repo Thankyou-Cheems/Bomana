@@ -157,10 +157,10 @@ class AppRuntimeServices:
             return PanelConfig.speed_history_mode
 
         menu_items = [
-            pystray.MenuItem("🔄 立即重置计时器", do_reset),
-            pystray.MenuItem(f"🔓 锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
-            pystray.MenuItem(f"📍 切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
-            pystray.MenuItem("🕰 空历速度模式", do_speed_history, checked=is_speed_history_mode),
+            pystray.MenuItem("立即重置计时器", do_reset),
+            pystray.MenuItem(f"锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
+            pystray.MenuItem(f"切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
+            pystray.MenuItem("空历速度模式", do_speed_history, checked=is_speed_history_mode),
             pystray.Menu.SEPARATOR,
         ]
 
@@ -204,31 +204,25 @@ class AppRuntimeServices:
 
             panel_items = []
             if ENABLE_ZONES:
-                panel_items.append(
-                    pystray.MenuItem("🎯 战区导航", toggle_zone, checked=is_zone_panel)
-                )
+                panel_items.append(pystray.MenuItem("战区导航", toggle_zone, checked=is_zone_panel))
             if ENABLE_AIRFIELDS:
                 panel_items.append(
-                    pystray.MenuItem("🛫 机场导航", toggle_airfield, checked=is_airfield_panel)
+                    pystray.MenuItem("机场导航", toggle_airfield, checked=is_airfield_panel)
                 )
             if ENABLE_FUEL:
-                panel_items.append(
-                    pystray.MenuItem("⛽ 燃油管理", toggle_fuel, checked=is_fuel_panel)
-                )
-            panel_items.append(
-                pystray.MenuItem("⚡ 速度监视", toggle_speed, checked=is_speed_panel)
-            )
+                panel_items.append(pystray.MenuItem("燃油管理", toggle_fuel, checked=is_fuel_panel))
+            panel_items.append(pystray.MenuItem("速度监视", toggle_speed, checked=is_speed_panel))
             if ENABLE_CCRP:
                 panel_items.append(
-                    pystray.MenuItem("💣 投弹预测", toggle_bombing, checked=is_bombing_panel)
+                    pystray.MenuItem("投弹预测", toggle_bombing, checked=is_bombing_panel)
                 )
             if ENABLE_CHECKLIST:
                 panel_items.append(
-                    pystray.MenuItem("✅ 出击检查", toggle_checklist, checked=is_checklist_panel)
+                    pystray.MenuItem("出击检查", toggle_checklist, checked=is_checklist_panel)
                 )
 
             if panel_items:
-                menu_items.append(pystray.MenuItem("📊 显示面板", pystray.Menu(*panel_items)))
+                menu_items.append(pystray.MenuItem("显示面板", pystray.Menu(*panel_items)))
 
             if ENABLE_ZONES:
 
@@ -239,35 +233,35 @@ class AppRuntimeServices:
                     return PanelConfig.navigation_mode == "standalone"
 
                 menu_items.append(
-                    pystray.MenuItem("🧭 独立导航窗口", toggle_nav_mode, checked=is_standalone_nav)
+                    pystray.MenuItem("独立导航窗口", toggle_nav_mode, checked=is_standalone_nav)
                 )
 
             menu_items.append(pystray.Menu.SEPARATOR)
 
         menu_items.append(
-            pystray.MenuItem(f"🔊 声音 ({HotkeyConfig.KEY_BEEP})", do_beep, checked=is_beep_on)
+            pystray.MenuItem(f"声音 ({HotkeyConfig.KEY_BEEP})", do_beep, checked=is_beep_on)
         )
 
         if ENABLE_ZONES:
             menu_items.append(
                 pystray.MenuItem(
-                    f"🔔 战区提示音 ({HotkeyConfig.KEY_ZONES})",
+                    f"战区提示音 ({HotkeyConfig.KEY_ZONES})",
                     do_zone_sound,
                     checked=is_zone_sound_on,
                 )
             )
 
         if ENABLE_CHECKLIST:
-            menu_items.append(pystray.MenuItem("📝 编辑检查清单", do_edit_checklist))
+            menu_items.append(pystray.MenuItem("编辑检查清单", do_edit_checklist))
 
         if ENABLE_ADVANCED_SETTINGS:
-            menu_items.append(pystray.MenuItem("⚙️ 设置", do_settings))
+            menu_items.append(pystray.MenuItem("设置", do_settings))
 
         menu_items.append(pystray.Menu.SEPARATOR)
-        menu_items.append(pystray.MenuItem("⭐ 给作者点个Star", do_star))
-        menu_items.append(pystray.MenuItem("🐛 Debug模式", do_debug, checked=is_debug_on))
-        menu_items.append(pystray.MenuItem("ℹ️ 关于", do_about))
-        menu_items.append(pystray.MenuItem("❌ 退出", do_quit))
+        menu_items.append(pystray.MenuItem("给作者点个Star", do_star))
+        menu_items.append(pystray.MenuItem("Debug模式", do_debug, checked=is_debug_on))
+        menu_items.append(pystray.MenuItem("关于", do_about))
+        menu_items.append(pystray.MenuItem("退出", do_quit))
 
         self.tray = pystray.Icon(__title__, icon(), __title__, pystray.Menu(*menu_items))
         start_daemon_thread("BomanaTray", self.tray.run)

@@ -1,0 +1,53 @@
+"""Bundled PNG icon helpers."""
+
+from __future__ import annotations
+
+import tkinter as tk
+from pathlib import Path
+from typing import Any
+
+from bomana.utils.file_utils import resource_path
+
+
+class IconManager:
+    """Load and attach bundled PNG icons while keeping Tk references alive."""
+
+    def __init__(self, root: tk.Misc):
+        self.root = root
+        self._cache: dict[tuple[str, int], tk.PhotoImage] = {}
+
+    def photo(self, key: str, size: int = 16) -> tk.PhotoImage | None:
+        cache_key = (key, size)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        path = Path(resource_path(f"bomana/assets/icons/{key}_{size}.png"))
+        if not path.exists():
+            return None
+        try:
+            image = tk.PhotoImage(master=self.root, file=str(path))
+        except tk.TclError:
+            return None
+        self._cache[cache_key] = image
+        return image
+
+    def configure_label(
+        self,
+        label: tk.Widget,
+        *,
+        icon: str | None,
+        text: str = "",
+        size: int = 16,
+        compound: str = "left",
+        padx: int = 4,
+        **kwargs: Any,
+    ) -> None:
+        image = self.photo(icon, size) if icon else None
+        config = {"text": text, **kwargs}
+        if image is not None:
+            config.update({"image": image, "compound": compound, "padx": padx})
+            label._bomana_icon_image = image
+        else:
+            config.update({"image": "", "compound": "none", "padx": 0})
+            label._bomana_icon_image = None
+        label.config(**config)

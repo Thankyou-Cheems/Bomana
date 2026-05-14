@@ -35,6 +35,7 @@ from bomana.core.logic import GameLogic
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui.debug_support import AppDebugSupport
 from bomana.ui.dialogs import AboutDialog, BombSelectorDialog, ChecklistEditor, SettingsDialog
+from bomana.ui.icon_assets import IconManager
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.navigation_runtime import AppNavigationServices
 from bomana.ui.panel_renderer import AppPanelRenderer
@@ -90,6 +91,7 @@ class App:
         self.game = GameLogic()
         self.sound = SoundManager()
         self.dispatcher = TkEventDispatcher(root)
+        self.icons = IconManager(root)
         self.logic_poller = LogicPoller(self.game, lambda: self._stop)
         self.navigation_services = AppNavigationServices(self)
         self.runtime_services = AppRuntimeServices(self)
@@ -1673,7 +1675,7 @@ class App:
                     badge_bg = Theme.YELLOW
             else:
                 # 警告状态
-                badge_text = "⚠起落架"
+                badge_text = "起落架"
                 badge_bg = Theme.ORANGE
 
             self.badge_gear.set(badge_text, Theme.TEXT, badge_bg)

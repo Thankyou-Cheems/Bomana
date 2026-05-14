@@ -34,7 +34,7 @@ from bomana.utils.math_utils import (
 class NavListItem:
     """Presentation state for one stable zone/airport list row."""
 
-    icon: str = ""
+    icon: str | None = None
     direction: str = ""
     distance: str = ""
     relative: str = ""
@@ -44,7 +44,7 @@ class NavListItem:
 class AppPanelRenderer:
     """Encapsulate large panel rendering sections for App."""
 
-    _NAV_TARGET_ICON = "➤"
+    _NAV_TARGET_ICON = "target"
 
     def __init__(self, app: Any):
         self.app = app
@@ -188,7 +188,7 @@ class AppPanelRenderer:
         if getattr(app, "heading_tape", None) is not None:
             app.heading_tape.clear()
         if getattr(app, "zone_alert_lbl", None) is not None:
-            app.zone_alert_lbl.config(text="")
+            app.icons.configure_label(app.zone_alert_lbl, icon=None, text="")
 
         app._zone_layout_mode = None
         app._airport_layout_mode = None
@@ -276,11 +276,15 @@ class AppPanelRenderer:
             return f"{rel_sign}{relative:.2f}°"
         return f"{rel_sign}{int(relative)}°"
 
-    @staticmethod
-    def _set_nav_row(row: Any, item: NavListItem | None = None) -> None:
+    def _set_nav_row(self, row: Any, item: NavListItem | None = None) -> None:
         """Update one prebuilt zone/airport row without changing geometry."""
         item = item or NavListItem()
-        row.icon_lbl.config(text=item.icon, fg=item.fg)
+        if getattr(self.app, "icons", None) is not None:
+            self.app.icons.configure_label(
+                row.icon_lbl, icon=item.icon, text="", size=12, fg=item.fg, padx=0
+            )
+        else:
+            row.icon_lbl.config(text=item.icon or "", image="", fg=item.fg)
         row.direction_lbl.config(text=item.direction, fg=item.fg)
         row.distance_lbl.config(text=item.distance, fg=item.fg)
         if getattr(row, "relative_lbl", None) is not None:
@@ -383,13 +387,20 @@ class AppPanelRenderer:
                     self._grid_remove_if_needed(app.heading_tape_frame)
 
             if snap.zone_destroyed_alert:
-                alert_text = "💥 战区被摧毁："
+                alert_text = "战区被摧毁："
                 if getattr(snap, "destroyed_zone_text", ""):
                     alert_text += snap.destroyed_zone_text
                 else:
-                    alert_text = "💥 战区已摧毁!"
+                    alert_text = "战区已摧毁!"
                 wrap = max(int(220 * s), app.zone_frame.winfo_width() - int(16 * s))
-                app.zone_alert_lbl.config(text=alert_text, wraplength=wrap, justify="left")
+                app.icons.configure_label(
+                    app.zone_alert_lbl,
+                    icon="explosion",
+                    text=alert_text,
+                    size=16,
+                    wraplength=wrap,
+                    justify="left",
+                )
                 if (
                     snap.should_play_destroyed_sound
                     and not app._last_zone_destroyed_alert
@@ -398,7 +409,7 @@ class AppPanelRenderer:
                     app.sound.play(pattern="zone_destroyed")
                 app._last_zone_destroyed_alert = True
             else:
-                app.zone_alert_lbl.config(text="")
+                app.icons.configure_label(app.zone_alert_lbl, icon=None, text="")
                 app._last_zone_destroyed_alert = False
 
             zone_layout_mode = "full" if nav_in_main else "hidden"
@@ -451,7 +462,7 @@ class AppPanelRenderer:
                     self._set_nav_row(
                         row_pool[idx],
                         NavListItem(
-                            icon=self._nav_list_icon("○", bool(zone.is_target)),
+                            icon=self._nav_list_icon("zone", bool(zone.is_target)),
                             direction=zone.direction,
                             distance=dist_text,
                             relative=relative_text,
@@ -467,7 +478,7 @@ class AppPanelRenderer:
             self._grid_remove_if_needed(app.zone_list_header_frame)
             self._grid_remove_if_needed(app.zone_list_frame)
             self._grid_remove_if_needed(app.compact_nav_frame)
-            app.zone_alert_lbl.config(text="")
+            app.icons.configure_label(app.zone_alert_lbl, icon=None, text="")
             self._clear_nav_rows(app._zone_row_pool)
             self._clear_nav_rows(app._compact_zone_row_pool)
             self._sync_nav_row_visibility(app._zone_row_pool, 0)
@@ -514,7 +525,7 @@ class AppPanelRenderer:
                 self._set_nav_row(
                     row_pool[ap_idx],
                     NavListItem(
-                        icon=self._nav_list_icon("🟢", selected=True),
+                        icon=self._nav_list_icon("airfield_friendly", selected=True),
                         direction=af.direction,
                         distance=dist_text,
                         relative=relative_text,
@@ -532,7 +543,7 @@ class AppPanelRenderer:
                     self._set_nav_row(
                         row_pool[ap_idx],
                         NavListItem(
-                            icon=self._nav_list_icon("🔴", bool(af.is_target)),
+                            icon=self._nav_list_icon("airfield_enemy", bool(af.is_target)),
                             direction=af.direction,
                             distance=dist_text,
                             relative=relative_text,
@@ -629,9 +640,21 @@ class AppPanelRenderer:
             app.fuel_main_lbl.config(text="-- kg (--%)", fg=Theme.TEXT_MUTED)
 
         if snap.fuel_time_remaining_str:
-            app.fuel_time_lbl.config(text=f"⏱️ {snap.fuel_time_remaining_str}", fg=Theme.TEXT)
+            app.icons.configure_label(
+                app.fuel_time_lbl,
+                icon="clock",
+                text=snap.fuel_time_remaining_str,
+                size=14,
+                fg=Theme.TEXT,
+            )
         else:
-            app.fuel_time_lbl.config(text="⏱️ 计算中...", fg=Theme.TEXT_MUTED)
+            app.icons.configure_label(
+                app.fuel_time_lbl,
+                icon="clock",
+                text="计算中...",
+                size=14,
+                fg=Theme.TEXT_MUTED,
+            )
 
         if snap.fuel_rate_stable and snap.fuel_rate_kg_min > 0:
             rate_text = f"油耗 {snap.fuel_rate_kg_min:.0f}kg/min"
@@ -648,22 +671,31 @@ class AppPanelRenderer:
                 needed_text += f" ({return_percent:.0f}%)"
 
             if snap.return_status == "safe":
-                status_icon = "✅ 充足"
+                status_icon = "ok"
+                status_text = "充足"
                 return_color = Theme.GREEN
             elif snap.return_status == "warning":
-                status_icon = "⚠️ 注意"
+                status_icon = "warning"
+                status_text = "注意"
                 return_color = Theme.YELLOW
             else:
-                status_icon = "🔴 不足!"
+                status_icon = "danger"
+                status_text = "不足!"
                 return_color = Theme.RED
 
-            app.fuel_return_lbl.config(text=status_icon, fg=return_color)
+            app.icons.configure_label(
+                app.fuel_return_lbl, icon=status_icon, text=status_text, size=14, fg=return_color
+            )
             detail_suffix = f"返航 {needed_text}"
         elif snap.friendly_distance_km > 0:
-            app.fuel_return_lbl.config(text="↻ 估算中", fg=Theme.TEXT_MUTED)
+            app.icons.configure_label(
+                app.fuel_return_lbl, icon=None, text="↻ 估算中", fg=Theme.TEXT_MUTED
+            )
             detail_suffix = f"返航距离 {snap.friendly_distance_km:.0f}km"
         else:
-            app.fuel_return_lbl.config(text="无机场", fg=Theme.TEXT_MUTED)
+            app.icons.configure_label(
+                app.fuel_return_lbl, icon=None, text="无机场", fg=Theme.TEXT_MUTED
+            )
             detail_suffix = "返航无机场数据"
 
         app.fuel_detail_lbl.config(text=f"{rate_text} │ {alt_text} │ {detail_suffix}")
@@ -691,37 +723,58 @@ class AppPanelRenderer:
 
             if status == "ready":
                 time_str = f"{snap.time_to_release:.2f}s"
-                release_text = f"💣 投弹 {time_str} │ {dist_str}"
+                release_icon = "bomb"
+                release_text = f"投弹 {time_str} │ {dist_str}"
                 release_color = Theme.GREEN
             elif status == "approaching":
                 time_str = f"{snap.time_to_release:.1f}s"
-                release_text = f"⏱️ {time_str} │ {dist_str}"
+                release_icon = "clock"
+                release_text = f"{time_str} │ {dist_str}"
                 release_color = Theme.YELLOW
             elif status == "passed":
-                release_text = f"❌ 已飞过 {dist_str}"
+                release_icon = "danger"
+                release_text = f"已飞过 {dist_str}"
                 release_color = Theme.RED
             elif status == "too_far":
                 time_str = f"{snap.time_to_release:.0f}s"
-                release_text = f"🎯 {dist_str} │ {time_str}"
+                release_icon = "aim"
+                release_text = f"{dist_str} │ {time_str}"
                 release_color = Theme.TEXT_DIM
             else:
-                release_text = "⏳ 计算中"
+                release_icon = "clock"
+                release_text = "计算中"
                 release_color = Theme.TEXT_MUTED
 
-            app.bomb_release_lbl.config(text=release_text, fg=release_color)
+            app.icons.configure_label(
+                app.bomb_release_lbl,
+                icon=release_icon,
+                text=release_text,
+                size=14,
+                fg=release_color,
+            )
         else:
             app.bomb_trajectory_lbl.config(text="弹道: -- km │ 飞行: -- s", fg=Theme.TEXT_MUTED)
 
             if snap.on_ground:
-                release_text = "🛫 请起飞"
+                release_icon = "aircraft"
+                release_text = "请起飞"
             elif snap.altitude_m <= 50:
-                release_text = "📈 请爬升"
+                release_icon = "climb"
+                release_text = "请爬升"
             elif not snap.has_target:
-                release_text = "🎯 无目标战区"
+                release_icon = "aim"
+                release_text = "无目标战区"
             else:
+                release_icon = None
                 release_text = "↻ 请对准目标"
 
-            app.bomb_release_lbl.config(text=release_text, fg=Theme.TEXT_MUTED)
+            app.icons.configure_label(
+                app.bomb_release_lbl,
+                icon=release_icon,
+                text=release_text,
+                size=14,
+                fg=Theme.TEXT_MUTED,
+            )
 
     @staticmethod
     def format_aircraft_type_label(raw: str) -> str:

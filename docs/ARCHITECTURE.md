@@ -7,6 +7,7 @@
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app coordinator, main-window builder, debug support, panel renderer, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
+- Bundled UI assets: `bomana/assets/` (private UI font subsets + PNG icon assets)
 - External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
 - Tools: `tools/update_datamine_assets.py` (refresh both generated datamine assets)
@@ -24,6 +25,9 @@
 │  ├─ data/
 │  │  ├─ ccrp_bomb_params.json # Bomb parameters (CCRP)
 │  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
+│  ├─ assets/
+│  │  ├─ fonts/                # Private Bomana UI Sans font subsets + OFL license
+│  │  └─ icons/                # PNG icon assets used instead of emoji glyphs
 │  ├─ core/
 │  │  ├─ ballistics.py        # Bombing ballistics
 │  │  ├─ logic.py             # GameLogic core loop
@@ -35,6 +39,7 @@
 │  │  ├─ debug_support.py     # Debug mock snapshot + debug panel helpers
 │  │  ├─ dialogs.py           # Settings/About/etc dialogs
 │  │  ├─ hud_overlay.py       # Fullscreen HUD overlay skeleton (v6.8.0)
+│  │  ├─ icon_assets.py       # Bundled PNG icon loader/cache
 │  │  ├─ main_window.py       # Stable main-window skeleton/card layout builder
 │  │  ├─ nav_window.py        # Standalone navigation window
 │  │  ├─ navigation_runtime.py # Standalone nav lifecycle + display rebuild service
@@ -55,6 +60,7 @@
 │  ├─ create_version_info.py # Windows version-info helper for packaging
 │  ├─ blkx_extractor.py      # .blkx -> bomana/data/ccrp_bomb_params.json generator
 │  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
+│  ├─ generate_ui_assets.py  # Noto Sans SC subset + PNG icon asset generator
 │  ├─ update_datamine_assets.py # One command to refresh both generated data assets
 │  ├─ sample_8111_attitude.py # HUD baseline sampler
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
@@ -152,6 +158,8 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - `HeadingTape` (`bomana/ui/widgets.py`) uses render-signature dedup to skip equivalent canvas redraw frames.
 - Standalone nav window rows (`bomana/ui/nav_window.py`) stay mounted; update text/color only to reduce micro-flicker.
 - Launcher and modal dialogs must treat DPI/text preferences as the font scale source of truth; normal window resize may reflow text, but must not continuously recalculate widget font sizes.
+- Do not rely on system emoji fonts for primary UI. Use `IconManager` PNG assets for visual icons and keep text labels emoji-free.
+- `bomana/utils/system.py` privately loads bundled `Bomana UI Sans` fonts before selecting a UI family; this avoids requiring users to install fonts system-wide.
 
 ## Build & Release
 Portable release uses:
@@ -160,6 +168,10 @@ Portable release uses:
 - `Bomana_app_<Variant>_vX.Y.Z.zip` (updatable application package)
 - `manifest_<Variant>.json` (channel/version/package metadata + SHA256 + `min_launcher_version`)
 - `checksums_*.txt` (SHA256 checksum info)
+
+Bundled assets:
+- App packages include `bomana/assets/` automatically because `build_app_zip()` packages the whole `bomana/` tree.
+- Launcher builds also add `bomana/assets/` so launcher/dialog text can use the same private UI font when running as a onefile executable.
 
 Local build helper:
 - `tools\scripts\build_portable.bat <Variant> <all|app|launcher>`

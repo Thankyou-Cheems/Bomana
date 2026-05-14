@@ -154,7 +154,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         super().__init__(parent)
         self.app = app
         self.initial_tab = initial_tab or "显示"
-        self.title("⚙️ 设置")
+        self.title("设置")
         self.resizable(True, True)
         self.configure(bg=Theme.BG)
         self.transient(parent)
@@ -587,21 +587,22 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         panels = []
 
         if ENABLE_ZONES:
-            panels.append(("show_zones", "🎯 战区导航", "显示战区位置和距离"))
+            panels.append(("show_zones", "aim", "战区导航", "显示战区位置和距离"))
         if ENABLE_AIRFIELDS:
-            panels.append(("show_airfields", "🛫 机场导航", "显示友方/敌方机场"))
+            panels.append(("show_airfields", "aircraft", "机场导航", "显示友方/敌方机场"))
         if ENABLE_FUEL:
-            panels.append(("show_fuel", "⛽ 燃油管理", "显示油量和返航估算"))
-        panels.append(("show_speed", "⚡ 速度监视", "显示紧凑速度条和超速提示"))
+            panels.append(("show_fuel", "fuel", "燃油管理", "显示油量和返航估算"))
+        panels.append(("show_speed", "speed", "速度监视", "显示紧凑速度条和超速提示"))
         panels.append(
             (
                 "speed_history_mode",
-                "🕰 历史模式(独立速度界面)",
+                "clock",
+                "历史模式(独立速度界面)",
                 "隐藏计时和其他扩展面板，切换为仅速度提醒的专用界面",
             )
         )
         if ENABLE_CHECKLIST:
-            panels.append(("show_checklist", "✅ 出击检查", "显示起飞前检查清单"))
+            panels.append(("show_checklist", "checklist", "出击检查", "显示起飞前检查清单"))
 
         if not panels:
             tk.Label(
@@ -609,14 +610,14 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             ).pack(anchor="w")
             return
 
-        for key, label, desc in panels:
+        for key, icon, label, desc in panels:
             var = tk.BooleanVar(value=getattr(PanelConfig, key))
             self.panel_vars[key] = var
 
             item_frame = tk.Frame(frame, bg=Theme.BG)
             item_frame.pack(fill="x", pady=3)
 
-            tk.Checkbutton(
+            checkbutton = tk.Checkbutton(
                 item_frame,
                 text=label,
                 variable=var,
@@ -627,7 +628,12 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 activeforeground=Theme.TEXT,
                 highlightthickness=0,
                 anchor="w",
-            ).pack(side="left")
+            )
+            image = self.app.icons.photo(icon, 16) if getattr(self.app, "icons", None) else None
+            if image is not None:
+                checkbutton.config(image=image, compound="left", padx=4)
+                checkbutton._bomana_icon_image = image
+            checkbutton.pack(side="left")
 
             tk.Label(
                 item_frame, text=f"  - {desc}", bg=Theme.BG, fg=Theme.TEXT_DIM, font=("Segoe UI", 8)
@@ -3157,7 +3163,7 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         if not img_loaded:
             btn = tk.Button(
                 item_frame,
-                text=f"💝 {name}",
+                text=name,
                 font=("Segoe UI", 11),
                 bg=Theme.GRAYPILL,
                 fg=Theme.TEXT,

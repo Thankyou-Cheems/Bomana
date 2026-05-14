@@ -1367,12 +1367,12 @@ class GameLogic:
             ) >= GameConfig.API_PENDING_HINT_DELAY_SEC
 
         if api_down:
-            main_badge = ("❌8111不可用", Theme.TEXT, Theme.RED)
+            main_badge = ("8111不可用", Theme.TEXT, Theme.RED)
             status_text = "未检测到 8111"
         elif api_down_pending and (
             phase in (Phase.IDLE, Phase.HANGAR, Phase.ARMING) or life_spawn_time is None
         ):
-            main_badge = ("⏳加入战斗中", Theme.TEXT, Theme.BLUE)
+            main_badge = ("加入战斗中", Theme.TEXT, Theme.BLUE)
             status_text = "加入战斗中"
         else:
             if phase == Phase.ALIVE:
@@ -1388,7 +1388,7 @@ class GameLogic:
                 main_badge = ("部署中", Theme.TEXT, Theme.BLUE)
                 status_text = "部署中"
             elif phase == Phase.HANGAR:
-                main_badge = ("🏠机库", Theme.TEXT, Theme.GRAYPILL)
+                main_badge = ("机库", Theme.TEXT, Theme.GRAYPILL)
                 status_text = "等待游戏开始"
             else:
                 main_badge = ("IDLE", Theme.TEXT, Theme.GRAYPILL)

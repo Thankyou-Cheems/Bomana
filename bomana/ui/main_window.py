@@ -320,11 +320,17 @@ class MainWindowBuilder:
         )
         app.history_mode_title_lbl = tk.Label(
             history_header,
-            text="🕰 空历速度监视",
+            text="空历速度监视",
             font=history_title_font,
             fg=Theme.TEXT,
             bg=Theme.GRAYPILL,
             anchor="w",
+        )
+        app.icons.configure_label(
+            app.history_mode_title_lbl,
+            icon="clock",
+            text="空历速度监视",
+            size=16,
         )
         app.history_mode_title_lbl.grid(row=0, column=0, sticky="w")
         app.history_mode_phase_lbl = tk.Label(
@@ -931,12 +937,13 @@ class MainWindowBuilder:
         fuel_header_right.grid(row=0, column=1, sticky="e")
         app.fuel_time_lbl = tk.Label(
             fuel_header_right,
-            text="⏱️ --:--",
+            text="--:--",
             font=font_item,
             fg=Theme.TEXT_MUTED,
             bg=Theme.GRAYPILL,
             anchor="e",
         )
+        app.icons.configure_label(app.fuel_time_lbl, icon="clock", text="--:--", size=14)
         app.fuel_time_lbl.pack(side="left")
         app.fuel_return_lbl = tk.Label(
             fuel_header_right,

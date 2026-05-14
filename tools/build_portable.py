@@ -259,6 +259,9 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
     sponsor_file = root / "sponsor_wechat.png"
     if sponsor_file.exists():
         cmd.extend(["--add-data", f"{sponsor_file};."])
+    assets_dir = root / APP_DIR / "assets"
+    if assets_dir.exists():
+        cmd.extend(["--add-data", f"{assets_dir};{APP_DIR}/assets"])
 
     cmd.append(str(root / "launcher.pyw"))
     subprocess.run(cmd, check=True, cwd=root)

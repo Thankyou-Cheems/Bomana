@@ -348,9 +348,9 @@ class NavigationWindow:
     def _show_context_menu(self, event):
         """显示右键菜单"""
         menu = tk.Menu(self.window, tearoff=0)
-        menu.add_command(label="🔄 切换到集成模式", command=self._switch_to_integrated)
+        menu.add_command(label="切换到集成模式", command=self._switch_to_integrated)
         menu.add_separator()
-        menu.add_command(label="📍 重置位置", command=self._reset_position)
+        menu.add_command(label="重置位置", command=self._reset_position)
 
         try:
             menu.tk_popup(event.x_root, event.y_root)

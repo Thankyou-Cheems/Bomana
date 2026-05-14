@@ -5,9 +5,12 @@ from bomana.ui.panel_renderer import AppPanelRenderer
 
 class PanelRendererNavListTests(unittest.TestCase):
     def test_selected_nav_icon_replaces_base_icon(self) -> None:
-        self.assertEqual(AppPanelRenderer._nav_list_icon("○", selected=True), "➤")
-        self.assertEqual(AppPanelRenderer._nav_list_icon("🔴", selected=True), "➤")
-        self.assertEqual(AppPanelRenderer._nav_list_icon("🔴", selected=False), "🔴")
+        self.assertEqual(AppPanelRenderer._nav_list_icon("zone", selected=True), "target")
+        self.assertEqual(AppPanelRenderer._nav_list_icon("airfield_enemy", selected=True), "target")
+        self.assertEqual(
+            AppPanelRenderer._nav_list_icon("airfield_enemy", selected=False),
+            "airfield_enemy",
+        )
 
     def test_nav_list_formatters_match_zone_and_airport_rows(self) -> None:
         self.assertEqual(AppPanelRenderer._format_nav_distance(8.25), "8.2km")
