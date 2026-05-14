@@ -276,12 +276,21 @@ class AppPanelRenderer:
             return f"{rel_sign}{relative:.2f}°"
         return f"{rel_sign}{int(relative)}°"
 
+    def _icon_size(self, base_size: int = 18, *, min_size: int = 16, max_size: int = 32) -> int:
+        scale = float(getattr(self.app, "scale", 1.0) or 1.0)
+        return max(min_size, min(max_size, round(base_size * scale)))
+
     def _set_nav_row(self, row: Any, item: NavListItem | None = None) -> None:
         """Update one prebuilt zone/airport row without changing geometry."""
         item = item or NavListItem()
         if getattr(self.app, "icons", None) is not None:
             self.app.icons.configure_label(
-                row.icon_lbl, icon=item.icon, text="", size=12, fg=item.fg, padx=0
+                row.icon_lbl,
+                icon=item.icon,
+                text="",
+                size=self._icon_size(18),
+                fg=item.fg,
+                padx=0,
             )
         else:
             row.icon_lbl.config(text=item.icon or "", image="", fg=item.fg)
@@ -397,7 +406,7 @@ class AppPanelRenderer:
                     app.zone_alert_lbl,
                     icon="explosion",
                     text=alert_text,
-                    size=16,
+                    size=self._icon_size(18),
                     wraplength=wrap,
                     justify="left",
                 )
@@ -644,7 +653,7 @@ class AppPanelRenderer:
                 app.fuel_time_lbl,
                 icon="clock",
                 text=snap.fuel_time_remaining_str,
-                size=14,
+                size=self._icon_size(18),
                 fg=Theme.TEXT,
             )
         else:
@@ -652,7 +661,7 @@ class AppPanelRenderer:
                 app.fuel_time_lbl,
                 icon="clock",
                 text="计算中...",
-                size=14,
+                size=self._icon_size(18),
                 fg=Theme.TEXT_MUTED,
             )
 
@@ -684,7 +693,11 @@ class AppPanelRenderer:
                 return_color = Theme.RED
 
             app.icons.configure_label(
-                app.fuel_return_lbl, icon=status_icon, text=status_text, size=14, fg=return_color
+                app.fuel_return_lbl,
+                icon=status_icon,
+                text=status_text,
+                size=self._icon_size(18),
+                fg=return_color,
             )
             detail_suffix = f"返航 {needed_text}"
         elif snap.friendly_distance_km > 0:
@@ -749,7 +762,7 @@ class AppPanelRenderer:
                 app.bomb_release_lbl,
                 icon=release_icon,
                 text=release_text,
-                size=14,
+                size=self._icon_size(18),
                 fg=release_color,
             )
         else:
@@ -772,7 +785,7 @@ class AppPanelRenderer:
                 app.bomb_release_lbl,
                 icon=release_icon,
                 text=release_text,
-                size=14,
+                size=self._icon_size(18),
                 fg=Theme.TEXT_MUTED,
             )
 

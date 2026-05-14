@@ -12,16 +12,24 @@ from bomana.utils.file_utils import resource_path
 class IconManager:
     """Load and attach bundled PNG icons while keeping Tk references alive."""
 
+    _ASSET_SIZES = (12, 14, 16, 18, 20, 24, 28, 32)
+
     def __init__(self, root: tk.Misc):
         self.root = root
         self._cache: dict[tuple[str, int], tk.PhotoImage] = {}
 
+    @classmethod
+    def _nearest_asset_size(cls, size: int) -> int:
+        requested = max(1, int(size))
+        return min(cls._ASSET_SIZES, key=lambda candidate: (abs(candidate - requested), candidate))
+
     def photo(self, key: str, size: int = 16) -> tk.PhotoImage | None:
-        cache_key = (key, size)
+        asset_size = self._nearest_asset_size(size)
+        cache_key = (key, asset_size)
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        path = Path(resource_path(f"bomana/assets/icons/{key}_{size}.png"))
+        path = Path(resource_path(f"bomana/assets/icons/{key}_{asset_size}.png"))
         if not path.exists():
             return None
         try:

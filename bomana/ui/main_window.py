@@ -330,7 +330,7 @@ class MainWindowBuilder:
             app.history_mode_title_lbl,
             icon="clock",
             text="空历速度监视",
-            size=16,
+            size=max(18, min(32, round(18 * s))),
         )
         app.history_mode_title_lbl.grid(row=0, column=0, sticky="w")
         app.history_mode_phase_lbl = tk.Label(
@@ -499,6 +499,7 @@ class MainWindowBuilder:
         show_relative: bool,
     ) -> list[NavListRow]:
         pool: list[NavListRow] = []
+        parent.grid_columnconfigure(0, minsize=max(20, int(24 * self.app.scale)))
         parent.grid_columnconfigure(1, weight=1)
         for _ in range(count):
             row_index = len(pool)
@@ -509,10 +510,9 @@ class MainWindowBuilder:
                 font=font,
                 fg=Theme.TEXT_MUTED,
                 bg=bg,
-                anchor="w",
-                width=3,
+                anchor="center",
             )
-            icon_lbl.grid(row=row_index, column=0, sticky="w")
+            icon_lbl.grid(row=row_index, column=0, sticky="ew")
             icon_lbl.grid_remove()
 
             direction_lbl = tk.Label(
@@ -943,7 +943,12 @@ class MainWindowBuilder:
             bg=Theme.GRAYPILL,
             anchor="e",
         )
-        app.icons.configure_label(app.fuel_time_lbl, icon="clock", text="--:--", size=14)
+        app.icons.configure_label(
+            app.fuel_time_lbl,
+            icon="clock",
+            text="--:--",
+            size=max(18, min(32, round(18 * s))),
+        )
         app.fuel_time_lbl.pack(side="left")
         app.fuel_return_lbl = tk.Label(
             fuel_header_right,

@@ -252,7 +252,7 @@ def build_icons() -> None:
         "speed",
         "checklist",
     ):
-        for size in (12, 14, 16, 18, 20):
+        for size in (12, 14, 16, 18, 20, 24, 28, 32):
             draw_icon(kind, size).save(ICON_DIR / f"{kind}_{size}.png")
 
 

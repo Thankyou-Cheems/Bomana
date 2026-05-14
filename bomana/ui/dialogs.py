@@ -629,7 +629,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 highlightthickness=0,
                 anchor="w",
             )
-            image = self.app.icons.photo(icon, 16) if getattr(self.app, "icons", None) else None
+            image = self.app.icons.photo(icon, 18) if getattr(self.app, "icons", None) else None
             if image is not None:
                 checkbutton.config(image=image, compound="left", padx=4)
                 checkbutton._bomana_icon_image = image
