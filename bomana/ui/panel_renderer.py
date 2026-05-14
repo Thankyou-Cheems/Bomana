@@ -2,6 +2,7 @@
 
 import time
 import tkinter as tk
+from dataclasses import dataclass
 from typing import Any
 
 from bomana.config import (
@@ -29,8 +30,21 @@ from bomana.utils.math_utils import (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class NavListItem:
+    """Presentation state for one stable zone/airport list row."""
+
+    icon: str = ""
+    direction: str = ""
+    distance: str = ""
+    relative: str = ""
+    fg: str = Theme.TEXT_MUTED
+
+
 class AppPanelRenderer:
     """Encapsulate large panel rendering sections for App."""
+
+    _NAV_TARGET_ICON = "➤"
 
     def __init__(self, app: Any):
         self.app = app
@@ -246,22 +260,31 @@ class AppPanelRenderer:
             app._checklist_panel_visible = visible
             self.update_mid_panel_layout()
 
+    @classmethod
+    def _nav_list_icon(cls, base_icon: str, selected: bool) -> str:
+        """Return the replacement icon for selected rows."""
+        return cls._NAV_TARGET_ICON if selected else base_icon
+
     @staticmethod
-    def _set_nav_row(
-        row: Any,
-        *,
-        icon: str = "",
-        direction: str = "",
-        distance: str = "",
-        relative: str = "",
-        fg: str = Theme.TEXT_MUTED,
-    ) -> None:
+    def _format_nav_distance(distance_km: float) -> str:
+        return f"{distance_km:.1f}km" if distance_km < 10 else f"{int(distance_km)}km"
+
+    @staticmethod
+    def _format_nav_relative(relative: float, *, precise: bool = False) -> str:
+        rel_sign = "+" if relative > 0 else ""
+        if precise:
+            return f"{rel_sign}{relative:.2f}°"
+        return f"{rel_sign}{int(relative)}°"
+
+    @staticmethod
+    def _set_nav_row(row: Any, item: NavListItem | None = None) -> None:
         """Update one prebuilt zone/airport row without changing geometry."""
-        row.icon_lbl.config(text=icon, fg=fg)
-        row.direction_lbl.config(text=direction, fg=fg)
-        row.distance_lbl.config(text=distance, fg=fg)
+        item = item or NavListItem()
+        row.icon_lbl.config(text=item.icon, fg=item.fg)
+        row.direction_lbl.config(text=item.direction, fg=item.fg)
+        row.distance_lbl.config(text=item.distance, fg=item.fg)
         if getattr(row, "relative_lbl", None) is not None:
-            row.relative_lbl.config(text=relative, fg=fg)
+            row.relative_lbl.config(text=item.relative, fg=item.fg)
 
     def _clear_nav_rows(self, rows: list[Any], start: int = 0) -> None:
         """Blank remaining prebuilt rows."""
@@ -409,21 +432,13 @@ class AppPanelRenderer:
 
             idx = 0
             if not snap.zones:
-                self._set_nav_row(row_pool[idx], direction="无战区")
+                self._set_nav_row(row_pool[idx], NavListItem(direction="无战区"))
                 idx += 1
             else:
                 for zone in snap.zones[: ZoneConfig.MAX_DISPLAY_ZONES]:
-                    marker = "➤" if zone.is_target else "○"
-                    dist_text = (
-                        f"{zone.distance_km:.1f}km"
-                        if zone.distance_km < 10
-                        else f"{int(zone.distance_km)}km"
-                    )
-                    rel_sign = "+" if zone.relative > 0 else ""
-                    rel_text = (
-                        f"{rel_sign}{zone.relative:.2f}°"
-                        if zone.is_target
-                        else f"{rel_sign}{int(zone.relative)}°"
+                    dist_text = self._format_nav_distance(zone.distance_km)
+                    rel_text = self._format_nav_relative(
+                        zone.relative, precise=bool(zone.is_target)
                     )
                     relative_text = rel_text if nav_in_main else ""
                     fg = (
@@ -435,11 +450,13 @@ class AppPanelRenderer:
                     )
                     self._set_nav_row(
                         row_pool[idx],
-                        icon=marker,
-                        direction=zone.direction,
-                        distance=dist_text,
-                        relative=relative_text,
-                        fg=fg,
+                        NavListItem(
+                            icon=self._nav_list_icon("○", bool(zone.is_target)),
+                            direction=zone.direction,
+                            distance=dist_text,
+                            relative=relative_text,
+                            fg=fg,
+                        ),
                     )
                     idx += 1
             self._clear_nav_rows(row_pool, start=idx)
@@ -491,46 +508,41 @@ class AppPanelRenderer:
             ap_idx = 0
             if snap.friendly_airfield:
                 af = snap.friendly_airfield
-                dist_text = (
-                    f"{af.distance_km:.1f}km" if af.distance_km < 10 else f"{int(af.distance_km)}km"
-                )
-                rel_sign = "+" if af.relative > 0 else ""
-                rel_text = f"{rel_sign}{int(af.relative)}°"
+                dist_text = self._format_nav_distance(af.distance_km)
+                rel_text = self._format_nav_relative(af.relative)
                 relative_text = rel_text if nav_in_main else ""
                 self._set_nav_row(
                     row_pool[ap_idx],
-                    icon="🟢➤",
-                    direction=af.direction,
-                    distance=dist_text,
-                    relative=relative_text,
-                    fg=Theme.GREEN,
+                    NavListItem(
+                        icon=self._nav_list_icon("🟢", selected=True),
+                        direction=af.direction,
+                        distance=dist_text,
+                        relative=relative_text,
+                        fg=Theme.GREEN,
+                    ),
                 )
                 ap_idx += 1
 
             if snap.enemy_airfields:
                 for af in snap.enemy_airfields[: max(0, ZoneConfig.MAX_DISPLAY_AIRFIELDS - ap_idx)]:
-                    marker = "➤" if af.is_target else "○"
-                    dist_text = (
-                        f"{af.distance_km:.1f}km"
-                        if af.distance_km < 10
-                        else f"{int(af.distance_km)}km"
-                    )
-                    rel_sign = "+" if af.relative > 0 else ""
-                    rel_text = f"{rel_sign}{int(af.relative)}°"
+                    dist_text = self._format_nav_distance(af.distance_km)
+                    rel_text = self._format_nav_relative(af.relative)
                     relative_text = rel_text if nav_in_main else ""
                     fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
                     self._set_nav_row(
                         row_pool[ap_idx],
-                        icon=f"🔴{marker}",
-                        direction=af.direction,
-                        distance=dist_text,
-                        relative=relative_text,
-                        fg=fg,
+                        NavListItem(
+                            icon=self._nav_list_icon("🔴", bool(af.is_target)),
+                            direction=af.direction,
+                            distance=dist_text,
+                            relative=relative_text,
+                            fg=fg,
+                        ),
                     )
                     ap_idx += 1
 
             if ap_idx == 0:
-                self._set_nav_row(row_pool[0], direction="无数据")
+                self._set_nav_row(row_pool[0], NavListItem(direction="无数据"))
                 ap_idx = 1
             self._clear_nav_rows(row_pool, start=ap_idx)
             self._sync_nav_row_visibility(app._airport_row_pool, ap_idx if nav_in_main else 0)
