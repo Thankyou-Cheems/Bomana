@@ -172,7 +172,7 @@ Portable release uses:
 Bundled assets:
 - App packages include `bomana/assets/` automatically because `build_app_zip()` packages the whole `bomana/` tree.
 - Launcher builds also add `bomana/assets/` so launcher/dialog text can use the same private UI font when running as a onefile executable.
-- Root-level branding files were folded into `bomana/assets/branding/`; runtime path resolution keeps legacy root filenames only as fallbacks.
+- Root-level branding files were folded into `bomana/assets/branding/`; runtime and packaging paths use only the bundled asset location.
 
 Local build helper:
 - `tools\scripts\build_portable.bat <Variant> <all|app|launcher>`

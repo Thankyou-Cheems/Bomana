@@ -13,7 +13,7 @@ class ResourcePathTests(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
 
         self.assertEqual(FileConfig.ICON_FILE, "bomana/assets/branding/app.ico")
-        self.assertIn("app.ico", FileConfig.ICON_FILE_CANDIDATES)
+        self.assertFalse(hasattr(FileConfig, "ICON_FILE_CANDIDATES"))
         self.assertTrue((root / FileConfig.ICON_FILE).is_file())
         self.assertTrue((root / "bomana/assets/branding/app.png").is_file())
         self.assertTrue((root / "bomana/assets/branding/sponsor_wechat.png").is_file())

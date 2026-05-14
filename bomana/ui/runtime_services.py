@@ -95,14 +95,12 @@ class AppRuntimeServices:
         app = self.app
 
         def icon():
-            candidates = getattr(FileConfig, "ICON_FILE_CANDIDATES", (FileConfig.ICON_FILE,))
-            for name in candidates:
-                try:
-                    p = resource_path(name)
-                    if os.path.exists(p):
-                        return Image.open(p).convert("RGBA")
-                except Exception:
-                    continue
+            try:
+                p = resource_path(FileConfig.ICON_FILE)
+                if os.path.exists(p):
+                    return Image.open(p).convert("RGBA")
+            except Exception:
+                pass
             return Image.new("RGBA", (64, 64), Theme.BLUE)
 
         def do_reset(icon, item):

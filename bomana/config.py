@@ -712,10 +712,6 @@ class FileConfig:
 
     # 图标文件（用于托盘和窗口）
     ICON_FILE = "bomana/assets/branding/app.ico"
-    ICON_FILE_CANDIDATES = (
-        ICON_FILE,
-        "app.ico",
-    )
 
     # 用户自定义提示音导入目录
     CUSTOM_SOUND_DIR = SoundConfig.CUSTOM_SOUND_DIR
