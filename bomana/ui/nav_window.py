@@ -128,6 +128,30 @@ class NavigationWindow:
         """更新窗口透明度（响应透明度配置变化）"""
         self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
 
+    @staticmethod
+    def _configure_status_row(
+        row: tk.Frame,
+        *,
+        turn_label: tk.Label,
+        status_label: tk.Label,
+        info_label: tk.Label,
+    ) -> None:
+        """Use elastic columns for standalone navigation status rows."""
+        row.grid_columnconfigure(0, weight=0)
+        row.grid_columnconfigure(1, weight=1, uniform="standalone_status")
+        row.grid_columnconfigure(2, weight=1, uniform="standalone_status")
+        row.grid_columnconfigure(3, weight=2)
+
+        def update_wrap(event=None) -> None:
+            width = int(getattr(event, "width", 0) or row.winfo_width() or 0)
+            if width <= 1:
+                return
+            turn_label.configure(wraplength=max(42, int(width * 0.22)))
+            status_label.configure(wraplength=max(42, int(width * 0.22)))
+            info_label.configure(wraplength=max(72, int(width * 0.34)))
+
+        row.bind("<Configure>", update_wrap, add="+")
+
     def _init_ui(self):
         """初始化独立导航窗 UI（简洁版：标题 + 航向带 + 两条状态）。"""
         s = self.scale
@@ -222,7 +246,6 @@ class NavigationWindow:
         status_font = self.app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.9, min_size=7)
         self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.zone_row.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
-        self.zone_row.grid_columnconfigure(3, weight=1)
         self.zone_label = tk.Label(
             self.zone_row,
             text="⊚战区",
@@ -239,9 +262,9 @@ class NavigationWindow:
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
             anchor="w",
-            width=8,
+            justify="left",
         )
-        self.zone_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+        self.zone_turn.grid(row=0, column=1, sticky="ew", padx=(int(6 * s), 0))
         self.zone_status = tk.Label(
             self.zone_row,
             text="",
@@ -249,9 +272,9 @@ class NavigationWindow:
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
             anchor="w",
-            width=8,
+            justify="left",
         )
-        self.zone_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
+        self.zone_status.grid(row=0, column=2, sticky="ew", padx=(int(8 * s), 0))
         self.zone_info = tk.Label(
             self.zone_row,
             text="",
@@ -259,13 +282,18 @@ class NavigationWindow:
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
             anchor="e",
-            width=16,
+            justify="right",
         )
-        self.zone_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
+        self.zone_info.grid(row=0, column=3, sticky="ew", padx=(int(8 * s), 0))
+        self._configure_status_row(
+            self.zone_row,
+            turn_label=self.zone_turn,
+            status_label=self.zone_status,
+            info_label=self.zone_info,
+        )
 
         self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.friendly_row.pack(fill="x", padx=pad, pady=(int(1 * s), int(4 * s)))
-        self.friendly_row.grid_columnconfigure(3, weight=1)
         self.friendly_label = tk.Label(
             self.friendly_row,
             text="✈友方",
@@ -282,9 +310,9 @@ class NavigationWindow:
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
             anchor="w",
-            width=8,
+            justify="left",
         )
-        self.friendly_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+        self.friendly_turn.grid(row=0, column=1, sticky="ew", padx=(int(6 * s), 0))
         self.friendly_status = tk.Label(
             self.friendly_row,
             text="",
@@ -292,9 +320,9 @@ class NavigationWindow:
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
             anchor="w",
-            width=8,
+            justify="left",
         )
-        self.friendly_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
+        self.friendly_status.grid(row=0, column=2, sticky="ew", padx=(int(8 * s), 0))
         self.friendly_info = tk.Label(
             self.friendly_row,
             text="",
@@ -302,9 +330,15 @@ class NavigationWindow:
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
             anchor="e",
-            width=16,
+            justify="right",
         )
-        self.friendly_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
+        self.friendly_info.grid(row=0, column=3, sticky="ew", padx=(int(8 * s), 0))
+        self._configure_status_row(
+            self.friendly_row,
+            turn_label=self.friendly_turn,
+            status_label=self.friendly_status,
+            info_label=self.friendly_info,
+        )
 
     def _init_bindings(self):
         """初始化事件绑定"""

@@ -94,6 +94,30 @@ class MainWindowBuilder:
 
         parent.bind("<Configure>", update_wrap, add="+")
 
+    def _configure_heading_status_row(
+        self,
+        row: tk.Frame,
+        *,
+        turn_label: tk.Label,
+        status_label: tk.Label,
+        info_label: tk.Label,
+    ) -> None:
+        """Give heading status rows elastic columns and live wrapping."""
+        row.grid_columnconfigure(0, weight=0)
+        row.grid_columnconfigure(1, weight=1, uniform="heading_status")
+        row.grid_columnconfigure(2, weight=1, uniform="heading_status")
+        row.grid_columnconfigure(3, weight=2)
+
+        def update_wrap(event=None) -> None:
+            width = int(getattr(event, "width", 0) or row.winfo_width() or 0)
+            if width <= 1:
+                return
+            turn_label.configure(wraplength=max(44, int(width * 0.22)))
+            status_label.configure(wraplength=max(44, int(width * 0.22)))
+            info_label.configure(wraplength=max(74, int(width * 0.34)))
+
+        row.bind("<Configure>", update_wrap, add="+")
+
     def _build_bottom_card(self) -> None:
         app = self.app
         s = app.scale
@@ -725,7 +749,6 @@ class MainWindowBuilder:
 
             app.tape_zone_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
             app.tape_zone_row.pack(fill="x", pady=(int(2 * s), 0))
-            app.tape_zone_row.grid_columnconfigure(3, weight=1)
             app.tape_zone_label = tk.Label(
                 app.tape_zone_row,
                 text="⊚战区:",
@@ -742,9 +765,9 @@ class MainWindowBuilder:
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
                 anchor="w",
-                width=8,
+                justify="left",
             )
-            app.tape_zone_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+            app.tape_zone_turn.grid(row=0, column=1, sticky="ew", padx=(int(6 * s), 0))
             app.tape_zone_status = tk.Label(
                 app.tape_zone_row,
                 text="",
@@ -752,9 +775,9 @@ class MainWindowBuilder:
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
                 anchor="w",
-                width=8,
+                justify="left",
             )
-            app.tape_zone_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
+            app.tape_zone_status.grid(row=0, column=2, sticky="ew", padx=(int(8 * s), 0))
             app.tape_zone_info = tk.Label(
                 app.tape_zone_row,
                 text="",
@@ -762,9 +785,15 @@ class MainWindowBuilder:
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
                 anchor="e",
-                width=15,
+                justify="right",
             )
-            app.tape_zone_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
+            app.tape_zone_info.grid(row=0, column=3, sticky="ew", padx=(int(8 * s), 0))
+            self._configure_heading_status_row(
+                app.tape_zone_row,
+                turn_label=app.tape_zone_turn,
+                status_label=app.tape_zone_status,
+                info_label=app.tape_zone_info,
+            )
             app.tape_zone_tolerance = tk.Label(
                 app.tape_zone_row,
                 text="",
@@ -776,7 +805,6 @@ class MainWindowBuilder:
 
             app.tape_friendly_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
             app.tape_friendly_row.pack(fill="x", pady=(int(1 * s), 0))
-            app.tape_friendly_row.grid_columnconfigure(3, weight=1)
             app.tape_friendly_label = tk.Label(
                 app.tape_friendly_row,
                 text="✈友方:",
@@ -793,9 +821,9 @@ class MainWindowBuilder:
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
                 anchor="w",
-                width=8,
+                justify="left",
             )
-            app.tape_friendly_turn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+            app.tape_friendly_turn.grid(row=0, column=1, sticky="ew", padx=(int(6 * s), 0))
             app.tape_friendly_status = tk.Label(
                 app.tape_friendly_row,
                 text="",
@@ -803,9 +831,9 @@ class MainWindowBuilder:
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
                 anchor="w",
-                width=8,
+                justify="left",
             )
-            app.tape_friendly_status.grid(row=0, column=2, sticky="w", padx=(int(8 * s), 0))
+            app.tape_friendly_status.grid(row=0, column=2, sticky="ew", padx=(int(8 * s), 0))
             app.tape_friendly_info = tk.Label(
                 app.tape_friendly_row,
                 text="",
@@ -813,9 +841,15 @@ class MainWindowBuilder:
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
                 anchor="e",
-                width=15,
+                justify="right",
             )
-            app.tape_friendly_info.grid(row=0, column=3, sticky="e", padx=(int(8 * s), 0))
+            app.tape_friendly_info.grid(row=0, column=3, sticky="ew", padx=(int(8 * s), 0))
+            self._configure_heading_status_row(
+                app.tape_friendly_row,
+                turn_label=app.tape_friendly_turn,
+                status_label=app.tape_friendly_status,
+                info_label=app.tape_friendly_info,
+            )
 
             app.tape_turn_lbl = app.tape_zone_turn
             app.tape_deviation_lbl = app.tape_zone_status
