@@ -83,6 +83,17 @@ class MainWindowBuilder:
         body.grid_columnconfigure(0, weight=1)
         return shell, body
 
+    def _bind_label_wrap(self, label: tk.Label, parent: tk.Misc, *, margin: int = 0) -> None:
+        """Keep label wrapping aligned with its live container width."""
+
+        def update_wrap(event=None) -> None:
+            width = int(getattr(event, "width", 0) or parent.winfo_width() or 0)
+            if width <= 1:
+                return
+            label.configure(wraplength=max(80, width - margin))
+
+        parent.bind("<Configure>", update_wrap, add="+")
+
     def _build_bottom_card(self) -> None:
         app = self.app
         s = app.scale
@@ -979,17 +990,43 @@ class MainWindowBuilder:
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
             anchor="w",
+            justify="left",
         )
         app.fuel_main_lbl.pack(fill="x")
         app.fuel_detail_lbl = tk.Label(
             app.fuel_info_frame,
-            text="油耗 --kg/min │ 高度 --m │ 返航 --",
+            text="油耗 --kg/min",
             font=font_item,
             fg=Theme.TEXT_MUTED,
             bg=Theme.GRAYPILL,
             anchor="w",
+            justify="left",
         )
         app.fuel_detail_lbl.pack(fill="x")
+        app.fuel_alt_lbl = tk.Label(
+            app.fuel_info_frame,
+            text="高度 --m",
+            font=font_item,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            justify="left",
+        )
+        app.fuel_alt_lbl.pack(fill="x")
+        app.fuel_return_detail_lbl = tk.Label(
+            app.fuel_info_frame,
+            text="返航 --",
+            font=font_item,
+            fg=Theme.TEXT_MUTED,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            justify="left",
+        )
+        app.fuel_return_detail_lbl.pack(fill="x")
+        self._bind_label_wrap(app.fuel_main_lbl, app.fuel_info_frame)
+        self._bind_label_wrap(app.fuel_detail_lbl, app.fuel_info_frame)
+        self._bind_label_wrap(app.fuel_alt_lbl, app.fuel_info_frame)
+        self._bind_label_wrap(app.fuel_return_detail_lbl, app.fuel_info_frame)
 
         if ENABLE_CCRP:
             app.bombing_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
@@ -1034,9 +1071,11 @@ class MainWindowBuilder:
                 fg=Theme.BLUE,
                 bg=Theme.GRAYPILL,
                 anchor="w",
+                justify="left",
                 cursor="hand2",
             )
             app.bomb_select_lbl.pack(fill="x")
+            self._bind_label_wrap(app.bomb_select_lbl, app.bombing_info_frame)
             app.bomb_select_lbl.bind("<Button-1>", lambda e: app._show_bomb_selector())
             app.bomb_select_lbl.bind(
                 "<Enter>", lambda e: app.bomb_select_lbl.config(fg=Theme.TEXT, bg=Theme.BG)
@@ -1046,13 +1085,37 @@ class MainWindowBuilder:
             )
             app.bomb_trajectory_lbl = tk.Label(
                 app.bombing_info_frame,
-                text="弹道: -- m │ 飞行: -- s",
+                text="弹道: -- km",
                 font=font_item,
                 fg=Theme.TEXT_DIM,
                 bg=Theme.GRAYPILL,
                 anchor="w",
+                justify="left",
             )
             app.bomb_trajectory_lbl.pack(fill="x")
+            app.bomb_flight_lbl = tk.Label(
+                app.bombing_info_frame,
+                text="飞行: -- s",
+                font=font_item,
+                fg=Theme.TEXT_DIM,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+                justify="left",
+            )
+            app.bomb_flight_lbl.pack(fill="x")
+            app.bomb_release_detail_lbl = tk.Label(
+                app.bombing_info_frame,
+                text="距离: --",
+                font=font_item,
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+                justify="left",
+            )
+            app.bomb_release_detail_lbl.pack(fill="x")
+            self._bind_label_wrap(app.bomb_trajectory_lbl, app.bombing_info_frame)
+            self._bind_label_wrap(app.bomb_flight_lbl, app.bombing_info_frame)
+            self._bind_label_wrap(app.bomb_release_detail_lbl, app.bombing_info_frame)
 
         app._zone_row_pool = self._build_nav_row_pool(
             app.zone_list_frame,

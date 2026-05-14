@@ -8,6 +8,7 @@ from bomana.ui.navigation_runtime import AppNavigationServices
 class FakeGeometryWindow:
     def __init__(self) -> None:
         self.geometry_calls = []
+        self.update_idletasks_calls = 0
 
     def winfo_x(self) -> int:
         return 11
@@ -20,6 +21,9 @@ class FakeGeometryWindow:
 
     def winfo_height(self) -> int:
         return 44
+
+    def update_idletasks(self) -> None:
+        self.update_idletasks_calls += 1
 
     def geometry(self, value: str) -> None:
         self.geometry_calls.append(value)
@@ -118,7 +122,7 @@ class NavigationRuntimeTests(unittest.TestCase):
         self.assertTrue(services.window.visible)
 
     @patch("bomana.ui.navigation_runtime.NavigationWindow", FakeNavigationWindow)
-    def test_rebuild_preserves_visible_geometry_for_text_only_change(self) -> None:
+    def test_rebuild_preserves_position_but_reflows_size_for_text_only_change(self) -> None:
         app = FakeApp()
         services = AppNavigationServices(app)
         services.window = FakeNavigationWindow(app)
@@ -131,7 +135,8 @@ class NavigationRuntimeTests(unittest.TestCase):
         self.assertEqual(old_window.destroy_calls, 1)
         self.assertIsNot(services.window, old_window)
         self.assertTrue(services.window.visible)
-        self.assertEqual(services.window.window.geometry_calls, ["333x44+11+22"])
+        self.assertEqual(services.window.window.update_idletasks_calls, 1)
+        self.assertEqual(services.window.window.geometry_calls, ["+11+22"])
 
     def test_apply_lock_state_updates_owned_window(self) -> None:
         app = FakeApp()

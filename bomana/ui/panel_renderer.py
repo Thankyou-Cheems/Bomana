@@ -711,7 +711,11 @@ class AppPanelRenderer:
             )
             detail_suffix = "返航无机场数据"
 
-        app.fuel_detail_lbl.config(text=f"{rate_text} │ {alt_text} │ {detail_suffix}")
+        app.fuel_detail_lbl.config(text=rate_text)
+        if hasattr(app, "fuel_alt_lbl"):
+            app.fuel_alt_lbl.config(text=alt_text)
+        if hasattr(app, "fuel_return_detail_lbl"):
+            app.fuel_return_detail_lbl.config(text=detail_suffix)
 
     def update_bombing_display(self, snap: UISnapshot) -> None:
         """更新投弹预测信息显示。"""
@@ -722,8 +726,12 @@ class AppPanelRenderer:
 
         if snap.bombing_valid:
             bomb_range_km = snap.bomb_range_m / 1000.0
-            trajectory_text = f"弹道: {bomb_range_km:.2f}km │ 飞行: {snap.bomb_flight_time:.1f}s"
-            app.bomb_trajectory_lbl.config(text=trajectory_text, fg=Theme.TEXT_DIM)
+            app.bomb_trajectory_lbl.config(text=f"弹道: {bomb_range_km:.2f}km", fg=Theme.TEXT_DIM)
+            if hasattr(app, "bomb_flight_lbl"):
+                app.bomb_flight_lbl.config(
+                    text=f"飞行: {snap.bomb_flight_time:.1f}s",
+                    fg=Theme.TEXT_DIM,
+                )
 
             status = snap.release_status
             dist_m = snap.release_distance_m
@@ -737,25 +745,30 @@ class AppPanelRenderer:
             if status == "ready":
                 time_str = f"{snap.time_to_release:.2f}s"
                 release_icon = "bomb"
-                release_text = f"投弹 {time_str} │ {dist_str}"
+                release_text = "投弹"
+                release_detail_text = f"时间 {time_str}，距离 {dist_str}"
                 release_color = Theme.GREEN
             elif status == "approaching":
                 time_str = f"{snap.time_to_release:.1f}s"
                 release_icon = "clock"
-                release_text = f"{time_str} │ {dist_str}"
+                release_text = "接近"
+                release_detail_text = f"时间 {time_str}，距离 {dist_str}"
                 release_color = Theme.YELLOW
             elif status == "passed":
                 release_icon = "danger"
-                release_text = f"已飞过 {dist_str}"
+                release_text = "已飞过"
+                release_detail_text = f"偏离 {dist_str}"
                 release_color = Theme.RED
             elif status == "too_far":
                 time_str = f"{snap.time_to_release:.0f}s"
                 release_icon = "aim"
-                release_text = f"{dist_str} │ {time_str}"
+                release_text = "过远"
+                release_detail_text = f"距离 {dist_str}，预计 {time_str}"
                 release_color = Theme.TEXT_DIM
             else:
                 release_icon = "clock"
                 release_text = "计算中"
+                release_detail_text = "等待稳定数据"
                 release_color = Theme.TEXT_MUTED
 
             app.icons.configure_label(
@@ -765,21 +778,29 @@ class AppPanelRenderer:
                 size=self._icon_size(18),
                 fg=release_color,
             )
+            if hasattr(app, "bomb_release_detail_lbl"):
+                app.bomb_release_detail_lbl.config(text=release_detail_text, fg=release_color)
         else:
-            app.bomb_trajectory_lbl.config(text="弹道: -- km │ 飞行: -- s", fg=Theme.TEXT_MUTED)
+            app.bomb_trajectory_lbl.config(text="弹道: -- km", fg=Theme.TEXT_MUTED)
+            if hasattr(app, "bomb_flight_lbl"):
+                app.bomb_flight_lbl.config(text="飞行: -- s", fg=Theme.TEXT_MUTED)
 
             if snap.on_ground:
                 release_icon = "aircraft"
                 release_text = "请起飞"
+                release_detail_text = "起飞后开始计算"
             elif snap.altitude_m <= 50:
                 release_icon = "climb"
                 release_text = "请爬升"
+                release_detail_text = "高度超过 50m 后开始计算"
             elif not snap.has_target:
                 release_icon = "aim"
                 release_text = "无目标战区"
+                release_detail_text = "选择或接近目标战区"
             else:
                 release_icon = None
                 release_text = "↻ 请对准目标"
+                release_detail_text = "进入释放航线后显示距离和时间"
 
             app.icons.configure_label(
                 app.bomb_release_lbl,
@@ -788,6 +809,8 @@ class AppPanelRenderer:
                 size=self._icon_size(18),
                 fg=Theme.TEXT_MUTED,
             )
+            if hasattr(app, "bomb_release_detail_lbl"):
+                app.bomb_release_detail_lbl.config(text=release_detail_text, fg=Theme.TEXT_MUTED)
 
     @staticmethod
     def format_aircraft_type_label(raw: str) -> str:

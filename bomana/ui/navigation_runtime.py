@@ -85,7 +85,7 @@ class AppNavigationServices:
 
         window = self.window
         nav_was_visible = False
-        nav_geometry: tuple[int, int, int, int] | None = None
+        nav_position: tuple[int, int] | None = None
         if window:
             try:
                 nav_was_visible = bool(window.is_visible())
@@ -93,23 +93,23 @@ class AppNavigationServices:
                 nav_was_visible = False
             if preserve_text_only_geometry and nav_was_visible:
                 try:
-                    nav_geometry = (
+                    nav_position = (
                         window.window.winfo_x(),
                         window.window.winfo_y(),
-                        window.window.winfo_width(),
-                        window.window.winfo_height(),
                     )
                 except Exception:
-                    nav_geometry = None
+                    nav_position = None
             with contextlib.suppress(Exception):
                 window.destroy()
 
         self.window = NavigationWindow(self.app)
         if PanelConfig.navigation_mode == "standalone" and nav_was_visible:
             self.window.show()
-            if preserve_text_only_geometry and nav_geometry:
-                nav_x, nav_y, nav_w, nav_h = nav_geometry
-                self.window.window.geometry(f"{nav_w}x{nav_h}+{nav_x}+{nav_y}")
+            if preserve_text_only_geometry and nav_position:
+                nav_x, nav_y = nav_position
+                with contextlib.suppress(Exception):
+                    self.window.window.update_idletasks()
+                self.window.window.geometry(f"+{nav_x}+{nav_y}")
 
     def stop(self) -> None:
         """Destroy the owned nav surface during application shutdown."""
