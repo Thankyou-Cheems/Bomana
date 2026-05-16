@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import tkinter as tk
-import tkinter.font as tkfont
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -16,6 +15,7 @@ from bomana.config import (
     UIConfig,
     ZoneConfig,
 )
+from bomana.ui.text_utils import bind_dynamic_wrap, measure_min_width
 from bomana.ui.widgets import HeadingTape, Pill
 
 if TYPE_CHECKING:
@@ -89,14 +89,7 @@ class MainWindowBuilder:
 
     def _bind_label_wrap(self, label: tk.Label, parent: tk.Misc, *, margin: int = 0) -> None:
         """Keep label wrapping aligned with its live container width."""
-
-        def update_wrap(event=None) -> None:
-            width = int(getattr(event, "width", 0) or parent.winfo_width() or 0)
-            if width <= 1:
-                return
-            label.configure(wraplength=max(80, width - margin))
-
-        parent.bind("<Configure>", update_wrap, add="+")
+        bind_dynamic_wrap(label, parent, minimum=80, margin=margin)
 
     def _configure_heading_status_row(
         self,
@@ -121,15 +114,6 @@ class MainWindowBuilder:
             info_label.configure(wraplength=max(74, int(width * 0.34)))
 
         row.bind("<Configure>", update_wrap, add="+")
-
-    @staticmethod
-    def _label_minsize_for_text(font: tuple[str, int], text: str, *, scale: float) -> int:
-        """Return a pixel minsize from real Tk font metrics."""
-        try:
-            text_width = tkfont.Font(font=font).measure(text)
-        except tk.TclError:
-            text_width = int(len(text) * 8 * scale)
-        return text_width + max(8, int(8 * scale))
 
     def _build_bottom_card(self) -> None:
         app = self.app
@@ -552,19 +536,19 @@ class MainWindowBuilder:
         parent.grid_columnconfigure(1, weight=1)
         parent.grid_columnconfigure(
             2,
-            minsize=self._label_minsize_for_text(
+            minsize=measure_min_width(
                 font,
                 self._NAV_DISTANCE_SAMPLE,
-                scale=scale,
+                fallback_scale=scale,
             ),
         )
         if show_relative:
             parent.grid_columnconfigure(
                 3,
-                minsize=self._label_minsize_for_text(
+                minsize=measure_min_width(
                     font,
                     self._NAV_RELATIVE_SAMPLE,
-                    scale=scale,
+                    fallback_scale=scale,
                 ),
             )
         for _ in range(count):

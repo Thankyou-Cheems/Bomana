@@ -8,6 +8,7 @@ from bomana.ui.dialogs import _ScalableDialogMixin
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.panel_renderer import AppPanelRenderer
+from bomana.ui.text_utils import measure_min_width, set_elided_text
 from bomana.ui.widgets import HeadingTape
 
 
@@ -132,20 +133,31 @@ class TkGeometryTests(unittest.TestCase):
         self.assertEqual(rows[0].relative_lbl.cget("width"), 0)
         self.assertGreaterEqual(
             parent.grid_columnconfigure(2)["minsize"],
-            builder._label_minsize_for_text(
+            measure_min_width(
                 ("Segoe UI", 12),
                 builder._NAV_DISTANCE_SAMPLE,
-                scale=1.5,
+                fallback_scale=1.5,
             ),
         )
         self.assertGreaterEqual(
             parent.grid_columnconfigure(3)["minsize"],
-            builder._label_minsize_for_text(
+            measure_min_width(
                 ("Segoe UI", 12),
                 builder._NAV_RELATIVE_SAMPLE,
-                scale=1.5,
+                fallback_scale=1.5,
             ),
         )
+
+    def test_set_elided_text_uses_label_font_metrics(self) -> None:
+        label = tk.Label(self.root, font=("Segoe UI", 10))
+        full_text = "Very long aircraft display name"
+        full_width = measure_min_width(label.cget("font"), full_text, master=label, padding=0)
+
+        rendered = set_elided_text(label, full_text, max_width=max(1, full_width // 2))
+
+        self.assertEqual(label.cget("text"), rendered)
+        self.assertTrue(rendered.endswith("..."))
+        self.assertLess(len(rendered), len(full_text))
 
     def test_dialog_wrap_and_scale_controls_follow_live_geometry(self) -> None:
         original_scale = UIConfig.UI_SCALE_MULT

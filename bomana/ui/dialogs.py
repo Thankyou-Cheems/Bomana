@@ -32,6 +32,7 @@ from bomana.config import (
     UIConfig,
 )
 from bomana.core.overspeed import SpeedLimitDatabase
+from bomana.ui.text_utils import bind_existing_label_wraps, scaled_control_length
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.system import Win32
 
@@ -42,59 +43,28 @@ HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 class _ScalableDialogMixin:
     """可缩放窗口通用逻辑（适配屏幕 + 稳定字体初始化）"""
 
-    def _scaled_control_length(self, base_length: int) -> int:
-        """Scale fixed Tk control lengths with the configured UI scale."""
+    def _prepare_responsive_dialog_controls(self) -> None:
+        """Convert legacy fixed dialog hints into responsive Tk behavior."""
+        bind_existing_label_wraps(
+            self,
+            minimum_from_current=lambda wraplength: max(100, min(180, int(wraplength * 0.45))),
+            margin=24,
+        )
+
         try:
             ui_scale = float(UIConfig.UI_SCALE_MULT)
         except TypeError, ValueError:
             ui_scale = 1.0
-        return max(int(base_length), round(base_length * max(0.6, ui_scale)))
-
-    def _bind_dynamic_wrap(
-        self,
-        label: tk.Label,
-        parent: tk.Misc | None = None,
-        *,
-        minimum: int = 120,
-        margin: int = 24,
-    ) -> None:
-        """Tie a wrapped label to its live parent width."""
-        if getattr(label, "_bomana_dynamic_wrap", False):
-            return
-        target = parent or label.master
-        if target is None:
-            return
-        label._bomana_dynamic_wrap = True
-
-        def _update_wrap(event=None):
-            width = int(getattr(event, "width", 0) or target.winfo_width() or 0)
-            if width <= 1:
-                return
-            label.configure(wraplength=max(int(minimum), width - int(margin)))
-
-        target.bind("<Configure>", _update_wrap, add="+")
-        label.after_idle(_update_wrap)
-
-    def _prepare_responsive_dialog_controls(self) -> None:
-        """Convert legacy fixed dialog hints into responsive Tk behavior."""
 
         def prepare(widget: tk.Misc) -> None:
             for child in widget.winfo_children():
                 prepare(child)
 
-            if isinstance(widget, tk.Label):
-                with contextlib.suppress(tk.TclError, ValueError):
-                    wraplength = int(float(widget.cget("wraplength") or 0))
-                    if wraplength > 0:
-                        self._bind_dynamic_wrap(
-                            widget,
-                            minimum=max(100, min(180, int(wraplength * 0.45))),
-                        )
-            elif isinstance(widget, tk.Scale):
+            if isinstance(widget, tk.Scale):
                 with contextlib.suppress(tk.TclError, ValueError):
                     length = int(float(widget.cget("length") or 0))
                     if length > 0 and str(widget.cget("orient")) == "horizontal":
-                        widget.configure(length=self._scaled_control_length(length))
+                        widget.configure(length=scaled_control_length(length, ui_scale))
 
         prepare(self)
 
