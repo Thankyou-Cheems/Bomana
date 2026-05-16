@@ -12,6 +12,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import ClassVar
 
 from datamine_utils import (
     BOMBGUNS_SUBDIR,
@@ -23,7 +24,7 @@ from datamine_utils import (
 class BlkxExtractor:
     """Batch-extract bomb ballistic parameters from .blkx files."""
 
-    REQUIRED_PARAMS = [
+    REQUIRED_PARAMS: ClassVar[list[str]] = [
         "mass",
         "mass_lbs",
         "caliber",
@@ -38,7 +39,7 @@ class BlkxExtractor:
         "stabilityRicochetModifier",
     ]
 
-    BOMB_TYPE_PATTERNS = {
+    BOMB_TYPE_PATTERNS: ClassVar[dict[str, list[str]]] = {
         "high_explosive": ["mk", "hc", "gp", "ldgp"],
         "incendiary": ["zb", "napalm", "incendiary"],
         "anti_tank": ["antitank", "at"],

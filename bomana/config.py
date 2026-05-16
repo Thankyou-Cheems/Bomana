@@ -4,6 +4,7 @@
 
 from copy import deepcopy
 from pathlib import Path
+from typing import Any, ClassVar
 
 # =============================================================================
 # 标准元数据 (Standard Metadata)
@@ -76,7 +77,7 @@ class ZoneConfig:
 
     # 动态容差: (距离上限km, 容差角度°) - 距离越近要求越精确
     # v6.1优化: 针对高空投弹场景，在12km处就开始收紧阈值
-    CDI_TOLERANCE_THRESHOLDS = [
+    CDI_TOLERANCE_THRESHOLDS: ClassVar[list[tuple[float, float]]] = [
         (2.0, 0.5),  # <2km: ±0.5° 极限精准（投弹瞬间）
         (5.0, 1.0),  # <5km: ±1.0° 投弹窗口
         (8.0, 2.0),  # <8km: ±2.0° 精确瞄准
@@ -372,7 +373,7 @@ class HotkeyConfig:
     """
 
     # 功能键VK码映射表
-    VK_CODES = {
+    VK_CODES: ClassVar[dict[str, int]] = {
         "F1": 0x70,
         "F2": 0x71,
         "F3": 0x72,
@@ -388,7 +389,20 @@ class HotkeyConfig:
     }
 
     # 可用功能键列表（供UI选择）
-    AVAILABLE_KEYS = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
+    AVAILABLE_KEYS: ClassVar[list[str]] = [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+    ]
 
     # 当前绑定（可运行时修改）
     KEY_RESET = "F7"  # 双击确认后重置计时器
@@ -467,14 +481,14 @@ class SoundConfig:
     OVERSPEED_CRIT_GAP_MS = 30
 
     # 警告触发时间点（秒）
-    WARNING_SECONDS = [30, 20, 10, 5, 4, 3, 2, 1]
-    MAJOR_WARNINGS = [30, 20, 10]  # 重要警告点（双音）
+    WARNING_SECONDS: ClassVar[list[int]] = [30, 20, 10, 5, 4, 3, 2, 1]
+    MAJOR_WARNINGS: ClassVar[list[int]] = [30, 20, 10]  # 重要警告点（双音）
 
     # 自定义音频导入目录
     CUSTOM_SOUND_DIR = Path.home() / ".wttimer_sounds"
 
     # 支持的用户音频格式（基于 Windows 原生能力）
-    SUPPORTED_AUDIO_EXTS = {".wav", ".mp3", ".wma", ".mid", ".midi"}
+    SUPPORTED_AUDIO_EXTS: ClassVar[set[str]] = {".wav", ".mp3", ".wma", ".mid", ".midi"}
 
     SOUND_EVENT_GROUPS = (
         ("计时与操作", ("tick", "warning", "manual_reset", "on")),
@@ -482,7 +496,7 @@ class SoundConfig:
         ("空速提醒", ("overspeed_warning", "overspeed_critical")),
     )
 
-    SOUND_EVENT_META = {
+    SOUND_EVENT_META: ClassVar[dict[str, dict[str, str]]] = {
         "tick": {"label": "倒计时单响", "description": "倒计时普通提示"},
         "warning": {"label": "倒计时重点警告", "description": "30/20/10 秒等重点倒计时"},
         "manual_reset": {"label": "手动重置确认", "description": "双击热键确认重置后播放"},
@@ -492,7 +506,7 @@ class SoundConfig:
         "overspeed_critical": {"label": "超速危险", "description": "空速进入危险区时的循环提示"},
     }
 
-    _custom_sound_files = {}
+    _custom_sound_files: ClassVar[dict[str, str]] = {}
 
     @classmethod
     def get_event_groups(cls) -> tuple[tuple[str, tuple[str, ...]], ...]:
@@ -546,7 +560,7 @@ class OverspeedConfig:
     LIMITS_FILE = "bomana/data/fm_speed_limits.json"
 
     # 默认级别阈值（保持与 WTSpeeder 关键逻辑一致，并增加全真提前感知层）
-    _DEFAULT_THRESHOLDS = {
+    _DEFAULT_THRESHOLDS: ClassVar[dict[str, float]] = {
         "caution_ratio": 0.94,
         "warning_ratio": 0.97,
         "critical_ratio": 0.992,
@@ -554,7 +568,7 @@ class OverspeedConfig:
         "mach_warning_margin": 0.04,
         "mach_critical_margin": 0.02,
     }
-    _THRESHOLD_LIMITS = {
+    _THRESHOLD_LIMITS: ClassVar[dict[str, tuple[float, float]]] = {
         "caution_ratio": (0.80, 0.999),
         "warning_ratio": (0.85, 0.999),
         "critical_ratio": (0.90, 0.9995),
@@ -562,8 +576,8 @@ class OverspeedConfig:
         "mach_warning_margin": (0.0, 0.20),
         "mach_critical_margin": (0.0, 0.20),
     }
-    _global_thresholds = dict(_DEFAULT_THRESHOLDS)
-    _aircraft_overrides = {}
+    _global_thresholds: ClassVar[dict[str, float]] = dict(_DEFAULT_THRESHOLDS)
+    _aircraft_overrides: ClassVar[dict[str, dict[str, float]]] = {}
 
     # 兼容旧调用路径的运行时常量镜像
     CAUTION_RATIO = _DEFAULT_THRESHOLDS["caution_ratio"]
@@ -776,11 +790,11 @@ class BallisticPhysicsParams:
     RELEASE_READY_SEC = 0.5
 
     # ==================== 用户可调参数（全局） ====================
-    _DEFAULT_TUNING = {
+    _DEFAULT_TUNING: ClassVar[dict[str, float]] = {
         "range_correction_mult": 1.0,
         "time_correction_mult": 1.0,
     }
-    _TUNING_LIMITS = {
+    _TUNING_LIMITS: ClassVar[dict[str, tuple[float, float]]] = {
         "range_correction_mult": (0.6, 1.6),
         "time_correction_mult": (0.6, 1.6),
     }
@@ -839,7 +853,7 @@ class AboutConfig:
     GITHUB_URL = __repository__
 
     # 赞助链接配置（可以添加多个）
-    SPONSOR_LINKS = [
+    SPONSOR_LINKS: ClassVar[list[tuple[str, str, str]]] = [
         # ("显示名称", "链接URL", "图片文件名"),
         ("微信赞赏", "", "bomana/assets/branding/sponsor_wechat.png"),  # 空链接表示只显示图片
     ]
@@ -858,7 +872,7 @@ class ChecklistConfig:
     MAX_ITEMS = 8
 
     # 默认检查清单
-    DEFAULT_ITEMS = [
+    DEFAULT_ITEMS: ClassVar[list[str]] = [
         "按I启动发动机",
         "检查襟翼/起落架",
         "开启增稳系统",
@@ -882,7 +896,7 @@ class BombConfig:
     """
 
     selected_bomb = "su_fab100"
-    BOMB_DATABASE = {}
+    BOMB_DATABASE: ClassVar[dict[str, dict[str, Any]]] = {}
     _database_loaded = False
     load_error: str | None = None
     database_source: str | None = None
@@ -1063,7 +1077,7 @@ class BombConfig:
         return f"{name} ({mass_str})"
 
     @classmethod
-    def get_bomb_physics_params(cls, name: str = None) -> dict:
+    def get_bomb_physics_params(cls, name: str | None = None) -> dict:
         """获取炸弹的完整物理参数"""
         cls._ensure_database_loaded()
         data = cls.get_selected_bomb_data() if name is None else (cls.get_bomb_data(name) or {})
@@ -1097,7 +1111,7 @@ class Theme:
     _current = "fluent_dark"
 
     # 预设主题定义
-    THEMES = {
+    THEMES: ClassVar[dict[str, dict[str, str]]] = {
         "fluent_dark": {
             "name": "Fluent 深色",
             "BG": "#10151d",

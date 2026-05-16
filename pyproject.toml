@@ -34,7 +34,21 @@ line-length = 100
 respect-gitignore = false
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "C4", "UP", "SIM", "RUF005", "RUF046", "RUF059", "RUF100"]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "SIM",
+    "RUF005",
+    "RUF012",
+    "RUF013",
+    "RUF046",
+    "RUF059",
+    "RUF100",
+]
 ignore = [
     "E501",
 ]

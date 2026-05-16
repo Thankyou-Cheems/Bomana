@@ -68,6 +68,12 @@ uv run --extra dev ruff format --check .
 
 纯文档或仅变更 issue 状态的任务可在交接中说明 Ruff 不适用。
 
+Ruff 规则策略：`RUF012` 与 `RUF013` 已作为默认门禁启用，用于显式标记共享类状态和禁止隐式 `Optional`。`RUF001`、`RUF002`、`RUF003` 暂不全仓启用；仓库包含大量中文 UI 文案、注释、文档字符串和字体字形清单，直接启用会产生大量预期命中。需要排查 Unicode 歧义时，按文件或路径运行 targeted scan：
+
+```bash
+uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
+```
+
 ### CI 质量门
 
 `.github/workflows/quality.yml` 会在 PR 和 `main` 推送时运行 Windows 轻量门禁：
@@ -242,6 +248,12 @@ uv run --extra dev ruff format --check .
 ```
 
 Pure documentation or issue-status-only tasks may state that Ruff is not applicable in the handoff.
+
+Ruff rule posture: `RUF012` and `RUF013` are enabled in the default gate to make shared class state explicit and disallow implicit `Optional`. `RUF001`, `RUF002`, and `RUF003` are intentionally not enabled repository-wide; the project contains many Chinese UI strings, comments, docstrings, and font glyph lists that would create a large number of expected findings. For Unicode ambiguity investigations, run a targeted scan by file or path:
+
+```bash
+uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
+```
 
 ### CI Quality Gate
 

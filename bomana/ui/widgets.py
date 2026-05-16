@@ -200,7 +200,7 @@ class HeadingTape(tk.Canvas):
         return top_pad + top_band_height + row_gap + distance_linespace + bottom_pad
 
     def update_tape_multi(
-        self, current_hdg: float, targets: list = None, primary_distance_km: float = 0.0
+        self, current_hdg: float, targets: list | None = None, primary_distance_km: float = 0.0
     ):
         """更新航向带显示（多目标版本）
 
@@ -938,7 +938,7 @@ class HeadingTape(tk.Canvas):
     def update_tape(
         self,
         current_hdg: float,
-        target_hdg: float = None,
+        target_hdg: float | None = None,
         distance_km: float = 0.0,
         tolerance: float = 5.0,
         target_name: str = "",

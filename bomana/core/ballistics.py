@@ -9,7 +9,7 @@ from bomana.config import BallisticPhysicsParams, BombConfig
 # ============================================================================
 
 
-def _wt_get_air_density(altitude_m: float, temp_k: float = None) -> float:
+def _wt_get_air_density(altitude_m: float, temp_k: float | None = None) -> float:
     """计算War Thunder指数衰减大气密度
 
     公式：ρ(h) = 1.225 × exp(-h/14426) × (288.15/T)
@@ -41,7 +41,7 @@ def calculate_bomb_trajectory(
     target_alt_m: float = 0.0,
     dive_angle_deg: float = 0.0,
     initial_vz_ms=None,
-    bomb_params: dict = None,
+    bomb_params: dict | None = None,
 ) -> tuple:
     """计算炸弹弹道（支持多种阻力模型）
 

@@ -55,8 +55,8 @@ class SoundManager:
     def play(
         self,
         pattern: str = "tick",
-        freq: int = None,
-        duration: int = None,
+        freq: int | None = None,
+        duration: int | None = None,
         *,
         force: bool = False,
         custom_file: str | None = None,
