@@ -6,6 +6,16 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, ClassVar
 
+
+def _safe_print(message: str) -> None:
+    """Print diagnostics even when the host console is not UTF-8."""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        fallback = message.encode("ascii", errors="backslashreplace").decode("ascii")
+        print(fallback)
+
+
 # =============================================================================
 # 标准元数据 (Standard Metadata)
 # =============================================================================
@@ -958,15 +968,15 @@ class BombConfig:
 
             cls._database_loaded = True
             cls.database_source = source
-            print(f"[BombConfig] 已从{source}加载 {len(cls.BOMB_DATABASE)} 种炸弹参数")
+            _safe_print(f"[BombConfig] 已从{source}加载 {len(cls.BOMB_DATABASE)} 种炸弹参数")
 
         except ImportError as e:
-            print(f"[BombConfig] 警告: 无法加载ccrp_bomb_params模块: {e}")
+            _safe_print(f"[BombConfig] 警告: 无法加载ccrp_bomb_params模块: {e}")
             cls.BOMB_DATABASE.clear()
             cls.load_error = str(e)
             cls._database_loaded = False
         except Exception as e:
-            print(f"[BombConfig] 加载炸弹参数时出错: {e}")
+            _safe_print(f"[BombConfig] 加载炸弹参数时出错: {e}")
             cls.BOMB_DATABASE.clear()
             cls.load_error = str(e)
             cls._database_loaded = False
