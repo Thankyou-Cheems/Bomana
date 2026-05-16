@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+import tkinter.font as tkfont
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -37,6 +38,9 @@ class MainWindowBuilder:
     """Build a stable grid-based main window skeleton for the App."""
 
     app: App
+
+    _NAV_DISTANCE_SAMPLE = "999.9km"
+    _NAV_RELATIVE_SAMPLE = "+179.99°"
 
     def build(self) -> None:
         app = self.app
@@ -117,6 +121,15 @@ class MainWindowBuilder:
             info_label.configure(wraplength=max(74, int(width * 0.34)))
 
         row.bind("<Configure>", update_wrap, add="+")
+
+    @staticmethod
+    def _label_minsize_for_text(font: tuple[str, int], text: str, *, scale: float) -> int:
+        """Return a pixel minsize from real Tk font metrics."""
+        try:
+            text_width = tkfont.Font(font=font).measure(text)
+        except tk.TclError:
+            text_width = int(len(text) * 8 * scale)
+        return text_width + max(8, int(8 * scale))
 
     def _build_bottom_card(self) -> None:
         app = self.app
@@ -534,8 +547,26 @@ class MainWindowBuilder:
         show_relative: bool,
     ) -> list[NavListRow]:
         pool: list[NavListRow] = []
+        scale = float(getattr(self.app, "scale", 1.0) or 1.0)
         parent.grid_columnconfigure(0, minsize=max(20, int(24 * self.app.scale)))
         parent.grid_columnconfigure(1, weight=1)
+        parent.grid_columnconfigure(
+            2,
+            minsize=self._label_minsize_for_text(
+                font,
+                self._NAV_DISTANCE_SAMPLE,
+                scale=scale,
+            ),
+        )
+        if show_relative:
+            parent.grid_columnconfigure(
+                3,
+                minsize=self._label_minsize_for_text(
+                    font,
+                    self._NAV_RELATIVE_SAMPLE,
+                    scale=scale,
+                ),
+            )
         for _ in range(count):
             row_index = len(pool)
 
@@ -569,12 +600,11 @@ class MainWindowBuilder:
                 fg=Theme.TEXT_MUTED,
                 bg=bg,
                 anchor="e",
-                width=8,
             )
             distance_lbl.grid(
                 row=row_index,
                 column=2,
-                sticky="e",
+                sticky="ew",
                 padx=(int(6 * self.app.scale), 0),
                 pady=(0, max(1, int(self.app.scale))),
             )
@@ -589,12 +619,11 @@ class MainWindowBuilder:
                     fg=Theme.TEXT_MUTED,
                     bg=bg,
                     anchor="e",
-                    width=11,
                 )
                 relative_lbl.grid(
                     row=row_index,
                     column=3,
-                    sticky="e",
+                    sticky="ew",
                     padx=(int(8 * self.app.scale), 0),
                     pady=(0, max(1, int(self.app.scale))),
                 )

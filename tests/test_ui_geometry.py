@@ -110,6 +110,37 @@ class TkGeometryTests(unittest.TestCase):
         self.assertGreaterEqual(labels[1].cget("wraplength"), 44)
         self.assertGreaterEqual(labels[3].cget("wraplength"), 74)
 
+    def test_main_navigation_list_columns_use_font_metrics_not_fixed_widths(self) -> None:
+        parent = tk.Frame(self.root)
+        parent.pack(fill="x")
+        builder = MainWindowBuilder(app=SimpleNamespace(scale=1.5))
+        rows = builder._build_nav_row_pool(
+            parent,
+            1,
+            ("Segoe UI", 12),
+            bg="#000000",
+            show_relative=True,
+        )
+
+        self.assertEqual(rows[0].distance_lbl.cget("width"), 0)
+        self.assertEqual(rows[0].relative_lbl.cget("width"), 0)
+        self.assertGreaterEqual(
+            parent.grid_columnconfigure(2)["minsize"],
+            builder._label_minsize_for_text(
+                ("Segoe UI", 12),
+                builder._NAV_DISTANCE_SAMPLE,
+                scale=1.5,
+            ),
+        )
+        self.assertGreaterEqual(
+            parent.grid_columnconfigure(3)["minsize"],
+            builder._label_minsize_for_text(
+                ("Segoe UI", 12),
+                builder._NAV_RELATIVE_SAMPLE,
+                scale=1.5,
+            ),
+        )
+
     def test_standalone_navigation_status_row_uses_elastic_columns(self) -> None:
         row = tk.Frame(self.root)
         row.pack(fill="x")
