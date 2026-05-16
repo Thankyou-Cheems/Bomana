@@ -2,7 +2,9 @@ import tkinter as tk
 import unittest
 from types import SimpleNamespace
 
+from bomana.config import UIConfig
 from bomana.core.state import Phase, UISnapshot
+from bomana.ui.dialogs import _ScalableDialogMixin
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.panel_renderer import AppPanelRenderer
@@ -15,6 +17,10 @@ class FakeIcons:
         kwargs.pop("compound", None)
         kwargs.pop("padx", None)
         label.config(text=text, **kwargs)
+
+
+class DummyScalableDialog(tk.Toplevel, _ScalableDialogMixin):
+    pass
 
 
 class TkGeometryTests(unittest.TestCase):
@@ -140,6 +146,48 @@ class TkGeometryTests(unittest.TestCase):
                 scale=1.5,
             ),
         )
+
+    def test_dialog_wrap_and_scale_controls_follow_live_geometry(self) -> None:
+        original_scale = UIConfig.UI_SCALE_MULT
+        UIConfig.UI_SCALE_MULT = 1.75
+        dialog = DummyScalableDialog(self.root)
+        try:
+            frame = tk.Frame(dialog)
+            frame.pack(fill="x", expand=True)
+            label = tk.Label(frame, text="long dialog guidance", wraplength=620)
+            label.pack(fill="x")
+            scale = tk.Scale(frame, orient="horizontal", length=180)
+            scale.pack(fill="x")
+
+            dialog._prepare_responsive_dialog_controls()
+            dialog.geometry("260x120")
+            self.root.update()
+
+            self.assertEqual(label.cget("wraplength"), 236)
+            self.assertEqual(scale.cget("length"), 315)
+        finally:
+            UIConfig.UI_SCALE_MULT = original_scale
+            dialog.destroy()
+
+    def test_dialog_fit_clamps_minimum_size_to_available_screen(self) -> None:
+        dialog = DummyScalableDialog(self.root)
+        dialog.withdraw()
+        try:
+            dialog.winfo_reqwidth = lambda: 1200
+            dialog.winfo_reqheight = lambda: 900
+            dialog.winfo_screenwidth = lambda: 480
+            dialog.winfo_screenheight = lambda: 360
+
+            dialog._fit_window_to_screen()
+
+            min_w, min_h = dialog.minsize()
+            max_w, max_h = dialog.maxsize()
+            self.assertLessEqual(min_w, 360)
+            self.assertLessEqual(min_h, 320)
+            self.assertEqual(max_w, 360)
+            self.assertEqual(max_h, 320)
+        finally:
+            dialog.destroy()
 
     def test_standalone_navigation_status_row_uses_elastic_columns(self) -> None:
         row = tk.Frame(self.root)

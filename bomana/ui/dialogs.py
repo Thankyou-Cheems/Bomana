@@ -42,6 +42,62 @@ HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 class _ScalableDialogMixin:
     """可缩放窗口通用逻辑（适配屏幕 + 稳定字体初始化）"""
 
+    def _scaled_control_length(self, base_length: int) -> int:
+        """Scale fixed Tk control lengths with the configured UI scale."""
+        try:
+            ui_scale = float(UIConfig.UI_SCALE_MULT)
+        except TypeError, ValueError:
+            ui_scale = 1.0
+        return max(int(base_length), round(base_length * max(0.6, ui_scale)))
+
+    def _bind_dynamic_wrap(
+        self,
+        label: tk.Label,
+        parent: tk.Misc | None = None,
+        *,
+        minimum: int = 120,
+        margin: int = 24,
+    ) -> None:
+        """Tie a wrapped label to its live parent width."""
+        if getattr(label, "_bomana_dynamic_wrap", False):
+            return
+        target = parent or label.master
+        if target is None:
+            return
+        label._bomana_dynamic_wrap = True
+
+        def _update_wrap(event=None):
+            width = int(getattr(event, "width", 0) or target.winfo_width() or 0)
+            if width <= 1:
+                return
+            label.configure(wraplength=max(int(minimum), width - int(margin)))
+
+        target.bind("<Configure>", _update_wrap, add="+")
+        label.after_idle(_update_wrap)
+
+    def _prepare_responsive_dialog_controls(self) -> None:
+        """Convert legacy fixed dialog hints into responsive Tk behavior."""
+
+        def prepare(widget: tk.Misc) -> None:
+            for child in widget.winfo_children():
+                prepare(child)
+
+            if isinstance(widget, tk.Label):
+                with contextlib.suppress(tk.TclError, ValueError):
+                    wraplength = int(float(widget.cget("wraplength") or 0))
+                    if wraplength > 0:
+                        self._bind_dynamic_wrap(
+                            widget,
+                            minimum=max(100, min(180, int(wraplength * 0.45))),
+                        )
+            elif isinstance(widget, tk.Scale):
+                with contextlib.suppress(tk.TclError, ValueError):
+                    length = int(float(widget.cget("length") or 0))
+                    if length > 0 and str(widget.cget("orient")) == "horizontal":
+                        widget.configure(length=self._scaled_control_length(length))
+
+        prepare(self)
+
     def _fit_window_to_screen(self):
         """固定初始尺寸，适配屏幕，同时允许手动调整"""
         self.update_idletasks()
@@ -51,11 +107,14 @@ class _ScalableDialogMixin:
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
 
-        min_w = max(520, int(req_w * 0.85))
-        min_h = max(420, int(req_h * 0.85))
+        available_w = max(360, screen_w - 120)
+        available_h = max(320, screen_h - 120)
 
-        max_w = max(min_w, screen_w - 120)
-        max_h = max(min_h, screen_h - 120)
+        min_w = min(max(520, int(req_w * 0.85)), available_w)
+        min_h = min(max(420, int(req_h * 0.85)), available_h)
+
+        max_w = max(min_w, available_w)
+        max_h = max(min_h, available_h)
 
         init_w = min(max(req_w, min_w), max_w)
         init_h = min(max(req_h, min_h), max_h)
@@ -95,6 +154,7 @@ class _ScalableDialogMixin:
                     pass
 
         collect(self)
+        self._prepare_responsive_dialog_controls()
 
     def _clamp_to_visible_screen(self, x, y):
         """将窗口左上角坐标钳制在当前可见屏幕范围内。"""
