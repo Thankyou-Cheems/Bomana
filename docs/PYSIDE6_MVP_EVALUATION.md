@@ -2,11 +2,18 @@
 
 Date: 2026-05-16
 
+Status: Superseded on 2026-05-17. Production UI follow-up work is Tk-only. Do not add
+Qt/PySide6 code, dependencies, entrypoints, or tests unless the project owner explicitly reopens
+that direction. See `docs/TK_UI_FOLLOWUP_PLAN.md`.
+
 This note records the migration assessment for the UI repair epic. It is not an approved
 architecture change yet. The current recommendation is to keep shipping the repaired Tk UI while
 building a narrow PySide6 MVP behind an explicit development flag or branch.
 
 ## Decision
+
+Superseded decision: do not proceed with a Qt/PySide6 MVP in the next phase. Keep production UI
+work on Tk and use this document only as historical evaluation context.
 
 Proceed with a small PySide6 Widgets MVP, but do not add PySide6 to production dependencies until
 the MVP proves package size, startup time, and Windows overlay compatibility.
