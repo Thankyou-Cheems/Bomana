@@ -1,3 +1,7 @@
+import ast
+from pathlib import Path
+
+from bomana.ui.dialogs import _ScalableDialogMixin
 from bomana.ui.tk_style import TkPalette, action_button_style
 
 
@@ -48,3 +52,16 @@ def test_action_button_variants_share_control_tokens() -> None:
     assert action_button_style("unknown", palette=palette) == action_button_style(
         "neutral", palette=palette
     )
+
+
+def test_dialog_action_button_factory_stays_on_scalable_mixin() -> None:
+    source = Path("bomana/ui/dialogs.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    definitions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_create_action_button"
+    ]
+
+    assert len(definitions) == 1
+    assert "_create_action_button" in _ScalableDialogMixin.__dict__

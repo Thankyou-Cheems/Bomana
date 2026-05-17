@@ -44,6 +44,28 @@ HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 class _ScalableDialogMixin:
     """可缩放窗口通用逻辑（适配屏幕 + 稳定字体初始化）"""
 
+    def _create_action_button(
+        self,
+        parent: tk.Widget,
+        text: str,
+        command,
+        variant: str = "neutral",
+        width: int = 10,
+    ) -> tk.Button:
+        button = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bd=0,
+            relief="flat",
+            width=width,
+            padx=10,
+            pady=5,
+            cursor="hand2",
+        )
+        style_action_button(button, variant)
+        return button
+
     def _prepare_responsive_dialog_controls(self) -> None:
         """Convert legacy fixed dialog hints into responsive Tk behavior."""
         bind_existing_label_wraps(
@@ -203,28 +225,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self._fit_window_to_screen()
         self._init_dynamic_scaling()
         self._center_on_parent(parent)
-
-    def _create_action_button(
-        self,
-        parent: tk.Widget,
-        text: str,
-        command,
-        variant: str = "neutral",
-        width: int = 10,
-    ) -> tk.Button:
-        button = tk.Button(
-            parent,
-            text=text,
-            command=command,
-            bd=0,
-            relief="flat",
-            width=width,
-            padx=10,
-            pady=5,
-            cursor="hand2",
-        )
-        style_action_button(button, variant)
-        return button
 
     def _style_tab_button(self, name: str, active: bool) -> None:
         btn = self.tab_btns.get(name)
@@ -1881,28 +1881,6 @@ class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
         self._init_dynamic_scaling()
         self._center_on_parent(parent)
 
-    def _create_action_button(
-        self,
-        parent: tk.Widget,
-        text: str,
-        command,
-        variant: str = "neutral",
-        width: int = 10,
-    ) -> tk.Button:
-        btn = tk.Button(
-            parent,
-            text=text,
-            command=command,
-            bd=0,
-            relief="flat",
-            width=width,
-            padx=10,
-            pady=5,
-            cursor="hand2",
-        )
-        style_action_button(btn, variant)
-        return btn
-
     def _build_ui(self):
         shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
         shell.pack(fill="both", expand=True, padx=15, pady=12)
@@ -2024,28 +2002,6 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
         self._fit_window_to_screen()
         self._init_dynamic_scaling()
         self._center_dialog_on_parent(parent)
-
-    def _create_action_button(
-        self,
-        parent: tk.Widget,
-        text: str,
-        command,
-        variant: str = "neutral",
-        width: int = 10,
-    ) -> tk.Button:
-        button = tk.Button(
-            parent,
-            text=text,
-            command=command,
-            bd=0,
-            relief="flat",
-            width=width,
-            padx=10,
-            pady=5,
-            cursor="hand2",
-        )
-        style_action_button(button, variant)
-        return button
 
     @staticmethod
     def _format_aircraft_title(entry: dict[str, object]) -> str:
@@ -2601,28 +2557,6 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         self._fit_window_to_screen()
         self._init_dynamic_scaling()
         self._center_on_parent(parent)
-
-    def _create_action_button(
-        self,
-        parent: tk.Widget,
-        text: str,
-        command,
-        variant: str = "neutral",
-        width: int = 10,
-    ) -> tk.Button:
-        button = tk.Button(
-            parent,
-            text=text,
-            command=command,
-            bd=0,
-            relief="flat",
-            width=width,
-            padx=10,
-            pady=5,
-            cursor="hand2",
-        )
-        style_action_button(button, variant)
-        return button
 
     def _style_category_button(self, category: str, hover: bool = False) -> None:
         btn = self.cat_buttons.get(category)
