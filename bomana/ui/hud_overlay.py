@@ -7,7 +7,7 @@ import tkinter as tk
 from typing import Any
 
 from bomana.config import HUDConfig, UIConfig
-from bomana.utils.system import Win32
+from bomana.utils.system import Win32, resolve_tk_font_tuple
 
 
 class HUDOverlay:
@@ -146,9 +146,9 @@ class HUDOverlay:
 
     def _hud_font(self, size: float, *styles: str) -> tuple:
         scaled_size = UIConfig.scaled_font_size(size, float(HUDConfig.scale), min_size=6)
-        if styles:
-            return ("Segoe UI", scaled_size, *styles)
-        return ("Segoe UI", scaled_size)
+        font = ("Segoe UI", scaled_size, *styles) if styles else ("Segoe UI", scaled_size)
+        resolved = resolve_tk_font_tuple(self.window, font)
+        return resolved if isinstance(resolved, tuple) else font
 
     def refresh_text_scale(self) -> None:
         """在不重建 HUD 的情况下刷新文字字号。"""

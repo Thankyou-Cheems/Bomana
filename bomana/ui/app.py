@@ -45,7 +45,7 @@ from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.math_utils import calculate_smart_scale
 from bomana.utils.sound import SoundManager
-from bomana.utils.system import SingleInstanceManager, Win32, select_ui_font_family
+from bomana.utils.system import SingleInstanceManager, Win32, resolve_tk_font_tuple
 
 
 def fmt_time(sec: float | None) -> str:
@@ -446,12 +446,14 @@ class App:
 
     def _scaled_font(self, font_def: tuple, *, size_mult: float = 1.0, min_size: int = 1) -> tuple:
         """按布局缩放和独立文本缩放生成字体元组。"""
-        return UIConfig.scaled_font(
+        scaled = UIConfig.scaled_font(
             font_def,
             self.scale,
             size_mult=size_mult,
             min_size=min_size,
         )
+        resolved = resolve_tk_font_tuple(self.root, scaled)
+        return resolved if isinstance(resolved, tuple) else scaled
 
     def _scaled_font_size(
         self, base_size: float, *, size_mult: float = 1.0, min_size: int = 1
@@ -466,35 +468,11 @@ class App:
 
     def _get_font(self, name: str) -> tuple:
         """获取缓存的字体"""
-        return self._cached_fonts.get(name, ("Segoe UI", 10))
-
-    def _select_font_family(self) -> str:
-        """Pick an available UI font family."""
-        return select_ui_font_family(self.root)
+        return self._cached_fonts.get(name, self._scaled_font(("TkDefaultFont", 10)))
 
     def _apply_font_family(self) -> None:
-        """Apply a unified UI font family."""
-        fam = self._select_font_family()
-        if not fam:
-            return
-        font_keys = [
-            "FONT_TIMER",
-            "FONT_LIFE",
-            "FONT_CYCLE",
-            "FONT_PILL",
-            "FONT_STATUS",
-            "FONT_CHECKLIST_TITLE",
-            "FONT_CHECKLIST_ITEM",
-            "FONT_ZONE_TITLE",
-            "FONT_ZONE_ITEM",
-            "FONT_DEBUG",
-            "FONT_HINT",
-        ]
-        for key in font_keys:
-            val = getattr(UIConfig, key, None)
-            if isinstance(val, (list, tuple)) and len(val) >= 2:
-                new_val = (fam, val[1], *val[2:])
-                setattr(UIConfig, key, new_val)
+        """Refresh cached fonts through the shared family resolver."""
+        self._cache_fonts()
 
     def _finalize_window_geometry_and_styles(self):
         """最终确定窗口几何和样式"""

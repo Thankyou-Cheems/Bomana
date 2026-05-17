@@ -34,7 +34,7 @@ from bomana.config import (
 from bomana.core.overspeed import SpeedLimitDatabase
 from bomana.ui.text_utils import bind_existing_label_wraps, scaled_control_length
 from bomana.utils.file_utils import ConfigManager, resource_path
-from bomana.utils.system import Win32
+from bomana.utils.system import Win32, resolve_tk_font_tuple
 
 # Optional dependencies for images (match HAS_TRAY behavior).
 HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
@@ -111,8 +111,17 @@ class _ScalableDialogMixin:
                     scaled_size = UIConfig.scaled_font_size(abs(base_size), 1.0, min_size=1)
                     if base_size < 0:
                         scaled_size = -scaled_size
+                    font_tuple = resolve_tk_font_tuple(
+                        self,
+                        (
+                            actual.get("family", "TkDefaultFont"),
+                            scaled_size,
+                            actual.get("weight", "normal"),
+                        ),
+                    )
+                    family = font_tuple[0] if isinstance(font_tuple, tuple) else "TkDefaultFont"
                     new_font = tkfont.Font(
-                        family=actual.get("family", "Segoe UI"),
+                        family=family,
                         size=scaled_size,
                         weight=actual.get("weight", "normal"),
                         slant=actual.get("slant", "roman"),

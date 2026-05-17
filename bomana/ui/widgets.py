@@ -10,6 +10,7 @@ from bomana.utils.math_utils import (
     get_cdi_tolerance,
     get_deviation_color,
 )
+from bomana.utils.system import resolve_tk_font_tuple
 
 
 class Pill(tk.Label):
@@ -108,9 +109,9 @@ class HeadingTape(tk.Canvas):
         return max(int(min_size), int(float(base_size) * float(self.text_scale)))
 
     def _font(self, size: int, *, weight: str | None = None, family: str = "Consolas"):
-        if weight:
-            return (family, size, weight)
-        return (family, size)
+        font = (family, size, weight) if weight else (family, size)
+        resolved = resolve_tk_font_tuple(self, font)
+        return resolved if isinstance(resolved, tuple) else font
 
     def _font_linespace(self, font) -> int:
         return int(tkfont.Font(master=self, font=font).metrics("linespace"))

@@ -32,6 +32,36 @@ _PREFERRED_CJK_FONTS = [
     "Source Han Sans SC",
     "WenQuanYi Micro Hei",
 ]
+_PREFERRED_MONOSPACE_FONTS = [
+    "Cascadia Mono",
+    "Consolas",
+    "Courier New",
+    "Menlo",
+    "Monaco",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+    "Courier",
+]
+_UI_FONT_REQUESTS = {
+    "",
+    "TkDefaultFont",
+    "Bomana UI Sans",
+    "Segoe UI Variable",
+    "Segoe UI",
+    "Arial",
+    "Helvetica",
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "PingFang SC",
+    "Source Han Sans SC",
+    "WenQuanYi Micro Hei",
+}
+_MONOSPACE_FONT_REQUESTS = {
+    "TkFixedFont",
+    "monospace",
+    *_PREFERRED_MONOSPACE_FONTS,
+}
 _BUNDLED_FONT_FAMILY = "Bomana UI Sans"
 _BUNDLED_FONT_FILES = (
     "BomanaUiSans-Regular.ttf",
@@ -106,7 +136,7 @@ def select_ui_font_family(root: tk.Misc) -> str:
         return _BUNDLED_FONT_FAMILY
 
     try:
-        loc = locale.getdefaultlocale()[0] or ""
+        loc = locale.getlocale()[0] or ""
     except Exception:
         loc = ""
 
@@ -130,6 +160,49 @@ def select_ui_font_family(root: tk.Misc) -> str:
         if fam in families:
             return fam
     return ""
+
+
+def select_monospace_font_family(root: tk.Misc) -> str:
+    """Pick an available monospace font family for debug and numeric readouts."""
+    try:
+        families = set(tkfont.families(root))
+    except Exception:
+        return ""
+
+    for fam in _PREFERRED_MONOSPACE_FONTS:
+        if fam in families:
+            return fam
+    return ""
+
+
+def resolve_tk_font_family(root: tk.Misc, requested_family: str | None) -> str:
+    """Resolve legacy font requests to an available UI or monospace family."""
+    requested = str(requested_family or "").strip()
+    try:
+        families = set(tkfont.families(root))
+    except Exception:
+        families = set()
+
+    if requested in _MONOSPACE_FONT_REQUESTS:
+        return select_monospace_font_family(root) or requested
+
+    if requested in _UI_FONT_REQUESTS:
+        return select_ui_font_family(root) or requested
+
+    if requested and requested in families:
+        return requested
+
+    return requested or select_ui_font_family(root)
+
+
+def resolve_tk_font_tuple(root: tk.Misc, font_def: tuple | list | str) -> tuple | str:
+    """Resolve the family component of a Tk font tuple while preserving size/style."""
+    if not isinstance(font_def, (tuple, list)) or len(font_def) < 2:
+        return font_def
+    family = resolve_tk_font_family(root, str(font_def[0]))
+    if not family:
+        return tuple(font_def)
+    return (family, *tuple(font_def)[1:])
 
 
 # ============================================================================
