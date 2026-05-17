@@ -269,7 +269,7 @@ class Win32:
     @classmethod
     def setup_window(
         cls, hwnd: int, click_through: bool, alpha: int = 210, color_key: int | None = None
-    ):
+    ) -> bool:
         """设置窗口样式（透明、置顶、穿透）
 
         Args:
@@ -315,8 +315,9 @@ class Win32:
                 flags |= LWA_COLORKEY
                 key = int(color_key) & 0x00FFFFFF
             cls.user32.SetLayeredWindowAttributes(hwnd, key, target_alpha, flags)
+            return True
         except OSError, AttributeError:
-            pass
+            return False
 
     @classmethod
     def hide_console(cls):

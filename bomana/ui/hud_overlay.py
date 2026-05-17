@@ -3,11 +3,76 @@
 import contextlib
 import ctypes
 import math
+import os
 import tkinter as tk
+from dataclasses import dataclass
 from typing import Any
 
 from bomana.config import HUDConfig, UIConfig
 from bomana.utils.system import Win32, resolve_tk_font_tuple
+
+
+class HUDOverlayUnavailable(RuntimeError):
+    """Raised when the host cannot provide a transparent HUD surface."""
+
+
+@dataclass(frozen=True, slots=True)
+class HUDPhysicalRect:
+    """Physical monitor bounds used only for top-level window geometry."""
+
+    x: int
+    y: int
+    width: int
+    height: int
+
+    @classmethod
+    def from_monitor(cls, monitor: dict[str, Any]) -> HUDPhysicalRect:
+        return cls(
+            x=int(monitor.get("x", 0) or 0),
+            y=int(monitor.get("y", 0) or 0),
+            width=max(1, int(monitor.get("width", 1) or 1)),
+            height=max(1, int(monitor.get("height", 1) or 1)),
+        )
+
+    def tk_geometry(self) -> str:
+        return (
+            f"{self.width}x{self.height}{self._signed_offset(self.x)}{self._signed_offset(self.y)}"
+        )
+
+    @staticmethod
+    def _signed_offset(value: int) -> str:
+        return f"+{int(value)}" if int(value) >= 0 else str(int(value))
+
+
+@dataclass(frozen=True, slots=True)
+class HUDLogicalViewport:
+    """Canvas coordinate space reported by Tk after physical window placement."""
+
+    width: int
+    height: int
+
+    @classmethod
+    def from_widget(cls, widget: tk.Misc) -> HUDLogicalViewport:
+        return cls(
+            width=max(1, int(widget.winfo_width())),
+            height=max(1, int(widget.winfo_height())),
+        )
+
+    @property
+    def center(self) -> tuple[float, float]:
+        return self.width * 0.5, self.height * 0.5
+
+
+@dataclass(frozen=True, slots=True)
+class HUDTransparencySupport:
+    """Transparency capabilities for the HUD top-level surface."""
+
+    tk_color_key: bool
+    win32_layered: bool
+
+    @property
+    def usable(self) -> bool:
+        return self.tk_color_key or self.win32_layered
 
 
 class HUDOverlay:
@@ -60,7 +125,6 @@ class HUDOverlay:
         self._visible = False
         self._transparent_color = "#010101"
         self._transparent_color_ref = self._hex_to_colorref(self._transparent_color)
-        self._transparent_color_supported = False
 
         self.window = tk.Toplevel(self.root)
         self.window.title("HUD Overlay")
@@ -70,11 +134,12 @@ class HUDOverlay:
         self.window.withdraw()
 
         # 尽量使用透明色键；不支持时降级为普通透明窗口。
+        tk_color_key_supported = False
         try:
             self.window.attributes("-transparentcolor", self._transparent_color)
-            self._transparent_color_supported = True
+            tk_color_key_supported = True
         except tk.TclError:
-            self._transparent_color_supported = False
+            tk_color_key_supported = False
 
         self.canvas = tk.Canvas(
             self.window,
@@ -86,7 +151,14 @@ class HUDOverlay:
 
         self.window.update_idletasks()
         internal_id = self.window.winfo_id()
-        self.hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
+        self.hwnd = self._resolve_top_level_hwnd(internal_id)
+        self._transparency_support = HUDTransparencySupport(
+            tk_color_key=tk_color_key_supported,
+            win32_layered=self._win32_layered_supported(),
+        )
+        if not self._transparency_support.usable:
+            self.window.destroy()
+            raise HUDOverlayUnavailable("HUD overlay requires transparent color-key support")
 
         # 渲染状态（由外部更新）
         self._has_target = False
@@ -149,6 +221,26 @@ class HUDOverlay:
         font = ("Segoe UI", scaled_size, *styles) if styles else ("Segoe UI", scaled_size)
         resolved = resolve_tk_font_tuple(self.window, font)
         return resolved if isinstance(resolved, tuple) else font
+
+    @staticmethod
+    def _resolve_top_level_hwnd(internal_id: int) -> int:
+        fallback = int(internal_id)
+        if os.name != "nt":
+            return fallback
+        user32 = getattr(getattr(ctypes, "windll", None), "user32", None)
+        if user32 is None:
+            return fallback
+        try:
+            return int(user32.GetParent(fallback) or fallback)
+        except OSError, AttributeError, TypeError, ValueError:
+            return fallback
+
+    def _win32_layered_supported(self) -> bool:
+        return bool(os.name == "nt" and self.hwnd and getattr(ctypes, "windll", None) is not None)
+
+    @staticmethod
+    def _logical_px(value: float, *, min_value: float = 1.0) -> float:
+        return max(float(min_value), float(value) * float(HUDConfig.scale))
 
     def refresh_text_scale(self) -> None:
         """在不重建 HUD 的情况下刷新文字字号。"""
@@ -309,11 +401,7 @@ class HUDOverlay:
                     sw, sh = Win32.screen_size()
                     monitor = {"x": 0, "y": 0, "width": sw, "height": sh, "is_primary": True}
 
-        x = int(monitor["x"])
-        y = int(monitor["y"])
-        w = max(1, int(monitor["width"]))
-        h = max(1, int(monitor["height"]))
-        self.window.geometry(f"{w}x{h}+{x}+{y}")
+        self.window.geometry(HUDPhysicalRect.from_monitor(monitor).tk_geometry())
 
     def apply_window_styles(self, click_through: bool, alpha: int | None = None) -> None:
         """应用 HUD 窗口样式。
@@ -322,12 +410,22 @@ class HUDOverlay:
         """
         target_alpha = HUDConfig.alpha if alpha is None else alpha
         target_alpha = max(30, min(255, int(target_alpha)))
-        Win32.setup_window(
-            self.hwnd,
-            click_through=bool(click_through),
-            alpha=target_alpha,
-            color_key=self._transparent_color_ref,
-        )
+        if self._transparency_support.win32_layered:
+            if Win32.setup_window(
+                self.hwnd,
+                click_through=bool(click_through),
+                alpha=target_alpha,
+                color_key=self._transparent_color_ref,
+            ):
+                return
+            if not self._transparency_support.tk_color_key:
+                raise HUDOverlayUnavailable("HUD overlay Win32 layered style failed")
+
+        if self._transparency_support.tk_color_key:
+            with contextlib.suppress(tk.TclError):
+                self.window.attributes("-alpha", target_alpha / 255.0)
+        else:
+            raise HUDOverlayUnavailable("HUD overlay transparency is not available")
 
     def set_lock_state(self, locked: bool) -> None:
         self.apply_window_styles(click_through=bool(locked), alpha=HUDConfig.alpha)
@@ -667,10 +765,7 @@ class HUDOverlay:
             self._compass_signature = None
 
     def _position_standby(self) -> None:
-        w = max(1, int(self.window.winfo_width()))
-        h = max(1, int(self.window.winfo_height()))
-        cx = w * 0.5
-        cy = h * 0.5
+        cx, cy = HUDLogicalViewport.from_widget(self.window).center
         if self._standby_id is not None:
             self.canvas.coords(self._standby_id, cx, cy)
 
@@ -834,17 +929,20 @@ class HUDOverlay:
             x = self._clamp(x, width * 0.05, width * 0.95)
             y = self._clamp(y, height * 0.08, height * 0.92)
             dist_t = self._normalize_distance(dist)
-            marker_r = (
-                self._BASE_RADIUS_PX * float(HUDConfig.scale) * self._lerp(1.0, 0.58, dist_t) * 0.52
-            )
+            marker_r = self._logical_px(self._BASE_RADIUS_PX) * self._lerp(1.0, 0.58, dist_t) * 0.52
             marker_r = max(7.0, marker_r)
             self.canvas.coords(item_id, x - marker_r, y - marker_r, x + marker_r, y + marker_r)
-            self.canvas.itemconfig(item_id, outline=secondary_color, width=2, state="normal")
+            self.canvas.itemconfig(
+                item_id,
+                outline=secondary_color,
+                width=int(self._logical_px(2, min_value=1)),
+                state="normal",
+            )
 
             if label_id is not None:
                 label = str(selected[idx].get("label", "") or "").strip()
                 text = f"{label} {dist:.1f}km" if label else f"{dist:.1f}km"
-                self.canvas.coords(label_id, x, y - marker_r - 10.0)
+                self.canvas.coords(label_id, x, y - marker_r - self._logical_px(10, min_value=6))
                 self.canvas.itemconfig(label_id, text=text, fill=secondary_color, state="normal")
 
     def _render_compass(self, width: int, height: int, color: str, force: bool = False) -> None:
@@ -860,14 +958,13 @@ class HUDOverlay:
             self._set_compass_visible(False)
             return
 
-        width = max(1, int(self.window.winfo_width()))
-        height = max(1, int(self.window.winfo_height()))
-        target_x, target_y, rel = self._project_target(width, height)
+        viewport = HUDLogicalViewport.from_widget(self.window)
+        target_x, target_y, rel = self._project_target(viewport.width, viewport.height)
 
         dist_t = self._normalize_distance(self._target_distance_km)
         radius_scale = self._lerp(self._RADIUS_MAX_SCALE, self._RADIUS_MIN_SCALE, dist_t)
         brightness = self._lerp(self._BRIGHTNESS_MAX, self._BRIGHTNESS_MIN, dist_t)
-        radius_target = self._BASE_RADIUS_PX * float(HUDConfig.scale) * radius_scale
+        radius_target = self._logical_px(self._BASE_RADIUS_PX) * radius_scale
 
         self._smoothed_x = self._smooth(self._smoothed_x, target_x)
         self._smoothed_y = self._smooth(self._smoothed_y, target_y)
@@ -881,7 +978,7 @@ class HUDOverlay:
         color = self._color_from_brightness(brightness, self._attitude_fallback)
         mode_text = self._direction_prompt(rel) if self._attitude_fallback else ""
         dist_text = f"{self._target_distance_km:.1f}km"
-        stroke = 2 if self._attitude_fallback else 3
+        stroke = int(self._logical_px(2 if self._attitude_fallback else 3, min_value=1))
 
         signature = (
             round(cx, 1),
@@ -892,10 +989,10 @@ class HUDOverlay:
             color,
             stroke,
         )
-        self._render_compass(width, height, color=color, force=force)
+        self._render_compass(viewport.width, viewport.height, color=color, force=force)
         self._render_secondary_targets(
-            width,
-            height,
+            viewport.width,
+            viewport.height,
             color=color,
             primary_x=cx,
             primary_y=cy,
@@ -912,8 +1009,8 @@ class HUDOverlay:
         )
         self.canvas.coords(self._reticle_hline_id, cx - line_len, cy, cx + line_len, cy)
         self.canvas.coords(self._reticle_vline_id, cx, cy - line_len, cx, cy + line_len)
-        self.canvas.coords(self._reticle_mode_id, cx, cy + radius + 16)
-        self.canvas.coords(self._reticle_dist_id, cx, cy + radius + 32)
+        self.canvas.coords(self._reticle_mode_id, cx, cy + radius + self._logical_px(16))
+        self.canvas.coords(self._reticle_dist_id, cx, cy + radius + self._logical_px(32))
 
         self.canvas.itemconfig(
             self._reticle_mode_id, text=mode_text, state="normal" if mode_text else "hidden"
