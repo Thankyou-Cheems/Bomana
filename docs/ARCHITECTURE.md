@@ -48,6 +48,7 @@
 │  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
 │  │  ├─ runtime.py           # Tk dispatch + runtime worker thread helpers
 │  │  ├─ runtime_services.py  # Global hotkeys, tray, and HUD runtime integrations
+│  │  ├─ tk_style.py          # Shared Tk palette/action-button styling tokens
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
 │     ├─ diagnostics.py      # Structured async diagnostics logging
@@ -82,6 +83,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
+   - `tk_style.py` owns shared Tk visual tokens and action-button styling used by the launcher and modal app dialogs.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Diagnostics flow:
    - `Bomana.pyw` initializes `bomana/utils/diagnostics.py` at startup.

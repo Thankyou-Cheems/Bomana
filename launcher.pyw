@@ -39,6 +39,7 @@ from urllib.request import (
     build_opener,
 )
 
+from bomana.ui.tk_style import style_action_button
 from bomana.utils.system import Win32, select_ui_font_family
 
 try:
@@ -2560,88 +2561,7 @@ class LauncherWindow:
         return (self.font_family, max(8, self._px(size)), weight)
 
     def _style_action_button(self, btn: tk.Button, variant: str) -> None:
-        styles = {
-            "primary": {
-                "bg": _THEME["BLUE"],
-                "fg": "#0a0e13",
-                "hover_bg": "#79b8ff",
-                "press_bg": "#3f98f0",
-                "border": "#8cc2ff",
-            },
-            "success": {
-                "bg": "#3d8458",
-                "fg": "#08110d",
-                "hover_bg": "#4c9a68",
-                "press_bg": "#34724d",
-                "border": "#78c896",
-            },
-            "secondary": {
-                "bg": "#243040",
-                "fg": _THEME["TEXT"],
-                "hover_bg": "#314154",
-                "press_bg": "#273646",
-                "border": "#465a72",
-            },
-            "warning": {
-                "bg": "#7f5a22",
-                "fg": "#fff6e8",
-                "hover_bg": "#9a6d2a",
-                "press_bg": "#6b4b1b",
-                "border": "#c79245",
-            },
-        }
-        st = styles.get(variant, styles["secondary"])
-        self._button_styles[str(btn)] = st
-        btn.config(
-            bg=st["bg"],
-            fg=st["fg"],
-            activebackground=st["hover_bg"],
-            activeforeground=st["fg"],
-            bd=1,
-            highlightthickness=1,
-            highlightbackground=st["border"],
-            relief="flat",
-        )
-        self._bind_button_motion(btn)
-
-    def _bind_button_motion(self, btn: tk.Button) -> None:
-        if getattr(btn, "_bomana_motion_bound", False):
-            return
-        btn._bomana_motion_bound = True
-
-        def on_enter(_event: tk.Event) -> None:
-            if str(btn.cget("state")) == "disabled":
-                return
-            st = self._button_styles.get(str(btn), None)
-            if st:
-                btn.config(bg=st["hover_bg"])
-
-        def on_leave(_event: tk.Event) -> None:
-            st = self._button_styles.get(str(btn), None)
-            if st:
-                btn.config(bg=st["bg"])
-
-        def on_press(_event: tk.Event) -> None:
-            if str(btn.cget("state")) == "disabled":
-                return
-            st = self._button_styles.get(str(btn), None)
-            if st:
-                btn.config(bg=st["press_bg"])
-
-        def on_release(event: tk.Event) -> None:
-            st = self._button_styles.get(str(btn), None)
-            if not st:
-                return
-            if str(btn.cget("state")) == "disabled":
-                btn.config(bg=st["bg"])
-                return
-            under = btn.winfo_containing(event.x_root, event.y_root)
-            btn.config(bg=(st["hover_bg"] if under == btn else st["bg"]))
-
-        btn.bind("<Enter>", on_enter, add="+")
-        btn.bind("<Leave>", on_leave, add="+")
-        btn.bind("<ButtonPress-1>", on_press, add="+")
-        btn.bind("<ButtonRelease-1>", on_release, add="+")
+        style_action_button(btn, variant, palette=_THEME, bd=1)
 
     def _init_window_scale_context(self) -> None:
         self.dpi_scale = 1.0

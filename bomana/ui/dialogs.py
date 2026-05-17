@@ -33,6 +33,7 @@ from bomana.config import (
 )
 from bomana.core.overspeed import SpeedLimitDatabase
 from bomana.ui.text_utils import bind_existing_label_wraps, scaled_control_length
+from bomana.ui.tk_style import style_action_button
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.system import Win32, resolve_tk_font_tuple
 
@@ -203,25 +204,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         self._init_dynamic_scaling()
         self._center_on_parent(parent)
 
-    def _bind_button_hover(
-        self,
-        button: tk.Widget,
-        normal_bg: str,
-        hover_bg: str,
-        normal_border: str,
-        hover_border: str,
-    ) -> None:
-        """统一按钮悬停反馈，保持 Tk 原生控件下的 Fluent 触感。"""
-
-        def _on_enter(_event=None):
-            button.configure(bg=hover_bg, highlightbackground=hover_border)
-
-        def _on_leave(_event=None):
-            button.configure(bg=normal_bg, highlightbackground=normal_border)
-
-        button.bind("<Enter>", _on_enter, add="+")
-        button.bind("<Leave>", _on_leave, add="+")
-
     def _create_action_button(
         self,
         parent: tk.Widget,
@@ -230,55 +212,18 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         variant: str = "neutral",
         width: int = 10,
     ) -> tk.Button:
-        palette = {
-            "primary": {
-                "bg": Theme.BLUE,
-                "hover_bg": Theme.GREEN,
-                "fg": Theme.TEXT,
-                "border": Theme.BLUE,
-                "hover_border": Theme.GREEN,
-            },
-            "neutral": {
-                "bg": Theme.GRAYPILL,
-                "hover_bg": Theme.SEPARATOR,
-                "fg": Theme.TEXT,
-                "border": Theme.BORDER,
-                "hover_border": Theme.BLUE,
-            },
-            "accent": {
-                "bg": Theme.YELLOW,
-                "hover_bg": Theme.ORANGE,
-                "fg": Theme.TEXT,
-                "border": Theme.YELLOW,
-                "hover_border": Theme.ORANGE,
-            },
-        }
-        style = palette.get(variant, palette["neutral"])
         button = tk.Button(
             parent,
             text=text,
             command=command,
-            bg=style["bg"],
-            fg=style["fg"],
             bd=0,
             relief="flat",
             width=width,
             padx=10,
             pady=5,
-            activebackground=style["hover_bg"],
-            activeforeground=style["fg"],
-            highlightthickness=1,
-            highlightbackground=style["border"],
-            highlightcolor=style["border"],
             cursor="hand2",
         )
-        self._bind_button_hover(
-            button,
-            normal_bg=style["bg"],
-            hover_bg=style["hover_bg"],
-            normal_border=style["border"],
-            hover_border=style["hover_border"],
-        )
+        style_action_button(button, variant)
         return button
 
     def _style_tab_button(self, name: str, active: bool) -> None:
@@ -1944,39 +1889,18 @@ class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
         variant: str = "neutral",
         width: int = 10,
     ) -> tk.Button:
-        palette = {
-            "primary": (Theme.BLUE, Theme.GREEN, Theme.BLUE, Theme.GREEN),
-            "neutral": (Theme.GRAYPILL, Theme.SEPARATOR, Theme.BORDER, Theme.BLUE),
-            "accent": (Theme.YELLOW, Theme.ORANGE, Theme.YELLOW, Theme.ORANGE),
-        }
-        bg, hover_bg, border, hover_border = palette.get(variant, palette["neutral"])
         btn = tk.Button(
             parent,
             text=text,
             command=command,
-            bg=bg,
-            fg=Theme.TEXT,
             bd=0,
             relief="flat",
             width=width,
             padx=10,
             pady=5,
-            highlightthickness=1,
-            highlightbackground=border,
-            highlightcolor=border,
-            activebackground=hover_bg,
-            activeforeground=Theme.TEXT,
             cursor="hand2",
         )
-
-        def _on_enter(_event=None):
-            btn.configure(bg=hover_bg, highlightbackground=hover_border)
-
-        def _on_leave(_event=None):
-            btn.configure(bg=bg, highlightbackground=border)
-
-        btn.bind("<Enter>", _on_enter, add="+")
-        btn.bind("<Leave>", _on_leave, add="+")
+        style_action_button(btn, variant)
         return btn
 
     def _build_ui(self):
@@ -2109,39 +2033,18 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
         variant: str = "neutral",
         width: int = 10,
     ) -> tk.Button:
-        palette = {
-            "primary": (Theme.BLUE, Theme.GREEN, Theme.BLUE, Theme.GREEN),
-            "neutral": (Theme.GRAYPILL, Theme.SEPARATOR, Theme.BORDER, Theme.BLUE),
-            "accent": (Theme.YELLOW, Theme.ORANGE, Theme.YELLOW, Theme.ORANGE),
-        }
-        bg, hover_bg, border, hover_border = palette.get(variant, palette["neutral"])
         button = tk.Button(
             parent,
             text=text,
             command=command,
-            bg=bg,
-            fg=Theme.TEXT,
             bd=0,
             relief="flat",
             width=width,
             padx=10,
             pady=5,
-            activebackground=hover_bg,
-            activeforeground=Theme.TEXT,
-            highlightthickness=1,
-            highlightbackground=border,
-            highlightcolor=border,
             cursor="hand2",
         )
-
-        def _on_enter(_event=None):
-            button.configure(bg=hover_bg, highlightbackground=hover_border)
-
-        def _on_leave(_event=None):
-            button.configure(bg=bg, highlightbackground=border)
-
-        button.bind("<Enter>", _on_enter, add="+")
-        button.bind("<Leave>", _on_leave, add="+")
+        style_action_button(button, variant)
         return button
 
     @staticmethod
@@ -2707,38 +2610,18 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         variant: str = "neutral",
         width: int = 10,
     ) -> tk.Button:
-        palette = {
-            "primary": (Theme.BLUE, Theme.GREEN, Theme.BLUE, Theme.GREEN),
-            "neutral": (Theme.GRAYPILL, Theme.SEPARATOR, Theme.BORDER, Theme.BLUE),
-        }
-        bg, hover_bg, border, hover_border = palette.get(variant, palette["neutral"])
         button = tk.Button(
             parent,
             text=text,
             command=command,
-            bg=bg,
-            fg=Theme.TEXT,
             bd=0,
             relief="flat",
             width=width,
             padx=10,
             pady=5,
-            activebackground=hover_bg,
-            activeforeground=Theme.TEXT,
-            highlightthickness=1,
-            highlightbackground=border,
-            highlightcolor=border,
             cursor="hand2",
         )
-
-        def _on_enter(_event=None):
-            button.configure(bg=hover_bg, highlightbackground=hover_border)
-
-        def _on_leave(_event=None):
-            button.configure(bg=bg, highlightbackground=border)
-
-        button.bind("<Enter>", _on_enter, add="+")
-        button.bind("<Leave>", _on_leave, add="+")
+        style_action_button(button, variant)
         return button
 
     def _style_category_button(self, category: str, hover: bool = False) -> None:
