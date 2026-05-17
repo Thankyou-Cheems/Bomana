@@ -8,11 +8,13 @@ from typing import Any
 
 from bomana.utils.file_utils import resource_path
 
+ICON_ASSET_SIZES = (12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64)
+
 
 class IconManager:
     """Load and attach bundled PNG icons while keeping Tk references alive."""
 
-    _ASSET_SIZES = (12, 14, 16, 18, 20, 24, 28, 32)
+    _ASSET_SIZES = ICON_ASSET_SIZES
 
     def __init__(self, root: tk.Misc):
         self.root = root
@@ -21,7 +23,24 @@ class IconManager:
     @classmethod
     def _nearest_asset_size(cls, size: int) -> int:
         requested = max(1, int(size))
-        return min(cls._ASSET_SIZES, key=lambda candidate: (abs(candidate - requested), candidate))
+        for candidate in cls._ASSET_SIZES:
+            if candidate >= requested:
+                return candidate
+        return cls._ASSET_SIZES[-1]
+
+    @classmethod
+    def scaled_size(
+        cls,
+        base_size: int,
+        scale: float,
+        *,
+        min_size: int = 16,
+        max_size: int | None = None,
+    ) -> int:
+        """Return an icon size request that can use the full bundled asset range."""
+        upper = cls._ASSET_SIZES[-1] if max_size is None else int(max_size)
+        requested = round(int(base_size) * max(0.6, float(scale or 1.0)))
+        return max(int(min_size), min(int(upper), requested))
 
     def photo(self, key: str, size: int = 16) -> tk.PhotoImage | None:
         asset_size = self._nearest_asset_size(size)

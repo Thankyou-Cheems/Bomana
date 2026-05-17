@@ -15,6 +15,7 @@ from bomana.config import (
     UIConfig,
     ZoneConfig,
 )
+from bomana.ui.icon_assets import IconManager
 from bomana.ui.text_utils import bind_dynamic_wrap, measure_min_width
 from bomana.ui.widgets import HeadingTape, Pill
 
@@ -362,7 +363,7 @@ class MainWindowBuilder:
             app.history_mode_title_lbl,
             icon="clock",
             text="空历速度监视",
-            size=max(18, min(32, round(18 * s))),
+            size=IconManager.scaled_size(18, s, min_size=18),
         )
         app.history_mode_title_lbl.grid(row=0, column=0, sticky="w")
         app.history_mode_phase_lbl = tk.Label(
@@ -1005,7 +1006,7 @@ class MainWindowBuilder:
             app.fuel_time_lbl,
             icon="clock",
             text="--:--",
-            size=max(18, min(32, round(18 * s))),
+            size=IconManager.scaled_size(18, s, min_size=18),
         )
         app.fuel_time_lbl.pack(side="left")
         app.fuel_return_lbl = tk.Label(

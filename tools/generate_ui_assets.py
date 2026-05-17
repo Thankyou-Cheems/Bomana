@@ -7,11 +7,11 @@ import re
 import tempfile
 import urllib.request
 from pathlib import Path
+from typing import Any
 
-from fontTools import subset
-from fontTools.ttLib import TTFont
-from fontTools.varLib import instancer
 from PIL import Image, ImageDraw
+
+from bomana.ui.icon_assets import ICON_ASSET_SIZES
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_ROOT = ROOT / "bomana" / "assets"
@@ -60,14 +60,14 @@ def collect_project_text() -> str:
     return "".join(sorted(chars))
 
 
-def set_name_record(font: TTFont, name_id: int, value: str) -> None:
+def set_name_record(font: Any, name_id: int, value: str) -> None:
     name_table = font["name"]
     for record in name_table.names:
         if record.nameID == name_id:
             record.string = value.encode(record.getEncoding(), errors="replace")
 
 
-def rename_font(font: TTFont, *, subfamily: str) -> None:
+def rename_font(font: Any, *, subfamily: str) -> None:
     full_name = f"{FONT_FAMILY} {subfamily}"
     ps_name = re.sub(r"[^A-Za-z0-9-]", "", full_name.replace(" ", "-"))
     set_name_record(font, 1, FONT_FAMILY)
@@ -85,6 +85,10 @@ def rename_font(font: TTFont, *, subfamily: str) -> None:
 
 
 def build_font_subset(source_font: Path, text: str, *, weight: int, subfamily: str) -> None:
+    from fontTools import subset
+    from fontTools.ttLib import TTFont
+    from fontTools.varLib import instancer
+
     font = TTFont(source_font)
     font = instancer.instantiateVariableFont(font, {"wght": weight}, inplace=True)
 
@@ -252,7 +256,7 @@ def build_icons() -> None:
         "speed",
         "checklist",
     ):
-        for size in (12, 14, 16, 18, 20, 24, 28, 32):
+        for size in ICON_ASSET_SIZES:
             draw_icon(kind, size).save(ICON_DIR / f"{kind}_{size}.png")
 
 

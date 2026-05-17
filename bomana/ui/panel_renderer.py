@@ -18,6 +18,7 @@ from bomana.config import (
     ZoneConfig,
 )
 from bomana.core.state import UISnapshot
+from bomana.ui.icon_assets import IconManager
 from bomana.ui.navigation_presenter import build_navigation_tape_model
 from bomana.utils.math_utils import (
     calculate_airfield_status,
@@ -276,9 +277,9 @@ class AppPanelRenderer:
             return f"{rel_sign}{relative:.2f}°"
         return f"{rel_sign}{int(relative)}°"
 
-    def _icon_size(self, base_size: int = 18, *, min_size: int = 16, max_size: int = 32) -> int:
+    def _icon_size(self, base_size: int = 18, *, min_size: int = 16, max_size: int = 64) -> int:
         scale = float(getattr(self.app, "scale", 1.0) or 1.0)
-        return max(min_size, min(max_size, round(base_size * scale)))
+        return IconManager.scaled_size(base_size, scale, min_size=min_size, max_size=max_size)
 
     def _set_nav_row(self, row: Any, item: NavListItem | None = None) -> None:
         """Update one prebuilt zone/airport row without changing geometry."""
