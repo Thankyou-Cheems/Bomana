@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from bomana.config import PanelConfig
@@ -65,8 +66,11 @@ class FakeApp:
         self.update_calls = 0
         self.recalc_calls = []
         self.tray_calls = 0
+        self.panel_renderer = SimpleNamespace(
+            reset_navigation_layout_state=lambda: self._record_reset()
+        )
 
-    def _reset_navigation_layout_state(self) -> None:
+    def _record_reset(self) -> None:
         self.reset_calls += 1
 
     def _update_nav_mode_button(self) -> None:

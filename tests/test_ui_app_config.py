@@ -47,3 +47,33 @@ def test_save_config_warns_for_explicit_user_save_failure(monkeypatch) -> None:
     assert app._save_config(warn_on_failure=True) is False
     assert len(calls) == 1
     assert calls[0]["args"][:2] == ("保存失败", "配置保存失败，请检查配置文件权限或磁盘状态。")
+
+
+def test_app_keeps_only_external_callback_wrappers() -> None:
+    removed_internal_wrappers = {
+        "_toggle_debug_mock_mode",
+        "_cycle_debug_scene",
+        "_update_debug_controls",
+        "_build_debug_snapshot",
+        "_build_debug_mock_snapshot",
+        "_build_debug_text",
+        "_format_aircraft_type_label",
+        "_update_speed_strip",
+        "_ensure_hud_overlay",
+        "_update_hud_overlay",
+        "_toggle_hud",
+        "_update_mid_panel_layout",
+        "_set_zone_panel_visible",
+        "_update_tape_info_labels",
+        "_set_checklist_visible",
+        "_update_zone_display",
+        "_reset_navigation_layout_state",
+        "_update_fuel_display",
+        "_update_bombing_display",
+    }
+
+    app_methods = set(App.__dict__)
+
+    assert not (removed_internal_wrappers & app_methods)
+    assert "_toggle_debug" in app_methods
+    assert "_show_hud_overlay" in app_methods

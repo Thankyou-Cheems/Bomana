@@ -33,7 +33,7 @@ class AppNavigationServices:
         if not ENABLE_ZONES or window is None:
             return
 
-        self.app._reset_navigation_layout_state()
+        self.app.panel_renderer.reset_navigation_layout_state()
         if PanelConfig.navigation_mode == "integrated":
             PanelConfig.navigation_mode = "standalone"
             window.clear_display()

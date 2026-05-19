@@ -193,11 +193,13 @@ class MainWindowBuilder:
             pady=btn_pad_y,
         )
         app.debug_source_btn.grid(row=0, column=0, sticky="w")
-        app.debug_source_btn.bind("<Button-1>", lambda e: app._toggle_debug_mock_mode())
+        app.debug_source_btn.bind(
+            "<Button-1>", lambda e: app.debug_support.toggle_debug_mock_mode()
+        )
         app.debug_source_btn.bind(
             "<Enter>", lambda e: app.debug_source_btn.config(bg=Theme.BORDER, fg=Theme.TEXT)
         )
-        app.debug_source_btn.bind("<Leave>", lambda e: app._update_debug_controls())
+        app.debug_source_btn.bind("<Leave>", lambda e: app.debug_support.update_debug_controls())
 
         app.debug_prev_btn = tk.Label(
             app.debug_ctrl_row,
@@ -210,7 +212,7 @@ class MainWindowBuilder:
             pady=btn_pad_y,
         )
         app.debug_prev_btn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
-        app.debug_prev_btn.bind("<Button-1>", lambda e: app._cycle_debug_scene(-1))
+        app.debug_prev_btn.bind("<Button-1>", lambda e: app.debug_support.cycle_debug_scene(-1))
         app.debug_prev_btn.bind("<Enter>", lambda e: app.debug_prev_btn.config(bg=Theme.BORDER))
         app.debug_prev_btn.bind("<Leave>", lambda e: app.debug_prev_btn.config(bg=Theme.BG))
 
@@ -235,7 +237,7 @@ class MainWindowBuilder:
             pady=btn_pad_y,
         )
         app.debug_next_btn.grid(row=0, column=3, sticky="w")
-        app.debug_next_btn.bind("<Button-1>", lambda e: app._cycle_debug_scene(1))
+        app.debug_next_btn.bind("<Button-1>", lambda e: app.debug_support.cycle_debug_scene(1))
         app.debug_next_btn.bind("<Enter>", lambda e: app.debug_next_btn.config(bg=Theme.BORDER))
         app.debug_next_btn.bind("<Leave>", lambda e: app.debug_next_btn.config(bg=Theme.BG))
 
@@ -259,7 +261,7 @@ class MainWindowBuilder:
             justify="left",
             wraplength=int(UIConfig.DEBUG_WRAP_LENGTH * s),
         )
-        app._update_debug_controls()
+        app.debug_support.update_debug_controls()
 
     def _build_top_card(self) -> None:
         app = self.app

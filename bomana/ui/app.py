@@ -550,13 +550,16 @@ class App:
         self.root.bind(f"<{HotkeyConfig.KEY_ZONES}>", lambda e: self._toggle_zone_sound())
         self.root.bind("<Control-MouseWheel>", self._adjust_alpha)
         self.root.bind(
-            "<Control-Shift-Left>", lambda e: self._cycle_debug_scene(-1) if self._debug else None
+            "<Control-Shift-Left>",
+            lambda e: self.debug_support.cycle_debug_scene(-1) if self._debug else None,
         )
         self.root.bind(
-            "<Control-Shift-Right>", lambda e: self._cycle_debug_scene(1) if self._debug else None
+            "<Control-Shift-Right>",
+            lambda e: self.debug_support.cycle_debug_scene(1) if self._debug else None,
         )
         self.root.bind(
-            "<Control-Shift-m>", lambda e: self._toggle_debug_mock_mode() if self._debug else None
+            "<Control-Shift-m>",
+            lambda e: self.debug_support.toggle_debug_mock_mode() if self._debug else None,
         )
 
         # 拖动相关
@@ -642,7 +645,7 @@ class App:
                     padx=int(8 * self.scale),
                     pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
                 )
-            self._update_mid_panel_layout()
+            self.panel_renderer.update_mid_panel_layout()
 
     def _refresh_speed_history_ui(self, snap: UISnapshot, speed_level: str) -> None:
         """刷新历史模式专用头部文案。"""
@@ -665,7 +668,7 @@ class App:
             phase_text = "等待进入战局"
             phase_fg = Theme.TEXT_MUTED
 
-        aircraft_text = self._format_aircraft_type_label(
+        aircraft_text = AppPanelRenderer.format_aircraft_type_label(
             str(getattr(snap, "aircraft_type_name", "") or "")
         )
         self.history_mode_phase_lbl.config(text=phase_text, fg=phase_fg)
@@ -715,44 +718,6 @@ class App:
     def _toggle_debug(self):
         self.debug_support.toggle_debug()
 
-    def _show_debug_ui(self) -> None:
-        self.debug_support.show_debug_ui()
-
-    def _hide_debug_ui(self) -> None:
-        self.debug_support.hide_debug_ui()
-
-    def _toggle_debug_mock_mode(self) -> None:
-        self.debug_support.toggle_debug_mock_mode()
-
-    def _cycle_debug_scene(self, delta: int) -> None:
-        self.debug_support.cycle_debug_scene(delta)
-
-    def _update_debug_controls(self) -> None:
-        self.debug_support.update_debug_controls()
-
-    @staticmethod
-    def _debug_direction(relative_deg: float) -> str:
-        return AppDebugSupport.debug_direction(relative_deg)
-
-    def _debug_live_snapshot_available(self, snap: UISnapshot) -> bool:
-        return self.debug_support.debug_live_snapshot_available(snap)
-
-    def _build_debug_snapshot(self, base_snap: UISnapshot) -> UISnapshot:
-        return self.debug_support.build_debug_snapshot(base_snap)
-
-    def _build_debug_mock_snapshot(self, base_snap: UISnapshot) -> UISnapshot:
-        return self.debug_support.build_debug_mock_snapshot(base_snap)
-
-    def _build_debug_text(self, live_snap: UISnapshot, render_snap: UISnapshot) -> str:
-        return self.debug_support.build_debug_text(live_snap, render_snap)
-
-    @staticmethod
-    def _format_aircraft_type_label(raw: str) -> str:
-        return AppPanelRenderer.format_aircraft_type_label(raw)
-
-    def _update_speed_strip(self, snap: UISnapshot, debug_mock_mode: bool) -> str:
-        return self.panel_renderer.update_speed_strip(snap, debug_mock_mode)
-
     def _toggle_zone_sound(self):
         """切换战区提示音"""
         self._zone_sound_enabled = not self._zone_sound_enabled
@@ -762,21 +727,9 @@ class App:
         if self._zone_sound_enabled:
             self.sound.play(pattern="on")
 
-    def _ensure_hud_overlay(self) -> bool:
-        """确保 HUD 叠加层实例可用。"""
-        return self.runtime_services.ensure_hud_overlay()
-
     def _show_hud_overlay(self) -> bool:
         """显示 HUD 叠加层。"""
         return self.runtime_services.show_hud_overlay()
-
-    def _update_hud_overlay(self, snap: UISnapshot) -> None:
-        """在 UI 刷新中更新 HUD 叠加层。"""
-        self.runtime_services.update_hud_overlay(snap)
-
-    def _toggle_hud(self):
-        """切换 HUD 叠加层开关。"""
-        self.runtime_services.toggle_hud()
 
     def _toggle_navigation_mode(self):
         """切换导航条模式（集成/独立）
@@ -1328,7 +1281,7 @@ class App:
 
             self._init_ui()
             if self._debug:
-                self._show_debug_ui()
+                self.debug_support.show_debug_ui()
             self._update_hint()
             self._update_nav_mode_button()
             if preserve_text_only_geometry and main_geometry:
@@ -1440,32 +1393,6 @@ class App:
         except tk.TclError:
             pass
 
-    def _update_mid_panel_layout(self):
-        self.panel_renderer.update_mid_panel_layout()
-
-    def _set_zone_panel_visible(self, visible: bool):
-        self.panel_renderer.set_zone_panel_visible(visible)
-
-    def _update_tape_info_labels(self, targets_info: list, primary_zone):
-        self.panel_renderer.update_tape_info_labels(targets_info, primary_zone)
-
-    def _set_checklist_visible(self, visible: bool):
-        self.panel_renderer.set_checklist_visible(visible)
-
-    def _update_zone_display(self, snap: UISnapshot):
-        return self.panel_renderer.update_zone_display(snap)
-
-    def _reset_navigation_layout_state(self):
-        self.panel_renderer.reset_navigation_layout_state()
-
-    def _update_fuel_display(self, snap: UISnapshot, font_item):
-        _ = font_item
-        self.panel_renderer.update_fuel_display(snap)
-
-    def _update_bombing_display(self, snap: UISnapshot, font_item):
-        _ = font_item
-        self.panel_renderer.update_bombing_display(snap)
-
     def _show_bomb_selector(self):
         """显示炸弹选择对话框"""
         BombSelectorDialog(self.root, self)
@@ -1474,7 +1401,7 @@ class App:
         """UI更新循环(20fps)
 
         性能优化:
-        - _update_zone_display()返回是否需重算尺寸
+        - panel_renderer.update_zone_display() 返回是否需重算尺寸
         - 仅在布局结构变化时调用_recalc_size()
         - 使用缓存字体和Label复用池
         """
@@ -1488,7 +1415,7 @@ class App:
         live_snap = self.game.snapshot()
         self._restored_state = self.game.timer_restore_applied
         if self._debug:
-            snap = self._build_debug_snapshot(live_snap)
+            snap = self.debug_support.build_debug_snapshot(live_snap)
         else:
             snap = live_snap
             self._debug_effective_mock = False
@@ -1550,10 +1477,10 @@ class App:
         show_zone_panel = (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and (
             zones_enabled or airfields_enabled or fuel_enabled or bombing_enabled
         )
-        self._set_zone_panel_visible(show_zone_panel)
+        self.panel_renderer.set_zone_panel_visible(show_zone_panel)
         if show_zone_panel:
-            # _update_zone_display 返回是否需要重算尺寸
-            need_recalc = self._update_zone_display(snap)
+            # update_zone_display 返回是否需要重算尺寸
+            need_recalc = self.panel_renderer.update_zone_display(snap)
             if need_recalc:
                 now_recalc = time.monotonic()
                 # 数据抖动期节流尺寸重算，避免高频geometry震荡
@@ -1567,7 +1494,7 @@ class App:
             and (snap.phase == Phase.ALIVE)
             and (snap.on_ground or snap.landed_flash)
         )
-        self._set_checklist_visible(show_chk)
+        self.panel_renderer.set_checklist_visible(show_chk)
         self._apply_speed_history_layout(history_mode_active)
 
         # 更新计时器显示
@@ -1635,7 +1562,7 @@ class App:
                         int(UIConfig.PADDING_SPEED_STRIP[1] * self.scale),
                     ),
                 )
-            speed_level = self._update_speed_strip(snap, debug_mock_mode)
+            speed_level = self.panel_renderer.update_speed_strip(snap, debug_mock_mode)
         else:
             speed_level = "unknown"
             if self.speed_row.winfo_manager() == "grid":
@@ -1687,10 +1614,10 @@ class App:
 
         # 调试信息
         if self._debug:
-            self.diag_lbl.config(text=self._build_debug_text(live_snap, snap))
+            self.diag_lbl.config(text=self.debug_support.build_debug_text(live_snap, snap))
 
         # HUD 叠加层更新（v6.8.0）
-        self._update_hud_overlay(snap)
+        self.runtime_services.update_hud_overlay(snap)
 
         # 继续下一帧（基于实际耗时补偿）
         elapsed_ms = (time.monotonic() - loop_start) * 1000.0
