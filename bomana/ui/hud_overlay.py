@@ -125,6 +125,7 @@ class HUDOverlay:
         self.app = parent_app
         self.root = parent_app.root
         self._visible = False
+        self._last_geometry: str | None = None
         self._transparent_color = "#010101"
         self._transparent_color_ref = self._hex_to_colorref(self._transparent_color)
 
@@ -403,7 +404,10 @@ class HUDOverlay:
                     sw, sh = Win32.screen_size()
                     monitor = {"x": 0, "y": 0, "width": sw, "height": sh, "is_primary": True}
 
-        self.window.geometry(HUDPhysicalRect.from_monitor(monitor).tk_geometry())
+        geometry = HUDPhysicalRect.from_monitor(monitor).tk_geometry()
+        if geometry != self._last_geometry:
+            self.window.geometry(geometry)
+            self._last_geometry = geometry
 
     def apply_window_styles(self, click_through: bool, alpha: int | None = None) -> None:
         """应用 HUD 窗口样式。

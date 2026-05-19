@@ -49,6 +49,34 @@ def test_save_config_warns_for_explicit_user_save_failure(monkeypatch) -> None:
     assert calls[0]["args"][:2] == ("保存失败", "配置保存失败，请检查配置文件权限或磁盘状态。")
 
 
+def test_update_ui_reschedules_after_frame_exception(monkeypatch) -> None:
+    app = _make_config_only_app()
+    after_calls: list[tuple[int, object]] = []
+    app._stop = False
+    app._ui_after_id = None
+    app._last_ui_gap_ms = 0.0
+    app._last_ui_work_ms = 0.0
+    app.root = SimpleNamespace(
+        after=lambda delay, callback: after_calls.append((delay, callback)) or "after-id"
+    )
+    monkeypatch.setattr(
+        App,
+        "_update_ui_frame",
+        lambda _self, _loop_start: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    log_calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        app_module, "log_exception", lambda *args, **_kwargs: log_calls.append(args)
+    )
+
+    app._update_ui()
+
+    assert app._ui_after_id == "after-id"
+    assert len(after_calls) == 1
+    assert after_calls[0][1] == app._update_ui
+    assert log_calls and log_calls[0][0] == "ui_update_failed"
+
+
 def test_app_keeps_only_external_callback_wrappers() -> None:
     removed_internal_wrappers = {
         "_toggle_debug_mock_mode",

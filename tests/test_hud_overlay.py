@@ -60,3 +60,20 @@ def test_hud_window_styles_disable_when_win32_colorkey_fails() -> None:
         pytest.raises(HUDOverlayUnavailable),
     ):
         overlay.apply_window_styles(click_through=True, alpha=180)
+
+
+def test_hud_refresh_monitor_geometry_skips_unchanged_geometry(monkeypatch) -> None:
+    overlay = HUDOverlay.__new__(HUDOverlay)
+    overlay._last_geometry = None
+    overlay.window = mock.Mock()
+    monkeypatch.setattr(HUDConfig, "follow_main_window_monitor", True)
+    monkeypatch.setattr(
+        HUDOverlay,
+        "_get_main_window_monitor",
+        lambda _self: {"x": 0, "y": 0, "width": 1920, "height": 1080},
+    )
+
+    overlay.refresh_monitor_geometry()
+    overlay.refresh_monitor_geometry()
+
+    overlay.window.geometry.assert_called_once_with("1920x1080+0+0")

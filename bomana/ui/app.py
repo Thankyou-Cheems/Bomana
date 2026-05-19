@@ -1409,6 +1409,25 @@ class App:
             return
         self._ui_after_id = None
         loop_start = time.monotonic()
+        try:
+            self._update_ui_frame(loop_start)
+        except Exception as exc:
+            self._last_ui_work_ms = max(0.0, (time.monotonic() - loop_start) * 1000.0)
+            log_exception(
+                "ui_update_failed",
+                exc,
+                ui_gap_ms=float(self._last_ui_gap_ms),
+                ui_work_ms=float(self._last_ui_work_ms),
+            )
+        finally:
+            if not self._stop:
+                elapsed_ms = (time.monotonic() - loop_start) * 1000.0
+                self._last_ui_work_ms = elapsed_ms
+                delay = max(0, int(UIConfig.UI_REFRESH_MS - elapsed_ms))
+                self._ui_after_id = self.root.after(delay, self._update_ui)
+
+    def _update_ui_frame(self, loop_start: float) -> None:
+        """Render one UI frame. Scheduling is owned by _update_ui()."""
         if self._last_ui_frame_ts > 0.0:
             self._last_ui_gap_ms = max(0.0, (loop_start - self._last_ui_frame_ts) * 1000.0)
         self._last_ui_frame_ts = loop_start
@@ -1618,10 +1637,3 @@ class App:
 
         # HUD 叠加层更新（v6.8.0）
         self.runtime_services.update_hud_overlay(snap)
-
-        # 继续下一帧（基于实际耗时补偿）
-        elapsed_ms = (time.monotonic() - loop_start) * 1000.0
-        self._last_ui_work_ms = elapsed_ms
-        delay = max(0, int(UIConfig.UI_REFRESH_MS - elapsed_ms))
-        if not self._stop:
-            self._ui_after_id = self.root.after(delay, self._update_ui)
