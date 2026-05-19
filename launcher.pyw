@@ -72,7 +72,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "1.6.0"
+LAUNCHER_VERSION = "1.6.1"
 MIN_SUPPORTED_APP_VERSION = "6.7.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
@@ -153,6 +153,8 @@ _THEME = {
     "RED": "#ff6b6b",
     "ORANGE": "#ff9a52",
 }
+
+_LAUNCHER_SPINNER_FRAMES = ("|", "/", "-", "\\")
 
 CHANNEL_DETAILS = {
     "Enhanced": {
@@ -2125,7 +2127,7 @@ class LauncherWindow:
         self._cancel_requested = threading.Event()
         self._exit_after_task = False
         self._recheck_requested = False
-        self._spin = ["◜", "◠", "◝", "◞", "◡", "◟"]
+        self._spin = _LAUNCHER_SPINNER_FRAMES
         self.status_title = "正在准备"
         self.status_level = "info"
         self.dpi_scale = 1.0
@@ -2231,6 +2233,9 @@ class LauncherWindow:
         fam = select_ui_font_family(self.root)
         if fam:
             self.font_family = fam
+        self.root.option_add("*Font", self._font(10))
+        self.root.option_add("*Menu.font", self._font(10))
+        self.root.option_add("*Menubutton.font", self._font(10))
 
     def _fit_window_to_screen(self) -> None:
         self.root.update_idletasks()
@@ -2270,6 +2275,8 @@ class LauncherWindow:
             content_w = max(self._px(300), win_w - self._px(354))
             if hasattr(self, "selection_summary_lbl"):
                 self.selection_summary_lbl.config(wraplength=max(self._px(220), win_w // 3))
+            if hasattr(self, "rollback_status_lbl"):
+                self.rollback_status_lbl.config(wraplength=max(self._px(190), win_w // 3))
             if hasattr(self, "detail_lbl"):
                 self.detail_lbl.config(wraplength=content_w)
             if hasattr(self, "hint_lbl"):
@@ -2456,7 +2463,8 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
             bd=0,
-            width=9,
+            width=18,
+            anchor="w",
             cursor="hand2",
             font=self._font(10),
         )
@@ -2496,7 +2504,8 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
             bd=0,
-            width=14,
+            width=20,
+            anchor="w",
             cursor="hand2",
             font=self._font(9),
         )
@@ -2542,6 +2551,56 @@ class LauncherWindow:
             padx=self._px(12),
             pady=(self._px(2), self._px(12)),
         )
+
+        rollback_card = tk.Frame(
+            controls_card,
+            bg=_THEME["CARD"],
+            highlightthickness=1,
+            highlightbackground=_THEME["SEPARATOR"],
+        )
+        rollback_card.pack(
+            fill="x",
+            padx=self._px(12),
+            pady=(0, self._px(12)),
+        )
+        tk.Label(
+            rollback_card,
+            text="版本回退",
+            font=self._font(10, "bold"),
+            fg=_THEME["TEXT"],
+            bg=_THEME["CARD"],
+            anchor="w",
+        ).pack(fill="x", padx=self._px(10), pady=(self._px(9), self._px(2)))
+
+        self.rollback_status_lbl = tk.Label(
+            rollback_card,
+            text="",
+            font=self._font(8),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["CARD"],
+            anchor="w",
+            justify="left",
+            wraplength=self._px(210),
+        )
+        self.rollback_status_lbl.pack(fill="x", padx=self._px(10), pady=(0, self._px(8)))
+
+        self.rollback_btn = tk.Button(
+            rollback_card,
+            text="无回退版本",
+            width=18,
+            command=self._on_rollback,
+            cursor="hand2",
+            font=self._font(10, "bold"),
+            padx=self._px(6),
+            pady=self._px(3),
+        )
+        self.rollback_btn.pack(
+            fill="x",
+            padx=self._px(10),
+            pady=(0, self._px(10)),
+        )
+        self._style_action_button(self.rollback_btn, "secondary")
+
         self.channel_var.trace_add("write", self._on_channel_changed)
         self._refresh_channel_details()
         self._refresh_download_source_details()
@@ -2561,7 +2620,7 @@ class LauncherWindow:
 
         self.status_lbl = tk.Label(
             status_header,
-            text="◜ 正在准备",
+            text="| 正在准备",
             font=self._font(12, "bold"),
             fg=_THEME["BLUE"],
             bg=_THEME["CARD"],
@@ -2668,19 +2727,6 @@ class LauncherWindow:
         )
         self.retry_btn.pack(side="left")
         self._style_action_button(self.retry_btn, "secondary")
-
-        self.rollback_btn = tk.Button(
-            btn_row,
-            text="无回退版本",
-            width=12,
-            command=self._on_rollback,
-            cursor="hand2",
-            font=self._font(10),
-            padx=self._px(6),
-            pady=self._px(3),
-        )
-        self.rollback_btn.pack(side="left", padx=(self._px(8), 0))
-        self._style_action_button(self.rollback_btn, "secondary")
 
         self.release_btn = tk.Button(
             btn_row,
@@ -3283,10 +3329,22 @@ class LauncherWindow:
             return f"{base}  |  可回退：v{self.previous_version}"
         return base
 
+    def _rollback_status_text(self) -> str:
+        if self.source_test_mode:
+            return "源码模式不会写入 app/ 安装槽，因此不提供版本回退。"
+        if self.previous_version != "0.0.0":
+            return (
+                f"上一版本 v{self.previous_version} 已保留。回退会与当前 v{self.local_version} "
+                "对调，可再次切回。"
+            )
+        return "更新或导入本地包后，会自动保留一个上一版本用于快速回退。"
+
     def _refresh_installed_versions(self) -> None:
         self.local_version = _read_local_app_version(_app_runtime_dir(self.base))
         self.previous_version = _read_local_app_version(_previous_app_dir(self.base))
         self.sub_lbl.config(text=self._subline_text())
+        if hasattr(self, "rollback_status_lbl"):
+            self.rollback_status_lbl.config(text=self._rollback_status_text())
 
     def _queue_recheck_after_check(self, reason: str) -> None:
         self._recheck_requested = True
@@ -3343,13 +3401,19 @@ class LauncherWindow:
     def _update_rollback_button_state(self) -> None:
         if self.source_test_mode:
             self.rollback_btn.config(text="源码模式不回退", state="disabled")
+            if hasattr(self, "rollback_status_lbl"):
+                self.rollback_status_lbl.config(text=self._rollback_status_text())
             self._style_action_button(self.rollback_btn, "secondary")
             return
         if self.previous_version != "0.0.0":
             self.rollback_btn.config(text=f"回退 v{self.previous_version}", state="normal")
+            if hasattr(self, "rollback_status_lbl"):
+                self.rollback_status_lbl.config(text=self._rollback_status_text())
             self._style_action_button(self.rollback_btn, "warning")
             return
         self.rollback_btn.config(text="无回退版本", state="disabled")
+        if hasattr(self, "rollback_status_lbl"):
+            self.rollback_status_lbl.config(text=self._rollback_status_text())
         self._style_action_button(self.rollback_btn, "secondary")
 
     def _set_running(self, running: bool) -> None:

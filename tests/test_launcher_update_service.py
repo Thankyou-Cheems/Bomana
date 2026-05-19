@@ -49,6 +49,15 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def write_previous_app(self, version: str = "0.9.0") -> None:
+        previous_dir = self.base / self.launcher.APP_PREVIOUS_DIR_NAME
+        (previous_dir / "bomana").mkdir(parents=True)
+        (previous_dir / "Bomana.pyw").write_text("# previous app entry\n", encoding="utf-8")
+        (previous_dir / "bomana" / "config.py").write_text(
+            f'__version__ = "{version}"\n',
+            encoding="utf-8",
+        )
+
     def test_check_reports_launcher_requirement_and_fetches_missing_size(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
         app_manifest = {
@@ -150,6 +159,29 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertIn("cleanup_stale_lock", steps)
         self.assertFalse(lock_path.exists())
         self.assertTrue((self.base / self.launcher.APP_DIR_NAME / "Bomana.pyw").exists())
+
+    def test_rollback_to_previous_app_swaps_current_and_previous_versions(self) -> None:
+        self.write_current_app("2.0.0")
+        self.write_previous_app("1.5.0")
+        status_events = []
+
+        final_version, preserved_version = self.launcher._rollback_to_previous_app(
+            self.base,
+            status_cb=lambda *args: status_events.append(args),
+        )
+
+        self.assertEqual(final_version, "1.5.0")
+        self.assertEqual(preserved_version, "2.0.0")
+        self.assertEqual(
+            self.launcher._read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "1.5.0",
+        )
+        self.assertEqual(
+            self.launcher._read_local_app_version(self.base / self.launcher.APP_PREVIOUS_DIR_NAME),
+            "2.0.0",
+        )
+        self.assertTrue(status_events)
+        self.assertFalse((self.base / self.launcher.UPDATE_LOCK_FILE_NAME).exists())
 
 
 if __name__ == "__main__":
