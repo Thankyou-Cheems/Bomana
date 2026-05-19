@@ -514,7 +514,7 @@ This software is provided "AS IS" without warranty of any kind. The author(s) sh
 
 ## 更新日志 | Changelog
 
-详见 `docs/CHANGELOG.md`（源码版本以 `bomana/config.py` 中 `__version__` 为准；已发布版本见顶部 `app release` 徽章）。
+详见 `docs/CHANGELOG.md`（源码版本以 `bomana/metadata.py` 中 `__version__` 为准；已发布版本见顶部 `app release` 徽章）。
 
 ---
 

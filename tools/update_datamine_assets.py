@@ -24,6 +24,8 @@ from datamine_utils import (
 )
 from fm_speed_extractor import extract_from_root
 
+_JSON_READ_ERRORS = (OSError, json.JSONDecodeError)
+
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -33,7 +35,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 def _count_existing_bombs(path: Path) -> int | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except _JSON_READ_ERRORS:
         return None
     params = payload.get("ballistic_params", {})
     return len(params) if isinstance(params, dict) else None
@@ -42,7 +44,7 @@ def _count_existing_bombs(path: Path) -> int | None:
 def _count_existing_speed_rows(path: Path) -> tuple[int, int] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except _JSON_READ_ERRORS:
         return None
     meta = payload.get("meta", {})
     if not isinstance(meta, dict):

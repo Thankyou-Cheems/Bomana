@@ -32,6 +32,7 @@ from bomana.config import (
     UIConfig,
 )
 from bomana.core.overspeed import SpeedLimitDatabase
+from bomana.ui.settings_runtime import SettingsRuntimeMixin
 from bomana.ui.text_utils import bind_existing_label_wraps, scaled_control_length
 from bomana.ui.tk_style import style_action_button
 from bomana.utils.file_utils import ConfigManager, resource_path
@@ -39,6 +40,7 @@ from bomana.utils.system import Win32, resolve_tk_font_tuple
 
 # Optional dependencies for images (match HAS_TRAY behavior).
 HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 
 
 class _ScalableDialogMixin:
@@ -76,7 +78,7 @@ class _ScalableDialogMixin:
 
         try:
             ui_scale = float(UIConfig.UI_SCALE_MULT)
-        except TypeError, ValueError:
+        except _NUMERIC_PARSE_ERRORS:
             ui_scale = 1.0
 
         def prepare(widget: tk.Misc) -> None:
@@ -202,7 +204,7 @@ class _ScalableDialogMixin:
         self.geometry(f"+{x}+{y}")
 
 
-class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
+class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
     """设置对话框
 
     使用选项卡组织设置项：
@@ -1590,25 +1592,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         """保存所有设置"""
         # 收集设置值
         config = ConfigManager.load()
-        old_scale = float(UIConfig.UI_SCALE_MULT)
-        old_text_scale = float(UIConfig.TEXT_SCALE_MULT)
-        old_nav_width = float(PanelConfig.navigation_bar_width)
-        old_hud_enabled = bool(HUDConfig.enabled)
-        old_hud_alpha = int(HUDConfig.alpha)
-        old_hud_scale = float(HUDConfig.scale)
-        old_hud_follow_main = bool(HUDConfig.follow_main_window_monitor)
-        old_hud_color_style = str(getattr(HUDConfig, "color_style", "auto"))
-        old_sound_enabled = bool(self.app.sound.is_enabled())
-        old_zone_sound_enabled = bool(getattr(self.app, "_zone_sound_enabled", True))
-        old_hotkeys_enabled = HotkeyConfig.GLOBAL_HOTKEYS
-        old_hotkey_bindings = HotkeyConfig.get_bindings()
+        previous = self._capture_runtime_settings_state()
 
         new_window_alpha = int(self.alpha_var.get())
         new_nav_width = float(self.nav_width_var.get())
         new_ui_scale = UIConfig.clamp_ui_scale(self.scale_var.get())
         new_text_scale = UIConfig.clamp_text_scale(self.text_scale_var.get())
         new_theme = self.theme_var.get()
-        old_theme = Theme.get_current()
         new_hud_enabled = bool(self.hud_enabled_var.get())
         new_hud_alpha = max(30, min(255, int(self.hud_alpha_var.get())))
         new_hud_scale = max(0.5, min(2.0, float(self.hud_scale_var.get())))
@@ -1706,9 +1696,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
 
         # 保存配置
         if not ConfigManager.save(config):
-            for path in created_sound_files:
-                with contextlib.suppress(OSError):
-                    path.unlink(missing_ok=True)
+            self._rollback_created_sound_files(created_sound_files)
             messagebox.showerror(
                 "设置保存失败",
                 "配置文件写入失败，本次更改未应用。",
@@ -1721,35 +1709,26 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 path.unlink(missing_ok=True)
 
         # 配置写入成功后，再应用运行时状态
-        UIConfig.WINDOW_ALPHA = new_window_alpha
-        PanelConfig.navigation_bar_width = new_nav_width
-        UIConfig.UI_SCALE_MULT = new_ui_scale
-        UIConfig.TEXT_SCALE_MULT = new_text_scale
-        HUDConfig.enabled = new_hud_enabled
-        HUDConfig.apply_dict(pending_hud_config)
-        for key, value in panel_config.items():
-            setattr(PanelConfig, key, value)
-        HotkeyConfig.GLOBAL_HOTKEYS = new_hotkeys_enabled
-        HotkeyConfig.set_bindings(hotkey_bindings)
-        SnapConfig.enabled = new_snap_enabled
-        SnapConfig.SNAP_DISTANCE = new_snap_distance
-        self.app.sound.set_enabled(new_sound_enabled)
-        self.app._zone_sound_enabled = new_zone_sound_enabled
-        SoundConfig.apply_user_config(normalized_sound_overrides)
-        OverspeedConfig.apply_user_thresholds(
-            normalized_overspeed_thresholds,
-            normalized_overspeed_overrides,
+        self._apply_runtime_settings(
+            new_window_alpha=new_window_alpha,
+            new_nav_width=new_nav_width,
+            new_ui_scale=new_ui_scale,
+            new_text_scale=new_text_scale,
+            new_hud_enabled=new_hud_enabled,
+            pending_hud_config=pending_hud_config,
+            panel_config=panel_config,
+            new_hotkeys_enabled=new_hotkeys_enabled,
+            hotkey_bindings=hotkey_bindings,
+            new_snap_enabled=new_snap_enabled,
+            new_snap_distance=new_snap_distance,
+            new_sound_enabled=new_sound_enabled,
+            new_zone_sound_enabled=new_zone_sound_enabled,
+            normalized_sound_overrides=normalized_sound_overrides,
+            normalized_overspeed_thresholds=normalized_overspeed_thresholds,
+            normalized_overspeed_overrides=normalized_overspeed_overrides,
+            pending_ccrp_tuning=pending_ccrp_tuning,
+            pending_selected_bomb=pending_selected_bomb,
         )
-        if hasattr(self.app, "_refresh_overspeed_threshold_ui"):
-            self.app._refresh_overspeed_threshold_ui()
-        if pending_ccrp_tuning is not None:
-            BallisticPhysicsParams.apply_user_tuning(pending_ccrp_tuning)
-        if pending_selected_bomb:
-            BombConfig.selected_bomb = pending_selected_bomb
-            if hasattr(self.app, "bomb_select_lbl"):
-                self.app.bomb_select_lbl.config(
-                    text=f"炸弹: {BombConfig.format_bomb_name(pending_selected_bomb)} (点击更换)"
-                )
 
         # 刷新托盘菜单勾选状态
         if hasattr(self.app, "_refresh_tray"):
@@ -1758,9 +1737,9 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
         # 应用透明度
         Win32.setup_window(self.app.hwnd, self.app._locked, UIConfig.WINDOW_ALPHA)
 
-        sound_flags_changed = old_sound_enabled != bool(
+        sound_flags_changed = bool(previous["sound_enabled"]) != bool(
             self.app.sound.is_enabled()
-        ) or old_zone_sound_enabled != bool(self.app._zone_sound_enabled)
+        ) or bool(previous["zone_sound_enabled"]) != bool(self.app._zone_sound_enabled)
         if sound_flags_changed and hasattr(self.app, "_update_hint"):
             self.app._update_hint()
             if hasattr(self.app, "nav_window") and self.app.nav_window:
@@ -1768,8 +1747,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
 
         # 重启热键服务（如果需要）
         need_restart_hotkeys = (
-            old_hotkeys_enabled != HotkeyConfig.GLOBAL_HOTKEYS
-            or hotkey_bindings != old_hotkey_bindings
+            previous["hotkeys_enabled"] != HotkeyConfig.GLOBAL_HOTKEYS
+            or hotkey_bindings != previous["hotkey_bindings"]
         )
         if need_restart_hotkeys:
             if hasattr(self.app, "_ghk") and self.app._ghk:
@@ -1781,10 +1760,12 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
             if hasattr(self.app, "nav_window") and self.app.nav_window:
                 self.app.nav_window.update_hint_text()
 
-        theme_changed = new_theme != old_theme
-        ui_scale_changed = abs(UIConfig.UI_SCALE_MULT - old_scale) > 1e-6
-        text_scale_changed = abs(UIConfig.TEXT_SCALE_MULT - old_text_scale) > 1e-6
-        nav_width_changed = abs(PanelConfig.navigation_bar_width - old_nav_width) > 1e-6
+        theme_changed = new_theme != previous["theme"]
+        ui_scale_changed = abs(UIConfig.UI_SCALE_MULT - float(previous["scale"])) > 1e-6
+        text_scale_changed = abs(UIConfig.TEXT_SCALE_MULT - float(previous["text_scale"])) > 1e-6
+        nav_width_changed = (
+            abs(PanelConfig.navigation_bar_width - float(previous["nav_width"])) > 1e-6
+        )
         Theme.apply(new_theme)
 
         # 运行时应用显示设置，无需重启应用。
@@ -1796,32 +1777,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin):
                 nav_width_changed=nav_width_changed,
             )
 
-        hud_enabled_changed = old_hud_enabled != bool(HUDConfig.enabled)
-        hud_alpha_changed = old_hud_alpha != int(HUDConfig.alpha)
-        hud_scale_changed = abs(float(HUDConfig.scale) - old_hud_scale) > 1e-6
-        hud_follow_changed = old_hud_follow_main != bool(HUDConfig.follow_main_window_monitor)
-        hud_color_changed = old_hud_color_style != str(HUDConfig.color_style)
-
-        if HUDConfig.enabled:
-            if hasattr(self.app, "_show_hud_overlay"):
-                self.app._show_hud_overlay()
-            if getattr(self.app, "hud_overlay", None):
-                if hud_follow_changed:
-                    self.app.hud_overlay.refresh_monitor_geometry()
-                if hud_scale_changed and hasattr(self.app.hud_overlay, "refresh_text_scale"):
-                    self.app.hud_overlay.refresh_text_scale()
-                self.app.hud_overlay.update_transparency()
-        else:
-            if getattr(self.app, "hud_overlay", None) and self.app.hud_overlay.is_visible():
-                self.app.hud_overlay.hide()
-            if hasattr(self.app, "_hud_last_target"):
-                self.app._hud_last_target = None
-
-        if hud_enabled_changed or hud_alpha_changed or hud_color_changed:
-            if hasattr(self.app, "_update_hint"):
-                self.app._update_hint()
-            if hasattr(self.app, "_refresh_tray"):
-                self.app._refresh_tray()
+        self._refresh_runtime_hud_after_settings(previous)
 
         messagebox.showinfo("设置", "设置已保存", parent=self)
 

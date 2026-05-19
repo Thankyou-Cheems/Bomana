@@ -179,8 +179,8 @@ bd close <issue-id> --reason "Completed" --json
 ### 发布流程（维护者）
 
 1. 更新 `docs/CHANGELOG.md`
-2. 更新 `bomana/config.py` 中的 `__version__`
-3. 若 app 包需要新启动器能力，更新 `PORTABLE_MIN_LAUNCHER_VERSION`
+2. 更新 `bomana/metadata.py` 中的 `__version__`
+3. 若 app 包需要新启动器能力，更新 `bomana/metadata.py` 中的 `PORTABLE_MIN_LAUNCHER_VERSION`
 4. 根据发布目标做最少真实验证：
    - app 发布：启动器兼容性、下载/启动正常
    - launcher 发布：重查排队、保留一个 `app_previous/`、回退互换正常
@@ -370,8 +370,8 @@ Manual 8111 smoke notes should cover:
 ### Release Notes For Maintainers
 
 1. Update `docs/CHANGELOG.md`
-2. Bump `__version__` in `bomana/config.py`
-3. Update `PORTABLE_MIN_LAUNCHER_VERSION` if the app now requires newer launcher behavior
+2. Bump `__version__` in `bomana/metadata.py`
+3. Update `PORTABLE_MIN_LAUNCHER_VERSION` in `bomana/metadata.py` if the app now requires newer launcher behavior
 4. Smoke test the relevant release path
 5. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
 6. Let GitHub Actions build and publish the assets

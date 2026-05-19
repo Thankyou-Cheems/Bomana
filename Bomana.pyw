@@ -20,7 +20,7 @@ Runtime inputs:
 Maintenance notes:
 - Respect `ENABLE_*` feature flags and shared variant behavior in
   `bomana/config.py`.
-- Bump `__version__` in `bomana/config.py` for user-visible releases.
+- Bump `__version__` in `bomana/metadata.py` for user-visible releases.
 - Project-wide workflow and documentation rules live in `AGENTS.md` and
   `docs/`.
 """

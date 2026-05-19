@@ -21,6 +21,8 @@ from bomana.utils.math_utils import (
 )
 from bomana.utils.system import Win32
 
+_WIN32_ACCESS_ERRORS = (OSError, AttributeError)
+
 if TYPE_CHECKING:
     from bomana.core.state import UISnapshot
 
@@ -120,7 +122,7 @@ class NavigationWindow:
             # 同时应用透明键和整体透明度
             alpha = int(alpha)
             user32.SetLayeredWindowAttributes(self.hwnd, colorref, alpha, LWA_COLORKEY | LWA_ALPHA)
-        except OSError, AttributeError:
+        except _WIN32_ACCESS_ERRORS:
             # 降级：使用Tkinter的alpha属性
             self.window.attributes("-alpha", alpha / 255.0)
 

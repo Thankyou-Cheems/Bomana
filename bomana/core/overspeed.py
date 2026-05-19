@@ -6,6 +6,9 @@ from typing import Any
 from bomana.config import OverspeedConfig
 from bomana.utils.file_utils import load_json_resource
 
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
+_SEQUENCE_NUMERIC_PARSE_ERRORS = (TypeError, ValueError, IndexError)
+
 LimitValue = float | list[list[float]]
 
 
@@ -79,7 +82,7 @@ class SpeedLimitDatabase:
                 for item in raw:
                     try:
                         pairs.append([float(item[0]), float(item[1])])
-                    except TypeError, ValueError, IndexError:
+                    except _SEQUENCE_NUMERIC_PARSE_ERRORS:
                         return None
                 pairs.sort(key=lambda x: x[0])
                 return pairs
@@ -88,7 +91,7 @@ class SpeedLimitDatabase:
                 for i in range(0, len(raw), 2):
                     try:
                         pairs.append([float(raw[i]), float(raw[i + 1])])
-                    except TypeError, ValueError:
+                    except _NUMERIC_PARSE_ERRORS:
                         return None
                 pairs.sort(key=lambda x: x[0])
                 return pairs
@@ -106,7 +109,7 @@ class SpeedLimitDatabase:
                         for i in range(0, len(parts), 2):
                             try:
                                 pairs.append([float(parts[i]), float(parts[i + 1])])
-                            except TypeError, ValueError:
+                            except _NUMERIC_PARSE_ERRORS:
                                 return None
                         pairs.sort(key=lambda x: x[0])
                         return pairs
@@ -132,7 +135,7 @@ class SpeedLimitDatabase:
 
         try:
             x = float(sweep)
-        except TypeError, ValueError:
+        except _NUMERIC_PARSE_ERRORS:
             return float(points[-1][1])
 
         if x <= points[0][0]:
@@ -330,7 +333,7 @@ class OverspeedAnalyzer:
         if mach is not None:
             try:
                 mach_val = float(mach)
-            except TypeError, ValueError:
+            except _NUMERIC_PARSE_ERRORS:
                 mach_val = None
 
         resolved, ias_limit, mach_limit = self.db.get_limits(plane_type, wing_sweep)

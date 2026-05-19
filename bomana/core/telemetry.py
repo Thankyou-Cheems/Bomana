@@ -11,6 +11,8 @@ import requests
 from bomana.config import NetworkConfig
 from bomana.core.state import Airfield, MapInfo, MapObjData, TelemetryData, Zone
 
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
+
 # ============================================================================
 # 网络请求层
 # ============================================================================
@@ -140,7 +142,7 @@ class TelemetryFetcher:
             raw = raw[0] if raw else default
         try:
             return float(raw)
-        except TypeError, ValueError:
+        except _NUMERIC_PARSE_ERRORS:
             return float(default)
 
     @staticmethod
@@ -154,7 +156,7 @@ class TelemetryFetcher:
             raw = raw[0] if raw else None
         try:
             return float(raw)
-        except TypeError, ValueError:
+        except _NUMERIC_PARSE_ERRORS:
             return None
 
     def _read_float(self, payload: dict, keys: tuple[str, ...]) -> tuple[float, bool]:
@@ -465,7 +467,7 @@ class MapObjectsFetcher:
             value = value[0] if value else None
         try:
             result = float(value)
-        except TypeError, ValueError:
+        except _NUMERIC_PARSE_ERRORS:
             return None
         return result if math.isfinite(result) else None
 
@@ -498,7 +500,7 @@ class MapObjectsFetcher:
         if isinstance(value, (list, tuple)) and len(value) >= 3:
             try:
                 return float(value[0]), float(value[1]), float(value[2])
-            except TypeError, ValueError:
+            except _NUMERIC_PARSE_ERRORS:
                 return None
 
         text = MapObjectsFetcher._text(o.get("color", ""))

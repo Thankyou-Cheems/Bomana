@@ -7,6 +7,7 @@ from pathlib import Path
 
 BOMBGUNS_SUBDIR = Path("aces.vromfs.bin_u") / "gamedata" / "weapons" / "bombguns"
 FLIGHTMODELS_SUBDIR = Path("aces.vromfs.bin_u") / "gamedata" / "flightmodels"
+_GIT_COMMAND_ERRORS = (OSError, subprocess.SubprocessError)
 
 
 def require_datamine_dir(root: Path, relative_dir: Path) -> Path:
@@ -36,7 +37,7 @@ def read_git_commit(root: Path) -> str:
             text=True,
             timeout=10,
         )
-    except OSError, subprocess.SubprocessError:
+    except _GIT_COMMAND_ERRORS:
         return ""
 
     if completed.returncode != 0:

@@ -15,6 +15,7 @@ from typing import Any
 
 from bomana.config import FileConfig, HotkeyConfig
 
+_WIN32_ACCESS_ERRORS = (OSError, AttributeError)
 _MUTEX_HANDLE = None
 _PREFERRED_LATIN_FONTS = [
     "Bomana UI Sans",
@@ -232,11 +233,11 @@ class Win32:
         try:
             # 方法1: Per-Monitor V2 DPI感知（最佳）
             cls.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
-        except OSError, AttributeError:
+        except _WIN32_ACCESS_ERRORS:
             try:
                 # 方法2: Per-Monitor DPI感知
                 ctypes.windll.shcore.SetProcessDpiAwareness(2)
-            except OSError, AttributeError:
+            except _WIN32_ACCESS_ERRORS:
                 with contextlib.suppress(OSError, AttributeError):
                     # 方法3: System DPI感知（后备）
                     cls.user32.SetProcessDPIAware()
@@ -254,7 +255,7 @@ class Win32:
         try:
             dpi = cls.user32.GetDpiForWindow(hwnd)
             return (dpi / 96.0) if dpi else 1.0
-        except OSError, AttributeError:
+        except _WIN32_ACCESS_ERRORS:
             return 1.0
 
     @classmethod
@@ -316,7 +317,7 @@ class Win32:
                 key = int(color_key) & 0x00FFFFFF
             cls.user32.SetLayeredWindowAttributes(hwnd, key, target_alpha, flags)
             return True
-        except OSError, AttributeError:
+        except _WIN32_ACCESS_ERRORS:
             return False
 
     @classmethod
@@ -329,7 +330,7 @@ class Win32:
             hwnd = cls.kernel32.GetConsoleWindow()
             if hwnd:
                 cls.user32.ShowWindow(hwnd, 0)
-        except OSError, AttributeError:
+        except _WIN32_ACCESS_ERRORS:
             pass
 
     @classmethod
@@ -391,7 +392,7 @@ class Win32:
             cls.user32.EnumDisplayMonitors(None, None, enum_proc, 0)
 
             monitors = monitor_list
-        except OSError, AttributeError, Exception:
+        except Exception:
             # 失败时返回主屏幕
             w, h = cls.screen_size()
             monitors = [{"index": 0, "x": 0, "y": 0, "width": w, "height": h, "is_primary": True}]
@@ -505,7 +506,7 @@ class SingleInstanceManager:
                 except tk.TclError:
                     pass
                 sys.exit(0)
-        except OSError, AttributeError:
+        except _WIN32_ACCESS_ERRORS:
             pass
 
     @staticmethod
@@ -567,7 +568,7 @@ class GlobalHotkeys:
             # 向监听线程发送退出消息
             self._stop_event.set()
             Win32.user32.PostThreadMessageW(int(self._tid), int(self.WM_QUIT), 0, 0)
-        except OSError, AttributeError:
+        except _WIN32_ACCESS_ERRORS:
             pass
         if self._thread:
             self._thread.join(timeout=1.0)
@@ -579,7 +580,7 @@ class GlobalHotkeys:
             kernel32 = ctypes.windll.kernel32
             kernel32.GetCurrentThreadId.restype = ctypes.c_uint
             self._tid = int(kernel32.GetCurrentThreadId())
-        except OSError, AttributeError:
+        except _WIN32_ACCESS_ERRORS:
             self._tid = None
             return
 
@@ -598,7 +599,7 @@ class GlobalHotkeys:
                 )
                 if not ok:
                     failed_keys.append(str(key_name))
-            except OSError, AttributeError:
+            except _WIN32_ACCESS_ERRORS:
                 failed_keys.append(str(key_name))
 
         if failed_keys and self.error_cb:
@@ -640,7 +641,7 @@ class GlobalHotkeys:
                                 # 在主线程执行回调
                                 self.root.after(0, cb)
                             break
-            except OSError, AttributeError:
+            except _WIN32_ACCESS_ERRORS:
                 break
 
         # 注销所有热键

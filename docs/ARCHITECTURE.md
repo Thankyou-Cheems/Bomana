@@ -3,7 +3,10 @@
 ## Overview
 - Bootstrap entry point: `Bomana.pyw` (single-instance guard, DPI setup, root window creation, `App` startup)
 - Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, details/support dialog)
-- Central config: `bomana/config.py` (metadata, feature flags, config classes)
+- Launcher pure helpers: `bomana/launcher_core.py` (download-source normalization, version/asset helpers, checksum and safe zip extraction)
+- Launcher install primitives: `bomana/launcher_install.py` (update lock, staged app install, rollback, incomplete-install recovery)
+- Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata; re-exported by `bomana/config.py`)
+- Central config: `bomana/config.py` (feature flags, config classes, compatibility metadata re-exports)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app coordinator, main-window builder, debug support, panel renderer, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
@@ -21,7 +24,10 @@
 ├─ Bomana.pyw                # Thin bootstrap entrypoint
 ├─ launcher.pyw              # Green launcher (auto update + bootstrap)
 ├─ bomana/
-│  ├─ config.py              # Metadata/flags/config classes
+│  ├─ config.py              # Feature flags/config classes + compatibility metadata re-exports
+│  ├─ launcher_core.py       # Pure launcher helpers used by launcher.pyw
+│  ├─ launcher_install.py    # Launcher install/rollback transaction primitives
+│  ├─ metadata.py            # Project metadata and version constants
 │  ├─ data/
 │  │  ├─ ccrp_bomb_params.json # Bomb parameters (CCRP)
 │  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
@@ -48,6 +54,8 @@
 │  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
 │  │  ├─ runtime.py           # Tk dispatch + runtime worker thread helpers
 │  │  ├─ runtime_services.py  # Global hotkeys, tray, and HUD runtime integrations
+│  │  ├─ settings_runtime.py  # SettingsDialog persistence-success runtime side effects
+│  │  ├─ theme.py             # Runtime Tk theme tokens (re-exported by config)
 │  │  ├─ tk_style.py          # Shared Tk palette/action-button styling tokens
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
@@ -83,7 +91,8 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
-   - `tk_style.py` owns shared Tk visual tokens and action-button styling used by the launcher and modal app dialogs.
+   - `settings_runtime.py` owns SettingsDialog side effects that run only after config persistence succeeds.
+   - `theme.py` owns runtime theme tokens, while `tk_style.py` owns shared Tk palette/action-button styling used by the launcher and modal app dialogs.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Diagnostics flow:
    - `Bomana.pyw` initializes `bomana/utils/diagnostics.py` at startup.
@@ -104,7 +113,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
-   - Verifies SHA256 (when provided); `InstallTransaction` owns the update lock, staging directory, `app/` replacement, rollback cleanup, and incomplete-install recovery.
+   - Verifies SHA256 (when provided); `launcher_install.py` owns the update lock, staging directory, `app/` replacement, rollback cleanup, and incomplete-install recovery.
    - Successful app installs promote the previous app into `app_previous/` and update local version metadata.
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.

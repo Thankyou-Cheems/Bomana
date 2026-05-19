@@ -6,6 +6,19 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, ClassVar
 
+from bomana import metadata as _metadata
+from bomana.ui import theme as _theme
+
+__title__ = _metadata.__title__
+__version__ = _metadata.__version__
+PORTABLE_MIN_LAUNCHER_VERSION = _metadata.PORTABLE_MIN_LAUNCHER_VERSION
+__author__ = _metadata.__author__
+__license__ = _metadata.__license__
+__copyright__ = _metadata.__copyright__
+__repository__ = _metadata.__repository__
+Theme = _theme.Theme
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
+
 
 def _safe_print(message: str) -> None:
     """Print diagnostics even when the host console is not UTF-8."""
@@ -15,17 +28,6 @@ def _safe_print(message: str) -> None:
         fallback = message.encode("ascii", errors="backslashreplace").decode("ascii")
         print(fallback)
 
-
-# =============================================================================
-# 标准元数据 (Standard Metadata)
-# =============================================================================
-__title__ = "Bomana"
-__version__ = "6.14.1"
-PORTABLE_MIN_LAUNCHER_VERSION = "1.6.0"
-__author__ = "Thankyou-Cheems"
-__license__ = "MIT"
-__copyright__ = "Copyright 2024-2026 Thankyou-Cheems"
-__repository__ = "https://github.com/Thankyou-Cheems/Bomana"
 
 # ============================================================================
 # 编译开关 - 功能模块启用控制
@@ -606,7 +608,7 @@ class OverspeedConfig:
         low, high = cls._THRESHOLD_LIMITS[key]
         try:
             value = float(raw_value)
-        except TypeError, ValueError:
+        except _NUMERIC_PARSE_ERRORS:
             value = float(fallback)
         return max(low, min(high, value))
 
@@ -1102,180 +1104,6 @@ class BombConfig:
             "stab_enabled": data.get("stab_enabled", False),
             "reference_area": 3.14159 * (data.get("caliber", 0.2) / 2) ** 2,
         }
-
-
-class Theme:
-    """颜色主题配置
-
-    预设主题: FluentDark(默认), FluentLight, Dark, Light, HighContrast, LunarNewYear
-
-    添加新主题:
-    1. 在THEMES字典中添加定义
-    2. 确保包含所有必要颜色键
-    3. 调用Theme.apply(name)应用
-
-    注意: 主题切换由App在运行时重建UI以即时生效
-    """
-
-    # 当前活动主题名称
-    _current = "fluent_dark"
-
-    # 预设主题定义
-    THEMES: ClassVar[dict[str, dict[str, str]]] = {
-        "fluent_dark": {
-            "name": "Fluent 深色",
-            "BG": "#10151d",
-            "BORDER": "#354258",
-            "TEXT": "#f2f6fb",
-            "TEXT_DIM": "#bac7d8",
-            "TEXT_MUTED": "#7f8da0",
-            "GREEN": "#6ed081",
-            "YELLOW": "#f2c14e",
-            "RED": "#ff6b6b",
-            "BLUE": "#5ab0ff",
-            "ORANGE": "#ff9a52",
-            "GRAYPILL": "#1a2330",
-            "SEPARATOR": "#2a3648",
-        },
-        "fluent_light": {
-            "name": "Fluent 亮色",
-            "BG": "#f5f8fc",
-            "BORDER": "#c8d5e6",
-            "TEXT": "#132033",
-            "TEXT_DIM": "#3b4e67",
-            "TEXT_MUTED": "#677b96",
-            "GREEN": "#1f8b4c",
-            "YELLOW": "#9a6700",
-            "RED": "#c63a3a",
-            "BLUE": "#0a70e8",
-            "ORANGE": "#c96a1f",
-            "GRAYPILL": "#e9eff7",
-            "SEPARATOR": "#d5e0ed",
-        },
-        "dark": {
-            "name": "暗色 (Dark)",
-            "BG": "#0a0e13",
-            "BORDER": "#30363d",
-            "TEXT": "#e6edf3",
-            "TEXT_DIM": "#8b949e",
-            "TEXT_MUTED": "#484f58",
-            "GREEN": "#3fb950",
-            "YELLOW": "#d29922",
-            "RED": "#f85149",
-            "BLUE": "#58a6ff",
-            "ORANGE": "#f0883e",
-            "GRAYPILL": "#161b22",
-            "SEPARATOR": "#21262d",
-        },
-        "light": {
-            "name": "亮色 (Light)",
-            "BG": "#ffffff",
-            "BORDER": "#d0d7de",
-            "TEXT": "#1f2328",
-            "TEXT_DIM": "#656d76",
-            "TEXT_MUTED": "#8c959f",
-            "GREEN": "#1a7f37",
-            "YELLOW": "#9a6700",
-            "RED": "#cf222e",
-            "BLUE": "#0969da",
-            "ORANGE": "#bc4c00",
-            "GRAYPILL": "#f6f8fa",
-            "SEPARATOR": "#d8dee4",
-        },
-        "high_contrast": {
-            "name": "高对比度",
-            "BG": "#000000",
-            "BORDER": "#ffffff",
-            "TEXT": "#ffffff",
-            "TEXT_DIM": "#ffff00",
-            "TEXT_MUTED": "#808080",
-            "GREEN": "#00ff00",
-            "YELLOW": "#ffff00",
-            "RED": "#ff0000",
-            "BLUE": "#00ffff",
-            "ORANGE": "#ffa500",
-            "GRAYPILL": "#1a1a1a",
-            "SEPARATOR": "#404040",
-        },
-        "lunar_new_year": {
-            "name": "农历新年 (Lunar New Year)",
-            "BG": "#2a0d0d",
-            "BORDER": "#9c4e1d",
-            "TEXT": "#fbe7b2",
-            "TEXT_DIM": "#e8c47a",
-            "TEXT_MUTED": "#a8835c",
-            "GREEN": "#8fbf6b",
-            "YELLOW": "#e7b75b",
-            "RED": "#e14c3a",
-            "BLUE": "#5e8f8a",
-            "ORANGE": "#c97a33",
-            "GRAYPILL": "#4a1a14",
-            "SEPARATOR": "#6a2b1a",
-        },
-    }
-
-    # 默认颜色值（使用 Fluent 深色主题）
-    BG = "#10151d"
-    BORDER = "#354258"
-    TEXT = "#f2f6fb"
-    TEXT_DIM = "#bac7d8"
-    TEXT_MUTED = "#7f8da0"
-    GREEN = "#6ed081"
-    YELLOW = "#f2c14e"
-    RED = "#ff6b6b"
-    BLUE = "#5ab0ff"
-    ORANGE = "#ff9a52"
-    GRAYPILL = "#1a2330"
-    SEPARATOR = "#2a3648"
-
-    @classmethod
-    def apply(cls, theme_name: str) -> bool:
-        """应用指定主题
-
-        Args:
-            theme_name: 主题名称 ("dark", "light", "high_contrast")
-
-        Returns:
-            是否成功应用
-        """
-        if theme_name not in cls.THEMES:
-            return False
-
-        theme = cls.THEMES[theme_name]
-        cls._current = theme_name
-
-        # 更新类属性
-        cls.BG = theme["BG"]
-        cls.BORDER = theme["BORDER"]
-        cls.TEXT = theme["TEXT"]
-        cls.TEXT_DIM = theme["TEXT_DIM"]
-        cls.TEXT_MUTED = theme["TEXT_MUTED"]
-        cls.GREEN = theme["GREEN"]
-        cls.YELLOW = theme["YELLOW"]
-        cls.RED = theme["RED"]
-        cls.BLUE = theme["BLUE"]
-        cls.ORANGE = theme["ORANGE"]
-        cls.GRAYPILL = theme["GRAYPILL"]
-        cls.SEPARATOR = theme["SEPARATOR"]
-
-        return True
-
-    @classmethod
-    def get_current(cls) -> str:
-        """获取当前主题名称"""
-        return cls._current
-
-    @classmethod
-    def get_theme_names(cls) -> list:
-        """获取所有主题名称列表"""
-        return list(cls.THEMES.keys())
-
-    @classmethod
-    def get_theme_display_name(cls, theme_name: str) -> str:
-        """获取主题的显示名称"""
-        if theme_name in cls.THEMES:
-            return cls.THEMES[theme_name]["name"]
-        return theme_name
 
 
 class PanelConfig:

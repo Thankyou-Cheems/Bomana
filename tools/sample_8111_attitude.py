@@ -15,6 +15,7 @@ API_BASE = "http://127.0.0.1:8111"
 ATT_ZERO_EPS_DEG = 0.35
 JITTER_PITCH_RATE_DEG_S = 260.0
 JITTER_ROLL_RATE_DEG_S = 420.0
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 
 
 def _to_float(raw, default=0.0):
@@ -26,7 +27,7 @@ def _to_float(raw, default=0.0):
         raw = raw[0] if raw else default
     try:
         return float(raw)
-    except TypeError, ValueError:
+    except _NUMERIC_PARSE_ERRORS:
         return float(default)
 
 

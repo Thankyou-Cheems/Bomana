@@ -11,6 +11,8 @@ from typing import Any
 from bomana.config import HUDConfig, UIConfig
 from bomana.utils.system import Win32, resolve_tk_font_tuple
 
+_HUD_RUNTIME_ERRORS = (OSError, AttributeError, TypeError, ValueError)
+
 
 class HUDOverlayUnavailable(RuntimeError):
     """Raised when the host cannot provide a transparent HUD surface."""
@@ -232,7 +234,7 @@ class HUDOverlay:
             return fallback
         try:
             return int(user32.GetParent(fallback) or fallback)
-        except OSError, AttributeError, TypeError, ValueError:
+        except _HUD_RUNTIME_ERRORS:
             return fallback
 
     def _win32_layered_supported(self) -> bool:

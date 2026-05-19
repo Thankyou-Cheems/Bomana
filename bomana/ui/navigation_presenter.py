@@ -6,6 +6,8 @@ from typing import Any
 
 from bomana.config import Theme, ZoneConfig
 
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
+
 
 @dataclass(frozen=True)
 class NavigationTapeModel:
@@ -32,7 +34,7 @@ def select_display_primary_zone(zones: list[Any]) -> Any | None:
         try:
             rel = float(getattr(zone, "relative", 0.0))
             dist = float(getattr(zone, "distance_km", 0.0))
-        except TypeError, ValueError:
+        except _NUMERIC_PARSE_ERRORS:
             continue
         if math.isfinite(rel) and math.isfinite(dist):
             ranked.append((abs(rel), dist, zone))

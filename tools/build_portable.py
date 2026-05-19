@@ -72,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--version",
         default="",
-        help="Override version (default: read __version__ from bomana/config.py)",
+        help="Override version (default: read __version__ from bomana/metadata.py)",
     )
     parser.add_argument(
         "--output",
@@ -96,21 +96,19 @@ def replace_switches(code: str, switches: dict[str, str]) -> str:
     return code
 
 
-def read_version(config_text: str) -> str:
-    m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', config_text)
+def read_metadata_value(metadata_text: str, name: str, source: str = "bomana/metadata.py") -> str:
+    m = re.search(rf'{name}\s*=\s*["\']([^"\']+)["\']', metadata_text)
     if not m:
-        raise RuntimeError("Failed to find __version__ in bomana/config.py")
+        raise RuntimeError(f"Failed to find {name} in {source}")
     return m.group(1).strip()
 
 
-def read_min_launcher_version(config_text: str) -> str:
-    m = re.search(
-        r'PORTABLE_MIN_LAUNCHER_VERSION\s*=\s*["\']([^"\']+)["\']',
-        config_text,
-    )
-    if not m:
-        raise RuntimeError("Failed to find PORTABLE_MIN_LAUNCHER_VERSION in bomana/config.py")
-    return m.group(1).strip()
+def read_version(metadata_text: str) -> str:
+    return read_metadata_value(metadata_text, "__version__")
+
+
+def read_min_launcher_version(metadata_text: str) -> str:
+    return read_metadata_value(metadata_text, "PORTABLE_MIN_LAUNCHER_VERSION")
 
 
 def read_launcher_version(launcher_text: str) -> str:
@@ -344,9 +342,11 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     config_path = root / "bomana" / "config.py"
+    metadata_path = root / "bomana" / "metadata.py"
     launcher_path = root / "launcher.pyw"
     config_stat = config_path.stat()
     original = config_path.read_text(encoding="utf-8")
+    metadata_text = metadata_path.read_text(encoding="utf-8")
     launcher_text = launcher_path.read_text(encoding="utf-8")
     config_patched = False
 
@@ -358,16 +358,14 @@ def main() -> int:
     launcher_version = read_launcher_version(launcher_text)
 
     try:
-        app_version = args.version.strip() or read_version(original)
-        min_launcher_version = read_min_launcher_version(original)
+        app_version = args.version.strip() or read_version(metadata_text)
+        min_launcher_version = read_min_launcher_version(metadata_text)
 
         if args.target in ("all", "app"):
             patched = replace_switches(original, VARIANT_SWITCHES[args.variant])
             if patched != original:
                 config_path.write_text(patched, encoding="utf-8")
                 config_patched = True
-            app_version = args.version.strip() or read_version(patched)
-            min_launcher_version = read_min_launcher_version(patched)
             app_zip = build_app_zip(root, args.variant, app_version, out_dir)
             app_sha = sha256_file(app_zip)
             manifest = write_manifest(

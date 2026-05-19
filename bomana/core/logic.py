@@ -57,6 +57,9 @@ from bomana.utils.math_utils import (
     normalize_angle,
 )
 
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
+_SEQUENCE_NUMERIC_PARSE_ERRORS = (TypeError, ValueError, IndexError)
+
 # ============================================================================
 # 游戏逻辑核心
 # ============================================================================
@@ -384,7 +387,7 @@ class GameLogic:
             if scale_x <= 1e-6 or scale_y <= 1e-6:
                 return None
             return scale_x, scale_y
-        except TypeError, ValueError, IndexError:
+        except _SEQUENCE_NUMERIC_PARSE_ERRORS:
             return None
 
     @staticmethod
@@ -427,7 +430,7 @@ class GameLogic:
                     for airfield in mp.airfields
                 ),
             }
-        except TypeError, ValueError:
+        except _NUMERIC_PARSE_ERRORS:
             return None
 
         encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))

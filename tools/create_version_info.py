@@ -3,12 +3,24 @@ import re
 from pathlib import Path
 
 
+def _read_literal_version(path):
+    text = path.read_text(encoding="utf-8")
+    match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', text)
+    return match.group(1).strip() if match else ""
+
+
 def read_version(config_path):
     try:
-        text = Path(config_path).read_text(encoding="utf-8")
-        m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', text)
-        if m:
-            return m.group(1).strip()
+        path = Path(config_path)
+        version = _read_literal_version(path)
+        if version:
+            return version
+
+        metadata_path = path.with_name("metadata.py")
+        if metadata_path.exists():
+            version = _read_literal_version(metadata_path)
+            if version:
+                return version
     except Exception as e:
         print(f"Error reading config: {e}")
     return "0.0.0"

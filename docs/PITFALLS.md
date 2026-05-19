@@ -56,9 +56,9 @@ implementation plans belong in git history, not here.
   Fix/Workaround: log through encoding-safe output and keep release asset names ASCII-only; put localized text in release notes
 
 - Context: running `tools/build_portable.py` builds concurrently
-  Symptom: sporadic `Failed to find __version__ in bomana/config.py`, or `config.py` remained dirty after build
-  Cause: variant packaging temporarily patches `bomana/config.py`, so parallel builds race on the same file
-  Fix/Workaround: do not run build variants in parallel; preserve/restore the original file only when the build script actually patched it
+  Symptom: `config.py` remained dirty after build, or older build scripts failed while reading version literals from `config.py`
+  Cause: variant packaging temporarily patches `bomana/config.py`; version metadata now lives in `bomana/metadata.py`
+  Fix/Workaround: do not run build variants in parallel; keep version reads pointed at `metadata.py`; preserve/restore the original config file only when the build script actually patched it
 
 - Context: portable app launched from the PyInstaller onefile launcher
   Symptom: app code resolved assets under the launcher's `_MEI...` temp path, causing missing aircraft limits or data files
