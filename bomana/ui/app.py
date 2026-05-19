@@ -1407,7 +1407,11 @@ class App:
         """
         if self._stop:
             return
+        pending_after_id = self._ui_after_id
         self._ui_after_id = None
+        if pending_after_id is not None:
+            with contextlib.suppress(tk.TclError):
+                self.root.after_cancel(pending_after_id)
         loop_start = time.monotonic()
         try:
             self._update_ui_frame(loop_start)

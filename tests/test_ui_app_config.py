@@ -77,6 +77,27 @@ def test_update_ui_reschedules_after_frame_exception(monkeypatch) -> None:
     assert log_calls and log_calls[0][0] == "ui_update_failed"
 
 
+def test_update_ui_cancels_pending_frame_before_manual_refresh(monkeypatch) -> None:
+    app = _make_config_only_app()
+    after_calls: list[tuple[int, object]] = []
+    cancelled: list[str] = []
+    app._stop = False
+    app._ui_after_id = "pending-frame"
+    app._last_ui_gap_ms = 0.0
+    app._last_ui_work_ms = 0.0
+    app.root = SimpleNamespace(
+        after=lambda delay, callback: after_calls.append((delay, callback)) or "next-frame",
+        after_cancel=lambda after_id: cancelled.append(after_id),
+    )
+    monkeypatch.setattr(App, "_update_ui_frame", lambda _self, _loop_start: None)
+
+    app._update_ui()
+
+    assert cancelled == ["pending-frame"]
+    assert app._ui_after_id == "next-frame"
+    assert len(after_calls) == 1
+
+
 def test_app_keeps_only_external_callback_wrappers() -> None:
     removed_internal_wrappers = {
         "_toggle_debug_mock_mode",
