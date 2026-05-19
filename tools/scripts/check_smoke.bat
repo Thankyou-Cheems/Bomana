@@ -30,8 +30,8 @@ if %errorlevel% neq 0 (
     )
 )
 
-echo [1/1] Running lightweight unittest smoke checks...
-%UV_CMD% run python -m unittest discover -s tests -p "test_*.py"
+echo [1/1] Running lightweight pytest smoke checks...
+%UV_CMD% run --extra dev pytest
 if %errorlevel% neq 0 (
     echo [error] smoke checks failed
     popd >nul

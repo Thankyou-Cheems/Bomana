@@ -144,9 +144,48 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+  quality:
+    name: 发布前质量门
+    needs: prepare
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Install development dependencies
+        shell: pwsh
+        run: |
+          uv sync --extra dev --frozen
+
+      - name: Ruff check
+        shell: pwsh
+        run: |
+          uv run --extra dev ruff check .
+
+      - name: Ruff format check
+        shell: pwsh
+        run: |
+          uv run --extra dev ruff format --check .
+
+      - name: Pytest smoke
+        shell: cmd
+        run: |
+          tools\scripts\check_smoke.bat
+
   build_app:
     name: 构建应用包 ${{ matrix.variant.name }}
-    needs: prepare
+    needs: [prepare, quality]
     if: needs.prepare.outputs.build_target == 'all' || needs.prepare.outputs.build_target == 'app'
     runs-on: windows-latest
     strategy:
@@ -197,7 +236,7 @@ jobs:
 
   build_launcher:
     name: 构建通用启动器
-    needs: prepare
+    needs: [prepare, quality]
     if: needs.prepare.outputs.build_target == 'all' || needs.prepare.outputs.build_target == 'launcher'
     runs-on: windows-latest
 
@@ -240,9 +279,9 @@ jobs:
 
   release:
     name: 发布正式版本
-    needs: [prepare, build_app, build_launcher]
+    needs: [prepare, quality, build_app, build_launcher]
     runs-on: ubuntu-latest
-    if: (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') && always() && contains(fromJSON('["success","skipped"]'), needs.build_app.result) && contains(fromJSON('["success","skipped"]'), needs.build_launcher.result)
+    if: (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') && always() && needs.quality.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.build_app.result) && contains(fromJSON('["success","skipped"]'), needs.build_launcher.result)
 
     steps:
       - name: 下载产物

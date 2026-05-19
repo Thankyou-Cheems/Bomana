@@ -45,6 +45,11 @@ implementation plans belong in git history, not here.
 
 ### Packaging And Release Hygiene
 
+- Context: automated quality gates after adding pytest-style test functions
+  Symptom: local `pytest` ran more tests than `tools/scripts/check_smoke.bat`, or new tests did not appear in `git status`
+  Cause: smoke used `unittest discover` while part of the suite used pytest function tests, and `.gitignore` ignored `tests/` / `test_*.py`
+  Fix/Workaround: keep smoke on `uv run --extra dev pytest`, keep tests trackable in git, and use `tests/README.md` naming boundaries as the suite grows
+
 - Context: Windows CI packaging or release asset upload
   Symptom: `UnicodeEncodeError` when printing paths, or GitHub rewrote Chinese asset names into underscored names
   Cause: Windows CI console encoding can be cp1252, and GitHub normalizes non-ASCII/special characters in release asset names

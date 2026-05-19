@@ -225,9 +225,7 @@ launcher_state.json
 dist/
 build/
 
-# 测试文件
-test_*.py
-tests/
+# Tests are source files in this repository. Do not ignore tests/ or test_*.py.
 
 # 临时文件
 *.tmp

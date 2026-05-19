@@ -47,14 +47,14 @@ tools\scripts\check_smoke.bat
 等价命令：
 
 ```bash
-uv run python -m unittest discover -s tests -p "test_*.py"
+uv run --extra dev pytest
 ```
 
 如果需要可选开发工具：
 
 ```bash
 uv sync --extra dev
-uv run pytest
+uv run --extra dev pytest
 uv run ruff check <本次修改的 Python 路径>
 uv run ruff format --check <本次修改的 Python 路径>
 ```
@@ -85,6 +85,18 @@ uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
 - `tools\scripts\check_smoke.bat`
 
 当前阶段不设置覆盖率阈值，也不把 CI 伪装成真实 War Thunder / `localhost:8111` 实机验证。涉及 8111、HUD、热键、托盘、导航或启动器的改动，仍需按下文手工 smoke 记录验证结果。
+
+### 测试组织
+
+测试文件随功能增长时按系统边界命名，而不是按临时 bug 命名。详见 [../tests/README.md](../tests/README.md)。
+
+- `test_core_*.py`：核心逻辑、遥测、导航、计时状态和数据契约
+- `test_ui_*.py`：可用 fake/headless 跑的 Tk UI 行为
+- `test_launcher_*.py`：启动器更新、安装、回滚、清单和网络 fallback
+- `test_utils_*.py`：持久化、诊断、字体、资源查找等共享工具
+- `test_quality_*.py`：质量门和 workflow 配置
+
+现有测试文件可以在大改时再归并；新增或重写测试应优先使用上述前缀，避免 `test_misc.py`、`test_regression.py` 这类无边界文件。
 
 ### 任务跟踪（必须使用 bd）
 
@@ -228,14 +240,14 @@ tools\scripts\check_smoke.bat
 Equivalent command:
 
 ```bash
-uv run python -m unittest discover -s tests -p "test_*.py"
+uv run --extra dev pytest
 ```
 
 Optional development tools:
 
 ```bash
 uv sync --extra dev
-uv run pytest
+uv run --extra dev pytest
 uv run ruff check <changed Python paths>
 uv run ruff format --check <changed Python paths>
 ```
@@ -266,6 +278,18 @@ uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
 - `tools\scripts\check_smoke.bat`
 
 There is intentionally no coverage threshold yet, and CI is not treated as a replacement for real War Thunder / `localhost:8111` smoke validation. Changes touching 8111, HUD, hotkeys, tray, navigation, or launcher behavior still need the manual runtime checks documented below.
+
+### Test Organization
+
+As tests grow, name files by system boundary rather than by temporary bug. See [../tests/README.md](../tests/README.md).
+
+- `test_core_*.py`: core logic, telemetry, navigation, timer state, and data contracts
+- `test_ui_*.py`: Tk UI behavior that can run with fakes or headless setup
+- `test_launcher_*.py`: launcher update, install, rollback, manifest, and network fallback behavior
+- `test_utils_*.py`: persistence, diagnostics, fonts, resource lookup, and shared helpers
+- `test_quality_*.py`: quality gates and workflow configuration
+
+Existing test files can be folded into this scheme when they receive substantial edits. New or rewritten tests should use these prefixes and avoid boundary-free files such as `test_misc.py` or `test_regression.py`.
 
 ### Task Tracking With bd
 

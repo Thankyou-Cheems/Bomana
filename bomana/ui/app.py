@@ -319,7 +319,7 @@ class App:
 
         OverspeedConfig.apply_user_config(config.get("overspeed", {}))
 
-    def _save_config(self):
+    def _save_config(self, *, warn_on_failure: bool = False) -> bool:
         """保存用户配置"""
         config = ConfigManager.load()
 
@@ -387,7 +387,15 @@ class App:
             "monitor_index": monitor_index,
         }
 
-        ConfigManager.save(config)
+        saved = ConfigManager.save(config)
+        if not saved and warn_on_failure:
+            with contextlib.suppress(tk.TclError):
+                messagebox.showerror(
+                    "保存失败",
+                    "配置保存失败，请检查配置文件权限或磁盘状态。",
+                    parent=self.root,
+                )
+        return saved
 
     def _init_window_base(self):
         """初始化窗口基础设置"""
@@ -566,7 +574,7 @@ class App:
         """切换面板显示状态"""
         current = getattr(PanelConfig, panel_key)
         setattr(PanelConfig, panel_key, not current)
-        self._save_config()
+        self._save_config(warn_on_failure=True)
         # 立即刷新布局，避免留下空白
         self._recalc_size(force_shrink=True)
         self._update_ui()
@@ -575,7 +583,7 @@ class App:
     def _toggle_speed_history_mode(self):
         """切换空历速度模式。"""
         PanelConfig.speed_history_mode = not PanelConfig.speed_history_mode
-        self._save_config()
+        self._save_config(warn_on_failure=True)
         self._update_hint()
         self._update_ui()
         self._recalc_size(force_shrink=PanelConfig.speed_history_mode)
@@ -749,7 +757,7 @@ class App:
         """切换战区提示音"""
         self._zone_sound_enabled = not self._zone_sound_enabled
         self._update_hint()
-        self._save_config()
+        self._save_config(warn_on_failure=True)
         self._refresh_tray()
         if self._zone_sound_enabled:
             self.sound.play(pattern="on")
@@ -1207,14 +1215,14 @@ class App:
         self._user_moved = False
         self._manual_pos = None
         self._position()
-        self._save_config()
+        self._save_config(warn_on_failure=True)
 
     def _toggle_beep(self):
         """切换提示音"""
         enabled = not self.sound.is_enabled()
         self.sound.set_enabled(enabled)
         self._update_hint()
-        self._save_config()
+        self._save_config(warn_on_failure=True)
         self._refresh_tray()
         if enabled:
             self.sound.play(pattern="on")
@@ -1368,7 +1376,7 @@ class App:
             delta = 10 if event.delta > 0 else -10
             UIConfig.WINDOW_ALPHA = max(100, min(255, UIConfig.WINDOW_ALPHA + delta))
             Win32.setup_window(self.hwnd, click_through=False, alpha=UIConfig.WINDOW_ALPHA)
-            self._save_config()
+            self._save_config(warn_on_failure=True)
 
     def _quit(self):
         """退出应用"""

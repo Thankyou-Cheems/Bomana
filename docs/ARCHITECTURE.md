@@ -186,9 +186,10 @@ CI:
   - Python 3.14 + `uv sync --extra dev --frozen`
   - `uv run --extra dev ruff check .`
   - `uv run --extra dev ruff format --check .`
-  - `tools\scripts\check_smoke.bat`
+  - `tools\scripts\check_smoke.bat` (pytest-based fast suite)
   - This workflow intentionally does not enforce a coverage threshold or pretend to replace real War Thunder / `localhost:8111` smoke validation.
 - `.github/workflows/build.yml` runs separate jobs for:
+  - `quality`: release-preflight Ruff + pytest smoke checks
   - `build_app`: app package + manifest
   - `build_launcher`: launcher exe + `launcher_manifest.json`
 - tag-driven release targets:
