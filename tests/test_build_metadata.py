@@ -31,8 +31,8 @@ def test_launcher_manifest_records_size(tmp_path: Path) -> None:
 
     manifest_path = build_portable.write_launcher_manifest(
         tmp_path,
-        "1.7.0",
-        "Bomana_launcher_v1.7.0.exe",
+        "2.0.0",
+        "Bomana_launcher_v2.0.0.exe",
         "abc123",
         12345,
     )
