@@ -283,12 +283,14 @@ def write_launcher_manifest(
     version: str,
     launcher_name: str,
     launcher_sha256: str,
+    launcher_size_bytes: int,
 ) -> Path:
     manifest = {
         "schema_version": 1,
         "launcher_version": version,
         "launcher_asset": launcher_name,
         "launcher_sha256": launcher_sha256,
+        "launcher_size_bytes": launcher_size_bytes,
     }
     path = out_dir / "launcher_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -381,7 +383,11 @@ def main() -> int:
             launcher = build_launcher(root, launcher_version, out_dir)
             launcher_sha = sha256_file(launcher)
             launcher_manifest = write_launcher_manifest(
-                out_dir, launcher_version, launcher.name, launcher_sha
+                out_dir,
+                launcher_version,
+                launcher.name,
+                launcher_sha,
+                launcher.stat().st_size,
             )
 
         checksum_variant = "Universal" if args.target == "launcher" else args.variant

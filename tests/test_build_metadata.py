@@ -26,6 +26,20 @@ def test_portable_build_reads_version_from_metadata() -> None:
     )
 
 
+def test_launcher_manifest_records_size(tmp_path: Path) -> None:
+    build_portable = load_tool_module("build_portable_manifest", "tools/build_portable.py")
+
+    manifest_path = build_portable.write_launcher_manifest(
+        tmp_path,
+        "1.7.0",
+        "Bomana_launcher_v1.7.0.exe",
+        "abc123",
+        12345,
+    )
+
+    assert '"launcher_size_bytes": 12345' in manifest_path.read_text(encoding="utf-8")
+
+
 def test_version_info_falls_back_from_config_to_metadata() -> None:
     create_version_info = load_tool_module("create_version_info", "tools/create_version_info.py")
 
