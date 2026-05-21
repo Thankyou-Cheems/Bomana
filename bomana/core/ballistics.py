@@ -255,6 +255,18 @@ def calculate_release_timing(
     if bomb_range_m <= 0:
         return 0.0, 0.0, "invalid"
 
+    return calculate_release_timing_from_range(current_distance_m, ground_speed_ms, bomb_range_m)
+
+
+def calculate_release_timing_from_range(
+    current_distance_m: float,
+    ground_speed_ms: float,
+    bomb_range_m: float,
+) -> tuple[float, float, str]:
+    """计算已知弹道距离下的投弹时机，避免重复执行弹道积分。"""
+    if ground_speed_ms < 10.0 or bomb_range_m <= 0:
+        return 0.0, 0.0, "invalid"
+
     release_distance_m = current_distance_m - bomb_range_m
 
     if release_distance_m < 0:

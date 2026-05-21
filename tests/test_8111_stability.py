@@ -2,6 +2,7 @@
 
 import time
 import unittest
+from unittest import mock
 
 from bomana.config import GameConfig
 from bomana.core.logic import GameLogic
@@ -83,6 +84,15 @@ class GameLogic8111StabilityTests(unittest.TestCase):
         self.assertTrue(snap.source_debug.map_fallback_active)
         self.assertEqual(1, snap.source_debug.state_failure_streak)
         self.assertEqual(1, snap.source_debug.map_failure_streak)
+
+    def test_transient_map_fallback_skips_bombing_calculation(self):
+        game = self._alive_game_with_last_good_data()
+
+        with mock.patch("bomana.core.logic.calculate_bomb_trajectory") as calc:
+            game.tick()
+
+        calc.assert_not_called()
+        self.assertFalse(game.snapshot().bombing_valid)
 
     def test_sustained_full_api_failure_enters_api_down(self):
         game = self._alive_game_with_last_good_data()

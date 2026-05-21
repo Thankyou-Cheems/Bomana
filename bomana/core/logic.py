@@ -20,7 +20,7 @@ from bomana.config import (
     Theme,
     ZoneConfig,
 )
-from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing
+from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing_from_range
 from bomana.core.overspeed import OverspeedAnalyzer
 from bomana.core.state import (
     AirfieldDisplayInfo,
@@ -130,6 +130,7 @@ class GameLogic:
         tick_start = time.monotonic()
         now = time.time()
         budget = Budget(NetworkConfig.MAX_TICK_NET_BUDGET)
+        bombing_work: dict[str, Any] | None = None
 
         # 1. 获取遥测数据
         tel = self.tel.fetch(budget)
@@ -263,9 +264,6 @@ class GameLogic:
                 # 更新导航信息（战区、地速）
                 self._update_zone_navigation_locked(mp, tel, now)
 
-                # v6.0.1 优化：弹道计算移至tick线程（每250ms计算一次，而非每50ms）
-                self._update_bombing_calculation_locked(tel, now)
-
                 self._resolve_pending_timer_restore_locked(
                     mp=mp,
                     player_present=player_present,
@@ -362,12 +360,27 @@ class GameLogic:
                             self._clear_transient_state_locked()
                     else:
                         s.spawn_candidate_since = None
+
+                # v6.14.4: only collect CCRP inputs while holding the state lock.
+                # Ballistics integration can be expensive on abnormal settlement frames;
+                # keep it outside the lock so UI snapshots do not stall behind it.
+                bombing_work = self._prepare_bombing_calculation_locked(
+                    tel,
+                    now,
+                    player_present=player_present and (not used_map_fallback),
+                )
             finally:
                 s = self.state
                 s.perf_tick_net_ms = net_stage_ms
                 s.perf_tick_lock_wait_ms = max(0.0, (lock_hold_start - lock_wait_start) * 1000.0)
                 s.perf_tick_lock_hold_ms = max(0.0, (time.monotonic() - lock_hold_start) * 1000.0)
                 s.perf_tick_total_ms = max(0.0, (time.monotonic() - tick_start) * 1000.0)
+
+        if bombing_work is not None:
+            bombing_result = self._compute_bombing_calculation(bombing_work)
+            with self._lock:
+                self._apply_bombing_calculation_locked(bombing_result)
+                self.state.perf_tick_total_ms = max(0.0, (time.monotonic() - tick_start) * 1000.0)
 
     @staticmethod
     def _angle_delta_deg(current: float, previous: float) -> float:
@@ -1657,74 +1670,121 @@ class GameLogic:
         else:
             s.landing_start_time = None
 
-    def _update_bombing_calculation_locked(self, tel: TelemetryData, now: float):
-        """更新弹道计算缓存（必须在锁内调用）
+    @staticmethod
+    def _finite_float(value: Any, default: float = 0.0) -> float:
+        try:
+            result = float(value)
+        except _NUMERIC_PARSE_ERRORS:
+            return default
+        return result if math.isfinite(result) else default
 
-        v6.0.1 优化：将弹道计算从UI线程(50ms)移至tick线程(250ms)
-        减少UI线程的计算负载，提高界面流畅度
-        """
+    def _prepare_bombing_calculation_locked(
+        self,
+        tel: TelemetryData,
+        now: float,
+        *,
+        player_present: bool,
+    ) -> dict[str, Any] | None:
+        """Collect CCRP inputs under lock; expensive integration runs outside it."""
         s = self.state
         nav = s.zone_nav
 
-        # 检查是否需要计算
         if not ENABLE_CCRP:
             s.bombing_calc_valid = False
-            return
+            return None
 
-        # 计算频率控制：至少间隔200ms
         if (now - s.last_bombing_calc_time) < 0.2:
-            return
+            return None
 
         s.last_bombing_calc_time = now
 
-        # 检查计算条件
-        has_target = nav.target_zone is not None
-        on_ground = tel.is_on_ground
-        altitude_m = tel.altitude_m
-
-        if not (
-            has_target
-            and s.phase == Phase.ALIVE
-            and not on_ground
-            and altitude_m > 50
-            and nav.ground_speed > 0.0002
-        ):
-            s.bombing_calc_valid = False
-            return
-
-        # 执行弹道计算
         target_zone = nav.target_zone
-        target_distance_m = target_zone.distance * ZoneConfig.DISTANCE_SCALE * 1000
-        ground_speed_ms = nav.ground_speed * ZoneConfig.DISTANCE_SCALE * 1000
-
-        bomb_params = BombConfig.get_bomb_physics_params()
-
-        flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
-            release_alt_m=altitude_m,
-            release_speed_ms=ground_speed_ms,
-            target_alt_m=0.0,
-            dive_angle_deg=0.0,
-            initial_vz_ms=None,
-            bomb_params=bomb_params,
+        altitude_m = self._finite_float(tel.altitude_m)
+        ground_speed_ms = self._finite_float(nav.ground_speed) * ZoneConfig.DISTANCE_SCALE * 1000
+        target_distance_m = (
+            self._finite_float(target_zone.distance) * ZoneConfig.DISTANCE_SCALE * 1000
+            if target_zone is not None
+            else 0.0
         )
 
-        if bomb_range_m > 0:
-            release_distance_m, time_to_release, release_status = calculate_release_timing(
-                current_distance_m=target_distance_m,
-                current_alt_m=altitude_m,
-                ground_speed_ms=ground_speed_ms,
+        if not (
+            player_present
+            and target_zone is not None
+            and s.phase == Phase.ALIVE
+            and tel.state_resp_ok
+            and not tel.is_on_ground
+            and altitude_m > 50
+            and altitude_m <= 30000
+            and 10.0 <= ground_speed_ms <= 2500.0
+            and 0.0 < target_distance_m <= 500000.0
+        ):
+            s.bombing_calc_valid = False
+            return None
+
+        return {
+            "altitude_m": altitude_m,
+            "ground_speed_ms": ground_speed_ms,
+            "target_distance_m": target_distance_m,
+            "bomb_params": BombConfig.get_bomb_physics_params(),
+        }
+
+    def _compute_bombing_calculation(self, work: dict[str, Any]) -> dict[str, float | str] | None:
+        """Run CCRP ballistics without holding the game state lock."""
+        altitude_m = self._finite_float(work.get("altitude_m"))
+        ground_speed_ms = self._finite_float(work.get("ground_speed_ms"))
+        target_distance_m = self._finite_float(work.get("target_distance_m"))
+
+        try:
+            flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
+                release_alt_m=altitude_m,
+                release_speed_ms=ground_speed_ms,
                 target_alt_m=0.0,
                 dive_angle_deg=0.0,
                 initial_vz_ms=None,
+                bomb_params=work.get("bomb_params"),
             )
+        except Exception:
+            return None
 
-            # 缓存结果
-            s.cached_bomb_flight_time = flight_time
-            s.cached_bomb_range_m = bomb_range_m
-            s.cached_release_distance_m = release_distance_m
-            s.cached_time_to_release = time_to_release
-            s.cached_release_status = release_status
-            s.cached_target_distance_m = target_distance_m
-            s.bombing_calc_valid = True
-        else:
+        if not (
+            math.isfinite(flight_time)
+            and math.isfinite(bomb_range_m)
+            and flight_time > 0
+            and bomb_range_m > 0
+        ):
+            return None
+
+        release_distance_m, time_to_release, release_status = calculate_release_timing_from_range(
+            current_distance_m=target_distance_m,
+            ground_speed_ms=ground_speed_ms,
+            bomb_range_m=bomb_range_m,
+        )
+        if not (math.isfinite(release_distance_m) and math.isfinite(time_to_release)):
+            return None
+
+        return {
+            "flight_time": flight_time,
+            "bomb_range_m": bomb_range_m,
+            "release_distance_m": release_distance_m,
+            "time_to_release": time_to_release,
+            "release_status": release_status,
+            "target_distance_m": target_distance_m,
+        }
+
+    def _apply_bombing_calculation_locked(
+        self,
+        result: dict[str, float | str] | None,
+    ) -> None:
+        """Store CCRP result after out-of-lock calculation."""
+        s = self.state
+        if result is None:
             s.bombing_calc_valid = False
+            return
+
+        s.cached_bomb_flight_time = float(result["flight_time"])
+        s.cached_bomb_range_m = float(result["bomb_range_m"])
+        s.cached_release_distance_m = float(result["release_distance_m"])
+        s.cached_time_to_release = float(result["time_to_release"])
+        s.cached_release_status = str(result["release_status"])
+        s.cached_target_distance_m = float(result["target_distance_m"])
+        s.bombing_calc_valid = s.phase == Phase.ALIVE
