@@ -206,7 +206,8 @@ CI:
   - `vX.Y.Z-app`: app packages only
   - `vX.Y.Z-launcher`: launcher only
 - `workflow_dispatch` also supports `build_target=all|app|launcher`.
-- `.github/workflows/deploy-manifests-to-server.yml` syncs manifests, app zips, launcher exe, and `launcher_manifest.json` to the Tencent/EdgeOne update server.
+- `tools/deploy_update_assets.py` is the default Tencent/EdgeOne deployment path for locally built assets; it backs up `stats.db`/manifests, uploads app/launcher assets, writes versioned manifests, and verifies public endpoints.
+- `.github/workflows/deploy-manifests-to-server.yml` is manual-only fallback via `workflow_dispatch`; tag releases no longer auto-deploy to Tencent after GitHub Release creation.
 
 ## Documentation Map
 - `README.md`: public landing page, install paths, feature overview, compliance statement

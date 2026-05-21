@@ -189,7 +189,9 @@ bd close <issue-id> --reason "Completed" --json
    - `vX.Y.Z-app`：仅应用包
    - `vX.Y.Z-launcher`：仅启动器
 6. GitHub Actions 会构建对应产物并创建/更新 Release
-7. 如需同步到国内更新服务，等待 `deploy-manifests-to-server.yml` 完成
+7. 国内更新服务默认走本地直推，避免等待 Actions 二次 SSH 部署：
+   `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
+   需要兜底时，可手动运行 `deploy-manifests-to-server.yml` 的 `workflow_dispatch`
 
 ### 有问题？
 
@@ -375,6 +377,8 @@ Manual 8111 smoke notes should cover:
 4. Smoke test the relevant release path
 5. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
 6. Let GitHub Actions build and publish the assets
-7. Wait for the deploy workflow if the Tencent/EdgeOne update service should receive the new artifacts
+7. Deploy Tencent/EdgeOne update assets locally by default:
+   `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
+   Use `deploy-manifests-to-server.yml` `workflow_dispatch` only as a fallback
 
 

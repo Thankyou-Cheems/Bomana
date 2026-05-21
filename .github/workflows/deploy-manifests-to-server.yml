@@ -1,9 +1,6 @@
 name: Deploy Update Assets To Server
 
 on:
-  workflow_run:
-    workflows: ["Build and Release Bomana Portable"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -16,7 +13,6 @@ permissions:
 
 jobs:
   deploy-assets:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       should_deploy: ${{ steps.resolve.outputs.should_deploy }}
@@ -29,8 +25,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
-          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           INPUT_TAG: ${{ github.event.inputs.release_tag }}
         run: |
           set -euo pipefail
@@ -42,9 +36,6 @@ jobs:
 
           if [[ -n "${INPUT_TAG:-}" ]]; then
             TAG="$INPUT_TAG"
-            API_URL="https://api.github.com/repos/$REPO/releases/tags/$TAG"
-          elif [[ "${WORKFLOW_RUN_EVENT:-}" == "push" && -n "${WORKFLOW_RUN_HEAD_BRANCH:-}" && "${WORKFLOW_RUN_HEAD_BRANCH:-}" == v* ]]; then
-            TAG="$WORKFLOW_RUN_HEAD_BRANCH"
             API_URL="https://api.github.com/repos/$REPO/releases/tags/$TAG"
           else
             TAG="latest"
