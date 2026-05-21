@@ -2,6 +2,7 @@
 
 import tkinter as tk
 import tkinter.font as tkfont
+from typing import Any
 
 from bomana.config import Theme, UIConfig, ZoneConfig
 from bomana.utils.math_utils import (
@@ -86,6 +87,11 @@ class HeadingTape(tk.Canvas):
         )
         self.text_scale = UIConfig.clamp_text_scale(text_scale)
         self.tape_width = width
+        self._font_object_cache: dict[str, tkfont.Font] = {}
+        self._font_metric_cache: dict[tuple[str, str], int] = {}
+        self._measure_cache: dict[tuple[str, str], int] = {}
+        self._layout_cache_key: tuple[float, int] | None = None
+        self._layout_cache: dict[str, Any] | None = None
         self.tape_height = max(height, self._required_tape_height())
         if self.tape_height != height:
             self.configure(height=self.tape_height)
@@ -113,13 +119,37 @@ class HeadingTape(tk.Canvas):
         resolved = resolve_tk_font_tuple(self, font)
         return resolved if isinstance(resolved, tuple) else font
 
+    def _font_object(self, font) -> tkfont.Font:
+        key = repr(font)
+        cached = self._font_object_cache.get(key)
+        if cached is None:
+            cached = tkfont.Font(master=self, font=font)
+            self._font_object_cache[key] = cached
+        return cached
+
     def _font_linespace(self, font) -> int:
-        return int(tkfont.Font(master=self, font=font).metrics("linespace"))
+        key = ("linespace", repr(font))
+        cached = self._font_metric_cache.get(key)
+        if cached is None:
+            cached = int(self._font_object(font).metrics("linespace"))
+            self._font_metric_cache[key] = cached
+        return cached
 
     def _measure_text(self, text: str, font) -> int:
-        return int(tkfont.Font(master=self, font=font).measure(text))
+        key = (repr(font), text)
+        cached = self._measure_cache.get(key)
+        if cached is None:
+            if len(self._measure_cache) > 512:
+                self._measure_cache.clear()
+            cached = int(self._font_object(font).measure(text))
+            self._measure_cache[key] = cached
+        return cached
 
-    def _layout_metrics(self) -> dict[str, float | int | tuple]:
+    def _layout_metrics(self) -> dict[str, Any]:
+        cache_key = (float(self.text_scale), int(self.tape_height))
+        if self._layout_cache_key == cache_key and self._layout_cache is not None:
+            return self._layout_cache
+
         scale = float(self.text_scale)
         degree_font_size = self._scaled_text_size(8, min_size=7)
         distance_font_size = self._scaled_text_size(9, min_size=7)
@@ -161,7 +191,7 @@ class HeadingTape(tk.Canvas):
         else:
             marker_center_y = int(marker_top_limit)
 
-        return {
+        metrics: dict[str, Any] = {
             "top_pad": top_pad,
             "bottom_pad": bottom_pad,
             "row_gap": row_gap,
@@ -182,6 +212,9 @@ class HeadingTape(tk.Canvas):
             "marker_center_y": marker_center_y,
             "marker_half": marker_half,
         }
+        self._layout_cache_key = cache_key
+        self._layout_cache = metrics
+        return metrics
 
     def _required_tape_height(self) -> int:
         degree_font_size = self._scaled_text_size(8, min_size=7)
@@ -392,15 +425,16 @@ class HeadingTape(tk.Canvas):
                     primary["distance_km"] if primary else 10.0,
                     is_target=t_is_target,
                     show_distance=t_distance,
+                    layout=layout,
                 )
             else:
                 # 视野外目标显示小箭头（只显示活动目标）
                 if t_is_target:
-                    self._draw_overflow_indicator(t_rel, t_type, t_distance)
+                    self._draw_overflow_indicator(t_rel, t_type, t_distance, layout=layout)
 
         # 6. 主目标在视野外时的大箭头提示
         if primary and not primary_in_view:
-            self._draw_primary_overflow(primary_diff)
+            self._draw_primary_overflow(primary_diff, layout=layout)
 
         # 7. 绘制中心基准线（机头指向）
         self.create_line(
@@ -444,6 +478,7 @@ class HeadingTape(tk.Canvas):
         distance_km: float,
         is_target: bool = True,
         show_distance: float = 0,
+        layout: dict[str, Any] | None = None,
     ):
         """绘制目标标记
 
@@ -470,14 +505,22 @@ class HeadingTape(tk.Canvas):
             color = color_map.get(base_color, Theme.TEXT_DIM)
         else:
             color = base_color
-        layout = self._layout_metrics()
+        layout = layout or self._layout_metrics()
         icon_scale = float(layout["marker_scale"])
         y_center = int(layout["marker_center_y"])
 
         # v6.6.1: 为所有目标显示距离标签（非目标使用弱化样式）
         if show_distance > 0:
             self._draw_distance_label(
-                x, show_distance, t_type, is_primary, icon_scale, y_center, relative, is_target
+                x,
+                show_distance,
+                t_type,
+                is_primary,
+                icon_scale,
+                y_center,
+                relative,
+                is_target,
+                layout=layout,
             )
 
         if t_type == "zone":
@@ -623,6 +666,7 @@ class HeadingTape(tk.Canvas):
         y_center: int,
         relative_angle: float = 0.0,
         is_target: bool = True,
+        layout: dict[str, Any] | None = None,
     ):
         """v6.6.0 重构：绘制距离标签（图标下方，继承偏差颜色）
 
@@ -643,7 +687,7 @@ class HeadingTape(tk.Canvas):
             is_target: 是否为活动目标（v6.6.1新增）
         """
         # v6.6.0: 距离标签放在图标下方（航向带底部）
-        layout = self._layout_metrics()
+        layout = layout or self._layout_metrics()
         dist_y = int(layout["distance_y"])
 
         # v6.6.0: 使用动态精度格式化距离
@@ -818,7 +862,14 @@ class HeadingTape(tk.Canvas):
         else:
             return "#664422"
 
-    def _draw_overflow_indicator(self, relative: float, t_type: str, distance: float = 0):
+    def _draw_overflow_indicator(
+        self,
+        relative: float,
+        t_type: str,
+        distance: float = 0,
+        *,
+        layout: dict[str, Any] | None = None,
+    ):
         """绘制视野外目标的小指示器（v6.5优化：增强区分度）
 
         Args:
@@ -827,7 +878,7 @@ class HeadingTape(tk.Canvas):
             distance: 目标距离（公里）
         """
         color = self._target_colors.get(t_type, Theme.TEXT_DIM)
-        layout = self._layout_metrics()
+        layout = layout or self._layout_metrics()
         icon_scale = float(layout["marker_scale"])
         y = int(layout["marker_center_y"])
         tri_size = int(6 * icon_scale)
@@ -895,9 +946,9 @@ class HeadingTape(tk.Canvas):
                     anchor="e",
                 )
 
-    def _draw_primary_overflow(self, diff: float):
+    def _draw_primary_overflow(self, diff: float, *, layout: dict[str, Any] | None = None):
         """绘制主目标的大偏航箭头"""
-        layout = self._layout_metrics()
+        layout = layout or self._layout_metrics()
         y = int(layout["marker_center_y"])
         arrow_half = max(10, int(10 * float(layout["marker_scale"])))
         arrow_font = layout["arrow_font"]
