@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import ctypes
 import tkinter as tk
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from bomana.config import HotkeyConfig, PanelConfig, Theme, UIConfig, ZoneConfig
 from bomana.ui.navigation_presenter import build_navigation_tape_model
@@ -22,6 +22,8 @@ from bomana.utils.math_utils import (
 from bomana.utils.system import Win32
 
 _WIN32_ACCESS_ERRORS = (OSError, AttributeError)
+_RESTORE_VISIBLE_WIDTH = 100
+_RESTORE_VISIBLE_HEIGHT = 50
 
 if TYPE_CHECKING:
     from bomana.core.state import UISnapshot
@@ -407,14 +409,76 @@ class NavigationWindow:
         self.window.geometry(f"+{x}+{y}")
         PanelConfig.navigation_window_pos = (x, y)
 
+    @staticmethod
+    def _monitor_rect(monitor: dict[str, Any]) -> tuple[int, int, int, int] | None:
+        try:
+            x = int(monitor["x"])
+            y = int(monitor["y"])
+            width = int(monitor["width"])
+            height = int(monitor["height"])
+        except KeyError, TypeError, ValueError:
+            return None
+        if width <= 0 or height <= 0:
+            return None
+        return x, y, width, height
+
+    @classmethod
+    def _pick_restore_monitor(
+        cls,
+        x: int,
+        y: int,
+        monitors: list[dict[str, Any]],
+    ) -> tuple[int, int, int, int] | None:
+        """Find the monitor that still contains the saved standalone nav position."""
+        restore_right = x + _RESTORE_VISIBLE_WIDTH
+        restore_bottom = y + _RESTORE_VISIBLE_HEIGHT
+        best_rect = None
+        best_area = 0
+        primary_rect = None
+
+        for monitor in monitors:
+            rect = cls._monitor_rect(monitor)
+            if rect is None:
+                continue
+            mon_x, mon_y, mon_w, mon_h = rect
+            if monitor.get("is_primary") and primary_rect is None:
+                primary_rect = rect
+
+            overlap_w = max(0, min(restore_right, mon_x + mon_w) - max(x, mon_x))
+            overlap_h = max(0, min(restore_bottom, mon_y + mon_h) - max(y, mon_y))
+            area = overlap_w * overlap_h
+            if area > best_area:
+                best_area = area
+                best_rect = rect
+
+        if best_rect is not None:
+            return best_rect
+        if primary_rect is not None:
+            return primary_rect
+        for monitor in monitors:
+            rect = cls._monitor_rect(monitor)
+            if rect is not None:
+                return rect
+        return None
+
+    @classmethod
+    def _clamp_restore_position(cls, x: int, y: int) -> tuple[int, int]:
+        """Clamp restored position to the current monitor layout, including negative origins."""
+        monitor = cls._pick_restore_monitor(x, y, Win32.get_all_monitors())
+        if monitor is None:
+            sw, sh = Win32.screen_size()
+            monitor = (0, 0, sw, sh)
+
+        mon_x, mon_y, mon_w, mon_h = monitor
+        max_x = mon_x + max(0, mon_w - _RESTORE_VISIBLE_WIDTH)
+        max_y = mon_y + max(0, mon_h - _RESTORE_VISIBLE_HEIGHT)
+        return max(mon_x, min(x, max_x)), max(mon_y, min(y, max_y))
+
     def _restore_position(self):
         """恢复保存的窗口位置"""
         if PanelConfig.navigation_window_pos:
             x, y = PanelConfig.navigation_window_pos
-            # 确保在屏幕范围内
-            sw, sh = Win32.screen_size()
-            x = max(0, min(x, sw - 100))
-            y = max(0, min(y, sh - 50))
+            x, y = self._clamp_restore_position(int(x), int(y))
             self.window.geometry(f"+{x}+{y}")
         else:
             self._reset_position()

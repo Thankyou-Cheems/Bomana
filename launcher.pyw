@@ -120,12 +120,15 @@ RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 InstallTransaction = _launcher_install.InstallTransaction
 _acquire_update_lock = _launcher_install.acquire_update_lock
 _install_zip_package = _launcher_install.install_zip_package
+_install_zip_package_from_file = _launcher_install.install_zip_package_from_file
 _read_local_app_version = _launcher_install.read_local_app_version
 _release_update_lock = _launcher_install.release_update_lock
 _rollback_to_previous_app = _launcher_install.rollback_to_previous_app
+_sha256_file = _launcher_install.sha256_file
 
 _USE_SYSTEM_PROXY = True
 _URL_OPENERS: Dict[str, Any] = {}
+_PROXY_MODE_LOCAL = threading.local()
 _FAKE_IP_NETWORKS = (
     ipaddress.ip_network("198.18.0.0/15"),
     ipaddress.ip_network("100.64.0.0/10"),
@@ -227,10 +230,129 @@ def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _fallback_data_root(base: Path) -> Path:
+    env_root = os.environ.get("BOMANA_LAUNCHER_DATA_DIR", "").strip()
+    if env_root:
+        return Path(env_root).expanduser()
+    appdata = os.environ.get("LOCALAPPDATA", "").strip() or os.environ.get("APPDATA", "").strip()
+    if appdata:
+        root = Path(appdata) / "Bomana" / "launcher"
+    else:
+        root = Path.home() / ".bomana" / "launcher"
+    key = hashlib.sha256(str(base.resolve()).encode("utf-8", errors="ignore")).hexdigest()[:12]
+    return root / key
+
+
+def _can_write_dir(path: Path) -> bool:
+    probe: Optional[Path] = None
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / f".bomana_write_probe_{os.getpid()}_{time.monotonic_ns()}"
+        with probe.open("w", encoding="utf-8") as f:
+            f.write("ok")
+        probe.unlink(missing_ok=True)
+        return True
+    except Exception:
+        if probe is not None:
+            try:
+                probe.unlink(missing_ok=True)
+            except Exception:
+                pass
+        return False
+
+
+def _launcher_data_root(base: Path) -> Path:
+    env_root = os.environ.get("BOMANA_LAUNCHER_DATA_DIR", "").strip()
+    if env_root:
+        root = Path(env_root).expanduser()
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    if _can_write_dir(base):
+        return base
+    root = _fallback_data_root(base)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _data_path(base: Path, filename: str) -> Path:
+    return _launcher_data_root(base) / filename
+
+
+def _data_read_candidates(base: Path, filename: str) -> Tuple[Path, ...]:
+    paths = [_data_path(base, filename)]
+    legacy = base / filename
+    try:
+        if legacy.resolve() != paths[0].resolve():
+            paths.append(legacy)
+    except Exception:
+        if legacy != paths[0]:
+            paths.append(legacy)
+    return tuple(paths)
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path: Optional[Path] = None
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=str(path.parent),
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as f:
+        tmp_path = Path(f.name)
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+def _append_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.write(fd, text.encode("utf-8", errors="replace"))
+    finally:
+        os.close(fd)
+
+
+def _write_json_data_file(base: Path, filename: str, data: Dict[str, Any]) -> None:
+    _atomic_write_text(
+        _data_path(base, filename),
+        json.dumps(data, ensure_ascii=False, indent=2),
+    )
+
+
+def _read_json_data_file(base: Path, filename: str) -> Dict[str, Any]:
+    for path in _data_read_candidates(base, filename):
+        try:
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    return data
+        except Exception as exc:
+            try:
+                _append_text_atomic(
+                    _data_path(base, LOG_FILE_NAME),
+                    f"[{_now_utc_iso()}] 读取 {filename} 失败，已保留原文件 {path}：{exc}\n",
+                )
+            except Exception:
+                pass
+            continue
+    return {}
+
+
 def _log(base: Path, msg: str) -> None:
     try:
-        with (base / LOG_FILE_NAME).open("a", encoding="utf-8") as f:
-            f.write(f"[{_now_utc_iso()}] {msg}\n")
+        _append_text_atomic(_data_path(base, LOG_FILE_NAME), f"[{_now_utc_iso()}] {msg}\n")
     except Exception:
         pass
 
@@ -251,14 +373,32 @@ def _set_use_system_proxy(enabled: bool) -> None:
     _USE_SYSTEM_PROXY = bool(enabled)
 
 
-def _get_url_opener() -> Any:
-    key = "proxy" if _USE_SYSTEM_PROXY else "direct"
+def _current_use_system_proxy() -> bool:
+    override = getattr(_PROXY_MODE_LOCAL, "use_system_proxy", None)
+    if override is not None:
+        return bool(override)
+    return bool(_USE_SYSTEM_PROXY)
+
+
+def _set_thread_proxy_override(enabled: Optional[bool]) -> None:
+    if enabled is None:
+        try:
+            delattr(_PROXY_MODE_LOCAL, "use_system_proxy")
+        except AttributeError:
+            pass
+        return
+    _PROXY_MODE_LOCAL.use_system_proxy = bool(enabled)
+
+
+def _get_url_opener(use_system_proxy: Optional[bool] = None) -> Any:
+    use_proxy = _current_use_system_proxy() if use_system_proxy is None else bool(use_system_proxy)
+    key = "proxy" if use_proxy else "direct"
     opener = _URL_OPENERS.get(key)
     if opener is not None:
         return opener
 
     handlers = [HTTPHandler(), HTTPSHandler(context=_ssl_context)]
-    if _USE_SYSTEM_PROXY:
+    if use_proxy:
         handlers.append(ProxyHandler())
     else:
         handlers.append(ProxyHandler({}))
@@ -267,8 +407,8 @@ def _get_url_opener() -> Any:
     return opener
 
 
-def _open_url(req: Request, timeout: float):
-    opener = _get_url_opener()
+def _open_url(req: Request, timeout: float, use_system_proxy: Optional[bool] = None):
+    opener = _get_url_opener(use_system_proxy=use_system_proxy)
     return opener.open(req, timeout=timeout)
 
 
@@ -322,12 +462,70 @@ def _fetch_bytes(
     headers: Optional[Dict[str, str]] = None,
     timeout_sec: Optional[float] = None,
 ) -> bytes:
+    with tempfile.TemporaryDirectory(prefix="bomana_fetch_") as tmp:
+        dest = Path(tmp) / "download.bin"
+        _download_to_file(
+            url,
+            dest,
+            progress_cb=progress_cb,
+            cancel_cb=cancel_cb,
+            headers=headers,
+            timeout_sec=timeout_sec,
+            resume=False,
+        )
+        return dest.read_bytes()
+
+
+def _response_status(resp: Any) -> int:
+    for attr in ("status", "code"):
+        value = getattr(resp, attr, None)
+        if value is not None:
+            try:
+                return int(value)
+            except Exception:
+                pass
+    try:
+        return int(resp.getcode())
+    except Exception:
+        return 200
+
+
+def _parse_total_from_content_range(value: str) -> Optional[int]:
+    m = re.search(r"/(\d+|\*)\s*$", str(value or "").strip())
+    if not m or m.group(1) == "*":
+        return None
+    try:
+        return int(m.group(1))
+    except Exception:
+        return None
+
+
+def _download_to_file(
+    url: str,
+    dest: Path,
+    progress_cb: Optional[Callable[[int, Optional[int]], None]] = None,
+    cancel_cb: Optional[Callable[[], bool]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout_sec: Optional[float] = None,
+    resume: bool = True,
+) -> Path:
     req_headers = {
         "User-Agent": UA,
         "Accept": "application/json, application/vnd.github+json, */*",
     }
     if headers:
         req_headers.update(headers)
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part_path = dest.with_name(f"{dest.name}.part")
+    resume_from = 0
+    if resume and part_path.exists():
+        try:
+            resume_from = max(0, part_path.stat().st_size)
+        except Exception:
+            resume_from = 0
+    if resume_from > 0:
+        req_headers["Range"] = f"bytes={resume_from}-"
 
     req = Request(
         url,
@@ -336,31 +534,50 @@ def _fetch_bytes(
     with _open_url(
         req, timeout=(timeout_sec if timeout_sec is not None else NET_TIMEOUT_SEC)
     ) as resp:
+        status = _response_status(resp)
+        append_existing = resume_from > 0 and status == 206
+        if resume_from > 0 and not append_existing:
+            resume_from = 0
+            try:
+                part_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
         total: Optional[int] = None
         try:
-            header = resp.headers.get("Content-Length")
-            total = int(header) if header else None
+            content_range = str(resp.headers.get("Content-Range", "")).strip()
+            total = _parse_total_from_content_range(content_range)
+            if total is None:
+                header = resp.headers.get("Content-Length")
+                total = int(header) + resume_from if header else None
         except Exception:
             total = None
 
-        chunks = []
-        downloaded = 0
-        while True:
-            if cancel_cb and cancel_cb():
-                raise RuntimeError("已取消当前操作")
-            chunk = resp.read(64 * 1024)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            downloaded += len(chunk)
-            if progress_cb:
-                progress_cb(downloaded, total)
-            if cancel_cb and cancel_cb():
-                raise RuntimeError("已取消当前操作")
+        downloaded = resume_from
+        mode = "ab" if append_existing else "wb"
+        try:
+            with part_path.open(mode) as f:
+                while True:
+                    if cancel_cb and cancel_cb():
+                        raise RuntimeError("已取消当前操作")
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_cb:
+                        progress_cb(downloaded, total)
+                    if cancel_cb and cancel_cb():
+                        raise RuntimeError("已取消当前操作")
+                f.flush()
+                os.fsync(f.fileno())
+        except Exception:
+            raise
 
         if progress_cb:
             progress_cb(downloaded, total)
-        return b"".join(chunks)
+    os.replace(part_path, dest)
+    return dest
 
 
 def _fetch_json(url: str) -> Dict[str, Any]:
@@ -489,6 +706,19 @@ def _detect_channel() -> str:
     return DEFAULT_CHANNEL
 
 
+def _normalize_channel(value: Any) -> str:
+    text = str(value or "").strip()
+    if text in CHANNEL_DETAILS:
+        return text
+    mapped = _CHANNEL_MAP.get(text.lower())
+    return mapped or ""
+
+
+def _select_startup_channel(base: Path, detected_channel: str) -> str:
+    saved_channel = _normalize_channel(_read_state(base).get("channel", ""))
+    return saved_channel or detected_channel
+
+
 def _is_local_app_ready(base: Path) -> bool:
     return (_app_runtime_dir(base) / DEFAULT_ENTRYPOINT).exists()
 
@@ -504,41 +734,23 @@ def _recover_incomplete_install(base: Path) -> None:
 
 
 def _write_state(base: Path, state: Dict[str, Any]) -> None:
-    path = base / STATE_FILE_NAME
     try:
-        path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_json_data_file(base, STATE_FILE_NAME, state)
     except Exception:
         pass
 
 
 def _read_state(base: Path) -> Dict[str, Any]:
-    path = base / STATE_FILE_NAME
-    try:
-        if path.exists():
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
-    except Exception:
-        pass
-    return {}
+    return _read_json_data_file(base, STATE_FILE_NAME)
 
 
 def _read_temp_meta(base: Path) -> Dict[str, Any]:
-    path = base / TEMP_META_FILE_NAME
-    try:
-        if path.exists():
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
-    except Exception:
-        pass
-    return {}
+    return _read_json_data_file(base, TEMP_META_FILE_NAME)
 
 
 def _write_temp_meta(base: Path, data: Dict[str, Any]) -> None:
-    path = base / TEMP_META_FILE_NAME
     try:
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_json_data_file(base, TEMP_META_FILE_NAME, data)
     except Exception:
         pass
 
@@ -655,8 +867,11 @@ def _cleanup_temp_files_on_launcher_upgrade(base: Path) -> None:
 
 
 def _consume_launcher_update_result(base: Path) -> None:
-    path = base / LAUNCHER_UPDATE_RESULT_FILE_NAME
-    if not path.exists():
+    path = next(
+        (candidate for candidate in _data_read_candidates(base, LAUNCHER_UPDATE_RESULT_FILE_NAME) if candidate.exists()),
+        None,
+    )
+    if path is None:
         return
 
     try:
@@ -690,10 +905,12 @@ def _consume_launcher_update_result(base: Path) -> None:
 
 
 def _load_or_create_install_id(base: Path) -> str:
-    path = base / INSTALL_ID_FILE_NAME
+    path = _data_path(base, INSTALL_ID_FILE_NAME)
     try:
-        if path.exists():
-            text = path.read_text(encoding="utf-8").strip().lower()
+        for candidate in _data_read_candidates(base, INSTALL_ID_FILE_NAME):
+            if not candidate.exists():
+                continue
+            text = candidate.read_text(encoding="utf-8").strip().lower()
             if re.fullmatch(r"[0-9a-f]{32}", text):
                 return text
     except Exception:
@@ -701,7 +918,7 @@ def _load_or_create_install_id(base: Path) -> str:
 
     install_id = uuid.uuid4().hex
     try:
-        path.write_text(install_id, encoding="utf-8")
+        _atomic_write_text(path, install_id)
     except Exception:
         pass
     return install_id
@@ -773,7 +990,7 @@ def _attempt_primary_request(
             if key in tried_modes:
                 continue
             tried_modes.append(key)
-            _set_use_system_proxy(use_proxy)
+            _set_thread_proxy_override(use_proxy)
             mode_name = "system-proxy" if use_proxy else "direct"
             try:
                 result = fetcher(timeout_sec)
@@ -792,7 +1009,7 @@ def _attempt_primary_request(
             raise last_exc
         raise RuntimeError(f"{request_name}失败")
     finally:
-        _set_use_system_proxy(original_proxy_mode)
+        _set_thread_proxy_override(None)
 
 
 def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict[str, Any]:
@@ -1450,17 +1667,25 @@ def _download_update_from_manifest(
             detail = f"正在下载应用包：{downloaded / 1048576:.1f} MB  |  {speed_text}"
             notify("正在下载更新", detail, None, "info")
 
-    package_bytes = _fetch_bytes(package_url, progress_cb=on_progress, cancel_cb=cancel_cb)
-    if cancel_cb and cancel_cb():
-        raise RuntimeError("已取消当前操作")
-    _install_zip_package(
-        base,
-        package_bytes,
-        package_sha256,
-        entrypoint,
-        status_cb=notify,
-        cancel_cb=cancel_cb,
-    )
+    download_dir = _launcher_data_root(base) / "downloads"
+    package_path = download_dir / f"Bomana_{remote_version}.zip"
+    _download_to_file(package_url, package_path, progress_cb=on_progress, cancel_cb=cancel_cb)
+    try:
+        if cancel_cb and cancel_cb():
+            raise RuntimeError("已取消当前操作")
+        _install_zip_package_from_file(
+            base,
+            package_path,
+            package_sha256,
+            entrypoint,
+            status_cb=notify,
+            cancel_cb=cancel_cb,
+        )
+    finally:
+        try:
+            package_path.unlink(missing_ok=True)
+        except Exception:
+            pass
     notify("更新完成", f"已更新到 v{remote_version}", 1.0, "success")
     return remote_version, source_name
 
@@ -1486,41 +1711,78 @@ def _launch_updater_script(script_path: Path) -> None:
     )
 
 
+def _assert_launcher_target_dir_writable(target: Path) -> None:
+    """Check write and rename permission before downloading a launcher replacement."""
+    directory = target.parent
+    probe = directory / f".bomana_launcher_write_probe_{os.getpid()}_{time.monotonic_ns()}"
+    renamed_probe = probe.with_suffix(".renamed")
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        probe.write_text("ok", encoding="utf-8")
+        os.replace(probe, renamed_probe)
+    except Exception as exc:
+        raise RuntimeError(
+            "当前启动器目录不可写，无法自动替换启动器："
+            f"{directory}。请将启动器放到可写目录，或以管理员权限运行后重试。原始错误：{exc}"
+        ) from exc
+    finally:
+        for path in (probe, renamed_probe):
+            try:
+                path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
 def _stage_launcher_self_update(
     base: Path,
-    launcher_bytes: bytes,
+    launcher_bytes: Optional[bytes],
     remote_version: str,
+    launcher_source_path: Optional[Path] = None,
 ) -> None:
     if not _is_frozen_launcher():
         raise RuntimeError("源码模式不支持启动器自更新")
+    if launcher_source_path is None and launcher_bytes is None:
+        raise RuntimeError("缺少启动器更新文件")
 
     target = Path(sys.executable).resolve()
     work_dir = Path(tempfile.mkdtemp(prefix=LAUNCHER_SELF_UPDATE_WORKDIR_PREFIX))
     staged = work_dir / f"{target.stem}.update.new{target.suffix}"
     backup = target.with_name(f"{target.stem}.bomana_backup_{os.getpid()}{target.suffix}")
+    replacement = target.with_name(f"{target.stem}.bomana_replacement_{os.getpid()}{target.suffix}")
     script_path = work_dir / "bomana_update_launcher_apply.ps1"
-    result_path = base / LAUNCHER_UPDATE_RESULT_FILE_NAME
+    result_path = _data_path(base, LAUNCHER_UPDATE_RESULT_FILE_NAME)
 
     try:
         result_path.unlink(missing_ok=True)
-        staged.write_bytes(launcher_bytes)
+        if launcher_source_path is not None:
+            shutil.copyfile(launcher_source_path, staged)
+        else:
+            staged.write_bytes(launcher_bytes or b"")
         _log(base, f"已在临时目录准备启动器自更新文件：{staged}")
         script = f"""$ErrorActionPreference = 'Stop'
 $target = {json.dumps(str(target))}
 $staged = {json.dumps(str(staged))}
 $backup = {json.dumps(str(backup))}
+$replacement = {json.dumps(str(replacement))}
 $resultPath = {json.dumps(str(result_path))}
 $oldPid = {os.getpid()}
 $targetVersion = {json.dumps(str(remote_version))}
+$replaceSucceeded = $false
 
 function Write-Result([string]$status, [string]$message) {{
+    $resultDir = Split-Path -Parent $resultPath
+    if ($resultDir) {{
+        New-Item -ItemType Directory -Path $resultDir -Force | Out-Null
+    }}
+    $tmpResultPath = "$resultPath.tmp"
     $payload = [ordered]@{{
         status = $status
         target_version = $targetVersion
         message = $message
         updated_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     }}
-    $payload | ConvertTo-Json -Compress | Set-Content -LiteralPath $resultPath -Encoding UTF8
+    $payload | ConvertTo-Json -Compress | Set-Content -LiteralPath $tmpResultPath -Encoding UTF8
+    Move-Item -LiteralPath $tmpResultPath -Destination $resultPath -Force
 }}
 
 try {{
@@ -1532,16 +1794,22 @@ try {{
     }}
 
     Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
-    if (Test-Path -LiteralPath $target) {{
-        Move-Item -LiteralPath $target -Destination $backup -Force
-    }}
+    Remove-Item -LiteralPath $replacement -Force -ErrorAction SilentlyContinue
     if (-not (Test-Path -LiteralPath $staged)) {{
         throw "staged launcher file missing"
     }}
-    Move-Item -LiteralPath $staged -Destination $target -Force
+    Copy-Item -LiteralPath $staged -Destination $replacement -Force
+    if (-not (Test-Path -LiteralPath $replacement)) {{
+        throw "replacement launcher file missing after copy"
+    }}
+    if (Test-Path -LiteralPath $target) {{
+        Move-Item -LiteralPath $target -Destination $backup -Force
+    }}
+    Move-Item -LiteralPath $replacement -Destination $target -Force
     if (-not (Test-Path -LiteralPath $target)) {{
         throw "launcher target missing after replace"
     }}
+    $replaceSucceeded = $true
     Start-Process -FilePath $target | Out-Null
     Write-Result "success" ("Launcher replaced and restarted: " + $targetVersion)
     Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
@@ -1551,12 +1819,19 @@ catch {{
     if ((-not (Test-Path -LiteralPath $target)) -and (Test-Path -LiteralPath $backup)) {{
         Move-Item -LiteralPath $backup -Destination $target -Force -ErrorAction SilentlyContinue
     }}
+    Remove-Item -LiteralPath $replacement -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $staged) {{
+        $detail = $detail + "`n新版启动器文件保留在: " + $staged
+    }}
     Write-Result "error" $detail
     exit 1
 }}
 finally {{
     Start-Sleep -Milliseconds 500
-    Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+    if ($replaceSucceeded) {{
+        Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
+    }}
+    Remove-Item -LiteralPath $replacement -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 }}
 """
@@ -1603,6 +1878,9 @@ def _download_launcher_update_from_manifest(
         "info",
     )
 
+    if _is_frozen_launcher():
+        _assert_launcher_target_dir_writable(Path(sys.executable).resolve())
+
     last_emit = [0.0]
 
     def on_progress(downloaded: int, total: Optional[int]) -> None:
@@ -1624,20 +1902,48 @@ def _download_launcher_update_from_manifest(
                 "info",
             )
 
-    launcher_bytes = _fetch_bytes(package_url, progress_cb=on_progress, cancel_cb=cancel_cb)
-    if cancel_cb and cancel_cb():
-        raise RuntimeError("已取消当前操作")
-    actual_sha256 = hashlib.sha256(launcher_bytes).hexdigest().lower()
-    if actual_sha256 != package_sha256:
-        raise RuntimeError("SHA256 校验失败")
-    current_name = Path(sys.executable).name
-    notify(
-        "准备替换启动器",
-        f"新版启动器文件已下载完成；关闭当前窗口后会替换 {current_name} 并自动重启。",
-        0.9,
-        "info",
-    )
-    _stage_launcher_self_update(base, launcher_bytes, remote_version)
+    download_dir = _launcher_data_root(base) / "downloads"
+    launcher_path = download_dir / f"BomanaLauncher_{remote_version}.exe"
+    stage_attempted = False
+    keep_downloaded_file = False
+    try:
+        _download_to_file(package_url, launcher_path, progress_cb=on_progress, cancel_cb=cancel_cb)
+        if cancel_cb and cancel_cb():
+            raise RuntimeError("已取消当前操作")
+        actual_sha256 = _sha256_file(launcher_path)
+        if actual_sha256 != package_sha256:
+            try:
+                launcher_path.unlink(missing_ok=True)
+                launcher_path.with_name(f"{launcher_path.name}.part").unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise RuntimeError("SHA256 校验失败")
+        current_name = Path(sys.executable).name
+        notify(
+            "准备替换启动器",
+            f"新版启动器文件已下载完成；关闭当前窗口后会替换 {current_name} 并自动重启。",
+            0.9,
+            "info",
+        )
+        stage_attempted = True
+        _stage_launcher_self_update(
+            base,
+            None,
+            remote_version,
+            launcher_source_path=launcher_path,
+        )
+    except Exception:
+        keep_downloaded_file = stage_attempted and launcher_path.exists()
+        if keep_downloaded_file:
+            _log(base, f"启动器更新文件保留在：{launcher_path}")
+        raise
+    finally:
+        try:
+            if not keep_downloaded_file:
+                launcher_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
     notify(
         "启动器更新已就绪",
         f"已准备好升级到 v{remote_version}；关闭当前窗口后会用新版启动器文件替换当前 exe 并自动重启。",
@@ -2080,8 +2386,8 @@ class LauncherWindow:
         self.base = base
         self.source_test_mode = _is_source_test_run(base)
         self.saved_state = _read_state(base)
-        self.channel = channel
         self.detected_channel = channel
+        self.channel = _normalize_channel(self.saved_state.get("channel", "")) or channel
         self.download_source_mode = _normalize_download_source_mode(
             self.saved_state.get("download_source_mode", "")
         )
@@ -2152,7 +2458,7 @@ class LauncherWindow:
         self.root.resizable(True, True)
         self.root.configure(bg=_THEME["BG"])
         self.root.protocol("WM_DELETE_WINDOW", self._on_exit)
-        self.channel_var = tk.StringVar(master=self.root, value=channel)
+        self.channel_var = tk.StringVar(master=self.root, value=self.channel)
         self.proxy_var = tk.BooleanVar(master=self.root, value=self.use_system_proxy)
         self.download_source_var = tk.StringVar(
             master=self.root,
@@ -3931,10 +4237,10 @@ def main() -> None:
     _cleanup_legacy_launcher_self_update_files(base)
     _consume_launcher_update_result(base)
     Win32.enable_dpi()
-    channel = _detect_channel()
+    detected_channel = _detect_channel()
     identity = _build_client_identity(base)
 
-    gui = LauncherWindow(base, channel)
+    gui = LauncherWindow(base, detected_channel)
     decision = gui.run()
     if decision.action != "launch":
         return

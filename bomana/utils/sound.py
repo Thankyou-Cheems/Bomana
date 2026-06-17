@@ -5,7 +5,11 @@ import ctypes
 import queue
 import threading
 import time
-import winsound
+
+try:
+    import winsound
+except ImportError:  # pragma: no cover - exercised on non-Windows test hosts
+    winsound = None
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -162,6 +166,8 @@ class SoundManager:
     def _play_audio_file(path: Path) -> None:
         ext = path.suffix.lower()
         if ext == ".wav":
+            if winsound is None:
+                return
             winsound.PlaySound(str(path), winsound.SND_FILENAME)
             return
         SoundManager._play_audio_file_mci(path)

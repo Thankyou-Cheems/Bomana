@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -84,6 +85,14 @@ def release_update_lock(lock_path: Path | None) -> None:
         lock_path.unlink()
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
+
+
 class InstallTransaction:
     """Owns update lock, staging paths, replacement, and rollback cleanup."""
 
@@ -119,6 +128,13 @@ class InstallTransaction:
         if self.zip_path is None or self.stage_dir is None:
             raise RuntimeError("安装事务未启动")
         self.zip_path.write_bytes(package_bytes)
+        return self.extract_package_file(self.zip_path, entrypoint)
+
+    def extract_package_file(self, package_path: Path, entrypoint: str) -> Path:
+        if self.zip_path is None or self.stage_dir is None:
+            raise RuntimeError("安装事务未启动")
+        if package_path != self.zip_path:
+            shutil.copyfile(package_path, self.zip_path)
         safe_extract_zip(self.zip_path, self.stage_dir)
         src_root = normalize_package_root(self.stage_dir, entrypoint)
         if not (src_root / entrypoint).exists():
@@ -214,6 +230,37 @@ def install_zip_package(
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
         src_root = transaction.extract_package(package_bytes, entrypoint)
+
+        if status_cb:
+            status_cb("正在安装更新", "正在替换旧版本文件...", 0.94, "info")
+
+        transaction.stage_new_app(src_root)
+        if cancel_cb and cancel_cb():
+            raise RuntimeError("已取消当前操作")
+        transaction.replace_app()
+
+
+def install_zip_package_from_file(
+    base: Path,
+    package_path: Path,
+    expected_sha256: str,
+    entrypoint: str,
+    status_cb: StatusCallback | None = None,
+    cancel_cb: CancelCallback | None = None,
+) -> None:
+    expected = (expected_sha256 or "").strip().lower()
+    actual = sha256_file(package_path)
+    if expected and actual != expected:
+        raise RuntimeError("应用包 SHA256 校验失败")
+    if cancel_cb and cancel_cb():
+        raise RuntimeError("已取消当前操作")
+
+    with InstallTransaction(base) as transaction:
+        if status_cb:
+            status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
+        if cancel_cb and cancel_cb():
+            raise RuntimeError("已取消当前操作")
+        src_root = transaction.extract_package_file(package_path, entrypoint)
 
         if status_cb:
             status_cb("正在安装更新", "正在替换旧版本文件...", 0.94, "info")

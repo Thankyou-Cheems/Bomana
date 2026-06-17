@@ -71,6 +71,13 @@ _BUNDLED_FONT_FILES = (
 _BUNDLED_FONTS_LOADED = False
 
 
+def _win32_dll(name: str) -> Any | None:
+    windll = getattr(ctypes, "windll", None)
+    if windll is None:
+        return None
+    return getattr(windll, name, None)
+
+
 def _candidate_resource_roots() -> list[Path]:
     roots: list[Path] = []
     runtime_root = os.environ.get("BOMANA_RUNTIME_ROOT", "").strip()
@@ -103,10 +110,10 @@ def load_bundled_ui_fonts() -> bool:
     if os.name != "nt":
         return False
 
-    gdi32 = getattr(ctypes, "windll", None)
+    gdi32 = _win32_dll("gdi32")
     if gdi32 is None:
         return False
-    add_font = getattr(gdi32.gdi32, "AddFontResourceExW", None)
+    add_font = getattr(gdi32, "AddFontResourceExW", None)
     if add_font is None:
         return False
 
@@ -218,8 +225,8 @@ class Win32:
     使用ctypes调用user32.dll和kernel32.dll。
     """
 
-    user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
+    user32 = _win32_dll("user32")
+    kernel32 = _win32_dll("kernel32")
 
     @classmethod
     def enable_dpi(cls):
@@ -265,7 +272,10 @@ class Win32:
         Returns:
             (宽度, 高度) 元组
         """
-        return cls.user32.GetSystemMetrics(0), cls.user32.GetSystemMetrics(1)
+        try:
+            return cls.user32.GetSystemMetrics(0), cls.user32.GetSystemMetrics(1)
+        except _WIN32_ACCESS_ERRORS:
+            return 1920, 1080
 
     @classmethod
     def setup_window(

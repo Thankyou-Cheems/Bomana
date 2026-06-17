@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from bomana.config import PanelConfig
+from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.navigation_runtime import AppNavigationServices
 
 
@@ -150,6 +151,77 @@ class NavigationRuntimeTests(unittest.TestCase):
         services.apply_lock_state(locked=True, alpha=210)
 
         self.assertEqual(services.window.style_calls, [(True, 210)])
+
+
+class NavigationWindowPositionRestoreTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._old_pos = PanelConfig.navigation_window_pos
+
+    def tearDown(self) -> None:
+        PanelConfig.navigation_window_pos = self._old_pos
+
+    def _restore_geometry(
+        self,
+        pos: tuple[int, int],
+        monitors: list[dict],
+        *,
+        screen_size: tuple[int, int] = (1920, 1080),
+    ) -> str:
+        nav = object.__new__(NavigationWindow)
+        nav.window = FakeGeometryWindow()
+        PanelConfig.navigation_window_pos = pos
+
+        with (
+            patch("bomana.ui.nav_window.Win32.get_all_monitors", return_value=monitors),
+            patch("bomana.ui.nav_window.Win32.screen_size", return_value=screen_size),
+        ):
+            nav._restore_position()
+
+        return nav.window.geometry_calls[-1]
+
+    def test_restore_keeps_position_on_left_monitor_with_negative_x(self) -> None:
+        geometry = self._restore_geometry(
+            (-640, 120),
+            [
+                {"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1040, "is_primary": True},
+                {
+                    "index": 1,
+                    "x": -1280,
+                    "y": 0,
+                    "width": 1280,
+                    "height": 1024,
+                    "is_primary": False,
+                },
+            ],
+        )
+
+        self.assertEqual(geometry, "+-640+120")
+
+    def test_restore_keeps_position_on_upper_monitor_with_negative_y(self) -> None:
+        geometry = self._restore_geometry(
+            (260, -420),
+            [
+                {"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1040, "is_primary": True},
+                {
+                    "index": 1,
+                    "x": 0,
+                    "y": -900,
+                    "width": 1600,
+                    "height": 900,
+                    "is_primary": False,
+                },
+            ],
+        )
+
+        self.assertEqual(geometry, "+260+-420")
+
+    def test_restore_falls_back_to_primary_when_saved_monitor_is_missing(self) -> None:
+        geometry = self._restore_geometry(
+            (-640, -420),
+            [{"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1040, "is_primary": True}],
+        )
+
+        self.assertEqual(geometry, "+0+0")
 
 
 if __name__ == "__main__":
