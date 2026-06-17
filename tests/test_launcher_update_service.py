@@ -271,7 +271,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
         self.assertEqual(len(launched), 1)
         script = launched[0].read_text(encoding="utf-8")
-        self.assertIn(str(data_root / self.launcher.LAUNCHER_UPDATE_RESULT_FILE_NAME), script)
+        result_path = data_root / self.launcher.LAUNCHER_UPDATE_RESULT_FILE_NAME
+        self.assertIn(json.dumps(str(result_path)), script)
         self.assertIn("$replacement", script)
         self.assertIn("Copy-Item -LiteralPath $staged -Destination $replacement -Force", script)
         self.assertIn("Move-Item -LiteralPath $backup -Destination $target", script)
