@@ -212,13 +212,14 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 uv sync --python 3.14.5
 ```
 
-> 打包绿色版（启动器+应用包）可执行：`tools\scripts\build_portable.bat <Enhanced|Standard|Lite> <all|app|launcher> [version]`
+> 打包绿色版（启动器+应用包）可执行：`tools\scripts\build_portable.bat <Enhanced|Standard|Lite> <all|app|launcher> [version]`。`version` 是一致性校验值，必须匹配源码版本；`all` 同时包含 app 和 launcher，通常应省略单一 `version`。
 
 开发者区分打包目标：
 
 - 仅打包应用包（用于自动更新）：`tools\scripts\build_app_package.bat Enhanced|Standard|Lite`
 - 仅打包通用启动器（绿色入口）：`tools\scripts\build_launcher.bat [version]`
-- 一次性全打：`tools\scripts\build_portable.bat Enhanced all`
+- 一次性构建当前通道 app + 通用启动器：`tools\scripts\build_portable.bat Enhanced all`
+- 若要本地 `deploy_update_assets.py --target all`，需要先为 Enhanced / Standard / Lite 三个通道各构建 app 包，并构建一次通用启动器。
 
 GitHub 云端自动打包发布：
 

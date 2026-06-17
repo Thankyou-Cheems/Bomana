@@ -9,6 +9,9 @@ from typing import Any
 
 from bomana.config import NetworkConfig
 from bomana.core.logic import GameLogic
+from bomana.utils.diagnostics import log_exception
+
+_LOGIC_POLLER_EXCEPTION_LOG_INTERVAL_SEC = 60.0
 
 
 class TkEventDispatcher:
@@ -29,6 +32,7 @@ class LogicPoller:
         self.game = game
         self.should_stop = should_stop
         self._thread: threading.Thread | None = None
+        self._last_exception_log_at: float | None = None
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -40,7 +44,8 @@ class LogicPoller:
             loop_start = time.monotonic()
             try:
                 self.game.tick()
-            except Exception:
+            except Exception as exc:
+                self._log_tick_exception(exc, loop_start)
                 time.sleep(NetworkConfig.BACKOFF_MAX)
                 continue
 
@@ -49,6 +54,19 @@ class LogicPoller:
             )
             elapsed = time.monotonic() - loop_start
             time.sleep(max(0.0, interval - elapsed))
+
+    def _log_tick_exception(self, exc: Exception, now: float) -> None:
+        if (
+            self._last_exception_log_at is not None
+            and now - self._last_exception_log_at < _LOGIC_POLLER_EXCEPTION_LOG_INTERVAL_SEC
+        ):
+            return
+        self._last_exception_log_at = now
+        log_exception(
+            "logic_poller_tick_failed",
+            exc,
+            backoff_sec=NetworkConfig.BACKOFF_MAX,
+        )
 
 
 def start_daemon_thread(name: str, target: Callable[[], Any]) -> threading.Thread:

@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 from unittest import mock
 
-from bomana.config import HUDConfig
+from bomana.config import HotkeyConfig, HUDConfig
 from bomana.ui import runtime_services
+from bomana.ui.dialogs import SettingsDialog
 from bomana.ui.runtime_services import AppRuntimeServices
 
 
@@ -49,3 +50,88 @@ def test_hud_overlay_init_failure_disables_without_leaking_exception() -> None:
             assert log_exception.call_count >= 2
     finally:
         HUDConfig.enabled = original_enabled
+
+
+def _make_hotkey_app() -> SimpleNamespace:
+    return SimpleNamespace(
+        root=object(),
+        _manual_reset_hotkey=lambda: None,
+        _toggle_lock=lambda: None,
+        _next_corner=lambda: None,
+        _toggle_beep=lambda: None,
+        _toggle_zone_sound=lambda: None,
+        _on_hotkey_registration_error=lambda _key_names: None,
+    )
+
+
+def test_init_global_hotkeys_stops_existing_manager_before_reinit(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class ExistingManager:
+        def stop(self) -> None:
+            calls.append("old-stop")
+
+    class FakeGlobalHotkeys:
+        def __init__(self, *_args, **_kwargs) -> None:
+            calls.append("create")
+
+        def start(self) -> None:
+            calls.append("start")
+
+    services = AppRuntimeServices(_make_hotkey_app())
+    services.global_hotkeys = ExistingManager()
+
+    monkeypatch.setattr(runtime_services.os, "name", "nt")
+    monkeypatch.setattr(runtime_services, "GlobalHotkeys", FakeGlobalHotkeys)
+    monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
+
+    services.init_global_hotkeys()
+
+    assert calls == ["old-stop", "create", "start"]
+    assert isinstance(services.global_hotkeys, FakeGlobalHotkeys)
+
+
+def test_init_global_hotkeys_stops_existing_manager_when_disabled(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class ExistingManager:
+        def stop(self) -> None:
+            calls.append("old-stop")
+
+    services = AppRuntimeServices(_make_hotkey_app())
+    services.global_hotkeys = ExistingManager()
+
+    monkeypatch.setattr(runtime_services.os, "name", "nt")
+    monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", False)
+
+    services.init_global_hotkeys()
+
+    assert calls == ["old-stop"]
+    assert services.global_hotkeys is None
+
+
+def test_settings_hotkey_restart_uses_runtime_services(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class RuntimeServices:
+        def stop_global_hotkeys(self) -> None:
+            calls.append("stop")
+
+        def init_global_hotkeys(self) -> None:
+            calls.append("init")
+
+    class LegacyManager:
+        def stop(self) -> None:
+            raise AssertionError("legacy _ghk should not be stopped directly")
+
+    dialog = SettingsDialog.__new__(SettingsDialog)
+    dialog.app = SimpleNamespace(
+        runtime_services=RuntimeServices(),
+        _ghk=LegacyManager(),
+        _init_global_hotkeys=lambda: calls.append("legacy-init"),
+    )
+    monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
+
+    dialog._restart_global_hotkeys_after_save()
+
+    assert calls == ["stop", "init"]

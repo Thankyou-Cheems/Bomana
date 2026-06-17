@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from bomana.config import UIConfig
 from bomana.core.state import Phase, UISnapshot
-from bomana.ui.dialogs import _ScalableDialogMixin
+from bomana.ui.dialogs import _ScalableDialogMixin, _ScopedMousewheelBinding
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.panel_renderer import AppPanelRenderer
@@ -22,6 +22,64 @@ class FakeIcons:
 
 class DummyScalableDialog(tk.Toplevel, _ScalableDialogMixin):
     pass
+
+
+class FakeTkRoot:
+    def __init__(self) -> None:
+        self.unbind_calls: list[tuple[tuple[str, str, str], str]] = []
+
+    def _unbind(self, what: tuple[str, str, str], funcid: str | None = None) -> None:
+        if funcid is not None:
+            self.unbind_calls.append((what, funcid))
+
+
+class FakeMousewheelWidget:
+    def __init__(self, root: FakeTkRoot) -> None:
+        self.root = root
+        self.bind_handlers: dict[str, list[object]] = {}
+        self.bind_all_calls: list[tuple[str, object, str | None]] = []
+
+    def bind(self, sequence: str, func, add: str | None = None) -> None:
+        self.bind_handlers.setdefault(sequence, []).append(func)
+
+    def bind_all(self, sequence: str, func, add: str | None = None) -> str:
+        self.bind_all_calls.append((sequence, func, add))
+        return f"func-{len(self.bind_all_calls)}"
+
+    def unbind_all(self, _sequence: str) -> None:
+        raise AssertionError("unbind_all should not be used for scoped mousewheel cleanup")
+
+    def _root(self) -> FakeTkRoot:
+        return self.root
+
+    def emit(self, sequence: str, *, widget=None) -> None:
+        event = SimpleNamespace(widget=self if widget is None else widget)
+        for handler in self.bind_handlers.get(sequence, []):
+            handler(event)
+
+
+def test_scoped_mousewheel_binding_unbinds_only_owned_callback() -> None:
+    root = FakeTkRoot()
+    owner = FakeMousewheelWidget(root)
+    canvas = FakeMousewheelWidget(root)
+    _ScopedMousewheelBinding(owner, canvas, lambda _event: None)
+
+    canvas.emit("<Enter>")
+    canvas.emit("<Leave>")
+
+    assert canvas.bind_all_calls[0][0] == "<MouseWheel>"
+    assert canvas.bind_all_calls[0][2] == "+"
+    assert root.unbind_calls == [(("bind", "all", "<MouseWheel>"), "func-1")]
+
+    canvas.emit("<Enter>")
+    owner.emit("<Destroy>", widget=object())
+    assert root.unbind_calls == [(("bind", "all", "<MouseWheel>"), "func-1")]
+
+    owner.emit("<Destroy>", widget=owner)
+    assert root.unbind_calls == [
+        (("bind", "all", "<MouseWheel>"), "func-1"),
+        (("bind", "all", "<MouseWheel>"), "func-2"),
+    ]
 
 
 class TkGeometryTests(unittest.TestCase):

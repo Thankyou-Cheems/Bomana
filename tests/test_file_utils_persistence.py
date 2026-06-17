@@ -62,6 +62,50 @@ class PersistenceTests(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(migrated["config_version"], FileConfig.CONFIG_VERSION)
 
+    def test_config_save_persists_current_compile_switches(self) -> None:
+        ok = ConfigManager.save({"alpha": 180})
+
+        self.assertTrue(ok)
+        data = json.loads(self.config_file.read_text(encoding="utf-8"))
+        self.assertEqual(data["compile_switches"], ConfigManager._current_compile_switches())
+
+    def test_config_migration_without_saved_compile_switches_preserves_hidden_panels(
+        self,
+    ) -> None:
+        hidden_panels = {
+            "show_bombing": False,
+            "show_zones": False,
+            "show_airfields": False,
+            "show_fuel": False,
+            "show_checklist": False,
+        }
+
+        migrated, changed = ConfigManager._migrate_config(
+            {"config_version": FileConfig.CONFIG_VERSION, "panels": hidden_panels.copy()}
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(migrated["panels"], hidden_panels)
+        self.assertEqual(migrated["compile_switches"], ConfigManager._current_compile_switches())
+
+    def test_config_migration_resets_panel_for_explicit_false_to_true_switch(
+        self,
+    ) -> None:
+        migrated, changed = ConfigManager._migrate_config(
+            {
+                "config_version": FileConfig.CONFIG_VERSION,
+                "compile_switches": {"ENABLE_ZONES": False},
+                "panels": {
+                    "show_zones": False,
+                    "show_bombing": False,
+                },
+            }
+        )
+
+        self.assertTrue(changed)
+        self.assertTrue(migrated["panels"]["show_zones"])
+        self.assertFalse(migrated["panels"]["show_bombing"])
+
     def test_atomic_write_ignores_leftover_temp_file_on_load(self) -> None:
         self.config_file.write_text('{"alpha": 180}', encoding="utf-8")
         leftover = self.tmp_path / ".config.json.interrupted.tmp"

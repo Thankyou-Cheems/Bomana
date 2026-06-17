@@ -178,7 +178,7 @@ Portable release uses:
 - `launcher_manifest.json` (launcher version/package metadata + SHA256)
 - `Bomana_app_<Variant>_vX.Y.Z.zip` (updatable application package)
 - `manifest_<Variant>.json` (channel/version/package metadata + SHA256 + `min_launcher_version`)
-- `checksums_*.txt` (SHA256 checksum info)
+- `checksums_app_<Variant>.txt` and `checksums_launcher.txt` (SHA256 checksum info consumed by deployment tooling)
 
 Bundled assets:
 - App packages include `bomana/assets/` automatically because `build_app_zip()` packages the whole `bomana/` tree.
@@ -186,9 +186,9 @@ Bundled assets:
 - Root-level branding files were folded into `bomana/assets/branding/`; runtime and packaging paths use only the bundled asset location.
 
 Local build helper:
-- `tools\scripts\build_portable.bat <Variant> <all|app|launcher>`
+- `tools\scripts\build_portable.bat <Variant> <all|app|launcher>` (`all` builds the selected variant app plus the universal launcher)
 - `tools\scripts\build_app_package.bat <Variant>` (only app zip + manifest)
-- `tools\scripts\build_launcher.bat [version]` (only universal launcher exe)
+- `tools\scripts\build_launcher.bat [version]` (only universal launcher exe; optional version must match `LAUNCHER_VERSION`)
 
 CI:
 - `.github/workflows/quality.yml` runs lightweight pull-request / `main` push gates on `windows-latest`:

@@ -277,9 +277,6 @@ class TelemetryFetcher:
             )
             self._merge_attitude_fields(j, data)
 
-        if not data.ind_ok:
-            return data
-
         # 请求 /state (飞机状态)
         state_result = self.http.get_json(f"{NetworkConfig.API_BASE}/state", budget)
         data.state_resp_ok = state_result.ok

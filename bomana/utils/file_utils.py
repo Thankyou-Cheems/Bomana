@@ -170,6 +170,16 @@ class ConfigManager:
     """
 
     @staticmethod
+    def _current_compile_switches() -> dict[str, bool]:
+        return {
+            "ENABLE_CCRP": ENABLE_CCRP,
+            "ENABLE_ZONES": ENABLE_ZONES,
+            "ENABLE_AIRFIELDS": ENABLE_AIRFIELDS,
+            "ENABLE_FUEL": ENABLE_FUEL,
+            "ENABLE_CHECKLIST": ENABLE_CHECKLIST,
+        }
+
+    @staticmethod
     def load() -> dict[str, Any]:
         """加载配置文件
 
@@ -223,34 +233,31 @@ class ConfigManager:
             changed = True
 
         # 检查编译开关是否变化（精简版 <-> 完整版切换）
-        saved_switches = config.get("compile_switches", {})
-        current_switches = {
-            "ENABLE_CCRP": ENABLE_CCRP,
-            "ENABLE_ZONES": ENABLE_ZONES,
-            "ENABLE_AIRFIELDS": ENABLE_AIRFIELDS,
-            "ENABLE_FUEL": ENABLE_FUEL,
-            "ENABLE_CHECKLIST": ENABLE_CHECKLIST,
-        }
+        saved_switches_raw = config.get("compile_switches")
+        has_saved_switches = isinstance(saved_switches_raw, dict)
+        saved_switches = saved_switches_raw if has_saved_switches else {}
+        current_switches = ConfigManager._current_compile_switches()
 
         # 如果某个功能从禁用变为启用，重置该面板为默认显示
         panels = config.get("panels", {})
         switches_changed = False
 
-        for switch_name, current_enabled in current_switches.items():
-            was_enabled = saved_switches.get(switch_name, False)
-            if current_enabled and not was_enabled:
-                # 功能从禁用变为启用，重置对应面板为显示
-                panel_key = {
-                    "ENABLE_CCRP": "show_bombing",
-                    "ENABLE_ZONES": "show_zones",
-                    "ENABLE_AIRFIELDS": "show_airfields",
-                    "ENABLE_FUEL": "show_fuel",
-                    "ENABLE_CHECKLIST": "show_checklist",
-                }.get(switch_name)
-                if panel_key:
-                    panels[panel_key] = True
-                    switches_changed = True
-                    changed = True
+        if has_saved_switches:
+            for switch_name, current_enabled in current_switches.items():
+                was_enabled = saved_switches.get(switch_name)
+                if current_enabled and was_enabled is False:
+                    # 功能从禁用变为启用，重置对应面板为显示
+                    panel_key = {
+                        "ENABLE_CCRP": "show_bombing",
+                        "ENABLE_ZONES": "show_zones",
+                        "ENABLE_AIRFIELDS": "show_airfields",
+                        "ENABLE_FUEL": "show_fuel",
+                        "ENABLE_CHECKLIST": "show_checklist",
+                    }.get(switch_name)
+                    if panel_key:
+                        panels[panel_key] = True
+                        switches_changed = True
+                        changed = True
 
         if switches_changed:
             config["panels"] = panels
@@ -272,6 +279,7 @@ class ConfigManager:
         try:
             # 确保保存时带有版本号
             config["config_version"] = FileConfig.CONFIG_VERSION
+            config["compile_switches"] = ConfigManager._current_compile_switches()
             atomic_write_json(FileConfig.CONFIG_FILE, config, ensure_ascii=False)
             return True
         except (TypeError, ValueError, OSError) as exc:

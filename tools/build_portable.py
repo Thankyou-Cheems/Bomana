@@ -72,7 +72,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--version",
         default="",
-        help="Override version (default: read __version__ from bomana/metadata.py)",
+        help=(
+            "Expected version; fails if it does not match the source metadata "
+            "(app: bomana/metadata.py, launcher: launcher.pyw)"
+        ),
     )
     parser.add_argument(
         "--output",
@@ -116,6 +119,35 @@ def read_launcher_version(launcher_text: str) -> str:
     if not m:
         raise RuntimeError("Failed to find LAUNCHER_VERSION in launcher.pyw")
     return m.group(1).strip()
+
+
+def validate_requested_version(
+    requested_version: str,
+    target: str,
+    app_version: str,
+    launcher_version: str,
+) -> None:
+    requested = requested_version.strip()
+    if not requested:
+        return
+
+    expected_versions: list[tuple[str, str, str]] = []
+    if target in ("all", "app"):
+        expected_versions.append(("app", app_version, "bomana/metadata.py __version__"))
+    if target in ("all", "launcher"):
+        expected_versions.append(("launcher", launcher_version, "launcher.pyw LAUNCHER_VERSION"))
+
+    mismatches = [
+        f"{label} expected {expected!r} from {source}"
+        for label, expected, source in expected_versions
+        if requested != expected
+    ]
+    if mismatches:
+        raise RuntimeError(
+            f"--version {requested!r} does not match source version(s): "
+            + "; ".join(mismatches)
+            + ". Update the source version first, or omit --version."
+        )
 
 
 def add_file_to_zip(zf: zipfile.ZipFile, root: Path, path: Path) -> None:
@@ -332,7 +364,7 @@ def write_checksum_info(
     elif target == "app":
         path = out_dir / f"checksums_app_{variant}.txt"
     else:
-        path = out_dir / f"checksums_portable_{variant}.txt"
+        raise ValueError(f"unsupported checksum target: {target}")
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
@@ -357,13 +389,22 @@ def main() -> int:
     launcher: Path | None = None
     launcher_manifest: Path | None = None
     app_version: str | None = None
-    launcher_version = read_launcher_version(launcher_text)
+    launcher_version: str | None = None
+    checksums: list[Path] = []
 
     try:
-        app_version = args.version.strip() or read_version(metadata_text)
+        source_app_version = read_version(metadata_text)
         min_launcher_version = read_min_launcher_version(metadata_text)
+        source_launcher_version = read_launcher_version(launcher_text)
+        validate_requested_version(
+            args.version,
+            args.target,
+            source_app_version,
+            source_launcher_version,
+        )
 
         if args.target in ("all", "app"):
+            app_version = source_app_version
             patched = replace_switches(original, VARIANT_SWITCHES[args.variant])
             if patched != original:
                 config_path.write_text(patched, encoding="utf-8")
@@ -380,6 +421,7 @@ def main() -> int:
             )
 
         if args.target in ("all", "launcher"):
+            launcher_version = source_launcher_version
             launcher = build_launcher(root, launcher_version, out_dir)
             launcher_sha = sha256_file(launcher)
             launcher_manifest = write_launcher_manifest(
@@ -390,20 +432,35 @@ def main() -> int:
                 launcher.stat().st_size,
             )
 
-        checksum_variant = "Universal" if args.target == "launcher" else args.variant
-        checksum = write_checksum_info(
-            out_dir,
-            checksum_variant,
-            app_version,
-            launcher_version if args.target in ("all", "launcher") else None,
-            app_zip,
-            launcher,
-            args.target,
-        )
+        if args.target in ("all", "app"):
+            checksums.append(
+                write_checksum_info(
+                    out_dir,
+                    args.variant,
+                    app_version,
+                    None,
+                    app_zip,
+                    None,
+                    "app",
+                )
+            )
+        if args.target in ("all", "launcher"):
+            checksums.append(
+                write_checksum_info(
+                    out_dir,
+                    "Universal",
+                    None,
+                    launcher_version,
+                    None,
+                    launcher,
+                    "launcher",
+                )
+            )
 
+        checksum_variant = "Universal" if args.target == "launcher" else args.variant
         safe_print(
             f"[OK] variant={checksum_variant} app_version={app_version or '-'} "
-            f"launcher_version={launcher_version if args.target in ('all', 'launcher') else '-'} "
+            f"launcher_version={launcher_version or '-'} "
             f"target={args.target}"
         )
         if app_zip and app_zip.exists():
@@ -414,7 +471,8 @@ def main() -> int:
             safe_print(f"  - launcher:    {launcher}")
         if launcher_manifest and launcher_manifest.exists():
             safe_print(f"  - launcher manifest: {launcher_manifest}")
-        safe_print(f"  - checksum:    {checksum}")
+        for checksum in checksums:
+            safe_print(f"  - checksum:    {checksum}")
         return 0
     finally:
         if config_patched:
@@ -423,4 +481,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except RuntimeError as exc:
+        safe_print(f"[ERROR] {exc}")
+        raise SystemExit(1) from None

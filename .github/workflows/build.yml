@@ -70,8 +70,12 @@ jobs:
             VERSION="${GITHUB_REF#refs/tags/v}"
             echo "版本来源: Git Tag"
           else
-            VERSION=$(grep -oP '__version__\s*=\s*["\x27]\K[^"\x27]+' bomana/config.py || echo "dev")
-            echo "版本来源: 源代码 __version__"
+            VERSION=$(grep -oP '__version__\s*=\s*["\x27]\K[^"\x27]+' bomana/metadata.py || true)
+            if [ -z "$VERSION" ]; then
+              echo "::error::无法从 bomana/metadata.py 提取 __version__"
+              exit 1
+            fi
+            echo "版本来源: 源代码 bomana/metadata.py __version__"
           fi
 
           TAG_NAME="$TAG_REF"

@@ -9,7 +9,9 @@ REM   tools\scripts\build_portable.bat Enhanced
 REM   tools\scripts\build_portable.bat Standard app 6.7.0
 REM   tools\scripts\build_portable.bat Lite launcher
 REM 说明:
+REM   version 是一致性校验值，必须匹配源码中的 app 或 launcher 版本。
 REM   target=launcher 时生成通用启动器（与 variant 无关）
+REM   target=all 会构建当前 variant 的 app + 通用启动器；通常不要传单一 version。
 REM ============================================================================
 
 setlocal
@@ -72,7 +74,7 @@ if %errorlevel% neq 0 (
 if "%VERSION%"=="" (
     %UV_CMD% run python tools\build_portable.py --variant %VARIANT% --target %TARGET%
 ) else (
-    %UV_CMD% run python tools\build_portable.py --variant %VARIANT% --target %TARGET% --version %VERSION%
+    %UV_CMD% run python tools\build_portable.py --variant %VARIANT% --target %TARGET% --version "%VERSION%"
 )
 
 if %errorlevel% neq 0 (

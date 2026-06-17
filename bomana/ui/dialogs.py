@@ -204,6 +204,42 @@ class _ScalableDialogMixin:
         self.geometry(f"+{x}+{y}")
 
 
+class _ScopedMousewheelBinding:
+    """Own a bind_all mousewheel callback and remove only that callback."""
+
+    def __init__(self, owner: tk.Misc, bind_widget: tk.Misc, callback):
+        self.owner = owner
+        self.bind_widget = bind_widget
+        self.callback = callback
+        self._funcid: str | None = None
+        self._closed = False
+
+        bind_widget.bind("<Enter>", self._activate, add="+")
+        bind_widget.bind("<Leave>", self._deactivate, add="+")
+        owner.bind("<Destroy>", self._on_owner_destroy, add="+")
+
+    def _activate(self, _event=None) -> None:
+        if self._closed or self._funcid is not None:
+            return
+        self._funcid = self.bind_widget.bind_all("<MouseWheel>", self.callback, add="+")
+
+    def _deactivate(self, _event=None) -> None:
+        funcid = self._funcid
+        self._funcid = None
+        if not funcid:
+            return
+        with contextlib.suppress(Exception):
+            self.bind_widget._root()._unbind(("bind", "all", "<MouseWheel>"), funcid)
+
+    def _on_owner_destroy(self, event) -> None:
+        if event.widget is self.owner:
+            self.cleanup()
+
+    def cleanup(self) -> None:
+        self._closed = True
+        self._deactivate()
+
+
 class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
     """设置对话框
 
@@ -371,15 +407,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
 
         self.content_frame.bind("<Configure>", _sync_content_scrollregion, add="+")
         self._content_canvas.bind("<Configure>", _sync_content_width, add="+")
-        self._content_canvas.bind(
-            "<Enter>",
-            lambda _e: self._content_canvas.bind_all("<MouseWheel>", self._on_content_mousewheel),
-            add="+",
-        )
-        self._content_canvas.bind(
-            "<Leave>",
-            lambda _e: self._content_canvas.unbind_all("<MouseWheel>"),
-            add="+",
+        self._content_mousewheel_binding = _ScopedMousewheelBinding(
+            self,
+            self._content_canvas,
+            self._on_content_mousewheel,
         )
 
         # 创建各选项卡页面
@@ -409,6 +440,15 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
     def _on_content_mousewheel(self, event):
         if hasattr(self, "_content_canvas"):
             self._content_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _cleanup_content_mousewheel_binding(self) -> None:
+        binding = getattr(self, "_content_mousewheel_binding", None)
+        if binding is not None:
+            binding.cleanup()
+
+    def destroy(self) -> None:
+        self._cleanup_content_mousewheel_binding()
+        super().destroy()
 
     def _switch_tab(self, tab_name: str):
         """切换选项卡"""
@@ -1588,6 +1628,15 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         """居中显示并限制到可见屏幕。"""
         self._center_dialog_on_parent(parent)
 
+    def _restart_global_hotkeys_after_save(self) -> None:
+        runtime_services = getattr(self.app, "runtime_services", None)
+        if runtime_services is None:
+            return
+
+        runtime_services.stop_global_hotkeys()
+        if HotkeyConfig.GLOBAL_HOTKEYS:
+            runtime_services.init_global_hotkeys()
+
     def _save(self):
         """保存所有设置"""
         # 收集设置值
@@ -1751,10 +1800,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             or hotkey_bindings != previous["hotkey_bindings"]
         )
         if need_restart_hotkeys:
-            if hasattr(self.app, "_ghk") and self.app._ghk:
-                self.app._ghk.stop()
-            if HotkeyConfig.GLOBAL_HOTKEYS:
-                self.app._init_global_hotkeys()
+            self._restart_global_hotkeys_after_save()
             # 刷新提示文本（主窗口 + 导航窗口）
             self.app._update_hint()
             if hasattr(self.app, "nav_window") and self.app.nav_window:
@@ -2751,8 +2797,7 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         def on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        canvas.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", on_mousewheel), add="+")
-        canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"), add="+")
+        self._mousewheel_binding = _ScopedMousewheelBinding(self, canvas, on_mousewheel)
 
         content = tk.Frame(root, bg=Theme.BG)
         content.pack(fill="both", expand=True, padx=24, pady=20)
@@ -3000,10 +3045,13 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
                 webbrowser.open(url)
 
     def _close(self):
-        # 解绑鼠标滚轮事件，防止关闭后影响其他窗口
-        with contextlib.suppress(Exception):
-            self.unbind_all("<MouseWheel>")
         self.destroy()
+
+    def destroy(self) -> None:
+        binding = getattr(self, "_mousewheel_binding", None)
+        if binding is not None:
+            binding.cleanup()
+        super().destroy()
 
     def _center_on_parent(self, parent):
         self._center_dialog_on_parent(parent)

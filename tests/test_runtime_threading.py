@@ -23,6 +23,12 @@ class FakeGame:
         self.ticks += 1
 
 
+class ExplodingGame(FakeGame):
+    def tick(self) -> None:
+        self.ticks += 1
+        raise RuntimeError("tick failed")
+
+
 class RuntimeThreadingTests(unittest.TestCase):
     def test_dispatcher_posts_callback_to_tk_after(self) -> None:
         root = FakeRoot()
@@ -48,6 +54,35 @@ class RuntimeThreadingTests(unittest.TestCase):
             poller._run()
 
         self.assertEqual(game.ticks, 1)
+
+    def test_logic_poller_logs_tick_exception_once_until_throttle_elapsed(self) -> None:
+        game = ExplodingGame()
+        poller = LogicPoller(game, lambda: game.ticks >= 3)
+
+        with (
+            patch("bomana.ui.runtime.log_exception") as log_exception,
+            patch("bomana.ui.runtime.time.monotonic", return_value=100.0),
+            patch("bomana.ui.runtime.time.sleep"),
+        ):
+            poller._run()
+
+        self.assertEqual(game.ticks, 3)
+        self.assertEqual(log_exception.call_count, 1)
+        self.assertEqual(log_exception.call_args.args[0], "logic_poller_tick_failed")
+
+    def test_logic_poller_logs_tick_exception_after_throttle_elapsed(self) -> None:
+        game = ExplodingGame()
+        poller = LogicPoller(game, lambda: game.ticks >= 2)
+
+        with (
+            patch("bomana.ui.runtime.log_exception") as log_exception,
+            patch("bomana.ui.runtime.time.monotonic", side_effect=[100.0, 161.0]),
+            patch("bomana.ui.runtime.time.sleep"),
+        ):
+            poller._run()
+
+        self.assertEqual(game.ticks, 2)
+        self.assertEqual(log_exception.call_count, 2)
 
 
 if __name__ == "__main__":

@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.14"
+# dependencies = [
+#     "fonttools>=4.0.0",
+#     "pillow>=8.0.0",
+# ]
+# ///
 """Generate bundled UI font subsets and PNG icon assets."""
 
 from __future__ import annotations
 
 import re
+import sys
 import tempfile
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw
-
-from bomana.ui.icon_assets import ICON_ASSET_SIZES
-
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from PIL import Image, ImageDraw  # noqa: E402
+
+from bomana.ui.icon_assets import ICON_ASSET_SIZES  # noqa: E402
+
 ASSET_ROOT = ROOT / "bomana" / "assets"
 FONT_DIR = ASSET_ROOT / "fonts"
 ICON_DIR = ASSET_ROOT / "icons"

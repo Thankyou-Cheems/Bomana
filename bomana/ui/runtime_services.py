@@ -53,7 +53,7 @@ class AppRuntimeServices:
 
     def init_global_hotkeys(self) -> None:
         """Initialize runtime-configurable Windows global hotkeys."""
-        self.global_hotkeys = None
+        self.stop_global_hotkeys()
         if os.name != "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
             return
 

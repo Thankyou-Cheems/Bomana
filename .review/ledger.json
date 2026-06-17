@@ -23,13 +23,15 @@
         }
       ],
       "id": "F-598db3d6",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Fixed TelemetryFetcher to request /state after /indicators failure; verified by tests/test_telemetry_fetch_result.py and full pytest."
     },
     {
       "file": "bomana/ui/dialogs.py",
@@ -53,13 +55,15 @@
         }
       ],
       "id": "F-765d37d7",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Fixed global hotkey restart through AppRuntimeServices stop/init; verified by tests/test_runtime_services.py and full pytest."
     },
     {
       "file": "bomana/ui/dialogs.py",
@@ -83,13 +87,15 @@
         }
       ],
       "id": "F-493fddd1",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Fixed dialog mousewheel lifecycle with scoped bind_all ownership and destroy cleanup; verified by tests/test_ui_geometry.py and full pytest."
     },
     {
       "file": "bomana/utils/file_utils.py",
@@ -113,13 +119,15 @@
         }
       ],
       "id": "F-46da3c19",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Fixed config compile_switch persistence and migration semantics; verified by tests/test_file_utils_persistence.py and full pytest."
     },
     {
       "file": "bomana/ui/runtime.py",
@@ -143,13 +151,15 @@
         }
       ],
       "id": "F-ed18df31",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Fixed LogicPoller exception diagnostics with throttled log_exception; verified by tests/test_runtime_threading.py and full pytest."
     },
     {
       "file": "tools/build_portable.py",
@@ -169,13 +179,15 @@
         }
       ],
       "id": "F-17e5ea82",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Changed build --version to fail-fast consistency check against bomana/metadata.py; verified by release workflow tests and CLI mismatch probe."
     },
     {
       "file": ".github/workflows/build.yml",
@@ -199,13 +211,15 @@
         }
       ],
       "id": "F-dda5869e",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Changed build workflow fallback to read bomana/metadata.py and fail on empty version; verified by tests/test_quality_release_workflows.py and full pytest."
     },
     {
       "file": "tools/build_portable.py",
@@ -229,13 +243,15 @@
         }
       ],
       "id": "F-e2f05678",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Changed build_portable all/app/launcher checksum outputs to deployable checksums_app_<Variant>.txt and checksums_launcher.txt; verified by release workflow tests."
     },
     {
       "file": "tools/build_portable.py",
@@ -259,13 +275,15 @@
         }
       ],
       "id": "F-b5b819eb",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Changed launcher --version to fail-fast consistency check against LAUNCHER_VERSION and quoted batch arg; verified by release workflow tests and CLI mismatch probe."
     },
     {
       "file": "tools/generate_ui_assets.py",
@@ -289,13 +307,15 @@
         }
       ],
       "id": "F-7129cc8e",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "drifted",
+        "detail": "snippet exists but not at lines 88-90; first line now near line 99",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Declared fontTools/Pillow script dependencies and inserted repo root before local package imports; verified by asset generator import test and fontTools import probe."
     },
     {
       "file": "pyproject.toml",
@@ -319,13 +339,15 @@
         }
       ],
       "id": "F-cb582860",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-17T13:44:39+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-17T13:46:51+00:00"
-      }
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-06-17T14:47:10+00:00"
+      },
+      "resolved_at": "2026-06-17T14:47:38+00:00",
+      "resolution_note": "Added pytest --capture=sys for WSL Windows Temp stability; verified by default uv run --extra dev pytest passing 113 tests."
     }
   ]
 }
