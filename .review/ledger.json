@@ -1,0 +1,331 @@
+{
+  "version": 2,
+  "findings": [
+    {
+      "file": "bomana/core/telemetry.py",
+      "line_start": 280,
+      "line_end": 284,
+      "snippet": "        if not data.ind_ok:\n            return data\n\n        # 请求 /state (飞机状态)\n        state_result = self.http.get_json(f\"{NetworkConfig.API_BASE}/state\", budget)",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Telemetry fetcher skips /state whenever /indicators fails",
+      "impact": "When /indicators times out or returns bad JSON but /state is still healthy, the main tick never samples /state, reports state_resp_ok as false with an empty error, and loses /state as an independent API-up signal.",
+      "fix": "Continue fetching /state while budget remains even when /indicators fails, or explicitly mark /state as not_fetched if the skip is intentional.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "A FakeHttp probe with /indicators failing and /state succeeding recorded only the /indicators URL; state_resp_ok stayed False and ias_kmh stayed 0."
+        },
+        {
+          "kind": "read",
+          "detail": "tools/sample_8111_attitude.py requests /indicators and /state independently, so the endpoints are not inherently coupled."
+        }
+      ],
+      "id": "F-598db3d6",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/dialogs.py",
+      "line_start": 1748,
+      "line_end": 1757,
+      "snippet": "        # 重启热键服务（如果需要）\n        need_restart_hotkeys = (\n            previous[\"hotkeys_enabled\"] != HotkeyConfig.GLOBAL_HOTKEYS\n            or hotkey_bindings != previous[\"hotkey_bindings\"]\n        )\n        if need_restart_hotkeys:\n            if hasattr(self.app, \"_ghk\") and self.app._ghk:\n                self.app._ghk.stop()\n            if HotkeyConfig.GLOBAL_HOTKEYS:\n                self.app._init_global_hotkeys()",
+      "category": "lifecycle",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Hotkey settings restart stops a non-existent manager",
+      "impact": "On Windows, changing or disabling global hotkeys from settings leaves the old AppRuntimeServices.global_hotkeys listener running, so old shortcuts can keep firing or keep RegisterHotKey IDs occupied.",
+      "fix": "Restart hotkeys through AppRuntimeServices.stop_global_hotkeys() before reinitializing, and make init_global_hotkeys stop any existing manager before replacing the reference.",
+      "evidence": [
+        {
+          "kind": "grep",
+          "detail": "rg '_ghk|global_hotkeys' shows dialogs.py is the only _ghk reference; the real manager is runtime_services.global_hotkeys."
+        },
+        {
+          "kind": "read",
+          "detail": "AppRuntimeServices.init_global_hotkeys assigns self.global_hotkeys = None before creating a new manager and does not stop the old manager first."
+        }
+      ],
+      "id": "F-765d37d7",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/dialogs.py",
+      "line_start": 374,
+      "line_end": 382,
+      "snippet": "        self._content_canvas.bind(\n            \"<Enter>\",\n            lambda _e: self._content_canvas.bind_all(\"<MouseWheel>\", self._on_content_mousewheel),\n            add=\"+\",\n        )\n        self._content_canvas.bind(\n            \"<Leave>\",\n            lambda _e: self._content_canvas.unbind_all(\"<MouseWheel>\"),\n            add=\"+\",",
+      "category": "lifecycle",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Dialog mousewheel handling relies on global bind_all cleanup",
+      "impact": "If a scrollable dialog is destroyed without a Leave event, the Tk all-bind can keep pointing at dialog callbacks and later wheel events can fail or clear other global wheel bindings.",
+      "fix": "Bind wheel handling to dialog-local bindtags or add a single cleanup path for WM_DELETE_WINDOW and Destroy that only removes this dialog's binding.",
+      "evidence": [
+        {
+          "kind": "grep",
+          "detail": "rg 'WM_DELETE_WINDOW|protocol\\(' bomana/ui/dialogs.py found no dialog close protocol binding."
+        },
+        {
+          "kind": "read",
+          "detail": "AboutDialog has a manual _close cleanup, but SettingsDialog relies on Leave and both use bind_all/unbind_all on <MouseWheel>."
+        }
+      ],
+      "id": "F-493fddd1",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "bomana/utils/file_utils.py",
+      "line_start": 225,
+      "line_end": 260,
+      "snippet": "        # 检查编译开关是否变化（精简版 <-> 完整版切换）\n        saved_switches = config.get(\"compile_switches\", {})\n        current_switches = {\n            \"ENABLE_CCRP\": ENABLE_CCRP,\n            \"ENABLE_ZONES\": ENABLE_ZONES,\n            \"ENABLE_AIRFIELDS\": ENABLE_AIRFIELDS,\n            \"ENABLE_FUEL\": ENABLE_FUEL,\n            \"ENABLE_CHECKLIST\": ENABLE_CHECKLIST,\n        }\n\n        # 如果某个功能从禁用变为启用，重置该面板为默认显示\n        panels = config.get(\"panels\", {})\n        switches_changed = False\n\n        for switch_name, current_enabled in current_switches.items():\n            was_enabled = saved_switches.get(switch_name, False)\n            if current_enabled and not was_enabled:\n                # 功能从禁用变为启用，重置对应面板为显示\n                panel_key = {\n                    \"ENABLE_CCRP\": \"show_bombing\",\n                    \"ENABLE_ZONES\": \"show_zones\",\n                    \"ENABLE_AIRFIELDS\": \"show_airfields\",\n                    \"ENABLE_FUEL\": \"show_fuel\",\n                    \"ENABLE_CHECKLIST\": \"show_checklist\",\n                }.get(switch_name)\n                if panel_key:\n                    panels[panel_key] = True\n                    switches_changed = True\n                    changed = True\n\n        if switches_changed:\n            config[\"panels\"] = panels\n\n        # 更新保存的编译开关状态\n        if saved_switches != current_switches:\n            config[\"compile_switches\"] = current_switches",
+      "category": "data-loss",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Config migration resets hidden panel preferences after first save",
+      "impact": "A saved config without compile_switches treats every current feature as newly enabled on the next load, overwriting user hidden panel choices such as show_zones=false back to true.",
+      "fix": "Persist current compile_switches in ConfigManager.save, and only reset panels when a previous compile_switches block explicitly shows a feature changed from disabled to enabled.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "A temporary ConfigManager.save({'panels': {'show_zones': False, 'show_fuel': False}}) followed by load returned both fields as True and added compile_switches."
+        },
+        {
+          "kind": "read",
+          "detail": "ConfigManager.save only writes config_version before atomic_write_json and does not add compile_switches."
+        }
+      ],
+      "id": "F-46da3c19",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/runtime.py",
+      "line_start": 41,
+      "line_end": 45,
+      "snippet": "            try:\n                self.game.tick()\n            except Exception:\n                time.sleep(NetworkConfig.BACKOFF_MAX)\n                continue",
+      "category": "lifecycle",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "LogicPoller swallows GameLogic.tick exceptions without diagnostics",
+      "impact": "If the background 8111 polling loop hits a regression, users see stale or delayed data while diagnostics contain no exception event explaining the failure.",
+      "fix": "Log tick exceptions with diagnostics, preferably with throttling, then keep the existing backoff behavior.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "No log_exception call exists in bomana/ui/runtime.py and existing runtime threading tests only cover the successful tick path."
+        },
+        {
+          "kind": "grep",
+          "detail": "rg 'logic_poller|tick_failed|BACKOFF_MAX' shows only the silent sleep/continue path for LogicPoller errors."
+        }
+      ],
+      "id": "F-ed18df31",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "tools/build_portable.py",
+      "line_start": 363,
+      "line_end": 371,
+      "snippet": "        app_version = args.version.strip() or read_version(metadata_text)\n        min_launcher_version = read_min_launcher_version(metadata_text)\n\n        if args.target in (\"all\", \"app\"):\n            patched = replace_switches(original, VARIANT_SWITCHES[args.variant])\n            if patched != original:\n                config_path.write_text(patched, encoding=\"utf-8\")\n                config_patched = True\n            app_zip = build_app_zip(root, args.variant, app_version, out_dir)",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "App --version build labels the package without updating packaged metadata",
+      "impact": "Building an app package with --version can produce a manifest and zip filename for one version while the installed app still reports the source metadata version, causing repeated update prompts and untrustworthy release metadata.",
+      "fix": "Reject --version values that differ from bomana/metadata.py for app builds, or patch the packaged metadata file inside the build output consistently.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Built --target app --version 9.9.9; manifest app_version was 9.9.9, zip bomana/metadata.py still had __version__ = 6.14.4, and read_local_app_version returned 6.14.4."
+        }
+      ],
+      "id": "F-17e5ea82",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": ".github/workflows/build.yml",
+      "line_start": 58,
+      "line_end": 74,
+      "snippet": "          if [ -n \"${{ github.event.inputs.version }}\" ]; then\n            VERSION=\"${{ github.event.inputs.version }}\"\n            echo \"版本来源: 手动输入\"\n          elif [[ \"$TAG_REF\" =~ ^v(.+)-app$ ]]; then\n            VERSION=\"${BASH_REMATCH[1]}\"\n            AUTO_TARGET=\"app\"\n            echo \"版本来源: Git Tag (app only)\"\n          elif [[ \"$TAG_REF\" =~ ^v(.+)-launcher$ ]]; then\n            VERSION=\"${BASH_REMATCH[1]}\"\n            AUTO_TARGET=\"launcher\"\n            echo \"版本来源: Git Tag (launcher only)\"\n          elif [[ \"${GITHUB_REF}\" == refs/tags/* ]]; then\n            VERSION=\"${GITHUB_REF#refs/tags/v}\"\n            echo \"版本来源: Git Tag\"\n          else\n            VERSION=$(grep -oP '__version__\\s*=\\s*[\"\\x27]\\K[^\"\\x27]+' bomana/config.py || echo \"dev\")\n            echo \"版本来源: 源代码 __version__\"",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Manual release workflow falls back to dev because it greps config.py for version",
+      "impact": "A workflow_dispatch release with an empty version input now reads no literal version from bomana/config.py and emits dev, producing vdev and dev-labeled artifacts.",
+      "fix": "Read __version__ from bomana/metadata.py in the workflow fallback, and fail release preparation if the resolved version is empty or dev.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Running the same grep against bomana/config.py in this checkout returns no match and falls back to dev."
+        },
+        {
+          "kind": "read",
+          "detail": "bomana/config.py re-exports __version__ from metadata, while bomana/metadata.py contains the literal __version__ value."
+        }
+      ],
+      "id": "F-dda5869e",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "tools/build_portable.py",
+      "line_start": 330,
+      "line_end": 335,
+      "snippet": "    if target == \"launcher\":\n        path = out_dir / \"checksums_launcher.txt\"\n    elif target == \"app\":\n        path = out_dir / f\"checksums_app_{variant}.txt\"\n    else:\n        path = out_dir / f\"checksums_portable_{variant}.txt\"",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "build_portable --target all emits checksum names deploy_update_assets rejects",
+      "impact": "The documented local all build can succeed but deploy_update_assets --target all then fails because it requires checksums_app_<channel>.txt and checksums_launcher.txt, not checksums_portable_<variant>.txt.",
+      "fix": "Make all builds write the same checksum files deploy_update_assets requires, or teach deploy_update_assets to accept the portable checksum file for all builds.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "write_checksum_info(..., target='all') produced checksums_portable_Enhanced.txt; required_assets(..., target='all') immediately reported missing checksums_app_Enhanced.txt and checksums_launcher.txt."
+        },
+        {
+          "kind": "read",
+          "detail": "tools/deploy_update_assets.py required_assets requires checksums_app_* for app/all and checksums_launcher.txt for launcher/all."
+        }
+      ],
+      "id": "F-e2f05678",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "tools/build_portable.py",
+      "line_start": 360,
+      "line_end": 364,
+      "snippet": "    launcher_version = read_launcher_version(launcher_text)\n\n    try:\n        app_version = args.version.strip() or read_version(metadata_text)\n        min_launcher_version = read_min_launcher_version(metadata_text)",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Launcher build ignores the wrapper's version argument",
+      "impact": "tools/scripts/build_launcher.bat 2.1.0 passes --version but build_portable still reads LAUNCHER_VERSION from launcher.pyw, so maintainers can publish a launcher with a different version than requested.",
+      "fix": "For launcher targets, either reject a --version mismatch against LAUNCHER_VERSION or implement a temporary launcher.pyw version patch with restoration.",
+      "evidence": [
+        {
+          "kind": "grep",
+          "detail": "args.version is only assigned to app_version; build_launcher is called with launcher_version from launcher.pyw."
+        },
+        {
+          "kind": "read",
+          "detail": "tools/scripts/build_launcher.bat forwards its optional VERSION argument as --version to tools/build_portable.py."
+        }
+      ],
+      "id": "F-b5b819eb",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "tools/generate_ui_assets.py",
+      "line_start": 88,
+      "line_end": 90,
+      "snippet": "    from fontTools import subset\n    from fontTools.ttLib import TTFont\n    from fontTools.varLib import instancer",
+      "category": "dependency",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "generate_ui_assets.py depends on undeclared fontTools",
+      "impact": "The documented asset generator cannot run in the standard uv dev or build environments, so font and icon asset refreshes are not reproducible from the repository metadata.",
+      "fix": "Add fonttools to the appropriate project extra and update the lockfile; also make the script runnable from uv by inserting the repository root before importing bomana.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "uv run --extra dev python tools/generate_ui_assets.py failed with ModuleNotFoundError: No module named 'bomana'; PYTHONPATH=. then failed with ModuleNotFoundError: No module named 'fontTools'."
+        },
+        {
+          "kind": "grep",
+          "detail": "pyproject.toml declares pillow as a runtime dependency but no extra contains fonttools."
+        }
+      ],
+      "id": "F-7129cc8e",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    },
+    {
+      "file": "pyproject.toml",
+      "line_start": 30,
+      "line_end": 30,
+      "snippet": "addopts = \"-q\"",
+      "category": "test-gap",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Default pytest capture breaks the smoke gate in WSL Windows-temp environments",
+      "impact": "When tempfile uses /mnt/c/Users/.../Temp, pytest fd capture fails before running tests, making uv run --extra dev pytest report no tests ran even though the suite passes.",
+      "fix": "Set a stable capture mode such as --capture=sys for local smoke commands, or document/export TMPDIR=/tmp for WSL runs.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "uv run --extra dev pytest failed with FileNotFoundError in _pytest/capture.py and no tests ran; env TMPDIR=/tmp uv run --extra dev pytest passed with 94 tests."
+        },
+        {
+          "kind": "runtime",
+          "detail": "A direct tempfile.TemporaryFile(...).truncate() probe fails under /mnt/c/Users/cheb2/AppData/Local/Temp and passes under TMPDIR=/tmp."
+        }
+      ],
+      "id": "F-cb582860",
+      "status": "open",
+      "created_at": "2026-06-17T13:44:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-17T13:46:51+00:00"
+      }
+    }
+  ]
+}

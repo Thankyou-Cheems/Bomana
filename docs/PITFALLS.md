@@ -50,6 +50,11 @@ implementation plans belong in git history, not here.
   Cause: smoke used `unittest discover` while part of the suite used pytest function tests, and `.gitignore` ignored `tests/` / `test_*.py`
   Fix/Workaround: keep smoke on `uv run --extra dev pytest`, keep tests trackable in git, and use `tests/README.md` naming boundaries as the suite grows
 
+- Context: running pytest from WSL with temp files rooted in Windows `%TEMP%`
+  Symptom: `uv run --extra dev pytest` failed before running tests with `FileNotFoundError` from pytest fd capture cleanup
+  Cause: `tempfile.TemporaryFile().truncate()` can fail when Python resolves temp files under `/mnt/c/Users/.../AppData/Local/Temp`
+  Fix/Workaround: run with `TMPDIR=/tmp`, or configure the smoke command/pytest capture mode to avoid fd capture in that environment
+
 - Context: Windows CI packaging or release asset upload
   Symptom: `UnicodeEncodeError` when printing paths, or GitHub rewrote Chinese asset names into underscored names
   Cause: Windows CI console encoding can be cp1252, and GitHub normalizes non-ASCII/special characters in release asset names
