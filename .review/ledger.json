@@ -348,6 +348,996 @@
       },
       "resolved_at": "2026-06-17T14:47:38+00:00",
       "resolution_note": "Added pytest --capture=sys for WSL Windows Temp stability; verified by default uv run --extra dev pytest passing 113 tests."
+    },
+    {
+      "file": "bomana/core/telemetry.py",
+      "line_start": 280,
+      "line_end": 287,
+      "snippet": "        # 请求 /state (飞机状态)\n        state_result = self.http.get_json(f\"{NetworkConfig.API_BASE}/state\", budget)\n        data.state_resp_ok = state_result.ok\n        data.state_error_kind = state_result.error_kind\n        data.state_elapsed_ms = state_result.elapsed_ms\n        j = state_result.payload\n        if state_result.ok and isinstance(j, dict):\n            data.ias_kmh, _ = self._read_scaled_float(",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Schema-empty /state frames are marked healthy",
+      "impact": "An HTTP 200 /state payload such as {} leaves state_resp_ok true while all state fields remain defaults, so ALIVE fallback and landing/fuel guards treat zero/default telemetry as fresh data.",
+      "fix": "Validate the /state payload shape before setting state_resp_ok, or add a payload/schema flag used by fallback, fuel, landing, gear, and diagnostics.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "Probe with /state payload {} returned state_resp_ok=True, ias_kmh=0.0, gear_pct=0.0."
+        },
+        {
+          "kind": "read",
+          "detail": "GameLogic fallback only triggers when not tel.state_resp_ok at bomana/core/logic.py:189-193."
+        }
+      ],
+      "id": "F-1fa20106",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/core/telemetry.py",
+      "line_start": 143,
+      "line_end": 160,
+      "snippet": "        try:\n            return float(raw)\n        except _NUMERIC_PARSE_ERRORS:\n            return float(default)\n\n    @staticmethod\n    def _to_optional_float(raw: Any) -> float | None:\n        \"\"\"将8111字段值转换为可空float。\"\"\"\n        if raw is None:\n            return None\n        if isinstance(raw, dict):\n            raw = raw.get(\"value\")\n        elif isinstance(raw, (list, tuple)):\n            raw = raw[0] if raw else None\n        try:\n            return float(raw)\n        except _NUMERIC_PARSE_ERRORS:\n            return None",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Telemetry numeric parsing accepts NaN and Infinity",
+      "impact": "8111 values like \"nan\" or NaN are converted into non-finite floats and can poison gear, fuel, attitude, speed, or snapshot fields instead of falling back safely.",
+      "fix": "Require math.isfinite after float conversion and return the default or None for non-finite values; clamp bounded fields where appropriate.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "Probe with {\"IAS, km/h\":\"nan\", \"gear, %\":\"nan\"} returned state_resp_ok=True, ias_kmh=nan, gear_pct=nan."
+        },
+        {
+          "kind": "read",
+          "detail": "MapObjectsFetcher._float_or_none already rejects non-finite values, but TelemetryFetcher scalar parsers do not."
+        }
+      ],
+      "id": "F-57957fbb",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/core/telemetry.py",
+      "line_start": 582,
+      "line_end": 595,
+      "snippet": "        out = MapObjData()\n        result = self.http.get_json(f\"{NetworkConfig.API_BASE}/map_obj.json\", budget)\n        self.last_result = result\n        out.error_kind = result.error_kind\n        out.elapsed_ms = result.elapsed_ms\n        j = result.payload\n        if not result.ok:\n            return out\n\n        out.ok = True\n\n        # 提取对象列表\n        objs = self._extract_objects(j)\n        out.obj_count = len(objs)",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Malformed map object payloads are reported as healthy empty maps",
+      "impact": "HTTP 200 /map_obj.json payloads with non-list or unrecognized dict shapes set MapObjData.ok=True and obj_count=0, hiding schema failures from API-down diagnostics and stale-map fallback logic.",
+      "fix": "Validate the payload shape before setting out.ok; keep legitimate empty object lists valid but mark unsupported JSON shapes as schema errors.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "Probe with payload \"bad-shape\" and {\"unexpected\": []} returned ok=True, obj_count=0, error_kind=\"\"."
+        },
+        {
+          "kind": "read",
+          "detail": "GameLogic records map endpoint health from raw_map.ok at bomana/core/logic.py:596-600."
+        }
+      ],
+      "id": "F-8fb5648b",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/core/telemetry.py",
+      "line_start": 73,
+      "line_end": 82,
+      "snippet": "        rem = budget.remaining()\n        if rem <= 0.0:\n            return FetchResult(endpoint=endpoint, ok=False, error_kind=\"budget_exhausted\")\n\n        # 计算超时时间\n        connect_t = min(NetworkConfig.API_CONNECT_TIMEOUT, max(0.01, rem))\n        read_t = min(NetworkConfig.API_READ_TIMEOUT, max(0.01, rem))\n\n        try:\n            r = self.session.get(url, timeout=(connect_t, read_t))",
+      "category": "performance",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Tiny positive budgets still start over-budget requests",
+      "impact": "When remaining budget is below 10 ms, HttpJson still sends a request with 10 ms connect and 10 ms read timeouts, allowing a tick to exceed the remaining deadline before the next endpoint check.",
+      "fix": "Treat remaining time below the minimum usable timeout as budget_exhausted, or allocate one total per-request timeout from the remaining budget.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "Probe with Budget(0.001) still called session.get with timeout=(0.01, 0.01)."
+        },
+        {
+          "kind": "read",
+          "detail": "Budget is only checked before session.get, so it cannot interrupt the in-flight request."
+        }
+      ],
+      "id": "F-2eb5a564",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/utils/file_utils.py",
+      "line_start": 340,
+      "line_end": 365,
+      "snippet": "            # 提取保存时的剩余时间和时间戳\n            saved_remaining = data.get(\"remaining_sec\", 0)\n            save_time = data.get(\"save_timestamp\", 0)\n\n            # 计算实际流逝的时间\n            now = time.time()\n            elapsed_since_save = now - save_time\n            new_remaining = saved_remaining - elapsed_since_save\n\n            # 如果过期太久（超过一个完整周期），放弃恢复\n            if new_remaining < -GameConfig.CYCLE_SECONDS:\n                return None\n\n            # 如果时间为负（已进入下一周期），计算新周期的剩余时间\n            if new_remaining < 0:\n                overshoot = abs(new_remaining)\n                new_remaining = GameConfig.CYCLE_SECONDS - overshoot\n\n            # 反推出生时间\n            data[\"computed_remaining\"] = new_remaining\n            data[\"computed_spawn_time\"] = now - (GameConfig.CYCLE_SECONDS - new_remaining)\n\n            return data\n        except (json.JSONDecodeError, ValueError, KeyError, OSError) as exc:\n            _report_persistence_error(\"state load\", FileConfig.STATE_FILE, exc)\n            return None",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Malformed timer state can crash restore",
+      "impact": "A corrupted state JSON object with non-numeric remaining_sec or save_timestamp raises TypeError during startup restore instead of being ignored through the persistence-error path.",
+      "fix": "Coerce and validate remaining_sec/save_timestamp/life_index/sortie_id before arithmetic, and catch TypeError with the existing load failure handling.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "Probe wrote {\"remaining_sec\":\"bad\",\"save_timestamp\":0}; StateManager.load raised TypeError unsupported operand type(s) for -: str and float."
+        },
+        {
+          "kind": "read",
+          "detail": "GameLogic.restore_timer_state calls StateManager.load directly at bomana/core/logic.py:1256."
+        }
+      ],
+      "id": "F-d563b2d3",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/core/logic.py",
+      "line_start": 843,
+      "line_end": 863,
+      "snippet": "        # === 战区被摧毁检测 ===\n        current_zone_ids = {z.id for z in mp.zones}\n        if nav.previous_zone_ids and current_zone_ids:\n            destroyed_ids = nav.previous_zone_ids - current_zone_ids\n            if destroyed_ids:\n                # 找到被摧毁的战区\n                destroyed = [z for z in nav.zones if z.id in destroyed_ids]\n                if destroyed:\n                    nav.destroyed_zones = destroyed\n                    nav.destroyed_alert_until = now + ZoneConfig.DESTROYED_ALERT_SEC\n\n                    # v5.5: 判断是否有感兴趣的战区被摧毁\n                    has_interesting = any(\n                        self._is_zone_of_interest(z, nav.target_zone) for z in destroyed\n                    )\n                    nav.should_play_destroyed_sound = has_interesting\n                else:\n                    nav.should_play_destroyed_sound = False\n            else:\n                nav.should_play_destroyed_sound = False\n        nav.previous_zone_ids = current_zone_ids",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Final zone disappearance is never reported as destroyed",
+      "impact": "When the previous valid map had zones and the current valid map has player position but zero zones, current_zone_ids is empty so destroyed_ids is skipped and previous_zone_ids is overwritten, losing the final destroyed alert.",
+      "fix": "Handle previous non-empty to current empty as destroyed when the map frame is otherwise valid, or make the invalid-frame suppression explicit before this block.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The source-unavailable guard already returned for !mp.ok or missing player_pos at bomana/core/logic.py:775-789."
+        },
+        {
+          "kind": "read",
+          "detail": "Snapshot alerting depends on nav.destroyed_alert_until later at bomana/core/logic.py:1457."
+        }
+      ],
+      "id": "F-6fcde172",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/data/ccrp_bomb_params.json",
+      "line_start": 133,
+      "line_end": 147,
+      "snippet": "    \"bomb_ussr_82mm_o_832\": {\n      \"mass\": 3.31,\n      \"caliber\": 0.82,\n      \"dragCx\": 0.07,\n      \"distFromCmToStab\": 0.77,\n      \"brakeTime\": [\n        0.0,\n        0.0\n      ],\n      \"brakeCxK\": 0.0,\n      \"brakeArm\": 0.0,\n      \"stab_enabled\": false,\n      \"source_file\": \"bomb_ussr_82mm_o_832.blkx\",\n      \"mesh\": \"bomb_82mm_mortar\"\n    },",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "82mm mortar bomb is stored with a 0.82m caliber",
+      "impact": "Selecting bomb_ussr_82mm_o_832 feeds caliber 0.82 into drag area, making the 3.31 kg 82mm mortar behave like a 0.82 m projectile and producing a much shorter CCRP range.",
+      "fix": "Correct this entry to 0.082 m and add a data validation check for IDs/source/mesh names containing Nmm.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "calculate_bomb_trajectory(1000,100) range was 583.249m with caliber 0.82 and 1408.789m with only caliber changed to 0.082."
+        },
+        {
+          "kind": "read",
+          "detail": "id/source_file/mesh all identify this as 82mm; ballistics.py computes area from caliber in meters."
+        }
+      ],
+      "id": "F-97143313",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/utils/math_utils.py",
+      "line_start": 113,
+      "line_end": 117,
+      "snippet": "    while angle > 180:\n        angle -= 360\n    while angle < -180:\n        angle += 360\n    return angle",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "normalize_angle can hang on infinite input",
+      "impact": "normalize_angle(float(\"inf\")) never returns, and calculate_relative_bearing takes the same path if invalid heading/bearing data reaches it.",
+      "fix": "Replace the subtraction loops with finite validation plus modulo normalization while preserving the existing boundary behavior.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "timeout 1s uv run --extra dev python calling normalize_angle(float(\"inf\")) exited 124."
+        },
+        {
+          "kind": "read",
+          "detail": "The helper accepts arbitrary floats and has no finite guard."
+        }
+      ],
+      "id": "F-dff0276c",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/runtime_services.py",
+      "line_start": 60,
+      "line_end": 66,
+      "snippet": "        hotkeys = [\n            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.KEY_RESET, self.app._manual_reset_hotkey),\n            (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.KEY_LOCK, self.app._toggle_lock),\n            (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.KEY_CORNER, self.app._next_corner),\n            (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.KEY_BEEP, self.app._toggle_beep),\n            (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.KEY_ZONES, self.app._toggle_zone_sound),\n        ]",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Zone hotkey is registered when zones are compiled out",
+      "impact": "Lite-style builds with ENABLE_ZONES false can still capture KEY_ZONES globally and call _toggle_zone_sound, consuming F11 and mutating hidden zone sound state for a disabled feature.",
+      "fix": "Append the zones hotkey only under ENABLE_ZONES and apply the same guard to the Tk-local binding.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "runtime_services.py gates the tray zone menu on ENABLE_ZONES at lines 243-250, but the global hotkey list is unconditional."
+        },
+        {
+          "kind": "read",
+          "detail": "app.py also binds KEY_ZONES locally without an ENABLE_ZONES guard."
+        }
+      ],
+      "id": "F-d8a0e46f",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/app.py",
+      "line_start": 547,
+      "line_end": 550,
+      "snippet": "        self.root.bind(f\"<{HotkeyConfig.KEY_LOCK}>\", lambda e: self._toggle_lock())\n        self.root.bind(f\"<{HotkeyConfig.KEY_CORNER}>\", lambda e: self._next_corner())\n        self.root.bind(f\"<{HotkeyConfig.KEY_BEEP}>\", lambda e: self._toggle_beep())\n        self.root.bind(f\"<{HotkeyConfig.KEY_ZONES}>\", lambda e: self._toggle_zone_sound())",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Runtime hotkey changes leave Tk-local bindings stale",
+      "impact": "After Settings changes hotkey bindings, global hotkeys and hints can use the new keys while the Tk window remains bound to startup keys; with global hotkeys off, new local shortcuts do not work.",
+      "fix": "Track and unbind current Tk sequences, then refresh local bindings after HotkeyConfig.set_bindings.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "_init_bindings is called once during App construction at app.py:170."
+        },
+        {
+          "kind": "read",
+          "detail": "SettingsRuntimeMixin mutates HotkeyConfig at settings_runtime.py:78-79; dialogs.py only restarts global hotkeys and refreshes hints."
+        }
+      ],
+      "id": "F-00164968",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/runtime.py",
+      "line_start": 23,
+      "line_end": 25,
+      "snippet": "    def post(self, callback: Callable[..., Any], *args: Any) -> None:\n        with contextlib.suppress(tk.TclError):\n            self.root.after(0, callback, *args)",
+      "category": "concurrency",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Dispatcher can leak RuntimeError during Tk shutdown",
+      "impact": "Tray or worker callbacks posting during Tk shutdown can raise RuntimeError rather than TclError, escaping the callback and making shutdown/menu actions noisy or incomplete.",
+      "fix": "Treat dispatcher.post as a best-effort boundary by also suppressing RuntimeError or guarding on a Tk/app alive flag.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "runtime_services.py uses dispatcher.post from tray callbacks."
+        },
+        {
+          "kind": "read",
+          "detail": "tests/test_runtime_threading.py covers TclError suppression only."
+        }
+      ],
+      "id": "F-eeba46b2",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/panel_renderer.py",
+      "line_start": 80,
+      "line_end": 112,
+      "snippet": "    @staticmethod\n    def _grid_remove_if_needed(widget: tk.Widget) -> bool:\n        \"\"\"Only remove grid-managed widgets when visible.\"\"\"\n        if widget.winfo_manager() == \"grid\" and widget.winfo_ismapped():\n            widget.grid_remove()\n            return True\n        return False\n\n    def _pack_if_needed(self, widget: tk.Widget, **kwargs: Any) -> bool:\n        \"\"\"Only call pack() when placement actually changes.\"\"\"\n        if widget.winfo_manager() == \"pack\":\n            info = widget.pack_info()\n            unchanged = True\n            for key, value in kwargs.items():\n                if self._normalize_geom_value(info.get(key, \"\")) != self._normalize_geom_value(\n                    value\n                ):\n                    unchanged = False\n                    break\n            if unchanged:\n                return False\n            widget.pack_configure(**kwargs)\n            return True\n        widget.pack(**kwargs)\n        return True\n\n    @staticmethod\n    def _pack_forget_if_needed(widget: tk.Widget) -> bool:\n        \"\"\"Only forget packed widgets when they are currently packed.\"\"\"\n        if widget.winfo_manager() == \"pack\" and widget.winfo_ismapped():\n            widget.pack_forget()\n            return True\n        return False",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Hidden ancestors prevent panel removal from taking effect",
+      "impact": "Managed widgets under a withdrawn or hidden ancestor report winfo_ismapped false, so these helpers skip grid_remove/pack_forget and the stale panel can reappear when the ancestor is shown again.",
+      "fix": "Remove the winfo_ismapped condition and key only on winfo_manager being grid or pack.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Subagent Tk probe with withdrawn root reproduced a managed child reporting mapped=0 and reappearing after deiconify when removal was skipped."
+        },
+        {
+          "kind": "read",
+          "detail": "grid_remove and pack_forget are safe for managed-but-unmapped widgets."
+        }
+      ],
+      "id": "F-ed9ba16e",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/panel_renderer.py",
+      "line_start": 355,
+      "line_end": 367,
+      "snippet": "        if zones_enabled:\n            self._grid_if_needed(\n                app.zone_header_frame,\n                row=0,\n                column=0,\n                sticky=\"ew\",\n                padx=pad_x,\n                pady=(int(6 * s), int(2 * s)),\n            )\n            self._grid_remove_if_needed(app.compact_nav_frame)\n            if hasattr(app, \"nav_window\") and app.nav_window and app.nav_window.is_visible():\n                app.nav_window.update_display(snap)\n",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Standalone navigation stops updating when zones are hidden",
+      "impact": "With show_zones disabled but show_airfields enabled, the standalone navigation window can remain stale because nav_window.update_display is only called inside the zones_enabled branch.",
+      "fix": "Move standalone nav updates outside the zones_enabled branch and guard on active navigation data such as zones_enabled or airfields_enabled.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "PanelConfig exposes independent show_zones and show_airfields flags."
+        },
+        {
+          "kind": "read",
+          "detail": "The airfields branch renders main-panel rows but does not call nav_window.update_display."
+        }
+      ],
+      "id": "F-67345260",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/dialogs.py",
+      "line_start": 1683,
+      "line_end": 1687,
+      "snippet": "        # 面板设置\n        panel_config = {}\n        for key, var in self.panel_vars.items():\n            panel_config[key] = var.get()\n        config[\"panels\"] = panel_config",
+      "category": "data-loss",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Settings save drops the bombing panel preference",
+      "impact": "The panel tab omits show_bombing, then Settings replaces config[\"panels\"] with only self.panel_vars; a disabled bombing panel can come back after restart if the app exits before a full app save.",
+      "fix": "Include show_bombing when ENABLE_CCRP is true, or merge panel_config into the existing panels dict instead of replacing it.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "Panel list at dialogs.py:615-631 omits show_bombing."
+        },
+        {
+          "kind": "read",
+          "detail": "App load defaults missing show_bombing to True at app.py:251, while app full save includes it at app.py:341-343."
+        }
+      ],
+      "id": "F-f4261c90",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/dialogs.py",
+      "line_start": 1646,
+      "line_end": 1681,
+      "snippet": "        new_window_alpha = int(self.alpha_var.get())\n        new_nav_width = float(self.nav_width_var.get())\n        new_ui_scale = UIConfig.clamp_ui_scale(self.scale_var.get())\n        new_text_scale = UIConfig.clamp_text_scale(self.text_scale_var.get())\n        new_theme = self.theme_var.get()\n        new_hud_enabled = bool(self.hud_enabled_var.get())\n        new_hud_alpha = max(30, min(255, int(self.hud_alpha_var.get())))\n        new_hud_scale = max(0.5, min(2.0, float(self.hud_scale_var.get())))\n        new_hud_smoothing = max(0.0, min(1.0, float(self.hud_smoothing_var.get())))\n        new_hud_follow_main = bool(self.hud_follow_main_monitor_var.get())\n        new_hud_color_style = str(self.hud_color_style_var.get() or \"auto\").strip().lower()\n        if new_hud_color_style not in {\"auto\", \"green\", \"amber\", \"cyan\", \"white\"}:\n            new_hud_color_style = \"auto\"\n        pending_hud_config = {\n            \"alpha\": new_hud_alpha,\n            \"scale\": new_hud_scale,\n            \"smoothing\": new_hud_smoothing,\n            \"follow_main_window_monitor\": new_hud_follow_main,\n            \"color_style\": new_hud_color_style,\n            \"horizontal_fov_deg\": float(HUDConfig.horizontal_fov_deg),\n            \"vertical_fov_deg\": float(HUDConfig.vertical_fov_deg),\n        }\n\n        new_hotkeys_enabled = bool(self.hotkeys_enabled_var.get())\n        try:\n            hotkey_bindings = self._collect_hotkey_bindings()\n        except ValueError as exc:\n            messagebox.showwarning(\"快捷键冲突\", str(exc), parent=self)\n            return\n\n        config[\"alpha\"] = new_window_alpha\n        config[\"scale\"] = new_ui_scale\n        config[\"text_scale\"] = new_text_scale\n        config[\"theme\"] = new_theme\n        config[\"hud_enabled\"] = new_hud_enabled\n        config[\"hud\"] = pending_hud_config",
+      "category": "data-loss",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Navigation width is applied but not saved by Settings",
+      "impact": "Settings reads new_nav_width and applies it at runtime, but never writes navigation_bar_width before ConfigManager.save, so a forced exit or crash before app quit loses the explicit save.",
+      "fix": "Write config[\"navigation_bar_width\"] = new_nav_width before ConfigManager.save, matching App._save_config.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "_apply_runtime_settings receives new_nav_width at dialogs.py:1761-1764."
+        },
+        {
+          "kind": "read",
+          "detail": "App load reads navigation_bar_width at app.py:260-262 and App._save_config writes it at app.py:350."
+        }
+      ],
+      "id": "F-eb62a69c",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/dialogs.py",
+      "line_start": 1571,
+      "line_end": 1576,
+      "snippet": "            # 重置显示设置\n            self.alpha_var.set(210)\n            self.nav_width_var.set(1.0)\n            self.scale_var.set(0.85)\n            self.text_scale_var.set(1.0)\n            self.theme_var.set(\"fluent_dark\")",
+      "category": "correctness",
+      "severity": "low",
+      "confidence": "confirmed",
+      "title": "Reset defaults restores the old UI scale",
+      "impact": "Reset all settings sets UI scale to 0.85 even though the current UIConfig default is 1.0, so users get a smaller-than-default UI after Reset and Save.",
+      "fix": "Use UIConfig.UI_SCALE_MULT or a dedicated default constant instead of the stale hardcoded value.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "UIConfig documents UI_SCALE_MULT = 1.0 and notes it was raised from 0.85 at config.py:226-229."
+        },
+        {
+          "kind": "grep",
+          "detail": "rg found the reset assignment to 0.85 only in this reset defaults block."
+        }
+      ],
+      "id": "F-d03b8edc",
+      "status": "open",
+      "created_at": "2026-06-18T01:38:44+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/utils/system.py",
+      "line_start": 304,
+      "line_end": 329,
+      "snippet": "        try:\n            # 获取当前样式\n            style = cls.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)\n\n            # 添加必要样式\n            style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW\n\n            # 根据锁定状态切换点击穿透\n            # 关键：同时设置 WS_EX_TRANSPARENT 和 WS_EX_NOACTIVATE\n            # - WS_EX_TRANSPARENT: 让点击穿透到下层窗口\n            # - WS_EX_NOACTIVATE: 防止窗口被激活，确保持续穿透\n            if click_through:\n                style |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE\n            else:\n                style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)\n\n            # 应用样式和透明度/颜色键\n            cls.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)\n            target_alpha = max(0, min(255, int(alpha)))\n            flags = LWA_ALPHA\n            key = 0\n            if color_key is not None:\n                flags |= LWA_COLORKEY\n                key = int(color_key) & 0x00FFFFFF\n            cls.user32.SetLayeredWindowAttributes(hwnd, key, target_alpha, flags)\n            return True",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Win32 window style setup reports success on API failure",
+      "impact": "On Windows, failed SetWindowLongW or SetLayeredWindowAttributes calls can leave the main/HUD window non-transparent or non-click-through while callers proceed as if lock/click-through succeeded.",
+      "fix": "Declare ctypes argtypes/restype with wintypes, check BOOL/last-error return values, and return False when any required style or layered attribute call fails.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "ctypes Win32 BOOL failures do not raise OSError by default; this code ignores both SetWindowLongW and SetLayeredWindowAttributes return values and returns True."
+        },
+        {
+          "kind": "read",
+          "detail": "tests/test_system_portability.py only covers non-Windows user32 absence, not Windows API failure returns."
+        }
+      ],
+      "id": "F-691747c0",
+      "status": "open",
+      "created_at": "2026-06-18T01:39:33+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/hud_overlay.py",
+      "line_start": 419,
+      "line_end": 432,
+      "snippet": "        if self._transparency_support.win32_layered:\n            if Win32.setup_window(\n                self.hwnd,\n                click_through=bool(click_through),\n                alpha=target_alpha,\n                color_key=self._transparent_color_ref,\n            ):\n                return\n            if not self._transparency_support.tk_color_key:\n                raise HUDOverlayUnavailable(\"HUD overlay Win32 layered style failed\")\n\n        if self._transparency_support.tk_color_key:\n            with contextlib.suppress(tk.TclError):\n                self.window.attributes(\"-alpha\", target_alpha / 255.0)",
+      "category": "lifecycle",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "HUD can fall back to a non-click-through topmost window",
+      "impact": "If Win32 layered setup fails while Tk color-key support exists, click_through=True falls back to only setting Tk alpha, leaving a topmost HUD that can intercept game clicks.",
+      "fix": "When click_through is requested and Win32.setup_window fails, raise HUDOverlayUnavailable or hide/destroy HUD; reserve Tk-only fallback for non-click-through contexts.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "Fallback path applies only window.attributes(\"-alpha\") and has no click-through equivalent."
+        },
+        {
+          "kind": "read",
+          "detail": "tests/test_hud_overlay.py raises only when tk_color_key=False; it does not cover the tk_color_key=True click-through failure path."
+        }
+      ],
+      "id": "F-4cfa222a",
+      "status": "open",
+      "created_at": "2026-06-18T01:39:33+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/hud_overlay.py",
+      "line_start": 736,
+      "line_end": 750,
+      "snippet": "    def _set_reticle_visible(self, visible: bool) -> None:\n        state = \"normal\" if visible else \"hidden\"\n        for item_id in (\n            self._reticle_ring_id,\n            self._reticle_hline_id,\n            self._reticle_vline_id,\n            self._reticle_mode_id,\n            self._reticle_dist_id,\n        ):\n            if item_id is not None:\n                self.canvas.itemconfig(item_id, state=state)\n        for item_id in self._secondary_marker_ids:\n            self.canvas.itemconfig(item_id, state=state)\n        for item_id in self._secondary_label_ids:\n            self.canvas.itemconfig(item_id, state=state)",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Showing primary reticle re-shows stale secondary markers",
+      "impact": "When secondary targets drop from a previous frame, _render_secondary_targets hides unused IDs, then _set_reticle_visible(True) marks every secondary item normal again, potentially showing stale or empty secondary markers.",
+      "fix": "Let _render_secondary_targets own secondary visibility; _set_reticle_visible should hide secondary IDs only when visible is false or split primary and secondary visibility.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "_render_reticle calls _render_secondary_targets at hud_overlay.py:999-1007 and then _set_reticle_visible(True) at line 1012."
+        },
+        {
+          "kind": "read",
+          "detail": "_render_secondary_targets hides unused/empty secondary IDs at hud_overlay.py:878-884."
+        }
+      ],
+      "id": "F-fdfd306f",
+      "status": "open",
+      "created_at": "2026-06-18T01:39:33+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/utils/system.py",
+      "line_start": 573,
+      "line_end": 584,
+      "snippet": "    def stop(self):\n        \"\"\"停止热键监听\"\"\"\n        if os.name != \"nt\" or not self._tid:\n            return\n        try:\n            # 向监听线程发送退出消息\n            self._stop_event.set()\n            Win32.user32.PostThreadMessageW(int(self._tid), int(self.WM_QUIT), 0, 0)\n        except _WIN32_ACCESS_ERRORS:\n            pass\n        if self._thread:\n            self._thread.join(timeout=1.0)",
+      "category": "concurrency",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "GlobalHotkeys.stop can miss startup race",
+      "impact": "If stop runs immediately after start before _run stores _tid, it returns without setting _stop_event or joining, allowing the worker to proceed into GetMessageW and keep hotkeys registered until process exit.",
+      "fix": "Always set _stop_event and join an existing worker; coordinate readiness with an Event and check PostThreadMessageW success.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "start launches _run asynchronously at system.py:569-571; _tid is assigned inside _run at lines 589-592."
+        },
+        {
+          "kind": "read",
+          "detail": "stop exits early solely because _tid is false at system.py:575-576."
+        }
+      ],
+      "id": "F-85c0464b",
+      "status": "open",
+      "created_at": "2026-06-18T01:39:33+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/utils/sound.py",
+      "line_start": 183,
+      "line_end": 191,
+      "snippet": "        err = _mci(f'open \"{path_text}\" alias {alias}')\n        if err != 0:\n            raise OSError(f\"mci open failed: {err}\")\n        try:\n            err = _mci(f\"play {alias} wait\")\n            if err != 0:\n                raise OSError(f\"mci play failed: {err}\")\n        finally:\n            _mci(f\"close {alias}\")",
+      "category": "lifecycle",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Custom non-WAV playback cannot be cancelled during shutdown",
+      "impact": "A long .mp3/.wma/.mid custom alert blocks the worker in MCI \"play ... wait\"; stop(drain=False) only discards queued jobs and joins with a timeout, so active playback can outlive shutdown.",
+      "fix": "Track the active MCI alias and use non-blocking playback with explicit stop/close from SoundManager.stop, or enforce a short custom alert duration.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "SoundManager.stop(drain=False) discards pending jobs and joins with timeout but has no path to interrupt active MCI wait."
+        },
+        {
+          "kind": "read",
+          "detail": "_play_audio_file_mci uses blocking \"play alias wait\" for non-WAV custom files."
+        }
+      ],
+      "id": "F-6df88130",
+      "status": "open",
+      "created_at": "2026-06-18T01:39:33+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/nav_window.py",
+      "line_start": 565,
+      "line_end": 571,
+      "snippet": "        destroyed_zones = (\n            self.app.game.state.zone_nav.destroyed_zones\n            if getattr(snap, \"zone_destroyed_alert\", False)\n            and hasattr(self.app.game.state.zone_nav, \"destroyed_zones\")\n            else None\n        )\n        model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)",
+      "category": "concurrency",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Destroyed-marker rendering bypasses the snapshot",
+      "impact": "The standalone navigation renderer can combine a UISnapshot from one tick with mutable GameLogic.zone_nav.destroyed_zones from another tick, producing phantom, missing, or cross-battle destroyed markers.",
+      "fix": "Put destroyed marker display data on UISnapshot under the game lock and pass only snapshot-owned data into build_navigation_tape_model.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "update_display otherwise consumes snap, but these lines reach into app.game.state.zone_nav outside the snapshot lock."
+        },
+        {
+          "kind": "read",
+          "detail": "GameLogic.snapshot copies nav_destroyed_zones under lock for text/count, but marker geometry is not carried on UISnapshot."
+        }
+      ],
+      "id": "F-7858d3a3",
+      "status": "open",
+      "created_at": "2026-06-18T01:40:07+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/navigation_presenter.py",
+      "line_start": 107,
+      "line_end": 118,
+      "snippet": "    for af in getattr(snap, \"enemy_airfields\", []) or []:\n        is_in_front = abs(af.relative) <= 90\n        targets.append(\n            {\n                \"type\": \"enemy\",\n                \"relative\": af.relative,\n                \"distance_km\": af.distance_km,\n                \"is_primary\": False,\n                \"is_target\": is_in_front,\n            }\n        )\n        if getattr(af, \"is_target\", False) and is_in_front:",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Enemy airfield tape markers ignore core target selection",
+      "impact": "Every enemy airfield within +/-90 degrees is drawn as an active target marker even though core marks only the selected enemy airfield with af.is_target.",
+      "fix": "Set marker is_target to bool(getattr(af, \"is_target\", False) and is_in_front) so non-target enemy airfields remain visible but inactive.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The marker flag uses is_in_front while the following active_targets_info block already requires af.is_target and is_in_front."
+        },
+        {
+          "kind": "read",
+          "detail": "panel_renderer.py uses af.is_target to choose enemy airfield icon/color, so presenter broadens target semantics inconsistently."
+        }
+      ],
+      "id": "F-9660e3a1",
+      "status": "open",
+      "created_at": "2026-06-18T01:40:07+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/nav_window.py",
+      "line_start": 75,
+      "line_end": 82,
+      "snippet": "        # 获取窗口句柄\n        self.window.update_idletasks()  # 确保窗口已创建\n        # v6.6.3: 兼容 overrideredirect 的真实句柄获取\n        internal_id = self.window.winfo_id()\n        self.hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)\n\n        # 使用Win32 API设置分层窗口：背景透明，内容保持不透明 + 点击穿透\n        self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)",
+      "category": "lifecycle",
+      "severity": "low",
+      "confidence": "likely",
+      "title": "NavigationWindow Win32 handle lookup can crash before fallback",
+      "impact": "On non-Windows or ctypes-limited environments, constructing NavigationWindow can raise at ctypes.windll.user32.GetParent before apply_window_styles reaches its guarded fallback.",
+      "fix": "Wrap handle acquisition in _WIN32_ACCESS_ERRORS and fall back to int(internal_id), then let apply_window_styles degrade.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "apply_window_styles has a guarded fallback, but this unguarded handle acquisition runs first."
+        },
+        {
+          "kind": "read",
+          "detail": "The main app has a similar Windows-only handle acquisition pattern; project primary target is Windows, so severity is low."
+        }
+      ],
+      "id": "F-5061272d",
+      "status": "open",
+      "created_at": "2026-06-18T01:40:07+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/navigation_runtime.py",
+      "line_start": 62,
+      "line_end": 65,
+      "snippet": "        if state_changed:\n            self._history_mode_window_was_visible = bool(window.is_visible())\n        if window.is_visible():\n            window.hide()",
+      "category": "lifecycle",
+      "severity": "low",
+      "confidence": "likely",
+      "title": "Standalone toggle during history mode can lose restore intent",
+      "impact": "If a standalone nav window becomes visible while history mode is already active, suspend_for_history_mode(state_changed=False) hides it without recording restore intent, so leaving history mode can keep it hidden despite standalone mode.",
+      "fix": "When hiding a visible window during active history layout, record restore intent, or defer showing/toggling standalone mode until history mode exits.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "restore_after_history_mode only shows the window when _history_mode_window_was_visible is true."
+        },
+        {
+          "kind": "read",
+          "detail": "suspend_for_history_mode only updates that flag on state_changed=True."
+        }
+      ],
+      "id": "F-1efbc5c5",
+      "status": "open",
+      "created_at": "2026-06-18T01:40:07+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/utils/file_utils.py",
+      "line_start": 221,
+      "line_end": 226,
+      "snippet": "        if version < 2:\n            panels = config.get(\"panels\", {})\n            if \"show_bombing\" not in panels:\n                panels[\"show_bombing\"] = True\n                changed = True\n            config[\"panels\"] = panels",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Non-dict panels value crashes config migration",
+      "impact": "A valid JSON config such as {\"config_version\":1,\"panels\":null} crashes ConfigManager.load during migration instead of falling back, so startup or settings load can fail until the user manually edits or deletes the config.",
+      "fix": "Normalize nested sections before migration, e.g. treat non-dict panels as {}, and catch TypeError from migration in the tolerant load path.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "Probe ConfigManager._migrate_config({\"config_version\":1,\"panels\":None}) raised TypeError; list panels raised TypeError list indices must be integers or slices."
+        },
+        {
+          "kind": "read",
+          "detail": "ConfigManager.load catches json.JSONDecodeError, ValueError, and OSError, but not TypeError from _migrate_config."
+        }
+      ],
+      "id": "F-612d9b37",
+      "status": "open",
+      "created_at": "2026-06-18T01:40:32+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "tools/build_portable.py",
+      "line_start": 299,
+      "line_end": 307,
+      "snippet": "    manifest = {\n        \"schema_version\": 1,\n        \"channel\": variant,\n        \"app_version\": version,\n        \"min_launcher_version\": min_launcher_version,\n        \"entrypoint\": APP_ENTRY,\n        \"package_asset\": app_zip_name,\n        \"package_sha256\": app_sha256,\n    }",
+      "category": "security",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Auto-update artifacts are hash-checked but not publisher-signed",
+      "impact": "A compromised update host or release account can publish a malicious ZIP/EXE plus matching SHA256; the launcher uses SHA256 as integrity but has no independent publisher authenticity check.",
+      "fix": "Add an offline signature over the manifest or artifact, pin the public key in the launcher, and verify signatures before download/install.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "Build manifest records package_sha256 but no signature field."
+        },
+        {
+          "kind": "grep",
+          "detail": "Reviewed launcher/update files use sha256 checks but no signature verification path."
+        }
+      ],
+      "id": "F-bef29479",
+      "status": "open",
+      "created_at": "2026-06-18T01:43:08+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "launcher.pyw",
+      "line_start": 1798,
+      "line_end": 1808,
+      "snippet": "    if (-not (Test-Path -LiteralPath $staged)) {{\n        throw \"staged launcher file missing\"\n    }}\n    Copy-Item -LiteralPath $staged -Destination $replacement -Force\n    if (-not (Test-Path -LiteralPath $replacement)) {{\n        throw \"replacement launcher file missing after copy\"\n    }}\n    if (Test-Path -LiteralPath $target) {{\n        Move-Item -LiteralPath $target -Destination $backup -Force\n    }}\n    Move-Item -LiteralPath $replacement -Destination $target -Force",
+      "category": "security",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Launcher self-update does not rehash staged EXE at apply time",
+      "impact": "After download hash passes, a same-user process could replace the staged file while the detached PowerShell script waits for the launcher to exit; the modified EXE is then copied to the real launcher path.",
+      "fix": "Pass expected SHA256 into _stage_launcher_self_update and have the PowerShell script hash $staged immediately before Copy-Item and $replacement before Move-Item.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "Download hash check occurs before staging at launcher.pyw:1913-1920."
+        },
+        {
+          "kind": "read",
+          "detail": "_stage_launcher_self_update is called without the expected hash at launcher.pyw:1929-1934, and the script waits up to 120 seconds before copying."
+        }
+      ],
+      "id": "F-e05f92e3",
+      "status": "open",
+      "created_at": "2026-06-18T01:43:08+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "tools/deploy_update_assets.py",
+      "line_start": 163,
+      "line_end": 172,
+      "snippet": "        manifest_src = stage_dir / f\"manifest_{channel}.json\"\n        manifest = json.loads(manifest_src.read_text(encoding=\"utf-8\"))\n        asset_src = stage_dir / manifest[\"package_asset\"]\n        asset_sha = hashlib.sha256(asset_src.read_bytes()).hexdigest()\n        if asset_sha != manifest[\"package_sha256\"]:\n            raise SystemExit(f\"{asset_src.name} sha256 mismatch\")\n        if manifest[\"app_version\"] != app_version:\n            raise SystemExit(f\"{manifest_src.name} app_version mismatch\")\n\n        shutil.copy2(asset_src, download_dir / asset_src.name)",
+      "category": "security",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Deploy script trusts manifest asset paths outside staging directory",
+      "impact": "A tampered manifest can set package_asset to an absolute or ../ path; if the hash matches, deploy copies that file into the public downloads directory.",
+      "fix": "Reject absolute paths, separators, and parent components; resolve asset_src and require it to stay inside stage_dir, or compute asset filenames instead of trusting manifest paths.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "asset_src is built directly from stage_dir / manifest[\"package_asset\"] and read/copied without containment checks."
+        },
+        {
+          "kind": "read",
+          "detail": "Pathlib discards the left operand when the right operand is absolute."
+        }
+      ],
+      "id": "F-f5cbb6e5",
+      "status": "open",
+      "created_at": "2026-06-18T01:43:08+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "tools/deploy_update_assets.py",
+      "line_start": 202,
+      "line_end": 207,
+      "snippet": "    env = (\n        f\"STAGE_DIR={stage_dir!r} REMOTE_ROOT={remote_root!r} TARGET={target!r} \"\n        f\"APP_VERSION={app_version!r} LAUNCHER_VERSION={launcher_version!r} \"\n        \"python3 -\"\n    )\n    run([\"ssh\", host, env], input_text=script)",
+      "category": "security",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Python repr is used as remote shell quoting",
+      "impact": "A CLI value containing shell substitution syntax can be expanded by the remote shell before python3 starts because repr may choose double quotes for the env assignment.",
+      "fix": "Use shlex.quote for every remote shell value or pass a JSON blob/stdin protocol instead of shell-interpreted env prefixes.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "repr(\"x'$(touch /tmp/pwn)\") uses double quotes; POSIX shells expand $() inside double quotes in an env assignment."
+        },
+        {
+          "kind": "read",
+          "detail": "deploy_update_assets.py constructs one shell string passed to ssh as the remote command."
+        }
+      ],
+      "id": "F-d88c090c",
+      "status": "open",
+      "created_at": "2026-06-18T01:43:08+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/launcher_install.py",
+      "line_start": 300,
+      "line_end": 318,
+      "snippet": "        os.replace(str(app_dir), str(swap_dir))\n        os.replace(str(previous_dir), str(app_dir))\n        os.replace(str(swap_dir), str(previous_dir))\n\n        if status_cb:\n            status_cb(\n                \"回退完成\",\n                f\"已切换到 v{previous_version}，当前保留的上一版本为 v{current_version}。\",\n                1.0,\n                \"success\",\n            )\n        return previous_version, current_version\n    except Exception:\n        with suppress(Exception):\n            if swap_dir.exists() and not app_dir.exists():\n                os.replace(str(swap_dir), str(app_dir))\n        raise\n    finally:\n        shutil.rmtree(work_dir, ignore_errors=True)",
+      "category": "data-loss",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "Rollback can fail after changing app state and deleting preserved current version",
+      "impact": "If the final move from swap_dir to previous_dir fails after the first two moves, app_dir already contains the previous version, the function raises, and finally deletes work_dir containing the old current version.",
+      "fix": "Track move phases and reverse the second move on failure, or preserve swap_dir outside work_dir until current_version is safely restored or stored.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The except path only restores swap_dir when app_dir is missing; it does not handle failure after previous_dir was moved into app_dir."
+        },
+        {
+          "kind": "grep",
+          "detail": "tests/test_launcher_update_service.py covers successful rollback but no mocked os.replace failure after previous_dir -> app_dir."
+        }
+      ],
+      "id": "F-b6ca75c1",
+      "status": "open",
+      "created_at": "2026-06-18T01:43:08+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "bomana/launcher_core.py",
+      "line_start": 68,
+      "line_end": 81,
+      "snippet": "def extract_version_tuple(version: str) -> tuple[int, ...]:\n    nums = re.findall(r\"\\d+\", version or \"\")\n    if not nums:\n        return (0,)\n    return tuple(int(x) for x in nums)\n\n\ndef version_is_newer(remote: str, local: str) -> bool:\n    a = extract_version_tuple(remote)\n    b = extract_version_tuple(local)\n    n = max(len(a), len(b))\n    aa = a + (0,) * (n - len(a))\n    bb = b + (0,) * (n - len(b))\n    return aa > bb",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Version comparison treats prerelease digits as newer stable versions",
+      "impact": "A remote version like 2.0.0-rc.1 compares greater than local 2.0.0, and min_launcher_version 2.0.0-rc.1 can make stable 2.0.0 appear too old.",
+      "fix": "Use a SemVer or PEP 440 parser and explicitly reject or handle prerelease/build metadata; skip draft/prerelease GitHub releases unless opted in.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "extract_version_tuple(\"2.0.0-rc.1\") yields (2,0,0,1), which compares newer than (2,0,0)."
+        },
+        {
+          "kind": "grep",
+          "detail": "tests/test_launcher_core.py only covers numeric versions."
+        }
+      ],
+      "id": "F-5aefffd3",
+      "status": "open",
+      "created_at": "2026-06-18T01:43:08+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
+    },
+    {
+      "file": "tools/scripts/build.bat",
+      "line_start": 122,
+      "line_end": 126,
+      "snippet": "%UV_CMD% run python tools\\create_version_info.py --config bomana\\config.py --output file_version_info.txt\nset \"VERSION_ARG=\"\nif exist file_version_info.txt (\n    set \"VERSION_ARG=--version-file file_version_info.txt\"\n)",
+      "category": "correctness",
+      "severity": "low",
+      "confidence": "confirmed",
+      "title": "Legacy build ignores version-info generation failure",
+      "impact": "If create_version_info.py fails, the batch script continues building without version metadata, or with a stale file_version_info.txt if one exists.",
+      "fix": "Delete file_version_info.txt before generation and fail immediately when create_version_info.py returns nonzero; optionally assert the generated file matches source metadata.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The script checks only whether file_version_info.txt exists, not %ERRORLEVEL% from create_version_info.py."
+        },
+        {
+          "kind": "read",
+          "detail": "The primary portable build path is tools/build_portable.py, so this affects the legacy script path."
+        }
+      ],
+      "id": "F-122bb5c5",
+      "status": "open",
+      "created_at": "2026-06-18T01:43:08+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-18T01:46:33+00:00"
+      }
     }
   ]
 }
