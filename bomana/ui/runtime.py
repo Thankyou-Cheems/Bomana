@@ -21,7 +21,7 @@ class TkEventDispatcher:
         self.root = root
 
     def post(self, callback: Callable[..., Any], *args: Any) -> None:
-        with contextlib.suppress(tk.TclError):
+        with contextlib.suppress(tk.TclError, RuntimeError):
             self.root.after(0, callback, *args)
 
 

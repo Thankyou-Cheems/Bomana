@@ -126,3 +126,52 @@ def test_app_keeps_only_external_callback_wrappers() -> None:
     assert not (removed_internal_wrappers & app_methods)
     assert "_toggle_debug" in app_methods
     assert "_show_hud_overlay" in app_methods
+
+
+def test_refresh_local_hotkey_bindings_unbinds_old_sequences(monkeypatch) -> None:
+    app = _make_config_only_app()
+    bound: list[str] = []
+    unbound: list[str] = []
+    app.root = SimpleNamespace(
+        bind=lambda sequence, _callback: bound.append(sequence),
+        unbind=lambda sequence: unbound.append(sequence),
+    )
+    app._local_hotkey_sequences = ["<F8>", "<F9>"]
+    app._toggle_lock = lambda: None
+    app._next_corner = lambda: None
+    app._toggle_beep = lambda: None
+    app._toggle_zone_sound = lambda: None
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_LOCK", "F1")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_CORNER", "F2")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_BEEP", "F3")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(app_module, "ENABLE_ZONES", True)
+
+    app.refresh_local_hotkey_bindings()
+
+    assert unbound == ["<F8>", "<F9>"]
+    assert bound == ["<F1>", "<F2>", "<F3>", "<F4>"]
+    assert app._local_hotkey_sequences == ["<F1>", "<F2>", "<F3>", "<F4>"]
+
+
+def test_refresh_local_hotkey_bindings_omits_zones_when_disabled(monkeypatch) -> None:
+    app = _make_config_only_app()
+    bound: list[str] = []
+    app.root = SimpleNamespace(
+        bind=lambda sequence, _callback: bound.append(sequence),
+        unbind=lambda _sequence: None,
+    )
+    app._local_hotkey_sequences = []
+    app._toggle_lock = lambda: None
+    app._next_corner = lambda: None
+    app._toggle_beep = lambda: None
+    app._toggle_zone_sound = lambda: None
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_LOCK", "F1")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_CORNER", "F2")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_BEEP", "F3")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(app_module, "ENABLE_ZONES", False)
+
+    app.refresh_local_hotkey_bindings()
+
+    assert bound == ["<F1>", "<F2>", "<F3>"]

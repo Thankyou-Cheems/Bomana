@@ -612,6 +612,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         self.panel_vars = {}
         panels = []
 
+        if ENABLE_CCRP:
+            panels.append(("show_bombing", "bomb", "投弹预测", "显示CCRP投弹预测面板"))
         if ENABLE_ZONES:
             panels.append(("show_zones", "aim", "战区导航", "显示战区位置和距离"))
         if ENABLE_AIRFIELDS:
@@ -1571,7 +1573,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             # 重置显示设置
             self.alpha_var.set(210)
             self.nav_width_var.set(1.0)
-            self.scale_var.set(0.85)
+            self.scale_var.set(UIConfig.DEFAULT_UI_SCALE_MULT)
             self.text_scale_var.set(1.0)
             self.theme_var.set("fluent_dark")
             self.hud_enabled_var.set(False)
@@ -1674,6 +1676,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             return
 
         config["alpha"] = new_window_alpha
+        config["navigation_bar_width"] = new_nav_width
         config["scale"] = new_ui_scale
         config["text_scale"] = new_text_scale
         config["theme"] = new_theme
@@ -1681,7 +1684,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         config["hud"] = pending_hud_config
 
         # 面板设置
-        panel_config = {}
+        existing_panels = config.get("panels", {})
+        panel_config = dict(existing_panels) if isinstance(existing_panels, dict) else {}
         for key, var in self.panel_vars.items():
             panel_config[key] = var.get()
         config["panels"] = panel_config

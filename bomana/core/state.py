@@ -594,6 +594,7 @@ class UISnapshot:
     zone_destroyed_alert: bool = False
     destroyed_zone_count: int = 0
     destroyed_zone_text: str = ""
+    destroyed_zones: list[ZoneDisplayInfo] = field(default_factory=list)
     should_play_destroyed_sound: bool = False  # v5.5新增：是否应该播放摧毁音效
 
     player_heading: float = 0.0

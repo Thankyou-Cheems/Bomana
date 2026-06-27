@@ -544,10 +544,8 @@ class App:
         ╚══════════════════════════════════════════════════════════════════════╝
         """
 
-        self.root.bind(f"<{HotkeyConfig.KEY_LOCK}>", lambda e: self._toggle_lock())
-        self.root.bind(f"<{HotkeyConfig.KEY_CORNER}>", lambda e: self._next_corner())
-        self.root.bind(f"<{HotkeyConfig.KEY_BEEP}>", lambda e: self._toggle_beep())
-        self.root.bind(f"<{HotkeyConfig.KEY_ZONES}>", lambda e: self._toggle_zone_sound())
+        self._local_hotkey_sequences: list[str] = []
+        self.refresh_local_hotkey_bindings()
         self.root.bind("<Control-MouseWheel>", self._adjust_alpha)
         self.root.bind(
             "<Control-Shift-Left>",
@@ -572,6 +570,25 @@ class App:
         self.root.bind("<FocusIn>", self._on_focus_in)
 
         # 不再绑定窗口右键菜单（功能移至系统托盘）
+
+    def refresh_local_hotkey_bindings(self) -> None:
+        """Refresh Tk-local hotkeys after settings mutate HotkeyConfig."""
+        for sequence in getattr(self, "_local_hotkey_sequences", []):
+            with contextlib.suppress(tk.TclError):
+                self.root.unbind(sequence)
+        bindings = [
+            (HotkeyConfig.KEY_LOCK, self._toggle_lock),
+            (HotkeyConfig.KEY_CORNER, self._next_corner),
+            (HotkeyConfig.KEY_BEEP, self._toggle_beep),
+        ]
+        if ENABLE_ZONES:
+            bindings.append((HotkeyConfig.KEY_ZONES, self._toggle_zone_sound))
+
+        self._local_hotkey_sequences = []
+        for key_name, callback in bindings:
+            sequence = f"<{key_name}>"
+            self.root.bind(sequence, lambda _event, cb=callback: cb())
+            self._local_hotkey_sequences.append(sequence)
 
     def _toggle_panel(self, panel_key: str):
         """切换面板显示状态"""

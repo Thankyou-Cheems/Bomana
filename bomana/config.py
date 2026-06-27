@@ -226,7 +226,8 @@ class UIConfig:
     # UI缩放倍数：1.0（相对于系统DPI的额外缩放）
     # v5.9.3: 从0.85提升到1.0，让界面在1080p/2k下更清晰
     # 注意：此值可能被智能缩放逻辑覆盖（首次启动时）
-    UI_SCALE_MULT = 1.0
+    DEFAULT_UI_SCALE_MULT = 1.0
+    UI_SCALE_MULT = DEFAULT_UI_SCALE_MULT
 
     # 文本缩放倍数：独立于窗口/布局缩放，专门控制字体大小
     TEXT_SCALE_MULT = 1.0

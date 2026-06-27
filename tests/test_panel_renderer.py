@@ -37,6 +37,42 @@ class PanelRendererNavListTests(unittest.TestCase):
         self.assertEqual(IconManager.scaled_size(18, 2.5), 45)
         self.assertEqual(IconManager._nearest_asset_size(IconManager.scaled_size(18, 2.5)), 48)
 
+    def test_remove_helpers_act_on_managed_but_unmapped_widgets(self) -> None:
+        class FakeWidget:
+            def __init__(self, manager: str) -> None:
+                self.manager = manager
+                self.grid_remove_calls = 0
+                self.pack_forget_calls = 0
+
+            def winfo_manager(self) -> str:
+                return self.manager
+
+            def winfo_ismapped(self) -> bool:
+                return False
+
+            def grid_remove(self) -> None:
+                self.grid_remove_calls += 1
+                self.manager = ""
+
+            def pack_forget(self) -> None:
+                self.pack_forget_calls += 1
+                self.manager = ""
+
+        grid_widget = FakeWidget("grid")
+        pack_widget = FakeWidget("pack")
+
+        self.assertTrue(AppPanelRenderer._grid_remove_if_needed(grid_widget))
+        self.assertTrue(AppPanelRenderer._pack_forget_if_needed(pack_widget))
+        self.assertEqual(grid_widget.grid_remove_calls, 1)
+        self.assertEqual(pack_widget.pack_forget_calls, 1)
+
+    def test_standalone_navigation_update_is_not_nested_under_zones_branch(self) -> None:
+        source = Path("bomana/ui/panel_renderer.py").read_text(encoding="utf-8")
+        update_index = source.index("app.nav_window.update_display(snap)")
+        zones_branch_index = source.index("if zones_enabled:", update_index)
+
+        self.assertLess(update_index, zones_branch_index)
+
     def test_extended_icon_assets_exist_for_large_text_scales(self) -> None:
         icon_dir = Path("bomana/assets/icons")
         for key in ("zone", "aircraft", "fuel", "clock", "target"):

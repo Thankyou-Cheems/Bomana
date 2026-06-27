@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -61,6 +62,22 @@ class PersistenceTests(unittest.TestCase):
         migrated, changed = ConfigManager._migrate_config({"config_version": 1, "panels": {}})
         self.assertTrue(changed)
         self.assertEqual(migrated["config_version"], FileConfig.CONFIG_VERSION)
+
+    def test_config_load_treats_non_object_panels_as_empty(self) -> None:
+        old_config = {"config_version": 1, "panels": None}
+        self.config_file.write_text(json.dumps(old_config), encoding="utf-8")
+
+        loaded = ConfigManager.load()
+
+        self.assertEqual(loaded["config_version"], FileConfig.CONFIG_VERSION)
+        self.assertEqual(loaded["panels"]["show_bombing"], True)
+        self.assertEqual(json.loads(self.config_file.read_text(encoding="utf-8")), old_config)
+
+    def test_config_migration_treats_non_object_panels_as_empty(self) -> None:
+        migrated, changed = ConfigManager._migrate_config({"config_version": 1, "panels": []})
+
+        self.assertTrue(changed)
+        self.assertEqual(migrated["panels"], {"show_bombing": True})
 
     def test_config_save_persists_current_compile_switches(self) -> None:
         ok = ConfigManager.save({"alpha": 180})
@@ -142,6 +159,25 @@ class PersistenceTests(unittest.TestCase):
 
         self.assertIsNone(StateManager.load())
         self.assertEqual(self.state_file.read_text(encoding="utf-8"), "[1, 2, 3]")
+
+    def test_state_load_malformed_numeric_fields_does_not_clear_file(self) -> None:
+        malformed = {"remaining_sec": "bad", "save_timestamp": 0}
+        self.state_file.write_text(json.dumps(malformed), encoding="utf-8")
+
+        self.assertIsNone(StateManager.load())
+        self.assertEqual(json.loads(self.state_file.read_text(encoding="utf-8")), malformed)
+
+    def test_state_load_malformed_counter_fields_does_not_clear_file(self) -> None:
+        malformed = {
+            "remaining_sec": 100,
+            "save_timestamp": time.time(),
+            "life_index": "bad",
+            "sortie_id": 1,
+        }
+        self.state_file.write_text(json.dumps(malformed), encoding="utf-8")
+
+        self.assertIsNone(StateManager.load())
+        self.assertEqual(json.loads(self.state_file.read_text(encoding="utf-8")), malformed)
 
     def test_atomic_write_json_replaces_existing_file(self) -> None:
         target = self.tmp_path / "data.json"

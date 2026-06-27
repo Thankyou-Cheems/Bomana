@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import math
 import os
 import sys
 import tempfile
@@ -203,7 +204,7 @@ class ConfigManager:
                         to_version=config.get("config_version", old_version),
                     )
                 return config
-            except (json.JSONDecodeError, ValueError, OSError) as exc:
+            except (json.JSONDecodeError, TypeError, ValueError, OSError) as exc:
                 _report_persistence_error("config load", FileConfig.CONFIG_FILE, exc)
         return {}
 
@@ -217,9 +218,16 @@ class ConfigManager:
         version = config.get("config_version", 1)
         changed = False
 
+        panels_raw = config.get("panels", {})
+        if isinstance(panels_raw, dict):
+            panels = panels_raw
+        else:
+            panels = {}
+            config["panels"] = panels
+            changed = True
+
         # v1 -> v2: 添加投弹面板配置
         if version < 2:
-            panels = config.get("panels", {})
             if "show_bombing" not in panels:
                 panels["show_bombing"] = True
                 changed = True
@@ -239,7 +247,6 @@ class ConfigManager:
         current_switches = ConfigManager._current_compile_switches()
 
         # 如果某个功能从禁用变为启用，重置该面板为默认显示
-        panels = config.get("panels", {})
         switches_changed = False
 
         if has_saved_switches:
@@ -323,6 +330,18 @@ class StateManager:
             _report_persistence_error("state save", FileConfig.STATE_FILE, exc)
 
     @staticmethod
+    def _read_finite_float(data: dict[str, Any], key: str) -> float:
+        value = float(data.get(key, 0.0))
+        if not math.isfinite(value):
+            raise ValueError(f"{key} must be finite")
+        return value
+
+    @staticmethod
+    def _normalize_optional_int(data: dict[str, Any], key: str) -> None:
+        if key in data and data[key] is not None:
+            data[key] = int(data[key])
+
+    @staticmethod
     def load() -> dict[str, Any] | None:
         """加载并计算恢复后的状态
 
@@ -338,8 +357,12 @@ class StateManager:
                 raise ValueError("state root must be a JSON object")
 
             # 提取保存时的剩余时间和时间戳
-            saved_remaining = data.get("remaining_sec", 0)
-            save_time = data.get("save_timestamp", 0)
+            saved_remaining = StateManager._read_finite_float(data, "remaining_sec")
+            save_time = StateManager._read_finite_float(data, "save_timestamp")
+            StateManager._normalize_optional_int(data, "life_index")
+            StateManager._normalize_optional_int(data, "sortie_id")
+            data["remaining_sec"] = saved_remaining
+            data["save_timestamp"] = save_time
 
             # 计算实际流逝的时间
             now = time.time()
@@ -360,7 +383,7 @@ class StateManager:
             data["computed_spawn_time"] = now - (GameConfig.CYCLE_SECONDS - new_remaining)
 
             return data
-        except (json.JSONDecodeError, ValueError, KeyError, OSError) as exc:
+        except (json.JSONDecodeError, TypeError, ValueError, KeyError, OSError) as exc:
             _report_persistence_error("state load", FileConfig.STATE_FILE, exc)
             return None
 

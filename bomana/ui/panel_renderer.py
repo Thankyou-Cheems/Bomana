@@ -80,7 +80,7 @@ class AppPanelRenderer:
     @staticmethod
     def _grid_remove_if_needed(widget: tk.Widget) -> bool:
         """Only remove grid-managed widgets when visible."""
-        if widget.winfo_manager() == "grid" and widget.winfo_ismapped():
+        if widget.winfo_manager() == "grid":
             widget.grid_remove()
             return True
         return False
@@ -106,7 +106,7 @@ class AppPanelRenderer:
     @staticmethod
     def _pack_forget_if_needed(widget: tk.Widget) -> bool:
         """Only forget packed widgets when they are currently packed."""
-        if widget.winfo_manager() == "pack" and widget.winfo_ismapped():
+        if widget.winfo_manager() == "pack":
             widget.pack_forget()
             return True
         return False
@@ -323,12 +323,7 @@ class AppPanelRenderer:
         self, snap: UISnapshot
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any]:
         """Build integrated heading-tape targets and status items."""
-        app = self.app
-        destroyed_zones = (
-            app.game.state.zone_nav.destroyed_zones
-            if snap.zone_destroyed_alert and hasattr(app.game.state.zone_nav, "destroyed_zones")
-            else None
-        )
+        destroyed_zones = snap.destroyed_zones if snap.zone_destroyed_alert else None
         model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)
         return model.targets, model.active_targets_info, model.primary_zone
 
@@ -352,6 +347,14 @@ class AppPanelRenderer:
         fuel_enabled = ENABLE_FUEL and PanelConfig.is_effectively_enabled("fuel")
         bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
 
+        if (
+            (zones_enabled or airfields_enabled)
+            and hasattr(app, "nav_window")
+            and app.nav_window
+            and app.nav_window.is_visible()
+        ):
+            app.nav_window.update_display(snap)
+
         if zones_enabled:
             self._grid_if_needed(
                 app.zone_header_frame,
@@ -362,8 +365,6 @@ class AppPanelRenderer:
                 pady=(int(6 * s), int(2 * s)),
             )
             self._grid_remove_if_needed(app.compact_nav_frame)
-            if hasattr(app, "nav_window") and app.nav_window and app.nav_window.is_visible():
-                app.nav_window.update_display(snap)
 
             nav_in_main = PanelConfig.navigation_mode == "integrated"
             if app.heading_tape is not None:

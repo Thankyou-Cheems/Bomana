@@ -110,11 +110,12 @@ def normalize_angle(angle: float) -> float:
     Returns:
         规范化后的角度
     """
-    while angle > 180:
-        angle -= 360
-    while angle < -180:
-        angle += 360
-    return angle
+    if not math.isfinite(angle):
+        return 0.0
+    normalized = (angle + 180.0) % 360.0 - 180.0
+    if normalized == -180.0 and angle > 0.0:
+        return 180.0
+    return normalized
 
 
 def calculate_relative_bearing(player_heading: float, target_bearing: float) -> float:

@@ -77,6 +77,8 @@ class SettingsRuntimeMixin:
             setattr(PanelConfig, key, value)
         HotkeyConfig.GLOBAL_HOTKEYS = new_hotkeys_enabled
         HotkeyConfig.set_bindings(hotkey_bindings)
+        if hasattr(self.app, "refresh_local_hotkey_bindings"):
+            self.app.refresh_local_hotkey_bindings()
         SnapConfig.enabled = new_snap_enabled
         SnapConfig.SNAP_DISTANCE = new_snap_distance
         self.app.sound.set_enabled(new_sound_enabled)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -96,8 +97,32 @@ def required_assets(dist: Path, target: str, app_version: str, launcher_version:
     return assets
 
 
+def shell_quote(value: str) -> str:
+    return shlex.quote(value)
+
+
+def remote_env_command(
+    *,
+    stage_dir: str,
+    remote_root: str,
+    target: str,
+    app_version: str,
+    launcher_version: str,
+) -> str:
+    env = {
+        "STAGE_DIR": stage_dir,
+        "REMOTE_ROOT": remote_root,
+        "TARGET": target,
+        "APP_VERSION": app_version,
+        "LAUNCHER_VERSION": launcher_version,
+    }
+    assignments = " ".join(f"{name}={shell_quote(value)}" for name, value in env.items())
+    return f"{assignments} python3 -"
+
+
 def prepare_remote(host: str, stage_dir: str) -> None:
-    run(["ssh", host, f"rm -rf {stage_dir!r} && mkdir -p {stage_dir!r}"])
+    quoted_stage = shell_quote(stage_dir)
+    run(["ssh", host, f"rm -rf {quoted_stage} && mkdir -p {quoted_stage}"])
 
 
 def upload_assets(host: str, stage_dir: str, assets: list[Path]) -> None:
@@ -128,6 +153,22 @@ target = __import__("os").environ["TARGET"]
 app_version = __import__("os").environ["APP_VERSION"]
 launcher_version = __import__("os").environ["LAUNCHER_VERSION"]
 channels = ("Enhanced", "Standard", "Lite")
+
+def stage_asset_path(stage_dir: Path, asset_name: object, field_name: str) -> Path:
+    if not isinstance(asset_name, str) or not asset_name.strip():
+        raise SystemExit(f"{field_name} must be a non-empty filename")
+    if "/" in asset_name or "\\" in asset_name:
+        raise SystemExit(f"{field_name} must not contain path separators")
+    candidate_name = Path(asset_name)
+    if candidate_name.is_absolute() or candidate_name.name != asset_name:
+        raise SystemExit(f"{field_name} must be a filename, got {asset_name!r}")
+    stage_root = stage_dir.resolve()
+    candidate = (stage_dir / candidate_name).resolve()
+    try:
+        candidate.relative_to(stage_root)
+    except ValueError as exc:
+        raise SystemExit(f"{field_name} escapes stage directory: {asset_name!r}") from exc
+    return candidate
 
 manifest_dir = remote_root / "data" / "manifests"
 download_dir = remote_root / "data" / "downloads"
@@ -162,7 +203,7 @@ if target in {"app", "all"}:
     for channel in channels:
         manifest_src = stage_dir / f"manifest_{channel}.json"
         manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
-        asset_src = stage_dir / manifest["package_asset"]
+        asset_src = stage_asset_path(stage_dir, manifest["package_asset"], "package_asset")
         asset_sha = hashlib.sha256(asset_src.read_bytes()).hexdigest()
         if asset_sha != manifest["package_sha256"]:
             raise SystemExit(f"{asset_src.name} sha256 mismatch")
@@ -181,7 +222,7 @@ if target in {"app", "all"}:
 if target in {"launcher", "all"}:
     manifest_src = stage_dir / "launcher_manifest.json"
     manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
-    asset_src = stage_dir / manifest["launcher_asset"]
+    asset_src = stage_asset_path(stage_dir, manifest["launcher_asset"], "launcher_asset")
     asset_sha = hashlib.sha256(asset_src.read_bytes()).hexdigest()
     if asset_sha != manifest["launcher_sha256"]:
         raise SystemExit(f"{asset_src.name} sha256 mismatch")
@@ -199,12 +240,20 @@ if target in {"launcher", "all"}:
 shutil.rmtree(stage_dir, ignore_errors=True)
 print("backup_dir=", backup_dir)
 """
-    env = (
-        f"STAGE_DIR={stage_dir!r} REMOTE_ROOT={remote_root!r} TARGET={target!r} "
-        f"APP_VERSION={app_version!r} LAUNCHER_VERSION={launcher_version!r} "
-        "python3 -"
+    run(
+        [
+            "ssh",
+            host,
+            remote_env_command(
+                stage_dir=stage_dir,
+                remote_root=remote_root,
+                target=target,
+                app_version=app_version,
+                launcher_version=launcher_version,
+            ),
+        ],
+        input_text=script,
     )
-    run(["ssh", host, env], input_text=script)
 
 
 def verify_public(

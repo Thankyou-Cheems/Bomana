@@ -287,6 +287,9 @@ def rollback_to_previous_app(
     lock_path = acquire_update_lock(base)
     work_dir = Path(tempfile.mkdtemp(prefix="bomana_rollback_", dir=str(base)))
     swap_dir = work_dir / "app_swap"
+    moved_current_to_swap = False
+    moved_previous_to_app = False
+    cleanup_work_dir = True
 
     try:
         if status_cb:
@@ -298,8 +301,11 @@ def rollback_to_previous_app(
             )
 
         os.replace(str(app_dir), str(swap_dir))
+        moved_current_to_swap = True
         os.replace(str(previous_dir), str(app_dir))
+        moved_previous_to_app = True
         os.replace(str(swap_dir), str(previous_dir))
+        moved_current_to_swap = False
 
         if status_cb:
             status_cb(
@@ -311,9 +317,17 @@ def rollback_to_previous_app(
         return previous_version, current_version
     except Exception:
         with suppress(Exception):
-            if swap_dir.exists() and not app_dir.exists():
+            if moved_previous_to_app and app_dir.exists() and not previous_dir.exists():
+                os.replace(str(app_dir), str(previous_dir))
+                moved_previous_to_app = False
+        with suppress(Exception):
+            if moved_current_to_swap and swap_dir.exists() and not app_dir.exists():
                 os.replace(str(swap_dir), str(app_dir))
+                moved_current_to_swap = False
+        if swap_dir.exists():
+            cleanup_work_dir = False
         raise
     finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
+        if cleanup_work_dir:
+            shutil.rmtree(work_dir, ignore_errors=True)
         release_update_lock(lock_path)

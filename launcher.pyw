@@ -1738,6 +1738,7 @@ def _stage_launcher_self_update(
     launcher_bytes: Optional[bytes],
     remote_version: str,
     launcher_source_path: Optional[Path] = None,
+    expected_sha256: str = "",
 ) -> None:
     if not _is_frozen_launcher():
         raise RuntimeError("源码模式不支持启动器自更新")
@@ -1758,6 +1759,7 @@ def _stage_launcher_self_update(
             shutil.copyfile(launcher_source_path, staged)
         else:
             staged.write_bytes(launcher_bytes or b"")
+        expected_sha256 = (expected_sha256 or _sha256_file(staged)).strip().lower()
         _log(base, f"已在临时目录准备启动器自更新文件：{staged}")
         script = f"""$ErrorActionPreference = 'Stop'
 $target = {json.dumps(str(target))}
@@ -1765,6 +1767,7 @@ $staged = {json.dumps(str(staged))}
 $backup = {json.dumps(str(backup))}
 $replacement = {json.dumps(str(replacement))}
 $resultPath = {json.dumps(str(result_path))}
+$expectedSha256 = {json.dumps(str(expected_sha256))}
 $oldPid = {os.getpid()}
 $targetVersion = {json.dumps(str(remote_version))}
 $replaceSucceeded = $false
@@ -1785,6 +1788,16 @@ function Write-Result([string]$status, [string]$message) {{
     Move-Item -LiteralPath $tmpResultPath -Destination $resultPath -Force
 }}
 
+function Assert-FileSha256([string]$path, [string]$expected, [string]$label) {{
+    if (-not $expected) {{
+        return
+    }}
+    $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
+    if ($actual -ne $expected.ToLowerInvariant()) {{
+        throw ($label + " SHA256 mismatch")
+    }}
+}}
+
 try {{
     for ($i = 0; $i -lt 120; $i++) {{
         if (-not (Get-Process -Id $oldPid -ErrorAction SilentlyContinue)) {{
@@ -1798,10 +1811,12 @@ try {{
     if (-not (Test-Path -LiteralPath $staged)) {{
         throw "staged launcher file missing"
     }}
+    Assert-FileSha256 $staged $expectedSha256 "staged launcher"
     Copy-Item -LiteralPath $staged -Destination $replacement -Force
     if (-not (Test-Path -LiteralPath $replacement)) {{
         throw "replacement launcher file missing after copy"
     }}
+    Assert-FileSha256 $replacement $expectedSha256 "replacement launcher"
     if (Test-Path -LiteralPath $target) {{
         Move-Item -LiteralPath $target -Destination $backup -Force
     }}
@@ -1931,6 +1946,7 @@ def _download_launcher_update_from_manifest(
             None,
             remote_version,
             launcher_source_path=launcher_path,
+            expected_sha256=package_sha256,
         )
     except Exception:
         keep_downloaded_file = stage_attempted and launcher_path.exists()

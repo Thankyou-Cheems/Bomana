@@ -106,16 +106,17 @@ def build_navigation_tape_model(
 
     for af in getattr(snap, "enemy_airfields", []) or []:
         is_in_front = abs(af.relative) <= 90
+        is_target = bool(getattr(af, "is_target", False) and is_in_front)
         targets.append(
             {
                 "type": "enemy",
                 "relative": af.relative,
                 "distance_km": af.distance_km,
                 "is_primary": False,
-                "is_target": is_in_front,
+                "is_target": is_target,
             }
         )
-        if getattr(af, "is_target", False) and is_in_front:
+        if is_target:
             active_targets_info.append(
                 {
                     "type": "enemy",
@@ -131,11 +132,14 @@ def build_navigation_tape_model(
     if getattr(snap, "zone_destroyed_alert", False):
         for dz in destroyed_zones or []:
             if hasattr(dz, "relative"):
+                distance_km = getattr(dz, "distance_km", None)
+                if distance_km is None and hasattr(dz, "distance"):
+                    distance_km = dz.distance * ZoneConfig.DISTANCE_SCALE
                 targets.append(
                     {
                         "type": "destroyed",
                         "relative": dz.relative,
-                        "distance_km": dz.distance * ZoneConfig.DISTANCE_SCALE,
+                        "distance_km": float(distance_km or 0.0),
                         "is_primary": False,
                     }
                 )

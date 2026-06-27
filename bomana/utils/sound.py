@@ -42,6 +42,7 @@ class SoundManager:
         self._enabled = False
         self._busy = False
         self._stopped = False
+        self._active_mci_alias: str | None = None
         self._queue: queue.Queue[_SoundJob | object] = queue.Queue()
         self._worker = threading.Thread(
             target=self._worker_loop,
@@ -97,6 +98,7 @@ class SoundManager:
 
         if not drain:
             self._discard_pending_jobs()
+            self._stop_active_mci()
 
         self._queue.put(self._STOP)
         self._worker.join(timeout=max(0.0, float(timeout)))
@@ -162,33 +164,55 @@ class SoundManager:
             if gap:
                 time.sleep(gap / 1000.0)
 
-    @staticmethod
-    def _play_audio_file(path: Path) -> None:
+    def _play_audio_file(self, path: Path) -> None:
         ext = path.suffix.lower()
         if ext == ".wav":
             if winsound is None:
                 return
             winsound.PlaySound(str(path), winsound.SND_FILENAME)
             return
-        SoundManager._play_audio_file_mci(path)
+        self._play_audio_file_mci(path)
 
-    @staticmethod
-    def _play_audio_file_mci(path: Path) -> None:
+    def _stop_active_mci(self) -> None:
+        with self._lock:
+            alias = self._active_mci_alias
+        if not alias:
+            return
+        with contextlib.suppress(Exception):
+            ctypes.windll.winmm.mciSendStringW(f"stop {alias}", None, 0, None)
+        with contextlib.suppress(Exception):
+            ctypes.windll.winmm.mciSendStringW(f"close {alias}", None, 0, None)
+
+    def _play_audio_file_mci(self, path: Path) -> None:
         alias = f"bomana_{time.monotonic_ns()}"
         path_text = str(path).replace('"', '""')
 
-        def _mci(command: str) -> int:
-            return int(ctypes.windll.winmm.mciSendStringW(command, None, 0, None))
+        def _mci(command: str, buffer=None, buffer_size: int = 0) -> int:
+            return int(ctypes.windll.winmm.mciSendStringW(command, buffer, buffer_size, None))
 
         err = _mci(f'open "{path_text}" alias {alias}')
         if err != 0:
             raise OSError(f"mci open failed: {err}")
+        with self._lock:
+            self._active_mci_alias = alias
         try:
-            err = _mci(f"play {alias} wait")
+            err = _mci(f"play {alias}")
             if err != 0:
                 raise OSError(f"mci play failed: {err}")
+            while True:
+                with self._lock:
+                    if self._stopped or self._active_mci_alias != alias:
+                        break
+                mode = ctypes.create_unicode_buffer(64)
+                err = _mci(f"status {alias} mode", mode, len(mode))
+                if err != 0 or mode.value.lower() != "playing":
+                    break
+                time.sleep(0.05)
         finally:
             _mci(f"close {alias}")
+            with self._lock:
+                if self._active_mci_alias == alias:
+                    self._active_mci_alias = None
 
     @staticmethod
     def _get_pattern_sequence(pattern: str) -> list[tuple[int, int, int]]:

@@ -12,6 +12,14 @@ def test_launcher_core_version_and_source_helpers() -> None:
     assert launcher_core.format_min_launcher_requirement("1.6.0") == "启动器 v1.6.0+"
 
 
+def test_launcher_core_version_comparison_handles_prerelease_metadata() -> None:
+    assert launcher_core.extract_version_tuple("2.0.0-rc.1") == (2, 0, 0)
+    assert launcher_core.extract_version_tuple("2.0.0+build.5") == (2, 0, 0)
+    assert not launcher_core.version_is_newer("2.0.0-rc.1", "2.0.0")
+    assert launcher_core.version_is_newer("2.0.0", "2.0.0-rc.1")
+    assert not launcher_core.version_is_older("2.0.0", "2.0.0-rc.1")
+
+
 def test_launcher_core_finds_assets_and_package_root(tmp_path: Path) -> None:
     assets = [{"name": "manifest_Enhanced.json"}, {"name": "Bomana_launcher_v1.6.0.exe"}]
     assert launcher_core.find_asset(assets, "MANIFEST_ENHANCED.JSON") == assets[0]

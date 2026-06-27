@@ -62,8 +62,11 @@ class AppRuntimeServices:
             (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.KEY_LOCK, self.app._toggle_lock),
             (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.KEY_CORNER, self.app._next_corner),
             (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.KEY_BEEP, self.app._toggle_beep),
-            (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.KEY_ZONES, self.app._toggle_zone_sound),
         ]
+        if ENABLE_ZONES:
+            hotkeys.append(
+                (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.KEY_ZONES, self.app._toggle_zone_sound)
+            )
         self.global_hotkeys = GlobalHotkeys(
             self.app.root,
             hotkeys,

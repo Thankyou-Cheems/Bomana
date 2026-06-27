@@ -110,6 +110,30 @@ def test_init_global_hotkeys_stops_existing_manager_when_disabled(monkeypatch) -
     assert services.global_hotkeys is None
 
 
+def test_init_global_hotkeys_omits_zones_when_feature_is_disabled(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeGlobalHotkeys:
+        def __init__(self, _root, hotkeys, **_kwargs) -> None:
+            captured["hotkeys"] = hotkeys
+
+        def start(self) -> None:
+            captured["started"] = True
+
+    services = AppRuntimeServices(_make_hotkey_app())
+
+    monkeypatch.setattr(runtime_services.os, "name", "nt")
+    monkeypatch.setattr(runtime_services, "ENABLE_ZONES", False)
+    monkeypatch.setattr(runtime_services, "GlobalHotkeys", FakeGlobalHotkeys)
+    monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
+
+    services.init_global_hotkeys()
+
+    hotkey_ids = [item[0] for item in captured["hotkeys"]]
+    assert HotkeyConfig.HK_ID_ZONES not in hotkey_ids
+    assert captured["started"] is True
+
+
 def test_settings_hotkey_restart_uses_runtime_services(monkeypatch) -> None:
     calls: list[str] = []
 

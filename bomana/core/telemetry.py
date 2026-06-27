@@ -12,6 +12,7 @@ from bomana.config import NetworkConfig
 from bomana.core.state import Airfield, MapInfo, MapObjData, TelemetryData, Zone
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
+_MIN_REQUEST_TIMEOUT_SEC = 0.01
 
 # ============================================================================
 # 网络请求层
@@ -71,12 +72,12 @@ class HttpJson:
         endpoint = self._endpoint_label(url)
         start = time.monotonic()
         rem = budget.remaining()
-        if rem <= 0.0:
+        if rem < _MIN_REQUEST_TIMEOUT_SEC:
             return FetchResult(endpoint=endpoint, ok=False, error_kind="budget_exhausted")
 
         # 计算超时时间
-        connect_t = min(NetworkConfig.API_CONNECT_TIMEOUT, max(0.01, rem))
-        read_t = min(NetworkConfig.API_READ_TIMEOUT, max(0.01, rem))
+        connect_t = min(NetworkConfig.API_CONNECT_TIMEOUT, rem)
+        read_t = min(NetworkConfig.API_READ_TIMEOUT, rem)
 
         try:
             r = self.session.get(url, timeout=(connect_t, read_t))
@@ -478,16 +479,16 @@ class MapObjectsFetcher:
         return None
 
     @staticmethod
-    def _extract_objects(payload: Any) -> list[Any]:
+    def _extract_objects(payload: Any) -> tuple[list[Any], str]:
         if isinstance(payload, list):
-            return payload
+            return payload, ""
         if not isinstance(payload, dict):
-            return []
+            return [], "schema"
         for key in ("objects", "map_objects", "items", "data"):
             value = payload.get(key)
             if isinstance(value, list):
-                return value
-        return []
+                return value, ""
+        return [], "schema"
 
     @staticmethod
     def _read_rgb(o: dict) -> tuple[float, float, float] | None:
@@ -588,10 +589,13 @@ class MapObjectsFetcher:
         if not result.ok:
             return out
 
-        out.ok = True
-
         # 提取对象列表
-        objs = self._extract_objects(j)
+        objs, schema_error = self._extract_objects(j)
+        if schema_error:
+            out.error_kind = schema_error
+            return out
+
+        out.ok = True
         out.obj_count = len(objs)
 
         zone_index = 1

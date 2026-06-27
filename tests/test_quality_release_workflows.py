@@ -64,6 +64,46 @@ def test_local_deploy_script_accepts_build_portable_all_checksum_names(tmp_path:
     assert tmp_path / "checksums_launcher.txt" in assets
 
 
+def test_local_deploy_script_quotes_remote_env_values() -> None:
+    deploy = load_tool_module("deploy_update_assets_quote", "tools/deploy_update_assets.py")
+
+    command = deploy.remote_env_command(
+        stage_dir="x'$(touch /tmp/pwn)",
+        remote_root="/opt/stacks/bomana-update",
+        target="app",
+        app_version="1.0.0",
+        launcher_version="2.0.0",
+    )
+
+    assert command.startswith("STAGE_DIR='x'\"'\"'$(touch /tmp/pwn)' ")
+    assert 'STAGE_DIR="x' not in command
+
+
+def test_local_deploy_script_remote_stage_assets_are_filename_only() -> None:
+    source = (ROOT / "tools/deploy_update_assets.py").read_text(encoding="utf-8")
+
+    assert "def stage_asset_path" in source
+    assert '"/" in asset_name or "\\\\" in asset_name' in source
+    assert "candidate.relative_to(stage_root)" in source
+    assert 'manifest["package_asset"]' in source
+    assert 'manifest["launcher_asset"]' in source
+
+
+def test_legacy_build_fails_when_version_info_generation_fails() -> None:
+    script = (ROOT / "tools/scripts/build.bat").read_text(encoding="utf-8")
+    generate_index = script.index(
+        "%UV_CMD% run python tools\\create_version_info.py "
+        "--config bomana\\config.py --output file_version_info.txt"
+    )
+    delete_index = script.index("if exist file_version_info.txt del file_version_info.txt")
+    errorlevel_index = script.index("if %errorlevel% neq 0 (", generate_index)
+    missing_file_index = script.index("echo [错误] 未生成版本信息文件", generate_index)
+
+    assert delete_index < generate_index
+    assert errorlevel_index > generate_index
+    assert missing_file_index > generate_index
+
+
 def test_build_portable_rejects_app_version_mismatch() -> None:
     build_portable = load_tool_module("build_portable_app_version", "tools/build_portable.py")
 

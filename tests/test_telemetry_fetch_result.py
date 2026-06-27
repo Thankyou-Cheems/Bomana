@@ -67,6 +67,16 @@ class HttpJsonFetchResultTests(unittest.TestCase):
         self.assertEqual(result.error_kind, "budget_exhausted")
         self.assertEqual(session.calls, [])
 
+    def test_tiny_positive_budget_is_classified_without_request(self) -> None:
+        session = FakeSession(FakeResponse(payload={}))
+        http = HttpJson(session)
+
+        result = http.get_json("http://127.0.0.1:8111/state", Budget(0.001))
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error_kind, "budget_exhausted")
+        self.assertEqual(session.calls, [])
+
     def test_timeout_is_classified(self) -> None:
         http = HttpJson(FakeSession(requests.Timeout("slow")))
 
@@ -155,6 +165,28 @@ class FetcherDiagnosticTests(unittest.TestCase):
         self.assertFalse(data.ok)
         self.assertEqual(data.error_kind, "status")
         self.assertGreaterEqual(data.elapsed_ms, 0.0)
+
+    def test_map_fetcher_rejects_malformed_payload_shape(self) -> None:
+        for payload in ("bad-shape", {"unexpected": []}):
+            with self.subTest(payload=payload):
+                http = HttpJson(FakeSession(FakeResponse(payload=payload)))
+
+                data = MapObjectsFetcher(http).fetch(Budget(1.0))
+
+                self.assertFalse(data.ok)
+                self.assertEqual(data.error_kind, "schema")
+                self.assertEqual(data.obj_count, 0)
+
+    def test_map_fetcher_accepts_legitimate_empty_object_lists(self) -> None:
+        for payload in ([], {"objects": []}):
+            with self.subTest(payload=payload):
+                http = HttpJson(FakeSession(FakeResponse(payload=payload)))
+
+                data = MapObjectsFetcher(http).fetch(Budget(1.0))
+
+                self.assertTrue(data.ok)
+                self.assertEqual(data.error_kind, "")
+                self.assertEqual(data.obj_count, 0)
 
 
 if __name__ == "__main__":

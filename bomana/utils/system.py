@@ -302,8 +302,36 @@ class Win32:
         LWA_ALPHA = 0x2  # 透明度标志
 
         try:
+            user32 = cls.user32
+            kernel32 = cls.kernel32
+            with contextlib.suppress(Exception):
+                user32.GetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+                user32.GetWindowLongW.restype = ctypes.c_long
+                user32.SetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_long]
+                user32.SetWindowLongW.restype = ctypes.c_long
+                user32.SetLayeredWindowAttributes.argtypes = [
+                    ctypes.c_void_p,
+                    ctypes.c_uint,
+                    ctypes.c_ubyte,
+                    ctypes.c_uint,
+                ]
+                user32.SetLayeredWindowAttributes.restype = ctypes.c_bool
+
+            def _last_error() -> int:
+                try:
+                    return int(kernel32.GetLastError())
+                except _WIN32_ACCESS_ERRORS:
+                    return 0
+
+            def _clear_last_error() -> None:
+                with contextlib.suppress(_WIN32_ACCESS_ERRORS):
+                    kernel32.SetLastError(0)
+
             # 获取当前样式
-            style = cls.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            _clear_last_error()
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            if style == 0 and _last_error() != 0:
+                return False
 
             # 添加必要样式
             style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW
@@ -318,15 +346,17 @@ class Win32:
                 style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
 
             # 应用样式和透明度/颜色键
-            cls.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+            _clear_last_error()
+            previous_style = user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+            if previous_style == 0 and _last_error() != 0:
+                return False
             target_alpha = max(0, min(255, int(alpha)))
             flags = LWA_ALPHA
             key = 0
             if color_key is not None:
                 flags |= LWA_COLORKEY
                 key = int(color_key) & 0x00FFFFFF
-            cls.user32.SetLayeredWindowAttributes(hwnd, key, target_alpha, flags)
-            return True
+            return bool(user32.SetLayeredWindowAttributes(hwnd, key, target_alpha, flags))
         except _WIN32_ACCESS_ERRORS:
             return False
 
@@ -559,6 +589,7 @@ class GlobalHotkeys:
         self._thread = None
         self._tid = None
         self._stop_event = threading.Event()
+        self._ready = threading.Event()
 
     def start(self):
         """启动热键监听线程"""
@@ -567,21 +598,24 @@ class GlobalHotkeys:
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
+        self._ready.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def stop(self):
         """停止热键监听"""
-        if os.name != "nt" or not self._tid:
+        self._stop_event.set()
+        thread = self._thread
+        if os.name != "nt":
             return
         try:
             # 向监听线程发送退出消息
-            self._stop_event.set()
-            Win32.user32.PostThreadMessageW(int(self._tid), int(self.WM_QUIT), 0, 0)
+            if self._tid:
+                Win32.user32.PostThreadMessageW(int(self._tid), int(self.WM_QUIT), 0, 0)
         except _WIN32_ACCESS_ERRORS:
             pass
-        if self._thread:
-            self._thread.join(timeout=1.0)
+        if thread:
+            thread.join(timeout=1.0)
 
     def _run(self):
         """热键监听主循环（运行在独立线程）"""
@@ -590,8 +624,12 @@ class GlobalHotkeys:
             kernel32 = ctypes.windll.kernel32
             kernel32.GetCurrentThreadId.restype = ctypes.c_uint
             self._tid = int(kernel32.GetCurrentThreadId())
+            self._ready.set()
         except _WIN32_ACCESS_ERRORS:
             self._tid = None
+            self._ready.set()
+            return
+        if self._stop_event.is_set():
             return
 
         # 注册所有热键

@@ -45,6 +45,18 @@ def _stable_map() -> MapObjData:
     )
 
 
+def _empty_zone_map() -> MapObjData:
+    return MapObjData(
+        ok=True,
+        player_aircraft_present=True,
+        player_pos=(0.5, 0.5),
+        player_dx=0.0,
+        player_dy=-1.0,
+        obj_count=1,
+        zones=[],
+    )
+
+
 def _valid_map_info() -> MapInfo:
     now = time.time()
     return MapInfo(
@@ -112,6 +124,19 @@ class GameLogic8111StabilityTests(unittest.TestCase):
         self.assertEqual(Phase.IDLE, snap.phase)
         self.assertFalse(snap.source_debug.tel_fallback_active)
         self.assertFalse(snap.source_debug.map_fallback_active)
+
+    def test_final_zone_disappearance_reports_destroyed(self):
+        game = GameLogic()
+        now = time.time()
+        with game._lock:
+            game.state.map_info = _valid_map_info()
+            game._update_zone_navigation_locked(_stable_map(), _stable_telemetry(), now)
+            game._update_zone_navigation_locked(_empty_zone_map(), _stable_telemetry(), now + 1.0)
+        snap = game.snapshot()
+
+        self.assertTrue(snap.zone_destroyed_alert)
+        self.assertEqual(1, snap.destroyed_zone_count)
+        self.assertIn("1", snap.destroyed_zone_text)
 
 
 if __name__ == "__main__":

@@ -842,7 +842,7 @@ class GameLogic:
 
         # === 战区被摧毁检测 ===
         current_zone_ids = {z.id for z in mp.zones}
-        if nav.previous_zone_ids and current_zone_ids:
+        if nav.previous_zone_ids:
             destroyed_ids = nav.previous_zone_ids - current_zone_ids
             if destroyed_ids:
                 # 找到被摧毁的战区
@@ -1456,6 +1456,10 @@ class GameLogic:
         deviation_angle = nav_target_zone.relative if nav_target_zone else 0.0
         zone_destroyed_alert = nav_destroyed_alert_until > now
         destroyed_count = len(nav_destroyed_zones) if zone_destroyed_alert else 0
+        destroyed_zone_display_list = self._build_zone_display_list(
+            nav_destroyed_zones if zone_destroyed_alert else [],
+            nav_ground_speed,
+        )
         destroyed_zone_text = self._build_destroyed_zone_text(
             destroyed_zones=nav_destroyed_zones if zone_destroyed_alert else [],
             player_pos=mp.player_pos,
@@ -1564,6 +1568,7 @@ class GameLogic:
             zone_destroyed_alert=zone_destroyed_alert,
             destroyed_zone_count=destroyed_count,
             destroyed_zone_text=destroyed_zone_text,
+            destroyed_zones=destroyed_zone_display_list,
             should_play_destroyed_sound=nav_should_play_destroyed_sound,
             player_heading=nav_player_heading,
             fuel_kg=fuel_current_kg,

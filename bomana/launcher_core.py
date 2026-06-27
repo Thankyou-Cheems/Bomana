@@ -65,11 +65,23 @@ def format_size_text(num_bytes: int | None) -> str:
     return f"{num_bytes} B"
 
 
+_VERSION_RE = re.compile(r"^\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+].*)?\s*$")
+
+
 def extract_version_tuple(version: str) -> tuple[int, ...]:
-    nums = re.findall(r"\d+", version or "")
+    text = str(version or "").strip()
+    match = _VERSION_RE.match(text)
+    if match:
+        return tuple(int(part) for part in match.groups(default="0"))
+    nums = re.findall(r"\d+", text.split("-", 1)[0].split("+", 1)[0])
     if not nums:
         return (0,)
     return tuple(int(x) for x in nums)
+
+
+def _is_prerelease(version: str) -> bool:
+    release_and_prerelease = str(version or "").strip().split("+", 1)[0]
+    return "-" in release_and_prerelease
 
 
 def version_is_newer(remote: str, local: str) -> bool:
@@ -78,7 +90,9 @@ def version_is_newer(remote: str, local: str) -> bool:
     n = max(len(a), len(b))
     aa = a + (0,) * (n - len(a))
     bb = b + (0,) * (n - len(b))
-    return aa > bb
+    if aa != bb:
+        return aa > bb
+    return (not _is_prerelease(remote)) and _is_prerelease(local)
 
 
 def version_is_older(current: str, required: str) -> bool:

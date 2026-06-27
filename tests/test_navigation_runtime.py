@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from bomana.config import PanelConfig
+from bomana.ui import nav_window as nav_window_module
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.navigation_runtime import AppNavigationServices
 
@@ -57,6 +58,32 @@ class FakeNavigationWindow:
 
     def apply_window_styles(self, *, click_through: bool, alpha: int) -> None:
         self.style_calls.append((click_through, alpha))
+
+
+class FakeTopLevel:
+    def __init__(self, _root) -> None:
+        self.updated = False
+
+    def title(self, _text: str) -> None:
+        pass
+
+    def overrideredirect(self, _enabled: bool) -> None:
+        pass
+
+    def attributes(self, *_args) -> None:
+        pass
+
+    def configure(self, **_kwargs) -> None:
+        pass
+
+    def withdraw(self) -> None:
+        pass
+
+    def update_idletasks(self) -> None:
+        self.updated = True
+
+    def winfo_id(self) -> int:
+        return 12345
 
 
 class FakeApp:
@@ -126,6 +153,19 @@ class NavigationRuntimeTests(unittest.TestCase):
         services.restore_after_history_mode(state_changed=True)
         self.assertTrue(services.window.visible)
 
+    def test_history_mode_records_restore_intent_when_already_active(self) -> None:
+        app = FakeApp()
+        services = AppNavigationServices(app)
+        services.window = FakeNavigationWindow(app)
+        services.window.show()
+        PanelConfig.navigation_mode = "standalone"
+
+        services.suspend_for_history_mode(state_changed=False)
+        self.assertFalse(services.window.visible)
+
+        services.restore_after_history_mode(state_changed=True)
+        self.assertTrue(services.window.visible)
+
     @patch("bomana.ui.navigation_runtime.NavigationWindow", FakeNavigationWindow)
     def test_rebuild_preserves_position_but_reflows_size_for_text_only_change(self) -> None:
         app = FakeApp()
@@ -151,6 +191,21 @@ class NavigationRuntimeTests(unittest.TestCase):
         services.apply_lock_state(locked=True, alpha=210)
 
         self.assertEqual(services.window.style_calls, [(True, 210)])
+
+    def test_navigation_window_constructor_falls_back_when_win32_parent_lookup_fails(self) -> None:
+        app = SimpleNamespace(root=object(), scale=1.0, _locked=False)
+
+        with (
+            patch.object(nav_window_module.tk, "Toplevel", FakeTopLevel),
+            patch.object(nav_window_module.ctypes, "windll", SimpleNamespace(), create=True),
+            patch.object(NavigationWindow, "apply_window_styles", lambda *_args, **_kwargs: None),
+            patch.object(NavigationWindow, "_init_ui", lambda _self: None),
+            patch.object(NavigationWindow, "_init_bindings", lambda _self: None),
+            patch.object(NavigationWindow, "_restore_position", lambda _self: None),
+        ):
+            window = NavigationWindow(app)
+
+        self.assertEqual(window.hwnd, 12345)
 
 
 class NavigationWindowPositionRestoreTests(unittest.TestCase):

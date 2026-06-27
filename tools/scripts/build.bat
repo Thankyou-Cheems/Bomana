@@ -119,10 +119,24 @@ echo.
 
 REM 生成版本信息文件
 echo [5.5/6] 生成版本信息...
+if exist file_version_info.txt del file_version_info.txt
 %UV_CMD% run python tools\create_version_info.py --config bomana\config.py --output file_version_info.txt
+if %errorlevel% neq 0 (
+    if exist "%CONFIG_BAK%" move /y "%CONFIG_BAK%" "%CONFIG_FILE%" >nul
+    echo [错误] 版本信息生成失败
+    popd >nul
+    pause
+    exit /b 1
+)
 set "VERSION_ARG="
 if exist file_version_info.txt (
     set "VERSION_ARG=--version-file file_version_info.txt"
+) else (
+    if exist "%CONFIG_BAK%" move /y "%CONFIG_BAK%" "%CONFIG_FILE%" >nul
+    echo [错误] 未生成版本信息文件
+    popd >nul
+    pause
+    exit /b 1
 )
 
 

@@ -11,6 +11,8 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+from bomana import launcher_install
+
 
 def load_launcher_module():
     module_name = "launcher_under_test"
@@ -274,6 +276,9 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         result_path = data_root / self.launcher.LAUNCHER_UPDATE_RESULT_FILE_NAME
         self.assertIn(json.dumps(str(result_path)), script)
         self.assertIn("$replacement", script)
+        self.assertIn("$expectedSha256", script)
+        self.assertIn("Assert-FileSha256 $staged $expectedSha256", script)
+        self.assertIn("Assert-FileSha256 $replacement $expectedSha256", script)
         self.assertIn("Copy-Item -LiteralPath $staged -Destination $replacement -Force", script)
         self.assertIn("Move-Item -LiteralPath $backup -Destination $target", script)
         self.assertIn("新版启动器文件保留在", script)
@@ -342,6 +347,34 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "2.0.0",
         )
         self.assertTrue(status_events)
+        self.assertFalse((self.base / self.launcher.UPDATE_LOCK_FILE_NAME).exists())
+
+    def test_rollback_failure_after_previous_move_restores_current_version(self) -> None:
+        self.write_current_app("2.0.0")
+        self.write_previous_app("1.5.0")
+        real_replace = os.replace
+        replace_calls = []
+
+        def fail_third_replace(src, dst) -> None:
+            replace_calls.append((Path(src).name, Path(dst).name))
+            if len(replace_calls) == 3:
+                raise OSError("third move failed")
+            real_replace(src, dst)
+
+        with (
+            patch.object(launcher_install.os, "replace", side_effect=fail_third_replace),
+            self.assertRaisesRegex(OSError, "third move failed"),
+        ):
+            self.launcher._rollback_to_previous_app(self.base)
+
+        self.assertEqual(
+            self.launcher._read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "2.0.0",
+        )
+        self.assertEqual(
+            self.launcher._read_local_app_version(self.base / self.launcher.APP_PREVIOUS_DIR_NAME),
+            "1.5.0",
+        )
         self.assertFalse((self.base / self.launcher.UPDATE_LOCK_FILE_NAME).exists())
 
 

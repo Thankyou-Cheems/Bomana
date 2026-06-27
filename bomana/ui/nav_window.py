@@ -76,7 +76,10 @@ class NavigationWindow:
         self.window.update_idletasks()  # 确保窗口已创建
         # v6.6.3: 兼容 overrideredirect 的真实句柄获取
         internal_id = self.window.winfo_id()
-        self.hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
+        try:
+            self.hwnd = ctypes.windll.user32.GetParent(internal_id) or int(internal_id)
+        except _WIN32_ACCESS_ERRORS:
+            self.hwnd = int(internal_id)
 
         # 使用Win32 API设置分层窗口：背景透明，内容保持不透明 + 点击穿透
         self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
@@ -563,10 +566,7 @@ class NavigationWindow:
             return
 
         destroyed_zones = (
-            self.app.game.state.zone_nav.destroyed_zones
-            if getattr(snap, "zone_destroyed_alert", False)
-            and hasattr(self.app.game.state.zone_nav, "destroyed_zones")
-            else None
+            snap.destroyed_zones if getattr(snap, "zone_destroyed_alert", False) else None
         )
         model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)
         targets = model.targets

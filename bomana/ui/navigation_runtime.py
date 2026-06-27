@@ -59,10 +59,11 @@ class AppNavigationServices:
         window = self.window
         if window is None:
             return
-        if state_changed:
-            self._history_mode_window_was_visible = bool(window.is_visible())
         if window.is_visible():
+            self._history_mode_window_was_visible = True
             window.hide()
+        elif state_changed:
+            self._history_mode_window_was_visible = False
 
     def restore_after_history_mode(self, *, state_changed: bool) -> None:
         """Restore the standalone nav window after leaving the history layout."""

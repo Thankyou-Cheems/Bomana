@@ -46,6 +46,13 @@ class RuntimeThreadingTests(unittest.TestCase):
 
         TkEventDispatcher(ClosedRoot()).post(lambda: None)
 
+    def test_dispatcher_ignores_shutdown_runtime_error(self) -> None:
+        class ClosedRoot:
+            def after(self, delay_ms, callback, *args):
+                raise RuntimeError("main thread is not in main loop")
+
+        TkEventDispatcher(ClosedRoot()).post(lambda: None)
+
     def test_logic_poller_ticks_until_stop_callback(self) -> None:
         game = FakeGame()
         poller = LogicPoller(game, lambda: game.ticks >= 1)

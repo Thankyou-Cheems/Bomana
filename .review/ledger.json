@@ -376,7 +376,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
+        "at": "2026-06-27T16:09:35+00:00"
       }
     },
     {
@@ -406,7 +406,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
+        "at": "2026-06-27T16:09:35+00:00"
       }
     },
     {
@@ -431,13 +431,15 @@
         }
       ],
       "id": "F-8fb5648b",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:29+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/core/telemetry.py",
@@ -461,13 +463,15 @@
         }
       ],
       "id": "F-2eb5a564",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/utils/file_utils.py",
@@ -491,13 +495,15 @@
         }
       ],
       "id": "F-d563b2d3",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/core/logic.py",
@@ -521,13 +527,15 @@
         }
       ],
       "id": "F-6fcde172",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/data/ccrp_bomb_params.json",
@@ -554,9 +562,9 @@
       "status": "open",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
+        "status": "drifted",
+        "detail": "snippet exists but not at lines 133-147; first line now near line 238",
+        "at": "2026-06-27T16:09:35+00:00"
       }
     },
     {
@@ -581,13 +589,15 @@
         }
       ],
       "id": "F-dff0276c",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/runtime_services.py",
@@ -611,13 +621,15 @@
         }
       ],
       "id": "F-d8a0e46f",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/app.py",
@@ -641,13 +653,15 @@
         }
       ],
       "id": "F-00164968",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/runtime.py",
@@ -671,13 +685,15 @@
         }
       ],
       "id": "F-eeba46b2",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/panel_renderer.py",
@@ -701,13 +717,15 @@
         }
       ],
       "id": "F-ed9ba16e",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/panel_renderer.py",
@@ -731,13 +749,15 @@
         }
       ],
       "id": "F-67345260",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/dialogs.py",
@@ -761,13 +781,15 @@
         }
       ],
       "id": "F-f4261c90",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:28+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/dialogs.py",
@@ -791,13 +813,15 @@
         }
       ],
       "id": "F-eb62a69c",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/dialogs.py",
@@ -821,13 +845,15 @@
         }
       ],
       "id": "F-d03b8edc",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:38:44+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:29+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/utils/system.py",
@@ -851,13 +877,15 @@
         }
       ],
       "id": "F-691747c0",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:39:33+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:26+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/hud_overlay.py",
@@ -886,7 +914,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
+        "at": "2026-06-27T16:09:35+00:00"
       }
     },
     {
@@ -916,7 +944,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
+        "at": "2026-06-27T16:09:35+00:00"
       }
     },
     {
@@ -941,13 +969,15 @@
         }
       ],
       "id": "F-85c0464b",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:39:33+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/utils/sound.py",
@@ -971,13 +1001,15 @@
         }
       ],
       "id": "F-6df88130",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:39:33+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/nav_window.py",
@@ -1001,13 +1033,15 @@
         }
       ],
       "id": "F-7858d3a3",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:40:07+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/navigation_presenter.py",
@@ -1031,13 +1065,15 @@
         }
       ],
       "id": "F-9660e3a1",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:40:07+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/nav_window.py",
@@ -1061,13 +1097,15 @@
         }
       ],
       "id": "F-5061272d",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:40:07+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:29+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/ui/navigation_runtime.py",
@@ -1091,13 +1129,15 @@
         }
       ],
       "id": "F-1efbc5c5",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:40:07+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:29+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/utils/file_utils.py",
@@ -1121,13 +1161,15 @@
         }
       ],
       "id": "F-612d9b37",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:40:32+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:26+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "tools/build_portable.py",
@@ -1156,7 +1198,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
+        "at": "2026-06-27T16:09:35+00:00"
       }
     },
     {
@@ -1181,13 +1223,15 @@
         }
       ],
       "id": "F-e05f92e3",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:43:08+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "tools/deploy_update_assets.py",
@@ -1211,13 +1255,15 @@
         }
       ],
       "id": "F-f5cbb6e5",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:43:08+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "tools/deploy_update_assets.py",
@@ -1241,13 +1287,15 @@
         }
       ],
       "id": "F-d88c090c",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:43:08+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/launcher_install.py",
@@ -1271,13 +1319,15 @@
         }
       ],
       "id": "F-b6ca75c1",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:43:08+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "bomana/launcher_core.py",
@@ -1301,13 +1351,15 @@
         }
       ],
       "id": "F-5aefffd3",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:43:08+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:27+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     },
     {
       "file": "tools/scripts/build.bat",
@@ -1331,13 +1383,15 @@
         }
       ],
       "id": "F-122bb5c5",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:43:08+00:00",
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-18T01:46:33+00:00"
-      }
+        "at": "2026-06-27T16:09:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:37:29+00:00",
+      "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
     }
   ]
 }
