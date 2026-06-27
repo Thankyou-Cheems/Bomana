@@ -75,6 +75,11 @@ implementation plans belong in git history, not here.
   Cause: source mode used the current interpreter while dependencies existed only in the repo `.venv`
   Fix/Workaround: prepend repo `.venv` `site-packages` during source-mode launch; if missing, run `uv sync --python 3.14 --extra build`
 
+- Context: Windows `uv run` after a partial or broken virtualenv creation
+  Symptom: `uv run ...` failed before the command with `failed to remove file ...\.venv\lib64: Access is denied`
+  Cause: `.venv\lib64` was a self-referential reparse point and the virtualenv lacked the normal Windows `Scripts` directory, so uv could not repair it in place
+  Fix/Workaround: recreate the repo virtualenv with `uv sync --python 3.14 --extra dev` after removing the broken `.venv`; for stdlib-only maintainer scripts, use the system Python only as a temporary workaround and still repair uv before quality gates
+
 ### 8111 Runtime Stability
 
 - Context: opening map/scoreboard in battle
@@ -144,3 +149,8 @@ implementation plans belong in git history, not here.
   Symptom: old issues and notes still described pre-1.0 migration failures, external Dolt server setup, and legacy sync commands
   Cause: historical upgrade work remained after the project moved to the current embedded Dolt backend
   Fix/Workaround: retire old `bd sync`, manual `.beads/dolt/**/LOCK` cleanup, raw Dolt SQL schema commits, and hand-started `127.0.0.1:3307` server recipes. If auto-export warns because `.beads/` is ignored, prefer `bd config set export.git-add false` over changing repo ignore policy.
+
+- Context: embedded bd schema drift while using `bd 1.0.4`
+  Symptom: `bd create ... --json` failed with `Field 'id' doesn't have a default value`, and `bd status --json` failed with `column "depends_on_id" could not be found`; `bd ready --json`, `bd list --json`, and `bd backup status` still worked
+  Cause: local embedded Dolt tables were not aligned with the command paths used by create/status
+  Fix/Workaround: do not keep retrying failing write commands; capture the exact error, use `bd backup status` and read-only list/ready commands for session context, then repair or rebuild the embedded bd schema before requiring new issue creation/status updates

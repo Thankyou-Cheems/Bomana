@@ -1,12 +1,12 @@
 {
   "meta": {
-    "generated_at": "2026-05-13 16:04:40",
+    "generated_at": "2026-06-27 23:38:50",
     "source_root_name": "War-Thunder-Datamine",
     "source_subdir": "aces.vromfs.bin_u/gamedata/flightmodels",
-    "source_version": "2.55.1.107",
-    "source_commit": "4cfba6c6ebec3f5cd5b4c106b2e3d8edb9bc2864",
-    "fm_records": 1193,
-    "unit_records": 1430
+    "source_version": "2.57.0.24",
+    "source_commit": "ad87bddda260495fd9cf73095737dd5917989183",
+    "fm_records": 1207,
+    "unit_records": 1442
   },
   "unit_to_fm": {
     "a-20g": "a-20g",
@@ -129,7 +129,7 @@
     "b-29_japan_killstreak": "b-29",
     "b-29_killstreak": "b-29",
     "b-29_sweden_killstreak": "b-29",
-    "b-29_uk_killstreak": "b-29",
+    "b-29_uk_killstreak": "washington_b1",
     "b-57": "b-57",
     "b-57b": "b-57b",
     "b7a2": "b7a2",
@@ -288,16 +288,9 @@
     "f-104s_asa": "f_104s_asa",
     "f-104s_cb": "f_104s_cb",
     "f-105d": "f_105d",
-    "f-4c": "f-4c",
-    "f-4e": "f-4e",
-    "f-4e_iaf": "f-4e_iaf",
-    "f-4e_kurnass_2000": "f-4e_iaf",
     "f-4ej": "f-4ej",
     "f-4ej_adtw": "f-4ej",
     "f-4ej_kai": "f-4ej",
-    "f-4f": "f-4f",
-    "f-4f_kws_lv": "f-4f_kws_lv",
-    "f-4f_late": "f-4f",
     "f-4j": "f-4j",
     "f-4jk": "f-4j",
     "f-4k": "f-4k",
@@ -306,7 +299,7 @@
     "f-5a": "f_5a",
     "f-5a_china": "f_5a",
     "f-5a_thailand": "f_5a",
-    "f-5ag_norway": "f_5a",
+    "f-5ag_norway": "f_5ag",
     "f-5c": "f_5a",
     "f-5e": "f_5e",
     "f-5e_aidc": "f_5e_aidc",
@@ -384,6 +377,7 @@
     "f9f-5": "f9f-5",
     "f9f-8": "f9f-8",
     "f_100f_china": "f_100f",
+    "f_101c": "f_101c",
     "f_106a_1972": "f_106a_1972",
     "f_111a": "f_111a",
     "f_111c_raaf": "f_111c",
@@ -395,6 +389,7 @@
     "f_14a_early": "f_14a_early",
     "f_14a_iriaf": "f_14a_iriaf",
     "f_14b": "f_14b",
+    "f_14d": "f_14d",
     "f_15a": "f_15a",
     "f_15a_iaf": "f_15a",
     "f_15c_baz_msip": "f_15c_baz_msip",
@@ -415,8 +410,10 @@
     "f_16a_block_15_ocu_thailand": "f_16a_block_15_ocu_thailand",
     "f_16a_block_20_mlu": "f_16a_block_20_mlu",
     "f_16a_block_5_netherlands": "f_16a_block_5_netherlands",
+    "f_16a_block_72v_china": "f_16a_block_72v_china",
     "f_16aj": "f_16aj",
     "f_16am_block_15_mlu_belgium": "f_16am_block_15_mlu_belgium",
+    "f_16am_block_20_mlu_netherlands": "f_16a_block_20_mlu",
     "f_16am_block_20_mlu_norway": "f_16a_block_20_mlu",
     "f_16c_block_40_barak_2": "f_16c_block_40_barak_2",
     "f_16c_block_50": "f_16c_block_50",
@@ -492,6 +489,7 @@
     "fw-190d-9": "fw-190d-9",
     "fw-190d-9_ussr": "fw-190d-9",
     "fw-190f-8": "fw-190f-8",
+    "fw_189c_0": "fw_189c_0",
     "fw_190a_5_u14": "fw-190a-5_u14",
     "fw_190f_8_hungary": "fw-190f-8",
     "fw_200c_1": "fw_200c_1",
@@ -621,6 +619,7 @@
     "i_185_m82": "i_185_m82",
     "i_225": "i-225",
     "i_29": "i_29",
+    "ia_58a_pucara": "ia_58a_pucara",
     "iar_316b": "iar_316b",
     "iar_81c": "iar-81c",
     "iar_93b": "iar_93b",
@@ -661,6 +660,7 @@
     "j_11a": "j_11a",
     "j_11b": "j_11b",
     "j_15t": "j_15t",
+    "j_22m1a": "iar_93b",
     "j_7_mk2": "j_7_mk2",
     "j_7d": "j_7d",
     "j_7e": "j_7e",
@@ -684,6 +684,8 @@
     "jf_17": "jf_17",
     "jh_7": "jh_7",
     "jh_7a": "jh_7a",
+    "jh_7a2": "jh_7a2",
+    "jh_7a_killstreak": "jh_7a",
     "jh_7a_prototype": "jh_7a",
     "ju-188a-2": "ju-188a-2",
     "ju-288c": "ju-288c",
@@ -751,6 +753,7 @@
     "ki_94_2": "ki_94_2",
     "kitsuka": "kitsuka",
     "l_39za": "l_39za",
+    "l_39za_art_thailand": "l_39za_art_thailand",
     "la-11": "la-11",
     "la-11_china": "la-11",
     "la-15": "la-15",
@@ -780,6 +783,7 @@
     "lincoln_b2": "lincoln_b2",
     "loire_130": "loire_130",
     "lynx_ah_mk1": "lynx_ah_mk1",
+    "m_346fa": "m_346fa",
     "martin_139wc": "martin_139wc",
     "marut_mk1": "marut_mk1",
     "maryland_mk1": "maryland_mk1",
@@ -841,6 +845,7 @@
     "mh_60l_dap": "mh_60l_dap",
     "mi_24a": "mi_24a",
     "mi_24d": "mi_24v",
+    "mi_24d_german": "mi_24v",
     "mi_24d_hungary": "mi_24v",
     "mi_24p": "mi_24p",
     "mi_24p_german": "mi_24p_german",
@@ -896,6 +901,7 @@
     "mig-9_china": "mig-9",
     "mig-9_late_china": "mig-9_ussr",
     "mig-9_ussr": "mig-9_ussr",
+    "mig_21_2000_iaf": "mig_21_2000_iaf",
     "mig_21_bis_finland": "mig_21_bis_finland",
     "mig_23bn": "mig_23bn",
     "mig_23m": "mig_23m",
@@ -913,6 +919,7 @@
     "mig_29_9_12b_hungary": "mig_29_9_12_germany",
     "mig_29_9_12g": "mig_29_9_12g",
     "mig_29_9_13": "mig_29_9_13",
+    "mig_29kr_9_41r": "mig_29kr_9_41r",
     "mig_29m_9_15": "mig_29m_9_15",
     "mig_29n": "mig_29_9_12g",
     "mig_29smt_9_19": "mig_29smt_9_19",
@@ -1123,6 +1130,7 @@
     "saab_a32a_red_adam": "saab_a32a",
     "saab_aj37": "saab_aj37",
     "saab_ajs37": "saab_ajs37",
+    "saab_ajs37_early": "saab_ajs37",
     "saab_b17a": "saab_b17a",
     "saab_b17b": "saab_b17b",
     "saab_b17bs": "saab_b17bs",
@@ -1232,6 +1240,7 @@
     "spitfire_mk14c": "spitfire_mk14c",
     "spitfire_mk14e": "spitfire_mk14e",
     "spitfire_mk18e": "spitfire_mk18e",
+    "spitfire_mk5b_float": "spitfire_mk5b_float",
     "spitfire_mk5b_italy": "spitfire_mk5b",
     "spitfire_mk5b_notrop": "spitfire_mk5b_notrop",
     "spitfire_mk5c": "spitfire_mk5c",
@@ -1378,7 +1387,9 @@
     "vg_33": "vg_33",
     "vl_myrsky_2_late": "vl_myrsky_2_late",
     "walrus_mk1": "walrus_mk1",
+    "washington_b1": "washington_b1",
     "wasp_has_mk1": "wasp_has_mk1",
+    "welkin_fmk1": "welkin_fmk1",
     "wellington_mk10": "wellington_mk10",
     "wellington_mk1c_late": "wellington_mk1c",
     "wellington_mk1c_luftwaffe": "wellington_mk1c",
@@ -1424,6 +1435,7 @@
     "yak-9t_france": "yak-9t",
     "yak-9u": "yak-9u",
     "yak-9ut": "yak-9ut",
+    "yak_130_early": "yak_130_early",
     "yak_141": "yak_141",
     "yak_1_litvyak": "yak_1_pf",
     "yak_2_kabb": "yak-2_kabb",
@@ -1782,7 +1794,7 @@
       "mach": 0.63
     },
     "b-29": {
-      "ias": 609.0,
+      "ias": 507.0,
       "mach": 0.64
     },
     "b-57": {
@@ -1838,7 +1850,7 @@
       "mach": 0.65
     },
     "b_26b_c": {
-      "ias": 568.0,
+      "ias": 596.5,
       "mach": 0.75
     },
     "b_34": {
@@ -2597,6 +2609,10 @@
       "ias": 1361.0,
       "mach": 1.65
     },
+    "f_101c": {
+      "ias": 1540.0,
+      "mach": 1.8
+    },
     "f_104a": {
       "ias": 1555.0,
       "mach": 2.3
@@ -2662,6 +2678,10 @@
       "mach": null
     },
     "f_14b": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "f_14d": {
       "ias": 1400.0,
       "mach": null
     },
@@ -2737,6 +2757,10 @@
       "ias": 1555.0,
       "mach": 2.2
     },
+    "f_16a_block_72v_china": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
     "f_16aj": {
       "ias": 1555.0,
       "mach": 2.2
@@ -2790,6 +2814,10 @@
       "mach": 0.95
     },
     "f_5a": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_5ag": {
       "ias": 1458.0,
       "mach": 1.75
     },
@@ -3030,6 +3058,10 @@
       "mach": 0.83
     },
     "fw_189a_1": {
+      "ias": 525.0,
+      "mach": 0.65
+    },
+    "fw_189c_0": {
       "ias": 525.0,
       "mach": 0.65
     },
@@ -3453,6 +3485,10 @@
       "ias": 680.0,
       "mach": 0.75
     },
+    "ia_58a_pucara": {
+      "ias": 788.0,
+      "mach": 0.62
+    },
     "iar-81c": {
       "ias": 680.0,
       "mach": 0.72
@@ -3462,7 +3498,7 @@
       "mach": 0.6
     },
     "iar_93b": {
-      "ias": 1155.0,
+      "ias": 1186.0,
       "mach": 1.09
     },
     "il-10": {
@@ -3654,6 +3690,10 @@
       "mach": 1.95
     },
     "jh_7a": {
+      "ias": 1331.0,
+      "mach": 1.95
+    },
+    "jh_7a2": {
       "ias": 1331.0,
       "mach": 1.95
     },
@@ -3905,6 +3945,10 @@
       "ias": 955.0,
       "mach": 0.85
     },
+    "l_39za_art_thailand": {
+      "ias": 955.0,
+      "mach": 0.85
+    },
     "la-11": {
       "ias": 850.0,
       "mach": 0.8
@@ -4040,6 +4084,10 @@
     "lynx_ah_mk1": {
       "ias": 460.0,
       "mach": 0.79
+    },
+    "m_346fa": {
+      "ias": 1120.0,
+      "mach": 1.05
     },
     "martin_139wc": {
       "ias": 564.0,
@@ -4429,6 +4477,10 @@
       "ias": 1020.0,
       "mach": 0.89
     },
+    "mig_21_2000_iaf": {
+      "ias": 1365.0,
+      "mach": 2.21
+    },
     "mig_21_bis_finland": {
       "ias": 1365.0,
       "mach": 2.21
@@ -4484,6 +4536,10 @@
     "mig_29_9_13": {
       "ias": 1575.0,
       "mach": 2.35
+    },
+    "mig_29kr_9_41r": {
+      "ias": 1470.0,
+      "mach": 2.15
     },
     "mig_29m_9_15": {
       "ias": 1575.0,
@@ -5509,6 +5565,10 @@
       "ias": 760.0,
       "mach": 0.82
     },
+    "spitfire_mk5b_float": {
+      "ias": 724.0,
+      "mach": 0.82
+    },
     "spitfire_mk5b_notrop": {
       "ias": 760.0,
       "mach": 0.82
@@ -5655,11 +5715,11 @@
     },
     "su_30mk2v_venezuela": {
       "ias": 1540.0,
-      "mach": 2.35
+      "mach": 2.1
     },
     "su_30mkk": {
       "ias": 1540.0,
-      "mach": 2.35
+      "mach": 2.1
     },
     "su_30mkm": {
       "ias": 1540.0,
@@ -5878,7 +5938,7 @@
       "mach": 0.82
     },
     "tu_4": {
-      "ias": 609.0,
+      "ias": 507.0,
       "mach": 0.64
     },
     "typhoon_fgr4": {
@@ -5977,12 +6037,16 @@
       "ias": 300.0,
       "mach": 0.75
     },
+    "washington_b1": {
+      "ias": 507.0,
+      "mach": 0.64
+    },
     "wasp_has_mk1": {
       "ias": 330.0,
       "mach": 0.6
     },
     "welkin_fmk1": {
-      "ias": 826.0,
+      "ias": 675.0,
       "mach": 0.8
     },
     "wellington_mk10": {
@@ -6152,6 +6216,10 @@
     "yak-9ut": {
       "ias": 720.0,
       "mach": 0.78
+    },
+    "yak_130_early": {
+      "ias": 1120.0,
+      "mach": 1.05
     },
     "yak_141": {
       "ias": 1450.0,
