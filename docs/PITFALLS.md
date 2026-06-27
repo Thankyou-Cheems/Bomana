@@ -150,7 +150,7 @@ implementation plans belong in git history, not here.
   Cause: historical upgrade work remained after the project moved to the current embedded Dolt backend
   Fix/Workaround: retire old `bd sync`, manual `.beads/dolt/**/LOCK` cleanup, raw Dolt SQL schema commits, and hand-started `127.0.0.1:3307` server recipes. If auto-export warns because `.beads/` is ignored, prefer `bd config set export.git-add false` over changing repo ignore policy.
 
-- Context: embedded bd schema drift while using `bd 1.0.4`
-  Symptom: `bd create ... --json` failed with `Field 'id' doesn't have a default value`, and `bd status --json` failed with `column "depends_on_id" could not be found`; `bd ready --json`, `bd list --json`, and `bd backup status` still worked
-  Cause: local embedded Dolt tables were not aligned with the command paths used by create/status
-  Fix/Workaround: do not keep retrying failing write commands; capture the exact error, use `bd backup status` and read-only list/ready commands for session context, then repair or rebuild the embedded bd schema before requiring new issue creation/status updates
+- Context: mixing WSL dev `bd 1.0.5` with Windows release `bd 1.0.4`
+  Symptom: Windows `bd create ... --json` failed with `Field 'id' doesn't have a default value`, and `bd status --json` failed with `column "depends_on_id" could not be found`; WSL `/home/cheems/dev/Beads/bd` 1.0.5 could still read the same database
+  Cause: the dev 1.0.5 binary wrote a forward embedded Dolt schema (`depends_on_issue_id`, non-default event IDs) while Windows remained on release 1.0.4, whose command paths expect `depends_on_id` and `events.id DEFAULT uuid()`
+  Fix/Workaround: keep Bomana on Windows `bd 1.0.4` until 1.0.5 is officially installed everywhere. If the forward schema is already present, export with the 1.0.5 binary, back up `.beads`, rebuild with Windows `bd init --from-jsonl -p Bomana --database beads_Bomana`, restore the original `project_id`, then verify `bd status`, `bd create`, and `bd close`.
