@@ -35,7 +35,7 @@
 
 - `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动器自更新、启动入口，并保留一个上一版回退槽
 - `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行包
-- `manifest_<Variant>.json`：版本、地址、SHA256、`min_launcher_version` 元数据
+- `manifest_<Variant>.json`：版本、地址、SHA256、`min_launcher_version`、Ed25519 发布签名元数据
 
 #### 方式 B：源码运行（已安装 uv）
 
@@ -147,7 +147,7 @@ Launcher/package roles:
 
 - `Bomana_launcher_vX.Y.Z.exe`: update check/download/verify/start entry, plus one-version rollback retention
 - `Bomana_app_<Variant>_vX.Y.Z.zip`: runnable app package
-- `manifest_<Variant>.json`: version/url/SHA256/`min_launcher_version` metadata
+- `manifest_<Variant>.json`: version/url/SHA256/`min_launcher_version`/Ed25519 release-signature metadata
 
 #### Option B: Run from Source (uv)
 

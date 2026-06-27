@@ -222,6 +222,9 @@ jobs:
 
       - name: 构建应用包
         shell: pwsh
+        env:
+          BOMANA_RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}
+          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
         run: |
           uv run python tools/build_portable.py `
             --variant "${{ matrix.variant.slug }}" `
@@ -266,6 +269,9 @@ jobs:
 
       - name: 构建启动器
         shell: pwsh
+        env:
+          BOMANA_RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}
+          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
         run: |
           uv run python tools/build_portable.py `
             --target "launcher" `
@@ -314,7 +320,8 @@ jobs:
             > 云端自动构建：推送 `vX.Y.Z` / `vX.Y.Z-app` / `vX.Y.Z-launcher` 标签后，GitHub Actions 会按标签类型自动构建并发布。
 
             ## 🔐 安全验证
-            请下载对应的 `checksums_*.txt` 文件，使用 SHA256 校验确保文件完整性。
+            启动器会校验发布清单内置的 Ed25519 签名，并使用 SHA256 校验下载文件完整性。
+            手动下载时也可使用对应的 `checksums_*.txt` 文件复核文件完整性。
 
             ## 📄 许可证
             本软件基于 MIT 许可证开源。

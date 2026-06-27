@@ -221,6 +221,9 @@ launcher_state.json
 .bomana_install_id
 .bomana_update.lock
 
+# 发布签名公钥模块由 tools/build_portable.py 在打包启动器时临时生成
+bomana/release_public_keys.py
+
 # 打包输出
 dist/
 build/

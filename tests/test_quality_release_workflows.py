@@ -35,6 +35,14 @@ def test_build_release_workflow_reads_version_from_metadata_without_dev_fallback
     assert "无法从 bomana/metadata.py 提取 __version__" in workflow
 
 
+def test_build_release_workflow_passes_manifest_signing_secret() -> None:
+    workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+
+    assert "BOMANA_RELEASE_ED25519_PRIVATE_KEY" in workflow
+    assert "${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}" in workflow
+    assert "BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06" in workflow
+
+
 def test_local_deploy_script_validates_required_assets(tmp_path: Path) -> None:
     script_path = ROOT / "tools/deploy_update_assets.py"
     spec = importlib.util.spec_from_file_location("deploy_update_assets", script_path)
@@ -87,6 +95,8 @@ def test_local_deploy_script_remote_stage_assets_are_filename_only() -> None:
     assert "candidate.relative_to(stage_root)" in source
     assert 'manifest["package_asset"]' in source
     assert 'manifest["launcher_asset"]' in source
+    assert "def require_manifest_signature" in source
+    assert "missing manifest_signature" in source
 
 
 def test_legacy_build_fails_when_version_info_generation_fails() -> None:

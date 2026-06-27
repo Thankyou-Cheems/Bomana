@@ -109,11 +109,13 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Channel/source/proxy changes during an in-flight check are queued and trigger an automatic follow-up re-check instead of being blocked.
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for app and launcher manifests when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
+   - App and launcher manifests must include an Ed25519 `manifest_signature`; the launcher verifies it against pinned release public keys before trusting version, asset, or SHA256 fields.
+   - `tools/build_portable.py` signs manifests from `BOMANA_RELEASE_ED25519_PRIVATE_KEY` and injects the derived public key into packaged launchers through a temporary `bomana/release_public_keys.py` module.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
 8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
-   - Verifies SHA256 (when provided); `launcher_install.py` owns the update lock, staging directory, `app/` replacement, rollback cleanup, and incomplete-install recovery.
+   - Verifies SHA256 after signed-manifest validation; `launcher_install.py` owns the update lock, staging directory, `app/` replacement, rollback cleanup, and incomplete-install recovery.
    - Successful app installs promote the previous app into `app_previous/` and update local version metadata.
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
@@ -175,9 +177,9 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 ## Build & Release
 Portable release uses:
 - `Bomana_launcher_vX.Y.Z.exe` (universal bootstrap runtime with channel selector)
-- `launcher_manifest.json` (launcher version/package metadata + SHA256)
+- `launcher_manifest.json` (launcher version/package metadata + SHA256 + Ed25519 manifest signature)
 - `Bomana_app_<Variant>_vX.Y.Z.zip` (updatable application package)
-- `manifest_<Variant>.json` (channel/version/package metadata + SHA256 + `min_launcher_version`)
+- `manifest_<Variant>.json` (channel/version/package metadata + SHA256 + `min_launcher_version` + Ed25519 manifest signature)
 - `checksums_app_<Variant>.txt` and `checksums_launcher.txt` (SHA256 checksum info consumed by deployment tooling)
 
 Bundled assets:
@@ -189,6 +191,7 @@ Local build helper:
 - `tools\scripts\build_portable.bat <Variant> <all|app|launcher>` (`all` builds the selected variant app plus the universal launcher)
 - `tools\scripts\build_app_package.bat <Variant>` (only app zip + manifest)
 - `tools\scripts\build_launcher.bat [version]` (only universal launcher exe; optional version must match `LAUNCHER_VERSION`)
+- Release manifest builds require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`; launcher builds derive the public key and embed it into the packaged launcher.
 
 CI:
 - `.github/workflows/quality.yml` runs lightweight pull-request / `main` push gates on `windows-latest`:

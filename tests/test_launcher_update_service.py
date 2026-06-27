@@ -11,7 +11,9 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from bomana import launcher_install
+from bomana import launcher_core, launcher_install
+
+TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 
 
 def load_launcher_module():
@@ -79,6 +81,169 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             f'__version__ = "{version}"\n',
             encoding="utf-8",
         )
+
+    def signed_manifest(self, manifest: dict) -> dict:
+        return launcher_core.sign_release_manifest(
+            manifest,
+            TEST_SIGNING_PRIVATE_KEY,
+            key_id="test-key",
+        )
+
+    def trusted_release_key_patch(self):
+        public_key = launcher_core.ed25519_public_key_from_private_key(TEST_SIGNING_PRIVATE_KEY)
+        return patch.dict(
+            launcher_core.RELEASE_MANIFEST_PUBLIC_KEYS,
+            {"test-key": public_key},
+            clear=True,
+        )
+
+    def test_github_app_manifest_requires_release_signature(self) -> None:
+        release = {
+            "tag_name": "v2.0.0",
+            "assets": [
+                {
+                    "name": "manifest_Enhanced.json",
+                    "browser_download_url": "https://example.invalid/manifest.json",
+                },
+                {
+                    "name": "Bomana_app_Enhanced_v2.0.0.zip",
+                    "browser_download_url": "https://example.invalid/app.zip",
+                    "size": 10,
+                },
+            ],
+        }
+        manifest = {
+            "schema_version": 1,
+            "channel": "Enhanced",
+            "app_version": "2.0.0",
+            "min_launcher_version": "2.0.0",
+            "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+            "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+            "package_sha256": "a" * 64,
+        }
+
+        with (
+            patch.object(self.launcher, "_fetch_json", return_value=manifest),
+            self.assertRaisesRegex(RuntimeError, "缺少发布签名"),
+        ):
+            self.launcher._manifest_from_github_release(release, "Enhanced")
+
+    def test_github_app_manifest_accepts_signed_release_manifest(self) -> None:
+        release = {
+            "tag_name": "v2.0.0",
+            "assets": [
+                {
+                    "name": "manifest_Enhanced.json",
+                    "browser_download_url": "https://example.invalid/manifest.json",
+                },
+                {
+                    "name": "Bomana_app_Enhanced_v2.0.0.zip",
+                    "browser_download_url": "https://example.invalid/app.zip",
+                    "size": 10,
+                },
+            ],
+        }
+        manifest = self.signed_manifest(
+            {
+                "schema_version": 1,
+                "channel": "Enhanced",
+                "app_version": "2.0.0",
+                "min_launcher_version": "2.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+                "package_sha256": "a" * 64,
+            }
+        )
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_json", return_value=manifest),
+        ):
+            parsed = self.launcher._manifest_from_github_release(release, "Enhanced")
+
+        self.assertEqual(parsed["remote_version"], "2.0.0")
+        self.assertEqual(parsed["package_sha256"], "a" * 64)
+        self.assertEqual(parsed["package_url"], "https://example.invalid/app.zip")
+
+    def test_github_launcher_manifest_uses_signed_asset_fields(self) -> None:
+        release = {
+            "tag_name": "v2.0.0-launcher",
+            "assets": [
+                {
+                    "name": "launcher_manifest.json",
+                    "browser_download_url": "https://example.invalid/launcher_manifest.json",
+                },
+                {
+                    "name": "Bomana_launcher_v2.0.0.exe",
+                    "browser_download_url": "https://example.invalid/launcher.exe",
+                    "size": 456,
+                },
+            ],
+        }
+        manifest = self.signed_manifest(
+            {
+                "schema_version": 1,
+                "launcher_version": "2.0.0",
+                "launcher_asset": "Bomana_launcher_v2.0.0.exe",
+                "launcher_sha256": "b" * 64,
+                "launcher_size_bytes": 456,
+            }
+        )
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_json", return_value=manifest),
+        ):
+            parsed = self.launcher._launcher_manifest_from_github_release(release)
+
+        self.assertEqual(parsed["remote_version"], "2.0.0")
+        self.assertEqual(parsed["package_sha256"], "b" * 64)
+        self.assertEqual(parsed["package_url"], "https://example.invalid/launcher.exe")
+
+    def test_primary_app_manifest_requires_release_signature(self) -> None:
+        payload = {
+            "app_version": "2.0.0",
+            "package_url": "/downloads/app.zip",
+            "package_sha256": "a" * 64,
+        }
+
+        with (
+            patch.object(self.launcher, "_fetch_primary_version_payload", return_value=payload),
+            self.assertRaisesRegex(RuntimeError, "缺少发布签名"),
+        ):
+            self.launcher._fetch_manifest_from_primary(
+                "Enhanced",
+                "1.0.0",
+                {"install_id": "abc"},
+            )
+
+    def test_primary_app_manifest_accepts_signed_payload(self) -> None:
+        payload = self.signed_manifest(
+            {
+                "app_version": "2.0.0",
+                "package_url": "/downloads/app.zip",
+                "package_sha256": "a" * 64,
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "min_launcher_version": "2.0.0",
+                "package_size_bytes": 123,
+            }
+        )
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_primary_version_payload", return_value=payload),
+        ):
+            parsed = self.launcher._fetch_manifest_from_primary(
+                "Enhanced",
+                "1.0.0",
+                {"install_id": "abc"},
+            )
+
+        self.assertEqual(parsed["remote_version"], "2.0.0")
+        self.assertEqual(
+            parsed["package_url"], "https://bomanaupdate.ruikang.wang/downloads/app.zip"
+        )
+        self.assertEqual(parsed["package_sha256"], "a" * 64)
 
     def test_check_reports_launcher_requirement_and_fetches_missing_size(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})

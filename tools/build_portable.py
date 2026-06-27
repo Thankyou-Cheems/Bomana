@@ -12,6 +12,12 @@ import sys
 import zipfile
 from pathlib import Path
 
+from bomana.launcher_core import (
+    RELEASE_MANIFEST_DEFAULT_KEY_ID,
+    ed25519_public_key_from_private_key,
+    sign_release_manifest,
+)
+
 VARIANT_SWITCHES = {
     "Enhanced": {
         "ENABLE_CCRP": "True",
@@ -43,6 +49,8 @@ APP_ENTRY = "Bomana.pyw"
 APP_DIR = "bomana"
 UNIVERSAL_LAUNCHER_NAME = "Bomana_launcher"
 BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
+SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
+SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
 
 
 def safe_print(msg: str) -> None:
@@ -91,6 +99,41 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def sign_manifest(manifest: dict[str, object]) -> dict[str, object]:
+    private_key, key_id = release_signing_key_context()
+    return sign_release_manifest(manifest, private_key, key_id=key_id)
+
+
+def release_signing_key_context() -> tuple[str, str]:
+    private_key = os.environ.get(SIGNING_PRIVATE_KEY_ENV, "").strip()
+    if not private_key:
+        raise RuntimeError(f"{SIGNING_PRIVATE_KEY_ENV} is required to sign release manifests")
+    key_id = os.environ.get(SIGNING_KEY_ID_ENV, RELEASE_MANIFEST_DEFAULT_KEY_ID).strip()
+    if not key_id:
+        raise RuntimeError(f"{SIGNING_KEY_ID_ENV} must not be empty")
+    return private_key, key_id
+
+
+def write_release_public_keys_module(root: Path) -> tuple[Path, str | None]:
+    private_key, key_id = release_signing_key_context()
+    public_key = ed25519_public_key_from_private_key(private_key)
+    path = root / APP_DIR / "release_public_keys.py"
+    original = path.read_text(encoding="utf-8") if path.exists() else None
+    content = (
+        '"""Generated release manifest verification keys for packaged launchers."""\n\n'
+        f"RELEASE_MANIFEST_PUBLIC_KEYS = {{{key_id!r}: {public_key!r}}}\n"
+    )
+    path.write_text(content, encoding="utf-8")
+    return path, original
+
+
+def restore_release_public_keys_module(path: Path, original: str | None) -> None:
+    if original is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.write_text(original, encoding="utf-8")
 
 
 def replace_switches(code: str, switches: dict[str, str]) -> str:
@@ -284,7 +327,11 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         cmd.extend(["--add-data", f"{assets_dir};{APP_DIR}/assets"])
 
     cmd.append(str(root / "launcher.pyw"))
-    subprocess.run(cmd, check=True, cwd=root)
+    keys_module, keys_module_original = write_release_public_keys_module(root)
+    try:
+        subprocess.run(cmd, check=True, cwd=root)
+    finally:
+        restore_release_public_keys_module(keys_module, keys_module_original)
     return out_dir / f"{name}.exe"
 
 
@@ -305,6 +352,7 @@ def write_manifest(
         "package_asset": app_zip_name,
         "package_sha256": app_sha256,
     }
+    manifest = sign_manifest(manifest)
     path = out_dir / f"manifest_{variant}.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
@@ -324,6 +372,7 @@ def write_launcher_manifest(
         "launcher_sha256": launcher_sha256,
         "launcher_size_bytes": launcher_size_bytes,
     }
+    manifest = sign_manifest(manifest)
     path = out_dir / "launcher_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return path

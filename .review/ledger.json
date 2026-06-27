@@ -1193,13 +1193,15 @@
         }
       ],
       "id": "F-bef29479",
-      "status": "open",
+      "status": "fixed",
       "created_at": "2026-06-18T01:43:08+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-27T16:09:35+00:00"
-      }
+        "status": "drifted",
+        "detail": "build manifest writer now signs manifest payload before writing",
+        "at": "2026-06-27T16:56:35+00:00"
+      },
+      "resolved_at": "2026-06-27T16:56:35+00:00",
+      "resolution_note": "Fixed by Ed25519 signed release manifests, build-time public-key injection into packaged launchers, launcher fail-closed signature verification for GitHub/Tencent manifests, and full Ruff/pytest gates."
     },
     {
       "file": "launcher.pyw",

@@ -58,6 +58,7 @@ from bomana.launcher_core import (
     parse_launcher_version_from_asset_name as _parse_launcher_version_from_asset_name,
     require_remote_checksum as _require_remote_checksum,
     sha256_bytes as _sha256_bytes,
+    verify_release_manifest_signature as _verify_release_manifest_signature,
     version_is_newer as _version_is_newer,
     version_is_older as _version_is_older,
 )
@@ -1026,6 +1027,7 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
         raise RuntimeError("发布清单下载地址无效")
 
     manifest = _fetch_json(manifest_url)
+    _verify_release_manifest_signature(manifest, manifest_label=f"{manifest_name} ")
     remote_version = str(manifest.get("app_version", "")).strip()
     min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_asset = str(manifest.get("package_asset", "")).strip()
@@ -1059,16 +1061,6 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
 def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str, Any]:
     assets = release.get("assets", [])
     tag_name = str(release.get("tag_name", "")).strip()
-    launcher_asset = _find_launcher_asset(assets)
-    if not launcher_asset:
-        raise RuntimeError("未找到启动器安装包")
-
-    asset_name = str(launcher_asset.get("name", "")).strip()
-    remote_version = _parse_launcher_version_from_asset_name(asset_name)
-    package_url = str(launcher_asset.get("browser_download_url", "")).strip()
-    if not remote_version or not package_url:
-        raise RuntimeError("启动器发布字段缺失")
-
     manifest_asset = _find_asset(assets, "launcher_manifest.json")
     if not manifest_asset:
         raise RuntimeError("未找到启动器发布清单")
@@ -1076,6 +1068,20 @@ def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str,
     if not manifest_url:
         raise RuntimeError("启动器发布清单下载地址无效")
     manifest = _fetch_json(manifest_url)
+    _verify_release_manifest_signature(manifest, manifest_label="launcher_manifest.json ")
+    asset_name = str(manifest.get("launcher_asset", "")).strip()
+    remote_version = str(manifest.get("launcher_version", "")).strip()
+    if not asset_name or not remote_version:
+        raise RuntimeError("启动器发布清单字段缺失")
+    if _parse_launcher_version_from_asset_name(asset_name) != remote_version:
+        raise RuntimeError("启动器发布清单版本与资产名不匹配")
+
+    launcher_asset = _find_asset(assets, asset_name)
+    if not launcher_asset:
+        raise RuntimeError(f"未找到启动器安装包: {asset_name}")
+    package_url = str(launcher_asset.get("browser_download_url", "")).strip()
+    if not package_url:
+        raise RuntimeError("启动器下载地址无效")
     package_sha256 = _require_remote_checksum(
         manifest.get("launcher_sha256", ""),
         artifact_label="launcher_manifest.json ",
@@ -1176,6 +1182,7 @@ def _fetch_manifest_from_primary(
             used_anonymous_fallback = True
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
+    _verify_release_manifest_signature(payload, manifest_label="国内应用更新清单 ")
     remote_version = str(payload.get("app_version", "")).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
@@ -1234,6 +1241,7 @@ def _fetch_launcher_manifest_from_primary(
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
 
+    _verify_release_manifest_signature(payload, manifest_label="国内启动器更新清单 ")
     remote_version = str(payload.get("launcher_version", payload.get("app_version", ""))).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (

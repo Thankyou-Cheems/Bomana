@@ -170,6 +170,15 @@ def stage_asset_path(stage_dir: Path, asset_name: object, field_name: str) -> Pa
         raise SystemExit(f"{field_name} escapes stage directory: {asset_name!r}") from exc
     return candidate
 
+def require_manifest_signature(manifest: dict, manifest_name: str) -> None:
+    signature = manifest.get("manifest_signature")
+    if not isinstance(signature, dict):
+        raise SystemExit(f"{manifest_name} missing manifest_signature")
+    if signature.get("algorithm") != "ed25519":
+        raise SystemExit(f"{manifest_name} has unsupported manifest_signature algorithm")
+    if not signature.get("key_id") or not signature.get("signature"):
+        raise SystemExit(f"{manifest_name} has incomplete manifest_signature")
+
 manifest_dir = remote_root / "data" / "manifests"
 download_dir = remote_root / "data" / "downloads"
 launcher_manifest = remote_root / "data" / "launcher_manifest.json"
@@ -203,6 +212,7 @@ if target in {"app", "all"}:
     for channel in channels:
         manifest_src = stage_dir / f"manifest_{channel}.json"
         manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+        require_manifest_signature(manifest, manifest_src.name)
         asset_src = stage_asset_path(stage_dir, manifest["package_asset"], "package_asset")
         asset_sha = hashlib.sha256(asset_src.read_bytes()).hexdigest()
         if asset_sha != manifest["package_sha256"]:
@@ -222,6 +232,7 @@ if target in {"app", "all"}:
 if target in {"launcher", "all"}:
     manifest_src = stage_dir / "launcher_manifest.json"
     manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+    require_manifest_signature(manifest, manifest_src.name)
     asset_src = stage_asset_path(stage_dir, manifest["launcher_asset"], "launcher_asset")
     asset_sha = hashlib.sha256(asset_src.read_bytes()).hexdigest()
     if asset_sha != manifest["launcher_sha256"]:
