@@ -237,7 +237,7 @@
     },
     "bomb_ussr_82mm_o_832": {
       "mass": 3.31,
-      "caliber": 0.82,
+      "caliber": 0.082,
       "dragCx": 0.07,
       "distFromCmToStab": 0.77,
       "brakeTime": [

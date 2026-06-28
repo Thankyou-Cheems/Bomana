@@ -157,6 +157,99 @@ class FetcherDiagnosticTests(unittest.TestCase):
             ["/indicators", "/state"],
         )
 
+    def test_telemetry_fetcher_rejects_empty_state_payload(self) -> None:
+        session = FakeRouteSession(
+            {
+                "/indicators": FakeResponse(payload={"valid": True, "type": "test_plane"}),
+                "/state": FakeResponse(payload={}),
+            }
+        )
+        http = HttpJson(session)
+
+        data = TelemetryFetcher(http).fetch(Budget(1.0))
+
+        self.assertTrue(data.ind_ok)
+        self.assertFalse(data.state_resp_ok)
+        self.assertEqual(data.state_error_kind, "schema")
+        self.assertEqual(data.ias_kmh, 0)
+        self.assertEqual(data.altitude_m, 0)
+        self.assertFalse(data.entity_like)
+
+    def test_telemetry_fetcher_rejects_state_missing_required_fields(self) -> None:
+        session = FakeRouteSession(
+            {
+                "/indicators": FakeResponse(payload={"valid": True, "type": "test_plane"}),
+                "/state": FakeResponse(
+                    payload={
+                        "IAS, km/h": 420,
+                        "Vy, m/s": -4.5,
+                        "Mfuel, kg": 1500,
+                    }
+                ),
+            }
+        )
+        http = HttpJson(session)
+
+        data = TelemetryFetcher(http).fetch(Budget(1.0))
+
+        self.assertFalse(data.state_resp_ok)
+        self.assertEqual(data.state_error_kind, "schema")
+        self.assertEqual(data.ias_kmh, 0)
+        self.assertEqual(data.vy_ms, 0)
+        self.assertEqual(data.fuel_kg, 0)
+
+    def test_telemetry_fetcher_rejects_non_finite_state_numbers(self) -> None:
+        session = FakeRouteSession(
+            {
+                "/indicators": FakeResponse(
+                    payload={
+                        "valid": True,
+                        "type": "test_plane",
+                        "compass": "Infinity",
+                        "wing_sweep_indicator": "nan",
+                    }
+                ),
+                "/state": FakeResponse(
+                    payload={
+                        "IAS, km/h": 420,
+                        "Vy, m/s": -4.5,
+                        "Mfuel, kg": 1500,
+                        "Mfuel0, kg": "-Infinity",
+                        "H, m": 3200,
+                        "TAS, km/h": "Infinity",
+                        "throttle 1, %": "nan",
+                        "M": "Infinity",
+                        "gear, %": "nan",
+                        "aviahorizon_pitch": "nan",
+                        "aviahorizon_roll": "Infinity",
+                    }
+                ),
+            }
+        )
+        http = HttpJson(session)
+
+        data = TelemetryFetcher(http).fetch(Budget(1.0))
+
+        self.assertTrue(data.state_resp_ok)
+        self.assertFalse(data.compass_present)
+        self.assertIsNone(data.wing_sweep)
+        self.assertEqual(data.ias_kmh, 420)
+        self.assertEqual(data.vy_ms, -4.5)
+        self.assertEqual(data.fuel_kg, 1500)
+        self.assertEqual(data.altitude_m, 3200)
+        self.assertEqual(data.fuel0_kg, 0)
+        self.assertEqual(data.tas_kmh, 0)
+        self.assertEqual(data.throttle_pct, 0)
+        self.assertIsNone(data.mach)
+        self.assertEqual(data.gear_pct, 0)
+        self.assertFalse(data.gear_down)
+        self.assertFalse(data.attitude_pitch_present)
+        self.assertFalse(data.attitude_roll_present)
+        self.assertFalse(data.attitude_available)
+
+        self.assertEqual(TelemetryFetcher._to_float({"value": "nan"}, 12.5), 12.5)
+        self.assertIsNone(TelemetryFetcher._to_optional_float(["Infinity"]))
+
     def test_map_fetcher_attaches_failure_diagnostics(self) -> None:
         http = HttpJson(FakeSession(FakeResponse(ok=False, status_code=500)))
 

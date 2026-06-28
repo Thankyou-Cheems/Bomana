@@ -129,26 +129,79 @@ class TelemetryFetcher:
     同时请求/indicators和/state两个端点。
     """
 
+    _IAS_KEYS = (
+        ("IAS, km/h", 1.0),
+        ("IAS", 1.0),
+        ("ias", 1.0),
+        ("indicated_air_speed, km/h", 1.0),
+        ("indicated_air_speed", 1.0),
+        ("indicated_airspeed, km/h", 1.0),
+        ("indicated_airspeed", 1.0),
+        ("IAS, m/s", 3.6),
+        ("ias, m/s", 3.6),
+        ("indicated_air_speed, m/s", 3.6),
+        ("indicated_airspeed, m/s", 3.6),
+    )
+    _VY_KEYS = (
+        ("Vy, m/s", 1.0),
+        ("Vy", 1.0),
+        ("vy", 1.0),
+        ("vertical_speed, m/s", 1.0),
+        ("vertical_speed", 1.0),
+        ("climb_speed, m/s", 1.0),
+    )
+    _FUEL_KEYS = (
+        ("Mfuel, kg", 1.0),
+        ("Mfuel", 1.0),
+        ("fuel, kg", 1.0),
+        ("fuel", 1.0),
+    )
+    _FUEL0_KEYS = (
+        ("Mfuel0, kg", 1.0),
+        ("Mfuel0", 1.0),
+        ("fuel0, kg", 1.0),
+        ("fuel0", 1.0),
+    )
+    _ALTITUDE_KEYS = (
+        ("H, m", 1.0),
+        ("H", 1.0),
+        ("altitude, m", 1.0),
+        ("altitude", 1.0),
+        ("height, m", 1.0),
+        ("height", 1.0),
+    )
+    _TAS_KEYS = (
+        ("TAS, km/h", 1.0),
+        ("TAS", 1.0),
+        ("tas", 1.0),
+        ("true_air_speed, km/h", 1.0),
+        ("true_air_speed", 1.0),
+        ("true_airspeed, km/h", 1.0),
+        ("true_airspeed", 1.0),
+        ("TAS, m/s", 3.6),
+        ("tas, m/s", 3.6),
+        ("true_air_speed, m/s", 3.6),
+        ("true_airspeed, m/s", 3.6),
+    )
+    _THROTTLE_KEYS = (
+        ("throttle 1, %", 1.0),
+        ("throttle, %", 1.0),
+        ("throttle", 1.0),
+        ("Throttle 1, %", 1.0),
+    )
+    _GEAR_KEYS = (
+        ("gear, %", 1.0),
+        ("gear", 1.0),
+        ("gear_1, %", 1.0),
+        ("landing_gear, %", 1.0),
+        ("gear_down, %", 1.0),
+    )
+
     def __init__(self, http: HttpJson):
         self.http = http
 
     @staticmethod
-    def _to_float(raw: Any, default: float = 0.0) -> float:
-        """将8111字段值转换为float，兼容 list/dict 包装。"""
-        if raw is None:
-            return float(default)
-        if isinstance(raw, dict):
-            raw = raw.get("value", default)
-        elif isinstance(raw, (list, tuple)):
-            raw = raw[0] if raw else default
-        try:
-            return float(raw)
-        except _NUMERIC_PARSE_ERRORS:
-            return float(default)
-
-    @staticmethod
-    def _to_optional_float(raw: Any) -> float | None:
-        """将8111字段值转换为可空float。"""
+    def _finite_float_or_none(raw: Any) -> float | None:
         if raw is None:
             return None
         if isinstance(raw, dict):
@@ -156,15 +209,35 @@ class TelemetryFetcher:
         elif isinstance(raw, (list, tuple)):
             raw = raw[0] if raw else None
         try:
-            return float(raw)
+            value = float(raw)
         except _NUMERIC_PARSE_ERRORS:
             return None
+        return value if math.isfinite(value) else None
+
+    @staticmethod
+    def _to_float(raw: Any, default: float = 0.0) -> float:
+        """将8111字段值转换为float，兼容 list/dict 包装。"""
+        value = TelemetryFetcher._finite_float_or_none(raw)
+        if value is not None:
+            return value
+        try:
+            fallback = float(default)
+        except _NUMERIC_PARSE_ERRORS:
+            return 0.0
+        return fallback if math.isfinite(fallback) else 0.0
+
+    @staticmethod
+    def _to_optional_float(raw: Any) -> float | None:
+        """将8111字段值转换为可空float。"""
+        return TelemetryFetcher._finite_float_or_none(raw)
 
     def _read_float(self, payload: dict, keys: tuple[str, ...]) -> tuple[float, bool]:
         """按候选键顺序读取数值，返回(值, 是否命中键)。"""
         for key in keys:
             if key in payload:
-                value = self._to_float(payload.get(key), 0.0)
+                value = self._to_optional_float(payload.get(key))
+                if value is None:
+                    continue
                 if "rad" in key.lower():
                     value = math.degrees(value)
                 return value, True
@@ -176,7 +249,9 @@ class TelemetryFetcher:
         """按候选键顺序读取数值并应用倍率，返回(值, 是否命中键)。"""
         for key, scale in keys:
             if key in payload:
-                value = self._to_float(payload.get(key), 0.0)
+                value = self._to_optional_float(payload.get(key))
+                if value is None:
+                    continue
                 return value * float(scale), True
         return 0.0, False
 
@@ -280,112 +355,41 @@ class TelemetryFetcher:
 
         # 请求 /state (飞机状态)
         state_result = self.http.get_json(f"{NetworkConfig.API_BASE}/state", budget)
-        data.state_resp_ok = state_result.ok
         data.state_error_kind = state_result.error_kind
         data.state_elapsed_ms = state_result.elapsed_ms
         j = state_result.payload
         if state_result.ok and isinstance(j, dict):
-            data.ias_kmh, _ = self._read_scaled_float(
-                j,
-                (
-                    ("IAS, km/h", 1.0),
-                    ("IAS", 1.0),
-                    ("ias", 1.0),
-                    ("indicated_air_speed, km/h", 1.0),
-                    ("indicated_air_speed", 1.0),
-                    ("indicated_airspeed, km/h", 1.0),
-                    ("indicated_airspeed", 1.0),
-                    ("IAS, m/s", 3.6),
-                    ("ias, m/s", 3.6),
-                    ("indicated_air_speed, m/s", 3.6),
-                    ("indicated_airspeed, m/s", 3.6),
-                ),
+            ias_kmh, ias_present = self._read_scaled_float(j, self._IAS_KEYS)
+            vy_ms, vy_present = self._read_scaled_float(j, self._VY_KEYS)
+            fuel_kg, fuel_present = self._read_scaled_float(j, self._FUEL_KEYS)
+            altitude_m, altitude_present = self._read_scaled_float(j, self._ALTITUDE_KEYS)
+            data.state_resp_ok = bool(
+                ias_present and vy_present and fuel_present and altitude_present
             )
-            data.vy_ms, _ = self._read_scaled_float(
-                j,
-                (
-                    ("Vy, m/s", 1.0),
-                    ("Vy", 1.0),
-                    ("vy", 1.0),
-                    ("vertical_speed, m/s", 1.0),
-                    ("vertical_speed", 1.0),
-                    ("climb_speed, m/s", 1.0),
-                ),
-            )
-            data.fuel_kg, _ = self._read_scaled_float(
-                j,
-                (
-                    ("Mfuel, kg", 1.0),
-                    ("Mfuel", 1.0),
-                    ("fuel, kg", 1.0),
-                    ("fuel", 1.0),
-                ),
-            )
+            if not data.state_resp_ok:
+                data.state_error_kind = "schema"
 
-            # v5.8 新增：解析燃油管理相关字段
-            data.fuel0_kg, _ = self._read_scaled_float(
-                j,
-                (
-                    ("Mfuel0, kg", 1.0),
-                    ("Mfuel0", 1.0),
-                    ("fuel0, kg", 1.0),
-                    ("fuel0", 1.0),
-                ),
-            )
-            data.altitude_m, _ = self._read_scaled_float(
-                j,
-                (
-                    ("H, m", 1.0),
-                    ("H", 1.0),
-                    ("altitude, m", 1.0),
-                    ("altitude", 1.0),
-                    ("height, m", 1.0),
-                    ("height", 1.0),
-                ),
-            )
-            data.tas_kmh, _ = self._read_scaled_float(
-                j,
-                (
-                    ("TAS, km/h", 1.0),
-                    ("TAS", 1.0),
-                    ("tas", 1.0),
-                    ("true_air_speed, km/h", 1.0),
-                    ("true_air_speed", 1.0),
-                    ("true_airspeed, km/h", 1.0),
-                    ("true_airspeed", 1.0),
-                    ("TAS, m/s", 3.6),
-                    ("tas, m/s", 3.6),
-                    ("true_air_speed, m/s", 3.6),
-                    ("true_airspeed, m/s", 3.6),
-                ),
-            )
-            data.throttle_pct, _ = self._read_scaled_float(
-                j,
-                (
-                    ("throttle 1, %", 1.0),
-                    ("throttle, %", 1.0),
-                    ("throttle", 1.0),
-                    ("Throttle 1, %", 1.0),
-                ),
-            )
-            data.mach = self._to_optional_float(
-                j.get("M", j.get("Mach", j.get("mach", j.get("mach_number"))))
-            )
+            if data.state_resp_ok:
+                data.ias_kmh = ias_kmh
+                data.vy_ms = vy_ms
+                data.fuel_kg = fuel_kg
+                data.altitude_m = altitude_m
 
-            # v5.9.6 + v6.6.0：解析起落架状态和百分比
-            gear_pct, _ = self._read_scaled_float(
-                j,
-                (
-                    ("gear, %", 1.0),
-                    ("gear", 1.0),
-                    ("gear_1, %", 1.0),
-                    ("landing_gear, %", 1.0),
-                    ("gear_down, %", 1.0),
-                ),
-            )
-            data.gear_pct = gear_pct  # v6.6.0: 保存原始百分比
-            data.gear_down = gear_pct > 50  # 超过50%视为放下状态
-            self._merge_attitude_fields(j, data)
+                # v5.8 新增：解析燃油管理相关字段
+                data.fuel0_kg, _ = self._read_scaled_float(j, self._FUEL0_KEYS)
+                data.tas_kmh, _ = self._read_scaled_float(j, self._TAS_KEYS)
+                data.throttle_pct, _ = self._read_scaled_float(j, self._THROTTLE_KEYS)
+                data.mach = self._to_optional_float(
+                    j.get("M", j.get("Mach", j.get("mach", j.get("mach_number"))))
+                )
+
+                # v5.9.6 + v6.6.0：解析起落架状态和百分比
+                gear_pct, _ = self._read_scaled_float(j, self._GEAR_KEYS)
+                data.gear_pct = gear_pct  # v6.6.0: 保存原始百分比
+                data.gear_down = gear_pct > 50  # 超过50%视为放下状态
+                self._merge_attitude_fields(j, data)
+        elif state_result.ok:
+            data.state_error_kind = "schema"
 
         data.attitude_available = bool(
             data.state_resp_ok
