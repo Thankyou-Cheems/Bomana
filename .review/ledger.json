@@ -920,7 +920,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-28T04:35:55+00:00"
+        "at": "2026-06-28T05:40:47+00:00"
       }
     },
     {
@@ -950,7 +950,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-28T04:35:55+00:00"
+        "at": "2026-06-28T05:40:47+00:00"
       }
     },
     {
@@ -1520,7 +1520,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-28T04:35:55+00:00"
+        "at": "2026-06-28T05:40:47+00:00"
       }
     },
     {
@@ -1554,6 +1554,122 @@
       },
       "resolved_at": "2026-06-28T04:22:59+00:00",
       "resolution_note": "Fixed in 938389d by refreshing visible standalone nav outside the alive-only panel branch; uv run --extra dev pytest -q and Ruff passed."
+    },
+    {
+      "file": "launcher.pyw",
+      "line_start": 2197,
+      "line_end": 2203,
+      "snippet": "    _reset_embedded_app_modules()\n    os.environ[\"BOMANA_CHANNEL\"] = channel\n    os.environ[\"BOMANA_RUNTIME_ROOT\"] = str(app_dir)\n    os.chdir(app_dir)\n    if str(app_dir) not in sys.path:\n        sys.path.insert(0, str(app_dir))\n    runpy.run_path(str(entry), run_name=\"__main__\")",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Frozen launcher can shadow updated app modules during handoff",
+      "impact": "In a packaged launcher, PyInstaller's frozen importer can still resolve bomana.* after sys.modules is cleared, so launching an updated app package may execute launcher-bundled stale modules instead of the installed app/bomana sources.",
+      "fix": "Install an app-dir-first finder for bomana.* during _launch_app before runpy.run_path, and test against a simulated frozen importer.",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "PyInstaller PYZ-00.toc contains bomana.config, bomana.metadata, bomana.ui.theme, bomana.ui.tk_style, bomana.utils.*"
+        },
+        {
+          "kind": "runtime",
+          "detail": "A simulated frozen meta_path finder before PathFinder caused _launch_app to import SENTINEL='frozen' from bomana.config despite app/bomana/config.py containing SENTINEL='app'."
+        }
+      ],
+      "id": "F-fb7cdcee",
+      "status": "fixed",
+      "created_at": "2026-06-28T05:32:50+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T05:32:50+00:00"
+      },
+      "resolved_at": "2026-06-28T05:40:20+00:00",
+      "resolution_note": "Added app-package bomana meta_path finder in _launch_app so installed app/bomana wins over frozen launcher modules; verified by tests/test_launcher_update_service.py::LauncherUpdateServiceTests::test_launch_app_prefers_installed_bomana_over_frozen_importer and focused launcher tests."
+    },
+    {
+      "file": "launcher.pyw",
+      "line_start": 1114,
+      "line_end": 1123,
+      "snippet": "    manifest = _fetch_json(manifest_url)\n    _verify_release_manifest_signature(manifest, manifest_label=f\"{manifest_name} \", expected_kind=\"app\")\n    remote_version = str(manifest.get(\"app_version\", \"\")).strip()\n    min_launcher_version = str(manifest.get(\"min_launcher_version\", \"\")).strip()\n    package_asset = str(manifest.get(\"package_asset\", \"\")).strip()\n    package_sha256 = _require_remote_checksum(\n        manifest.get(\"package_sha256\", \"\"),\n        artifact_label=f\"{manifest_name} \",\n    )\n    entrypoint = str(manifest.get(\"entrypoint\", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "likely",
+      "title": "Signed app manifest channel is not checked against selected channel",
+      "impact": "A validly signed manifest for the wrong channel can be accepted if release assets or the primary update service map a channel incorrectly, so users can install a different variant than the one selected.",
+      "fix": "After signature verification, normalize and compare manifest channel to the requested channel in both GitHub and primary manifest paths.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "App manifest signatures include channel, but launcher reads app_version/package fields immediately after verify without comparing manifest['channel'] to the requested channel."
+        }
+      ],
+      "id": "F-d2461a6f",
+      "status": "fixed",
+      "created_at": "2026-06-28T05:34:43+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T05:34:43+00:00"
+      },
+      "resolved_at": "2026-06-28T05:40:20+00:00",
+      "resolution_note": "Validated signed app manifest channel against requested channel for GitHub and primary paths; wrong-channel signed payload tests pass."
+    },
+    {
+      "file": "tools/deploy_update_assets.py",
+      "line_start": 397,
+      "line_end": 406,
+      "snippet": "        with urlopen(url, timeout=20) as response:\n            payload = json.loads(response.read().decode(\"utf-8\"))\n        if str(payload.get(field, \"\")) != expected:\n            raise RuntimeError(f\"{label} {field} mismatch: {payload}\")\n        verify_release_manifest_signature(\n            payload,\n            manifest_label=f\"{label} \",\n            public_keys=public_keys,\n            expected_kind=expected_kind,\n        )",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Public endpoint verifier trusts version field before signature verification",
+      "impact": "The release gate reads and reports on an unverified public payload before proving it was signed, violating the release workflow rule and producing misleading diagnostics for tampered endpoint responses.",
+      "fix": "Move verify_release_manifest_signature immediately after JSON decode, before any field comparison or asset lookup.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "verify_public compares payload[field] to expected before calling verify_release_manifest_signature."
+        }
+      ],
+      "id": "F-28e20dfc",
+      "status": "fixed",
+      "created_at": "2026-06-28T05:34:43+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T05:34:43+00:00"
+      },
+      "resolved_at": "2026-06-28T05:40:47+00:00",
+      "resolution_note": "Moved public endpoint signature verification before version/SHA field trust in local deploy script and GitHub workflow; static ordering test passes."
+    },
+    {
+      "file": "launcher.pyw",
+      "line_start": 808,
+      "line_end": 809,
+      "snippet": "def _is_local_app_ready(base: Path) -> bool:\n    return (_app_runtime_dir(base) / DEFAULT_ENTRYPOINT).exists()",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "likely",
+      "title": "App readiness accepts packages that only contain the entrypoint",
+      "impact": "A corrupt or manually imported package containing only Bomana.pyw is treated as launchable, then fails later when Bomana.pyw imports bomana.config or bomana.metadata.",
+      "fix": "Use a shared app package preflight that requires Bomana.pyw plus core bomana metadata/config files during install and launch readiness checks.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "Install extraction also only checks the entrypoint exists before staging the app package."
+        }
+      ],
+      "id": "F-254b187a",
+      "status": "fixed",
+      "created_at": "2026-06-28T05:34:43+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T05:34:43+00:00"
+      },
+      "resolved_at": "2026-06-28T05:40:47+00:00",
+      "resolution_note": "Added validate_app_package_root requiring Bomana.pyw plus bomana/config.py and bomana/metadata.py during install and launch readiness; missing metadata test passes."
     }
   ]
 }

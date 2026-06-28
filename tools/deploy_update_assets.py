@@ -396,14 +396,14 @@ def verify_public(
     ) -> dict:
         with urlopen(url, timeout=20) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        if str(payload.get(field, "")) != expected:
-            raise RuntimeError(f"{label} {field} mismatch: {payload}")
         verify_release_manifest_signature(
             payload,
             manifest_label=f"{label} ",
             public_keys=public_keys,
             expected_kind=expected_kind,
         )
+        if str(payload.get(field, "")) != expected:
+            raise RuntimeError(f"{label} {field} mismatch: {payload}")
         return payload
 
     if target in {"app", "all"}:

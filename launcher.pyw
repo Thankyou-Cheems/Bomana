@@ -129,6 +129,7 @@ _read_local_app_version = _launcher_install.read_local_app_version
 _release_update_lock = _launcher_install.release_update_lock
 _rollback_to_previous_app = _launcher_install.rollback_to_previous_app
 _sha256_file = _launcher_install.sha256_file
+_validate_app_package_root = _launcher_install.validate_app_package_root
 
 _USE_SYSTEM_PROXY = True
 _URL_OPENERS: Dict[str, Any] = {}
@@ -800,13 +801,31 @@ def _normalize_channel(value: Any) -> str:
     return mapped or ""
 
 
+def _validate_app_manifest_channel(manifest: Dict[str, Any], expected_channel: str, label: str) -> None:
+    actual = _normalize_channel(manifest.get("channel", ""))
+    expected = _normalize_channel(expected_channel)
+    if not actual or actual != expected:
+        raise RuntimeError(f"{label}通道不匹配")
+
+
+def _validate_app_manifest_entrypoint(entrypoint_value: Any, label: str) -> str:
+    entrypoint = str(entrypoint_value or DEFAULT_ENTRYPOINT).strip() or DEFAULT_ENTRYPOINT
+    if entrypoint != DEFAULT_ENTRYPOINT:
+        raise RuntimeError(f"{label}入口文件不受支持: {entrypoint}")
+    return entrypoint
+
+
 def _select_startup_channel(base: Path, detected_channel: str) -> str:
     saved_channel = _normalize_channel(_read_state(base).get("channel", ""))
     return saved_channel or detected_channel
 
 
 def _is_local_app_ready(base: Path) -> bool:
-    return (_app_runtime_dir(base) / DEFAULT_ENTRYPOINT).exists()
+    try:
+        _validate_app_package_root(_app_runtime_dir(base), DEFAULT_ENTRYPOINT)
+    except Exception:
+        return False
+    return True
 
 
 def _is_previous_app_ready(base: Path) -> bool:
@@ -1113,6 +1132,7 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
 
     manifest = _fetch_json(manifest_url)
     _verify_release_manifest_signature(manifest, manifest_label=f"{manifest_name} ", expected_kind="app")
+    _validate_app_manifest_channel(manifest, channel, f"{manifest_name} ")
     remote_version = str(manifest.get("app_version", "")).strip()
     min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_asset = str(manifest.get("package_asset", "")).strip()
@@ -1120,7 +1140,10 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
         manifest.get("package_sha256", ""),
         artifact_label=f"{manifest_name} ",
     )
-    entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
+    entrypoint = _validate_app_manifest_entrypoint(
+        manifest.get("entrypoint", DEFAULT_ENTRYPOINT),
+        f"{manifest_name} ",
+    )
     if not remote_version or not package_asset:
         raise RuntimeError("发布清单字段缺失")
 
@@ -1274,6 +1297,7 @@ def _fetch_manifest_from_primary(
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
     _verify_release_manifest_signature(payload, manifest_label="国内应用更新清单 ", expected_kind="app")
+    _validate_app_manifest_channel(payload, channel, "国内应用更新清单 ")
     remote_version = str(payload.get("app_version", "")).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
@@ -1284,7 +1308,10 @@ def _fetch_manifest_from_primary(
         artifact_label="国内应用更新清单 ",
     )
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
-    entrypoint = str(payload.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
+    entrypoint = _validate_app_manifest_entrypoint(
+        payload.get("entrypoint", DEFAULT_ENTRYPOINT),
+        "国内应用更新清单 ",
+    )
     min_launcher_version = str(payload.get("min_launcher_version", "")).strip()
     source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     if used_anonymous_fallback:
@@ -2185,11 +2212,51 @@ def _reset_embedded_app_modules() -> None:
     importlib.invalidate_caches()
 
 
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except Exception:
+        return False
+    return True
+
+
+def _spec_points_within(spec: Any, root: Path) -> bool:
+    locations: list[Path] = []
+    origin = getattr(spec, "origin", None)
+    if origin and origin not in ("built-in", "frozen", "namespace"):
+        locations.append(Path(str(origin)))
+    search_locations = getattr(spec, "submodule_search_locations", None)
+    if search_locations:
+        locations.extend(Path(str(location)) for location in search_locations)
+    return any(_path_is_within(location, root) for location in locations)
+
+
+class _AppPackageBomanaFinder:
+    """Prefer installed app-package bomana modules over PyInstaller's frozen importer."""
+
+    def __init__(self, app_dir: Path) -> None:
+        self.app_dir = app_dir.resolve()
+
+    def find_spec(self, fullname: str, path: Any = None, target: Any = None) -> Any:
+        if fullname != "bomana" and not fullname.startswith("bomana."):
+            return None
+        search_path = [str(self.app_dir)] if fullname == "bomana" else path
+        if search_path is None:
+            search_dir = self.app_dir / "bomana"
+            for part in fullname.split(".")[1:-1]:
+                search_dir /= part
+            search_path = [str(search_dir)]
+        spec = importlib.machinery.PathFinder.find_spec(fullname, search_path)
+        if spec is None or not _spec_points_within(spec, self.app_dir):
+            return None
+        return spec
+
+
 def _launch_app(base: Path, channel: str) -> None:
     _recover_incomplete_install(base)
     app_dir = _app_runtime_dir(base)
     entry = app_dir / DEFAULT_ENTRYPOINT
-    if not entry.exists():
+    if not _is_local_app_ready(base):
         raise RuntimeError("本地应用不存在，请联网后重试。")
 
     if _is_source_test_run(base):
@@ -2200,7 +2267,13 @@ def _launch_app(base: Path, channel: str) -> None:
     os.chdir(app_dir)
     if str(app_dir) not in sys.path:
         sys.path.insert(0, str(app_dir))
-    runpy.run_path(str(entry), run_name="__main__")
+    finder = _AppPackageBomanaFinder(app_dir)
+    sys.meta_path.insert(0, finder)
+    try:
+        runpy.run_path(str(entry), run_name="__main__")
+    finally:
+        if finder in sys.meta_path:
+            sys.meta_path.remove(finder)
 
 
 def _friendly_error_text(err: Exception, channel: str) -> str:

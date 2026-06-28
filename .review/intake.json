@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-06-28T03:50:08+00:00",
+  "generated_at": "2026-06-28T05:25:53+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
-    "code_files": 67,
-    "code_lines": 26067,
-    "test_files": 26,
+    "code_files": 69,
+    "code_lines": 26940,
+    "test_files": 28,
     "todo_markers": 0
   },
   "languages": {
-    "python": 25900,
+    "python": 26773,
     "shell": 167
   },
   "primary_language": "python",
@@ -39,24 +39,24 @@
   ],
   "largest_files": [
     {
-      "lines": 3062,
+      "lines": 3123,
       "path": "bomana\\ui\\dialogs.py"
     },
     {
-      "lines": 1796,
+      "lines": 1837,
       "path": "bomana\\core\\logic.py"
     },
     {
-      "lines": 1661,
+      "lines": 1675,
       "path": "bomana\\ui\\app.py"
+    },
+    {
+      "lines": 1364,
+      "path": "bomana\\config.py"
     },
     {
       "lines": 1198,
       "path": "bomana\\ui\\main_window.py"
-    },
-    {
-      "lines": 1191,
-      "path": "bomana\\config.py"
     },
     {
       "lines": 1031,
@@ -67,7 +67,7 @@
       "path": "bomana\\ui\\widgets.py"
     },
     {
-      "lines": 923,
+      "lines": 954,
       "path": "bomana\\ui\\panel_renderer.py"
     },
     {
@@ -79,11 +79,11 @@
       "path": "bomana\\utils\\system.py"
     },
     {
-      "lines": 673,
+      "lines": 677,
       "path": "bomana\\core\\telemetry.py"
     },
     {
-      "lines": 654,
+      "lines": 656,
       "path": "bomana\\core\\state.py"
     },
     {
@@ -102,20 +102,20 @@
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "27c176f",
+    "head": "b0310df",
     "branch": "main",
     "dirty_files": 0,
     "recent_commits": [
+      "b0310df fix(ccrp): tune high-drag release lead by altitude",
+      "50732a5 fix(ccrp): advance high-drag bomb release cues",
+      "1704bb1 feat(ccrp): constrain bombing prediction by weapon profile",
+      "3de88c3 fix(telemetry): validate state schema and CCRP caliber",
+      "bb9e400 fix(settings): validate numeric dialog inputs",
+      "938389d fix(app): harden hotkey config and nav phase exit",
+      "ac91935 docs(review): record app code review findings",
       "27c176f fix(launcher): harden update verification and downloads",
       "e478b13 docs(agents): mark release signing secrets provisioned",
-      "5648bd4 docs(agents): document release signing workflow",
-      "47405bd feat(release): verify signed update manifests end to end",
-      "1366b7b fix(updater): require signed release manifests",
-      "b65cfe8 fix: resolve validated bd bug batch",
-      "bedb1f3 docs(beads): record bd 1.0.4 downgrade guardrails",
-      "d4b8f12 chore(data): refresh War Thunder bomb and speed limits",
-      "f1628e4 docs(review): record multi-agent code review findings",
-      "9cc106f fix(review): resolve code review findings"
+      "5648bd4 docs(agents): document release signing workflow"
     ]
   },
   "coverage_gaps": [

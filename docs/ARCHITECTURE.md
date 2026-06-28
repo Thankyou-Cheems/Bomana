@@ -122,6 +122,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
+   - App launch runs inside the packaged launcher process, but `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and a temporary `bomana.*` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules.
 9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 
 Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.

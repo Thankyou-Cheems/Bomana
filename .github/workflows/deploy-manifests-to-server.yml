@@ -405,14 +405,14 @@ jobs:
               raise SystemExit("missing release signing public key configuration")
           with urllib.request.urlopen(url, timeout=20) as response:
               payload = json.loads(response.read().decode("utf-8"))
-          if str(payload.get(expected_field, "")) != expected_value:
-              raise SystemExit(f"{label} {expected_field} mismatch: {payload}")
           verify_release_manifest_signature(
               payload,
               manifest_label=f"{label} ",
               public_keys={key_id: public_key},
               expected_kind=expected_kind,
           )
+          if str(payload.get(expected_field, "")) != expected_value:
+              raise SystemExit(f"{label} {expected_field} mismatch: {payload}")
 
           if expected_kind == "launcher":
               expected_sha = str(payload.get("launcher_sha256", "")).strip().lower()

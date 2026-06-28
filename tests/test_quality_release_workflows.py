@@ -119,6 +119,27 @@ def test_local_deploy_script_remote_stage_assets_are_filename_only() -> None:
     assert "public asset sha256 mismatch" in source
 
 
+def test_public_endpoint_verifiers_validate_signature_before_fields() -> None:
+    deploy_source = (ROOT / "tools/deploy_update_assets.py").read_text(encoding="utf-8")
+    deploy_decode = deploy_source.index('payload = json.loads(response.read().decode("utf-8"))')
+    deploy_verify = deploy_source.index("verify_release_manifest_signature(", deploy_decode)
+    deploy_field_check = deploy_source.index(
+        'if str(payload.get(field, "")) != expected', deploy_decode
+    )
+    assert deploy_decode < deploy_verify < deploy_field_check
+
+    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
+        encoding="utf-8"
+    )
+    workflow_decode = workflow.index('payload = json.loads(response.read().decode("utf-8"))')
+    workflow_verify = workflow.index("verify_release_manifest_signature(", workflow_decode)
+    workflow_field_check = workflow.index(
+        'if str(payload.get(expected_field, "")) != expected_value',
+        workflow_decode,
+    )
+    assert workflow_decode < workflow_verify < workflow_field_check
+
+
 def test_local_deploy_script_prevalidates_signed_launcher_assets(
     tmp_path: Path,
     monkeypatch,

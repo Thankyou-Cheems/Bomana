@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-28T03:50:21+00:00",
+  "generated_at": "2026-06-28T05:43:01+00:00",
   "results": [
     {
       "tool": "ruff",
@@ -12,9 +12,9 @@
     {
       "tool": "pytest",
       "cmd": "pytest -x -q --no-header",
-      "exit_code": 1,
-      "status": "fail",
-      "output_tail": "=================================== ERRORS ====================================\n________________ ERROR collecting tests/test_8111_stability.py ________________\nImportError while importing test module 'D:\\Dev\\Bomana\\tests\\test_8111_stability.py'.\nHint: make sure your test modules/packages have valid Python names.\nTraceback:\nC:\\Users\\cheb2\\AppData\\Roaming\\uv\\python\\cpython-3.14-windows-x86_64-none\\Lib\\importlib\\__init__.py:88: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntests\\test_8111_stability.py:8: in <module>\n    from bomana.core.logic import GameLogic\nbomana\\core\\logic.py:10: in <module>\n    import requests\nE   ModuleNotFoundError: No module named 'requests'\n=========================== short test summary info ===========================\nERROR tests/test_8111_stability.py\n!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!",
+      "exit_code": 0,
+      "status": "pass",
+      "output_tail": "....uuuuuuuu............................................................ [ 33%]\n........................................................................ [ 70%]\n........................uu..uu...............................            [100%]",
       "kind": "test"
     }
   ]

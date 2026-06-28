@@ -68,7 +68,7 @@ implementation plans belong in git history, not here.
 - Context: portable app launched from the PyInstaller onefile launcher
   Symptom: app code resolved assets under the launcher's `_MEI...` temp path, causing missing aircraft limits or data files
   Cause: launcher and app ran in one process, so `sys._MEIPASS` and cached `bomana.*` modules could point at the launcher bundle instead of the extracted app runtime
-  Fix/Workaround: export a stable app runtime root such as `BOMANA_RUNTIME_ROOT`, prefer app/module paths over `_MEIPASS`, and clear cached `bomana` modules before handing off to the app package
+  Fix/Workaround: export a stable app runtime root such as `BOMANA_RUNTIME_ROOT`, prefer app/module paths over `_MEIPASS`, clear cached `bomana` modules, and install an app-package-first `bomana.*` finder before handing off to the app package
 
 - Context: source-mode launch after changing the Windows `.pyw` association
   Symptom: launcher opened, but app launch failed with `No module named 'requests'`

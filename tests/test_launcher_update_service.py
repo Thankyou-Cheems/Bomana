@@ -33,6 +33,7 @@ def make_app_zip(version: str = "2.0.0") -> bytes:
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("Bomana.pyw", "# app entry\n")
         zf.writestr("bomana/config.py", f'__version__ = "{version}"\n')
+        zf.writestr("bomana/metadata.py", f'__version__ = "{version}"\n')
     return buffer.getvalue()
 
 
@@ -72,12 +73,20 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             f'__version__ = "{version}"\n',
             encoding="utf-8",
         )
+        (app_dir / "bomana" / "metadata.py").write_text(
+            f'__version__ = "{version}"\n',
+            encoding="utf-8",
+        )
 
     def write_previous_app(self, version: str = "0.9.0") -> None:
         previous_dir = self.base / self.launcher.APP_PREVIOUS_DIR_NAME
         (previous_dir / "bomana").mkdir(parents=True)
         (previous_dir / "Bomana.pyw").write_text("# previous app entry\n", encoding="utf-8")
         (previous_dir / "bomana" / "config.py").write_text(
+            f'__version__ = "{version}"\n',
+            encoding="utf-8",
+        )
+        (previous_dir / "bomana" / "metadata.py").write_text(
             f'__version__ = "{version}"\n',
             encoding="utf-8",
         )
@@ -164,6 +173,74 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertEqual(parsed["remote_version"], "2.0.0")
         self.assertEqual(parsed["package_sha256"], "a" * 64)
         self.assertEqual(parsed["package_url"], "https://example.invalid/app.zip")
+
+    def test_github_app_manifest_rejects_signed_wrong_channel_manifest(self) -> None:
+        release = {
+            "tag_name": "v2.0.0",
+            "assets": [
+                {
+                    "name": "manifest_Enhanced.json",
+                    "browser_download_url": "https://example.invalid/manifest.json",
+                },
+                {
+                    "name": "Bomana_app_Lite_v2.0.0.zip",
+                    "browser_download_url": "https://example.invalid/app.zip",
+                    "size": 10,
+                },
+            ],
+        }
+        manifest = self.signed_manifest(
+            {
+                "schema_version": 1,
+                "channel": "Lite",
+                "app_version": "2.0.0",
+                "min_launcher_version": "2.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "package_asset": "Bomana_app_Lite_v2.0.0.zip",
+                "package_sha256": "a" * 64,
+            }
+        )
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_json", return_value=manifest),
+            self.assertRaisesRegex(RuntimeError, "通道不匹配"),
+        ):
+            self.launcher._manifest_from_github_release(release, "Enhanced")
+
+    def test_github_app_manifest_rejects_non_default_entrypoint(self) -> None:
+        release = {
+            "tag_name": "v2.0.0",
+            "assets": [
+                {
+                    "name": "manifest_Enhanced.json",
+                    "browser_download_url": "https://example.invalid/manifest.json",
+                },
+                {
+                    "name": "Bomana_app_Enhanced_v2.0.0.zip",
+                    "browser_download_url": "https://example.invalid/app.zip",
+                    "size": 10,
+                },
+            ],
+        }
+        manifest = self.signed_manifest(
+            {
+                "schema_version": 1,
+                "channel": "Enhanced",
+                "app_version": "2.0.0",
+                "min_launcher_version": "2.0.0",
+                "entrypoint": "Other.pyw",
+                "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+                "package_sha256": "a" * 64,
+            }
+        )
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_json", return_value=manifest),
+            self.assertRaisesRegex(RuntimeError, "入口文件不受支持"),
+        ):
+            self.launcher._manifest_from_github_release(release, "Enhanced")
 
     def test_github_launcher_manifest_uses_signed_asset_fields(self) -> None:
         release = {
@@ -329,6 +406,31 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             parsed["package_url"], "https://bomanaupdate.ruikang.wang/downloads/app.zip"
         )
         self.assertEqual(parsed["package_sha256"], "a" * 64)
+
+    def test_primary_app_manifest_rejects_signed_wrong_channel_payload(self) -> None:
+        payload = self.signed_manifest(
+            {
+                "schema_version": 1,
+                "channel": "Lite",
+                "app_version": "2.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "min_launcher_version": "2.0.0",
+                "package_asset": "Bomana_app_Lite_v2.0.0.zip",
+                "package_sha256": "a" * 64,
+            }
+        )
+        payload["package_url"] = "/downloads/app.zip"
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_primary_version_payload", return_value=payload),
+            self.assertRaisesRegex(RuntimeError, "通道不匹配"),
+        ):
+            self.launcher._fetch_manifest_from_primary(
+                "Enhanced",
+                "1.0.0",
+                {"install_id": "abc"},
+            )
 
     def test_check_reports_launcher_requirement_and_fetches_missing_size(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
@@ -720,11 +822,33 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             '__version__ = "1.0.0"\n',
         )
 
+    def test_install_zip_rejects_package_missing_metadata(self) -> None:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zf:
+            zf.writestr("Bomana.pyw", "# app entry\n")
+            zf.writestr("bomana/config.py", '__version__ = "2.0.0"\n')
+        package_bytes = buffer.getvalue()
+        package_sha = self.launcher._sha256_bytes(package_bytes)
+
+        with self.assertRaisesRegex(RuntimeError, "metadata.py"):
+            self.launcher._install_zip_package(
+                self.base,
+                package_bytes,
+                package_sha,
+                self.launcher.DEFAULT_ENTRYPOINT,
+            )
+
+        self.assertFalse(self.launcher._is_local_app_ready(self.base))
+
     def test_recover_incomplete_install_restores_backup_and_removes_stale_lock(self) -> None:
         backup_dir = self.base / self.launcher.APP_BACKUP_DIR_NAME
         (backup_dir / "bomana").mkdir(parents=True)
         (backup_dir / "Bomana.pyw").write_text("# app entry\n", encoding="utf-8")
         (backup_dir / "bomana" / "config.py").write_text(
+            '__version__ = "1.0.0"\n',
+            encoding="utf-8",
+        )
+        (backup_dir / "bomana" / "metadata.py").write_text(
             '__version__ = "1.0.0"\n',
             encoding="utf-8",
         )
@@ -790,6 +914,76 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "1.5.0",
         )
         self.assertFalse((self.base / self.launcher.UPDATE_LOCK_FILE_NAME).exists())
+
+    def test_launch_app_prefers_installed_bomana_over_frozen_importer(self) -> None:
+        app_dir = self.base / self.launcher.APP_DIR_NAME
+        package_dir = app_dir / "bomana"
+        package_dir.mkdir(parents=True)
+        (app_dir / "Bomana.pyw").write_text(
+            "from pathlib import Path\n"
+            "from bomana.config import SENTINEL\n"
+            "Path('result.txt').write_text(SENTINEL, encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+        (package_dir / "config.py").write_text(
+            'SENTINEL = "app"\n__version__ = "2.0.0"\n',
+            encoding="utf-8",
+        )
+        (package_dir / "metadata.py").write_text('__version__ = "2.0.0"\n', encoding="utf-8")
+
+        class FrozenBomanaLoader:
+            def create_module(self, _spec):
+                return None
+
+            def exec_module(self, module) -> None:
+                if module.__name__ == "bomana":
+                    module.__path__ = []
+                elif module.__name__ == "bomana.config":
+                    module.SENTINEL = "frozen"
+
+        class FrozenBomanaFinder:
+            def find_spec(self, fullname, _path=None, _target=None):
+                if fullname == "bomana":
+                    return importlib.machinery.ModuleSpec(
+                        fullname,
+                        FrozenBomanaLoader(),
+                        is_package=True,
+                    )
+                if fullname == "bomana.config":
+                    return importlib.machinery.ModuleSpec(fullname, FrozenBomanaLoader())
+                return None
+
+        finder = FrozenBomanaFinder()
+        old_cwd = Path.cwd()
+        old_path = list(sys.path)
+        old_channel = os.environ.get("BOMANA_CHANNEL")
+        old_runtime_root = os.environ.get("BOMANA_RUNTIME_ROOT")
+        old_modules = {
+            name: module
+            for name, module in sys.modules.items()
+            if name == "bomana" or name.startswith("bomana.")
+        }
+        sys.meta_path.insert(0, finder)
+        try:
+            self.launcher._launch_app(self.base, "Enhanced")
+            self.assertEqual((app_dir / "result.txt").read_text(encoding="utf-8"), "app")
+        finally:
+            os.chdir(old_cwd)
+            sys.path[:] = old_path
+            if finder in sys.meta_path:
+                sys.meta_path.remove(finder)
+            for name in tuple(sys.modules):
+                if name == "bomana" or name.startswith("bomana."):
+                    sys.modules.pop(name, None)
+            sys.modules.update(old_modules)
+            if old_channel is None:
+                os.environ.pop("BOMANA_CHANNEL", None)
+            else:
+                os.environ["BOMANA_CHANNEL"] = old_channel
+            if old_runtime_root is None:
+                os.environ.pop("BOMANA_RUNTIME_ROOT", None)
+            else:
+                os.environ["BOMANA_RUNTIME_ROOT"] = old_runtime_root
 
 
 if __name__ == "__main__":

@@ -20,6 +20,11 @@ APP_PREVIOUS_DIR_NAME = "app_previous"
 APP_BACKUP_DIR_NAME = f"{APP_DIR_NAME}_backup"
 UPDATE_LOCK_FILE_NAME = ".bomana_update.lock"
 UPDATE_LOCK_STALE_SEC = 30 * 60
+APP_REQUIRED_FILES = (
+    Path("Bomana.pyw"),
+    Path("bomana") / "config.py",
+    Path("bomana") / "metadata.py",
+)
 
 StatusCallback = Callable[[str, str, float | None, str], None]
 CancelCallback = Callable[[], bool]
@@ -50,6 +55,17 @@ def read_local_app_version(app_dir: Path) -> str:
         if version:
             return version
     return "0.0.0"
+
+
+def validate_app_package_root(app_root: Path, entrypoint: str) -> None:
+    required = {Path(entrypoint), *APP_REQUIRED_FILES}
+    missing = [
+        path.as_posix()
+        for path in sorted(required, key=lambda item: item.as_posix())
+        if not (app_root / path).is_file()
+    ]
+    if missing:
+        raise RuntimeError(f"应用包缺少必要文件: {', '.join(missing)}")
 
 
 def acquire_update_lock(base: Path) -> Path:
@@ -137,8 +153,7 @@ class InstallTransaction:
             shutil.copyfile(package_path, self.zip_path)
         safe_extract_zip(self.zip_path, self.stage_dir)
         src_root = normalize_package_root(self.stage_dir, entrypoint)
-        if not (src_root / entrypoint).exists():
-            raise RuntimeError("应用包缺少入口文件 Bomana.pyw")
+        validate_app_package_root(src_root, entrypoint)
         return src_root
 
     def stage_new_app(self, src_root: Path) -> None:
