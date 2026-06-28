@@ -1,6 +1,9 @@
 import importlib.util
 import json
+import os
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -36,6 +39,24 @@ def test_portable_build_reads_version_from_metadata() -> None:
         build_portable.read_min_launcher_version(metadata_text)
         == metadata.PORTABLE_MIN_LAUNCHER_VERSION
     )
+
+
+def test_build_portable_script_runs_without_pythonpath() -> None:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONHOME", None)
+    env["PYTHONNOUSERSITE"] = "1"
+
+    result = subprocess.run(
+        [sys.executable, "tools/build_portable.py", "--help"],
+        cwd=ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "--target" in result.stdout
 
 
 def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:

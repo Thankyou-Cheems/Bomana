@@ -12,7 +12,11 @@ import sys
 import zipfile
 from pathlib import Path
 
-from bomana.launcher_core import (
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from bomana.launcher_core import (  # noqa: E402
     RELEASE_MANIFEST_DEFAULT_KEY_ID,
     ed25519_public_key_from_private_key,
     sign_release_manifest,
@@ -53,7 +57,7 @@ SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
 SIGNING_PUBLIC_KEY_ENV = "BOMANA_RELEASE_ED25519_PUBLIC_KEY"
 SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
 PACKAGED_LAUNCHER_REQUIRES_PYTHON = ">=3.14"
-PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "2.0.0"
+PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "2.1.0"
 PACKAGED_LAUNCHER_RUNTIME_MODULES_BY_DEPENDENCY = {
     "requests": "requests",
     "certifi": "certifi",

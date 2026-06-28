@@ -73,7 +73,7 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "2.0.0"
+LAUNCHER_VERSION = "2.1.0"
 MIN_SUPPORTED_APP_VERSION = "6.7.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"

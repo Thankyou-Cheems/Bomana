@@ -7,8 +7,35 @@
 ---
 ## [Unreleased]
 
+---
+## [7.0.0] - 2026-06-28
+
+### 新增
+- 将 CCRP 投弹预测升级为按武器配置约束的模型，区分常规炸弹、高阻/减速构型与特殊 profile，减少不适用弹型的误导提示。
+- 新增 packaged launcher 发布 smoke，可在带空格和中文字符的路径中毒化 Python 环境并验证启动器到应用的交接。
+
 ### 改进
+- 同步 War-Thunder-Datamine 静态数据，刷新 CCRP 炸弹参数与 FM 限速库。
 - 适配签名发布清单在 GitHub Actions、腾讯云/EdgeOne 更新服务与启动器之间的契约，服务端只转发签名并补派生字段，部署后会校验公开接口签名。
+- 收紧绿色版打包链路：本地脚本和 CI 清理宿主 Python 污染变量，使用 frozen uv，并用测试锁住 launcher 运行时依赖契约。
+- 将便携应用包最低启动器版本提升到 v2.1.0，确保用户先获得签名校验、打包运行时隔离和 app-package-first 交接修复。
+
+### 修复
+- 修复旧 launcher 冻结模块可能遮蔽新 app 包模块的问题，避免打包后 app 启动时加载到 launcher 内置的旧代码。
+- 修复投弹预测在高阻炸弹和高度变化场景下的投放提前量与提示约束。
+- 加强 8111 telemetry/state schema 兼容性，避免字段漂移导致速度、Mach 或 CCRP caliber 判断失效。
+- 修复设置数值输入、热键配置和导航阶段退出路径中的边界问题。
+
+---
+## [Launcher 2.1.0] - 2026-06-28
+
+### 改进
+- 启动器在信任版本、资源名和 SHA256 前先校验 Ed25519 发布清单签名，并优先使用签名内的 launcher SHA256。
+- 启动 app 包前清理冻结的 `bomana.*` 模块，并安装 app-package-first module finder，保证无 Python 环境用户运行的是新 app 包代码。
+- 打包启动器的 runtime 依赖由显式契约生成并受测试覆盖，降低新增依赖后漏进 launcher exe 的风险。
+
+### 修复
+- 修复 Windows PowerShell 5.1 对无 BOM UTF-8 release smoke 脚本误解码导致 CI parser 失败的问题。
 
 ---
 ## [6.14.4] - 2026-05-21
