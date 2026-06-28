@@ -813,8 +813,8 @@ class BallisticPhysicsParams:
     DRAG_REFERENCE_AREA_MULT = 0.8
 
     # ==================== 减速伞参数 ====================
-    BRAKE_DRAG_MULT = 1.0
-    BRAKE_DEPLOY_DELAY = 0.0
+    BRAKE_DRAG_MULT = 0.1
+    BRAKE_DEPLOY_DELAY = 1.0
     HIGH_DRAG_BRAKE_CXK_MIN = 10.0
     HIGH_DRAG_OPEN_TIME_SEC = 0.12
 

@@ -139,4 +139,17 @@ def test_high_drag_brake_remains_active_after_deploy_window() -> None:
         bomb_params=low_drag_params,
     )
 
+    assert range_hi > 450.0
     assert range_hi < range_lo * 0.5
+
+
+def test_high_drag_database_profile_keeps_release_cue_from_lagging_too_far() -> None:
+    snakeye_params = BombConfig.get_bomb_physics_params("us_500lb_mk_82_ldgp_snakeye")
+
+    _flight_time, bomb_range_m, _impact_speed = calculate_bomb_trajectory(
+        release_alt_m=300.0,
+        release_speed_ms=220.0,
+        bomb_params=snakeye_params,
+    )
+
+    assert 450.0 <= bomb_range_m <= 650.0
