@@ -417,12 +417,27 @@ class HotkeyConfig:
         "F12",
     ]
 
+    DEFAULT_BINDINGS: ClassVar[dict[str, str]] = {
+        "reset": "F7",
+        "lock": "F8",
+        "corner": "F9",
+        "beep": "F10",
+        "zones": "F11",
+    }
+    BINDING_ATTRS: ClassVar[dict[str, str]] = {
+        "reset": "KEY_RESET",
+        "lock": "KEY_LOCK",
+        "corner": "KEY_CORNER",
+        "beep": "KEY_BEEP",
+        "zones": "KEY_ZONES",
+    }
+
     # 当前绑定（可运行时修改）
-    KEY_RESET = "F7"  # 双击确认后重置计时器
-    KEY_LOCK = "F8"  # 锁定/解锁
-    KEY_CORNER = "F9"  # 切换角落
-    KEY_BEEP = "F10"  # 声音开关
-    KEY_ZONES = "F11"  # 战区提示音
+    KEY_RESET = DEFAULT_BINDINGS["reset"]  # 双击确认后重置计时器
+    KEY_LOCK = DEFAULT_BINDINGS["lock"]  # 锁定/解锁
+    KEY_CORNER = DEFAULT_BINDINGS["corner"]  # 切换角落
+    KEY_BEEP = DEFAULT_BINDINGS["beep"]  # 声音开关
+    KEY_ZONES = DEFAULT_BINDINGS["zones"]  # 战区提示音
 
     # 热键ID（用于注册/注销）
     HK_ID_RESET = 7007
@@ -440,32 +455,49 @@ class HotkeyConfig:
     @classmethod
     def get_vk(cls, key_name: str) -> int:
         """获取功能键的VK码"""
-        return cls.VK_CODES.get(key_name, 0)
+        normalized = cls.normalize_key(key_name)
+        return cls.VK_CODES.get(normalized, 0) if normalized else 0
+
+    @classmethod
+    def normalize_key(cls, key_name: object) -> str | None:
+        """Return a supported function-key name, or None for unsafe saved values."""
+        key = str(key_name or "").strip().upper()
+        if key in cls.AVAILABLE_KEYS and key in cls.VK_CODES:
+            return key
+        return None
+
+    @classmethod
+    def normalize_bindings(cls, bindings: dict | None) -> dict[str, str]:
+        """Normalize persisted hotkeys, falling back per-action for invalid values."""
+        if not isinstance(bindings, dict):
+            return {}
+
+        normalized: dict[str, str] = {}
+        for action in cls.BINDING_ATTRS:
+            if action not in bindings:
+                continue
+            key_name = cls.normalize_key(bindings[action])
+            normalized[action] = key_name or cls.DEFAULT_BINDINGS[action]
+        return normalized
 
     @classmethod
     def get_bindings(cls) -> dict:
         """获取当前所有绑定"""
-        return {
-            "reset": cls.KEY_RESET,
-            "lock": cls.KEY_LOCK,
-            "corner": cls.KEY_CORNER,
-            "beep": cls.KEY_BEEP,
-            "zones": cls.KEY_ZONES,
-        }
+        return cls.normalize_bindings(
+            {
+                "reset": cls.KEY_RESET,
+                "lock": cls.KEY_LOCK,
+                "corner": cls.KEY_CORNER,
+                "beep": cls.KEY_BEEP,
+                "zones": cls.KEY_ZONES,
+            }
+        )
 
     @classmethod
     def set_bindings(cls, bindings: dict) -> None:
         """设置绑定"""
-        if "reset" in bindings:
-            cls.KEY_RESET = bindings["reset"]
-        if "lock" in bindings:
-            cls.KEY_LOCK = bindings["lock"]
-        if "corner" in bindings:
-            cls.KEY_CORNER = bindings["corner"]
-        if "beep" in bindings:
-            cls.KEY_BEEP = bindings["beep"]
-        if "zones" in bindings:
-            cls.KEY_ZONES = bindings["zones"]
+        for action, key_name in cls.normalize_bindings(bindings).items():
+            setattr(cls, cls.BINDING_ATTRS[action], key_name)
 
 
 class SoundConfig:

@@ -586,9 +586,21 @@ class App:
 
         self._local_hotkey_sequences = []
         for key_name, callback in bindings:
-            sequence = f"<{key_name}>"
-            self.root.bind(sequence, lambda _event, cb=callback: cb())
+            normalized_key = HotkeyConfig.normalize_key(key_name)
+            if normalized_key is None:
+                continue
+            sequence = f"<{normalized_key}>"
+            try:
+                self.root.bind(sequence, lambda _event, cb=callback: cb())
+            except tk.TclError:
+                continue
             self._local_hotkey_sequences.append(sequence)
+
+    def _refresh_standalone_navigation_if_visible(self, snap: UISnapshot) -> None:
+        """Let the standalone navigation window clear stale content when panels hide."""
+        nav_window = self.nav_window
+        if nav_window and nav_window.is_visible():
+            nav_window.update_display(snap)
 
     def _toggle_panel(self, panel_key: str):
         """切换面板显示状态"""
@@ -1527,6 +1539,8 @@ class App:
                 if (now_recalc - self._last_zone_recalc_ts) >= 0.25:
                     self._last_zone_recalc_ts = now_recalc
                     self._recalc_size()
+        else:
+            self._refresh_standalone_navigation_if_visible(snap)
 
         # 检查清单面板（受编译开关控制）
         show_chk = (

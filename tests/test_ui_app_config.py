@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+from bomana.core.state import Phase, UISnapshot
 from bomana.ui import app as app_module
 from bomana.ui.app import App, Corner
 
@@ -175,3 +176,130 @@ def test_refresh_local_hotkey_bindings_omits_zones_when_disabled(monkeypatch) ->
     app.refresh_local_hotkey_bindings()
 
     assert bound == ["<F1>", "<F2>", "<F3>"]
+
+
+def test_hotkey_config_rejects_invalid_saved_bindings() -> None:
+    original = app_module.HotkeyConfig.get_bindings()
+    try:
+        app_module.HotkeyConfig.set_bindings(
+            {
+                "reset": "f1",
+                "lock": "BAD KEY",
+                "corner": " F2 ",
+                "beep": "",
+                "zones": "F12",
+            }
+        )
+
+        assert app_module.HotkeyConfig.get_bindings() == {
+            "reset": "F1",
+            "lock": app_module.HotkeyConfig.DEFAULT_BINDINGS["lock"],
+            "corner": "F2",
+            "beep": app_module.HotkeyConfig.DEFAULT_BINDINGS["beep"],
+            "zones": "F12",
+        }
+    finally:
+        app_module.HotkeyConfig.set_bindings(original)
+
+
+def test_refresh_local_hotkey_bindings_skips_invalid_runtime_key(monkeypatch) -> None:
+    app = _make_config_only_app()
+    bound: list[str] = []
+
+    def bind(sequence, _callback):
+        if sequence == "<BAD KEY>":
+            raise app_module.tk.TclError("bad event type")
+        bound.append(sequence)
+
+    app.root = SimpleNamespace(bind=bind, unbind=lambda _sequence: None)
+    app._local_hotkey_sequences = []
+    app._toggle_lock = lambda: None
+    app._next_corner = lambda: None
+    app._toggle_beep = lambda: None
+    app._toggle_zone_sound = lambda: None
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_LOCK", "BAD KEY")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_CORNER", "F2")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_BEEP", "F3")
+    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(app_module, "ENABLE_ZONES", True)
+
+    app.refresh_local_hotkey_bindings()
+
+    assert bound == ["<F2>", "<F3>", "<F4>"]
+    assert app._local_hotkey_sequences == ["<F2>", "<F3>", "<F4>"]
+
+
+def test_update_ui_frame_refreshes_visible_standalone_navigation_when_phase_exits(
+    monkeypatch,
+) -> None:
+    app = _make_config_only_app()
+    snap = UISnapshot(
+        phase=Phase.IDLE,
+        life_index=None,
+        cycle=None,
+        remaining_sec=None,
+        progress=0.0,
+        sortie_id=1,
+        main_badge=("待机", "#fff", "#000"),
+        flight_badge=("无", "#fff", "#000"),
+        status_text="",
+        api_down=False,
+        api_down_pending=False,
+        on_ground=False,
+        landed_flash=False,
+    )
+    nav_updates: list[UISnapshot] = []
+    nav_window = SimpleNamespace(
+        is_visible=lambda: True,
+        update_display=lambda current_snap: nav_updates.append(current_snap),
+    )
+    app.navigation_services = SimpleNamespace(window=nav_window)
+    app.game = SimpleNamespace(snapshot=lambda: snap, timer_restore_applied=False)
+    app._last_ui_frame_ts = 0.0
+    app._debug = False
+    app._debug_effective_mock = False
+    app._debug_live_available = False
+    app._restored_state = False
+    app._nudge_sortie_seen = 1
+    app._nudge_airborne_seen = False
+    app._nudge_visible = False
+    app._nudge_sortie_id = 0
+    app._last_landed_flash = False
+    app._manual_reset_confirm_until = 0.0
+    app._last_zone_recalc_ts = 0.0
+    app._last_beep_sec = -1
+    app.scale = 1.0
+    app.panel_renderer = SimpleNamespace(
+        set_zone_panel_visible=lambda _visible: None,
+        update_zone_display=lambda _snap: (_ for _ in ()).throw(
+            AssertionError("hidden zone panel should not render")
+        ),
+        set_checklist_visible=lambda _visible: None,
+    )
+    app._apply_speed_history_layout = lambda _active: None
+    app._refresh_speed_history_ui = lambda _snap, _speed_level: None
+    app.bar_fill = SimpleNamespace(place=lambda **_kwargs: None, config=lambda **_kwargs: None)
+    app.timer_lbl = SimpleNamespace(config=lambda **_kwargs: None)
+    app.life_lbl = SimpleNamespace(config=lambda **_kwargs: None)
+    app.cycle_lbl = SimpleNamespace(config=lambda **_kwargs: None)
+    app.badge_main = SimpleNamespace(set=lambda *_args: None)
+    app.badge_flight = SimpleNamespace(set=lambda *_args: None)
+    app.badge_gear = SimpleNamespace(
+        winfo_ismapped=lambda: False,
+        set=lambda *_args: None,
+        pack=lambda **_kwargs: None,
+        pack_forget=lambda: None,
+    )
+    app.speed_row = SimpleNamespace(
+        winfo_manager=lambda: "",
+        grid=lambda **_kwargs: None,
+        grid_remove=lambda: None,
+    )
+    app.status_txt = SimpleNamespace(config=lambda **_kwargs: None)
+    app.runtime_services = SimpleNamespace(update_hud_overlay=lambda _snap: None)
+    monkeypatch.setattr(app_module.PanelConfig, "is_effectively_enabled", lambda _feature: False)
+    monkeypatch.setattr(app_module.PanelConfig, "speed_history_mode", False)
+
+    app._update_ui_frame(100.0)
+
+    assert nav_updates == [snap]
