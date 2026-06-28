@@ -35,7 +35,7 @@ Keep it concise and update when workflows or boundaries change.
   uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
   ```
   Public endpoint verification must call `verify_release_manifest_signature`, not just check that a signature field exists.
-- Current known blocker if secrets are still missing: `Bomana-xkf` (`配置发布签名 GitHub Secrets`).
+- Release signing secrets are provisioned for `bomana-release-2026-06`; if they ever appear missing again, check `gh secret list --repo Thankyou-Cheems/Bomana` and bd issue history for `Bomana-xkf`.
 
 ## Header Facts (Condensed)
 - Data sources: `/indicators`, `/state`, `/map_obj.json`, `/map_info.json`.
