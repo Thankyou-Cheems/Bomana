@@ -30,11 +30,13 @@ def test_portable_build_reads_version_from_metadata() -> None:
 
 
 TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+TEST_SIGNING_PUBLIC_KEY = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
 
 
 def test_launcher_manifest_records_size(tmp_path: Path, monkeypatch) -> None:
     build_portable = load_tool_module("build_portable_manifest", "tools/build_portable.py")
     monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
+    monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, TEST_SIGNING_PUBLIC_KEY)
     monkeypatch.setenv(build_portable.SIGNING_KEY_ID_ENV, "test-key")
 
     manifest_path = build_portable.write_launcher_manifest(
@@ -71,12 +73,29 @@ def test_build_portable_refuses_unsigned_manifests(tmp_path: Path, monkeypatch) 
         )
 
 
+def test_build_portable_rejects_signing_key_mismatch(tmp_path: Path, monkeypatch) -> None:
+    build_portable = load_tool_module("build_portable_key_mismatch", "tools/build_portable.py")
+    monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
+    monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, "A" * 44)
+
+    with pytest.raises(RuntimeError, match=build_portable.SIGNING_PUBLIC_KEY_ENV):
+        build_portable.write_manifest(
+            tmp_path,
+            "Enhanced",
+            metadata.__version__,
+            f"Bomana_app_Enhanced_v{metadata.__version__}.zip",
+            "a" * 64,
+            metadata.PORTABLE_MIN_LAUNCHER_VERSION,
+        )
+
+
 def test_build_portable_generates_and_restores_launcher_public_key(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     build_portable = load_tool_module("build_portable_release_keys", "tools/build_portable.py")
     monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
+    monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, TEST_SIGNING_PUBLIC_KEY)
     monkeypatch.setenv(build_portable.SIGNING_KEY_ID_ENV, "test-key")
     (tmp_path / "bomana").mkdir()
 

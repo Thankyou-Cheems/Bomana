@@ -4,12 +4,20 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import shlex
 import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.request import urlopen
+
+from bomana.launcher_core import (
+    RELEASE_MANIFEST_DEFAULT_KEY_ID,
+    verify_release_manifest_signature,
+)
 
 CHANNELS = ("Enhanced", "Standard", "Lite")
 DEFAULT_HOST = "TencentCloudPublic"
@@ -270,39 +278,57 @@ print("backup_dir=", backup_dir)
 def verify_public(
     *, host: str, public_base_url: str, target: str, app_version: str, launcher_version: str
 ) -> None:
+    public_key = os.environ.get("BOMANA_RELEASE_ED25519_PUBLIC_KEY", "").strip()
+    key_id = os.environ.get(
+        "BOMANA_RELEASE_SIGNING_KEY_ID",
+        RELEASE_MANIFEST_DEFAULT_KEY_ID,
+    ).strip()
+    if not public_key:
+        raise RuntimeError("BOMANA_RELEASE_ED25519_PUBLIC_KEY is required for public verify")
+
+    def verify_signed_payload(url: str, label: str, field: str, expected: str) -> dict:
+        with urlopen(url, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if str(payload.get(field, "")) != expected:
+            raise RuntimeError(f"{label} {field} mismatch: {payload}")
+        verify_release_manifest_signature(
+            payload,
+            manifest_label=f"{label} ",
+            public_keys={key_id: public_key},
+        )
+        return payload
+
     if target in {"app", "all"}:
         for channel in CHANNELS:
             url = (
                 f"{public_base_url.rstrip('/')}/api/v1/version"
                 f"?channel={channel}&local_version=0.0.0&launcher_version={launcher_version}"
             )
-            run(
-                [
-                    "ssh",
-                    host,
-                    "python3 -c "
-                    + repr(
-                        "import json,sys,urllib.request;"
-                        f"d=json.load(urllib.request.urlopen({url!r}, timeout=20));"
-                        f"assert d['app_version']=={app_version!r}, d;"
-                        "print('verified_app=', d['app_version'], d['package_sha256'][:12])"
-                    ),
-                ]
+            payload = verify_signed_payload(
+                url,
+                f"app_{channel}",
+                "app_version",
+                app_version,
+            )
+            print(
+                "verified_app=",
+                payload["app_version"],
+                payload["package_sha256"][:12],
+                payload["manifest_signature"]["key_id"],
             )
     if target in {"launcher", "all"}:
         url = f"{public_base_url.rstrip('/')}/api/v1/launcher?launcher_version=0.0.0"
-        run(
-            [
-                "ssh",
-                host,
-                "python3 -c "
-                + repr(
-                    "import json,urllib.request;"
-                    f"d=json.load(urllib.request.urlopen({url!r}, timeout=20));"
-                    f"assert d['launcher_version']=={launcher_version!r}, d;"
-                    "print('verified_launcher=', d['launcher_version'], d['package_sha256'][:12])"
-                ),
-            ]
+        payload = verify_signed_payload(
+            url,
+            "launcher",
+            "launcher_version",
+            launcher_version,
+        )
+        print(
+            "verified_launcher=",
+            payload["launcher_version"],
+            payload["package_sha256"][:12],
+            payload["manifest_signature"]["key_id"],
         )
 
 

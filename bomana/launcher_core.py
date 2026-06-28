@@ -316,8 +316,43 @@ def _without_manifest_signature(value: Any) -> Any:
     return value
 
 
-def manifest_signature_payload(manifest: dict[str, Any]) -> bytes:
+_APP_MANIFEST_SIGNATURE_FIELDS = (
+    "schema_version",
+    "channel",
+    "app_version",
+    "min_launcher_version",
+    "entrypoint",
+    "package_asset",
+    "package_sha256",
+)
+_LAUNCHER_MANIFEST_SIGNATURE_FIELDS = (
+    "schema_version",
+    "launcher_version",
+    "launcher_asset",
+    "launcher_sha256",
+    "launcher_size_bytes",
+)
+
+
+def _manifest_signature_core(manifest: dict[str, Any]) -> dict[str, Any]:
     unsigned_manifest = _without_manifest_signature(manifest)
+    if "app_version" in unsigned_manifest:
+        fields = _APP_MANIFEST_SIGNATURE_FIELDS
+        label = "应用发布清单"
+    elif "launcher_version" in unsigned_manifest:
+        fields = _LAUNCHER_MANIFEST_SIGNATURE_FIELDS
+        label = "启动器发布清单"
+    else:
+        raise RuntimeError("发布清单缺少可签名的版本字段")
+
+    missing = [field for field in fields if field not in unsigned_manifest]
+    if missing:
+        raise RuntimeError(f"{label}缺少签名字段: {', '.join(missing)}")
+    return {field: unsigned_manifest[field] for field in fields}
+
+
+def manifest_signature_payload(manifest: dict[str, Any]) -> bytes:
+    unsigned_manifest = _manifest_signature_core(manifest)
     payload = json.dumps(
         unsigned_manifest,
         ensure_ascii=False,

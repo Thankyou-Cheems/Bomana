@@ -200,6 +200,38 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertEqual(parsed["package_sha256"], "b" * 64)
         self.assertEqual(parsed["package_url"], "https://example.invalid/launcher.exe")
 
+    def test_primary_launcher_manifest_uses_signed_launcher_sha256(self) -> None:
+        payload = self.signed_manifest(
+            {
+                "schema_version": 1,
+                "launcher_version": "2.0.0",
+                "launcher_asset": "Bomana_launcher_v2.0.0.exe",
+                "launcher_sha256": "b" * 64,
+                "launcher_size_bytes": 456,
+            }
+        )
+        payload.update(
+            {
+                "package_url": "/downloads/launcher.exe",
+                "package_sha256": "c" * 64,
+                "package_size": 123,
+            }
+        )
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_primary_json_payload", return_value=payload),
+        ):
+            parsed = self.launcher._fetch_launcher_manifest_from_primary(
+                {"install_id": "abc"},
+            )
+
+        self.assertEqual(parsed["remote_version"], "2.0.0")
+        self.assertEqual(parsed["package_sha256"], "b" * 64)
+        self.assertEqual(
+            parsed["package_url"], "https://bomanaupdate.ruikang.wang/downloads/launcher.exe"
+        )
+
     def test_primary_app_manifest_requires_release_signature(self) -> None:
         payload = {
             "app_version": "2.0.0",
@@ -220,14 +252,17 @@ class LauncherUpdateServiceTests(unittest.TestCase):
     def test_primary_app_manifest_accepts_signed_payload(self) -> None:
         payload = self.signed_manifest(
             {
+                "schema_version": 1,
+                "channel": "Enhanced",
                 "app_version": "2.0.0",
-                "package_url": "/downloads/app.zip",
-                "package_sha256": "a" * 64,
                 "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
                 "min_launcher_version": "2.0.0",
-                "package_size_bytes": 123,
+                "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+                "package_sha256": "a" * 64,
             }
         )
+        payload["package_url"] = "/downloads/app.zip"
+        payload["package_size_bytes"] = 123
 
         with (
             self.trusted_release_key_patch(),

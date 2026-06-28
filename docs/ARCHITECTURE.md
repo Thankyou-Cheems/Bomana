@@ -110,7 +110,9 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for app and launcher manifests when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
    - App and launcher manifests must include an Ed25519 `manifest_signature`; the launcher verifies it against pinned release public keys before trusting version, asset, or SHA256 fields.
-   - `tools/build_portable.py` signs manifests from `BOMANA_RELEASE_ED25519_PRIVATE_KEY` and injects the derived public key into packaged launchers through a temporary `bomana/release_public_keys.py` module.
+   - Manifest signatures cover release-owned core fields only. App signatures cover `schema_version`, `channel`, `app_version`, `min_launcher_version`, `entrypoint`, `package_asset`, and `package_sha256`; launcher signatures cover `schema_version`, `launcher_version`, `launcher_asset`, `launcher_sha256`, and `launcher_size_bytes`.
+   - The Tencent/EdgeOne service does not hold the release private key. It forwards `manifest_signature` from the deployed JSON manifests and may add service-derived fields such as `package_url`, `source_name`, `package_size`, and the launcher compatibility alias `package_sha256`.
+   - `tools/build_portable.py` signs manifests from `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, requires the matching `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and injects that public key into packaged launchers through a temporary `bomana/release_public_keys.py` module.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
 8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
@@ -191,7 +193,7 @@ Local build helper:
 - `tools\scripts\build_portable.bat <Variant> <all|app|launcher>` (`all` builds the selected variant app plus the universal launcher)
 - `tools\scripts\build_app_package.bat <Variant>` (only app zip + manifest)
 - `tools\scripts\build_launcher.bat [version]` (only universal launcher exe; optional version must match `LAUNCHER_VERSION`)
-- Release manifest builds require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`; launcher builds derive the public key and embed it into the packaged launcher.
+- Release manifest builds require both `BOMANA_RELEASE_ED25519_PRIVATE_KEY` and `BOMANA_RELEASE_ED25519_PUBLIC_KEY`; the build fails if the public key does not match the private key. Launcher builds embed the public key into the packaged launcher.
 
 CI:
 - `.github/workflows/quality.yml` runs lightweight pull-request / `main` push gates on `windows-latest`:
@@ -204,13 +206,14 @@ CI:
   - `quality`: release-preflight Ruff + pytest smoke checks
   - `build_app`: app package + manifest
   - `build_launcher`: launcher exe + `launcher_manifest.json`
+- `.github/workflows/build.yml` requires the repository secrets `BOMANA_RELEASE_ED25519_PRIVATE_KEY` and `BOMANA_RELEASE_ED25519_PUBLIC_KEY` for every signed release build.
 - tag-driven release targets:
   - `vX.Y.Z`: full release (launcher + app packages)
   - `vX.Y.Z-app`: app packages only
   - `vX.Y.Z-launcher`: launcher only
 - `workflow_dispatch` also supports `build_target=all|app|launcher`.
-- `tools/deploy_update_assets.py` is the default Tencent/EdgeOne deployment path for locally built assets; it backs up `stats.db`/manifests, uploads app/launcher assets, writes versioned manifests, and verifies public endpoints.
-- `.github/workflows/deploy-manifests-to-server.yml` is manual-only fallback via `workflow_dispatch`; tag releases no longer auto-deploy to Tencent after GitHub Release creation.
+- `tools/deploy_update_assets.py` is the default Tencent/EdgeOne deployment path for locally built assets; it backs up `stats.db`/manifests, uploads app/launcher assets, writes versioned manifests, and verifies public endpoints with the release public key.
+- `.github/workflows/deploy-manifests-to-server.yml` is manual-only fallback via `workflow_dispatch`; tag releases no longer auto-deploy to Tencent after GitHub Release creation. The fallback rejects unsigned manifests before upload and verifies the public Tencent endpoints after deployment.
 
 ## Documentation Map
 - `README.md`: public landing page, install paths, feature overview, compliance statement

@@ -36,6 +36,9 @@
 - `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动器自更新、启动入口，并保留一个上一版回退槽
 - `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行包
 - `manifest_<Variant>.json`：版本、地址、SHA256、`min_launcher_version`、Ed25519 发布签名元数据
+- `launcher_manifest.json`：启动器版本、文件名、SHA256、文件大小、Ed25519 发布签名元数据
+
+启动器会先校验发布清单签名，再校验下载文件 SHA256。腾讯云/EdgeOne 服务只补下载 URL、来源和大小等派生字段，签名本身来自 GitHub Release 产物。
 
 #### 方式 B：源码运行（已安装 uv）
 

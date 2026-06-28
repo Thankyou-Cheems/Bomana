@@ -27,6 +27,18 @@ def test_tencent_deploy_workflow_is_manual_only() -> None:
     assert "Build and Release Bomana Portable" not in workflow
 
 
+def test_tencent_deploy_workflow_validates_signed_manifests() -> None:
+    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "validate_manifest_signature" in workflow
+    assert '.manifest_signature.algorithm == "ed25519"' in workflow
+    assert "Verify public update endpoints" in workflow
+    assert "PUBLIC_UPDATE_BASE_URL" in workflow
+    assert "verify_release_manifest_signature" in workflow
+
+
 def test_build_release_workflow_reads_version_from_metadata_without_dev_fallback() -> None:
     workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
 
@@ -40,6 +52,8 @@ def test_build_release_workflow_passes_manifest_signing_secret() -> None:
 
     assert "BOMANA_RELEASE_ED25519_PRIVATE_KEY" in workflow
     assert "${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}" in workflow
+    assert "BOMANA_RELEASE_ED25519_PUBLIC_KEY" in workflow
+    assert "${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}" in workflow
     assert "BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06" in workflow
 
 
@@ -97,6 +111,8 @@ def test_local_deploy_script_remote_stage_assets_are_filename_only() -> None:
     assert 'manifest["launcher_asset"]' in source
     assert "def require_manifest_signature" in source
     assert "missing manifest_signature" in source
+    assert "verify_release_manifest_signature" in source
+    assert "BOMANA_RELEASE_ED25519_PUBLIC_KEY" in source
 
 
 def test_legacy_build_fails_when_version_info_generation_fails() -> None:

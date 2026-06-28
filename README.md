@@ -228,6 +228,8 @@ GitHub 云端自动打包发布：
 - 推送标签 `vX.Y.Z-launcher`：仅构建并发布启动器
 - `workflow_dispatch` 手动触发时也可通过 `build_target` 选择 `all` / `app` / `launcher`
 - 不需要本地打包后手工上传文件
+- 发布构建必须配置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY` 与 `BOMANA_RELEASE_ED25519_PUBLIC_KEY` 两个 GitHub Secrets；构建会拒绝不匹配的签名密钥。
+- 腾讯云/EdgeOne 更新服务只转发 Release 清单里的 `manifest_signature`，不保存发布私钥；服务端可以补 `package_url`、`source_name`、`package_size` 等派生字段，但版本、文件名和 SHA256 必须来自签名覆盖的核心字段。
 
 
 #### 运行
@@ -529,3 +531,5 @@ Bomana 的独立更新统计服务（Docker/FastAPI）已迁移到以下仓库�
 - 路径：`services/bomana-update-service/`
 
 本仓库继续维护主程序与启动器；更新服务相关部署文档与迭代以 `bomana-worker` 为准。
+
+签名发布流程由本仓库生成带 Ed25519 `manifest_signature` 的 `manifest_<Variant>.json` 与 `launcher_manifest.json`，再由 `bomana-worker`/TencentCloudPublic 服务按当前部署路径暴露给启动器。服务端不重新签名，也不需要发布私钥；部署后应使用本仓库的 `tools/deploy_update_assets.py` 或 `deploy-manifests-to-server.yml` 校验公开接口返回体签名。

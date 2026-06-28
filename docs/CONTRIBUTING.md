@@ -184,14 +184,17 @@ bd close <issue-id> --reason "Completed" --json
 4. 根据发布目标做最少真实验证：
    - app 发布：启动器兼容性、下载/启动正常
    - launcher 发布：重查排队、保留一个 `app_previous/`、回退互换正常
-5. 推送标签：
+5. 确认 GitHub Secrets 已配置并成对匹配：
+   `BOMANA_RELEASE_ED25519_PRIVATE_KEY` / `BOMANA_RELEASE_ED25519_PUBLIC_KEY`
+6. 推送标签：
    - `vX.Y.Z`：完整发布
    - `vX.Y.Z-app`：仅应用包
    - `vX.Y.Z-launcher`：仅启动器
-6. GitHub Actions 会构建对应产物并创建/更新 Release
-7. 国内更新服务默认走本地直推，避免等待 Actions 二次 SSH 部署：
+7. GitHub Actions 会构建对应产物并创建/更新 Release；构建会签名 `manifest_<Variant>.json` 与 `launcher_manifest.json`
+8. 国内更新服务默认走本地直推，避免等待 Actions 二次 SSH 部署：
    `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
    需要兜底时，可手动运行 `deploy-manifests-to-server.yml` 的 `workflow_dispatch`
+9. 部署脚本会校验公开腾讯云/EdgeOne 接口返回的签名。服务端只转发 Release 清单签名并补 URL/大小/来源等派生字段，不应保存发布私钥。
 
 ### 有问题？
 
@@ -375,10 +378,13 @@ Manual 8111 smoke notes should cover:
 2. Bump `__version__` in `bomana/metadata.py`
 3. Update `PORTABLE_MIN_LAUNCHER_VERSION` in `bomana/metadata.py` if the app now requires newer launcher behavior
 4. Smoke test the relevant release path
-5. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
-6. Let GitHub Actions build and publish the assets
-7. Deploy Tencent/EdgeOne update assets locally by default:
+5. Confirm GitHub Secrets are configured as a matching pair:
+   `BOMANA_RELEASE_ED25519_PRIVATE_KEY` / `BOMANA_RELEASE_ED25519_PUBLIC_KEY`
+6. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
+7. Let GitHub Actions build, sign, and publish the assets
+8. Deploy Tencent/EdgeOne update assets locally by default:
    `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
    Use `deploy-manifests-to-server.yml` `workflow_dispatch` only as a fallback
+9. The deploy path verifies the public update endpoints with the release public key. The update service only forwards Release manifest signatures and adds URL/size/source fields; it must not store the release private key.
 
 

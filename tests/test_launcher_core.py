@@ -59,7 +59,10 @@ def test_release_manifest_signature_rejects_tampering() -> None:
     public_key = launcher_core.ed25519_public_key_from_private_key(private_key)
     manifest = {
         "schema_version": 1,
+        "channel": "Enhanced",
         "app_version": "6.14.4",
+        "min_launcher_version": "2.0.0",
+        "entrypoint": "Bomana.pyw",
         "package_asset": "Bomana_app_Enhanced_v6.14.4.zip",
         "package_sha256": "a" * 64,
     }
@@ -68,6 +71,12 @@ def test_release_manifest_signature_rejects_tampering() -> None:
         private_key,
         key_id="test-key",
     )
+
+    launcher_core.verify_release_manifest_signature(
+        signed,
+        public_keys={"test-key": public_key},
+    )
+    signed["package_url"] = "https://example.invalid/app.zip"
 
     launcher_core.verify_release_manifest_signature(
         signed,

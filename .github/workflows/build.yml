@@ -224,6 +224,7 @@ jobs:
         shell: pwsh
         env:
           BOMANA_RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}
+          BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
           BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
         run: |
           uv run python tools/build_portable.py `
@@ -271,6 +272,7 @@ jobs:
         shell: pwsh
         env:
           BOMANA_RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}
+          BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
           BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
         run: |
           uv run python tools/build_portable.py `

@@ -50,6 +50,7 @@ APP_DIR = "bomana"
 UNIVERSAL_LAUNCHER_NAME = "Bomana_launcher"
 BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
 SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
+SIGNING_PUBLIC_KEY_ENV = "BOMANA_RELEASE_ED25519_PUBLIC_KEY"
 SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
 
 
@@ -110,6 +111,14 @@ def release_signing_key_context() -> tuple[str, str]:
     private_key = os.environ.get(SIGNING_PRIVATE_KEY_ENV, "").strip()
     if not private_key:
         raise RuntimeError(f"{SIGNING_PRIVATE_KEY_ENV} is required to sign release manifests")
+    expected_public_key = os.environ.get(SIGNING_PUBLIC_KEY_ENV, "").strip()
+    if not expected_public_key:
+        raise RuntimeError(
+            f"{SIGNING_PUBLIC_KEY_ENV} is required to pin the release signing public key"
+        )
+    actual_public_key = ed25519_public_key_from_private_key(private_key)
+    if actual_public_key != expected_public_key:
+        raise RuntimeError(f"{SIGNING_PRIVATE_KEY_ENV} does not match {SIGNING_PUBLIC_KEY_ENV}")
     key_id = os.environ.get(SIGNING_KEY_ID_ENV, RELEASE_MANIFEST_DEFAULT_KEY_ID).strip()
     if not key_id:
         raise RuntimeError(f"{SIGNING_KEY_ID_ENV} must not be empty")
@@ -300,6 +309,8 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         "pystray._win32",
         "--hidden-import",
         "winsound",
+        "--hidden-import",
+        "bomana.release_public_keys",
         "--collect-submodules",
         "PIL",
         "--collect-submodules",

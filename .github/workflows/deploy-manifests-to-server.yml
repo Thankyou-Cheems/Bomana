@@ -19,6 +19,11 @@ jobs:
       deploy_app: ${{ steps.resolve.outputs.deploy_app }}
       deploy_launcher: ${{ steps.resolve.outputs.deploy_launcher }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: Resolve release and download update assets
         id: resolve
         shell: bash
@@ -60,6 +65,15 @@ jobs:
             return 0
           }
 
+          validate_manifest_signature() {
+            local path="$1"
+            jq -e '
+              .manifest_signature.algorithm == "ed25519" and
+              (.manifest_signature.key_id | type == "string" and length > 0) and
+              (.manifest_signature.signature | type == "string" and length > 0)
+            ' "$path" >/dev/null
+          }
+
           app_complete="true"
           for CH in Enhanced Standard Lite; do
             MANIFEST_NAME="manifest_${CH}.json"
@@ -70,6 +84,7 @@ jobs:
               break
             fi
             download_asset "$MANIFEST_NAME" "stage/manifests/$MANIFEST_NAME" || { app_complete="false"; break; }
+            validate_manifest_signature "stage/manifests/$MANIFEST_NAME" || { echo "Unsigned app manifest: $MANIFEST_NAME"; app_complete="false"; break; }
             download_asset "$ZIP_NAME" "stage/downloads/$ZIP_NAME" || { app_complete="false"; break; }
             download_asset "$CHECKSUM_NAME" "stage/downloads/$CHECKSUM_NAME" || true
           done
@@ -85,9 +100,14 @@ jobs:
           if [[ -n "$LAUNCHER_NAME" && "$LAUNCHER_NAME" != "null" ]]; then
             if download_asset "$LAUNCHER_NAME" "stage/downloads/$LAUNCHER_NAME" && \
                download_asset "launcher_manifest.json" "stage/root/launcher_manifest.json"; then
-              SHOULD_DEPLOY="true"
-              DEPLOY_LAUNCHER="true"
-              download_asset "checksums_launcher.txt" "stage/downloads/checksums_launcher.txt" || true
+              if validate_manifest_signature "stage/root/launcher_manifest.json"; then
+                SHOULD_DEPLOY="true"
+                DEPLOY_LAUNCHER="true"
+                download_asset "checksums_launcher.txt" "stage/downloads/checksums_launcher.txt" || true
+              else
+                echo "Unsigned launcher manifest: launcher_manifest.json"
+                rm -f "stage/downloads/$LAUNCHER_NAME" stage/root/launcher_manifest.json stage/downloads/checksums_launcher.txt
+              fi
             else
               rm -f "stage/downloads/$LAUNCHER_NAME" stage/root/launcher_manifest.json stage/downloads/checksums_launcher.txt
             fi
@@ -257,9 +277,87 @@ jobs:
           if [[ "$DEPLOY_APP" == "true" ]]; then
             ls -l /opt/stacks/bomana-update/data/manifests/manifest_*.json
             ls -l /opt/stacks/bomana-update/data/downloads/Bomana_app_*.zip
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path in Path("/opt/stacks/bomana-update/data/manifests").glob("manifest_*.json"):
+              data = json.loads(path.read_text(encoding="utf-8"))
+              sig = data.get("manifest_signature")
+              if not isinstance(sig, dict) or sig.get("algorithm") != "ed25519":
+                  raise SystemExit(f"missing Ed25519 manifest_signature: {path}")
+          PY
           fi
           if [[ "$DEPLOY_LAUNCHER" == "true" ]]; then
             ls -l /opt/stacks/bomana-update/data/launcher_manifest.json
             ls -l /opt/stacks/bomana-update/data/downloads/Bomana_launcher_v*.exe
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("/opt/stacks/bomana-update/data/launcher_manifest.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          sig = data.get("manifest_signature")
+          if not isinstance(sig, dict) or sig.get("algorithm") != "ed25519":
+              raise SystemExit(f"missing Ed25519 manifest_signature: {path}")
+          PY
           fi
           EOF
+
+      - name: Verify public update endpoints
+        if: steps.resolve.outputs.should_deploy == 'true'
+        shell: bash
+        env:
+          DEPLOY_APP: ${{ steps.resolve.outputs.deploy_app }}
+          DEPLOY_LAUNCHER: ${{ steps.resolve.outputs.deploy_launcher }}
+          PUBLIC_UPDATE_BASE_URL: https://bomanaupdate.ruikang.wang
+          BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
+          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
+        run: |
+          set -euo pipefail
+          verify_signed_payload() {
+            local label="$1"
+            local url="$2"
+            local expected_field="$3"
+            local expected_value="$4"
+            python3 - "$label" "$url" "$expected_field" "$expected_value" <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          from bomana.launcher_core import verify_release_manifest_signature
+
+          label, url, expected_field, expected_value = sys.argv[1:5]
+          public_key = os.environ.get("BOMANA_RELEASE_ED25519_PUBLIC_KEY", "").strip()
+          key_id = os.environ.get("BOMANA_RELEASE_SIGNING_KEY_ID", "").strip()
+          if not public_key or not key_id:
+              raise SystemExit("missing release signing public key configuration")
+          with urllib.request.urlopen(url, timeout=20) as response:
+              payload = json.loads(response.read().decode("utf-8"))
+          if str(payload.get(expected_field, "")) != expected_value:
+              raise SystemExit(f"{label} {expected_field} mismatch: {payload}")
+          verify_release_manifest_signature(
+              payload,
+              manifest_label=f"{label} ",
+              public_keys={key_id: public_key},
+          )
+          print(f"verified_signed_{label}={expected_value}")
+          PY
+          }
+          if [[ "$DEPLOY_APP" == "true" ]]; then
+            for CH in Enhanced Standard Lite; do
+              expected_version="$(jq -r '.app_version' "stage/manifests/manifest_${CH}.json")"
+              verify_signed_payload \
+                "app_${CH}" \
+                "${PUBLIC_UPDATE_BASE_URL}/api/v1/version?channel=${CH}&local_version=0.0.0&launcher_version=999.0.0" \
+                "app_version" \
+                "$expected_version"
+            done
+          fi
+          if [[ "$DEPLOY_LAUNCHER" == "true" ]]; then
+            expected_launcher="$(jq -r '.launcher_version' stage/root/launcher_manifest.json)"
+            verify_signed_payload \
+              "launcher" \
+              "${PUBLIC_UPDATE_BASE_URL}/api/v1/launcher?launcher_version=0.0.0" \
+              "launcher_version" \
+              "$expected_launcher"
+          fi

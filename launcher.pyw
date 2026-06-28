@@ -1248,7 +1248,7 @@ def _fetch_launcher_manifest_from_primary(
         _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
     )
     package_sha256 = _require_remote_checksum(
-        payload.get("package_sha256", ""),
+        payload.get("launcher_sha256", payload.get("package_sha256", "")),
         artifact_label="国内启动器更新清单 ",
     )
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
