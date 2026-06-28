@@ -46,6 +46,15 @@ function Resolve-FullPath {
     return [System.IO.Path]::GetFullPath($Path)
 }
 
+function New-UnicodeText {
+    param([Parameter(Mandatory = $true)][int[]]$CodePoints)
+
+    $chars = foreach ($codePoint in $CodePoints) {
+        [char]$codePoint
+    }
+    return -join $chars
+}
+
 function Assert-PathWithin {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -262,10 +271,10 @@ function New-SmokeEnvironment {
         [Parameter(Mandatory = $true)][string]$VariantName
     )
 
-    $profileRoot = Join-Path $SmokeRootPath "user profile 用户"
+    $profileRoot = Join-Path $SmokeRootPath ("user profile " + $script:TextUser)
     $appData = Join-Path $profileRoot "AppData\Roaming"
     $localAppData = Join-Path $profileRoot "AppData\Local"
-    $tempRoot = Join-Path $SmokeRootPath "temp 临时"
+    $tempRoot = Join-Path $SmokeRootPath ("temp " + $script:TextTemp)
     foreach ($directory in @($profileRoot, $appData, $localAppData, $tempRoot)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
@@ -293,8 +302,10 @@ function New-SmokeEnvironment {
         BOMANA_CHANNEL = $VariantName.ToLowerInvariant()
         BOMANA_UPDATE_BASE_URL = "http://127.0.0.1:9"
         BOMANA_PRIMARY_ALLOW_PACKAGE_DOWNLOAD = "0"
-        BOMANA_LAUNCHER_DATA_DIR = Join-Path $SmokeRootPath "launcher data 数据"
-        BOMANA_LAUNCHER_DOWNLOAD_DIR = Join-Path $SmokeRootPath "downloads 下载"
+        BOMANA_LAUNCHER_DATA_DIR = Join-Path $SmokeRootPath ("launcher data " + $script:TextData)
+        BOMANA_LAUNCHER_DOWNLOAD_DIR = Join-Path $SmokeRootPath (
+            "downloads " + $script:TextDownload
+        )
         BOMANA_PACKAGED_LAUNCHER_SMOKE = "1"
     }
 }
@@ -387,7 +398,7 @@ function Invoke-UiAutomationLaunchButton {
         $buttons = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
         foreach ($button in $buttons) {
             $name = [string]$button.Current.Name
-            if ($name -match "^启动(?!器)") {
+            if ($name -match $script:LaunchButtonPattern) {
                 $pattern = $button.GetCurrentPattern(
                     [System.Windows.Automation.InvokePattern]::Pattern
                 )
@@ -409,7 +420,7 @@ function Invoke-Win32LaunchButton {
     foreach ($child in [BomanaSmokeWin32]::ChildWindows($WindowHandle)) {
         $text = [BomanaSmokeWin32]::WindowText($child)
         $className = [BomanaSmokeWin32]::ClassName($child)
-        if ($className -like "*Button*" -and $text -match "^启动(?!器)") {
+        if ($className -like "*Button*" -and $text -match $script:LaunchButtonPattern) {
             [BomanaSmokeWin32]::SetForegroundWindow($WindowHandle) | Out-Null
             [BomanaSmokeWin32]::SendMessage($child, $bmClick, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
             return $true
@@ -528,15 +539,31 @@ function Stop-SmokeProcess {
 
 Assert-Windows
 
+$script:TextChinese = New-UnicodeText @(0x4e2d, 0x6587)
+$script:TextPath = New-UnicodeText @(0x8def, 0x5f84)
+$script:TextLauncher = New-UnicodeText @(0x542f, 0x52a8, 0x5668)
+$script:TextReleaseAssets = New-UnicodeText @(0x53d1, 0x5e03, 0x4ea7, 0x7269)
+$script:TextArtifacts = New-UnicodeText @(0x4ea7, 0x7269)
+$script:TextUser = New-UnicodeText @(0x7528, 0x6237)
+$script:TextTemp = New-UnicodeText @(0x4e34, 0x65f6)
+$script:TextData = New-UnicodeText @(0x6570, 0x636e)
+$script:TextDownload = New-UnicodeText @(0x4e0b, 0x8f7d)
+$script:LaunchButtonPattern = "^" + (New-UnicodeText @(0x542f, 0x52a8)) +
+    "(?!" + (New-UnicodeText @(0x5668)) + ")"
+
 $repoRoot = Resolve-FullPath (Join-Path $PSScriptRoot "..\..")
 $createdSmokeRoot = $false
 if ([string]::IsNullOrWhiteSpace($SmokeRoot)) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $SmokeRoot = Join-Path ([System.IO.Path]::GetTempPath()) "Bomana packaged smoke 中文 路径 $stamp"
+    $SmokeRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
+        "Bomana packaged smoke " + $script:TextChinese + " " + $script:TextPath + " $stamp"
+    )
     $createdSmokeRoot = $true
 }
 $workRoot = Resolve-FullPath $SmokeRoot
-$installRoot = Join-Path $workRoot "install target 启动器 路径"
+$installRoot = Join-Path $workRoot (
+    "install target " + $script:TextLauncher + " " + $script:TextPath
+)
 $launcherProcess = $null
 $success = $false
 $failed = $false
@@ -554,7 +581,7 @@ try {
     }
     else {
         if ([string]::IsNullOrWhiteSpace($ArtifactDir)) {
-            $ArtifactDir = Join-Path $workRoot "build output 产物"
+            $ArtifactDir = Join-Path $workRoot ("build output " + $script:TextArtifacts)
         }
         $uv = Get-Command uv -ErrorAction SilentlyContinue
         if ($null -eq $uv) {
@@ -584,7 +611,7 @@ try {
     $artifacts = Resolve-ReleaseArtifacts -Directory $ArtifactDir -VariantName $Variant
 
     Write-Host "[4/7] Copying packaged launcher and app assets into hostile path"
-    $assetCopyRoot = Join-Path $installRoot "release assets 发布产物"
+    $assetCopyRoot = Join-Path $installRoot ("release assets " + $script:TextReleaseAssets)
     New-Item -ItemType Directory -Path $assetCopyRoot -Force | Out-Null
     $launcherTarget = Join-Path $installRoot ([System.IO.Path]::GetFileName($artifacts.LauncherExe))
     Copy-Item -LiteralPath $artifacts.LauncherExe -Destination $launcherTarget -Force

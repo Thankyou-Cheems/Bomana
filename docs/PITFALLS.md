@@ -60,6 +60,11 @@ implementation plans belong in git history, not here.
   Cause: Windows CI console encoding can be cp1252, and GitHub normalizes non-ASCII/special characters in release asset names
   Fix/Workaround: log through encoding-safe output and keep release asset names ASCII-only; put localized text in release notes
 
+- Context: Windows PowerShell 5.1 parser checks for release smoke scripts
+  Symptom: GitHub Actions failed while parsing a `.ps1` file with errors far from the real source line, such as unexpected `\System32` or broken here-strings
+  Cause: Windows PowerShell 5.1 can decode UTF-8-without-BOM scripts through the runner's ANSI code page, so non-ASCII literals can corrupt later string parsing
+  Fix/Workaround: keep committed `.ps1` source ASCII-safe and construct required localized path/button text at runtime with explicit Unicode code points; keep a parser test that runs under Windows PowerShell
+
 - Context: running `tools/build_portable.py` builds concurrently
   Symptom: `config.py` remained dirty after build, or older build scripts failed while reading version literals from `config.py`
   Cause: variant packaging temporarily patches `bomana/config.py`; version metadata now lives in `bomana/metadata.py`

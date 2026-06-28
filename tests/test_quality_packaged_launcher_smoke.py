@@ -30,6 +30,16 @@ def test_packaged_launcher_smoke_script_parses_with_powershell() -> None:
     )
 
 
+def test_packaged_launcher_smoke_script_source_is_ascii_safe_for_windows_powershell() -> None:
+    source = read_script()
+
+    assert all(ord(char) < 128 for char in source)
+    assert "New-UnicodeText" in source
+    assert "0x4e2d, 0x6587" in source
+    assert "0x8def, 0x5f84" in source
+    assert "0x542f, 0x52a8, 0x5668" in source
+
+
 def test_packaged_launcher_smoke_builds_and_requires_signed_artifacts() -> None:
     source = read_script()
 
@@ -56,9 +66,12 @@ def test_packaged_launcher_smoke_builds_and_requires_signed_artifacts() -> None:
 def test_packaged_launcher_smoke_stages_hostile_path_and_app_layout() -> None:
     source = read_script()
 
-    assert "Bomana packaged smoke 中文 路径" in source
-    assert "install target 启动器 路径" in source
-    assert "release assets 发布产物" in source
+    assert "Bomana packaged smoke " in source
+    assert "$script:TextChinese" in source
+    assert "$script:TextPath" in source
+    assert "install target " in source
+    assert "$script:TextLauncher" in source
+    assert "$script:TextReleaseAssets" in source
     assert "[System.IO.Compression.ZipFile]::ExtractToDirectory" in source
     assert '"app"' in source
     assert '"Bomana.pyw"' in source
@@ -80,7 +93,8 @@ def test_packaged_launcher_smoke_poisons_python_for_packaged_launch() -> None:
     assert "PYTHONPATH" in source
     assert "PYTHONNOUSERSITE" in source
     assert "PYTHONUSERBASE" in source
-    assert "user profile 用户" in source
+    assert "user profile " in source
+    assert "$script:TextUser" in source
     assert "LOCALAPPDATA" in source
     assert "APPDATA" in source
     assert "TEMP = $tempRoot" in source
@@ -96,8 +110,9 @@ def test_packaged_launcher_smoke_verifies_gui_handoff_contract() -> None:
     assert "UIAutomationClient" in source
     assert "BomanaSmokeWin32" in source
     assert "Wait-AndInvokeLaunchButton" in source
-    assert 'if ($name -match "^启动(?!器)")' in source
-    assert 'if ($className -like "*Button*" -and $text -match "^启动(?!器)")' in source
+    assert "$script:LaunchButtonPattern" in source
+    assert "0x542f, 0x52a8" in source
+    assert "0x5668" in source
     assert "Wait-AppWindow" in source
     assert '$title -eq "WT Timer"' in source
     assert "interactive Windows desktop" in source
