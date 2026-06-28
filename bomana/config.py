@@ -817,6 +817,9 @@ class BallisticPhysicsParams:
     BRAKE_DEPLOY_DELAY = 1.0
     HIGH_DRAG_BRAKE_CXK_MIN = 10.0
     HIGH_DRAG_OPEN_TIME_SEC = 0.12
+    HIGH_DRAG_RELEASE_LEAD_BASE_SEC = 0.30
+    HIGH_DRAG_RELEASE_LEAD_PER_ALT_M = 0.00016
+    HIGH_DRAG_RELEASE_LEAD_MAX_SEC = 1.50
 
     # ==================== 投放限制 ====================
     RELEASE_MAX_MACH = 1.0

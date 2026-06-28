@@ -225,6 +225,16 @@ def _calculate_trajectory_advanced(h, vx, vz0, g, bomb_params, range_mult, time_
             vx_curr = prev_vx + (vx_curr - prev_vx) * ratio
             vz_curr = prev_vz + (vz_curr - prev_vz) * ratio
 
+    if str(bomb_params.get("prediction_kind", "") or "") == "high_drag" or (
+        stab_enabled and brake_cx_k >= BallisticPhysicsParams.HIGH_DRAG_BRAKE_CXK_MIN
+    ):
+        lead_sec = min(
+            BallisticPhysicsParams.HIGH_DRAG_RELEASE_LEAD_MAX_SEC,
+            BallisticPhysicsParams.HIGH_DRAG_RELEASE_LEAD_BASE_SEC
+            + max(0.0, h) * BallisticPhysicsParams.HIGH_DRAG_RELEASE_LEAD_PER_ALT_M,
+        )
+        x += max(0.0, vx) * lead_sec
+
     impact_speed = math.sqrt(vx_curr**2 + vz_curr**2)
     return t * time_mult, x * range_mult, impact_speed
 

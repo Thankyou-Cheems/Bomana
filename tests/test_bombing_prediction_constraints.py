@@ -153,3 +153,22 @@ def test_high_drag_database_profile_keeps_release_cue_from_lagging_too_far() -> 
     )
 
     assert 450.0 <= bomb_range_m <= 650.0
+
+
+def test_high_drag_release_lead_grows_with_altitude() -> None:
+    snakeye_params = BombConfig.get_bomb_physics_params("us_500lb_mk_82_ldgp_snakeye")
+
+    _time_2km, range_2km, _speed_2km = calculate_bomb_trajectory(
+        release_alt_m=2000.0,
+        release_speed_ms=220.0,
+        bomb_params=snakeye_params,
+    )
+    _time_7km, range_7km, _speed_7km = calculate_bomb_trajectory(
+        release_alt_m=7000.0,
+        release_speed_ms=220.0,
+        bomb_params=snakeye_params,
+    )
+
+    assert 620.0 <= range_2km <= 760.0
+    assert 850.0 <= range_7km <= 1050.0
+    assert range_7km - range_2km >= 180.0
