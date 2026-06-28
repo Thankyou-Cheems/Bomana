@@ -224,6 +224,20 @@ jobs:
           ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" \
             "mkdir -p '$STAGE_DIR' && chmod 700 '$STAGE_DIR'"
 
+          remote_existing_path() {
+            case "$1" in
+              downloads/* | manifests/*)
+                printf '/opt/stacks/bomana-update/data/%s' "$1"
+                ;;
+              root/launcher_manifest.json)
+                printf '/opt/stacks/bomana-update/data/launcher_manifest.json'
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
           mapfile -t stage_files < <(cd stage && find . -type f | sort)
           if [[ "${#stage_files[@]}" -eq 0 ]]; then
             echo "ERROR: no staged files found to upload"
@@ -239,6 +253,16 @@ jobs:
             size_h="$(du -h "$local_path" | cut -f1)"
             echo "[$((idx + 1))/$total_files] Uploading $rel_path ($size_h)"
             ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "mkdir -p '$remote_dir'"
+            local_sha="$(sha256sum "$local_path" | awk '{print $1}')"
+            existing_path="$(remote_existing_path "$rel_path" || true)"
+            if [[ -n "$existing_path" ]]; then
+              remote_sha="$(ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "test -r '$existing_path' && sha256sum '$existing_path' | awk '{print \$1}' || true")"
+              if [[ "$remote_sha" == "$local_sha" ]]; then
+                echo "[$((idx + 1))/$total_files] Reusing remote $rel_path ($size_h)"
+                ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "cp -f '$existing_path' '$remote_path'"
+                continue
+              fi
+            fi
             rsync -aW --partial --human-readable --progress \
               -e "ssh ${SSH_OPTS[*]}" \
               "$local_path" "$SERVER_USER@$SERVER_HOST:$remote_path"
@@ -307,7 +331,14 @@ jobs:
             mapfile -t app_manifests < <(compgen -G "$STAGE_DIR/manifests/manifest_*.json" || true)
             mapfile -t app_archives < <(compgen -G "$STAGE_DIR/downloads/Bomana_app_*.zip" || true)
             mapfile -t app_checksums < <(compgen -G "$STAGE_DIR/downloads/checksums_app_*.txt" || true)
-            install_many "$MANIFEST_DIR" "${app_manifests[@]}"
+            for manifest in "${app_manifests[@]}"; do
+              manifest_name="$(basename "$manifest")"
+              channel="${manifest_name#manifest_}"
+              channel="${channel%.json}"
+              app_version="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["app_version"])' "$manifest")"
+              install_file "$manifest" "$MANIFEST_DIR/$manifest_name"
+              install_file "$manifest" "$MANIFEST_DIR/manifest_${channel}_v${app_version}.json"
+            done
             install_many "$DOWNLOAD_DIR" "${app_archives[@]}"
             if [[ "${#app_checksums[@]}" -gt 0 ]]; then
               install_many "$DOWNLOAD_DIR" "${app_checksums[@]}"
@@ -320,7 +351,10 @@ jobs:
             if [[ -f "$STAGE_DIR/downloads/checksums_launcher.txt" ]]; then
               install_many "$DOWNLOAD_DIR" "$STAGE_DIR/downloads/checksums_launcher.txt"
             fi
-            install_file "$STAGE_DIR/root/launcher_manifest.json" "$LAUNCHER_MANIFEST"
+            launcher_manifest_src="$STAGE_DIR/root/launcher_manifest.json"
+            launcher_version="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["launcher_version"])' "$launcher_manifest_src")"
+            install_file "$launcher_manifest_src" "$LAUNCHER_MANIFEST"
+            install_file "$launcher_manifest_src" "$(dirname "$LAUNCHER_MANIFEST")/launcher_manifest_v${launcher_version}.json"
           fi
 
           rm -rf "$(dirname "$STAGE_DIR")"

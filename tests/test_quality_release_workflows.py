@@ -63,6 +63,24 @@ def test_tencent_deploy_remote_verify_scopes_current_release_manifests() -> None
     assert "ls -l /opt/stacks/bomana-update/data/manifests/manifest_*.json" not in workflow
 
 
+def test_tencent_deploy_syncs_versioned_manifests_and_reuses_remote_assets() -> None:
+    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "remote_existing_path()" in workflow
+    assert "sha256sum '$existing_path'" in workflow
+    assert "Reusing remote $rel_path" in workflow
+    assert (
+        'install_file "$manifest" "$MANIFEST_DIR/manifest_${channel}_v${app_version}.json"'
+        in workflow
+    )
+    assert (
+        'install_file "$launcher_manifest_src" "$(dirname "$LAUNCHER_MANIFEST")/'
+        'launcher_manifest_v${launcher_version}.json"'
+    ) in workflow
+
+
 def test_build_release_workflow_reads_version_from_metadata_without_dev_fallback() -> None:
     workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
 
