@@ -232,6 +232,56 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             parsed["package_url"], "https://bomanaupdate.ruikang.wang/downloads/launcher.exe"
         )
 
+    def test_launcher_manifest_rejects_app_signature_with_launcher_fields(self) -> None:
+        release = {
+            "tag_name": "v9.9.9-launcher",
+            "assets": [
+                {
+                    "name": "launcher_manifest.json",
+                    "browser_download_url": "https://example.invalid/launcher_manifest.json",
+                },
+                {
+                    "name": "Bomana_launcher_v9.9.9.exe",
+                    "browser_download_url": "https://example.invalid/launcher.exe",
+                    "size": 456,
+                },
+            ],
+        }
+        mixed = self.signed_manifest(
+            {
+                "schema_version": 1,
+                "channel": "Enhanced",
+                "app_version": "2.0.0",
+                "min_launcher_version": "2.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+                "package_sha256": "a" * 64,
+            }
+        )
+        mixed.update(
+            {
+                "launcher_version": "9.9.9",
+                "launcher_asset": "Bomana_launcher_v9.9.9.exe",
+                "launcher_sha256": "b" * 64,
+                "launcher_size_bytes": 456,
+            }
+        )
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_json", return_value=mixed),
+            self.assertRaisesRegex(RuntimeError, "不能同时包含"),
+        ):
+            self.launcher._launcher_manifest_from_github_release(release)
+
+        mixed["package_url"] = "/downloads/launcher.exe"
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_primary_json_payload", return_value=mixed),
+            self.assertRaisesRegex(RuntimeError, "不能同时包含"),
+        ):
+            self.launcher._fetch_launcher_manifest_from_primary({"install_id": "abc"})
+
     def test_primary_app_manifest_requires_release_signature(self) -> None:
         payload = {
             "app_version": "2.0.0",
@@ -314,6 +364,32 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "https://example.invalid/launcher.exe",
             timeout_sec=self.launcher.NET_TIMEOUT_SEC,
         )
+
+    def test_check_continues_when_launcher_manifest_check_fails(self) -> None:
+        service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
+        app_manifest = {
+            "remote_version": "2.0.0",
+            "min_launcher_version": self.launcher.LAUNCHER_VERSION,
+            "package_url": "https://example.invalid/app.zip",
+            "package_sha256": "abc",
+            "package_size": "123",
+            "source_name": "GitHub",
+        }
+
+        with (
+            patch.object(service, "resolve_app_manifest", return_value=("1.0.0", app_manifest)),
+            patch.object(
+                service,
+                "resolve_launcher_manifest",
+                side_effect=RuntimeError("launcher offline"),
+            ),
+        ):
+            info = service.check()
+
+        self.assertTrue(info["update_available"])
+        self.assertFalse(info["app_requires_launcher_update"])
+        self.assertFalse(info["launcher_update_available"])
+        self.assertEqual(info["launcher_check_warning"], "launcher offline")
 
     def test_check_propagates_resolver_failure_without_network_fallback_hiding_it(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
@@ -446,6 +522,113 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertEqual(requests[0][0].headers["Range"], "bytes=3-")
         self.assertEqual(progress[-1], (6, 6))
 
+    def test_download_dir_falls_back_when_user_downloads_is_not_writable(self) -> None:
+        user_downloads = self.base / "readonly-downloads"
+        data_root = self.base / "data-root"
+        fallback_downloads = data_root / self.launcher.DOWNLOAD_DIR_NAME
+
+        def can_write(path: Path) -> bool:
+            return path == fallback_downloads
+
+        with (
+            patch.object(self.launcher, "_user_downloads_dir", return_value=user_downloads),
+            patch.object(self.launcher, "_launcher_data_root", return_value=data_root),
+            patch.object(self.launcher, "_can_write_dir", side_effect=can_write),
+        ):
+            download_dir = self.launcher._launcher_download_dir(self.base)
+
+        self.assertEqual(download_dir, fallback_downloads)
+
+    def test_app_install_preflight_runs_before_download(self) -> None:
+        manifest = {
+            "remote_version": "2.0.0",
+            "min_launcher_version": self.launcher.LAUNCHER_VERSION,
+            "package_url": "https://example.invalid/app.zip",
+            "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+            "package_sha256": "a" * 64,
+            "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+        }
+
+        with (
+            patch.object(
+                self.launcher,
+                "_assert_app_install_dir_writable",
+                side_effect=RuntimeError("当前启动器目录不可写"),
+            ),
+            patch.object(self.launcher, "_download_to_file") as download,
+            self.assertRaisesRegex(RuntimeError, "当前启动器目录不可写"),
+        ):
+            self.launcher._download_update_from_manifest(self.base, manifest)
+
+        download.assert_not_called()
+
+    def test_download_app_update_preserves_verified_package_in_download_dir(self) -> None:
+        package_bytes = make_app_zip("2.0.0")
+        package_sha = self.launcher._sha256_bytes(package_bytes)
+        download_dir = self.base / "visible-downloads"
+        manifest = {
+            "remote_version": "2.0.0",
+            "min_launcher_version": self.launcher.LAUNCHER_VERSION,
+            "package_url": "https://example.invalid/app.zip",
+            "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+            "package_sha256": package_sha,
+            "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+            "source_name": "GitHub",
+        }
+        statuses = []
+
+        def fake_open(_req, timeout, use_system_proxy=None):
+            return FakeResponse(package_bytes, headers={"Content-Length": str(len(package_bytes))})
+
+        with (
+            patch.dict(os.environ, {self.launcher.DOWNLOAD_DIR_ENV_NAME: str(download_dir)}),
+            patch.object(self.launcher, "_open_url", side_effect=fake_open),
+        ):
+            final_version, _source = self.launcher._download_update_from_manifest(
+                self.base,
+                manifest,
+                status_cb=lambda *args: statuses.append(args),
+            )
+
+        self.assertEqual(final_version, "2.0.0")
+        self.assertEqual(
+            self.launcher._read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "2.0.0",
+        )
+        cached = list(download_dir.glob("Bomana_app_*"))
+        self.assertEqual(len(cached), 1)
+        self.assertEqual(cached[0].read_bytes(), package_bytes)
+        self.assertTrue(any(str(cached[0]) in event[1] for event in statuses))
+
+    def test_download_app_hash_mismatch_preserves_existing_app_and_removes_bad_file(self) -> None:
+        self.write_current_app("1.0.0")
+        package_bytes = make_app_zip("2.0.0")
+        download_dir = self.base / "visible-downloads"
+        manifest = {
+            "remote_version": "2.0.0",
+            "min_launcher_version": self.launcher.LAUNCHER_VERSION,
+            "package_url": "https://example.invalid/app.zip",
+            "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+            "package_sha256": "0" * 64,
+            "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+        }
+
+        def fake_open(_req, timeout, use_system_proxy=None):
+            return FakeResponse(package_bytes, headers={"Content-Length": str(len(package_bytes))})
+
+        with (
+            patch.dict(os.environ, {self.launcher.DOWNLOAD_DIR_ENV_NAME: str(download_dir)}),
+            patch.object(self.launcher, "_open_url", side_effect=fake_open),
+            self.assertRaisesRegex(RuntimeError, "SHA256 校验失败"),
+        ):
+            self.launcher._download_update_from_manifest(self.base, manifest)
+
+        self.assertEqual(
+            self.launcher._read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "1.0.0",
+        )
+        self.assertFalse(list(download_dir.glob("Bomana_app_*")))
+
     def test_launcher_target_dir_precheck_uses_probe_rename(self) -> None:
         target = self.base / "BomanaLauncher.exe"
 
@@ -482,7 +665,38 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertIn("Copy-Item -LiteralPath $staged -Destination $replacement -Force", script)
         self.assertIn("Move-Item -LiteralPath $backup -Destination $target", script)
         self.assertIn("新版启动器文件保留在", script)
-        self.assertIn("if ($replaceSucceeded)", script)
+        self.assertIn("Start-Process -FilePath $target -WorkingDirectory", script)
+        self.assertIn("-PassThru", script)
+        self.assertIn("$restartSucceeded", script)
+        self.assertIn("if ($replaceSucceeded -and $restartSucceeded)", script)
+
+    def test_launcher_self_update_script_preserves_unicode_paths(self) -> None:
+        unicode_root = self.base / "中文路径"
+        data_root = unicode_root / "数据"
+        work_dir = unicode_root / "临时更新"
+        target = unicode_root / "Bomana启动器.exe"
+        work_dir.mkdir(parents=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"old")
+        launched = []
+
+        with (
+            patch.dict(os.environ, {"BOMANA_LAUNCHER_DATA_DIR": str(data_root)}),
+            patch.object(sys, "frozen", True, create=True),
+            patch.object(sys, "executable", str(target)),
+            patch.object(self.launcher.tempfile, "mkdtemp", return_value=str(work_dir)),
+            patch.object(
+                self.launcher,
+                "_launch_updater_script",
+                side_effect=lambda script_path: launched.append(Path(script_path)),
+            ),
+        ):
+            self.launcher._stage_launcher_self_update(self.base, b"new", "3.0.0")
+
+        script = launched[0].read_text(encoding="utf-8-sig")
+        self.assertIn("中文路径", script)
+        self.assertIn("Bomana启动器.exe", script)
+        self.assertNotIn("\\u", script)
 
     def test_fresh_lock_blocks_install_and_preserves_existing_app(self) -> None:
         self.write_current_app("1.0.0")

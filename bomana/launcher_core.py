@@ -334,14 +334,29 @@ _LAUNCHER_MANIFEST_SIGNATURE_FIELDS = (
 )
 
 
-def _manifest_signature_core(manifest: dict[str, Any]) -> dict[str, Any]:
+def _manifest_signature_core(
+    manifest: dict[str, Any],
+    *,
+    expected_kind: str | None = None,
+) -> dict[str, Any]:
     unsigned_manifest = _without_manifest_signature(manifest)
-    if "app_version" in unsigned_manifest:
+    kind = str(expected_kind or "").strip().lower()
+    has_app_version = "app_version" in unsigned_manifest
+    has_launcher_version = "launcher_version" in unsigned_manifest
+    if has_app_version and has_launcher_version:
+        raise RuntimeError("发布清单不能同时包含应用和启动器版本字段")
+    if kind and kind not in ("app", "launcher"):
+        raise RuntimeError("发布清单签名类型不支持")
+    if kind == "app" or (not kind and has_app_version):
         fields = _APP_MANIFEST_SIGNATURE_FIELDS
         label = "应用发布清单"
-    elif "launcher_version" in unsigned_manifest:
+        if not has_app_version:
+            raise RuntimeError("应用发布清单缺少 app_version")
+    elif kind == "launcher" or (not kind and has_launcher_version):
         fields = _LAUNCHER_MANIFEST_SIGNATURE_FIELDS
         label = "启动器发布清单"
+        if not has_launcher_version:
+            raise RuntimeError("启动器发布清单缺少 launcher_version")
     else:
         raise RuntimeError("发布清单缺少可签名的版本字段")
 
@@ -351,8 +366,12 @@ def _manifest_signature_core(manifest: dict[str, Any]) -> dict[str, Any]:
     return {field: unsigned_manifest[field] for field in fields}
 
 
-def manifest_signature_payload(manifest: dict[str, Any]) -> bytes:
-    unsigned_manifest = _manifest_signature_core(manifest)
+def manifest_signature_payload(
+    manifest: dict[str, Any],
+    *,
+    expected_kind: str | None = None,
+) -> bytes:
+    unsigned_manifest = _manifest_signature_core(manifest, expected_kind=expected_kind)
     payload = json.dumps(
         unsigned_manifest,
         ensure_ascii=False,
@@ -386,6 +405,7 @@ def verify_release_manifest_signature(
     *,
     manifest_label: str = "更新清单",
     public_keys: dict[str, str] | None = None,
+    expected_kind: str | None = None,
 ) -> None:
     signature_info = manifest.get(RELEASE_MANIFEST_SIGNATURE_FIELD)
     if not isinstance(signature_info, dict):
@@ -406,7 +426,11 @@ def verify_release_manifest_signature(
 
     public_key = _decode_base64_bytes(public_key_text, label="Ed25519 公钥", expected_len=32)
     signature = _decode_base64_bytes(signature_text, label="Ed25519 签名", expected_len=64)
-    if not ed25519_verify(manifest_signature_payload(manifest), signature, public_key):
+    if not ed25519_verify(
+        manifest_signature_payload(manifest, expected_kind=expected_kind),
+        signature,
+        public_key,
+    ):
         raise RuntimeError(f"{manifest_label}发布签名校验失败")
 
 

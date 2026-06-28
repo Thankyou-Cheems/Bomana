@@ -1,9 +1,10 @@
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
 
-from bomana import metadata
+from bomana import launcher_core, metadata
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,6 +114,114 @@ def test_local_deploy_script_remote_stage_assets_are_filename_only() -> None:
     assert "missing manifest_signature" in source
     assert "verify_release_manifest_signature" in source
     assert "BOMANA_RELEASE_ED25519_PUBLIC_KEY" in source
+    assert "validate_local_release_assets" in source
+    assert 'expected_kind="launcher"' in source
+    assert "public asset sha256 mismatch" in source
+
+
+def test_local_deploy_script_prevalidates_signed_launcher_assets(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    deploy = load_tool_module("deploy_update_assets_prevalidate", "tools/deploy_update_assets.py")
+    private_key = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    public_key = launcher_core.ed25519_public_key_from_private_key(private_key)
+    monkeypatch.setenv("BOMANA_RELEASE_ED25519_PUBLIC_KEY", public_key)
+    monkeypatch.setenv("BOMANA_RELEASE_SIGNING_KEY_ID", "test-key")
+    launcher = tmp_path / "Bomana_launcher_v2.0.0.exe"
+    launcher.write_bytes(b"launcher")
+    manifest = launcher_core.sign_release_manifest(
+        {
+            "schema_version": 1,
+            "launcher_version": "2.0.0",
+            "launcher_asset": launcher.name,
+            "launcher_sha256": deploy.sha256_file(launcher),
+            "launcher_size_bytes": launcher.stat().st_size,
+        },
+        private_key,
+        key_id="test-key",
+    )
+    (tmp_path / "launcher_manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+
+    deploy.validate_local_release_assets(tmp_path, "launcher", metadata.__version__, "2.0.0")
+
+    manifest["launcher_sha256"] = "0" * 64
+    (tmp_path / "launcher_manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="发布签名校验失败"):
+        deploy.validate_local_release_assets(tmp_path, "launcher", metadata.__version__, "2.0.0")
+
+
+def test_public_verify_downloads_launcher_asset_and_checks_signed_sha(monkeypatch) -> None:
+    deploy = load_tool_module("deploy_update_assets_public_verify", "tools/deploy_update_assets.py")
+    private_key = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    public_key = launcher_core.ed25519_public_key_from_private_key(private_key)
+    monkeypatch.setenv("BOMANA_RELEASE_ED25519_PUBLIC_KEY", public_key)
+    monkeypatch.setenv("BOMANA_RELEASE_SIGNING_KEY_ID", "test-key")
+    launcher_bytes = b"launcher"
+    launcher_sha = launcher_core.sha256_bytes(launcher_bytes)
+    payload = launcher_core.sign_release_manifest(
+        {
+            "schema_version": 1,
+            "launcher_version": "2.0.0",
+            "launcher_asset": "Bomana_launcher_v2.0.0.exe",
+            "launcher_sha256": launcher_sha,
+            "launcher_size_bytes": len(launcher_bytes),
+        },
+        private_key,
+        key_id="test-key",
+    )
+    payload.update(
+        {
+            "package_url": "/downloads/Bomana_launcher_v2.0.0.exe",
+            "package_sha256": launcher_sha,
+        }
+    )
+
+    class Response:
+        def __init__(self, body: bytes) -> None:
+            self._body = body
+            self._offset = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb) -> None:
+            return None
+
+        def read(self, size: int = -1) -> bytes:
+            if size < 0:
+                size = len(self._body) - self._offset
+            chunk = self._body[self._offset : self._offset + size]
+            self._offset += len(chunk)
+            return chunk
+
+    requested: list[str] = []
+
+    def fake_urlopen(url: str, timeout: int):
+        requested.append(url)
+        if "/api/v1/launcher" in url:
+            return Response(json.dumps(payload).encode("utf-8"))
+        if "/downloads/" in url:
+            return Response(launcher_bytes)
+        raise AssertionError(url)
+
+    monkeypatch.setattr(deploy, "urlopen", fake_urlopen)
+
+    deploy.verify_public(
+        host="unused",
+        public_base_url="https://updates.example.test",
+        target="launcher",
+        app_version=metadata.__version__,
+        launcher_version="2.0.0",
+    )
+
+    assert "https://updates.example.test/downloads/Bomana_launcher_v2.0.0.exe" in requested
 
 
 def test_legacy_build_fails_when_version_info_generation_fails() -> None:

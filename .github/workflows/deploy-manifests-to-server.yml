@@ -121,6 +121,74 @@ jobs:
           echo "deploy_app=$DEPLOY_APP" >> "$GITHUB_OUTPUT"
           echo "deploy_launcher=$DEPLOY_LAUNCHER" >> "$GITHUB_OUTPUT"
 
+      - name: Validate staged release signatures and assets
+        if: steps.resolve.outputs.should_deploy == 'true'
+        shell: bash
+        env:
+          DEPLOY_APP: ${{ steps.resolve.outputs.deploy_app }}
+          DEPLOY_LAUNCHER: ${{ steps.resolve.outputs.deploy_launcher }}
+          BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
+          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          from bomana.launcher_core import verify_release_manifest_signature
+
+          public_key = os.environ.get("BOMANA_RELEASE_ED25519_PUBLIC_KEY", "").strip()
+          key_id = os.environ.get("BOMANA_RELEASE_SIGNING_KEY_ID", "").strip()
+          if not public_key or not key_id:
+              raise SystemExit("missing release signing public key configuration")
+          public_keys = {key_id: public_key}
+          stage = Path("stage")
+
+          def sha256_file(path: Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as file_obj:
+                  for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest().lower()
+
+          def asset_path(name: object, field_name: str) -> Path:
+              if not isinstance(name, str) or not name.strip() or "/" in name or "\\" in name:
+                  raise SystemExit(f"{field_name} must be a filename")
+              path = stage / "downloads" / name
+              if not path.exists():
+                  raise SystemExit(f"missing release asset: {path}")
+              return path
+
+          if os.environ.get("DEPLOY_APP") == "true":
+              for channel in ("Enhanced", "Standard", "Lite"):
+                  manifest_path = stage / "manifests" / f"manifest_{channel}.json"
+                  manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                  verify_release_manifest_signature(
+                      manifest,
+                      manifest_label=f"{manifest_path.name} ",
+                      public_keys=public_keys,
+                      expected_kind="app",
+                  )
+                  package = asset_path(manifest.get("package_asset"), "package_asset")
+                  if sha256_file(package) != str(manifest.get("package_sha256", "")).lower():
+                      raise SystemExit(f"{package.name} sha256 mismatch")
+
+          if os.environ.get("DEPLOY_LAUNCHER") == "true":
+              manifest_path = stage / "root" / "launcher_manifest.json"
+              manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+              verify_release_manifest_signature(
+                  manifest,
+                  manifest_label=f"{manifest_path.name} ",
+                  public_keys=public_keys,
+                  expected_kind="launcher",
+              )
+              launcher = asset_path(manifest.get("launcher_asset"), "launcher_asset")
+              if sha256_file(launcher) != str(manifest.get("launcher_sha256", "")).lower():
+                  raise SystemExit(f"{launcher.name} sha256 mismatch")
+          PY
+
       - name: Setup SSH key
         if: steps.resolve.outputs.should_deploy == 'true'
         shell: bash
@@ -318,17 +386,21 @@ jobs:
             local url="$2"
             local expected_field="$3"
             local expected_value="$4"
-            python3 - "$label" "$url" "$expected_field" "$expected_value" <<'PY'
+            local expected_kind="$5"
+            python3 - "$label" "$url" "$expected_field" "$expected_value" "$expected_kind" <<'PY'
+          import hashlib
           import json
           import os
           import sys
+          import urllib.parse
           import urllib.request
 
           from bomana.launcher_core import verify_release_manifest_signature
 
-          label, url, expected_field, expected_value = sys.argv[1:5]
+          label, url, expected_field, expected_value, expected_kind = sys.argv[1:6]
           public_key = os.environ.get("BOMANA_RELEASE_ED25519_PUBLIC_KEY", "").strip()
           key_id = os.environ.get("BOMANA_RELEASE_SIGNING_KEY_ID", "").strip()
+          public_base_url = os.environ.get("PUBLIC_UPDATE_BASE_URL", "").strip()
           if not public_key or not key_id:
               raise SystemExit("missing release signing public key configuration")
           with urllib.request.urlopen(url, timeout=20) as response:
@@ -339,8 +411,32 @@ jobs:
               payload,
               manifest_label=f"{label} ",
               public_keys={key_id: public_key},
+              expected_kind=expected_kind,
           )
-          print(f"verified_signed_{label}={expected_value}")
+
+          if expected_kind == "launcher":
+              expected_sha = str(payload.get("launcher_sha256", "")).strip().lower()
+              alias_sha = str(payload.get("package_sha256", "")).strip().lower()
+              if alias_sha and alias_sha != expected_sha:
+                  raise SystemExit("launcher package_sha256 alias does not match launcher_sha256")
+          else:
+              expected_sha = str(payload.get("package_sha256", "")).strip().lower()
+          if not expected_sha:
+              raise SystemExit(f"{label} missing signed sha256")
+          package_url = str(payload.get("package_url", "")).strip()
+          if not package_url:
+              raise SystemExit(f"{label} missing package_url")
+          asset_url = urllib.parse.urljoin(public_base_url.rstrip("/") + "/", package_url.lstrip("/"))
+          digest = hashlib.sha256()
+          with urllib.request.urlopen(asset_url, timeout=60) as response:
+              while True:
+                  chunk = response.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  digest.update(chunk)
+          if digest.hexdigest().lower() != expected_sha:
+              raise SystemExit(f"{label} public asset sha256 mismatch: {asset_url}")
+          print(f"verified_signed_{label}={expected_value} sha={expected_sha[:12]}")
           PY
           }
           if [[ "$DEPLOY_APP" == "true" ]]; then
@@ -350,7 +446,8 @@ jobs:
                 "app_${CH}" \
                 "${PUBLIC_UPDATE_BASE_URL}/api/v1/version?channel=${CH}&local_version=0.0.0&launcher_version=999.0.0" \
                 "app_version" \
-                "$expected_version"
+                "$expected_version" \
+                "app"
             done
           fi
           if [[ "$DEPLOY_LAUNCHER" == "true" ]]; then
@@ -359,5 +456,6 @@ jobs:
               "launcher" \
               "${PUBLIC_UPDATE_BASE_URL}/api/v1/launcher?launcher_version=0.0.0" \
               "launcher_version" \
-              "$expected_launcher"
+              "$expected_launcher" \
+              "launcher"
           fi

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -12,6 +13,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urljoin
 from urllib.request import urlopen
 
 from bomana.launcher_core import (
@@ -103,6 +105,85 @@ def required_assets(dist: Path, target: str, app_version: str, launcher_version:
             "missing release assets:\n" + "\n".join(f"  - {path}" for path in missing)
         )
     return assets
+
+
+def public_key_config() -> tuple[str, dict[str, str]]:
+    public_key = os.environ.get("BOMANA_RELEASE_ED25519_PUBLIC_KEY", "").strip()
+    key_id = os.environ.get(
+        "BOMANA_RELEASE_SIGNING_KEY_ID",
+        RELEASE_MANIFEST_DEFAULT_KEY_ID,
+    ).strip()
+    if not public_key:
+        raise RuntimeError("BOMANA_RELEASE_ED25519_PUBLIC_KEY is required for release verify")
+    if not key_id:
+        raise RuntimeError("BOMANA_RELEASE_SIGNING_KEY_ID must not be empty")
+    return key_id, {key_id: public_key}
+
+
+def local_asset_path(dist: Path, asset_name: object, field_name: str) -> Path:
+    if not isinstance(asset_name, str) or not asset_name.strip():
+        raise RuntimeError(f"{field_name} must be a non-empty filename")
+    if "/" in asset_name or "\\" in asset_name:
+        raise RuntimeError(f"{field_name} must not contain path separators")
+    candidate_name = Path(asset_name)
+    if candidate_name.is_absolute() or candidate_name.name != asset_name:
+        raise RuntimeError(f"{field_name} must be a filename, got {asset_name!r}")
+    dist_root = dist.resolve()
+    candidate = (dist / candidate_name).resolve()
+    try:
+        candidate.relative_to(dist_root)
+    except ValueError as exc:
+        raise RuntimeError(f"{field_name} escapes dist directory: {asset_name!r}") from exc
+    if not candidate.exists():
+        raise FileNotFoundError(f"{field_name} asset missing: {candidate}")
+    return candidate
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file_obj:
+        for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
+
+
+def validate_local_release_assets(
+    dist: Path,
+    target: str,
+    app_version: str,
+    launcher_version: str,
+) -> None:
+    _key_id, public_keys = public_key_config()
+    if target in {"app", "all"}:
+        for channel in CHANNELS:
+            manifest_src = dist / f"manifest_{channel}.json"
+            manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+            verify_release_manifest_signature(
+                manifest,
+                manifest_label=f"{manifest_src.name} ",
+                public_keys=public_keys,
+                expected_kind="app",
+            )
+            if manifest.get("app_version") != app_version:
+                raise RuntimeError(f"{manifest_src.name} app_version mismatch")
+            asset_src = local_asset_path(dist, manifest.get("package_asset"), "package_asset")
+            if sha256_file(asset_src) != str(manifest.get("package_sha256", "")).lower():
+                raise RuntimeError(f"{asset_src.name} sha256 mismatch")
+
+    if target in {"launcher", "all"}:
+        manifest_src = dist / "launcher_manifest.json"
+        manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+        verify_release_manifest_signature(
+            manifest,
+            manifest_label=f"{manifest_src.name} ",
+            public_keys=public_keys,
+            expected_kind="launcher",
+        )
+        if manifest.get("launcher_version") != launcher_version:
+            raise RuntimeError("launcher version mismatch")
+        asset_src = local_asset_path(dist, manifest.get("launcher_asset"), "launcher_asset")
+        if sha256_file(asset_src) != str(manifest.get("launcher_sha256", "")).lower():
+            raise RuntimeError(f"{asset_src.name} sha256 mismatch")
 
 
 def shell_quote(value: str) -> str:
@@ -278,15 +359,41 @@ print("backup_dir=", backup_dir)
 def verify_public(
     *, host: str, public_base_url: str, target: str, app_version: str, launcher_version: str
 ) -> None:
-    public_key = os.environ.get("BOMANA_RELEASE_ED25519_PUBLIC_KEY", "").strip()
-    key_id = os.environ.get(
-        "BOMANA_RELEASE_SIGNING_KEY_ID",
-        RELEASE_MANIFEST_DEFAULT_KEY_ID,
-    ).strip()
-    if not public_key:
-        raise RuntimeError("BOMANA_RELEASE_ED25519_PUBLIC_KEY is required for public verify")
+    _key_id, public_keys = public_key_config()
 
-    def verify_signed_payload(url: str, label: str, field: str, expected: str) -> dict:
+    def public_asset_url(package_url: object) -> str:
+        raw = str(package_url or "").strip()
+        if not raw:
+            raise RuntimeError("public payload missing package_url")
+        return urljoin(f"{public_base_url.rstrip('/')}/", raw.lstrip("/"))
+
+    def sha256_url(url: str) -> str:
+        digest = hashlib.sha256()
+        with urlopen(url, timeout=60) as response:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return digest.hexdigest().lower()
+
+    def verify_public_asset(payload: dict, label: str, expected_sha256: str) -> None:
+        expected = str(expected_sha256 or "").strip().lower()
+        if not expected:
+            raise RuntimeError(f"{label} missing signed sha256")
+        asset_url = public_asset_url(payload.get("package_url"))
+        actual = sha256_url(asset_url)
+        if actual != expected:
+            raise RuntimeError(f"{label} public asset sha256 mismatch: {asset_url}")
+
+    def verify_signed_payload(
+        url: str,
+        label: str,
+        field: str,
+        expected: str,
+        *,
+        expected_kind: str,
+    ) -> dict:
         with urlopen(url, timeout=20) as response:
             payload = json.loads(response.read().decode("utf-8"))
         if str(payload.get(field, "")) != expected:
@@ -294,7 +401,8 @@ def verify_public(
         verify_release_manifest_signature(
             payload,
             manifest_label=f"{label} ",
-            public_keys={key_id: public_key},
+            public_keys=public_keys,
+            expected_kind=expected_kind,
         )
         return payload
 
@@ -309,7 +417,9 @@ def verify_public(
                 f"app_{channel}",
                 "app_version",
                 app_version,
+                expected_kind="app",
             )
+            verify_public_asset(payload, f"app_{channel}", payload["package_sha256"])
             print(
                 "verified_app=",
                 payload["app_version"],
@@ -323,11 +433,17 @@ def verify_public(
             "launcher",
             "launcher_version",
             launcher_version,
+            expected_kind="launcher",
         )
+        launcher_sha256 = str(payload.get("launcher_sha256", "")).strip().lower()
+        package_sha256 = str(payload.get("package_sha256", "")).strip().lower()
+        if package_sha256 and package_sha256 != launcher_sha256:
+            raise RuntimeError("launcher package_sha256 alias does not match launcher_sha256")
+        verify_public_asset(payload, "launcher", launcher_sha256)
         print(
             "verified_launcher=",
             payload["launcher_version"],
-            payload["package_sha256"][:12],
+            launcher_sha256[:12],
             payload["manifest_signature"]["key_id"],
         )
 
@@ -345,6 +461,7 @@ def main() -> int:
         root / "launcher.pyw", "LAUNCHER_VERSION"
     )
     assets = required_assets(dist, args.target, app_version, launcher_version)
+    validate_local_release_assets(dist, args.target, app_version, launcher_version)
     stage_dir = f"/tmp/bomana-update-assets-local-{int(time.time())}"
 
     prepare_remote(args.host, stage_dir)

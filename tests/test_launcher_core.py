@@ -91,6 +91,39 @@ def test_release_manifest_signature_rejects_tampering() -> None:
         )
 
 
+def test_release_manifest_signature_rejects_kind_confusion() -> None:
+    private_key = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    public_key = launcher_core.ed25519_public_key_from_private_key(private_key)
+    signed = launcher_core.sign_release_manifest(
+        {
+            "schema_version": 1,
+            "channel": "Enhanced",
+            "app_version": "6.14.4",
+            "min_launcher_version": "2.0.0",
+            "entrypoint": "Bomana.pyw",
+            "package_asset": "Bomana_app_Enhanced_v6.14.4.zip",
+            "package_sha256": "a" * 64,
+        },
+        private_key,
+        key_id="test-key",
+    )
+    signed.update(
+        {
+            "launcher_version": "9.9.9",
+            "launcher_asset": "Bomana_launcher_v9.9.9.exe",
+            "launcher_sha256": "b" * 64,
+            "launcher_size_bytes": 123,
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="不能同时包含"):
+        launcher_core.verify_release_manifest_signature(
+            signed,
+            public_keys={"test-key": public_key},
+            expected_kind="launcher",
+        )
+
+
 def test_launcher_install_reads_metadata_version(tmp_path: Path) -> None:
     app_dir = tmp_path / "app"
     package_dir = app_dir / "bomana"

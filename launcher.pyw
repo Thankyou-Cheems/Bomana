@@ -92,6 +92,9 @@ TEMP_META_FILE_NAME = ".bomana_temp_meta.json"
 LAUNCHER_UPDATE_RESULT_FILE_NAME = ".bomana_launcher_update_result.json"
 LAUNCHER_SELF_UPDATE_WORKDIR_PREFIX = "bomana_launcher_update_"
 LAUNCHER_SELF_UPDATE_TEMP_STALE_SEC = 3 * 24 * 60 * 60
+DOWNLOAD_DIR_ENV_NAME = "BOMANA_LAUNCHER_DOWNLOAD_DIR"
+DOWNLOAD_DIR_NAME = "downloads"
+USER_DOWNLOADS_APP_DIR_NAME = "Bomana"
 LEGACY_LAUNCHER_SELF_UPDATE_FILES = (
     "BomanaLauncher_update.new.exe",
     "BomanaLauncher_backup.old.exe",
@@ -231,6 +234,14 @@ def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _base_path_key(base: Path) -> str:
+    try:
+        base_text = str(base.resolve())
+    except Exception:
+        base_text = str(base)
+    return hashlib.sha256(base_text.encode("utf-8", errors="ignore")).hexdigest()[:12]
+
+
 def _fallback_data_root(base: Path) -> Path:
     env_root = os.environ.get("BOMANA_LAUNCHER_DATA_DIR", "").strip()
     if env_root:
@@ -240,8 +251,7 @@ def _fallback_data_root(base: Path) -> Path:
         root = Path(appdata) / "Bomana" / "launcher"
     else:
         root = Path.home() / ".bomana" / "launcher"
-    key = hashlib.sha256(str(base.resolve()).encode("utf-8", errors="ignore")).hexdigest()[:12]
-    return root / key
+    return root / _base_path_key(base)
 
 
 def _can_write_dir(path: Path) -> bool:
@@ -273,6 +283,81 @@ def _launcher_data_root(base: Path) -> Path:
     root = _fallback_data_root(base)
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _user_downloads_dir() -> Path:
+    profile = os.environ.get("USERPROFILE", "").strip()
+    if profile:
+        return Path(profile) / "Downloads" / USER_DOWNLOADS_APP_DIR_NAME
+    return Path.home() / "Downloads" / USER_DOWNLOADS_APP_DIR_NAME
+
+
+def _unique_paths(paths: Tuple[Path, ...]) -> Tuple[Path, ...]:
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        try:
+            key = str(path.resolve(strict=False)).casefold()
+        except Exception:
+            key = str(path).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return tuple(unique)
+
+
+def _download_dir_candidates(base: Path) -> Tuple[Path, ...]:
+    candidates: list[Path] = []
+    env_root = os.environ.get(DOWNLOAD_DIR_ENV_NAME, "").strip()
+    if env_root:
+        candidates.append(Path(env_root).expanduser())
+    candidates.append(_user_downloads_dir())
+    try:
+        candidates.append(_launcher_data_root(base) / DOWNLOAD_DIR_NAME)
+    except Exception:
+        pass
+    candidates.append(Path(tempfile.gettempdir()) / "Bomana" / DOWNLOAD_DIR_NAME / _base_path_key(base))
+    return _unique_paths(tuple(candidates))
+
+
+def _launcher_download_dir(base: Path) -> Path:
+    attempted: list[str] = []
+    for candidate in _download_dir_candidates(base):
+        attempted.append(str(candidate))
+        if _can_write_dir(candidate):
+            return candidate
+    detail = "；".join(attempted) if attempted else "无可用候选目录"
+    raise RuntimeError(f"无法创建可写下载目录。已尝试：{detail}")
+
+
+def _download_cache_filename(
+    prefix: str,
+    remote_version: str,
+    artifact_name: str,
+    checksum: str,
+    suffix: str,
+) -> str:
+    name_seed = str(artifact_name or "").strip() or str(remote_version or "").strip()
+    stem = Path(urlparse(name_seed).path).stem or str(remote_version or "").strip() or "download"
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-") or "download"
+    digest_part = str(checksum or "").strip().lower()[:12] or _sha256_bytes(name_seed.encode("utf-8"))[:12]
+    return f"{prefix}_{safe_stem}_{digest_part}{suffix}"
+
+
+def _ps_string(value: Any) -> str:
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _open_folder(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    if sys.platform.startswith("win") and hasattr(os, "startfile"):
+        os.startfile(str(path))  # type: ignore[attr-defined]
+        return
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", str(path)], close_fds=True)
+        return
+    subprocess.Popen(["xdg-open", str(path)], close_fds=True)
 
 
 def _data_path(base: Path, filename: str) -> Path:
@@ -1027,7 +1112,7 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
         raise RuntimeError("发布清单下载地址无效")
 
     manifest = _fetch_json(manifest_url)
-    _verify_release_manifest_signature(manifest, manifest_label=f"{manifest_name} ")
+    _verify_release_manifest_signature(manifest, manifest_label=f"{manifest_name} ", expected_kind="app")
     remote_version = str(manifest.get("app_version", "")).strip()
     min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_asset = str(manifest.get("package_asset", "")).strip()
@@ -1052,6 +1137,7 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
         "min_launcher_version": min_launcher_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
+        "package_asset": package_asset,
         "entrypoint": entrypoint,
         "package_size": package_size,
         "source_name": (f"GitHub ({tag_name})" if tag_name else "GitHub"),
@@ -1068,7 +1154,11 @@ def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str,
     if not manifest_url:
         raise RuntimeError("启动器发布清单下载地址无效")
     manifest = _fetch_json(manifest_url)
-    _verify_release_manifest_signature(manifest, manifest_label="launcher_manifest.json ")
+    _verify_release_manifest_signature(
+        manifest,
+        manifest_label="launcher_manifest.json ",
+        expected_kind="launcher",
+    )
     asset_name = str(manifest.get("launcher_asset", "")).strip()
     remote_version = str(manifest.get("launcher_version", "")).strip()
     if not asset_name or not remote_version:
@@ -1091,6 +1181,7 @@ def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str,
         "remote_version": remote_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
+        "package_asset": asset_name,
         "package_size": launcher_asset.get("size", None),
         "source_name": (f"GitHub ({tag_name})" if tag_name else "GitHub"),
     }
@@ -1182,7 +1273,7 @@ def _fetch_manifest_from_primary(
             used_anonymous_fallback = True
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
-    _verify_release_manifest_signature(payload, manifest_label="国内应用更新清单 ")
+    _verify_release_manifest_signature(payload, manifest_label="国内应用更新清单 ", expected_kind="app")
     remote_version = str(payload.get("app_version", "")).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
@@ -1207,6 +1298,7 @@ def _fetch_manifest_from_primary(
         "min_launcher_version": min_launcher_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
+        "package_asset": str(payload.get("package_asset", "")).strip(),
         "entrypoint": entrypoint,
         "package_size": package_size,
         "source_name": source_name,
@@ -1241,14 +1333,18 @@ def _fetch_launcher_manifest_from_primary(
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
 
-    _verify_release_manifest_signature(payload, manifest_label="国内启动器更新清单 ")
-    remote_version = str(payload.get("launcher_version", payload.get("app_version", ""))).strip()
+    _verify_release_manifest_signature(
+        payload,
+        manifest_label="国内启动器更新清单 ",
+        expected_kind="launcher",
+    )
+    remote_version = str(payload.get("launcher_version", "")).strip()
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
         _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
     )
     package_sha256 = _require_remote_checksum(
-        payload.get("launcher_sha256", payload.get("package_sha256", "")),
+        payload.get("launcher_sha256", ""),
         artifact_label="国内启动器更新清单 ",
     )
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
@@ -1263,6 +1359,7 @@ def _fetch_launcher_manifest_from_primary(
         "remote_version": remote_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
+        "package_asset": str(payload.get("launcher_asset", "")).strip(),
         "package_size": package_size,
         "source_name": source_name,
     }
@@ -1517,19 +1614,29 @@ class UpdateService:
         if update_available and package_size is None and package_url:
             package_size = _fetch_content_length(package_url, timeout_sec=NET_TIMEOUT_SEC)
 
-        launcher_manifest = self.resolve_launcher_manifest()
-        launcher_remote_version = str(launcher_manifest.get("remote_version", "")).strip()
-        launcher_source_name = (
-            str(launcher_manifest.get("source_name", "GitHub")).strip() or "GitHub"
-        )
-        launcher_update_available = _version_is_newer(launcher_remote_version, LAUNCHER_VERSION)
-        launcher_package_size = self._manifest_package_size(launcher_manifest)
-        if launcher_update_available and launcher_package_size is None:
-            launcher_package_url = str(launcher_manifest.get("package_url", "")).strip()
-            if launcher_package_url:
-                launcher_package_size = _fetch_content_length(
-                    launcher_package_url, timeout_sec=NET_TIMEOUT_SEC
-                )
+        launcher_manifest: Dict[str, Any] = {}
+        launcher_remote_version = LAUNCHER_VERSION
+        launcher_source_name = ""
+        launcher_update_available = False
+        launcher_package_size: Optional[int] = None
+        launcher_check_warning = ""
+        try:
+            launcher_manifest = self.resolve_launcher_manifest()
+            launcher_remote_version = str(launcher_manifest.get("remote_version", "")).strip()
+            launcher_source_name = (
+                str(launcher_manifest.get("source_name", "GitHub")).strip() or "GitHub"
+            )
+            launcher_update_available = _version_is_newer(launcher_remote_version, LAUNCHER_VERSION)
+            launcher_package_size = self._manifest_package_size(launcher_manifest)
+            if launcher_update_available and launcher_package_size is None:
+                launcher_package_url = str(launcher_manifest.get("package_url", "")).strip()
+                if launcher_package_url:
+                    launcher_package_size = _fetch_content_length(
+                        launcher_package_url, timeout_sec=NET_TIMEOUT_SEC
+                    )
+        except Exception as exc:
+            launcher_check_warning = str(exc)
+            _log(self.base, f"启动器更新检查失败，应用更新检查继续：{exc}")
 
         return {
             "local_version": local_version,
@@ -1545,6 +1652,7 @@ class UpdateService:
             "launcher_source_name": launcher_source_name,
             "launcher_update_available": launcher_update_available,
             "launcher_package_size": launcher_package_size,
+            "launcher_check_warning": launcher_check_warning,
         }
 
     def download_app_update(self, manifest: Dict[str, Any]) -> Tuple[str, str]:
@@ -1617,6 +1725,7 @@ def _download_update_from_manifest(
     remote_version = str(manifest.get("remote_version", "")).strip()
     min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
+    package_asset = str(manifest.get("package_asset", "")).strip()
     package_sha256 = _require_remote_checksum(
         manifest.get("package_sha256", ""),
         artifact_label="应用更新清单 ",
@@ -1633,6 +1742,7 @@ def _download_update_from_manifest(
         raise RuntimeError(
             f"此版本要求先更新启动器（当前 v{LAUNCHER_VERSION}，要求 >= v{min_launcher_version}）"
         )
+    _assert_app_install_dir_writable(base)
 
     notify("开始下载", f"正在下载 v{remote_version}（来源：{source_name}）", 0.24, "info")
     last_emit = [0.0]
@@ -1675,12 +1785,28 @@ def _download_update_from_manifest(
             detail = f"正在下载应用包：{downloaded / 1048576:.1f} MB  |  {speed_text}"
             notify("正在下载更新", detail, None, "info")
 
-    download_dir = _launcher_data_root(base) / "downloads"
-    package_path = download_dir / f"Bomana_{remote_version}.zip"
-    _download_to_file(package_url, package_path, progress_cb=on_progress, cancel_cb=cancel_cb)
+    download_dir = _launcher_download_dir(base)
+    package_path = download_dir / _download_cache_filename(
+        "Bomana_app",
+        remote_version,
+        package_asset or package_url,
+        package_sha256,
+        ".zip",
+    )
+    keep_downloaded_file = False
     try:
+        _download_to_file(package_url, package_path, progress_cb=on_progress, cancel_cb=cancel_cb)
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
+        actual_sha256 = _sha256_file(package_path)
+        if actual_sha256 != package_sha256:
+            try:
+                package_path.unlink(missing_ok=True)
+                package_path.with_name(f"{package_path.name}.part").unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise RuntimeError("SHA256 校验失败")
+        keep_downloaded_file = True
         _install_zip_package_from_file(
             base,
             package_path,
@@ -1691,10 +1817,16 @@ def _download_update_from_manifest(
         )
     finally:
         try:
-            package_path.unlink(missing_ok=True)
+            if not keep_downloaded_file:
+                package_path.unlink(missing_ok=True)
         except Exception:
             pass
-    notify("更新完成", f"已更新到 v{remote_version}", 1.0, "success")
+    notify(
+        "更新完成",
+        f"已更新到 v{remote_version}\n下载包保留在：{package_path}",
+        1.0,
+        "success",
+    )
     return remote_version, source_name
 
 
@@ -1741,6 +1873,32 @@ def _assert_launcher_target_dir_writable(target: Path) -> None:
                 pass
 
 
+def _assert_app_install_dir_writable(base: Path) -> None:
+    """Check install-root write, lock, temp creation, and rename before a large app download."""
+    lock_path: Optional[Path] = None
+    probe_dir: Optional[Path] = None
+    renamed_probe: Optional[Path] = None
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        lock_path = _acquire_update_lock(base)
+        probe_dir = Path(tempfile.mkdtemp(prefix=".bomana_install_probe_", dir=str(base)))
+        renamed_probe = base / f"{probe_dir.name}.renamed"
+        os.replace(str(probe_dir), str(renamed_probe))
+        probe_dir = None
+    except Exception as exc:
+        raise RuntimeError(
+            "当前启动器目录不可写，无法自动安装应用更新："
+            f"{base}。请将启动器整个文件夹移动到可写目录（例如桌面或下载目录下的 Bomana 文件夹），"
+            f"或以管理员权限运行后重试。原始错误：{exc}"
+        ) from exc
+    finally:
+        if renamed_probe is not None:
+            shutil.rmtree(renamed_probe, ignore_errors=True)
+        if probe_dir is not None:
+            shutil.rmtree(probe_dir, ignore_errors=True)
+        _release_update_lock(lock_path)
+
+
 def _stage_launcher_self_update(
     base: Path,
     launcher_bytes: Optional[bytes],
@@ -1770,15 +1928,16 @@ def _stage_launcher_self_update(
         expected_sha256 = (expected_sha256 or _sha256_file(staged)).strip().lower()
         _log(base, f"已在临时目录准备启动器自更新文件：{staged}")
         script = f"""$ErrorActionPreference = 'Stop'
-$target = {json.dumps(str(target))}
-$staged = {json.dumps(str(staged))}
-$backup = {json.dumps(str(backup))}
-$replacement = {json.dumps(str(replacement))}
-$resultPath = {json.dumps(str(result_path))}
-$expectedSha256 = {json.dumps(str(expected_sha256))}
+$target = {_ps_string(target)}
+$staged = {_ps_string(staged)}
+$backup = {_ps_string(backup)}
+$replacement = {_ps_string(replacement)}
+$resultPath = {_ps_string(result_path)}
+$expectedSha256 = {_ps_string(expected_sha256)}
 $oldPid = {os.getpid()}
-$targetVersion = {json.dumps(str(remote_version))}
+$targetVersion = {_ps_string(remote_version)}
 $replaceSucceeded = $false
+$restartSucceeded = $false
 
 function Write-Result([string]$status, [string]$message) {{
     $resultDir = Split-Path -Parent $resultPath
@@ -1833,7 +1992,11 @@ try {{
         throw "launcher target missing after replace"
     }}
     $replaceSucceeded = $true
-    Start-Process -FilePath $target | Out-Null
+    $startedProcess = Start-Process -FilePath $target -WorkingDirectory (Split-Path -Parent $target) -PassThru
+    if (-not $startedProcess) {{
+        throw "launcher restart did not return a process"
+    }}
+    $restartSucceeded = $true
     Write-Result "success" ("Launcher replaced and restarted: " + $targetVersion)
     Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
 }}
@@ -1843,6 +2006,9 @@ catch {{
         Move-Item -LiteralPath $backup -Destination $target -Force -ErrorAction SilentlyContinue
     }}
     Remove-Item -LiteralPath $replacement -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $target) {{
+        $detail = $detail + "`n当前启动器文件: " + $target + "`n如未自动打开，请手动双击该文件。"
+    }}
     if (Test-Path -LiteralPath $staged) {{
         $detail = $detail + "`n新版启动器文件保留在: " + $staged
     }}
@@ -1851,14 +2017,14 @@ catch {{
 }}
 finally {{
     Start-Sleep -Milliseconds 500
-    if ($replaceSucceeded) {{
+    if ($replaceSucceeded -and $restartSucceeded) {{
         Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
     }}
     Remove-Item -LiteralPath $replacement -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 }}
 """
-        script_path.write_text(script, encoding="utf-8")
+        script_path.write_text(script, encoding="utf-8-sig")
         _launch_updater_script(script_path)
     except Exception:
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -1882,6 +2048,7 @@ def _download_launcher_update_from_manifest(
 
     remote_version = str(manifest.get("remote_version", "")).strip()
     package_url = str(manifest.get("package_url", "")).strip()
+    package_asset = str(manifest.get("package_asset", "")).strip()
     package_sha256 = _require_remote_checksum(
         manifest.get("package_sha256", ""),
         artifact_label="启动器更新清单 ",
@@ -1925,8 +2092,14 @@ def _download_launcher_update_from_manifest(
                 "info",
             )
 
-    download_dir = _launcher_data_root(base) / "downloads"
-    launcher_path = download_dir / f"BomanaLauncher_{remote_version}.exe"
+    download_dir = _launcher_download_dir(base)
+    launcher_path = download_dir / _download_cache_filename(
+        "Bomana_launcher",
+        remote_version,
+        package_asset or package_url,
+        package_sha256,
+        ".exe",
+    )
     stage_attempted = False
     keep_downloaded_file = False
     try:
@@ -1941,10 +2114,14 @@ def _download_launcher_update_from_manifest(
             except Exception:
                 pass
             raise RuntimeError("SHA256 校验失败")
+        keep_downloaded_file = True
         current_name = Path(sys.executable).name
         notify(
             "准备替换启动器",
-            f"新版启动器文件已下载完成；关闭当前窗口后会替换 {current_name} 并自动重启。",
+            (
+                f"新版启动器文件已下载完成；关闭当前窗口后会替换 {current_name} 并自动重启。\n"
+                f"下载文件保留在：{launcher_path}"
+            ),
             0.9,
             "info",
         )
@@ -1970,7 +2147,10 @@ def _download_launcher_update_from_manifest(
 
     notify(
         "启动器更新已就绪",
-        f"已准备好升级到 v{remote_version}；关闭当前窗口后会用新版启动器文件替换当前 exe 并自动重启。",
+        (
+            f"已准备好升级到 v{remote_version}；当前窗口即将关闭，随后会自动替换当前 exe 并重启。\n"
+            f"下载文件保留在：{launcher_path}"
+        ),
         1.0,
         "success",
     )
@@ -2094,6 +2274,7 @@ class LauncherDetailsDialog(tk.Toplevel):
         local_version: str,
         launcher_version: str,
         install_dir: Path,
+        download_dir: Path,
     ):
         super().__init__(parent)
         self.title("关于 Bomana")
@@ -2104,12 +2285,17 @@ class LauncherDetailsDialog(tk.Toplevel):
         _apply_window_icon(self)
         self._images: list = []
 
-        self._build_ui(channel, local_version, launcher_version, install_dir)
+        self._build_ui(channel, local_version, launcher_version, install_dir, download_dir)
         self._fit_window_to_parent(parent)
         self._center_on_parent(parent)
 
     def _build_ui(
-        self, channel: str, local_version: str, launcher_version: str, install_dir: Path
+        self,
+        channel: str,
+        local_version: str,
+        launcher_version: str,
+        install_dir: Path,
+        download_dir: Path,
     ) -> None:
         wrap_w = 760
 
@@ -2204,6 +2390,7 @@ class LauncherDetailsDialog(tk.Toplevel):
             f"当前通道：{channel}\n"
             f"本地版本：v{local_version}\n"
             f"安装目录：{install_dir}\n"
+            f"下载目录：{download_dir}\n"
             f"启动器版本：v{launcher_version}"
         )
         tk.Label(
@@ -2447,6 +2634,7 @@ class LauncherWindow:
         self.latest_launcher_version = LAUNCHER_VERSION
         self.latest_launcher_source_name = ""
         self.latest_launcher_package_size: Optional[int] = None
+        self.latest_launcher_check_warning = ""
         self.launcher_update_available = False
         self.last_check_ok = False
         self.last_check_error = ""
@@ -3084,6 +3272,19 @@ class LauncherWindow:
         self.import_btn.pack(side="right", padx=(0, self._px(8)))
         self._style_action_button(self.import_btn, "secondary")
 
+        self.download_dir_btn = tk.Button(
+            btn_row,
+            text="下载目录",
+            width=10,
+            command=self._open_download_dir,
+            cursor="hand2",
+            font=self._font(10),
+            padx=self._px(6),
+            pady=self._px(3),
+        )
+        self.download_dir_btn.pack(side="right", padx=(0, self._px(8)))
+        self._style_action_button(self.download_dir_btn, "secondary")
+
         self.exit_btn = tk.Button(
             btn_row,
             text="退出",
@@ -3136,6 +3337,7 @@ class LauncherWindow:
         self.app_requires_launcher_update = False
         self.latest_launcher_manifest = None
         self.latest_launcher_package_size = None
+        self.latest_launcher_check_warning = ""
         self.launcher_update_available = False
         self.last_check_ok = False
         self.last_check_error = ""
@@ -3208,7 +3410,7 @@ class LauncherWindow:
                         "final_version": launcher_version,
                         "status": ("启动器更新已准备好" if update_ok else "启动器更新失败"),
                         "detail": (
-                            "已准备好下载并接管新版启动器；当前窗口关闭后会自动替换当前 exe 并重启。"
+                            "已准备好下载并接管新版启动器；当前窗口即将关闭，随后会自动替换当前 exe 并重启。"
                             if update_ok
                             else update_error
                         ),
@@ -3367,7 +3569,8 @@ class LauncherWindow:
                         "status": "下载完成",
                         "detail": (
                             f"已更新到 v{final_version}（来源：{update_source}）。现在可点击“启动应用”。\n"
-                            f"安装位置：{self.install_dir}"
+                            f"安装位置：{self.install_dir}\n"
+                            f"下载目录：{_launcher_download_dir(self.base)}"
                             + (
                                 f"\n已保留上一版本 v{_read_local_app_version(_previous_app_dir(self.base))}，可随时回退。"
                                 if _is_previous_app_ready(self.base)
@@ -3454,6 +3657,9 @@ class LauncherWindow:
                         self.latest_launcher_package_size = payload.get(
                             "launcher_package_size", None
                         )
+                        self.latest_launcher_check_warning = str(
+                            payload.get("launcher_check_warning", "")
+                        ).strip()
                         self.launcher_update_available = bool(
                             payload.get("launcher_update_available", False)
                         )
@@ -3481,6 +3687,7 @@ class LauncherWindow:
                         self.latest_launcher_manifest = None
                         self.latest_launcher_package_size = None
                         self.latest_launcher_source_name = ""
+                        self.latest_launcher_check_warning = ""
                         self.launcher_update_available = False
                         self.last_check_error = str(payload.get("error", "检查失败"))
                         self._set_status("检查失败", self.last_check_error, 0.0, "warning")
@@ -3651,6 +3858,8 @@ class LauncherWindow:
             lines.append(
                 f"启动器 v{LAUNCHER_VERSION} -> v{self.latest_launcher_version}（来源：{self.latest_launcher_source_name}，大小：{launcher_size_text}）"
             )
+        elif self.latest_launcher_check_warning:
+            lines.append(f"启动器更新检查暂不可用：{self.latest_launcher_check_warning}")
         return "\n".join(line for line in lines if line)
 
     def _subline_text(self) -> str:
@@ -3766,6 +3975,7 @@ class LauncherWindow:
             self.launch_btn.config(state=state)
         self.release_btn.config(state="normal")
         self.import_btn.config(state=("disabled" if self.source_test_mode else "normal"))
+        self.download_dir_btn.config(state="normal")
         self.details_btn.config(state="normal")
         self.exit_btn.config(state="normal")
         self.rollback_btn.config(state=("disabled" if running else self.rollback_btn.cget("state")))
@@ -3881,12 +4091,12 @@ class LauncherWindow:
 
     def _show_error_actions(self) -> None:
         if _is_local_app_ready(self.base):
-            text = "可点击“重新检查”或“打开下载页”。也可直接点击“启动应用”。"
+            text = "可点击“重新检查”或“打开下载页”。也可点“下载目录”查看已缓存文件，或直接点击“启动应用”。"
             if self.previous_version != "0.0.0":
                 text += f"\n如果新版异常，也可以点击“回退 v{self.previous_version}”。"
             self.hint_lbl.config(text=text)
         else:
-            self.hint_lbl.config(text="可点击“重新检查”或“打开下载页”。首次使用请先完成下载。")
+            self.hint_lbl.config(text="可点击“重新检查”或“打开下载页”。也可点“下载目录”查看已下载文件。首次使用请先完成下载。")
         self._schedule_layout_reflow()
 
     def _save_launcher_state(self, extra: Optional[Dict[str, Any]] = None) -> None:
@@ -4202,6 +4412,13 @@ class LauncherWindow:
         except Exception:
             pass
 
+    def _open_download_dir(self) -> None:
+        try:
+            _open_folder(_launcher_download_dir(self.base))
+        except Exception as e:
+            _log(self.base, f"打开下载目录失败：{e}")
+            messagebox.showwarning(DISPLAY_NAME, f"无法打开下载目录：{e}")
+
     def _open_details(self) -> None:
         try:
             LauncherDetailsDialog(
@@ -4210,6 +4427,7 @@ class LauncherWindow:
                 local_version=self.local_version,
                 launcher_version=LAUNCHER_VERSION,
                 install_dir=self.install_dir,
+                download_dir=_launcher_download_dir(self.base),
             )
         except Exception as e:
             _log(self.base, f"打开详情弹窗失败：{e}")
