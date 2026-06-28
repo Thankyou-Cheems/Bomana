@@ -165,7 +165,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 ### 安装路径选择
 
 - 启动器路径（推荐普通用户）：下载 `Bomana_launcher_vX.X.X.exe`，由启动器自动检查更新并按通道下载对应 app 包；新版会保留一个上一版本供回退。
-- uv 直运行路径（适合开发者/已有 Python 环境）：如果本机已经有 uv 环境，可直接执行 `uv sync` 和 `uv run python Bomana.pyw`，无需下载启动器。
+- uv 直运行路径（适合开发者/已有 Python 环境）：如果本机已经有 uv 环境，可直接执行 `uv sync --python 3.14.5` 和 `uv run python Bomana.pyw`，无需下载启动器。
 
 ### 方式一：下载预编译版本（推荐）
 
@@ -183,9 +183,9 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 启动器与 app 包的关系：
 
 - `Bomana_launcher_vX.Y.Z.exe`：固定入口，负责版本检查、下载/校验 app 包、启动器自更新、离线启动本地版本，并保留一个可回退的上一版应用目录。
-- `launcher_manifest.json`：记录启动器版本、下载包名、SHA256 和 Ed25519 发布签名等元数据。
+- `launcher_manifest.json`：记录启动器版本、启动器文件名、SHA256 和 Ed25519 发布签名等元数据。
 - `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行程序包（Enhanced / Standard / Lite）。
-- `manifest_<Variant>.json`：记录版本、下载地址、SHA256、`min_launcher_version` 和 Ed25519 发布签名等元数据。
+- `manifest_<Variant>.json`：记录版本、应用包文件名、SHA256、`min_launcher_version` 和 Ed25519 发布签名等元数据。
 
 3. 下载后双击运行（绿色版，无需安装）
 4. 启动器打开后会后台自动检查当前通道版本与启动器版本（优先腾讯云/EdgeOne 更新服务，必要时回退 GitHub），并在界面展示来源与下载总大小
@@ -220,6 +220,7 @@ uv sync --python 3.14.5
 - 仅打包通用启动器（绿色入口）：`tools\scripts\build_launcher.bat [version]`
 - 一次性构建当前通道 app + 通用启动器：`tools\scripts\build_portable.bat Enhanced all`
 - 若要本地 `deploy_update_assets.py --target all`，需要先为 Enhanced / Standard / Lite 三个通道各构建 app 包，并构建一次通用启动器。
+- 本地发布构建同样必须先设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）；`tools/build_portable.py` 会拒绝未签名清单和不匹配的公私钥。
 
 GitHub 云端自动打包发布：
 
@@ -228,8 +229,9 @@ GitHub 云端自动打包发布：
 - 推送标签 `vX.Y.Z-launcher`：仅构建并发布启动器
 - `workflow_dispatch` 手动触发时也可通过 `build_target` 选择 `all` / `app` / `launcher`
 - 不需要本地打包后手工上传文件
-- 发布构建必须配置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY` 与 `BOMANA_RELEASE_ED25519_PUBLIC_KEY` 两个 GitHub Secrets；构建会拒绝不匹配的签名密钥。
+- 发布构建必须提供 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）；GitHub Actions 中私钥/公钥来自 Secrets，key id 通常由 workflow 环境变量设置，构建会拒绝不匹配的签名密钥。
 - 腾讯云/EdgeOne 更新服务只转发 Release 清单里的 `manifest_signature`，不保存发布私钥；服务端可以补 `package_url`、`source_name`、`package_size` 等派生字段，但版本、文件名和 SHA256 必须来自签名覆盖的核心字段。
+- 发布或部署更新资产前，先核对 `gh secret list --repo Thankyou-Cheems/Bomana`，再运行对应的 `uv run python tools/build_portable.py --target app|launcher|all ...` 与 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`；公开端点验证必须调用 `verify_release_manifest_signature`，不能只检查签名字段是否存在。
 
 
 #### 运行

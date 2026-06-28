@@ -35,7 +35,7 @@
 
 - `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动器自更新、启动入口，并保留一个上一版回退槽
 - `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行包
-- `manifest_<Variant>.json`：版本、地址、SHA256、`min_launcher_version`、Ed25519 发布签名元数据
+- `manifest_<Variant>.json`：版本、应用包文件名、SHA256、`min_launcher_version`、Ed25519 发布签名元数据
 - `launcher_manifest.json`：启动器版本、文件名、SHA256、文件大小、Ed25519 发布签名元数据
 
 启动器会先校验发布清单签名，再校验下载文件 SHA256。腾讯云/EdgeOne 服务只补下载 URL、来源和大小等派生字段，签名本身来自 GitHub Release 产物。
@@ -45,11 +45,11 @@
 ```bash
 git clone https://github.com/Thankyou-Cheems/Bomana.git
 cd Bomana
-uv sync
+uv sync --python 3.14.5
 uv run python Bomana.pyw
 ```
 
-如果你已经有 uv 环境，可以直接使用方式 B，不需要下载启动器。
+如果你已经有 uv 环境，可以直接使用方式 B，不需要下载启动器；仓库 `.python-version` 默认 pin 到 Python 3.14.5。
 
 ### 2. 启动流程
 
@@ -119,6 +119,13 @@ uv run python tools/update_datamine_assets.py ^
   --no-bomb-report
 ```
 
+### 6. 开发者：打包与发布核对
+
+- 发布构建使用 Python 3.14 + uv；本地打包前运行 `uv sync --extra build --frozen`。
+- 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
+- 本地发布命令入口是 `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`；`--version` 只是可选一致性校验，app 目标必须匹配 `bomana/metadata.py` 的 `__version__`，launcher 目标必须匹配 `launcher.pyw` 的 `LAUNCHER_VERSION`。
+- 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；更新服务部署入口是 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`，公开端点验证必须调用 `verify_release_manifest_signature`。
+
 ---
 
 ## English Quick Start
@@ -152,18 +159,21 @@ Launcher/package roles:
 
 - `Bomana_launcher_vX.Y.Z.exe`: update check/download/verify/start entry, plus one-version rollback retention
 - `Bomana_app_<Variant>_vX.Y.Z.zip`: runnable app package
-- `manifest_<Variant>.json`: version/url/SHA256/`min_launcher_version`/Ed25519 release-signature metadata
+- `manifest_<Variant>.json`: version/package asset/SHA256/`min_launcher_version`/Ed25519 release-signature metadata
+- `launcher_manifest.json`: launcher version/asset/SHA256/size/Ed25519 release-signature metadata
+
+The launcher validates Ed25519 manifest signatures before trusting version, asset, or SHA256 fields. The Tencent/EdgeOne service only adds derived fields such as package URL, source name, and size.
 
 #### Option B: Run from Source (uv)
 
 ```bash
 git clone https://github.com/Thankyou-Cheems/Bomana.git
 cd Bomana
-uv sync
+uv sync --python 3.14.5
 uv run python Bomana.pyw
 ```
 
-If you already use uv, Option B is enough.
+If you already use uv, Option B is enough; the repo `.python-version` pins Python 3.14.5.
 
 ### 2. Start Flow
 
@@ -214,5 +224,12 @@ A: Aircraft FM may not be matched in the current speed-limit database.
 
 **Q: CCRP prediction is off?**  
 A: Expected for an estimate-based model. Tune `range correction` and `time correction` in `Settings -> Bombing`.
+
+### 5. Developer: Build/Release Checks
+
+- Release builds use Python 3.14 + uv; run `uv sync --extra build --frozen` before local packaging.
+- Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).
+- Local package entry: `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`; `--version` is an optional consistency check and must match `bomana/metadata.py __version__` for app builds or `launcher.pyw LAUNCHER_VERSION` for launcher builds.
+- Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; deploy with `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`, and public endpoint checks must call `verify_release_manifest_signature`.
 
 ---

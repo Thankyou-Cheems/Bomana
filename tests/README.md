@@ -18,3 +18,9 @@ Existing files may keep their current names until they need substantial edits. W
 - Keep real War Thunder / `localhost:8111` validation out of automated tests; document that as manual smoke in the PR or handoff.
 - Use pytest-style tests by default. `tools/scripts/check_smoke.bat` is the canonical fast local suite and must run the same tests as `uv run --extra dev pytest`.
 - Add a regression test next to the layer where the bug lives. If a test needs broad cross-file setup, first ask whether the production boundary is too wide.
+
+## Quality Gates
+
+- Code-changing tasks must run `uv run --extra dev ruff check .`, `uv run --extra dev ruff format --check .`, and the focused tests or smoke checks relevant to the touched area before closeout.
+- Documentation-only or issue-tracking-only tasks may mark Ruff as not applicable in the handoff.
+- Tests that touch release, build, launcher update, or deploy behavior must preserve Ed25519 manifest-signing coverage. Verify signed manifests with `verify_release_manifest_signature`; do not only assert that `manifest_signature` exists.

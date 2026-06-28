@@ -55,8 +55,8 @@ uv run --extra dev pytest
 ```bash
 uv sync --extra dev
 uv run --extra dev pytest
-uv run ruff check <本次修改的 Python 路径>
-uv run ruff format --check <本次修改的 Python 路径>
+uv run --extra dev ruff check <本次修改的 Python 路径>
+uv run --extra dev ruff format --check <本次修改的 Python 路径>
 ```
 
 代码类任务（包括 `bd`/beads 任务）完成前必须运行 Ruff。推荐最终门禁：
@@ -126,6 +126,8 @@ bd close <issue-id> --reason "Completed" --json
 
 关闭代码类 `bd` 任务前，先运行 Ruff 和相关测试/构建门禁，并在提交或交接中记录结果。
 
+`bd` 数据以本地 Dolt 数据库为准；收尾或交接前用 `bd backup status` 检查备份状态。命令行自动化应使用 `--json`，不要恢复旧 `bd sync` / `sync-branch` 流程。
+
 如果你是外部贡献者，PR 里请直接写明对应的 `bd` 编号；若没有权限操作 `bd` 数据库，请在 PR 描述里说明原因和上下文。
 
 ### 开发规范
@@ -190,15 +192,17 @@ bd close <issue-id> --reason "Completed" --json
    - launcher 发布：重查排队、保留一个 `app_previous/`、回退互换正常
 5. 确认 GitHub Secrets 已配置并成对匹配：
    `BOMANA_RELEASE_ED25519_PRIVATE_KEY` / `BOMANA_RELEASE_ED25519_PUBLIC_KEY`
-6. 推送标签：
+   并确认 `BOMANA_RELEASE_SIGNING_KEY_ID` 使用当前 key id（默认 `bomana-release-2026-06`）。不要生成、轮换、覆盖或上传发布私钥，除非已明确确认私钥保管方案。
+6. 本地发布构建必须使用匹配的私钥/公钥；`tools/build_portable.py` 会拒绝空签名、缺失公钥或公钥与私钥不匹配的清单。
+7. 推送标签：
    - `vX.Y.Z`：完整发布
    - `vX.Y.Z-app`：仅应用包
    - `vX.Y.Z-launcher`：仅启动器
-7. GitHub Actions 会构建对应产物并创建/更新 Release；构建会签名 `manifest_<Variant>.json` 与 `launcher_manifest.json`
-8. 国内更新服务默认走本地直推，避免等待 Actions 二次 SSH 部署：
+8. GitHub Actions 会构建对应产物并创建/更新 Release；构建会用 Ed25519 签名 `manifest_<Variant>.json` 与 `launcher_manifest.json`
+9. 国内更新服务默认走本地直推，避免等待 Actions 二次 SSH 部署：
    `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
    需要兜底时，可手动运行 `deploy-manifests-to-server.yml` 的 `workflow_dispatch`
-9. 部署脚本会校验公开腾讯云/EdgeOne 接口返回的签名。服务端只转发 Release 清单签名并补 URL/大小/来源等派生字段，不应保存发布私钥。
+10. 部署脚本会调用 `verify_release_manifest_signature` 校验公开腾讯云/EdgeOne 接口返回的签名。服务端只转发 Release 清单签名并补 URL/大小/来源等派生字段，不应保存发布私钥。
 
 ### 有问题？
 
@@ -257,8 +261,8 @@ Optional development tools:
 ```bash
 uv sync --extra dev
 uv run --extra dev pytest
-uv run ruff check <changed Python paths>
-uv run ruff format --check <changed Python paths>
+uv run --extra dev ruff check <changed Python paths>
+uv run --extra dev ruff format --check <changed Python paths>
 ```
 
 Code-changing tasks, including `bd`/beads tasks, must run Ruff before completion. Recommended final gates:
@@ -328,11 +332,14 @@ bd close <issue-id> --reason "Completed" --json
 
 Before closing a code-changing `bd` task, run Ruff plus the relevant tests/build checks and record the result in the commit or handoff.
 
+`bd` state lives in the local Dolt database; use `bd backup status` before handoff/closeout to check backup state. Automation should pass `--json`, and the old `bd sync` / `sync-branch` flow should not be restored.
+
 If you are contributing from a fork and cannot update the project beads database directly, mention the intended `bd` linkage in your PR description.
 
 ### Development Expectations
 
 - Python `3.14+`
+- `.python-version` pins local setup to `3.14.5`; use `uv sync --python 3.14.5 --extra dev` for a fresh checkout
 - PEP 8, 4-space indentation, preferably <= 100 columns
 - Preserve existing headers and comments; add comments only when they provide real context
 - Re-check multi-DPI, multi-monitor, history-speed mode, standalone nav window, and HUD behavior when UI changes
@@ -388,11 +395,13 @@ Manual 8111 smoke notes should cover:
 4. Smoke test the relevant release path
 5. Confirm GitHub Secrets are configured as a matching pair:
    `BOMANA_RELEASE_ED25519_PRIVATE_KEY` / `BOMANA_RELEASE_ED25519_PUBLIC_KEY`
-6. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
-7. Let GitHub Actions build, sign, and publish the assets
-8. Deploy Tencent/EdgeOne update assets locally by default:
+   and confirm `BOMANA_RELEASE_SIGNING_KEY_ID` uses the current key id, defaulting to `bomana-release-2026-06`. Do not generate, rotate, overwrite, or upload release private keys unless the private-key retention plan is explicit.
+6. Local release builds must use matching private/public keys; `tools/build_portable.py` rejects empty signatures, missing public keys, and public keys that do not match the private key.
+7. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
+8. Let GitHub Actions build, Ed25519-sign, and publish the assets
+9. Deploy Tencent/EdgeOne update assets locally by default:
    `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
    Use `deploy-manifests-to-server.yml` `workflow_dispatch` only as a fallback
-9. The deploy path verifies the public update endpoints with the release public key. The update service only forwards Release manifest signatures and adds URL/size/source fields; it must not store the release private key.
+10. The deploy path calls `verify_release_manifest_signature` before trusting public update endpoints. The update service only forwards Release manifest signatures and adds URL/size/source fields; it must not store the release private key.
 
 

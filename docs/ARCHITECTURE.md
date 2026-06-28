@@ -15,6 +15,7 @@
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
 - Tools: `tools/update_datamine_assets.py` (refresh both generated datamine assets)
 - Tools: `tools/blkx_extractor.py` / `tools/fm_speed_extractor.py` (single-asset extractors)
+- Tools: `tools/datamine_utils.py` (shared datamine source-dir and metadata helpers)
 - Tools: `tools/create_version_info.py` / `tools/sample_8111_attitude.py` (build metadata + diagnostics)
 - Branding assets: `bomana/assets/branding/` (`app.ico`, `app.png`, sponsor images)
 
@@ -55,6 +56,7 @@
 │  │  ├─ runtime.py           # Tk dispatch + runtime worker thread helpers
 │  │  ├─ runtime_services.py  # Global hotkeys, tray, and HUD runtime integrations
 │  │  ├─ settings_runtime.py  # SettingsDialog persistence-success runtime side effects
+│  │  ├─ text_utils.py        # Shared Tk text measurement, wrapping, and elision helpers
 │  │  ├─ theme.py             # Runtime Tk theme tokens (re-exported by config)
 │  │  ├─ tk_style.py          # Shared Tk palette/action-button styling tokens
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
@@ -69,6 +71,7 @@
 │  ├─ build_portable.py      # Build launcher/app package/manifest
 │  ├─ create_version_info.py # Windows version-info helper for packaging
 │  ├─ blkx_extractor.py      # .blkx -> bomana/data/ccrp_bomb_params.json generator
+│  ├─ datamine_utils.py      # Shared datamine directory + source metadata helpers
 │  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
 │  ├─ generate_ui_assets.py  # Noto Sans SC subset + PNG icon asset generator
 │  ├─ update_datamine_assets.py # One command to refresh both generated data assets
@@ -92,6 +95,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
    - `settings_runtime.py` owns SettingsDialog side effects that run only after config persistence succeeds.
+   - `text_utils.py` owns shared Tk text measurement, label wrapping, elision, and scaled control-length helpers used by main-window and dialog layout.
    - `theme.py` owns runtime theme tokens, while `tk_style.py` owns shared Tk palette/action-button styling used by the launcher and modal app dialogs.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Diagnostics flow:
@@ -132,11 +136,13 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx`
   - Recommended updater: `tools/update_datamine_assets.py`
   - Dedicated generator: `tools/blkx_extractor.py`
+  - Shared helper: `tools/datamine_utils.py`
   - Runtime consumer: `BombConfig` / CCRP ballistics path
 - `bomana/data/fm_speed_limits.json`
   - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/flightmodels/**`
   - Recommended updater: `tools/update_datamine_assets.py`
   - Dedicated generator: `tools/fm_speed_extractor.py`
+  - Shared helper: `tools/datamine_utils.py`
   - Runtime consumer: `OverspeedAnalyzer` via `/indicators.type -> unit_to_fm -> fm_speed_limits`
 - Generated JSON metadata records the datamine source version and git commit when available.
 
