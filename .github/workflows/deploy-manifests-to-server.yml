@@ -337,35 +337,106 @@ jobs:
           DEPLOY_LAUNCHER: ${{ steps.resolve.outputs.deploy_launcher }}
         run: |
           set -euo pipefail
+          APP_VERSION=""
+          LAUNCHER_VERSION=""
+          if [[ "$DEPLOY_APP" == "true" ]]; then
+            APP_VERSION="$(jq -r '.app_version' stage/manifests/manifest_Enhanced.json)"
+          fi
+          if [[ "$DEPLOY_LAUNCHER" == "true" ]]; then
+            LAUNCHER_VERSION="$(jq -r '.launcher_version' stage/root/launcher_manifest.json)"
+          fi
+
           ssh -p "$SERVER_PORT" -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" \
             "export DEPLOY_APP='$DEPLOY_APP'
             export DEPLOY_LAUNCHER='$DEPLOY_LAUNCHER'
+            export APP_VERSION='$APP_VERSION'
+            export LAUNCHER_VERSION='$LAUNCHER_VERSION'
             bash -s" <<'EOF'
           set -euo pipefail
           if [[ "$DEPLOY_APP" == "true" ]]; then
-            ls -l /opt/stacks/bomana-update/data/manifests/manifest_*.json
-            ls -l /opt/stacks/bomana-update/data/downloads/Bomana_app_*.zip
             python3 - <<'PY'
+          import hashlib
           import json
+          import os
           from pathlib import Path
-          for path in Path("/opt/stacks/bomana-update/data/manifests").glob("manifest_*.json"):
+
+          root = Path("/opt/stacks/bomana-update/data")
+          app_version = os.environ["APP_VERSION"]
+
+          def sha256_file(path: Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as fh:
+                  for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def require_signature(data: dict, path: Path) -> None:
+              sig = data.get("manifest_signature")
+              if not isinstance(sig, dict) or sig.get("algorithm") != "ed25519":
+                  raise SystemExit(f"missing Ed25519 manifest_signature: {path}")
+              if not sig.get("key_id") or not sig.get("signature"):
+                  raise SystemExit(f"incomplete Ed25519 manifest_signature: {path}")
+
+          for channel in ("Enhanced", "Standard", "Lite"):
+              for path in (
+                  root / "manifests" / f"manifest_{channel}.json",
+                  root / "manifests" / f"manifest_{channel}_v{app_version}.json",
+              ):
+                  if not path.is_file():
+                      raise SystemExit(f"missing deployed manifest: {path}")
+                  data = json.loads(path.read_text(encoding="utf-8"))
+                  require_signature(data, path)
+                  if data.get("app_version") != app_version:
+                      raise SystemExit(f"{path} app_version mismatch")
+                  asset = root / "downloads" / str(data.get("package_asset", ""))
+                  if not asset.is_file():
+                      raise SystemExit(f"missing deployed app asset: {asset}")
+                  expected_sha = str(data.get("package_sha256", "")).lower()
+                  actual_sha = sha256_file(asset)
+                  if actual_sha != expected_sha:
+                      raise SystemExit(f"{asset} sha256 mismatch")
+                  print("verified_app=", channel, path.name, asset.name, actual_sha[:12])
+          PY
+          fi
+          if [[ "$DEPLOY_LAUNCHER" == "true" ]]; then
+            python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("/opt/stacks/bomana-update/data")
+          launcher_version = os.environ["LAUNCHER_VERSION"]
+
+          def sha256_file(path: Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as fh:
+                  for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          for path in (
+              root / "launcher_manifest.json",
+              root / f"launcher_manifest_v{launcher_version}.json",
+          ):
+              if not path.is_file():
+                  raise SystemExit(f"missing deployed launcher manifest: {path}")
               data = json.loads(path.read_text(encoding="utf-8"))
               sig = data.get("manifest_signature")
               if not isinstance(sig, dict) or sig.get("algorithm") != "ed25519":
                   raise SystemExit(f"missing Ed25519 manifest_signature: {path}")
-          PY
-          fi
-          if [[ "$DEPLOY_LAUNCHER" == "true" ]]; then
-            ls -l /opt/stacks/bomana-update/data/launcher_manifest.json
-            ls -l /opt/stacks/bomana-update/data/downloads/Bomana_launcher_v*.exe
-            python3 - <<'PY'
-          import json
-          from pathlib import Path
-          path = Path("/opt/stacks/bomana-update/data/launcher_manifest.json")
-          data = json.loads(path.read_text(encoding="utf-8"))
-          sig = data.get("manifest_signature")
-          if not isinstance(sig, dict) or sig.get("algorithm") != "ed25519":
-              raise SystemExit(f"missing Ed25519 manifest_signature: {path}")
+              if not sig.get("key_id") or not sig.get("signature"):
+                  raise SystemExit(f"incomplete Ed25519 manifest_signature: {path}")
+              if data.get("launcher_version") != launcher_version:
+                  raise SystemExit(f"{path} launcher_version mismatch")
+              asset = root / "downloads" / str(data.get("launcher_asset", ""))
+              if not asset.is_file():
+                  raise SystemExit(f"missing deployed launcher asset: {asset}")
+              expected_sha = str(data.get("launcher_sha256", "")).lower()
+              actual_sha = sha256_file(asset)
+              if actual_sha != expected_sha:
+                  raise SystemExit(f"{asset} sha256 mismatch")
+              print("verified_launcher=", path.name, asset.name, actual_sha[:12])
           PY
           fi
           EOF

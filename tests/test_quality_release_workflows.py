@@ -43,6 +43,26 @@ def test_tencent_deploy_workflow_validates_signed_manifests() -> None:
     assert "verify_release_manifest_signature" in workflow
 
 
+def test_tencent_deploy_remote_verify_scopes_current_release_manifests() -> None:
+    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "APP_VERSION=\"$(jq -r '.app_version' stage/manifests/manifest_Enhanced.json)\"" in workflow
+    )
+    assert (
+        "LAUNCHER_VERSION=\"$(jq -r '.launcher_version' stage/root/launcher_manifest.json)\""
+        in workflow
+    )
+    assert 'f"manifest_{channel}_v{app_version}.json"' in workflow
+    assert 'f"launcher_manifest_v{launcher_version}.json"' in workflow
+    assert (
+        'Path("/opt/stacks/bomana-update/data/manifests").glob("manifest_*.json")' not in workflow
+    )
+    assert "ls -l /opt/stacks/bomana-update/data/manifests/manifest_*.json" not in workflow
+
+
 def test_build_release_workflow_reads_version_from_metadata_without_dev_fallback() -> None:
     workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
 
