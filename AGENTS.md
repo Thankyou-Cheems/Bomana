@@ -18,6 +18,25 @@ Keep it concise and update when workflows or boundaries change.
 - Only use the official 8111 API; no memory reads, injection, or game file edits.
 - Respect ENABLE_* feature flags (build variants share one config file).
 
+## Release Signing Workflow
+- Treat this workflow as mandatory for every release/update/deploy task, even if the user does not mention signing.
+- Release manifests must never be empty-signed or unsigned. `manifest_<Variant>.json` and `launcher_manifest.json` must contain `manifest_signature.algorithm == "ed25519"`, non-empty `key_id`, and non-empty `signature`.
+- Required build/CI secrets and env vars: `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`). `tools/build_portable.py` must fail if the public key is absent or does not match the private key.
+- Do not generate, rotate, overwrite, or upload release signing keys unless the user explicitly asks and confirms the private-key retention plan. Never print private keys in logs or handoffs.
+- The release signature covers release-owned core fields only:
+  - App: `schema_version`, `channel`, `app_version`, `min_launcher_version`, `entrypoint`, `package_asset`, `package_sha256`.
+  - Launcher: `schema_version`, `launcher_version`, `launcher_asset`, `launcher_sha256`, `launcher_size_bytes`.
+- TencentCloudPublic / `bomana-update` must not hold the release private key. It only forwards `manifest_signature` from deployed manifests and may add derived fields such as `package_url`, `source_name`, `package_size`, and launcher compatibility `package_sha256`.
+- Clients must verify `manifest_signature` before trusting versions, assets, or SHA256. For launcher updates, prefer signed `launcher_sha256` over the service-derived `package_sha256` alias.
+- Before publishing or deploying update assets, verify:
+  ```bash
+  gh secret list --repo Thankyou-Cheems/Bomana
+  uv run python tools/build_portable.py --target app|launcher|all ...
+  uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
+  ```
+  Public endpoint verification must call `verify_release_manifest_signature`, not just check that a signature field exists.
+- Current known blocker if secrets are still missing: `Bomana-xkf` (`配置发布签名 GitHub Secrets`).
+
 ## Header Facts (Condensed)
 - Data sources: `/indicators`, `/state`, `/map_obj.json`, `/map_info.json`.
 - Tech stack: Python 3.14+, `tkinter`, `requests`, `ctypes` (optional: Pillow, pystray).
