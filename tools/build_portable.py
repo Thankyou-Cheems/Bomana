@@ -52,6 +52,27 @@ BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
 SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
 SIGNING_PUBLIC_KEY_ENV = "BOMANA_RELEASE_ED25519_PUBLIC_KEY"
 SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
+PACKAGED_LAUNCHER_REQUIRES_PYTHON = ">=3.14"
+PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "2.0.0"
+PACKAGED_LAUNCHER_RUNTIME_MODULES_BY_DEPENDENCY = {
+    "requests": "requests",
+    "certifi": "certifi",
+    "pillow": "PIL",
+    "pystray": "pystray",
+}
+PACKAGED_LAUNCHER_HIDDEN_IMPORTS = (
+    "pystray._win32",
+    "winsound",
+    "bomana.release_public_keys",
+)
+PACKAGED_LAUNCHER_COLLECT_SUBMODULES = (
+    "PIL",
+    "pystray",
+)
+PACKAGED_LAUNCHER_COLLECT_ALL = (
+    "requests",
+    "certifi",
+)
 
 
 def safe_print(msg: str) -> None:
@@ -100,6 +121,25 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def packaged_launcher_runtime_dependency_names() -> tuple[str, ...]:
+    return tuple(PACKAGED_LAUNCHER_RUNTIME_MODULES_BY_DEPENDENCY)
+
+
+def packaged_launcher_runtime_module_names() -> tuple[str, ...]:
+    return tuple(PACKAGED_LAUNCHER_RUNTIME_MODULES_BY_DEPENDENCY.values())
+
+
+def pyinstaller_launcher_runtime_args() -> list[str]:
+    args: list[str] = []
+    for module in PACKAGED_LAUNCHER_HIDDEN_IMPORTS:
+        args.extend(["--hidden-import", module])
+    for module in PACKAGED_LAUNCHER_COLLECT_SUBMODULES:
+        args.extend(["--collect-submodules", module])
+    for module in PACKAGED_LAUNCHER_COLLECT_ALL:
+        args.extend(["--collect-all", module])
+    return args
 
 
 def sign_manifest(manifest: dict[str, object]) -> dict[str, object]:
@@ -305,20 +345,7 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         name,
         "--icon",
         str(root / BRANDING_ICON),
-        "--hidden-import",
-        "pystray._win32",
-        "--hidden-import",
-        "winsound",
-        "--hidden-import",
-        "bomana.release_public_keys",
-        "--collect-submodules",
-        "PIL",
-        "--collect-submodules",
-        "pystray",
-        "--collect-all",
-        "requests",
-        "--collect-all",
-        "certifi",
+        *pyinstaller_launcher_runtime_args(),
         "--distpath",
         str(out_dir),
         "--workpath",

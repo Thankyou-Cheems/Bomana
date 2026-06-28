@@ -58,6 +58,35 @@ def test_build_release_workflow_passes_manifest_signing_secret() -> None:
     assert "BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06" in workflow
 
 
+def test_build_release_workflow_isolates_python_env_and_uses_frozen_uv() -> None:
+    workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+
+    assert 'PYTHONNOUSERSITE: "1"' in workflow
+    assert 'PYTHONPATH: ""' in workflow
+    assert 'PYTHONHOME: ""' in workflow
+    assert "uv sync --extra dev --frozen" in workflow
+    assert "uv sync --extra build --frozen" in workflow
+    assert "uv run --frozen --extra dev ruff check ." in workflow
+    assert "uv run --frozen --extra dev ruff format --check ." in workflow
+    assert "uv run --frozen python tools/build_portable.py" in workflow
+
+
+def test_local_portable_build_scripts_isolate_python_env_and_use_frozen_uv() -> None:
+    for relative_path in (
+        "tools/scripts/build_portable.bat",
+        "tools/scripts/build_launcher.bat",
+    ):
+        script = (ROOT / relative_path).read_text(encoding="utf-8")
+        env_index = script.index('set "PYTHONNOUSERSITE=1"')
+        uv_index = script.index('set "UV_CMD=uv"')
+
+        assert 'set "PYTHONPATH="' in script
+        assert 'set "PYTHONHOME="' in script
+        assert env_index < uv_index
+        assert "sync --extra build --frozen" in script
+        assert "run --frozen python tools\\build_portable.py" in script
+
+
 def test_local_deploy_script_validates_required_assets(tmp_path: Path) -> None:
     script_path = ROOT / "tools/deploy_update_assets.py"
     spec = importlib.util.spec_from_file_location("deploy_update_assets", script_path)

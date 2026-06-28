@@ -26,6 +26,9 @@ permissions:
 env:
   PYTHONUTF8: "1"
   PYTHONIOENCODING: utf-8
+  PYTHONNOUSERSITE: "1"
+  PYTHONPATH: ""
+  PYTHONHOME: ""
 
 jobs:
   prepare:
@@ -175,12 +178,12 @@ jobs:
       - name: Ruff check
         shell: pwsh
         run: |
-          uv run --extra dev ruff check .
+          uv run --frozen --extra dev ruff check .
 
       - name: Ruff format check
         shell: pwsh
         run: |
-          uv run --extra dev ruff format --check .
+          uv run --frozen --extra dev ruff format --check .
 
       - name: Pytest smoke
         shell: cmd
@@ -227,7 +230,7 @@ jobs:
           BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
           BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
         run: |
-          uv run python tools/build_portable.py `
+          uv run --frozen python tools/build_portable.py `
             --variant "${{ matrix.variant.slug }}" `
             --target "app" `
             --version "${{ needs.prepare.outputs.version }}" `
@@ -275,7 +278,7 @@ jobs:
           BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
           BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
         run: |
-          uv run python tools/build_portable.py `
+          uv run --frozen python tools/build_portable.py `
             --target "launcher" `
             --version "${{ needs.prepare.outputs.launcher_version }}" `
             --output "dist"

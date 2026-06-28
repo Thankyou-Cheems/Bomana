@@ -51,6 +51,10 @@ echo 打包目标: %TARGET%
 if not "%VERSION%"=="" echo 版本号: %VERSION%
 echo.
 
+set "PYTHONPATH="
+set "PYTHONHOME="
+set "PYTHONNOUSERSITE=1"
+
 set "UV_CMD=uv"
 %UV_CMD% --version >nul 2>&1
 if %errorlevel% neq 0 (
@@ -63,8 +67,8 @@ if %errorlevel% neq 0 (
     )
 )
 
-echo [信息] 同步依赖 (uv sync --extra build)...
-%UV_CMD% sync --extra build
+echo [信息] 同步依赖 (uv sync --extra build --frozen)...
+%UV_CMD% sync --extra build --frozen
 if %errorlevel% neq 0 (
     echo [错误] 依赖同步失败
     set "EXIT_CODE=1"
@@ -72,9 +76,9 @@ if %errorlevel% neq 0 (
 )
 
 if "%VERSION%"=="" (
-    %UV_CMD% run python tools\build_portable.py --variant %VARIANT% --target %TARGET%
+    %UV_CMD% run --frozen python tools\build_portable.py --variant %VARIANT% --target %TARGET%
 ) else (
-    %UV_CMD% run python tools\build_portable.py --variant %VARIANT% --target %TARGET% --version "%VERSION%"
+    %UV_CMD% run --frozen python tools\build_portable.py --variant %VARIANT% --target %TARGET% --version "%VERSION%"
 )
 
 if %errorlevel% neq 0 (

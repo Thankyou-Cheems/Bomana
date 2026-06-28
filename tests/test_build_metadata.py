@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -7,6 +9,7 @@ import pytest
 from bomana import launcher_core, metadata
 
 ROOT = Path(__file__).resolve().parents[1]
+DEPENDENCY_NAME_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)")
 
 
 def load_tool_module(name: str, relative_path: str):
@@ -18,6 +21,12 @@ def load_tool_module(name: str, relative_path: str):
     return module
 
 
+def normalized_dependency_name(requirement: str) -> str:
+    match = DEPENDENCY_NAME_RE.match(requirement)
+    assert match is not None
+    return re.sub(r"[-_.]+", "-", match.group(1)).lower()
+
+
 def test_portable_build_reads_version_from_metadata() -> None:
     build_portable = load_tool_module("build_portable", "tools/build_portable.py")
     metadata_text = (ROOT / "bomana" / "metadata.py").read_text(encoding="utf-8")
@@ -27,6 +36,47 @@ def test_portable_build_reads_version_from_metadata() -> None:
         build_portable.read_min_launcher_version(metadata_text)
         == metadata.PORTABLE_MIN_LAUNCHER_VERSION
     )
+
+
+def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:
+    build_portable = load_tool_module(
+        "build_portable_runtime_contract",
+        "tools/build_portable.py",
+    )
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project = pyproject["project"]
+
+    pyproject_dependencies = {
+        normalized_dependency_name(dependency) for dependency in project["dependencies"]
+    }
+    launcher_dependencies = {
+        normalized_dependency_name(dependency)
+        for dependency in build_portable.packaged_launcher_runtime_dependency_names()
+    }
+    runtime_args = build_portable.pyinstaller_launcher_runtime_args()
+
+    assert launcher_dependencies == pyproject_dependencies
+    assert project["requires-python"] == build_portable.PACKAGED_LAUNCHER_REQUIRES_PYTHON
+    assert (
+        build_portable.PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION
+        == metadata.PORTABLE_MIN_LAUNCHER_VERSION
+    )
+    assert runtime_args == [
+        "--hidden-import",
+        "pystray._win32",
+        "--hidden-import",
+        "winsound",
+        "--hidden-import",
+        "bomana.release_public_keys",
+        "--collect-submodules",
+        "PIL",
+        "--collect-submodules",
+        "pystray",
+        "--collect-all",
+        "requests",
+        "--collect-all",
+        "certifi",
+    ]
 
 
 TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"

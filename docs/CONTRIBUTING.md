@@ -168,6 +168,10 @@ bd close <issue-id> --reason "Completed" --json
 - 受影响功能的静态自测
 - 真实 War Thunder SB 实测（如果改动涉及 8111 数据、UI 刷新、热键、导航、HUD、启动器）
 - 打包链路验证：`tools\scripts\build_portable.bat <Variant> <all|app|launcher>`（如果改动涉及发布或资源）
+- Windows 打包启动器发布 smoke：
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools\scripts\packaged_launcher_smoke.ps1 -Variant Enhanced`
+  会构建签名启动器与应用包、复制到带空格和中文的路径、毒化 Python 环境变量/PATH，并自动验证启动器到应用窗口的交接。
+  已有产物可用 `-NoBuild -ArtifactDir dist` 复用。
 
 需要实机 8111 的手工 smoke 建议至少记录：
 
@@ -364,6 +368,10 @@ Relevant changes should be validated with some combination of:
 - focused local static checks
 - real War Thunder SB smoke testing
 - `tools\scripts\build_portable.bat <Variant> <all|app|launcher>` for packaging/release changes
+- Windows packaged-launcher release smoke:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools\scripts\packaged_launcher_smoke.ps1 -Variant Enhanced`
+  builds signed launcher/app assets, copies them to a path with spaces and Chinese characters, poisons Python environment variables/PATH, and automates the launcher-to-app window handoff.
+  Use `-NoBuild -ArtifactDir dist` to reuse existing artifacts.
 
 Manual 8111 smoke notes should cover:
 

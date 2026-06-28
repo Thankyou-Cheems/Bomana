@@ -12,6 +12,10 @@ if %errorlevel% neq 0 (
 
 set "VERSION=%~1"
 
+set "PYTHONPATH="
+set "PYTHONHOME="
+set "PYTHONNOUSERSITE=1"
+
 set "UV_CMD=uv"
 %UV_CMD% --version >nul 2>&1
 if %errorlevel% neq 0 (
@@ -24,7 +28,7 @@ if %errorlevel% neq 0 (
   )
 )
 
-%UV_CMD% sync --extra build
+%UV_CMD% sync --extra build --frozen
 if %errorlevel% neq 0 (
   echo [错误] 依赖同步失败
   set "EXIT_CODE=1"
@@ -32,9 +36,9 @@ if %errorlevel% neq 0 (
 )
 
 if "%VERSION%"=="" (
-  %UV_CMD% run python tools\build_portable.py --target launcher
+  %UV_CMD% run --frozen python tools\build_portable.py --target launcher
 ) else (
-  %UV_CMD% run python tools\build_portable.py --target launcher --version "%VERSION%"
+  %UV_CMD% run --frozen python tools\build_portable.py --target launcher --version "%VERSION%"
 )
 if %errorlevel% neq 0 (
   set "EXIT_CODE=1"
