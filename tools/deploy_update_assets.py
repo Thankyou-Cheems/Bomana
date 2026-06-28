@@ -16,7 +16,11 @@ from pathlib import Path
 from urllib.parse import urljoin
 from urllib.request import urlopen
 
-from bomana.launcher_core import (
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from bomana.launcher_core import (  # noqa: E402
     RELEASE_MANIFEST_DEFAULT_KEY_ID,
     verify_release_manifest_signature,
 )

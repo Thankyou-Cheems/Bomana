@@ -1,5 +1,8 @@
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -56,6 +59,28 @@ def test_build_release_workflow_passes_manifest_signing_secret() -> None:
     assert "BOMANA_RELEASE_ED25519_PUBLIC_KEY" in workflow
     assert "${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}" in workflow
     assert "BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06" in workflow
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ("tools/build_portable.py", "tools/deploy_update_assets.py"),
+)
+def test_release_tool_entrypoints_run_without_pythonpath(relative_path: str) -> None:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONHOME", None)
+    env["PYTHONNOUSERSITE"] = "1"
+
+    result = subprocess.run(
+        [sys.executable, relative_path, "--help"],
+        cwd=ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "--target" in result.stdout
 
 
 def test_build_release_workflow_isolates_python_env_and_uses_frozen_uv() -> None:
