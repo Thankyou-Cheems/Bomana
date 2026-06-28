@@ -124,7 +124,7 @@ uv run python tools/update_datamine_assets.py ^
 - 发布构建使用 Python 3.14 + uv；本地打包前运行 `uv sync --extra build --frozen`。
 - 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
 - 本地发布命令入口是 `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`；`--version` 只是可选一致性校验，app 目标必须匹配 `bomana/metadata.py` 的 `__version__`，launcher 目标必须匹配 `launcher.pyw` 的 `LAUNCHER_VERSION`。
-- 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；更新服务部署入口是 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`，公开端点验证必须调用 `verify_release_manifest_signature`。
+- 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；更新服务部署只能从本机运行 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`，不要用 GitHub Actions 直连腾讯云主机部署。公开端点验证必须调用 `verify_release_manifest_signature`。
 
 ---
 
@@ -230,6 +230,6 @@ A: Expected for an estimate-based model. Tune `range correction` and `time corre
 - Release builds use Python 3.14 + uv; run `uv sync --extra build --frozen` before local packaging.
 - Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).
 - Local package entry: `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`; `--version` is an optional consistency check and must match `bomana/metadata.py __version__` for app builds or `launcher.pyw LAUNCHER_VERSION` for launcher builds.
-- Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; deploy with `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`, and public endpoint checks must call `verify_release_manifest_signature`.
+- Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; deploy only from the maintainer workstation with `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`. Do not deploy to Tencent from GitHub Actions. Public endpoint checks must call `verify_release_manifest_signature`.
 
 ---

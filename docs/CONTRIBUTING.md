@@ -199,10 +199,10 @@ bd close <issue-id> --reason "Completed" --json
    - `vX.Y.Z-app`：仅应用包
    - `vX.Y.Z-launcher`：仅启动器
 8. GitHub Actions 会构建对应产物并创建/更新 Release；构建会用 Ed25519 签名 `manifest_<Variant>.json` 与 `launcher_manifest.json`
-9. 国内更新服务默认走本地直推，避免等待 Actions 二次 SSH 部署：
+9. 国内更新服务必须走本机直推，避免 Actions 到腾讯云的 SSH/rsync 链路：
    `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
-   需要兜底时，可手动运行 `deploy-manifests-to-server.yml` 的 `workflow_dispatch`
-10. 部署脚本会调用 `verify_release_manifest_signature` 校验公开腾讯云/EdgeOne 接口返回的签名。服务端只转发 Release 清单签名并补 URL/大小/来源等派生字段，不应保存发布私钥。
+   不要添加或触发 GitHub Actions 到腾讯云主机的部署 workflow。
+10. 部署脚本会调用 `verify_release_manifest_signature` 校验公开腾讯云/EdgeOne 接口返回的签名。服务端只转发 Release 清单签名并补 URL/大小/来源等派生字段，不应保存发布私钥。不要引入 COS/CDN 等额外付费对象存储，除非用户明确批准成本。
 
 ### 有问题？
 
@@ -399,9 +399,8 @@ Manual 8111 smoke notes should cover:
 6. Local release builds must use matching private/public keys; `tools/build_portable.py` rejects empty signatures, missing public keys, and public keys that do not match the private key.
 7. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
 8. Let GitHub Actions build, Ed25519-sign, and publish the assets
-9. Deploy Tencent/EdgeOne update assets locally by default:
+9. Deploy Tencent/EdgeOne update assets locally from the maintainer workstation:
    `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
-   Use `deploy-manifests-to-server.yml` `workflow_dispatch` only as a fallback
-10. The deploy path calls `verify_release_manifest_signature` before trusting public update endpoints. The update service only forwards Release manifest signatures and adds URL/size/source fields; it must not store the release private key.
-
+   Do not add or trigger a GitHub Actions workflow that deploys to the Tencent host.
+10. The deploy path calls `verify_release_manifest_signature` before trusting public update endpoints. The update service only forwards Release manifest signatures and adds URL/size/source fields; it must not store the release private key. Do not introduce COS/CDN paid object storage unless the user explicitly approves the cost.
 

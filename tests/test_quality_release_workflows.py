@@ -21,64 +21,42 @@ def load_tool_module(name: str, relative_path: str):
     return module
 
 
-def test_tencent_deploy_workflow_is_manual_only() -> None:
-    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
-        encoding="utf-8"
+def test_tencent_deploy_is_local_only() -> None:
+    deploy_workflow = ROOT / ".github/workflows/deploy-manifests-to-server.yml"
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+    assert not deploy_workflow.exists()
+    assert "Tencent/EdgeOne update deployment is local-only" in agents
+    assert "Do not deploy update assets from GitHub-hosted Actions" in agents
+    assert "tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z" in agents
+
+
+def test_docs_do_not_restore_github_to_tencent_deploy_fallback() -> None:
+    checked_docs = (
+        ROOT / "AGENTS.md",
+        ROOT / "docs/ARCHITECTURE.md",
+        ROOT / "docs/CONTRIBUTING.md",
+        ROOT / "docs/QUICKSTART.md",
     )
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked_docs)
 
-    assert "workflow_dispatch:" in workflow
-    assert "workflow_run:" not in workflow
-    assert "Build and Release Bomana Portable" not in workflow
-
-
-def test_tencent_deploy_workflow_validates_signed_manifests() -> None:
-    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
-        encoding="utf-8"
-    )
-
-    assert "validate_manifest_signature" in workflow
-    assert '.manifest_signature.algorithm == "ed25519"' in workflow
-    assert "Verify public update endpoints" in workflow
-    assert "PUBLIC_UPDATE_BASE_URL" in workflow
-    assert "verify_release_manifest_signature" in workflow
+    assert "deploy-manifests-to-server.yml" not in combined
+    assert "workflow_dispatch` only as a fallback" not in combined
+    assert "manual-only fallback" not in combined
+    assert "GitHub-hosted Actions must not SSH/rsync/scp" in combined
+    assert "不要用 GitHub Actions 直连腾讯云主机部署" in combined
 
 
-def test_tencent_deploy_remote_verify_scopes_current_release_manifests() -> None:
-    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
-        encoding="utf-8"
-    )
+def test_local_deploy_script_validates_signed_manifests_and_public_endpoints() -> None:
+    source = (ROOT / "tools/deploy_update_assets.py").read_text(encoding="utf-8")
 
-    assert (
-        "APP_VERSION=\"$(jq -r '.app_version' stage/manifests/manifest_Enhanced.json)\"" in workflow
-    )
-    assert (
-        "LAUNCHER_VERSION=\"$(jq -r '.launcher_version' stage/root/launcher_manifest.json)\""
-        in workflow
-    )
-    assert 'f"manifest_{channel}_v{app_version}.json"' in workflow
-    assert 'f"launcher_manifest_v{launcher_version}.json"' in workflow
-    assert (
-        'Path("/opt/stacks/bomana-update/data/manifests").glob("manifest_*.json")' not in workflow
-    )
-    assert "ls -l /opt/stacks/bomana-update/data/manifests/manifest_*.json" not in workflow
-
-
-def test_tencent_deploy_syncs_versioned_manifests_and_reuses_remote_assets() -> None:
-    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
-        encoding="utf-8"
-    )
-
-    assert "remote_existing_path()" in workflow
-    assert "sha256sum '$existing_path'" in workflow
-    assert "Reusing remote $rel_path" in workflow
-    assert (
-        'install_file "$manifest" "$MANIFEST_DIR/manifest_${channel}_v${app_version}.json"'
-        in workflow
-    )
-    assert (
-        'install_file "$launcher_manifest_src" "$(dirname "$LAUNCHER_MANIFEST")/'
-        'launcher_manifest_v${launcher_version}.json"'
-    ) in workflow
+    assert "validate_local_release_assets" in source
+    assert "verify_public" in source
+    assert "verify_release_manifest_signature" in source
+    assert 'expected_kind="launcher"' in source
+    assert "public asset sha256 mismatch" in source
+    assert "versioned_manifest" in source
+    assert "launcher_manifest_v{launcher_version}.json" in source
 
 
 def test_build_release_workflow_reads_version_from_metadata_without_dev_fallback() -> None:
@@ -219,17 +197,6 @@ def test_public_endpoint_verifiers_validate_signature_before_fields() -> None:
         'if str(payload.get(field, "")) != expected', deploy_decode
     )
     assert deploy_decode < deploy_verify < deploy_field_check
-
-    workflow = (ROOT / ".github/workflows/deploy-manifests-to-server.yml").read_text(
-        encoding="utf-8"
-    )
-    workflow_decode = workflow.index('payload = json.loads(response.read().decode("utf-8"))')
-    workflow_verify = workflow.index("verify_release_manifest_signature(", workflow_decode)
-    workflow_field_check = workflow.index(
-        'if str(payload.get(expected_field, "")) != expected_value',
-        workflow_decode,
-    )
-    assert workflow_decode < workflow_verify < workflow_field_check
 
 
 def test_local_deploy_script_prevalidates_signed_launcher_assets(

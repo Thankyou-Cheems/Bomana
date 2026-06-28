@@ -28,6 +28,12 @@ Keep it concise and update when workflows or boundaries change.
   - Launcher: `schema_version`, `launcher_version`, `launcher_asset`, `launcher_sha256`, `launcher_size_bytes`.
 - TencentCloudPublic / `bomana-update` must not hold the release private key. It only forwards `manifest_signature` from deployed manifests and may add derived fields such as `package_url`, `source_name`, `package_size`, and launcher compatibility `package_sha256`.
 - Clients must verify `manifest_signature` before trusting versions, assets, or SHA256. For launcher updates, prefer signed `launcher_sha256` over the service-derived `package_sha256` alias.
+- Tencent/EdgeOne update deployment is local-only from the maintainer workstation. Do not deploy update assets from GitHub-hosted Actions to TencentCloudPublic/CVM via SSH, rsync, or scp; that path is intentionally absent because the network is too slow and unreliable.
+- If a release session needs deployment, GitHub Actions may build and publish the signed GitHub Release, but the Tencent update deploy command must be run locally:
+  ```bash
+  uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
+  ```
+- Do not add COS/CDN paid artifact storage or switch update assets to paid object storage unless the user explicitly approves the cost.
 - Before publishing or deploying update assets, verify:
   ```bash
   gh secret list --repo Thankyou-Cheems/Bomana

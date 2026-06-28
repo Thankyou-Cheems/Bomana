@@ -219,8 +219,8 @@ CI:
   - `vX.Y.Z-app`: app packages only
   - `vX.Y.Z-launcher`: launcher only
 - `workflow_dispatch` also supports `build_target=all|app|launcher`.
-- `tools/deploy_update_assets.py` is the default Tencent/EdgeOne deployment path for locally built assets; it backs up `stats.db`/manifests, uploads app/launcher assets, writes versioned manifests, and verifies public endpoints with the release public key.
-- `.github/workflows/deploy-manifests-to-server.yml` is manual-only fallback via `workflow_dispatch`; tag releases no longer auto-deploy to Tencent after GitHub Release creation. The fallback rejects unsigned manifests before upload and verifies the public Tencent endpoints after deployment.
+- `tools/deploy_update_assets.py` is the only supported Tencent/EdgeOne deployment path for release update assets; it runs from the maintainer workstation, backs up `stats.db`/manifests, uploads app/launcher assets, writes versioned manifests, and verifies public endpoints with the release public key.
+- GitHub-hosted Actions must not SSH/rsync/scp release assets to TencentCloudPublic/CVM. That deploy workflow is intentionally absent because the GitHub runner to Tencent network path is slow/unreliable; build and Release creation remain in GitHub Actions, while Tencent update deployment stays local.
 
 ## Documentation Map
 - `README.md`: public landing page, install paths, feature overview, compliance statement
@@ -229,4 +229,3 @@ CI:
 - `docs/PRIVACY.md`: launcher telemetry/update-service privacy disclosure
 - `docs/PITFALLS.md`: operational failure log for maintainers
 - `docs/PYSIDE6_MVP_EVALUATION.md`: PySide6 main/nav MVP migration assessment and validation gates
-

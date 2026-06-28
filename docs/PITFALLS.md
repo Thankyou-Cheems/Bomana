@@ -43,6 +43,11 @@ implementation plans belong in git history, not here.
   Cause: CI SSH user lacked direct write permission after ownership/ACL drift
   Fix/Workaround: upload to remote `/tmp` staging first, then sync into the target directory with a direct-write check and passwordless-`sudo` fallback
 
+- Context: GitHub-hosted Actions uploading release assets to TencentCloudPublic/CVM
+  Symptom: SSH/rsync upload of app packages or launcher exe ran at roughly 10 KB/s and could stall release deployment for tens of minutes
+  Cause: the GitHub-hosted runner to Tencent network path is slow/unreliable, while the Tencent host also cannot reliably pull from GitHub directly
+  Fix/Workaround: keep GitHub Actions limited to signed Release builds; deploy Tencent/EdgeOne update assets only from the maintainer workstation with `tools/deploy_update_assets.py`
+
 ### Packaging And Release Hygiene
 
 - Context: automated quality gates after adding pytest-style test functions
