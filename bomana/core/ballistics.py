@@ -176,10 +176,16 @@ def _calculate_trajectory_advanced(h, vx, vz0, g, bomb_params, range_mult, time_
         current_drag_cx = drag_cx
         if stab_enabled and len(brake_time) >= 2:
             brake_start = brake_time[0] + BallisticPhysicsParams.BRAKE_DEPLOY_DELAY
-            brake_end = brake_time[1] + BallisticPhysicsParams.BRAKE_DEPLOY_DELAY
-            if brake_start <= t <= brake_end and brake_cx_k > 0:
+            brake_end = max(brake_start, brake_time[1] + BallisticPhysicsParams.BRAKE_DEPLOY_DELAY)
+            if t >= brake_start and brake_cx_k > 0:
+                open_time = max(
+                    BallisticPhysicsParams.HIGH_DRAG_OPEN_TIME_SEC,
+                    brake_end - brake_start,
+                )
+                deploy_ratio = min(1.0, max(0.0, (t - brake_start) / open_time))
+                deploy_factor = deploy_ratio * deploy_ratio * (3.0 - 2.0 * deploy_ratio)
                 brake_drag = brake_cx_k / (caliber**2) * BallisticPhysicsParams.BRAKE_DRAG_MULT
-                current_drag_cx += brake_drag
+                current_drag_cx += brake_drag * deploy_factor
 
         v = max(0.1, math.sqrt(vx_curr**2 + vz_curr**2))
         drag_factor = 0.5 * rho * current_drag_cx * area / mass

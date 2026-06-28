@@ -2687,6 +2687,14 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
 
         current_index, select_index, total_count = 0, 0, 0
 
+        def _profile_badge(bomb_data: dict) -> str:
+            prediction_kind = str(bomb_data.get("prediction_kind", "freefall") or "freefall")
+            if prediction_kind == "guided_glide":
+                return " [制导/滑翔]"
+            if prediction_kind == "high_drag":
+                return " [高阻]"
+            return ""
+
         if show_categories:
             for category in BombConfig.get_categories():
                 cat_bombs = BombConfig.get_bombs_by_category(category)
@@ -2701,7 +2709,10 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
                     if bomb_data:
                         mass = bomb_data["mass"]
                         mass_str = f"{mass / 1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
-                        text = f"  {bomb_id} ({mass_str}, Cx={bomb_data.get('drag_cx', 0.04):.4f})"
+                        text = (
+                            f"  {bomb_id} ({mass_str}, Cx={bomb_data.get('drag_cx', 0.04):.4f})"
+                            f"{_profile_badge(bomb_data)}"
+                        )
                     else:
                         text = f"  {bomb_id}"
 
@@ -2720,6 +2731,7 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
                     cat = bomb_data.get("category", "?")
                     text = (
                         f"{bomb_id} ({mass_str}, Cx={bomb_data.get('drag_cx', 0.04):.4f}) [{cat}]"
+                        f"{_profile_badge(bomb_data)}"
                     )
                 else:
                     text = bomb_id

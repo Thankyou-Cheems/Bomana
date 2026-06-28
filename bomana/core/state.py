@@ -421,6 +421,7 @@ class GameState:
     cached_time_to_release: float = 0.0
     cached_release_status: str = "invalid"
     cached_target_distance_m: float = 0.0
+    cached_bombing_unavailable_reason: str = ""
     bombing_calc_valid: bool = False
     last_bombing_calc_time: float = 0.0
     current_life: LifeState | None = None  # 当前生命
@@ -630,6 +631,7 @@ class UISnapshot:
     time_to_release: float = 0.0  # 到投弹点时间 (秒)
     release_status: str = "invalid"  # ready/approaching/too_far/passed/invalid
     target_zone_distance_m: float = 0.0  # 目标战区距离 (米)
+    bombing_unavailable_reason: str = ""  # guided_glide/release_mach_limit/unstable/calc_failed
     ground_speed_kmh: float = 0.0  # 地速 (km/h)
     aircraft_type_name: str = ""  # 当前机型标识（来自 /indicators.type）
 

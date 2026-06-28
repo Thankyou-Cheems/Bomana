@@ -725,13 +725,20 @@ class AppPanelRenderer:
         app.bomb_select_lbl.config(
             text=f"炸弹: {BombConfig.format_bomb_name(snap.bomb_name)} (点击更换)"
         )
+        bomb_data = BombConfig.get_bomb_data(snap.bomb_name) or {}
+        prediction_kind = str(bomb_data.get("prediction_kind", "freefall") or "freefall")
 
         if snap.bombing_valid:
             bomb_range_km = snap.bomb_range_m / 1000.0
-            app.bomb_trajectory_lbl.config(text=f"弹道: {bomb_range_km:.2f}km", fg=Theme.TEXT_DIM)
+            trajectory_label = "高阻" if prediction_kind == "high_drag" else "弹道"
+            app.bomb_trajectory_lbl.config(
+                text=f"{trajectory_label}: {bomb_range_km:.2f}km",
+                fg=Theme.TEXT_DIM,
+            )
             if hasattr(app, "bomb_flight_lbl"):
+                flight_label = "直落" if prediction_kind == "high_drag" else "飞行"
                 app.bomb_flight_lbl.config(
-                    text=f"飞行: {snap.bomb_flight_time:.1f}s",
+                    text=f"{flight_label}: {snap.bomb_flight_time:.1f}s",
                     fg=Theme.TEXT_DIM,
                 )
 
@@ -783,36 +790,60 @@ class AppPanelRenderer:
             if hasattr(app, "bomb_release_detail_lbl"):
                 app.bomb_release_detail_lbl.config(text=release_detail_text, fg=release_color)
         else:
-            app.bomb_trajectory_lbl.config(text="弹道: -- km", fg=Theme.TEXT_MUTED)
-            if hasattr(app, "bomb_flight_lbl"):
-                app.bomb_flight_lbl.config(text="飞行: -- s", fg=Theme.TEXT_MUTED)
+            unavailable_reason = str(getattr(snap, "bombing_unavailable_reason", "") or "").strip()
 
-            if snap.on_ground:
-                release_icon = "aircraft"
-                release_text = "请起飞"
-                release_detail_text = "起飞后开始计算"
-            elif snap.altitude_m <= 50:
-                release_icon = "climb"
-                release_text = "请爬升"
-                release_detail_text = "高度超过 50m 后开始计算"
-            elif not snap.has_target:
+            if unavailable_reason == "guided_glide":
+                app.bomb_trajectory_lbl.config(text="弹道: 不适用", fg=Theme.TEXT_MUTED)
+                if hasattr(app, "bomb_flight_lbl"):
+                    app.bomb_flight_lbl.config(text="飞行: 制导/滑翔", fg=Theme.TEXT_MUTED)
                 release_icon = "aim"
-                release_text = "无目标战区"
-                release_detail_text = "选择或接近目标战区"
+                release_text = "未辅助"
+                release_detail_text = "使用武器自身引导，不显示释放点"
+            elif unavailable_reason == "release_mach_limit":
+                app.bomb_trajectory_lbl.config(text="弹道: 超限", fg=Theme.TEXT_MUTED)
+                if hasattr(app, "bomb_flight_lbl"):
+                    app.bomb_flight_lbl.config(text="飞行: 不计算", fg=Theme.TEXT_MUTED)
+                mach = getattr(snap, "overspeed_current_mach", None)
+                mach_text = f"M{float(mach):.2f}" if mach is not None else "M≥1.00"
+                release_icon = "danger"
+                release_text = "不可投"
+                release_detail_text = f"{mach_text} 超过投放限制，减速后再投"
             else:
-                release_icon = None
-                release_text = "↻ 请对准目标"
-                release_detail_text = "进入释放航线后显示距离和时间"
+                app.bomb_trajectory_lbl.config(text="弹道: -- km", fg=Theme.TEXT_MUTED)
+                if hasattr(app, "bomb_flight_lbl"):
+                    app.bomb_flight_lbl.config(text="飞行: -- s", fg=Theme.TEXT_MUTED)
+
+                if snap.on_ground:
+                    release_icon = "aircraft"
+                    release_text = "请起飞"
+                    release_detail_text = "起飞后开始计算"
+                elif snap.altitude_m <= 50:
+                    release_icon = "climb"
+                    release_text = "请爬升"
+                    release_detail_text = "高度超过 50m 后开始计算"
+                elif not snap.has_target:
+                    release_icon = "aim"
+                    release_text = "无目标战区"
+                    release_detail_text = "选择或接近目标战区"
+                else:
+                    release_icon = None
+                    release_text = "↻ 请对准目标"
+                    release_detail_text = "进入释放航线后显示距离和时间"
+
+            if unavailable_reason in {"guided_glide", "release_mach_limit"}:
+                release_fg = Theme.YELLOW if unavailable_reason == "guided_glide" else Theme.RED
+            else:
+                release_fg = Theme.TEXT_MUTED
 
             app.icons.configure_label(
                 app.bomb_release_lbl,
                 icon=release_icon,
                 text=release_text,
                 size=self._icon_size(18),
-                fg=Theme.TEXT_MUTED,
+                fg=release_fg,
             )
             if hasattr(app, "bomb_release_detail_lbl"):
-                app.bomb_release_detail_lbl.config(text=release_detail_text, fg=Theme.TEXT_MUTED)
+                app.bomb_release_detail_lbl.config(text=release_detail_text, fg=release_fg)
 
     @staticmethod
     def format_aircraft_type_label(raw: str) -> str:

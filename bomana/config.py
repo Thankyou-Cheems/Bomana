@@ -814,7 +814,12 @@ class BallisticPhysicsParams:
 
     # ==================== 减速伞参数 ====================
     BRAKE_DRAG_MULT = 1.0
-    BRAKE_DEPLOY_DELAY = 0.5
+    BRAKE_DEPLOY_DELAY = 0.0
+    HIGH_DRAG_BRAKE_CXK_MIN = 10.0
+    HIGH_DRAG_OPEN_TIME_SEC = 0.12
+
+    # ==================== 投放限制 ====================
+    RELEASE_MAX_MACH = 1.0
 
     # ==================== 数值计算精度 ====================
     TIME_STEP = 0.005
@@ -947,6 +952,46 @@ class BombConfig:
     database_source: str | None = None
     JSON_FILE = "bomana/data/ccrp_bomb_params.json"
     LEGACY_JSON_FILE = "ccrp_bomb_params.json"
+    GUIDED_OR_GLIDE_KEYWORDS: ClassVar[tuple[str, ...]] = (
+        "agm",
+        "bgl",
+        "gbu",
+        "gbu_",
+        "gb250",
+        "gcs_1",
+        "glide",
+        "grom",
+        "guided",
+        "hosbo",
+        "jdam",
+        "jsow",
+        "kab",
+        "kggb",
+        "laser",
+        "lizard",
+        "lgb",
+        "ljdam",
+        "ls_6",
+        "paveway",
+        "pgb",
+        "sdb",
+        "spice",
+        "tv",
+        "umpk",
+        "upab",
+        "walleye",
+        "fx1400",
+    )
+    HIGH_DRAG_KEYWORDS: ClassVar[tuple[str, ...]] = (
+        "air_na",
+        "ballute",
+        "brp",
+        "fab500sh",
+        "ofab250sh",
+        "parachute",
+        "retarded",
+        "snakeye",
+    )
 
     @classmethod
     def _ensure_database_loaded(cls):
@@ -982,6 +1027,7 @@ class BombConfig:
                 raise RuntimeError("炸弹数据库为空")
 
             for bomb_id, params in external_params.items():
+                profile = cls._infer_prediction_profile(bomb_id, params)
                 cls.BOMB_DATABASE[bomb_id] = {
                     "mass": params.get("mass", 100.0),
                     "drag_cx": params.get("dragCx", 0.04),
@@ -991,7 +1037,10 @@ class BombConfig:
                     "brakeCxK": params.get("brakeCxK", 0.0),
                     "brakeArm": params.get("brakeArm", 0.0),
                     "stab_enabled": params.get("stab_enabled", False),
+                    "source_file": params.get("source_file", ""),
+                    "mesh": params.get("mesh", ""),
                     "category": cls._infer_category(bomb_id),
+                    **profile,
                 }
 
             if cls.selected_bomb not in cls.BOMB_DATABASE and cls.BOMB_DATABASE:
@@ -1047,29 +1096,87 @@ class BombConfig:
         return "通用"
 
     @classmethod
-    def get_categories(cls) -> list:
+    def _prediction_text(cls, bomb_id: str, params: dict[str, Any] | None) -> str:
+        params = params if isinstance(params, dict) else {}
+        return " ".join(
+            (
+                str(bomb_id or ""),
+                str(params.get("source_file", "") or ""),
+                str(params.get("mesh", "") or ""),
+            )
+        ).lower()
+
+    @classmethod
+    def _infer_prediction_profile(cls, bomb_id: str, params: dict[str, Any] | None) -> dict:
+        """Infer the CCRP prediction profile from static bomb metadata."""
+        params = params if isinstance(params, dict) else {}
+        text = cls._prediction_text(bomb_id, params)
+        brake_cx_k = 0.0
+        try:
+            brake_cx_k = float(params.get("brakeCxK", 0.0) or 0.0)
+        except _NUMERIC_PARSE_ERRORS:
+            brake_cx_k = 0.0
+
+        if any(keyword in text for keyword in cls.GUIDED_OR_GLIDE_KEYWORDS):
+            return {
+                "prediction_supported": False,
+                "prediction_kind": "guided_glide",
+                "prediction_note": "guided_or_glide",
+                "release_mach_max": None,
+            }
+
+        if brake_cx_k >= BallisticPhysicsParams.HIGH_DRAG_BRAKE_CXK_MIN or any(
+            keyword in text for keyword in cls.HIGH_DRAG_KEYWORDS
+        ):
+            return {
+                "prediction_supported": True,
+                "prediction_kind": "high_drag",
+                "prediction_note": "retarded_or_parachute",
+                "release_mach_max": BallisticPhysicsParams.RELEASE_MAX_MACH,
+            }
+
+        return {
+            "prediction_supported": True,
+            "prediction_kind": "freefall",
+            "prediction_note": "freefall",
+            "release_mach_max": BallisticPhysicsParams.RELEASE_MAX_MACH,
+        }
+
+    @classmethod
+    def get_categories(cls, *, include_unsupported: bool = False) -> list:
         """获取所有炸弹分类"""
         cls._ensure_database_loaded()
-        categories = {bomb.get("category", "通用") for bomb in cls.BOMB_DATABASE.values()}
+        categories = {
+            bomb.get("category", "通用")
+            for bomb in cls.BOMB_DATABASE.values()
+            if include_unsupported or bomb.get("prediction_supported", True)
+        }
         priority = ["苏联", "美国", "德国", "英国", "日本", "中国"]
         result = [p for p in priority if p in categories]
         result.extend(sorted(categories - set(priority)))
         return result
 
     @classmethod
-    def get_bombs_by_category(cls, category: str) -> list:
+    def get_bombs_by_category(cls, category: str, *, include_unsupported: bool = False) -> list:
         """获取指定分类的所有炸弹"""
         cls._ensure_database_loaded()
         bombs = [
-            name for name, data in cls.BOMB_DATABASE.items() if data.get("category") == category
+            name
+            for name, data in cls.BOMB_DATABASE.items()
+            if data.get("category") == category
+            and (include_unsupported or data.get("prediction_supported", True))
         ]
         return sorted(bombs, key=lambda x: cls.BOMB_DATABASE[x].get("mass", 0))
 
     @classmethod
-    def get_all_bomb_names(cls) -> list:
+    def get_all_bomb_names(cls, *, include_unsupported: bool = False) -> list:
         """获取所有炸弹名称"""
         cls._ensure_database_loaded()
-        return sorted(cls.BOMB_DATABASE.keys())
+        return sorted(
+            name
+            for name, data in cls.BOMB_DATABASE.items()
+            if include_unsupported or data.get("prediction_supported", True)
+        )
 
     @classmethod
     def get_bomb_data(cls, name: str):
@@ -1087,11 +1194,17 @@ class BombConfig:
         )
 
     @classmethod
-    def search_bombs(cls, query: str, limit: int = 100) -> list:
+    def search_bombs(
+        cls,
+        query: str,
+        limit: int = 100,
+        *,
+        include_unsupported: bool = False,
+    ) -> list:
         """搜索炸弹"""
         cls._ensure_database_loaded()
         if not query:
-            return list(cls.BOMB_DATABASE.keys())[:limit]
+            return cls.get_all_bomb_names(include_unsupported=include_unsupported)[:limit]
 
         def normalize(s):
             return s.lower().replace("_", "").replace("-", "").replace(" ", "")
@@ -1100,8 +1213,18 @@ class BombConfig:
         results = []
 
         for bomb_id, data in cls.BOMB_DATABASE.items():
+            if not include_unsupported and not data.get("prediction_supported", True):
+                continue
             keywords = (
-                bomb_id + " " + data.get("category", "") + " " + str(int(data.get("mass", 0)))
+                bomb_id
+                + " "
+                + data.get("category", "")
+                + " "
+                + str(data.get("source_file", ""))
+                + " "
+                + str(data.get("mesh", ""))
+                + " "
+                + str(int(data.get("mass", 0)))
             )
             if query_norm in normalize(keywords) or query.lower() in keywords.lower():
                 results.append(bomb_id)
@@ -1119,7 +1242,13 @@ class BombConfig:
         mass = data.get("mass", 0)
         mass_str = f"{mass / 1000:.1f}t" if mass >= 1000 else f"{int(mass)}kg"
         name = bomb_id.replace("_", " ").replace(" default", "")
-        return f"{name} ({mass_str})"
+        prediction_kind = str(data.get("prediction_kind", "freefall") or "freefall")
+        profile_suffix = ""
+        if prediction_kind == "guided_glide":
+            profile_suffix = " [制导/滑翔]"
+        elif prediction_kind == "high_drag":
+            profile_suffix = " [高阻]"
+        return f"{name} ({mass_str}){profile_suffix}"
 
     @classmethod
     def get_bomb_physics_params(cls, name: str | None = None) -> dict:
@@ -1135,6 +1264,15 @@ class BombConfig:
             "brakeCxK": data.get("brakeCxK", 0.0),
             "brakeArm": data.get("brakeArm", 0.0),
             "stab_enabled": data.get("stab_enabled", False),
+            "prediction_supported": data.get("prediction_supported", True),
+            "prediction_kind": data.get("prediction_kind", "freefall"),
+            "prediction_note": data.get("prediction_note", "freefall"),
+            "release_mach_max": data.get(
+                "release_mach_max",
+                BallisticPhysicsParams.RELEASE_MAX_MACH,
+            ),
+            "source_file": data.get("source_file", ""),
+            "mesh": data.get("mesh", ""),
             "reference_area": 3.14159 * (data.get("caliber", 0.2) / 2) ** 2,
         }
 

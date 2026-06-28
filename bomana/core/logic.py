@@ -1329,6 +1329,7 @@ class GameLogic:
             cached_time_to_release = s.cached_time_to_release
             cached_release_status = s.cached_release_status
             cached_target_distance_m = s.cached_target_distance_m
+            cached_bombing_unavailable_reason = s.cached_bombing_unavailable_reason
 
             perf_debug = PerfDebugInfo(
                 tick_total_ms=s.perf_tick_total_ms,
@@ -1519,6 +1520,7 @@ class GameLogic:
         time_to_release = 0.0
         release_status = "invalid"
         target_zone_distance_m = 0.0
+        bombing_unavailable_reason = cached_bombing_unavailable_reason
         if ENABLE_CCRP and bombing_calc_valid:
             bombing_valid = True
             bomb_flight_time = cached_bomb_flight_time
@@ -1527,6 +1529,7 @@ class GameLogic:
             time_to_release = cached_time_to_release
             release_status = cached_release_status
             target_zone_distance_m = cached_target_distance_m
+            bombing_unavailable_reason = ""
 
         mach_ratio_dbg = None
         try:
@@ -1593,6 +1596,7 @@ class GameLogic:
             time_to_release=time_to_release,
             release_status=release_status,
             target_zone_distance_m=target_zone_distance_m,
+            bombing_unavailable_reason=bombing_unavailable_reason,
             ground_speed_kmh=ground_speed_kmh_for_bombing,
             aircraft_type_name=str(tel.type_name or ""),
             attitude_pitch_deg=attitude_pitch_deg,
@@ -1683,6 +1687,22 @@ class GameLogic:
             return default
         return result if math.isfinite(result) else default
 
+    @classmethod
+    def _estimate_release_mach(cls, tel: TelemetryData, ground_speed_ms: float) -> float | None:
+        """Prefer 8111 Mach; fall back to TAS or map-derived ground speed."""
+        if tel.mach is not None:
+            mach = cls._finite_float(tel.mach, default=0.0)
+            if mach > 0.0:
+                return mach
+
+        tas_kmh = cls._finite_float(tel.tas_kmh, default=0.0)
+        if tas_kmh > 0.0:
+            return tas_kmh / 1225.0
+
+        if ground_speed_ms > 0.0:
+            return ground_speed_ms / 340.3
+        return None
+
     def _prepare_bombing_calculation_locked(
         self,
         tel: TelemetryData,
@@ -1702,6 +1722,7 @@ class GameLogic:
             return None
 
         s.last_bombing_calc_time = now
+        s.cached_bombing_unavailable_reason = ""
 
         target_zone = nav.target_zone
         altitude_m = self._finite_float(tel.altitude_m)
@@ -1726,11 +1747,28 @@ class GameLogic:
             s.bombing_calc_valid = False
             return None
 
+        bomb_params = BombConfig.get_bomb_physics_params()
+        if not bomb_params.get("prediction_supported", True):
+            s.bombing_calc_valid = False
+            s.cached_bombing_unavailable_reason = str(
+                bomb_params.get("prediction_kind") or "unsupported"
+            )
+            return None
+
+        release_mach_max = bomb_params.get("release_mach_max")
+        if release_mach_max is not None:
+            max_mach = self._finite_float(release_mach_max, default=0.0)
+            release_mach = self._estimate_release_mach(tel, ground_speed_ms)
+            if max_mach > 0.0 and release_mach is not None and release_mach >= max_mach:
+                s.bombing_calc_valid = False
+                s.cached_bombing_unavailable_reason = "release_mach_limit"
+                return None
+
         return {
             "altitude_m": altitude_m,
             "ground_speed_ms": ground_speed_ms,
             "target_distance_m": target_distance_m,
-            "bomb_params": BombConfig.get_bomb_physics_params(),
+            "bomb_params": bomb_params,
         }
 
     def _compute_bombing_calculation(self, work: dict[str, Any]) -> dict[str, float | str] | None:
@@ -1784,6 +1822,8 @@ class GameLogic:
         s = self.state
         if result is None:
             s.bombing_calc_valid = False
+            if not s.cached_bombing_unavailable_reason:
+                s.cached_bombing_unavailable_reason = "calc_failed"
             return
 
         s.cached_bomb_flight_time = float(result["flight_time"])
@@ -1792,4 +1832,5 @@ class GameLogic:
         s.cached_time_to_release = float(result["time_to_release"])
         s.cached_release_status = str(result["release_status"])
         s.cached_target_distance_m = float(result["target_distance_m"])
+        s.cached_bombing_unavailable_reason = ""
         s.bombing_calc_valid = s.phase == Phase.ALIVE

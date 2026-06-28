@@ -75,6 +75,8 @@ uv run python Bomana.pyw
 CCRP 说明：
 
 - 该功能是工程化估计，不是游戏内部真实投弹算法，存在误差是正常现象。
+- 仅对普通/高阻自由落体炸弹显示辅助释放点；制导炸弹、滑翔炸弹不显示投弹预测。
+- 当前 Mach >= 1.0 时按多数炸弹无法投放处理，面板会提示超出投放限制。
 - 可在 `设置 -> 投弹` 中手动校准：`距离修正倍率`、`时间修正倍率`。
 - 静态炸弹库来源：War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` -> `tools/update_datamine_assets.py` -> `tools/blkx_extractor.py` -> `bomana/data/ccrp_bomb_params.json`
 
@@ -187,6 +189,8 @@ If you already use uv, Option B is enough.
 CCRP note:
 
 - This feature is an engineering estimate and not War Thunder's internal bombing algorithm.
+- Assisted release cues are shown only for free-fall or high-drag free-fall bombs; guided and glide bombs are marked as not applicable.
+- Mach >= 1.0 is treated as above the release limit for normal bomb prediction.
 - Prediction error is expected; calibrate in `Settings -> Bombing` using `range correction` and `time correction`.
 - Static bomb DB provenance: War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` -> `tools/update_datamine_assets.py` -> `tools/blkx_extractor.py` -> `bomana/data/ccrp_bomb_params.json`
 
