@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from bomana.config import HotkeyConfig, UIConfig
 from bomana.ui import dialogs
-from bomana.ui.dialogs import SettingsDialog
+from bomana.ui.dialogs import OverspeedAircraftOverrideDialog, SettingsDialog
 
 
 class FakeVar:
@@ -25,6 +25,11 @@ class FakeSound:
 
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled
+
+
+class InvalidNumberVar:
+    def get(self):
+        raise dialogs.tk.TclError('expected floating-point number but got "bad"')
 
 
 def _dialog_for_save() -> SettingsDialog:
@@ -105,3 +110,83 @@ def test_settings_save_persists_nav_width_and_merges_panels(monkeypatch) -> None
 
     assert saved["navigation_bar_width"] == 1.35
     assert saved["panels"] == {"show_bombing": False, "show_zones": False}
+
+
+def test_settings_save_validates_overspeed_before_sound_persistence(monkeypatch) -> None:
+    dialog = _dialog_for_save()
+    warnings = []
+    dialog.overspeed_vars = {"caution_ratio": InvalidNumberVar()}
+
+    monkeypatch.setattr(dialogs.ConfigManager, "load", lambda: {})
+    monkeypatch.setattr(
+        dialogs.ConfigManager,
+        "save",
+        lambda _config: (_ for _ in ()).throw(AssertionError("save should not run")),
+    )
+    dialog._persist_sound_overrides = lambda: (_ for _ in ()).throw(
+        AssertionError("sound persistence should not run")
+    )
+    monkeypatch.setattr(
+        dialogs.messagebox,
+        "showwarning",
+        lambda title, message, **_kwargs: warnings.append((title, message)),
+    )
+
+    dialog._save()
+
+    assert warnings == [("数值无效", "IAS 提示线 必须输入有效数字。")]
+
+
+def test_settings_save_validates_ccrp_before_sound_persistence(monkeypatch) -> None:
+    dialog = _dialog_for_save()
+    warnings = []
+    dialog.ccrp_range_mult_var = InvalidNumberVar()
+    dialog.ccrp_time_mult_var = FakeVar(1.0)
+
+    monkeypatch.setattr(dialogs, "ENABLE_CCRP", True)
+    monkeypatch.setattr(dialogs.ConfigManager, "load", lambda: {})
+    monkeypatch.setattr(
+        dialogs.ConfigManager,
+        "save",
+        lambda _config: (_ for _ in ()).throw(AssertionError("save should not run")),
+    )
+    dialog._persist_sound_overrides = lambda: (_ for _ in ()).throw(
+        AssertionError("sound persistence should not run")
+    )
+    monkeypatch.setattr(
+        dialogs.messagebox,
+        "showwarning",
+        lambda title, message, **_kwargs: warnings.append((title, message)),
+    )
+
+    dialog._save()
+
+    assert warnings == [("数值无效", "CCRP 距离修正倍率 必须输入有效数字。")]
+
+
+def test_aircraft_overspeed_override_invalid_number_warns_without_mutating(
+    monkeypatch,
+) -> None:
+    dialog = OverspeedAircraftOverrideDialog.__new__(OverspeedAircraftOverrideDialog)
+    existing_override = {"caution_ratio": 0.91}
+    dialog.selected_aircraft_key = "test_aircraft"
+    dialog.override_map = {"existing_aircraft": dict(existing_override)}
+    dialog.editor_vars = {"caution_ratio": InvalidNumberVar()}
+    dialog.aircraft_mode_var = FakeVar("状态：继承全局")
+    dialog._effective_search_query = lambda: ""
+    dialog._populate_list = lambda _query: (_ for _ in ()).throw(
+        AssertionError("list refresh should not run")
+    )
+    warnings = []
+
+    monkeypatch.setattr(
+        dialogs.messagebox,
+        "showwarning",
+        lambda title, message, **_kwargs: warnings.append((title, message)),
+    )
+
+    dialog._apply_override()
+
+    assert warnings == [("数值无效", "IAS 提示线 必须输入有效数字。")]
+    assert dialog.override_map == {"existing_aircraft": existing_override}
+    assert dialog.aircraft_mode_var.get() == "状态：继承全局"

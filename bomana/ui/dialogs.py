@@ -40,7 +40,32 @@ from bomana.utils.system import Win32, resolve_tk_font_tuple
 
 # Optional dependencies for images (match HAS_TRAY behavior).
 HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
-_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError, tk.TclError)
+_OVERSPEED_FIELD_LABELS = {
+    "caution_ratio": "IAS 提示线",
+    "warning_ratio": "IAS 警告线",
+    "critical_ratio": "IAS 危险线",
+    "mach_caution_margin": "Mach 提示线",
+    "mach_warning_margin": "Mach 警告线",
+    "mach_critical_margin": "Mach 危险线",
+}
+_CCRP_TUNING_FIELD_LABELS = {
+    "range_correction_mult": "CCRP 距离修正倍率",
+    "time_correction_mult": "CCRP 时间修正倍率",
+}
+
+
+def _collect_numeric_var_values(
+    vars_by_key: dict, labels_by_key: dict[str, str]
+) -> dict[str, float]:
+    values = {}
+    for key, var in vars_by_key.items():
+        try:
+            values[key] = float(var.get())
+        except _NUMERIC_PARSE_ERRORS as exc:
+            label = labels_by_key.get(key, str(key))
+            raise ValueError(f"{label} 必须输入有效数字。") from exc
+    return values
 
 
 class _ScalableDialogMixin:
@@ -1639,6 +1664,22 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         if HotkeyConfig.GLOBAL_HOTKEYS:
             runtime_services.init_global_hotkeys()
 
+    def _collect_overspeed_thresholds(self) -> dict[str, float]:
+        overspeed_thresholds = _collect_numeric_var_values(
+            getattr(self, "overspeed_vars", {}),
+            _OVERSPEED_FIELD_LABELS,
+        )
+        return OverspeedConfig.normalize_thresholds(overspeed_thresholds)
+
+    def _collect_ccrp_tuning(self) -> dict[str, float]:
+        return _collect_numeric_var_values(
+            {
+                "range_correction_mult": self.ccrp_range_mult_var,
+                "time_correction_mult": self.ccrp_time_mult_var,
+            },
+            _CCRP_TUNING_FIELD_LABELS,
+        )
+
     def _save(self):
         """保存所有设置"""
         # 收集设置值
@@ -1673,6 +1714,29 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             hotkey_bindings = self._collect_hotkey_bindings()
         except ValueError as exc:
             messagebox.showwarning("快捷键冲突", str(exc), parent=self)
+            return
+
+        try:
+            normalized_overspeed_thresholds = self._collect_overspeed_thresholds()
+            normalized_overspeed_overrides = {}
+            overspeed_override_map = getattr(self, "overspeed_override_map", None)
+            if isinstance(overspeed_override_map, dict):
+                for aircraft_key, raw_override in overspeed_override_map.items():
+                    aircraft_name = str(aircraft_key or "").strip()
+                    if not aircraft_name or not isinstance(raw_override, dict):
+                        continue
+                    normalized_overspeed_overrides[aircraft_name] = (
+                        OverspeedConfig.normalize_thresholds(raw_override)
+                    )
+
+            pending_ccrp_tuning = None
+            pending_selected_bomb = None
+            if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
+                pending_ccrp_tuning = self._collect_ccrp_tuning()
+                if hasattr(self, "selected_bomb_id") and self.selected_bomb_id:
+                    pending_selected_bomb = self.selected_bomb_id
+        except ValueError as exc:
+            messagebox.showwarning("数值无效", str(exc), parent=self)
             return
 
         config["alpha"] = new_window_alpha
@@ -1716,35 +1780,15 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         config["zone_sound_enabled"] = new_zone_sound_enabled
         config["sound_settings"] = normalized_sound_overrides
 
-        overspeed_thresholds = {
-            key: var.get() for key, var in getattr(self, "overspeed_vars", {}).items()
-        }
-        normalized_overspeed_thresholds = OverspeedConfig.normalize_thresholds(overspeed_thresholds)
-        normalized_overspeed_overrides = {}
-        if isinstance(self.overspeed_override_map, dict):
-            for aircraft_key, raw_override in self.overspeed_override_map.items():
-                aircraft_name = str(aircraft_key or "").strip()
-                if not aircraft_name or not isinstance(raw_override, dict):
-                    continue
-                normalized_overspeed_overrides[aircraft_name] = (
-                    OverspeedConfig.normalize_thresholds(raw_override)
-                )
         config["overspeed"] = {
             "global": normalized_overspeed_thresholds,
             "aircraft_overrides": normalized_overspeed_overrides,
         }
 
         # 投弹预测调参（仅在CCRP启用时保存）
-        pending_ccrp_tuning = None
-        pending_selected_bomb = None
-        if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
-            pending_ccrp_tuning = {
-                "range_correction_mult": self.ccrp_range_mult_var.get(),
-                "time_correction_mult": self.ccrp_time_mult_var.get(),
-            }
+        if pending_ccrp_tuning is not None:
             config["ccrp_tuning"] = dict(pending_ccrp_tuning)
-            if hasattr(self, "selected_bomb_id") and self.selected_bomb_id:
-                pending_selected_bomb = self.selected_bomb_id
+            if pending_selected_bomb:
                 config["selected_bomb"] = pending_selected_bomb
 
         # 保存配置
@@ -2362,14 +2406,19 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
 
     def _collect_editor_thresholds(self) -> dict[str, float]:
         return OverspeedConfig.normalize_thresholds(
-            {key: var.get() for key, var in self.editor_vars.items()}
+            _collect_numeric_var_values(self.editor_vars, _OVERSPEED_FIELD_LABELS)
         )
 
     def _apply_override(self):
         if not self.selected_aircraft_key:
             messagebox.showwarning("提示", "请先从左侧选择一个机型。", parent=self)
             return
-        self.override_map[self.selected_aircraft_key] = self._collect_editor_thresholds()
+        try:
+            thresholds = self._collect_editor_thresholds()
+        except ValueError as exc:
+            messagebox.showwarning("数值无效", str(exc), parent=self)
+            return
+        self.override_map[self.selected_aircraft_key] = thresholds
         self._populate_list(self._effective_search_query())
         self.aircraft_mode_var.set("状态：已覆盖")
 
