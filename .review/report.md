@@ -1,7 +1,7 @@
 # Code Review Report
 
-**Open findings:** 5 high, 24 medium, 4 low
-**Resolved:** 11  |  **Generated:** 2026-06-18T01:46:33+00:00
+**Open findings:** 3 high, 7 medium
+**Resolved:** 39  |  **Generated:** 2026-06-28T04:00:30+00:00
 
 ## F-1fa20106 [HIGH/confirmed] Schema-empty /state frames are marked healthy
 `bomana/core/telemetry.py:280-287`
@@ -20,7 +20,7 @@
 - **Evidence:** [tool] Probe with /state payload {} returned state_resp_ok=True, ias_kmh=0.0, gear_pct=0.0.; [read] GameLogic fallback only triggers when not tel.state_resp_ok at bomana/core/logic.py:189-193.
 
 ## F-97143313 [HIGH/confirmed] 82mm mortar bomb is stored with a 0.82m caliber
-`bomana/data/ccrp_bomb_params.json:133-147`
+`bomana/data/ccrp_bomb_params.json:133-147`  ⚠ snippet exists but not at lines 133-147; first line now near line 238
 ```
     "bomb_ussr_82mm_o_832": {
       "mass": 3.31,
@@ -64,72 +64,6 @@
 - **Fix:** When click_through is requested and Win32.setup_window fails, raise HUDOverlayUnavailable or hide/destroy HUD; reserve Tk-only fallback for non-click-through contexts.
 - **Evidence:** [read] Fallback path applies only window.attributes("-alpha") and has no click-through equivalent.; [read] tests/test_hud_overlay.py raises only when tk_color_key=False; it does not cover the tk_color_key=True click-through failure path.
 
-## F-612d9b37 [HIGH/confirmed] Non-dict panels value crashes config migration
-`bomana/utils/file_utils.py:221-226`
-```
-        if version < 2:
-            panels = config.get("panels", {})
-            if "show_bombing" not in panels:
-                panels["show_bombing"] = True
-                changed = True
-            config["panels"] = panels
-```
-- **Impact:** A valid JSON config such as {"config_version":1,"panels":null} crashes ConfigManager.load during migration instead of falling back, so startup or settings load can fail until the user manually edits or deletes the config.
-- **Fix:** Normalize nested sections before migration, e.g. treat non-dict panels as {}, and catch TypeError from migration in the tolerant load path.
-- **Evidence:** [tool] Probe ConfigManager._migrate_config({"config_version":1,"panels":None}) raised TypeError; list panels raised TypeError list indices must be integers or slices.; [read] ConfigManager.load catches json.JSONDecodeError, ValueError, and OSError, but not TypeError from _migrate_config.
-
-## F-691747c0 [HIGH/confirmed] Win32 window style setup reports success on API failure
-`bomana/utils/system.py:304-329`
-```
-        try:
-            # 获取当前样式
-            style = cls.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-
-            # 添加必要样式
-            style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW
-
-            # 根据锁定状态切换点击穿透
-            # 关键：同时设置 WS_EX_TRANSPARENT 和 WS_EX_NOACTIVATE
-            # - WS_EX_TRANSPARENT: 让点击穿透到下层窗口
-            # - WS_EX_NOACTIVATE: 防止窗口被激活，确保持续穿透
-            if click_through:
-                style |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE
-            else:
-                style &= ~(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)
-
-            # 应用样式和透明度/颜色键
-            cls.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-            target_alpha = max(0, min(255, int(alpha)))
-            flags = LWA_ALPHA
-            key = 0
-            if color_key is not None:
-                flags |= LWA_COLORKEY
-                key = int(color_key) & 0x00FFFFFF
-            cls.user32.SetLayeredWindowAttributes(hwnd, key, target_alpha, flags)
-            return True
-```
-- **Impact:** On Windows, failed SetWindowLongW or SetLayeredWindowAttributes calls can leave the main/HUD window non-transparent or non-click-through while callers proceed as if lock/click-through succeeded.
-- **Fix:** Declare ctypes argtypes/restype with wintypes, check BOOL/last-error return values, and return False when any required style or layered attribute call fails.
-- **Evidence:** [read] ctypes Win32 BOOL failures do not raise OSError by default; this code ignores both SetWindowLongW and SetLayeredWindowAttributes return values and returns True.; [read] tests/test_system_portability.py only covers non-Windows user32 absence, not Windows API failure returns.
-
-## F-2eb5a564 [MEDIUM/confirmed] Tiny positive budgets still start over-budget requests
-`bomana/core/telemetry.py:73-82`
-```
-        rem = budget.remaining()
-        if rem <= 0.0:
-            return FetchResult(endpoint=endpoint, ok=False, error_kind="budget_exhausted")
-
-        # 计算超时时间
-        connect_t = min(NetworkConfig.API_CONNECT_TIMEOUT, max(0.01, rem))
-        read_t = min(NetworkConfig.API_READ_TIMEOUT, max(0.01, rem))
-
-        try:
-            r = self.session.get(url, timeout=(connect_t, read_t))
-```
-- **Impact:** When remaining budget is below 10 ms, HttpJson still sends a request with 10 ms connect and 10 ms read timeouts, allowing a tick to exceed the remaining deadline before the next endpoint check.
-- **Fix:** Treat remaining time below the minimum usable timeout as budget_exhausted, or allocate one total per-request timeout from the remaining budget.
-- **Evidence:** [tool] Probe with Budget(0.001) still called session.get with timeout=(0.01, 0.01).; [read] Budget is only checked before session.get, so it cannot interrupt the in-flight request.
-
 ## F-57957fbb [MEDIUM/confirmed] Telemetry numeric parsing accepts NaN and Infinity
 `bomana/core/telemetry.py:143-160`
 ```
@@ -156,83 +90,84 @@
 - **Fix:** Require math.isfinite after float conversion and return the default or None for non-finite values; clamp bounded fields where appropriate.
 - **Evidence:** [tool] Probe with {"IAS, km/h":"nan", "gear, %":"nan"} returned state_resp_ok=True, ias_kmh=nan, gear_pct=nan.; [read] MapObjectsFetcher._float_or_none already rejects non-finite values, but TelemetryFetcher scalar parsers do not.
 
-## F-8fb5648b [MEDIUM/confirmed] Malformed map object payloads are reported as healthy empty maps
-`bomana/core/telemetry.py:582-595`
+## F-61167c77 [MEDIUM/confirmed] Startup HUD initialization failure is not persisted
+`bomana/ui/app.py:177-178`
 ```
-        out = MapObjData()
-        result = self.http.get_json(f"{NetworkConfig.API_BASE}/map_obj.json", budget)
-        self.last_result = result
-        out.error_kind = result.error_kind
-        out.elapsed_ms = result.elapsed_ms
-        j = result.payload
-        if not result.ok:
-            return out
-
-        out.ok = True
-
-        # 提取对象列表
-        objs = self._extract_objects(j)
-        out.obj_count = len(objs)
+        if HUDConfig.enabled and not self._show_hud_overlay():
+            HUDConfig.enabled = False
 ```
-- **Impact:** HTTP 200 /map_obj.json payloads with non-list or unrecognized dict shapes set MapObjData.ok=True and obj_count=0, hiding schema failures from API-down diagnostics and stale-map fallback logic.
-- **Fix:** Validate the payload shape before setting out.ok; keep legitimate empty object lists valid but mark unsupported JSON shapes as schema errors.
-- **Evidence:** [tool] Probe with payload "bad-shape" and {"unexpected": []} returned ok=True, obj_count=0, error_kind="".; [read] GameLogic records map endpoint health from raw_map.ok at bomana/core/logic.py:596-600.
+- **Impact:** On a machine where the HUD overlay cannot be created or shown, a saved hud_enabled=true config is only disabled in memory during startup, so the next launch reads true again and repeats the failing HUD initialization and diagnostics instead of converging to a repaired config.
+- **Fix:** When startup _show_hud_overlay() fails, reuse the runtime disable path or call _save_config() after setting HUDConfig.enabled = False.
+- **Evidence:** [read] runtime_services.update_hud_overlay() persists the later failure path at runtime_services.py:315-319, but App.__init__ disables HUD at app.py:177-178 before the first frame and does not save.
 
-## F-5aefffd3 [MEDIUM/confirmed] Version comparison treats prerelease digits as newer stable versions
-`bomana/launcher_core.py:68-81`
+## F-0cede565 [MEDIUM/confirmed] Invalid saved hotkeys can crash app startup
+`bomana/ui/app.py:587-591`
 ```
-def extract_version_tuple(version: str) -> tuple[int, ...]:
-    nums = re.findall(r"\d+", version or "")
-    if not nums:
-        return (0,)
-    return tuple(int(x) for x in nums)
-
-
-def version_is_newer(remote: str, local: str) -> bool:
-    a = extract_version_tuple(remote)
-    b = extract_version_tuple(local)
-    n = max(len(a), len(b))
-    aa = a + (0,) * (n - len(a))
-    bb = b + (0,) * (n - len(b))
-    return aa > bb
+        self._local_hotkey_sequences = []
+        for key_name, callback in bindings:
+            sequence = f"<{key_name}>"
+            self.root.bind(sequence, lambda _event, cb=callback: cb())
+            self._local_hotkey_sequences.append(sequence)
 ```
-- **Impact:** A remote version like 2.0.0-rc.1 compares greater than local 2.0.0, and min_launcher_version 2.0.0-rc.1 can make stable 2.0.0 appear too old.
-- **Fix:** Use a SemVer or PEP 440 parser and explicitly reject or handle prerelease/build metadata; skip draft/prerelease GitHub releases unless opted in.
-- **Evidence:** [tool] extract_version_tuple("2.0.0-rc.1") yields (2,0,0,1), which compares newer than (2,0,0).; [grep] tests/test_launcher_core.py only covers numeric versions.
+- **Impact:** A malformed or manually edited config such as hotkey_bindings.lock = "BAD KEY" is accepted by ConfigManager.load() and HotkeyConfig.set_bindings(), then App.__init__ reaches refresh_local_hotkey_bindings() and Tk raises TclError for <BAD KEY>, aborting startup before the settings UI can repair it.
+- **Fix:** Normalize saved hotkey bindings against HotkeyConfig.AVAILABLE_KEYS before assigning them, or skip invalid entries and fall back to defaults before calling root.bind().
+- **Evidence:** [runtime] python Tk probe: root.bind('<BAD KEY>', ...) raised TclError: bad event type or keysym "BAD"; root.bind('<NotAKey>', ...) raised TclError: bad event type or keysym "NotAKey".; [read] bomana/config.py:457-468 assigns saved hotkey strings without checking HotkeyConfig.AVAILABLE_KEYS; bomana/ui/app.py:285-288 applies non-empty saved hotkey_bindings during startup.
 
-## F-00164968 [MEDIUM/confirmed] Runtime hotkey changes leave Tk-local bindings stale
-`bomana/ui/app.py:547-550`
+## F-ee6506b8 [MEDIUM/confirmed] Standalone navigation keeps stale combat display after phase exit
+`bomana/ui/app.py:1517-1521`
 ```
-        self.root.bind(f"<{HotkeyConfig.KEY_LOCK}>", lambda e: self._toggle_lock())
-        self.root.bind(f"<{HotkeyConfig.KEY_CORNER}>", lambda e: self._next_corner())
-        self.root.bind(f"<{HotkeyConfig.KEY_BEEP}>", lambda e: self._toggle_beep())
-        self.root.bind(f"<{HotkeyConfig.KEY_ZONES}>", lambda e: self._toggle_zone_sound())
+        show_zone_panel = (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and (
+            zones_enabled or airfields_enabled or fuel_enabled or bombing_enabled
+        )
+        self.panel_renderer.set_zone_panel_visible(show_zone_panel)
+        if show_zone_panel:
 ```
-- **Impact:** After Settings changes hotkey bindings, global hotkeys and hints can use the new keys while the Tk window remains bound to startup keys; with global hotkeys off, new local shortcuts do not work.
-- **Fix:** Track and unbind current Tk sequences, then refresh local bindings after HotkeyConfig.set_bindings.
-- **Evidence:** [read] _init_bindings is called once during App construction at app.py:170.; [read] SettingsRuntimeMixin mutates HotkeyConfig at settings_runtime.py:78-79; dialogs.py only restarts global hotkeys and refreshes hints.
+- **Impact:** When the standalone navigation window is visible and the snapshot phase leaves ALIVE/LOSS_PENDING, update_zone_display() is skipped by this gate, so NavigationWindow.update_display() never runs its non-alive clearing branch and the separate nav window can keep the last heading and target display after battle state is no longer valid.
+- **Fix:** Update or clear the standalone nav window outside the show_zone_panel gate; for example, call nav_window.update_display(snap) whenever it is visible, or call clear_display() when show_zone_panel becomes false.
+- **Evidence:** [grep] rg found the only app.nav_window.update_display(snap) call in panel_renderer.py:350-356, which is reached only through App._update_ui_frame's show_zone_panel branch.; [read] NavigationWindow.update_display() has the intended non-alive clearing branch at nav_window.py:552-566, but the app-level gate prevents it from running after phase exit.
 
-## Deferred (23 lower-priority findings)
-- F-eb62a69c [medium] Navigation width is applied but not saved by Settings (`bomana/ui/dialogs.py:1646`)
-- F-f4261c90 [medium] Settings save drops the bombing panel preference (`bomana/ui/dialogs.py:1683`)
-- F-fdfd306f [medium] Showing primary reticle re-shows stale secondary markers (`bomana/ui/hud_overlay.py:736`)
-- F-9660e3a1 [medium] Enemy airfield tape markers ignore core target selection (`bomana/ui/navigation_presenter.py:107`)
-- F-ed9ba16e [medium] Hidden ancestors prevent panel removal from taking effect (`bomana/ui/panel_renderer.py:80`)
-- F-d8a0e46f [medium] Zone hotkey is registered when zones are compiled out (`bomana/ui/runtime_services.py:60`)
-- F-d563b2d3 [medium] Malformed timer state can crash restore (`bomana/utils/file_utils.py:340`)
-- F-dff0276c [medium] normalize_angle can hang on infinite input (`bomana/utils/math_utils.py:113`)
-- F-f5cbb6e5 [medium] Deploy script trusts manifest asset paths outside staging directory (`tools/deploy_update_assets.py:163`)
-- F-d88c090c [medium] Python repr is used as remote shell quoting (`tools/deploy_update_assets.py:202`)
-- F-6fcde172 [medium] Final zone disappearance is never reported as destroyed (`bomana/core/logic.py:843`)
-- F-b6ca75c1 [medium] Rollback can fail after changing app state and deleting preserved current version (`bomana/launcher_install.py:300`)
-- F-7858d3a3 [medium] Destroyed-marker rendering bypasses the snapshot (`bomana/ui/nav_window.py:565`)
-- F-67345260 [medium] Standalone navigation stops updating when zones are hidden (`bomana/ui/panel_renderer.py:355`)
-- F-eeba46b2 [medium] Dispatcher can leak RuntimeError during Tk shutdown (`bomana/ui/runtime.py:23`)
-- F-6df88130 [medium] Custom non-WAV playback cannot be cancelled during shutdown (`bomana/utils/sound.py:183`)
-- F-85c0464b [medium] GlobalHotkeys.stop can miss startup race (`bomana/utils/system.py:573`)
-- F-e05f92e3 [medium] Launcher self-update does not rehash staged EXE at apply time (`launcher.pyw:1798`)
-- F-bef29479 [medium] Auto-update artifacts are hash-checked but not publisher-signed (`tools/build_portable.py:299`)
-- F-d03b8edc [low] Reset defaults restores the old UI scale (`bomana/ui/dialogs.py:1571`)
-- F-122bb5c5 [low] Legacy build ignores version-info generation failure (`tools/scripts/build.bat:122`)
-- F-5061272d [low] NavigationWindow Win32 handle lookup can crash before fallback (`bomana/ui/nav_window.py:75`)
-- F-1efbc5c5 [low] Standalone toggle during history mode can lose restore intent (`bomana/ui/navigation_runtime.py:62`)
+## F-9d81ba86 [MEDIUM/confirmed] Settings save can crash on invalid numeric input
+`bomana/ui/dialogs.py:1719-1721`
+```
+        overspeed_thresholds = {
+            key: var.get() for key, var in getattr(self, "overspeed_vars", {}).items()
+        }
+```
+- **Impact:** If a user types non-numeric text into an overspeed numeric field and clicks Save, tk.DoubleVar.get() raises TclError after custom sound files may already have been copied, so the dialog callback aborts without a user-readable validation message and can leave orphaned copied sound files.
+- **Fix:** Read and validate all numeric Tk variables before side effects, catch tk.TclError/TypeError/ValueError, show a warning, and return before copying sound files or saving config.
+- **Evidence:** [runtime] python Tcl probe: tk.DoubleVar(master=tk.Tcl()).set('abc'); get() raised TclError: expected floating-point number but got "abc".; [read] SettingsDialog._save calls _persist_sound_overrides() at dialogs.py:1706-1714 before reading overspeed_vars at 1719-1721 and CCRP DoubleVars at 1741-1744; no local TclError handler covers those reads.
+
+## F-93660464 [MEDIUM/confirmed] Aircraft overspeed override can crash on invalid numeric input
+`bomana/ui/dialogs.py:2363-2366`
+```
+    def _collect_editor_thresholds(self) -> dict[str, float]:
+        return OverspeedConfig.normalize_thresholds(
+            {key: var.get() for key, var in self.editor_vars.items()}
+        )
+```
+- **Impact:** Typing non-numeric text into the aircraft override threshold dialog and applying the override raises TclError from DoubleVar.get(), aborting the callback instead of rejecting the invalid field in the UI.
+- **Fix:** Validate editor_vars reads in _collect_editor_thresholds() or _apply_override(), catch tk.TclError/TypeError/ValueError, and show a warning without mutating the override map.
+- **Evidence:** [runtime] python Tcl probe: tk.DoubleVar(master=tk.Tcl()).set('abc'); get() raised TclError: expected floating-point number but got "abc".; [grep] No validatecommand/invalidcommand/report_callback_exception handler was found for these Spinbox-backed Tk variables.
+
+## F-fdfd306f [MEDIUM/confirmed] Showing primary reticle re-shows stale secondary markers
+`bomana/ui/hud_overlay.py:736-750`
+```
+    def _set_reticle_visible(self, visible: bool) -> None:
+        state = "normal" if visible else "hidden"
+        for item_id in (
+            self._reticle_ring_id,
+            self._reticle_hline_id,
+            self._reticle_vline_id,
+            self._reticle_mode_id,
+            self._reticle_dist_id,
+        ):
+            if item_id is not None:
+                self.canvas.itemconfig(item_id, state=state)
+        for item_id in self._secondary_marker_ids:
+            self.canvas.itemconfig(item_id, state=state)
+        for item_id in self._secondary_label_ids:
+            self.canvas.itemconfig(item_id, state=state)
+```
+- **Impact:** When secondary targets drop from a previous frame, _render_secondary_targets hides unused IDs, then _set_reticle_visible(True) marks every secondary item normal again, potentially showing stale or empty secondary markers.
+- **Fix:** Let _render_secondary_targets own secondary visibility; _set_reticle_visible should hide secondary IDs only when visible is false or split primary and secondary visibility.
+- **Evidence:** [read] _render_reticle calls _render_secondary_targets at hud_overlay.py:999-1007 and then _set_reticle_visible(True) at line 1012.; [read] _render_secondary_targets hides unused/empty secondary IDs at hud_overlay.py:878-884.

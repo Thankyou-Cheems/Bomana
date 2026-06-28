@@ -1,0 +1,124 @@
+{
+  "generated_at": "2026-06-28T03:50:08+00:00",
+  "root": "D:\\Dev\\Bomana",
+  "size": {
+    "code_files": 67,
+    "code_lines": 26067,
+    "test_files": 26,
+    "todo_markers": 0
+  },
+  "languages": {
+    "python": 25900,
+    "shell": 167
+  },
+  "primary_language": "python",
+  "configs": [
+    {
+      "kind": "manifest",
+      "tool": "python",
+      "path": "pyproject.toml"
+    },
+    {
+      "kind": "lockfile",
+      "tool": "uv",
+      "path": "uv.lock"
+    }
+  ],
+  "check_capability": [
+    {
+      "kind": "lint",
+      "tool": "ruff"
+    },
+    {
+      "kind": "test",
+      "tool": "pytest"
+    }
+  ],
+  "entry_points": [
+    "bomana\\ui\\app.py"
+  ],
+  "largest_files": [
+    {
+      "lines": 3062,
+      "path": "bomana\\ui\\dialogs.py"
+    },
+    {
+      "lines": 1796,
+      "path": "bomana\\core\\logic.py"
+    },
+    {
+      "lines": 1661,
+      "path": "bomana\\ui\\app.py"
+    },
+    {
+      "lines": 1198,
+      "path": "bomana\\ui\\main_window.py"
+    },
+    {
+      "lines": 1191,
+      "path": "bomana\\config.py"
+    },
+    {
+      "lines": 1031,
+      "path": "bomana\\ui\\hud_overlay.py"
+    },
+    {
+      "lines": 1017,
+      "path": "bomana\\ui\\widgets.py"
+    },
+    {
+      "lines": 923,
+      "path": "bomana\\ui\\panel_renderer.py"
+    },
+    {
+      "lines": 797,
+      "path": "tests\\test_launcher_update_service.py"
+    },
+    {
+      "lines": 699,
+      "path": "bomana\\utils\\system.py"
+    },
+    {
+      "lines": 673,
+      "path": "bomana\\core\\telemetry.py"
+    },
+    {
+      "lines": 654,
+      "path": "bomana\\core\\state.py"
+    },
+    {
+      "lines": 632,
+      "path": "bomana\\ui\\debug_support.py"
+    },
+    {
+      "lines": 608,
+      "path": "bomana\\ui\\nav_window.py"
+    },
+    {
+      "lines": 549,
+      "path": "tools\\build_portable.py"
+    }
+  ],
+  "possible_hardcoded_secrets": [],
+  "git": {
+    "is_repo": true,
+    "head": "27c176f",
+    "branch": "main",
+    "dirty_files": 0,
+    "recent_commits": [
+      "27c176f fix(launcher): harden update verification and downloads",
+      "e478b13 docs(agents): mark release signing secrets provisioned",
+      "5648bd4 docs(agents): document release signing workflow",
+      "47405bd feat(release): verify signed update manifests end to end",
+      "1366b7b fix(updater): require signed release manifests",
+      "b65cfe8 fix: resolve validated bd bug batch",
+      "bedb1f3 docs(beads): record bd 1.0.4 downgrade guardrails",
+      "d4b8f12 chore(data): refresh War Thunder bomb and speed limits",
+      "f1628e4 docs(review): record multi-agent code review findings",
+      "9cc106f fix(review): resolve code review findings"
+    ]
+  },
+  "coverage_gaps": [
+    "typecheck"
+  ]
+}

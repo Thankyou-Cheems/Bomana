@@ -376,7 +376,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-27T16:09:35+00:00"
+        "at": "2026-06-28T03:59:59+00:00"
       }
     },
     {
@@ -406,7 +406,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-27T16:09:35+00:00"
+        "at": "2026-06-28T03:59:59+00:00"
       }
     },
     {
@@ -564,7 +564,7 @@
       "snippet_check": {
         "status": "drifted",
         "detail": "snippet exists but not at lines 133-147; first line now near line 238",
-        "at": "2026-06-27T16:09:35+00:00"
+        "at": "2026-06-28T03:59:59+00:00"
       }
     },
     {
@@ -914,7 +914,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-27T16:09:35+00:00"
+        "at": "2026-06-28T03:59:59+00:00"
       }
     },
     {
@@ -944,7 +944,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-27T16:09:35+00:00"
+        "at": "2026-06-28T03:59:59+00:00"
       }
     },
     {
@@ -1394,6 +1394,152 @@
       },
       "resolved_at": "2026-06-27T16:37:29+00:00",
       "resolution_note": "Fixed via bd evaluation batch; full Ruff and pytest passed."
+    },
+    {
+      "file": "bomana/ui/app.py",
+      "line_start": 587,
+      "line_end": 591,
+      "snippet": "        self._local_hotkey_sequences = []\n        for key_name, callback in bindings:\n            sequence = f\"<{key_name}>\"\n            self.root.bind(sequence, lambda _event, cb=callback: cb())\n            self._local_hotkey_sequences.append(sequence)",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Invalid saved hotkeys can crash app startup",
+      "impact": "A malformed or manually edited config such as hotkey_bindings.lock = \"BAD KEY\" is accepted by ConfigManager.load() and HotkeyConfig.set_bindings(), then App.__init__ reaches refresh_local_hotkey_bindings() and Tk raises TclError for <BAD KEY>, aborting startup before the settings UI can repair it.",
+      "fix": "Normalize saved hotkey bindings against HotkeyConfig.AVAILABLE_KEYS before assigning them, or skip invalid entries and fall back to defaults before calling root.bind().",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "python Tk probe: root.bind('<BAD KEY>', ...) raised TclError: bad event type or keysym \"BAD\"; root.bind('<NotAKey>', ...) raised TclError: bad event type or keysym \"NotAKey\"."
+        },
+        {
+          "kind": "read",
+          "detail": "bomana/config.py:457-468 assigns saved hotkey strings without checking HotkeyConfig.AVAILABLE_KEYS; bomana/ui/app.py:285-288 applies non-empty saved hotkey_bindings during startup."
+        }
+      ],
+      "id": "F-0cede565",
+      "status": "open",
+      "created_at": "2026-06-28T03:54:50+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T03:59:59+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/dialogs.py",
+      "line_start": 1719,
+      "line_end": 1721,
+      "snippet": "        overspeed_thresholds = {\n            key: var.get() for key, var in getattr(self, \"overspeed_vars\", {}).items()\n        }",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Settings save can crash on invalid numeric input",
+      "impact": "If a user types non-numeric text into an overspeed numeric field and clicks Save, tk.DoubleVar.get() raises TclError after custom sound files may already have been copied, so the dialog callback aborts without a user-readable validation message and can leave orphaned copied sound files.",
+      "fix": "Read and validate all numeric Tk variables before side effects, catch tk.TclError/TypeError/ValueError, show a warning, and return before copying sound files or saving config.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "python Tcl probe: tk.DoubleVar(master=tk.Tcl()).set('abc'); get() raised TclError: expected floating-point number but got \"abc\"."
+        },
+        {
+          "kind": "read",
+          "detail": "SettingsDialog._save calls _persist_sound_overrides() at dialogs.py:1706-1714 before reading overspeed_vars at 1719-1721 and CCRP DoubleVars at 1741-1744; no local TclError handler covers those reads."
+        }
+      ],
+      "id": "F-9d81ba86",
+      "status": "open",
+      "created_at": "2026-06-28T03:59:05+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T03:59:59+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/dialogs.py",
+      "line_start": 2363,
+      "line_end": 2366,
+      "snippet": "    def _collect_editor_thresholds(self) -> dict[str, float]:\n        return OverspeedConfig.normalize_thresholds(\n            {key: var.get() for key, var in self.editor_vars.items()}\n        )",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Aircraft overspeed override can crash on invalid numeric input",
+      "impact": "Typing non-numeric text into the aircraft override threshold dialog and applying the override raises TclError from DoubleVar.get(), aborting the callback instead of rejecting the invalid field in the UI.",
+      "fix": "Validate editor_vars reads in _collect_editor_thresholds() or _apply_override(), catch tk.TclError/TypeError/ValueError, and show a warning without mutating the override map.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "python Tcl probe: tk.DoubleVar(master=tk.Tcl()).set('abc'); get() raised TclError: expected floating-point number but got \"abc\"."
+        },
+        {
+          "kind": "grep",
+          "detail": "No validatecommand/invalidcommand/report_callback_exception handler was found for these Spinbox-backed Tk variables."
+        }
+      ],
+      "id": "F-93660464",
+      "status": "open",
+      "created_at": "2026-06-28T03:59:05+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T03:59:59+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/app.py",
+      "line_start": 177,
+      "line_end": 178,
+      "snippet": "        if HUDConfig.enabled and not self._show_hud_overlay():\n            HUDConfig.enabled = False",
+      "category": "lifecycle",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Startup HUD initialization failure is not persisted",
+      "impact": "On a machine where the HUD overlay cannot be created or shown, a saved hud_enabled=true config is only disabled in memory during startup, so the next launch reads true again and repeats the failing HUD initialization and diagnostics instead of converging to a repaired config.",
+      "fix": "When startup _show_hud_overlay() fails, reuse the runtime disable path or call _save_config() after setting HUDConfig.enabled = False.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "runtime_services.update_hud_overlay() persists the later failure path at runtime_services.py:315-319, but App.__init__ disables HUD at app.py:177-178 before the first frame and does not save."
+        }
+      ],
+      "id": "F-61167c77",
+      "status": "open",
+      "created_at": "2026-06-28T03:59:35+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T03:59:59+00:00"
+      }
+    },
+    {
+      "file": "bomana/ui/app.py",
+      "line_start": 1517,
+      "line_end": 1521,
+      "snippet": "        show_zone_panel = (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and (\n            zones_enabled or airfields_enabled or fuel_enabled or bombing_enabled\n        )\n        self.panel_renderer.set_zone_panel_visible(show_zone_panel)\n        if show_zone_panel:",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Standalone navigation keeps stale combat display after phase exit",
+      "impact": "When the standalone navigation window is visible and the snapshot phase leaves ALIVE/LOSS_PENDING, update_zone_display() is skipped by this gate, so NavigationWindow.update_display() never runs its non-alive clearing branch and the separate nav window can keep the last heading and target display after battle state is no longer valid.",
+      "fix": "Update or clear the standalone nav window outside the show_zone_panel gate; for example, call nav_window.update_display(snap) whenever it is visible, or call clear_display() when show_zone_panel becomes false.",
+      "evidence": [
+        {
+          "kind": "grep",
+          "detail": "rg found the only app.nav_window.update_display(snap) call in panel_renderer.py:350-356, which is reached only through App._update_ui_frame's show_zone_panel branch."
+        },
+        {
+          "kind": "read",
+          "detail": "NavigationWindow.update_display() has the intended non-alive clearing branch at nav_window.py:552-566, but the app-level gate prevents it from running after phase exit."
+        }
+      ],
+      "id": "F-ee6506b8",
+      "status": "open",
+      "created_at": "2026-06-28T03:59:48+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-06-28T03:59:59+00:00"
+      }
     }
   ]
 }
