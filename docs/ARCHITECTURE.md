@@ -228,4 +228,3 @@ CI:
 - `docs/CONTRIBUTING.md`: current contribution workflow, `bd` tracking, release expectations
 - `docs/PRIVACY.md`: launcher telemetry/update-service privacy disclosure
 - `docs/PITFALLS.md`: operational failure log for maintainers
-- `docs/PYSIDE6_MVP_EVALUATION.md`: PySide6 main/nav MVP migration assessment and validation gates

@@ -3,8 +3,7 @@
 Date: 2026-05-17
 
 This plan records the remaining `Bomana-21x` work after the completed Tk UI repair pass.
-Production UI work stays on Tk. Do not add Qt/PySide6 code, dependencies, entrypoints, or
-tests unless the project owner explicitly reopens that direction.
+Production UI work stays on Tk.
 
 ## Completed Baseline
 
@@ -19,8 +18,6 @@ Do not repeat these areas:
 - Bundled UI fonts and icon assets: `670f9a4`, bd `Bomana-ql9`.
 - Basic bundled icon scaling for navigation panels: `bfa244e`, bd `Bomana-de5`.
 - Shared Tk UI and monospace font fallback resolution: `df8613e`, bd `Bomana-7qt`.
-- PySide6/Qt evaluation only: `5c4657b`, bd `Bomana-ph4`. Qt prototype follow-ups were
-  closed as not planned.
 
 ## Remaining Order
 
@@ -67,13 +64,9 @@ Task-specific checks:
 - Launcher/main visual token consolidation:
   - Run any focused launcher tests touched by the change.
   - Manual smoke: open launcher source mode, details/support dialog, and main app settings.
-  - Confirm no production dependency or build script picks up Qt/PySide6.
 
 ## Guardrails
 
 - Official 8111 API only; no game memory reads, injection, or game file edits.
 - Respect `ENABLE_*` feature flags and keep build variants sharing one config file.
 - Preserve the existing Tk production entrypoints: `launcher.pyw` and `Bomana.pyw`.
-- Do not create new Qt/PySide6 modules such as `bomana/ui_qt/`.
-- Do not add PySide6 to `pyproject.toml`, lock files, build scripts, CI, or tests.
-- Do not re-open closed Qt bd tasks unless the project owner explicitly changes direction.
