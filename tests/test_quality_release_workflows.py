@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,17 @@ import pytest
 from bomana import launcher_core, metadata
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def build_workflow_source() -> str:
+    return (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+
+
+def workflow_sources() -> list[tuple[Path, str]]:
+    return [
+        (path, path.read_text(encoding="utf-8"))
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml"))
+    ]
 
 
 def load_tool_module(name: str, relative_path: str):
@@ -60,7 +72,7 @@ def test_local_deploy_script_validates_signed_manifests_and_public_endpoints() -
 
 
 def test_build_release_workflow_reads_version_from_metadata_without_dev_fallback() -> None:
-    workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+    workflow = build_workflow_source()
 
     assert "bomana/metadata.py" in workflow
     assert 'bomana/config.py || echo "dev"' not in workflow
@@ -68,7 +80,7 @@ def test_build_release_workflow_reads_version_from_metadata_without_dev_fallback
 
 
 def test_build_release_workflow_passes_manifest_signing_secret() -> None:
-    workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+    workflow = build_workflow_source()
 
     assert "BOMANA_RELEASE_ED25519_PRIVATE_KEY" in workflow
     assert "${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}" in workflow
@@ -100,7 +112,7 @@ def test_release_tool_entrypoints_run_without_pythonpath(relative_path: str) -> 
 
 
 def test_build_release_workflow_isolates_python_env_and_uses_frozen_uv() -> None:
-    workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+    workflow = build_workflow_source()
 
     assert 'PYTHONNOUSERSITE: "1"' in workflow
     assert 'PYTHONPATH: ""' in workflow
@@ -110,6 +122,58 @@ def test_build_release_workflow_isolates_python_env_and_uses_frozen_uv() -> None
     assert "uv run --frozen --extra dev ruff check ." in workflow
     assert "uv run --frozen --extra dev ruff format --check ." in workflow
     assert "uv run --frozen python tools/build_portable.py" in workflow
+
+
+def test_build_release_workflow_validates_release_version_inputs() -> None:
+    workflow = build_workflow_source()
+
+    assert "set -euo pipefail" in workflow
+    assert "SEMVER_RE='^[0-9]+[.][0-9]+[.][0-9]+$'" in workflow
+    assert "TAG_RE='^v([0-9]+[.][0-9]+[.][0-9]+)(-(app|launcher))?$'" in workflow
+    assert 'validate_version "workflow_dispatch version"' in workflow
+    assert 'validate_version "source version"' in workflow
+    assert 'validate_version "launcher version"' in workflow
+    assert "release tag must match vX.Y.Z, vX.Y.Z-app, or vX.Y.Z-launcher" in workflow
+
+
+def test_build_release_workflow_avoids_shell_expression_injection() -> None:
+    workflow = build_workflow_source()
+
+    assert "INPUT_VERSION: ${{ github.event.inputs.version || '' }}" in workflow
+    assert "INPUT_BUILD_TARGET: ${{ github.event.inputs.build_target || '' }}" in workflow
+    assert 'VERSION="${{ github.event.inputs.version }}"' not in workflow
+    assert 'BUILD_TARGET="${{ github.event.inputs.build_target }}"' not in workflow
+    assert '--version "${{ needs.prepare.outputs.version }}"' not in workflow
+    assert '--version "${{ needs.prepare.outputs.launcher_version }}"' not in workflow
+    assert '--version "$env:BUILD_VERSION"' in workflow
+    assert '--version "$env:BUILD_LAUNCHER_VERSION"' in workflow
+
+
+def test_build_release_workflow_scopes_write_token_to_release_job() -> None:
+    workflow = build_workflow_source()
+    top_permissions = workflow.index("permissions:\n  contents: read")
+    jobs = workflow.index("jobs:")
+    release = workflow.index("  release:")
+    release_permissions = workflow.index("    permissions:\n      contents: write", release)
+    release_steps = workflow.index("    steps:", release)
+
+    assert top_permissions < jobs
+    assert release < release_permissions < release_steps
+    assert "permissions:\n  contents: write" not in workflow[:jobs]
+
+
+def test_github_workflows_pin_actions_to_full_commit_sha() -> None:
+    uses_lines: list[tuple[Path, str]] = []
+    for path, workflow in workflow_sources():
+        for line in workflow.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("uses: ") and not stripped.startswith(
+                ("uses: ./", "uses: docker://")
+            ):
+                uses_lines.append((path, stripped))
+
+    assert uses_lines
+    assert all(re.search(r"@[0-9a-f]{40}(?:\s+#\s+\S+)?$", line) for _path, line in uses_lines)
 
 
 def test_local_portable_build_scripts_isolate_python_env_and_use_frozen_uv() -> None:

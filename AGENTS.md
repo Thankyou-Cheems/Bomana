@@ -34,6 +34,9 @@ Keep it concise and update when workflows or boundaries change.
   uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
   ```
 - Do not add COS/CDN paid artifact storage or switch update assets to paid object storage unless the user explicitly approves the cost.
+- Release workflows must default to `permissions: contents: read`; grant `contents: write` only to the final GitHub Release job.
+- Release `version` / tag values must be allowlisted as `X.Y.Z`, `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`, then passed into shell scripts through environment variables. Do not interpolate GitHub Actions expressions directly inside `run:` commands.
+- Pin GitHub Actions `uses:` references to full commit SHAs. Keep the human-readable upstream tag only as a comment if useful.
 - Before publishing or deploying update assets, verify:
   ```bash
   gh secret list --repo Thankyou-Cheems/Bomana
