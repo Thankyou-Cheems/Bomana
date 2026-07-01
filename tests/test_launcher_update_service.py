@@ -738,6 +738,40 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
         self.assertFalse(list(self.base.glob(".bomana_launcher_write_probe*")))
 
+    def test_launcher_updater_uses_system_powershell_path_and_safe_cwd(self) -> None:
+        script_path = self.base / "staging" / "bomana_update_launcher_apply.ps1"
+        script_path.parent.mkdir()
+        script_path.write_text("# updater\n", encoding="utf-8")
+        system_powershell = (
+            self.base / "Windows" / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+        )
+        system_powershell.parent.mkdir(parents=True)
+        system_powershell.write_bytes(b"powershell")
+        popen_calls = []
+
+        def fake_popen(args, **kwargs):
+            popen_calls.append((args, kwargs))
+            return object()
+
+        with (
+            patch.object(
+                self.launcher,
+                "_system_windows_powershell_exe",
+                return_value=system_powershell,
+            ),
+            patch.object(self.launcher.subprocess, "Popen", side_effect=fake_popen),
+        ):
+            self.launcher._launch_updater_script(script_path)
+
+        self.assertEqual(len(popen_calls), 1)
+        args, kwargs = popen_calls[0]
+        self.assertEqual(args[0], str(system_powershell))
+        self.assertNotEqual(args[0], "powershell.exe")
+        self.assertEqual(kwargs["cwd"], str(system_powershell.parent))
+        self.assertNotEqual(kwargs["cwd"], str(script_path.parent))
+        self.assertIn("-File", args)
+        self.assertIn(str(script_path), args)
+
     def test_launcher_self_update_uses_data_root_result_and_rollback_script(self) -> None:
         data_root = self.base / "data-root"
         target = self.base / "BomanaLauncher.exe"

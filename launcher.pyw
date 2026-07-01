@@ -361,6 +361,34 @@ def _open_folder(path: Path) -> None:
     subprocess.Popen(["xdg-open", str(path)], close_fds=True)
 
 
+def _windows_system_dir() -> Path:
+    kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
+    if kernel32 is None:
+        raise RuntimeError("无法定位 Windows 系统目录")
+
+    get_system_directory = kernel32.GetSystemDirectoryW
+    get_system_directory.argtypes = [ctypes.c_wchar_p, ctypes.c_uint]
+    get_system_directory.restype = ctypes.c_uint
+
+    buffer = ctypes.create_unicode_buffer(260)
+    length = int(get_system_directory(buffer, len(buffer)))
+    if length > len(buffer):
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        length = int(get_system_directory(buffer, len(buffer)))
+    if length <= 0:
+        raise RuntimeError("无法定位 Windows 系统目录")
+    return Path(buffer.value).resolve()
+
+
+def _system_windows_powershell_exe() -> Path:
+    powershell = (
+        _windows_system_dir() / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    )
+    if not powershell.is_file():
+        raise RuntimeError(f"无法定位系统 PowerShell：{powershell}")
+    return powershell
+
+
 def _data_path(base: Path, filename: str) -> Path:
     return _launcher_data_root(base) / filename
 
@@ -1858,6 +1886,7 @@ def _download_update_from_manifest(
 
 
 def _launch_updater_script(script_path: Path) -> None:
+    powershell = _system_windows_powershell_exe()
     creation_flags = 0
     if hasattr(subprocess, "CREATE_NO_WINDOW"):
         creation_flags |= subprocess.CREATE_NO_WINDOW
@@ -1865,14 +1894,14 @@ def _launch_updater_script(script_path: Path) -> None:
         creation_flags |= subprocess.DETACHED_PROCESS
     subprocess.Popen(
         [
-            "powershell.exe",
+            str(powershell),
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",
             "-File",
             str(script_path),
         ],
-        cwd=str(script_path.parent),
+        cwd=str(powershell.parent),
         close_fds=True,
         creationflags=creation_flags,
     )
