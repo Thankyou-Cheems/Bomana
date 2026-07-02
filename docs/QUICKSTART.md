@@ -12,7 +12,7 @@
 - 游戏：War Thunder 已启动并进入战斗（机库状态不会产生飞行数据）
 - 数据来源：`http://localhost:8111`
 - 说明：无需额外“开启本地服务器”开关
-- 相关文档：更完整的功能与架构说明见 [README](../README.md) 与 [ARCHITECTURE](./ARCHITECTURE.md)
+- 相关文档：更完整的功能与架构说明见 [README](../README.md)、[ARCHITECTURE](./ARCHITECTURE.md) 与 [specs](./specs/)
 
 ### 1. 获取程序
 
@@ -125,6 +125,7 @@ uv run python tools/update_datamine_assets.py ^
 - 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
 - 本地发布命令入口是 `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`；`--version` 只是可选一致性校验，app 目标必须匹配 `bomana/metadata.py` 的 `__version__`，launcher 目标必须匹配 `launcher.pyw` 的 `LAUNCHER_VERSION`。
 - 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；更新服务部署只能从本机运行 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`，不要用 GitHub Actions 直连腾讯云主机部署。公开端点验证必须调用 `verify_release_manifest_signature`。
+- 发布签名字段、密钥处理和部署边界以 [release-signing spec](./specs/release-signing.md) 为准。
 
 ---
 
@@ -136,7 +137,7 @@ uv run python tools/update_datamine_assets.py ^
 - Game state: War Thunder must be in battle (hangar provides no live flight data)
 - Data source: `http://localhost:8111`
 - Note: no extra in-game "local server" toggle is required
-- Further reading: see [README](../README.md) and [ARCHITECTURE](./ARCHITECTURE.md) for the full feature and implementation overview
+- Further reading: see [README](../README.md), [ARCHITECTURE](./ARCHITECTURE.md), and [specs](./specs/) for the full feature and implementation overview
 
 ### 1. Get the App
 
@@ -231,5 +232,6 @@ A: Expected for an estimate-based model. Tune `range correction` and `time corre
 - Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).
 - Local package entry: `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`; `--version` is an optional consistency check and must match `bomana/metadata.py __version__` for app builds or `launcher.pyw LAUNCHER_VERSION` for launcher builds.
 - Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; deploy only from the maintainer workstation with `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`. Do not deploy to Tencent from GitHub Actions. Public endpoint checks must call `verify_release_manifest_signature`.
+- Release signing fields, key handling, and deployment boundaries are canonical in [release-signing spec](./specs/release-signing.md).
 
 ---

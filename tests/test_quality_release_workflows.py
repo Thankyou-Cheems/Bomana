@@ -45,6 +45,7 @@ def test_tencent_deploy_is_local_only() -> None:
 
 def test_docs_do_not_restore_github_to_tencent_deploy_fallback() -> None:
     checked_docs = (
+        ROOT / "README.md",
         ROOT / "AGENTS.md",
         ROOT / "docs/ARCHITECTURE.md",
         ROOT / "docs/CONTRIBUTING.md",

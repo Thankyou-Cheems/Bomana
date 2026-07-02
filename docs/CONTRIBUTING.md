@@ -12,6 +12,7 @@
 
 - 只使用 War Thunder 官方 `localhost:8111` 数据；禁止内存读取、注入或修改游戏文件。
 - 所有任务跟踪都使用 `bd (beads)`，不要新增 markdown TODO 或外部任务列表。
+- 跨模块不变量以 [docs/specs](./specs/) 为准；入口文档只保留摘要和链接。
 - 修改架构或代码流时，必须同步更新 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 - 遇到新的失败模式时，必须在 [PITFALLS.md](./PITFALLS.md) 追加简短记录。
 - 功能开关受 `bomana/config.py` 中的 `ENABLE_*` 控制，三种构建变体共用同一份配置逻辑。
@@ -95,6 +96,7 @@ uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
 - `test_launcher_*.py`：启动器更新、安装、回滚、清单和网络 fallback
 - `test_utils_*.py`：持久化、诊断、字体、资源查找等共享工具
 - `test_quality_*.py`：质量门和 workflow 配置
+- `tests/contracts/`：对应 `docs/specs/` 的跨模块架构合同
 
 现有测试文件可以在大改时再归并；新增或重写测试应优先使用上述前缀，避免 `test_misc.py`、`test_regression.py` 这类无边界文件。
 
@@ -156,6 +158,7 @@ bd close <issue-id> --reason "Completed" --json
 
 - [../README.md](../README.md)：面向用户的安装、功能和合规说明
 - [ARCHITECTURE.md](./ARCHITECTURE.md)：目录结构、运行数据流、构建链路
+- [specs](./specs/)：8111、发布签名、UI 线程、配置变体和质量门禁合同
 - [PRIVACY.md](./PRIVACY.md)：匿名统计和更新服务行为
 - [CHANGELOG.md](./CHANGELOG.md)：对用户可见的版本变化
 
@@ -184,15 +187,15 @@ bd close <issue-id> --reason "Completed" --json
 
 ### 发布流程（维护者）
 
+完整规则以 [release-signing spec](./specs/release-signing.md) 为准；这里保留维护者操作摘要。
+
 1. 更新 `docs/CHANGELOG.md`
 2. 更新 `bomana/metadata.py` 中的 `__version__`
 3. 若 app 包需要新启动器能力，更新 `bomana/metadata.py` 中的 `PORTABLE_MIN_LAUNCHER_VERSION`
 4. 根据发布目标做最少真实验证：
    - app 发布：启动器兼容性、下载/启动正常
    - launcher 发布：重查排队、保留一个 `app_previous/`、回退互换正常
-5. 确认 GitHub Secrets 已配置并成对匹配：
-   `BOMANA_RELEASE_ED25519_PRIVATE_KEY` / `BOMANA_RELEASE_ED25519_PUBLIC_KEY`
-   并确认 `BOMANA_RELEASE_SIGNING_KEY_ID` 使用当前 key id（默认 `bomana-release-2026-06`）。不要生成、轮换、覆盖或上传发布私钥，除非已明确确认私钥保管方案。
+5. 确认 GitHub Secrets 已配置并成对匹配，且不要生成、轮换、覆盖或上传发布私钥，除非已明确确认私钥保管方案。
 6. 本地发布构建必须使用匹配的私钥/公钥；`tools/build_portable.py` 会拒绝空签名、缺失公钥或公钥与私钥不匹配的清单。
 7. 推送标签：
    - `vX.Y.Z`：完整发布
@@ -218,6 +221,7 @@ bd close <issue-id> --reason "Completed" --json
 
 - Use only the official War Thunder `localhost:8111` API. No memory reads, injection, or game-file edits.
 - Track work in `bd (beads)` only; do not add markdown TODO systems.
+- Cross-module invariants are canonical in [docs/specs](./specs/); entrypoint docs should stay as summaries and links.
 - Update [ARCHITECTURE.md](./ARCHITECTURE.md) when module boundaries or data flow change.
 - Add a short note to [PITFALLS.md](./PITFALLS.md) when you hit a new failure mode.
 - Respect `ENABLE_*` feature flags in `bomana/config.py`; all build variants share the same config model.
@@ -301,6 +305,7 @@ As tests grow, name files by system boundary rather than by temporary bug. See [
 - `test_launcher_*.py`: launcher update, install, rollback, manifest, and network fallback behavior
 - `test_utils_*.py`: persistence, diagnostics, fonts, resource lookup, and shared helpers
 - `test_quality_*.py`: quality gates and workflow configuration
+- `tests/contracts/`: cross-module architecture contracts traced to `docs/specs/`
 
 Existing test files can be folded into this scheme when they receive substantial edits. New or rewritten tests should use these prefixes and avoid boundary-free files such as `test_misc.py` or `test_regression.py`.
 
@@ -361,6 +366,7 @@ Keep these in sync with the code:
 
 - [../README.md](../README.md)
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [specs](./specs/)
 - [PRIVACY.md](./PRIVACY.md)
 - [CHANGELOG.md](./CHANGELOG.md)
 
@@ -389,13 +395,14 @@ Manual 8111 smoke notes should cover:
 
 ### Release Notes For Maintainers
 
+The complete rules are canonical in [release-signing spec](./specs/release-signing.md);
+this section is the maintainer operation summary.
+
 1. Update `docs/CHANGELOG.md`
 2. Bump `__version__` in `bomana/metadata.py`
 3. Update `PORTABLE_MIN_LAUNCHER_VERSION` in `bomana/metadata.py` if the app now requires newer launcher behavior
 4. Smoke test the relevant release path
-5. Confirm GitHub Secrets are configured as a matching pair:
-   `BOMANA_RELEASE_ED25519_PRIVATE_KEY` / `BOMANA_RELEASE_ED25519_PUBLIC_KEY`
-   and confirm `BOMANA_RELEASE_SIGNING_KEY_ID` uses the current key id, defaulting to `bomana-release-2026-06`. Do not generate, rotate, overwrite, or upload release private keys unless the private-key retention plan is explicit.
+5. Confirm GitHub Secrets are configured as a matching pair. Do not generate, rotate, overwrite, or upload release private keys unless the private-key retention plan is explicit.
 6. Local release builds must use matching private/public keys; `tools/build_portable.py` rejects empty signatures, missing public keys, and public keys that do not match the private key.
 7. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
 8. Let GitHub Actions build, Ed25519-sign, and publish the assets
@@ -403,4 +410,3 @@ Manual 8111 smoke notes should cover:
    `uv run python tools\deploy_update_assets.py --target app --version X.Y.Z`
    Do not add or trigger a GitHub Actions workflow that deploys to the Tencent host.
 10. The deploy path calls `verify_release_manifest_signature` before trusting public update endpoints. The update service only forwards Release manifest signatures and adds URL/size/source fields; it must not store the release private key. Do not introduce COS/CDN paid object storage unless the user explicitly approves the cost.
-

@@ -12,39 +12,26 @@ Keep it concise and update when workflows or boundaries change.
 - Utilities: `bomana/utils/` (system, math, file, sound)
 - CCRP data: `bomana/data/ccrp_bomb_params.json`
 - Portable build: `tools/build_portable.py`, `tools/scripts/build_portable.bat`, `tools/scripts/build_app_package.bat`, `tools/scripts/build_launcher.bat`
-- Docs: `docs/ARCHITECTURE.md`, `docs/PITFALLS.md`
+- Docs: `docs/ARCHITECTURE.md`, `docs/PITFALLS.md`, `docs/specs/`
 
 ## Guardrails
-- Only use the official 8111 API; no memory reads, injection, or game file edits.
-- Respect ENABLE_* feature flags (build variants share one config file).
+- Canonical specs live in `docs/specs/`; update them before duplicating durable rules elsewhere.
+- Only use the official 8111 API; no memory reads, injection, or game file edits. See `docs/specs/runtime-8111-boundary.md`.
+- Respect ENABLE_* feature flags. See `docs/specs/config-variants.md`.
+- Tk UI work must cross background threads through the documented dispatcher/`root.after` bridges. See `docs/specs/threading-ui-contract.md`.
 
 ## Release Signing Workflow
-- Treat this workflow as mandatory for every release/update/deploy task, even if the user does not mention signing.
-- Release manifests must never be empty-signed or unsigned. `manifest_<Variant>.json` and `launcher_manifest.json` must contain `manifest_signature.algorithm == "ed25519"`, non-empty `key_id`, and non-empty `signature`.
-- Required build/CI secrets and env vars: `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`). `tools/build_portable.py` must fail if the public key is absent or does not match the private key.
-- Do not generate, rotate, overwrite, or upload release signing keys unless the user explicitly asks and confirms the private-key retention plan. Never print private keys in logs or handoffs.
-- The release signature covers release-owned core fields only:
-  - App: `schema_version`, `channel`, `app_version`, `min_launcher_version`, `entrypoint`, `package_asset`, `package_sha256`.
-  - Launcher: `schema_version`, `launcher_version`, `launcher_asset`, `launcher_sha256`, `launcher_size_bytes`.
-- TencentCloudPublic / `bomana-update` must not hold the release private key. It only forwards `manifest_signature` from deployed manifests and may add derived fields such as `package_url`, `source_name`, `package_size`, and launcher compatibility `package_sha256`.
-- Clients must verify `manifest_signature` before trusting versions, assets, or SHA256. For launcher updates, prefer signed `launcher_sha256` over the service-derived `package_sha256` alias.
-- Tencent/EdgeOne update deployment is local-only from the maintainer workstation. Do not deploy update assets from GitHub-hosted Actions to TencentCloudPublic/CVM via SSH, rsync, or scp; that path is intentionally absent because the network is too slow and unreliable.
+- Treat `docs/specs/release-signing.md` as mandatory for every release/update/deploy task, even if the user does not mention signing.
+- Manifests must be Ed25519-signed and verified before trusting versions, assets, or SHA256.
+- Do not generate, rotate, overwrite, upload, or print release signing keys unless the user explicitly approves the private-key retention plan.
+- Tencent/EdgeOne update deployment is local-only from the maintainer workstation.
+- Do not deploy update assets from GitHub-hosted Actions to TencentCloudPublic/CVM via SSH, rsync, or scp.
 - If a release session needs deployment, GitHub Actions may build and publish the signed GitHub Release, but the Tencent update deploy command must be run locally:
   ```bash
   uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
   ```
-- Do not add COS/CDN paid artifact storage or switch update assets to paid object storage unless the user explicitly approves the cost.
-- Release workflows must default to `permissions: contents: read`; grant `contents: write` only to the final GitHub Release job.
-- Release `version` / tag values must be allowlisted as `X.Y.Z`, `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`, then passed into shell scripts through environment variables. Do not interpolate GitHub Actions expressions directly inside `run:` commands.
-- Pin GitHub Actions `uses:` references to full commit SHAs. Keep the human-readable upstream tag only as a comment if useful.
-- Before publishing or deploying update assets, verify:
-  ```bash
-  gh secret list --repo Thankyou-Cheems/Bomana
-  uv run python tools/build_portable.py --target app|launcher|all ...
-  uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
-  ```
-  Public endpoint verification must call `verify_release_manifest_signature`, not just check that a signature field exists.
-- Release signing secrets are provisioned for `bomana-release-2026-06`; if they ever appear missing again, check `gh secret list --repo Thankyou-Cheems/Bomana` and bd issue history for `Bomana-xkf`.
+- Public endpoint verification must call `verify_release_manifest_signature`, not just check that a signature field exists.
+- Do not add COS/CDN paid artifact storage unless the user explicitly approves the cost.
 
 ## Header Facts (Condensed)
 - Data sources: `/indicators`, `/state`, `/map_obj.json`, `/map_info.json`.
@@ -53,6 +40,7 @@ Keep it concise and update when workflows or boundaries change.
 
 ## Documentation Rules
 - If architecture changes (new/split modules, major data-flow changes, core directory renames), update `docs/ARCHITECTURE.md`.
+- If an invariant or cross-module contract changes, update the relevant file under `docs/specs/` and its contract test.
 - If a task fails in a new way, add a short entry to `docs/PITFALLS.md`.
 
 ## Expected Task Flow
@@ -71,14 +59,16 @@ Keep it concise and update when workflows or boundaries change.
 
 ## Landing the Plane (Session Completion)
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+**When ending a work session**, complete ALL steps below. Work is normally NOT complete until `git push` succeeds, unless an active ADR/bd decision explicitly sets a narrower closeout policy.
+
+Current SDD exception: `docs/adr/0001-spec-anchored-docs.md` records that SDD phase work is committed locally and not pushed unless the user explicitly authorizes a push.
 
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Ruff, tests, builds
 3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+4. **PUSH TO REMOTE** - Mandatory except for explicit commit-only work such as the active SDD refactor:
    ```bash
    git pull --rebase
    bd backup status
@@ -90,10 +80,9 @@ Keep it concise and update when workflows or boundaries change.
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+- Default work is NOT complete until `git push` succeeds
+- For explicit commit-only work, do not push until the user authorizes it
+- If push is required and fails, resolve and retry until it succeeds
 - On `main` branch, every `git commit` MUST use `/gc` (`git-commit-smart`) to generate the commit message first
 - On `main` branch, do NOT bypass `/gc` by writing a direct commit message and committing immediately
 Use 'bd' for task tracking

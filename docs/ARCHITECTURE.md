@@ -19,6 +19,13 @@
 - Tools: `tools/create_version_info.py` / `tools/sample_8111_attitude.py` (build metadata + diagnostics)
 - Branding assets: `bomana/assets/branding/` (`app.ico`, `app.png`, sponsor images)
 
+## Spec Anchors
+- Runtime 8111 boundary: `docs/specs/runtime-8111-boundary.md`
+- Release signing and Tencent/EdgeOne deployment: `docs/specs/release-signing.md`
+- Tk threading and UI dispatch: `docs/specs/threading-ui-contract.md`
+- Config variants and `ENABLE_*` precedence: `docs/specs/config-variants.md`
+- Test layers and quality gates: `docs/specs/testing-quality-gates.md`
+
 ## Repository Layout
 ```
 .
@@ -113,8 +120,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Channel/source/proxy changes during an in-flight check are queued and trigger an automatic follow-up re-check instead of being blocked.
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for app and launcher manifests when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
-   - App and launcher manifests must include an Ed25519 `manifest_signature`; the launcher verifies it against pinned release public keys before trusting version, asset, or SHA256 fields.
-   - Manifest signatures cover release-owned core fields only. App signatures cover `schema_version`, `channel`, `app_version`, `min_launcher_version`, `entrypoint`, `package_asset`, and `package_sha256`; launcher signatures cover `schema_version`, `launcher_version`, `launcher_asset`, `launcher_sha256`, and `launcher_size_bytes`.
+   - App and launcher manifests must include an Ed25519 `manifest_signature`; the launcher verifies it against pinned release public keys before trusting version, asset, or SHA256 fields. Canonical field ownership is in `docs/specs/release-signing.md`.
    - The Tencent/EdgeOne service does not hold the release private key. It forwards `manifest_signature` from the deployed JSON manifests and may add service-derived fields such as `package_url`, `source_name`, `package_size`, and the launcher compatibility alias `package_sha256`.
    - `tools/build_portable.py` signs manifests from `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, requires the matching `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and injects that public key into packaged launchers through a temporary `bomana/release_public_keys.py` module.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
@@ -226,5 +232,6 @@ CI:
 - `README.md`: public landing page, install paths, feature overview, compliance statement
 - `docs/QUICKSTART.md`: condensed player/developer quick start
 - `docs/CONTRIBUTING.md`: current contribution workflow, `bd` tracking, release expectations
+- `docs/specs/`: canonical runtime, release, threading, config, and quality contracts
 - `docs/PRIVACY.md`: launcher telemetry/update-service privacy disclosure
 - `docs/PITFALLS.md`: operational failure log for maintainers

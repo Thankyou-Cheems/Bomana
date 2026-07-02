@@ -9,6 +9,7 @@ Bomana keeps fast automated tests in `tests/`. These tests are part of the sourc
 - `test_launcher_*.py`: launcher update, install, rollback, manifest, and network fallback behavior.
 - `test_utils_*.py`: persistence, diagnostics, fonts, resource lookup, and other shared helpers.
 - `test_quality_*.py`: repository quality gates and workflow configuration.
+- `contracts/`: cross-module architecture contracts traced to `docs/specs/`.
 
 Existing files may keep their current names until they need substantial edits. When adding or heavily rewriting tests, use the layer prefix above so growth stays searchable.
 
@@ -18,6 +19,7 @@ Existing files may keep their current names until they need substantial edits. W
 - Keep real War Thunder / `localhost:8111` validation out of automated tests; document that as manual smoke in the PR or handoff.
 - Use pytest-style tests by default. `tools/scripts/check_smoke.bat` is the canonical fast local suite and must run the same tests as `uv run --extra dev pytest`.
 - Add a regression test next to the layer where the bug lives. If a test needs broad cross-file setup, first ask whether the production boundary is too wide.
+- Add broad refactor guardrails under `tests/contracts/` and cite the matching spec file in the test name or module docstring.
 
 ## Quality Gates
 
