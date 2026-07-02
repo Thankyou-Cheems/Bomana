@@ -45,9 +45,14 @@
 │  │  └─ icons/                # PNG icon assets used instead of emoji glyphs
 │  ├─ core/
 │  │  ├─ ballistics.py        # Bombing ballistics
+│  │  ├─ ccrp_scheduler.py    # CCRP input gating, calculation, and result storage helpers
+│  │  ├─ diagnostics.py       # Endpoint diagnostic counters and log throttling
+│  │  ├─ lifecycle.py         # Life/reset/landing state transitions
 │  │  ├─ logic.py             # GameLogic core loop
+│  │  ├─ navigation.py        # Navigation scale, bearing, and distance helpers
 │  │  ├─ overspeed.py         # Aircraft speed-limit matching + alert grading
 │  │  ├─ state.py             # Dataclasses/enums
+│  │  ├─ timing_store.py      # Battle-scoped timer signature helpers
 │  │  └─ telemetry.py         # 8111 fetchers
 │  ├─ ui/
 │  │  ├─ app.py               # App coordinator (window lifecycle + main UI loop)
@@ -96,6 +101,10 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 ## Runtime Data Flow
 1. 8111 API polling via `requests` to `localhost:8111`.
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
+   - `GameLogic` remains the polling/orchestration facade.
+   - `navigation.py`, `timing_store.py`, `lifecycle.py`, `diagnostics.py`, and
+     `ccrp_scheduler.py` own focused helper responsibilities extracted from the
+     former monolithic logic module.
 3. UI render with `tkinter` (timer, panels, hints, debug text).
    - `App` keeps window lifecycle and the main refresh loop.
    - `AppNavigationServices` owns standalone navigation window lifecycle, mode switching, history-mode suspension, and display-change rebuilds.

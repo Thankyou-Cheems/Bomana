@@ -1,7 +1,5 @@
 """Game logic core."""
 
-import hashlib
-import json
 import math
 import threading
 import time
@@ -20,11 +18,12 @@ from bomana.config import (
     Theme,
     ZoneConfig,
 )
+from bomana.core import ccrp_scheduler, lifecycle, navigation, timing_store
+from bomana.core import diagnostics as core_diagnostics
 from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing_from_range
 from bomana.core.overspeed import OverspeedAnalyzer
 from bomana.core.state import (
     AirfieldDisplayInfo,
-    AttitudeConfidenceState,
     GameState,
     InterestPoint,
     LifeState,
@@ -38,7 +37,6 @@ from bomana.core.state import (
     UISnapshot,
     Zone,
     ZoneDisplayInfo,
-    ZoneNavigationState,
 )
 from bomana.core.telemetry import (
     Budget,
@@ -50,17 +48,11 @@ from bomana.core.telemetry import (
 from bomana.utils.diagnostics import log_event
 from bomana.utils.file_utils import StateManager
 from bomana.utils.math_utils import (
-    calculate_bearing,
-    calculate_distance,
     calculate_heading_from_vector,
     calculate_relative_bearing,
     generate_cdi_indicator,
     get_direction_text,
-    normalize_angle,
 )
-
-_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
-_SEQUENCE_NUMERIC_PARSE_ERRORS = (TypeError, ValueError, IndexError)
 
 # ============================================================================
 # 游戏逻辑核心
@@ -387,28 +379,17 @@ class GameLogic:
     @staticmethod
     def _angle_delta_deg(current: float, previous: float) -> float:
         """计算两角度差值（映射到 [-180, 180] 后取绝对值）。"""
-        return abs(normalize_angle(float(current) - float(previous)))
+        return navigation.angle_delta_deg(current, previous)
 
     @staticmethod
     def _map_axis_scale_m(map_info: MapInfo | None) -> tuple[float, float] | None:
         """从 map_info 提取归一化坐标在 X/Y 轴对应的米制尺度。"""
-        if map_info is None or not getattr(map_info, "valid", False):
-            return None
-        try:
-            min_x, min_y = map_info.map_min
-            max_x, max_y = map_info.map_max
-            scale_x = abs(float(max_x) - float(min_x))
-            scale_y = abs(float(max_y) - float(min_y))
-            if scale_x <= 1e-6 or scale_y <= 1e-6:
-                return None
-            return scale_x, scale_y
-        except _SEQUENCE_NUMERIC_PARSE_ERRORS:
-            return None
+        return navigation.map_axis_scale_m(map_info)
 
     @staticmethod
     def _rounded_float(value: float) -> float:
         """将参与指纹的浮点值规整到稳定精度。"""
-        return round(float(value), 6)
+        return timing_store.rounded_float(value)
 
     @classmethod
     def _build_battle_signature(
@@ -417,39 +398,7 @@ class GameLogic:
         mp: MapObjData | None,
     ) -> str | None:
         """基于 8111 当前可见的地图上下文构造战局指纹。"""
-        if map_info is None or not map_info.valid or mp is None or not mp.ok:
-            return None
-
-        try:
-            payload = {
-                "map_min": [cls._rounded_float(value) for value in map_info.map_min],
-                "map_max": [cls._rounded_float(value) for value in map_info.map_max],
-                "grid_size": [cls._rounded_float(value) for value in map_info.grid_size],
-                "grid_steps": [cls._rounded_float(value) for value in map_info.grid_steps],
-                "grid_zero": [cls._rounded_float(value) for value in map_info.grid_zero],
-                "zones": sorted(
-                    (
-                        cls._rounded_float(zone.x),
-                        cls._rounded_float(zone.y),
-                        str(zone.color or ""),
-                    )
-                    for zone in mp.zones
-                ),
-                "airfields": sorted(
-                    (
-                        cls._rounded_float(airfield.x),
-                        cls._rounded_float(airfield.y),
-                        str(airfield.color or ""),
-                        bool(airfield.is_friendly),
-                    )
-                    for airfield in mp.airfields
-                ),
-            }
-        except _NUMERIC_PARSE_ERRORS:
-            return None
-
-        encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(encoded.encode("ascii")).hexdigest()
+        return timing_store.build_battle_signature(map_info, mp)
 
     def _resolve_pending_timer_restore_locked(
         self,
@@ -500,13 +449,7 @@ class GameLogic:
         dx: float, dy: float, map_axis_scale_m: tuple[float, float] | None
     ) -> float:
         """计算兼容旧语义的 distance（实际km / DISTANCE_SCALE）。"""
-        dx = float(dx)
-        dy = float(dy)
-        if map_axis_scale_m is not None:
-            moved_m = math.hypot(dx * map_axis_scale_m[0], dy * map_axis_scale_m[1])
-            moved_km = moved_m / 1000.0
-            return moved_km / ZoneConfig.DISTANCE_SCALE
-        return math.hypot(dx, dy)
+        return navigation.distance_norm_from_delta(dx, dy, map_axis_scale_m)
 
     @staticmethod
     def _bearing_distance_norm(
@@ -517,28 +460,13 @@ class GameLogic:
         map_axis_scale_m: tuple[float, float] | None,
     ) -> tuple[float, float]:
         """计算目标方位角与兼容距离值。"""
-        dx = float(tx) - float(px)
-        dy = float(ty) - float(py)
-        if map_axis_scale_m is not None:
-            dx_m = dx * map_axis_scale_m[0]
-            dy_m = dy * map_axis_scale_m[1]
-            bearing = (math.degrees(math.atan2(dx_m, -dy_m)) + 360.0) % 360.0
-            distance_norm = GameLogic._distance_norm_from_delta(dx, dy, map_axis_scale_m)
-            return bearing, distance_norm
-
-        bearing = calculate_bearing(px, py, tx, ty)
-        distance_norm = calculate_distance(px, py, tx, ty)
-        return bearing, distance_norm
+        return navigation.bearing_distance_norm(px, py, tx, ty, map_axis_scale_m)
 
     def _record_endpoint_diagnostic_locked(
         self, ok: bool, streak_attr: str, count_attr: str
     ) -> None:
         """Update per-endpoint failure counters (must be called with lock held)."""
-        if ok:
-            setattr(self.state, streak_attr, 0)
-            return
-        setattr(self.state, streak_attr, getattr(self.state, streak_attr) + 1)
-        setattr(self.state, count_attr, getattr(self.state, count_attr) + 1)
+        core_diagnostics.record_endpoint_diagnostic(self.state, ok, streak_attr, count_attr)
 
     def _emit_endpoint_diagnostic(
         self,
@@ -551,25 +479,12 @@ class GameLogic:
         status_code: int | None = None,
     ) -> None:
         """Emit endpoint health changes without logging every polling tick."""
-        previous_streak = self._endpoint_diag_state.get(endpoint, 0)
-        if ok:
-            if previous_streak > 0:
-                log_event(
-                    "endpoint_recovered",
-                    endpoint=endpoint,
-                    previous_failure_streak=previous_streak,
-                    elapsed_ms=elapsed_ms,
-                )
-            self._endpoint_diag_state[endpoint] = 0
-            return
-
-        self._endpoint_diag_state[endpoint] = failure_streak
-        if failure_streak not in {1, 5, 20} and (failure_streak % 100) != 0:
-            return
-        log_event(
-            "endpoint_failed",
+        core_diagnostics.emit_endpoint_diagnostic(
+            self._endpoint_diag_state,
+            log_event,
             endpoint=endpoint,
-            error_kind=error_kind or "unknown",
+            ok=ok,
+            error_kind=error_kind,
             elapsed_ms=elapsed_ms,
             failure_streak=failure_streak,
             status_code=status_code,
@@ -1679,90 +1594,35 @@ class GameLogic:
 
     def _start_new_life_locked(self, now: float):
         """开始新的生命（必须在锁内调用）"""
-        s = self.state
-        next_index = 1 if not s.current_life else (s.current_life.life_index + 1)
-        s.current_life = LifeState(spawn_time=now, life_index=next_index)
-        s.sortie_id += 1
-        s.last_refit_ts = now
-        s.last_player_present_ts = now
-        s.attitude = AttitudeConfidenceState()
+        lifecycle.start_new_life(self.state, now)
 
     def _prepare_new_battle_context_locked(self):
         """丢弃机库期缓存，让战局建立阶段重取地图尺度。"""
-        s = self.state
-        s.zone_nav = ZoneNavigationState()
-        s.map_info = None
+        lifecycle.prepare_new_battle_context(self.state)
 
     def _reset_life_state_locked(self):
         """重置生命状态（必须在锁内调用）"""
-        s = self.state
-        s.current_life = None
-        s.sortie_id = 0
-        s.last_refit_ts = 0.0
-        s.spawn_candidate_since = None
-        s.missing_player_since = None
-        s.last_player_present_ts = 0.0
-        s.landing_start_time = None
-        s.landed_flash_until = 0.0
-        s.zone_nav = ZoneNavigationState()
-        s.attitude = AttitudeConfidenceState()
-        s.map_info = None
-        s.fuel_state.reset()  # v5.8 新增：重置燃油状态
+        lifecycle.reset_life_state(self.state)
 
     def _clear_transient_state_locked(self):
         """清除瞬态状态（必须在锁内调用）"""
-        s = self.state
-        s.spawn_candidate_since = None
-        s.missing_player_since = None
-        s.landing_start_time = None
-        s.landed_flash_until = 0.0
+        lifecycle.clear_transient_state(self.state)
 
     def _update_landing_locked(self, tel: TelemetryData, now: float):
         """更新着陆状态（必须在锁内调用）
 
         着陆判断：低速3秒 → 触发"就绪"闪烁10秒
         """
-        s = self.state
-        if not s.current_life:
-            return
-
-        # /state 失败时不要用默认零值参与着陆判断，避免误判为“在地面”。
-        if not tel.state_resp_ok:
-            return
-
-        if tel.is_on_ground:
-            if s.landing_start_time is None:
-                s.landing_start_time = now
-            elif (
-                now - s.landing_start_time
-            ) >= GameConfig.LAND_CONFIRM_SEC and s.landed_flash_until <= now:
-                s.landed_flash_until = now + GameConfig.LANDED_FLASH_SEC
-        else:
-            s.landing_start_time = None
+        lifecycle.update_landing(self.state, tel, now)
 
     @staticmethod
     def _finite_float(value: Any, default: float = 0.0) -> float:
-        try:
-            result = float(value)
-        except _NUMERIC_PARSE_ERRORS:
-            return default
-        return result if math.isfinite(result) else default
+        return ccrp_scheduler.finite_float(value, default)
 
     @classmethod
     def _estimate_release_mach(cls, tel: TelemetryData, ground_speed_ms: float) -> float | None:
         """Prefer 8111 Mach; fall back to TAS or map-derived ground speed."""
-        if tel.mach is not None:
-            mach = cls._finite_float(tel.mach, default=0.0)
-            if mach > 0.0:
-                return mach
-
-        tas_kmh = cls._finite_float(tel.tas_kmh, default=0.0)
-        if tas_kmh > 0.0:
-            return tas_kmh / 1225.0
-
-        if ground_speed_ms > 0.0:
-            return ground_speed_ms / 340.3
-        return None
+        return ccrp_scheduler.estimate_release_mach(tel, ground_speed_ms)
 
     def _prepare_bombing_calculation_locked(
         self,
@@ -1772,126 +1632,24 @@ class GameLogic:
         player_present: bool,
     ) -> dict[str, Any] | None:
         """Collect CCRP inputs under lock; expensive integration runs outside it."""
-        s = self.state
-        nav = s.zone_nav
-
-        if not ENABLE_CCRP:
-            s.bombing_calc_valid = False
-            return None
-
-        if (now - s.last_bombing_calc_time) < 0.2:
-            return None
-
-        s.last_bombing_calc_time = now
-        s.cached_bombing_unavailable_reason = ""
-
-        target_zone = nav.target_zone
-        altitude_m = self._finite_float(tel.altitude_m)
-        ground_speed_ms = self._finite_float(nav.ground_speed) * ZoneConfig.DISTANCE_SCALE * 1000
-        target_distance_m = (
-            self._finite_float(target_zone.distance) * ZoneConfig.DISTANCE_SCALE * 1000
-            if target_zone is not None
-            else 0.0
+        return ccrp_scheduler.prepare_bombing_calculation(
+            self.state,
+            tel,
+            now,
+            player_present=player_present,
         )
-
-        if not (
-            player_present
-            and target_zone is not None
-            and s.phase == Phase.ALIVE
-            and tel.state_resp_ok
-            and not tel.is_on_ground
-            and altitude_m > 50
-            and altitude_m <= 30000
-            and 10.0 <= ground_speed_ms <= 2500.0
-            and 0.0 < target_distance_m <= 500000.0
-        ):
-            s.bombing_calc_valid = False
-            return None
-
-        bomb_params = BombConfig.get_bomb_physics_params()
-        if not bomb_params.get("prediction_supported", True):
-            s.bombing_calc_valid = False
-            s.cached_bombing_unavailable_reason = str(
-                bomb_params.get("prediction_kind") or "unsupported"
-            )
-            return None
-
-        release_mach_max = bomb_params.get("release_mach_max")
-        if release_mach_max is not None:
-            max_mach = self._finite_float(release_mach_max, default=0.0)
-            release_mach = self._estimate_release_mach(tel, ground_speed_ms)
-            if max_mach > 0.0 and release_mach is not None and release_mach >= max_mach:
-                s.bombing_calc_valid = False
-                s.cached_bombing_unavailable_reason = "release_mach_limit"
-                return None
-
-        return {
-            "altitude_m": altitude_m,
-            "ground_speed_ms": ground_speed_ms,
-            "target_distance_m": target_distance_m,
-            "bomb_params": bomb_params,
-        }
 
     def _compute_bombing_calculation(self, work: dict[str, Any]) -> dict[str, float | str] | None:
         """Run CCRP ballistics without holding the game state lock."""
-        altitude_m = self._finite_float(work.get("altitude_m"))
-        ground_speed_ms = self._finite_float(work.get("ground_speed_ms"))
-        target_distance_m = self._finite_float(work.get("target_distance_m"))
-
-        try:
-            flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
-                release_alt_m=altitude_m,
-                release_speed_ms=ground_speed_ms,
-                target_alt_m=0.0,
-                dive_angle_deg=0.0,
-                initial_vz_ms=None,
-                bomb_params=work.get("bomb_params"),
-            )
-        except Exception:
-            return None
-
-        if not (
-            math.isfinite(flight_time)
-            and math.isfinite(bomb_range_m)
-            and flight_time > 0
-            and bomb_range_m > 0
-        ):
-            return None
-
-        release_distance_m, time_to_release, release_status = calculate_release_timing_from_range(
-            current_distance_m=target_distance_m,
-            ground_speed_ms=ground_speed_ms,
-            bomb_range_m=bomb_range_m,
+        return ccrp_scheduler.compute_bombing_calculation(
+            work,
+            trajectory_func=calculate_bomb_trajectory,
+            timing_func=calculate_release_timing_from_range,
         )
-        if not (math.isfinite(release_distance_m) and math.isfinite(time_to_release)):
-            return None
-
-        return {
-            "flight_time": flight_time,
-            "bomb_range_m": bomb_range_m,
-            "release_distance_m": release_distance_m,
-            "time_to_release": time_to_release,
-            "release_status": release_status,
-            "target_distance_m": target_distance_m,
-        }
 
     def _apply_bombing_calculation_locked(
         self,
         result: dict[str, float | str] | None,
     ) -> None:
         """Store CCRP result after out-of-lock calculation."""
-        s = self.state
-        if result is None:
-            s.bombing_calc_valid = False
-            if not s.cached_bombing_unavailable_reason:
-                s.cached_bombing_unavailable_reason = "calc_failed"
-            return
-
-        s.cached_bomb_flight_time = float(result["flight_time"])
-        s.cached_bomb_range_m = float(result["bomb_range_m"])
-        s.cached_release_distance_m = float(result["release_distance_m"])
-        s.cached_time_to_release = float(result["time_to_release"])
-        s.cached_release_status = str(result["release_status"])
-        s.cached_target_distance_m = float(result["target_distance_m"])
-        s.cached_bombing_unavailable_reason = ""
-        s.bombing_calc_valid = s.phase == Phase.ALIVE
+        ccrp_scheduler.apply_bombing_calculation(self.state, result)
