@@ -5,7 +5,7 @@ from bomana.config.settings import BombConfig
 from bomana.core import ccrp_scheduler
 from bomana.core.ballistics import calculate_bomb_trajectory
 from bomana.core.logic import GameLogic
-from bomana.core.state import LifeState, Phase, TelemetryData, Zone
+from bomana.core.state import BombingTarget, LifeState, Phase, TelemetryData, Zone
 
 
 class BombPredictionClassificationTests(unittest.TestCase):
@@ -122,6 +122,27 @@ class BombPredictionLogicTests(unittest.TestCase):
 
         self.assertIsNotNone(work)
         self.assertEqual(work["bomb_params"]["prediction_kind"], "high_drag")
+
+    def test_poi_bombing_target_overrides_zone_distance(self) -> None:
+        game, tel = self._alive_game(bomb_id="su_fab100", mach=0.82)
+
+        with game._lock:
+            game.state.zone_nav.bombing_target = BombingTarget(
+                id="poi-smoke",
+                kind="poi",
+                name="Smoke",
+                distance=0.04,
+                relative=1.0,
+            )
+            work = ccrp_scheduler.prepare_bombing_calculation(
+                game.state, tel, time.time(), player_present=True
+            )
+
+        self.assertIsNotNone(work)
+        assert work is not None
+        self.assertEqual(work["target_kind"], "poi")
+        self.assertEqual(work["target_name"], "Smoke")
+        self.assertAlmostEqual(work["target_distance_m"], 4000.0)
 
 
 def test_high_drag_brake_remains_active_after_deploy_window() -> None:

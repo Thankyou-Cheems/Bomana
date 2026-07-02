@@ -736,6 +736,10 @@ class AppPanelRenderer:
         app.fuel_detail_lbl.config(text=model.detail_text)
         if hasattr(app, "fuel_alt_lbl"):
             app.fuel_alt_lbl.config(text=model.altitude_text)
+            if model.altitude_text:
+                self._pack_if_needed(app.fuel_alt_lbl, fill="x")
+            else:
+                self._pack_forget_if_needed(app.fuel_alt_lbl)
         if hasattr(app, "fuel_return_detail_lbl"):
             app.fuel_return_detail_lbl.config(text=model.return_detail_text)
 
@@ -747,6 +751,10 @@ class AppPanelRenderer:
         app.bomb_trajectory_lbl.config(text=model.trajectory_text, fg=model.trajectory_fg)
         if hasattr(app, "bomb_flight_lbl"):
             app.bomb_flight_lbl.config(text=model.flight_text, fg=model.flight_fg)
+            if model.flight_text:
+                self._pack_if_needed(app.bomb_flight_lbl, fill="x")
+            else:
+                self._pack_forget_if_needed(app.bomb_flight_lbl)
         app.icons.configure_label(
             app.bomb_release_lbl,
             icon=model.release.icon,

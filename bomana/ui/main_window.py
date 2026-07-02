@@ -1039,7 +1039,7 @@ class MainWindowBuilder:
 
         app.fuel_main_lbl = tk.Label(
             app.fuel_info_frame,
-            text="-- kg (--%)",
+            text="油量 -- kg / --%",
             font=font_item,
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
@@ -1049,7 +1049,7 @@ class MainWindowBuilder:
         app.fuel_main_lbl.pack(fill="x")
         app.fuel_detail_lbl = tk.Label(
             app.fuel_info_frame,
-            text="油耗 --kg/min",
+            text="油耗 -- · 高度 --",
             font=font_item,
             fg=Theme.TEXT_MUTED,
             bg=Theme.GRAYPILL,
@@ -1059,14 +1059,13 @@ class MainWindowBuilder:
         app.fuel_detail_lbl.pack(fill="x")
         app.fuel_alt_lbl = tk.Label(
             app.fuel_info_frame,
-            text="高度 --m",
+            text="",
             font=font_item,
             fg=Theme.TEXT_MUTED,
             bg=Theme.GRAYPILL,
             anchor="w",
             justify="left",
         )
-        app.fuel_alt_lbl.pack(fill="x")
         app.fuel_return_detail_lbl = tk.Label(
             app.fuel_info_frame,
             text="返航 --",
@@ -1120,7 +1119,7 @@ class MainWindowBuilder:
             )
             app.bomb_select_lbl = tk.Label(
                 app.bombing_info_frame,
-                text=f"炸弹: {BombConfig.format_bomb_name(BombConfig.selected_bomb)} (点击更换)",
+                text=f"炸弹 {BombConfig.format_bomb_name(BombConfig.selected_bomb)} · 点击更换",
                 font=font_item,
                 fg=Theme.BLUE,
                 bg=Theme.GRAYPILL,
@@ -1139,7 +1138,7 @@ class MainWindowBuilder:
             )
             app.bomb_trajectory_lbl = tk.Label(
                 app.bombing_info_frame,
-                text="弹道: -- km",
+                text="目标 -- · 弹道 --",
                 font=font_item,
                 fg=Theme.TEXT_DIM,
                 bg=Theme.GRAYPILL,
@@ -1149,17 +1148,16 @@ class MainWindowBuilder:
             app.bomb_trajectory_lbl.pack(fill="x")
             app.bomb_flight_lbl = tk.Label(
                 app.bombing_info_frame,
-                text="飞行: -- s",
+                text="",
                 font=font_item,
                 fg=Theme.TEXT_DIM,
                 bg=Theme.GRAYPILL,
                 anchor="w",
                 justify="left",
             )
-            app.bomb_flight_lbl.pack(fill="x")
             app.bomb_release_detail_lbl = tk.Label(
                 app.bombing_info_frame,
-                text="距离: --",
+                text="朝向POI或战区后计算",
                 font=font_item,
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,

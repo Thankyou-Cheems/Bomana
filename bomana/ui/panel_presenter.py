@@ -97,7 +97,7 @@ def format_aircraft_type_label(raw: str) -> str:
 
 def build_fuel_display_model(snap: Any) -> FuelDisplayModel:
     if snap.fuel_kg > 0:
-        main_text = f"{int(snap.fuel_kg)}kg ({snap.fuel_percent:.0f}%)"
+        main_text = f"油量 {int(snap.fuel_kg)}kg / {snap.fuel_percent:.0f}%"
         if snap.fuel_percent <= FuelConfig.DANGER_PERCENT:
             main_fg = Theme.RED
         elif snap.fuel_percent <= FuelConfig.WARNING_PERCENT:
@@ -105,41 +105,46 @@ def build_fuel_display_model(snap: Any) -> FuelDisplayModel:
         else:
             main_fg = Theme.TEXT
     else:
-        main_text = "-- kg (--%)"
+        main_text = "油量 -- kg / --%"
         main_fg = Theme.TEXT_MUTED
 
     remaining_time_text = _format_fuel_remaining_time(
         getattr(snap, "fuel_remaining_time_min", None)
     )
     if remaining_time_text:
-        time = IconTextModel("clock", remaining_time_text, Theme.TEXT)
+        time = IconTextModel("clock", f"余 {remaining_time_text}", Theme.TEXT)
     else:
-        time = IconTextModel("clock", "计算中...", Theme.TEXT_MUTED)
+        time = IconTextModel("clock", "余 --", Theme.TEXT_MUTED)
 
     if snap.fuel_rate_stable and snap.fuel_rate_kg_min > 0:
-        detail_text = f"油耗 {snap.fuel_rate_kg_min:.0f}kg/min"
+        fuel_rate_text = f"油耗 {snap.fuel_rate_kg_min:.0f}kg/min"
     else:
-        detail_text = "油耗 --"
+        fuel_rate_text = "油耗 --"
 
-    altitude_text = f"高度 {int(snap.altitude_m)}m" if snap.altitude_m > 0 else "高度 --"
+    altitude_value_text = f"高度 {int(snap.altitude_m)}m" if snap.altitude_m > 0 else "高度 --"
+    detail_text = f"{fuel_rate_text} · {altitude_value_text}"
+    altitude_text = ""
     return_detail_text = "返航 --"
+    friendly_distance_text = (
+        f" · {snap.friendly_distance_km:.0f}km" if snap.friendly_distance_km > 0 else ""
+    )
 
     if snap.return_status != "unknown" and snap.return_fuel_needed_kg > 0:
-        needed_text = f"需~{int(snap.return_fuel_needed_kg)}kg"
+        needed_text = f"需 {int(snap.return_fuel_needed_kg)}kg"
         if snap.fuel_initial_kg > 0:
             return_percent = (snap.return_fuel_needed_kg / snap.fuel_initial_kg) * 100
             needed_text += f" ({return_percent:.0f}%)"
 
         if snap.return_status == "safe":
-            return_status = IconTextModel("ok", "充足", Theme.GREEN)
+            return_status = IconTextModel("ok", "返航足", Theme.GREEN)
         elif snap.return_status == "warning":
-            return_status = IconTextModel("warning", "注意", Theme.YELLOW)
+            return_status = IconTextModel("warning", "返航紧", Theme.YELLOW)
         else:
-            return_status = IconTextModel("danger", "不足!", Theme.RED)
-        return_detail_text = f"返航 {needed_text}"
+            return_status = IconTextModel("danger", "返航不足", Theme.RED)
+        return_detail_text = f"返航 {needed_text}{friendly_distance_text}"
     elif snap.friendly_distance_km > 0:
-        return_status = IconTextModel(None, "↻ 估算中", Theme.TEXT_MUTED)
-        return_detail_text = f"返航距离 {snap.friendly_distance_km:.0f}km"
+        return_status = IconTextModel(None, "返航估算", Theme.TEXT_MUTED)
+        return_detail_text = f"返航估算中 · {snap.friendly_distance_km:.0f}km"
     else:
         return_status = IconTextModel(None, "无机场", Theme.TEXT_MUTED)
         return_detail_text = "返航无机场数据"
@@ -163,72 +168,113 @@ def _format_release_distance(dist_m: float) -> str:
     return f"{dist_m:.0f}m"
 
 
+def _short_label(text: str, *, fallback: str, limit: int = 14) -> str:
+    cleaned = " ".join(str(text or "").strip().split())
+    if not cleaned:
+        cleaned = fallback
+    if len(cleaned) > limit:
+        return cleaned[: limit - 3] + "..."
+    return cleaned
+
+
+def _format_bombing_target(snap: Any) -> tuple[str, str, str, bool]:
+    has_target = bool(
+        getattr(snap, "has_bombing_target", False) or getattr(snap, "has_target", False)
+    )
+    kind = str(getattr(snap, "bombing_target_kind", "") or "").strip().lower()
+    if not kind and getattr(snap, "has_target", False):
+        kind = "zone"
+
+    distance_m = _safe_float(getattr(snap, "target_zone_distance_m", 0.0))
+    distance_text = f" {_format_release_distance(distance_m)}" if distance_m > 0 else ""
+
+    if not has_target:
+        return "--", Theme.TEXT_MUTED, "目标", False
+
+    if kind == "poi":
+        name = _short_label(
+            str(getattr(snap, "bombing_target_name", "") or ""),
+            fallback="兴趣点",
+        )
+        return f"POI {name}{distance_text}", Theme.YELLOW, "POI", True
+
+    name = _short_label(
+        str(getattr(snap, "bombing_target_name", "") or ""),
+        fallback="战区",
+    )
+    return f"{name}{distance_text}", Theme.TEXT_DIM, "战区", True
+
+
 def build_bombing_display_model(snap: Any) -> BombingDisplayModel:
-    bomb_label_text = f"炸弹: {BombConfig.format_bomb_name(snap.bomb_name)} (点击更换)"
+    bomb_label_text = f"炸弹 {BombConfig.format_bomb_name(snap.bomb_name)} · 点击更换"
     bomb_data = BombConfig.get_bomb_data(snap.bomb_name) or {}
     prediction_kind = str(bomb_data.get("prediction_kind", "freefall") or "freefall")
+    target_text, target_fg, target_short, has_bombing_target = _format_bombing_target(snap)
 
     if snap.bombing_valid:
         bomb_range_km = snap.bomb_range_m / 1000.0
         trajectory_label = "高阻" if prediction_kind == "high_drag" else "弹道"
-        trajectory_text = f"{trajectory_label}: {bomb_range_km:.2f}km"
-        trajectory_fg = Theme.TEXT_DIM
         flight_label = "直落" if prediction_kind == "high_drag" else "飞行"
-        flight_text = f"{flight_label}: {snap.bomb_flight_time:.1f}s"
+        trajectory_text = (
+            f"目标 {target_text} · {trajectory_label} {bomb_range_km:.2f}km"
+            f" · {flight_label} {snap.bomb_flight_time:.1f}s"
+        )
+        trajectory_fg = target_fg
+        flight_text = ""
         flight_fg = Theme.TEXT_DIM
 
         status = snap.release_status
         dist_str = _format_release_distance(snap.release_distance_m)
         if status == "ready":
             release = IconTextModel("bomb", "投弹", Theme.GREEN)
-            release_detail_text = f"时间 {snap.time_to_release:.2f}s，距离 {dist_str}"
+            release_detail_text = f"{target_short}窗口 {snap.time_to_release:.2f}s / {dist_str}"
         elif status == "approaching":
             release = IconTextModel("clock", "接近", Theme.YELLOW)
-            release_detail_text = f"时间 {snap.time_to_release:.1f}s，距离 {dist_str}"
+            release_detail_text = f"{target_short}窗口 {snap.time_to_release:.1f}s / {dist_str}"
         elif status == "passed":
             release = IconTextModel("danger", "已飞过", Theme.RED)
-            release_detail_text = f"偏离 {dist_str}"
+            release_detail_text = f"已过{target_short}释放点 {dist_str}"
         elif status == "too_far":
             release = IconTextModel("aim", "过远", Theme.TEXT_DIM)
-            release_detail_text = f"距离 {dist_str}，预计 {snap.time_to_release:.0f}s"
+            release_detail_text = f"{target_short}释放点 {dist_str} / {snap.time_to_release:.0f}s"
         else:
             release = IconTextModel("clock", "计算中", Theme.TEXT_MUTED)
             release_detail_text = "等待稳定数据"
     else:
         unavailable_reason = str(getattr(snap, "bombing_unavailable_reason", "") or "").strip()
         if unavailable_reason == "guided_glide":
-            trajectory_text = "弹道: 不适用"
+            trajectory_text = f"目标 {target_text} · 武器自导/滑翔"
             trajectory_fg = Theme.TEXT_MUTED
-            flight_text = "飞行: 制导/滑翔"
+            flight_text = ""
             flight_fg = Theme.TEXT_MUTED
             release = IconTextModel("aim", "未辅助", Theme.YELLOW)
-            release_detail_text = "使用武器自身引导，不显示释放点"
+            release_detail_text = "不显示CCRP释放点"
         elif unavailable_reason == "release_mach_limit":
-            trajectory_text = "弹道: 超限"
+            trajectory_text = f"目标 {target_text} · 超马赫限制"
             trajectory_fg = Theme.TEXT_MUTED
-            flight_text = "飞行: 不计算"
+            flight_text = ""
             flight_fg = Theme.TEXT_MUTED
             mach = getattr(snap, "overspeed_current_mach", None)
             mach_text = f"M{float(mach):.2f}" if mach is not None else "M≥1.00"
             release = IconTextModel("danger", "不可投", Theme.RED)
             release_detail_text = f"{mach_text} 超过投放限制，减速后再投"
         else:
-            trajectory_text = "弹道: -- km"
+            trajectory_text = f"目标 {target_text} · 弹道 --"
             trajectory_fg = Theme.TEXT_MUTED
-            flight_text = "飞行: -- s"
+            flight_text = ""
             flight_fg = Theme.TEXT_MUTED
             if snap.on_ground:
                 release = IconTextModel("aircraft", "请起飞", Theme.TEXT_MUTED)
                 release_detail_text = "起飞后开始计算"
             elif snap.altitude_m <= 50:
                 release = IconTextModel("climb", "请爬升", Theme.TEXT_MUTED)
-                release_detail_text = "高度超过 50m 后开始计算"
-            elif not snap.has_target:
-                release = IconTextModel("aim", "无目标战区", Theme.TEXT_MUTED)
-                release_detail_text = "选择或接近目标战区"
+                release_detail_text = "高度 >50m 后计算"
+            elif not has_bombing_target:
+                release = IconTextModel("aim", "无投弹目标", Theme.TEXT_MUTED)
+                release_detail_text = "朝向POI或战区后计算"
             else:
-                release = IconTextModel(None, "↻ 请对准目标", Theme.TEXT_MUTED)
-                release_detail_text = "进入释放航线后显示距离和时间"
+                release = IconTextModel(None, "对准目标", Theme.TEXT_MUTED)
+                release_detail_text = "进入释放航线后显示窗口"
 
     return BombingDisplayModel(
         bomb_label_text=bomb_label_text,

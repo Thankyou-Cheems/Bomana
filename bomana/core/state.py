@@ -130,6 +130,17 @@ class InterestPoint:
     name: str = ""  # API返回名称（如有）
 
 
+@dataclass(frozen=True)
+class BombingTarget:
+    """投弹预测目标，可能来自战区或兴趣点。"""
+
+    id: str
+    kind: str  # "zone" 或 "poi"
+    name: str
+    distance: float  # 归一化距离
+    relative: float = 0.0
+
+
 @dataclass
 class MapObjData:
     """地图对象数据（来自/map_obj.json）
@@ -384,6 +395,7 @@ class ZoneNavigationState:
 
     zones: list[Zone] = field(default_factory=list)  # 当前战区列表
     target_zone: Zone | None = None  # 当前目标战区
+    bombing_target: BombingTarget | None = None  # 当前投弹预测目标（战区或POI）
     previous_zone_ids: set = field(default_factory=set)  # 上一帧战区ID集合
     destroyed_zones: list[Zone] = field(default_factory=list)  # 被摧毁的战区
     destroyed_alert_until: float = 0.0  # 摧毁警告持续到的时间戳
@@ -436,6 +448,8 @@ class GameState:
     cached_time_to_release: float = 0.0
     cached_release_status: str = "invalid"
     cached_target_distance_m: float = 0.0
+    cached_bombing_target_kind: str = ""
+    cached_bombing_target_name: str = ""
     cached_bombing_unavailable_reason: str = ""
     bombing_calc_valid: bool = False
     last_bombing_calc_time: float = 0.0
@@ -616,6 +630,9 @@ class UISnapshot:
     interest_point: NavigationPointDisplayInfo | None = None
     has_airfield_target: bool = False
     has_target: bool = False
+    has_bombing_target: bool = False
+    bombing_target_kind: str = ""  # "zone" / "poi"
+    bombing_target_name: str = ""
     is_deviating: bool = False
     deviation_angle: float = 0.0
 

@@ -58,18 +58,26 @@ def prepare_bombing_calculation(
     state.last_bombing_calc_time = now
     state.cached_bombing_unavailable_reason = ""
 
+    target = nav.bombing_target
     target_zone = nav.target_zone
     altitude_m = finite_float(tel.altitude_m)
     ground_speed_ms = finite_float(nav.ground_speed) * ZoneConfig.DISTANCE_SCALE * 1000
-    target_distance_m = (
-        finite_float(target_zone.distance) * ZoneConfig.DISTANCE_SCALE * 1000
-        if target_zone is not None
-        else 0.0
-    )
+    if target is not None:
+        target_distance_m = finite_float(target.distance) * ZoneConfig.DISTANCE_SCALE * 1000
+        target_kind = str(target.kind or "")
+        target_name = str(target.name or "")
+    elif target_zone is not None:
+        target_distance_m = finite_float(target_zone.distance) * ZoneConfig.DISTANCE_SCALE * 1000
+        target_kind = "zone"
+        target_name = f"战区 #{target_zone.index}"
+    else:
+        target_distance_m = 0.0
+        target_kind = ""
+        target_name = ""
 
     if not (
         player_present
-        and target_zone is not None
+        and (target is not None or target_zone is not None)
         and state.phase == Phase.ALIVE
         and tel.state_resp_ok
         and not tel.is_on_ground
@@ -102,6 +110,8 @@ def prepare_bombing_calculation(
         "altitude_m": altitude_m,
         "ground_speed_ms": ground_speed_ms,
         "target_distance_m": target_distance_m,
+        "target_kind": target_kind,
+        "target_name": target_name,
         "bomb_params": bomb_params,
     }
 
@@ -152,6 +162,8 @@ def compute_bombing_calculation(
         "time_to_release": time_to_release,
         "release_status": release_status,
         "target_distance_m": target_distance_m,
+        "target_kind": str(work.get("target_kind") or ""),
+        "target_name": str(work.get("target_name") or ""),
     }
 
 
@@ -172,5 +184,7 @@ def apply_bombing_calculation(
     state.cached_time_to_release = float(result["time_to_release"])
     state.cached_release_status = str(result["release_status"])
     state.cached_target_distance_m = float(result["target_distance_m"])
+    state.cached_bombing_target_kind = str(result.get("target_kind") or "")
+    state.cached_bombing_target_name = str(result.get("target_name") or "")
     state.cached_bombing_unavailable_reason = ""
     state.bombing_calc_valid = state.phase == Phase.ALIVE

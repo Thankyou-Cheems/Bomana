@@ -1,12 +1,13 @@
 """Map object parsing and coordinate contract tests."""
 
 import math
+import time
 import unittest
 
 from bomana.config.settings import ZoneConfig
 from bomana.core import navigation
 from bomana.core.logic import GameLogic
-from bomana.core.state import InterestPoint, MapInfo, MapObjData, TelemetryData
+from bomana.core.state import InterestPoint, MapInfo, MapObjData, Phase, TelemetryData, Zone
 from bomana.core.telemetry import Budget, FetchResult, MapObjectsFetcher
 
 
@@ -155,6 +156,79 @@ class MapObjectsContractTests(unittest.TestCase):
         self.assertEqual(point.ete_str, "00:10")
         self.assertTrue(point.cdi_indicator)
         self.assertTrue(point.cdi_color)
+
+    def test_zone_navigation_uses_forward_poi_as_bombing_target(self):
+        logic = GameLogic()
+        tel = TelemetryData(
+            ind_ok=True,
+            state_resp_ok=True,
+            valid=True,
+            type_name="test_plane",
+            ias_kmh=300.0,
+            vy_ms=5.0,
+            compass=0.0,
+            compass_present=True,
+        )
+        mp = MapObjData(
+            ok=True,
+            player_aircraft_present=True,
+            player_pos=(0.5, 0.5),
+            zones=[Zone(id="zone-a", index=1, x=0.5, y=0.2)],
+            interest_points=[InterestPoint(id="poi-forward", index=1, x=0.5, y=0.45, name="Smoke")],
+        )
+
+        with logic._lock:
+            logic.state.phase = Phase.ALIVE
+            logic.state.map_info = MapInfo(
+                valid=True,
+                map_min=[0.0, 0.0],
+                map_max=[1000.0, 1000.0],
+            )
+            logic._update_zone_navigation_locked(mp, tel, time.time())
+
+        self.assertIsNotNone(logic.state.zone_nav.target_zone)
+        self.assertEqual(logic.state.zone_nav.target_zone.id, "zone-a")
+        self.assertIsNotNone(logic.state.zone_nav.bombing_target)
+        target = logic.state.zone_nav.bombing_target
+        assert target is not None
+        self.assertEqual(target.kind, "poi")
+        self.assertEqual(target.id, "poi-forward")
+        self.assertEqual(target.name, "Smoke")
+
+    def test_zone_navigation_keeps_zone_bombing_target_when_poi_outside_heading_gate(self):
+        logic = GameLogic()
+        tel = TelemetryData(
+            ind_ok=True,
+            state_resp_ok=True,
+            valid=True,
+            type_name="test_plane",
+            ias_kmh=300.0,
+            vy_ms=5.0,
+            compass=0.0,
+            compass_present=True,
+        )
+        mp = MapObjData(
+            ok=True,
+            player_aircraft_present=True,
+            player_pos=(0.5, 0.5),
+            zones=[Zone(id="zone-a", index=1, x=0.5, y=0.2)],
+            interest_points=[InterestPoint(id="poi-side", index=1, x=0.95, y=0.5, name="Side")],
+        )
+
+        with logic._lock:
+            logic.state.phase = Phase.ALIVE
+            logic.state.map_info = MapInfo(
+                valid=True,
+                map_min=[0.0, 0.0],
+                map_max=[1000.0, 1000.0],
+            )
+            logic._update_zone_navigation_locked(mp, tel, time.time())
+
+        self.assertIsNotNone(logic.state.zone_nav.bombing_target)
+        target = logic.state.zone_nav.bombing_target
+        assert target is not None
+        self.assertEqual(target.kind, "zone")
+        self.assertEqual(target.id, "zone-a")
 
 
 if __name__ == "__main__":

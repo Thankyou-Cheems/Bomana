@@ -23,6 +23,7 @@ from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_
 from bomana.core.overspeed import OverspeedAnalyzer
 from bomana.core.state import (
     AirfieldDisplayInfo,
+    BombingTarget,
     GameState,
     InterestPoint,
     LifeState,
@@ -638,6 +639,7 @@ class GameLogic:
             # 无数据时重置
             nav.zones = []
             nav.target_zone = None
+            nav.bombing_target = None
             nav.is_deviating = False
             nav.last_pos = None
             nav.ground_speed = 0.0
@@ -850,8 +852,53 @@ class GameLogic:
                     target = zones_with_nav[i]
                     break
 
+        poi_bombing_target = None
+        if is_airborne and getattr(mp, "interest_points", None):
+            poi_candidates: list[tuple[float, float, InterestPoint, float]] = []
+            for point in mp.interest_points:
+                try:
+                    point_x = float(point.x)
+                    point_y = float(point.y)
+                except TypeError, ValueError:
+                    continue
+                if not (math.isfinite(point_x) and math.isfinite(point_y)):
+                    continue
+
+                bearing, distance = navigation.bearing_distance_norm(
+                    px, py, point_x, point_y, map_axis_scale_m
+                )
+                relative = calculate_relative_bearing(heading, bearing)
+                if abs(relative) <= ZoneConfig.HEADING_TOLERANCE:
+                    poi_candidates.append((abs(relative), distance, point, relative))
+
+            if poi_candidates:
+                _, distance, point, relative = min(
+                    poi_candidates,
+                    key=lambda item: (item[0], item[1]),
+                )
+                point_name = str(point.name or "").strip() or f"兴趣点 #{point.index}"
+                poi_bombing_target = BombingTarget(
+                    id=point.id,
+                    kind="poi",
+                    name=point_name,
+                    distance=distance,
+                    relative=relative,
+                )
+
         nav.zones = zones_with_nav
         nav.target_zone = target
+        if poi_bombing_target is not None:
+            nav.bombing_target = poi_bombing_target
+        elif target:
+            nav.bombing_target = BombingTarget(
+                id=target.id,
+                kind="zone",
+                name=f"战区 #{target.index}",
+                distance=target.distance,
+                relative=target.relative,
+            )
+        else:
+            nav.bombing_target = None
         nav.is_deviating = (
             (abs(target.relative) > ZoneConfig.DEVIATION_WARNING) if target else False
         )
@@ -1212,6 +1259,7 @@ class GameLogic:
             nav = s.zone_nav
             nav_zones = list(nav.zones)
             nav_target_zone = nav.target_zone
+            nav_bombing_target = nav.bombing_target
             nav_destroyed_zones = list(nav.destroyed_zones)
             nav_destroyed_alert_until = nav.destroyed_alert_until
             nav_is_deviating = nav.is_deviating
@@ -1245,6 +1293,8 @@ class GameLogic:
             cached_time_to_release = s.cached_time_to_release
             cached_release_status = s.cached_release_status
             cached_target_distance_m = s.cached_target_distance_m
+            cached_bombing_target_kind = s.cached_bombing_target_kind
+            cached_bombing_target_name = s.cached_bombing_target_name
             cached_bombing_unavailable_reason = s.cached_bombing_unavailable_reason
 
             perf_debug = PerfDebugInfo(
@@ -1334,6 +1384,13 @@ class GameLogic:
         )
 
         has_target = nav_target_zone is not None
+        has_bombing_target = nav_bombing_target is not None
+        bombing_target_kind = str(nav_bombing_target.kind) if nav_bombing_target else ""
+        bombing_target_name = str(nav_bombing_target.name) if nav_bombing_target else ""
+        if (not has_bombing_target) and nav_target_zone is not None:
+            has_bombing_target = True
+            bombing_target_kind = "zone"
+            bombing_target_name = f"战区 #{nav_target_zone.index}"
         deviation_angle = nav_target_zone.relative if nav_target_zone else 0.0
         zone_destroyed_alert = nav_destroyed_alert_until > now
         destroyed_count = len(nav_destroyed_zones) if zone_destroyed_alert else 0
@@ -1394,6 +1451,10 @@ class GameLogic:
         release_status = "invalid"
         target_zone_distance_m = 0.0
         bombing_unavailable_reason = cached_bombing_unavailable_reason
+        if nav_bombing_target is not None:
+            target_zone_distance_m = nav_bombing_target.distance * ZoneConfig.DISTANCE_SCALE * 1000
+        elif nav_target_zone is not None:
+            target_zone_distance_m = nav_target_zone.distance * ZoneConfig.DISTANCE_SCALE * 1000
         if ENABLE_CCRP and bombing_calc_valid:
             bombing_valid = True
             bomb_flight_time = cached_bomb_flight_time
@@ -1402,6 +1463,9 @@ class GameLogic:
             time_to_release = cached_time_to_release
             release_status = cached_release_status
             target_zone_distance_m = cached_target_distance_m
+            bombing_target_kind = cached_bombing_target_kind or bombing_target_kind
+            bombing_target_name = cached_bombing_target_name or bombing_target_name
+            has_bombing_target = bool(bombing_target_kind)
             bombing_unavailable_reason = ""
 
         return UISnapshot(
@@ -1423,6 +1487,9 @@ class GameLogic:
             interest_point=interest_point_display,
             has_airfield_target=has_airfield_target,
             has_target=has_target,
+            has_bombing_target=has_bombing_target,
+            bombing_target_kind=bombing_target_kind,
+            bombing_target_name=bombing_target_name,
             is_deviating=nav_is_deviating,
             deviation_angle=deviation_angle,
             zone_destroyed_alert=zone_destroyed_alert,
