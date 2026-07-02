@@ -42,6 +42,10 @@ from bomana.ui.panel_presenter import build_speed_history_header_model
 from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.runtime import LogicPoller, TkEventDispatcher
 from bomana.ui.runtime_services import HAS_TRAY, AppRuntimeServices
+from bomana.ui.window_geometry import (
+    apply_snap_anchor,
+    capture_snap_anchor,
+)
 from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.math_utils import calculate_smart_scale
@@ -879,70 +883,22 @@ class App:
 
     def _capture_snap_anchor(self, x: int, y: int, w: int, h: int) -> dict[str, Any] | None:
         """捕获窗口当前贴边锚点（仅在手动拖拽场景使用）。"""
-        if not SnapConfig.enabled:
-            return None
         monitor = Win32.get_monitor_at(x + w // 2, y + h // 2)
-        if not monitor:
-            return None
-
-        mon_x = monitor["x"]
-        mon_y = monitor["y"]
-        mon_w = monitor["width"]
-        mon_h = monitor["height"]
-        threshold = max(1, int(SnapConfig.SNAP_DISTANCE))
-
-        left_gap = x - mon_x
-        right_gap = (mon_x + mon_w) - (x + w)
-        top_gap = y - mon_y
-        bottom_gap = (mon_y + mon_h) - (y + h)
-
-        horizontal = None
-        vertical = None
-
-        if abs(left_gap) <= threshold:
-            horizontal = ("left", left_gap)
-        elif abs(right_gap) <= threshold:
-            horizontal = ("right", right_gap)
-
-        if abs(top_gap) <= threshold:
-            vertical = ("top", top_gap)
-        elif abs(bottom_gap) <= threshold:
-            vertical = ("bottom", bottom_gap)
-
-        if not horizontal and not vertical:
-            return None
-        return {"monitor": monitor, "horizontal": horizontal, "vertical": vertical}
+        return capture_snap_anchor(
+            x,
+            y,
+            w,
+            h,
+            snap_enabled=SnapConfig.enabled,
+            snap_distance=SnapConfig.SNAP_DISTANCE,
+            monitor=monitor,
+        )
 
     def _apply_snap_anchor(
         self, x: int, y: int, w: int, h: int, anchor: dict[str, Any]
     ) -> tuple[int, int]:
         """按捕获的贴边锚点修正新尺寸下的位置。"""
-        monitor = anchor.get("monitor") or {}
-        mon_x = int(monitor.get("x", 0))
-        mon_y = int(monitor.get("y", 0))
-        mon_w = int(monitor.get("width", 0))
-        mon_h = int(monitor.get("height", 0))
-
-        horizontal = anchor.get("horizontal")
-        vertical = anchor.get("vertical")
-
-        if horizontal and mon_w > 0:
-            edge, gap = horizontal
-            gap = int(gap)
-            if edge == "left":
-                x = mon_x + gap
-            elif edge == "right":
-                x = mon_x + mon_w - w - gap
-
-        if vertical and mon_h > 0:
-            edge, gap = vertical
-            gap = int(gap)
-            if edge == "top":
-                y = mon_y + gap
-            elif edge == "bottom":
-                y = mon_y + mon_h - h - gap
-
-        return x, y
+        return apply_snap_anchor(x, y, w, h, anchor)
 
     def _show(self):
         """显示窗口"""

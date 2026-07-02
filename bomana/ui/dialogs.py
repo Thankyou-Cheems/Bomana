@@ -37,6 +37,17 @@ from bomana.ui.dialog_presenter import (
     format_aircraft_override_label,
     format_overspeed_override_summary,
 )
+from bomana.ui.settings_form import (
+    OVERSPEED_FIELD_LABELS as _OVERSPEED_FIELD_LABELS,
+)
+from bomana.ui.settings_form import (
+    apply_settings_payload_to_config,
+    build_settings_save_payload,
+    collect_ccrp_tuning,
+    collect_hotkey_bindings,
+    collect_numeric_var_values,
+    collect_overspeed_thresholds,
+)
 from bomana.ui.settings_runtime import SettingsRuntimeMixin
 from bomana.ui.text_utils import bind_existing_label_wraps, scaled_control_length
 from bomana.ui.tk_style import style_action_button
@@ -46,31 +57,12 @@ from bomana.utils.system import Win32, resolve_tk_font_tuple
 # Optional dependencies for images (match HAS_TRAY behavior).
 HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError, tk.TclError)
-_OVERSPEED_FIELD_LABELS = {
-    "caution_ratio": "IAS 提示线",
-    "warning_ratio": "IAS 警告线",
-    "critical_ratio": "IAS 危险线",
-    "mach_caution_margin": "Mach 提示线",
-    "mach_warning_margin": "Mach 警告线",
-    "mach_critical_margin": "Mach 危险线",
-}
-_CCRP_TUNING_FIELD_LABELS = {
-    "range_correction_mult": "CCRP 距离修正倍率",
-    "time_correction_mult": "CCRP 时间修正倍率",
-}
 
 
 def _collect_numeric_var_values(
     vars_by_key: dict, labels_by_key: dict[str, str]
 ) -> dict[str, float]:
-    values = {}
-    for key, var in vars_by_key.items():
-        try:
-            values[key] = float(var.get())
-        except _NUMERIC_PARSE_ERRORS as exc:
-            label = labels_by_key.get(key, str(key))
-            raise ValueError(f"{label} 必须输入有效数字。") from exc
-    return values
+    return collect_numeric_var_values(vars_by_key, labels_by_key)
 
 
 class _ScalableDialogMixin:
@@ -1655,51 +1647,16 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             runtime_services.init_global_hotkeys()
 
     def _collect_overspeed_thresholds(self) -> dict[str, float]:
-        overspeed_thresholds = _collect_numeric_var_values(
-            getattr(self, "overspeed_vars", {}),
-            _OVERSPEED_FIELD_LABELS,
-        )
-        return OverspeedConfig.normalize_thresholds(overspeed_thresholds)
+        return collect_overspeed_thresholds(getattr(self, "overspeed_vars", {}))
 
     def _collect_ccrp_tuning(self) -> dict[str, float]:
-        return _collect_numeric_var_values(
-            {
-                "range_correction_mult": self.ccrp_range_mult_var,
-                "time_correction_mult": self.ccrp_time_mult_var,
-            },
-            _CCRP_TUNING_FIELD_LABELS,
-        )
+        return collect_ccrp_tuning(self.ccrp_range_mult_var, self.ccrp_time_mult_var)
 
     def _save(self):
         """保存所有设置"""
         # 收集设置值
         config = ConfigManager.load()
         previous = self._capture_runtime_settings_state()
-
-        new_window_alpha = int(self.alpha_var.get())
-        new_nav_width = float(self.nav_width_var.get())
-        new_ui_scale = UIConfig.clamp_ui_scale(self.scale_var.get())
-        new_text_scale = UIConfig.clamp_text_scale(self.text_scale_var.get())
-        new_theme = self.theme_var.get()
-        new_hud_enabled = bool(self.hud_enabled_var.get())
-        new_hud_alpha = max(30, min(255, int(self.hud_alpha_var.get())))
-        new_hud_scale = max(0.5, min(2.0, float(self.hud_scale_var.get())))
-        new_hud_smoothing = max(0.0, min(1.0, float(self.hud_smoothing_var.get())))
-        new_hud_follow_main = bool(self.hud_follow_main_monitor_var.get())
-        new_hud_color_style = str(self.hud_color_style_var.get() or "auto").strip().lower()
-        if new_hud_color_style not in {"auto", "green", "amber", "cyan", "white"}:
-            new_hud_color_style = "auto"
-        pending_hud_config = {
-            "alpha": new_hud_alpha,
-            "scale": new_hud_scale,
-            "smoothing": new_hud_smoothing,
-            "follow_main_window_monitor": new_hud_follow_main,
-            "color_style": new_hud_color_style,
-            "horizontal_fov_deg": float(HUDConfig.horizontal_fov_deg),
-            "vertical_fov_deg": float(HUDConfig.vertical_fov_deg),
-        }
-
-        new_hotkeys_enabled = bool(self.hotkeys_enabled_var.get())
         try:
             hotkey_bindings = self._collect_hotkey_bindings()
         except ValueError as exc:
@@ -1707,56 +1664,38 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             return
 
         try:
-            normalized_overspeed_thresholds = self._collect_overspeed_thresholds()
-            normalized_overspeed_overrides = {}
-            overspeed_override_map = getattr(self, "overspeed_override_map", None)
-            if isinstance(overspeed_override_map, dict):
-                for aircraft_key, raw_override in overspeed_override_map.items():
-                    aircraft_name = str(aircraft_key or "").strip()
-                    if not aircraft_name or not isinstance(raw_override, dict):
-                        continue
-                    normalized_overspeed_overrides[aircraft_name] = (
-                        OverspeedConfig.normalize_thresholds(raw_override)
-                    )
-
-            pending_ccrp_tuning = None
-            pending_selected_bomb = None
-            if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
-                pending_ccrp_tuning = self._collect_ccrp_tuning()
-                if hasattr(self, "selected_bomb_id") and self.selected_bomb_id:
-                    pending_selected_bomb = self.selected_bomb_id
+            payload = build_settings_save_payload(
+                alpha_var=self.alpha_var,
+                nav_width_var=self.nav_width_var,
+                scale_var=self.scale_var,
+                text_scale_var=self.text_scale_var,
+                theme_var=self.theme_var,
+                hud_enabled_var=self.hud_enabled_var,
+                hud_alpha_var=self.hud_alpha_var,
+                hud_scale_var=self.hud_scale_var,
+                hud_smoothing_var=self.hud_smoothing_var,
+                hud_follow_main_monitor_var=self.hud_follow_main_monitor_var,
+                hud_color_style_var=self.hud_color_style_var,
+                hotkeys_enabled_var=self.hotkeys_enabled_var,
+                hotkey_bindings=hotkey_bindings,
+                panel_vars=self.panel_vars,
+                snap_var=self.snap_var,
+                snap_dist_var=self.snap_dist_var,
+                sound_enabled_var=self.sound_enabled_var,
+                zone_sound_enabled_var=self.zone_sound_enabled_var,
+                overspeed_vars=getattr(self, "overspeed_vars", {}),
+                overspeed_override_map=getattr(self, "overspeed_override_map", None),
+                existing_config=config,
+                enable_ccrp=bool(ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var")),
+                ccrp_range_mult_var=getattr(self, "ccrp_range_mult_var", None),
+                ccrp_time_mult_var=getattr(self, "ccrp_time_mult_var", None),
+                selected_bomb_id=getattr(self, "selected_bomb_id", None),
+            )
         except ValueError as exc:
             messagebox.showwarning("数值无效", str(exc), parent=self)
             return
 
-        config["alpha"] = new_window_alpha
-        config["navigation_bar_width"] = new_nav_width
-        config["scale"] = new_ui_scale
-        config["text_scale"] = new_text_scale
-        config["theme"] = new_theme
-        config["hud_enabled"] = new_hud_enabled
-        config["hud"] = pending_hud_config
-
-        # 面板设置
-        existing_panels = config.get("panels", {})
-        panel_config = dict(existing_panels) if isinstance(existing_panels, dict) else {}
-        for key, var in self.panel_vars.items():
-            panel_config[key] = var.get()
-        config["panels"] = panel_config
-
-        # 快捷键设置
-        config["global_hotkeys"] = new_hotkeys_enabled
-        config["hotkey_bindings"] = hotkey_bindings
-
-        # 吸附设置
-        new_snap_enabled = bool(self.snap_var.get())
-        new_snap_distance = int(self.snap_dist_var.get())
-        config["snap_enabled"] = new_snap_enabled
-        config["snap_distance"] = new_snap_distance
-
         # 音效设置
-        new_sound_enabled = bool(self.sound_enabled_var.get())
-        new_zone_sound_enabled = bool(self.zone_sound_enabled_var.get())
         try:
             (
                 normalized_sound_overrides,
@@ -1766,20 +1705,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         except Exception as exc:
             messagebox.showerror("音效保存失败", f"无法保存自定义提示音：{exc}", parent=self)
             return
-        config["beep_enabled"] = new_sound_enabled
-        config["zone_sound_enabled"] = new_zone_sound_enabled
-        config["sound_settings"] = normalized_sound_overrides
-
-        config["overspeed"] = {
-            "global": normalized_overspeed_thresholds,
-            "aircraft_overrides": normalized_overspeed_overrides,
-        }
-
-        # 投弹预测调参（仅在CCRP启用时保存）
-        if pending_ccrp_tuning is not None:
-            config["ccrp_tuning"] = dict(pending_ccrp_tuning)
-            if pending_selected_bomb:
-                config["selected_bomb"] = pending_selected_bomb
+        apply_settings_payload_to_config(
+            config,
+            payload,
+            sound_settings=normalized_sound_overrides,
+        )
 
         # 保存配置
         if not ConfigManager.save(config):
@@ -1797,24 +1727,24 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
 
         # 配置写入成功后，再应用运行时状态
         self._apply_runtime_settings(
-            new_window_alpha=new_window_alpha,
-            new_nav_width=new_nav_width,
-            new_ui_scale=new_ui_scale,
-            new_text_scale=new_text_scale,
-            new_hud_enabled=new_hud_enabled,
-            pending_hud_config=pending_hud_config,
-            panel_config=panel_config,
-            new_hotkeys_enabled=new_hotkeys_enabled,
+            new_window_alpha=payload.window_alpha,
+            new_nav_width=payload.nav_width,
+            new_ui_scale=payload.ui_scale,
+            new_text_scale=payload.text_scale,
+            new_hud_enabled=payload.hud_enabled,
+            pending_hud_config=payload.hud_config,
+            panel_config=payload.panel_config,
+            new_hotkeys_enabled=payload.hotkeys_enabled,
             hotkey_bindings=hotkey_bindings,
-            new_snap_enabled=new_snap_enabled,
-            new_snap_distance=new_snap_distance,
-            new_sound_enabled=new_sound_enabled,
-            new_zone_sound_enabled=new_zone_sound_enabled,
+            new_snap_enabled=payload.snap_enabled,
+            new_snap_distance=payload.snap_distance,
+            new_sound_enabled=payload.sound_enabled,
+            new_zone_sound_enabled=payload.zone_sound_enabled,
             normalized_sound_overrides=normalized_sound_overrides,
-            normalized_overspeed_thresholds=normalized_overspeed_thresholds,
-            normalized_overspeed_overrides=normalized_overspeed_overrides,
-            pending_ccrp_tuning=pending_ccrp_tuning,
-            pending_selected_bomb=pending_selected_bomb,
+            normalized_overspeed_thresholds=payload.overspeed_thresholds,
+            normalized_overspeed_overrides=payload.overspeed_overrides,
+            pending_ccrp_tuning=payload.ccrp_tuning,
+            pending_selected_bomb=payload.selected_bomb,
         )
 
         # 刷新托盘菜单勾选状态
@@ -1844,13 +1774,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             if hasattr(self.app, "nav_window") and self.app.nav_window:
                 self.app.nav_window.update_hint_text()
 
-        theme_changed = new_theme != previous["theme"]
+        theme_changed = payload.theme != previous["theme"]
         ui_scale_changed = abs(UIConfig.UI_SCALE_MULT - float(previous["scale"])) > 1e-6
         text_scale_changed = abs(UIConfig.TEXT_SCALE_MULT - float(previous["text_scale"])) > 1e-6
         nav_width_changed = (
             abs(PanelConfig.navigation_bar_width - float(previous["nav_width"])) > 1e-6
         )
-        Theme.apply(new_theme)
+        Theme.apply(payload.theme)
 
         # 运行时应用显示设置，无需重启应用。
         if hasattr(self.app, "apply_display_settings_runtime"):
@@ -1869,37 +1799,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
 
     def _collect_hotkey_bindings(self) -> dict[str, str]:
         """收集并校验快捷键绑定。"""
-        hotkey_bindings = {
-            key: str(var.get() or "").strip() for key, var in self.hotkey_vars.items()
-        }
-
-        key_to_actions: dict[str, list[str]] = {}
-        for action, key_name in hotkey_bindings.items():
-            if not key_name:
-                continue
-            key_to_actions.setdefault(key_name, []).append(action)
-
-        duplicate_groups = [
-            (key_name, actions) for key_name, actions in key_to_actions.items() if len(actions) > 1
-        ]
-        if duplicate_groups:
-            action_labels = {
-                "reset": "重置计时器",
-                "lock": "锁定/解锁",
-                "corner": "切换角落",
-                "beep": "声音开关",
-                "zones": "战区提示音",
-            }
-            details = []
-            for key_name, actions in duplicate_groups:
-                labels = "、".join(action_labels.get(action, action) for action in actions)
-                details.append(f"{key_name}: {labels}")
-            raise ValueError(
-                "检测到重复快捷键绑定：\n"
-                + "\n".join(details)
-                + "\n\n请为每个功能选择不同的快捷键。"
-            )
-        return hotkey_bindings
+        return collect_hotkey_bindings(self.hotkey_vars)
 
 
 class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):

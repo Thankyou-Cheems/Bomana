@@ -66,6 +66,7 @@
 │  │  ├─ app.py               # App coordinator (window lifecycle + main UI loop)
 │  │  ├─ debug_support.py     # Debug mock snapshot + debug panel helpers
 │  │  ├─ dialogs.py           # Settings/About/etc dialogs
+│  │  ├─ settings_form.py     # Headless settings dialog value collection/validation/payload helpers
 │  │  ├─ hud_overlay.py       # Fullscreen HUD overlay skeleton (v6.8.0)
 │  │  ├─ icon_assets.py       # Bundled PNG icon loader/cache
 │  │  ├─ main_window.py       # Stable main-window skeleton/card layout builder
@@ -83,6 +84,7 @@
 │  │  ├─ text_utils.py        # Shared Tk text measurement, wrapping, and elision helpers
 │  │  ├─ theme.py             # Runtime Tk theme tokens (re-exported by config)
 │  │  ├─ tk_style.py          # Shared Tk palette/action-button styling tokens
+│  │  ├─ window_geometry.py   # Headless snap-anchor geometry helpers used by App
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
 │     ├─ diagnostics.py      # Structured async diagnostics logging
@@ -124,7 +126,9 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `panel_presenter.py`, `hud_presenter.py`, `dialog_presenter.py`, and `snapshot_presenter.py` own headless view models for strings, colors, target selection, and option summaries. Tk modules apply those models while retaining widget layout and runtime side effects.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
    - `settings_runtime.py` owns SettingsDialog side effects that run only after config persistence succeeds.
+   - `settings_form.py` owns headless settings value collection, validation, hotkey conflict checks, and save-payload construction; `dialogs.py` remains the Tk compatibility facade and applies messagebox/file/runtime side effects.
    - `text_utils.py` owns shared Tk text measurement, label wrapping, elision, and scaled control-length helpers used by main-window and dialog layout.
+   - `window_geometry.py` owns snap-anchor capture/application helpers so App geometry coordination can be tested without a Tk root.
    - `theme.py` owns runtime theme tokens, while `tk_style.py` owns shared Tk palette/action-button styling used by the launcher and modal app dialogs.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Diagnostics flow:
