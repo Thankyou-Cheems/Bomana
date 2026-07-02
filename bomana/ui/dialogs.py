@@ -32,6 +32,11 @@ from bomana.config import (
     UIConfig,
 )
 from bomana.core.overspeed import SpeedLimitDatabase
+from bomana.ui.dialog_presenter import (
+    build_panel_option_specs,
+    format_aircraft_override_label,
+    format_overspeed_override_summary,
+)
 from bomana.ui.settings_runtime import SettingsRuntimeMixin
 from bomana.ui.text_utils import bind_existing_label_wraps, scaled_control_length
 from bomana.ui.tk_style import style_action_button
@@ -633,29 +638,14 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             anchor="w", pady=(0, 10)
         )
 
-        # 面板开关（根据编译开关动态生成）
         self.panel_vars = {}
-        panels = []
-
-        if ENABLE_CCRP:
-            panels.append(("show_bombing", "bomb", "投弹预测", "显示CCRP投弹预测面板"))
-        if ENABLE_ZONES:
-            panels.append(("show_zones", "aim", "战区导航", "显示战区位置和距离"))
-        if ENABLE_AIRFIELDS:
-            panels.append(("show_airfields", "aircraft", "机场导航", "显示友方/敌方机场"))
-        if ENABLE_FUEL:
-            panels.append(("show_fuel", "fuel", "燃油管理", "显示油量和返航估算"))
-        panels.append(("show_speed", "speed", "速度监视", "显示紧凑速度条和超速提示"))
-        panels.append(
-            (
-                "speed_history_mode",
-                "clock",
-                "历史模式(独立速度界面)",
-                "隐藏计时和其他扩展面板，切换为仅速度提醒的专用界面",
-            )
+        panels = build_panel_option_specs(
+            enable_ccrp=ENABLE_CCRP,
+            enable_zones=ENABLE_ZONES,
+            enable_airfields=ENABLE_AIRFIELDS,
+            enable_fuel=ENABLE_FUEL,
+            enable_checklist=ENABLE_CHECKLIST,
         )
-        if ENABLE_CHECKLIST:
-            panels.append(("show_checklist", "checklist", "出击检查", "显示起飞前检查清单"))
 
         if not panels:
             tk.Label(
@@ -663,16 +653,16 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             ).pack(anchor="w")
             return
 
-        for key, icon, label, desc in panels:
-            var = tk.BooleanVar(value=getattr(PanelConfig, key))
-            self.panel_vars[key] = var
+        for spec in panels:
+            var = tk.BooleanVar(value=getattr(PanelConfig, spec.key))
+            self.panel_vars[spec.key] = var
 
             item_frame = tk.Frame(frame, bg=Theme.BG)
             item_frame.pack(fill="x", pady=3)
 
             checkbutton = tk.Checkbutton(
                 item_frame,
-                text=label,
+                text=spec.label,
                 variable=var,
                 bg=Theme.BG,
                 fg=Theme.TEXT,
@@ -682,14 +672,20 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
                 highlightthickness=0,
                 anchor="w",
             )
-            image = self.app.icons.photo(icon, 18) if getattr(self.app, "icons", None) else None
+            image = (
+                self.app.icons.photo(spec.icon, 18) if getattr(self.app, "icons", None) else None
+            )
             if image is not None:
                 checkbutton.config(image=image, compound="left", padx=4)
                 checkbutton._bomana_icon_image = image
             checkbutton.pack(side="left")
 
             tk.Label(
-                item_frame, text=f"  - {desc}", bg=Theme.BG, fg=Theme.TEXT_DIM, font=("Segoe UI", 8)
+                item_frame,
+                text=f"  - {spec.description}",
+                bg=Theme.BG,
+                fg=Theme.TEXT_DIM,
+                font=("Segoe UI", 8),
             ).pack(side="left")
 
     def _build_overspeed_tab(self):
@@ -899,18 +895,12 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
 
     @staticmethod
     def _format_aircraft_label(raw: str) -> str:
-        return str(raw or "").strip().replace("_", " ") or "未知机型"
+        return format_aircraft_override_label(raw)
 
     def _refresh_overspeed_override_summary(self):
-        count = len(self.overspeed_override_map)
-        if count <= 0:
-            self.overspeed_override_summary_var.set("当前没有机型覆盖，所有飞机使用全局阈值。")
-            return
-        names = sorted(self._format_aircraft_label(name) for name in self.overspeed_override_map)
-        preview = ", ".join(names[:4])
-        if count > 4:
-            preview += f" 等 {count} 个机型"
-        self.overspeed_override_summary_var.set(f"已配置 {count} 个机型覆盖：{preview}")
+        self.overspeed_override_summary_var.set(
+            format_overspeed_override_summary(self.overspeed_override_map)
+        )
 
     def _build_sound_tab(self):
         """构建音效设置页。"""

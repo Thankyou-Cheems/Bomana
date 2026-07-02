@@ -58,11 +58,15 @@
 │  │  ├─ main_window.py       # Stable main-window skeleton/card layout builder
 │  │  ├─ nav_window.py        # Standalone navigation window
 │  │  ├─ navigation_runtime.py # Standalone nav lifecycle + display rebuild service
+│  │  ├─ dialog_presenter.py # Headless settings dialog option/summary view models
+│  │  ├─ hud_presenter.py    # Headless HUD target/standby view models
 │  │  ├─ navigation_presenter.py # Shared heading-tape target selection/model helpers
+│  │  ├─ panel_presenter.py  # Headless fuel/bombing/speed panel view models
 │  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
 │  │  ├─ runtime.py           # Tk dispatch + runtime worker thread helpers
 │  │  ├─ runtime_services.py  # Global hotkeys, tray, and HUD runtime integrations
 │  │  ├─ settings_runtime.py  # SettingsDialog persistence-success runtime side effects
+│  │  ├─ snapshot_presenter.py # Headless lifecycle/status presentation model helpers
 │  │  ├─ text_utils.py        # Shared Tk text measurement, wrapping, and elision helpers
 │  │  ├─ theme.py             # Runtime Tk theme tokens (re-exported by config)
 │  │  ├─ tk_style.py          # Shared Tk palette/action-button styling tokens
@@ -100,6 +104,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
    - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
+   - `panel_presenter.py`, `hud_presenter.py`, `dialog_presenter.py`, and `snapshot_presenter.py` own headless view models for strings, colors, target selection, and option summaries. Tk modules apply those models while retaining widget layout and runtime side effects.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
    - `settings_runtime.py` owns SettingsDialog side effects that run only after config persistence succeeds.
    - `text_utils.py` owns shared Tk text measurement, label wrapping, elision, and scaled control-length helpers used by main-window and dialog layout.

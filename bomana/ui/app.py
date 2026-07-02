@@ -38,6 +38,7 @@ from bomana.ui.dialogs import AboutDialog, BombSelectorDialog, ChecklistEditor, 
 from bomana.ui.icon_assets import IconManager
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.navigation_runtime import AppNavigationServices
+from bomana.ui.panel_presenter import build_speed_history_header_model
 from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.runtime import LogicPoller, TkEventDispatcher
 from bomana.ui.runtime_services import HAS_TRAY, AppRuntimeServices
@@ -682,29 +683,9 @@ class App:
         if not PanelConfig.speed_history_mode:
             return
 
-        if snap.api_down:
-            phase_text = "8111 离线"
-            phase_fg = Theme.YELLOW
-        elif snap.phase == Phase.ALIVE and not snap.on_ground:
-            phase_text = "飞行中"
-            phase_fg = Theme.GREEN if speed_level not in ("warning", "critical") else Theme.YELLOW
-        elif snap.phase == Phase.ALIVE:
-            phase_text = "地面待命"
-            phase_fg = Theme.TEXT_DIM
-        elif snap.phase == Phase.LOSS_PENDING:
-            phase_text = "状态切换中"
-            phase_fg = Theme.YELLOW
-        else:
-            phase_text = "等待进入战局"
-            phase_fg = Theme.TEXT_MUTED
-
-        aircraft_text = AppPanelRenderer.format_aircraft_type_label(
-            str(getattr(snap, "aircraft_type_name", "") or "")
-        )
-        self.history_mode_phase_lbl.config(text=phase_text, fg=phase_fg)
-        self.history_mode_hint_lbl.config(
-            text=f"计时和导航已隐藏，当前机型：{aircraft_text}",
-        )
+        model = build_speed_history_header_model(snap, speed_level)
+        self.history_mode_phase_lbl.config(text=model.phase_text, fg=model.phase_fg)
+        self.history_mode_hint_lbl.config(text=model.hint_text)
 
     def _refresh_tray(self):
         """刷新系统托盘菜单状态

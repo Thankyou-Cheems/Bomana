@@ -24,6 +24,7 @@ from bomana.config import (
 )
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui.hud_overlay import HUDOverlay
+from bomana.ui.hud_presenter import build_hud_target_model
 from bomana.ui.runtime import start_daemon_thread
 from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import resource_path
@@ -330,50 +331,32 @@ class AppRuntimeServices:
                 self._hud_monitor_refresh_ts = now
                 overlay.refresh_monitor_geometry()
 
-            target_zone = None
-            secondary_targets = []
             secondary_limit = max(2, int(getattr(ZoneConfig, "MAX_DISPLAY_ZONES", 6)))
-            if snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING):
-                target_zone = next((z for z in snap.zones if z.is_target), None)
-                if target_zone is None and snap.zones:
-                    target_zone = min(snap.zones, key=lambda z: abs(z.relative))
-                if snap.zones:
-                    for zone in sorted(snap.zones, key=lambda z: abs(z.relative)):
-                        if target_zone is not None and zone.id == target_zone.id:
-                            continue
-                        secondary_targets.append(
-                            {
-                                "relative": float(zone.relative),
-                                "distance": float(zone.distance_km),
-                                "label": "",
-                            }
-                        )
-                        if len(secondary_targets) >= secondary_limit:
-                            break
+            model = build_hud_target_model(snap, secondary_limit=secondary_limit)
 
-            if target_zone:
+            if model.has_target:
                 self._hud_last_target = {
                     "ts": now,
-                    "relative": float(target_zone.relative),
-                    "distance": float(target_zone.distance_km),
-                    "pitch": float(getattr(snap, "attitude_pitch_deg", 0.0) or 0.0),
-                    "roll": float(getattr(snap, "attitude_roll_deg", 0.0) or 0.0),
-                    "fallback": bool(getattr(snap, "hud_attitude_fallback", True)),
-                    "heading": float(getattr(snap, "player_heading", 0.0) or 0.0),
-                    "altitude": float(getattr(snap, "altitude_m", 0.0) or 0.0),
-                    "secondary_targets": list(secondary_targets),
+                    "relative": model.relative,
+                    "distance": model.distance,
+                    "pitch": model.pitch,
+                    "roll": model.roll,
+                    "fallback": model.fallback,
+                    "heading": model.heading,
+                    "altitude": model.altitude,
+                    "secondary_targets": list(model.secondary_targets),
                 }
                 overlay.clear_standby()
                 overlay.update_target(
                     has_target=True,
-                    relative_deg=self._hud_last_target["relative"],
-                    distance_km=self._hud_last_target["distance"],
-                    attitude_pitch_deg=self._hud_last_target["pitch"],
-                    attitude_roll_deg=self._hud_last_target["roll"],
-                    attitude_fallback=self._hud_last_target["fallback"],
-                    heading_deg=self._hud_last_target["heading"],
-                    own_altitude_m=self._hud_last_target["altitude"],
-                    secondary_targets=self._hud_last_target["secondary_targets"],
+                    relative_deg=model.relative,
+                    distance_km=model.distance,
+                    attitude_pitch_deg=model.pitch,
+                    attitude_roll_deg=model.roll,
+                    attitude_fallback=model.fallback,
+                    heading_deg=model.heading,
+                    own_altitude_m=model.altitude,
+                    secondary_targets=list(model.secondary_targets),
                 )
             else:
                 can_hold = False
@@ -419,14 +402,7 @@ class AppRuntimeServices:
                     )
                 else:
                     overlay.clear_target()
-                    if snap.api_down:
-                        overlay.show_standby("8111 DELAY")
-                    elif snap.api_down_pending:
-                        overlay.show_standby("8111 PENDING")
-                    elif snap.phase not in (Phase.ALIVE, Phase.LOSS_PENDING):
-                        overlay.show_standby("HUD STANDBY")
-                    else:
-                        overlay.show_standby("NO TARGET")
+                    overlay.show_standby(model.standby_text)
 
             if self._hud_render_error_count > 0:
                 self._hud_render_error_count = 0

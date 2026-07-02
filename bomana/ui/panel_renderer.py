@@ -11,8 +11,6 @@ from bomana.config import (
     ENABLE_CCRP,
     ENABLE_FUEL,
     ENABLE_ZONES,
-    BombConfig,
-    FuelConfig,
     OverspeedConfig,
     PanelConfig,
     Theme,
@@ -21,6 +19,12 @@ from bomana.config import (
 from bomana.core.state import UISnapshot
 from bomana.ui.icon_assets import IconManager
 from bomana.ui.navigation_presenter import build_navigation_tape_model
+from bomana.ui.panel_presenter import (
+    build_bombing_display_model,
+    build_fuel_display_model,
+    build_speed_strip_model,
+    format_aircraft_type_label,
+)
 from bomana.utils.math_utils import (
     calculate_airfield_status,
     calculate_airfield_turn_indicator,
@@ -711,310 +715,76 @@ class AppPanelRenderer:
     def update_fuel_display(self, snap: UISnapshot) -> None:
         """更新燃油信息显示。"""
         app = self.app
-        if snap.fuel_kg > 0:
-            fuel_text = f"{int(snap.fuel_kg)}kg ({snap.fuel_percent:.0f}%)"
-
-            if snap.fuel_percent <= FuelConfig.DANGER_PERCENT:
-                fuel_color = Theme.RED
-            elif snap.fuel_percent <= FuelConfig.WARNING_PERCENT:
-                fuel_color = Theme.YELLOW
-            else:
-                fuel_color = Theme.TEXT
-
-            app.fuel_main_lbl.config(text=fuel_text, fg=fuel_color)
-        else:
-            app.fuel_main_lbl.config(text="-- kg (--%)", fg=Theme.TEXT_MUTED)
-
-        if snap.fuel_time_remaining_str:
-            app.icons.configure_label(
-                app.fuel_time_lbl,
-                icon="clock",
-                text=snap.fuel_time_remaining_str,
-                size=self._icon_size(18),
-                fg=Theme.TEXT,
-            )
-        else:
-            app.icons.configure_label(
-                app.fuel_time_lbl,
-                icon="clock",
-                text="计算中...",
-                size=self._icon_size(18),
-                fg=Theme.TEXT_MUTED,
-            )
-
-        if snap.fuel_rate_stable and snap.fuel_rate_kg_min > 0:
-            rate_text = f"油耗 {snap.fuel_rate_kg_min:.0f}kg/min"
-        else:
-            rate_text = "油耗 --"
-
-        alt_text = f"高度 {int(snap.altitude_m)}m" if snap.altitude_m > 0 else "高度 --"
-        detail_suffix = "返航 --"
-
-        if snap.return_status != "unknown" and snap.return_fuel_needed_kg > 0:
-            needed_text = f"需~{int(snap.return_fuel_needed_kg)}kg"
-            if snap.fuel_initial_kg > 0:
-                return_percent = (snap.return_fuel_needed_kg / snap.fuel_initial_kg) * 100
-                needed_text += f" ({return_percent:.0f}%)"
-
-            if snap.return_status == "safe":
-                status_icon = "ok"
-                status_text = "充足"
-                return_color = Theme.GREEN
-            elif snap.return_status == "warning":
-                status_icon = "warning"
-                status_text = "注意"
-                return_color = Theme.YELLOW
-            else:
-                status_icon = "danger"
-                status_text = "不足!"
-                return_color = Theme.RED
-
-            app.icons.configure_label(
-                app.fuel_return_lbl,
-                icon=status_icon,
-                text=status_text,
-                size=self._icon_size(18),
-                fg=return_color,
-            )
-            detail_suffix = f"返航 {needed_text}"
-        elif snap.friendly_distance_km > 0:
-            app.icons.configure_label(
-                app.fuel_return_lbl, icon=None, text="↻ 估算中", fg=Theme.TEXT_MUTED
-            )
-            detail_suffix = f"返航距离 {snap.friendly_distance_km:.0f}km"
-        else:
-            app.icons.configure_label(
-                app.fuel_return_lbl, icon=None, text="无机场", fg=Theme.TEXT_MUTED
-            )
-            detail_suffix = "返航无机场数据"
-
-        app.fuel_detail_lbl.config(text=rate_text)
+        model = build_fuel_display_model(snap)
+        app.fuel_main_lbl.config(text=model.main_text, fg=model.main_fg)
+        app.icons.configure_label(
+            app.fuel_time_lbl,
+            icon=model.time.icon,
+            text=model.time.text,
+            size=self._icon_size(18),
+            fg=model.time.fg,
+        )
+        app.icons.configure_label(
+            app.fuel_return_lbl,
+            icon=model.return_status.icon,
+            text=model.return_status.text,
+            size=self._icon_size(18),
+            fg=model.return_status.fg,
+        )
+        app.fuel_detail_lbl.config(text=model.detail_text)
         if hasattr(app, "fuel_alt_lbl"):
-            app.fuel_alt_lbl.config(text=alt_text)
+            app.fuel_alt_lbl.config(text=model.altitude_text)
         if hasattr(app, "fuel_return_detail_lbl"):
-            app.fuel_return_detail_lbl.config(text=detail_suffix)
+            app.fuel_return_detail_lbl.config(text=model.return_detail_text)
 
     def update_bombing_display(self, snap: UISnapshot) -> None:
         """更新投弹预测信息显示。"""
         app = self.app
-        app.bomb_select_lbl.config(
-            text=f"炸弹: {BombConfig.format_bomb_name(snap.bomb_name)} (点击更换)"
+        model = build_bombing_display_model(snap)
+        app.bomb_select_lbl.config(text=model.bomb_label_text)
+        app.bomb_trajectory_lbl.config(text=model.trajectory_text, fg=model.trajectory_fg)
+        if hasattr(app, "bomb_flight_lbl"):
+            app.bomb_flight_lbl.config(text=model.flight_text, fg=model.flight_fg)
+        app.icons.configure_label(
+            app.bomb_release_lbl,
+            icon=model.release.icon,
+            text=model.release.text,
+            size=self._icon_size(18),
+            fg=model.release.fg,
         )
-        bomb_data = BombConfig.get_bomb_data(snap.bomb_name) or {}
-        prediction_kind = str(bomb_data.get("prediction_kind", "freefall") or "freefall")
-
-        if snap.bombing_valid:
-            bomb_range_km = snap.bomb_range_m / 1000.0
-            trajectory_label = "高阻" if prediction_kind == "high_drag" else "弹道"
-            app.bomb_trajectory_lbl.config(
-                text=f"{trajectory_label}: {bomb_range_km:.2f}km",
-                fg=Theme.TEXT_DIM,
+        if hasattr(app, "bomb_release_detail_lbl"):
+            app.bomb_release_detail_lbl.config(
+                text=model.release_detail_text,
+                fg=model.release.fg,
             )
-            if hasattr(app, "bomb_flight_lbl"):
-                flight_label = "直落" if prediction_kind == "high_drag" else "飞行"
-                app.bomb_flight_lbl.config(
-                    text=f"{flight_label}: {snap.bomb_flight_time:.1f}s",
-                    fg=Theme.TEXT_DIM,
-                )
-
-            status = snap.release_status
-            dist_m = snap.release_distance_m
-            if dist_m > 1000:
-                dist_str = f"{dist_m / 1000:.2f}km"
-            elif dist_m > 100:
-                dist_str = f"{int(dist_m)}m"
-            else:
-                dist_str = f"{dist_m:.0f}m"
-
-            if status == "ready":
-                time_str = f"{snap.time_to_release:.2f}s"
-                release_icon = "bomb"
-                release_text = "投弹"
-                release_detail_text = f"时间 {time_str}，距离 {dist_str}"
-                release_color = Theme.GREEN
-            elif status == "approaching":
-                time_str = f"{snap.time_to_release:.1f}s"
-                release_icon = "clock"
-                release_text = "接近"
-                release_detail_text = f"时间 {time_str}，距离 {dist_str}"
-                release_color = Theme.YELLOW
-            elif status == "passed":
-                release_icon = "danger"
-                release_text = "已飞过"
-                release_detail_text = f"偏离 {dist_str}"
-                release_color = Theme.RED
-            elif status == "too_far":
-                time_str = f"{snap.time_to_release:.0f}s"
-                release_icon = "aim"
-                release_text = "过远"
-                release_detail_text = f"距离 {dist_str}，预计 {time_str}"
-                release_color = Theme.TEXT_DIM
-            else:
-                release_icon = "clock"
-                release_text = "计算中"
-                release_detail_text = "等待稳定数据"
-                release_color = Theme.TEXT_MUTED
-
-            app.icons.configure_label(
-                app.bomb_release_lbl,
-                icon=release_icon,
-                text=release_text,
-                size=self._icon_size(18),
-                fg=release_color,
-            )
-            if hasattr(app, "bomb_release_detail_lbl"):
-                app.bomb_release_detail_lbl.config(text=release_detail_text, fg=release_color)
-        else:
-            unavailable_reason = str(getattr(snap, "bombing_unavailable_reason", "") or "").strip()
-
-            if unavailable_reason == "guided_glide":
-                app.bomb_trajectory_lbl.config(text="弹道: 不适用", fg=Theme.TEXT_MUTED)
-                if hasattr(app, "bomb_flight_lbl"):
-                    app.bomb_flight_lbl.config(text="飞行: 制导/滑翔", fg=Theme.TEXT_MUTED)
-                release_icon = "aim"
-                release_text = "未辅助"
-                release_detail_text = "使用武器自身引导，不显示释放点"
-            elif unavailable_reason == "release_mach_limit":
-                app.bomb_trajectory_lbl.config(text="弹道: 超限", fg=Theme.TEXT_MUTED)
-                if hasattr(app, "bomb_flight_lbl"):
-                    app.bomb_flight_lbl.config(text="飞行: 不计算", fg=Theme.TEXT_MUTED)
-                mach = getattr(snap, "overspeed_current_mach", None)
-                mach_text = f"M{float(mach):.2f}" if mach is not None else "M≥1.00"
-                release_icon = "danger"
-                release_text = "不可投"
-                release_detail_text = f"{mach_text} 超过投放限制，减速后再投"
-            else:
-                app.bomb_trajectory_lbl.config(text="弹道: -- km", fg=Theme.TEXT_MUTED)
-                if hasattr(app, "bomb_flight_lbl"):
-                    app.bomb_flight_lbl.config(text="飞行: -- s", fg=Theme.TEXT_MUTED)
-
-                if snap.on_ground:
-                    release_icon = "aircraft"
-                    release_text = "请起飞"
-                    release_detail_text = "起飞后开始计算"
-                elif snap.altitude_m <= 50:
-                    release_icon = "climb"
-                    release_text = "请爬升"
-                    release_detail_text = "高度超过 50m 后开始计算"
-                elif not snap.has_target:
-                    release_icon = "aim"
-                    release_text = "无目标战区"
-                    release_detail_text = "选择或接近目标战区"
-                else:
-                    release_icon = None
-                    release_text = "↻ 请对准目标"
-                    release_detail_text = "进入释放航线后显示距离和时间"
-
-            if unavailable_reason in {"guided_glide", "release_mach_limit"}:
-                release_fg = Theme.YELLOW if unavailable_reason == "guided_glide" else Theme.RED
-            else:
-                release_fg = Theme.TEXT_MUTED
-
-            app.icons.configure_label(
-                app.bomb_release_lbl,
-                icon=release_icon,
-                text=release_text,
-                size=self._icon_size(18),
-                fg=release_fg,
-            )
-            if hasattr(app, "bomb_release_detail_lbl"):
-                app.bomb_release_detail_lbl.config(text=release_detail_text, fg=release_fg)
 
     @staticmethod
     def format_aircraft_type_label(raw: str) -> str:
-        text = str(raw or "").strip().replace("_", " ")
-        text = " ".join(text.split())
-        if not text:
-            return "机型未识别"
-        if len(text) > 28:
-            return text[:25] + "..."
-        return text
+        return format_aircraft_type_label(raw)
 
     def update_speed_strip(self, snap: UISnapshot, debug_mock_mode: bool) -> str:
         """更新紧凑速度指示条，并返回当前超速等级。"""
         app = self.app
-        speed_level = str(getattr(snap, "overspeed_level", "unknown") or "unknown")
-        speed_ratio = float(getattr(snap, "overspeed_ratio", 0.0) or 0.0)
-        display_ratio = float(getattr(snap, "overspeed_display_ratio", speed_ratio) or 0.0)
-        current_ias = float(getattr(snap, "overspeed_current_ias_kmh", 0.0) or 0.0)
-        current_mach = getattr(snap, "overspeed_current_mach", None)
-        limit_ias = float(getattr(snap, "overspeed_limit_kmh", 0.0) or 0.0)
-        limit_mach = float(getattr(snap, "overspeed_limit_mach", 0.0) or 0.0)
-        matched = bool(getattr(snap, "overspeed_match", False))
-        reason = str(getattr(snap, "overspeed_reason", "") or "")
-        aircraft_type_name = self.format_aircraft_type_label(
-            str(getattr(snap, "aircraft_type_name", "") or "")
-        )
+        model = build_speed_strip_model(snap)
+        app.speed_state_lbl.config(text=model.state_text, fg=model.state_fg)
+        app.speed_model_lbl.config(text=model.model_text, fg=model.model_fg)
+        app.speed_value_lbl.config(text=model.value_text, fg=model.value_fg)
+        app.speed_bar_fill.config(bg=model.fill_color)
+        app.speed_bar_fill.place(relwidth=model.fill_ratio)
 
-        if speed_level == "critical":
-            state_text = "超速危险"
-            state_fg = Theme.RED
-            fill_color = Theme.RED
-        elif speed_level == "warning":
-            state_text = "接近极限"
-            state_fg = Theme.YELLOW
-            fill_color = Theme.YELLOW
-        elif speed_level == "caution":
-            state_text = "高速预警"
-            state_fg = Theme.ORANGE
-            fill_color = Theme.ORANGE
-        elif reason == "limit_missing":
-            state_text = "阈值缺失"
-            state_fg = Theme.TEXT_MUTED
-            fill_color = Theme.TEXT_MUTED
-        elif matched:
-            state_text = "速度安全"
-            state_fg = Theme.GREEN
-            fill_color = Theme.GREEN
-        else:
-            state_text = "速度监视"
-            state_fg = Theme.TEXT_MUTED
-            fill_color = Theme.TEXT_MUTED
-
-        if matched:
-            if limit_ias > 0.0:
-                value_text = f"IAS {current_ias:.0f}/{limit_ias:.0f}"
-            elif current_ias > 0.0:
-                value_text = f"IAS {current_ias:.0f}"
-            else:
-                value_text = "IAS --"
-        else:
-            value_text = f"IAS {current_ias:.0f}" if current_ias > 0.0 else "IAS --"
-
-        model_parts = [aircraft_type_name]
-        if current_mach is not None and limit_mach > 0.0:
-            model_parts.append(f"M{float(current_mach):.2f}/{limit_mach:.2f}")
-        elif reason == "limit_missing":
-            model_parts.append("阈值缺失")
-        elif not matched:
-            model_parts.append("阈值未匹配")
-        model_text = "  |  ".join(part for part in model_parts if part)
-
-        app.speed_state_lbl.config(text=state_text, fg=state_fg)
-        app.speed_model_lbl.config(
-            text=model_text,
-            fg=(Theme.TEXT if speed_level in ("warning", "critical") else Theme.TEXT_DIM),
-        )
-        app.speed_value_lbl.config(
-            text=value_text,
-            fg=state_fg if speed_level in ("caution", "warning", "critical") else Theme.TEXT_DIM,
-        )
-        app.speed_bar_fill.config(bg=fill_color if matched else Theme.TEXT_MUTED)
-        app.speed_bar_fill.place(relwidth=max(0.0, min(1.0, display_ratio if matched else 0.0)))
-
-        if speed_level != app._last_overspeed_level:
-            app._last_overspeed_level = speed_level
+        if model.level != app._last_overspeed_level:
+            app._last_overspeed_level = model.level
             app._last_overspeed_sound_ts = 0.0
 
         if not debug_mock_mode:
             now_sound = time.monotonic()
-            if speed_level == "critical":
+            if model.level == "critical":
                 if (
                     now_sound - app._last_overspeed_sound_ts
                 ) >= OverspeedConfig.CRITICAL_SOUND_INTERVAL_SEC:
                     app.sound.play(pattern="overspeed_critical")
                     app._last_overspeed_sound_ts = now_sound
-            elif speed_level == "warning":
+            elif model.level == "warning":
                 if (
                     now_sound - app._last_overspeed_sound_ts
                 ) >= OverspeedConfig.WARNING_SOUND_INTERVAL_SEC:
@@ -1022,7 +792,7 @@ class AppPanelRenderer:
                     app._last_overspeed_sound_ts = now_sound
             else:
                 app._last_overspeed_sound_ts = 0.0
-        elif speed_level not in ("critical", "warning"):
+        elif model.level not in ("critical", "warning"):
             app._last_overspeed_sound_ts = 0.0
 
-        return speed_level
+        return model.level
