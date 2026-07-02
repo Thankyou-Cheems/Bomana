@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import requests
 
 from bomana.config import NetworkConfig
-from bomana.core.state import Airfield, MapInfo, MapObjData, TelemetryData, Zone
+from bomana.core.state import Airfield, InterestPoint, MapInfo, MapObjData, TelemetryData, Zone
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 _MIN_REQUEST_TIMEOUT_SEC = 0.01
@@ -483,6 +483,15 @@ class MapObjectsFetcher:
         return None
 
     @staticmethod
+    def _first_text(o: dict, keys: tuple[str, ...]) -> str:
+        for key in keys:
+            if key in o:
+                value = MapObjectsFetcher._text(o.get(key))
+                if value:
+                    return value
+        return ""
+
+    @staticmethod
     def _extract_objects(payload: Any) -> tuple[list[Any], str]:
         if isinstance(payload, list):
             return payload, ""
@@ -575,6 +584,20 @@ class MapObjectsFetcher:
             or "bomb_target" in icon
         )
 
+    @staticmethod
+    def _is_interest_point_object(o: dict) -> bool:
+        return MapObjectsFetcher._lower_text(o.get("type", "")) == "point_of_interest"
+
+    @staticmethod
+    def _interest_point_id(o: dict, x: float, y: float) -> str:
+        api_id = MapObjectsFetcher._first_text(
+            o,
+            ("id", "uid", "object_id", "obj_id", "instance_id"),
+        )
+        if api_id:
+            return f"poi_{api_id}"
+        return f"poi_{x:.6f}_{y:.6f}"
+
     def fetch(self, budget: Budget) -> MapObjData:
         """获取地图对象
 
@@ -604,6 +627,7 @@ class MapObjectsFetcher:
 
         zone_index = 1
         airfield_index = 1
+        interest_point_index = 1
 
         # 遍历对象
         for o in objs:
@@ -620,6 +644,22 @@ class MapObjectsFetcher:
                 out.player_pos = (px, py)
                 out.player_dx = self._first_float(o, ("dx", "DX", "vel_x", "vx")) or 0.0
                 out.player_dy = self._first_float(o, ("dy", "DY", "vel_y", "vy")) or 0.0
+
+            elif self._is_interest_point_object(o):
+                point_x = self._first_float(o, ("x", "X", "pos_x", "position_x"))
+                point_y = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
+                if point_x is None or point_y is None:
+                    continue
+                out.interest_points.append(
+                    InterestPoint(
+                        id=self._interest_point_id(o, point_x, point_y),
+                        index=interest_point_index,
+                        x=point_x,
+                        y=point_y,
+                        name=self._first_text(o, ("name", "label", "title", "text")),
+                    )
+                )
+                interest_point_index += 1
 
             elif self._is_airfield_object(o):
                 # 机场：使用跑道起止点的中心

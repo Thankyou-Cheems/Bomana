@@ -117,10 +117,21 @@ class Airfield:
 
 
 @dataclass
+class InterestPoint:
+    """兴趣点数据结构（来自/map_obj.json 的 point_of_interest）"""
+
+    id: str  # 唯一标识（优先API id，缺失时基于坐标生成）
+    index: int  # 兴趣点编号
+    x: float  # X坐标（归一化）
+    y: float  # Y坐标（归一化）
+    name: str = ""  # API返回名称（如有）
+
+
+@dataclass
 class MapObjData:
     """地图对象数据（来自/map_obj.json）
 
-    包含玩家、战区、机场的所有信息。
+    包含玩家、战区、机场和自然导航兴趣点的所有信息。
     """
 
     ok: bool = False  # 请求成功
@@ -133,6 +144,7 @@ class MapObjData:
     elapsed_ms: float = 0.0
     zones: list[Zone] = field(default_factory=list)  # 战区列表
     airfields: list[Airfield] = field(default_factory=list)  # 机场列表
+    interest_points: list[InterestPoint] = field(default_factory=list)  # 兴趣点列表
 
 
 @dataclass
@@ -515,6 +527,21 @@ class AirfieldDisplayInfo:
 
 
 @dataclass(frozen=True)
+class NavigationPointDisplayInfo:
+    """自然导航点显示信息（UI层数据）"""
+
+    id: str
+    name: str
+    distance_km: float
+    direction: str
+    relative: float
+    is_target: bool
+    ete_str: str = ""
+    cdi_indicator: str = ""
+    cdi_color: str = ""
+
+
+@dataclass(frozen=True)
 class PerfDebugInfo:
     """性能诊断信息。"""
 
@@ -586,6 +613,7 @@ class UISnapshot:
     zones: list[ZoneDisplayInfo] = field(default_factory=list)
     friendly_airfield: AirfieldDisplayInfo | None = None
     enemy_airfields: list[AirfieldDisplayInfo] = field(default_factory=list)
+    interest_point: NavigationPointDisplayInfo | None = None
     has_airfield_target: bool = False
     has_target: bool = False
     is_deviating: bool = False

@@ -26,9 +26,11 @@ from bomana.core.state import (
     AirfieldDisplayInfo,
     AttitudeConfidenceState,
     GameState,
+    InterestPoint,
     LifeState,
     MapInfo,
     MapObjData,
+    NavigationPointDisplayInfo,
     PerfDebugInfo,
     Phase,
     SourceDebugInfo,
@@ -1180,6 +1182,58 @@ class GameLogic:
 
         return friendly_display, enemy_display, has_airfield_target
 
+    def _build_interest_point_display(
+        self,
+        mp: MapObjData,
+        map_axis_scale_m: tuple[float, float] | None,
+        player_heading: float,
+        ground_speed: float,
+    ) -> NavigationPointDisplayInfo | None:
+        """根据地图对象构建最近兴趣点显示数据。"""
+        if not (mp.ok and mp.player_pos and getattr(mp, "interest_points", None)):
+            return None
+
+        px, py = mp.player_pos
+        candidates: list[tuple[float, InterestPoint, float]] = []
+        for point in mp.interest_points:
+            if (not math.isfinite(float(point.x))) or (not math.isfinite(float(point.y))):
+                continue
+
+            bearing, distance = self._bearing_distance_norm(
+                px,
+                py,
+                point.x,
+                point.y,
+                map_axis_scale_m,
+            )
+            relative = calculate_relative_bearing(player_heading, bearing)
+            candidates.append((distance, point, relative))
+
+        if not candidates:
+            return None
+
+        distance, point, relative = min(candidates, key=lambda item: item[0])
+        distance_km = distance * ZoneConfig.DISTANCE_SCALE
+        ete_text = ""
+        if ground_speed > 1e-7:
+            seconds_left = distance / ground_speed
+            if seconds_left < 5999:
+                mm, ss = divmod(int(seconds_left), 60)
+                ete_text = f"{mm:02d}:{ss:02d}"
+
+        cdi_str, cdi_clr = generate_cdi_indicator(relative, distance_km)
+        return NavigationPointDisplayInfo(
+            id=point.id,
+            name=point.name or point.id,
+            distance_km=distance_km,
+            direction=get_direction_text(relative),
+            relative=relative,
+            is_target=True,
+            ete_str=ete_text,
+            cdi_indicator=cdi_str,
+            cdi_color=cdi_clr,
+        )
+
     def _build_destroyed_zone_text(
         self,
         destroyed_zones: list[Zone],
@@ -1452,6 +1506,12 @@ class GameLogic:
                 ground_speed=nav_ground_speed,
             )
         )
+        interest_point_display = self._build_interest_point_display(
+            mp=mp,
+            map_axis_scale_m=map_axis_scale_m,
+            player_heading=nav_player_heading,
+            ground_speed=nav_ground_speed,
+        )
 
         has_target = nav_target_zone is not None
         deviation_angle = nav_target_zone.relative if nav_target_zone else 0.0
@@ -1564,6 +1624,7 @@ class GameLogic:
             zones=zone_display_list,
             friendly_airfield=friendly_airfield_display,
             enemy_airfields=enemy_airfields_display,
+            interest_point=interest_point_display,
             has_airfield_target=has_airfield_target,
             has_target=has_target,
             is_deviating=nav_is_deviating,
