@@ -17,6 +17,95 @@ def _make_config_only_app() -> App:
     return instance
 
 
+class _FakeLabel:
+    def __init__(self) -> None:
+        self.options: dict[str, object] = {}
+
+    def config(self, **kwargs) -> None:
+        self.options.update(kwargs)
+
+
+class _FakeNudgeRow:
+    def __init__(self, manager: str) -> None:
+        self.manager = manager
+        self.grid_calls = 0
+        self.grid_remove_calls = 0
+
+    def winfo_manager(self) -> str:
+        return self.manager
+
+    def grid(self, **_kwargs) -> None:
+        self.manager = "grid"
+        self.grid_calls += 1
+
+    def grid_remove(self) -> None:
+        self.manager = ""
+        self.grid_remove_calls += 1
+
+
+def _make_hint_app_with_nudge(*, visible: bool, manager: str):
+    app = _make_config_only_app()
+    app._nudge_visible = visible
+    app._manual_reset_confirm_until = 0.0
+    app._hint_width_cache = {"text": "old"}
+    app._hint_text = lambda: "hint"
+    app._nudge_text = lambda: "nudge"
+    app._update_lock_badge = lambda: None
+    recalc_calls: list[dict[str, object]] = []
+    app._recalc_size = lambda **kwargs: recalc_calls.append(kwargs)
+    app.main_frame = object()
+    app.hint_lbl = _FakeLabel()
+    app.nudge_lbl = _FakeLabel()
+    app.star_lbl = _FakeLabel()
+    app.nudge_row = _FakeNudgeRow(manager)
+    return app, recalc_calls
+
+
+def test_init_ui_syncs_hint_after_build(monkeypatch) -> None:
+    app = _make_config_only_app()
+    calls: list[str] = []
+
+    class FakeBuilder:
+        def __init__(self, built_app) -> None:
+            assert built_app is app
+
+        def build(self) -> None:
+            calls.append("build")
+
+    monkeypatch.setattr(app_module, "MainWindowBuilder", FakeBuilder)
+    app._update_hint = lambda: calls.append("hint")
+
+    app._init_ui()
+
+    assert calls == ["build", "hint"]
+
+
+def test_update_hint_removes_hidden_star_nudge_row() -> None:
+    app, recalc_calls = _make_hint_app_with_nudge(visible=False, manager="grid")
+
+    app._update_hint()
+
+    assert app.nudge_lbl.options["text"] == ""
+    assert app.star_lbl.options["text"] == ""
+    assert app.star_lbl.options["cursor"] == "arrow"
+    assert app.nudge_row.manager == ""
+    assert app.nudge_row.grid_remove_calls == 1
+    assert recalc_calls == [{"force_shrink": True}]
+
+
+def test_update_hint_restores_visible_star_nudge_row() -> None:
+    app, recalc_calls = _make_hint_app_with_nudge(visible=True, manager="")
+
+    app._update_hint()
+
+    assert app.nudge_lbl.options["text"] == "nudge"
+    assert app.star_lbl.options["text"] == "GitHub Star"
+    assert app.star_lbl.options["cursor"] == "hand2"
+    assert app.nudge_row.manager == "grid"
+    assert app.nudge_row.grid_calls == 1
+    assert recalc_calls == [{"force_shrink": False}]
+
+
 def test_save_config_returns_failure_without_background_popup(monkeypatch) -> None:
     app = _make_config_only_app()
     monkeypatch.setattr(app_module.ConfigManager, "load", lambda: {})

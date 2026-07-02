@@ -133,13 +133,15 @@ class MainWindowBuilder:
         bottom_frame.grid_rowconfigure(1, weight=1)
         bottom_frame.grid_columnconfigure(0, weight=1)
 
+        nudge_visible = bool(getattr(app, "_nudge_visible", False))
+
         app.nudge_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
         app.nudge_row.grid(row=0, column=0, sticky="ew", padx=int(6 * s), pady=(int(4 * s), 0))
         app.nudge_row.grid_columnconfigure(0, weight=1)
 
         app.nudge_lbl = tk.Label(
             app.nudge_row,
-            text=app._nudge_text(),
+            text=app._nudge_text() if nudge_visible else "",
             font=font_hint,
             fg=Theme.TEXT_MUTED,
             bg=Theme.GRAYPILL,
@@ -151,11 +153,11 @@ class MainWindowBuilder:
 
         app.star_lbl = tk.Label(
             app.nudge_row,
-            text="GitHub Star",
+            text="GitHub Star" if nudge_visible else "",
             font=font_hint,
             fg=Theme.BLUE,
             bg=Theme.BG,
-            cursor="hand2",
+            cursor="hand2" if nudge_visible else "arrow",
             padx=int(8 * s),
             pady=max(1, int(1 * s)),
         )
@@ -163,6 +165,8 @@ class MainWindowBuilder:
         app.star_lbl.bind("<Enter>", lambda e: app.star_lbl.config(fg=Theme.TEXT, bg=Theme.BORDER))
         app.star_lbl.bind("<Leave>", lambda e: app.star_lbl.config(fg=Theme.BLUE, bg=Theme.BG))
         app.star_lbl.grid(row=0, column=1, sticky="e", padx=(int(8 * s), 0))
+        if not nudge_visible:
+            app.nudge_row.grid_remove()
 
         app.hint_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
         app.hint_row.grid(row=1, column=0, sticky="ew", padx=int(6 * s), pady=(0, int(4 * s)))

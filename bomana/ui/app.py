@@ -496,6 +496,7 @@ class App:
     def _init_ui(self):
         """初始化 UI 布局（稳定的主窗口骨架）。"""
         MainWindowBuilder(self).build()
+        self._update_hint()
 
     def _rebuild_checklist(self):
         """重建检查清单UI（纯展示模式）"""
@@ -1166,6 +1167,14 @@ class App:
         self._update_lock_badge()
         if hasattr(self, "_hint_width_cache") and self._hint_width_cache is not None:
             self._hint_width_cache["text"] = ""
+        nudge_layout_changed = self._sync_nudge_row()
+        if nudge_layout_changed and hasattr(self, "main_frame"):
+            with contextlib.suppress(Exception):
+                self._recalc_size(force_shrink=not self._nudge_visible)
+
+    def _sync_nudge_row(self) -> bool:
+        """Mirror the GitHub Star nudge state into visible widgets."""
+        visible = bool(self._nudge_visible)
         if hasattr(self, "nudge_lbl") and self.nudge_lbl:
             self.nudge_lbl.config(text=(self._nudge_text() if self._nudge_visible else ""))
         if hasattr(self, "star_lbl") and self.star_lbl:
@@ -1173,6 +1182,20 @@ class App:
                 text=("GitHub Star" if self._nudge_visible else ""),
                 cursor=("hand2" if self._nudge_visible else "arrow"),
             )
+        if not hasattr(self, "nudge_row") or not self.nudge_row:
+            return False
+
+        current_manager = ""
+        with contextlib.suppress(Exception):
+            current_manager = self.nudge_row.winfo_manager()
+
+        if visible and current_manager != "grid":
+            self.nudge_row.grid()
+            return True
+        if not visible and current_manager == "grid":
+            self.nudge_row.grid_remove()
+            return True
+        return False
 
     def _open_star_url(self) -> None:
         url = AboutConfig.GITHUB_URL
