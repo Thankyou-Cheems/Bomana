@@ -216,11 +216,7 @@ class AppPanelRenderer:
     @classmethod
     def _format_active_info_text(cls, info: dict[str, Any]) -> str:
         distance = cls._safe_float(info.get("distance_km", 0.0))
-        base_text = format_distance_ete(distance, info.get("ete_str"))
-        name = str(info.get("name", "") or "").strip()
-        if info.get("type") == "poi" and name and name != "兴趣点":
-            return f"{name} {base_text}"
-        return base_text
+        return format_distance_ete(distance, info.get("ete_str"))
 
     @classmethod
     def _target_info_from_legacy_zone(cls, zone: Any) -> dict[str, Any] | None:
@@ -245,7 +241,7 @@ class AppPanelRenderer:
         if primary_target_info is not None:
             return cls._target_info_from_legacy_zone(primary_target_info)
         return next(
-            (info for info in targets_info if info.get("type") in {"poi", "zone"}),
+            (info for info in targets_info if info.get("type") == "zone"),
             None,
         )
 
@@ -257,32 +253,17 @@ class AppPanelRenderer:
         target_info = self._primary_target_info(targets_info, primary_target_info)
         has_primary_labels = app.tape_turn_lbl and app.tape_deviation_lbl and app.tape_tolerance_lbl
         if target_info and has_primary_labels:
-            target_type = str(target_info.get("type", "") or "")
             rel = self._safe_float(target_info.get("relative", 0.0))
             distance = self._safe_float(target_info.get("distance_km", 0.0))
             info_text = self._format_active_info_text(target_info)
 
-            if target_type == "poi":
-                label_text = "◇兴趣点:"
-                label_color = Theme.YELLOW
-                turn_text = str(target_info.get("direction", "") or "").strip()
-                turn_color = Theme.YELLOW
-                if not turn_text:
-                    turn_text, turn_color = calculate_airfield_turn_indicator(rel)
-                dev_text = str(target_info.get("cdi_indicator", "") or "").strip()
-                dev_color = str(target_info.get("cdi_color", "") or "").strip() or Theme.YELLOW
-                if not dev_text:
-                    tolerance = get_cdi_tolerance(distance)
-                    dev_text, dev_color = calculate_zone_status(abs(rel), tolerance)
-                tol_text = ""
-            else:
-                tolerance = get_cdi_tolerance(distance)
-                scale = calculate_heading_tape_scale(distance)
-                turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
-                dev_text, dev_color = calculate_zone_status(abs(rel), tolerance)
-                label_text = "⊚战区:"
-                label_color = Theme.RED
-                tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
+            tolerance = get_cdi_tolerance(distance)
+            scale = calculate_heading_tape_scale(distance)
+            turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
+            dev_text, dev_color = calculate_zone_status(abs(rel), tolerance)
+            label_text = "⊚战区:"
+            label_color = Theme.RED
+            tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
 
             if hasattr(app, "tape_zone_label") and app.tape_zone_label:
                 app.tape_zone_label.config(text=label_text, fg=label_color)

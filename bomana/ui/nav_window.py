@@ -551,11 +551,7 @@ class NavigationWindow:
     @classmethod
     def _format_active_info_text(cls, info: dict[str, Any]) -> str:
         distance = cls._safe_float(info.get("distance_km", 0.0))
-        base_text = format_distance_ete(distance, info.get("ete_str"))
-        name = str(info.get("name", "") or "").strip()
-        if info.get("type") == "poi" and name and name != "兴趣点":
-            return f"{name} {base_text}"
-        return base_text
+        return format_distance_ete(distance, info.get("ete_str"))
 
     def update_display(self, snap: UISnapshot):
         """更新独立导航窗显示（简洁航向带版）。"""
@@ -599,31 +595,16 @@ class NavigationWindow:
         self.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
 
         if primary_info:
-            target_type = str(primary_info.get("type", "") or "")
             rel = self._safe_float(primary_info.get("relative", 0.0))
             distance = self._safe_float(primary_info.get("distance_km", 0.0))
             info_text = self._format_active_info_text(primary_info)
-            if target_type == "poi":
-                self.zone_label.config(text="◇兴趣点", fg=Theme.YELLOW)
-                turn_text = str(primary_info.get("direction", "") or "").strip()
-                turn_color = Theme.YELLOW
-                if not turn_text:
-                    turn_text, turn_color = calculate_airfield_turn_indicator(rel)
-                status_text = str(primary_info.get("cdi_indicator", "") or "").strip()
-                status_color = str(primary_info.get("cdi_color", "") or "").strip() or Theme.YELLOW
-                if not status_text:
-                    tolerance = get_cdi_tolerance(distance)
-                    status_text, status_color = calculate_zone_status(abs(rel), tolerance)
-                self.tolerance_lbl.config(text="")
-                info_color = Theme.YELLOW
-            else:
-                self.zone_label.config(text="⊚战区", fg=Theme.RED)
-                tolerance = get_cdi_tolerance(distance)
-                scale = calculate_heading_tape_scale(distance)
-                turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
-                status_text, status_color = calculate_zone_status(abs(rel), tolerance)
-                self.tolerance_lbl.config(text=f"±{tolerance:.1f}° {scale:.1f}x")
-                info_color = Theme.RED
+            self.zone_label.config(text="⊚战区", fg=Theme.RED)
+            tolerance = get_cdi_tolerance(distance)
+            scale = calculate_heading_tape_scale(distance)
+            turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
+            status_text, status_color = calculate_zone_status(abs(rel), tolerance)
+            self.tolerance_lbl.config(text=f"±{tolerance:.1f}° {scale:.1f}x")
+            info_color = Theme.RED
             self.zone_turn.config(text=turn_text, fg=turn_color)
             self.zone_status.config(text=status_text, fg=status_color)
             self.zone_info.config(text=info_text, fg=info_color)

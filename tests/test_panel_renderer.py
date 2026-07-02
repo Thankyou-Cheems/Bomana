@@ -52,7 +52,7 @@ class PanelRendererNavListTests(unittest.TestCase):
         self.assertEqual(item.relative, "-4.90°")
         self.assertEqual(item.fg, Theme.GREEN)
 
-    def test_tape_status_row_formats_interest_point_as_primary_target(self) -> None:
+    def test_tape_status_row_keeps_zone_primary_when_poi_marker_exists(self) -> None:
         app = SimpleNamespace(
             tape_zone_label=FakeLabel(),
             tape_turn_lbl=FakeLabel(),
@@ -70,25 +70,28 @@ class PanelRendererNavListTests(unittest.TestCase):
             "name": "补给点",
             "relative": 12.0,
             "distance_km": 4.25,
-            "direction": "右转 12°",
-            "ete_str": "00:34",
-            "cdi_indicator": "偏右",
-            "cdi_color": "#f2c14e",
             "color": Theme.YELLOW,
         }
+        zone_info = {
+            "type": "zone",
+            "name": "战区",
+            "relative": -3.0,
+            "distance_km": 7.0,
+            "ete_str": "01:10",
+            "color": Theme.RED,
+        }
 
-        renderer.update_tape_info_labels([poi_info], poi_info)
+        renderer.update_tape_info_labels([poi_info, zone_info])
 
-        self.assertEqual(app.tape_zone_label.cget("text"), "◇兴趣点:")
-        self.assertEqual(app.tape_zone_label.cget("fg"), Theme.YELLOW)
-        self.assertEqual(app.tape_turn_lbl.cget("text"), "右转 12°")
-        self.assertEqual(app.tape_deviation_lbl.cget("text"), "偏右")
-        self.assertEqual(app.tape_deviation_lbl.cget("fg"), "#f2c14e")
-        self.assertEqual(app.tape_zone_info.cget("fg"), Theme.YELLOW)
-        self.assertIn("补给点", app.tape_zone_info.cget("text"))
-        self.assertIn("4.2km", app.tape_zone_info.cget("text"))
-        self.assertIn("00:34", app.tape_zone_info.cget("text"))
-        self.assertEqual(app.tape_tolerance_legend.cget("text"), "")
+        self.assertEqual(app.tape_zone_label.cget("text"), "⊚战区:")
+        self.assertEqual(app.tape_zone_label.cget("fg"), Theme.RED)
+        self.assertNotIn("补给点", app.tape_zone_info.cget("text"))
+        self.assertIn("7.0km", app.tape_zone_info.cget("text"))
+        self.assertIn("01:10", app.tape_zone_info.cget("text"))
+        self.assertEqual(app.tape_zone_info.cget("fg"), Theme.RED)
+        self.assertTrue(app.tape_turn_lbl.cget("text"))
+        self.assertTrue(app.tape_deviation_lbl.cget("text"))
+        self.assertIn("°", app.tape_tolerance_legend.cget("text"))
 
     def test_icon_manager_uses_nearest_generated_size(self) -> None:
         self.assertEqual(IconManager._nearest_asset_size(17), 18)

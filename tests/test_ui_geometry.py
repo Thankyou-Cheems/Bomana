@@ -149,15 +149,16 @@ class TkGeometryTests(unittest.TestCase):
             tape.update_tape_multi(
                 90.0,
                 [
+                    {"type": "zone", "relative": 8.0, "distance_km": 7.0, "is_primary": True},
                     {
                         "type": "poi",
                         "relative": 0.0,
                         "distance_km": 4.2,
-                        "is_primary": True,
+                        "is_primary": False,
                         "is_target": True,
-                    }
+                    },
                 ],
-                4.2,
+                7.0,
             )
             self.root.update_idletasks()
 

@@ -65,7 +65,7 @@ def build_navigation_tape_model(
     active_targets_info: list[dict[str, Any]] = []
     primary_zone = select_display_primary_zone(getattr(snap, "zones", []))
     interest_point = getattr(snap, "interest_point", None)
-    primary_target = interest_point or primary_zone
+    primary_target = primary_zone
     primary_target_info: dict[str, Any] | None = None
 
     if interest_point is not None:
@@ -77,31 +77,16 @@ def build_navigation_tape_model(
                 "type": "poi",
                 "relative": poi_relative,
                 "distance_km": poi_distance,
-                "is_primary": True,
+                "is_primary": False,
                 "is_target": True,
                 "name": poi_name,
             }
         )
-        primary_target_info = {
-            "type": "poi",
-            "name": poi_name,
-            "icon": "◇",
-            "relative": poi_relative,
-            "distance_km": poi_distance,
-            "direction": getattr(interest_point, "direction", ""),
-            "ete_str": getattr(interest_point, "ete_str", ""),
-            "cdi_indicator": getattr(interest_point, "cdi_indicator", ""),
-            "cdi_color": getattr(interest_point, "cdi_color", Theme.YELLOW),
-            "color": Theme.YELLOW,
-        }
-        active_targets_info.append(primary_target_info)
 
     for zone in getattr(snap, "zones", []):
         zone_id = getattr(zone, "id", None)
         primary_zone_id = getattr(primary_zone, "id", None)
-        is_primary = bool(
-            interest_point is None and primary_zone is not None and zone_id == primary_zone_id
-        )
+        is_primary = bool(primary_zone is not None and zone_id == primary_zone_id)
         zone_relative = _safe_float(getattr(zone, "relative", 0.0))
         zone_distance = _safe_float(getattr(zone, "distance_km", 0.0))
         zone_is_target = bool(getattr(zone, "is_target", False))
