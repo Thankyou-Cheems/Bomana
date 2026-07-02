@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover - exercised on non-Windows test hosts
 from dataclasses import dataclass
 from pathlib import Path
 
-from bomana.config import SoundConfig
+from bomana.config.settings import SoundConfig
 
 # ============================================================================
 # 音效管理

@@ -5,7 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from dataclasses import dataclass
 
-from bomana.config import (
+from bomana.config.settings import (
     HUDConfig,
     OverspeedConfig,
     UIConfig,

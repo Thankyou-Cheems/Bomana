@@ -4,10 +4,10 @@ This file is the single place for agent guidance and project rules.
 Keep it concise and update when workflows or boundaries change.
 
 ## Quick Map
-- Launcher entry: `launcher.pyw` (compatibility/distribution facade)
-- Launcher package: `launcher/` (manifest projection, download cache, install facade, bootstrap metadata)
+- Launcher entry: `launcher.pyw` (distribution/PyInstaller entrypoint)
+- Launcher package: `launcher/` (manifest projection, download cache, install transactions, bootstrap metadata)
 - App entry: `Bomana.pyw`
-- Config: `bomana/config/` (facade: `__init__.py`; feature flags: `feature_profile.py`; settings: `settings.py`)
+- Config: `bomana/config/` (package marker: `__init__.py`; feature flags: `feature_profile.py`; settings: `settings.py`; static data: `static_data.py`)
 - Core: `bomana/core/` (state, telemetry, ballistics, logic)
 - UI: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound)

@@ -6,17 +6,17 @@ import tkinter as tk
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from bomana.config import (
-    ENABLE_CCRP,
+from bomana.config.feature_profile import ENABLE_CCRP
+from bomana.config.settings import (
     BombConfig,
     OverspeedConfig,
     PanelConfig,
-    Theme,
     UIConfig,
     ZoneConfig,
 )
 from bomana.ui.icon_assets import IconManager
 from bomana.ui.text_utils import bind_dynamic_wrap, measure_min_width
+from bomana.ui.theme import Theme
 from bomana.ui.widgets import HeadingTape, Pill
 
 if TYPE_CHECKING:

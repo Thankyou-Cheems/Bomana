@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from bomana.config import HUDConfig
+from bomana.config.settings import HUDConfig
 from bomana.ui.hud_overlay import (
     HUDOverlay,
     HUDOverlayUnavailable,

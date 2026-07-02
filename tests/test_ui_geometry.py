@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from bomana.config import UIConfig
+from bomana.config.settings import UIConfig
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui.dialogs import _ScalableDialogMixin, _ScopedMousewheelBinding
 from bomana.ui.main_window import MainWindowBuilder
@@ -355,9 +355,6 @@ class TkGeometryTests(unittest.TestCase):
             remaining_sec=42.0,
             progress=0.5,
             sortie_id=1,
-            main_badge=("运行中", "#fff", "#000"),
-            flight_badge=("飞行", "#fff", "#000"),
-            status_text="",
             api_down=False,
             api_down_pending=False,
             on_ground=False,
@@ -367,7 +364,7 @@ class TkGeometryTests(unittest.TestCase):
             fuel_percent=75,
             fuel_rate_kg_min=96,
             fuel_rate_stable=True,
-            fuel_time_remaining_str="18:45",
+            fuel_remaining_time_min=18 + (45 / 60),
             altitude_m=4321,
             return_fuel_needed_kg=650,
             return_status="warning",

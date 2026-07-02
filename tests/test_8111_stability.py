@@ -4,7 +4,7 @@ import time
 import unittest
 from unittest import mock
 
-from bomana.config import GameConfig
+from bomana.config.settings import GameConfig
 from bomana.core.logic import GameLogic
 from bomana.core.state import LifeState, MapInfo, MapObjData, Phase, TelemetryData, Zone
 

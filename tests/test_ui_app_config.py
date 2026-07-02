@@ -209,6 +209,9 @@ def test_app_keeps_only_external_callback_wrappers() -> None:
         "_reset_navigation_layout_state",
         "_update_fuel_display",
         "_update_bombing_display",
+        "_capture_snap_anchor",
+        "_apply_snap_anchor",
+        "refresh_local_hotkey_bindings",
     }
 
     app_methods = set(App.__dict__)
@@ -216,55 +219,6 @@ def test_app_keeps_only_external_callback_wrappers() -> None:
     assert not (removed_internal_wrappers & app_methods)
     assert "_toggle_debug" in app_methods
     assert "_show_hud_overlay" in app_methods
-
-
-def test_refresh_local_hotkey_bindings_unbinds_old_sequences(monkeypatch) -> None:
-    app = _make_config_only_app()
-    bound: list[str] = []
-    unbound: list[str] = []
-    app.root = SimpleNamespace(
-        bind=lambda sequence, _callback: bound.append(sequence),
-        unbind=lambda sequence: unbound.append(sequence),
-    )
-    app._local_hotkey_sequences = ["<F8>", "<F9>"]
-    app._toggle_lock = lambda: None
-    app._next_corner = lambda: None
-    app._toggle_beep = lambda: None
-    app._toggle_zone_sound = lambda: None
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_LOCK", "F1")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_CORNER", "F2")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_BEEP", "F3")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_ZONES", "F4")
-    monkeypatch.setattr(app_module, "ENABLE_ZONES", True)
-
-    app.refresh_local_hotkey_bindings()
-
-    assert unbound == ["<F8>", "<F9>"]
-    assert bound == ["<F1>", "<F2>", "<F3>", "<F4>"]
-    assert app._local_hotkey_sequences == ["<F1>", "<F2>", "<F3>", "<F4>"]
-
-
-def test_refresh_local_hotkey_bindings_omits_zones_when_disabled(monkeypatch) -> None:
-    app = _make_config_only_app()
-    bound: list[str] = []
-    app.root = SimpleNamespace(
-        bind=lambda sequence, _callback: bound.append(sequence),
-        unbind=lambda _sequence: None,
-    )
-    app._local_hotkey_sequences = []
-    app._toggle_lock = lambda: None
-    app._next_corner = lambda: None
-    app._toggle_beep = lambda: None
-    app._toggle_zone_sound = lambda: None
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_LOCK", "F1")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_CORNER", "F2")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_BEEP", "F3")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_ZONES", "F4")
-    monkeypatch.setattr(app_module, "ENABLE_ZONES", False)
-
-    app.refresh_local_hotkey_bindings()
-
-    assert bound == ["<F1>", "<F2>", "<F3>"]
 
 
 def test_hotkey_config_rejects_invalid_saved_bindings() -> None:
@@ -291,33 +245,6 @@ def test_hotkey_config_rejects_invalid_saved_bindings() -> None:
         app_module.HotkeyConfig.set_bindings(original)
 
 
-def test_refresh_local_hotkey_bindings_skips_invalid_runtime_key(monkeypatch) -> None:
-    app = _make_config_only_app()
-    bound: list[str] = []
-
-    def bind(sequence, _callback):
-        if sequence == "<BAD KEY>":
-            raise app_module.tk.TclError("bad event type")
-        bound.append(sequence)
-
-    app.root = SimpleNamespace(bind=bind, unbind=lambda _sequence: None)
-    app._local_hotkey_sequences = []
-    app._toggle_lock = lambda: None
-    app._next_corner = lambda: None
-    app._toggle_beep = lambda: None
-    app._toggle_zone_sound = lambda: None
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_LOCK", "BAD KEY")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_CORNER", "F2")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_BEEP", "F3")
-    monkeypatch.setattr(app_module.HotkeyConfig, "KEY_ZONES", "F4")
-    monkeypatch.setattr(app_module, "ENABLE_ZONES", True)
-
-    app.refresh_local_hotkey_bindings()
-
-    assert bound == ["<F2>", "<F3>", "<F4>"]
-    assert app._local_hotkey_sequences == ["<F2>", "<F3>", "<F4>"]
-
-
 def test_update_ui_frame_refreshes_visible_standalone_navigation_when_phase_exits(
     monkeypatch,
 ) -> None:
@@ -329,9 +256,6 @@ def test_update_ui_frame_refreshes_visible_standalone_navigation_when_phase_exit
         remaining_sec=None,
         progress=0.0,
         sortie_id=1,
-        main_badge=("待机", "#fff", "#000"),
-        flight_badge=("无", "#fff", "#000"),
-        status_text="",
         api_down=False,
         api_down_pending=False,
         on_ground=False,

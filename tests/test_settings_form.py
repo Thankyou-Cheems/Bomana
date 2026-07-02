@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from bomana.config import HUDConfig, UIConfig
+from bomana.config.settings import (
+    HUDConfig,
+    UIConfig,
+)
 from bomana.ui import settings_form
 
 

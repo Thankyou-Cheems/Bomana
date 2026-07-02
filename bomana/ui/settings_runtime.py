@@ -6,7 +6,7 @@ import contextlib
 from pathlib import Path
 from typing import Any
 
-from bomana.config import (
+from bomana.config.settings import (
     BallisticPhysicsParams,
     BombConfig,
     HotkeyConfig,
@@ -15,9 +15,9 @@ from bomana.config import (
     PanelConfig,
     SnapConfig,
     SoundConfig,
-    Theme,
     UIConfig,
 )
+from bomana.ui.theme import Theme
 
 
 class SettingsRuntimeMixin:
@@ -77,8 +77,7 @@ class SettingsRuntimeMixin:
             setattr(PanelConfig, key, value)
         HotkeyConfig.GLOBAL_HOTKEYS = new_hotkeys_enabled
         HotkeyConfig.set_bindings(hotkey_bindings)
-        if hasattr(self.app, "refresh_local_hotkey_bindings"):
-            self.app.refresh_local_hotkey_bindings()
+        self.app.runtime_services.refresh_local_hotkey_bindings()
         SnapConfig.enabled = new_snap_enabled
         SnapConfig.SNAP_DISTANCE = new_snap_distance
         self.app.sound.set_enabled(new_sound_enabled)

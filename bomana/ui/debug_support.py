@@ -3,8 +3,12 @@
 from dataclasses import replace
 from typing import Any
 
-from bomana.config import BombConfig, Theme, UIConfig
+from bomana.config.settings import (
+    BombConfig,
+    UIConfig,
+)
 from bomana.core.state import AirfieldDisplayInfo, Phase, UISnapshot, ZoneDisplayInfo
+from bomana.ui.theme import Theme
 
 
 class AppDebugSupport:
@@ -138,7 +142,6 @@ class AppDebugSupport:
             "aircraft_type_name": "mig-21_bison",
             "overspeed_level": "safe",
             "overspeed_ratio": 0.0,
-            "overspeed_display_ratio": 0.0,
             "overspeed_current_ias_kmh": 0.0,
             "overspeed_current_mach": None,
             "overspeed_limit_kmh": 0.0,
@@ -172,9 +175,6 @@ class AppDebugSupport:
                 remaining_sec=470.0,
                 progress=0.48,
                 sortie_id=903,
-                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
-                flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
-                status_text="模拟: 巡航导航",
                 api_down=False,
                 api_down_pending=False,
                 on_ground=False,
@@ -196,7 +196,7 @@ class AppDebugSupport:
                 fuel_percent=71.5,
                 fuel_rate_kg_min=430.0,
                 fuel_rate_stable=True,
-                fuel_time_remaining_str="04:19",
+                fuel_remaining_time_min=4 + (19 / 60),
                 altitude_m=3250.0,
                 return_fuel_needed_kg=580.0,
                 return_status="safe",
@@ -234,9 +234,6 @@ class AppDebugSupport:
                 remaining_sec=121.0,
                 progress=0.87,
                 sortie_id=1201,
-                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
-                flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
-                status_text="模拟: 偏航修正中",
                 api_down=False,
                 api_down_pending=False,
                 on_ground=False,
@@ -258,7 +255,7 @@ class AppDebugSupport:
                 fuel_percent=54.5,
                 fuel_rate_kg_min=520.0,
                 fuel_rate_stable=True,
-                fuel_time_remaining_str="02:18",
+                fuel_remaining_time_min=2 + (18 / 60),
                 altitude_m=2780.0,
                 return_fuel_needed_kg=410.0,
                 return_status="warning",
@@ -295,9 +292,6 @@ class AppDebugSupport:
                 remaining_sec=42.0,
                 progress=0.95,
                 sortie_id=1540,
-                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
-                flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
-                status_text="模拟: 低油返航",
                 api_down=False,
                 api_down_pending=False,
                 on_ground=False,
@@ -319,7 +313,7 @@ class AppDebugSupport:
                 fuel_percent=9.6,
                 fuel_rate_kg_min=460.0,
                 fuel_rate_stable=True,
-                fuel_time_remaining_str="00:33",
+                fuel_remaining_time_min=33 / 60,
                 altitude_m=1680.0,
                 return_fuel_needed_kg=340.0,
                 return_status="danger",
@@ -371,9 +365,6 @@ class AppDebugSupport:
                 remaining_sec=301.0,
                 progress=0.66,
                 sortie_id=640,
-                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
-                flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
-                status_text="模拟: 投弹窗口测试",
                 api_down=False,
                 api_down_pending=False,
                 on_ground=False,
@@ -401,7 +392,7 @@ class AppDebugSupport:
                 fuel_percent=51.1,
                 fuel_rate_kg_min=390.0,
                 fuel_rate_stable=True,
-                fuel_time_remaining_str="02:21",
+                fuel_remaining_time_min=2 + (21 / 60),
                 altitude_m=4120.0,
                 return_fuel_needed_kg=370.0,
                 return_status="safe",
@@ -440,9 +431,6 @@ class AppDebugSupport:
                 remaining_sec=890.0,
                 progress=0.02,
                 sortie_id=100,
-                main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
-                flight_badge=("就绪✓", Theme.TEXT, Theme.GREEN),
-                status_text="模拟: 地面检查",
                 api_down=False,
                 api_down_pending=False,
                 on_ground=True,
@@ -466,7 +454,7 @@ class AppDebugSupport:
                 fuel_percent=96.0,
                 fuel_rate_kg_min=0.0,
                 fuel_rate_stable=False,
-                fuel_time_remaining_str="",
+                fuel_remaining_time_min=None,
                 altitude_m=8.0,
                 return_fuel_needed_kg=0.0,
                 return_status="unknown",
@@ -492,18 +480,14 @@ class AppDebugSupport:
             os_level = "caution"
             os_ratio = 0.955
             os_reason = "ias"
-            os_status = "模拟: 超速压测 (提前提示)"
         elif phase_slot < 60:
             os_level = "warning"
             os_ratio = 0.978
             os_reason = "ias+mach"
-            os_status = "模拟: 超速压测 (接近极限)"
         else:
             os_level = "critical"
             os_ratio = 1.005
             os_reason = "ias+mach"
-            os_status = "模拟: 超速压测 (危险)"
-
         return replace(
             base_snap,
             phase=Phase.ALIVE,
@@ -512,9 +496,6 @@ class AppDebugSupport:
             remaining_sec=188.0,
             progress=0.79,
             sortie_id=1120,
-            main_badge=("DEBUG模拟", Theme.TEXT, Theme.BLUE),
-            flight_badge=("飞行中", Theme.TEXT_DIM, Theme.GRAYPILL),
-            status_text=os_status,
             api_down=False,
             api_down_pending=False,
             on_ground=False,
@@ -541,7 +522,7 @@ class AppDebugSupport:
             fuel_percent=54.4,
             fuel_rate_kg_min=470.0,
             fuel_rate_stable=True,
-            fuel_time_remaining_str="02:05",
+            fuel_remaining_time_min=2 + (5 / 60),
             altitude_m=4680.0,
             return_fuel_needed_kg=390.0,
             return_status="safe",
@@ -561,7 +542,6 @@ class AppDebugSupport:
             hud_attitude_fallback_reason="",
             overspeed_level=os_level,
             overspeed_ratio=os_ratio,
-            overspeed_display_ratio=max(os_ratio, (0.86 / 0.88)),
             overspeed_current_ias_kmh=980.0 * os_ratio,
             overspeed_current_mach=0.86,
             overspeed_limit_kmh=980.0,

@@ -6,7 +6,7 @@ import tkinter as tk
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from bomana.config import Theme
+from bomana.ui.theme import Theme
 
 
 @dataclass(frozen=True, slots=True)

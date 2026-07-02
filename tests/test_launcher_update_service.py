@@ -11,7 +11,8 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from bomana import launcher_core, launcher_install
+from bomana import launcher_core
+from launcher import install_txn as launcher_install
 
 TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 
@@ -43,10 +44,11 @@ def write_config_package(package_dir: Path, version: str, *, sentinel: str | Non
     config_dir.mkdir(parents=True, exist_ok=True)
     sentinel_line = f'SENTINEL = "{sentinel}"\n' if sentinel is not None else ""
     (config_dir / "__init__.py").write_text(
-        f'{sentinel_line}__version__ = "{version}"\n',
+        f'__version__ = "{version}"\n',
         encoding="utf-8",
     )
     (config_dir / "feature_profile.py").write_text("ENABLE_CCRP = True\n", encoding="utf-8")
+    (config_dir / "settings.py").write_text(sentinel_line, encoding="utf-8")
     (package_dir / "metadata.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
 
 
@@ -693,7 +695,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
         self.assertEqual(final_version, "2.0.0")
         self.assertEqual(
-            self.launcher._read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
             "2.0.0",
         )
         cached = list(download_dir.glob("Bomana_app_*"))
@@ -725,7 +727,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             self.launcher._download_update_from_manifest(self.base, manifest)
 
         self.assertEqual(
-            self.launcher._read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
             "1.0.0",
         )
         self.assertFalse(list(download_dir.glob("Bomana_app_*")))
@@ -841,7 +843,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         lock_path.write_text("pid=1\n", encoding="utf-8")
 
         with self.assertRaisesRegex(RuntimeError, "另一个更新任务"):
-            self.launcher._install_zip_package(
+            launcher_install.install_zip_package(
                 self.base,
                 package_bytes,
                 package_sha,
@@ -864,7 +866,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         package_sha = self.launcher._sha256_bytes(package_bytes)
 
         with self.assertRaisesRegex(RuntimeError, "metadata.py"):
-            self.launcher._install_zip_package(
+            launcher_install.install_zip_package(
                 self.base,
                 package_bytes,
                 package_sha,
@@ -883,7 +885,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         stale_time = time.time() - self.launcher.UPDATE_LOCK_STALE_SEC - 10
         os.utime(lock_path, (stale_time, stale_time))
 
-        steps = self.launcher.InstallTransaction.recover_incomplete(self.base)
+        steps = launcher_install.InstallTransaction.recover_incomplete(self.base)
 
         self.assertIn("restore_backup", steps)
         self.assertIn("cleanup_stale_lock", steps)
@@ -895,7 +897,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.write_previous_app("1.5.0")
         status_events = []
 
-        final_version, preserved_version = self.launcher._rollback_to_previous_app(
+        final_version, preserved_version = launcher_install.rollback_to_previous_app(
             self.base,
             status_cb=lambda *args: status_events.append(args),
         )
@@ -903,11 +905,13 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertEqual(final_version, "1.5.0")
         self.assertEqual(preserved_version, "2.0.0")
         self.assertEqual(
-            self.launcher._read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
             "1.5.0",
         )
         self.assertEqual(
-            self.launcher._read_local_app_version(self.base / self.launcher.APP_PREVIOUS_DIR_NAME),
+            launcher_install.read_local_app_version(
+                self.base / self.launcher.APP_PREVIOUS_DIR_NAME
+            ),
             "2.0.0",
         )
         self.assertTrue(status_events)
@@ -929,14 +933,16 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             patch.object(launcher_install.os, "replace", side_effect=fail_third_replace),
             self.assertRaisesRegex(OSError, "third move failed"),
         ):
-            self.launcher._rollback_to_previous_app(self.base)
+            launcher_install.rollback_to_previous_app(self.base)
 
         self.assertEqual(
-            self.launcher._read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
             "2.0.0",
         )
         self.assertEqual(
-            self.launcher._read_local_app_version(self.base / self.launcher.APP_PREVIOUS_DIR_NAME),
+            launcher_install.read_local_app_version(
+                self.base / self.launcher.APP_PREVIOUS_DIR_NAME
+            ),
             "1.5.0",
         )
         self.assertFalse((self.base / self.launcher.UPDATE_LOCK_FILE_NAME).exists())
@@ -947,7 +953,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         package_dir.mkdir(parents=True)
         (app_dir / "Bomana.pyw").write_text(
             "from pathlib import Path\n"
-            "from bomana.config import SENTINEL\n"
+            "from bomana.config.settings import SENTINEL\n"
             "Path('result.txt').write_text(SENTINEL, encoding='utf-8')\n",
             encoding="utf-8",
         )
@@ -958,9 +964,9 @@ class LauncherUpdateServiceTests(unittest.TestCase):
                 return None
 
             def exec_module(self, module) -> None:
-                if module.__name__ == "bomana":
+                if module.__name__ == "bomana" or module.__name__ == "bomana.config":
                     module.__path__ = []
-                elif module.__name__ == "bomana.config":
+                elif module.__name__ == "bomana.config.settings":
                     module.SENTINEL = "frozen"
 
         class FrozenBomanaFinder:
@@ -972,6 +978,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
                         is_package=True,
                     )
                 if fullname == "bomana.config":
+                    return importlib.machinery.ModuleSpec(fullname, FrozenBomanaLoader())
+                if fullname == "bomana.config.settings":
                     return importlib.machinery.ModuleSpec(fullname, FrozenBomanaLoader())
                 return None
 

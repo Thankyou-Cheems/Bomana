@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 from typing import Any
 
-from bomana.config import BombConfig, FuelConfig, Theme
+from bomana.config.settings import (
+    BombConfig,
+    FuelConfig,
+)
+from bomana.ui.theme import Theme
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +66,25 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _format_fuel_remaining_time(minutes: float | None) -> str:
+    if minutes is None:
+        return ""
+    if minutes > 60:
+        return ">60:00"
+    remaining_seconds = max(0, int(minutes * 60))
+    rm, rs = divmod(remaining_seconds, 60)
+    return f"{rm:02d}:{rs:02d}"
+
+
+def _compute_overspeed_fill_ratio(snap: Any, ias_ratio: float) -> float:
+    mach = getattr(snap, "overspeed_current_mach", None)
+    limit_mach = _safe_float(getattr(snap, "overspeed_limit_mach", 0.0))
+    mach_ratio = 0.0
+    if mach is not None and limit_mach > 0.0:
+        mach_ratio = _safe_float(mach) / limit_mach
+    return max(ias_ratio, mach_ratio, 0.0)
+
+
 def format_aircraft_type_label(raw: str) -> str:
     text = str(raw or "").strip().replace("_", " ")
     text = " ".join(text.split())
@@ -85,8 +108,11 @@ def build_fuel_display_model(snap: Any) -> FuelDisplayModel:
         main_text = "-- kg (--%)"
         main_fg = Theme.TEXT_MUTED
 
-    if snap.fuel_time_remaining_str:
-        time = IconTextModel("clock", snap.fuel_time_remaining_str, Theme.TEXT)
+    remaining_time_text = _format_fuel_remaining_time(
+        getattr(snap, "fuel_remaining_time_min", None)
+    )
+    if remaining_time_text:
+        time = IconTextModel("clock", remaining_time_text, Theme.TEXT)
     else:
         time = IconTextModel("clock", "计算中...", Theme.TEXT_MUTED)
 
@@ -218,7 +244,6 @@ def build_bombing_display_model(snap: Any) -> BombingDisplayModel:
 def build_speed_strip_model(snap: Any) -> SpeedStripModel:
     speed_level = str(getattr(snap, "overspeed_level", "unknown") or "unknown")
     speed_ratio = _safe_float(getattr(snap, "overspeed_ratio", 0.0))
-    display_ratio = _safe_float(getattr(snap, "overspeed_display_ratio", speed_ratio))
     current_ias = _safe_float(getattr(snap, "overspeed_current_ias_kmh", 0.0))
     current_mach = getattr(snap, "overspeed_current_mach", None)
     limit_ias = _safe_float(getattr(snap, "overspeed_limit_kmh", 0.0))
@@ -228,6 +253,7 @@ def build_speed_strip_model(snap: Any) -> SpeedStripModel:
     aircraft_type_name = format_aircraft_type_label(
         str(getattr(snap, "aircraft_type_name", "") or "")
     )
+    display_ratio = _compute_overspeed_fill_ratio(snap, speed_ratio)
 
     if speed_level == "critical":
         state_text = "超速危险"

@@ -2,7 +2,10 @@
 
 import math
 
-from bomana.config import BallisticPhysicsParams, BombConfig
+from bomana.config.settings import (
+    BallisticPhysicsParams,
+    BombConfig,
+)
 
 # ============================================================================
 # 弹道物理计算辅助函数

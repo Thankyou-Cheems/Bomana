@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
-from bomana.config import NetworkConfig
+from bomana.config.settings import NetworkConfig
 from bomana.core.telemetry import MapObjectsFetcher
 
 # enforces: docs/specs/runtime-8111-boundary.md R8111-01..R8111-04

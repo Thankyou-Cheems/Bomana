@@ -4,7 +4,11 @@ import tkinter as tk
 import tkinter.font as tkfont
 from typing import Any
 
-from bomana.config import Theme, UIConfig, ZoneConfig
+from bomana.config.settings import (
+    UIConfig,
+    ZoneConfig,
+)
+from bomana.ui.theme import Theme
 from bomana.utils.math_utils import (
     calculate_heading_tape_scale,
     format_distance_dynamic,

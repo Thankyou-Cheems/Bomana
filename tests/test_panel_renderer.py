@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 from PIL import Image
 
-from bomana.config import Theme
 from bomana.ui.icon_assets import IconManager
 from bomana.ui.panel_renderer import AppPanelRenderer
+from bomana.ui.theme import Theme
 
 
 class FakeLabel:

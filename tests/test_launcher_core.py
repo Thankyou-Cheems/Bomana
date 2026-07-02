@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from bomana import launcher_core
-from bomana.launcher_install import read_local_app_version
+from launcher.install_txn import read_local_app_version, validate_app_package_root
 
 
 def test_launcher_core_version_and_source_helpers() -> None:
@@ -136,3 +136,15 @@ def test_launcher_install_reads_metadata_version(tmp_path: Path) -> None:
     (package_dir / "metadata.py").write_text('__version__ = "7.0.0"\n', encoding="utf-8")
 
     assert read_local_app_version(app_dir) == "7.0.0"
+
+
+def test_launcher_install_rejects_legacy_config_py_marker(tmp_path: Path) -> None:
+    app_dir = tmp_path / "app"
+    package_dir = app_dir / "bomana"
+    package_dir.mkdir(parents=True)
+    (app_dir / "Bomana.pyw").write_text("# entry\n", encoding="utf-8")
+    (package_dir / "metadata.py").write_text('__version__ = "7.0.0"\n', encoding="utf-8")
+    (package_dir / "config.py").write_text('__version__ = "7.0.0"\n', encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="bomana/config/__init__\\.py"):
+        validate_app_package_root(app_dir, "Bomana.pyw")

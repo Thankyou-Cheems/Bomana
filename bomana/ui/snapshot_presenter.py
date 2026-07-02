@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from bomana.config import Theme
 from bomana.core.state import Phase
+from bomana.ui.theme import Theme
 
 
 @dataclass(frozen=True, slots=True)

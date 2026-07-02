@@ -3,8 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from bomana import config
-from bomana.config import feature_profile, settings
+import bomana.config.feature_profile as feature_profile
+import bomana.config.settings as settings
 from bomana.utils.file_utils import ConfigManager
 
 # enforces: docs/specs/config-variants.md CFG-01..CFG-08
@@ -65,13 +65,15 @@ def test_source_feature_profile_defaults_to_enhanced() -> None:
     )
 
 
-def test_config_package_facade_preserves_public_reexports() -> None:
-    assert config.PanelConfig is settings.PanelConfig
-    assert config.Theme is not None
-    assert config.__version__
-    assert config.ENABLE_CCRP is feature_profile.ENABLE_CCRP
-    assert hasattr(config, "GameConfig")
-    assert hasattr(config, "BombConfig")
+def test_config_package_boundary_uses_explicit_submodules() -> None:
+    import bomana.config as config
+
+    assert config.__all__ == ["feature_profile", "settings", "static_data"]
+    assert settings.PanelConfig
+    assert feature_profile.ENABLE_CCRP is True
+    assert not hasattr(config, "PanelConfig")
+    assert not hasattr(config, "Theme")
+    assert not hasattr(config, "__version__")
 
 
 def test_panel_config_compile_flags_take_precedence(monkeypatch) -> None:

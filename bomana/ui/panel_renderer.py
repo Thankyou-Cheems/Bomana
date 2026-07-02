@@ -6,14 +6,15 @@ import tkinter as tk
 from dataclasses import dataclass
 from typing import Any
 
-from bomana.config import (
+from bomana.config.feature_profile import (
     ENABLE_AIRFIELDS,
     ENABLE_CCRP,
     ENABLE_FUEL,
     ENABLE_ZONES,
+)
+from bomana.config.settings import (
     OverspeedConfig,
     PanelConfig,
-    Theme,
     ZoneConfig,
 )
 from bomana.core.state import UISnapshot
@@ -25,6 +26,7 @@ from bomana.ui.panel_presenter import (
     build_speed_strip_model,
     format_aircraft_type_label,
 )
+from bomana.ui.theme import Theme
 from bomana.utils.math_utils import (
     calculate_airfield_status,
     calculate_airfield_turn_indicator,

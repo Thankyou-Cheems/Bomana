@@ -1,85 +1,9 @@
-"""Compatibility facade for Bomana runtime configuration."""
+"""Configuration package boundary.
 
-from bomana.config.feature_profile import (
-    ENABLE_ADVANCED_SETTINGS,
-    ENABLE_AIRFIELDS,
-    ENABLE_CCRP,
-    ENABLE_CHECKLIST,
-    ENABLE_FUEL,
-    ENABLE_ZONES,
-    FEATURE_FLAG_NAMES,
-)
-from bomana.config.metadata import (
-    PORTABLE_MIN_LAUNCHER_VERSION,
-    Theme,
-    __author__,
-    __copyright__,
-    __license__,
-    __repository__,
-    __title__,
-    __version__,
-)
-from bomana.config.settings import (
-    AboutConfig,
-    BallisticPhysicsParams,
-    BombConfig,
-    ChecklistConfig,
-    FileConfig,
-    FuelConfig,
-    GameConfig,
-    HotkeyConfig,
-    HUDConfig,
-    NetworkConfig,
-    OverspeedConfig,
-    PanelConfig,
-    SnapConfig,
-    SoundConfig,
-    UIConfig,
-    ZoneConfig,
-)
-from bomana.config.static_data import (
-    APP_ICON_FILE,
-    BOMB_PARAMS_JSON,
-    FM_SPEED_LIMITS_JSON,
-    LEGACY_BOMB_PARAMS_JSON,
-    SPONSOR_WECHAT_IMAGE,
-)
+Import symbols from explicit submodules:
+- `bomana.config.feature_profile` for build-variant feature flags.
+- `bomana.config.settings` for runtime configuration classes.
+- `bomana.config.static_data` for packaged static asset paths.
+"""
 
-__all__ = [
-    "APP_ICON_FILE",
-    "AboutConfig",
-    "BOMB_PARAMS_JSON",
-    "BallisticPhysicsParams",
-    "BombConfig",
-    "ChecklistConfig",
-    "ENABLE_ADVANCED_SETTINGS",
-    "ENABLE_AIRFIELDS",
-    "ENABLE_CCRP",
-    "ENABLE_CHECKLIST",
-    "ENABLE_FUEL",
-    "ENABLE_ZONES",
-    "FEATURE_FLAG_NAMES",
-    "FM_SPEED_LIMITS_JSON",
-    "FileConfig",
-    "FuelConfig",
-    "GameConfig",
-    "HUDConfig",
-    "HotkeyConfig",
-    "LEGACY_BOMB_PARAMS_JSON",
-    "NetworkConfig",
-    "OverspeedConfig",
-    "PORTABLE_MIN_LAUNCHER_VERSION",
-    "PanelConfig",
-    "SPONSOR_WECHAT_IMAGE",
-    "SnapConfig",
-    "SoundConfig",
-    "Theme",
-    "UIConfig",
-    "ZoneConfig",
-    "__author__",
-    "__copyright__",
-    "__license__",
-    "__repository__",
-    "__title__",
-    "__version__",
-]
+__all__ = ["feature_profile", "settings", "static_data"]

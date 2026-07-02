@@ -11,7 +11,6 @@ from bomana.config.feature_profile import (
     ENABLE_FUEL,
     ENABLE_ZONES,
 )
-from bomana.config.metadata import __author__, __repository__, __title__, __version__
 from bomana.config.static_data import (
     APP_ICON_FILE,
     BOMB_PARAMS_JSON,
@@ -19,6 +18,7 @@ from bomana.config.static_data import (
     LEGACY_BOMB_PARAMS_JSON,
     SPONSOR_WECHAT_IMAGE,
 )
+from bomana.metadata import __author__, __repository__, __title__, __version__
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 

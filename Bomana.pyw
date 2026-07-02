@@ -28,7 +28,8 @@ import sys
 import tkinter as tk
 from tkinter import messagebox
 
-from bomana.config import FileConfig, __version__
+from bomana.config.settings import FileConfig
+from bomana.metadata import __version__
 from bomana.ui.app import App
 from bomana.utils.diagnostics import app_context, configure_diagnostics, log_event, shutdown_diagnostics
 from bomana.utils.system import SingleInstanceManager, Win32

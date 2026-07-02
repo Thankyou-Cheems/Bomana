@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from bomana.config import FileConfig
+from bomana.config.settings import FileConfig
 from bomana.utils.file_utils import ConfigManager, StateManager, atomic_write_json
 
 

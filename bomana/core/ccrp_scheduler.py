@@ -3,7 +3,11 @@
 import math
 from typing import Any
 
-from bomana.config import ENABLE_CCRP, BombConfig, ZoneConfig
+from bomana.config.feature_profile import ENABLE_CCRP
+from bomana.config.settings import (
+    BombConfig,
+    ZoneConfig,
+)
 from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing_from_range
 from bomana.core.state import GameState, Phase, TelemetryData
 

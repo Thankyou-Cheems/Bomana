@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 from unittest import mock
 
-from bomana.config import HotkeyConfig, HUDConfig
+from bomana.config.settings import (
+    HotkeyConfig,
+    HUDConfig,
+)
 from bomana.ui import runtime_services
 from bomana.ui.dialogs import SettingsDialog
 from bomana.ui.runtime_services import AppRuntimeServices
@@ -132,6 +135,71 @@ def test_init_global_hotkeys_omits_zones_when_feature_is_disabled(monkeypatch) -
     hotkey_ids = [item[0] for item in captured["hotkeys"]]
     assert HotkeyConfig.HK_ID_ZONES not in hotkey_ids
     assert captured["started"] is True
+
+
+def test_refresh_local_hotkey_bindings_unbinds_old_sequences(monkeypatch) -> None:
+    bound: list[str] = []
+    unbound: list[str] = []
+    app = _make_hotkey_app()
+    app.root = SimpleNamespace(
+        bind=lambda sequence, _callback: bound.append(sequence),
+        unbind=lambda sequence: unbound.append(sequence),
+    )
+    services = AppRuntimeServices(app)
+    services.local_hotkey_sequences = ["<F8>", "<F9>"]
+    monkeypatch.setattr(HotkeyConfig, "KEY_LOCK", "F1")
+    monkeypatch.setattr(HotkeyConfig, "KEY_CORNER", "F2")
+    monkeypatch.setattr(HotkeyConfig, "KEY_BEEP", "F3")
+    monkeypatch.setattr(HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(runtime_services, "ENABLE_ZONES", True)
+
+    services.refresh_local_hotkey_bindings()
+
+    assert unbound == ["<F8>", "<F9>"]
+    assert bound == ["<F1>", "<F2>", "<F3>", "<F4>"]
+    assert services.local_hotkey_sequences == ["<F1>", "<F2>", "<F3>", "<F4>"]
+
+
+def test_refresh_local_hotkey_bindings_omits_zones_when_disabled(monkeypatch) -> None:
+    bound: list[str] = []
+    app = _make_hotkey_app()
+    app.root = SimpleNamespace(
+        bind=lambda sequence, _callback: bound.append(sequence),
+        unbind=lambda _sequence: None,
+    )
+    services = AppRuntimeServices(app)
+    monkeypatch.setattr(HotkeyConfig, "KEY_LOCK", "F1")
+    monkeypatch.setattr(HotkeyConfig, "KEY_CORNER", "F2")
+    monkeypatch.setattr(HotkeyConfig, "KEY_BEEP", "F3")
+    monkeypatch.setattr(HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(runtime_services, "ENABLE_ZONES", False)
+
+    services.refresh_local_hotkey_bindings()
+
+    assert bound == ["<F1>", "<F2>", "<F3>"]
+
+
+def test_refresh_local_hotkey_bindings_skips_invalid_runtime_key(monkeypatch) -> None:
+    bound: list[str] = []
+    app = _make_hotkey_app()
+
+    def bind(sequence, _callback):
+        if sequence == "<BAD KEY>":
+            raise runtime_services.tk.TclError("bad event type")
+        bound.append(sequence)
+
+    app.root = SimpleNamespace(bind=bind, unbind=lambda _sequence: None)
+    services = AppRuntimeServices(app)
+    monkeypatch.setattr(HotkeyConfig, "KEY_LOCK", "BAD KEY")
+    monkeypatch.setattr(HotkeyConfig, "KEY_CORNER", "F2")
+    monkeypatch.setattr(HotkeyConfig, "KEY_BEEP", "F3")
+    monkeypatch.setattr(HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(runtime_services, "ENABLE_ZONES", True)
+
+    services.refresh_local_hotkey_bindings()
+
+    assert bound == ["<F2>", "<F3>", "<F4>"]
+    assert services.local_hotkey_sequences == ["<F2>", "<F3>", "<F4>"]
 
 
 def test_settings_hotkey_restart_uses_runtime_services(monkeypatch) -> None:

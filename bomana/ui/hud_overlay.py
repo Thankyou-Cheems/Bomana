@@ -8,7 +8,10 @@ import tkinter as tk
 from dataclasses import dataclass
 from typing import Any
 
-from bomana.config import HUDConfig, UIConfig
+from bomana.config.settings import (
+    HUDConfig,
+    UIConfig,
+)
 from bomana.utils.system import Win32, resolve_tk_font_tuple
 
 _HUD_RUNTIME_ERRORS = (OSError, AttributeError, TypeError, ValueError)

@@ -5,27 +5,30 @@ from __future__ import annotations
 import contextlib
 import os
 import time
+import tkinter as tk
 from typing import Any
 
-from bomana.config import (
+from bomana.config.feature_profile import (
     ENABLE_ADVANCED_SETTINGS,
     ENABLE_AIRFIELDS,
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
     ENABLE_FUEL,
     ENABLE_ZONES,
+)
+from bomana.config.settings import (
     FileConfig,
     HotkeyConfig,
     HUDConfig,
     PanelConfig,
-    Theme,
     ZoneConfig,
-    __title__,
 )
 from bomana.core.state import Phase, UISnapshot
+from bomana.metadata import __title__
 from bomana.ui.hud_overlay import HUDOverlay
 from bomana.ui.hud_presenter import build_hud_target_model
 from bomana.ui.runtime import start_daemon_thread
+from bomana.ui.theme import Theme
 from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import resource_path
 from bomana.utils.system import GlobalHotkeys
@@ -47,6 +50,7 @@ class AppRuntimeServices:
         self.global_hotkeys: GlobalHotkeys | None = None
         self.tray: Any | None = None
         self.hud_overlay: HUDOverlay | None = None
+        self.local_hotkey_sequences: list[str] = []
         self._hud_monitor_refresh_ts = 0.0
         self._hud_last_target: dict[str, Any] | None = None
         self._hud_target_hold_sec = 1.2
@@ -82,6 +86,32 @@ class AppRuntimeServices:
             return
         with contextlib.suppress(Exception):
             manager.stop()
+
+    def refresh_local_hotkey_bindings(self) -> None:
+        """Refresh Tk-local hotkeys after settings mutate HotkeyConfig."""
+        for sequence in self.local_hotkey_sequences:
+            with contextlib.suppress(tk.TclError):
+                self.app.root.unbind(sequence)
+
+        bindings = [
+            (HotkeyConfig.KEY_LOCK, self.app._toggle_lock),
+            (HotkeyConfig.KEY_CORNER, self.app._next_corner),
+            (HotkeyConfig.KEY_BEEP, self.app._toggle_beep),
+        ]
+        if ENABLE_ZONES:
+            bindings.append((HotkeyConfig.KEY_ZONES, self.app._toggle_zone_sound))
+
+        self.local_hotkey_sequences = []
+        for key_name, callback in bindings:
+            normalized_key = HotkeyConfig.normalize_key(key_name)
+            if normalized_key is None:
+                continue
+            sequence = f"<{normalized_key}>"
+            try:
+                self.app.root.bind(sequence, lambda _event, cb=callback: cb())
+            except tk.TclError:
+                continue
+            self.local_hotkey_sequences.append(sequence)
 
     def refresh_tray(self) -> None:
         """Refresh the system tray menu if it exists."""

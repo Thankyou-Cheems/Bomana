@@ -7,8 +7,8 @@ Prefix: `CFG-`
 ## Scope
 
 This spec governs the `bomana/config/` package, feature flags, build variants,
-panel effective state, persisted user config, and metadata/theme re-export
-compatibility.
+panel effective state, persisted user config, and explicit configuration
+submodule boundaries.
 
 ## Non-goals
 
@@ -37,11 +37,14 @@ compatibility.
   panels.
 - `CFG-07`: If `ENABLE_ZONES` is false, standalone navigation config is invalid
   and must be forced back to integrated mode.
-- `CFG-08`: Config package changes must not break `from bomana import config`,
-  `config.X`, metadata re-exports, theme re-exports, or existing default values.
+- `CFG-08`: Config package changes must preserve `from bomana import config`
+  as a package import, but callers must import symbols from explicit
+  submodules: `bomana.config.feature_profile`, `bomana.config.settings`, or
+  `bomana.config.static_data`. Project metadata lives in `bomana.metadata`, and
+  runtime theme tokens live in `bomana.ui.theme`.
 
 ## Contract Coverage
 
 - `tests/contracts/test_config_variants.py` covers `VARIANT_SWITCHES`,
-  `PanelConfig`, compile-switch persistence, build patch target, and re-export
-  compatibility.
+  `PanelConfig`, compile-switch persistence, build patch target, and the
+  explicit config package boundary.

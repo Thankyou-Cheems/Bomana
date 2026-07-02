@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from bomana.config import PanelConfig
+from bomana.config.settings import PanelConfig
 from bomana.ui import nav_window as nav_window_module
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.navigation_runtime import AppNavigationServices

@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import importlib.machinery
-import importlib.util
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -12,18 +9,6 @@ from bomana import launcher_core
 from launcher import manifest_sources, metadata, verify
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def load_launcher_entry():
-    module_name = "launcher_package_boundary_entry"
-    if module_name in sys.modules:
-        return sys.modules[module_name]
-    loader = importlib.machinery.SourceFileLoader(module_name, str(ROOT / "launcher.pyw"))
-    spec = importlib.util.spec_from_loader(loader.name, loader)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    loader.exec_module(module)
-    return module
 
 
 class GuardedManifest(dict[str, Any]):
@@ -125,7 +110,8 @@ def test_verified_app_manifest_projection_exposes_only_trusted_runtime_fields() 
     }
 
 
-def test_launcher_metadata_matches_compatibility_entrypoint() -> None:
-    launcher_entry = load_launcher_entry()
+def test_launcher_entry_uses_package_metadata_version_source() -> None:
+    launcher_entry = (ROOT / "launcher.pyw").read_text(encoding="utf-8")
 
-    assert launcher_entry.LAUNCHER_VERSION == metadata.LAUNCHER_VERSION
+    assert "from launcher.metadata import LAUNCHER_VERSION" in launcher_entry
+    assert f'LAUNCHER_VERSION = "{metadata.LAUNCHER_VERSION}"' not in launcher_entry

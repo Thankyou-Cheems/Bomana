@@ -3,11 +3,10 @@
 ## Overview
 - Bootstrap entry point: `Bomana.pyw` (single-instance guard, DPI setup, root window creation, `App` startup)
 - Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, details/support dialog)
-- Launcher package: `launcher/` (manifest verification/projection, download cache pathing, install facade, app bootstrap helpers, launcher metadata)
+- Launcher package: `launcher/` (manifest verification/projection, download cache pathing, install transactions, app bootstrap helpers, launcher metadata)
 - Launcher pure helpers: `bomana/launcher_core.py` (download-source normalization, version/asset helpers, checksum and safe zip extraction)
-- Launcher install primitives: `bomana/launcher_install.py` (update lock, staged app install, rollback, incomplete-install recovery)
-- Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata; re-exported by `bomana/config/`)
-- Central config: `bomana/config/` (feature flags, config classes, compatibility metadata re-exports)
+- Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata)
+- Central config: `bomana/config/` (explicit feature flag, settings, and static-data submodules)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app coordinator, main-window builder, debug support, panel renderer, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
@@ -31,18 +30,17 @@
 ```
 .
 ├─ Bomana.pyw                # Thin bootstrap entrypoint
-├─ launcher.pyw              # Green launcher compatibility/distribution entrypoint
+├─ launcher.pyw              # Green launcher distribution/PyInstaller entrypoint
 ├─ launcher/
 │  ├─ metadata.py            # Launcher version source for build/deploy tooling
 │  ├─ manifest_sources.py    # Verified manifest projection helpers
 │  ├─ verify.py              # Verify-before-trust helper boundary
 │  ├─ download_cache.py      # Download directory fallback and cache naming
-│  ├─ install_txn.py         # Facade over install/rollback transaction primitives
+│  ├─ install_txn.py         # Install/rollback transaction primitives
 │  └─ bootstrap.py           # App-package import isolation and launch helpers
 ├─ bomana/
-│  ├─ config/                # Feature flags, settings classes, static paths, compatibility re-exports
+│  ├─ config/                # Package marker plus explicit feature/settings/static-data submodules
 │  ├─ launcher_core.py       # Pure launcher helpers used by launcher.pyw
-│  ├─ launcher_install.py    # Launcher install/rollback transaction primitives
 │  ├─ metadata.py            # Project metadata and version constants
 │  ├─ data/
 │  │  ├─ ccrp_bomb_params.json # Bomb parameters (CCRP)
@@ -82,7 +80,7 @@
 │  │  ├─ settings_runtime.py  # SettingsDialog persistence-success runtime side effects
 │  │  ├─ snapshot_presenter.py # Headless lifecycle/status presentation model helpers
 │  │  ├─ text_utils.py        # Shared Tk text measurement, wrapping, and elision helpers
-│  │  ├─ theme.py             # Runtime Tk theme tokens (re-exported by config)
+│  │  ├─ theme.py             # Runtime Tk theme tokens
 │  │  ├─ tk_style.py          # Shared Tk palette/action-button styling tokens
 │  │  ├─ window_geometry.py   # Headless snap-anchor geometry helpers used by App
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
@@ -111,7 +109,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 ## Runtime Data Flow
 1. 8111 API polling via `requests` to `localhost:8111`.
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
-   - `GameLogic` remains the polling/orchestration facade.
+   - `GameLogic` remains the polling/orchestration boundary.
    - `navigation.py`, `timing_store.py`, `lifecycle.py`, `diagnostics.py`, and
      `ccrp_scheduler.py` own focused helper responsibilities extracted from the
      former monolithic logic module.
@@ -126,7 +124,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `panel_presenter.py`, `hud_presenter.py`, `dialog_presenter.py`, and `snapshot_presenter.py` own headless view models for strings, colors, target selection, and option summaries. Tk modules apply those models while retaining widget layout and runtime side effects.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
    - `settings_runtime.py` owns SettingsDialog side effects that run only after config persistence succeeds.
-   - `settings_form.py` owns headless settings value collection, validation, hotkey conflict checks, and save-payload construction; `dialogs.py` remains the Tk compatibility facade and applies messagebox/file/runtime side effects.
+   - `settings_form.py` owns headless settings value collection, validation, hotkey conflict checks, and save-payload construction; `dialogs.py` remains the Tk modal entrypoint and applies messagebox/file/runtime side effects.
    - `text_utils.py` owns shared Tk text measurement, label wrapping, elision, and scaled control-length helpers used by main-window and dialog layout.
    - `window_geometry.py` owns snap-anchor capture/application helpers so App geometry coordination can be tested without a Tk root.
    - `theme.py` owns runtime theme tokens, while `tk_style.py` owns shared Tk palette/action-button styling used by the launcher and modal app dialogs.
@@ -155,7 +153,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
-   - Verifies SHA256 after signed-manifest validation; `launcher_install.py` owns the update lock, staging directory, `app/` replacement, rollback cleanup, and incomplete-install recovery.
+   - Verifies SHA256 after signed-manifest validation; `launcher/install_txn.py` owns the update lock, staging directory, `app/` replacement, rollback cleanup, and incomplete-install recovery.
    - Successful app installs promote the previous app into `app_previous/` and update local version metadata.
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
@@ -182,6 +180,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config/`.
+- Import configuration through explicit submodules: `bomana.config.feature_profile`, `bomana.config.settings`, and `bomana.config.static_data`.
 - User config/state stored as JSON in the user home directory (`FileConfig.CONFIG_FILE` / `STATE_FILE`).
 - Timer state restore is battle-scoped: `STATE_FILE` stores a 8111-derived battle signature and `GameLogic` applies the pending timer only after the next live battle context matches it.
 - Feature flags (`ENABLE_*`) drive compile-time variants and UI availability. All variants share the same config file.

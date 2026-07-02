@@ -2,7 +2,7 @@
 
 import math
 
-from bomana.config import ZoneConfig
+from bomana.config.settings import ZoneConfig
 from bomana.core.state import MapInfo
 from bomana.utils.math_utils import (
     calculate_bearing,

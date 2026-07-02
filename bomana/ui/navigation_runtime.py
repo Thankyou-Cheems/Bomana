@@ -5,7 +5,8 @@ from __future__ import annotations
 import contextlib
 from typing import Any
 
-from bomana.config import ENABLE_ZONES, PanelConfig
+from bomana.config.feature_profile import ENABLE_ZONES
+from bomana.config.settings import PanelConfig
 from bomana.ui.nav_window import NavigationWindow
 from bomana.utils.diagnostics import log_event
 

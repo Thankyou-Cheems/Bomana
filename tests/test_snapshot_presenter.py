@@ -1,6 +1,6 @@
-from bomana.config import Theme
 from bomana.core.state import Phase
 from bomana.ui.snapshot_presenter import build_status_presentation
+from bomana.ui.theme import Theme
 
 
 def test_status_presentation_prioritizes_api_down() -> None:

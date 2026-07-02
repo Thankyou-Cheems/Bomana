@@ -8,8 +8,14 @@ import math
 import tkinter as tk
 from typing import TYPE_CHECKING, Any
 
-from bomana.config import HotkeyConfig, PanelConfig, Theme, UIConfig, ZoneConfig
+from bomana.config.settings import (
+    HotkeyConfig,
+    PanelConfig,
+    UIConfig,
+    ZoneConfig,
+)
 from bomana.ui.navigation_presenter import build_navigation_tape_model
+from bomana.ui.theme import Theme
 from bomana.ui.widgets import HeadingTape
 from bomana.utils.math_utils import (
     calculate_airfield_status,

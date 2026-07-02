@@ -1,6 +1,6 @@
 """Game lifecycle state transitions extracted from GameLogic."""
 
-from bomana.config import GameConfig
+from bomana.config.settings import GameConfig
 from bomana.core.state import (
     AttitudeConfidenceState,
     GameState,

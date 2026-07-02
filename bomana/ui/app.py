@@ -10,12 +10,14 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 from typing import Any
 
-from bomana.config import (
+from bomana.config.feature_profile import (
     ENABLE_AIRFIELDS,
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
     ENABLE_FUEL,
     ENABLE_ZONES,
+)
+from bomana.config.settings import (
     AboutConfig,
     BallisticPhysicsParams,
     BombConfig,
@@ -28,7 +30,6 @@ from bomana.config import (
     PanelConfig,
     SnapConfig,
     SoundConfig,
-    Theme,
     UIConfig,
 )
 from bomana.core.logic import GameLogic
@@ -42,6 +43,8 @@ from bomana.ui.panel_presenter import build_speed_history_header_model
 from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.runtime import LogicPoller, TkEventDispatcher
 from bomana.ui.runtime_services import HAS_TRAY, AppRuntimeServices
+from bomana.ui.snapshot_presenter import build_status_presentation
+from bomana.ui.theme import Theme
 from bomana.ui.window_geometry import (
     apply_snap_anchor,
     capture_snap_anchor,
@@ -550,8 +553,7 @@ class App:
         ╚══════════════════════════════════════════════════════════════════════╝
         """
 
-        self._local_hotkey_sequences: list[str] = []
-        self.refresh_local_hotkey_bindings()
+        self.runtime_services.refresh_local_hotkey_bindings()
         self.root.bind("<Control-MouseWheel>", self._adjust_alpha)
         self.root.bind(
             "<Control-Shift-Left>",
@@ -576,31 +578,6 @@ class App:
         self.root.bind("<FocusIn>", self._on_focus_in)
 
         # 不再绑定窗口右键菜单（功能移至系统托盘）
-
-    def refresh_local_hotkey_bindings(self) -> None:
-        """Refresh Tk-local hotkeys after settings mutate HotkeyConfig."""
-        for sequence in getattr(self, "_local_hotkey_sequences", []):
-            with contextlib.suppress(tk.TclError):
-                self.root.unbind(sequence)
-        bindings = [
-            (HotkeyConfig.KEY_LOCK, self._toggle_lock),
-            (HotkeyConfig.KEY_CORNER, self._next_corner),
-            (HotkeyConfig.KEY_BEEP, self._toggle_beep),
-        ]
-        if ENABLE_ZONES:
-            bindings.append((HotkeyConfig.KEY_ZONES, self._toggle_zone_sound))
-
-        self._local_hotkey_sequences = []
-        for key_name, callback in bindings:
-            normalized_key = HotkeyConfig.normalize_key(key_name)
-            if normalized_key is None:
-                continue
-            sequence = f"<{normalized_key}>"
-            try:
-                self.root.bind(sequence, lambda _event, cb=callback: cb())
-            except tk.TclError:
-                continue
-            self._local_hotkey_sequences.append(sequence)
 
     def _refresh_standalone_navigation_if_visible(self, snap: UISnapshot) -> None:
         """Let the standalone navigation window clear stale content when panels hide."""
@@ -822,7 +799,15 @@ class App:
         # 手动拖拽后若贴边，记录贴边锚点；尺寸变化时优先保持贴边体验
         edge_anchor = None
         if keep_pos and self._user_moved and old_w > 0 and old_h > 0:
-            edge_anchor = self._capture_snap_anchor(old_x, old_y, old_w, old_h)
+            edge_anchor = capture_snap_anchor(
+                old_x,
+                old_y,
+                old_w,
+                old_h,
+                snap_enabled=SnapConfig.enabled,
+                snap_distance=SnapConfig.SNAP_DISTANCE,
+                monitor=Win32.get_monitor_at(old_x + old_w // 2, old_y + old_h // 2),
+            )
 
         # 宽高双向收缩防抖：扩张立即生效，收缩需满足阈值且避开刚扩张后的冷却窗口
         now = time.monotonic()
@@ -872,7 +857,7 @@ class App:
             # 边界检查：确保窗口不超出屏幕
             # 手动拖拽位置使用0边距，避免尺寸变化后破坏边缘吸附锚点
             if edge_anchor:
-                x, y = self._apply_snap_anchor(x, y, self.W, self.H, edge_anchor)
+                x, y = apply_snap_anchor(x, y, self.W, self.H, edge_anchor)
             clamp_margin = 0 if self._user_moved else None
             x, y = self._clamp_to_screen(x, y, margin=clamp_margin)
             self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
@@ -880,25 +865,6 @@ class App:
                 self._manual_pos = (x, y)
         else:
             self._position()
-
-    def _capture_snap_anchor(self, x: int, y: int, w: int, h: int) -> dict[str, Any] | None:
-        """捕获窗口当前贴边锚点（仅在手动拖拽场景使用）。"""
-        monitor = Win32.get_monitor_at(x + w // 2, y + h // 2)
-        return capture_snap_anchor(
-            x,
-            y,
-            w,
-            h,
-            snap_enabled=SnapConfig.enabled,
-            snap_distance=SnapConfig.SNAP_DISTANCE,
-            monitor=monitor,
-        )
-
-    def _apply_snap_anchor(
-        self, x: int, y: int, w: int, h: int, anchor: dict[str, Any]
-    ) -> tuple[int, int]:
-        """按捕获的贴边锚点修正新尺寸下的位置。"""
-        return apply_snap_anchor(x, y, w, h, anchor)
 
     def _show(self):
         """显示窗口"""
@@ -1561,9 +1527,19 @@ class App:
         )
         self.cycle_lbl.config(text=(f"第{snap.cycle}轮" if snap.cycle is not None else "未开始"))
 
+        status_model = build_status_presentation(
+            phase=snap.phase,
+            api_down=snap.api_down,
+            api_down_pending=snap.api_down_pending,
+            has_life=snap.life_index is not None,
+            landed_flash=snap.landed_flash,
+            on_ground=snap.on_ground,
+            overspeed_level=snap.overspeed_level,
+        )
+
         # 更新徽章
-        self.badge_main.set(*snap.main_badge)
-        self.badge_flight.set(*snap.flight_badge)
+        self.badge_main.set(*status_model.main_badge)
+        self.badge_flight.set(*status_model.flight_badge)
         if speed_enabled:
             if self.speed_row.winfo_manager() != "grid":
                 self.speed_row.grid(
@@ -1624,7 +1600,7 @@ class App:
             status_fg = Theme.RED
         elif speed_enabled and speed_level == "warning" and not snap.api_down:
             status_fg = Theme.YELLOW
-        self.status_txt.config(text=snap.status_text, fg=status_fg)
+        self.status_txt.config(text=status_model.status_text, fg=status_fg)
 
         # 调试信息
         if self._debug:

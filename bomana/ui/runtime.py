@@ -7,7 +7,7 @@ import tkinter as tk
 from collections.abc import Callable
 from typing import Any
 
-from bomana.config import NetworkConfig
+from bomana.config.settings import NetworkConfig
 from bomana.core.logic import GameLogic
 from bomana.utils.diagnostics import log_exception
 

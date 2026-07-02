@@ -2,7 +2,8 @@
 
 import math
 
-from bomana.config import Theme, ZoneConfig
+from bomana.config.settings import ZoneConfig
+from bomana.ui.theme import Theme
 
 
 def calculate_smart_scale(screen_width: int, screen_height: int, base_dpi_scale: float) -> float:

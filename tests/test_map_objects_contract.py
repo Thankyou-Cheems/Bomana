@@ -3,7 +3,8 @@
 import math
 import unittest
 
-from bomana.config import ZoneConfig
+from bomana.config.settings import ZoneConfig
+from bomana.core import navigation
 from bomana.core.logic import GameLogic
 from bomana.core.state import InterestPoint, MapInfo, MapObjData, TelemetryData
 from bomana.core.telemetry import Budget, FetchResult, MapObjectsFetcher
@@ -95,12 +96,12 @@ class MapObjectsContractTests(unittest.TestCase):
     def test_map_info_axis_scale_uses_map_bounds(self):
         map_info = MapInfo(valid=True, map_min=[-1000.0, -500.0], map_max=[1000.0, 500.0])
 
-        self.assertEqual(GameLogic._map_axis_scale_m(map_info), (2000.0, 1000.0))
+        self.assertEqual(navigation.map_axis_scale_m(map_info), (2000.0, 1000.0))
 
     def test_bearing_and_distance_apply_axis_specific_meter_scale(self):
         scale = (2000.0, 1000.0)
 
-        bearing, distance_norm = GameLogic._bearing_distance_norm(0.0, 0.0, 0.5, -0.5, scale)
+        bearing, distance_norm = navigation.bearing_distance_norm(0.0, 0.0, 0.5, -0.5, scale)
 
         self.assertAlmostEqual(bearing, math.degrees(math.atan2(1000.0, 500.0)), places=6)
         expected_km = math.hypot(1000.0, 500.0) / 1000.0

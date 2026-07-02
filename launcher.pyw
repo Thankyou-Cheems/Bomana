@@ -61,8 +61,9 @@ from bomana.ui.tk_style import style_action_button
 from bomana.utils.system import Win32, select_ui_font_family
 from launcher import bootstrap as _launcher_bootstrap
 from launcher import download_cache as _launcher_download_cache
-from launcher import install_txn as _launcher_install
+from launcher import install_txn
 from launcher import manifest_sources as _launcher_manifest_sources
+from launcher.metadata import LAUNCHER_VERSION
 
 try:
     import certifi
@@ -72,21 +73,20 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-LAUNCHER_VERSION = "2.1.1"
 MIN_SUPPORTED_APP_VERSION = "6.7.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
 PROJECT_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
 DEFAULT_CHANNEL = "Enhanced"
-APP_DIR_NAME = _launcher_install.APP_DIR_NAME
-APP_PREVIOUS_DIR_NAME = _launcher_install.APP_PREVIOUS_DIR_NAME
-APP_BACKUP_DIR_NAME = _launcher_install.APP_BACKUP_DIR_NAME
+APP_DIR_NAME = install_txn.APP_DIR_NAME
+APP_PREVIOUS_DIR_NAME = install_txn.APP_PREVIOUS_DIR_NAME
+APP_BACKUP_DIR_NAME = install_txn.APP_BACKUP_DIR_NAME
 STATE_FILE_NAME = "launcher_state.json"
 LOG_FILE_NAME = "launcher.log"
 INSTALL_ID_FILE_NAME = ".bomana_install_id"
-UPDATE_LOCK_FILE_NAME = _launcher_install.UPDATE_LOCK_FILE_NAME
-UPDATE_LOCK_STALE_SEC = _launcher_install.UPDATE_LOCK_STALE_SEC
+UPDATE_LOCK_FILE_NAME = install_txn.UPDATE_LOCK_FILE_NAME
+UPDATE_LOCK_STALE_SEC = install_txn.UPDATE_LOCK_STALE_SEC
 TEMP_META_FILE_NAME = ".bomana_temp_meta.json"
 LAUNCHER_UPDATE_RESULT_FILE_NAME = ".bomana_launcher_update_result.json"
 LAUNCHER_SELF_UPDATE_WORKDIR_PREFIX = "bomana_launcher_update_"
@@ -120,16 +120,6 @@ BRANDING_ICON_FILE = "bomana/assets/branding/app.ico"
 BRANDING_SPONSOR_FILE = "bomana/assets/branding/sponsor_wechat.png"
 
 RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
-InstallTransaction = _launcher_install.InstallTransaction
-_acquire_update_lock = _launcher_install.acquire_update_lock
-_install_zip_package = _launcher_install.install_zip_package
-_install_zip_package_from_file = _launcher_install.install_zip_package_from_file
-_read_local_app_version = _launcher_install.read_local_app_version
-_release_update_lock = _launcher_install.release_update_lock
-_rollback_to_previous_app = _launcher_install.rollback_to_previous_app
-_sha256_file = _launcher_install.sha256_file
-_validate_app_package_root = _launcher_install.validate_app_package_root
-
 _USE_SYSTEM_PROXY = True
 _URL_OPENERS: Dict[str, Any] = {}
 _PROXY_MODE_LOCAL = threading.local()
@@ -205,9 +195,7 @@ def _is_frozen_launcher() -> bool:
 
 
 def _has_config_marker(base: Path) -> bool:
-    return (base / "bomana" / "config.py").exists() or (
-        base / "bomana" / "config" / "__init__.py"
-    ).exists()
+    return (base / "bomana" / "config" / "__init__.py").exists()
 
 
 def _is_source_test_run(base: Path) -> bool:
@@ -851,7 +839,7 @@ def _select_startup_channel(base: Path, detected_channel: str) -> str:
 
 def _is_local_app_ready(base: Path) -> bool:
     try:
-        _validate_app_package_root(_app_runtime_dir(base), DEFAULT_ENTRYPOINT)
+        install_txn.validate_app_package_root(_app_runtime_dir(base), DEFAULT_ENTRYPOINT)
     except Exception:
         return False
     return True
@@ -862,7 +850,7 @@ def _is_previous_app_ready(base: Path) -> bool:
 
 
 def _recover_incomplete_install(base: Path) -> None:
-    steps = InstallTransaction.recover_incomplete(base, log_cb=_log)
+    steps = install_txn.InstallTransaction.recover_incomplete(base, log_cb=_log)
     if steps:
         _log(base, f"检测到上次安装未完成，已恢复：{', '.join(steps)}")
 
@@ -1443,7 +1431,7 @@ def _resolve_update_manifest(
         if status_cb:
             status_cb(title, detail, progress, level)
 
-    local_version = _read_local_app_version(_app_runtime_dir(base))
+    local_version = install_txn.read_local_app_version(_app_runtime_dir(base))
     source_mode = _normalize_download_source_mode(download_source_mode)
 
     manifest: Optional[Dict[str, Any]] = None
@@ -1830,7 +1818,7 @@ def _download_update_from_manifest(
         _download_to_file(package_url, package_path, progress_cb=on_progress, cancel_cb=cancel_cb)
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
-        actual_sha256 = _sha256_file(package_path)
+        actual_sha256 = install_txn.sha256_file(package_path)
         if actual_sha256 != package_sha256:
             try:
                 package_path.unlink(missing_ok=True)
@@ -1839,7 +1827,7 @@ def _download_update_from_manifest(
                 pass
             raise RuntimeError("SHA256 校验失败")
         keep_downloaded_file = True
-        _install_zip_package_from_file(
+        install_txn.install_zip_package_from_file(
             base,
             package_path,
             package_sha256,
@@ -1913,7 +1901,7 @@ def _assert_app_install_dir_writable(base: Path) -> None:
     renamed_probe: Optional[Path] = None
     try:
         base.mkdir(parents=True, exist_ok=True)
-        lock_path = _acquire_update_lock(base)
+        lock_path = install_txn.acquire_update_lock(base)
         probe_dir = Path(tempfile.mkdtemp(prefix=".bomana_install_probe_", dir=str(base)))
         renamed_probe = base / f"{probe_dir.name}.renamed"
         os.replace(str(probe_dir), str(renamed_probe))
@@ -1929,7 +1917,7 @@ def _assert_app_install_dir_writable(base: Path) -> None:
             shutil.rmtree(renamed_probe, ignore_errors=True)
         if probe_dir is not None:
             shutil.rmtree(probe_dir, ignore_errors=True)
-        _release_update_lock(lock_path)
+        install_txn.release_update_lock(lock_path)
 
 
 def _stage_launcher_self_update(
@@ -1958,7 +1946,7 @@ def _stage_launcher_self_update(
             shutil.copyfile(launcher_source_path, staged)
         else:
             staged.write_bytes(launcher_bytes or b"")
-        expected_sha256 = (expected_sha256 or _sha256_file(staged)).strip().lower()
+        expected_sha256 = (expected_sha256 or install_txn.sha256_file(staged)).strip().lower()
         _log(base, f"已在临时目录准备启动器自更新文件：{staged}")
         script = f"""$ErrorActionPreference = 'Stop'
 $target = {_ps_string(target)}
@@ -2139,7 +2127,7 @@ def _download_launcher_update_from_manifest(
         _download_to_file(package_url, launcher_path, progress_cb=on_progress, cancel_cb=cancel_cb)
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
-        actual_sha256 = _sha256_file(launcher_path)
+        actual_sha256 = install_txn.sha256_file(launcher_path)
         if actual_sha256 != package_sha256:
             try:
                 launcher_path.unlink(missing_ok=True)
@@ -2636,8 +2624,8 @@ class LauncherWindow:
             self.use_system_proxy = bool(raw_proxy)
         _set_use_system_proxy(self.use_system_proxy)
         self.client_identity = _build_client_identity(base)
-        self.local_version = _read_local_app_version(_app_runtime_dir(base))
-        self.previous_version = _read_local_app_version(_previous_app_dir(base))
+        self.local_version = install_txn.read_local_app_version(_app_runtime_dir(base))
+        self.previous_version = install_txn.read_local_app_version(_previous_app_dir(base))
         self.events: "queue.Queue[Tuple[str, Dict[str, Any]]]" = queue.Queue()
         self.running = False
         self.has_attempted_update = False
@@ -3442,12 +3430,12 @@ class LauncherWindow:
             )
             return
         if task == "rollback":
-            final_version = _read_local_app_version(_app_runtime_dir(self.base))
-            preserved_version = _read_local_app_version(_previous_app_dir(self.base))
+            final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
+            preserved_version = install_txn.read_local_app_version(_previous_app_dir(self.base))
             update_ok = False
             detail = ""
             try:
-                final_version, preserved_version = _rollback_to_previous_app(
+                final_version, preserved_version = install_txn.rollback_to_previous_app(
                     self.base,
                     status_cb=self._emit_status,
                 )
@@ -3471,7 +3459,7 @@ class LauncherWindow:
             )
             return
         if task == "import_zip":
-            final_version = _read_local_app_version(_app_runtime_dir(self.base))
+            final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
             update_ok = False
             update_error = ""
             package_path = str(getattr(self, "pending_import_zip_path", "")).strip()
@@ -3483,7 +3471,7 @@ class LauncherWindow:
                     raise RuntimeError("ZIP 包不存在")
                 self._emit_status("开始安装", f"正在导入本地包：{zip_file.name}", 0.2, "info")
                 package_bytes = zip_file.read_bytes()
-                _install_zip_package(
+                install_txn.install_zip_package(
                     self.base,
                     package_bytes,
                     expected_sha256="",
@@ -3491,7 +3479,7 @@ class LauncherWindow:
                     status_cb=self._emit_status,
                     cancel_cb=lambda: self._cancel_requested.is_set(),
                 )
-                final_version = _read_local_app_version(_app_runtime_dir(self.base))
+                final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
                 update_ok = True
             except Exception as e:
                 update_error = str(e)
@@ -3509,7 +3497,7 @@ class LauncherWindow:
                             "detail": (
                                 f"已导入本地应用包，当前版本 v{final_version}"
                                 + (
-                                    f"；已保留上一版本 v{_read_local_app_version(_previous_app_dir(self.base))}"
+                                    f"；已保留上一版本 v{install_txn.read_local_app_version(_previous_app_dir(self.base))}"
                                     if _is_previous_app_ready(self.base)
                                     else ""
                                 )
@@ -3538,7 +3526,7 @@ class LauncherWindow:
                 )
             return
 
-        final_version = _read_local_app_version(_app_runtime_dir(self.base))
+        final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
         update_ok = False
         update_source = ""
         update_error = ""
@@ -3594,7 +3582,7 @@ class LauncherWindow:
                             f"安装位置：{self.install_dir}\n"
                             f"下载目录：{_launcher_download_dir(self.base)}"
                             + (
-                                f"\n已保留上一版本 v{_read_local_app_version(_previous_app_dir(self.base))}，可随时回退。"
+                                f"\n已保留上一版本 v{install_txn.read_local_app_version(_previous_app_dir(self.base))}，可随时回退。"
                                 if _is_previous_app_ready(self.base)
                                 else ""
                             )
@@ -3901,8 +3889,8 @@ class LauncherWindow:
         return "更新或导入本地包后，会自动保留一个上一版本用于快速回退。"
 
     def _refresh_installed_versions(self) -> None:
-        self.local_version = _read_local_app_version(_app_runtime_dir(self.base))
-        self.previous_version = _read_local_app_version(_previous_app_dir(self.base))
+        self.local_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
+        self.previous_version = install_txn.read_local_app_version(_previous_app_dir(self.base))
         self.sub_lbl.config(text=self._subline_text())
         if hasattr(self, "rollback_status_lbl"):
             self.rollback_status_lbl.config(text=self._rollback_status_text())
@@ -4423,7 +4411,7 @@ class LauncherWindow:
             )
             self._set_status("无法启动", detail, None, "error")
             return
-        final_version = _read_local_app_version(_app_runtime_dir(self.base))
+        final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
         self.decision = LaunchDecision(action="launch", final_version=final_version, warning="")
         self._set_status("准备启动", f"将启动本地版本 v{final_version}", 1.0, "success")
         self.root.after(300, self._commit_launch)
@@ -4462,7 +4450,7 @@ class LauncherWindow:
         self._exit_after_task = False
         self.decision = LaunchDecision(
             action="exit",
-            final_version=_read_local_app_version(_app_runtime_dir(self.base)),
+            final_version=install_txn.read_local_app_version(_app_runtime_dir(self.base)),
             warning=self.decision.warning,
         )
         self.root.destroy()

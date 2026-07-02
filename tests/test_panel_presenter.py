@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-from bomana.config import Theme
 from bomana.ui import panel_presenter
 from bomana.ui.panel_presenter import (
     build_bombing_display_model,
@@ -9,13 +8,14 @@ from bomana.ui.panel_presenter import (
     build_speed_strip_model,
     format_aircraft_type_label,
 )
+from bomana.ui.theme import Theme
 
 
 def test_fuel_display_model_formats_return_warning() -> None:
     snap = SimpleNamespace(
         fuel_kg=420.0,
         fuel_percent=18.0,
-        fuel_time_remaining_str="12:34",
+        fuel_remaining_time_min=12 + (34 / 60),
         fuel_rate_stable=True,
         fuel_rate_kg_min=38.4,
         altitude_m=1234.0,
@@ -88,9 +88,8 @@ def test_speed_strip_model_clamps_ratio_and_formats_aircraft() -> None:
     snap = SimpleNamespace(
         overspeed_level="warning",
         overspeed_ratio=0.91,
-        overspeed_display_ratio=1.25,
         overspeed_current_ias_kmh=980.0,
-        overspeed_current_mach=0.86,
+        overspeed_current_mach=1.1,
         overspeed_limit_kmh=1040.0,
         overspeed_limit_mach=0.88,
         overspeed_match=True,
@@ -102,7 +101,7 @@ def test_speed_strip_model_clamps_ratio_and_formats_aircraft() -> None:
 
     assert model.level == "warning"
     assert model.state_text == "接近极限"
-    assert model.model_text == "very long aircraft name w...  |  M0.86/0.88"
+    assert model.model_text == "very long aircraft name w...  |  M1.10/0.88"
     assert model.value_text == "IAS 980/1040"
     assert model.fill_color == Theme.YELLOW
     assert model.fill_ratio == 1.0

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from bomana.config import OverspeedConfig
+from bomana.config.settings import OverspeedConfig
 from bomana.utils.file_utils import load_json_resource
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)

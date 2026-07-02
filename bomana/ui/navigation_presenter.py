@@ -4,7 +4,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-from bomana.config import Theme, ZoneConfig
+from bomana.config.settings import ZoneConfig
+from bomana.ui.theme import Theme
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 

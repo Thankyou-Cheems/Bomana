@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
-from bomana.config import HotkeyConfig, UIConfig
+from bomana.config.settings import (
+    HotkeyConfig,
+    UIConfig,
+)
 from bomana.ui import dialogs
 from bomana.ui.dialogs import OverspeedAircraftOverrideDialog, SettingsDialog
 
@@ -64,6 +67,7 @@ def _dialog_for_save() -> SettingsDialog:
     dialog._persist_sound_overrides = lambda: ({}, [], [])
     dialog._refresh_runtime_hud_after_settings = lambda _previous: None
     dialog.destroy = lambda: None
+    runtime_services = SimpleNamespace(refresh_local_hotkey_bindings=lambda: None)
     dialog.app = SimpleNamespace(
         sound=FakeSound(),
         _zone_sound_enabled=True,
@@ -73,7 +77,7 @@ def _dialog_for_save() -> SettingsDialog:
         hwnd=0,
         _locked=False,
         apply_display_settings_runtime=lambda **_kwargs: None,
-        refresh_local_hotkey_bindings=lambda: None,
+        runtime_services=runtime_services,
     )
     return dialog
 

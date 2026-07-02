@@ -13,7 +13,10 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 from typing import Any
 
-from bomana.config import FileConfig, HotkeyConfig
+from bomana.config.settings import (
+    FileConfig,
+    HotkeyConfig,
+)
 
 _WIN32_ACCESS_ERRORS = (OSError, AttributeError)
 _MUTEX_HANDLE = None

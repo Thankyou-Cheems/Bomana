@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from bomana.config import NetworkConfig
+from bomana.config.settings import NetworkConfig
 from bomana.core.state import Airfield, InterestPoint, MapInfo, MapObjData, TelemetryData, Zone
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)

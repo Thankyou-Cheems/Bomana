@@ -14,10 +14,8 @@ def _read_literal_version(path):
 def read_version(config_path):
     try:
         path = Path(config_path)
-        candidates = [path, path.with_name("metadata.py")]
-        if path.name == "config.py":
-            candidates.append(path.parent / "metadata.py")
-        if path.parent.name == "config":
+        candidates = [path]
+        if path.parent.name == "config" and path.name == "__init__.py":
             candidates.append(path.parent.parent / "metadata.py")
         for candidate in dict.fromkeys(candidates):
             version = _read_literal_version(candidate)

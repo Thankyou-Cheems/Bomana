@@ -4,7 +4,10 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from bomana.config import FuelConfig, GameConfig
+from bomana.config.settings import (
+    FuelConfig,
+    GameConfig,
+)
 
 # ============================================================================
 # 数据结构定义
@@ -599,9 +602,6 @@ class UISnapshot:
     remaining_sec: float | None
     progress: float
     sortie_id: int
-    main_badge: tuple[str, str, str]  # (文本, 前景色, 背景色)
-    flight_badge: tuple[str, str, str]
-    status_text: str
     api_down: bool
     api_down_pending: bool
     on_ground: bool
@@ -634,7 +634,7 @@ class UISnapshot:
     fuel_percent: float = 0.0  # 油量百分比
     fuel_rate_kg_min: float = 0.0  # 油耗率 (kg/min)
     fuel_rate_stable: bool = False  # 油耗率是否稳定
-    fuel_time_remaining_str: str = ""  # 剩余飞行时间字符串
+    fuel_remaining_time_min: float | None = None  # 估算剩余飞行时间（分钟）
     altitude_m: float = 0.0  # 高度
 
     # 返航估算
@@ -674,7 +674,6 @@ class UISnapshot:
     # v6.9.0 新增：超速提醒链路
     overspeed_level: str = "unknown"  # unknown/safe/caution/warning/critical
     overspeed_ratio: float = 0.0  # IAS占限速百分比（0~1）
-    overspeed_display_ratio: float = 0.0  # UI显示比例（IAS/Mach中更危险的一侧）
     overspeed_current_ias_kmh: float = 0.0  # 当前IAS
     overspeed_current_mach: float | None = None  # 当前马赫
     overspeed_limit_kmh: float = 0.0  # 机型IAS限速

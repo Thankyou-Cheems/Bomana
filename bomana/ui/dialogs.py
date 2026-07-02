@@ -10,13 +10,15 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 
-from bomana.config import (
+from bomana.config.feature_profile import (
     ENABLE_ADVANCED_SETTINGS,
     ENABLE_AIRFIELDS,
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
     ENABLE_FUEL,
     ENABLE_ZONES,
+)
+from bomana.config.settings import (
     AboutConfig,
     BallisticPhysicsParams,
     BombConfig,
@@ -28,7 +30,6 @@ from bomana.config import (
     PanelConfig,
     SnapConfig,
     SoundConfig,
-    Theme,
     UIConfig,
 )
 from bomana.core.overspeed import SpeedLimitDatabase
@@ -38,18 +39,14 @@ from bomana.ui.dialog_presenter import (
     format_overspeed_override_summary,
 )
 from bomana.ui.settings_form import (
-    OVERSPEED_FIELD_LABELS as _OVERSPEED_FIELD_LABELS,
-)
-from bomana.ui.settings_form import (
     apply_settings_payload_to_config,
     build_settings_save_payload,
-    collect_ccrp_tuning,
     collect_hotkey_bindings,
-    collect_numeric_var_values,
     collect_overspeed_thresholds,
 )
 from bomana.ui.settings_runtime import SettingsRuntimeMixin
 from bomana.ui.text_utils import bind_existing_label_wraps, scaled_control_length
+from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_action_button
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.system import Win32, resolve_tk_font_tuple
@@ -57,12 +54,6 @@ from bomana.utils.system import Win32, resolve_tk_font_tuple
 # Optional dependencies for images (match HAS_TRAY behavior).
 HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError, tk.TclError)
-
-
-def _collect_numeric_var_values(
-    vars_by_key: dict, labels_by_key: dict[str, str]
-) -> dict[str, float]:
-    return collect_numeric_var_values(vars_by_key, labels_by_key)
 
 
 class _ScalableDialogMixin:
@@ -1646,19 +1637,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         if HotkeyConfig.GLOBAL_HOTKEYS:
             runtime_services.init_global_hotkeys()
 
-    def _collect_overspeed_thresholds(self) -> dict[str, float]:
-        return collect_overspeed_thresholds(getattr(self, "overspeed_vars", {}))
-
-    def _collect_ccrp_tuning(self) -> dict[str, float]:
-        return collect_ccrp_tuning(self.ccrp_range_mult_var, self.ccrp_time_mult_var)
-
     def _save(self):
         """保存所有设置"""
         # 收集设置值
         config = ConfigManager.load()
         previous = self._capture_runtime_settings_state()
         try:
-            hotkey_bindings = self._collect_hotkey_bindings()
+            hotkey_bindings = collect_hotkey_bindings(self.hotkey_vars)
         except ValueError as exc:
             messagebox.showwarning("快捷键冲突", str(exc), parent=self)
             return
@@ -1796,10 +1781,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         messagebox.showinfo("设置", "设置已保存", parent=self)
 
         self.destroy()
-
-    def _collect_hotkey_bindings(self) -> dict[str, str]:
-        """收集并校验快捷键绑定。"""
-        return collect_hotkey_bindings(self.hotkey_vars)
 
 
 class ChecklistEditor(tk.Toplevel, _ScalableDialogMixin):
@@ -2295,9 +2276,7 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
             self.editor_vars[key].set(value)
 
     def _collect_editor_thresholds(self) -> dict[str, float]:
-        return OverspeedConfig.normalize_thresholds(
-            _collect_numeric_var_values(self.editor_vars, _OVERSPEED_FIELD_LABELS)
-        )
+        return collect_overspeed_thresholds(self.editor_vars)
 
     def _apply_override(self):
         if not self.selected_aircraft_key:

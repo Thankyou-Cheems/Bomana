@@ -8,8 +8,9 @@
 ## [Unreleased]
 
 ### 改进
-- 将绿色版启动器拆出顶层 `launcher/` 开发期包，集中 manifest 验签投影、下载缓存、安装 facade、启动隔离和 launcher metadata，同时保留 `launcher.pyw` 单文件分发入口。
+- 将绿色版启动器拆出顶层 `launcher/` 开发期包，集中 manifest 验签投影、下载缓存、安装事务、启动隔离和 launcher metadata，同时保留 `launcher.pyw` 单文件分发入口。
 - 拆出设置对话框的 headless 表单校验/保存 payload helper，并将主窗口贴边锚点几何逻辑下放为可单测 helper，降低 `dialogs.py`/`app.py` 的协调负担。
+- 清理 SDD 迁移期间保留的旧兼容面：移除 config facade re-export、旧 app 包 marker、launcher 安装事务旧模块、GameLogic delegator wrapper，以及 `UISnapshot` 展示字符串/颜色字段。
 
 ### 修复
 - 修复部署脚本在 `PYTHONPATH` 隔离环境下直接执行时无法导入本地 `bomana` 包的问题。

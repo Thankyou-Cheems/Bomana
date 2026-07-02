@@ -1,7 +1,8 @@
 import time
 import unittest
 
-from bomana.config import BombConfig
+from bomana.config.settings import BombConfig
+from bomana.core import ccrp_scheduler
 from bomana.core.ballistics import calculate_bomb_trajectory
 from bomana.core.logic import GameLogic
 from bomana.core.state import LifeState, Phase, TelemetryData, Zone
@@ -91,7 +92,9 @@ class BombPredictionLogicTests(unittest.TestCase):
         game, tel = self._alive_game(bomb_id="us_gbu_39")
 
         with game._lock:
-            work = game._prepare_bombing_calculation_locked(tel, time.time(), player_present=True)
+            work = ccrp_scheduler.prepare_bombing_calculation(
+                game.state, tel, time.time(), player_present=True
+            )
 
         self.assertIsNone(work)
         self.assertFalse(game.state.bombing_calc_valid)
@@ -101,7 +104,9 @@ class BombPredictionLogicTests(unittest.TestCase):
         game, tel = self._alive_game(bomb_id="su_fab100", mach=1.01)
 
         with game._lock:
-            work = game._prepare_bombing_calculation_locked(tel, time.time(), player_present=True)
+            work = ccrp_scheduler.prepare_bombing_calculation(
+                game.state, tel, time.time(), player_present=True
+            )
 
         self.assertIsNone(work)
         self.assertFalse(game.state.bombing_calc_valid)
@@ -111,7 +116,9 @@ class BombPredictionLogicTests(unittest.TestCase):
         game, tel = self._alive_game(bomb_id="us_500lb_mk_82_ldgp_snakeye", mach=0.82)
 
         with game._lock:
-            work = game._prepare_bombing_calculation_locked(tel, time.time(), player_present=True)
+            work = ccrp_scheduler.prepare_bombing_calculation(
+                game.state, tel, time.time(), player_present=True
+            )
 
         self.assertIsNotNone(work)
         self.assertEqual(work["bomb_params"]["prediction_kind"], "high_drag")

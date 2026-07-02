@@ -471,12 +471,10 @@ def main() -> int:
     feature_profile_path = root / "bomana" / "config" / "feature_profile.py"
     metadata_path = root / "bomana" / "metadata.py"
     launcher_metadata_path = root / "launcher" / "metadata.py"
-    launcher_path = root / "launcher.pyw"
     feature_profile_stat = feature_profile_path.stat()
     original_feature_profile = feature_profile_path.read_text(encoding="utf-8")
     metadata_text = metadata_path.read_text(encoding="utf-8")
     launcher_metadata_text = launcher_metadata_path.read_text(encoding="utf-8")
-    launcher_text = launcher_path.read_text(encoding="utf-8")
     feature_profile_patched = False
 
     app_zip: Path | None = None
@@ -494,12 +492,6 @@ def main() -> int:
             launcher_metadata_text,
             "launcher/metadata.py",
         )
-        launcher_entry_version = read_launcher_version(launcher_text, "launcher.pyw")
-        if launcher_entry_version != source_launcher_version:
-            raise RuntimeError(
-                "launcher.pyw LAUNCHER_VERSION must match launcher/metadata.py "
-                f"LAUNCHER_VERSION ({launcher_entry_version} != {source_launcher_version})"
-            )
         validate_requested_version(
             args.version,
             args.target,

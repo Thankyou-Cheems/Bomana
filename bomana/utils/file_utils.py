@@ -12,13 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from bomana.config import (
+from bomana.config.feature_profile import (
     ENABLE_ADVANCED_SETTINGS,
     ENABLE_AIRFIELDS,
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
     ENABLE_FUEL,
     ENABLE_ZONES,
+)
+from bomana.config.settings import (
     FileConfig,
     GameConfig,
 )

@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from bomana.config import FileConfig
+from bomana.config.settings import FileConfig
+from bomana.core import timing_store
 from bomana.core.logic import GameLogic
 from bomana.core.state import MapInfo, MapObjData, Phase, TelemetryData, Zone
 from bomana.utils.file_utils import StateManager
@@ -66,7 +67,7 @@ class TimerRestoreGuardTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _save_pending_restore(self, zone_x: float) -> str:
-        signature = GameLogic._build_battle_signature(_valid_map_info(), _battle_map(zone_x))
+        signature = timing_store.build_battle_signature(_valid_map_info(), _battle_map(zone_x))
         assert signature is not None
         StateManager.save(
             remaining_sec=600.0,

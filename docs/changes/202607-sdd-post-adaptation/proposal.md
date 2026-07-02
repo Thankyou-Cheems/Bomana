@@ -1,5 +1,8 @@
 # 202607 SDD Post-Adaptation Proposal
 
+Historical note: this pass reopened cleanup issues for temporary compatibility
+facades. Those facades are removed by `docs/changes/202607-sdd-cleanup/`.
+
 ## Problem
 
 The SDD refactor paused or deferred pre-existing bd work while module boundaries

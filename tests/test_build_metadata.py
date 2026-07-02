@@ -187,8 +187,9 @@ def test_build_portable_generates_and_restores_launcher_public_key(
 def test_version_info_falls_back_from_config_to_metadata() -> None:
     create_version_info = load_tool_module("create_version_info", "tools/create_version_info.py")
 
-    assert create_version_info.read_version(ROOT / "bomana" / "config.py") == metadata.__version__
+    assert create_version_info.read_version(ROOT / "bomana" / "metadata.py") == metadata.__version__
     assert (
         create_version_info.read_version(ROOT / "bomana" / "config" / "__init__.py")
         == metadata.__version__
     )
+    assert create_version_info.read_version(ROOT / "bomana" / "config.py") == "0.0.0"
