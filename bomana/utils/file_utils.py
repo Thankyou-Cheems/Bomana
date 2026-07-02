@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from bomana.config import (
+    ENABLE_ADVANCED_SETTINGS,
     ENABLE_AIRFIELDS,
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
@@ -178,6 +179,7 @@ class ConfigManager:
             "ENABLE_AIRFIELDS": ENABLE_AIRFIELDS,
             "ENABLE_FUEL": ENABLE_FUEL,
             "ENABLE_CHECKLIST": ENABLE_CHECKLIST,
+            "ENABLE_ADVANCED_SETTINGS": ENABLE_ADVANCED_SETTINGS,
         }
 
     @staticmethod

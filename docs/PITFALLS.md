@@ -71,9 +71,9 @@ implementation plans belong in git history, not here.
   Fix/Workaround: keep committed `.ps1` source ASCII-safe and construct required localized path/button text at runtime with explicit Unicode code points; keep a parser test that runs under Windows PowerShell
 
 - Context: running `tools/build_portable.py` builds concurrently
-  Symptom: `config.py` remained dirty after build, or older build scripts failed while reading version literals from `config.py`
-  Cause: variant packaging temporarily patches `bomana/config.py`; version metadata now lives in `bomana/metadata.py`
-  Fix/Workaround: do not run build variants in parallel; keep version reads pointed at `metadata.py`; preserve/restore the original config file only when the build script actually patched it
+  Symptom: `feature_profile.py` remained dirty after build, or older build scripts failed while reading version literals from config files
+  Cause: variant packaging temporarily patches `bomana/config/feature_profile.py`; version metadata lives in `bomana/metadata.py`
+  Fix/Workaround: do not run build variants in parallel; keep version reads pointed at `metadata.py`; preserve/restore the original feature profile only when the build script actually patched it
 
 - Context: portable app launched from the PyInstaller onefile launcher
   Symptom: app code resolved assets under the launcher's `_MEI...` temp path, causing missing aircraft limits or data files

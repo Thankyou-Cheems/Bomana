@@ -5,8 +5,8 @@
 - Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, details/support dialog)
 - Launcher pure helpers: `bomana/launcher_core.py` (download-source normalization, version/asset helpers, checksum and safe zip extraction)
 - Launcher install primitives: `bomana/launcher_install.py` (update lock, staged app install, rollback, incomplete-install recovery)
-- Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata; re-exported by `bomana/config.py`)
-- Central config: `bomana/config.py` (feature flags, config classes, compatibility metadata re-exports)
+- Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata; re-exported by `bomana/config/`)
+- Central config: `bomana/config/` (feature flags, config classes, compatibility metadata re-exports)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app coordinator, main-window builder, debug support, panel renderer, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
@@ -32,7 +32,7 @@
 ├─ Bomana.pyw                # Thin bootstrap entrypoint
 ├─ launcher.pyw              # Green launcher (auto update + bootstrap)
 ├─ bomana/
-│  ├─ config.py              # Feature flags/config classes + compatibility metadata re-exports
+│  ├─ config/                # Feature flags, settings classes, static paths, compatibility re-exports
 │  ├─ launcher_core.py       # Pure launcher helpers used by launcher.pyw
 │  ├─ launcher_install.py    # Launcher install/rollback transaction primitives
 │  ├─ metadata.py            # Project metadata and version constants
@@ -153,7 +153,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - Generated JSON metadata records the datamine source version and git commit when available.
 
 ## Configuration & Persistence
-- Runtime configuration lives in `bomana/config.py`.
+- Runtime configuration lives in `bomana/config/`.
 - User config/state stored as JSON in the user home directory (`FileConfig.CONFIG_FILE` / `STATE_FILE`).
 - Timer state restore is battle-scoped: `STATE_FILE` stores a 8111-derived battle signature and `GameLogic` applies the pending timer only after the next live battle context matches it.
 - Feature flags (`ENABLE_*`) drive compile-time variants and UI availability. All variants share the same config file.

@@ -263,7 +263,7 @@ uv run python Bomana.pyw
 ├─ Bomana.pyw
 ├─ launcher.pyw
 ├─ bomana/
-│  ├─ config.py
+│  ├─ config/
 │  ├─ core/
 │  ├─ data/
 │  │  ├─ ccrp_bomb_params.json
@@ -303,7 +303,7 @@ uv run python Bomana.pyw
 
 ### 编译开关
 
-编译开关在 `bomana/config.py` 中，用于打包不同功能版本：
+编译开关在 `bomana/config/feature_profile.py` 中，用于打包不同功能版本：
 
 ```python
 ENABLE_CCRP = True              # CCRP投弹预测功能

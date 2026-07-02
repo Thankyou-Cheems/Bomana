@@ -57,10 +57,10 @@ esac
 echo "[3/6] 构建版本: $VARIANT"
 echo ""
 
-# 根据版本注入编译开关（备份后修改 config.py）
+# 根据版本注入编译开关（备份后修改 feature_profile.py）
 echo "[4/6] 注入编译开关..."
-CONFIG_FILE="bomana/config.py"
-CONFIG_BAK="bomana/config.py.bak"
+CONFIG_FILE="bomana/config/feature_profile.py"
+CONFIG_BAK="bomana/config/feature_profile.py.bak"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "[错误] 未找到 $CONFIG_FILE"
     exit 1
@@ -91,7 +91,7 @@ from pathlib import Path
 import os
 import re
 
-path = Path("bomana/config.py")
+path = Path("bomana/config/feature_profile.py")
 code = path.read_text(encoding="utf-8")
 switches = {
     "ENABLE_CCRP": os.environ["ENABLE_CCRP"],

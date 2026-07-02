@@ -32,9 +32,22 @@ def make_app_zip(version: str = "2.0.0") -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("Bomana.pyw", "# app entry\n")
-        zf.writestr("bomana/config.py", f'__version__ = "{version}"\n')
+        zf.writestr("bomana/config/__init__.py", f'__version__ = "{version}"\n')
+        zf.writestr("bomana/config/feature_profile.py", "ENABLE_CCRP = True\n")
         zf.writestr("bomana/metadata.py", f'__version__ = "{version}"\n')
     return buffer.getvalue()
+
+
+def write_config_package(package_dir: Path, version: str, *, sentinel: str | None = None) -> None:
+    config_dir = package_dir / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    sentinel_line = f'SENTINEL = "{sentinel}"\n' if sentinel is not None else ""
+    (config_dir / "__init__.py").write_text(
+        f'{sentinel_line}__version__ = "{version}"\n',
+        encoding="utf-8",
+    )
+    (config_dir / "feature_profile.py").write_text("ENABLE_CCRP = True\n", encoding="utf-8")
+    (package_dir / "metadata.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
 
 
 class FakeResponse:
@@ -69,27 +82,13 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         app_dir = self.base / self.launcher.APP_DIR_NAME
         (app_dir / "bomana").mkdir(parents=True)
         (app_dir / "Bomana.pyw").write_text("# app entry\n", encoding="utf-8")
-        (app_dir / "bomana" / "config.py").write_text(
-            f'__version__ = "{version}"\n',
-            encoding="utf-8",
-        )
-        (app_dir / "bomana" / "metadata.py").write_text(
-            f'__version__ = "{version}"\n',
-            encoding="utf-8",
-        )
+        write_config_package(app_dir / "bomana", version)
 
     def write_previous_app(self, version: str = "0.9.0") -> None:
         previous_dir = self.base / self.launcher.APP_PREVIOUS_DIR_NAME
         (previous_dir / "bomana").mkdir(parents=True)
         (previous_dir / "Bomana.pyw").write_text("# previous app entry\n", encoding="utf-8")
-        (previous_dir / "bomana" / "config.py").write_text(
-            f'__version__ = "{version}"\n',
-            encoding="utf-8",
-        )
-        (previous_dir / "bomana" / "metadata.py").write_text(
-            f'__version__ = "{version}"\n',
-            encoding="utf-8",
-        )
+        write_config_package(previous_dir / "bomana", version)
 
     def signed_manifest(self, manifest: dict) -> dict:
         return launcher_core.sign_release_manifest(
@@ -850,9 +849,9 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             )
 
         self.assertEqual(
-            (self.base / self.launcher.APP_DIR_NAME / "bomana" / "config.py").read_text(
-                encoding="utf-8"
-            ),
+            (
+                self.base / self.launcher.APP_DIR_NAME / "bomana" / "config" / "__init__.py"
+            ).read_text(encoding="utf-8"),
             '__version__ = "1.0.0"\n',
         )
 
@@ -860,7 +859,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as zf:
             zf.writestr("Bomana.pyw", "# app entry\n")
-            zf.writestr("bomana/config.py", '__version__ = "2.0.0"\n')
+            zf.writestr("bomana/config/__init__.py", '__version__ = "2.0.0"\n')
         package_bytes = buffer.getvalue()
         package_sha = self.launcher._sha256_bytes(package_bytes)
 
@@ -878,14 +877,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         backup_dir = self.base / self.launcher.APP_BACKUP_DIR_NAME
         (backup_dir / "bomana").mkdir(parents=True)
         (backup_dir / "Bomana.pyw").write_text("# app entry\n", encoding="utf-8")
-        (backup_dir / "bomana" / "config.py").write_text(
-            '__version__ = "1.0.0"\n',
-            encoding="utf-8",
-        )
-        (backup_dir / "bomana" / "metadata.py").write_text(
-            '__version__ = "1.0.0"\n',
-            encoding="utf-8",
-        )
+        write_config_package(backup_dir / "bomana", "1.0.0")
         lock_path = self.base / self.launcher.UPDATE_LOCK_FILE_NAME
         lock_path.write_text("pid=1\n", encoding="utf-8")
         stale_time = time.time() - self.launcher.UPDATE_LOCK_STALE_SEC - 10
@@ -959,11 +951,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "Path('result.txt').write_text(SENTINEL, encoding='utf-8')\n",
             encoding="utf-8",
         )
-        (package_dir / "config.py").write_text(
-            'SENTINEL = "app"\n__version__ = "2.0.0"\n',
-            encoding="utf-8",
-        )
-        (package_dir / "metadata.py").write_text('__version__ = "2.0.0"\n', encoding="utf-8")
+        write_config_package(package_dir, "2.0.0", sentinel="app")
 
         class FrozenBomanaLoader:
             def create_module(self, _spec):

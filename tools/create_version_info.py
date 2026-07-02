@@ -4,6 +4,8 @@ from pathlib import Path
 
 
 def _read_literal_version(path):
+    if not path.exists():
+        return ""
     text = path.read_text(encoding="utf-8")
     match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', text)
     return match.group(1).strip() if match else ""
@@ -12,13 +14,13 @@ def _read_literal_version(path):
 def read_version(config_path):
     try:
         path = Path(config_path)
-        version = _read_literal_version(path)
-        if version:
-            return version
-
-        metadata_path = path.with_name("metadata.py")
-        if metadata_path.exists():
-            version = _read_literal_version(metadata_path)
+        candidates = [path, path.with_name("metadata.py")]
+        if path.name == "config.py":
+            candidates.append(path.parent / "metadata.py")
+        if path.parent.name == "config":
+            candidates.append(path.parent.parent / "metadata.py")
+        for candidate in dict.fromkeys(candidates):
+            version = _read_literal_version(candidate)
             if version:
                 return version
     except Exception as e:

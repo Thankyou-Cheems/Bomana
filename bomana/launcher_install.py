@@ -22,8 +22,11 @@ UPDATE_LOCK_FILE_NAME = ".bomana_update.lock"
 UPDATE_LOCK_STALE_SEC = 30 * 60
 APP_REQUIRED_FILES = (
     Path("Bomana.pyw"),
-    Path("bomana") / "config.py",
     Path("bomana") / "metadata.py",
+)
+APP_CONFIG_MARKERS = (
+    Path("bomana") / "config.py",
+    Path("bomana") / "config" / "__init__.py",
 )
 
 StatusCallback = Callable[[str, str, float | None, str], None]
@@ -49,6 +52,8 @@ def _read_literal_version(path: Path) -> str:
 def read_local_app_version(app_dir: Path) -> str:
     for relative in (
         Path("bomana") / "config.py",
+        Path("bomana") / "config" / "__init__.py",
+        Path("bomana") / "config" / "metadata.py",
         Path("bomana") / "metadata.py",
     ):
         version = _read_literal_version(app_dir / relative)
@@ -64,6 +69,8 @@ def validate_app_package_root(app_root: Path, entrypoint: str) -> None:
         for path in sorted(required, key=lambda item: item.as_posix())
         if not (app_root / path).is_file()
     ]
+    if not any((app_root / path).is_file() for path in APP_CONFIG_MARKERS):
+        missing.append("bomana/config.py or bomana/config/__init__.py")
     if missing:
         raise RuntimeError(f"应用包缺少必要文件: {', '.join(missing)}")
 

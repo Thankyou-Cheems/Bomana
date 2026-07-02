@@ -1,22 +1,25 @@
-"""
-配置与元数据集中管理。
-"""
+"""Runtime configuration classes."""
 
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, ClassVar
 
-from bomana import metadata as _metadata
-from bomana.ui import theme as _theme
+from bomana.config.feature_profile import (
+    ENABLE_AIRFIELDS,
+    ENABLE_CCRP,
+    ENABLE_CHECKLIST,
+    ENABLE_FUEL,
+    ENABLE_ZONES,
+)
+from bomana.config.metadata import __author__, __repository__, __title__, __version__
+from bomana.config.static_data import (
+    APP_ICON_FILE,
+    BOMB_PARAMS_JSON,
+    FM_SPEED_LIMITS_JSON,
+    LEGACY_BOMB_PARAMS_JSON,
+    SPONSOR_WECHAT_IMAGE,
+)
 
-__title__ = _metadata.__title__
-__version__ = _metadata.__version__
-PORTABLE_MIN_LAUNCHER_VERSION = _metadata.PORTABLE_MIN_LAUNCHER_VERSION
-__author__ = _metadata.__author__
-__license__ = _metadata.__license__
-__copyright__ = _metadata.__copyright__
-__repository__ = _metadata.__repository__
-Theme = _theme.Theme
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 
 
@@ -27,21 +30,6 @@ def _safe_print(message: str) -> None:
     except UnicodeEncodeError:
         fallback = message.encode("ascii", errors="backslashreplace").decode("ascii")
         print(fallback)
-
-
-# ============================================================================
-# 编译开关 - 功能模块启用控制
-# ============================================================================
-# 本地源码直接运行（python Bomana.pyw）默认全功能，提升测试体验。
-# 构建脚本 tools/build_portable.py 会按变体临时覆盖这些值，并在结束后恢复。
-# 因此此处默认值不会改变 Enhanced/Standard/Lite 的打包结果。
-
-ENABLE_CCRP = True
-ENABLE_ZONES = True
-ENABLE_AIRFIELDS = True
-ENABLE_FUEL = True
-ENABLE_CHECKLIST = True
-ENABLE_ADVANCED_SETTINGS = True
 
 
 # ============================================================================
@@ -602,7 +590,7 @@ class OverspeedConfig:
     ENABLED = True
 
     # 限速数据库文件（相对项目根目录，resource_path可解析）
-    LIMITS_FILE = "bomana/data/fm_speed_limits.json"
+    LIMITS_FILE = FM_SPEED_LIMITS_JSON
 
     # 默认级别阈值（保持与 WTSpeeder 关键逻辑一致，并增加全真提前感知层）
     _DEFAULT_THRESHOLDS: ClassVar[dict[str, float]] = {
@@ -770,7 +758,7 @@ class FileConfig:
     STATE_FILE = Path.home() / ".wttimer_state.json"
 
     # 图标文件（用于托盘和窗口）
-    ICON_FILE = "bomana/assets/branding/app.ico"
+    ICON_FILE = APP_ICON_FILE
 
     # 用户自定义提示音导入目录
     CUSTOM_SOUND_DIR = SoundConfig.CUSTOM_SOUND_DIR
@@ -908,7 +896,7 @@ class AboutConfig:
     # 赞助链接配置（可以添加多个）
     SPONSOR_LINKS: ClassVar[list[tuple[str, str, str]]] = [
         # ("显示名称", "链接URL", "图片文件名"),
-        ("微信赞赏", "", "bomana/assets/branding/sponsor_wechat.png"),  # 空链接表示只显示图片
+        ("微信赞赏", "", SPONSOR_WECHAT_IMAGE),  # 空链接表示只显示图片
     ]
 
     # 赞助图片尺寸
@@ -953,8 +941,8 @@ class BombConfig:
     _database_loaded = False
     load_error: str | None = None
     database_source: str | None = None
-    JSON_FILE = "bomana/data/ccrp_bomb_params.json"
-    LEGACY_JSON_FILE = "ccrp_bomb_params.json"
+    JSON_FILE = BOMB_PARAMS_JSON
+    LEGACY_JSON_FILE = LEGACY_BOMB_PARAMS_JSON
     GUIDED_OR_GLIDE_KEYWORDS: ClassVar[tuple[str, ...]] = (
         "agm",
         "bgl",

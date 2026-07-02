@@ -127,8 +127,9 @@ def test_release_manifest_signature_rejects_kind_confusion() -> None:
 def test_launcher_install_reads_metadata_version(tmp_path: Path) -> None:
     app_dir = tmp_path / "app"
     package_dir = app_dir / "bomana"
-    package_dir.mkdir(parents=True)
-    (package_dir / "config.py").write_text(
+    config_dir = package_dir / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "__init__.py").write_text(
         "from bomana import metadata as _metadata\n__version__ = _metadata.__version__\n",
         encoding="utf-8",
     )

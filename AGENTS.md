@@ -6,7 +6,7 @@ Keep it concise and update when workflows or boundaries change.
 ## Quick Map
 - Launcher: `launcher.pyw`
 - App entry: `Bomana.pyw`
-- Config: `bomana/config.py`
+- Config: `bomana/config/` (facade: `__init__.py`; feature flags: `feature_profile.py`; settings: `settings.py`)
 - Core: `bomana/core/` (state, telemetry, ballistics, logic)
 - UI: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound)

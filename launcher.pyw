@@ -205,10 +205,16 @@ def _is_frozen_launcher() -> bool:
     return bool(getattr(sys, "frozen", False)) and bool(str(getattr(sys, "executable", "")).strip())
 
 
+def _has_config_marker(base: Path) -> bool:
+    return (base / "bomana" / "config.py").exists() or (
+        base / "bomana" / "config" / "__init__.py"
+    ).exists()
+
+
 def _is_source_test_run(base: Path) -> bool:
     if _is_frozen_launcher():
         return False
-    return (base / DEFAULT_ENTRYPOINT).exists() and (base / "bomana" / "config.py").exists()
+    return (base / DEFAULT_ENTRYPOINT).exists() and _has_config_marker(base)
 
 
 def _app_runtime_dir(base: Path) -> Path:

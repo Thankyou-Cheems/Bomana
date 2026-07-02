@@ -466,14 +466,14 @@ def main() -> int:
     out_dir = (root / args.output).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    config_path = root / "bomana" / "config.py"
+    feature_profile_path = root / "bomana" / "config" / "feature_profile.py"
     metadata_path = root / "bomana" / "metadata.py"
     launcher_path = root / "launcher.pyw"
-    config_stat = config_path.stat()
-    original = config_path.read_text(encoding="utf-8")
+    feature_profile_stat = feature_profile_path.stat()
+    original_feature_profile = feature_profile_path.read_text(encoding="utf-8")
     metadata_text = metadata_path.read_text(encoding="utf-8")
     launcher_text = launcher_path.read_text(encoding="utf-8")
-    config_patched = False
+    feature_profile_patched = False
 
     app_zip: Path | None = None
     manifest: Path | None = None
@@ -496,10 +496,10 @@ def main() -> int:
 
         if args.target in ("all", "app"):
             app_version = source_app_version
-            patched = replace_switches(original, VARIANT_SWITCHES[args.variant])
-            if patched != original:
-                config_path.write_text(patched, encoding="utf-8")
-                config_patched = True
+            patched = replace_switches(original_feature_profile, VARIANT_SWITCHES[args.variant])
+            if patched != original_feature_profile:
+                feature_profile_path.write_text(patched, encoding="utf-8")
+                feature_profile_patched = True
             app_zip = build_app_zip(root, args.variant, app_version, out_dir)
             app_sha = sha256_file(app_zip)
             manifest = write_manifest(
@@ -566,9 +566,12 @@ def main() -> int:
             safe_print(f"  - checksum:    {checksum}")
         return 0
     finally:
-        if config_patched:
-            config_path.write_text(original, encoding="utf-8")
-            os.utime(config_path, ns=(config_stat.st_atime_ns, config_stat.st_mtime_ns))
+        if feature_profile_patched:
+            feature_profile_path.write_text(original_feature_profile, encoding="utf-8")
+            os.utime(
+                feature_profile_path,
+                ns=(feature_profile_stat.st_atime_ns, feature_profile_stat.st_mtime_ns),
+            )
 
 
 if __name__ == "__main__":

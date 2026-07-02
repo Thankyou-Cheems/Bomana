@@ -220,7 +220,8 @@ function Install-AppPackage {
 
     $required = @(
         "Bomana.pyw",
-        "bomana\config.py",
+        "bomana\config\__init__.py",
+        "bomana\config\feature_profile.py",
         "bomana\metadata.py"
     )
     foreach ($relative in $required) {

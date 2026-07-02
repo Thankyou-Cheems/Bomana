@@ -68,10 +68,10 @@ if /I not "%VARIANT%"=="Enhanced" if /I not "%VARIANT%"=="Standard" if /I not "%
 echo [3/6] 构建版本: %VARIANT%
 echo.
 
-REM 根据版本注入编译开关（备份后修改 config.py）
+REM 根据版本注入编译开关（备份后修改 feature_profile.py）
 echo [4/6] 注入编译开关...
-set "CONFIG_FILE=bomana\config.py"
-set "CONFIG_BAK=bomana\config.py.bak"
+set "CONFIG_FILE=bomana\config\feature_profile.py"
+set "CONFIG_BAK=bomana\config\feature_profile.py.bak"
 if not exist "%CONFIG_FILE%" (
     echo [错误] 未找到 %CONFIG_FILE%
     popd >nul
@@ -120,7 +120,7 @@ echo.
 REM 生成版本信息文件
 echo [5.5/6] 生成版本信息...
 if exist file_version_info.txt del file_version_info.txt
-%UV_CMD% run python tools\create_version_info.py --config bomana\config.py --output file_version_info.txt
+%UV_CMD% run python tools\create_version_info.py --config bomana\metadata.py --output file_version_info.txt
 if %errorlevel% neq 0 (
     if exist "%CONFIG_BAK%" move /y "%CONFIG_BAK%" "%CONFIG_FILE%" >nul
     echo [错误] 版本信息生成失败
@@ -188,7 +188,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM 恢复 config.py
+REM 恢复 feature_profile.py
 if exist "%CONFIG_BAK%" move /y "%CONFIG_BAK%" "%CONFIG_FILE%" >nul
 
 echo.

@@ -373,7 +373,7 @@ def test_legacy_build_fails_when_version_info_generation_fails() -> None:
     script = (ROOT / "tools/scripts/build.bat").read_text(encoding="utf-8")
     generate_index = script.index(
         "%UV_CMD% run python tools\\create_version_info.py "
-        "--config bomana\\config.py --output file_version_info.txt"
+        "--config bomana\\metadata.py --output file_version_info.txt"
     )
     delete_index = script.index("if exist file_version_info.txt del file_version_info.txt")
     errorlevel_index = script.index("if %errorlevel% neq 0 (", generate_index)

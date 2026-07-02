@@ -15,7 +15,7 @@
 - 跨模块不变量以 [docs/specs](./specs/) 为准；入口文档只保留摘要和链接。
 - 修改架构或代码流时，必须同步更新 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 - 遇到新的失败模式时，必须在 [PITFALLS.md](./PITFALLS.md) 追加简短记录。
-- 功能开关受 `bomana/config.py` 中的 `ENABLE_*` 控制，三种构建变体共用同一份配置逻辑。
+- 功能开关受 `bomana/config/feature_profile.py` 中的 `ENABLE_*` 控制，三种构建变体共用同一份配置逻辑。
 
 ### 环境准备
 
@@ -138,7 +138,7 @@ bd close <issue-id> --reason "Completed" --json
 - 本仓库通过 `.python-version` 默认 pin 到 `3.14.5`；本地初始化建议直接执行 `uv sync --python 3.14.5 --extra dev`
 - 代码风格：PEP 8、4 空格缩进、尽量保持单行不超过 100 字符
 - 注释：保留现有注释与文件头，新增注释只写必要背景，不写显而易见的语句复述
-- 配置/状态类优先集中在 `bomana/config.py` 与 `bomana/core/state.py`
+- 配置/状态类优先集中在 `bomana/config/` 与 `bomana/core/state.py`
 - UI 改动请同时检查多 DPI、多显示器、历史速度模式、独立导航窗口和 HUD 开关
 
 ### 提交与 PR
@@ -224,7 +224,7 @@ bd close <issue-id> --reason "Completed" --json
 - Cross-module invariants are canonical in [docs/specs](./specs/); entrypoint docs should stay as summaries and links.
 - Update [ARCHITECTURE.md](./ARCHITECTURE.md) when module boundaries or data flow change.
 - Add a short note to [PITFALLS.md](./PITFALLS.md) when you hit a new failure mode.
-- Respect `ENABLE_*` feature flags in `bomana/config.py`; all build variants share the same config model.
+- Respect `ENABLE_*` feature flags in `bomana/config/feature_profile.py`; all build variants share the same config model.
 
 ### Setup
 
