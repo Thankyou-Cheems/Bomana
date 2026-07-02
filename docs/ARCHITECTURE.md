@@ -23,6 +23,7 @@
 - Runtime 8111 boundary: `docs/specs/runtime-8111-boundary.md`
 - Release signing and Tencent/EdgeOne deployment: `docs/specs/release-signing.md`
 - Tk threading and UI dispatch: `docs/specs/threading-ui-contract.md`
+- UI presenter boundaries: `docs/specs/ui-presenter-boundary.md`
 - Config variants and `ENABLE_*` precedence: `docs/specs/config-variants.md`
 - Test layers and quality gates: `docs/specs/testing-quality-gates.md`
 

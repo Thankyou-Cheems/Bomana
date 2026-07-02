@@ -7,7 +7,7 @@ Prefix: `QG-`
 ## Scope
 
 This spec governs local validation, CI quality gates, automated test boundaries,
-test layout, release/deploy verification tests, and SDD phase closeout evidence.
+test layout, and release/deploy verification tests.
 
 ## Non-goals
 
@@ -22,8 +22,8 @@ test layout, release/deploy verification tests, and SDD phase closeout evidence.
 - `QG-01`: Code-changing tasks must run `uv run --extra dev ruff check .` and
   `uv run --extra dev ruff format --check .`. Pure docs or issue-only changes
   may mark Ruff as not applicable.
-- `QG-02`: Phase closeout must have Ruff and pytest green. Do not delete, skip,
-  or weaken tests just to pass a phase.
+- `QG-02`: Refactor milestone closeout must have Ruff and pytest green. Do not
+  delete, skip, or weaken tests just to pass a milestone.
 - `QG-03`: `tools/scripts/check_smoke.bat` is the fast local smoke entrypoint and
   must run the same pytest suite as `uv run --extra dev pytest`.
 - `QG-04`: CI quality gates use Windows, Python 3.14, `uv sync --extra dev
@@ -40,13 +40,12 @@ test layout, release/deploy verification tests, and SDD phase closeout evidence.
   changes also need build or packaged-launcher smoke when appropriate.
 - `QG-09`: Ruff defaults include `RUF012` and `RUF013`. `RUF001`, `RUF002`, and
   `RUF003` are targeted scans only.
-- `QG-10`: During the active SDD repository refactor, phases are committed
-  locally and not pushed unless the user explicitly authorizes a push.
+- `QG-10`: During the SDD repository refactor consolidation, work is committed
+  and merged locally unless the user explicitly authorizes a remote push.
 
 ## Contract Coverage
 
 - `tests/test_quality_gate_config.py` checks pytest/smoke behavior.
 - `tests/test_quality_release_workflows.py` checks release workflow policy.
 - `tests/README.md` records `tests/contracts/` as the spec contract layer.
-- Phase evidence lives in `docs/changes/<change-id>/`; task state remains in
-  `bd`.
+- Task state remains in `bd`; durable validation rules live in `docs/specs/`.

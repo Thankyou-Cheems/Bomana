@@ -1,6 +1,6 @@
 from pathlib import Path
 
-# enforces: docs/changes/202607-sdd-phase2/delta-spec.md UI-PRES-01..UI-PRES-02
+# enforces: docs/specs/ui-presenter-boundary.md UI-PRES-01..UI-PRES-02
 
 ROOT = Path(__file__).resolve().parents[2]
 

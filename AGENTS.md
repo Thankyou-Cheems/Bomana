@@ -62,7 +62,7 @@ Keep it concise and update when workflows or boundaries change.
 
 **When ending a work session**, complete ALL steps below. Work is normally NOT complete until `git push` succeeds, unless an active ADR/bd decision explicitly sets a narrower closeout policy.
 
-Current SDD exception: `docs/adr/0001-spec-anchored-docs.md` records that SDD phase work is committed locally and not pushed unless the user explicitly authorizes a push.
+Current SDD exception: `docs/adr/0001-spec-anchored-docs.md` records that SDD refactor work is committed and merged locally until the user explicitly authorizes a remote push.
 
 **MANDATORY WORKFLOW:**
 
