@@ -106,6 +106,7 @@ class HeadingTape(tk.Canvas):
         # 目标类型颜色配置
         self._target_colors = {
             "zone": Theme.RED,
+            "poi": Theme.YELLOW,
             "friendly": Theme.BLUE,
             "enemy": Theme.ORANGE,
             "destroyed": Theme.TEXT_MUTED,
@@ -242,7 +243,7 @@ class HeadingTape(tk.Canvas):
             current_hdg: 当前航向(0-360°)
             targets: 目标列表，每个目标为dict:
                 {
-                    'type': 'zone'/'friendly'/'enemy'/'destroyed',
+                    'type': 'zone'/'poi'/'friendly'/'enemy'/'destroyed',
                     'relative': 相对角度(-180~180),
                     'distance_km': 距离(公里),
                     'is_primary': 是否主目标(用于偏航提示),
@@ -398,10 +399,10 @@ class HeadingTape(tk.Canvas):
                     width=1,
                 )
 
-        # 5. 绘制所有目标标记（按优先级：destroyed < enemy < friendly < zone）
+        # 5. 绘制所有目标标记（按优先级：destroyed < enemy < friendly < zone < poi）
         sorted_targets = sorted(
             targets,
-            key=lambda t: {"destroyed": 0, "enemy": 1, "friendly": 2, "zone": 3}.get(
+            key=lambda t: {"destroyed": 0, "enemy": 1, "friendly": 2, "zone": 3, "poi": 4}.get(
                 t.get("type", "zone"), 2
             ),
         )
@@ -603,6 +604,33 @@ class HeadingTape(tk.Canvas):
                     outline="",
                 )
 
+        elif t_type == "poi":
+            size = int((8 if is_primary else 6) * icon_scale)
+            width = 2 if is_target else 1
+            self.create_polygon(
+                x,
+                y_center - size,
+                x + size,
+                y_center,
+                x,
+                y_center + size,
+                x - size,
+                y_center,
+                outline=color,
+                fill="" if is_primary else color,
+                width=width,
+            )
+            if is_primary:
+                dot_size = max(2, int(2 * icon_scale))
+                self.create_oval(
+                    x - dot_size,
+                    y_center - dot_size,
+                    x + dot_size,
+                    y_center + dot_size,
+                    fill=color,
+                    outline="",
+                )
+
         elif t_type == "friendly":
             # v6.3: 友方机场 - 根据是否为目标调整大小
             # v6.5.2: 调小尺寸
@@ -743,6 +771,38 @@ class HeadingTape(tk.Canvas):
                     dist_y,
                     text=dist_text,
                     fill=Theme.TEXT_MUTED,
+                    font=text_font,
+                    anchor="s",
+                )
+
+        elif t_type == "poi":
+            label_text = f"◇{dist_text}"
+            if is_primary:
+                bg_color = self._darken_color(Theme.YELLOW, 0.45)
+                text_width = self._measure_text(label_text, bold_font)
+                pad = 2
+                self.create_rectangle(
+                    x - text_width / 2 - pad,
+                    dist_y - int(layout["distance_linespace"]),
+                    x + text_width / 2 + pad,
+                    dist_y + pad,
+                    fill=bg_color,
+                    outline="",
+                )
+                self.create_text(
+                    x,
+                    dist_y,
+                    text=label_text,
+                    fill="#FFFFFF",
+                    font=bold_font,
+                    anchor="s",
+                )
+            else:
+                self.create_text(
+                    x,
+                    dist_y,
+                    text=label_text,
+                    fill=Theme.YELLOW if is_target else Theme.TEXT_MUTED,
                     font=text_font,
                     anchor="s",
                 )
@@ -891,6 +951,8 @@ class HeadingTape(tk.Canvas):
             prefix = "✖"
         elif t_type == "zone":
             prefix = "●"
+        elif t_type == "poi":
+            prefix = "◇"
 
         # v6.5: 格式化距离文本
         dist_text = ""

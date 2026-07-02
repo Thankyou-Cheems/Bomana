@@ -1,10 +1,23 @@
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from PIL import Image
 
+from bomana.config import Theme
 from bomana.ui.icon_assets import IconManager
 from bomana.ui.panel_renderer import AppPanelRenderer
+
+
+class FakeLabel:
+    def __init__(self) -> None:
+        self.options: dict[str, object] = {}
+
+    def config(self, **kwargs) -> None:
+        self.options.update(kwargs)
+
+    def cget(self, key: str):
+        return self.options.get(key, "")
 
 
 class PanelRendererNavListTests(unittest.TestCase):
@@ -21,6 +34,61 @@ class PanelRendererNavListTests(unittest.TestCase):
         self.assertEqual(AppPanelRenderer._format_nav_distance(12.9), "12km")
         self.assertEqual(AppPanelRenderer._format_nav_relative(4.9), "+4°")
         self.assertEqual(AppPanelRenderer._format_nav_relative(-4.9, precise=True), "-4.90°")
+
+    def test_dense_nav_list_item_preserves_all_navigation_fields(self) -> None:
+        item = AppPanelRenderer._build_nav_list_item(
+            base_icon="zone",
+            selected=True,
+            direction="NE",
+            distance_km=8.25,
+            relative=-4.9,
+            fg=Theme.GREEN,
+            precise_relative=True,
+        )
+
+        self.assertEqual(item.icon, "target")
+        self.assertEqual(item.direction, "NE")
+        self.assertEqual(item.distance, "8.2km")
+        self.assertEqual(item.relative, "-4.90°")
+        self.assertEqual(item.fg, Theme.GREEN)
+
+    def test_tape_status_row_formats_interest_point_as_primary_target(self) -> None:
+        app = SimpleNamespace(
+            tape_zone_label=FakeLabel(),
+            tape_turn_lbl=FakeLabel(),
+            tape_deviation_lbl=FakeLabel(),
+            tape_tolerance_lbl=FakeLabel(),
+            tape_zone_info=FakeLabel(),
+            tape_tolerance_legend=FakeLabel(),
+            tape_friendly_turn=None,
+            tape_friendly_status=None,
+            tape_friendly_info=None,
+        )
+        renderer = AppPanelRenderer(app)
+        poi_info = {
+            "type": "poi",
+            "name": "补给点",
+            "relative": 12.0,
+            "distance_km": 4.25,
+            "direction": "右转 12°",
+            "ete_str": "00:34",
+            "cdi_indicator": "偏右",
+            "cdi_color": "#f2c14e",
+            "color": Theme.YELLOW,
+        }
+
+        renderer.update_tape_info_labels([poi_info], poi_info)
+
+        self.assertEqual(app.tape_zone_label.cget("text"), "◇兴趣点:")
+        self.assertEqual(app.tape_zone_label.cget("fg"), Theme.YELLOW)
+        self.assertEqual(app.tape_turn_lbl.cget("text"), "右转 12°")
+        self.assertEqual(app.tape_deviation_lbl.cget("text"), "偏右")
+        self.assertEqual(app.tape_deviation_lbl.cget("fg"), "#f2c14e")
+        self.assertEqual(app.tape_zone_info.cget("fg"), Theme.YELLOW)
+        self.assertIn("补给点", app.tape_zone_info.cget("text"))
+        self.assertIn("4.2km", app.tape_zone_info.cget("text"))
+        self.assertIn("00:34", app.tape_zone_info.cget("text"))
+        self.assertEqual(app.tape_tolerance_legend.cget("text"), "")
 
     def test_icon_manager_uses_nearest_generated_size(self) -> None:
         self.assertEqual(IconManager._nearest_asset_size(17), 18)

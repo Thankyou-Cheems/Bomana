@@ -1,5 +1,6 @@
 """Panel rendering helpers for the main App coordinator."""
 
+import math
 import time
 import tkinter as tk
 from dataclasses import dataclass
@@ -29,6 +30,8 @@ from bomana.utils.math_utils import (
     format_distance_ete,
     get_cdi_tolerance,
 )
+
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,30 +205,97 @@ class AppPanelRenderer:
             app._zone_panel_visible = visible
             self.update_mid_panel_layout()
 
-    def update_tape_info_labels(self, targets_info: list, primary_zone) -> None:
-        """更新航向带下方的状态提示（战区+友方机场）。"""
+    @staticmethod
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        try:
+            number = float(value)
+        except _NUMERIC_PARSE_ERRORS:
+            return default
+        return number if math.isfinite(number) else default
+
+    @classmethod
+    def _format_active_info_text(cls, info: dict[str, Any]) -> str:
+        distance = cls._safe_float(info.get("distance_km", 0.0))
+        base_text = format_distance_ete(distance, info.get("ete_str"))
+        name = str(info.get("name", "") or "").strip()
+        if info.get("type") == "poi" and name and name != "兴趣点":
+            return f"{name} {base_text}"
+        return base_text
+
+    @classmethod
+    def _target_info_from_legacy_zone(cls, zone: Any) -> dict[str, Any] | None:
+        if zone is None:
+            return None
+        return {
+            "type": "zone",
+            "name": "战区",
+            "icon": "⊚",
+            "relative": getattr(zone, "relative", 0.0),
+            "distance_km": getattr(zone, "distance_km", 0.0),
+            "ete_str": getattr(zone, "ete_str", ""),
+            "color": Theme.RED,
+        }
+
+    @classmethod
+    def _primary_target_info(
+        cls, targets_info: list[dict[str, Any]], primary_target_info: Any = None
+    ) -> dict[str, Any] | None:
+        if isinstance(primary_target_info, dict):
+            return primary_target_info
+        if primary_target_info is not None:
+            return cls._target_info_from_legacy_zone(primary_target_info)
+        return next(
+            (info for info in targets_info if info.get("type") in {"poi", "zone"}),
+            None,
+        )
+
+    def update_tape_info_labels(
+        self, targets_info: list[dict[str, Any]], primary_target_info: Any = None
+    ) -> None:
+        """更新航向带下方的主导航目标和友方机场状态提示。"""
         app = self.app
-        zone_info = next((t for t in targets_info if t["type"] == "zone"), None)
-        if primary_zone and app.tape_turn_lbl and app.tape_deviation_lbl and app.tape_tolerance_lbl:
-            tolerance = get_cdi_tolerance(primary_zone.distance_km)
-            scale = calculate_heading_tape_scale(primary_zone.distance_km)
-            rel = primary_zone.relative
-            abs_rel = abs(rel)
+        target_info = self._primary_target_info(targets_info, primary_target_info)
+        has_primary_labels = app.tape_turn_lbl and app.tape_deviation_lbl and app.tape_tolerance_lbl
+        if target_info and has_primary_labels:
+            target_type = str(target_info.get("type", "") or "")
+            rel = self._safe_float(target_info.get("relative", 0.0))
+            distance = self._safe_float(target_info.get("distance_km", 0.0))
+            info_text = self._format_active_info_text(target_info)
 
-            turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
-            dev_text, dev_color = calculate_zone_status(abs_rel, tolerance)
-            ete_str = zone_info.get("ete_str") if zone_info else None
-            info_text = format_distance_ete(primary_zone.distance_km, ete_str)
-            tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
+            if target_type == "poi":
+                label_text = "◇兴趣点:"
+                label_color = Theme.YELLOW
+                turn_text = str(target_info.get("direction", "") or "").strip()
+                turn_color = Theme.YELLOW
+                if not turn_text:
+                    turn_text, turn_color = calculate_airfield_turn_indicator(rel)
+                dev_text = str(target_info.get("cdi_indicator", "") or "").strip()
+                dev_color = str(target_info.get("cdi_color", "") or "").strip() or Theme.YELLOW
+                if not dev_text:
+                    tolerance = get_cdi_tolerance(distance)
+                    dev_text, dev_color = calculate_zone_status(abs(rel), tolerance)
+                tol_text = ""
+            else:
+                tolerance = get_cdi_tolerance(distance)
+                scale = calculate_heading_tape_scale(distance)
+                turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
+                dev_text, dev_color = calculate_zone_status(abs(rel), tolerance)
+                label_text = "⊚战区:"
+                label_color = Theme.RED
+                tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
 
+            if hasattr(app, "tape_zone_label") and app.tape_zone_label:
+                app.tape_zone_label.config(text=label_text, fg=label_color)
             app.tape_turn_lbl.config(text=turn_text, fg=turn_color)
             app.tape_deviation_lbl.config(text=dev_text, fg=dev_color)
             if hasattr(app, "tape_zone_info") and app.tape_zone_info:
-                app.tape_zone_info.config(text=info_text, fg=Theme.RED)
+                app.tape_zone_info.config(text=info_text, fg=label_color)
             if hasattr(app, "tape_tolerance_legend") and app.tape_tolerance_legend:
                 app.tape_tolerance_legend.config(text=tol_text)
             app.tape_tolerance_lbl.config(text="")
-        elif app.tape_turn_lbl and app.tape_deviation_lbl and app.tape_tolerance_lbl:
+        elif has_primary_labels:
+            if hasattr(app, "tape_zone_label") and app.tape_zone_label:
+                app.tape_zone_label.config(text="⊚战区:", fg=Theme.RED)
             app.tape_turn_lbl.config(text="", fg=Theme.TEXT_MUTED)
             app.tape_deviation_lbl.config(text="无目标", fg=Theme.TEXT_MUTED)
             if hasattr(app, "tape_zone_info") and app.tape_zone_info:
@@ -234,11 +304,11 @@ class AppPanelRenderer:
                 app.tape_tolerance_legend.config(text="")
             app.tape_tolerance_lbl.config(text="")
 
-        friendly_info = next((t for t in targets_info if t["type"] == "friendly"), None)
+        friendly_info = next((t for t in targets_info if t.get("type") == "friendly"), None)
         if friendly_info and app.tape_friendly_turn and app.tape_friendly_info:
-            rel = friendly_info["relative"]
+            rel = self._safe_float(friendly_info.get("relative", 0.0))
             abs_rel = abs(rel)
-            dist = friendly_info["distance_km"]
+            dist = self._safe_float(friendly_info.get("distance_km", 0.0))
 
             turn_text, turn_color = calculate_airfield_turn_indicator(rel)
             status_text, status_color = calculate_airfield_status(abs_rel)
@@ -276,6 +346,29 @@ class AppPanelRenderer:
         if precise:
             return f"{rel_sign}{relative:.2f}°"
         return f"{rel_sign}{int(relative)}°"
+
+    @classmethod
+    def _build_nav_list_item(
+        cls,
+        *,
+        base_icon: str,
+        selected: bool,
+        direction: Any,
+        distance_km: Any,
+        relative: Any,
+        fg: str,
+        precise_relative: bool = False,
+    ) -> NavListItem:
+        """Build one dense navigation row without dropping core row fields."""
+        distance = cls._safe_float(distance_km)
+        rel = cls._safe_float(relative)
+        return NavListItem(
+            icon=cls._nav_list_icon(base_icon, selected),
+            direction=str(direction or ""),
+            distance=cls._format_nav_distance(distance),
+            relative=cls._format_nav_relative(rel, precise=precise_relative),
+            fg=fg,
+        )
 
     def _icon_size(self, base_size: int = 18, *, min_size: int = 16, max_size: int = 64) -> int:
         scale = float(getattr(self.app, "scale", 1.0) or 1.0)
@@ -323,9 +416,13 @@ class AppPanelRenderer:
         self, snap: UISnapshot
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any]:
         """Build integrated heading-tape targets and status items."""
-        destroyed_zones = snap.destroyed_zones if snap.zone_destroyed_alert else None
+        destroyed_zones = (
+            getattr(snap, "destroyed_zones", [])
+            if getattr(snap, "zone_destroyed_alert", False)
+            else None
+        )
         model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)
-        return model.targets, model.active_targets_info, model.primary_zone
+        return model.targets, model.active_targets_info, model.primary_target_info
 
     def update_zone_display(self, snap: UISnapshot):
         """更新战区显示，并返回是否需要重算布局尺寸。"""
@@ -362,24 +459,26 @@ class AppPanelRenderer:
                 column=0,
                 sticky="ew",
                 padx=pad_x,
-                pady=(int(6 * s), int(2 * s)),
+                pady=(int(2 * s), int(1 * s)),
             )
             self._grid_remove_if_needed(app.compact_nav_frame)
 
             nav_in_main = PanelConfig.navigation_mode == "integrated"
             if app.heading_tape is not None:
                 if nav_in_main and heading_available:
-                    targets, active_targets_info, target_zone = self._build_heading_targets(snap)
-                    primary_dist = target_zone.distance_km if target_zone else 10.0
+                    targets, active_targets_info, primary_info = self._build_heading_targets(snap)
+                    primary_dist = (
+                        self._safe_float(primary_info.get("distance_km")) if primary_info else 10.0
+                    )
                     app.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
-                    self.update_tape_info_labels(active_targets_info, target_zone)
+                    self.update_tape_info_labels(active_targets_info, primary_info)
                     self._grid_if_needed(
                         app.heading_tape_frame,
                         row=1,
                         column=0,
                         sticky="ew",
                         padx=pad_x,
-                        pady=(int(2 * s), int(4 * s)),
+                        pady=(int(1 * s), int(3 * s)),
                     )
                 elif nav_in_main:
                     app.heading_tape.clear()
@@ -390,7 +489,7 @@ class AppPanelRenderer:
                         column=0,
                         sticky="ew",
                         padx=pad_x,
-                        pady=(int(2 * s), int(4 * s)),
+                        pady=(int(1 * s), int(3 * s)),
                     )
                 else:
                     app.heading_tape.clear()
@@ -436,7 +535,7 @@ class AppPanelRenderer:
                     column=0,
                     sticky="ew",
                     padx=pad_x,
-                    pady=(0, int(2 * s)),
+                    pady=(0, int(1 * s)),
                 )
                 self._grid_if_needed(
                     app.zone_list_frame,
@@ -444,7 +543,7 @@ class AppPanelRenderer:
                     column=0,
                     sticky="ew",
                     padx=pad_x,
-                    pady=(0, int(10 * s)),
+                    pady=(0, int(3 * s)),
                 )
             else:
                 self._grid_remove_if_needed(app.zone_list_header_frame)
@@ -458,26 +557,24 @@ class AppPanelRenderer:
                 idx += 1
             else:
                 for zone in snap.zones[: ZoneConfig.MAX_DISPLAY_ZONES]:
-                    dist_text = self._format_nav_distance(zone.distance_km)
-                    rel_text = self._format_nav_relative(
-                        zone.relative, precise=bool(zone.is_target)
-                    )
-                    relative_text = rel_text if nav_in_main else ""
+                    zone_is_target = bool(getattr(zone, "is_target", False))
                     fg = (
                         Theme.GREEN
-                        if zone.is_target and not snap.is_deviating
+                        if zone_is_target and not getattr(snap, "is_deviating", False)
                         else Theme.ORANGE
-                        if zone.is_target
+                        if zone_is_target
                         else Theme.TEXT_DIM
                     )
                     self._set_nav_row(
                         row_pool[idx],
-                        NavListItem(
-                            icon=self._nav_list_icon("zone", bool(zone.is_target)),
-                            direction=zone.direction,
-                            distance=dist_text,
-                            relative=relative_text,
+                        self._build_nav_list_item(
+                            base_icon="zone",
+                            selected=zone_is_target,
+                            direction=getattr(zone, "direction", ""),
+                            distance_km=getattr(zone, "distance_km", 0.0),
+                            relative=getattr(zone, "relative", 0.0),
                             fg=fg,
+                            precise_relative=zone_is_target,
                         ),
                     )
                     idx += 1
@@ -511,7 +608,7 @@ class AppPanelRenderer:
                     column=0,
                     sticky="ew",
                     padx=pad_x,
-                    pady=(0, int(2 * s)),
+                    pady=(0, int(1 * s)),
                 )
                 self._grid_if_needed(
                     app.airport_list_frame,
@@ -519,7 +616,7 @@ class AppPanelRenderer:
                     column=0,
                     sticky="ew",
                     padx=pad_x,
-                    pady=(0, int(10 * s)),
+                    pady=(0, int(3 * s)),
                 )
                 row_pool = app._airport_row_pool
             else:
@@ -530,16 +627,14 @@ class AppPanelRenderer:
             ap_idx = 0
             if snap.friendly_airfield:
                 af = snap.friendly_airfield
-                dist_text = self._format_nav_distance(af.distance_km)
-                rel_text = self._format_nav_relative(af.relative)
-                relative_text = rel_text if nav_in_main else ""
                 self._set_nav_row(
                     row_pool[ap_idx],
-                    NavListItem(
-                        icon=self._nav_list_icon("airfield_friendly", selected=True),
-                        direction=af.direction,
-                        distance=dist_text,
-                        relative=relative_text,
+                    self._build_nav_list_item(
+                        base_icon="airfield_friendly",
+                        selected=True,
+                        direction=getattr(af, "direction", ""),
+                        distance_km=getattr(af, "distance_km", 0.0),
+                        relative=getattr(af, "relative", 0.0),
                         fg=Theme.GREEN,
                     ),
                 )
@@ -547,17 +642,16 @@ class AppPanelRenderer:
 
             if snap.enemy_airfields:
                 for af in snap.enemy_airfields[: max(0, ZoneConfig.MAX_DISPLAY_AIRFIELDS - ap_idx)]:
-                    dist_text = self._format_nav_distance(af.distance_km)
-                    rel_text = self._format_nav_relative(af.relative)
-                    relative_text = rel_text if nav_in_main else ""
-                    fg = Theme.ORANGE if af.is_target else Theme.TEXT_DIM
+                    af_is_target = bool(getattr(af, "is_target", False))
+                    fg = Theme.ORANGE if af_is_target else Theme.TEXT_DIM
                     self._set_nav_row(
                         row_pool[ap_idx],
-                        NavListItem(
-                            icon=self._nav_list_icon("airfield_enemy", bool(af.is_target)),
-                            direction=af.direction,
-                            distance=dist_text,
-                            relative=relative_text,
+                        self._build_nav_list_item(
+                            base_icon="airfield_enemy",
+                            selected=af_is_target,
+                            direction=getattr(af, "direction", ""),
+                            distance_km=getattr(af, "distance_km", 0.0),
+                            relative=getattr(af, "relative", 0.0),
                             fg=fg,
                         ),
                     )

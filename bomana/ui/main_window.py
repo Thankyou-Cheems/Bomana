@@ -535,7 +535,7 @@ class MainWindowBuilder:
     ) -> list[NavListRow]:
         pool: list[NavListRow] = []
         scale = float(getattr(self.app, "scale", 1.0) or 1.0)
-        parent.grid_columnconfigure(0, minsize=max(20, int(24 * self.app.scale)))
+        parent.grid_columnconfigure(0, minsize=max(18, int(21 * self.app.scale)))
         parent.grid_columnconfigure(1, weight=1)
         parent.grid_columnconfigure(
             2,
@@ -592,8 +592,8 @@ class MainWindowBuilder:
                 row=row_index,
                 column=2,
                 sticky="ew",
-                padx=(int(6 * self.app.scale), 0),
-                pady=(0, max(1, int(self.app.scale))),
+                padx=(int(4 * self.app.scale), 0),
+                pady=(0, 0),
             )
             distance_lbl.grid_remove()
 
@@ -611,8 +611,8 @@ class MainWindowBuilder:
                     row=row_index,
                     column=3,
                     sticky="ew",
-                    padx=(int(8 * self.app.scale), 0),
-                    pady=(0, max(1, int(self.app.scale))),
+                    padx=(int(6 * self.app.scale), 0),
+                    pady=(0, 0),
                 )
                 relative_lbl.grid_remove()
 
@@ -684,7 +684,7 @@ class MainWindowBuilder:
 
         app.zone_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.zone_header_frame.grid(
-            row=0, column=0, sticky="ew", padx=pad_x, pady=(int(4 * s), int(2 * s))
+            row=0, column=0, sticky="ew", padx=pad_x, pady=(int(2 * s), int(1 * s))
         )
         app.zone_header_frame.grid_columnconfigure(2, weight=1)
         app.zone_title = tk.Label(
@@ -746,7 +746,7 @@ class MainWindowBuilder:
             app.tape_legend_row.pack(fill="x", pady=(int(1 * s), 0))
             legend_left = tk.Label(
                 app.tape_legend_row,
-                text="⊚战区  ✈友方机场  ✈敌方机场  ✕摧毁目标",
+                text="◇兴趣点  ⊚战区  ✈友方机场  ✈敌方机场  ✕摧毁目标",
                 font=legend_font,
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
@@ -764,7 +764,7 @@ class MainWindowBuilder:
             app.tape_tolerance_legend.pack(side="right", padx=(0, int(4 * s)))
 
             app.tape_zone_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
-            app.tape_zone_row.pack(fill="x", pady=(int(2 * s), 0))
+            app.tape_zone_row.pack(fill="x", pady=(int(1 * s), 0))
             app.tape_zone_label = tk.Label(
                 app.tape_zone_row,
                 text="⊚战区:",
@@ -820,7 +820,7 @@ class MainWindowBuilder:
             )
 
             app.tape_friendly_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
-            app.tape_friendly_row.pack(fill="x", pady=(int(1 * s), 0))
+            app.tape_friendly_row.pack(fill="x", pady=(0, 0))
             app.tape_friendly_label = tk.Label(
                 app.tape_friendly_row,
                 text="✈友方:",
@@ -897,10 +897,10 @@ class MainWindowBuilder:
             anchor="w",
             justify="left",
         )
-        app.zone_alert_lbl.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
+        app.zone_alert_lbl.grid(row=2, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
 
         app.compact_nav_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-        app.compact_nav_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(10 * s)))
+        app.compact_nav_frame.grid(row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s)))
         app.compact_nav_frame.grid_columnconfigure(0, weight=1)
         app.compact_nav_frame.grid_columnconfigure(1, weight=1)
 
@@ -914,7 +914,7 @@ class MainWindowBuilder:
             bg=Theme.GRAYPILL,
             anchor="w",
         )
-        app.compact_zone_title.pack(fill="x")
+        app.compact_zone_title.pack(fill="x", pady=(0, 0))
         app.compact_zone_list = tk.Frame(app.compact_zone_frame, bg=Theme.GRAYPILL)
         app.compact_zone_list.pack(fill="x")
 
@@ -928,13 +928,13 @@ class MainWindowBuilder:
             bg=Theme.GRAYPILL,
             anchor="w",
         )
-        app.compact_airport_title.pack(fill="x")
+        app.compact_airport_title.pack(fill="x", pady=(0, 0))
         app.compact_airport_list = tk.Frame(app.compact_airport_frame, bg=Theme.GRAYPILL)
         app.compact_airport_list.pack(fill="x")
 
         app.zone_list_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.zone_list_header_frame.grid(
-            row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s))
+            row=3, column=0, sticky="ew", padx=pad_x, pady=(0, int(1 * s))
         )
         app.zone_list_header_frame.grid_columnconfigure(0, weight=1)
         app.zone_list_title_lbl = tk.Label(
@@ -954,10 +954,10 @@ class MainWindowBuilder:
         )
         app.zone_close_btn.grid(row=0, column=1, sticky="e")
         app.zone_list_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-        app.zone_list_frame.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
+        app.zone_list_frame.grid(row=4, column=0, sticky="ew", padx=pad_x, pady=(0, int(3 * s)))
         app.airport_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.airport_header_frame.grid(
-            row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s))
+            row=5, column=0, sticky="ew", padx=pad_x, pady=(0, int(1 * s))
         )
         app.airport_header_frame.grid_columnconfigure(0, weight=1)
         app.airport_title_lbl = tk.Label(
@@ -980,7 +980,7 @@ class MainWindowBuilder:
         app.friendly_heading_tape = None
         app.enemy_heading_tape = None
         app.airport_list_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-        app.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(4 * s)))
+        app.airport_list_frame.grid(row=6, column=0, sticky="ew", padx=pad_x, pady=(0, int(3 * s)))
 
         app.fuel_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.fuel_header_frame.grid(row=7, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s)))
@@ -1179,7 +1179,7 @@ class MainWindowBuilder:
             ZoneConfig.MAX_DISPLAY_ZONES,
             font_item,
             bg=Theme.GRAYPILL,
-            show_relative=False,
+            show_relative=True,
         )
         app._airport_row_pool = self._build_nav_row_pool(
             app.airport_list_frame,
@@ -1193,5 +1193,5 @@ class MainWindowBuilder:
             ZoneConfig.MAX_DISPLAY_AIRFIELDS,
             font_item,
             bg=Theme.GRAYPILL,
-            show_relative=False,
+            show_relative=True,
         )

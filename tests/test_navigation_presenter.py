@@ -23,6 +23,58 @@ def test_enemy_airfield_marker_respects_core_target_selection() -> None:
     assert model.active_targets_info[0]["type"] == "enemy"
 
 
+def test_interest_point_becomes_primary_target_without_becoming_zone() -> None:
+    poi = SimpleNamespace(
+        id="poi-1",
+        name="补给点",
+        distance_km=4.25,
+        direction="右转 12°",
+        relative=12.0,
+        is_target=True,
+        ete_str="00:34",
+        cdi_indicator="偏右",
+        cdi_color="#f2c14e",
+    )
+    zone = SimpleNamespace(
+        id="zone-1",
+        relative=-3.0,
+        distance_km=7.0,
+        is_target=True,
+        ete_str="01:10",
+    )
+    snap = SimpleNamespace(
+        interest_point=poi,
+        zones=[zone],
+        friendly_airfield=SimpleNamespace(relative=18.0, distance_km=20.0, ete_str="02:00"),
+        enemy_airfields=[],
+        zone_destroyed_alert=False,
+    )
+
+    model = build_navigation_tape_model(snap)
+
+    poi_targets = [target for target in model.targets if target["type"] == "poi"]
+    zone_targets = [target for target in model.targets if target["type"] == "zone"]
+    assert poi_targets == [
+        {
+            "type": "poi",
+            "relative": 12.0,
+            "distance_km": 4.25,
+            "is_primary": True,
+            "is_target": True,
+            "name": "补给点",
+        }
+    ]
+    assert zone_targets[0]["is_primary"] is False
+    assert zone_targets[0]["is_target"] is True
+    assert model.primary_zone is zone
+    assert model.primary_target is poi
+    assert model.primary_target_info is not None
+    assert model.primary_target_info["type"] == "poi"
+    assert model.primary_target_info["name"] == "补给点"
+    assert model.active_targets_info[0]["type"] == "poi"
+    assert "zone" not in [info["type"] for info in model.active_targets_info]
+
+
 def test_destroyed_markers_use_snapshot_owned_display_data() -> None:
     snap = SimpleNamespace(
         zones=[],

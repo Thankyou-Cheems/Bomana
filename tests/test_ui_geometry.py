@@ -1,5 +1,6 @@
 import tkinter as tk
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 from bomana.config import UIConfig
@@ -142,6 +143,34 @@ class TkGeometryTests(unittest.TestCase):
         self.assertLess(heights[0], heights[1])
         self.assertLess(heights[1], heights[2])
 
+    def test_heading_tape_renders_interest_point_marker(self) -> None:
+        tape = HeadingTape(self.root, width=280, height=36, text_scale=1.0)
+        try:
+            tape.update_tape_multi(
+                90.0,
+                [
+                    {
+                        "type": "poi",
+                        "relative": 0.0,
+                        "distance_km": 4.2,
+                        "is_primary": True,
+                        "is_target": True,
+                    }
+                ],
+                4.2,
+            )
+            self.root.update_idletasks()
+
+            texts = [
+                tape.itemcget(item_id, "text")
+                for item_id in tape.find_all()
+                if tape.type(item_id) == "text"
+            ]
+            self.assertTrue(any(text.startswith("◇") for text in texts))
+            self.assertTrue(tape.find_all())
+        finally:
+            tape.destroy()
+
     def test_integrated_navigation_status_row_uses_elastic_columns(self) -> None:
         row = tk.Frame(self.root)
         row.pack(fill="x")
@@ -205,6 +234,15 @@ class TkGeometryTests(unittest.TestCase):
                 fallback_scale=1.5,
             ),
         )
+        rows[0].distance_lbl.grid()
+        rows[0].relative_lbl.grid()
+        self.assertEqual(rows[0].distance_lbl.grid_info()["pady"], 0)
+        self.assertEqual(rows[0].relative_lbl.grid_info()["pady"], 0)
+
+    def test_main_navigation_compact_pools_keep_relative_bearing_columns(self) -> None:
+        source = Path("bomana/ui/main_window.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("show_relative=False", source)
 
     def test_set_elided_text_uses_label_font_metrics(self) -> None:
         label = tk.Label(self.root, font=("Segoe UI", 10))

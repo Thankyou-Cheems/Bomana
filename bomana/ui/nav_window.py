@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import math
 import tkinter as tk
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +23,7 @@ from bomana.utils.math_utils import (
 from bomana.utils.system import Win32
 
 _WIN32_ACCESS_ERRORS = (OSError, AttributeError)
+_NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 _RESTORE_VISIBLE_WIDTH = 100
 _RESTORE_VISIBLE_HEIGHT = 50
 
@@ -509,6 +511,7 @@ class NavigationWindow:
         self.heading_lbl.config(text="航向 ---°")
         self.tolerance_lbl.config(text="")
         self.heading_tape.clear()
+        self.zone_label.config(text="⊚战区", fg=Theme.RED)
         self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
         self.zone_status.config(text="", fg=Theme.TEXT_DIM)
         self.zone_info.config(text="", fg=Theme.TEXT_DIM)
@@ -537,6 +540,23 @@ class NavigationWindow:
             with contextlib.suppress(Exception):
                 self.apply_window_styles(click_through=True, alpha=UIConfig.WINDOW_ALPHA)
 
+    @staticmethod
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        try:
+            number = float(value)
+        except _NUMERIC_PARSE_ERRORS:
+            return default
+        return number if math.isfinite(number) else default
+
+    @classmethod
+    def _format_active_info_text(cls, info: dict[str, Any]) -> str:
+        distance = cls._safe_float(info.get("distance_km", 0.0))
+        base_text = format_distance_ete(distance, info.get("ete_str"))
+        name = str(info.get("name", "") or "").strip()
+        if info.get("type") == "poi" and name and name != "兴趣点":
+            return f"{name} {base_text}"
+        return base_text
+
     def update_display(self, snap: UISnapshot):
         """更新独立导航窗显示（简洁航向带版）。"""
         if not self._visible:
@@ -557,6 +577,7 @@ class NavigationWindow:
         if not heading_available:
             self.heading_tape.clear()
             self.tolerance_lbl.config(text="")
+            self.zone_label.config(text="⊚战区", fg=Theme.RED)
             self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
             self.zone_status.config(text="无目标", fg=Theme.TEXT_MUTED)
             self.zone_info.config(text="", fg=Theme.TEXT_DIM)
@@ -566,28 +587,48 @@ class NavigationWindow:
             return
 
         destroyed_zones = (
-            snap.destroyed_zones if getattr(snap, "zone_destroyed_alert", False) else None
+            getattr(snap, "destroyed_zones", [])
+            if getattr(snap, "zone_destroyed_alert", False)
+            else None
         )
         model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)
         targets = model.targets
-        primary_zone = model.primary_zone
+        primary_info = model.primary_target_info
 
-        primary_dist = primary_zone.distance_km if primary_zone else 10.0
+        primary_dist = self._safe_float(primary_info.get("distance_km")) if primary_info else 10.0
         self.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
 
-        if primary_zone:
-            tolerance = get_cdi_tolerance(primary_zone.distance_km)
-            scale = calculate_heading_tape_scale(primary_zone.distance_km)
-            turn_text, turn_color = calculate_zone_turn_indicator(primary_zone.relative, tolerance)
-            status_text, status_color = calculate_zone_status(abs(primary_zone.relative), tolerance)
-            info_text = format_distance_ete(
-                primary_zone.distance_km, getattr(primary_zone, "ete_str", "")
-            )
-            self.tolerance_lbl.config(text=f"±{tolerance:.1f}° {scale:.1f}x")
+        if primary_info:
+            target_type = str(primary_info.get("type", "") or "")
+            rel = self._safe_float(primary_info.get("relative", 0.0))
+            distance = self._safe_float(primary_info.get("distance_km", 0.0))
+            info_text = self._format_active_info_text(primary_info)
+            if target_type == "poi":
+                self.zone_label.config(text="◇兴趣点", fg=Theme.YELLOW)
+                turn_text = str(primary_info.get("direction", "") or "").strip()
+                turn_color = Theme.YELLOW
+                if not turn_text:
+                    turn_text, turn_color = calculate_airfield_turn_indicator(rel)
+                status_text = str(primary_info.get("cdi_indicator", "") or "").strip()
+                status_color = str(primary_info.get("cdi_color", "") or "").strip() or Theme.YELLOW
+                if not status_text:
+                    tolerance = get_cdi_tolerance(distance)
+                    status_text, status_color = calculate_zone_status(abs(rel), tolerance)
+                self.tolerance_lbl.config(text="")
+                info_color = Theme.YELLOW
+            else:
+                self.zone_label.config(text="⊚战区", fg=Theme.RED)
+                tolerance = get_cdi_tolerance(distance)
+                scale = calculate_heading_tape_scale(distance)
+                turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
+                status_text, status_color = calculate_zone_status(abs(rel), tolerance)
+                self.tolerance_lbl.config(text=f"±{tolerance:.1f}° {scale:.1f}x")
+                info_color = Theme.RED
             self.zone_turn.config(text=turn_text, fg=turn_color)
             self.zone_status.config(text=status_text, fg=status_color)
-            self.zone_info.config(text=info_text, fg=Theme.RED)
+            self.zone_info.config(text=info_text, fg=info_color)
         else:
+            self.zone_label.config(text="⊚战区", fg=Theme.RED)
             self.tolerance_lbl.config(text="")
             self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
             self.zone_status.config(text="无目标", fg=Theme.TEXT_MUTED)
@@ -595,9 +636,11 @@ class NavigationWindow:
 
         friendly = getattr(snap, "friendly_airfield", None)
         if friendly:
-            turn_text, turn_color = calculate_airfield_turn_indicator(friendly.relative)
-            status_text, status_color = calculate_airfield_status(abs(friendly.relative))
-            info_text = format_distance_ete(friendly.distance_km, friendly.ete_str)
+            friendly_rel = self._safe_float(getattr(friendly, "relative", 0.0))
+            friendly_distance = self._safe_float(getattr(friendly, "distance_km", 0.0))
+            turn_text, turn_color = calculate_airfield_turn_indicator(friendly_rel)
+            status_text, status_color = calculate_airfield_status(abs(friendly_rel))
+            info_text = format_distance_ete(friendly_distance, getattr(friendly, "ete_str", ""))
             self.friendly_turn.config(text=turn_text, fg=turn_color)
             self.friendly_status.config(text=status_text, fg=status_color)
             self.friendly_info.config(text=info_text, fg=Theme.BLUE)
