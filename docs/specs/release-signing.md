@@ -54,6 +54,10 @@ asset deployment.
 - `SIGN-10`: `docs/specs/schemas/app-manifest.schema.json` and
   `docs/specs/schemas/launcher-manifest.schema.json` are the shape source of
   truth for local release-owned manifests.
+- `SIGN-11`: Launcher release/signing helpers used by `launcher.pyw`,
+  `launcher/`, and release tools must live under the `launcher` package, not the
+  app package namespace. This avoids app-package import isolation resolving a
+  launcher helper from an installed app bundle with a different version.
 
 ## Contract Coverage
 
@@ -65,3 +69,5 @@ asset deployment.
 - `tests/test_quality_release_workflows.py` covers verify-before-trust order,
   local-only Tencent deployment, version allowlists, workflow permissions, and
   SHA-pinned actions.
+- `tests/contracts/test_launcher_package_boundaries.py` covers launcher package
+  ownership for launcher release helpers.

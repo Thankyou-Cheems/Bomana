@@ -13,7 +13,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
-from bomana.launcher_core import normalize_package_root, safe_extract_zip, sha256_bytes
+from launcher.core import normalize_package_root, safe_extract_zip, sha256_bytes
 
 APP_DIR_NAME = "app"
 APP_PREVIOUS_DIR_NAME = "app_previous"

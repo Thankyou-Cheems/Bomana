@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = [
     "bootstrap",
+    "core",
     "download_cache",
     "install_txn",
     "manifest_sources",

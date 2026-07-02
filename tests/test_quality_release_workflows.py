@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from bomana import launcher_core, metadata
+from bomana import metadata
+from launcher import core as launcher_core
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,10 +37,15 @@ def load_tool_module(name: str, relative_path: str):
 def test_tencent_deploy_is_local_only() -> None:
     deploy_workflow = ROOT / ".github/workflows/deploy-manifests-to-server.yml"
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    release_spec = (ROOT / "docs/specs/release-signing.md").read_text(encoding="utf-8")
 
     assert not deploy_workflow.exists()
-    assert "Tencent/EdgeOne update deployment is local-only" in agents
-    assert "Do not deploy update assets from GitHub-hosted Actions" in agents
+    assert "docs/specs/release-signing.md" in agents
+    assert "SIGN-03" in agents
+    assert "SIGN-05" in agents
+    assert "SIGN-07" in agents
+    for clause_id in re.findall(r"`?(SIGN-\d{2})`?", agents):
+        assert f"`{clause_id}`" in release_spec
     assert "tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z" in agents
 
 

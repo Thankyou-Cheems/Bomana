@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from bomana import launcher_core
+from launcher import core as launcher_core
 from launcher import manifest_sources, metadata, verify
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -115,3 +115,24 @@ def test_launcher_entry_uses_package_metadata_version_source() -> None:
 
     assert "from launcher.metadata import LAUNCHER_VERSION" in launcher_entry
     assert f'LAUNCHER_VERSION = "{metadata.LAUNCHER_VERSION}"' not in launcher_entry
+
+
+def test_launcher_core_helpers_live_in_launcher_package() -> None:
+    assert not (ROOT / "bomana" / "launcher_core.py").exists()
+
+    checked_paths = [
+        ROOT / "launcher.pyw",
+        *sorted((ROOT / "launcher").glob("*.py")),
+        ROOT / "tools" / "build_portable.py",
+        ROOT / "tools" / "deploy_update_assets.py",
+    ]
+    offenders = [
+        path.relative_to(ROOT).as_posix()
+        for path in checked_paths
+        if (
+            "bomana.launcher_core" in path.read_text(encoding="utf-8")
+            or "from bomana import launcher_core" in path.read_text(encoding="utf-8")
+        )
+    ]
+
+    assert offenders == []

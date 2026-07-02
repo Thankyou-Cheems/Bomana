@@ -33,7 +33,7 @@ RELEASE_MANIFEST_SIGNATURE_FIELD = "manifest_signature"
 RELEASE_MANIFEST_SIGNATURE_ALGORITHM = "ed25519"
 RELEASE_MANIFEST_DEFAULT_KEY_ID = "bomana-release-2026-06"
 try:
-    _RELEASE_KEYS_MODULE = importlib.import_module("bomana.release_public_keys")
+    _RELEASE_KEYS_MODULE = importlib.import_module("launcher.release_public_keys")
     _PINNED_RELEASE_KEYS = getattr(_RELEASE_KEYS_MODULE, "RELEASE_MANIFEST_PUBLIC_KEYS", {})
 except ImportError:
     _PINNED_RELEASE_KEYS = {}

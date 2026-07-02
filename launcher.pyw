@@ -35,7 +35,7 @@ from urllib.request import (
     build_opener,
 )
 
-from bomana.launcher_core import (
+from launcher.core import (
     DOWNLOAD_SOURCE_CHOICES,
     DOWNLOAD_SOURCE_DETAILS,
     DOWNLOAD_SOURCE_LABEL_TO_MODE as _DOWNLOAD_SOURCE_LABEL_TO_MODE,

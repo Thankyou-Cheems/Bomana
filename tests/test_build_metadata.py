@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from bomana import launcher_core, metadata
+from bomana import metadata
+from launcher import core as launcher_core
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPENDENCY_NAME_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)")
@@ -88,7 +89,7 @@ def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:
         "--hidden-import",
         "winsound",
         "--hidden-import",
-        "bomana.release_public_keys",
+        "launcher.release_public_keys",
         "--collect-submodules",
         "PIL",
         "--collect-submodules",
@@ -168,7 +169,7 @@ def test_build_portable_generates_and_restores_launcher_public_key(
     monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
     monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, TEST_SIGNING_PUBLIC_KEY)
     monkeypatch.setenv(build_portable.SIGNING_KEY_ID_ENV, "test-key")
-    (tmp_path / "bomana").mkdir()
+    (tmp_path / "launcher").mkdir()
 
     path, original = build_portable.write_release_public_keys_module(tmp_path)
 

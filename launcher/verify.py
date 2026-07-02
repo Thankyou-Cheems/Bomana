@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from bomana.launcher_core import verify_release_manifest_signature
+from launcher.core import verify_release_manifest_signature
 
 
 def project_verified_manifest_fields(

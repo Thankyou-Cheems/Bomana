@@ -4,7 +4,7 @@
 - Bootstrap entry point: `Bomana.pyw` (single-instance guard, DPI setup, root window creation, `App` startup)
 - Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, details/support dialog)
 - Launcher package: `launcher/` (manifest verification/projection, download cache pathing, install transactions, app bootstrap helpers, launcher metadata)
-- Launcher pure helpers: `bomana/launcher_core.py` (download-source normalization, version/asset helpers, checksum and safe zip extraction)
+- Launcher pure helpers: `launcher/core.py` (download-source normalization, version/asset helpers, checksum and safe zip extraction)
 - Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata)
 - Central config: `bomana/config/` (explicit feature flag, settings, and static-data submodules)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
@@ -34,6 +34,7 @@
 ├─ launcher.pyw              # Green launcher distribution/PyInstaller entrypoint
 ├─ launcher/
 │  ├─ metadata.py            # Launcher version source for build/deploy tooling
+│  ├─ core.py                # Pure launcher helpers used by launcher.pyw
 │  ├─ manifest_sources.py    # Verified manifest projection helpers
 │  ├─ verify.py              # Verify-before-trust helper boundary
 │  ├─ download_cache.py      # Download directory fallback and cache naming
@@ -41,7 +42,6 @@
 │  └─ bootstrap.py           # App-package import isolation and launch helpers
 ├─ bomana/
 │  ├─ config/                # Package marker plus explicit feature/settings/static-data submodules
-│  ├─ launcher_core.py       # Pure launcher helpers used by launcher.pyw
 │  ├─ metadata.py            # Project metadata and version constants
 │  ├─ data/
 │  │  ├─ ccrp_bomb_params.json # Bomb parameters (CCRP)
@@ -149,7 +149,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
    - App and launcher manifests must include an Ed25519 `manifest_signature`; `launcher.verify` and `launcher.manifest_sources` verify against pinned release public keys before projecting trusted version, asset, or SHA256 fields. Canonical field ownership is in `docs/specs/release-signing.md`.
    - The Tencent/EdgeOne service does not hold the release private key. It forwards `manifest_signature` from the deployed JSON manifests and may add service-derived fields such as `package_url`, `source_name`, `package_size`, and the launcher compatibility alias `package_sha256`.
-   - `tools/build_portable.py` signs manifests from `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, requires the matching `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and injects that public key into packaged launchers through a temporary `bomana/release_public_keys.py` module.
+   - `tools/build_portable.py` signs manifests from `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, requires the matching `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and injects that public key into packaged launchers through a temporary `launcher/release_public_keys.py` module.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
 8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.

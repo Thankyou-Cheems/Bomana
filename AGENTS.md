@@ -1,7 +1,7 @@
 # AGENTS.md (Bomana)
 
-This file is the single place for agent guidance and project rules.
-Keep it concise and update when workflows or boundaries change.
+This file routes agents to the right code, docs, and workflow contracts.
+Keep durable project rules in `docs/specs/`; keep this router concise.
 
 ## Quick Map
 - Launcher entry: `launcher.pyw` (distribution/PyInstaller entrypoint)
@@ -22,17 +22,12 @@ Keep it concise and update when workflows or boundaries change.
 - Tk UI work must cross background threads through the documented dispatcher/`root.after` bridges. See `docs/specs/threading-ui-contract.md`.
 
 ## Release Signing Workflow
-- Treat `docs/specs/release-signing.md` as mandatory for every release/update/deploy task, even if the user does not mention signing.
-- Manifests must be Ed25519-signed and verified before trusting versions, assets, or SHA256.
-- Do not generate, rotate, overwrite, upload, or print release signing keys unless the user explicitly approves the private-key retention plan.
-- Tencent/EdgeOne update deployment is local-only from the maintainer workstation.
-- Do not deploy update assets from GitHub-hosted Actions to TencentCloudPublic/CVM via SSH, rsync, or scp.
-- If a release session needs deployment, GitHub Actions may build and publish the signed GitHub Release, but the Tencent update deploy command must be run locally:
+- For every release/update/deploy task, follow `docs/specs/release-signing.md` before acting.
+- Verify manifests before trusting version, asset, SHA256, entrypoint, or URL fields; see `SIGN-03`.
+- Keep release private keys off unapproved hosts and deploy Tencent/EdgeOne update assets locally only; see `SIGN-05` and `SIGN-07`:
   ```bash
   uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
   ```
-- Public endpoint verification must call `verify_release_manifest_signature`, not just check that a signature field exists.
-- Do not add COS/CDN paid artifact storage unless the user explicitly approves the cost.
 
 ## Header Facts (Condensed)
 - Data sources: `/indicators`, `/state`, `/map_obj.json`, `/map_info.json`.

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from bomana import launcher_core
+from launcher import core as launcher_core
 from launcher.install_txn import read_local_app_version, validate_app_package_root
 
 

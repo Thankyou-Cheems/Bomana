@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from bomana import launcher_core
+from launcher import core as launcher_core
 
 # enforces: docs/specs/release-signing.md SIGN-01..SIGN-04
 # enforces: docs/specs/schemas/app-manifest.schema.json

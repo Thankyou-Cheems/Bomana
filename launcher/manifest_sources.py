@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from bomana.launcher_core import (
+from launcher.core import (
     _APP_MANIFEST_SIGNATURE_FIELDS,
     _LAUNCHER_MANIFEST_SIGNATURE_FIELDS,
     parse_launcher_version_from_asset_name,

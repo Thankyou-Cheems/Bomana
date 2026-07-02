@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from bomana.launcher_core import (  # noqa: E402
+from launcher.core import (  # noqa: E402
     RELEASE_MANIFEST_DEFAULT_KEY_ID,
     ed25519_public_key_from_private_key,
     sign_release_manifest,
@@ -51,6 +51,7 @@ VARIANT_SWITCHES = {
 
 APP_ENTRY = "Bomana.pyw"
 APP_DIR = "bomana"
+LAUNCHER_DIR = "launcher"
 UNIVERSAL_LAUNCHER_NAME = "Bomana_launcher"
 BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
 SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
@@ -67,7 +68,7 @@ PACKAGED_LAUNCHER_RUNTIME_MODULES_BY_DEPENDENCY = {
 PACKAGED_LAUNCHER_HIDDEN_IMPORTS = (
     "pystray._win32",
     "winsound",
-    "bomana.release_public_keys",
+    "launcher.release_public_keys",
 )
 PACKAGED_LAUNCHER_COLLECT_SUBMODULES = (
     "PIL",
@@ -172,7 +173,7 @@ def release_signing_key_context() -> tuple[str, str]:
 def write_release_public_keys_module(root: Path) -> tuple[Path, str | None]:
     private_key, key_id = release_signing_key_context()
     public_key = ed25519_public_key_from_private_key(private_key)
-    path = root / APP_DIR / "release_public_keys.py"
+    path = root / LAUNCHER_DIR / "release_public_keys.py"
     original = path.read_text(encoding="utf-8") if path.exists() else None
     content = (
         '"""Generated release manifest verification keys for packaged launchers."""\n\n'
