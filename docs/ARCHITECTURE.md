@@ -3,6 +3,7 @@
 ## Overview
 - Bootstrap entry point: `Bomana.pyw` (single-instance guard, DPI setup, root window creation, `App` startup)
 - Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, details/support dialog)
+- Launcher package: `launcher/` (manifest verification/projection, download cache pathing, install facade, app bootstrap helpers, launcher metadata)
 - Launcher pure helpers: `bomana/launcher_core.py` (download-source normalization, version/asset helpers, checksum and safe zip extraction)
 - Launcher install primitives: `bomana/launcher_install.py` (update lock, staged app install, rollback, incomplete-install recovery)
 - Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata; re-exported by `bomana/config/`)
@@ -30,7 +31,14 @@
 ```
 .
 ├─ Bomana.pyw                # Thin bootstrap entrypoint
-├─ launcher.pyw              # Green launcher (auto update + bootstrap)
+├─ launcher.pyw              # Green launcher compatibility/distribution entrypoint
+├─ launcher/
+│  ├─ metadata.py            # Launcher version source for build/deploy tooling
+│  ├─ manifest_sources.py    # Verified manifest projection helpers
+│  ├─ verify.py              # Verify-before-trust helper boundary
+│  ├─ download_cache.py      # Download directory fallback and cache naming
+│  ├─ install_txn.py         # Facade over install/rollback transaction primitives
+│  └─ bootstrap.py           # App-package import isolation and launch helpers
 ├─ bomana/
 │  ├─ config/                # Feature flags, settings classes, static paths, compatibility re-exports
 │  ├─ launcher_core.py       # Pure launcher helpers used by launcher.pyw
@@ -129,12 +137,14 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
    - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives compact speed strip + alert sound.
 7. Launcher check flow:
+   - `launcher.pyw` remains the user-facing and PyInstaller entrypoint, while
+     the `launcher/` package owns development-time launcher boundaries.
    - On startup (and channel switch), launcher auto-checks both app-package metadata and launcher metadata in a background thread.
    - `UpdateService` coordinates manifest resolution, size probing, app update checks, and launcher update checks while the GUI keeps only worker/event handling.
    - Channel/source/proxy changes during an in-flight check are queued and trigger an automatic follow-up re-check instead of being blocked.
    - Uses Tencent API first (`BOMANA_UPDATE_BASE_URL`) for app and launcher manifests when available.
    - Falls back to GitHub Release metadata when Tencent is unavailable, or when primary only exposes version without downloadable package.
-   - App and launcher manifests must include an Ed25519 `manifest_signature`; the launcher verifies it against pinned release public keys before trusting version, asset, or SHA256 fields. Canonical field ownership is in `docs/specs/release-signing.md`.
+   - App and launcher manifests must include an Ed25519 `manifest_signature`; `launcher.verify` and `launcher.manifest_sources` verify against pinned release public keys before projecting trusted version, asset, or SHA256 fields. Canonical field ownership is in `docs/specs/release-signing.md`.
    - The Tencent/EdgeOne service does not hold the release private key. It forwards `manifest_signature` from the deployed JSON manifests and may add service-derived fields such as `package_url`, `source_name`, `package_size`, and the launcher compatibility alias `package_sha256`.
    - `tools/build_portable.py` signs manifests from `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, requires the matching `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and injects that public key into packaged launchers through a temporary `bomana/release_public_keys.py` module.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
@@ -146,7 +156,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
-   - App launch runs inside the packaged launcher process, but `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and a temporary `bomana.*` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules.
+   - App launch runs inside the packaged launcher process, but `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and the `launcher.bootstrap` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules.
 9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 
 Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.

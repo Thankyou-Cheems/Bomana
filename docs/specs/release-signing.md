@@ -50,7 +50,7 @@ asset deployment.
   allowlisted. GitHub expressions must enter shell scripts through environment
   variables. External `uses:` actions must be pinned to full commit SHAs.
 - `SIGN-09`: App `--version` values must match `bomana/metadata.py __version__`;
-  launcher `--version` values must match `launcher.pyw LAUNCHER_VERSION`.
+  launcher `--version` values must match `launcher/metadata.py LAUNCHER_VERSION`.
 - `SIGN-10`: `docs/specs/schemas/app-manifest.schema.json` and
   `docs/specs/schemas/launcher-manifest.schema.json` are the shape source of
   truth for local release-owned manifests.

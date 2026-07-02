@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--launcher-version",
         default="",
-        help="Launcher version; defaults to LAUNCHER_VERSION in launcher.pyw.",
+        help="Launcher version; defaults to LAUNCHER_VERSION in launcher/metadata.py.",
     )
     parser.add_argument("--host", default=DEFAULT_HOST, help="SSH host or config alias.")
     parser.add_argument("--remote-root", default=DEFAULT_REMOTE_ROOT, help="Remote service root.")
@@ -462,7 +462,7 @@ def main() -> int:
         root / "bomana" / "metadata.py", "__version__"
     )
     launcher_version = args.launcher_version.strip() or read_literal(
-        root / "launcher.pyw", "LAUNCHER_VERSION"
+        root / "launcher" / "metadata.py", "LAUNCHER_VERSION"
     )
     assets = required_assets(dist, args.target, app_version, launcher_version)
     validate_local_release_assets(dist, args.target, app_version, launcher_version)

@@ -7,6 +7,9 @@
 ---
 ## [Unreleased]
 
+### 改进
+- 将绿色版启动器拆出顶层 `launcher/` 开发期包，集中 manifest 验签投影、下载缓存、安装 facade、启动隔离和 launcher metadata，同时保留 `launcher.pyw` 单文件分发入口。
+
 ### 修复
 - 修复部署脚本在 `PYTHONPATH` 隔离环境下直接执行时无法导入本地 `bomana` 包的问题。
 - 修复更新资产部署验证误扫旧版历史清单，导致新签名 release 被旧无签名 manifest 阻断的问题。

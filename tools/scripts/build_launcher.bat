@@ -1,6 +1,6 @@
 @echo off
 REM 仅打包通用启动器（Bomana_launcher_vX.Y.Z.exe）
-REM 可选版本号必须匹配 launcher.pyw 中的 LAUNCHER_VERSION，否则构建会失败。
+REM 可选版本号必须匹配 launcher\metadata.py 中的 LAUNCHER_VERSION，否则构建会失败。
 setlocal
 set "EXIT_CODE=0"
 set "ROOT_DIR=%~dp0..\.."

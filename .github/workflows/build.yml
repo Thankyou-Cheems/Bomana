@@ -113,9 +113,9 @@ jobs:
           else
             TAG_NAME="v$VERSION"
           fi
-          LAUNCHER_VERSION=$(grep -oP 'LAUNCHER_VERSION\s*=\s*["\x27]\K[^"\x27]+' launcher.pyw || echo "")
+          LAUNCHER_VERSION=$(grep -oP 'LAUNCHER_VERSION\s*=\s*["\x27]\K[^"\x27]+' launcher/metadata.py || echo "")
           if [ -z "$LAUNCHER_VERSION" ]; then
-            echo "无法从 launcher.pyw 提取 LAUNCHER_VERSION"
+            echo "无法从 launcher/metadata.py 提取 LAUNCHER_VERSION"
             exit 1
           fi
           validate_version "launcher version" "$LAUNCHER_VERSION"

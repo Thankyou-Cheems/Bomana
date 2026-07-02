@@ -108,7 +108,7 @@ def parse_args() -> argparse.Namespace:
         default="",
         help=(
             "Expected version; fails if it does not match the source metadata "
-            "(app: bomana/metadata.py, launcher: launcher.pyw)"
+            "(app: bomana/metadata.py, launcher: launcher/metadata.py)"
         ),
     )
     parser.add_argument(
@@ -210,10 +210,10 @@ def read_min_launcher_version(metadata_text: str) -> str:
     return read_metadata_value(metadata_text, "PORTABLE_MIN_LAUNCHER_VERSION")
 
 
-def read_launcher_version(launcher_text: str) -> str:
+def read_launcher_version(launcher_text: str, source: str = "launcher/metadata.py") -> str:
     m = re.search(r'LAUNCHER_VERSION\s*=\s*["\']([^"\']+)["\']', launcher_text)
     if not m:
-        raise RuntimeError("Failed to find LAUNCHER_VERSION in launcher.pyw")
+        raise RuntimeError(f"Failed to find LAUNCHER_VERSION in {source}")
     return m.group(1).strip()
 
 
@@ -231,7 +231,9 @@ def validate_requested_version(
     if target in ("all", "app"):
         expected_versions.append(("app", app_version, "bomana/metadata.py __version__"))
     if target in ("all", "launcher"):
-        expected_versions.append(("launcher", launcher_version, "launcher.pyw LAUNCHER_VERSION"))
+        expected_versions.append(
+            ("launcher", launcher_version, "launcher/metadata.py LAUNCHER_VERSION")
+        )
 
     mismatches = [
         f"{label} expected {expected!r} from {source}"
@@ -468,10 +470,12 @@ def main() -> int:
 
     feature_profile_path = root / "bomana" / "config" / "feature_profile.py"
     metadata_path = root / "bomana" / "metadata.py"
+    launcher_metadata_path = root / "launcher" / "metadata.py"
     launcher_path = root / "launcher.pyw"
     feature_profile_stat = feature_profile_path.stat()
     original_feature_profile = feature_profile_path.read_text(encoding="utf-8")
     metadata_text = metadata_path.read_text(encoding="utf-8")
+    launcher_metadata_text = launcher_metadata_path.read_text(encoding="utf-8")
     launcher_text = launcher_path.read_text(encoding="utf-8")
     feature_profile_patched = False
 
@@ -486,7 +490,16 @@ def main() -> int:
     try:
         source_app_version = read_version(metadata_text)
         min_launcher_version = read_min_launcher_version(metadata_text)
-        source_launcher_version = read_launcher_version(launcher_text)
+        source_launcher_version = read_launcher_version(
+            launcher_metadata_text,
+            "launcher/metadata.py",
+        )
+        launcher_entry_version = read_launcher_version(launcher_text, "launcher.pyw")
+        if launcher_entry_version != source_launcher_version:
+            raise RuntimeError(
+                "launcher.pyw LAUNCHER_VERSION must match launcher/metadata.py "
+                f"LAUNCHER_VERSION ({launcher_entry_version} != {source_launcher_version})"
+            )
         validate_requested_version(
             args.version,
             args.target,

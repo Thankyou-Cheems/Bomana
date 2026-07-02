@@ -3,13 +3,11 @@
 
 import ctypes
 import hashlib
-import importlib
 import ipaddress
 import json
 import os
 import queue
 import re
-import runpy
 import shutil
 import socket
 
@@ -37,7 +35,6 @@ from urllib.request import (
     build_opener,
 )
 
-from bomana import launcher_install as _launcher_install
 from bomana.launcher_core import (
     DOWNLOAD_SOURCE_CHOICES,
     DOWNLOAD_SOURCE_DETAILS,
@@ -55,15 +52,17 @@ from bomana.launcher_core import (
     format_size_text as _format_size_text,
     join_base_url_path as _join_base_url_path,
     normalize_download_source_mode as _normalize_download_source_mode,
-    parse_launcher_version_from_asset_name as _parse_launcher_version_from_asset_name,
     require_remote_checksum as _require_remote_checksum,
     sha256_bytes as _sha256_bytes,
-    verify_release_manifest_signature as _verify_release_manifest_signature,
     version_is_newer as _version_is_newer,
     version_is_older as _version_is_older,
 )
 from bomana.ui.tk_style import style_action_button
 from bomana.utils.system import Win32, select_ui_font_family
+from launcher import bootstrap as _launcher_bootstrap
+from launcher import download_cache as _launcher_download_cache
+from launcher import install_txn as _launcher_install
+from launcher import manifest_sources as _launcher_manifest_sources
 
 try:
     import certifi
@@ -300,42 +299,27 @@ def _user_downloads_dir() -> Path:
 
 
 def _unique_paths(paths: Tuple[Path, ...]) -> Tuple[Path, ...]:
-    unique: list[Path] = []
-    seen: set[str] = set()
-    for path in paths:
-        try:
-            key = str(path.resolve(strict=False)).casefold()
-        except Exception:
-            key = str(path).casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(path)
-    return tuple(unique)
+    return _launcher_download_cache.unique_paths(paths)
 
 
 def _download_dir_candidates(base: Path) -> Tuple[Path, ...]:
-    candidates: list[Path] = []
-    env_root = os.environ.get(DOWNLOAD_DIR_ENV_NAME, "").strip()
-    if env_root:
-        candidates.append(Path(env_root).expanduser())
-    candidates.append(_user_downloads_dir())
-    try:
-        candidates.append(_launcher_data_root(base) / DOWNLOAD_DIR_NAME)
-    except Exception:
-        pass
-    candidates.append(Path(tempfile.gettempdir()) / "Bomana" / DOWNLOAD_DIR_NAME / _base_path_key(base))
-    return _unique_paths(tuple(candidates))
+    return _launcher_download_cache.download_dir_candidates(
+        base,
+        env_root=os.environ.get(DOWNLOAD_DIR_ENV_NAME, "").strip(),
+        user_downloads_dir=_user_downloads_dir,
+        launcher_data_root=_launcher_data_root,
+        temp_root=Path(tempfile.gettempdir()),
+        base_path_key=_base_path_key,
+        download_dir_name=DOWNLOAD_DIR_NAME,
+    )
 
 
 def _launcher_download_dir(base: Path) -> Path:
-    attempted: list[str] = []
-    for candidate in _download_dir_candidates(base):
-        attempted.append(str(candidate))
-        if _can_write_dir(candidate):
-            return candidate
-    detail = "；".join(attempted) if attempted else "无可用候选目录"
-    raise RuntimeError(f"无法创建可写下载目录。已尝试：{detail}")
+    return _launcher_download_cache.launcher_download_dir(
+        base,
+        candidates=_download_dir_candidates,
+        can_write_dir=_can_write_dir,
+    )
 
 
 def _download_cache_filename(
@@ -345,11 +329,14 @@ def _download_cache_filename(
     checksum: str,
     suffix: str,
 ) -> str:
-    name_seed = str(artifact_name or "").strip() or str(remote_version or "").strip()
-    stem = Path(urlparse(name_seed).path).stem or str(remote_version or "").strip() or "download"
-    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-") or "download"
-    digest_part = str(checksum or "").strip().lower()[:12] or _sha256_bytes(name_seed.encode("utf-8"))[:12]
-    return f"{prefix}_{safe_stem}_{digest_part}{suffix}"
+    return _launcher_download_cache.download_cache_filename(
+        prefix,
+        remote_version,
+        artifact_name,
+        checksum,
+        suffix,
+        sha256_bytes=_sha256_bytes,
+    )
 
 
 def _ps_string(value: Any) -> str:
@@ -836,17 +823,25 @@ def _normalize_channel(value: Any) -> str:
 
 
 def _validate_app_manifest_channel(manifest: Dict[str, Any], expected_channel: str, label: str) -> None:
-    actual = _normalize_channel(manifest.get("channel", ""))
-    expected = _normalize_channel(expected_channel)
-    if not actual or actual != expected:
-        raise RuntimeError(f"{label}通道不匹配")
+    _launcher_manifest_sources.validate_app_manifest_channel(
+        {"channel": _normalize_channel(manifest.get("channel", ""))},
+        _normalize_channel(expected_channel),
+        label,
+    )
 
 
 def _validate_app_manifest_entrypoint(entrypoint_value: Any, label: str) -> str:
-    entrypoint = str(entrypoint_value or DEFAULT_ENTRYPOINT).strip() or DEFAULT_ENTRYPOINT
-    if entrypoint != DEFAULT_ENTRYPOINT:
-        raise RuntimeError(f"{label}入口文件不受支持: {entrypoint}")
-    return entrypoint
+    try:
+        return _launcher_manifest_sources.validate_app_manifest_entrypoint(
+            entrypoint_value,
+            label,
+            DEFAULT_ENTRYPOINT,
+        )
+    except RuntimeError as exc:
+        entrypoint = str(entrypoint_value or DEFAULT_ENTRYPOINT).strip() or DEFAULT_ENTRYPOINT
+        if "入口文件不受支持" in str(exc):
+            raise RuntimeError(f"{label}入口文件不受支持: {entrypoint}") from exc
+        raise
 
 
 def _select_startup_channel(base: Path, detected_channel: str) -> str:
@@ -1165,21 +1160,17 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
         raise RuntimeError("发布清单下载地址无效")
 
     manifest = _fetch_json(manifest_url)
-    _verify_release_manifest_signature(manifest, manifest_label=f"{manifest_name} ", expected_kind="app")
-    _validate_app_manifest_channel(manifest, channel, f"{manifest_name} ")
-    remote_version = str(manifest.get("app_version", "")).strip()
-    min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
-    package_asset = str(manifest.get("package_asset", "")).strip()
-    package_sha256 = _require_remote_checksum(
-        manifest.get("package_sha256", ""),
-        artifact_label=f"{manifest_name} ",
+    trusted = _launcher_manifest_sources.verified_app_manifest_fields(
+        manifest,
+        channel=channel,
+        label=f"{manifest_name} ",
+        default_entrypoint=DEFAULT_ENTRYPOINT,
     )
-    entrypoint = _validate_app_manifest_entrypoint(
-        manifest.get("entrypoint", DEFAULT_ENTRYPOINT),
-        f"{manifest_name} ",
-    )
-    if not remote_version or not package_asset:
-        raise RuntimeError("发布清单字段缺失")
+    remote_version = str(trusted["remote_version"])
+    min_launcher_version = str(trusted["min_launcher_version"])
+    package_asset = str(trusted["package_asset"])
+    package_sha256 = str(trusted["package_sha256"])
+    entrypoint = str(trusted["entrypoint"])
 
     app_asset = _find_asset(assets, package_asset)
     if not app_asset:
@@ -1211,17 +1202,12 @@ def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str,
     if not manifest_url:
         raise RuntimeError("启动器发布清单下载地址无效")
     manifest = _fetch_json(manifest_url)
-    _verify_release_manifest_signature(
+    trusted = _launcher_manifest_sources.verified_launcher_manifest_fields(
         manifest,
-        manifest_label="launcher_manifest.json ",
-        expected_kind="launcher",
+        label="launcher_manifest.json ",
     )
-    asset_name = str(manifest.get("launcher_asset", "")).strip()
-    remote_version = str(manifest.get("launcher_version", "")).strip()
-    if not asset_name or not remote_version:
-        raise RuntimeError("启动器发布清单字段缺失")
-    if _parse_launcher_version_from_asset_name(asset_name) != remote_version:
-        raise RuntimeError("启动器发布清单版本与资产名不匹配")
+    asset_name = str(trusted["package_asset"])
+    remote_version = str(trusted["remote_version"])
 
     launcher_asset = _find_asset(assets, asset_name)
     if not launcher_asset:
@@ -1229,10 +1215,7 @@ def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str,
     package_url = str(launcher_asset.get("browser_download_url", "")).strip()
     if not package_url:
         raise RuntimeError("启动器下载地址无效")
-    package_sha256 = _require_remote_checksum(
-        manifest.get("launcher_sha256", ""),
-        artifact_label="launcher_manifest.json ",
-    )
+    package_sha256 = str(trusted["package_sha256"])
 
     return {
         "remote_version": remote_version,
@@ -1330,36 +1313,31 @@ def _fetch_manifest_from_primary(
             used_anonymous_fallback = True
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
-    _verify_release_manifest_signature(payload, manifest_label="国内应用更新清单 ", expected_kind="app")
-    _validate_app_manifest_channel(payload, channel, "国内应用更新清单 ")
-    remote_version = str(payload.get("app_version", "")).strip()
+    trusted = _launcher_manifest_sources.verified_app_manifest_fields(
+        payload,
+        channel=channel,
+        label="国内应用更新清单 ",
+        default_entrypoint=DEFAULT_ENTRYPOINT,
+    )
+    remote_version = str(trusted["remote_version"])
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
         _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
     )
-    package_sha256 = _require_remote_checksum(
-        payload.get("package_sha256", ""),
-        artifact_label="国内应用更新清单 ",
-    )
+    package_sha256 = str(trusted["package_sha256"])
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
-    entrypoint = _validate_app_manifest_entrypoint(
-        payload.get("entrypoint", DEFAULT_ENTRYPOINT),
-        "国内应用更新清单 ",
-    )
-    min_launcher_version = str(payload.get("min_launcher_version", "")).strip()
+    entrypoint = str(trusted["entrypoint"])
+    min_launcher_version = str(trusted["min_launcher_version"])
     source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     if used_anonymous_fallback:
         source_name = f"{source_name} (匿名回退)"
-
-    if not remote_version:
-        raise RuntimeError("国内更新服务返回字段缺失")
 
     return {
         "remote_version": remote_version,
         "min_launcher_version": min_launcher_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
-        "package_asset": str(payload.get("package_asset", "")).strip(),
+        "package_asset": str(trusted["package_asset"]),
         "entrypoint": entrypoint,
         "package_size": package_size,
         "source_name": source_name,
@@ -1394,33 +1372,26 @@ def _fetch_launcher_manifest_from_primary(
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
 
-    _verify_release_manifest_signature(
+    trusted = _launcher_manifest_sources.verified_launcher_manifest_fields(
         payload,
-        manifest_label="国内启动器更新清单 ",
-        expected_kind="launcher",
+        label="国内启动器更新清单 ",
     )
-    remote_version = str(payload.get("launcher_version", "")).strip()
+    remote_version = str(trusted["remote_version"])
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
         _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
     )
-    package_sha256 = _require_remote_checksum(
-        payload.get("launcher_sha256", ""),
-        artifact_label="国内启动器更新清单 ",
-    )
+    package_sha256 = str(trusted["package_sha256"])
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
     source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     if used_anonymous_fallback:
         source_name = f"{source_name} (匿名回退)"
 
-    if not remote_version:
-        raise RuntimeError("国内启动器更新服务返回字段缺失")
-
     return {
         "remote_version": remote_version,
         "package_url": package_url,
         "package_sha256": package_sha256,
-        "package_asset": str(payload.get("launcher_asset", "")).strip(),
+        "package_asset": str(trusted["package_asset"]),
         "package_size": package_size,
         "source_name": source_name,
     }
@@ -2220,95 +2191,38 @@ def _download_launcher_update_from_manifest(
 
 
 def _source_site_packages(base: Path) -> Tuple[Path, ...]:
-    venv_dir = base / ".venv"
-    version_tag = f"python{sys.version_info.major}.{sys.version_info.minor}"
-    candidates = (
-        venv_dir / "Lib" / "site-packages",
-        venv_dir / "lib" / version_tag / "site-packages",
-        venv_dir / "lib" / "site-packages",
-    )
-    return tuple(path for path in candidates if path.exists())
+    return _launcher_bootstrap.source_site_packages(base)
 
 
 def _prepare_source_test_runtime(base: Path) -> None:
-    for site_packages in reversed(_source_site_packages(base)):
-        site_text = str(site_packages)
-        if site_text not in sys.path:
-            sys.path.insert(0, site_text)
+    return _launcher_bootstrap.prepare_source_test_runtime(base)
 
 
 def _reset_embedded_app_modules() -> None:
-    """Clear launcher-bundled bomana modules before handing off to the app package."""
-    stale_modules = [
-        name for name in tuple(sys.modules.keys()) if name == "bomana" or name.startswith("bomana.")
-    ]
-    for name in stale_modules:
-        sys.modules.pop(name, None)
-    importlib.invalidate_caches()
+    return _launcher_bootstrap.reset_embedded_app_modules()
 
 
 def _path_is_within(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-    except Exception:
-        return False
-    return True
+    return _launcher_bootstrap.path_is_within(path, root)
 
 
 def _spec_points_within(spec: Any, root: Path) -> bool:
-    locations: list[Path] = []
-    origin = getattr(spec, "origin", None)
-    if origin and origin not in ("built-in", "frozen", "namespace"):
-        locations.append(Path(str(origin)))
-    search_locations = getattr(spec, "submodule_search_locations", None)
-    if search_locations:
-        locations.extend(Path(str(location)) for location in search_locations)
-    return any(_path_is_within(location, root) for location in locations)
+    return _launcher_bootstrap.spec_points_within(spec, root)
 
 
-class _AppPackageBomanaFinder:
-    """Prefer installed app-package bomana modules over PyInstaller's frozen importer."""
-
-    def __init__(self, app_dir: Path) -> None:
-        self.app_dir = app_dir.resolve()
-
-    def find_spec(self, fullname: str, path: Any = None, target: Any = None) -> Any:
-        if fullname != "bomana" and not fullname.startswith("bomana."):
-            return None
-        search_path = [str(self.app_dir)] if fullname == "bomana" else path
-        if search_path is None:
-            search_dir = self.app_dir / "bomana"
-            for part in fullname.split(".")[1:-1]:
-                search_dir /= part
-            search_path = [str(search_dir)]
-        spec = importlib.machinery.PathFinder.find_spec(fullname, search_path)
-        if spec is None or not _spec_points_within(spec, self.app_dir):
-            return None
-        return spec
+_AppPackageBomanaFinder = _launcher_bootstrap.AppPackageBomanaFinder
 
 
 def _launch_app(base: Path, channel: str) -> None:
-    _recover_incomplete_install(base)
-    app_dir = _app_runtime_dir(base)
-    entry = app_dir / DEFAULT_ENTRYPOINT
-    if not _is_local_app_ready(base):
-        raise RuntimeError("本地应用不存在，请联网后重试。")
-
-    if _is_source_test_run(base):
-        _prepare_source_test_runtime(base)
-    _reset_embedded_app_modules()
-    os.environ["BOMANA_CHANNEL"] = channel
-    os.environ["BOMANA_RUNTIME_ROOT"] = str(app_dir)
-    os.chdir(app_dir)
-    if str(app_dir) not in sys.path:
-        sys.path.insert(0, str(app_dir))
-    finder = _AppPackageBomanaFinder(app_dir)
-    sys.meta_path.insert(0, finder)
-    try:
-        runpy.run_path(str(entry), run_name="__main__")
-    finally:
-        if finder in sys.meta_path:
-            sys.meta_path.remove(finder)
+    return _launcher_bootstrap.launch_app(
+        base,
+        channel,
+        recover_incomplete_install=_recover_incomplete_install,
+        app_runtime_dir=_app_runtime_dir,
+        is_local_app_ready=_is_local_app_ready,
+        is_source_test_run=_is_source_test_run,
+        default_entrypoint=DEFAULT_ENTRYPOINT,
+    )
 
 
 def _friendly_error_text(err: Exception, channel: str) -> str:
