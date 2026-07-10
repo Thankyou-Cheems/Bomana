@@ -68,7 +68,7 @@
 │  │  ├─ debug_support.py     # Debug mock snapshot + debug panel helpers
 │  │  ├─ dialogs.py           # Settings/About/etc dialogs
 │  │  ├─ settings_form.py     # Headless settings dialog value collection/validation/payload helpers
-│  │  ├─ hud_overlay.py       # Fullscreen HUD overlay skeleton (v6.8.0)
+│  │  ├─ hud_overlay.py       # Fullscreen HUD overlay runtime
 │  │  ├─ icon_assets.py       # Bundled PNG icon loader/cache
 │  │  ├─ main_window.py       # Stable main-window skeleton/card layout builder
 │  │  ├─ nav_window.py        # Standalone navigation window
@@ -275,5 +275,7 @@ CI:
 - `docs/QUICKSTART.md`: condensed player/developer quick start
 - `docs/CONTRIBUTING.md`: current contribution workflow, `bd` tracking, release expectations
 - `docs/specs/`: canonical runtime, release, threading, config, and quality contracts
+- `docs/adr/`: durable architecture decisions and their status
 - `docs/PRIVACY.md`: launcher telemetry/update-service privacy disclosure
 - `docs/PITFALLS.md`: operational failure log for maintainers
+- `tests/README.md`: test-layer router; quality obligations remain canonical in `docs/specs/testing-quality-gates.md`

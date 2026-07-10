@@ -1,9 +1,9 @@
+# enforces: docs/specs/threading-ui-contract.md THREAD-02..THREAD-06, THREAD-08, THREAD-09, HOTKEY-01, HOTKEY-02, HOTKEY-04
+
 from __future__ import annotations
 
 import ast
 from pathlib import Path
-
-# enforces: docs/specs/threading-ui-contract.md THREAD-02..THREAD-06, THREAD-08, THREAD-09, HOTKEY-01, HOTKEY-02, HOTKEY-04
 
 ROOT = Path(__file__).resolve().parents[2]
 TK_MUTATORS = (

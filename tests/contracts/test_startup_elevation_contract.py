@@ -1,9 +1,9 @@
+# enforces: docs/specs/startup-elevation.md ELEV-01..ELEV-12
+
 from __future__ import annotations
 
 import ast
 from pathlib import Path
-
-# enforces: docs/specs/startup-elevation.md ELEV-01..ELEV-12
 
 ROOT = Path(__file__).resolve().parents[2]
 

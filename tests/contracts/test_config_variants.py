@@ -1,3 +1,5 @@
+# enforces: docs/specs/config-variants.md CFG-01..CFG-04, CFG-06..CFG-08
+
 from __future__ import annotations
 
 import importlib.util
@@ -5,9 +7,11 @@ from pathlib import Path
 
 import bomana.config.feature_profile as feature_profile
 import bomana.config.settings as settings
+from bomana import metadata
+from bomana.metadata import __version__
+from bomana.ui.theme import Theme
+from bomana.ui.theme import Theme as RuntimeTheme
 from bomana.utils.file_utils import ConfigManager
-
-# enforces: docs/specs/config-variants.md CFG-01..CFG-04, CFG-06..CFG-08
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -74,6 +78,8 @@ def test_config_package_boundary_uses_explicit_submodules() -> None:
     assert not hasattr(config, "PanelConfig")
     assert not hasattr(config, "Theme")
     assert not hasattr(config, "__version__")
+    assert __version__ == metadata.__version__
+    assert Theme is RuntimeTheme
 
 
 def test_panel_config_compile_flags_take_precedence(monkeypatch) -> None:

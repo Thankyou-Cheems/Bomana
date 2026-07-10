@@ -1,3 +1,5 @@
+# enforces: docs/specs/runtime-8111-boundary.md R8111-01, R8111-02, R8111-04, R8111-06, R8111-08
+
 from __future__ import annotations
 
 import ast
@@ -8,8 +10,6 @@ from urllib.parse import urlparse
 
 from bomana.config.settings import NetworkConfig
 from bomana.core.telemetry import MapObjectsFetcher
-
-# enforces: docs/specs/runtime-8111-boundary.md R8111-01, R8111-02, R8111-04, R8111-06, R8111-08
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_ENDPOINTS = {"/indicators", "/state", "/map_obj.json", "/map_info.json"}

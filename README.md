@@ -74,7 +74,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 - **状态恢复** - 支持应用重启后继续计时
 - **倒计时警告** - 30秒、20秒、10秒...语音/蜂鸣提醒
 
-### 投弹预测系统（CCRP v3.0）
+### 投弹预测系统（CCRP）
 
 基于真实弹道物理的投弹辅助计算：
 
@@ -99,7 +99,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 - **ETE 预估** - 按当前速度到达目标的预计时间
 - **智能目标切换** - 持续对准某目标 3 秒后自动锁定
 
-### HUD 导航叠加层（v6.8）
+### HUD 导航叠加层
 
 - **主目标靶子** - 基于相对方位与距离显示 HUD 目标提示
 - **2.5D/2D 自动降级** - 姿态可靠时用 2.5D，缺失或抖动时自动回退 2D
@@ -258,6 +258,7 @@ uv run python Bomana.pyw
 - [docs/PRIVACY.md](docs/PRIVACY.md) - 启动器更新检查与匿名统计上报说明
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) - 版本变更记录
 - [docs/PITFALLS.md](docs/PITFALLS.md) - 维护过程中的已知坑点与排障记录
+- [tests/README.md](tests/README.md) - 测试分层、放置规则与规范映射
 
 ---
 

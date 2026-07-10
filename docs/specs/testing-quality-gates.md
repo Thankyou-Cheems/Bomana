@@ -30,8 +30,8 @@ test layout, and release/deploy verification tests.
   --frozen`, Ruff, pytest smoke, and read-only default permissions.
 - `QG-05`: Test layers should stay searchable: `test_core_*`, `test_ui_*`,
   `test_launcher_*`, `test_utils_*`, `test_quality_*`. New spec contract tests
-  belong under `tests/contracts/`, must include exact `# enforces` clause
-  headers, and must pass clause-level meta-traceability.
+  belong under `tests/contracts/`, must start with an exact `# enforces` clause
+  header, and must pass clause-level meta-traceability.
 - `QG-06`: Release/build/launcher/deploy tests must call
   `verify_release_manifest_signature`; do not only assert that signature fields
   exist or mock away verification.
@@ -46,6 +46,10 @@ test layout, and release/deploy verification tests.
   `cargo test --locked`, and an unsigned development build of the broker;
   Windows release CI MUST repeat these checks before packaging the broker into
   each App ZIP.
+- `QG-11`: Top-level Markdown under `docs/` MUST remain a curated set of current
+  user, contributor, architecture, privacy, changelog, and pitfalls documents.
+  Temporary plans and task status belong in `bd`; repository-local Markdown
+  links MUST resolve.
 
 ## Contract Coverage
 
@@ -55,6 +59,8 @@ test layout, and release/deploy verification tests.
   CI and release verification rules in `QG-04`, `QG-06`, and `QG-10`.
 - [static] `tests/contracts/test_meta_traceability.py` enforces the contract
   layout and exact clause mapping required by `QG-05`.
+- [static] `tests/test_quality_documentation.py` enforces the curated top-level
+  documentation set and local-link integrity required by `QG-11`.
 - [manual] Task closeout and handoff review enforce `QG-01`, `QG-02`, `QG-07`,
   and `QG-08`; automated results must identify any required real-environment
   smoke that was not run.

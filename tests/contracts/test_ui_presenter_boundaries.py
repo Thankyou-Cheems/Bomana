@@ -1,6 +1,6 @@
-from pathlib import Path
-
 # enforces: docs/specs/ui-presenter-boundary.md UI-PRES-01..UI-PRES-02
+
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 

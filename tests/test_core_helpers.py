@@ -1,3 +1,5 @@
+"""Behavioral coverage for the extracted core helper modules."""
+
 import time
 
 from bomana.core import ccrp_scheduler, diagnostics, lifecycle, navigation, timing_store
@@ -91,11 +93,7 @@ def test_ccrp_scheduler_applies_and_rejects_results() -> None:
     assert state.bombing_calc_valid is False
     assert state.cached_bombing_unavailable_reason == "calc_failed"
     assert (
-        ccrp_scheduler.estimate_release_mach(
-            TelemetryData(mach=None, tas_kmh=1225.0),
-            0.0,
-        )
-        == 1.0
+        ccrp_scheduler.estimate_release_mach(TelemetryData(mach=None, tas_kmh=1225.0), 0.0) == 1.0
     )
 
 

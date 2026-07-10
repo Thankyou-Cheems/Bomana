@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### 改进
+- 清理已完成的阶段性 UI 计划和重复测试，将 8111 回归迁为按核心边界命名的 pytest 测试，并新增文档集合与本地链接卫生门禁。
 - 移除可变 Python App 包的整包提权路径；普通热键默认先启动，确认 War Thunder 普通运行时不请求 UAC。游戏高权限、未启动或无法判断时才提供手动授权，零安装 native Broker 随 App ZIP 携带并只注册固定动作；拒绝时恢复普通热键。
 - 为 App 包、Launcher、清单和校验文件添加 GitHub Artifact Attestations；继续保留 Ed25519 清单与 SHA256 校验，并明确来源证明不会让无证书 UAC 显示可信发布者。
 - 重构 GitHub Pages 首页，以更简洁的新用户路径呈现下载、三种通道、首次启动、权限说明、功能边界、隐私与文档入口。

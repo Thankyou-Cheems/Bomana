@@ -1,5 +1,8 @@
 # ADR 0003: Use an optional zero-install privileged hotkey broker
 
+Status: Accepted
+Date: 2026-07-10
+
 ## Context
 
 War Thunder may run at high integrity on Windows. A medium-integrity Bomana

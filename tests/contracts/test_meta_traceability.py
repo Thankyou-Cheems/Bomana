@@ -1,4 +1,4 @@
-# enforces: the traceability chain itself.
+# enforces: docs/specs/testing-quality-gates.md QG-05
 #
 # Copied from the spec-anchored-development skill. It checks classified clause
 # coverage and both directions of the spec/test map.
@@ -136,10 +136,11 @@ def test_contract_headers_match_spec_coverage() -> None:
     spec_clauses, mapped_contract_clauses, problems = _spec_contract_map()
 
     for test_file in sorted(CONTRACTS.glob("test_*.py")):
-        if test_file.name == Path(__file__).name:
-            continue
         test_rel = test_file.relative_to(REPO).as_posix()
         text = test_file.read_text(encoding="utf-8")[:2000]
+        first_line = text.partition("\n")[0]
+        if not first_line.startswith("# enforces: docs/specs/"):
+            problems.append(f"{test_file.name}: first line must be an exact spec-clause header")
         matches = list(ENFORCES_RE.finditer(text))
         if not matches:
             problems.append(
