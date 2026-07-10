@@ -14,12 +14,19 @@ implementation plans belong in git history, not here.
 
 ## Entries
 
+### 2026-07-10 — UAC handoff elevated a mutable Python App package
+
+Symptom: game-foreground hotkeys worked after whole-App elevation, but the UAC child imported and executed the user-writable `app/` Python tree.
+Root cause: the integrity workaround moved the entire application across the privilege boundary instead of isolating the one capability that required it.
+Spec: `docs/specs/startup-elevation.md` `ELEV-01..ELEV-10` (Amended 2026-07); ADR `docs/adr/0003-minimal-privileged-hotkey-broker.md`.
+Pin: `tests/contracts/test_startup_elevation_contract.py`, `tests/test_hotkey_broker.py`, and native broker tests prohibit elevated mutable App code and constrain the broker to fixed `RegisterHotKey` actions.
+
 ### 2026-07-10 — Separate the Windows integrity boundary from the Tk hotkey bug
 
 Symptom: F7-F11 registered successfully but were silent only while a higher-integrity War Thunder window had focus; Explorer focus restored delivery.
 Root cause: same-session tests of current HEAD and an exact `fa1899cf^` worktree both failed in the game, and the relevant pre/post-spec hotkey sources were identical. `RegisterHotKey`, raw input, and a low-level probe all stopped receiving physical keys at the same higher-integrity foreground boundary, so the spec migration was not the cause. Separately, the old worker listener really did call `root.after(...)` across threads and could die with `RuntimeError`; the Tk-owned message-only window remains a valid lifecycle fix even though it cannot cross Windows integrity levels.
-Spec: `docs/specs/startup-elevation.md` `ELEV-01..ELEV-08`; `docs/specs/threading-ui-contract.md` `THREAD-02`, `THREAD-04`, `THREAD-08`, `HOTKEY-01..HOTKEY-04`; `docs/specs/runtime-8111-boundary.md` `R8111-08`.
-Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, with Tk-owned message delivery and dispatcher callbacks. Do not add hooks, raw-input fallback, key polling, automatic re-registration, or game-process scanning. The launcher stays ordinary for updates and requests UAC only for the fixed App handoff; refusal keeps an explicit ordinary-launch path and an accurate degraded-feature warning.
+Spec: `docs/specs/startup-elevation.md` `ELEV-01..ELEV-10`; `docs/specs/threading-ui-contract.md` `THREAD-02`, `THREAD-04`, `THREAD-08`, `THREAD-09`, `HOTKEY-01..HOTKEY-04`; `docs/specs/runtime-8111-boundary.md` `R8111-08`.
+Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, with Tk-owned local delivery or fixed-action broker delivery through `TkEventDispatcher`. Do not add hooks, raw-input fallback, key polling, automatic re-registration, or game-process scanning. The launcher and Python App stay ordinary; only the protected native broker may request UAC.
 
 ### Launcher Update Safety
 

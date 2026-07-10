@@ -920,7 +920,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-10T05:31:40+00:00"
+        "at": "2026-07-10T07:03:23+00:00"
       }
     },
     {
@@ -950,7 +950,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-10T05:31:40+00:00"
+        "at": "2026-07-10T07:03:23+00:00"
       }
     },
     {
@@ -1519,8 +1519,8 @@
       "created_at": "2026-06-28T03:59:35+00:00",
       "snippet_check": {
         "status": "drifted",
-        "detail": "snippet exists but not at lines 177-178; first line now near line 185",
-        "at": "2026-07-10T05:31:40+00:00"
+        "detail": "snippet exists but not at lines 177-178; first line now near line 188",
+        "at": "2026-07-10T07:03:23+00:00"
       }
     },
     {
@@ -1706,6 +1706,102 @@
       },
       "resolved_at": "2026-07-09T23:20:37+00:00",
       "resolution_note": "Replaced worker GetMessage/root.after path with a Tk-owner message-only HWND and TkEventDispatcher delivery; 38 focused tests and real Win32 synthetic F6 smoke passed."
+    },
+    {
+      "file": "bomana/utils/hotkey_broker.py",
+      "line_start": 604,
+      "line_end": 611,
+      "snippet": "            if not ok:\n                error_code = int(ctypes.get_last_error())\n                if not self._stopping and error_code not in (\n                    ERROR_BROKEN_PIPE,\n                    ERROR_OPERATION_ABORTED,\n                ):\n                    self._dispatch_failure(f\"热键组件连接已中断（Windows 错误 {error_code}）。\")\n                return",
+      "category": "lifecycle",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Unexpected broker exit leaves the App stuck in connecting state",
+      "impact": "If the elevated broker connects and then exits before sending READY, ReadFile returns ERROR_BROKEN_PIPE. The client suppresses that error while not stopping, so the App never starts local fallback and keeps showing that the protected broker is connecting.",
+      "fix": "Treat every pipe read failure while _stopping is false as a broker failure, dispatch the visible fallback, and add a regression test for a broken pipe before READY.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The expected shutdown path sets _stopping before signaling the stop event, so ERROR_BROKEN_PIPE while _stopping is false is unexpected and must not be suppressed."
+        },
+        {
+          "kind": "tool",
+          "detail": "Ruff and pytest pass, confirming this lifecycle branch is not covered by the existing suite."
+        }
+      ],
+      "id": "F-703386c9",
+      "status": "fixed",
+      "created_at": "2026-07-10T06:49:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-10T06:49:39+00:00"
+      },
+      "resolved_at": "2026-07-10T06:50:27+00:00",
+      "resolution_note": "Pipe read failures now dispatch the visible fallback whenever the App is not stopping; tests/test_hotkey_broker.py broken-pipe regression passes."
+    },
+    {
+      "file": "bomana/ui/runtime_services.py",
+      "line_start": 142,
+      "line_end": 145,
+      "snippet": "    def _on_hotkey_broker_ready(self, failed_keys: tuple[str, ...]) -> None:\n        self._set_hotkey_broker_notice(\"\", \"\")\n        if failed_keys:\n            self.app._on_hotkey_registration_error(failed_keys)",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Broker registration failures clear the persistent recovery action",
+      "impact": "When one or more configured keys are already reserved, the broker reports those failures but runtime services clear the persistent notice before showing a one-time modal. This violates ELEV-07 and leaves the user without the required visible retry path after dismissing the dialog.",
+      "fix": "Keep the auxiliary notice row visible with a concise failed-key explanation and retry action whenever failed_keys is non-empty; clear it only after a fully successful READY frame.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The handler unconditionally clears the notice before branching on failed_keys."
+        },
+        {
+          "kind": "tool",
+          "detail": "The accepted startup-elevation spec ELEV-07 requires a persistent explanation and retry action for registration failure."
+        }
+      ],
+      "id": "F-df502207",
+      "status": "fixed",
+      "created_at": "2026-07-10T06:51:24+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-10T06:51:24+00:00"
+      },
+      "resolved_at": "2026-07-10T06:51:49+00:00",
+      "resolution_note": "Failed READY frames now preserve a retry notice naming the conflicting keys; focused runtime-services tests pass."
+    },
+    {
+      "file": "native/hotkey_broker_setup/src/main.rs",
+      "line_start": 172,
+      "line_end": 183,
+      "snippet": "    fn install() -> Result<PathBuf, String> {\n        if BROKER_BYTES.len() < 1024 {\n            return Err(\"内置热键组件无效。\".to_owned());\n        }\n        let directory = program_files()?.join(\"Bomana\").join(\"HotkeyBroker\");\n        fs::create_dir_all(&directory).map_err(|error| format!(\"无法创建安装目录：{error}\"))?;\n        let target = directory.join(\"BomanaHotkeyBroker.exe\");\n        let staged = directory.join(\"BomanaHotkeyBroker.exe.new\");\n        let mut file = File::create(&staged).map_err(|error| format!(\"无法暂存组件：{error}\"))?;\n        file.write_all(BROKER_BYTES)\n            .and_then(|_| file.sync_all())\n            .map_err(|error| format!(\"无法写入组件：{error}\"))?;",
+      "category": "security",
+      "severity": "high",
+      "confidence": "likely",
+      "title": "Broker installer trusts any pre-existing Program Files directory ACL",
+      "impact": "If the fixed HotkeyBroker directory already exists with a permissive DACL, create_dir_all preserves it and the installed elevated broker remains replaceable by a standard user. Because runtime currently accepts any Windows-trusted Authenticode signer, a user-writable directory would weaken the intended fixed-binary UAC boundary.",
+      "fix": "Apply an explicit protected DACL granting full control only to SYSTEM and Administrators and read/execute to Builtin Users on both the install directory and final broker file; fail installation if either ACL operation fails.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The installer creates or reuses the directory and writes the broker without any security descriptor or ACL verification."
+        },
+        {
+          "kind": "tool",
+          "detail": "ELEV-03 requires administrator-only write ACLs; the current Rust build passes because no test asserts the installed DACL."
+        }
+      ],
+      "id": "F-6c9aaa7a",
+      "status": "fixed",
+      "created_at": "2026-07-10T06:52:53+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-10T06:52:53+00:00"
+      },
+      "resolved_at": "2026-07-10T06:54:59+00:00",
+      "resolution_note": "Installer now applies a protected DACL to both the fixed Program Files directory and final broker; dev native build and startup-elevation contract tests pass."
     }
   ]
 }

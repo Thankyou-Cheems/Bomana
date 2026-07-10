@@ -40,8 +40,10 @@ claim to protect the War Thunder data boundary.
   `bomana/data/ccrp_bomb_params.json` and `bomana/data/fm_speed_limits.json`.
   Static data provenance must be documented when refreshed.
 - `R8111-08`: Runtime hotkey diagnostics must not enumerate or open War Thunder
-  processes, query process tokens, or infer hotkey delivery from process
-  elevation; diagnosis must use registration and callback-delivery evidence.
+  or anti-cheat processes, query another process token, or infer hotkey delivery
+  from process elevation; the broker client may query only its own token to
+  construct the current-user IPC DACL, and diagnosis must use registration and
+  callback-delivery evidence.
 
 ## Contract Coverage
 

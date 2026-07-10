@@ -55,3 +55,14 @@ jobs:
         shell: cmd
         run: |
           tools\scripts\check_smoke.bat
+
+      - name: Native hotkey broker checks
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal
+          rustup component add rustfmt --toolchain 1.94.0
+          rustup default 1.94.0
+          cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml
+          cargo fmt --check --manifest-path native/hotkey_broker_setup/Cargo.toml
+          cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml
+          uv run --frozen python tools/build_hotkey_broker.py --mode dev

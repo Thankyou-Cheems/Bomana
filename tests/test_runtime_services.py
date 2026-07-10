@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
+
 from bomana.config.settings import (
     HotkeyConfig,
     HUDConfig,
@@ -8,6 +10,22 @@ from bomana.config.settings import (
 from bomana.ui import runtime_services
 from bomana.ui.dialogs import SettingsDialog
 from bomana.ui.runtime_services import AppRuntimeServices
+from bomana.utils.hotkey_broker import BrokerStartResult, BrokerStartStatus
+
+
+@pytest.fixture(autouse=True)
+def _default_to_unavailable_broker(monkeypatch):
+    class UnavailableBroker:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def start(self) -> BrokerStartResult:
+            return BrokerStartResult(BrokerStartStatus.UNAVAILABLE)
+
+        def stop(self) -> None:
+            pass
+
+    monkeypatch.setattr(runtime_services, "ElevatedHotkeyBrokerClient", UnavailableBroker)
 
 
 class FakeSound:
@@ -65,6 +83,7 @@ def _make_hotkey_app() -> SimpleNamespace:
         _toggle_beep=lambda: None,
         _toggle_zone_sound=lambda: None,
         _on_hotkey_registration_error=lambda _key_names: None,
+        _set_hotkey_broker_notice=lambda _message, _action: None,
     )
 
 
@@ -163,6 +182,96 @@ def test_init_global_hotkeys_omits_zones_when_feature_is_disabled(monkeypatch) -
     assert HotkeyConfig.HK_ID_ZONES not in hotkey_ids
     assert captured["dispatch"] == services.app.dispatcher.post
     assert captured["started"] is True
+
+
+def test_init_global_hotkeys_prefers_started_privileged_broker(monkeypatch) -> None:
+    calls: list[str] = []
+    notices: list[tuple[str, str]] = []
+
+    class StartedBroker:
+        def __init__(self, _dispatch, bindings, **_kwargs) -> None:
+            calls.append(f"broker-create:{len(bindings)}")
+
+        def start(self) -> BrokerStartResult:
+            calls.append("broker-start")
+            return BrokerStartResult(BrokerStartStatus.STARTED)
+
+        def stop(self) -> None:
+            calls.append("broker-stop")
+
+    class UnexpectedLocalHotkeys:
+        def __init__(self, *_args, **_kwargs) -> None:
+            raise AssertionError("local hotkeys must not register while broker is active")
+
+    app = _make_hotkey_app()
+    app._set_hotkey_broker_notice = lambda message, action: notices.append((message, action))
+    services = AppRuntimeServices(app)
+    monkeypatch.setattr(runtime_services.os, "name", "nt")
+    monkeypatch.setattr(runtime_services, "ElevatedHotkeyBrokerClient", StartedBroker)
+    monkeypatch.setattr(runtime_services, "GlobalHotkeys", UnexpectedLocalHotkeys)
+    monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
+
+    services.init_global_hotkeys()
+
+    assert calls == ["broker-create:5", "broker-start"]
+    assert services.hotkey_broker is not None
+    assert services.global_hotkeys is None
+    assert notices[-1][1] == ""
+    assert "正在连接" in notices[-1][0]
+
+
+def test_cancelled_broker_falls_back_locally_and_offers_retry(monkeypatch) -> None:
+    calls: list[str] = []
+    notices: list[tuple[str, str]] = []
+
+    class CancelledBroker:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def start(self) -> BrokerStartResult:
+            calls.append("broker-start")
+            return BrokerStartResult(BrokerStartStatus.CANCELLED)
+
+        def stop(self) -> None:
+            calls.append("broker-stop")
+
+    class LocalHotkeys:
+        def __init__(self, _dispatch, hotkeys, **_kwargs) -> None:
+            calls.append(f"local-create:{len(hotkeys)}")
+
+        def start(self) -> None:
+            calls.append("local-start")
+
+    app = _make_hotkey_app()
+    app._set_hotkey_broker_notice = lambda message, action: notices.append((message, action))
+    services = AppRuntimeServices(app)
+    monkeypatch.setattr(runtime_services.os, "name", "nt")
+    monkeypatch.setattr(runtime_services, "ElevatedHotkeyBrokerClient", CancelledBroker)
+    monkeypatch.setattr(runtime_services, "GlobalHotkeys", LocalHotkeys)
+    monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
+
+    services.init_global_hotkeys()
+
+    assert calls == ["broker-start", "broker-stop", "local-create:5", "local-start"]
+    assert services.hotkey_broker is None
+    assert services.global_hotkeys is not None
+    assert notices[-1][1] == "retry"
+    assert "8111" in notices[-1][0]
+
+
+def test_broker_registration_failure_keeps_persistent_retry_notice() -> None:
+    notices: list[tuple[str, str]] = []
+    errors: list[tuple[str, ...]] = []
+    app = _make_hotkey_app()
+    app._set_hotkey_broker_notice = lambda message, action: notices.append((message, action))
+    app._on_hotkey_registration_error = errors.append
+    services = AppRuntimeServices(app)
+
+    services._on_hotkey_broker_ready(("F8", "F11"))
+
+    assert errors == [("F8", "F11")]
+    assert notices[-1][1] == "retry"
+    assert "F8、F11" in notices[-1][0]
 
 
 def test_refresh_local_hotkey_bindings_unbinds_old_sequences(monkeypatch) -> None:

@@ -51,6 +51,7 @@ from bomana.ui.window_geometry import (
 )
 from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import ConfigManager, resource_path
+from bomana.utils.hotkey_broker import BROKER_RELEASES_URL
 from bomana.utils.math_utils import calculate_smart_scale
 from bomana.utils.sound import SoundManager
 from bomana.utils.system import SingleInstanceManager, Win32, resolve_tk_font_tuple
@@ -140,6 +141,8 @@ class App:
         self._nudge_sortie_id = -1
         self._nudge_airborne_seen = False
         self._nudge_sortie_seen = -1
+        self._hotkey_broker_notice = ""
+        self._hotkey_broker_action = ""
         # 初始缩放占位：_init_window_base 后会用DPI重新计算
         self.scale = float(UIConfig.UI_SCALE_MULT)
         self._hint_width_cache = {"text": "", "width": int(380 * self.scale)}
@@ -1058,7 +1061,31 @@ class App:
         return f"再按一次 [{HotkeyConfig.KEY_RESET}] 确认重置"
 
     def _nudge_text(self) -> str:
+        if self._hotkey_broker_notice:
+            return self._hotkey_broker_notice
         return "提示：如果 Bomana 对你有帮助，欢迎点一个 GitHub Star（起飞后自动隐藏）"
+
+    def _nudge_action_text(self) -> str:
+        if self._hotkey_broker_action == "retry":
+            return "启用游戏内热键"
+        if self._hotkey_broker_action == "install":
+            return "获取签名组件"
+        return "GitHub Star" if self._nudge_visible else ""
+
+    def _set_hotkey_broker_notice(self, message: str, action: str) -> None:
+        self._hotkey_broker_notice = str(message or "").strip()
+        self._hotkey_broker_action = str(action or "").strip()
+        self._update_hint()
+
+    def _on_nudge_action(self) -> None:
+        if self._hotkey_broker_action == "retry":
+            self.runtime_services.retry_hotkey_broker()
+            return
+        if self._hotkey_broker_action == "install":
+            with contextlib.suppress(Exception):
+                webbrowser.open(BROKER_RELEASES_URL)
+            return
+        self._open_star_url()
 
     def _update_hint(self) -> None:
         """更新提示文本"""
@@ -1071,17 +1098,23 @@ class App:
         nudge_layout_changed = self._sync_nudge_row()
         if nudge_layout_changed and hasattr(self, "main_frame"):
             with contextlib.suppress(Exception):
-                self._recalc_size(force_shrink=not self._nudge_visible)
+                self._recalc_size(
+                    force_shrink=not bool(self._hotkey_broker_notice or self._nudge_visible)
+                )
 
     def _sync_nudge_row(self) -> bool:
         """Mirror the GitHub Star nudge state into visible widgets."""
-        visible = bool(self._nudge_visible)
+        visible = bool(self._hotkey_broker_notice or self._nudge_visible)
         if hasattr(self, "nudge_lbl") and self.nudge_lbl:
-            self.nudge_lbl.config(text=(self._nudge_text() if self._nudge_visible else ""))
+            self.nudge_lbl.config(
+                text=(self._nudge_text() if visible else ""),
+                fg=(Theme.YELLOW if self._hotkey_broker_notice else Theme.TEXT_MUTED),
+            )
         if hasattr(self, "star_lbl") and self.star_lbl:
+            action_text = self._nudge_action_text() if visible else ""
             self.star_lbl.config(
-                text=("GitHub Star" if self._nudge_visible else ""),
-                cursor=("hand2" if self._nudge_visible else "arrow"),
+                text=action_text,
+                cursor=("hand2" if action_text else "arrow"),
             )
         if not hasattr(self, "nudge_row") or not self.nudge_row:
             return False

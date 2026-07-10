@@ -2,14 +2,15 @@
 
 ## Overview
 - Bootstrap entry point: `Bomana.pyw` (single-instance guard, DPI setup, root window creation, `App` startup)
-- Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, UAC App handoff, details/support dialog)
-- Launcher package: `launcher/` (manifest verification/projection, download cache pathing, install transactions, bounded UAC handoff, app bootstrap helpers, launcher metadata)
+- Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, ordinary-integrity offline launch, details/support dialog)
+- Launcher package: `launcher/` (manifest verification/projection, download cache pathing, install transactions, app bootstrap helpers, launcher metadata)
 - Launcher pure helpers: `launcher/core.py` (download-source normalization, version/asset helpers, checksum and safe zip extraction)
 - Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata)
 - Central config: `bomana/config/` (explicit feature flag, settings, and static-data submodules)
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app coordinator, main-window builder, debug support, panel renderer, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
+- Privileged hotkeys: `bomana/utils/hotkey_broker.py` (ordinary App IPC/UAC client) plus `native/hotkey_broker/` (fixed-action native broker) and `native/hotkey_broker_setup/` (signed fixed-path installer)
 - Bundled UI assets: `bomana/assets/` (private UI font subsets + PNG icon assets)
 - External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
@@ -23,7 +24,7 @@
 - Runtime 8111 boundary: `docs/specs/runtime-8111-boundary.md`
 - Release signing and Tencent/EdgeOne deployment: `docs/specs/release-signing.md`
 - Tk threading and UI dispatch: `docs/specs/threading-ui-contract.md`
-- Launcher-to-App elevation: `docs/specs/startup-elevation.md`
+- Privileged hotkey broker: `docs/specs/startup-elevation.md`
 - UI presenter boundaries: `docs/specs/ui-presenter-boundary.md`
 - Config variants and `ENABLE_*` precedence: `docs/specs/config-variants.md`
 - Test layers and quality gates: `docs/specs/testing-quality-gates.md`
@@ -40,7 +41,6 @@
 │  ├─ verify.py              # Verify-before-trust helper boundary
 │  ├─ download_cache.py      # Download directory fallback and cache naming
 │  ├─ install_txn.py         # Install/rollback transaction primitives
-│  ├─ elevation.py           # Current-token check + bounded App-only runas handoff
 │  └─ bootstrap.py           # App-package import isolation and launch helpers
 ├─ bomana/
 │  ├─ config/                # Package marker plus explicit feature/settings/static-data submodules
@@ -88,12 +88,16 @@
 │  │  ├─ window_geometry.py   # Headless snap-anchor geometry helpers used by App
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
+│     ├─ hotkey_broker.py    # Protected broker discovery, UAC, ACL-restricted IPC client
 │     ├─ diagnostics.py      # Structured async diagnostics logging
 │     ├─ file_utils.py        # Config/state/resource helpers
 │     ├─ math_utils.py        # Navigation/math helpers
 │     ├─ sound.py             # Sound manager
 │     └─ system.py            # Windows/system helpers
-├─ docs/                        # Architecture/changelog/privacy/contributing docs
+├─ native/
+│  ├─ hotkey_broker/          # Elevated fixed-action RegisterHotKey runtime (Rust)
+│  └─ hotkey_broker_setup/    # Authenticode-signed Program Files installer (Rust)
+├─ docs/                       # GitHub Pages + architecture/changelog/privacy/contributing docs
 ├─ tools/
 │  ├─ build_portable.py      # Build launcher/app package/manifest
 │  ├─ create_version_info.py # Windows version-info helper for packaging
@@ -161,10 +165,15 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
-   - Launcher download/update/install work remains at ordinary user integrity. On Windows, the default App action requests UAC only at the handoff and starts a fixed internal App-only child; that child bypasses launcher networking/update UI and enters `launcher.bootstrap.launch_app()` after independently confirming its token is elevated.
-   - If UAC is cancelled or fails, the launcher stays open with a persistent, precise hotkey-degradation warning plus separate “管理员权限重试” and ordinary-launch actions. There is no automatic retry loop.
-   - The App normally runs inside the App-only launcher child process. `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and the `launcher.bootstrap` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules.
-9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
+   - Launcher download/update/install and App launch all remain at ordinary user integrity. `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and the `launcher.bootstrap` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules without crossing UAC.
+9. Privileged hotkey flow:
+   - The ordinary App creates one local message pipe and stop event per launch with a random nonce, explicit current-user/SYSTEM/Administrators DACL, and remote-client rejection.
+   - The App may request UAC only for the Authenticode-trusted `BomanaHotkeyBroker.exe` installed below `%ProgramFiles%\Bomana\HotkeyBroker`; source and portable `app/` Python trees never run elevated.
+   - The native broker validates the App PID/session and pipe server PID, registers only the configured fixed actions once with `RegisterHotKey | MOD_NOREPEAT`, and sends fixed eight-byte action frames back to the App.
+   - The pipe reader posts callbacks through `TkEventDispatcher`; UAC denial, missing/untrusted broker, or IPC failure keeps local `RegisterHotKey`, buttons, tray actions, and 8111 features available while the existing auxiliary notice row explains the game-foreground limitation and exposes install/retry.
+   - The App stop event or App process exit unregisters all broker hotkeys and ends the broker. No hook, polling, game-process inspection, service, scheduled task, autostart, network, plugin, or arbitrary command/path surface exists in the broker.
+   - `tools/build_hotkey_broker.py` builds the broker and fixed-path installer. Release mode requires and verifies Authenticode signatures before either artifact enters `dist/`.
+10. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 
 Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.
 
@@ -251,7 +260,8 @@ CI:
   - `quality`: release-preflight Ruff + pytest smoke checks
   - `build_app`: app package + manifest
   - `build_launcher`: launcher exe + `launcher_manifest.json`
-- `.github/workflows/build.yml` requires the repository secrets `BOMANA_RELEASE_ED25519_PRIVATE_KEY` and `BOMANA_RELEASE_ED25519_PUBLIC_KEY` for every signed release build.
+  - `build_hotkey_broker`: Authenticode-signed broker runtime + fixed-path installer
+- `.github/workflows/build.yml` requires the repository secrets `BOMANA_RELEASE_ED25519_PRIVATE_KEY` and `BOMANA_RELEASE_ED25519_PUBLIC_KEY` for signed manifests, plus `BOMANA_AUTHENTICODE_PFX_B64` and `BOMANA_AUTHENTICODE_PFX_PASSWORD` whenever launcher/broker artifacts are released.
 - tag-driven release targets:
   - `vX.Y.Z`: full release (launcher + app packages)
   - `vX.Y.Z-app`: app packages only
@@ -262,6 +272,7 @@ CI:
 
 ## Documentation Map
 - `README.md`: public landing page, install paths, feature overview, compliance statement
+- `docs/index.html` + `docs/styles.css` + `docs/site.js`: static GitHub Pages landing site served from `main:/docs`
 - `docs/QUICKSTART.md`: condensed player/developer quick start
 - `docs/CONTRIBUTING.md`: current contribution workflow, `bd` tracking, release expectations
 - `docs/specs/`: canonical runtime, release, threading, config, and quality contracts

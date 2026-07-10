@@ -41,12 +41,18 @@ test layout, and release/deploy verification tests.
   changes also need build or packaged-launcher smoke when appropriate.
 - `QG-09`: Ruff defaults include `RUF012` and `RUF013`. `RUF001`, `RUF002`, and
   `RUF003` are targeted scans only.
+- `QG-10`: Changes to `native/hotkey_broker/`,
+  `native/hotkey_broker_setup/`, or `tools/build_hotkey_broker.py` MUST run
+  `cargo fmt --check` for both crates, `cargo test --locked` for the runtime
+  broker, and an unsigned development build of both binaries; Windows release
+  CI MUST repeat these checks before Authenticode signing.
+
 ## Contract Coverage
 
 - [static] `tests/test_quality_gate_config.py` enforces smoke-runner and Ruff
   configuration rules in `QG-03` and `QG-09`.
 - [static] `tests/test_quality_release_workflows.py` enforces Windows/Python/uv
-  CI and release verification rules in `QG-04` and `QG-06`.
+  CI and release verification rules in `QG-04`, `QG-06`, and `QG-10`.
 - [static] `tests/contracts/test_meta_traceability.py` enforces the contract
   layout and exact clause mapping required by `QG-05`.
 - [manual] Task closeout and handoff review enforce `QG-01`, `QG-02`, `QG-07`,

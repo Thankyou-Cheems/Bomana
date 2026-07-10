@@ -8,7 +8,8 @@
 ## [Unreleased]
 
 ### 改进
-- 启动器保持普通权限完成检查、下载和更新，仅在 App 交接时默认请求 UAC；拒绝后可普通启动，并保留精确的快捷键降级提示与一键提权重试。
+- 移除可变 Python App 包的整包提权路径；Launcher 与 App 始终保持普通权限，仅由安装在 Program Files、经 Authenticode 签名的最小原生 Broker 请求 UAC 并注册固定热键动作。拒绝或组件缺失时保留本地热键、精确降级提示与一键重试。
+- 重构 GitHub Pages 首页，以更简洁的新用户路径呈现下载、三种通道、首次启动、权限说明、功能边界、隐私与文档入口。
 - 收敛全局快捷键为每个启用动作每个生命周期一次 `RegisterHotKey`，保留 Tk-owned message window/dispatcher 修复，不再引入 hook、轮询、原始输入或游戏进程扫描后端。
 - 将绿色版启动器拆出顶层 `launcher/` 开发期包，集中 manifest 验签投影、下载缓存、安装事务、启动隔离和 launcher metadata，同时保留 `launcher.pyw` 单文件分发入口。
 - 拆出设置对话框的 headless 表单校验/保存 payload helper，并将主窗口贴边锚点几何逻辑下放为可单测 helper，降低 `dialogs.py`/`app.py` 的协调负担。
@@ -458,4 +459,3 @@
 - 性能优化
 - 安全相关
 - 移除功能
-

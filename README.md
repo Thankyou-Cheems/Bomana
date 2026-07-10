@@ -189,6 +189,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 启动器与 app 包的关系：
 
 - `Bomana_launcher_vX.Y.Z.exe`：固定入口，负责版本检查、下载/校验 app 包、启动器自更新、离线启动本地版本，并保留一个可回退的上一版应用目录。
+- `BomanaHotkeyBrokerSetup.exe`：可选的 Authenticode 签名安装器；只为高权限游戏前台下的全局热键安装最小原生 Broker，Launcher 与 Python App 本身始终保持普通权限。
 - `launcher_manifest.json`：记录启动器版本、启动器文件名、SHA256 和 Ed25519 发布签名等元数据。
 - `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行程序包（Enhanced / Standard / Lite）。
 - `manifest_<Variant>.json`：记录版本、应用包文件名、SHA256、`min_launcher_version` 和 Ed25519 发布签名等元数据。
@@ -227,6 +228,7 @@ uv sync --python 3.14.5
 - 一次性构建当前通道 app + 通用启动器：`tools\scripts\build_portable.bat Enhanced all`
 - 若要本地 `deploy_update_assets.py --target all`，需要先为 Enhanced / Standard / Lite 三个通道各构建 app 包，并构建一次通用启动器。
 - 本地发布构建同样必须先设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）；`tools/build_portable.py` 会拒绝未签名清单和不匹配的公私钥。
+- 发布热键 Broker 还必须设置 `BOMANA_AUTHENTICODE_PFX_B64` 与 `BOMANA_AUTHENTICODE_PFX_PASSWORD`；`tools/build_hotkey_broker.py --mode release` 在 Authenticode 签名或验证失败时不会输出可发布文件。
 
 GitHub 云端自动打包发布：
 
@@ -235,7 +237,7 @@ GitHub 云端自动打包发布：
 - 推送标签 `vX.Y.Z-launcher`：仅构建并发布启动器
 - `workflow_dispatch` 手动触发时也可通过 `build_target` 选择 `all` / `app` / `launcher`
 - 不需要本地打包后手工上传文件
-- 发布构建必须提供 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）；GitHub Actions 中私钥/公钥来自 Secrets，key id 通常由 workflow 环境变量设置，构建会拒绝不匹配的签名密钥。
+- 发布构建必须提供 Ed25519 manifest 签名 Secrets；包含 Launcher 的发布还必须提供 Authenticode PFX 与密码 Secrets，用于签名并验证热键 Broker 及其安装器。
 - 签名字段、信任边界和腾讯云/EdgeOne 本地部署规则以 [docs/specs/release-signing.md](docs/specs/release-signing.md) 为准。
 - 发布或部署更新资产前，先核对 `gh secret list --repo Thankyou-Cheems/Bomana`，再运行对应的 `uv run python tools/build_portable.py --target app|launcher|all ...` 与 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`；公开端点验证必须调用 `verify_release_manifest_signature`，不能只检查签名字段是否存在。
 
@@ -283,7 +285,7 @@ uv run python Bomana.pyw
 ```
 
 - `Bomana.pyw` 现在主要负责单实例、DPI、窗口创建和启动 `bomana.ui.app.App`；主要业务逻辑已拆分到 `bomana/`。
-- `launcher.pyw` 是绿色版启动器，负责通道选择、更新检查、下载校验、回退与离线启动。Windows 下默认仅在 App 交接时请求管理员权限；拒绝后仍可普通启动，并会说明可能失效的游戏前台全局快捷键及提供重试按钮。
+- `launcher.pyw` 是绿色版启动器，负责通道选择、更新检查、下载校验、回退与普通权限离线启动。Launcher 与 Python App 不再整体提权；只有安装在 Program Files、签名且固定动作的原生热键 Broker 可单独请求 UAC。
 - 超速限速数据库文件是 `bomana/data/fm_speed_limits.json`（不是仓库根目录）。
 - CCRP 炸弹参数文件是 `bomana/data/ccrp_bomb_params.json`（与限速库统一放在 `bomana/data/`）。
 
@@ -299,7 +301,7 @@ uv run python Bomana.pyw
 | `F10` | 声音开关 | 开启/关闭提示音 |
 | `F11` | 战区提示音 | 开启/关闭战区被摧毁提示 |
 
-*快捷键可在设置中自定义；HUD 叠加层仅可在设置中启用/关闭（默认关闭）*
+*快捷键可在设置中自定义；HUD 叠加层仅可在设置中启用/关闭（默认关闭）。如果 War Thunder 以更高权限运行，可从 Release 安装签名 `BomanaHotkeyBrokerSetup.exe`，再在 App 提示行点击“启用游戏内热键”；拒绝授权不会影响按钮、托盘、计时、导航或 8111 数据。*
 
 ---
 

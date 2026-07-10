@@ -8,7 +8,8 @@ Prefix: `SIGN-`
 
 This spec governs release manifests, signing keys, launcher verification,
 portable release builds, GitHub release workflows, and Tencent/EdgeOne update
-asset deployment.
+asset deployment, including Authenticode signing for the privileged native
+hotkey broker and its installer.
 
 ## Non-goals
 
@@ -58,6 +59,14 @@ asset deployment.
   `launcher/`, and release tools must live under the `launcher` package, not the
   app package namespace. This avoids app-package import isolation resolving a
   launcher helper from an installed app bundle with a different version.
+- `SIGN-12`: `BomanaHotkeyBroker.exe` and `BomanaHotkeyBrokerSetup.exe` MUST be
+  Authenticode-signed with SHA256 and timestamped before they enter `dist/`, an
+  Actions artifact, or a GitHub Release; release tooling MUST run
+  `signtool verify /pa /all` for both files before publication.
+- `SIGN-13`: Broker signing requires `BOMANA_AUTHENTICODE_PFX_B64` and
+  `BOMANA_AUTHENTICODE_PFX_PASSWORD`; the decoded PFX MUST exist only in a
+  temporary build directory and MUST NOT be printed, committed, uploaded, or
+  copied into release artifacts.
 
 ## Contract Coverage
 
@@ -71,7 +80,8 @@ asset deployment.
 - [behavioral] `tests/test_build_metadata.py` enforces signing-input and version
   consistency rules in `SIGN-04` and `SIGN-09`.
 - [static] `tests/test_quality_release_workflows.py` enforces `SIGN-03` and
-  `SIGN-05..SIGN-09`, including local-only Tencent deployment,
-  forwarding boundaries, input allowlists, permissions, and SHA-pinned actions.
+  `SIGN-05..SIGN-09`, `SIGN-12`, and `SIGN-13`, including local-only Tencent
+  deployment, forwarding boundaries, input allowlists, permissions, SHA-pinned
+  actions, and fail-closed broker signing.
 - [manual] Explicit maintainer approval of any private-key retention or rotation
   plan covers the authorization portion of `SIGN-05`.

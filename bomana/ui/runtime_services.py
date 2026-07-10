@@ -31,6 +31,11 @@ from bomana.ui.runtime import start_daemon_thread
 from bomana.ui.theme import Theme
 from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import resource_path
+from bomana.utils.hotkey_broker import (
+    BrokerBinding,
+    BrokerStartStatus,
+    ElevatedHotkeyBrokerClient,
+)
 from bomana.utils.system import GlobalHotkeys
 
 try:
@@ -48,6 +53,7 @@ class AppRuntimeServices:
     def __init__(self, app: Any):
         self.app = app
         self.global_hotkeys: GlobalHotkeys | None = None
+        self.hotkey_broker: ElevatedHotkeyBrokerClient | None = None
         self.tray: Any | None = None
         self.hud_overlay: HUDOverlay | None = None
         self.local_hotkey_sequences: list[str] = []
@@ -61,36 +67,133 @@ class AppRuntimeServices:
         if not self.stop_global_hotkeys():
             return
         if os.name != "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
+            self._set_hotkey_broker_notice("", "")
             return
 
+        hotkeys = self._configured_hotkeys()
+        broker = ElevatedHotkeyBrokerClient(
+            self.app.dispatcher.post,
+            [
+                BrokerBinding(action, key_name, callback)
+                for action, _hotkey_id, key_name, callback in hotkeys
+            ],
+            ready_cb=self._on_hotkey_broker_ready,
+            failure_cb=self._on_hotkey_broker_failure,
+        )
+        result = broker.start()
+        if result.status is BrokerStartStatus.STARTED:
+            self.hotkey_broker = broker
+            self._set_hotkey_broker_notice("正在连接受保护的游戏内热键组件…", "")
+            return
+
+        broker.stop()
+        self._start_local_hotkeys(hotkeys)
+        if result.status in (BrokerStartStatus.UNAVAILABLE, BrokerStartStatus.UNTRUSTED):
+            message = (
+                "未安装可信热键组件；游戏以前台高权限运行时，F7-F11 可能失效。"
+                "窗口按钮、托盘与 8111 功能不受影响。"
+            )
+            self._set_hotkey_broker_notice(message, "install")
+        elif result.status in (BrokerStartStatus.CANCELLED, BrokerStartStatus.FAILED):
+            message = (
+                "未启用高权限热键；游戏以前台高权限运行时，F7-F11 可能失效。"
+                "窗口按钮、托盘与 8111 功能不受影响。"
+            )
+            self._set_hotkey_broker_notice(message, "retry")
+        else:
+            self._set_hotkey_broker_notice("", "")
+
+    def _configured_hotkeys(self) -> list[tuple[str, int, str, Any]]:
         hotkeys = [
-            (HotkeyConfig.HK_ID_RESET, HotkeyConfig.KEY_RESET, self.app._manual_reset_hotkey),
-            (HotkeyConfig.HK_ID_LOCK, HotkeyConfig.KEY_LOCK, self.app._toggle_lock),
-            (HotkeyConfig.HK_ID_CORNER, HotkeyConfig.KEY_CORNER, self.app._next_corner),
-            (HotkeyConfig.HK_ID_BEEP, HotkeyConfig.KEY_BEEP, self.app._toggle_beep),
+            (
+                "reset",
+                HotkeyConfig.HK_ID_RESET,
+                HotkeyConfig.KEY_RESET,
+                self.app._manual_reset_hotkey,
+            ),
+            ("lock", HotkeyConfig.HK_ID_LOCK, HotkeyConfig.KEY_LOCK, self.app._toggle_lock),
+            (
+                "corner",
+                HotkeyConfig.HK_ID_CORNER,
+                HotkeyConfig.KEY_CORNER,
+                self.app._next_corner,
+            ),
+            ("beep", HotkeyConfig.HK_ID_BEEP, HotkeyConfig.KEY_BEEP, self.app._toggle_beep),
         ]
         if ENABLE_ZONES:
             hotkeys.append(
-                (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.KEY_ZONES, self.app._toggle_zone_sound)
+                (
+                    "zones",
+                    HotkeyConfig.HK_ID_ZONES,
+                    HotkeyConfig.KEY_ZONES,
+                    self.app._toggle_zone_sound,
+                )
             )
+        return hotkeys
+
+    def _start_local_hotkeys(self, hotkeys: list[tuple[str, int, str, Any]]) -> None:
         self.global_hotkeys = GlobalHotkeys(
             self.app.dispatcher.post,
-            hotkeys,
+            [(hotkey_id, key_name, callback) for _action, hotkey_id, key_name, callback in hotkeys],
             error_cb=self.app._on_hotkey_registration_error,
         )
         self.global_hotkeys.start()
 
+    def _on_hotkey_broker_ready(self, failed_keys: tuple[str, ...]) -> None:
+        if failed_keys:
+            joined = "、".join(failed_keys)
+            self._set_hotkey_broker_notice(
+                f"游戏内热键 {joined} 注册失败；请检查按键冲突后重试。",
+                "retry",
+            )
+            self.app._on_hotkey_registration_error(failed_keys)
+            return
+        self._set_hotkey_broker_notice("", "")
+
+    def _on_hotkey_broker_failure(self, message: str) -> None:
+        broker = self.hotkey_broker
+        self.hotkey_broker = None
+        if broker is not None:
+            broker.stop()
+        if HotkeyConfig.GLOBAL_HOTKEYS and self.global_hotkeys is None:
+            self._start_local_hotkeys(self._configured_hotkeys())
+        self._set_hotkey_broker_notice(
+            (
+                f"{message} 游戏以前台高权限运行时，F7-F11 可能失效；"
+                "窗口按钮、托盘与 8111 功能不受影响。"
+            ),
+            "retry",
+        )
+
+    def _set_hotkey_broker_notice(self, message: str, action: str) -> None:
+        callback = getattr(self.app, "_set_hotkey_broker_notice", None)
+        if callable(callback):
+            callback(message, action)
+
+    def retry_hotkey_broker(self) -> None:
+        """Retry one explicit UAC broker request from the App notice action."""
+        self.init_global_hotkeys()
+
     def stop_global_hotkeys(self) -> bool:
+        stopped = True
+        broker = self.hotkey_broker
+        self.hotkey_broker = None
+        if broker is not None:
+            try:
+                broker.stop()
+            except Exception as exc:
+                log_exception("hotkey_broker_stop_failed", exc)
+                stopped = False
         manager = self.global_hotkeys
         if manager is None:
-            return True
+            return stopped
         try:
             manager.stop()
         except Exception as exc:
             log_exception("global_hotkeys_stop_failed", exc)
             return False
         self.global_hotkeys = None
-        return True
+        return stopped
 
     def refresh_local_hotkey_bindings(self) -> None:
         """Refresh Tk-local hotkeys after settings mutate HotkeyConfig."""

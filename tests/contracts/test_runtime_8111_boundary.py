@@ -74,12 +74,21 @@ def test_runtime_code_does_not_add_memory_or_injection_primitives() -> None:
         "frida",
         "pyinject",
         "OpenProcess(",
-        "OpenProcessToken",
-        "GetTokenInformation",
         "CreateToolhelp32Snapshot",
     )
 
     assert not [token for token in forbidden_tokens if token in source]
+
+    token_users = [
+        path.relative_to(ROOT).as_posix()
+        for path in RUNTIME_SOURCES
+        if "OpenProcessToken" in path.read_text(encoding="utf-8")
+        or "GetTokenInformation" in path.read_text(encoding="utf-8")
+    ]
+    assert token_users == ["bomana/utils/hotkey_broker.py"]
+    broker_source = (ROOT / token_users[0]).read_text(encoding="utf-8")
+    assert "GetCurrentProcess" in broker_source
+    assert "CreateToolhelp32Snapshot" not in broker_source
 
 
 def test_runtime_http_json_access_stays_centralized() -> None:

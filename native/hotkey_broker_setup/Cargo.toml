@@ -1,0 +1,16 @@
+[package]
+name = "bomana-hotkey-broker-setup"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "BomanaHotkeyBrokerSetup"
+path = "src/main.rs"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = "symbols"

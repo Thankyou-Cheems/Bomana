@@ -40,30 +40,34 @@ runtime app.
 - `THREAD-08`: The native hotkey WndProc must only enqueue callbacks; it must not
   call Tk APIs or execute application callbacks reentrantly from Windows message
   dispatch.
+- `THREAD-09`: The privileged hotkey broker pipe reader MUST run outside the Tk
+  thread and MUST route status, error, and fixed-action callbacks through
+  `TkEventDispatcher.post()` before touching App or UI state.
 - `HOTKEY-01`: Windows global hotkeys must use `RegisterHotKey` as the default
-  backend. Runtime code must not add low-level keyboard hooks, polling fallback
-  paths, or key-state polling for configured global hotkeys.
+  backend in both the local and privileged-broker paths. Runtime code must not
+  add low-level keyboard hooks, polling fallback paths, or key-state polling for
+  configured global hotkeys.
 - `HOTKEY-02`: Hotkey registration, re-registration, unregistration, and
-  message-window creation/destruction must run on the Tk owner thread. Callback
-  dispatch must use the documented dispatcher bridge rather than a hook,
-  polling fallback, or worker message loop.
+  message-window creation/destruction in the local fallback must run on the Tk
+  owner thread. Broker callbacks must use the documented dispatcher bridge
+  rather than calling Tk from the pipe reader.
 - `HOTKEY-03`: `RegisterHotKey` failures must be surfaced through the configured
   UI error callback. Code must not silently switch to another input backend.
-- `HOTKEY-04`: The hotkey backend must not inspect War Thunder/anti-cheat
-  processes or infer delivery from another process's elevation. Windows App
-  startup elevation is a separate launcher handoff governed by
-  `docs/specs/startup-elevation.md`; it must not add another input backend.
+- `HOTKEY-04`: Neither hotkey path may inspect War Thunder/anti-cheat processes
+  or infer delivery from another process's elevation. The optional native
+  broker is governed by `docs/specs/startup-elevation.md` and remains the same
+  `RegisterHotKey` backend rather than an alternate input mechanism.
 
 ## Contract Coverage
 
 - [static] `tests/contracts/test_tk_thread_contract.py` enforces
-  `THREAD-02..THREAD-06`, `THREAD-08`, `HOTKEY-01`, `HOTKEY-02`, and
+  `THREAD-02..THREAD-06`, `THREAD-08`, `THREAD-09`, `HOTKEY-01`, `HOTKEY-02`, and
   `HOTKEY-04` by checking dispatcher, hotkey, tray, poller, sound, and forbidden
   fallback paths.
 - [behavioral] `tests/test_runtime_threading.py` and
   `tests/test_runtime_services.py` enforce dispatcher, poller, shutdown, and
   hotkey lifecycle behavior in `THREAD-02..THREAD-05`, `THREAD-07`,
-  `HOTKEY-02`, and `HOTKEY-03`.
+  `THREAD-09`, `HOTKEY-02`, and `HOTKEY-03`.
 - [behavioral] `tests/test_system_portability.py` enforces `THREAD-04`,
   `THREAD-08`, `HOTKEY-02`, and `HOTKEY-03` with registration lifecycle tests
   plus a real Windows message-window dispatch test.

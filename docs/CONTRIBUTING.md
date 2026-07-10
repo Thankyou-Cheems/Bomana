@@ -67,6 +67,15 @@ uv run --extra dev ruff check .
 uv run --extra dev ruff format --check .
 ```
 
+修改原生热键组件时，还需运行：
+
+```bash
+cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml
+cargo fmt --check --manifest-path native/hotkey_broker_setup/Cargo.toml
+cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml
+uv run python tools/build_hotkey_broker.py --mode dev
+```
+
 纯文档或仅变更 issue 状态的任务可在交接中说明 Ruff 不适用。
 
 Ruff 规则策略：`RUF012` 与 `RUF013` 已作为默认门禁启用，用于显式标记共享类状态和禁止隐式 `Optional`。`RUF001`、`RUF002`、`RUF003` 暂不全仓启用；仓库包含大量中文 UI 文案、注释、文档字符串和字体字形清单，直接启用会产生大量预期命中。需要排查 Unicode 歧义时，按文件或路径运行 targeted scan：
@@ -84,6 +93,7 @@ uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
 - `uv run --extra dev ruff check .`
 - `uv run --extra dev ruff format --check .`
 - `tools\scripts\check_smoke.bat`
+- 两个 Rust crate 的格式检查、Broker 单测与 unsigned dev build
 
 当前阶段不设置覆盖率阈值，也不把 CI 伪装成真实 War Thunder / `localhost:8111` 实机验证。涉及 8111、HUD、热键、托盘、导航或启动器的改动，仍需按下文手工 smoke 记录验证结果。
 
@@ -195,7 +205,7 @@ bd close <issue-id> --reason "Completed" --json
 4. 根据发布目标做最少真实验证：
    - app 发布：启动器兼容性、下载/启动正常
    - launcher 发布：重查排队、保留一个 `app_previous/`、回退互换正常
-5. 确认 GitHub Secrets 已配置并成对匹配，且不要生成、轮换、覆盖或上传发布私钥，除非已明确确认私钥保管方案。
+5. 确认 GitHub Secrets 已配置并成对匹配；Launcher/完整发布还需 `BOMANA_AUTHENTICODE_PFX_B64` 与 `BOMANA_AUTHENTICODE_PFX_PASSWORD`。不要生成、轮换、覆盖或上传任何发布私钥，除非已明确确认私钥保管方案。
 6. 本地发布构建必须使用匹配的私钥/公钥；`tools/build_portable.py` 会拒绝空签名、缺失公钥或公钥与私钥不匹配的清单。
 7. 推送标签：
    - `vX.Y.Z`：完整发布
@@ -276,6 +286,15 @@ uv run --extra dev ruff check .
 uv run --extra dev ruff format --check .
 ```
 
+When native hotkey broker code changes, also run:
+
+```bash
+cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml
+cargo fmt --check --manifest-path native/hotkey_broker_setup/Cargo.toml
+cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml
+uv run python tools/build_hotkey_broker.py --mode dev
+```
+
 Pure documentation or issue-status-only tasks may state that Ruff is not applicable in the handoff.
 
 Ruff rule posture: `RUF012` and `RUF013` are enabled in the default gate to make shared class state explicit and disallow implicit `Optional`. `RUF001`, `RUF002`, and `RUF003` are intentionally not enabled repository-wide; the project contains many Chinese UI strings, comments, docstrings, and font glyph lists that would create a large number of expected findings. For Unicode ambiguity investigations, run a targeted scan by file or path:
@@ -293,6 +312,7 @@ uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
 - `uv run --extra dev ruff check .`
 - `uv run --extra dev ruff format --check .`
 - `tools\scripts\check_smoke.bat`
+- format checks for both Rust crates, broker unit tests, and the unsigned dev build
 
 There is intentionally no coverage threshold yet, and CI is not treated as a replacement for real War Thunder / `localhost:8111` smoke validation. Changes touching 8111, HUD, hotkeys, tray, navigation, or launcher behavior still need the manual runtime checks documented below.
 
@@ -402,7 +422,7 @@ this section is the maintainer operation summary.
 2. Bump `__version__` in `bomana/metadata.py`
 3. Update `PORTABLE_MIN_LAUNCHER_VERSION` in `bomana/metadata.py` if the app now requires newer launcher behavior
 4. Smoke test the relevant release path
-5. Confirm GitHub Secrets are configured as a matching pair. Do not generate, rotate, overwrite, or upload release private keys unless the private-key retention plan is explicit.
+5. Confirm matching manifest-signing Secrets; launcher/full releases also require `BOMANA_AUTHENTICODE_PFX_B64` and `BOMANA_AUTHENTICODE_PFX_PASSWORD`. Do not generate, rotate, overwrite, or upload release private keys unless the private-key retention plan is explicit.
 6. Local release builds must use matching private/public keys; `tools/build_portable.py` rejects empty signatures, missing public keys, and public keys that do not match the private key.
 7. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
 8. Let GitHub Actions build, Ed25519-sign, and publish the assets

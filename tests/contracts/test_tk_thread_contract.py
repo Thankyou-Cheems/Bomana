@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-# enforces: docs/specs/threading-ui-contract.md THREAD-02..THREAD-06, THREAD-08, HOTKEY-01, HOTKEY-02, HOTKEY-04
+# enforces: docs/specs/threading-ui-contract.md THREAD-02..THREAD-06, THREAD-08, THREAD-09, HOTKEY-01, HOTKEY-02, HOTKEY-04
 
 ROOT = Path(__file__).resolve().parents[2]
 TK_MUTATORS = (
@@ -90,6 +90,21 @@ def test_global_hotkeys_use_tk_owned_message_window() -> None:
     assert "PostThreadMessageW" not in hotkey_source
     assert "self.root.after" not in hotkey_source
     assert "threading.Thread" not in hotkey_source
+
+
+def test_privileged_broker_reader_dispatches_before_app_callbacks() -> None:
+    source = read_source("bomana/utils/hotkey_broker.py")
+    read_body = method_source(source, "ElevatedHotkeyBrokerClient", "_read_frames")
+    dispatch_body = method_source(source, "ElevatedHotkeyBrokerClient", "_dispatch_frame")
+    deliver_body = method_source(source, "ElevatedHotkeyBrokerClient", "_deliver_action")
+
+    assert 'name="BomanaHotkeyBrokerPipe"' in source
+    assert "self.dispatch(self.ready_cb, failed)" in dispatch_body
+    assert "self.dispatch(self._deliver_action, binding)" in dispatch_body
+    assert "binding.callback()" in deliver_body
+    assert "binding.callback()" not in read_body
+    assert "tk." not in read_body
+    assert ".after(" not in read_body
 
 
 def test_windows_hotkey_path_does_not_inspect_game_processes() -> None:

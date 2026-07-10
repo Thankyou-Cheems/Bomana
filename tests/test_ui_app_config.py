@@ -17,6 +17,8 @@ def _make_config_only_app() -> App:
     instance._locked = True
     instance._manual_reset_confirm_until = 0.0
     instance._nudge_visible = False
+    instance._hotkey_broker_notice = ""
+    instance._hotkey_broker_action = ""
     return instance
 
 
@@ -106,6 +108,21 @@ def test_update_hint_restores_visible_star_nudge_row() -> None:
     assert app.star_lbl.options["cursor"] == "hand2"
     assert app.nudge_row.manager == "grid"
     assert app.nudge_row.grid_calls == 1
+    assert recalc_calls == [{"force_shrink": False}]
+
+
+def test_hotkey_broker_notice_uses_existing_nudge_row_with_retry_action() -> None:
+    app, recalc_calls = _make_hint_app_with_nudge(visible=False, manager="")
+    app._hotkey_broker_notice = "游戏前台热键需要单独授权。"
+    app._hotkey_broker_action = "retry"
+    app._nudge_text = App._nudge_text.__get__(app, App)
+
+    app._update_hint()
+
+    assert app.nudge_lbl.options["text"] == "游戏前台热键需要单独授权。"
+    assert app.star_lbl.options["text"] == "启用游戏内热键"
+    assert app.star_lbl.options["cursor"] == "hand2"
+    assert app.nudge_row.manager == "grid"
     assert recalc_calls == [{"force_shrink": False}]
 
 

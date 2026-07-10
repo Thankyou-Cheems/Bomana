@@ -1,16 +1,17 @@
 {
-  "generated_at": "2026-07-10T05:31:40+00:00",
+  "generated_at": "2026-07-10T06:48:19+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
-    "code_files": 110,
-    "code_lines": 32490,
-    "test_files": 47,
+    "code_files": 114,
+    "code_lines": 33981,
+    "test_files": 48,
     "todo_markers": 0
   },
   "languages": {
-    "python": 32191,
+    "python": 32886,
+    "rust": 817,
     "shell": 167,
-    "javascript": 132
+    "javascript": 111
   },
   "primary_language": "python",
   "configs": [
@@ -23,6 +24,26 @@
       "kind": "lockfile",
       "tool": "uv",
       "path": "uv.lock"
+    },
+    {
+      "kind": "lockfile",
+      "tool": "cargo",
+      "path": "native\\hotkey_broker\\Cargo.lock"
+    },
+    {
+      "kind": "manifest",
+      "tool": "cargo",
+      "path": "native\\hotkey_broker\\Cargo.toml"
+    },
+    {
+      "kind": "lockfile",
+      "tool": "cargo",
+      "path": "native\\hotkey_broker_setup\\Cargo.lock"
+    },
+    {
+      "kind": "manifest",
+      "tool": "cargo",
+      "path": "native\\hotkey_broker_setup\\Cargo.toml"
     }
   ],
   "check_capability": [
@@ -36,7 +57,9 @@
     }
   ],
   "entry_points": [
-    "bomana\\ui\\app.py"
+    "bomana\\ui\\app.py",
+    "native\\hotkey_broker\\src\\main.rs",
+    "native\\hotkey_broker_setup\\src\\main.rs"
   ],
   "largest_files": [
     {
@@ -44,7 +67,7 @@
       "path": "bomana\\ui\\dialogs.py"
     },
     {
-      "lines": 1609,
+      "lines": 1642,
       "path": "bomana\\ui\\app.py"
     },
     {
@@ -56,7 +79,7 @@
       "path": "bomana\\config\\settings.py"
     },
     {
-      "lines": 1200,
+      "lines": 1202,
       "path": "bomana\\ui\\main_window.py"
     },
     {
@@ -88,25 +111,26 @@
       "path": "bomana\\core\\state.py"
     },
     {
+      "lines": 650,
+      "path": "bomana\\utils\\hotkey_broker.py"
+    },
+    {
       "lines": 638,
       "path": "bomana\\ui\\nav_window.py"
     },
     {
-      "lines": 612,
-      "path": "bomana\\ui\\debug_support.py"
-    },
-    {
-      "lines": 589,
-      "path": "tools\\build_portable.py"
+      "lines": 617,
+      "path": "bomana\\ui\\runtime_services.py"
     }
   ],
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "895ea85",
+    "head": "e3b9029",
     "branch": "main",
-    "dirty_files": 3,
+    "dirty_files": 37,
     "recent_commits": [
+      "e3b9029 chore(review): refresh audit evidence after hotkey cleanup",
       "895ea85 feat(launcher): elevate only the app handoff by default",
       "840d829 fix(specs): enforce clause-level contract traceability",
       "6df2523 docs(readme): clarify Bomana game context",
@@ -115,8 +139,7 @@
       "e91bba0 refactor: harden post-SDD boundaries",
       "0a55da3 docs: remove temporary SDD process notes",
       "5167771 refactor: remove SDD compatibility facades",
-      "dff68c9 post-sdd(bd): document legacy work adaptation",
-      "8b5a61e phase5(ui): extract settings form helpers"
+      "dff68c9 post-sdd(bd): document legacy work adaptation"
     ]
   },
   "coverage_gaps": [

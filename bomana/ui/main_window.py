@@ -133,7 +133,9 @@ class MainWindowBuilder:
         bottom_frame.grid_rowconfigure(1, weight=1)
         bottom_frame.grid_columnconfigure(0, weight=1)
 
-        nudge_visible = bool(getattr(app, "_nudge_visible", False))
+        nudge_visible = bool(
+            getattr(app, "_hotkey_broker_notice", "") or getattr(app, "_nudge_visible", False)
+        )
 
         app.nudge_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
         app.nudge_row.grid(row=0, column=0, sticky="ew", padx=int(6 * s), pady=(int(4 * s), 0))
@@ -143,7 +145,7 @@ class MainWindowBuilder:
             app.nudge_row,
             text=app._nudge_text() if nudge_visible else "",
             font=font_hint,
-            fg=Theme.TEXT_MUTED,
+            fg=(Theme.YELLOW if getattr(app, "_hotkey_broker_notice", "") else Theme.TEXT_MUTED),
             bg=Theme.GRAYPILL,
             anchor="w",
             justify="left",
@@ -153,15 +155,15 @@ class MainWindowBuilder:
 
         app.star_lbl = tk.Label(
             app.nudge_row,
-            text="GitHub Star" if nudge_visible else "",
+            text=app._nudge_action_text() if nudge_visible else "",
             font=font_hint,
             fg=Theme.BLUE,
             bg=Theme.BG,
-            cursor="hand2" if nudge_visible else "arrow",
+            cursor="hand2" if app._nudge_action_text() else "arrow",
             padx=int(8 * s),
             pady=max(1, int(1 * s)),
         )
-        app.star_lbl.bind("<Button-1>", lambda e: app._open_star_url())
+        app.star_lbl.bind("<Button-1>", lambda e: app._on_nudge_action())
         app.star_lbl.bind("<Enter>", lambda e: app.star_lbl.config(fg=Theme.TEXT, bg=Theme.BORDER))
         app.star_lbl.bind("<Leave>", lambda e: app.star_lbl.config(fg=Theme.BLUE, bg=Theme.BG))
         app.star_lbl.grid(row=0, column=1, sticky="e", padx=(int(8 * s), 0))

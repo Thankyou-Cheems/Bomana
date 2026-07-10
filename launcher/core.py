@@ -48,7 +48,7 @@ _ED25519_B: tuple[int, int] | None = None
 
 @dataclass
 class LaunchDecision:
-    action: str  # "launch" | "elevated_handoff" | "exit"
+    action: str  # "launch" | "exit"
     final_version: str
     warning: str = ""
 
