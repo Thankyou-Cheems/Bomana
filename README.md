@@ -258,6 +258,7 @@ uv run python Bomana.pyw
 - [docs/PRIVACY.md](docs/PRIVACY.md) - 启动器更新检查与匿名统计上报说明
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) - 版本变更记录
 - [docs/PITFALLS.md](docs/PITFALLS.md) - 维护过程中的已知坑点与排障记录
+- [docs/guides/8111-session-recording.md](docs/guides/8111-session-recording.md) - 录制真实 8111 对局数据用于离线回放
 - [tests/README.md](tests/README.md) - 测试分层、放置规则与规范映射
 
 ---

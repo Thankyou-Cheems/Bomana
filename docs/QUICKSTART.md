@@ -131,6 +131,11 @@ uv run python tools/update_datamine_assets.py ^
 
 ### 6. 开发者：打包与发布核对
 
+需要为离线回放采集一场真实对局时，运行
+`uv run python tools/record_8111_session.py --label "full-sortie-1" --mode SB`，
+进入战斗并在出击结束后按一次 `Ctrl+C`。完整步骤和隐私边界见
+[8111 对局录制指南](./guides/8111-session-recording.md)。
+
 - 发布构建使用 Python 3.14 + uv；本地打包前运行 `uv sync --extra build --frozen`。
 - 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
 - App 发布构建会自动编译并内置 native 热键 Broker；Actions 使用 `actions/attest@v4` 为最终包、清单与校验文件生成来源证明。
@@ -248,6 +253,12 @@ A: Aircraft FM may not be matched in the current speed-limit database.
 A: Expected for an estimate-based model. Tune `range correction` and `time correction` in `Settings -> Bombing`.
 
 ### 5. Developer: Build/Release Checks
+
+To capture one real sortie for offline replay, run
+`uv run python tools/record_8111_session.py --label "full-sortie-1" --mode SB`,
+enter battle, then press `Ctrl+C` once after the sortie. See the
+[8111 session recording guide](./guides/8111-session-recording.md) for the full
+workflow and privacy boundary.
 
 - Release builds use Python 3.14 + uv; run `uv sync --extra build --frozen` before local packaging.
 - Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).

@@ -1,4 +1,4 @@
-# enforces: docs/specs/runtime-8111-boundary.md R8111-01, R8111-02, R8111-04, R8111-06, R8111-08
+# enforces: docs/specs/runtime-8111-boundary.md R8111-01, R8111-02, R8111-04, R8111-06, R8111-08..R8111-10
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from bomana.config.settings import NetworkConfig
 from bomana.core.telemetry import MapObjectsFetcher
+from tools import record_8111_session
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_ENDPOINTS = {"/indicators", "/state", "/map_obj.json", "/map_info.json"}
@@ -116,3 +117,38 @@ def test_map_objects_fetcher_does_not_own_map_info_scale_conversion() -> None:
     source = inspect.getsource(MapObjectsFetcher.fetch)
 
     assert "map_info" not in source
+
+
+def test_session_recorder_is_fixed_to_official_8111_endpoints() -> None:
+    assert record_8111_session.API_BASE in {
+        "http://127.0.0.1:8111",
+        "http://localhost:8111",
+    }
+    assert set(record_8111_session.OFFICIAL_ENDPOINTS) == ALLOWED_ENDPOINTS
+    assert "api_base" not in vars(record_8111_session.parse_args([]))
+
+
+def test_session_recorder_omits_machine_identity_and_uses_ignored_output() -> None:
+    source = (ROOT / "tools/record_8111_session.py").read_text(encoding="utf-8")
+    forbidden_identity_sources = (
+        "getpass.getuser",
+        "os.getlogin",
+        "platform.node",
+        "socket.gethostname",
+        "COMPUTERNAME",
+        "USERNAME",
+    )
+    forbidden_collection_or_upload = (
+        "ReadProcessMemory",
+        "CreateToolhelp32Snapshot",
+        "OpenProcess(",
+        ".post(",
+        ".put(",
+        "game.log",
+        "aces.vromfs",
+    )
+
+    assert not [token for token in forbidden_identity_sources if token in source]
+    assert not [token for token in forbidden_collection_or_upload if token in source]
+    assert record_8111_session.default_output_path().parent == ROOT / "recordings"
+    assert "recordings/" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()

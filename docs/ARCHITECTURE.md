@@ -17,7 +17,9 @@
 - Tools: `tools/update_datamine_assets.py` (refresh both generated datamine assets)
 - Tools: `tools/blkx_extractor.py` / `tools/fm_speed_extractor.py` (single-asset extractors)
 - Tools: `tools/datamine_utils.py` (shared datamine source-dir and metadata helpers)
-- Tools: `tools/create_version_info.py` / `tools/sample_8111_attitude.py` (build metadata + diagnostics)
+- Tools: `tools/create_version_info.py`, `tools/sample_8111_attitude.py`, and
+  `tools/record_8111_session.py` (build metadata, diagnostics, and official 8111
+  session capture)
 - Branding assets: `bomana/assets/branding/` (`app.ico`, `app.png`, sponsor images)
 
 ## Spec Anchors
@@ -106,6 +108,7 @@
 │  ├─ generate_ui_assets.py  # Noto Sans SC subset + PNG icon asset generator
 │  ├─ update_datamine_assets.py # One command to refresh both generated data assets
 │  ├─ sample_8111_attitude.py # HUD baseline sampler
+│  ├─ record_8111_session.py  # Gzip JSONL capture of official 8111 session payloads
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
 └─ README.md                 # Main landing page for GitHub visitors
 ```
@@ -191,6 +194,23 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   - Shared helper: `tools/datamine_utils.py`
   - Runtime consumer: `OverspeedAnalyzer` via `/indicators.type -> unit_to_fm -> fm_speed_limits`
 - Generated JSON metadata records the datamine source version and git commit when available.
+
+## Offline Session Capture
+
+- `tools/record_8111_session.py` records synchronized decoded payloads from the
+  four official loopback endpoints into gzip JSONL without entering the runtime
+  App or changing its polling path.
+- `/indicators`, `/state`, and `/map_obj.json` use the configured recording
+  interval; `/map_info.json` defaults to the App's 30-second cache cadence.
+- Metadata and summaries intentionally omit user, account, and host identifiers.
+  Captures default to the gitignored `recordings/` directory and are inputs for
+  the planned deterministic replay harness, not committed source fixtures.
+- `docs/specs/schemas/8111-session-record.schema.json` is the machine-readable
+  shape source for each JSONL record; the recorder reads its format version and
+  contract tests validate completed records against it.
+- Usage and capture privacy are documented in
+  `docs/guides/8111-session-recording.md`; the collection boundary is governed
+  by `R8111-09..R8111-11`.
 
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config/`.

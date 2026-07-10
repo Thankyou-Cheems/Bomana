@@ -7,13 +7,15 @@ Prefix: `R8111-`
 ## Scope
 
 This spec governs runtime app code under `Bomana.pyw` and `bomana/` that reads
-War Thunder data or renders data-derived UI. It also governs automated tests that
-claim to protect the War Thunder data boundary.
+War Thunder data or renders data-derived UI. It also governs the collection
+boundary of `tools/record_8111_session.py` and automated tests that claim to
+protect the War Thunder data boundary.
 
 ## Non-goals
 
 - This spec does not govern `tools/sample_8111_attitude.py` or other manual
-  developer diagnostics unless they are shipped as runtime behavior.
+  developer diagnostics unless they are shipped as runtime behavior or collect
+  reusable raw session data.
 - This spec does not document Tencent/EdgeOne update service APIs.
 - This spec does not replace manual War Thunder smoke testing.
 
@@ -46,16 +48,34 @@ claim to protect the War Thunder data boundary.
   it must not take process snapshots, inspect modules or anti-cheat internals,
   read process memory, or use the result for any purpose except choosing whether
   to show the optional privileged-hotkey action.
+- `R8111-09`: `tools/record_8111_session.py` MUST use the fixed official 8111
+  base and only `/indicators`, `/state`, `/map_obj.json`, and `/map_info.json`;
+  its CLI MUST NOT accept an alternate API base.
+- `R8111-10`: Recorder-generated metadata MUST omit local user, account, and
+  host identifiers; the recorder MUST default to the gitignored local
+  `recordings/` directory and MUST NOT upload captures or inspect any process,
+  memory, module, packet, log, or game file.
+- `R8111-11`: Each completed recorder file MUST contain metadata, synchronized
+  decoded endpoint payloads with response diagnostics and body hashes, and a
+  summary; `Ctrl+C` MUST finalize a readable file rather than leaving the normal
+  output path partial, and every JSONL record MUST conform to
+  `docs/specs/schemas/8111-session-record.schema.json`.
 
 ## Contract Coverage
 
 - [static] `tests/contracts/test_runtime_8111_boundary.py` enforces
-  `R8111-01`, `R8111-02`, `R8111-04`, `R8111-06`, and `R8111-08` by checking
+  `R8111-01`, `R8111-02`, `R8111-04`, `R8111-06`, and `R8111-08..R8111-10` by checking
   the runtime base URL, endpoint whitelist, dangerous API strings, ownership,
-  polling defaults, and the narrow process-query allowlist.
+  polling defaults, narrow process-query allowlist, and recorder collection and
+  identity boundaries.
 - [behavioral] `tests/test_telemetry_fetch_result.py` and
   `tests/test_map_objects_contract.py` enforce the fetcher and coordinate
   ownership boundary in `R8111-04`.
+- [behavioral] `tests/test_8111_recorder.py` enforces `R8111-10` and `R8111-11`
+  with synchronized raw-payload capture, diagnostics, overwrite, timeout, and
+  `Ctrl+C` finalization cases.
+- [behavioral] `tests/contracts/test_8111_session_schema.py` enforces
+  `R8111-11` with schema round-trip and tamper rejection.
 - [manual] Runtime/data review covers the player-visible-information boundary in
   `R8111-03`; handoffs must record real War Thunder smoke for `R8111-05`,
   explicit approval for polling changes under `R8111-06`, and provenance review

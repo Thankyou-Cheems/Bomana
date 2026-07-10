@@ -241,7 +241,7 @@ bomana/bin/
 # 日志文件
 *.log
 
-# 截图/录屏（用于开发测试）
+# 截图/录屏与原始 8111 对局录制（仅用于本地开发测试）
 screenshots/
 recordings/
 *.gif

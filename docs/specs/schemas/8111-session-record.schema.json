@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Thankyou-Cheems/Bomana/docs/specs/schemas/8111-session-record.schema.json",
+  "title": "Bomana 8111 Session JSONL Record",
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/meta"
+    },
+    {
+      "$ref": "#/$defs/sample"
+    },
+    {
+      "$ref": "#/$defs/summary"
+    }
+  ],
+  "x-format-version": 1,
+  "$defs": {
+    "response": {
+      "type": "object",
+      "required": [
+        "ok",
+        "elapsed_ms"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "error_kind": {
+          "type": "string"
+        },
+        "elapsed_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "status_code": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "body_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "body_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "payload": {},
+        "payload_type": {
+          "type": "string",
+          "enum": [
+            "dict",
+            "list",
+            "str",
+            "int",
+            "float",
+            "bool",
+            "NoneType"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "responses": {
+      "type": "object",
+      "required": [
+        "/indicators",
+        "/state",
+        "/map_obj.json"
+      ],
+      "properties": {
+        "/indicators": {
+          "$ref": "#/$defs/response"
+        },
+        "/state": {
+          "$ref": "#/$defs/response"
+        },
+        "/map_obj.json": {
+          "$ref": "#/$defs/response"
+        },
+        "/map_info.json": {
+          "$ref": "#/$defs/response"
+        }
+      },
+      "additionalProperties": false
+    },
+    "endpoint_stat": {
+      "type": "object",
+      "required": [
+        "attempts",
+        "ok",
+        "failures",
+        "errors"
+      ],
+      "properties": {
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ok": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "endpoint_stats": {
+      "type": "object",
+      "required": [
+        "/indicators",
+        "/state",
+        "/map_obj.json",
+        "/map_info.json"
+      ],
+      "properties": {
+        "/indicators": {
+          "$ref": "#/$defs/endpoint_stat"
+        },
+        "/state": {
+          "$ref": "#/$defs/endpoint_stat"
+        },
+        "/map_obj.json": {
+          "$ref": "#/$defs/endpoint_stat"
+        },
+        "/map_info.json": {
+          "$ref": "#/$defs/endpoint_stat"
+        }
+      },
+      "additionalProperties": false
+    },
+    "meta": {
+      "type": "object",
+      "required": [
+        "record_type",
+        "schema_version",
+        "started_at_utc",
+        "api_base",
+        "endpoints",
+        "interval_sec",
+        "map_info_interval_sec",
+        "label",
+        "game_version",
+        "mode"
+      ],
+      "properties": {
+        "record_type": {
+          "const": "meta"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "started_at_utc": {
+          "type": "string"
+        },
+        "api_base": {
+          "const": "http://127.0.0.1:8111"
+        },
+        "endpoints": {
+          "const": [
+            "/indicators",
+            "/state",
+            "/map_obj.json",
+            "/map_info.json"
+          ]
+        },
+        "interval_sec": {
+          "type": "number",
+          "minimum": 0.05
+        },
+        "map_info_interval_sec": {
+          "type": "number",
+          "minimum": 0.05
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "game_version": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "mode": {
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "additionalProperties": false
+    },
+    "sample": {
+      "type": "object",
+      "required": [
+        "record_type",
+        "seq",
+        "elapsed_sec",
+        "responses"
+      ],
+      "properties": {
+        "record_type": {
+          "const": "sample"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "elapsed_sec": {
+          "type": "number",
+          "minimum": 0
+        },
+        "responses": {
+          "$ref": "#/$defs/responses"
+        }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "record_type",
+        "schema_version",
+        "finished_at_utc",
+        "duration_sec",
+        "samples",
+        "interrupted",
+        "aircraft_types",
+        "endpoint_stats"
+      ],
+      "properties": {
+        "record_type": {
+          "const": "summary"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "finished_at_utc": {
+          "type": "string"
+        },
+        "duration_sec": {
+          "type": "number",
+          "minimum": 0
+        },
+        "samples": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "interrupted": {
+          "type": "boolean"
+        },
+        "aircraft_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "endpoint_stats": {
+          "$ref": "#/$defs/endpoint_stats"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
