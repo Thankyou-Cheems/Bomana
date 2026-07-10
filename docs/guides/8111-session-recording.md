@@ -109,3 +109,25 @@ choose another local path.
 The report intentionally omits map positions. A pass verifies deterministic
 core behavior against captured 4 Hz input; it does not validate Tk rendering,
 global hotkeys, or behavior between recorded frames.
+
+## Promote a capture to the test library | 纳入测试库
+
+Local captures remain ignored by default. To intentionally add a completed
+session as a repository fixture, run:
+
+```powershell
+uv run python tools/build_8111_replay_fixture.py `
+  recordings/8111_session_<UTC timestamp>.jsonl.gz `
+  --fixture-id full-sortie-YYYYMMDD
+```
+
+The importer validates the complete stream, copies the gzip bytes exactly into
+`tests/fixtures/8111/`, runs the `full-sortie` profile, and writes a tracked
+manifest containing the source/fixture SHA-256 and exact expected timeline.
+`uv run --extra dev pytest` and CI's normal smoke command then replay it
+automatically.
+
+该操作会保留原始官方 8111 payload，包括玩家和地图坐标；仅应导入已经结束且明确同意
+公开进 Git 的对局。录制器从未采集 Windows 用户名、主机名、游戏账号或进程身份，导入
+工具也不会添加这些字段。若原始文件、fixture 或期望时间线任一发生变化，标准测试都会
+失败。

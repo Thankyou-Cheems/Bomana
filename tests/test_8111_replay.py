@@ -1,8 +1,10 @@
-# enforces: docs/specs/runtime-8111-boundary.md R8111-12, R8111-13, R8111-14
+# enforces: docs/specs/runtime-8111-boundary.md R8111-12..R8111-16
 
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -12,8 +14,12 @@ import pytest
 from bomana.core.clock import SystemClock
 from bomana.core.logic import GameLogic
 from bomana.core.telemetry import HttpJson
+from tools.build_8111_replay_fixture import build_fixture, validate_fixture_manifest
 from tools.replay_8111_session import _parse_speed, replay_session
 from tools.session_8111 import OFFICIAL_ENDPOINTS, SessionFormatError, load_recorded_session
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures/8111"
+REAL_SORTIE_MANIFEST = FIXTURE_DIR / "full_sortie_20260710.manifest.json"
 
 
 def _success(payload: Any) -> dict[str, Any]:
@@ -178,6 +184,65 @@ def test_full_sortie_replay_drives_production_logic_with_virtual_time(tmp_path: 
     assert report["coverage"]["takeoffs_sec"] == [20.0, 620.0]
     assert report["coverage"]["landings_sec"] == [600.0]
     assert report["coverage"]["refits_sec"] == [610.0]
+
+
+def test_tracked_real_sortie_fixture_replays_in_standard_suite() -> None:
+    manifest = json.loads(REAL_SORTIE_MANIFEST.read_text(encoding="utf-8"))
+    validate_fixture_manifest(manifest)
+    recording = FIXTURE_DIR / manifest["session_file"]
+    fixture_hash = hashlib.sha256(recording.read_bytes()).hexdigest()
+
+    assert fixture_hash == manifest["session_sha256"]
+    assert fixture_hash == manifest["source"]["recording_sha256"]
+    assert manifest["privacy"] == {
+        "profile": "raw-official-8111-v1",
+        "coordinates_preserved": True,
+        "recorder_identity_fields_omitted": True,
+    }
+
+    session = load_recorded_session(recording)
+    assert len(session.samples) == manifest["source"]["samples"] == 4281
+    assert session.summary["duration_sec"] == manifest["source"]["duration_sec"]
+    report = replay_session(session, speed=None, profile="full-sortie")
+    expected = manifest["expected"]
+
+    assert report["passed"] is True
+    assert sorted(report["checks"]) == expected["checks"]
+    assert all(report["checks"].values())
+    assert report["coverage"]["takeoffs_sec"] == expected["takeoffs_sec"]
+    assert report["coverage"]["landings_sec"] == expected["landings_sec"]
+    assert report["coverage"]["refits_sec"] == expected["refits_sec"]
+    assert len(report["coverage"]["weapon2_pulses_sec"]) == expected["weapon2_pulse_count"]
+    assert report["coverage"]["player_losses_sec"] == expected["player_losses_sec"]
+    assert report["coverage"]["max_cycle"] == expected["max_cycle"]
+    assert report["coverage"]["max_sortie_id"] == expected["max_sortie_id"]
+    assert report["coverage"]["lobby_endpoint_failures"] == expected["lobby_endpoint_failures"]
+
+
+def test_fixture_importer_copies_validated_gzip_bytes_exactly(tmp_path: Path) -> None:
+    plain = tmp_path / "source.jsonl"
+    recording = tmp_path / "source.jsonl.gz"
+    _write_full_sortie(plain)
+    recording.write_bytes(gzip.compress(plain.read_bytes(), mtime=0))
+
+    session_path, manifest_path = build_fixture(
+        recording,
+        fixture_id="test-full-sortie",
+        output_dir=tmp_path / "fixtures",
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert session_path.read_bytes() == recording.read_bytes()
+    assert manifest["session_sha256"] == manifest["source"]["recording_sha256"]
+    assert manifest["privacy"]["coordinates_preserved"] is True
+
+
+def test_fixture_manifest_rejects_changed_raw_privacy_profile() -> None:
+    manifest = json.loads(REAL_SORTIE_MANIFEST.read_text(encoding="utf-8"))
+    manifest["privacy"]["coordinates_preserved"] = False
+
+    with pytest.raises(SessionFormatError):
+        validate_fixture_manifest(manifest)
 
 
 def test_normal_game_logic_keeps_production_clock_and_http_defaults() -> None:

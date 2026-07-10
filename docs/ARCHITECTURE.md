@@ -205,8 +205,10 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - `/indicators`, `/state`, and `/map_obj.json` use the configured recording
   interval; `/map_info.json` defaults to the App's 30-second cache cadence.
 - Metadata and summaries intentionally omit user, account, and host identifiers.
-  Captures default to the gitignored `recordings/` directory and are inputs for
-  the planned deterministic replay harness, not committed source fixtures.
+  Captures default to the gitignored `recordings/` directory. A maintainer may
+  explicitly promote a completed capture byte-for-byte into
+  `tests/fixtures/8111/`; its manifest locks the source/fixture SHA-256 and
+  expected replay timeline.
 - `docs/specs/schemas/8111-session-record.schema.json` is the machine-readable
   shape source for each JSONL record. `tools/session_8111.py` validates every
   record and also verifies ordering, monotonic elapsed time, sample totals,
@@ -218,9 +220,14 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   positions. The `full-sortie` profile gates lobby failure, spawn, two takeoffs,
   landing/refit, bomb release, cycle rollover, critical overspeed, and player
   loss. It does not replace Tk/global-hotkey or real-game smoke testing.
+- `tools/build_8111_replay_fixture.py` validates and replays a selected raw
+  capture before exact-byte import. Coordinates remain available to navigation
+  regression tests; identity fields remain absent because the recorder schema
+  never collected them. The fixture manifest shape is governed by
+  `docs/specs/schemas/8111-replay-fixture-manifest.schema.json`.
 - Usage and capture privacy are documented in
   `docs/guides/8111-session-recording.md`; the collection boundary is governed
-  by `R8111-09..R8111-14`.
+  by `R8111-09..R8111-16`.
 
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config/`.

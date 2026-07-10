@@ -42,24 +42,29 @@ def _schema_error(path: str, message: str) -> SessionFormatError:
     return SessionFormatError(f"{path}: {message}")
 
 
-def _resolve_ref(ref: str) -> dict[str, Any]:
+def _resolve_ref(ref: str, schema: dict[str, Any]) -> dict[str, Any]:
     prefix = "#/$defs/"
     if not ref.startswith(prefix):
         raise SessionFormatError(f"unsupported schema reference: {ref}")
-    return SESSION_RECORD_SCHEMA["$defs"][ref.removeprefix(prefix)]
+    return schema["$defs"][ref.removeprefix(prefix)]
 
 
-def _validate(value: Any, rules: dict[str, Any], path: str) -> None:
+def _validate(
+    value: Any,
+    rules: dict[str, Any],
+    path: str,
+    schema: dict[str, Any],
+) -> None:
     if not rules:
         return
     if "$ref" in rules:
-        _validate(value, _resolve_ref(rules["$ref"]), path)
+        _validate(value, _resolve_ref(rules["$ref"], schema), path, schema)
         return
     if "oneOf" in rules:
         matches = 0
         for candidate in rules["oneOf"]:
             try:
-                _validate(value, candidate, path)
+                _validate(value, candidate, path, schema)
             except SessionFormatError:
                 continue
             matches += 1
@@ -86,16 +91,16 @@ def _validate(value: Any, rules: dict[str, Any], path: str) -> None:
             raise _schema_error(path, f"unknown fields {sorted(unknown)!r}")
         if isinstance(additional, dict):
             for field in unknown:
-                _validate(value[field], additional, f"{path}.{field}")
+                _validate(value[field], additional, f"{path}.{field}", schema)
         for field, field_rules in properties.items():
             if field in value:
-                _validate(value[field], field_rules, f"{path}.{field}")
+                _validate(value[field], field_rules, f"{path}.{field}", schema)
     elif expected_type == "array":
         if not isinstance(value, list):
             raise _schema_error(path, "expected array")
         if item_rules := rules.get("items"):
             for index, item in enumerate(value):
-                _validate(item, item_rules, f"{path}[{index}]")
+                _validate(item, item_rules, f"{path}[{index}]", schema)
         if rules.get("uniqueItems"):
             canonical = [json.dumps(item, sort_keys=True) for item in value]
             if len(canonical) != len(set(canonical)):
@@ -122,10 +127,21 @@ def _validate(value: Any, rules: dict[str, Any], path: str) -> None:
         raise _schema_error(path, f"must be at least {rules['minimum']}")
 
 
+def validate_json_schema(
+    value: Any,
+    schema: dict[str, Any],
+    *,
+    path: str = "document",
+) -> None:
+    """Validate JSON using the schema subset used by Bomana's local formats."""
+
+    _validate(value, schema, path, schema)
+
+
 def validate_session_record(record: Any, *, path: str = "record") -> None:
     """Validate one JSONL record against the canonical recording schema."""
 
-    _validate(record, SESSION_RECORD_SCHEMA, path)
+    validate_json_schema(record, SESSION_RECORD_SCHEMA, path=path)
 
 
 def _open_recording(path: Path) -> TextIO:
@@ -141,7 +157,9 @@ def _empty_endpoint_stats() -> dict[str, dict[str, Any]]:
     }
 
 
-def _recompute_summary(samples: list[dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
+def summarize_session_samples(
+    samples: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[str]]:
     stats = _empty_endpoint_stats()
     aircraft_types: set[str] = set()
     for sample in samples:
@@ -213,7 +231,7 @@ def load_recorded_session(path: Path) -> RecordedSession:
         )
     if samples and float(summary["duration_sec"]) < float(samples[-1]["elapsed_sec"]):
         raise SessionFormatError("summary duration precedes the final sample")
-    expected_stats, expected_aircraft = _recompute_summary(samples)
+    expected_stats, expected_aircraft = summarize_session_samples(samples)
     if summary["endpoint_stats"] != expected_stats:
         raise SessionFormatError("summary endpoint statistics do not match samples")
     if summary["aircraft_types"] != expected_aircraft:

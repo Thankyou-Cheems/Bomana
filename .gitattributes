@@ -6,5 +6,8 @@
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
 
+# Raw 8111 replay fixtures are exact-byte gzip artifacts with manifest hashes.
+tests/fixtures/8111/*.jsonl.gz binary
+
 # Use bd merge for beads JSONL files
 .beads/issues.jsonl merge=beads

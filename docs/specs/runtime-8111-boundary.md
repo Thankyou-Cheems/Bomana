@@ -76,6 +76,13 @@ War Thunder data boundary.
   critical overspeed, and player-object loss. Passing offline replay does not
   claim Tk rendering, global-hotkey, capture-cadence, or real-game smoke
   coverage.
+- `R8111-15`: A raw recording promoted to `tests/fixtures/8111/` MUST be copied
+  byte-for-byte only after full session validation, MUST retain equal source and
+  fixture SHA256 values in a manifest conforming to
+  `docs/specs/schemas/8111-replay-fixture-manifest.schema.json`.
+- `R8111-16`: Every tracked raw fixture MUST replay with exact manifest coverage
+  in the standard pytest suite; coordinates MAY be retained, but recorder-omitted
+  user, account, host, and process identity fields MUST remain absent.
 
 ## Contract Coverage
 
@@ -93,9 +100,10 @@ War Thunder data boundary.
 - [behavioral] `tests/contracts/test_8111_session_schema.py` enforces
   `R8111-11` and `R8111-12` with schema round-trip, shared validator use, and
   tamper rejection.
-- [behavioral] `tests/test_8111_replay.py` enforces `R8111-12..R8111-14` with
+- [behavioral] `tests/test_8111_replay.py` enforces `R8111-12..R8111-16` with
   complete-stream validation, sequence tamper rejection, virtual-time production
-  logic replay, and every `full-sortie` coverage gate.
+  logic replay, every `full-sortie` coverage gate, and byte/hash/schema/timeline
+  verification of the tracked real-session fixture.
 - [manual] Runtime/data review covers the player-visible-information boundary in
   `R8111-03`; handoffs must record real War Thunder smoke for `R8111-05`,
   explicit approval for polling changes under `R8111-06`, and provenance review
