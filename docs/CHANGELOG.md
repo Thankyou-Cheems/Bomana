@@ -8,6 +8,8 @@
 ## [Unreleased]
 
 ### 改进
+- 启动器保持普通权限完成检查、下载和更新，仅在 App 交接时默认请求 UAC；拒绝后可普通启动，并保留精确的快捷键降级提示与一键提权重试。
+- 收敛全局快捷键为每个启用动作每个生命周期一次 `RegisterHotKey`，保留 Tk-owned message window/dispatcher 修复，不再引入 hook、轮询、原始输入或游戏进程扫描后端。
 - 将绿色版启动器拆出顶层 `launcher/` 开发期包，集中 manifest 验签投影、下载缓存、安装事务、启动隔离和 launcher metadata，同时保留 `launcher.pyw` 单文件分发入口。
 - 拆出设置对话框的 headless 表单校验/保存 payload helper，并将主窗口贴边锚点几何逻辑下放为可单测 helper，降低 `dialogs.py`/`app.py` 的协调负担。
 - 清理 SDD 迁移期间保留的旧兼容面：移除 config facade re-export、旧 app 包 marker、launcher 安装事务旧模块、GameLogic delegator wrapper，以及 `UISnapshot` 展示字符串/颜色字段。
@@ -456,5 +458,4 @@
 - 性能优化
 - 安全相关
 - 移除功能
-
 

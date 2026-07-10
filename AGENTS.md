@@ -20,6 +20,7 @@ Keep durable project rules in `docs/specs/`; keep this router concise.
 - Only use the official 8111 API; no memory reads, injection, or game file edits. See `docs/specs/runtime-8111-boundary.md`.
 - Respect ENABLE_* feature flags. See `docs/specs/config-variants.md`.
 - Tk UI work must cross background threads through `TkEventDispatcher` or a Tk-owned queue; background threads must not call Tk APIs directly. See `docs/specs/threading-ui-contract.md`.
+- Keep launcher update work at ordinary integrity; Windows UAC is limited to the App handoff and must retain the refusal fallback. See `docs/specs/startup-elevation.md`.
 
 ## Release Signing Workflow
 - For every release/update/deploy task, follow `docs/specs/release-signing.md` before acting.

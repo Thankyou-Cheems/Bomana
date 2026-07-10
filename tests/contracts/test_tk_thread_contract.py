@@ -92,13 +92,12 @@ def test_global_hotkeys_use_tk_owned_message_window() -> None:
     assert "threading.Thread" not in hotkey_source
 
 
-def test_windows_hotkey_path_does_not_infer_elevation_requirements() -> None:
+def test_windows_hotkey_path_does_not_inspect_game_processes() -> None:
     app_source = read_source("bomana/ui/app.py")
     system_source = read_source("bomana/utils/system.py")
 
     assert "def _check_hotkey_integrity_context" not in app_source
     assert "hotkey_integrity_context" not in app_source
-    assert "管理员权限启动 Bomana" not in app_source
     assert "OpenProcess" not in system_source
     assert "process_is_elevated" not in system_source
     assert "process_ids_by_name" not in system_source

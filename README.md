@@ -283,7 +283,7 @@ uv run python Bomana.pyw
 ```
 
 - `Bomana.pyw` 现在主要负责单实例、DPI、窗口创建和启动 `bomana.ui.app.App`；主要业务逻辑已拆分到 `bomana/`。
-- `launcher.pyw` 是绿色版启动器，负责通道选择、更新检查、下载校验、回退与离线启动。
+- `launcher.pyw` 是绿色版启动器，负责通道选择、更新检查、下载校验、回退与离线启动。Windows 下默认仅在 App 交接时请求管理员权限；拒绝后仍可普通启动，并会说明可能失效的游戏前台全局快捷键及提供重试按钮。
 - 超速限速数据库文件是 `bomana/data/fm_speed_limits.json`（不是仓库根目录）。
 - CCRP 炸弹参数文件是 `bomana/data/ccrp_bomb_params.json`（与限速库统一放在 `bomana/data/`）。
 

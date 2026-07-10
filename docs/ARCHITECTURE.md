@@ -2,8 +2,8 @@
 
 ## Overview
 - Bootstrap entry point: `Bomana.pyw` (single-instance guard, DPI setup, root window creation, `App` startup)
-- Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, details/support dialog)
-- Launcher package: `launcher/` (manifest verification/projection, download cache pathing, install transactions, app bootstrap helpers, launcher metadata)
+- Portable launcher: `launcher.pyw` (startup auto-check, Tencent CDN-first downloads with GitHub fallback, app/launcher split updates, one-version rollback retention, offline launch, UAC App handoff, details/support dialog)
+- Launcher package: `launcher/` (manifest verification/projection, download cache pathing, install transactions, bounded UAC handoff, app bootstrap helpers, launcher metadata)
 - Launcher pure helpers: `launcher/core.py` (download-source normalization, version/asset helpers, checksum and safe zip extraction)
 - Project metadata: `bomana/metadata.py` (version, repository, launcher compatibility metadata)
 - Central config: `bomana/config/` (explicit feature flag, settings, and static-data submodules)
@@ -23,6 +23,7 @@
 - Runtime 8111 boundary: `docs/specs/runtime-8111-boundary.md`
 - Release signing and Tencent/EdgeOne deployment: `docs/specs/release-signing.md`
 - Tk threading and UI dispatch: `docs/specs/threading-ui-contract.md`
+- Launcher-to-App elevation: `docs/specs/startup-elevation.md`
 - UI presenter boundaries: `docs/specs/ui-presenter-boundary.md`
 - Config variants and `ENABLE_*` precedence: `docs/specs/config-variants.md`
 - Test layers and quality gates: `docs/specs/testing-quality-gates.md`
@@ -39,6 +40,7 @@
 │  ├─ verify.py              # Verify-before-trust helper boundary
 │  ├─ download_cache.py      # Download directory fallback and cache naming
 │  ├─ install_txn.py         # Install/rollback transaction primitives
+│  ├─ elevation.py           # Current-token check + bounded App-only runas handoff
 │  └─ bootstrap.py           # App-package import isolation and launch helpers
 ├─ bomana/
 │  ├─ config/                # Package marker plus explicit feature/settings/static-data submodules
@@ -159,7 +161,9 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
-   - App launch runs inside the packaged launcher process, but `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and the `launcher.bootstrap` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules.
+   - Launcher download/update/install work remains at ordinary user integrity. On Windows, the default App action requests UAC only at the handoff and starts a fixed internal App-only child; that child bypasses launcher networking/update UI and enters `launcher.bootstrap.launch_app()` after independently confirming its token is elevated.
+   - If UAC is cancelled or fails, the launcher stays open with a persistent, precise hotkey-degradation warning plus separate “管理员权限重试” and ordinary-launch actions. There is no automatic retry loop.
+   - The App normally runs inside the App-only launcher child process. `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and the `launcher.bootstrap` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules.
 9. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 
 Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.

@@ -14,12 +14,12 @@ implementation plans belong in git history, not here.
 
 ## Entries
 
-### 2026-07-10 — Windows hotkey regression was misattributed to elevation
+### 2026-07-10 — Separate the Windows integrity boundary from the Tk hotkey bug
 
-Symptom: F7-F11 registered successfully but became silent with War Thunder focused; restoring the pre-spec `GlobalHotkeys` source did not restore behavior.
-Root cause: `fa1899cf^` and the restored implementation were identical, so the spec migration did not replace `RegisterHotKey`. The latent design bound hotkeys to a worker-thread queue and called `root.after(...)` across threads, which can raise `RuntimeError` and kill delivery; later contracts accidentally froze that unsafe bridge. Hook, polling, raw-input, and elevation diagnostics obscured the differential evidence, and process-elevation polling introduced its own ctypes prototype race.
-Spec: `docs/specs/threading-ui-contract.md` `THREAD-02`, `THREAD-04`, `THREAD-08`, `HOTKEY-02`, `HOTKEY-04` (Amended 2026-07); `docs/specs/runtime-8111-boundary.md` `R8111-08` (Amended 2026-07).
-Pin: `tests/test_system_portability.py` and `tests/contracts/test_tk_thread_contract.py` require a Tk-owned Win32 message-only window, dispatcher-only callback delivery, and no worker `GetMessageW`/cross-thread Tk/process-elevation path. Real War Thunder foreground smoke remains a manual gate.
+Symptom: F7-F11 registered successfully but were silent only while a higher-integrity War Thunder window had focus; Explorer focus restored delivery.
+Root cause: same-session tests of current HEAD and an exact `fa1899cf^` worktree both failed in the game, and the relevant pre/post-spec hotkey sources were identical. `RegisterHotKey`, raw input, and a low-level probe all stopped receiving physical keys at the same higher-integrity foreground boundary, so the spec migration was not the cause. Separately, the old worker listener really did call `root.after(...)` across threads and could die with `RuntimeError`; the Tk-owned message-only window remains a valid lifecycle fix even though it cannot cross Windows integrity levels.
+Spec: `docs/specs/startup-elevation.md` `ELEV-01..ELEV-08`; `docs/specs/threading-ui-contract.md` `THREAD-02`, `THREAD-04`, `THREAD-08`, `HOTKEY-01..HOTKEY-04`; `docs/specs/runtime-8111-boundary.md` `R8111-08`.
+Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, with Tk-owned message delivery and dispatcher callbacks. Do not add hooks, raw-input fallback, key polling, automatic re-registration, or game-process scanning. The launcher stays ordinary for updates and requests UAC only for the fixed App handoff; refusal keeps an explicit ordinary-launch path and an accurate degraded-feature warning.
 
 ### Launcher Update Safety
 

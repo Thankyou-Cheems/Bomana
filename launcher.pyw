@@ -61,6 +61,7 @@ from bomana.ui.tk_style import style_action_button
 from bomana.utils.system import Win32, select_ui_font_family
 from launcher import bootstrap as _launcher_bootstrap
 from launcher import download_cache as _launcher_download_cache
+from launcher import elevation as _launcher_elevation
 from launcher import install_txn
 from launcher import manifest_sources as _launcher_manifest_sources
 from launcher.metadata import LAUNCHER_VERSION
@@ -2650,6 +2651,8 @@ class LauncherWindow:
         self.last_check_error = ""
         self.install_dir = _app_runtime_dir(self.base)
         self.last_download_success = False
+        self._allow_unelevated_launch = False
+        self._elevation_request_pending = False
         self.decision = LaunchDecision(action="exit", final_version=self.local_version)
         self._worker: Optional[threading.Thread] = None
         self._cancel_requested = threading.Event()
@@ -2807,6 +2810,8 @@ class LauncherWindow:
                 self.rollback_status_lbl.config(wraplength=max(self._px(190), win_w // 3))
             if hasattr(self, "detail_lbl"):
                 self.detail_lbl.config(wraplength=content_w)
+            if hasattr(self, "elevation_warning_lbl"):
+                self.elevation_warning_lbl.config(wraplength=content_w)
             if hasattr(self, "hint_lbl"):
                 self.hint_lbl.config(wraplength=content_w)
             self.progress_width = max(self._px(320), content_w)
@@ -3169,6 +3174,18 @@ class LauncherWindow:
         self.launch_btn.pack(side="right", padx=(self._px(4), 0))
         self._style_action_button(self.launch_btn, "secondary")
 
+        self.elevate_btn = tk.Button(
+            status_header,
+            text="管理员权限重试",
+            width=15,
+            command=self._on_retry_elevation,
+            cursor="hand2",
+            font=self._font(10, "bold"),
+            padx=self._px(10),
+            pady=self._px(5),
+        )
+        self._style_action_button(self.elevate_btn, "primary")
+
         self.detail_lbl = tk.Label(
             card,
             text="",
@@ -3180,6 +3197,17 @@ class LauncherWindow:
             wraplength=self._px(520),
         )
         self.detail_lbl.pack(fill="x", padx=self._px(16))
+
+        self.elevation_warning_lbl = tk.Label(
+            card,
+            text="",
+            font=self._font(9),
+            fg=_THEME["YELLOW"],
+            bg=_THEME["CARD"],
+            anchor="w",
+            justify="left",
+            wraplength=self._px(520),
+        )
 
         self.progress_canvas = tk.Canvas(
             card,
@@ -3901,6 +3929,10 @@ class LauncherWindow:
         self._set_status("已记录新的检查条件", detail, None, "info")
 
     def _update_launch_button_label(self) -> None:
+        if self._allow_unelevated_launch:
+            self.launch_btn.config(text="普通权限启动")
+            self._style_action_button(self.launch_btn, "secondary")
+            return
         if self.source_test_mode:
             self.launch_btn.config(text="启动源码应用")
             self._style_action_button(self.launch_btn, "secondary")
@@ -3983,6 +4015,10 @@ class LauncherWindow:
             self.launch_btn.config(state="normal")
         else:
             self.launch_btn.config(state=state)
+        if self.elevate_btn.winfo_manager():
+            self.elevate_btn.config(
+                state=("disabled" if running or self._elevation_request_pending else "normal")
+            )
         self.release_btn.config(state="normal")
         self.import_btn.config(state=("disabled" if self.source_test_mode else "normal"))
         self.download_dir_btn.config(state="normal")
@@ -4033,7 +4069,7 @@ class LauncherWindow:
             if self.source_test_mode:
                 self.hint_lbl.config(
                     text=(
-                        "当前处于源码测试模式：launcher.pyw 将直接启动同目录 Bomana.pyw，"
+                        "当前处于源码测试模式：launcher.pyw 将从同目录启动 Bomana.pyw，"
                         "不会自动检查或覆盖安装线上版本。"
                     )
                 )
@@ -4402,7 +4438,7 @@ class LauncherWindow:
     def _refresh_download_source_details(self) -> None:
         self._refresh_channel_details()
 
-    def _on_launch(self) -> None:
+    def _local_app_launch_version(self) -> str | None:
         if not _is_local_app_ready(self.base):
             detail = (
                 "同目录源码入口缺失，请确认 Bomana.pyw 存在。"
@@ -4410,11 +4446,108 @@ class LauncherWindow:
                 else "本地没有可用应用包，请先点击“下载更新”。"
             )
             self._set_status("无法启动", detail, None, "error")
-            return
-        final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
+            return None
+        return install_txn.read_local_app_version(_app_runtime_dir(self.base))
+
+    def _prepare_ordinary_launch(self, final_version: str) -> None:
         self.decision = LaunchDecision(action="launch", final_version=final_version, warning="")
-        self._set_status("准备启动", f"将启动本地版本 v{final_version}", 1.0, "success")
+        privilege = "普通权限" if self._allow_unelevated_launch else "当前权限"
+        self._set_status(
+            "准备启动",
+            f"将以{privilege}启动本地版本 v{final_version}",
+            1.0,
+            "success",
+        )
         self.root.after(300, self._commit_launch)
+
+    def _show_elevation_fallback(
+        self,
+        result: _launcher_elevation.ElevationResult,
+    ) -> None:
+        self._allow_unelevated_launch = True
+        warning = (
+            "当前未以管理员权限启动 App。War Thunder 以前台运行且权限更高时，"
+            "窗口失焦后的 F7-F11 全局快捷键可能不可用；窗口内按键、按钮/托盘、"
+            "计时/导航和官方 8111 数据仍可用。"
+        )
+        if result.status is _launcher_elevation.ElevationStatus.FAILED:
+            reason = result.error_message or f"Windows 错误 {result.error_code}"
+            warning = f"管理员启动失败：{reason}\n{warning}"
+        elif result.status is _launcher_elevation.ElevationStatus.UNSUPPORTED:
+            warning = f"当前环境不支持 Windows UAC 自动重启。\n{warning}"
+        self.elevation_warning_lbl.config(text=warning)
+        if not self.elevation_warning_lbl.winfo_manager():
+            self.elevation_warning_lbl.pack(
+                fill="x",
+                padx=self._px(16),
+                pady=(self._px(7), self._px(2)),
+                before=self.progress_canvas,
+            )
+        if not self.elevate_btn.winfo_manager():
+            self.elevate_btn.pack(side="right", padx=(self._px(4), 0))
+        self.elevate_btn.config(state="normal")
+        self.launch_btn.config(text="普通权限启动", state="normal")
+        self._style_action_button(self.launch_btn, "secondary")
+        self._set_status(
+            "未授予管理员权限",
+            "可直接普通权限启动，或点击“管理员权限重试”。",
+            None,
+            "warning",
+        )
+
+    def _request_elevated_launch(self, final_version: str) -> None:
+        self._elevation_request_pending = True
+        self.launch_btn.config(state="disabled")
+        if self.elevate_btn.winfo_manager():
+            self.elevate_btn.config(state="disabled")
+        self._set_status(
+            "正在请求管理员权限",
+            "Windows 将显示 UAC 确认；拒绝后仍可普通权限启动。",
+            None,
+            "info",
+        )
+        self.root.update_idletasks()
+        try:
+            result = _launcher_elevation.request_elevated_app(
+                launcher_entry=Path(__file__).resolve(),
+                base=self.base,
+                channel=self.channel,
+            )
+        finally:
+            self._elevation_request_pending = False
+
+        if result.status is _launcher_elevation.ElevationStatus.STARTED:
+            self.decision = LaunchDecision(
+                action="elevated_handoff",
+                final_version=final_version,
+                warning="",
+            )
+            self._set_status(
+                "管理员启动已交接",
+                f"正在打开本地版本 v{final_version}",
+                1.0,
+                "success",
+            )
+            self.root.after(100, self._commit_launch)
+            return
+        self._show_elevation_fallback(result)
+
+    def _on_retry_elevation(self) -> None:
+        final_version = self._local_app_launch_version()
+        if final_version is not None:
+            self._request_elevated_launch(final_version)
+
+    def _on_launch(self) -> None:
+        final_version = self._local_app_launch_version()
+        if final_version is None:
+            return
+        if self._allow_unelevated_launch or os.name != "nt":
+            self._prepare_ordinary_launch(final_version)
+            return
+        if _launcher_elevation.is_current_process_elevated():
+            self._prepare_ordinary_launch(final_version)
+            return
+        self._request_elevated_launch(final_version)
 
     def _open_releases(self) -> None:
         try:
@@ -4443,7 +4576,7 @@ class LauncherWindow:
             _log(self.base, f"打开详情弹窗失败：{e}")
 
     def _commit_launch(self) -> None:
-        if self.decision.action == "launch":
+        if self.decision.action in ("launch", "elevated_handoff"):
             self.root.destroy()
 
     def _finalize_exit(self) -> None:
@@ -4483,6 +4616,37 @@ class LauncherWindow:
 
 def main() -> None:
     base = _base_dir()
+    try:
+        elevated_channel = _launcher_elevation.parse_elevated_app_request(
+            sys.argv[1:],
+            allowed_channels=tuple(CHANNEL_DETAILS),
+        )
+    except ValueError as exc:
+        _show_error(f"{DISPLAY_NAME} 启动失败", f"无效的管理员启动请求：{exc}")
+        return
+    if elevated_channel is not None:
+        if not _launcher_elevation.is_current_process_elevated():
+            _show_error(
+                f"{DISPLAY_NAME} 启动失败",
+                "管理员 App 子进程未获得管理员权限，已拒绝继续启动。",
+            )
+            return
+        try:
+            _launch_app(base, elevated_channel)
+        except Exception as exc:
+            _log(base, f"Elevated app launch failed: {exc}")
+            _show_error(
+                f"{DISPLAY_NAME} 启动失败",
+                _format_app_launch_error(
+                    base,
+                    exc,
+                    "",
+                    elevated_channel,
+                    _is_source_test_run(base),
+                ),
+            )
+        return
+
     _recover_incomplete_install(base)
     _cleanup_temp_files_on_launcher_upgrade(base)
     _cleanup_stale_launcher_self_update_temp(base)
@@ -4494,7 +4658,7 @@ def main() -> None:
 
     gui = LauncherWindow(base, detected_channel)
     decision = gui.run()
-    if decision.action != "launch":
+    if decision.action not in ("launch", "elevated_handoff"):
         return
 
     selected_channel = gui.channel
@@ -4504,6 +4668,9 @@ def main() -> None:
         args=(base, identity, "app_launch", selected_channel, decision.final_version),
         daemon=True,
     ).start()
+
+    if decision.action == "elevated_handoff":
+        return
 
     try:
         _launch_app(base, selected_channel)

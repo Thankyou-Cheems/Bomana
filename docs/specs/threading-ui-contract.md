@@ -49,9 +49,10 @@ runtime app.
   polling fallback, or worker message loop.
 - `HOTKEY-03`: `RegisterHotKey` failures must be surfaced through the configured
   UI error callback. Code must not silently switch to another input backend.
-- `HOTKEY-04`: Bomana must not require, request, or recommend process elevation
-  for hotkeys, and runtime code must not inspect process elevation as a proxy for
-  hotkey delivery.
+- `HOTKEY-04`: The hotkey backend must not inspect War Thunder/anti-cheat
+  processes or infer delivery from another process's elevation. Windows App
+  startup elevation is a separate launcher handoff governed by
+  `docs/specs/startup-elevation.md`; it must not add another input backend.
 
 ## Contract Coverage
 
