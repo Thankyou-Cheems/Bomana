@@ -34,8 +34,14 @@ from bomana.config.settings import (
 )
 from bomana.core.logic import GameLogic
 from bomana.core.state import Phase, UISnapshot
+from bomana.core.weapon_catalog import get_weapon_catalog
 from bomana.ui.debug_support import AppDebugSupport
-from bomana.ui.dialogs import AboutDialog, BombSelectorDialog, ChecklistEditor, SettingsDialog
+from bomana.ui.dialogs import (
+    AboutDialog,
+    ChecklistEditor,
+    SettingsDialog,
+    WeaponSelectorDialog,
+)
 from bomana.ui.icon_assets import IconManager
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.navigation_runtime import AppNavigationServices
@@ -195,6 +201,15 @@ class App:
         if HAS_TRAY:
             self._init_tray()
 
+    def _get_weapon_catalog(self):
+        """Reuse GameLogic's one validated catalog load, including its None fallback."""
+
+        game = getattr(self, "game", None)
+        if game is not None and hasattr(game, "weapon_catalog"):
+            return game.weapon_catalog
+        # Headless config tests and legacy embedders may not construct GameLogic.
+        return get_weapon_catalog()
+
     @property
     def hud_overlay(self):
         """Compatibility view for dialog code that inspects the active HUD surface."""
@@ -274,11 +289,32 @@ class App:
             # 精简版强制使用集成模式，忽略配置文件中的设置
             PanelConfig.navigation_mode = "integrated"
 
-        # v6.0 新增：炸弹选择（仅在CCRP启用时）
+        # 武器解算沿用 CCRP 编译开关；精简构建不会触发目录懒加载。
         if ENABLE_CCRP:
             selected_bomb = config.get("selected_bomb", "su_fab100")
             if BombConfig.get_bomb_data(selected_bomb):
                 BombConfig.selected_bomb = selected_bomb
+
+            weapon_catalog = self._get_weapon_catalog()
+            if weapon_catalog is not None:
+                selected_weapon = config.get("selected_weapon")
+                if not isinstance(selected_weapon, str) or not selected_weapon.strip():
+                    selected_weapon = selected_bomb
+                selected_weapon = str(selected_weapon).strip()
+                selection_candidates = (
+                    selected_weapon,
+                    BombConfig.get_bomb_source_id(selected_weapon),
+                    str(selected_bomb or "").strip(),
+                    BombConfig.get_bomb_source_id(str(selected_bomb or "")),
+                )
+                for candidate in dict.fromkeys(selection_candidates):
+                    if candidate and weapon_catalog.set_selected(candidate, source="manual"):
+                        break
+
+                weapon = weapon_catalog.selected_weapon or {}
+                weapon_id = str(weapon.get("id") or weapon_catalog.selected_weapon_id or "")
+                if weapon.get("role") == "bomb" and BombConfig.get_bomb_data(weapon_id):
+                    BombConfig.selected_bomb = weapon_id
             tuning = config.get("ccrp_tuning", {})
             BallisticPhysicsParams.apply_user_tuning(tuning)
 
@@ -359,8 +395,18 @@ class App:
             config["navigation_window_pos"] = list(PanelConfig.navigation_window_pos)
         config["navigation_bar_width"] = PanelConfig.navigation_bar_width
 
-        # v6.0 新增：炸弹选择（仅在CCRP启用时保存）
+        # 武器选择与兼容的 CCRP 炸弹选择同时持久化。
         if ENABLE_CCRP:
+            weapon_catalog = self._get_weapon_catalog()
+            if weapon_catalog is not None:
+                selected_weapon_id = str(weapon_catalog.selected_weapon_id or "").strip()
+                selected_weapon = weapon_catalog.selected_weapon or {}
+                if selected_weapon.get("role") == "bomb" and BombConfig.get_bomb_data(
+                    selected_weapon_id
+                ):
+                    BombConfig.selected_bomb = selected_weapon_id
+                if selected_weapon_id:
+                    config["selected_weapon"] = selected_weapon_id
             config["selected_bomb"] = BombConfig.selected_bomb
             config["ccrp_tuning"] = BallisticPhysicsParams.get_user_tuning()
 
@@ -1387,8 +1433,25 @@ class App:
             pass
 
     def _show_bomb_selector(self):
-        """显示炸弹选择对话框"""
-        BombSelectorDialog(self.root, self)
+        """显示武器选择对话框（方法名保留以兼容既有绑定）。"""
+        weapon_catalog = self._get_weapon_catalog()
+        if weapon_catalog is None:
+            messagebox.showwarning(
+                "武器目录不可用",
+                "武器目录缺失或校验失败，已停用武器选择与解算。",
+                parent=self.root,
+            )
+            return
+        snap = self.game.snapshot()
+        airborne = snap.phase == Phase.ALIVE and not snap.on_ground
+        WeaponSelectorDialog(
+            self.root,
+            self,
+            catalog=weapon_catalog,
+            initial_weapon=weapon_catalog.selected_weapon_id,
+            aircraft_type_name=str(getattr(snap, "aircraft_type_name", "") or ""),
+            airborne=airborne,
+        )
 
     def _update_ui(self):
         """UI更新循环(20fps)

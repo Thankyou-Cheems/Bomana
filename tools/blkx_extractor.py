@@ -17,6 +17,7 @@ from typing import ClassVar
 from datamine_utils import (
     BOMBGUNS_SUBDIR,
     build_source_metadata,
+    normalize_datamine_caliber_m,
     require_datamine_dir,
 )
 
@@ -77,7 +78,7 @@ class BlkxExtractor:
             return mesh_value
         return "unknown"
 
-    def extract_ballistic_params(self, config: dict):
+    def extract_ballistic_params(self, config: dict, *, source_name: str = ""):
         """Extract ballistic parameters needed by CCRP."""
         if not config or "bomb" not in config:
             return None
@@ -94,7 +95,17 @@ class BlkxExtractor:
                 extracted[param] = bomb_config[param]
 
         if "caliber" in extracted:
-            cal = extracted["caliber"]
+            raw_caliber = float(extracted["caliber"])
+            cal, normalization = normalize_datamine_caliber_m(
+                raw_caliber,
+                source_name,
+                extracted["filename"],
+                str(bomb_config.get("bulletName", "")),
+            )
+            extracted["caliber"] = cal
+            if normalization is not None:
+                extracted["raw_caliber"] = raw_caliber
+                extracted["caliber_normalization"] = normalization
             extracted["cross_section"] = 3.1415926535 * (cal / 2) ** 2
 
         if all(k in extracted for k in ("mass", "dragCx", "cross_section")):
@@ -128,7 +139,7 @@ class BlkxExtractor:
             self.error_count += 1
             return
 
-        params = self.extract_ballistic_params(config)
+        params = self.extract_ballistic_params(config, source_name=filepath.name)
         if not params:
             self._log("  Missing bomb section or no params extracted")
             self.no_bomb_files.append(filepath.name)
@@ -226,7 +237,7 @@ class BlkxExtractor:
                     new_key = f"{key}_{suffix}"
                 key = new_key
 
-            ccrp_params[key] = {
+            record = {
                 "mass": float(bomb["mass"]),
                 "caliber": float(bomb["caliber"]),
                 "dragCx": float(bomb["dragCx"]),
@@ -238,6 +249,11 @@ class BlkxExtractor:
                 "source_file": bomb.get("source_file", ""),
                 "mesh": bomb.get("filename", ""),
             }
+            if "caliber_normalization" in bomb:
+                record["raw_caliber"] = float(bomb["raw_caliber"])
+                record["caliber_source_pointer"] = "/bomb/caliber"
+                record["caliber_normalization"] = bomb["caliber_normalization"]
+            ccrp_params[key] = record
 
         meta = {
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -254,7 +270,7 @@ class BlkxExtractor:
         }
 
         Path(output_file).write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
 

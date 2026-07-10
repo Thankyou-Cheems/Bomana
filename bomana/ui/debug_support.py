@@ -149,6 +149,17 @@ class AppDebugSupport:
             "overspeed_match": False,
             "overspeed_reason": "safe",
         }
+        debug_bomb_id = BombConfig.selected_bomb
+        weapon_defaults = {
+            "weapon_id": debug_bomb_id,
+            "weapon_display_name": BombConfig.format_bomb_name(debug_bomb_id),
+            "weapon_role": "bomb",
+            "weapon_control": "unguided",
+            "weapon_planform": "normal",
+            "weapon_selection_source": "manual",
+            "weapon_selection_compatible": True,
+            "weapon_status": "ccrp",
+        }
 
         if idx == 0:
             zones = [
@@ -215,6 +226,7 @@ class AppDebugSupport:
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
                 **overspeed_defaults,
+                **weapon_defaults,
             )
 
         if idx == 1:
@@ -274,6 +286,7 @@ class AppDebugSupport:
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
                 **overspeed_defaults,
+                **weapon_defaults,
             )
 
         if idx == 2:
@@ -332,6 +345,7 @@ class AppDebugSupport:
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
                 **overspeed_defaults,
+                **weapon_defaults,
             )
 
         if idx == 3:
@@ -417,6 +431,7 @@ class AppDebugSupport:
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
                 **overspeed_defaults,
+                **weapon_defaults,
             )
 
         if idx == 4:
@@ -473,6 +488,7 @@ class AppDebugSupport:
                 hud_attitude_fallback=False,
                 hud_attitude_fallback_reason="",
                 **overspeed_defaults,
+                **weapon_defaults,
             )
 
         phase_slot = app._debug_frame_counter % 90
@@ -533,6 +549,7 @@ class AppDebugSupport:
             gear_retracting=False,
             bombing_valid=False,
             bomb_name=BombConfig.selected_bomb,
+            **weapon_defaults,
             ground_speed_kmh=980.0,
             attitude_pitch_deg=-12.0,
             attitude_roll_deg=2.8,

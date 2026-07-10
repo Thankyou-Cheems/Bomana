@@ -301,8 +301,20 @@ def build_app_zip(
 
     ccrp_json_rel = Path("bomana/data/ccrp_bomb_params.json")
     ccrp_json = root / ccrp_json_rel
+    weapon_catalog_rel = Path("bomana/data/weapon_fire_control.json")
+    weapon_schema_rel = Path("docs/specs/schemas/weapon-fire-control.schema.json")
     legacy_ccrp_json = root / "ccrp_bomb_params.json"
     legacy_ccrp_py = root / "ccrp_bomb_params.py"
+
+    if variant == "Enhanced":
+        missing_weapon_assets = [
+            rel_path
+            for rel_path in (weapon_catalog_rel, weapon_schema_rel)
+            if not (root / rel_path).is_file()
+        ]
+        if missing_weapon_assets:
+            missing = ", ".join(path.as_posix() for path in missing_weapon_assets)
+            raise RuntimeError(f"missing Enhanced weapon fire-control assets: {missing}")
 
     with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         add_file_to_zip(zf, root, root / APP_ENTRY)
@@ -318,9 +330,15 @@ def build_app_zip(
             rel_path = path.relative_to(root).as_posix()
             if rel_path.startswith(f"{APP_DIR}/bin/"):
                 continue
-            if variant != "Enhanced" and rel_path == ccrp_json_rel.as_posix():
+            if variant != "Enhanced" and rel_path in {
+                ccrp_json_rel.as_posix(),
+                weapon_catalog_rel.as_posix(),
+            }:
                 continue
             add_file_to_zip(zf, root, path)
+
+        if variant == "Enhanced":
+            add_file_to_zip(zf, root, root / weapon_schema_rel)
 
         broker_sha256 = sha256_file(hotkey_broker)
         zf.write(

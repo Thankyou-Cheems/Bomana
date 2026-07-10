@@ -1,5 +1,6 @@
 import time
 import unittest
+from pathlib import Path
 
 from bomana.config.settings import BombConfig
 from bomana.core import ccrp_scheduler
@@ -48,6 +49,20 @@ class BombPredictionClassificationTests(unittest.TestCase):
             self.assertIsNotNone(bomb)
             self.assertTrue(bomb["prediction_supported"])
             self.assertEqual(bomb["prediction_kind"], "high_drag")
+
+    def test_catalog_source_id_alias_resolves_matching_ccrp_physics(self) -> None:
+        bomb = BombConfig.get_bomb_data("uk_1000lbs_mc_mk1_mk2_bomb")
+
+        self.assertIsNotNone(bomb)
+        self.assertEqual(bomb["mass"], 463.1)
+        self.assertEqual(
+            BombConfig.get_bomb_source_id("uk_1000lbs_mc_mk1_mk2"),
+            "uk_1000lbs_mc_mk1_mk2_bomb",
+        )
+        self.assertEqual(
+            Path(str(bomb["source_file"])).stem,
+            "uk_1000lbs_mc_mk1_mk2_bomb",
+        )
 
 
 class BombPredictionLogicTests(unittest.TestCase):
@@ -143,6 +158,22 @@ class BombPredictionLogicTests(unittest.TestCase):
         self.assertEqual(work["target_kind"], "poi")
         self.assertEqual(work["target_name"], "Smoke")
         self.assertAlmostEqual(work["target_distance_m"], 4000.0)
+
+    def test_explicit_selected_weapon_physics_does_not_reuse_global_bomb(self) -> None:
+        game, tel = self._alive_game(bomb_id="su_fab100", mach=0.82)
+        selected_params = BombConfig.get_bomb_physics_params("uk_1000lbs_mc_mk1_mk2_bomb")
+
+        with game._lock:
+            work = ccrp_scheduler.prepare_bombing_calculation(
+                game.state,
+                tel,
+                time.time(),
+                player_present=True,
+                bomb_params=selected_params,
+            )
+
+        self.assertIsNotNone(work)
+        self.assertEqual(work["bomb_params"]["mass"], 463.1)
 
 
 def test_high_drag_brake_remains_active_after_deploy_window() -> None:

@@ -47,3 +47,19 @@ def test_small_mm_ccrp_calibers_are_stored_as_meters() -> None:
         )
 
     assert not failures, "\n".join(failures)
+
+
+def test_normalized_ccrp_caliber_retains_raw_datamine_evidence() -> None:
+    payload = json.loads(CCRP_DATA_PATH.read_text(encoding="utf-8"))
+    mortar = payload["ballistic_params"]["bomb_ussr_82mm_o_832"]
+
+    assert mortar["caliber"] == 0.082
+    assert mortar["raw_caliber"] == 0.82
+    assert mortar["caliber_source_pointer"] == "/bomb/caliber"
+    assert mortar["caliber_normalization"] == {
+        "field": "caliber_m",
+        "rule": "datamine_mm_identity_decimal_shift",
+        "raw_value": 0.82,
+        "normalized_value": 0.082,
+        "evidence": ["bomb_82mm_mortar", "bomb_ussr_82mm_o_832.blkx"],
+    }

@@ -69,6 +69,8 @@ def test_app_package_bundles_zero_install_hotkey_broker_and_checksum(tmp_path: P
     output.mkdir()
     (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "bomana" / "data").mkdir()
+    (root / "bomana" / "data" / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
@@ -76,8 +78,49 @@ def test_app_package_bundles_zero_install_hotkey_broker_and_checksum(tmp_path: P
 
     with zipfile.ZipFile(package) as archive:
         assert "bomana/bin/BomanaHotkeyBroker.exe" in archive.namelist()
+        assert "bomana/data/weapon_fire_control.json" not in archive.namelist()
         checksum = archive.read("bomana/bin/BomanaHotkeyBroker.sha256").decode("ascii")
         assert checksum == f"{build_portable.sha256_file(broker)}  BomanaHotkeyBroker.exe\n"
+
+
+def test_enhanced_app_package_bundles_weapon_catalog_and_shared_schema(tmp_path: Path) -> None:
+    build_portable = load_tool_module("build_portable_weapon_data", "tools/build_portable.py")
+    root = tmp_path / "repo"
+    output = tmp_path / "dist"
+    data_dir = root / "bomana" / "data"
+    schema_dir = root / "docs" / "specs" / "schemas"
+    data_dir.mkdir(parents=True)
+    schema_dir.mkdir(parents=True)
+    output.mkdir()
+    (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
+    (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
+    (data_dir / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
+    (schema_dir / "weapon-fire-control.schema.json").write_text("{}\n", encoding="utf-8")
+    broker = tmp_path / "BomanaHotkeyBroker.exe"
+    broker.write_bytes(b"native broker payload")
+
+    package = build_portable.build_app_zip(root, "Enhanced", "1.2.3", output, broker)
+
+    with zipfile.ZipFile(package) as archive:
+        assert "bomana/data/weapon_fire_control.json" in archive.namelist()
+        assert "docs/specs/schemas/weapon-fire-control.schema.json" in archive.namelist()
+
+
+def test_enhanced_app_package_rejects_missing_weapon_assets(tmp_path: Path) -> None:
+    build_portable = load_tool_module(
+        "build_portable_missing_weapon_data", "tools/build_portable.py"
+    )
+    root = tmp_path / "repo"
+    output = tmp_path / "dist"
+    (root / "bomana").mkdir(parents=True)
+    output.mkdir()
+    (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
+    (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
+    broker = tmp_path / "BomanaHotkeyBroker.exe"
+    broker.write_bytes(b"native broker payload")
+
+    with pytest.raises(RuntimeError, match="missing Enhanced weapon fire-control assets"):
+        build_portable.build_app_zip(root, "Enhanced", "1.2.3", output, broker)
 
 
 def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:

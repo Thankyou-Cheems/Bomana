@@ -15,6 +15,7 @@ from bomana.config.settings import (
     ZoneConfig,
 )
 from bomana.ui.icon_assets import IconManager
+from bomana.ui.panel_presenter import format_weapon_selection_label
 from bomana.ui.text_utils import bind_dynamic_wrap, measure_min_width
 from bomana.ui.theme import Theme
 from bomana.ui.widgets import HeadingTape, Pill
@@ -1084,6 +1085,19 @@ class MainWindowBuilder:
         self._bind_label_wrap(app.fuel_return_detail_lbl, app.fuel_info_frame)
 
         if ENABLE_CCRP:
+            weapon_catalog = app._get_weapon_catalog()
+            selected_weapon = weapon_catalog.selected_weapon if weapon_catalog is not None else {}
+            selected_weapon = selected_weapon or {}
+            selected_weapon_name = str(
+                selected_weapon.get("display_name_zh")
+                or selected_weapon.get("display_name")
+                or (
+                    BombConfig.format_bomb_name(BombConfig.selected_bomb)
+                    if weapon_catalog is not None
+                    else "武器目录不可用"
+                )
+            )
+            selected_weapon_role = str(selected_weapon.get("role") or "bomb")
             app.bombing_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
             app.bombing_header_frame.grid(
                 row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s))
@@ -1091,7 +1105,7 @@ class MainWindowBuilder:
             app.bombing_header_frame.grid_columnconfigure(1, weight=1)
             app.bombing_title_lbl = tk.Label(
                 app.bombing_header_frame,
-                text="投弹预测",
+                text="武器解算",
                 font=font_title,
                 fg=Theme.TEXT,
                 bg=Theme.GRAYPILL,
@@ -1121,7 +1135,11 @@ class MainWindowBuilder:
             )
             app.bomb_select_lbl = tk.Label(
                 app.bombing_info_frame,
-                text=f"炸弹 {BombConfig.format_bomb_name(BombConfig.selected_bomb)} · 点击更换",
+                text=format_weapon_selection_label(
+                    selected_weapon_name,
+                    selected_weapon_role,
+                    weapon_catalog.selection_source if weapon_catalog is not None else "unknown",
+                ),
                 font=font_item,
                 fg=Theme.BLUE,
                 bg=Theme.GRAYPILL,
@@ -1131,7 +1149,6 @@ class MainWindowBuilder:
             )
             app.bomb_select_lbl.pack(fill="x")
             self._bind_label_wrap(app.bomb_select_lbl, app.bombing_info_frame)
-            app.bomb_select_lbl.bind("<Button-1>", lambda e: app._show_bomb_selector())
             app.bomb_select_lbl.bind(
                 "<Enter>", lambda e: app.bomb_select_lbl.config(fg=Theme.TEXT, bg=Theme.BG)
             )
@@ -1170,6 +1187,19 @@ class MainWindowBuilder:
             self._bind_label_wrap(app.bomb_trajectory_lbl, app.bombing_info_frame)
             self._bind_label_wrap(app.bomb_flight_lbl, app.bombing_info_frame)
             self._bind_label_wrap(app.bomb_release_detail_lbl, app.bombing_info_frame)
+            for weapon_card_widget in (
+                app.bombing_info_frame,
+                app.bomb_select_lbl,
+                app.bomb_trajectory_lbl,
+                app.bomb_flight_lbl,
+                app.bomb_release_detail_lbl,
+            ):
+                weapon_card_widget.config(cursor="hand2")
+                weapon_card_widget.bind(
+                    "<Button-1>",
+                    lambda _event: app._show_bomb_selector(),
+                    add="+",
+                )
 
         app._zone_row_pool = self._build_nav_row_pool(
             app.zone_list_frame,

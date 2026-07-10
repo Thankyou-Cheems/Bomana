@@ -56,7 +56,7 @@ Bomana 严格遵循以下原则，确保合规使用：
 
 ### 关键结论 | Key Takeaway
 
-**Bomana 作为基于 8111 端口数据的计时器工具，其核心功能（复活计时、飞行数据显示、投弹预测、超速提醒）属于官方认可的使用范畴。** 但用户应当：
+**Bomana 作为基于 8111 端口数据的计时器工具，其核心功能（复活计时、飞行数据显示、武器解算、超速提醒）属于官方认可的使用范畴。** 但用户应当：
 
 1. **了解**即使某些功能技术上可行，也不代表官方认可其使用
 2. **承担**因使用方式不当可能导致的任何后果
@@ -74,18 +74,20 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 - **状态恢复** - 支持应用重启后继续计时
 - **倒计时警告** - 30秒、20秒、10秒...语音/蜂鸣提醒
 
-### 投弹预测系统（CCRP）
+### 武器解算（CCRP + 空地/空空估算）
 
-基于真实弹道物理的投弹辅助计算：
+在原有 CCRP 卡片中提供紧凑的投放距离与窗口提示：
 
-- **弹道计算** - 考虑空气阻力、大气密度、温度修正
-- **多型号支持** - 内置多国炸弹参数数据库（苏联、美国、德国、英国等）
-- **实时预测** - 根据当前高度、速度、俯仰角计算投弹距离和时间
-- **减速伞支持** - 支持带减速伞炸弹的特殊弹道计算
+- **自由落体/高阻炸弹** - 继续使用 CCRP 弹道计算，考虑空气阻力、大气密度与减速构型
+- **空地导弹与制导/滑翔炸弹** - 按当前高度、速度和前方 POI/战区给出保守距离、飞行时间与对准提示；未校准的滑翔武器仅显示明确标注的弹道参考
+- **空空导弹** - 仅对 8111 当前返回的可见敌机显示二维最大距离，不声称最小射程、雷达锁定、NEZ 或发射授权
+- **Datamine 武器目录** - 从 War Thunder Datamine 生成物理参数、中文名称与机型挂载关系，选择器按当前机型过滤
+- **明确手选** - 当前 8111 实测只有武器按键/投放脉冲，没有可靠的所选挂载字段，因此不做自动猜测
 
 重要说明：
 
-- **CCRP 为估计值** - 当前算法是基于公开参数与物理模型的预测，不是 War Thunder 的游戏内真实算法。
+- **解算均为估计值** - 当前算法基于 Datamine 参数与独立物理模型，不是 War Thunder 的游戏内真实算法。
+- **复杂模型会停用** - 条件点火、变推力或离散质量变化尚未被完整建模时显示“数据不足”，不会用简化结果冒充有效窗口。
 - **存在误差** - 地图、飞行状态、环境因素和游戏内部实现差异都会带来偏差。
 - **可手动校准** - 可在 `设置 -> 投弹` 中调整 `距离修正倍率` 与 `时间修正倍率`。
 
@@ -182,8 +184,8 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 
 | 通道 | 包含功能 | 适合人群 |
 |------|----------|----------|
-| **Enhanced** | 计时器 + 战区/机场导航 + 燃油管理 + CCRP投弹预测 | 需要完整功能的玩家（推荐） |
-| **Standard** | 计时器 + 战区/机场导航 + 燃油管理（无CCRP） | 不用投弹预测但需要导航/燃油信息 |
+| **Enhanced** | 计时器 + 战区/机场导航 + 燃油管理 + 武器解算 | 需要完整功能的玩家（推荐） |
+| **Standard** | 计时器 + 战区/机场导航 + 燃油管理（无武器解算） | 不用武器解算但需要导航/燃油信息 |
 | **Lite** | 仅核心计时器 | 只想要极简界面和最低占用 |
 
 启动器与 app 包的关系：
@@ -323,9 +325,10 @@ ENABLE_ADVANCED_SETTINGS = True # 高级设置（面板/快捷键自定义等）
 
 ### 更新 datamine 静态数据（开发者）
 
-炸弹参数与机型超速限速库都来自同一份 War Thunder datamine checkout。维护者优先使用统一更新入口，它会同时刷新：
+炸弹参数、武器/挂载目录与机型超速限速库都来自同一份干净的 War Thunder datamine checkout。维护者优先使用统一更新入口，它会同时刷新：
 
 - `bomana/data/ccrp_bomb_params.json`
+- `bomana/data/weapon_fire_control.json`
 - `bomana/data/fm_speed_limits.json`
 - JSON `meta` 中的 datamine `source_version` / `source_commit`
 
@@ -334,7 +337,7 @@ ENABLE_ADVANCED_SETTINGS = True # 高级设置（面板/快捷键自定义等）
 git clone https://github.com/gszabi99/War-Thunder-Datamine.git
 git -C .\War-Thunder-Datamine pull --ff-only
 
-# 2) 一次性刷新两份数据；默认输出适合提交前快速审阅
+# 2) 一次性刷新三份数据；默认输出适合提交前快速审阅
 uv run python tools/update_datamine_assets.py ^
   .\War-Thunder-Datamine ^
   --no-bomb-report
@@ -350,9 +353,13 @@ uv run python tools/blkx_extractor.py ^
 uv run python tools/fm_speed_extractor.py ^
   .\War-Thunder-Datamine ^
   -o bomana\data\fm_speed_limits.json
+
+uv run python tools/weapon_fire_control_extractor.py ^
+  .\War-Thunder-Datamine ^
+  --output bomana\data\weapon_fire_control.json
 ```
 
-`Bomana` 运行时会读取这两份 JSON：炸弹库供 CCRP 估算使用，限速库按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 结合 `/state` IAS/Mach 数据做超速分级提醒。
+`Bomana` 运行时读取生成后的静态 JSON：炸弹库供 CCRP 使用，武器目录供挂载筛选和导弹/制导武器估算，限速库按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 结合 `/state` IAS/Mach 数据做超速分级提醒。
 
 
 ---
@@ -372,11 +379,12 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 
 ### 静态数据文件来源
 
-除 8111 实时端点外，Bomana 还会随应用携带两份静态数据文件：
+除 8111 实时端点外，Bomana 还会随对应功能通道携带以下静态数据文件：
 
 | 数据文件 | 原始来源 | 生成脚本 | 运行时用途 |
 |------|------|------|------|
 | `bomana/data/ccrp_bomb_params.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` | `tools/update_datamine_assets.py` -> `tools/blkx_extractor.py` | `BombConfig` 读取炸弹质量、口径、阻力、减速伞参数，用于 CCRP 弹道估算 |
+| `bomana/data/weapon_fire_control.json` | War Thunder datamine: 武器、挂载容器、机型预设与 `units_weaponry.csv` | `tools/update_datamine_assets.py` -> `tools/weapon_fire_control_extractor.py` | `WeaponCatalog` 读取分类、物理参数、本地化与机型兼容关系，供手选和保守武器窗口估算 |
 | `bomana/data/fm_speed_limits.json` | War Thunder datamine: `aces.vromfs.bin_u/gamedata/flightmodels/**` | `tools/update_datamine_assets.py` -> `tools/fm_speed_extractor.py` | `OverspeedAnalyzer` 按 `/indicators.type -> unit_to_fm -> fm_speed_limits` 做 IAS/Mach 超速分级 |
 
 ### 轮询频率
@@ -410,20 +418,20 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 2. 检查 8111 端口是否可访问
 3. 等待 1-2 秒让程序检测到玩家
 
-### Q: 投弹预测不准确？
+### Q: 武器解算或投弹提示不准确？
 
-1. 确认选择了正确的炸弹型号
-2. 高空投弹时注意风速影响（游戏内未提供风速数据）
-3. 减速伞炸弹需要额外的展开时间
-4. 在 `设置 -> 投弹` 中调节 `距离修正倍率` 和 `时间修正倍率` 做手动校准
+1. 点击主卡片，确认手选武器和当前机型一致
+2. AAM 只显示二维最大距离，滑翔武器当前只显示弹道参考；它们不是完整发射包线
+3. 自由落体/高阻炸弹还会受游戏未提供的风速与减速构型展开时机影响
+4. `设置 -> 投弹` 的距离/时间倍率只校准 CCRP，不会修正导弹或制导武器模型
 
 ### Q: 与 WTRTI 有什么区别？
 
 | 特性 | Bomana | WTRTI |
 |------|--------|-------|
-| 主要用途 | SB 模式计时+投弹 | 通用飞行数据显示 |
+| 主要用途 | SB 模式计时+武器解算 | 通用飞行数据显示 |
 | 15分钟计时 | 核心功能 | 不提供 |
-| 投弹预测 | 内置 | 不提供 |
+| 武器解算 | Enhanced 内置 | 不提供 |
 | 战区导航 | 内置 | 不提供 |
 | 自定义指标 | 不提供 | 高度自定义 |
 | 平台 | Windows | 跨平台 |

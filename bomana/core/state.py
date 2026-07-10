@@ -141,6 +141,35 @@ class BombingTarget:
     relative: float = 0.0
 
 
+@dataclass(frozen=True)
+class AirContact:
+    """Current hostile aircraft contact from one /map_obj.json response."""
+
+    id: str
+    index: int
+    x: float
+    y: float
+    name: str = ""
+    icon: str = ""
+    color: str = ""
+
+
+# Descriptive alias retained for callers that prefer the explicit hostile name.
+HostileAirContact = AirContact
+
+
+@dataclass(frozen=True)
+class WeaponTarget:
+    """Prepared 2D fire-control target; never represents a verified game lock."""
+
+    id: str
+    kind: str
+    name: str
+    distance_m: float
+    relative_deg: float = 0.0
+    altitude_m: float | None = None
+
+
 @dataclass
 class MapObjData:
     """地图对象数据（来自/map_obj.json）
@@ -159,6 +188,7 @@ class MapObjData:
     zones: list[Zone] = field(default_factory=list)  # 战区列表
     airfields: list[Airfield] = field(default_factory=list)  # 机场列表
     interest_points: list[InterestPoint] = field(default_factory=list)  # 兴趣点列表
+    hostile_air_contacts: list[AirContact] = field(default_factory=list)
 
 
 @dataclass
@@ -453,6 +483,26 @@ class GameState:
     cached_bombing_unavailable_reason: str = ""
     bombing_calc_valid: bool = False
     last_bombing_calc_time: float = 0.0
+    weapon_id: str = ""
+    weapon_display_name: str = ""
+    weapon_role: str = ""
+    weapon_control: str = ""
+    weapon_planform: str = ""
+    weapon_selection_source: str = "manual"
+    weapon_selection_compatible: bool = False
+    weapon_solution_valid: bool = False
+    weapon_status: str = "unknown_weapon"
+    weapon_quality: str = "none"
+    weapon_reason: str = ""
+    weapon_target_kind: str = ""
+    weapon_target_name: str = ""
+    weapon_target_distance_m: float = 0.0
+    weapon_min_range_m: float = 0.0
+    weapon_max_range_m: float = 0.0
+    weapon_time_to_target_s: float = 0.0
+    weapon_time_to_window_s: float = 0.0
+    weapon_target: WeaponTarget | None = None
+    last_weapon_calc_time: float = 0.0
     current_life: LifeState | None = None  # 当前生命
     sortie_id: int = 0  # 出击计数（补给时递增）
     last_refit_ts: float = 0.0  # 上次补给时间
@@ -697,3 +747,23 @@ class UISnapshot:
     overspeed_limit_mach: float = 0.0  # 机型马赫限速
     overspeed_match: bool = False  # 是否成功匹配机型限速
     overspeed_reason: str = ""  # 判定来源（ias/mach/ias+mach/safe/unknown）
+
+    # v7.0.0: schema-backed weapon fire-control estimate
+    weapon_id: str = ""
+    weapon_display_name: str = ""
+    weapon_role: str = ""
+    weapon_control: str = ""
+    weapon_planform: str = ""
+    weapon_selection_source: str = "manual"
+    weapon_selection_compatible: bool = False
+    weapon_solution_valid: bool = False
+    weapon_status: str = "unknown_weapon"
+    weapon_quality: str = "none"
+    weapon_reason: str = ""
+    weapon_target_kind: str = ""
+    weapon_target_name: str = ""
+    weapon_target_distance_m: float = 0.0
+    weapon_min_range_m: float = 0.0
+    weapon_max_range_m: float = 0.0
+    weapon_time_to_target_s: float = 0.0
+    weapon_time_to_window_s: float = 0.0

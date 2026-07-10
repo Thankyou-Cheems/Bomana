@@ -1,13 +1,13 @@
 {
   "meta": {
-    "generated_at": "2026-06-27 23:38:36",
+    "generated_at": "2026-07-10 22:19:14",
     "bombs": 437,
     "collisions": 0,
     "skipped_non_bomb": 23,
     "source_root_name": "War-Thunder-Datamine",
     "source_subdir": "aces.vromfs.bin_u/gamedata/weapons/bombguns",
-    "source_version": "2.57.0.24",
-    "source_commit": "ad87bddda260495fd9cf73095737dd5917989183"
+    "source_version": "2.57.1.16",
+    "source_commit": "96787940b7d0a48fcd6eb153081b4c852f9435e9"
   },
   "ballistic_params": {
     "ar_bk_br_125kg": {
@@ -248,7 +248,19 @@
       "brakeArm": 0.0,
       "stab_enabled": false,
       "source_file": "bomb_ussr_82mm_o_832.blkx",
-      "mesh": "bomb_82mm_mortar"
+      "mesh": "bomb_82mm_mortar",
+      "raw_caliber": 0.82,
+      "caliber_source_pointer": "/bomb/caliber",
+      "caliber_normalization": {
+        "field": "caliber_m",
+        "rule": "datamine_mm_identity_decimal_shift",
+        "raw_value": 0.82,
+        "normalized_value": 0.082,
+        "evidence": [
+          "bomb_82mm_mortar",
+          "bomb_ussr_82mm_o_832.blkx"
+        ]
+      }
     },
     "bomb_ussr_mbu600": {
       "mass": 29.5,

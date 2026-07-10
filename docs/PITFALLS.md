@@ -14,6 +14,83 @@ implementation plans belong in git history, not here.
 
 ## Entries
 
+### 2026-07-10 — App helper extraction can strand lifecycle calls after `return`
+
+Symptom: the Windows tray stops initializing even though startup otherwise succeeds and tray support is available.
+Root cause: inserting a new `App` helper before the final `__init__` statements accidentally moved the existing `_init_tray()` branch into that helper after an unconditional `return`.
+Spec: `docs/ARCHITECTURE.md` runtime-service/UI lifecycle boundary.
+Pin: `tests/test_ui_app_config.py` requires the tray call to remain in `App.__init__` and outside `_get_weapon_catalog`.
+
+### 2026-07-10 — A clamped glide proxy can make every weapon the same
+
+Symptom: all 44 generated glide records return the same height-proportional envelope, so GBU-39 and GBU-53 differ in the catalog but not in the solver.
+Root cause: every real `0.08 * wingAreaMult / CxK` value fell below the hardcoded 1.5 floor, while mass, caliber, and `dragCx` never entered that path; the available fields also do not establish lift-curve or induced-drag coefficients for a defensible replacement L/D.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-07`, `WFC-10`, `WFC-13` (Draft 2026-07).
+Pin: `tests/test_weapon_solver.py` requires glide cues to use the Datamine-backed gravity/drag trajectory only as a non-green guided-ballistic reference until live calibration establishes a lift model.
+
+### 2026-07-10 — Modern propulsion blocks are not always a flat motor schedule
+
+Symptom: PGM, AGM-130, ALARM, Kh-31, and YJ-91-family records can show a valid range even though their conditional ignition, airflow/Mach factors, factor-indexed impulses, or instantaneous mass changes were discarded or interpolated across a burn.
+Root cause: flattening `propulsionN/impulseN` retained nominal thrust and mass but omitted `propulsionAutopilot`, `propulsionFactorN`, `factorIndex`, and discrete zero-time semantics.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-02`, `WFC-05`, `WFC-06`, `WFC-10` (Draft 2026-07).
+Pin: `tests/test_weapon_data_extractor.py`, `tests/contracts/test_weapon_fire_control_schema.py`, and `tests/test_weapon_solver.py` retain machine-readable unsupported reasons and require runtime fail-closed behavior.
+
+### 2026-07-10 — Missile `minDistance` is not an AAM engagement minimum
+
+Symptom: an AIM-9L target at 50 m receives a green in-envelope cue because the top-level Datamine `minDistance` is 30 m, while the same record's condition-dependent guidance tables contain minimum ranges in the hundreds or thousands of meters.
+Root cause: the solver treated a general top-level field as the lower edge of an AAM envelope even though 8111 does not provide the target aspect, motion, and altitude needed to select a guidance-table cell.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-06`, `WFC-08`, `WFC-13` (Draft 2026-07).
+Pin: schema/extractor tests retain the guidance-table minima and their pointers, while `tests/test_weapon_solver.py` requires max-only neutral/yellow AAM output with unknown minimum range.
+
+### 2026-07-10 — Weapon launch TAS is not ground-target closing speed
+
+Symptom: the card can show “time to estimated window” while flying 45 degrees away from the target, with at least a 41 percent geometric error before wind.
+Root cause: remaining ground distance was divided by weapon launch speed, which prefers TAS, before alignment was checked.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-09`, `WFC-10`, `WFC-13` (Draft 2026-07).
+Pin: `tests/test_weapon_scheduler.py` and `tests/test_weapon_solver.py` separate launch physics from aligned positive SOG closure and suppress the countdown while off-axis or opening.
+
+### 2026-07-10 — Fresh Datamine values still need provenance-preserving SI validation
+
+Symptom: refreshing the 82 mm O-832 mortar payload changes its CCRP caliber from `0.082` m to raw `0.82` m, inflating reference area by 100 times even though the source filename, mesh, and physical identity all say 82 mm.
+Root cause: the current Datamine record contains a decimal-shift anomaly; blindly copying a newer commit is source-faithful but not physically or dimensionally valid.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-01`, `WFC-02`, `WFC-05` (Draft 2026-07).
+Pin: `tests/test_quality_ccrp_data.py` and `tests/test_weapon_data_extractor.py` require a narrow Datamine-identity rule, retain raw `0.82`, normalized `0.082`, rule/evidence, and the original JSON pointer, and reject hand-edited output.
+
+### 2026-07-10 — 8111 weapon pulses and `Player` icons are not semantic identity
+
+Symptom: a weapon helper can appear to auto-detect the selected store from `weapon2`, while navigation can silently replace the player's position when a blue squad aircraft also uses the `Player` icon.
+Root cause: the real 4,281-frame JAS 39C fixture exposes `weapon2`/`weapon4` only as button/release pulses and contains both a yellow own-aircraft marker and a blue squad marker with `type=aircraft, icon=Player`; neither field name is a sufficient identity contract by itself.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-03..WFC-04`, `WFC-08`; `docs/specs/runtime-8111-boundary.md` `R8111-03..R8111-05` (Amended 2026-07).
+Pin: `tests/test_8111_replay.py`, `tests/test_map_objects_contract.py`, and `tests/test_weapon_catalog.py` keep selection manual without a verified named field, prefer the explicit/yellow own marker, and expose only current hostile contacts to the two-dimensional estimate.
+
+### 2026-07-10 — Legacy command-guided weapons may not have a modern seeker block
+
+Symptom: AGM-12, AS/AA-20, X-4, Hs 293, Kh-23M, Rb 05A, and Fritz X were omitted from guided fire-control routes or classified as unguided even though their Datamine records expose control authority.
+Root cause: classification required modern seeker/autopilot structures and ignored positive legacy `controlSensitivity`; accepting that scalar alone would be too broad, so it must be paired with structured guided-weapon trigger or icon evidence.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-01..WFC-02` (Draft 2026-07).
+Pin: `tests/contracts/test_weapon_fire_control_schema.py` requires representative AAM, AGM, and bomb records to retain `/rocket/controlSensitivity` or `/bomb/controlSensitivity` and emit `legacy_command`/`command` guidance.
+
+### 2026-07-10 — A validated catalog failure must propagate through the whole UI
+
+Symptom: core startup caught a missing or invalid weapon catalog, but App configuration or main-window construction tried to load the singleton again and could still crash.
+Root cause: the catalog validation result was not treated as one process-wide startup decision across core and UI boundaries.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-10`, `WFC-12`, `WFC-14` (Draft 2026-07).
+Pin: `tests/contracts/test_weapon_fire_control_runtime.py` keeps App/builders on GameLogic's validated catalog result, renders an unavailable state, and disables selection without a second load attempt.
+
+### 2026-07-10 — AAM target disappearance is not ordinary throttled work
+
+Symptom: a hostile aircraft removed from the latest `/map_obj.json` response could retain a valid launch-range cue for the remainder of the 200 ms solver interval.
+Root cause: target state was updated before the generic calculation throttle, so a present-to-missing transition could return early without applying a `no_target` result.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-08`, `WFC-10..WFC-11`; `docs/specs/runtime-8111-boundary.md` `R8111-03` (Draft/Amended 2026-07).
+Pin: `tests/contracts/test_weapon_fire_control_runtime.py` and `tests/test_weapon_scheduler.py` require the disappearance transition to bypass throttling and clear the valid cue in the current calculation cycle.
+
+### 2026-07-10 — CCRP keys and Datamine source IDs are not always identical
+
+Symptom: CCRP-routed bombs whose catalog ID retains a `_bomb` suffix failed lookup and silently inherited the previously selected bomb's physics; an old saved CCRP key could also fall back to the default weapon during migration.
+Root cause: the legacy CCRP asset trims suffixes from some keys, while the new catalog uses the Datamine source filename stem as its stable ID, and startup initially tried only the legacy key.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-07`, `WFC-10` (Draft 2026-07).
+Pin: `tests/contracts/test_weapon_fire_control_schema.py` requires catalog-to-CCRP ID/source-stem parity; `tests/contracts/test_weapon_fire_control_runtime.py` pins source-ID alias resolution, `tests/test_ui_app_config.py` pins legacy-key migration, and `tests/test_weapon_scheduler.py` requires unresolved physics to fail closed.
+
 ### 2026-07-10 — Artifact Attestations do not replace a UAC publisher certificate
 
 Symptom: the protected Program Files broker design could not ship because the free project had no practical Authenticode certificate, while requiring a separate installer made the feature unusable.

@@ -20,7 +20,64 @@ class FakeLabel:
         return self.options.get(key, "")
 
 
+class FakePackLabel(FakeLabel):
+    def __init__(self, manager: str = "") -> None:
+        super().__init__()
+        self.manager = manager
+
+    def winfo_manager(self) -> str:
+        return self.manager
+
+    def pack(self, **_kwargs) -> None:
+        self.manager = "pack"
+
+    def pack_forget(self) -> None:
+        self.manager = ""
+
+
+class FakeIcons:
+    @staticmethod
+    def configure_label(label, *, icon, text, **_kwargs) -> None:
+        label.config(icon=icon, text=text)
+
+
 class PanelRendererNavListTests(unittest.TestCase):
+    def test_weapon_detail_row_replaces_legacy_ccrp_detail_row(self) -> None:
+        app = SimpleNamespace(
+            scale=1.0,
+            icons=FakeIcons(),
+            bomb_select_lbl=FakeLabel(),
+            bomb_trajectory_lbl=FakeLabel(),
+            bomb_flight_lbl=FakePackLabel(),
+            bomb_release_lbl=FakeLabel(),
+            bomb_release_detail_lbl=FakePackLabel("pack"),
+        )
+        snap = SimpleNamespace(
+            weapon_id="agm_65d",
+            weapon_display_name="AGM-65D",
+            weapon_role="agm",
+            weapon_control="guided",
+            weapon_selection_source="manual",
+            weapon_selection_compatible=True,
+            weapon_solution_valid=True,
+            weapon_status="in_envelope",
+            weapon_quality="two_dimensional",
+            weapon_target_kind="poi",
+            weapon_target_name="",
+            weapon_target_distance_m=12_400.0,
+            weapon_min_range_m=600.0,
+            weapon_max_range_m=18_600.0,
+            weapon_time_to_target_s=28.0,
+            weapon_time_to_window_s=0.0,
+        )
+
+        AppPanelRenderer(app).update_bombing_display(snap)
+
+        self.assertEqual(app.bomb_flight_lbl.winfo_manager(), "pack")
+        self.assertEqual(app.bomb_flight_lbl.cget("text"), "飞行约 28s · 二维估算")
+        self.assertEqual(app.bomb_release_detail_lbl.winfo_manager(), "")
+        self.assertEqual(app.bomb_release_lbl.cget("text"), "估算窗内")
+
     def test_selected_nav_icon_replaces_base_icon(self) -> None:
         self.assertEqual(AppPanelRenderer._nav_list_icon("zone", selected=True), "target")
         self.assertEqual(AppPanelRenderer._nav_list_icon("airfield_enemy", selected=True), "target")

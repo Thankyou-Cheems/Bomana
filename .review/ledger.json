@@ -920,7 +920,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-10T12:57:44+00:00"
+        "at": "2026-07-10T15:00:49+00:00"
       }
     },
     {
@@ -950,7 +950,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-10T12:57:44+00:00"
+        "at": "2026-07-10T15:00:49+00:00"
       }
     },
     {
@@ -1519,8 +1519,8 @@
       "created_at": "2026-06-28T03:59:35+00:00",
       "snippet_check": {
         "status": "drifted",
-        "detail": "snippet exists but not at lines 177-178; first line now near line 187",
-        "at": "2026-07-10T12:57:44+00:00"
+        "detail": "snippet exists but not at lines 177-178; first line now near line 193",
+        "at": "2026-07-10T15:00:49+00:00"
       }
     },
     {
@@ -1838,8 +1838,269 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-10T12:57:44+00:00"
+        "at": "2026-07-10T15:00:49+00:00"
       }
+    },
+    {
+      "file": "tools/weapon_fire_control_extractor.py",
+      "line_start": 621,
+      "line_end": 624,
+      "snippet": "def _is_guided(section: dict[str, Any]) -> bool:\n    guidance_type = _clean_text(section.get(\"guidanceType\")).casefold()\n    guidance = section.get(\"guidance\")\n    return guidance_type in _GUIDED_TYPES or isinstance(guidance, dict) and bool(guidance)",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Legacy command-guided weapons are omitted from the catalog",
+      "impact": "Aircraft presets mount legacy command-guided stores such as AGM-12B/C, AS-20/30, AA-20, X-4, Hs 293A-1, Kh-23M, Grom, and Rb 05A, but their Datamine records expose positive controlSensitivity and guided icons without the newer guidanceType/guidance object. This predicate returns false, so AAM/AGM records are discarded and Fritz X is mislabeled unguided; users cannot obtain the requested fire-control estimate for these realistic loadouts.",
+      "fix": "Recognize the legacy structured command-control fields (at minimum positive controlSensitivity, corroborated by AAM/ATGM trigger or guided icon), retain guidance_kind=unknown when no more specific structured kind exists, and add known-record regression pins for at least one legacy AAM, AGM, and guided bomb.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Datamine mount graph probe found 19 AAM/ATGM terminal records rejected by _is_guided; examples include us_agm_12b_bullpup, fr_aa20, de_x4_ruhrstahl, de_hs_293a1, su_kh_23m, and swd_rb_05a, each with positive controlSensitivity and a guided/AAM missile icon. Generated catalog also marks de_fx1400 (Fritz X, iconType=bombs_guided, controlSensitivity=0.7) as unguided."
+        },
+        {
+          "kind": "read",
+          "detail": "_build_weapon_record drops role aam/agm whenever this predicate returns false and otherwise uses this predicate as the control classification."
+        }
+      ],
+      "id": "F-9d3ae30d",
+      "status": "fixed",
+      "created_at": "2026-07-10T14:09:02+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-07-10T14:26:25+00:00"
+      },
+      "resolved_at": "2026-07-10T14:32:43+00:00",
+      "resolution_note": "Legacy command guidance now requires positive controlSensitivity plus structured guided trigger/icon evidence; regenerated 723-weapon catalog contains representative AAM/AGM/bomb records. Focused 62 tests and clean Datamine regeneration equivalence passed."
+    },
+    {
+      "file": "bomana/ui/app.py",
+      "line_start": 283,
+      "line_end": 290,
+      "snippet": "        # 武器解算沿用 CCRP 编译开关；精简构建不会触发目录懒加载。\n        if ENABLE_CCRP:\n            selected_bomb = config.get(\"selected_bomb\", \"su_fab100\")\n            if BombConfig.get_bomb_data(selected_bomb):\n                BombConfig.selected_bomb = selected_bomb\n\n            weapon_catalog = get_weapon_catalog()\n            selected_weapon = config.get(\"selected_weapon\")",
+      "category": "lifecycle",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Catalog validation failure still aborts Enhanced startup",
+      "impact": "GameLogic deliberately catches a missing or tampered Enhanced catalog and records catalog_unavailable, but App.__init__ immediately calls this unguarded singleton load from _load_config; the same unguarded reload also exists in MainWindowBuilder. A damaged or schema-rejected catalog therefore crashes startup instead of presenting the designed unavailable state.",
+      "fix": "Treat GameLogic.weapon_catalog as the single load result, make config/UI construction tolerate None with an unavailable placeholder and disabled selector, and regression-test App/MainWindow behavior when WeaponCatalogError is raised.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Calling App._load_config with get_weapon_catalog patched to raise WeaponCatalogError('tampered catalog') propagated WeaponCatalogError; GameLogic.__init__ lines 110-119 catches the same exception and sets weapon_reason=catalog_unavailable."
+        },
+        {
+          "kind": "read",
+          "detail": "App.__init__ constructs GameLogic before _load_config, so this second singleton call defeats the core fallback on the normal Enhanced startup path."
+        }
+      ],
+      "id": "F-9782d0a6",
+      "status": "fixed",
+      "created_at": "2026-07-10T14:09:02+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-07-10T14:26:25+00:00"
+      },
+      "resolved_at": "2026-07-10T14:32:56+00:00",
+      "resolution_note": "App, MainWindow, and WeaponSelectorDialog now reuse GameLogic's validated catalog or fail closed with catalog-unavailable UI; tray initialization remains in App startup. Focused catalog/UI tests passed (43 tests), and full pytest passed."
+    },
+    {
+      "file": "bomana/core/weapon_scheduler.py",
+      "line_start": 75,
+      "line_end": 82,
+      "snippet": "    catalog = catalog or get_weapon_catalog()\n    if (\n        state.last_weapon_calc_time > 0.0\n        and (now - state.last_weapon_calc_time) < CALCULATION_INTERVAL_S\n    ):\n        return None\n    state.last_weapon_calc_time = now\n    state.weapon_target = target",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "R8111-03: rate limiting retains a disappeared hostile cue",
+      "impact": "When the current /map_obj.json frame no longer contains the AAM contact inside the 200 ms calculation interval, prepare returns before storing target=None or changing the solution. UISnapshot can therefore continue to expose the previous hostile target with an in-envelope valid state after the contact is absent from the current response.",
+      "fix": "Make target disappearance or identity change bypass the calculation throttle (or synchronously apply no_target) before returning; keep numerical recomputation throttled for unchanged identities and add a current-frame disappearance regression test through GameLogic/snapshot.",
+      "spec_clause": "R8111-03",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Probe with last_weapon_calc_time=10.0, a retained hostile WeaponTarget, status=in_envelope/valid=True, target=None, and now=10.05 returned work=None while retaining target hostile-1 and the valid in-envelope status."
+        },
+        {
+          "kind": "spec",
+          "detail": "R8111-03: a hostile aircraft contact may feed an aggregate two-dimensional weapon estimate only while /map_obj.json currently returns that contact and must not be persisted or reconstructed after it disappears."
+        }
+      ],
+      "id": "F-ae1f420a",
+      "status": "fixed",
+      "created_at": "2026-07-10T14:09:02+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-07-10T14:26:25+00:00"
+      },
+      "resolved_at": "2026-07-10T14:33:02+00:00",
+      "resolution_note": "A present-to-missing hostile aircraft transition now bypasses the scheduler throttle and applies no_target immediately; behavioral contract and scheduler regression tests passed, closing R8111-03 incident loop."
+    },
+    {
+      "file": "bomana/core/logic.py",
+      "line_start": 398,
+      "line_end": 406,
+      "snippet": "                    if uses_existing_ccrp(selected_weapon) and selected_is_compatible:\n                        if BombConfig.get_bomb_data(selected_id) is not None:\n                            BombConfig.selected_bomb = selected_id\n                        bombing_work = ccrp_scheduler.prepare_bombing_calculation(\n                            self.state,\n                            tel,\n                            now,\n                            player_present=usable_player_frame,\n                        )",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Missing CCRP rows silently solve the previously selected bomb",
+      "impact": "The generated weapon selector exposes eight compatible free-fall bombs that are absent from ccrp_bomb_params.json. Selecting one leaves BombConfig.selected_bomb unchanged but still schedules CCRP, so the card names the newly selected weapon while range and timing are calculated from the previous bomb's mass and drag.",
+      "fix": "Enforce generator/contract parity for every weapon routed to existing CCRP, or mark/suppress catalog records without CCRP physics before scheduling; pass the selected weapon ID/physics through the CCRP work item rather than relying on mutable global fallback state.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Cross-catalog probe found 8 CCRP-routed IDs missing from BombConfig. For uk_1000lbs_mc_mk1_mk2_bomb, the selected catalog mass is 463.1 kg while this branch retained su_fab100 and BombConfig.get_bomb_physics_params returned 103.5 kg."
+        },
+        {
+          "kind": "read",
+          "detail": "ccrp_scheduler.prepare_bombing_calculation always reads BombConfig.get_bomb_physics_params() without the selected weapon ID."
+        }
+      ],
+      "id": "F-f5ca018b",
+      "status": "fixed",
+      "created_at": "2026-07-10T14:09:02+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet NOT FOUND in file — finding is unverifiable as cited",
+        "at": "2026-07-10T14:26:25+00:00"
+      },
+      "resolved_at": "2026-07-10T14:33:08+00:00",
+      "resolution_note": "CCRP lookup now resolves Datamine source stems, all 276 CCRP-routed catalog records map to supported physics, and GameLogic passes an immutable selected-ID parameter snapshot into CCRP. Parity/runtime tests and cross-catalog probe passed."
+    },
+    {
+      "file": "docs/PITFALLS.md",
+      "line_start": 24,
+      "line_end": 29,
+      "snippet": "### 2026-07-10 — A clamped glide proxy can make every weapon the same\n\nSymptom: all 44 generated glide records return the same height-proportional envelope, so GBU-39 and GBU-53 differ in the catalog but not in the solver.\nRoot cause: every real `0.08 * wingAreaMult / CxK` value fell below the hardcoded 1.5 floor, while mass, caliber, and `dragCx` never entered that path; the available fields also do not establish lift-curve or induced-drag coefficients for a defensible replacement L/D.\nSpec: `docs/specs/weapon-fire-control.md` `WFC-07`, `WFC-10`, `WFC-13` (Draft 2026-07).\nPin: `tests/test_weapon_solver.py` requires glide cues to use the Datamine-backed gravity/drag trajectory only as a non-green guided-ballistic reference until live calibration establishes a lift model.",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Clamped glide proxy collapses distinct weapons into one false envelope",
+      "impact": "All 44 glide weapons could receive the same synthetic height-proportional range and a green/full-envelope claim despite lacking a calibrated lift model, misleading release decisions for realistic GBU-39/GBU-53 loadouts.",
+      "fix": "Remove the synthetic L/D path and expose only the Datamine-backed gravity/drag result as a neutral/yellow guided-ballistic reference until live calibration supports a lift model.",
+      "spec_clause": "WFC-07",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "The repository incident record states that all 44 generated glide records collapsed to the same floor-clamped height-proportional envelope while weapon-specific mass, caliber, and dragCx were unused."
+        },
+        {
+          "kind": "spec",
+          "detail": "WFC-07 and WFC-13 prohibit inferring a glide L/D envelope from wingAreaMult/CxK and prohibit presenting a ballistic reference as a green glide envelope."
+        }
+      ],
+      "id": "F-cfbcfd11",
+      "status": "fixed",
+      "created_at": "2026-07-10T14:54:47+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-10T14:54:47+00:00"
+      },
+      "resolved_at": "2026-07-10T14:58:48+00:00",
+      "resolution_note": "Removed the synthetic L/D proxy. Current solver emits guided-ballistic reference statuses, presenter keeps both states yellow, real-catalog GBU-39/GBU-53 probe produced distinct ranges, focused tests passed, full pytest passed 459 plus 12 subtests."
+    },
+    {
+      "file": "docs/PITFALLS.md",
+      "line_start": 31,
+      "line_end": 36,
+      "snippet": "### 2026-07-10 — Modern propulsion blocks are not always a flat motor schedule\n\nSymptom: PGM, AGM-130, ALARM, Kh-31, and YJ-91-family records can show a valid range even though their conditional ignition, airflow/Mach factors, factor-indexed impulses, or instantaneous mass changes were discarded or interpolated across a burn.\nRoot cause: flattening `propulsionN/impulseN` retained nominal thrust and mass but omitted `propulsionAutopilot`, `propulsionFactorN`, `factorIndex`, and discrete zero-time semantics.\nSpec: `docs/specs/weapon-fire-control.md` `WFC-02`, `WFC-05`, `WFC-06`, `WFC-10` (Draft 2026-07).\nPin: `tests/test_weapon_data_extractor.py`, `tests/contracts/test_weapon_fire_control_schema.py`, and `tests/test_weapon_solver.py` retain machine-readable unsupported reasons and require runtime fail-closed behavior.",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Conditional propulsion semantics are flattened into invalid powered ranges",
+      "impact": "PGM, AGM-130, ALARM, Kh-31, and YJ-91-family weapons could show apparently valid ranges after conditional ignition, variable factors, indexed impulses, or instantaneous mass changes were silently discarded.",
+      "fix": "Audit modern propulsion structures into schema-backed reason codes with source pointers and fail closed at runtime for every unsupported record.",
+      "spec_clause": "WFC-06",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "The repository incident record identifies real PGM, AGM-130, ALARM, Kh-31, and YJ-91-family records whose propulsion semantics were lost by the flat schedule."
+        },
+        {
+          "kind": "spec",
+          "detail": "WFC-06 requires conditional propulsion autopilots, variable factors, factor-indexed impulses, and instantaneous mass changes to retain machine-readable reasons and fail closed."
+        }
+      ],
+      "id": "F-be7d7ba5",
+      "status": "fixed",
+      "created_at": "2026-07-10T14:54:47+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-10T14:54:47+00:00"
+      },
+      "resolved_at": "2026-07-10T14:58:48+00:00",
+      "resolution_note": "Schema and extractor now retain four unsupported propulsion reason codes and source pointers on exactly 26 records; every flagged real-catalog record returned insufficient_data/conditional_propulsion_unsupported in the runtime probe. Focused and full gates passed."
+    },
+    {
+      "file": "docs/PITFALLS.md",
+      "line_start": 38,
+      "line_end": 43,
+      "snippet": "### 2026-07-10 — Missile `minDistance` is not an AAM engagement minimum\n\nSymptom: an AIM-9L target at 50 m receives a green in-envelope cue because the top-level Datamine `minDistance` is 30 m, while the same record's condition-dependent guidance tables contain minimum ranges in the hundreds or thousands of meters.\nRoot cause: the solver treated a general top-level field as the lower edge of an AAM envelope even though 8111 does not provide the target aspect, motion, and altitude needed to select a guidance-table cell.\nSpec: `docs/specs/weapon-fire-control.md` `WFC-06`, `WFC-08`, `WFC-13` (Draft 2026-07).\nPin: schema/extractor tests retain the guidance-table minima and their pointers, while `tests/test_weapon_solver.py` requires max-only neutral/yellow AAM output with unknown minimum range.",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Top-level missile minDistance is presented as an AAM engagement bound",
+      "impact": "An AIM-9L target at 50 m could receive a green full-envelope cue even though the available 8111 data cannot select the condition-dependent guidance minimum, overstating the validity of the engagement cue.",
+      "fix": "Retain guidance-table minimum evidence and pointers, but make runtime AAM output neutral/yellow maximum-only with the minimum explicitly unknown.",
+      "spec_clause": "WFC-08",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "The repository incident record reproduces the AIM-9L case: top-level minDistance is 30 m while guidance-table minimum ranges span hundreds or thousands of meters."
+        },
+        {
+          "kind": "spec",
+          "detail": "WFC-08 forbids using top-level minDistance as an AAM engagement bound without target aspect, motion, and altitude."
+        }
+      ],
+      "id": "F-43ae3a6c",
+      "status": "fixed",
+      "created_at": "2026-07-10T14:54:47+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-10T14:54:47+00:00"
+      },
+      "resolved_at": "2026-07-10T14:58:49+00:00",
+      "resolution_note": "Guidance-table minima remain provenance-backed (176 AAM records); runtime ignores top-level minDistance as a bound and emits yellow within_2d_max_only with min_range_m=0. AIM-9L real-catalog probe and focused/full tests passed."
+    },
+    {
+      "file": "docs/PITFALLS.md",
+      "line_start": 45,
+      "line_end": 50,
+      "snippet": "### 2026-07-10 — Weapon launch TAS is not ground-target closing speed\n\nSymptom: the card can show “time to estimated window” while flying 45 degrees away from the target, with at least a 41 percent geometric error before wind.\nRoot cause: remaining ground distance was divided by weapon launch speed, which prefers TAS, before alignment was checked.\nSpec: `docs/specs/weapon-fire-control.md` `WFC-09`, `WFC-10`, `WFC-13` (Draft 2026-07).\nPin: `tests/test_weapon_scheduler.py` and `tests/test_weapon_solver.py` separate launch physics from aligned positive SOG closure and suppress the countdown while off-axis or opening.",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Ground time-to-window divides by launch TAS instead of aligned closure",
+      "impact": "The compact card could display a release-window countdown while the aircraft was flying away or substantially off-axis, with at least 41 percent geometric error before accounting for wind.",
+      "fix": "Keep TAS only for weapon launch physics; derive countdown closure from positive SOG multiplied by cosine of relative bearing and suppress it outside the alignment gate.",
+      "spec_clause": "WFC-09",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "The repository incident record documents a countdown while flying 45 degrees away and identifies TAS-before-alignment as the cause."
+        },
+        {
+          "kind": "spec",
+          "detail": "WFC-09 allows ground countdown only while aligned and requires positive along-target SOG closure; launch TAS must not be reused."
+        }
+      ],
+      "id": "F-9405771c",
+      "status": "fixed",
+      "created_at": "2026-07-10T14:54:47+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-10T14:54:47+00:00"
+      },
+      "resolved_at": "2026-07-10T14:58:49+00:00",
+      "resolution_note": "Scheduler now separates launch TAS from positive aligned SOG*cos(relative) ground closure; real-path probe kept launch speed 250 m/s, produced 199.878 m/s closure at 2 degrees, and suppressed closure at 20 degrees. Focused/full tests passed."
     }
   ]
 }

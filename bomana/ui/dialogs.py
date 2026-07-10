@@ -9,6 +9,7 @@ from importlib.util import find_spec
 from pathlib import Path
 from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
+from typing import ClassVar
 
 from bomana.config.feature_profile import (
     ENABLE_ADVANCED_SETTINGS,
@@ -33,11 +34,13 @@ from bomana.config.settings import (
     UIConfig,
 )
 from bomana.core.overspeed import SpeedLimitDatabase
+from bomana.core.weapon_catalog import WeaponCatalog, get_weapon_catalog
 from bomana.ui.dialog_presenter import (
     build_panel_option_specs,
     format_aircraft_override_label,
     format_overspeed_override_summary,
 )
+from bomana.ui.panel_presenter import format_weapon_selection_label
 from bomana.ui.settings_form import (
     apply_settings_payload_to_config,
     build_settings_save_payload,
@@ -54,6 +57,28 @@ from bomana.utils.system import Win32, resolve_tk_font_tuple
 # Optional dependencies for images (match HAS_TRAY behavior).
 HAS_TRAY = find_spec("PIL") is not None and find_spec("pystray") is not None
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError, tk.TclError)
+
+
+def build_weapon_selector_scope(
+    catalog,
+    *,
+    aircraft_type_name: str,
+    airborne: bool,
+) -> tuple[list[dict], str, bool]:
+    """Return selector records, scope annotation, and compatible-only state."""
+    all_records = list(catalog.search(""))
+    aircraft_name = " ".join(str(aircraft_type_name or "").split())
+    if not airborne:
+        return all_records, "未在飞行中：显示全部武器", False
+
+    compatible_records = list(catalog.for_aircraft(aircraft_name)) if aircraft_name else []
+    if compatible_records:
+        return compatible_records, f"当前机型 {aircraft_name}：仅显示兼容武器", True
+    if aircraft_name:
+        note = f"未匹配 {aircraft_name} 的武器预设：显示全部（兼容性未验证）"
+    else:
+        note = "当前机型未识别：显示全部（兼容性未验证）"
+    return all_records, note, False
 
 
 class _ScalableDialogMixin:
@@ -1359,9 +1384,9 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         self.ccrp_selected_bomb_var = tk.StringVar()
         self._refresh_ccrp_selected_bomb_text()
 
-        tk.Label(frame, text="当前炸弹:", bg=Theme.BG, fg=Theme.TEXT).pack(anchor="w")
+        tk.Label(frame, text="CCRP 默认炸弹:", bg=Theme.BG, fg=Theme.TEXT).pack(anchor="w")
         bomb_row = tk.Frame(frame, bg=Theme.BG)
-        bomb_row.pack(fill="x", pady=(6, 12))
+        bomb_row.pack(fill="x", pady=(6, 4))
         tk.Label(
             bomb_row,
             textvariable=self.ccrp_selected_bomb_var,
@@ -1373,11 +1398,19 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         ).pack(side="left", fill="x", expand=True)
         self._create_action_button(
             bomb_row,
-            "更换当前炸弹",
+            "更换 CCRP 炸弹",
             self._open_ccrp_bomb_selector,
             variant="neutral",
             width=12,
         ).pack(side="left", padx=(10, 0))
+
+        tk.Label(
+            frame,
+            text="这里只设置自由落体/高阻 CCRP 的默认炸弹；作战武器请点击主卡片选择。",
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(0, 10))
 
         if BombConfig.load_error:
             tk.Label(
@@ -2313,6 +2346,287 @@ class OverspeedAircraftOverrideDialog(tk.Toplevel, _ScalableDialogMixin):
         self.destroy()
 
 
+class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
+    """Manual selector for the Datamine-backed weapon catalog."""
+
+    _ROLE_LABELS: ClassVar[dict[str, str]] = {
+        "aam": "AAM",
+        "agm": "AGM",
+        "bomb": "炸弹",
+    }
+    _CONTROL_LABELS: ClassVar[dict[str, str]] = {
+        "guided": "制导",
+        "unguided": "非制导",
+    }
+    _PLANFORM_LABELS: ClassVar[dict[str, str]] = {
+        "normal": "常规",
+        "glide": "滑翔",
+        "high_drag": "高阻",
+    }
+
+    def __init__(
+        self,
+        parent,
+        app,
+        *,
+        catalog: WeaponCatalog | None = None,
+        initial_weapon: str | None = None,
+        aircraft_type_name: str = "",
+        airborne: bool = False,
+    ):
+        super().__init__(parent)
+        self.app = app
+        self.catalog = catalog if catalog is not None else get_weapon_catalog()
+        self.result = None
+        self.selected_weapon = initial_weapon or self.catalog.selected_weapon_id
+        self._current_role = None
+        self._visible_weapon_ids: list[str] = []
+        self._scope_records, scope_note, self._compatible_only = build_weapon_selector_scope(
+            self.catalog,
+            aircraft_type_name=aircraft_type_name,
+            airborne=airborne,
+        )
+        self._scope_ids = {
+            str(record.get("id") or "") for record in self._scope_records if record.get("id")
+        }
+
+        self.title("选择武器")
+        self.configure(bg=Theme.BG)
+        self.resizable(True, True)
+        self.transient(parent)
+        self.grab_set()
+
+        shell = tk.Frame(self, bg=Theme.BORDER, bd=0, highlightthickness=0)
+        shell.pack(fill="both", expand=True, padx=15, pady=12)
+        main = tk.Frame(shell, bg=Theme.BG, bd=0, highlightthickness=0)
+        main.pack(fill="both", expand=True, padx=1, pady=1)
+
+        header = tk.Frame(main, bg=Theme.BG)
+        header.pack(fill="x", padx=12, pady=(10, 6))
+        tk.Label(
+            header,
+            text="选择武器",
+            font=("Segoe UI", 13, "bold"),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            anchor="w",
+        ).pack(anchor="w")
+        tk.Label(
+            header,
+            text=scope_note,
+            font=("Segoe UI", 9),
+            bg=Theme.BG,
+            fg=Theme.YELLOW if airborne and not self._compatible_only else Theme.TEXT_MUTED,
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", pady=(2, 0))
+
+        search_frame = tk.Frame(main, bg=Theme.BG)
+        search_frame.pack(fill="x", padx=12, pady=(4, 8))
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *_args: self._populate_list())
+        self.search_entry = tk.Entry(
+            search_frame,
+            textvariable=self.search_var,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BLUE,
+            insertbackground=Theme.TEXT,
+            font=("Segoe UI", 10),
+        )
+        self.search_entry.pack(fill="x", ipady=6)
+
+        role_frame = tk.Frame(main, bg=Theme.BG)
+        role_frame.pack(fill="x", padx=12, pady=(0, 8))
+        self.role_buttons = {}
+        for role, label in ((None, "全部"), ("aam", "AAM"), ("agm", "AGM"), ("bomb", "炸弹")):
+            button = self._create_action_button(
+                role_frame,
+                label,
+                lambda value=role: self._set_role(value),
+                variant="primary" if role is None else "neutral",
+                width=7,
+            )
+            button.pack(side="left", padx=(0, 6))
+            self.role_buttons[role] = button
+
+        list_shell = tk.Frame(main, bg=Theme.SEPARATOR, bd=0, highlightthickness=0)
+        list_shell.pack(fill="both", expand=True, padx=12)
+        list_frame = tk.Frame(list_shell, bg=Theme.GRAYPILL, bd=0, highlightthickness=0)
+        list_frame.pack(fill="both", expand=True, padx=1, pady=1)
+        scrollbar = tk.Scrollbar(
+            list_frame,
+            troughcolor=Theme.BG,
+            bg=Theme.GRAYPILL,
+            activebackground=Theme.SEPARATOR,
+            bd=0,
+            highlightthickness=0,
+        )
+        scrollbar.pack(side="right", fill="y")
+        self.listbox = tk.Listbox(
+            list_frame,
+            width=62,
+            height=20,
+            bg=Theme.GRAYPILL,
+            fg=Theme.TEXT,
+            selectbackground=Theme.BLUE,
+            selectforeground=Theme.TEXT,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BLUE,
+            yscrollcommand=scrollbar.set,
+            font=("Segoe UI", 9),
+        )
+        self.listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=self.listbox.yview)
+        self.listbox.bind("<Double-Button-1>", lambda _event: self._select())
+
+        self.stats_lbl = tk.Label(
+            main,
+            text="",
+            bg=Theme.BG,
+            fg=Theme.TEXT_DIM,
+            font=("Segoe UI", 9),
+            anchor="w",
+        )
+        self.stats_lbl.pack(fill="x", padx=12, pady=(6, 0))
+
+        button_frame = tk.Frame(main, bg=Theme.BG)
+        button_frame.pack(fill="x", padx=12, pady=(10, 10))
+        self._create_action_button(
+            button_frame,
+            "确定",
+            self._select,
+            variant="primary",
+            width=9,
+        ).pack(side="right")
+        self._create_action_button(
+            button_frame,
+            "取消",
+            self.destroy,
+            variant="neutral",
+            width=9,
+        ).pack(side="right", padx=(0, 8))
+
+        self._populate_list()
+        self._fit_window_to_screen()
+        self._init_dynamic_scaling()
+        self._center_dialog_on_parent(parent)
+
+    @staticmethod
+    def _display_name(record: dict) -> str:
+        return str(
+            record.get("display_name_zh")
+            or record.get("display_name")
+            or record.get("id")
+            or "未命名武器"
+        )
+
+    def _set_role(self, role: str | None) -> None:
+        self._current_role = role
+        for button_role, button in self.role_buttons.items():
+            active = button_role == role
+            style_action_button(button, "primary" if active else "neutral")
+        self._populate_list()
+
+    def _view_records(self) -> list[dict]:
+        query = " ".join(self.search_var.get().split())
+        if query:
+            records = list(self.catalog.search(query))
+            if self._compatible_only:
+                records = [
+                    record for record in records if str(record.get("id") or "") in self._scope_ids
+                ]
+        else:
+            records = list(self._scope_records)
+        if self._current_role:
+            records = [
+                record
+                for record in records
+                if str(record.get("role") or "").lower() == self._current_role
+            ]
+        return records
+
+    def _record_text(self, record: dict) -> str:
+        role = self._ROLE_LABELS.get(str(record.get("role") or "").lower(), "武器")
+        control = self._CONTROL_LABELS.get(
+            str(record.get("control") or "").lower(),
+            "控制未知",
+        )
+        planform = self._PLANFORM_LABELS.get(
+            str(record.get("planform") or "").lower(),
+            "构型未知",
+        )
+        weapon_id = str(record.get("id") or "").strip()
+        identity = f" [{weapon_id}]" if weapon_id else ""
+        return f"{self._display_name(record)}{identity} · {role} · {control}/{planform}"
+
+    def _populate_list(self) -> None:
+        if not hasattr(self, "listbox"):
+            return
+        records = self._view_records()
+        self.listbox.delete(0, "end")
+        self._visible_weapon_ids = []
+        selected_index = None
+        for record in records:
+            weapon_id = str(record.get("id") or "")
+            if not weapon_id:
+                continue
+            index = len(self._visible_weapon_ids)
+            self._visible_weapon_ids.append(weapon_id)
+            self.listbox.insert("end", self._record_text(record))
+            if weapon_id == self.selected_weapon:
+                selected_index = index
+                self.listbox.itemconfig(index, fg=Theme.GREEN)
+        if selected_index is not None:
+            self.listbox.selection_set(selected_index)
+            self.listbox.see(selected_index)
+        self.stats_lbl.config(
+            text=f"显示 {len(self._visible_weapon_ids)} / {len(self._scope_records)} 种武器"
+        )
+
+    def _select(self) -> None:
+        selection = self.listbox.curselection()
+        if not selection:
+            return
+        index = int(selection[0])
+        if index < 0 or index >= len(self._visible_weapon_ids):
+            return
+        weapon_id = self._visible_weapon_ids[index]
+        weapon = self.catalog.get(weapon_id)
+        if not weapon:
+            return
+
+        config = ConfigManager.load()
+        config["selected_weapon"] = weapon_id
+        if weapon.get("role") == "bomb" and BombConfig.get_bomb_data(weapon_id):
+            config["selected_bomb"] = weapon_id
+        if not ConfigManager.save(config):
+            messagebox.showerror("失败", "武器选择保存失败", parent=self)
+            return
+        if not self.catalog.set_selected(weapon_id, source="manual"):
+            messagebox.showerror("失败", "武器目录无法应用所选记录", parent=self)
+            return
+
+        if weapon.get("role") == "bomb" and BombConfig.get_bomb_data(weapon_id):
+            BombConfig.selected_bomb = weapon_id
+        self.result = weapon_id
+        self.selected_weapon = weapon_id
+        if hasattr(self.app, "bomb_select_lbl"):
+            self.app.bomb_select_lbl.config(
+                text=format_weapon_selection_label(
+                    self._display_name(weapon),
+                    str(weapon.get("role") or ""),
+                    "manual",
+                )
+            )
+        self.destroy()
+
+
 class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
     """炸弹选择对话框"""
 
@@ -2646,11 +2960,6 @@ class BombSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
                     messagebox.showerror("失败", "炸弹选择保存失败", parent=self)
                     return
                 BombConfig.selected_bomb = bomb_id
-
-                if hasattr(self.app, "bomb_select_lbl"):
-                    self.app.bomb_select_lbl.config(
-                        text=f"炸弹: {BombConfig.format_bomb_name(bomb_id)} (点击更换)"
-                    )
 
             self.destroy()
 

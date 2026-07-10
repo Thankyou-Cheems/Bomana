@@ -219,6 +219,30 @@ def test_tracked_real_sortie_fixture_replays_in_standard_suite() -> None:
     assert report["coverage"]["lobby_endpoint_failures"] == expected["lobby_endpoint_failures"]
 
 
+def test_real_sortie_weapon_pulses_do_not_claim_selected_store_identity() -> None:
+    manifest = json.loads(REAL_SORTIE_MANIFEST.read_text(encoding="utf-8"))
+    session = load_recorded_session(FIXTURE_DIR / manifest["session_file"])
+    indicator_keys: set[str] = set()
+    weapon2_values: set[float] = set()
+
+    for sample in session.samples:
+        result = sample["responses"]["/indicators"]
+        payload = result.get("payload")
+        if not result["ok"] or not isinstance(payload, dict):
+            continue
+        indicator_keys.update(str(key) for key in payload)
+        if "weapon2" in payload:
+            weapon2_values.add(float(payload["weapon2"]))
+
+    assert {"weapon2", "weapon4"} <= indicator_keys
+    assert weapon2_values == {0.0, 1.0}
+    assert not any(
+        token in key.lower()
+        for key in indicator_keys
+        for token in ("selected", "loadout", "missile", "bomb", "ammo")
+    )
+
+
 def test_fixture_importer_copies_validated_gzip_bytes_exactly(tmp_path: Path) -> None:
     plain = tmp_path / "source.jsonl"
     recording = tmp_path / "source.jsonl.gz"

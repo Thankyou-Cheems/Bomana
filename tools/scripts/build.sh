@@ -125,6 +125,17 @@ if [ -f "bomana/data/fm_speed_limits.json" ]; then
   ADD_DATA_ARGS+=("--add-data" "bomana/data/fm_speed_limits.json:bomana/data")
 fi
 if [ "$VARIANT" = "Enhanced" ]; then
+  if [ ! -f "bomana/data/weapon_fire_control.json" ] || \
+     [ ! -f "docs/specs/schemas/weapon-fire-control.schema.json" ]; then
+    echo "错误: Enhanced 缺少武器解算目录或 schema" >&2
+    exit 1
+  fi
+  if [ -f "bomana/data/weapon_fire_control.json" ]; then
+    ADD_DATA_ARGS+=("--add-data" "bomana/data/weapon_fire_control.json:bomana/data")
+  fi
+  if [ -f "docs/specs/schemas/weapon-fire-control.schema.json" ]; then
+    ADD_DATA_ARGS+=("--add-data" "docs/specs/schemas/weapon-fire-control.schema.json:docs/specs/schemas")
+  fi
   if [ -f "bomana/data/ccrp_bomb_params.json" ]; then
     ADD_DATA_ARGS+=("--add-data" "bomana/data/ccrp_bomb_params.json:bomana/data")
   elif [ -f "ccrp_bomb_params.json" ]; then

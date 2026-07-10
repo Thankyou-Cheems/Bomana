@@ -1,4 +1,4 @@
-# enforces: docs/specs/config-variants.md CFG-01..CFG-04, CFG-06..CFG-08
+# enforces: docs/specs/config-variants.md CFG-01..CFG-04, CFG-06..CFG-09
 
 from __future__ import annotations
 
@@ -169,3 +169,19 @@ def test_disabled_zones_force_integrated_navigation_mode() -> None:
     assert "if ENABLE_ZONES:" in source
     assert 'PanelConfig.navigation_mode = config.get("navigation_mode", "integrated")' in source
     assert 'PanelConfig.navigation_mode = "integrated"' in source
+
+
+def test_weapon_solution_uses_legacy_bombing_gate_and_enhanced_packaging() -> None:
+    # enforces: docs/specs/config-variants.md CFG-02, CFG-03, CFG-09
+    portable = (ROOT / "tools/build_portable.py").read_text(encoding="utf-8")
+    batch = (ROOT / "tools/scripts/build.bat").read_text(encoding="utf-8")
+    shell = (ROOT / "tools/scripts/build.sh").read_text(encoding="utf-8")
+
+    assert "weapon_catalog_rel" in portable
+    assert "weapon_schema_rel" in portable
+    assert 'variant != "Enhanced"' in portable
+    assert "WEAPON_DATA_ARG" in batch
+    assert "WEAPON_SCHEMA_ARG" in batch
+    assert "weapon_fire_control.json" in batch
+    assert 'if [ "$VARIANT" = "Enhanced" ]' in shell
+    assert "weapon_fire_control.json" in shell

@@ -744,7 +744,7 @@ class AppPanelRenderer:
             app.fuel_return_detail_lbl.config(text=model.return_detail_text)
 
     def update_bombing_display(self, snap: UISnapshot) -> None:
-        """更新投弹预测信息显示。"""
+        """更新武器解算信息显示（自由落体炸弹仍复用 CCRP 文案）。"""
         app = self.app
         model = build_bombing_display_model(snap)
         app.bomb_select_lbl.config(text=model.bomb_label_text)
@@ -767,6 +767,10 @@ class AppPanelRenderer:
                 text=model.release_detail_text,
                 fg=model.release.fg,
             )
+            if model.release_detail_text:
+                self._pack_if_needed(app.bomb_release_detail_lbl, fill="x")
+            else:
+                self._pack_forget_if_needed(app.bomb_release_detail_lbl)
 
     @staticmethod
     def format_aircraft_type_label(raw: str) -> str:

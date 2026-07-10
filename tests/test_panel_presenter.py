@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from bomana.ui import panel_presenter
 from bomana.ui.panel_presenter import (
     build_bombing_display_model,
@@ -56,7 +58,7 @@ def test_bombing_display_model_ready_state(monkeypatch) -> None:
 
     model = build_bombing_display_model(snap)
 
-    assert model.bomb_label_text == "炸弹 FAB-100 · 点击更换"
+    assert model.bomb_label_text == "FAB-100 · 炸弹 · 手选"
     assert model.trajectory_text == "目标 战区 #1 1.42km · 弹道 1.42km · 飞行 3.6s"
     assert model.flight_text == ""
     assert model.release.icon == "bomb"
@@ -111,6 +113,224 @@ def test_bombing_display_model_explains_mach_limit(monkeypatch) -> None:
     assert model.release.text == "不可投"
     assert model.release.fg == Theme.RED
     assert model.release_detail_text == "M1.08 超过投放限制，减速后再投"
+
+
+def _weapon_snapshot(**overrides):
+    values = {
+        "weapon_id": "agm_65d",
+        "weapon_display_name": "AGM-65D",
+        "weapon_role": "agm",
+        "weapon_control": "guided",
+        "weapon_planform": "normal",
+        "weapon_selection_source": "manual",
+        "weapon_selection_compatible": True,
+        "weapon_solution_valid": True,
+        "weapon_status": "in_envelope",
+        "weapon_quality": "two_dimensional",
+        "weapon_reason": "",
+        "weapon_target_kind": "poi",
+        "weapon_target_name": "",
+        "weapon_target_distance_m": 12_400.0,
+        "weapon_min_range_m": 600.0,
+        "weapon_max_range_m": 18_600.0,
+        "weapon_time_to_target_s": 28.0,
+        "weapon_time_to_window_s": 0.0,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_weapon_solution_model_uses_compact_estimate_wording() -> None:
+    model = build_bombing_display_model(_weapon_snapshot())
+
+    assert model.bomb_label_text == "AGM-65D · AGM · 手选"
+    assert model.trajectory_text == "POI 12.4km · 估算窗 0.6–18.6km"
+    assert model.flight_text == "飞行约 28s · 二维估算"
+    assert model.release.icon == "ok"
+    assert model.release.text == "估算窗内"
+    assert model.release.fg == Theme.GREEN
+    assert model.release_detail_text == ""
+
+
+def test_weapon_solution_model_never_shows_countdown_while_aligning() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_status="align",
+            weapon_solution_valid=False,
+            weapon_time_to_window_s=6.4,
+        )
+    )
+
+    assert model.release.text == "请对准"
+    assert model.flight_text == "二维估算"
+    assert "6.4s" not in model.flight_text
+    assert "距估算窗" not in model.flight_text
+    rendered = " ".join(
+        (model.bomb_label_text, model.trajectory_text, model.flight_text, model.release.text)
+    )
+    assert "LOCK" not in rendered.upper()
+    assert "NEZ" not in rendered.upper()
+    assert "授权" not in rendered
+
+
+def test_glide_solution_is_presented_as_yellow_ballistic_reference() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_id="us_gbu_39",
+            weapon_display_name="GBU-39/B",
+            weapon_role="bomb",
+            weapon_planform="glide",
+            weapon_status="within_ballistic_reference",
+            weapon_quality="conservative",
+            weapon_reason="guided_ballistic_surrogate",
+        )
+    )
+
+    assert model.release.text == "弹道参考内"
+    assert model.release.fg == Theme.YELLOW
+    assert model.release.icon != "ok"
+    assert model.trajectory_text == "POI 12.4km · 弹道参考约 18.6km"
+    assert "仅重力/阻力弹道参考，未计滑翔增程" in model.flight_text
+
+
+def test_glide_target_beyond_reference_does_not_claim_out_of_range() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_id="us_gbu_53",
+            weapon_display_name="GBU-53/B",
+            weapon_role="bomb",
+            weapon_planform="glide",
+            weapon_status="beyond_ballistic_reference",
+            weapon_quality="conservative",
+            weapon_reason="guided_ballistic_surrogate",
+            weapon_time_to_target_s=0.0,
+            weapon_time_to_window_s=12.0,
+        )
+    )
+
+    assert model.release.text == "弹道参考外"
+    assert model.release.fg == Theme.YELLOW
+    assert model.trajectory_text == "POI 12.4km · 弹道参考约 18.6km"
+    assert "距弹道参考约 12s" in model.flight_text
+    assert "不代表超出滑翔能力" in model.flight_text
+    assert "过远" not in model.release.text
+
+
+def test_aam_solution_states_2d_max_limitations_and_never_turns_green() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_id="us_aim9l",
+            weapon_display_name="AIM-9L",
+            weapon_role="aam",
+            weapon_target_kind="aircraft",
+            weapon_target_name="Hostile",
+            weapon_target_distance_m=50.0,
+            weapon_min_range_m=0.0,
+            weapon_status="within_2d_max_only",
+            weapon_reason="aam_2d_max_only",
+            weapon_time_to_target_s=0.0,
+        )
+    )
+
+    assert model.trajectory_text == "空中目标 Hostile 50m · 二维最大约 18.6km"
+    assert model.release.text == "二维上限内"
+    assert model.release.fg == Theme.YELLOW
+    assert model.release.icon != "ok"
+    assert "仅二维最大射程，未计目标速度、高差与迎尾角" in model.flight_text
+
+
+def test_conditional_propulsion_failure_explains_fail_closed_state() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_status="insufficient_data",
+            weapon_solution_valid=False,
+            weapon_reason="conditional_propulsion_unsupported",
+            weapon_time_to_target_s=0.0,
+            weapon_max_range_m=0.0,
+        )
+    )
+
+    assert model.release.text == "数据不足"
+    assert model.flight_text == "条件或变推力推进尚未建模，已停用估算"
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("incompatible", "不兼容"),
+        ("no_target", "无目标"),
+        ("insufficient_data", "数据不足"),
+        ("too_close", "过近"),
+        ("out_of_range", "过远"),
+    ],
+)
+def test_weapon_solution_model_distinguishes_unavailable_states(
+    status: str,
+    expected: str,
+) -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_status=status,
+            weapon_solution_valid=False,
+            weapon_time_to_target_s=0.0,
+            weapon_time_to_window_s=0.0,
+        )
+    )
+
+    assert model.release.text == expected
+    assert model.flight_text
+
+
+def test_catalog_failure_stays_visible_after_snapshot_render() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_id="",
+            weapon_display_name="",
+            weapon_role="",
+            weapon_control="",
+            weapon_selection_source="unknown",
+            weapon_selection_compatible=False,
+            weapon_solution_valid=False,
+            weapon_status="unknown_weapon",
+            weapon_reason="catalog_unavailable",
+            weapon_time_to_target_s=0.0,
+        )
+    )
+
+    assert model.bomb_label_text == "武器目录不可用 · 武器 · 来源未知"
+    assert model.release.text == "目录不可用"
+    assert model.flight_text == "武器目录缺失或校验失败"
+
+
+def test_incompatible_unguided_bomb_does_not_show_ccrp_release_cue() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_id="us_mk_82",
+            weapon_display_name="Mk 82",
+            weapon_role="bomb",
+            weapon_control="unguided",
+            weapon_selection_compatible=False,
+            weapon_solution_valid=False,
+            weapon_status="incompatible",
+            weapon_time_to_target_s=0.0,
+        )
+    )
+
+    assert model.release.text == "不兼容"
+    assert model.flight_text == "请更换当前机型可用武器"
+
+
+def test_missing_aircraft_identity_stays_data_shortage_not_incompatible() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_selection_compatible=False,
+            weapon_solution_valid=False,
+            weapon_status="insufficient_data",
+            weapon_time_to_target_s=0.0,
+        )
+    )
+
+    assert model.release.text == "数据不足"
 
 
 def test_speed_strip_model_clamps_ratio_and_formats_aircraft() -> None:

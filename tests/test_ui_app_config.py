@@ -1,3 +1,6 @@
+import ast
+import inspect
+import textwrap
 from types import SimpleNamespace
 
 from bomana.core.state import Phase, UISnapshot
@@ -28,6 +31,30 @@ class _FakeLabel:
 
     def config(self, **kwargs) -> None:
         self.options.update(kwargs)
+
+
+class _FakeWeaponCatalog:
+    def __init__(self, selected_weapon_id: str = "su_fab100") -> None:
+        self.records = {
+            "su_fab100": {"id": "su_fab100", "role": "bomb"},
+            "agm_65d": {"id": "agm_65d", "role": "agm"},
+            "legacy_bomb_source": {"id": "legacy_bomb_source", "role": "bomb"},
+        }
+        self.selected_weapon_id = selected_weapon_id
+        self.selection_source = "manual"
+        self.set_calls: list[tuple[str, str]] = []
+
+    @property
+    def selected_weapon(self):
+        return self.records.get(self.selected_weapon_id)
+
+    def set_selected(self, weapon_id: str, source: str = "manual") -> bool:
+        self.set_calls.append((weapon_id, source))
+        if weapon_id not in self.records:
+            return False
+        self.selected_weapon_id = weapon_id
+        self.selection_source = source
+        return True
 
 
 class _FakeNudgeRow:
@@ -154,6 +181,8 @@ def test_elevation_action_requires_bomana_confirmation_before_uac(monkeypatch) -
 
 def test_save_config_returns_failure_without_background_popup(monkeypatch) -> None:
     app = _make_config_only_app()
+    catalog = _FakeWeaponCatalog()
+    monkeypatch.setattr(app_module, "get_weapon_catalog", lambda: catalog)
     monkeypatch.setattr(app_module.ConfigManager, "load", lambda: {})
     monkeypatch.setattr(app_module.ConfigManager, "save", lambda _config: False)
 
@@ -170,6 +199,8 @@ def test_save_config_returns_failure_without_background_popup(monkeypatch) -> No
 
 def test_save_config_warns_for_explicit_user_save_failure(monkeypatch) -> None:
     app = _make_config_only_app()
+    catalog = _FakeWeaponCatalog()
+    monkeypatch.setattr(app_module, "get_weapon_catalog", lambda: catalog)
     monkeypatch.setattr(app_module.ConfigManager, "load", lambda: {})
     monkeypatch.setattr(app_module.ConfigManager, "save", lambda _config: False)
 
@@ -183,6 +214,145 @@ def test_save_config_warns_for_explicit_user_save_failure(monkeypatch) -> None:
     assert app._save_config(warn_on_failure=True) is False
     assert len(calls) == 1
     assert calls[0]["args"][:2] == ("保存失败", "配置保存失败，请检查配置文件权限或磁盘状态。")
+
+
+def test_load_config_migrates_missing_selected_weapon_from_selected_bomb(monkeypatch) -> None:
+    app = _make_config_only_app()
+    app.sound = SimpleNamespace(set_enabled=lambda _enabled: None, is_enabled=lambda: False)
+    catalog = _FakeWeaponCatalog(selected_weapon_id="agm_65d")
+    monkeypatch.setattr(app_module, "get_weapon_catalog", lambda: catalog)
+    monkeypatch.setattr(
+        app_module.ConfigManager,
+        "load",
+        lambda: {
+            "scale": 1.0,
+            "selected_bomb": "su_fab100",
+            "panels": {},
+        },
+    )
+    monkeypatch.setattr(app_module.BombConfig, "get_bomb_data", lambda _value: {})
+
+    app._load_config()
+
+    assert catalog.set_calls == [("su_fab100", "manual")]
+    assert catalog.selected_weapon_id == "su_fab100"
+    assert catalog.selection_source == "manual"
+
+
+def test_load_config_migrates_legacy_ccrp_key_to_datamine_source_id(monkeypatch) -> None:
+    app = _make_config_only_app()
+    app.sound = SimpleNamespace(set_enabled=lambda _enabled: None, is_enabled=lambda: False)
+    catalog = _FakeWeaponCatalog(selected_weapon_id="agm_65d")
+    monkeypatch.setattr(app_module, "get_weapon_catalog", lambda: catalog)
+    monkeypatch.setattr(
+        app_module.ConfigManager,
+        "load",
+        lambda: {
+            "scale": 1.0,
+            "selected_bomb": "legacy_ccrp_key",
+            "panels": {},
+        },
+    )
+    monkeypatch.setattr(
+        app_module.BombConfig,
+        "get_bomb_data",
+        lambda value: {"mass": 100.0} if value == "legacy_ccrp_key" else None,
+    )
+    monkeypatch.setattr(
+        app_module.BombConfig,
+        "get_bomb_source_id",
+        lambda value: "legacy_bomb_source" if value == "legacy_ccrp_key" else "",
+    )
+
+    app._load_config()
+
+    assert catalog.selected_weapon_id == "legacy_bomb_source"
+    assert catalog.selection_source == "manual"
+
+
+def test_save_config_writes_weapon_and_ccrp_bomb_selection_together(monkeypatch) -> None:
+    app = _make_config_only_app()
+    catalog = _FakeWeaponCatalog(selected_weapon_id="agm_65d")
+    saved = {}
+    monkeypatch.setattr(app_module, "get_weapon_catalog", lambda: catalog)
+    monkeypatch.setattr(app_module.ConfigManager, "load", lambda: {})
+    monkeypatch.setattr(
+        app_module.ConfigManager, "save", lambda config: saved.update(config) or True
+    )
+    monkeypatch.setattr(app_module.BombConfig, "selected_bomb", "su_fab100")
+
+    assert app._save_config() is True
+    assert saved["selected_weapon"] == "agm_65d"
+    assert saved["selected_bomb"] == "su_fab100"
+
+
+def test_main_card_selector_filters_with_current_aircraft_only_in_flight(monkeypatch) -> None:
+    app = _make_config_only_app()
+    catalog = _FakeWeaponCatalog(selected_weapon_id="agm_65d")
+    calls = []
+    app.game = SimpleNamespace(
+        snapshot=lambda: SimpleNamespace(
+            phase=Phase.ALIVE,
+            on_ground=False,
+            aircraft_type_name="f_16c_block_50",
+        )
+    )
+    monkeypatch.setattr(app_module, "get_weapon_catalog", lambda: catalog)
+    monkeypatch.setattr(
+        app_module,
+        "WeaponSelectorDialog",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    app._show_bomb_selector()
+
+    assert len(calls) == 1
+    assert calls[0][1] == {
+        "catalog": catalog,
+        "initial_weapon": "agm_65d",
+        "aircraft_type_name": "f_16c_block_50",
+        "airborne": True,
+    }
+
+
+def test_weapon_catalog_failure_reuses_core_fallback_and_disables_selector(monkeypatch) -> None:
+    app = _make_config_only_app()
+    app.game = SimpleNamespace(weapon_catalog=None)
+    warnings = []
+    monkeypatch.setattr(
+        app_module,
+        "get_weapon_catalog",
+        lambda: (_ for _ in ()).throw(AssertionError("must not reload catalog")),
+    )
+    monkeypatch.setattr(
+        app_module.messagebox,
+        "showwarning",
+        lambda *args, **kwargs: warnings.append((args, kwargs)),
+    )
+
+    app._show_bomb_selector()
+
+    assert len(warnings) == 1
+    assert warnings[0][0][:2] == (
+        "武器目录不可用",
+        "武器目录缺失或校验失败，已停用武器选择与解算。",
+    )
+
+
+def test_tray_initialization_remains_in_app_startup_flow() -> None:
+    tree = ast.parse(textwrap.dedent(inspect.getsource(App)))
+    methods = {node.name: node for node in tree.body[0].body if isinstance(node, ast.FunctionDef)}
+
+    def calls_init_tray(method: ast.FunctionDef) -> bool:
+        return any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "_init_tray"
+            for node in ast.walk(method)
+        )
+
+    assert calls_init_tray(methods["__init__"])
+    assert not calls_init_tray(methods["_get_weapon_catalog"])
 
 
 def test_update_ui_reschedules_after_frame_exception(monkeypatch) -> None:

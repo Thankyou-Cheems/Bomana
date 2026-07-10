@@ -13,9 +13,10 @@
 - Privileged hotkeys: `bomana/utils/hotkey_broker.py` (ordinary-first game-elevation probe plus IPC/UAC client) and `native/hotkey_broker/` (bundled zero-install fixed-action native broker)
 - Bundled UI assets: `bomana/assets/` (private UI font subsets + PNG icon assets)
 - External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
+- External data: `bomana/data/weapon_fire_control.json` (Datamine-backed aircraft weapon catalog, compatibility, and solver inputs)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
-- Tools: `tools/update_datamine_assets.py` (refresh both generated datamine assets)
-- Tools: `tools/blkx_extractor.py` / `tools/fm_speed_extractor.py` (single-asset extractors)
+- Tools: `tools/update_datamine_assets.py` (refresh generated datamine assets)
+- Tools: `tools/blkx_extractor.py` / `tools/weapon_fire_control_extractor.py` / `tools/fm_speed_extractor.py` (single-asset extractors)
 - Tools: `tools/datamine_utils.py` (shared datamine source-dir and metadata helpers)
 - Tools: `tools/create_version_info.py`, `tools/sample_8111_attitude.py`, and
   `tools/record_8111_session.py` / `tools/replay_8111_session.py` (build
@@ -30,6 +31,7 @@
 - UI presenter boundaries: `docs/specs/ui-presenter-boundary.md`
 - Config variants and `ENABLE_*` precedence: `docs/specs/config-variants.md`
 - Test layers and quality gates: `docs/specs/testing-quality-gates.md`
+- Weapon catalog, selection, solver, and compact presentation: `docs/specs/weapon-fire-control.md`
 
 ## Repository Layout
 ```
@@ -49,6 +51,7 @@
 │  ├─ metadata.py            # Project metadata and version constants
 │  ├─ data/
 │  │  ├─ ccrp_bomb_params.json # Bomb parameters (CCRP)
+│  │  ├─ weapon_fire_control.json # Aircraft weapon catalog + compatibility + solver inputs
 │  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
 │  ├─ assets/
 │  │  ├─ branding/             # App icon, promo image, sponsor image
@@ -64,6 +67,9 @@
 │  │  ├─ overspeed.py         # Aircraft speed-limit matching + alert grading
 │  │  ├─ state.py             # Dataclasses/enums
 │  │  ├─ timing_store.py      # Battle-scoped timer signature helpers
+│  │  ├─ weapon_catalog.py    # Schema-backed weapon catalog and manual selection
+│  │  ├─ weapon_scheduler.py  # Lock-safe weapon-solution scheduling
+│  │  ├─ weapon_solver.py     # Headless powered/guided estimates + conservative references
 │  │  └─ telemetry.py         # 8111 fetchers
 │  ├─ ui/
 │  │  ├─ app.py               # App coordinator (window lifecycle + main UI loop)
@@ -105,8 +111,9 @@
 │  ├─ blkx_extractor.py      # .blkx -> bomana/data/ccrp_bomb_params.json generator
 │  ├─ datamine_utils.py      # Shared datamine directory + source metadata helpers
 │  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
+│  ├─ weapon_fire_control_extractor.py # Datamine reference graph -> weapon catalog
 │  ├─ generate_ui_assets.py  # Noto Sans SC subset + PNG icon asset generator
-│  ├─ update_datamine_assets.py # One command to refresh both generated data assets
+│  ├─ update_datamine_assets.py # One command to refresh generated data assets
 │  ├─ sample_8111_attitude.py # HUD baseline sampler
 │  ├─ record_8111_session.py  # Gzip JSONL capture of official 8111 session payloads
 │  ├─ replay_8111_session.py  # Validated virtual-time replay through production GameLogic
@@ -121,16 +128,25 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 1. 8111 API polling via `requests` to `localhost:8111`.
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
    - `GameLogic` remains the polling/orchestration boundary.
-   - `navigation.py`, `timing_store.py`, `lifecycle.py`, `diagnostics.py`, and
-     `ccrp_scheduler.py` own focused helper responsibilities extracted from the
+   - `navigation.py`, `timing_store.py`, `lifecycle.py`, `diagnostics.py`,
+     `ccrp_scheduler.py`, `weapon_catalog.py`, `weapon_scheduler.py`, and
+     `weapon_solver.py` own focused helper responsibilities extracted from the
      former monolithic logic module.
+   - Free-fall/high-drag stores keep the existing CCRP path. Supported powered
+     weapons, guided bombs, and glide ballistic references use a separate
+     prepare/compute/apply path: lock-owned
+     state is projected into a work item, the numerical estimate runs outside
+     the state lock, and only a still-current selection/target result is applied.
+   - Weapon selection is manual unless a future directed 8111 capture proves a
+     named selection field. Button/release pulses such as `weapon2` are never
+     treated as a selected category.
 3. UI render with `tkinter` (timer, panels, hints, debug text).
    - `App` keeps window lifecycle and the main refresh loop.
    - `AppNavigationServices` owns standalone navigation window lifecycle, mode switching, history-mode suspension, and display-change rebuilds.
    - `AppRuntimeServices` owns global hotkey, tray, and HUD overlay lifecycle while preserving the existing `App` callback surface for dialogs and tray actions.
    - `MainWindowBuilder` owns the static card/grid skeleton and pre-allocates fixed label pools for the main window.
    - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
-   - `AppPanelRenderer` owns zone/airport/fuel/bombing/speed strip rendering and mid-panel layout updates.
+   - `AppPanelRenderer` owns zone/airport/fuel/weapon-solution/speed strip rendering and mid-panel layout updates.
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
    - `panel_presenter.py`, `hud_presenter.py`, `dialog_presenter.py`, and `snapshot_presenter.py` own headless view models for strings, colors, target selection, and option summaries. Tk modules apply those models while retaining widget layout and runtime side effects.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
@@ -195,6 +211,17 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   - Dedicated generator: `tools/fm_speed_extractor.py`
   - Shared helper: `tools/datamine_utils.py`
   - Runtime consumer: `OverspeedAnalyzer` via `/indicators.type -> unit_to_fm -> fm_speed_limits`
+- `bomana/data/weapon_fire_control.json`
+  - Raw sources: Datamine `gamedata/weapons/{rocketguns,bombguns,containers}`,
+    aircraft `gamedata/flightmodels/*.blkx` weapon-slot/preset references, and
+    `lang/units_weaponry.csv` localization
+  - Shape source: `docs/specs/schemas/weapon-fire-control.schema.json`
+  - Recommended updater: `tools/update_datamine_assets.py`
+  - Dedicated generator: `tools/weapon_fire_control_extractor.py`
+  - Runtime consumers: `WeaponCatalog`, `weapon_solver`, and the existing
+    Enhanced-only compact bombing/weapon-solution card
+  - Each record retains its source path/SHA-256 and normalized-field JSON
+    pointers; top-level metadata retains the Datamine version and full commit.
 - Generated JSON metadata records the datamine source version and git commit when available.
 
 ## Offline Session Capture and Replay
@@ -235,12 +262,16 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - User config/state stored as JSON in the user home directory (`FileConfig.CONFIG_FILE` / `STATE_FILE`).
 - Timer state restore is battle-scoped: `STATE_FILE` stores a 8111-derived battle signature and `GameLogic` applies the pending timer only after the next live battle context matches it.
 - Feature flags (`ENABLE_*`) drive compile-time variants and UI availability. All variants share the same config file.
+- For compatibility, legacy `ENABLE_CCRP` and `show_bombing` names gate the
+  whole compact weapon-solution card; `selected_weapon` is manual selection and
+  falls back to the historical `selected_bomb` value during migration.
 
 ## Functional Areas (Conceptual)
 - Timer & lifecycle
 - Zone/airfield navigation
 - Fuel management
-- CCRP bombing predictor
+- CCRP bombing predictor + estimated AGM/guided ranges, AAM max-only cues, and
+  glide ballistic references
 - UI overlays & global hotkeys
 
 ## Runtime Thread Boundary
@@ -252,8 +283,16 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 
 ## 8111 Map Coordinate Contract
 - `MapInfoFetcher` owns `/map_info.json` retrieval and cache refresh timing on `GameState.map_info`.
-- `MapObjectsFetcher` owns `/map_obj.json` parsing only. It returns player, zone, and airfield positions in the normalized coordinates provided by 8111 and does not accept or interpret `map_info`.
-- `GameLogic` owns coordinate semantics for navigation. It derives X/Y meter scale from cached `MapInfo.map_min/map_max` and applies that scale when calculating bearing, distance, ground speed, and airfield/zone display values.
+- `MapObjectsFetcher` owns `/map_obj.json` parsing only. It returns player,
+  currently visible hostile-aircraft contacts, zone, POI, and airfield positions
+  in the normalized coordinates provided by 8111 and does not accept or
+  interpret `map_info`. It excludes friendly aircraft from fire-control targets
+  and does not persist contacts after 8111 stops returning them.
+- `GameLogic` owns coordinate semantics for navigation and weapon targeting. It
+  derives X/Y meter scale from cached `MapInfo.map_min/map_max` and applies that
+  scale when calculating bearing, distance, ground speed, airfield/zone display
+  values, forward ground targets, and the current two-dimensional hostile-air
+  estimate.
 
 ## UI Stability & Performance Guardrails
 - Keep panel containers structurally stable during transient 8111 data drops (avoid frame-level mount/unmount churn).

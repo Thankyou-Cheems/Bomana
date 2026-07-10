@@ -10,7 +10,15 @@ from urllib.parse import urlparse
 import requests
 
 from bomana.config.settings import NetworkConfig
-from bomana.core.state import Airfield, InterestPoint, MapInfo, MapObjData, TelemetryData, Zone
+from bomana.core.state import (
+    AirContact,
+    Airfield,
+    InterestPoint,
+    MapInfo,
+    MapObjData,
+    TelemetryData,
+    Zone,
+)
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 _MIN_REQUEST_TIMEOUT_SEC = 0.01
@@ -549,15 +557,91 @@ class MapObjectsFetcher:
 
     @staticmethod
     def _is_player_object(o: dict) -> bool:
+        return MapObjectsFetcher._player_priority(o) > 0
+
+    @staticmethod
+    def _is_aircraft_object(o: dict) -> bool:
+        obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
+        icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
+        return bool(
+            obj_type in {"aircraft", "plane", "player", "player_aircraft"}
+            or icon in {"fighter", "assault", "bomber", "helicopter"}
+        )
+
+    @staticmethod
+    def _is_yellow_or_gold(o: dict) -> bool:
+        color_name = MapObjectsFetcher._lower_text(o.get("color", ""))
+        if any(token in color_name for token in ("yellow", "gold", "amber")):
+            return True
+        rgb = MapObjectsFetcher._read_rgb(o)
+        if rgb is None:
+            return False
+        red, green, blue = rgb
+        return bool(red >= 180 and green >= 120 and blue <= 100 and red >= green)
+
+    @staticmethod
+    def _player_priority(o: dict) -> int:
+        """Rank explicit self above the yellow ownship and a lone Player fallback."""
+
         obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
         icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
         name = MapObjectsFetcher._lower_text(o.get("name", o.get("label", "")))
-        if o.get("is_player") is True or o.get("player") is True:
-            return True
-        return bool(
-            obj_type in {"aircraft", "plane", "player", "player_aircraft"}
-            and (icon == "player" or name == "player" or "player" in icon)
+        if any(o.get(key) is True for key in ("is_player", "player", "is_self", "self")):
+            return 3
+        if obj_type in {"player", "player_aircraft"}:
+            return 3
+        player_like = MapObjectsFetcher._is_aircraft_object(o) and (
+            icon == "player" or name == "player" or "player" in icon
         )
+        if player_like and MapObjectsFetcher._is_yellow_or_gold(o):
+            return 2
+        return 1 if player_like else 0
+
+    @staticmethod
+    def _select_player_object(objs: list[Any]) -> dict | None:
+        ranked = [
+            (MapObjectsFetcher._player_priority(o), index, o)
+            for index, o in enumerate(objs)
+            if isinstance(o, dict) and MapObjectsFetcher._player_priority(o) > 0
+        ]
+        explicit = [item for item in ranked if item[0] == 3]
+        if explicit:
+            return min(explicit, key=lambda item: item[1])[2]
+        own_color = [item for item in ranked if item[0] == 2]
+        if own_color:
+            return min(own_color, key=lambda item: item[1])[2]
+        fallback = [item for item in ranked if item[0] == 1]
+        return fallback[0][2] if len(fallback) == 1 else None
+
+    @staticmethod
+    def _is_hostile_aircraft(o: dict) -> bool:
+        if not MapObjectsFetcher._is_aircraft_object(o):
+            return False
+        side = MapObjectsFetcher._lower_text(o.get("side", o.get("team", o.get("army"))))
+        if side in {"enemy", "hostile", "red", "team_b", "2"}:
+            return True
+        if side in {"friendly", "ally", "allied", "blue", "team_a", "1"}:
+            return False
+        color_name = MapObjectsFetcher._lower_text(o.get("color", ""))
+        if "red" in color_name:
+            return True
+        if "blue" in color_name:
+            return False
+        if MapObjectsFetcher._is_yellow_or_gold(o):
+            return False
+        rgb = MapObjectsFetcher._read_rgb(o)
+        if rgb is None:
+            return False
+        red, green, blue = rgb
+        return bool(red >= 120 and red >= green + 30 and red >= blue + 30)
+
+    @staticmethod
+    def _air_contact_id(o: dict, x: float, y: float, index: int) -> str:
+        api_id = MapObjectsFetcher._first_text(
+            o,
+            ("id", "uid", "object_id", "obj_id", "instance_id"),
+        )
+        return f"air_{api_id}" if api_id else f"air_{index}_{x:.6f}_{y:.6f}"
 
     @staticmethod
     def _is_airfield_object(o: dict) -> bool:
@@ -630,13 +714,15 @@ class MapObjectsFetcher:
         zone_index = 1
         airfield_index = 1
         interest_point_index = 1
+        hostile_air_index = 1
+        player_object = self._select_player_object(objs)
 
         # 遍历对象
         for o in objs:
             if not isinstance(o, dict):
                 continue
 
-            if self._is_player_object(o):
+            if o is player_object:
                 # 玩家飞机
                 px = self._first_float(o, ("x", "X", "pos_x", "position_x"))
                 py = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
@@ -646,6 +732,26 @@ class MapObjectsFetcher:
                 out.player_pos = (px, py)
                 out.player_dx = self._first_float(o, ("dx", "DX", "vel_x", "vx")) or 0.0
                 out.player_dy = self._first_float(o, ("dy", "DY", "vel_y", "vy")) or 0.0
+
+            elif self._is_hostile_aircraft(o):
+                contact_x = self._first_float(o, ("x", "X", "pos_x", "position_x"))
+                contact_y = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
+                if contact_x is None or contact_y is None:
+                    continue
+                icon = self._first_text(o, ("icon", "class", "category"))
+                name = self._first_text(o, ("name", "label", "title", "callsign")) or icon
+                out.hostile_air_contacts.append(
+                    AirContact(
+                        id=self._air_contact_id(o, contact_x, contact_y, hostile_air_index),
+                        index=hostile_air_index,
+                        x=contact_x,
+                        y=contact_y,
+                        name=name,
+                        icon=icon,
+                        color=self._text(o.get("color", "")),
+                    )
+                )
+                hostile_air_index += 1
 
             elif self._is_interest_point_object(o):
                 point_x = self._first_float(o, ("x", "X", "pos_x", "position_x"))

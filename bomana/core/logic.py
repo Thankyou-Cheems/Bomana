@@ -17,7 +17,7 @@ from bomana.config.settings import (
     PanelConfig,
     ZoneConfig,
 )
-from bomana.core import ccrp_scheduler, lifecycle, navigation, timing_store
+from bomana.core import ccrp_scheduler, lifecycle, navigation, timing_store, weapon_scheduler
 from bomana.core import diagnostics as core_diagnostics
 from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing_from_range
 from bomana.core.clock import SystemClock, WallClock
@@ -35,6 +35,7 @@ from bomana.core.state import (
     SourceDebugInfo,
     TelemetryData,
     UISnapshot,
+    WeaponTarget,
     Zone,
     ZoneDisplayInfo,
 )
@@ -45,6 +46,8 @@ from bomana.core.telemetry import (
     MapObjectsFetcher,
     TelemetryFetcher,
 )
+from bomana.core.weapon_catalog import WeaponCatalogError, get_weapon_catalog
+from bomana.core.weapon_solver import WeaponSolver, uses_existing_ccrp
 from bomana.utils.diagnostics import log_event
 from bomana.utils.file_utils import StateManager
 from bomana.utils.math_utils import (
@@ -102,7 +105,19 @@ class GameLogic:
         self.map_info_fetcher = MapInfoFetcher(self.http, now=self.clock.time)
         self.map = MapObjectsFetcher(self.http)
         self.overspeed = OverspeedAnalyzer()
+        self.weapon_catalog = None
+        self.weapon_solver = WeaponSolver() if ENABLE_CCRP else None
+        if ENABLE_CCRP:
+            try:
+                self.weapon_catalog = get_weapon_catalog()
+            except WeaponCatalogError:
+                # A missing/tampered Enhanced-only catalog is surfaced in the snapshot.
+                # Standard/Lite never enter this branch and do not load Enhanced assets.
+                self.weapon_catalog = None
         self.state = GameState()
+        if ENABLE_CCRP and self.weapon_catalog is None:
+            self.state.weapon_reason = "catalog_unavailable"
+            self.state.weapon_selection_source = "unknown"
         self._endpoint_diag_state: dict[str, int] = {}
         self._pending_timer_restore: dict[str, Any] | None = None
         self.timer_restore_applied = False
@@ -130,6 +145,8 @@ class GameLogic:
         now = self.clock.time()
         budget = Budget(NetworkConfig.MAX_TICK_NET_BUDGET)
         bombing_work: dict[str, Any] | None = None
+        bombing_selection_token: tuple[str, str] | None = None
+        weapon_work: dict[str, Any] | None = None
 
         # 1. 获取遥测数据
         tel = self.tel.fetch(budget)
@@ -363,12 +380,46 @@ class GameLogic:
                 # v6.14.4: only collect CCRP inputs while holding the state lock.
                 # Ballistics integration can be expensive on abnormal settlement frames;
                 # keep it outside the lock so UI snapshots do not stall behind it.
-                bombing_work = ccrp_scheduler.prepare_bombing_calculation(
-                    self.state,
-                    tel,
-                    now,
-                    player_present=player_present and (not used_map_fallback),
-                )
+                if ENABLE_CCRP and self.weapon_catalog is not None:
+                    selection_snapshot = self.weapon_catalog.selection_snapshot()
+                    selected_id, _selection_source, selected_weapon = selection_snapshot
+                    weapon_target = self._select_weapon_target_locked(selected_weapon, mp)
+                    usable_player_frame = player_present and (not used_map_fallback)
+                    selected_is_ccrp = uses_existing_ccrp(selected_weapon)
+                    ccrp_data = BombConfig.get_bomb_data(selected_id) if selected_is_ccrp else None
+                    weapon_work = weapon_scheduler.prepare_weapon_calculation(
+                        self.state,
+                        tel,
+                        now,
+                        player_present=usable_player_frame,
+                        target=weapon_target,
+                        catalog=self.weapon_catalog,
+                        selection_snapshot=selection_snapshot,
+                        ccrp_supported=not selected_is_ccrp or ccrp_data is not None,
+                    )
+                    selected_is_compatible = self.weapon_catalog.compatible(
+                        selected_id,
+                        tel.type_name,
+                    )
+                    if selected_is_ccrp and selected_is_compatible and ccrp_data is not None:
+                        BombConfig.selected_bomb = selected_id
+                        bombing_work = ccrp_scheduler.prepare_bombing_calculation(
+                            self.state,
+                            tel,
+                            now,
+                            player_present=usable_player_frame,
+                            bomb_params=BombConfig.get_bomb_physics_params(selected_id),
+                        )
+                        bombing_selection_token = selection_snapshot[:2]
+                    else:
+                        self.state.bombing_calc_valid = False
+                elif ENABLE_CCRP:
+                    self.state.weapon_solution_valid = False
+                    self.state.weapon_status = "unknown_weapon"
+                    self.state.weapon_quality = "none"
+                    self.state.weapon_reason = "catalog_unavailable"
+                    self.state.weapon_selection_source = "unknown"
+                    self.state.bombing_calc_valid = False
             finally:
                 s = self.state
                 s.perf_tick_net_ms = net_stage_ms
@@ -383,8 +434,32 @@ class GameLogic:
                 timing_func=calculate_release_timing_from_range,
             )
             with self._lock:
-                ccrp_scheduler.apply_bombing_calculation(self.state, bombing_result)
+                current_selection = (
+                    self.weapon_catalog.selection_snapshot()[:2]
+                    if self.weapon_catalog is not None
+                    else None
+                )
+                if current_selection == bombing_selection_token:
+                    ccrp_scheduler.apply_bombing_calculation(self.state, bombing_result)
+                else:
+                    self.state.bombing_calc_valid = False
                 self.state.perf_tick_total_ms = max(0.0, (time.monotonic() - tick_start) * 1000.0)
+
+        if weapon_work is not None:
+            weapon_result = weapon_scheduler.compute_weapon_calculation(
+                weapon_work,
+                solver=self.weapon_solver,
+            )
+            with self._lock:
+                weapon_scheduler.apply_weapon_calculation(
+                    self.state,
+                    weapon_result,
+                    catalog=self.weapon_catalog,
+                )
+                self.state.perf_tick_total_ms = max(
+                    0.0,
+                    (time.monotonic() - tick_start) * 1000.0,
+                )
 
     def _resolve_pending_timer_restore_locked(
         self,
@@ -921,6 +996,74 @@ class GameLogic:
                 airborne=bool(is_airborne),
             )
 
+    def _select_weapon_target_locked(
+        self,
+        weapon: dict[str, Any] | None,
+        mp: MapObjData,
+    ) -> WeaponTarget | None:
+        """Select one current 2D target without implying a game lock."""
+
+        if not weapon:
+            return None
+        if weapon.get("role") != "aam":
+            bombing_target = self.state.zone_nav.bombing_target
+            if bombing_target is None:
+                return None
+            distance_m = bombing_target.distance * ZoneConfig.DISTANCE_SCALE * 1000
+            if not math.isfinite(distance_m) or distance_m <= 0.0:
+                return None
+            return WeaponTarget(
+                id=bombing_target.id,
+                kind=bombing_target.kind,
+                name=bombing_target.name,
+                distance_m=distance_m,
+                relative_deg=bombing_target.relative,
+                altitude_m=None,
+            )
+
+        if not (mp.ok and mp.player_pos and mp.hostile_air_contacts):
+            return None
+        px, py = mp.player_pos
+        map_axis_scale_m = navigation.map_axis_scale_m(self.state.map_info)
+        heading = self.state.zone_nav.player_heading
+        candidates: list[tuple[float, float, Any, float]] = []
+        for contact in mp.hostile_air_contacts:
+            try:
+                contact_x = float(contact.x)
+                contact_y = float(contact.y)
+            except TypeError, ValueError:
+                continue
+            if not (math.isfinite(contact_x) and math.isfinite(contact_y)):
+                continue
+            bearing, distance = navigation.bearing_distance_norm(
+                px,
+                py,
+                contact_x,
+                contact_y,
+                map_axis_scale_m,
+            )
+            relative = calculate_relative_bearing(heading, bearing)
+            if abs(relative) <= 60.0:
+                candidates.append((abs(relative), distance, contact, relative))
+        if not candidates:
+            return None
+
+        _angle, distance, contact, relative = min(
+            candidates,
+            key=lambda item: (item[0], item[1]),
+        )
+        distance_m = distance * ZoneConfig.DISTANCE_SCALE * 1000
+        if not math.isfinite(distance_m) or distance_m <= 0.0:
+            return None
+        return WeaponTarget(
+            id=contact.id,
+            kind="aircraft",
+            name=str(contact.name or contact.icon or f"敌机 #{contact.index}"),
+            distance_m=distance_m,
+            relative_deg=relative,
+            altitude_m=None,
+        )
+
     def _is_zone_of_interest(self, zone: Zone, target_zone: Zone | None) -> bool:
         """判断战区是否是玩家感兴趣的（v5.5新增）
 
@@ -1302,6 +1445,26 @@ class GameLogic:
             cached_bombing_target_kind = s.cached_bombing_target_kind
             cached_bombing_target_name = s.cached_bombing_target_name
             cached_bombing_unavailable_reason = s.cached_bombing_unavailable_reason
+            weapon_snapshot = {
+                "weapon_id": s.weapon_id,
+                "weapon_display_name": s.weapon_display_name,
+                "weapon_role": s.weapon_role,
+                "weapon_control": s.weapon_control,
+                "weapon_planform": s.weapon_planform,
+                "weapon_selection_source": s.weapon_selection_source,
+                "weapon_selection_compatible": s.weapon_selection_compatible,
+                "weapon_solution_valid": s.weapon_solution_valid,
+                "weapon_status": s.weapon_status,
+                "weapon_quality": s.weapon_quality,
+                "weapon_reason": s.weapon_reason,
+                "weapon_target_kind": s.weapon_target_kind,
+                "weapon_target_name": s.weapon_target_name,
+                "weapon_target_distance_m": s.weapon_target_distance_m,
+                "weapon_min_range_m": s.weapon_min_range_m,
+                "weapon_max_range_m": s.weapon_max_range_m,
+                "weapon_time_to_target_s": s.weapon_time_to_target_s,
+                "weapon_time_to_window_s": s.weapon_time_to_window_s,
+            }
 
             perf_debug = PerfDebugInfo(
                 tick_total_ms=s.perf_tick_total_ms,
@@ -1543,4 +1706,5 @@ class GameLogic:
             overspeed_limit_mach=float(overspeed.mach_limit or 0.0),
             overspeed_match=bool(overspeed.resolved_fm),
             overspeed_reason=overspeed.reason,
+            **weapon_snapshot,
         )

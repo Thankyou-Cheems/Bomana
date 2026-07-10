@@ -68,6 +68,19 @@ if /I not "%VARIANT%"=="Enhanced" if /I not "%VARIANT%"=="Standard" if /I not "%
 echo [3/6] 构建版本: %VARIANT%
 echo.
 
+if /I "%VARIANT%"=="Enhanced" (
+    if not exist bomana\data\weapon_fire_control.json (
+        echo [错误] Enhanced 缺少 bomana\data\weapon_fire_control.json
+        popd >nul
+        exit /b 1
+    )
+    if not exist docs\specs\schemas\weapon-fire-control.schema.json (
+        echo [错误] Enhanced 缺少 docs\specs\schemas\weapon-fire-control.schema.json
+        popd >nul
+        exit /b 1
+    )
+)
+
 REM 根据版本注入编译开关（备份后修改 feature_profile.py）
 echo [4/6] 注入编译开关...
 set "CONFIG_FILE=bomana\config\feature_profile.py"
@@ -142,6 +155,8 @@ if exist file_version_info.txt (
 
 set "EXEC_NAME=Bomana_%VARIANT%"
 set "CCRP_DATA_ARG="
+set "WEAPON_DATA_ARG="
+set "WEAPON_SCHEMA_ARG="
 set "FM_SPEED_DATA_ARG="
 if /I "%VARIANT%"=="Enhanced" (
     if exist bomana\data\ccrp_bomb_params.json (
@@ -151,17 +166,25 @@ if /I "%VARIANT%"=="Enhanced" (
     ) else if exist ccrp_bomb_params.py (
         set "CCRP_DATA_ARG=--add-data \"ccrp_bomb_params.py;.\""
     )
+    if exist bomana\data\weapon_fire_control.json (
+        set "WEAPON_DATA_ARG=--add-data \"bomana/data/weapon_fire_control.json;bomana/data\""
+    )
+    if exist docs\specs\schemas\weapon-fire-control.schema.json (
+        set "WEAPON_SCHEMA_ARG=--add-data \"docs/specs/schemas/weapon-fire-control.schema.json;docs/specs/schemas\""
+    )
 )
 if exist bomana\data\fm_speed_limits.json (
     set "FM_SPEED_DATA_ARG=--add-data \"bomana/data/fm_speed_limits.json;bomana/data\""
 )
 
-if /I "%VARIANT%"=="Enhanced" if not "%CCRP_DATA_ARG%"=="" (
+if /I "%VARIANT%"=="Enhanced" (
     %UV_CMD% run pyinstaller --noconsole --onefile ^
                 --name=%EXEC_NAME% ^
                 --icon=bomana\assets\branding\app.ico ^
                 --add-data "bomana/assets;bomana/assets" ^
                 %CCRP_DATA_ARG% ^
+                %WEAPON_DATA_ARG% ^
+                %WEAPON_SCHEMA_ARG% ^
                 %FM_SPEED_DATA_ARG% ^
                 --hidden-import "pystray._win32" ^
                 --collect-submodules "PIL" ^

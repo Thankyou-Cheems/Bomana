@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bomana.local/schemas/weapon-fire-control.schema.json",
+  "title": "Bomana weapon fire-control catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "meta",
+    "weapons",
+    "aircraft_weapons"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generated_at_utc",
+        "source_repo",
+        "source_version",
+        "source_commit",
+        "source_subdirs",
+        "weapon_count",
+        "aircraft_count",
+        "unresolved_references"
+      ],
+      "properties": {
+        "generated_at_utc": { "type": "string", "minLength": 1 },
+        "source_repo": { "type": "string", "minLength": 1 },
+        "source_version": { "type": "string", "minLength": 1 },
+        "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "source_subdirs": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "weapon_count": { "type": "integer", "minimum": 1 },
+        "aircraft_count": { "type": "integer", "minimum": 1 },
+        "unresolved_references": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "weapons": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/weapon" }
+    },
+    "aircraft_weapons": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "motor_stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duration_s", "thrust_n", "mass_end_kg"],
+      "properties": {
+        "duration_s": { "type": "number", "exclusiveMinimum": 0 },
+        "thrust_n": { "type": "number", "minimum": 0 },
+        "mass_end_kg": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "guidance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "seeker"],
+      "properties": {
+        "type": { "type": "string" },
+        "seeker": { "type": "string" },
+        "range_max_m": { "type": "number", "minimum": 0 },
+        "range_rear_m": { "type": "number", "minimum": 0 },
+        "range_all_aspect_m": { "type": "number", "minimum": 0 },
+        "lock_angle_max_deg": { "type": "number", "minimum": 0, "maximum": 180 },
+        "angle_max_deg": { "type": "number", "minimum": 0, "maximum": 180 },
+        "launch_angle_max_deg": { "type": "number", "minimum": 0, "maximum": 180 },
+        "autopilot_max_g": { "type": "number", "minimum": 0 },
+        "control_sensitivity": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "guidance_range_table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["table"],
+      "properties": {
+        "table": { "type": "string", "pattern": "^table[0-9]+$" },
+        "range_min_m": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "number", "minimum": 0 }
+        },
+        "range_min_dogfight_m": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "guidance_min_ranges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tables", "conservative_floor_m"],
+      "properties": {
+        "tables": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/guidance_range_table" }
+        },
+        "conservative_floor_m": { "type": "number", "minimum": 0 }
+      }
+    },
+    "normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "rule", "raw_value", "normalized_value", "evidence"],
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "rule": { "type": "string", "minLength": 1 },
+        "raw_value": { "type": "number" },
+        "normalized_value": { "type": "number" },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "weapon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "display_name",
+        "display_name_zh",
+        "role",
+        "propulsion",
+        "model_unsupported_reasons",
+        "control",
+        "guidance_kind",
+        "planform",
+        "source_file",
+        "source_sha256",
+        "source_pointers",
+        "reference_chains",
+        "source_section",
+        "trigger_groups",
+        "compatible_aircraft",
+        "mass_start_kg",
+        "mass_end_kg",
+        "caliber_m",
+        "cx_k",
+        "drag_cx",
+        "wing_area_mult",
+        "fins_aoa_horiz",
+        "fins_aoa_vert",
+        "time_life_s",
+        "start_speed_mps",
+        "min_distance_m",
+        "hard_max_distance_m",
+        "stat_card_range_m",
+        "max_speed_mps",
+        "mach_max",
+        "motor_stages",
+        "guidance"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "display_name": { "type": "string", "minLength": 1 },
+        "display_name_zh": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["aam", "agm", "bomb"] },
+        "propulsion": { "enum": ["powered", "unpowered"] },
+        "model_unsupported_reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "conditional_propulsion_autopilot",
+              "variable_propulsion_factor",
+              "impulse_factor_index",
+              "instantaneous_mass_change"
+            ]
+          }
+        },
+        "control": { "enum": ["guided", "unguided"] },
+        "guidance_kind": {
+          "enum": [
+            "ir",
+            "tv",
+            "radar_active",
+            "radar_semi_active",
+            "laser",
+            "ins_gnss",
+            "saclos",
+            "mixed",
+            "none",
+            "unknown"
+          ]
+        },
+        "planform": { "enum": ["normal", "glide", "high_drag"] },
+        "source_file": { "type": "string", "minLength": 1 },
+        "source_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "source_pointers": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string", "pattern": "^/" }
+        },
+        "reference_chains": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "source_section": { "enum": ["bomb", "rocket"] },
+        "trigger_groups": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "compatible_aircraft": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "mass_start_kg": { "type": "number", "exclusiveMinimum": 0 },
+        "mass_end_kg": { "type": "number", "exclusiveMinimum": 0 },
+        "caliber_m": { "type": "number", "exclusiveMinimum": 0 },
+        "cx_k": { "type": "number", "minimum": 0 },
+        "drag_cx": { "type": "number", "minimum": 0 },
+        "wing_area_mult": { "type": "number", "minimum": 0 },
+        "fins_aoa_horiz": { "type": "number", "minimum": 0 },
+        "fins_aoa_vert": { "type": "number", "minimum": 0 },
+        "time_life_s": { "type": "number", "minimum": 0 },
+        "start_speed_mps": { "type": "number", "minimum": 0 },
+        "min_distance_m": { "type": "number", "minimum": 0 },
+        "hard_max_distance_m": { "type": "number", "minimum": 0 },
+        "stat_card_range_m": { "type": "number", "minimum": 0 },
+        "max_speed_mps": { "type": "number", "minimum": 0 },
+        "mach_max": { "type": "number", "minimum": 0 },
+        "guidance_min_ranges": { "$ref": "#/$defs/guidance_min_ranges" },
+        "normalizations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/normalization" }
+        },
+        "motor_stages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/motor_stage" }
+        },
+        "guidance": { "$ref": "#/$defs/guidance" }
+      }
+    }
+  }
+}

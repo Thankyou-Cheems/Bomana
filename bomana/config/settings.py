@@ -938,6 +938,7 @@ class BombConfig:
 
     selected_bomb = "su_fab100"
     BOMB_DATABASE: ClassVar[dict[str, dict[str, Any]]] = {}
+    _SOURCE_ID_INDEX: ClassVar[dict[str, str]] = {}
     _database_loaded = False
     load_error: str | None = None
     database_source: str | None = None
@@ -994,6 +995,7 @@ class BombConfig:
             from bomana.utils.file_utils import load_json_resource
 
             cls.BOMB_DATABASE.clear()
+            cls._SOURCE_ID_INDEX.clear()
             cls.load_error = None
             cls.database_source = None
             external_params = None
@@ -1019,7 +1021,7 @@ class BombConfig:
 
             for bomb_id, params in external_params.items():
                 profile = cls._infer_prediction_profile(bomb_id, params)
-                cls.BOMB_DATABASE[bomb_id] = {
+                record = {
                     "mass": params.get("mass", 100.0),
                     "drag_cx": params.get("dragCx", 0.04),
                     "caliber": params.get("caliber", 0.2),
@@ -1033,8 +1035,17 @@ class BombConfig:
                     "category": cls._infer_category(bomb_id),
                     **profile,
                 }
+                cls.BOMB_DATABASE[bomb_id] = record
+                source_id = Path(str(record.get("source_file") or "")).stem.casefold()
+                if source_id:
+                    cls._SOURCE_ID_INDEX.setdefault(source_id, bomb_id)
 
-            if cls.selected_bomb not in cls.BOMB_DATABASE and cls.BOMB_DATABASE:
+            selected_key = str(cls.selected_bomb or "").casefold()
+            if (
+                cls.selected_bomb not in cls.BOMB_DATABASE
+                and selected_key not in cls._SOURCE_ID_INDEX
+                and cls.BOMB_DATABASE
+            ):
                 cls.selected_bomb = (
                     "su_fab100"
                     if "su_fab100" in cls.BOMB_DATABASE
@@ -1173,13 +1184,24 @@ class BombConfig:
     def get_bomb_data(cls, name: str):
         """获取指定炸弹的数据"""
         cls._ensure_database_loaded()
-        return cls.BOMB_DATABASE.get(name)
+        direct = cls.BOMB_DATABASE.get(name)
+        if direct is not None:
+            return direct
+        source_key = cls._SOURCE_ID_INDEX.get(str(name or "").casefold())
+        return cls.BOMB_DATABASE.get(source_key) if source_key is not None else None
+
+    @classmethod
+    def get_bomb_source_id(cls, name: str) -> str:
+        """Return the Datamine source stem used by the weapon catalog."""
+
+        data = cls.get_bomb_data(name)
+        return Path(str(data.get("source_file") or "")).stem if data is not None else ""
 
     @classmethod
     def get_selected_bomb_data(cls) -> dict:
         """获取当前选中炸弹的数据"""
         cls._ensure_database_loaded()
-        data = cls.BOMB_DATABASE.get(cls.selected_bomb)
+        data = cls.get_bomb_data(cls.selected_bomb)
         return (
             data if data else {"mass": 100.0, "drag_cx": 0.04, "caliber": 0.2, "category": "苏联"}
         )

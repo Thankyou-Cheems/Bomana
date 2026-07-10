@@ -44,6 +44,7 @@ def prepare_bombing_calculation(
     now: float,
     *,
     player_present: bool,
+    bomb_params: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Collect CCRP inputs under lock; expensive integration runs outside it."""
     nav = state.zone_nav
@@ -89,7 +90,9 @@ def prepare_bombing_calculation(
         state.bombing_calc_valid = False
         return None
 
-    bomb_params = BombConfig.get_bomb_physics_params()
+    bomb_params = (
+        dict(bomb_params) if bomb_params is not None else BombConfig.get_bomb_physics_params()
+    )
     if not bomb_params.get("prediction_supported", True):
         state.bombing_calc_valid = False
         state.cached_bombing_unavailable_reason = str(

@@ -371,6 +371,13 @@ class TkGeometryTests(unittest.TestCase):
             friendly_distance_km=36,
             bombing_valid=True,
             bomb_name="FAB_500_M_62_extremely_long_test_name",
+            weapon_id="FAB_500_M_62_extremely_long_test_name",
+            weapon_display_name="FAB-500 M-62",
+            weapon_role="bomb",
+            weapon_control="unguided",
+            weapon_selection_source="manual",
+            weapon_selection_compatible=True,
+            weapon_status="ccrp",
             bomb_range_m=2140,
             bomb_flight_time=12.3,
             release_distance_m=980,
@@ -403,7 +410,15 @@ class TkGeometryTests(unittest.TestCase):
         self.assertEqual(bomb_texts[3], "战区窗口 3.4s / 980m")
         self.assertEqual(app.fuel_alt_lbl.winfo_manager(), "")
         self.assertEqual(app.bomb_flight_lbl.winfo_manager(), "")
+        self.assertEqual(app.bomb_release_detail_lbl.winfo_manager(), "pack")
         self.assertNotIn("│", " ".join(fuel_texts + bomb_texts))
+
+    def test_main_window_reuses_bombing_card_as_weapon_solution_card(self) -> None:
+        source = Path("bomana/ui/main_window.py").read_text(encoding="utf-8")
+
+        self.assertIn('text="武器解算"', source)
+        self.assertNotIn("tactical_map", source)
+        self.assertNotIn("weapon_map", source)
 
 
 if __name__ == "__main__":

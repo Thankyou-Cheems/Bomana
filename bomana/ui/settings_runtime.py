@@ -93,10 +93,6 @@ class SettingsRuntimeMixin:
             BallisticPhysicsParams.apply_user_tuning(pending_ccrp_tuning)
         if pending_selected_bomb:
             BombConfig.selected_bomb = pending_selected_bomb
-            if hasattr(self.app, "bomb_select_lbl"):
-                self.app.bomb_select_lbl.config(
-                    text=f"炸弹: {BombConfig.format_bomb_name(pending_selected_bomb)} (点击更换)"
-                )
 
     def _refresh_runtime_hud_after_settings(self, previous: dict[str, object]) -> None:
         hud_enabled_changed = bool(previous["hud_enabled"]) != bool(HUDConfig.enabled)

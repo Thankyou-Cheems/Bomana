@@ -177,6 +177,262 @@ def _short_label(text: str, *, fallback: str, limit: int = 14) -> str:
     return cleaned
 
 
+_WEAPON_ROLE_LABELS = {
+    "aam": "AAM",
+    "agm": "AGM",
+    "bomb": "炸弹",
+}
+
+_WEAPON_SOURCE_LABELS = {
+    "manual": "手选",
+    "8111": "8111",
+    "unknown": "来源未知",
+}
+
+
+def format_weapon_selection_label(
+    display_name: str,
+    role: str,
+    selection_source: str,
+) -> str:
+    """Format the clickable first row shared by CCRP and envelope estimates."""
+    name = _short_label(display_name, fallback="未选择武器", limit=28)
+    role_label = _WEAPON_ROLE_LABELS.get(str(role or "").strip().lower(), "武器")
+    source_label = _WEAPON_SOURCE_LABELS.get(
+        str(selection_source or "").strip().lower(),
+        "来源未知",
+    )
+    return f"{name} · {role_label} · {source_label}"
+
+
+def _weapon_selection_label_from_snapshot(snap: Any) -> str:
+    reason = str(getattr(snap, "weapon_reason", "") or "").strip().lower()
+    if reason == "catalog_unavailable":
+        return format_weapon_selection_label("武器目录不可用", "", "unknown")
+    display_name = str(getattr(snap, "weapon_display_name", "") or "").strip()
+    if not display_name:
+        bomb_name = str(getattr(snap, "bomb_name", "") or "")
+        display_name = BombConfig.format_bomb_name(bomb_name) if bomb_name else ""
+    role = str(getattr(snap, "weapon_role", "") or "").strip().lower()
+    if not role:
+        weapon_status = str(getattr(snap, "weapon_status", "") or "").strip().lower()
+        if not weapon_status or weapon_status == "ccrp":
+            role = "bomb"
+    selection_source = (
+        str(getattr(snap, "weapon_selection_source", "") or "").strip().lower() or "manual"
+    )
+    return format_weapon_selection_label(display_name, role, selection_source)
+
+
+def _is_ccrp_weapon_snapshot(snap: Any) -> bool:
+    status = str(getattr(snap, "weapon_status", "") or "").strip().lower()
+    role = str(getattr(snap, "weapon_role", "") or "").strip().lower()
+    control = str(getattr(snap, "weapon_control", "") or "").strip().lower()
+    if status:
+        return status == "ccrp"
+    if role == "bomb" and control == "unguided":
+        return True
+
+    # Older/debug snapshots do not carry weapon fields. Keep their established
+    # CCRP rendering instead of turning a compatible fixture into an unknown weapon.
+    has_weapon_identity = bool(
+        status
+        or role
+        or control
+        or str(getattr(snap, "weapon_id", "") or "").strip()
+        or str(getattr(snap, "weapon_display_name", "") or "").strip()
+    )
+    return not has_weapon_identity
+
+
+def _format_weapon_distance(distance_m: float) -> str:
+    distance_m = max(0.0, distance_m)
+    if distance_m >= 1000.0:
+        return f"{distance_m / 1000.0:.1f}km"
+    return f"{distance_m:.0f}m"
+
+
+def _format_weapon_range(min_range_m: float, max_range_m: float) -> str:
+    min_range_m = max(0.0, min_range_m)
+    max_range_m = max(0.0, max_range_m)
+    if max_range_m <= 0.0:
+        return "估算窗 --"
+    if max_range_m >= 1000.0:
+        return f"估算窗 {min_range_m / 1000.0:.1f}–{max_range_m / 1000.0:.1f}km"
+    return f"估算窗 {min_range_m:.0f}–{max_range_m:.0f}m"
+
+
+def _format_weapon_target(snap: Any) -> str:
+    kind = str(getattr(snap, "weapon_target_kind", "") or "").strip().lower()
+    name = str(getattr(snap, "weapon_target_name", "") or "").strip()
+    kind_label = {
+        "poi": "POI",
+        "zone": "战区",
+        "aircraft": "空中目标",
+        "enemy_aircraft": "空中目标",
+        "air": "空中目标",
+        "ground": "地面目标",
+    }.get(kind, "目标")
+
+    if name:
+        short_name = _short_label(name, fallback=kind_label, limit=12)
+        if short_name.casefold() != kind_label.casefold():
+            kind_label = f"{kind_label} {short_name}"
+
+    target_distance_m = _safe_float(getattr(snap, "weapon_target_distance_m", 0.0))
+    if target_distance_m > 0.0:
+        return f"{kind_label} {_format_weapon_distance(target_distance_m)}"
+    return f"{kind_label} --"
+
+
+def _format_weapon_time(seconds: float) -> str:
+    seconds = max(0.0, seconds)
+    if seconds < 10.0:
+        return f"{seconds:.1f}s"
+    return f"{seconds:.0f}s"
+
+
+def _weapon_quality_text(quality: str) -> str:
+    quality = str(quality or "").strip().lower()
+    if quality in {"two_dimensional", "two-dimensional", "2d"}:
+        return "二维估算"
+    if quality == "conservative":
+        return "保守估算"
+    if quality in {"degraded", "coarse"}:
+        return "粗略估算"
+    return ""
+
+
+def _weapon_status_presentation(status: str) -> IconTextModel:
+    presentations = {
+        "unknown_weapon": IconTextModel("warning", "武器未知", Theme.YELLOW),
+        "catalog_unavailable": IconTextModel("danger", "目录不可用", Theme.RED),
+        "incompatible": IconTextModel("danger", "不兼容", Theme.RED),
+        "no_target": IconTextModel("aim", "无目标", Theme.TEXT_MUTED),
+        "insufficient_data": IconTextModel("clock", "数据不足", Theme.TEXT_MUTED),
+        "too_close": IconTextModel("warning", "过近", Theme.YELLOW),
+        "out_of_range": IconTextModel("aim", "过远", Theme.YELLOW),
+        "align": IconTextModel("aim", "请对准", Theme.YELLOW),
+        "in_envelope": IconTextModel("ok", "估算窗内", Theme.GREEN),
+        "within_ballistic_reference": IconTextModel("aim", "弹道参考内", Theme.YELLOW),
+        "beyond_ballistic_reference": IconTextModel("aim", "弹道参考外", Theme.YELLOW),
+        "within_2d_max_only": IconTextModel("aim", "二维上限内", Theme.YELLOW),
+        "solver_error": IconTextModel("danger", "解算失败", Theme.RED),
+    }
+    return presentations.get(status, IconTextModel("clock", "等待估算", Theme.TEXT_MUTED))
+
+
+def _weapon_fallback_detail(status: str, role: str, reason: str = "") -> str:
+    if status == "catalog_unavailable":
+        return "武器目录缺失或校验失败"
+    if status == "unknown_weapon":
+        return "请选择武器目录中的记录"
+    if status == "incompatible":
+        return "请更换当前机型可用武器"
+    if status == "no_target":
+        if role == "aam":
+            return "未发现可估算的敌机目标"
+        return "朝向 POI 或战区后估算"
+    if status == "insufficient_data":
+        if reason == "conditional_propulsion_unsupported":
+            return "条件或变推力推进尚未建模，已停用估算"
+        return "等待有效高度与速度数据"
+    if status == "too_close":
+        return "目标位于估算窗近端以内"
+    if status == "out_of_range":
+        return "目标超出当前估算窗"
+    if status == "align":
+        return "对准目标后更新估算"
+    if status == "within_ballistic_reference":
+        return "仅重力/阻力弹道参考，未计滑翔增程"
+    if status == "beyond_ballistic_reference":
+        return "超出弹道参考，不代表超出滑翔能力"
+    if status == "within_2d_max_only":
+        return "仅二维最大射程，未计目标速度、高差与迎尾角"
+    if status == "solver_error":
+        return "暂时无法生成武器估算"
+    return ""
+
+
+def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
+    status = str(getattr(snap, "weapon_status", "") or "").strip().lower()
+    reason = str(getattr(snap, "weapon_reason", "") or "").strip().lower()
+    if reason == "catalog_unavailable":
+        status = "catalog_unavailable"
+    role = str(getattr(snap, "weapon_role", "") or "").strip().lower()
+    compatible = bool(getattr(snap, "weapon_selection_compatible", True))
+    solution_valid = bool(getattr(snap, "weapon_solution_valid", False))
+    usable_statuses = {
+        "in_envelope",
+        "within_ballistic_reference",
+        "beyond_ballistic_reference",
+        "within_2d_max_only",
+    }
+    if status in usable_statuses and not compatible:
+        status = "incompatible"
+    elif status in usable_statuses and not solution_valid:
+        status = "insufficient_data"
+
+    release = _weapon_status_presentation(status)
+    min_range_m = _safe_float(getattr(snap, "weapon_min_range_m", 0.0))
+    max_range_m = _safe_float(getattr(snap, "weapon_max_range_m", 0.0))
+    if status in {"within_ballistic_reference", "beyond_ballistic_reference"}:
+        range_text = (
+            f"弹道参考约 {_format_weapon_distance(max_range_m)}"
+            if max_range_m > 0.0
+            else "弹道参考 --"
+        )
+    elif role == "aam" and max_range_m > 0.0:
+        range_text = f"二维最大约 {_format_weapon_distance(max_range_m)}"
+    else:
+        range_text = _format_weapon_range(min_range_m, max_range_m)
+    trajectory_text = f"{_format_weapon_target(snap)} · {range_text}"
+
+    detail_parts: list[str] = []
+    time_to_target_s = _safe_float(getattr(snap, "weapon_time_to_target_s", 0.0))
+    time_to_window_s = _safe_float(getattr(snap, "weapon_time_to_window_s", 0.0))
+    if status == "out_of_range" and time_to_window_s > 0.0:
+        detail_parts.append(f"距估算窗约 {_format_weapon_time(time_to_window_s)}")
+    elif status == "beyond_ballistic_reference" and time_to_window_s > 0.0:
+        detail_parts.append(f"距弹道参考约 {_format_weapon_time(time_to_window_s)}")
+    elif status != "align" and time_to_target_s > 0.0:
+        detail_parts.append(f"飞行约 {_format_weapon_time(time_to_target_s)}")
+
+    if role == "aam" and max_range_m > 0.0:
+        detail_parts.append("仅二维最大射程，未计目标速度、高差与迎尾角")
+    elif status == "within_ballistic_reference":
+        detail_parts.append("仅重力/阻力弹道参考，未计滑翔增程")
+    elif status == "beyond_ballistic_reference":
+        detail_parts.append("仅超出弹道参考，不代表超出滑翔能力")
+
+    quality_text = ""
+    if status in {
+        "too_close",
+        "out_of_range",
+        "align",
+        "in_envelope",
+        "within_ballistic_reference",
+        "beyond_ballistic_reference",
+        "within_2d_max_only",
+    }:
+        quality_text = _weapon_quality_text(str(getattr(snap, "weapon_quality", "") or ""))
+    if quality_text:
+        detail_parts.append(quality_text)
+    flight_text = " · ".join(detail_parts) or _weapon_fallback_detail(status, role, reason)
+
+    highlighted_statuses = usable_statuses | {"align"}
+
+    return BombingDisplayModel(
+        bomb_label_text=_weapon_selection_label_from_snapshot(snap),
+        trajectory_text=trajectory_text,
+        trajectory_fg=release.fg if status in highlighted_statuses else Theme.TEXT_DIM,
+        flight_text=flight_text,
+        flight_fg=release.fg if status in highlighted_statuses else Theme.TEXT_MUTED,
+        release=release,
+        release_detail_text="",
+    )
+
+
 def _format_bombing_target(snap: Any) -> tuple[str, str, str, bool]:
     has_target = bool(
         getattr(snap, "has_bombing_target", False) or getattr(snap, "has_target", False)
@@ -206,7 +462,10 @@ def _format_bombing_target(snap: Any) -> tuple[str, str, str, bool]:
 
 
 def build_bombing_display_model(snap: Any) -> BombingDisplayModel:
-    bomb_label_text = f"炸弹 {BombConfig.format_bomb_name(snap.bomb_name)} · 点击更换"
+    if not _is_ccrp_weapon_snapshot(snap):
+        return _build_weapon_solution_display_model(snap)
+
+    bomb_label_text = _weapon_selection_label_from_snapshot(snap)
     bomb_data = BombConfig.get_bomb_data(snap.bomb_name) or {}
     prediction_kind = str(bomb_data.get("prediction_kind", "freefall") or "freefall")
     target_text, target_fg, target_short, has_bombing_target = _format_bombing_target(snap)

@@ -21,8 +21,8 @@ submodule boundaries.
   temporarily patch `ENABLE_*` flags in `bomana/config/feature_profile.py` while
   building variants and must restore the source file afterward.
 - `CFG-02`: Variant matrix is fixed: Enhanced enables all listed features;
-  Standard disables only `ENABLE_CCRP`; Lite disables CCRP, zones, airfields,
-  fuel, and checklist. `ENABLE_ADVANCED_SETTINGS` stays true.
+  Standard disables only `ENABLE_CCRP`; Lite disables CCRP/weapon solution,
+  zones, airfields, fuel, and checklist. `ENABLE_ADVANCED_SETTINGS` stays true.
 - `CFG-03`: `ENABLE_*` flags take precedence over user config. A build-disabled
   feature must not be re-enabled by persisted config, UI, tray, hotkey, or core
   code.
@@ -42,11 +42,15 @@ submodule boundaries.
   submodules: `bomana.config.feature_profile`, `bomana.config.settings`, or
   `bomana.config.static_data`. Project metadata lives in `bomana.metadata`, and
   runtime theme tokens live in `bomana.ui.theme`.
+- `CFG-09`: For backward compatibility, `ENABLE_CCRP` and persisted
+  `show_bombing` MUST gate the complete compact weapon-solution card, including
+  CCRP, AAM, AGM, guided-bomb, and glide-bomb estimates; code MUST NOT create a
+  parallel feature flag or panel key for that card.
 
 ## Contract Coverage
 
 - [static] `tests/contracts/test_config_variants.py` enforces
-  `CFG-01..CFG-04` and `CFG-06..CFG-08` across the variant matrix, build patch
+  `CFG-01..CFG-04` and `CFG-06..CFG-09` across the variant matrix, build patch
   target, shared config path, panel precedence, navigation fallback, and package
   boundary.
 - [behavioral] `tests/test_file_utils_persistence.py` enforces `CFG-04` and
