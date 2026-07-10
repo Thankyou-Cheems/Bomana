@@ -1,15 +1,16 @@
 {
-  "generated_at": "2026-06-28T05:25:53+00:00",
+  "generated_at": "2026-07-10T05:31:40+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
-    "code_files": 69,
-    "code_lines": 26940,
-    "test_files": 28,
+    "code_files": 110,
+    "code_lines": 32490,
+    "test_files": 47,
     "todo_markers": 0
   },
   "languages": {
-    "python": 26773,
-    "shell": 167
+    "python": 32191,
+    "shell": 167,
+    "javascript": 132
   },
   "primary_language": "python",
   "configs": [
@@ -39,83 +40,83 @@
   ],
   "largest_files": [
     {
-      "lines": 3123,
+      "lines": 2992,
       "path": "bomana\\ui\\dialogs.py"
     },
     {
-      "lines": 1837,
-      "path": "bomana\\core\\logic.py"
-    },
-    {
-      "lines": 1675,
+      "lines": 1609,
       "path": "bomana\\ui\\app.py"
     },
     {
-      "lines": 1364,
-      "path": "bomana\\config.py"
+      "lines": 1541,
+      "path": "bomana\\core\\logic.py"
     },
     {
-      "lines": 1198,
+      "lines": 1352,
+      "path": "bomana\\config\\settings.py"
+    },
+    {
+      "lines": 1200,
       "path": "bomana\\ui\\main_window.py"
     },
     {
-      "lines": 1031,
-      "path": "bomana\\ui\\hud_overlay.py"
-    },
-    {
-      "lines": 1017,
+      "lines": 1083,
       "path": "bomana\\ui\\widgets.py"
     },
     {
-      "lines": 954,
-      "path": "bomana\\ui\\panel_renderer.py"
+      "lines": 1034,
+      "path": "bomana\\ui\\hud_overlay.py"
     },
     {
-      "lines": 797,
+      "lines": 1021,
       "path": "tests\\test_launcher_update_service.py"
     },
     {
-      "lines": 699,
+      "lines": 839,
       "path": "bomana\\utils\\system.py"
     },
     {
-      "lines": 677,
+      "lines": 809,
+      "path": "bomana\\ui\\panel_renderer.py"
+    },
+    {
+      "lines": 717,
       "path": "bomana\\core\\telemetry.py"
     },
     {
-      "lines": 656,
+      "lines": 700,
       "path": "bomana\\core\\state.py"
     },
     {
-      "lines": 632,
-      "path": "bomana\\ui\\debug_support.py"
-    },
-    {
-      "lines": 608,
+      "lines": 638,
       "path": "bomana\\ui\\nav_window.py"
     },
     {
-      "lines": 549,
+      "lines": 612,
+      "path": "bomana\\ui\\debug_support.py"
+    },
+    {
+      "lines": 589,
       "path": "tools\\build_portable.py"
     }
   ],
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "b0310df",
+    "head": "895ea85",
     "branch": "main",
-    "dirty_files": 0,
+    "dirty_files": 3,
     "recent_commits": [
-      "b0310df fix(ccrp): tune high-drag release lead by altitude",
-      "50732a5 fix(ccrp): advance high-drag bomb release cues",
-      "1704bb1 feat(ccrp): constrain bombing prediction by weapon profile",
-      "3de88c3 fix(telemetry): validate state schema and CCRP caliber",
-      "bb9e400 fix(settings): validate numeric dialog inputs",
-      "938389d fix(app): harden hotkey config and nav phase exit",
-      "ac91935 docs(review): record app code review findings",
-      "27c176f fix(launcher): harden update verification and downloads",
-      "e478b13 docs(agents): mark release signing secrets provisioned",
-      "5648bd4 docs(agents): document release signing workflow"
+      "895ea85 feat(launcher): elevate only the app handoff by default",
+      "840d829 fix(specs): enforce clause-level contract traceability",
+      "6df2523 docs(readme): clarify Bomana game context",
+      "d92e640 fix(hotkeys): keep a single Tk-owned RegisterHotKey lifecycle",
+      "5662488 feat(ccrp): target forward POIs for bombing cues",
+      "e91bba0 refactor: harden post-SDD boundaries",
+      "0a55da3 docs: remove temporary SDD process notes",
+      "5167771 refactor: remove SDD compatibility facades",
+      "dff68c9 post-sdd(bd): document legacy work adaptation",
+      "8b5a61e phase5(ui): extract settings form helpers"
     ]
   },
   "coverage_gaps": [

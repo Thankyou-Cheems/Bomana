@@ -920,7 +920,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-28T05:40:47+00:00"
+        "at": "2026-07-10T05:31:40+00:00"
       }
     },
     {
@@ -950,7 +950,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-06-28T05:40:47+00:00"
+        "at": "2026-07-10T05:31:40+00:00"
       }
     },
     {
@@ -1518,9 +1518,9 @@
       "status": "open",
       "created_at": "2026-06-28T03:59:35+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-06-28T05:40:47+00:00"
+        "status": "drifted",
+        "detail": "snippet exists but not at lines 177-178; first line now near line 185",
+        "at": "2026-07-10T05:31:40+00:00"
       }
     },
     {
@@ -1670,6 +1670,42 @@
       },
       "resolved_at": "2026-06-28T05:40:47+00:00",
       "resolution_note": "Added validate_app_package_root requiring Bomana.pyw plus bomana/config.py and bomana/metadata.py during install and launch readiness; missing metadata test passes."
+    },
+    {
+      "file": "bomana/utils/system.py",
+      "line_start": 872,
+      "line_end": 872,
+      "snippet": "                                self.root.after(0, cb)",
+      "category": "concurrency",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "Hotkey listener calls Tk from the Win32 worker thread",
+      "impact": "A hotkey or registration-error delivery can raise RuntimeError when Tk is not processing its event loop, terminating GlobalHotkeys._run and leaving every game-focus shortcut silent for the rest of the process.",
+      "fix": "Bind RegisterHotKey to a native message-only window owned by the Tk thread and enqueue callbacks through TkEventDispatcher without calling Tk from a worker.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Python 3.14.5 repro: worker root.after before mainloop raised RuntimeError: main thread is not in main loop after 1.007 seconds; fake WM_HOTKEY repro stopped GetMessageW after one message."
+        },
+        {
+          "kind": "diff",
+          "detail": "fa1899cf^ and HEAD GlobalHotkeys are byte-identical, proving a latent pre-existing path rather than a changed RegisterHotKey implementation."
+        },
+        {
+          "kind": "read",
+          "detail": "The outer message-loop handler catches only OSError and AttributeError, so RuntimeError escapes; current PITFALLS already describes this failure."
+        }
+      ],
+      "id": "F-f1fba42d",
+      "status": "fixed",
+      "created_at": "2026-07-09T23:09:10+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-09T23:09:10+00:00"
+      },
+      "resolved_at": "2026-07-09T23:20:37+00:00",
+      "resolution_note": "Replaced worker GetMessage/root.after path with a Tk-owner message-only HWND and TkEventDispatcher delivery; 38 focused tests and real Win32 synthetic F6 smoke passed."
     }
   ]
 }
