@@ -2,7 +2,11 @@
 
 **战雷全真模式收益计时器** | War Thunder SB Timer
 
-A powerful War Thunder timer made for the "Space Monkeys" who love dropping bombs and eating bananas
+War Thunder 是一款载具对战电子游戏；Bomana 是一个面向 War Thunder 全真模式的多功能计时器。
+本文档中的“炸弹”“投弹”“CCRP”等词均指代游戏内的虚拟概念，不对应任何现实内容。祝你玩得开心！
+
+War Thunder is a vehicle-combat video game; Bomana is a multifunction timer for War Thunder simulator battles.
+In this README, terms like "bomb", "bombing", and "CCRP" refer only to virtual in-game concepts, not anything in the real world. Have fun!
 
 <p align="center">
   <img src="bomana/assets/branding/app.png" width="320" alt="Bomana promotional art">
