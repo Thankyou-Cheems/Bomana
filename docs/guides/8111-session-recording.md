@@ -84,3 +84,28 @@ analysis; review it before publishing it publicly.
 If the terminal is killed instead of using `Ctrl+C`, a `.partial` file may
 remain. Keep it for recovery, but do not use it as a golden replay fixture
 because it may lack the final summary.
+
+## Validate and fast-forward | 校验与快进
+
+Run the completed capture through production `GameLogic` without opening War
+Thunder or contacting port 8111:
+
+```powershell
+uv run python tools/replay_8111_session.py `
+  recordings/8111_session_<UTC timestamp>.jsonl.gz `
+  --speed max `
+  --profile full-sortie
+```
+
+`--speed max` advances directly from frame to frame. A numeric value such as
+`--speed 20` paces replay at 20x recorded time. The default report is written
+beside the capture as `<name>.replay-report.json`; use `--report <path>` to
+choose another local path.
+
+回放开始前会校验每行 schema、记录顺序、时间单调性和 summary 统计；任何篡改或不完整
+文件都会被拒绝。`full-sortie` 要求大厅失败、存活、两次起飞、着陆整备、投弹、跨越
+15 分钟周期、临界超速和玩家对象消失全部出现，否则返回非零退出码。
+
+The report intentionally omits map positions. A pass verifies deterministic
+core behavior against captured 4 Hz input; it does not validate Tk rendering,
+global hotkeys, or behavior between recorded frames.

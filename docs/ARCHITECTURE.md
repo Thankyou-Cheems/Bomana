@@ -18,8 +18,8 @@
 - Tools: `tools/blkx_extractor.py` / `tools/fm_speed_extractor.py` (single-asset extractors)
 - Tools: `tools/datamine_utils.py` (shared datamine source-dir and metadata helpers)
 - Tools: `tools/create_version_info.py`, `tools/sample_8111_attitude.py`, and
-  `tools/record_8111_session.py` (build metadata, diagnostics, and official 8111
-  session capture)
+  `tools/record_8111_session.py` / `tools/replay_8111_session.py` (build
+  metadata, diagnostics, and official 8111 session capture/replay)
 - Branding assets: `bomana/assets/branding/` (`app.ico`, `app.png`, sponsor images)
 
 ## Spec Anchors
@@ -109,6 +109,8 @@
 │  ├─ update_datamine_assets.py # One command to refresh both generated data assets
 │  ├─ sample_8111_attitude.py # HUD baseline sampler
 │  ├─ record_8111_session.py  # Gzip JSONL capture of official 8111 session payloads
+│  ├─ replay_8111_session.py  # Validated virtual-time replay through production GameLogic
+│  ├─ session_8111.py         # Shared schema validation and completed-session loader
 │  ├─ scripts/               # Local build helper scripts (bat/sh)
 └─ README.md                 # Main landing page for GitHub visitors
 ```
@@ -195,7 +197,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   - Runtime consumer: `OverspeedAnalyzer` via `/indicators.type -> unit_to_fm -> fm_speed_limits`
 - Generated JSON metadata records the datamine source version and git commit when available.
 
-## Offline Session Capture
+## Offline Session Capture and Replay
 
 - `tools/record_8111_session.py` records synchronized decoded payloads from the
   four official loopback endpoints into gzip JSONL without entering the runtime
@@ -206,11 +208,19 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   Captures default to the gitignored `recordings/` directory and are inputs for
   the planned deterministic replay harness, not committed source fixtures.
 - `docs/specs/schemas/8111-session-record.schema.json` is the machine-readable
-  shape source for each JSONL record; the recorder reads its format version and
-  contract tests validate completed records against it.
+  shape source for each JSONL record. `tools/session_8111.py` validates every
+  record and also verifies ordering, monotonic elapsed time, sample totals,
+  endpoint statistics, and aircraft-type summary before replay begins.
+- `tools/replay_8111_session.py` replaces only `GameLogic`'s injected wall clock
+  and HTTP adapter. It advances recorded elapsed time without contacting 8111,
+  while the normal App keeps `SystemClock` and `HttpJson` defaults.
+- Replay reports contain sanitized transitions and coverage rather than map
+  positions. The `full-sortie` profile gates lobby failure, spawn, two takeoffs,
+  landing/refit, bomb release, cycle rollover, critical overspeed, and player
+  loss. It does not replace Tk/global-hotkey or real-game smoke testing.
 - Usage and capture privacy are documented in
   `docs/guides/8111-session-recording.md`; the collection boundary is governed
-  by `R8111-09..R8111-11`.
+  by `R8111-09..R8111-14`.
 
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config/`.

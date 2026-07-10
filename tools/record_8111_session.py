@@ -24,14 +24,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from bomana.config.settings import ZoneConfig  # noqa: E402
+from tools.session_8111 import (  # noqa: E402
+    API_BASE,
+    FAST_ENDPOINTS,
+    MAP_INFO_ENDPOINT,
+    OFFICIAL_ENDPOINTS,
+    SCHEMA_VERSION,
+    validate_session_record,
+)
 
-SESSION_RECORD_SCHEMA_PATH = ROOT / "docs/specs/schemas/8111-session-record.schema.json"
-SESSION_RECORD_SCHEMA = json.loads(SESSION_RECORD_SCHEMA_PATH.read_text(encoding="utf-8"))
-SCHEMA_VERSION = int(SESSION_RECORD_SCHEMA["x-format-version"])
-API_BASE = "http://127.0.0.1:8111"
-FAST_ENDPOINTS = ("/indicators", "/state", "/map_obj.json")
-MAP_INFO_ENDPOINT = "/map_info.json"
-OFFICIAL_ENDPOINTS = (*FAST_ENDPOINTS, MAP_INFO_ENDPOINT)
 DEFAULT_INTERVAL_SEC = 0.25
 DEFAULT_PROGRESS_INTERVAL_SEC = 5.0
 CONNECT_TIMEOUT_SEC = 0.15
@@ -118,6 +119,7 @@ def _open_text(path: Path, *, compressed: bool) -> TextIO:
 
 
 def _write_record(stream: TextIO, payload: dict[str, Any]) -> None:
+    validate_session_record(payload)
     stream.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True))
     stream.write("\n")
 

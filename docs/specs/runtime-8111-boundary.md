@@ -7,9 +7,10 @@ Prefix: `R8111-`
 ## Scope
 
 This spec governs runtime app code under `Bomana.pyw` and `bomana/` that reads
-War Thunder data or renders data-derived UI. It also governs the collection
-boundary of `tools/record_8111_session.py` and automated tests that claim to
-protect the War Thunder data boundary.
+War Thunder data or renders data-derived UI. It also governs the collection and
+replay boundaries of `tools/record_8111_session.py`,
+`tools/replay_8111_session.py`, and automated tests that claim to protect the
+War Thunder data boundary.
 
 ## Non-goals
 
@@ -60,14 +61,29 @@ protect the War Thunder data boundary.
   summary; `Ctrl+C` MUST finalize a readable file rather than leaving the normal
   output path partial, and every JSONL record MUST conform to
   `docs/specs/schemas/8111-session-record.schema.json`.
+- `R8111-12`: Replay MUST first validate every record plus stream order,
+  monotonic sample time, summary counts, endpoint statistics, and aircraft types.
+  Replay MUST consume only the selected local session file and MUST NOT make a
+  network request, inspect a process, or replace the runtime App's default HTTP
+  source.
+- `R8111-13`: Replay MUST drive production `GameLogic` with a virtual wall clock
+  derived from recording elapsed time. Normal App construction MUST retain the
+  system wall clock and official 8111 HTTP source; real monotonic timing MAY
+  remain in performance diagnostics and replay pacing.
+- `R8111-14`: The `full-sortie` profile MUST fail unless it processes every
+  sample and observes lobby endpoint failure, the alive phase, at least two
+  takeoffs, a landing, refit, bomb-release pulse, 15-minute cycle rollover,
+  critical overspeed, and player-object loss. Passing offline replay does not
+  claim Tk rendering, global-hotkey, capture-cadence, or real-game smoke
+  coverage.
 
 ## Contract Coverage
 
 - [static] `tests/contracts/test_runtime_8111_boundary.py` enforces
-  `R8111-01`, `R8111-02`, `R8111-04`, `R8111-06`, and `R8111-08..R8111-10` by checking
-  the runtime base URL, endpoint whitelist, dangerous API strings, ownership,
-  polling defaults, narrow process-query allowlist, and recorder collection and
-  identity boundaries.
+  `R8111-01`, `R8111-02`, `R8111-04`, `R8111-06`, `R8111-08..R8111-10`, and
+  `R8111-12` by checking the runtime base URL, endpoint whitelist, dangerous API
+  strings, ownership, polling defaults, narrow process-query allowlist,
+  recorder boundaries, and the replay adapter's lack of network/process paths.
 - [behavioral] `tests/test_telemetry_fetch_result.py` and
   `tests/test_map_objects_contract.py` enforce the fetcher and coordinate
   ownership boundary in `R8111-04`.
@@ -75,7 +91,11 @@ protect the War Thunder data boundary.
   with synchronized raw-payload capture, diagnostics, overwrite, timeout, and
   `Ctrl+C` finalization cases.
 - [behavioral] `tests/contracts/test_8111_session_schema.py` enforces
-  `R8111-11` with schema round-trip and tamper rejection.
+  `R8111-11` and `R8111-12` with schema round-trip, shared validator use, and
+  tamper rejection.
+- [behavioral] `tests/test_8111_replay.py` enforces `R8111-12..R8111-14` with
+  complete-stream validation, sequence tamper rejection, virtual-time production
+  logic replay, and every `full-sortie` coverage gate.
 - [manual] Runtime/data review covers the player-visible-information boundary in
   `R8111-03`; handoffs must record real War Thunder smoke for `R8111-05`,
   explicit approval for polling changes under `R8111-06`, and provenance review

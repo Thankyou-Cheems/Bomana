@@ -2,6 +2,7 @@
 
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -406,8 +407,9 @@ class MapInfoFetcher:
     获取地图尺度参数，结果会缓存30秒。
     """
 
-    def __init__(self, http: HttpJson):
+    def __init__(self, http: HttpJson, *, now: Callable[[], float] | None = None):
         self.http = http
+        self._now = now or time.time
         self.last_result = FetchResult(
             endpoint="/map_info.json", ok=False, error_kind="not_fetched"
         )
@@ -434,7 +436,7 @@ class MapInfoFetcher:
             grid_zero=j.get("grid_zero", [0.0, 0.0]),
             map_min=j.get("map_min", [-65536.0, -65536.0]),
             map_max=j.get("map_max", [65536.0, 65536.0]),
-            fetch_time=time.time(),
+            fetch_time=self._now(),
         )
 
 

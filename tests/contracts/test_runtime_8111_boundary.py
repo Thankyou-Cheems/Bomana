@@ -1,4 +1,4 @@
-# enforces: docs/specs/runtime-8111-boundary.md R8111-01, R8111-02, R8111-04, R8111-06, R8111-08..R8111-10
+# enforces: docs/specs/runtime-8111-boundary.md R8111-01, R8111-02, R8111-04, R8111-06, R8111-08..R8111-10, R8111-12
 
 from __future__ import annotations
 
@@ -152,3 +152,21 @@ def test_session_recorder_omits_machine_identity_and_uses_ignored_output() -> No
     assert not [token for token in forbidden_collection_or_upload if token in source]
     assert record_8111_session.default_output_path().parent == ROOT / "recordings"
     assert "recordings/" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+def test_session_replayer_has_no_live_network_or_process_path() -> None:
+    source = (ROOT / "tools/replay_8111_session.py").read_text(encoding="utf-8")
+
+    assert "GameLogic(clock=replay_clock, http=recorded_http)" in source
+    assert not [
+        token
+        for token in (
+            "requests.",
+            "socket.",
+            "subprocess.",
+            "OpenProcess(",
+            "CreateToolhelp32Snapshot",
+            "ReadProcessMemory",
+        )
+        if token in source
+    ]

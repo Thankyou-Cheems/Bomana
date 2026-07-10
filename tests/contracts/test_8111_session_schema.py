@@ -1,10 +1,9 @@
-# enforces: docs/specs/runtime-8111-boundary.md R8111-11
+# enforces: docs/specs/runtime-8111-boundary.md R8111-11, R8111-12
 
 from __future__ import annotations
 
 import copy
 import json
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -12,10 +11,11 @@ from typing import Any
 import pytest
 
 from tools import record_8111_session as recorder
+from tools import session_8111
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA_PATH = ROOT / "docs/specs/schemas/8111-session-record.schema.json"
-SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+SCHEMA_PATH = session_8111.SESSION_RECORD_SCHEMA_PATH
+SCHEMA = session_8111.SESSION_RECORD_SCHEMA
 
 
 class ContractClock:
@@ -51,74 +51,6 @@ class ContractSession:
         assert timeout == (recorder.CONNECT_TIMEOUT_SEC, recorder.READ_TIMEOUT_SEC)
         payload: Any = [] if url.endswith("/map_obj.json") else {"valid": True}
         return ContractResponse(payload)
-
-
-def _resolve_ref(ref: str) -> dict[str, Any]:
-    prefix = "#/$defs/"
-    assert ref.startswith(prefix), ref
-    return SCHEMA["$defs"][ref.removeprefix(prefix)]
-
-
-def assert_matches_schema(value: Any, rules: dict[str, Any]) -> None:
-    if not rules:
-        return
-    if "$ref" in rules:
-        assert_matches_schema(value, _resolve_ref(rules["$ref"]))
-        return
-    if "oneOf" in rules:
-        matches = 0
-        for candidate in rules["oneOf"]:
-            try:
-                assert_matches_schema(value, candidate)
-            except AssertionError:
-                continue
-            matches += 1
-        assert matches == 1, f"expected one schema match, got {matches}: {value!r}"
-        return
-    if "const" in rules:
-        assert value == rules["const"]
-    if "enum" in rules:
-        assert value in rules["enum"]
-
-    expected_type = rules.get("type")
-    if expected_type == "object":
-        assert isinstance(value, dict)
-        required = set(rules.get("required", ()))
-        assert required <= set(value), f"missing fields: {sorted(required - set(value))}"
-        properties = rules.get("properties", {})
-        additional = rules.get("additionalProperties", True)
-        unknown = set(value) - set(properties)
-        if additional is False:
-            assert not unknown, f"unknown fields: {sorted(unknown)}"
-        elif isinstance(additional, dict):
-            for field in unknown:
-                assert_matches_schema(value[field], additional)
-        for field, field_rules in properties.items():
-            if field in value:
-                assert_matches_schema(value[field], field_rules)
-    elif expected_type == "array":
-        assert isinstance(value, list)
-        if item_rules := rules.get("items"):
-            for item in value:
-                assert_matches_schema(item, item_rules)
-        if rules.get("uniqueItems"):
-            canonical = [json.dumps(item, sort_keys=True) for item in value]
-            assert len(canonical) == len(set(canonical))
-    elif expected_type == "string":
-        assert isinstance(value, str)
-        if "maxLength" in rules:
-            assert len(value) <= rules["maxLength"]
-        if "pattern" in rules:
-            assert re.fullmatch(rules["pattern"], value)
-    elif expected_type == "integer":
-        assert isinstance(value, int) and not isinstance(value, bool)
-    elif expected_type == "number":
-        assert isinstance(value, int | float) and not isinstance(value, bool)
-    elif expected_type == "boolean":
-        assert isinstance(value, bool)
-
-    if "minimum" in rules:
-        assert value >= rules["minimum"]
 
 
 def _success_response(payload: Any) -> dict[str, Any]:
@@ -180,14 +112,13 @@ def valid_records() -> list[dict[str, Any]]:
 
 
 def test_recorder_and_contract_load_the_same_schema_version() -> None:
-    assert recorder.SESSION_RECORD_SCHEMA_PATH == SCHEMA_PATH
-    assert recorder.SESSION_RECORD_SCHEMA == SCHEMA
-    assert recorder.SCHEMA_VERSION == SCHEMA["x-format-version"] == 1
+    assert SCHEMA_PATH == ROOT / "docs/specs/schemas/8111-session-record.schema.json"
+    assert recorder.SCHEMA_VERSION == session_8111.SCHEMA_VERSION == 1
 
 
 def test_valid_meta_sample_and_summary_records_match_schema() -> None:
     for record in valid_records():
-        assert_matches_schema(record, SCHEMA)
+        session_8111.validate_session_record(record)
 
 
 def test_actual_recorded_jsonl_matches_schema(tmp_path: Path) -> None:
@@ -212,7 +143,7 @@ def test_actual_recorded_jsonl_matches_schema(tmp_path: Path) -> None:
         "summary",
     ]
     for record in records:
-        assert_matches_schema(record, SCHEMA)
+        session_8111.validate_session_record(record)
 
 
 @pytest.mark.parametrize("record_index", [0, 1, 2])
@@ -220,8 +151,8 @@ def test_missing_required_field_is_rejected(record_index: int) -> None:
     record = copy.deepcopy(valid_records()[record_index])
     record.pop(next(iter(SCHEMA["$defs"][record["record_type"]]["required"])))
 
-    with pytest.raises(AssertionError):
-        assert_matches_schema(record, SCHEMA)
+    with pytest.raises(session_8111.SessionFormatError):
+        session_8111.validate_session_record(record)
 
 
 def test_unknown_field_and_invalid_body_hash_are_rejected() -> None:
@@ -229,7 +160,7 @@ def test_unknown_field_and_invalid_body_hash_are_rejected() -> None:
     meta["hostname"] = "must-not-be-recorded"
     sample["responses"]["/state"]["body_sha256"] = "not-a-sha256"
 
-    with pytest.raises(AssertionError):
-        assert_matches_schema(meta, SCHEMA)
-    with pytest.raises(AssertionError):
-        assert_matches_schema(sample, SCHEMA)
+    with pytest.raises(session_8111.SessionFormatError):
+        session_8111.validate_session_record(meta)
+    with pytest.raises(session_8111.SessionFormatError):
+        session_8111.validate_session_record(sample)

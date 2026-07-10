@@ -20,6 +20,7 @@ from bomana.config.settings import (
 from bomana.core import ccrp_scheduler, lifecycle, navigation, timing_store
 from bomana.core import diagnostics as core_diagnostics
 from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing_from_range
+from bomana.core.clock import SystemClock, WallClock
 from bomana.core.overspeed import OverspeedAnalyzer
 from bomana.core.state import (
     AirfieldDisplayInfo,
@@ -86,14 +87,19 @@ class GameLogic:
     ATTITUDE_JITTER_PITCH_RATE_DEG_S = 260.0
     ATTITUDE_JITTER_ROLL_RATE_DEG_S = 420.0
 
-    def __init__(self):
+    def __init__(self, *, clock: WallClock | None = None, http: HttpJson | None = None):
         self._lock = threading.Lock()
-        self.session = requests.Session()
-        # 性能优化：禁用代理环境检查，减少每次请求的开销
-        self.session.trust_env = False
-        self.http = HttpJson(self.session)
+        self.clock = clock or SystemClock()
+        self.session: requests.Session | None = None
+        if http is None:
+            self.session = requests.Session()
+            # 性能优化：禁用代理环境检查，减少每次请求的开销
+            self.session.trust_env = False
+            self.http = HttpJson(self.session)
+        else:
+            self.http = http
         self.tel = TelemetryFetcher(self.http)
-        self.map_info_fetcher = MapInfoFetcher(self.http)
+        self.map_info_fetcher = MapInfoFetcher(self.http, now=self.clock.time)
         self.map = MapObjectsFetcher(self.http)
         self.overspeed = OverspeedAnalyzer()
         self.state = GameState()
@@ -121,7 +127,7 @@ class GameLogic:
         5. 更新导航信息
         """
         tick_start = time.monotonic()
-        now = time.time()
+        now = self.clock.time()
         budget = Budget(NetworkConfig.MAX_TICK_NET_BUDGET)
         bombing_work: dict[str, Any] | None = None
 
@@ -1178,7 +1184,7 @@ class GameLogic:
         """
         with self._lock:
             if self.state.phase == Phase.ALIVE and self.state.current_life:
-                self.state.current_life.spawn_time = time.time()
+                self.state.current_life.spawn_time = self.clock.time()
                 self.state.landing_start_time = None
                 self.state.landed_flash_until = 0.0
 
@@ -1201,7 +1207,7 @@ class GameLogic:
                 StateManager.clear()
                 log_event("timer_state_not_saved", reason="missing_battle_signature")
                 return
-            now = time.time()
+            now = self.clock.time()
             remaining = self.state.current_life.cycle_remaining(now)
             StateManager.save(
                 remaining,
@@ -1240,7 +1246,7 @@ class GameLogic:
         Returns:
             UISnapshot对象
         """
-        now = time.time()
+        now = self.clock.time()
         wait_start = time.monotonic()
         with self._lock:
             snapshot_wait_ms = max(0.0, (time.monotonic() - wait_start) * 1000.0)

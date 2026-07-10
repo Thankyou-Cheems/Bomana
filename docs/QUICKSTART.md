@@ -135,6 +135,9 @@ uv run python tools/update_datamine_assets.py ^
 `uv run python tools/record_8111_session.py --label "full-sortie-1" --mode SB`，
 进入战斗并在出击结束后按一次 `Ctrl+C`。完整步骤和隐私边界见
 [8111 对局录制指南](./guides/8111-session-recording.md)。
+录制完成后可运行
+`uv run python tools/replay_8111_session.py <recording.jsonl.gz> --speed max --profile full-sortie`
+在数秒内校验完整核心链路，无需再次打开游戏。
 
 - 发布构建使用 Python 3.14 + uv；本地打包前运行 `uv sync --extra build --frozen`。
 - 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
@@ -259,6 +262,9 @@ To capture one real sortie for offline replay, run
 enter battle, then press `Ctrl+C` once after the sortie. See the
 [8111 session recording guide](./guides/8111-session-recording.md) for the full
 workflow and privacy boundary.
+After capture, run
+`uv run python tools/replay_8111_session.py <recording.jsonl.gz> --speed max --profile full-sortie`
+to validate the complete core path in seconds without reopening the game.
 
 - Release builds use Python 3.14 + uv; run `uv sync --extra build --frozen` before local packaging.
 - Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).
