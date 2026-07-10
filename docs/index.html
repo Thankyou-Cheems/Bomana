@@ -180,17 +180,18 @@
           <p class="section-label">WINDOWS PERMISSION, EXPLAINED</p>
           <h2 id="hotkey-title">提权只给热键，不给整个应用</h2>
           <p>
-            Launcher 和 Python App 始终以普通权限运行。如果 War Thunder 以更高权限运行，只有安装在 Program Files、带有效发布者签名的最小热键 Broker 会请求 UAC。
+            Bomana 先启用普通热键；如果确认游戏也以普通权限运行，就完全不提权。游戏未启动、权限未知或以管理员运行时，才显示可选授权按钮。
           </p>
           <ul class="boundary-list">
             <li>只注册当前启用的 F1–F12 固定动作</li>
             <li>不使用键盘钩子、轮询或 Raw Input</li>
-            <li>不读取游戏进程、文件、网络或 8111 数据</li>
-            <li>拒绝授权时 App 继续运行，并提供一键重试</li>
+            <li>只查询可见游戏窗口的进程名与管理员状态，不读内存</li>
+            <li>组件随 App 包携带，不安装服务、计划任务或额外程序</li>
+            <li>拒绝授权时 App 继续运行，并恢复普通热键</li>
           </ul>
           <div class="hotkey-actions">
-            <a class="button secondary" id="setupDownload" href="https://github.com/Thankyou-Cheems/Bomana/releases">
-              获取签名热键组件
+            <a class="button secondary" href="https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations">
+              验证 GitHub 来源证明
             </a>
             <a class="text-link" href="https://github.com/Thankyou-Cheems/Bomana/blob/main/docs/specs/startup-elevation.md">查看安全契约</a>
           </div>
@@ -198,7 +199,7 @@
         <div class="permission-flow" aria-label="权限分离流程">
           <div class="flow-node game"><small>HIGH INTEGRITY</small><strong>War Thunder</strong><span>游戏获得焦点</span></div>
           <i aria-hidden="true">↓</i>
-          <div class="flow-node broker"><small>MINIMAL · SIGNED</small><strong>Hotkey Broker</strong><span>RegisterHotKey · 固定动作</span></div>
+          <div class="flow-node broker"><small>OPTIONAL · ZERO INSTALL</small><strong>Hotkey Broker</strong><span>手动 UAC · 固定动作</span></div>
           <i aria-hidden="true">↓</i>
           <div class="flow-node app"><small>ORDINARY INTEGRITY</small><strong>Bomana App</strong><span>按钮 · 托盘 · 8111 功能</span></div>
         </div>
@@ -211,7 +212,7 @@
         </div>
         <div class="trust-grid">
           <article><h3>官方数据边界</h3><p>运行时只访问 `/indicators`、`/state`、`/map_obj.json` 与 `/map_info.json`，不读内存、不注入、不改游戏文件。</p></article>
-          <article><h3>可验证的更新</h3><p>启动器先验证 Ed25519 清单签名，再信任版本、文件名与 SHA256；热键组件另行通过 Authenticode 签名。</p></article>
+          <article><h3>可验证的更新</h3><p>启动器先验证 Ed25519 清单与 SHA256；GitHub Actions 还为发布文件生成可独立验证的 Artifact Attestations。</p></article>
           <article><h3>透明的隐私说明</h3><p>匿名统计字段、用途和禁用方式公开；热键 Broker 不联网、不记录按键内容，也不参与统计。</p></article>
         </div>
       </section>
@@ -236,7 +237,7 @@
         </div>
         <div class="faq-list">
           <details><summary>为什么显示 8111 不可用？</summary><p>机库通常没有完整飞行数据。进入战斗后再试；也可在浏览器访问 <code>http://localhost:8111</code> 确认游戏本地数据页可用。</p></details>
-          <details><summary>一定要授予管理员权限吗？</summary><p>不需要。只有游戏以更高权限运行且你希望游戏前台仍接收全局热键时，才需要为签名热键 Broker 单独授权。拒绝不会影响其他功能。</p></details>
+          <details><summary>一定要授予管理员权限吗？</summary><p>不需要。Bomana 默认使用普通热键，确认游戏普通运行时不会提示。只有高权限或无法判断时才提供可选按钮；项目没有商业证书，因此 UAC 会显示“未知发布者”，拒绝不会影响其他功能。</p></details>
           <details><summary>CCRP 是游戏内部真实弹道吗？</summary><p>不是。它是基于公开静态参数和飞行状态的工程估算，适用弹型与误差会在界面中明确提示。</p></details>
           <details><summary>可以和其他 8111 工具一起使用吗？</summary><p>通常可以。Bomana 只读游戏本地 HTTP 数据，不占用独占连接；全局热键请避免与游戏或其他工具重复。</p></details>
         </div>

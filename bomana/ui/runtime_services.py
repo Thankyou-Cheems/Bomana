@@ -35,6 +35,8 @@ from bomana.utils.hotkey_broker import (
     BrokerBinding,
     BrokerStartStatus,
     ElevatedHotkeyBrokerClient,
+    GameIntegrityStatus,
+    detect_war_thunder_integrity,
 )
 from bomana.utils.system import GlobalHotkeys
 
@@ -71,6 +73,42 @@ class AppRuntimeServices:
             return
 
         hotkeys = self._configured_hotkeys()
+        self._start_local_hotkeys(hotkeys)
+        integrity = detect_war_thunder_integrity()
+        log_event(
+            "war_thunder_integrity_probe",
+            status=integrity.status.value,
+            process_id=integrity.process_id,
+            image_name=integrity.image_name,
+        )
+        if integrity.status is GameIntegrityStatus.ORDINARY:
+            self._set_hotkey_broker_notice("", "")
+        elif integrity.status is GameIntegrityStatus.ELEVATED:
+            self._set_hotkey_broker_notice(
+                "检测到 War Thunder 以管理员权限运行；普通热键可能在游戏前台失效。",
+                "elevate",
+            )
+        elif integrity.status is GameIntegrityStatus.NOT_RUNNING:
+            self._set_hotkey_broker_notice(
+                "尚未检测到 War Thunder；普通热键已启用，如游戏以管理员运行可手动授权。",
+                "elevate",
+            )
+        elif integrity.status is GameIntegrityStatus.UNKNOWN:
+            self._set_hotkey_broker_notice(
+                "无法判断 War Thunder 权限；普通热键已启用，需要时可手动授权。",
+                "elevate",
+            )
+        else:
+            self._set_hotkey_broker_notice("", "")
+
+    def enable_elevated_hotkeys(self) -> None:
+        """Request the optional broker only after explicit user confirmation."""
+
+        if os.name != "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
+            return
+        hotkeys = self._configured_hotkeys()
+        if not self._stop_local_global_hotkeys():
+            return
         broker = ElevatedHotkeyBrokerClient(
             self.app.dispatcher.post,
             [
@@ -83,23 +121,19 @@ class AppRuntimeServices:
         result = broker.start()
         if result.status is BrokerStartStatus.STARTED:
             self.hotkey_broker = broker
-            self._set_hotkey_broker_notice("正在连接受保护的游戏内热键组件…", "")
+            self._set_hotkey_broker_notice("正在连接管理员热键组件…", "")
             return
 
         broker.stop()
         self._start_local_hotkeys(hotkeys)
         if result.status in (BrokerStartStatus.UNAVAILABLE, BrokerStartStatus.UNTRUSTED):
-            message = (
-                "未安装可信热键组件；游戏以前台高权限运行时，F7-F11 可能失效。"
-                "窗口按钮、托盘与 8111 功能不受影响。"
+            self._set_hotkey_broker_notice(
+                f"{result.message or '当前 App 包的热键组件不可用。'} 普通热键已恢复。",
+                "",
             )
-            self._set_hotkey_broker_notice(message, "install")
         elif result.status in (BrokerStartStatus.CANCELLED, BrokerStartStatus.FAILED):
-            message = (
-                "未启用高权限热键；游戏以前台高权限运行时，F7-F11 可能失效。"
-                "窗口按钮、托盘与 8111 功能不受影响。"
-            )
-            self._set_hotkey_broker_notice(message, "retry")
+            message = "未启用管理员热键；普通热键已恢复，游戏以前台高权限运行时可能失效。"
+            self._set_hotkey_broker_notice(message, "elevate")
         else:
             self._set_hotkey_broker_notice("", "")
 
@@ -144,7 +178,7 @@ class AppRuntimeServices:
             joined = "、".join(failed_keys)
             self._set_hotkey_broker_notice(
                 f"游戏内热键 {joined} 注册失败；请检查按键冲突后重试。",
-                "retry",
+                "elevate",
             )
             self.app._on_hotkey_registration_error(failed_keys)
             return
@@ -162,7 +196,7 @@ class AppRuntimeServices:
                 f"{message} 游戏以前台高权限运行时，F7-F11 可能失效；"
                 "窗口按钮、托盘与 8111 功能不受影响。"
             ),
-            "retry",
+            "elevate",
         )
 
     def _set_hotkey_broker_notice(self, message: str, action: str) -> None:
@@ -172,7 +206,19 @@ class AppRuntimeServices:
 
     def retry_hotkey_broker(self) -> None:
         """Retry one explicit UAC broker request from the App notice action."""
-        self.init_global_hotkeys()
+        self.enable_elevated_hotkeys()
+
+    def _stop_local_global_hotkeys(self) -> bool:
+        manager = self.global_hotkeys
+        if manager is None:
+            return True
+        try:
+            manager.stop()
+        except Exception as exc:
+            log_exception("global_hotkeys_stop_failed", exc)
+            return False
+        self.global_hotkeys = None
+        return True
 
     def stop_global_hotkeys(self) -> bool:
         stopped = True
@@ -184,16 +230,7 @@ class AppRuntimeServices:
             except Exception as exc:
                 log_exception("hotkey_broker_stop_failed", exc)
                 stopped = False
-        manager = self.global_hotkeys
-        if manager is None:
-            return stopped
-        try:
-            manager.stop()
-        except Exception as exc:
-            log_exception("global_hotkeys_stop_failed", exc)
-            return False
-        self.global_hotkeys = None
-        return stopped
+        return self._stop_local_global_hotkeys() and stopped
 
     def refresh_local_hotkey_bindings(self) -> None:
         """Refresh Tk-local hotkeys after settings mutate HotkeyConfig."""

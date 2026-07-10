@@ -53,10 +53,11 @@ runtime app.
   rather than calling Tk from the pipe reader.
 - `HOTKEY-03`: `RegisterHotKey` failures must be surfaced through the configured
   UI error callback. Code must not silently switch to another input backend.
-- `HOTKEY-04`: Neither hotkey path may inspect War Thunder/anti-cheat processes
-  or infer delivery from another process's elevation. The optional native
-  broker is governed by `docs/specs/startup-elevation.md` and remains the same
-  `RegisterHotKey` backend rather than an alternate input mechanism.
+- `HOTKEY-04`: The ordinary hotkey path must start before the allowlisted
+  War Thunder elevation probe, and that probe may only decide whether to show
+  the optional action governed by `docs/specs/startup-elevation.md`; both local
+  and broker paths remain `RegisterHotKey` backends rather than alternate input
+  mechanisms.
 
 ## Contract Coverage
 

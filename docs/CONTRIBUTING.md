@@ -71,7 +71,6 @@ uv run --extra dev ruff format --check .
 
 ```bash
 cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml
-cargo fmt --check --manifest-path native/hotkey_broker_setup/Cargo.toml
 cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml
 uv run python tools/build_hotkey_broker.py --mode dev
 ```
@@ -93,7 +92,7 @@ uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
 - `uv run --extra dev ruff check .`
 - `uv run --extra dev ruff format --check .`
 - `tools\scripts\check_smoke.bat`
-- 两个 Rust crate 的格式检查、Broker 单测与 unsigned dev build
+- Rust Broker 的格式检查、单测与 unsigned dev build
 
 当前阶段不设置覆盖率阈值，也不把 CI 伪装成真实 War Thunder / `localhost:8111` 实机验证。涉及 8111、HUD、热键、托盘、导航或启动器的改动，仍需按下文手工 smoke 记录验证结果。
 
@@ -205,7 +204,7 @@ bd close <issue-id> --reason "Completed" --json
 4. 根据发布目标做最少真实验证：
    - app 发布：启动器兼容性、下载/启动正常
    - launcher 发布：重查排队、保留一个 `app_previous/`、回退互换正常
-5. 确认 GitHub Secrets 已配置并成对匹配；Launcher/完整发布还需 `BOMANA_AUTHENTICODE_PFX_B64` 与 `BOMANA_AUTHENTICODE_PFX_PASSWORD`。不要生成、轮换、覆盖或上传任何发布私钥，除非已明确确认私钥保管方案。
+5. 确认 Ed25519 manifest GitHub Secrets 已配置并成对匹配。App/Launcher 构建会通过 `actions/attest@v4` 生成来源证明，不需要 Authenticode PFX。不要生成、轮换、覆盖或上传任何发布私钥，除非已明确确认私钥保管方案。
 6. 本地发布构建必须使用匹配的私钥/公钥；`tools/build_portable.py` 会拒绝空签名、缺失公钥或公钥与私钥不匹配的清单。
 7. 推送标签：
    - `vX.Y.Z`：完整发布
@@ -290,7 +289,6 @@ When native hotkey broker code changes, also run:
 
 ```bash
 cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml
-cargo fmt --check --manifest-path native/hotkey_broker_setup/Cargo.toml
 cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml
 uv run python tools/build_hotkey_broker.py --mode dev
 ```
@@ -312,7 +310,7 @@ uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>
 - `uv run --extra dev ruff check .`
 - `uv run --extra dev ruff format --check .`
 - `tools\scripts\check_smoke.bat`
-- format checks for both Rust crates, broker unit tests, and the unsigned dev build
+- Rust broker format checks, unit tests, and the unsigned dev build
 
 There is intentionally no coverage threshold yet, and CI is not treated as a replacement for real War Thunder / `localhost:8111` smoke validation. Changes touching 8111, HUD, hotkeys, tray, navigation, or launcher behavior still need the manual runtime checks documented below.
 
@@ -422,7 +420,7 @@ this section is the maintainer operation summary.
 2. Bump `__version__` in `bomana/metadata.py`
 3. Update `PORTABLE_MIN_LAUNCHER_VERSION` in `bomana/metadata.py` if the app now requires newer launcher behavior
 4. Smoke test the relevant release path
-5. Confirm matching manifest-signing Secrets; launcher/full releases also require `BOMANA_AUTHENTICODE_PFX_B64` and `BOMANA_AUTHENTICODE_PFX_PASSWORD`. Do not generate, rotate, overwrite, or upload release private keys unless the private-key retention plan is explicit.
+5. Confirm matching Ed25519 manifest-signing Secrets. App/Launcher builds use `actions/attest@v4` for provenance and do not require an Authenticode PFX. Do not generate, rotate, overwrite, or upload release private keys unless the private-key retention plan is explicit.
 6. Local release builds must use matching private/public keys; `tools/build_portable.py` rejects empty signatures, missing public keys, and public keys that do not match the private key.
 7. Push `vX.Y.Z`, `vX.Y.Z-app`, or `vX.Y.Z-launcher`
 8. Let GitHub Actions build, Ed25519-sign, and publish the assets

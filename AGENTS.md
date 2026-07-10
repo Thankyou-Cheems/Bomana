@@ -20,7 +20,7 @@ Keep durable project rules in `docs/specs/`; keep this router concise.
 - Only use the official 8111 API; no memory reads, injection, or game file edits. See `docs/specs/runtime-8111-boundary.md`.
 - Respect ENABLE_* feature flags. See `docs/specs/config-variants.md`.
 - Tk UI work must cross background threads through `TkEventDispatcher` or a Tk-owned queue; background threads must not call Tk APIs directly. See `docs/specs/threading-ui-contract.md`.
-- Keep the launcher and Python App at ordinary integrity; Windows UAC is limited to the protected native hotkey broker and must retain the refusal fallback. See `docs/specs/startup-elevation.md`.
+- Keep the launcher and Python App at ordinary integrity; ordinary hotkeys start first, and only an explicit user-confirmed action may elevate the bundled fixed-action native broker. See `docs/specs/startup-elevation.md`.
 
 ## Release Signing Workflow
 - For every release/update/deploy task, follow `docs/specs/release-signing.md` before acting.
@@ -51,7 +51,7 @@ Keep durable project rules in `docs/specs/`; keep this router concise.
   uv run --extra dev ruff check .
   uv run --extra dev ruff format --check .
   ```
-- When native hotkey broker code changes, also run both Cargo format checks, the runtime broker tests, and `uv run python tools/build_hotkey_broker.py --mode dev`; see `QG-10`.
+- When native hotkey broker code changes, also run its Cargo format check, runtime broker tests, and `uv run python tools/build_hotkey_broker.py --mode dev`; see `QG-10`.
 - Run the focused tests/smoke/build checks relevant to the touched area.
 - Pure documentation or issue-tracking-only tasks may mark Ruff as not applicable in the handoff.
 

@@ -46,13 +46,13 @@ def test_github_pages_site_has_new_user_and_permission_paths() -> None:
         "docs",
         "heroDownload",
         "launcherDownload",
-        "setupDownload",
         "releaseStatus",
         "releaseAssets",
     } <= parser.ids
     assert "提权只给热键，不给整个应用" in html
     assert "三步开始" in html
     assert "只读官方 localhost:8111" in html
+    assert "Artifact Attestations" in html
     assert parser.inline_scripts == 0
 
 
@@ -65,7 +65,12 @@ def test_github_pages_local_assets_exist_and_no_external_runtime_assets() -> Non
     assert not [
         asset
         for asset in parser.external_assets
-        if urlparse(asset).netloc not in {"github.com", "thankyou-cheems.github.io"}
+        if urlparse(asset).netloc
+        not in {
+            "docs.github.com",
+            "github.com",
+            "thankyou-cheems.github.io",
+        }
     ]
 
 
@@ -78,6 +83,6 @@ def test_site_styles_are_responsive_and_accessible() -> None:
     assert ":focus-visible" in css
     assert ".skip-link" in css
     assert "api.github.com" in javascript
-    assert "BomanaHotkeyBrokerSetup" in javascript
+    assert "BomanaHotkeyBrokerSetup" not in javascript
     assert "textContent" in javascript
     assert "innerHTML" not in javascript

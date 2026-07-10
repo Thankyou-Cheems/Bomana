@@ -53,6 +53,8 @@ APP_ENTRY = "Bomana.pyw"
 APP_DIR = "bomana"
 LAUNCHER_DIR = "launcher"
 UNIVERSAL_LAUNCHER_NAME = "Bomana_launcher"
+HOTKEY_BROKER_NAME = "BomanaHotkeyBroker.exe"
+HOTKEY_BROKER_CHECKSUM_NAME = "BomanaHotkeyBroker.sha256"
 BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
 SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
 SIGNING_PUBLIC_KEY_ENV = "BOMANA_RELEASE_ED25519_PUBLIC_KEY"
@@ -116,6 +118,14 @@ def parse_args() -> argparse.Namespace:
         "--output",
         default="dist",
         help="Output directory for release assets",
+    )
+    parser.add_argument(
+        "--hotkey-broker",
+        default="",
+        help=(
+            "prebuilt BomanaHotkeyBroker.exe for app packages; when omitted, "
+            "tools/build_hotkey_broker.py builds it from source"
+        ),
     )
     return parser.parse_args()
 
@@ -254,7 +264,36 @@ def add_file_to_zip(zf: zipfile.ZipFile, root: Path, path: Path) -> None:
     zf.write(path, rel)
 
 
-def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path:
+def resolve_hotkey_broker(root: Path, configured_path: str) -> Path:
+    if configured_path.strip():
+        broker = Path(configured_path).resolve()
+    else:
+        output = root / "build" / "hotkey-broker-release"
+        subprocess.run(
+            [
+                sys.executable,
+                str(root / "tools" / "build_hotkey_broker.py"),
+                "--mode",
+                "release",
+                "--output",
+                str(output),
+            ],
+            cwd=root,
+            check=True,
+        )
+        broker = output / HOTKEY_BROKER_NAME
+    if not broker.is_file() or broker.name != HOTKEY_BROKER_NAME:
+        raise RuntimeError(f"missing fixed-name hotkey broker: {broker}")
+    return broker
+
+
+def build_app_zip(
+    root: Path,
+    variant: str,
+    version: str,
+    out_dir: Path,
+    hotkey_broker: Path,
+) -> Path:
     name = f"Bomana_app_{variant}_v{version}.zip"
     out_zip = out_dir / name
     if out_zip.exists():
@@ -277,9 +316,21 @@ def build_app_zip(root: Path, variant: str, version: str, out_dir: Path) -> Path
             if path.suffix in {".pyc", ".pyo"}:
                 continue
             rel_path = path.relative_to(root).as_posix()
+            if rel_path.startswith(f"{APP_DIR}/bin/"):
+                continue
             if variant != "Enhanced" and rel_path == ccrp_json_rel.as_posix():
                 continue
             add_file_to_zip(zf, root, path)
+
+        broker_sha256 = sha256_file(hotkey_broker)
+        zf.write(
+            hotkey_broker,
+            f"{APP_DIR}/bin/{HOTKEY_BROKER_NAME}",
+        )
+        zf.writestr(
+            f"{APP_DIR}/bin/{HOTKEY_BROKER_CHECKSUM_NAME}",
+            f"{broker_sha256}  {HOTKEY_BROKER_NAME}\n",
+        )
 
         # Backward compatibility: legacy root-level CCRP file.
         if variant == "Enhanced" and not ccrp_json.exists():
@@ -502,11 +553,18 @@ def main() -> int:
 
         if args.target in ("all", "app"):
             app_version = source_app_version
+            hotkey_broker = resolve_hotkey_broker(root, args.hotkey_broker)
             patched = replace_switches(original_feature_profile, VARIANT_SWITCHES[args.variant])
             if patched != original_feature_profile:
                 feature_profile_path.write_text(patched, encoding="utf-8")
                 feature_profile_patched = True
-            app_zip = build_app_zip(root, args.variant, app_version, out_dir)
+            app_zip = build_app_zip(
+                root,
+                args.variant,
+                app_version,
+                out_dir,
+                hotkey_broker,
+            )
             app_sha = sha256_file(app_zip)
             manifest = write_manifest(
                 out_dir,

@@ -222,7 +222,9 @@ function Install-AppPackage {
         "Bomana.pyw",
         "bomana\config\__init__.py",
         "bomana\config\feature_profile.py",
-        "bomana\metadata.py"
+        "bomana\metadata.py",
+        "bomana\bin\BomanaHotkeyBroker.exe",
+        "bomana\bin\BomanaHotkeyBroker.sha256"
     )
     foreach ($relative in $required) {
         $candidate = Join-Path $appDir $relative

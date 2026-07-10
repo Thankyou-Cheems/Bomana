@@ -41,11 +41,11 @@ test layout, and release/deploy verification tests.
   changes also need build or packaged-launcher smoke when appropriate.
 - `QG-09`: Ruff defaults include `RUF012` and `RUF013`. `RUF001`, `RUF002`, and
   `RUF003` are targeted scans only.
-- `QG-10`: Changes to `native/hotkey_broker/`,
-  `native/hotkey_broker_setup/`, or `tools/build_hotkey_broker.py` MUST run
-  `cargo fmt --check` for both crates, `cargo test --locked` for the runtime
-  broker, and an unsigned development build of both binaries; Windows release
-  CI MUST repeat these checks before Authenticode signing.
+- `QG-10`: Changes to `native/hotkey_broker/` or
+  `tools/build_hotkey_broker.py` MUST run `cargo fmt --check`,
+  `cargo test --locked`, and an unsigned development build of the broker;
+  Windows release CI MUST repeat these checks before packaging the broker into
+  each App ZIP.
 
 ## Contract Coverage
 

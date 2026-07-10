@@ -8,9 +8,10 @@
 ## [Unreleased]
 
 ### 改进
-- 移除可变 Python App 包的整包提权路径；Launcher 与 App 始终保持普通权限，仅由安装在 Program Files、经 Authenticode 签名的最小原生 Broker 请求 UAC 并注册固定热键动作。拒绝或组件缺失时保留本地热键、精确降级提示与一键重试。
+- 移除可变 Python App 包的整包提权路径；普通热键默认先启动，确认 War Thunder 普通运行时不请求 UAC。游戏高权限、未启动或无法判断时才提供手动授权，零安装 native Broker 随 App ZIP 携带并只注册固定动作；拒绝时恢复普通热键。
+- 为 App 包、Launcher、清单和校验文件添加 GitHub Artifact Attestations；继续保留 Ed25519 清单与 SHA256 校验，并明确来源证明不会让无证书 UAC 显示可信发布者。
 - 重构 GitHub Pages 首页，以更简洁的新用户路径呈现下载、三种通道、首次启动、权限说明、功能边界、隐私与文档入口。
-- 收敛全局快捷键为每个启用动作每个生命周期一次 `RegisterHotKey`，保留 Tk-owned message window/dispatcher 修复，不再引入 hook、轮询、原始输入或游戏进程扫描后端。
+- 收敛全局快捷键为每个启用动作每个生命周期一次 `RegisterHotKey`，保留 Tk-owned message window/dispatcher 修复，不再引入 hook、轮询或原始输入后端；权限探测仅查询可见 War Thunder 窗口的进程名和 elevation token。
 - 将绿色版启动器拆出顶层 `launcher/` 开发期包，集中 manifest 验签投影、下载缓存、安装事务、启动隔离和 launcher metadata，同时保留 `launcher.pyw` 单文件分发入口。
 - 拆出设置对话框的 headless 表单校验/保存 payload helper，并将主窗口贴边锚点几何逻辑下放为可单测 helper，降低 `dialogs.py`/`app.py` 的协调负担。
 - 清理 SDD 迁移期间保留的旧兼容面：移除 config facade re-export、旧 app 包 marker、launcher 安装事务旧模块、GameLogic delegator wrapper，以及 `UISnapshot` 展示字符串/颜色字段。

@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-# enforces: docs/specs/startup-elevation.md ELEV-01..ELEV-10
+# enforces: docs/specs/startup-elevation.md ELEV-01..ELEV-12
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -52,20 +52,76 @@ def test_launcher_and_python_app_remain_as_invoker() -> None:
     assert "_launch_app(base, selected_channel)" in main_body
 
 
-def test_only_fixed_program_files_broker_path_crosses_uac() -> None:
+def test_ordinary_hotkeys_start_before_probe_and_uac_is_explicit() -> None:
+    runtime_source = read_source("bomana/ui/runtime_services.py")
+    app_source = read_source("bomana/ui/app.py")
+    init_body = method_source(runtime_source, "AppRuntimeServices", "init_global_hotkeys")
+    elevate_body = method_source(
+        runtime_source,
+        "AppRuntimeServices",
+        "enable_elevated_hotkeys",
+    )
+    action_body = method_source(app_source, "App", "_on_nudge_action")
+
+    assert init_body.index("self._start_local_hotkeys(hotkeys)") < init_body.index(
+        "detect_war_thunder_integrity()"
+    )
+    assert "ElevatedHotkeyBrokerClient(" not in init_body
+    assert "ElevatedHotkeyBrokerClient(" in elevate_body
+    assert 'self._hotkey_broker_action == "elevate"' in action_body
+    assert "messagebox.askokcancel" in action_body
+    assert "未知" in action_body
+    assert "不会安装额外程序" in action_body
+
+
+def test_probe_is_limited_to_visible_allowlisted_war_thunder_tokens() -> None:
+    source = read_source("bomana/utils/hotkey_broker.py")
+    probe_body = function_source(source, "detect_war_thunder_integrity")
+
+    for token in (
+        "EnumWindows",
+        "IsWindowVisible",
+        "GetWindowTextW",
+        "WAR_THUNDER_WINDOW_TITLE",
+        "QueryFullProcessImageNameW",
+        "PROCESS_QUERY_LIMITED_INFORMATION",
+        "OpenProcessToken",
+        "TOKEN_QUERY",
+        "TokenElevation",
+        "aces.exe",
+        "aces64.exe",
+        "aces_be.exe",
+    ):
+        assert token in source
+    assert "WAR_THUNDER_EXECUTABLES" in probe_body
+    for forbidden in (
+        "CreateToolhelp32Snapshot",
+        "Process32First",
+        "Process32Next",
+        "Module32First",
+        "ReadProcessMemory",
+        "WriteProcessMemory",
+    ):
+        assert forbidden not in source
+
+
+def test_only_fixed_bundled_hash_locked_broker_path_crosses_uac() -> None:
     source = read_source("bomana/utils/hotkey_broker.py")
     request_body = function_source(source, "_request_runas")
-    path_body = function_source(source, "installed_broker_path")
+    path_body = function_source(source, "bundled_broker_path")
 
     assert 'BROKER_EXECUTABLE_NAME = "BomanaHotkeyBroker.exe"' in source
-    assert 'Path("Bomana") / BROKER_DIRECTORY_NAME' in source
-    assert "SHGetKnownFolderPath" in source
+    assert 'BROKER_BIN_DIRECTORY = "bin"' in source
     assert "os.environ" not in path_body
     assert 'info.lpVerb = "runas"' in request_body
     assert "info.lpFile = str(path)" in request_body
     assert "subprocess.list2cmdline" in request_body
-    assert "verify_authenticode(actual)" in source
-    assert "WinVerifyTrust" in source
+    assert "verify_bundled_broker" in source
+    assert "sha256_file" in source
+    assert "_lock_broker_file" in source
+    assert "FILE_SHARE_READ" in source
+    assert "FILE_SHARE_WRITE" not in source
+    assert "FILE_SHARE_DELETE" not in source
 
 
 def test_broker_ipc_is_acl_restricted_and_fixed_frame_only() -> None:
@@ -141,16 +197,6 @@ def test_broker_exits_with_app_or_stop_event_and_never_persists() -> None:
     assert not [token for token in forbidden if token in combined]
 
 
-def test_installer_forces_protected_program_files_acl() -> None:
-    setup_source = read_source("native/hotkey_broker_setup/src/main.rs")
-
-    assert "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)" in setup_source
-    assert "PROTECTED_DACL_SECURITY_INFORMATION" in setup_source
-    assert "SetNamedSecurityInfoW" in setup_source
-    assert "apply_protected_acl(&directory)?" in setup_source
-    assert "apply_protected_acl(&target)?" in setup_source
-
-
 def test_no_elevated_path_runs_mutable_python_app_code() -> None:
     launcher_source = read_source("launcher.pyw")
     bootstrap_source = read_source("launcher/bootstrap.py")
@@ -165,15 +211,21 @@ def test_no_elevated_path_runs_mutable_python_app_code() -> None:
     assert not (ROOT / "launcher" / "elevation.py").exists()
 
 
-def test_release_tooling_refuses_unsigned_broker_artifacts() -> None:
+def test_release_packages_zero_install_broker_without_setup_or_authenticode() -> None:
     source = read_source("tools/build_hotkey_broker.py")
+    portable_source = read_source("tools/build_portable.py")
     workflow = read_source(".github/workflows/build.yml")
 
-    assert 'PFX_B64_ENV = "BOMANA_AUTHENTICODE_PFX_B64"' in source
-    assert 'PFX_PASSWORD_ENV = "BOMANA_AUTHENTICODE_PFX_PASSWORD"' in source
-    assert "release_certificate_context()" in source
-    assert source.count("authenticode_sign(") >= 3
-    assert 'signtool, "verify", "/pa", "/all"' in source
-    assert "BOMANA_AUTHENTICODE_PFX_B64" in workflow
     assert "tools/build_hotkey_broker.py" in workflow
-    assert "BomanaHotkeyBrokerSetup.exe" in workflow
+    assert "{APP_DIR}/bin/{HOTKEY_BROKER_NAME}" in portable_source
+    assert "HOTKEY_BROKER_CHECKSUM_NAME" in portable_source
+    combined = f"{source}\n{portable_source}\n{workflow}"
+    for forbidden in (
+        "BomanaHotkeyBrokerSetup.exe",
+        "hotkey_broker_setup",
+        "BOMANA_AUTHENTICODE_PFX_B64",
+        "BOMANA_AUTHENTICODE_PFX_PASSWORD",
+        "signtool",
+    ):
+        assert forbidden not in combined
+    assert not (ROOT / "native" / "hotkey_broker_setup" / "Cargo.toml").exists()

@@ -1,9 +1,10 @@
-"""Constrained client for Bomana's protected native Windows hotkey broker."""
+"""Ordinary-first client for Bomana's optional native Windows hotkey broker."""
 
 from __future__ import annotations
 
 import contextlib
 import ctypes
+import hashlib
 import os
 import secrets
 import subprocess
@@ -17,10 +18,11 @@ from typing import Any
 
 from bomana.utils.diagnostics import log_event, log_exception
 
-BROKER_DIRECTORY_NAME = "HotkeyBroker"
 BROKER_EXECUTABLE_NAME = "BomanaHotkeyBroker.exe"
-BROKER_INSTALL_RELATIVE = Path("Bomana") / BROKER_DIRECTORY_NAME / BROKER_EXECUTABLE_NAME
-BROKER_RELEASES_URL = "https://github.com/Thankyou-Cheems/Bomana/releases"
+BROKER_CHECKSUM_NAME = "BomanaHotkeyBroker.sha256"
+BROKER_BIN_DIRECTORY = "bin"
+WAR_THUNDER_EXECUTABLES = frozenset({"aces.exe", "aces64.exe", "aces_be.exe"})
+WAR_THUNDER_WINDOW_TITLE = "war thunder"
 
 ERROR_CANCELLED = 1223
 ERROR_PIPE_CONNECTED = 535
@@ -35,6 +37,13 @@ PIPE_READMODE_MESSAGE = 0x00000002
 PIPE_WAIT = 0x00000000
 PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+TOKEN_QUERY = 0x0008
+GENERIC_READ = 0x80000000
+FILE_SHARE_READ = 0x00000001
+OPEN_EXISTING = 3
+FILE_ATTRIBUTE_NORMAL = 0x00000080
+BROKER_READY_TIMEOUT_SECONDS = 12.0
 
 FRAME_SIZE = 8
 FRAME_MAGIC = b"BHK1"
@@ -61,11 +70,27 @@ class BrokerStartStatus(StrEnum):
     UNSUPPORTED = "unsupported"
 
 
+class GameIntegrityStatus(StrEnum):
+    ORDINARY = "ordinary"
+    ELEVATED = "elevated"
+    NOT_RUNNING = "not_running"
+    UNKNOWN = "unknown"
+    UNSUPPORTED = "unsupported"
+
+
 @dataclass(frozen=True, slots=True)
 class BrokerStartResult:
     status: BrokerStartStatus
     message: str = ""
     error_code: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GameIntegrityResult:
+    status: GameIntegrityStatus
+    process_id: int | None = None
+    image_name: str = ""
+    message: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,15 +105,6 @@ class BrokerFrame:
     kind: int
     code: int
     detail: int
-
-
-class GUID(ctypes.Structure):
-    _fields_ = [
-        ("Data1", wintypes.DWORD),
-        ("Data2", wintypes.WORD),
-        ("Data3", wintypes.WORD),
-        ("Data4", ctypes.c_ubyte * 8),
-    ]
 
 
 class SECURITY_ATTRIBUTES(ctypes.Structure):
@@ -119,39 +135,16 @@ class SHELLEXECUTEINFOW(ctypes.Structure):
     ]
 
 
-class WINTRUST_FILE_INFO(ctypes.Structure):
-    _fields_ = [
-        ("cbStruct", wintypes.DWORD),
-        ("pcwszFilePath", wintypes.LPCWSTR),
-        ("hFile", wintypes.HANDLE),
-        ("pgKnownSubject", ctypes.POINTER(GUID)),
-    ]
-
-
-class WINTRUST_DATA(ctypes.Structure):
-    _fields_ = [
-        ("cbStruct", wintypes.DWORD),
-        ("pPolicyCallbackData", wintypes.LPVOID),
-        ("pSIPClientData", wintypes.LPVOID),
-        ("dwUIChoice", wintypes.DWORD),
-        ("fdwRevocationChecks", wintypes.DWORD),
-        ("dwUnionChoice", wintypes.DWORD),
-        ("pFile", ctypes.POINTER(WINTRUST_FILE_INFO)),
-        ("dwStateAction", wintypes.DWORD),
-        ("hWVTStateData", wintypes.HANDLE),
-        ("pwszURLReference", wintypes.LPCWSTR),
-        ("dwProvFlags", wintypes.DWORD),
-        ("dwUIContext", wintypes.DWORD),
-        ("pSignatureSettings", wintypes.LPVOID),
-    ]
-
-
 class SID_AND_ATTRIBUTES(ctypes.Structure):
     _fields_ = [("Sid", wintypes.LPVOID), ("Attributes", wintypes.DWORD)]
 
 
 class TOKEN_USER(ctypes.Structure):
     _fields_ = [("User", SID_AND_ATTRIBUTES)]
+
+
+class TOKEN_ELEVATION(ctypes.Structure):
+    _fields_ = [("TokenIsElevated", wintypes.DWORD)]
 
 
 def _is_windows() -> bool:
@@ -168,92 +161,58 @@ def _windows_dll(name: str) -> Any | None:
         return None
 
 
-def _known_program_files() -> Path | None:
-    if not _is_windows():
-        return None
-    shell32 = _windows_dll("shell32")
-    ole32 = _windows_dll("ole32")
-    if shell32 is None or ole32 is None:
-        return None
+def bundled_broker_path(*, package_directory: Path | None = None) -> Path:
+    """Return the fixed broker path inside this App package.
 
-    folder_id = GUID(
-        0x905E63B6,
-        0xC1BF,
-        0x494E,
-        (ctypes.c_ubyte * 8)(0xB2, 0x9C, 0x65, 0xB7, 0x32, 0xD3, 0xD2, 0x1A),
+    ``package_directory`` is dependency injection for tests/build validation;
+    runtime configuration and environment variables cannot override this path.
+    """
+
+    package_root = (
+        Path(package_directory).resolve()
+        if package_directory is not None
+        else Path(__file__).resolve().parents[1]
     )
-    path_pointer = wintypes.LPWSTR()
-    get_known_folder = shell32.SHGetKnownFolderPath
-    get_known_folder.argtypes = [
-        ctypes.POINTER(GUID),
-        wintypes.DWORD,
-        wintypes.HANDLE,
-        ctypes.POINTER(wintypes.LPWSTR),
-    ]
-    get_known_folder.restype = ctypes.c_long
-    ole32.CoTaskMemFree.argtypes = [wintypes.LPVOID]
-    ole32.CoTaskMemFree.restype = None
-    if get_known_folder(ctypes.byref(folder_id), 0, None, ctypes.byref(path_pointer)) != 0:
-        return None
+    return package_root / BROKER_BIN_DIRECTORY / BROKER_EXECUTABLE_NAME
+
+
+def broker_checksum_path(path: Path) -> Path:
+    return path.with_name(BROKER_CHECKSUM_NAME)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def expected_broker_sha256(path: Path) -> str:
+    checksum = broker_checksum_path(path)
+    text = checksum.read_text(encoding="ascii").strip()
+    fields = text.split()
+    if len(fields) != 2 or fields[1] != BROKER_EXECUTABLE_NAME:
+        raise ValueError("invalid bundled hotkey broker checksum")
+    expected = fields[0].lower()
+    if len(expected) != 64 or any(char not in "0123456789abcdef" for char in expected):
+        raise ValueError("invalid bundled hotkey broker SHA-256")
+    return expected
+
+
+def verify_bundled_broker(path: Path) -> bool:
     try:
-        return Path(path_pointer.value)
-    finally:
-        ole32.CoTaskMemFree(path_pointer)
-
-
-def installed_broker_path(*, program_files: Path | None = None) -> Path | None:
-    """Return the one allowed broker path; injection is test-only and not runtime config."""
-
-    root = Path(program_files).resolve() if program_files is not None else _known_program_files()
-    if root is None:
-        return None
-    return root / BROKER_INSTALL_RELATIVE
-
-
-def verify_authenticode(path: Path) -> bool:
-    """Verify that Windows trusts the executable's Authenticode signature."""
-
-    if not _is_windows() or not path.is_file():
-        return False
-    wintrust = _windows_dll("wintrust")
-    if wintrust is None:
+        return sha256_file(path) == expected_broker_sha256(path)
+    except OSError, UnicodeError, ValueError:
         return False
 
-    action = GUID(
-        0x00AAC56B,
-        0xCD44,
-        0x11D0,
-        (ctypes.c_ubyte * 8)(0x8C, 0xC2, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE),
-    )
-    file_info = WINTRUST_FILE_INFO()
-    file_info.cbStruct = ctypes.sizeof(WINTRUST_FILE_INFO)
-    file_info.pcwszFilePath = str(path)
 
-    trust_data = WINTRUST_DATA()
-    trust_data.cbStruct = ctypes.sizeof(WINTRUST_DATA)
-    trust_data.dwUIChoice = 2  # WTD_UI_NONE
-    trust_data.fdwRevocationChecks = 0  # WTD_REVOKE_NONE
-    trust_data.dwUnionChoice = 1  # WTD_CHOICE_FILE
-    trust_data.pFile = ctypes.pointer(file_info)
-    trust_data.dwStateAction = 1  # WTD_STATEACTION_VERIFY
-    trust_data.dwProvFlags = 0x1000  # WTD_CACHE_ONLY_URL_RETRIEVAL
-
-    verify = wintrust.WinVerifyTrust
-    verify.argtypes = [wintypes.HWND, ctypes.POINTER(GUID), wintypes.LPVOID]
-    verify.restype = ctypes.c_long
-    status = int(verify(None, ctypes.byref(action), ctypes.byref(trust_data)))
-    trust_data.dwStateAction = 2  # WTD_STATEACTION_CLOSE
-    with contextlib.suppress(OSError, ValueError):
-        verify(None, ctypes.byref(action), ctypes.byref(trust_data))
-    return status == 0
-
-
-def find_trusted_broker() -> BrokerStartResult | Path:
-    path = installed_broker_path()
-    if path is None or not path.is_file():
+def find_bundled_broker() -> BrokerStartResult | Path:
+    path = bundled_broker_path()
+    if not path.is_file() or path.is_symlink():
         return BrokerStartResult(
             BrokerStartStatus.UNAVAILABLE,
-            "未安装受保护的热键组件。",
+            "当前 App 包未携带游戏内热键组件。",
         )
     try:
         expected_parent = path.parent.resolve(strict=True)
@@ -262,12 +221,213 @@ def find_trusted_broker() -> BrokerStartResult | Path:
         return BrokerStartResult(BrokerStartStatus.UNAVAILABLE, str(exc))
     if actual.parent != expected_parent or actual.name != BROKER_EXECUTABLE_NAME:
         return BrokerStartResult(BrokerStartStatus.UNTRUSTED, "热键组件路径不可信。")
-    if not verify_authenticode(actual):
+    if not verify_bundled_broker(actual):
         return BrokerStartResult(
             BrokerStartStatus.UNTRUSTED,
-            "热键组件缺少有效的 Authenticode 签名。",
+            "热键组件 SHA-256 校验失败，请重新下载官方 App 包。",
         )
     return actual
+
+
+def _open_limited_process(process_id: int) -> int:
+    kernel32 = _windows_dll("kernel32")
+    if kernel32 is None:
+        raise OSError("Windows process APIs are unavailable")
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(process_id))
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    return int(handle)
+
+
+def _visible_window_process_ids() -> tuple[int, ...]:
+    user32 = _windows_dll("user32")
+    if not _is_windows() or user32 is None:
+        return ()
+    callback_type = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)(
+        wintypes.BOOL,
+        wintypes.HWND,
+        wintypes.LPARAM,
+    )
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
+    user32.GetWindowThreadProcessId.argtypes = [
+        wintypes.HWND,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    process_ids: set[int] = set()
+
+    @callback_type
+    def collect(hwnd: int, _parameter: int) -> bool:
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        length = int(user32.GetWindowTextLengthW(hwnd))
+        if length <= 0:
+            return True
+        title = ctypes.create_unicode_buffer(length + 1)
+        if user32.GetWindowTextW(hwnd, title, len(title)) <= 0:
+            return True
+        if WAR_THUNDER_WINDOW_TITLE not in title.value.casefold():
+            return True
+        process_id = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+        if process_id.value:
+            process_ids.add(int(process_id.value))
+        return True
+
+    user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user32.EnumWindows.restype = wintypes.BOOL
+    if not user32.EnumWindows(collect, 0):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return tuple(sorted(process_ids))
+
+
+def _process_image_name(process_id: int) -> str:
+    kernel32 = _windows_dll("kernel32")
+    if kernel32 is None:
+        raise OSError("Windows process APIs are unavailable")
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    handle = _open_limited_process(process_id)
+    try:
+        kernel32.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = wintypes.DWORD(len(buffer))
+        if not kernel32.QueryFullProcessImageNameW(
+            wintypes.HANDLE(handle),
+            0,
+            buffer,
+            ctypes.byref(length),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return Path(buffer.value).name.casefold()
+    finally:
+        kernel32.CloseHandle(wintypes.HANDLE(handle))
+
+
+def _process_is_elevated(process_id: int) -> bool:
+    kernel32 = _windows_dll("kernel32")
+    advapi32 = _windows_dll("advapi32")
+    if kernel32 is None or advapi32 is None:
+        raise OSError("Windows token APIs are unavailable")
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    process = _open_limited_process(process_id)
+    token = wintypes.HANDLE()
+    try:
+        advapi32.OpenProcessToken.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.HANDLE),
+        ]
+        advapi32.OpenProcessToken.restype = wintypes.BOOL
+        if not advapi32.OpenProcessToken(
+            wintypes.HANDLE(process), TOKEN_QUERY, ctypes.byref(token)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        elevation = TOKEN_ELEVATION()
+        returned = wintypes.DWORD()
+        advapi32.GetTokenInformation.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        advapi32.GetTokenInformation.restype = wintypes.BOOL
+        if not advapi32.GetTokenInformation(
+            token,
+            20,  # TokenElevation
+            ctypes.byref(elevation),
+            ctypes.sizeof(elevation),
+            ctypes.byref(returned),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return bool(elevation.TokenIsElevated)
+    finally:
+        if token:
+            kernel32.CloseHandle(token)
+        kernel32.CloseHandle(wintypes.HANDLE(process))
+
+
+def detect_war_thunder_integrity() -> GameIntegrityResult:
+    """Inspect only visible War Thunder-titled windows and token elevation."""
+
+    if not _is_windows():
+        return GameIntegrityResult(GameIntegrityStatus.UNSUPPORTED)
+    try:
+        process_ids = _visible_window_process_ids()
+    except OSError as exc:
+        return GameIntegrityResult(GameIntegrityStatus.UNKNOWN, message=str(exc))
+
+    ordinary: GameIntegrityResult | None = None
+    unknown: GameIntegrityResult | None = None
+    for process_id in process_ids:
+        try:
+            image_name = _process_image_name(process_id)
+        except OSError:
+            continue
+        if image_name not in WAR_THUNDER_EXECUTABLES:
+            continue
+        try:
+            elevated = _process_is_elevated(process_id)
+        except OSError as exc:
+            unknown = GameIntegrityResult(
+                GameIntegrityStatus.UNKNOWN,
+                process_id,
+                image_name,
+                str(exc),
+            )
+            continue
+        result = GameIntegrityResult(
+            GameIntegrityStatus.ELEVATED if elevated else GameIntegrityStatus.ORDINARY,
+            process_id,
+            image_name,
+        )
+        if elevated:
+            return result
+        ordinary = result
+    return ordinary or unknown or GameIntegrityResult(GameIntegrityStatus.NOT_RUNNING)
+
+
+def _lock_broker_file(path: Path) -> int:
+    kernel32 = _windows_dll("kernel32")
+    if kernel32 is None:
+        raise OSError("Windows file APIs are unavailable")
+    kernel32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    handle = kernel32.CreateFileW(
+        str(path),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        None,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        None,
+    )
+    if int(handle or 0) == int(INVALID_HANDLE_VALUE or 0):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return int(handle)
 
 
 def normalize_bindings(bindings: Sequence[BrokerBinding]) -> tuple[BrokerBinding, ...]:
@@ -454,7 +614,9 @@ class ElevatedHotkeyBrokerClient:
         self.failure_cb = failure_cb
         self._pipe_handle: int | None = None
         self._stop_event_handle: int | None = None
+        self._broker_file_handle: int | None = None
         self._reader_thread: threading.Thread | None = None
+        self._startup_timer: threading.Timer | None = None
         self._stopping = False
         self._ready = False
         self._session_token = ""
@@ -462,13 +624,23 @@ class ElevatedHotkeyBrokerClient:
     def start(self) -> BrokerStartResult:
         if not _is_windows():
             return BrokerStartResult(BrokerStartStatus.UNSUPPORTED)
-        trusted = find_trusted_broker()
-        if isinstance(trusted, BrokerStartResult):
-            return trusted
+        broker_path = find_bundled_broker()
+        if isinstance(broker_path, BrokerStartResult):
+            return broker_path
 
         kernel32 = _windows_dll("kernel32")
         if kernel32 is None:
             return BrokerStartResult(BrokerStartStatus.UNSUPPORTED, "Windows IPC API 不可用。")
+        try:
+            self._broker_file_handle = _lock_broker_file(broker_path)
+        except OSError as exc:
+            return BrokerStartResult(BrokerStartStatus.UNTRUSTED, str(exc))
+        if not verify_bundled_broker(broker_path):
+            self.stop()
+            return BrokerStartResult(
+                BrokerStartStatus.UNTRUSTED,
+                "热键组件在启动前发生变化，请重新下载官方 App 包。",
+            )
         self._session_token = f"{os.getpid()}-{secrets.token_hex(16)}"
         pipe_name = rf"\\.\pipe\Bomana.HotkeyBroker.{self._session_token}"
         event_name = rf"Local\Bomana.HotkeyBroker.Stop.{self._session_token}"
@@ -525,7 +697,7 @@ class ElevatedHotkeyBrokerClient:
                 kernel32.LocalFree(descriptor)
 
         result = _request_runas(
-            trusted,
+            broker_path,
             build_broker_arguments(self._session_token, self.bindings),
         )
         if result.status is not BrokerStartStatus.STARTED:
@@ -539,15 +711,25 @@ class ElevatedHotkeyBrokerClient:
             daemon=True,
         )
         self._reader_thread.start()
+        self._startup_timer = threading.Timer(
+            BROKER_READY_TIMEOUT_SECONDS,
+            self._handle_start_timeout,
+        )
+        self._startup_timer.daemon = True
+        self._startup_timer.start()
         log_event(
             "hotkey_broker_started",
             binding_count=len(self.bindings),
-            broker_path=str(trusted),
+            broker_path=str(broker_path),
         )
         return result
 
     def stop(self) -> None:
         self._stopping = True
+        timer = self._startup_timer
+        self._startup_timer = None
+        if timer is not None:
+            timer.cancel()
         kernel32 = _windows_dll("kernel32")
         if kernel32 is None:
             return
@@ -561,7 +743,7 @@ class ElevatedHotkeyBrokerClient:
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=1.0)
         self._reader_thread = None
-        for attribute in ("_pipe_handle", "_stop_event_handle"):
+        for attribute in ("_pipe_handle", "_stop_event_handle", "_broker_file_handle"):
             handle = getattr(self, attribute)
             if handle:
                 with contextlib.suppress(OSError, TypeError, ValueError):
@@ -620,6 +802,10 @@ class ElevatedHotkeyBrokerClient:
                 if frame.detail & (1 << (ACTION_IDS[binding.action] - 1))
             )
             self._ready = True
+            timer = self._startup_timer
+            self._startup_timer = None
+            if timer is not None:
+                timer.cancel()
             self.dispatch(self.ready_cb, failed)
             return
         binding = next(
@@ -643,3 +829,11 @@ class ElevatedHotkeyBrokerClient:
         log_exception("hotkey_broker_failed", RuntimeError(message))
         if not self._stopping:
             self.dispatch(self.failure_cb, message)
+
+    def _handle_start_timeout(self) -> None:
+        if self._stopping or self._ready:
+            return
+        message = "管理员热键组件未在限定时间内建立连接。"
+        log_exception("hotkey_broker_start_timeout", TimeoutError(message))
+        self.stop()
+        self.dispatch(self.failure_cb, message)

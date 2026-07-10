@@ -6,7 +6,7 @@ import pytest
 
 from bomana.utils import hotkey_broker
 
-# enforces: docs/specs/startup-elevation.md ELEV-02, ELEV-04, ELEV-05, ELEV-07, ELEV-08
+# enforces: docs/specs/startup-elevation.md ELEV-03, ELEV-05, ELEV-07..ELEV-12
 
 
 def _bindings(calls: list[str] | None = None) -> tuple[hotkey_broker.BrokerBinding, ...]:
@@ -20,10 +20,10 @@ def _bindings(calls: list[str] | None = None) -> tuple[hotkey_broker.BrokerBindi
     )
 
 
-def test_installed_broker_path_is_fixed_below_program_files(tmp_path: Path) -> None:
-    path = hotkey_broker.installed_broker_path(program_files=tmp_path)
+def test_bundled_broker_path_is_fixed_inside_app_package(tmp_path: Path) -> None:
+    path = hotkey_broker.bundled_broker_path(package_directory=tmp_path)
 
-    assert path == tmp_path.resolve() / "Bomana" / "HotkeyBroker" / "BomanaHotkeyBroker.exe"
+    assert path == tmp_path.resolve() / "bin" / "BomanaHotkeyBroker.exe"
 
 
 def test_broker_arguments_allow_only_fixed_actions_and_function_keys() -> None:
@@ -79,16 +79,60 @@ def test_decode_frame_accepts_only_fixed_eight_byte_protocol() -> None:
             hotkey_broker.decode_frame(invalid)
 
 
-def test_find_trusted_broker_rejects_unsigned_binary(monkeypatch, tmp_path: Path) -> None:
-    broker = tmp_path / "BomanaHotkeyBroker.exe"
-    broker.write_bytes(b"not signed")
-    monkeypatch.setattr(hotkey_broker, "installed_broker_path", lambda: broker)
-    monkeypatch.setattr(hotkey_broker, "verify_authenticode", lambda _path: False)
+def test_find_bundled_broker_rejects_tampered_binary(monkeypatch, tmp_path: Path) -> None:
+    broker = tmp_path / "bin" / "BomanaHotkeyBroker.exe"
+    broker.parent.mkdir()
+    broker.write_bytes(b"original")
+    checksum = hotkey_broker.sha256_file(broker)
+    broker.with_name(hotkey_broker.BROKER_CHECKSUM_NAME).write_text(
+        f"{checksum}  {broker.name}\n",
+        encoding="ascii",
+    )
+    broker.write_bytes(b"tampered")
+    monkeypatch.setattr(hotkey_broker, "bundled_broker_path", lambda: broker)
 
-    result = hotkey_broker.find_trusted_broker()
+    result = hotkey_broker.find_bundled_broker()
 
     assert isinstance(result, hotkey_broker.BrokerStartResult)
     assert result.status is hotkey_broker.BrokerStartStatus.UNTRUSTED
+
+
+def test_war_thunder_integrity_probe_uses_visible_allowlisted_processes(monkeypatch) -> None:
+    monkeypatch.setattr(hotkey_broker, "_is_windows", lambda: True)
+    monkeypatch.setattr(hotkey_broker, "_visible_window_process_ids", lambda: (11, 22))
+    monkeypatch.setattr(
+        hotkey_broker,
+        "_process_image_name",
+        lambda process_id: "notepad.exe" if process_id == 11 else "aces.exe",
+    )
+    monkeypatch.setattr(hotkey_broker, "_process_is_elevated", lambda process_id: process_id == 22)
+
+    result = hotkey_broker.detect_war_thunder_integrity()
+
+    assert result.status is hotkey_broker.GameIntegrityStatus.ELEVATED
+    assert result.process_id == 22
+    assert result.image_name == "aces.exe"
+
+
+def test_war_thunder_integrity_probe_distinguishes_absent_and_unknown(monkeypatch) -> None:
+    monkeypatch.setattr(hotkey_broker, "_is_windows", lambda: True)
+    monkeypatch.setattr(hotkey_broker, "_visible_window_process_ids", lambda: (31,))
+    monkeypatch.setattr(hotkey_broker, "_process_image_name", lambda _pid: "explorer.exe")
+    assert (
+        hotkey_broker.detect_war_thunder_integrity().status
+        is hotkey_broker.GameIntegrityStatus.NOT_RUNNING
+    )
+
+    monkeypatch.setattr(hotkey_broker, "_process_image_name", lambda _pid: "aces_be.exe")
+    monkeypatch.setattr(
+        hotkey_broker,
+        "_process_is_elevated",
+        lambda _pid: (_ for _ in ()).throw(OSError("access denied")),
+    )
+    assert (
+        hotkey_broker.detect_war_thunder_integrity().status
+        is hotkey_broker.GameIntegrityStatus.UNKNOWN
+    )
 
 
 def test_uac_cancellation_cleans_ipc_without_starting_reader(monkeypatch, tmp_path: Path) -> None:
@@ -120,7 +164,9 @@ def test_uac_cancellation_cleans_ipc_without_starting_reader(monkeypatch, tmp_pa
 
     fake_kernel32 = FakeKernel32()
     monkeypatch.setattr(hotkey_broker, "_is_windows", lambda: True)
-    monkeypatch.setattr(hotkey_broker, "find_trusted_broker", lambda: broker)
+    monkeypatch.setattr(hotkey_broker, "find_bundled_broker", lambda: broker)
+    monkeypatch.setattr(hotkey_broker, "_lock_broker_file", lambda _path: 103)
+    monkeypatch.setattr(hotkey_broker, "verify_bundled_broker", lambda _path: True)
     monkeypatch.setattr(
         hotkey_broker,
         "_security_attributes",
@@ -155,6 +201,7 @@ def test_uac_cancellation_cleans_ipc_without_starting_reader(monkeypatch, tmp_pa
     assert ("disconnect", 101) in calls
     assert ("close", 101) in calls
     assert ("close", 102) in calls
+    assert ("close", 103) in calls
 
 
 def test_broker_frames_dispatch_callbacks_only_through_dispatcher() -> None:
@@ -230,3 +277,24 @@ def test_broken_pipe_before_ready_dispatches_visible_failure(monkeypatch) -> Non
     callback(*args)
     assert len(failures) == 1
     assert "109" in failures[0]
+
+
+def test_broker_start_timeout_stops_session_and_dispatches_failure(monkeypatch) -> None:
+    dispatched: list[tuple[object, tuple[object, ...]]] = []
+    failures: list[str] = []
+    client = hotkey_broker.ElevatedHotkeyBrokerClient(
+        lambda callback, *args: dispatched.append((callback, args)),
+        _bindings(),
+        ready_cb=lambda _failed: None,
+        failure_cb=failures.append,
+    )
+    stopped: list[bool] = []
+    monkeypatch.setattr(client, "stop", lambda: stopped.append(True))
+
+    client._handle_start_timeout()
+
+    assert stopped == [True]
+    assert failures == []
+    callback, args = dispatched[0]
+    callback(*args)
+    assert "限定时间" in failures[0]

@@ -34,8 +34,7 @@
 启动器与 app 包：
 
 - `Bomana_launcher_vX.Y.Z.exe`：更新检查、下载、校验、启动器自更新、启动入口，并保留一个上一版回退槽
-- `BomanaHotkeyBrokerSetup.exe`：可选的签名热键组件安装器；仅当 War Thunder 以更高权限运行且你需要游戏前台 F7-F11 时使用
-- `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行包
+- `Bomana_app_<Variant>_vX.Y.Z.zip`：实际运行包，内置零安装的最小热键 Broker
 - `manifest_<Variant>.json`：版本、应用包文件名、SHA256、`min_launcher_version`、Ed25519 发布签名元数据
 - `launcher_manifest.json`：启动器版本、文件名、SHA256、文件大小、Ed25519 发布签名元数据
 
@@ -51,6 +50,7 @@ uv run python Bomana.pyw
 ```
 
 如果你已经有 uv 环境，可以直接使用方式 B，不需要下载启动器；仓库 `.python-version` 默认 pin 到 Python 3.14.5。
+源码调试若要测试可选管理员热键，可先运行 `uv run python tools/build_hotkey_broker.py --mode dev --output bomana/bin`；这只在仓库内生成被忽略的 native 文件，不会安装程序或修改系统。
 
 ### 2. 启动流程
 
@@ -63,11 +63,12 @@ uv run python Bomana.pyw
 
 #### 游戏前台热键权限
 
-- Launcher 与 Bomana App 始终以普通权限运行，不再提权整个 Python 应用目录。
-- 如果 War Thunder 也以普通权限运行，无需安装额外组件。
-- 如果游戏以更高权限运行，Bomana 会提示安装 Release 中带有效发布者签名的 `BomanaHotkeyBrokerSetup.exe`。安装一次后，点击 App 内“启用游戏内热键”即可为最小热键 Broker 单独请求 UAC。
+- Launcher 与 Bomana App 始终以普通权限运行；启动时先启用普通热键，不会自动弹 UAC。
+- Bomana 只检查可见 War Thunder 窗口对应的进程名和管理员状态，不读取游戏内存、模块或文件。确认游戏普通运行时不会显示提权建议。
+- 游戏以管理员运行、尚未启动或权限无法判断时，App 会显示“授权管理员热键”。点击后先阅读确认说明，再由你在 Windows UAC 中手动批准随 App 包携带的最小 Broker；无需安装任何额外 EXE、服务或计划任务。
+- 项目没有商业 Authenticode 证书，因此 UAC 会显示“未知发布者”。可用 `gh attestation verify <下载文件> --repo Thankyou-Cheems/Bomana` 验证 GitHub Actions 构建来源。
 - 拒绝 UAC 不会阻止 Bomana 启动；窗口按钮、托盘、计时、导航和官方 8111 数据保持可用，只是游戏获得焦点时的全局 F7-F11 可能失效。
-- Broker 只注册当前启用的固定动作，不使用键盘钩子、轮询、Raw Input、游戏进程扫描、服务或计划任务。
+- Broker 只注册当前启用的固定动作，不使用键盘钩子、轮询、Raw Input、游戏内存读取、服务或计划任务。
 
 ### 3. 核心功能速览
 
@@ -132,9 +133,9 @@ uv run python tools/update_datamine_assets.py ^
 
 - 发布构建使用 Python 3.14 + uv；本地打包前运行 `uv sync --extra build --frozen`。
 - 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
-- 发布热键 Broker 还必须设置 `BOMANA_AUTHENTICODE_PFX_B64` 与 `BOMANA_AUTHENTICODE_PFX_PASSWORD`；`tools/build_hotkey_broker.py --mode release` 会在签名或 `signtool verify /pa /all` 失败时拒绝产出 Release 文件。
+- App 发布构建会自动编译并内置 native 热键 Broker；Actions 使用 `actions/attest@v4` 为最终包、清单与校验文件生成来源证明。
 - 本地发布命令入口是 `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`；`--version` 只是可选一致性校验，app 目标必须匹配 `bomana/metadata.py` 的 `__version__`，launcher 目标必须匹配 `launcher/metadata.py` 的 `LAUNCHER_VERSION`。
-- 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；更新服务部署只能从本机运行 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`，不要用 GitHub Actions 直连腾讯云主机部署。公开端点验证必须调用 `verify_release_manifest_signature`。
+- 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；GitHub Release 完成后在本机运行 `gh release download vX.Y.Z --dir dist`，再运行 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`。不要用 GitHub Actions 直连腾讯云主机部署，公开端点验证必须调用 `verify_release_manifest_signature`。
 - 发布签名字段、密钥处理和部署边界以 [release-signing spec](./specs/release-signing.md) 为准。
 
 ---
@@ -169,8 +170,7 @@ Channels:
 Launcher/package roles:
 
 - `Bomana_launcher_vX.Y.Z.exe`: update check/download/verify/start entry, plus one-version rollback retention
-- `BomanaHotkeyBrokerSetup.exe`: optional signed installer for game-foreground hotkeys when War Thunder runs at higher integrity
-- `Bomana_app_<Variant>_vX.Y.Z.zip`: runnable app package
+- `Bomana_app_<Variant>_vX.Y.Z.zip`: runnable app package with the zero-install native hotkey broker bundled inside
 - `manifest_<Variant>.json`: version/package asset/SHA256/`min_launcher_version`/Ed25519 release-signature metadata
 - `launcher_manifest.json`: launcher version/asset/SHA256/size/Ed25519 release-signature metadata
 
@@ -186,6 +186,7 @@ uv run python Bomana.pyw
 ```
 
 If you already use uv, Option B is enough; the repo `.python-version` pins Python 3.14.5.
+For source-mode admin-hotkey testing, first run `uv run python tools/build_hotkey_broker.py --mode dev --output bomana/bin`; this creates an ignored native file inside the checkout and does not install or modify the system.
 
 ### 2. Start Flow
 
@@ -198,11 +199,12 @@ If you already use uv, Option B is enough; the repo `.python-version` pins Pytho
 
 #### Game-foreground hotkey permission
 
-- Launcher and the Python App always stay at ordinary integrity.
-- If War Thunder also runs normally, no extra component is needed.
-- If the game runs at higher integrity, install the publisher-signed `BomanaHotkeyBrokerSetup.exe` from Releases once, then use “Enable in-game hotkeys” in the App to approve only the minimal broker.
+- Launcher and the Python App always stay at ordinary integrity; ordinary hotkeys start first and UAC is never automatic.
+- Bomana queries only the executable name and elevation token for visible War Thunder windows. If the game is confirmed ordinary, no privilege recommendation is shown.
+- If the game is elevated, closed, or its token cannot be queried, the App offers “Authorize admin hotkeys”. After an explanatory confirmation, you can manually approve the bundled native broker in UAC; no helper installer, service, or scheduled task is created.
+- Without a commercial Authenticode certificate, UAC shows “Unknown publisher”. Run `gh attestation verify <download> --repo Thankyou-Cheems/Bomana` to verify GitHub build provenance.
 - Denying UAC keeps buttons, tray actions, timer/navigation, and official 8111 data available; only global F7-F11 delivery while the game has focus may be unavailable.
-- The broker registers only enabled fixed actions and does not use hooks, polling, Raw Input, game-process scans, a service, or a scheduled task.
+- The broker registers only enabled fixed actions and does not use hooks, polling, Raw Input, game-memory access, a service, or a scheduled task.
 
 ### 3. Feature Snapshot
 
@@ -249,8 +251,9 @@ A: Expected for an estimate-based model. Tune `range correction` and `time corre
 
 - Release builds use Python 3.14 + uv; run `uv sync --extra build --frozen` before local packaging.
 - Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).
+- App builds compile and bundle the native broker automatically. GitHub release jobs attest final packages, manifests, and checksum files with `actions/attest@v4`; Authenticode secrets are not required.
 - Local package entry: `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`; `--version` is an optional consistency check and must match `bomana/metadata.py __version__` for app builds or `launcher/metadata.py LAUNCHER_VERSION` for launcher builds.
-- Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; deploy only from the maintainer workstation with `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`. Do not deploy to Tencent from GitHub Actions. Public endpoint checks must call `verify_release_manifest_signature`.
+- Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; after GitHub finishes the Release, run `gh release download vX.Y.Z --dir dist` and then `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z` on the maintainer workstation. Do not deploy to Tencent from Actions. Public endpoint checks must call `verify_release_manifest_signature`.
 - Release signing fields, key handling, and deployment boundaries are canonical in [release-signing spec](./specs/release-signing.md).
 
 ---

@@ -6,15 +6,10 @@ const statusEl = document.querySelector("#releaseStatus");
 const releaseAssets = document.querySelector("#releaseAssets");
 const launcherDownload = document.querySelector("#launcherDownload");
 const heroDownload = document.querySelector("#heroDownload");
-const setupDownload = document.querySelector("#setupDownload");
 const allReleasesLink = document.querySelector("#allReleasesLink");
 
 function isLauncher(name) {
   return /launcher.*[.]exe$/i.test(name);
-}
-
-function isBrokerSetup(name) {
-  return /^BomanaHotkeyBrokerSetup[.]exe$/i.test(name);
 }
 
 function releaseHasLauncher(release) {
@@ -27,7 +22,6 @@ function chooseRelease(releases) {
 
 function friendlyAssetLabel(name) {
   if (isLauncher(name)) return "Windows Launcher";
-  if (isBrokerSetup(name)) return "Signed Hotkey Broker";
   if (/checksums/i.test(name)) return "Checksums";
   if (/manifest/i.test(name)) return "Signed manifest";
   if (/app_Enhanced/i.test(name)) return "Enhanced app";
@@ -38,13 +32,12 @@ function friendlyAssetLabel(name) {
 
 function assetRank(name) {
   if (isLauncher(name)) return 0;
-  if (isBrokerSetup(name)) return 1;
-  if (/checksums/i.test(name)) return 2;
-  if (/manifest/i.test(name)) return 3;
-  if (/app_Enhanced/i.test(name)) return 4;
-  if (/app_Standard/i.test(name)) return 5;
-  if (/app_Lite/i.test(name)) return 6;
-  return 7;
+  if (/checksums/i.test(name)) return 1;
+  if (/manifest/i.test(name)) return 2;
+  if (/app_Enhanced/i.test(name)) return 3;
+  if (/app_Standard/i.test(name)) return 4;
+  if (/app_Lite/i.test(name)) return 5;
+  return 6;
 }
 
 function renderAssets(release) {
@@ -74,7 +67,6 @@ async function loadRelease() {
     if (!release) throw new Error("No releases found");
 
     const launcher = release.assets.find((asset) => isLauncher(asset.name));
-    const brokerSetup = release.assets.find((asset) => isBrokerSetup(asset.name));
     const label = release.name || release.tag_name;
     statusEl.textContent = `当前推荐：${label}。启动器会自动选择并验证应用通道。`;
     allReleasesLink.href = releasesUrl;
@@ -89,21 +81,12 @@ async function loadRelease() {
       heroDownload.href = release.html_url || releasesUrl;
     }
 
-    if (brokerSetup) {
-      setupDownload.href = brokerSetup.browser_download_url;
-      setupDownload.textContent = "下载签名热键组件";
-    } else {
-      setupDownload.href = release.html_url || releasesUrl;
-      setupDownload.textContent = "查看热键组件说明";
-    }
-
     renderAssets(release);
   } catch (error) {
     console.warn("Unable to load Bomana releases", error);
     statusEl.textContent = "暂时无法读取版本信息，请直接打开 GitHub Releases。";
     launcherDownload.href = releasesUrl;
     heroDownload.href = releasesUrl;
-    setupDownload.href = releasesUrl;
   }
 }
 

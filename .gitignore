@@ -228,6 +228,9 @@ bomana/release_public_keys.py
 dist/
 build/
 
+# 源码调试时可将零安装热键 Broker 构建到这里；发布包由打包脚本重新注入
+bomana/bin/
+
 # Tests are source files in this repository. Do not ignore tests/ or test_*.py.
 
 # 临时文件

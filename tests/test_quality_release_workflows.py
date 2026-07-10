@@ -96,29 +96,36 @@ def test_build_release_workflow_passes_manifest_signing_secret() -> None:
     assert "BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06" in workflow
 
 
-def test_hotkey_broker_release_is_authenticode_signed_fail_closed() -> None:
+def test_hotkey_broker_is_zero_install_and_release_assets_are_attested() -> None:
     workflow = build_workflow_source()
     quality_workflow = (ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8")
     tool = (ROOT / "tools/build_hotkey_broker.py").read_text(encoding="utf-8")
+    portable = (ROOT / "tools/build_portable.py").read_text(encoding="utf-8")
 
-    assert "BOMANA_AUTHENTICODE_PFX_B64" in workflow
-    assert "${{ secrets.BOMANA_AUTHENTICODE_PFX_B64 }}" in workflow
-    assert "BOMANA_AUTHENTICODE_PFX_PASSWORD" in workflow
-    assert "${{ secrets.BOMANA_AUTHENTICODE_PFX_PASSWORD }}" in workflow
     assert "tools/build_hotkey_broker.py" in workflow
-    assert "--mode release" in workflow
-    assert "BomanaHotkeyBrokerSetup.exe" in workflow
-    assert 'signtool, "verify", "/pa", "/all"' in tool
     assert "TemporaryDirectory" in tool
-    assert "authenticode.pfx" in tool
-    assert "release_certificate_context()" in tool
+    assert "HOTKEY_BROKER_CHECKSUM_NAME" in portable
+    assert "resolve_hotkey_broker" in portable
     assert "cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml" in workflow
-    assert "cargo fmt --check --manifest-path native/hotkey_broker_setup/Cargo.toml" in workflow
     assert "cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml" in workflow
     assert "tools/build_hotkey_broker.py --mode dev" in workflow
     assert "cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml" in quality_workflow
     assert "cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml" in quality_workflow
     assert "tools/build_hotkey_broker.py --mode dev" in quality_workflow
+    assert workflow.count("actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1") == 2
+    assert workflow.count("id-token: write") == 2
+    assert workflow.count("attestations: write") == 2
+    assert workflow.count("artifact-metadata: write") == 2
+    assert "gh attestation verify <文件> --repo Thankyou-Cheems/Bomana" in workflow
+    combined = f"{workflow}\n{quality_workflow}\n{tool}\n{portable}"
+    for forbidden in (
+        "BomanaHotkeyBrokerSetup.exe",
+        "hotkey_broker_setup",
+        "BOMANA_AUTHENTICODE_PFX_B64",
+        "BOMANA_AUTHENTICODE_PFX_PASSWORD",
+        "signtool",
+    ):
+        assert forbidden not in combined
 
 
 @pytest.mark.parametrize(

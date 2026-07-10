@@ -111,19 +111,45 @@ def test_update_hint_restores_visible_star_nudge_row() -> None:
     assert recalc_calls == [{"force_shrink": False}]
 
 
-def test_hotkey_broker_notice_uses_existing_nudge_row_with_retry_action() -> None:
+def test_hotkey_broker_notice_uses_existing_nudge_row_with_elevation_action() -> None:
     app, recalc_calls = _make_hint_app_with_nudge(visible=False, manager="")
     app._hotkey_broker_notice = "游戏前台热键需要单独授权。"
-    app._hotkey_broker_action = "retry"
+    app._hotkey_broker_action = "elevate"
     app._nudge_text = App._nudge_text.__get__(app, App)
 
     app._update_hint()
 
     assert app.nudge_lbl.options["text"] == "游戏前台热键需要单独授权。"
-    assert app.star_lbl.options["text"] == "启用游戏内热键"
+    assert app.star_lbl.options["text"] == "授权管理员热键"
     assert app.star_lbl.options["cursor"] == "hand2"
     assert app.nudge_row.manager == "grid"
     assert recalc_calls == [{"force_shrink": False}]
+
+
+def test_elevation_action_requires_bomana_confirmation_before_uac(monkeypatch) -> None:
+    app = _make_config_only_app()
+    app._hotkey_broker_action = "elevate"
+    calls: list[str] = []
+    app.runtime_services = SimpleNamespace(
+        retry_hotkey_broker=lambda: calls.append("uac"),
+    )
+
+    monkeypatch.setattr(app_module.messagebox, "askokcancel", lambda *_args, **_kwargs: False)
+    app._on_nudge_action()
+    assert calls == []
+
+    prompts: list[str] = []
+
+    def approve(_title, message, **_kwargs) -> bool:
+        prompts.append(message)
+        return True
+
+    monkeypatch.setattr(app_module.messagebox, "askokcancel", approve)
+    app._on_nudge_action()
+
+    assert calls == ["uac"]
+    assert "未知" in prompts[0]
+    assert "不会安装额外程序" in prompts[0]
 
 
 def test_save_config_returns_failure_without_background_popup(monkeypatch) -> None:

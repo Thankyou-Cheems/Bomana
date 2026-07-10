@@ -1,7 +1,7 @@
 # Code Review Report
 
 **Open findings:** 1 high, 2 medium
-**Resolved:** 54  |  **Generated:** 2026-07-10T07:03:23+00:00
+**Resolved:** 54  |  **Generated:** 2026-07-10T10:05:43+00:00
 
 ## F-4cfa222a [HIGH/confirmed] HUD can fall back to a non-click-through topmost window
 `bomana/ui/hud_overlay.py:419-432`
@@ -26,7 +26,7 @@
 - **Evidence:** [read] Fallback path applies only window.attributes("-alpha") and has no click-through equivalent.; [read] tests/test_hud_overlay.py raises only when tk_color_key=False; it does not cover the tk_color_key=True click-through failure path.
 
 ## F-61167c77 [MEDIUM/confirmed] Startup HUD initialization failure is not persisted
-`bomana/ui/app.py:177-178`  ⚠ snippet exists but not at lines 177-178; first line now near line 188
+`bomana/ui/app.py:177-178`  ⚠ snippet exists but not at lines 177-178; first line now near line 187
 ```
         if HUDConfig.enabled and not self._show_hud_overlay():
             HUDConfig.enabled = False

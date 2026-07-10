@@ -73,7 +73,6 @@ def test_runtime_code_does_not_add_memory_or_injection_primitives() -> None:
         "pymem",
         "frida",
         "pyinject",
-        "OpenProcess(",
         "CreateToolhelp32Snapshot",
     )
 
@@ -88,7 +87,13 @@ def test_runtime_code_does_not_add_memory_or_injection_primitives() -> None:
     assert token_users == ["bomana/utils/hotkey_broker.py"]
     broker_source = (ROOT / token_users[0]).read_text(encoding="utf-8")
     assert "GetCurrentProcess" in broker_source
+    assert "OpenProcess" in broker_source
+    assert "PROCESS_QUERY_LIMITED_INFORMATION" in broker_source
+    assert "GetWindowTextW" in broker_source
+    assert "QueryFullProcessImageNameW" in broker_source
+    assert "WAR_THUNDER_EXECUTABLES" in broker_source
     assert "CreateToolhelp32Snapshot" not in broker_source
+    assert "ReadProcessMemory" not in broker_source
 
 
 def test_runtime_http_json_access_stays_centralized() -> None:

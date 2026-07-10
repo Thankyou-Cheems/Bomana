@@ -1,17 +1,17 @@
 {
-  "generated_at": "2026-07-10T06:48:19+00:00",
+  "generated_at": "2026-07-10T10:04:02+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
-    "code_files": 114,
-    "code_lines": 33981,
+    "code_files": 113,
+    "code_lines": 34198,
     "test_files": 48,
     "todo_markers": 0
   },
   "languages": {
-    "python": 32886,
-    "rust": 817,
+    "python": 33396,
+    "rust": 541,
     "shell": 167,
-    "javascript": 111
+    "javascript": 94
   },
   "primary_language": "python",
   "configs": [
@@ -34,16 +34,6 @@
       "kind": "manifest",
       "tool": "cargo",
       "path": "native\\hotkey_broker\\Cargo.toml"
-    },
-    {
-      "kind": "lockfile",
-      "tool": "cargo",
-      "path": "native\\hotkey_broker_setup\\Cargo.lock"
-    },
-    {
-      "kind": "manifest",
-      "tool": "cargo",
-      "path": "native\\hotkey_broker_setup\\Cargo.toml"
     }
   ],
   "check_capability": [
@@ -58,8 +48,7 @@
   ],
   "entry_points": [
     "bomana\\ui\\app.py",
-    "native\\hotkey_broker\\src\\main.rs",
-    "native\\hotkey_broker_setup\\src\\main.rs"
+    "native\\hotkey_broker\\src\\main.rs"
   ],
   "largest_files": [
     {
@@ -67,7 +56,7 @@
       "path": "bomana\\ui\\dialogs.py"
     },
     {
-      "lines": 1642,
+      "lines": 1649,
       "path": "bomana\\ui\\app.py"
     },
     {
@@ -99,6 +88,10 @@
       "path": "bomana\\utils\\system.py"
     },
     {
+      "lines": 827,
+      "path": "bomana\\utils\\hotkey_broker.py"
+    },
+    {
       "lines": 809,
       "path": "bomana\\ui\\panel_renderer.py"
     },
@@ -111,25 +104,23 @@
       "path": "bomana\\core\\state.py"
     },
     {
-      "lines": 650,
-      "path": "bomana\\utils\\hotkey_broker.py"
-    },
-    {
-      "lines": 638,
-      "path": "bomana\\ui\\nav_window.py"
-    },
-    {
-      "lines": 617,
+      "lines": 660,
       "path": "bomana\\ui\\runtime_services.py"
+    },
+    {
+      "lines": 647,
+      "path": "tools\\build_portable.py"
     }
   ],
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "e3b9029",
+    "head": "654e955",
     "branch": "main",
-    "dirty_files": 37,
+    "dirty_files": 35,
     "recent_commits": [
+      "654e955 feat(hotkeys): isolate privileged hotkeys in signed broker",
+      "e063361 feat(site): refresh GitHub Pages for new users",
       "e3b9029 chore(review): refresh audit evidence after hotkey cleanup",
       "895ea85 feat(launcher): elevate only the app handoff by default",
       "840d829 fix(specs): enforce clause-level contract traceability",
@@ -137,9 +128,7 @@
       "d92e640 fix(hotkeys): keep a single Tk-owned RegisterHotKey lifecycle",
       "5662488 feat(ccrp): target forward POIs for bombing cues",
       "e91bba0 refactor: harden post-SDD boundaries",
-      "0a55da3 docs: remove temporary SDD process notes",
-      "5167771 refactor: remove SDD compatibility facades",
-      "dff68c9 post-sdd(bd): document legacy work adaptation"
+      "0a55da3 docs: remove temporary SDD process notes"
     ]
   },
   "coverage_gaps": [

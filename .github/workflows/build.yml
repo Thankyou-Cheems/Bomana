@@ -128,7 +128,7 @@ jobs:
             all)
               BUILD_DESC="完整发布（启动器 + 三通道应用包）"
               RELEASE_NAME="Bomana v$VERSION"
-              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 签名热键组件安装器：`BomanaHotkeyBrokerSetup.exe`\n- 启动器清单：`launcher_manifest.json`\n- 应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_launcher.txt` + `checksums_hotkey_broker.txt` + `checksums_app_*.txt`'
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 启动器清单：`launcher_manifest.json`\n- 内置零安装热键组件的应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt`'
               ;;
             app)
               BUILD_DESC="应用包发布（Enhanced/Standard/Lite）"
@@ -138,7 +138,7 @@ jobs:
             launcher)
               BUILD_DESC="启动器发布（通用启动器）"
               RELEASE_NAME="Bomana v$VERSION · Launcher"
-              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 签名热键组件安装器：`BomanaHotkeyBrokerSetup.exe`\n- 启动器清单：`launcher_manifest.json`\n- 校验：`checksums_launcher.txt` + `checksums_hotkey_broker.txt`'
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 启动器清单：`launcher_manifest.json`\n- 校验：`checksums_launcher.txt`'
               ;;
             *)
               echo "未知构建目标: $BUILD_TARGET"
@@ -229,7 +229,6 @@ jobs:
           rustup component add rustfmt --toolchain 1.94.0
           rustup default 1.94.0
           cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml
-          cargo fmt --check --manifest-path native/hotkey_broker_setup/Cargo.toml
           cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml
           uv run --frozen python tools/build_hotkey_broker.py --mode dev
 
@@ -238,6 +237,11 @@ jobs:
     needs: [prepare, quality]
     if: needs.prepare.outputs.build_target == 'all' || needs.prepare.outputs.build_target == 'app'
     runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     strategy:
       fail-fast: false
       matrix:
@@ -266,6 +270,13 @@ jobs:
         run: |
           uv sync --extra build --frozen
 
+      - name: 准备 native 热键组件工具链
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal
+          rustup default 1.94.0
+          rustc -V
+
       - name: 构建应用包
         shell: pwsh
         env:
@@ -281,6 +292,14 @@ jobs:
             --version "$env:BUILD_VERSION" `
             --output "dist"
 
+      - name: 生成应用包来源证明
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: |
+            dist/Bomana_app_${{ matrix.variant.slug }}_v${{ needs.prepare.outputs.version }}.zip
+            dist/manifest_${{ matrix.variant.slug }}.json
+            dist/checksums_app_${{ matrix.variant.slug }}.txt
+
       - name: 上传应用包产物
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -295,6 +314,11 @@ jobs:
     needs: [prepare, quality]
     if: needs.prepare.outputs.build_target == 'all' || needs.prepare.outputs.build_target == 'launcher'
     runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
 
     steps:
       - name: Checkout code
@@ -329,6 +353,14 @@ jobs:
             --version "$env:BUILD_LAUNCHER_VERSION" `
             --output "dist"
 
+      - name: 生成启动器来源证明
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: |
+            dist/Bomana_launcher_v${{ needs.prepare.outputs.launcher_version }}.exe
+            dist/launcher_manifest.json
+            dist/checksums_launcher.txt
+
       - name: 上传启动器产物
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -338,60 +370,13 @@ jobs:
             dist/launcher_manifest.json
             dist/checksums_launcher.txt
 
-  build_hotkey_broker:
-    name: 构建并签名热键组件
-    needs: [prepare, quality]
-    if: needs.prepare.outputs.build_target == 'all' || needs.prepare.outputs.build_target == 'launcher'
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.14"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-
-      - name: Verify Rust toolchain
-        shell: pwsh
-        run: |
-          rustup toolchain install 1.94.0 --profile minimal
-          rustup component add rustfmt --toolchain 1.94.0
-          rustup default 1.94.0
-          rustc -V
-
-      - name: Build and Authenticode-sign broker
-        shell: pwsh
-        env:
-          BOMANA_AUTHENTICODE_PFX_B64: ${{ secrets.BOMANA_AUTHENTICODE_PFX_B64 }}
-          BOMANA_AUTHENTICODE_PFX_PASSWORD: ${{ secrets.BOMANA_AUTHENTICODE_PFX_PASSWORD }}
-        run: |
-          uv run --frozen python tools/build_hotkey_broker.py `
-            --mode release `
-            --output dist
-
-      - name: Upload hotkey broker artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: Bomana-HotkeyBroker
-          path: |
-            dist/BomanaHotkeyBroker.exe
-            dist/BomanaHotkeyBrokerSetup.exe
-            dist/checksums_hotkey_broker.txt
-
   release:
     name: 发布正式版本
-    needs: [prepare, quality, build_app, build_launcher, build_hotkey_broker]
+    needs: [prepare, quality, build_app, build_launcher]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') && always() && needs.quality.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.build_app.result) && contains(fromJSON('["success","skipped"]'), needs.build_launcher.result) && contains(fromJSON('["success","skipped"]'), needs.build_hotkey_broker.result)
+    if: (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') && always() && needs.quality.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.build_app.result) && contains(fromJSON('["success","skipped"]'), needs.build_launcher.result)
 
     steps:
       - name: 下载产物
@@ -422,6 +407,12 @@ jobs:
             ## 🔐 安全验证
             启动器会校验发布清单内置的 Ed25519 签名，并使用 SHA256 校验下载文件完整性。
             手动下载时也可使用对应的 `checksums_*.txt` 文件复核文件完整性。
+            GitHub Actions 同时为产物生成来源证明，可运行 `gh attestation verify <文件> --repo Thankyou-Cheems/Bomana` 验证。
+            来源证明不等同于 Windows Authenticode；可选管理员热键的 UAC 发布者会显示为“未知”。
+
+            ## 🌏 腾讯云更新节点
+            GitHub Actions 不会直连或推送腾讯云。维护者应在自己的 Windows 工作站下载本 Release 到 `dist/`，再运行：
+            `uv run python tools/deploy_update_assets.py --target ${{ needs.prepare.outputs.build_target }} --version ${{ needs.prepare.outputs.version }}`
 
             ## 📄 许可证
             本软件基于 MIT 许可证开源。

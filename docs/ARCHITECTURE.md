@@ -10,7 +10,7 @@
 - Core logic: `bomana/core/` (state, telemetry, ballistics, game logic)
 - UI components: `bomana/ui/` (app coordinator, main-window builder, debug support, panel renderer, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
-- Privileged hotkeys: `bomana/utils/hotkey_broker.py` (ordinary App IPC/UAC client) plus `native/hotkey_broker/` (fixed-action native broker) and `native/hotkey_broker_setup/` (signed fixed-path installer)
+- Privileged hotkeys: `bomana/utils/hotkey_broker.py` (ordinary-first game-elevation probe plus IPC/UAC client) and `native/hotkey_broker/` (bundled zero-install fixed-action native broker)
 - Bundled UI assets: `bomana/assets/` (private UI font subsets + PNG icon assets)
 - External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
@@ -88,15 +88,14 @@
 │  │  ├─ window_geometry.py   # Headless snap-anchor geometry helpers used by App
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
 │  └─ utils/
-│     ├─ hotkey_broker.py    # Protected broker discovery, UAC, ACL-restricted IPC client
+│     ├─ hotkey_broker.py    # Minimal game elevation probe, bundled broker hash lock, UAC/IPC client
 │     ├─ diagnostics.py      # Structured async diagnostics logging
 │     ├─ file_utils.py        # Config/state/resource helpers
 │     ├─ math_utils.py        # Navigation/math helpers
 │     ├─ sound.py             # Sound manager
 │     └─ system.py            # Windows/system helpers
 ├─ native/
-│  ├─ hotkey_broker/          # Elevated fixed-action RegisterHotKey runtime (Rust)
-│  └─ hotkey_broker_setup/    # Authenticode-signed Program Files installer (Rust)
+│  └─ hotkey_broker/          # Optional elevated fixed-action RegisterHotKey runtime (Rust)
 ├─ docs/                       # GitHub Pages + architecture/changelog/privacy/contributing docs
 ├─ tools/
 │  ├─ build_portable.py      # Build launcher/app package/manifest
@@ -167,12 +166,13 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Launch action stays available for offline local app start while background checks are still running.
    - Launcher download/update/install and App launch all remain at ordinary user integrity. `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and the `launcher.bootstrap` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules without crossing UAC.
 9. Privileged hotkey flow:
-   - The ordinary App creates one local message pipe and stop event per launch with a random nonce, explicit current-user/SYSTEM/Administrators DACL, and remote-client rejection.
-   - The App may request UAC only for the Authenticode-trusted `BomanaHotkeyBroker.exe` installed below `%ProgramFiles%\Bomana\HotkeyBroker`; source and portable `app/` Python trees never run elevated.
+   - The App registers ordinary `RegisterHotKey` bindings first and never opens UAC automatically. It then enumerates visible top-level windows and queries only the image name and elevation token for exact War Thunder executable names.
+   - Confirmed ordinary War Thunder keeps the default path without a privilege notice. Elevated, absent, or unknown game state exposes an optional action; after explicit confirmation, the App resolves `bomana/bin/BomanaHotkeyBroker.exe`, validates its adjacent SHA-256, locks it against write/delete replacement, and requests UAC. No installer or persistent component is used; without Authenticode Windows shows Unknown publisher.
+   - The ordinary App creates one local message pipe and stop event per privileged launch with a random nonce, explicit current-user/SYSTEM/Administrators DACL, and remote-client rejection.
    - The native broker validates the App PID/session and pipe server PID, registers only the configured fixed actions once with `RegisterHotKey | MOD_NOREPEAT`, and sends fixed eight-byte action frames back to the App.
-   - The pipe reader posts callbacks through `TkEventDispatcher`; UAC denial, missing/untrusted broker, or IPC failure keeps local `RegisterHotKey`, buttons, tray actions, and 8111 features available while the existing auxiliary notice row explains the game-foreground limitation and exposes install/retry.
-   - The App stop event or App process exit unregisters all broker hotkeys and ends the broker. No hook, polling, game-process inspection, service, scheduled task, autostart, network, plugin, or arbitrary command/path surface exists in the broker.
-   - `tools/build_hotkey_broker.py` builds the broker and fixed-path installer. Release mode requires and verifies Authenticode signatures before either artifact enters `dist/`.
+   - The pipe reader posts callbacks through `TkEventDispatcher`; UAC denial, missing/tampered broker, or IPC failure restores local `RegisterHotKey`, buttons, tray actions, and 8111 features.
+   - The App stop event or App process exit unregisters all broker hotkeys and ends the broker. No hook, polling, game-memory access, service, scheduled task, autostart, network, plugin, or arbitrary command/path surface exists in the broker.
+   - `tools/build_hotkey_broker.py` builds only the native runtime. `tools/build_portable.py` embeds it and the adjacent checksum into each App package.
 10. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 
 Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.
@@ -258,10 +258,9 @@ CI:
   - This workflow intentionally does not enforce a coverage threshold or pretend to replace real War Thunder / `localhost:8111` smoke validation.
 - `.github/workflows/build.yml` runs separate jobs for:
   - `quality`: release-preflight Ruff + pytest smoke checks
-  - `build_app`: app package + manifest
+  - `build_app`: native broker + app package + manifest + GitHub Artifact Attestation
   - `build_launcher`: launcher exe + `launcher_manifest.json`
-  - `build_hotkey_broker`: Authenticode-signed broker runtime + fixed-path installer
-- `.github/workflows/build.yml` requires the repository secrets `BOMANA_RELEASE_ED25519_PRIVATE_KEY` and `BOMANA_RELEASE_ED25519_PUBLIC_KEY` for signed manifests, plus `BOMANA_AUTHENTICODE_PFX_B64` and `BOMANA_AUTHENTICODE_PFX_PASSWORD` whenever launcher/broker artifacts are released.
+- `.github/workflows/build.yml` requires the repository secrets `BOMANA_RELEASE_ED25519_PRIVATE_KEY` and `BOMANA_RELEASE_ED25519_PUBLIC_KEY` for signed manifests. App and Launcher jobs use full-commit-pinned `actions/attest@v4` with narrow OIDC/attestation permissions to publish provenance for final artifacts; no Authenticode PFX is required.
 - tag-driven release targets:
   - `vX.Y.Z`: full release (launcher + app packages)
   - `vX.Y.Z-app`: app packages only

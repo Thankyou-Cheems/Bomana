@@ -10,7 +10,12 @@ from bomana.config.settings import (
 from bomana.ui import runtime_services
 from bomana.ui.dialogs import SettingsDialog
 from bomana.ui.runtime_services import AppRuntimeServices
-from bomana.utils.hotkey_broker import BrokerStartResult, BrokerStartStatus
+from bomana.utils.hotkey_broker import (
+    BrokerStartResult,
+    BrokerStartStatus,
+    GameIntegrityResult,
+    GameIntegrityStatus,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +31,11 @@ def _default_to_unavailable_broker(monkeypatch):
             pass
 
     monkeypatch.setattr(runtime_services, "ElevatedHotkeyBrokerClient", UnavailableBroker)
+    monkeypatch.setattr(
+        runtime_services,
+        "detect_war_thunder_integrity",
+        lambda: GameIntegrityResult(GameIntegrityStatus.NOT_RUNNING),
+    )
 
 
 class FakeSound:
@@ -184,43 +194,80 @@ def test_init_global_hotkeys_omits_zones_when_feature_is_disabled(monkeypatch) -
     assert captured["started"] is True
 
 
-def test_init_global_hotkeys_prefers_started_privileged_broker(monkeypatch) -> None:
+def test_init_global_hotkeys_uses_local_backend_without_automatic_uac(monkeypatch) -> None:
     calls: list[str] = []
     notices: list[tuple[str, str]] = []
 
-    class StartedBroker:
-        def __init__(self, _dispatch, bindings, **_kwargs) -> None:
-            calls.append(f"broker-create:{len(bindings)}")
+    class LocalHotkeys:
+        def __init__(self, _dispatch, hotkeys, **_kwargs) -> None:
+            calls.append(f"local-create:{len(hotkeys)}")
 
-        def start(self) -> BrokerStartResult:
-            calls.append("broker-start")
-            return BrokerStartResult(BrokerStartStatus.STARTED)
+        def start(self) -> None:
+            calls.append("local-start")
 
         def stop(self) -> None:
-            calls.append("broker-stop")
+            calls.append("local-stop")
 
-    class UnexpectedLocalHotkeys:
+    class UnexpectedBroker:
         def __init__(self, *_args, **_kwargs) -> None:
-            raise AssertionError("local hotkeys must not register while broker is active")
+            raise AssertionError("startup must not create or elevate the broker")
 
     app = _make_hotkey_app()
     app._set_hotkey_broker_notice = lambda message, action: notices.append((message, action))
     services = AppRuntimeServices(app)
     monkeypatch.setattr(runtime_services.os, "name", "nt")
-    monkeypatch.setattr(runtime_services, "ElevatedHotkeyBrokerClient", StartedBroker)
-    monkeypatch.setattr(runtime_services, "GlobalHotkeys", UnexpectedLocalHotkeys)
+    monkeypatch.setattr(runtime_services, "ElevatedHotkeyBrokerClient", UnexpectedBroker)
+    monkeypatch.setattr(runtime_services, "GlobalHotkeys", LocalHotkeys)
+    monkeypatch.setattr(
+        runtime_services,
+        "detect_war_thunder_integrity",
+        lambda: GameIntegrityResult(GameIntegrityStatus.ORDINARY, 42, "aces.exe"),
+    )
     monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
 
     services.init_global_hotkeys()
 
-    assert calls == ["broker-create:5", "broker-start"]
-    assert services.hotkey_broker is not None
-    assert services.global_hotkeys is None
+    assert calls == ["local-create:5", "local-start"]
+    assert services.hotkey_broker is None
+    assert services.global_hotkeys is not None
     assert notices[-1][1] == ""
-    assert "正在连接" in notices[-1][0]
+    assert notices[-1][0] == ""
 
 
-def test_cancelled_broker_falls_back_locally_and_offers_retry(monkeypatch) -> None:
+def test_elevated_game_keeps_local_hotkeys_and_offers_manual_uac(monkeypatch) -> None:
+    calls: list[str] = []
+    notices: list[tuple[str, str]] = []
+
+    class LocalHotkeys:
+        def __init__(self, _dispatch, _hotkeys, **_kwargs) -> None:
+            calls.append("local-create")
+
+        def start(self) -> None:
+            calls.append("local-start")
+
+        def stop(self) -> None:
+            calls.append("local-stop")
+
+    app = _make_hotkey_app()
+    app._set_hotkey_broker_notice = lambda message, action: notices.append((message, action))
+    services = AppRuntimeServices(app)
+    monkeypatch.setattr(runtime_services.os, "name", "nt")
+    monkeypatch.setattr(runtime_services, "GlobalHotkeys", LocalHotkeys)
+    monkeypatch.setattr(
+        runtime_services,
+        "detect_war_thunder_integrity",
+        lambda: GameIntegrityResult(GameIntegrityStatus.ELEVATED, 42, "aces.exe"),
+    )
+    monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
+
+    services.init_global_hotkeys()
+
+    assert calls == ["local-create", "local-start"]
+    assert notices[-1][1] == "elevate"
+    assert "管理员权限" in notices[-1][0]
+
+
+def test_cancelled_explicit_uac_restores_local_hotkeys(monkeypatch) -> None:
     calls: list[str] = []
     notices: list[tuple[str, str]] = []
 
@@ -242,6 +289,9 @@ def test_cancelled_broker_falls_back_locally_and_offers_retry(monkeypatch) -> No
         def start(self) -> None:
             calls.append("local-start")
 
+        def stop(self) -> None:
+            calls.append("local-stop")
+
     app = _make_hotkey_app()
     app._set_hotkey_broker_notice = lambda message, action: notices.append((message, action))
     services = AppRuntimeServices(app)
@@ -250,13 +300,22 @@ def test_cancelled_broker_falls_back_locally_and_offers_retry(monkeypatch) -> No
     monkeypatch.setattr(runtime_services, "GlobalHotkeys", LocalHotkeys)
     monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
 
-    services.init_global_hotkeys()
+    services._start_local_hotkeys(services._configured_hotkeys())
+    services.enable_elevated_hotkeys()
 
-    assert calls == ["broker-start", "broker-stop", "local-create:5", "local-start"]
+    assert calls == [
+        "local-create:5",
+        "local-start",
+        "local-stop",
+        "broker-start",
+        "broker-stop",
+        "local-create:5",
+        "local-start",
+    ]
     assert services.hotkey_broker is None
     assert services.global_hotkeys is not None
-    assert notices[-1][1] == "retry"
-    assert "8111" in notices[-1][0]
+    assert notices[-1][1] == "elevate"
+    assert "普通热键已恢复" in notices[-1][0]
 
 
 def test_broker_registration_failure_keeps_persistent_retry_notice() -> None:
@@ -270,7 +329,7 @@ def test_broker_registration_failure_keeps_persistent_retry_notice() -> None:
     services._on_hotkey_broker_ready(("F8", "F11"))
 
     assert errors == [("F8", "F11")]
-    assert notices[-1][1] == "retry"
+    assert notices[-1][1] == "elevate"
     assert "F8、F11" in notices[-1][0]
 
 

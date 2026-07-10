@@ -107,15 +107,19 @@ def test_privileged_broker_reader_dispatches_before_app_callbacks() -> None:
     assert ".after(" not in read_body
 
 
-def test_windows_hotkey_path_does_not_inspect_game_processes() -> None:
-    app_source = read_source("bomana/ui/app.py")
-    system_source = read_source("bomana/utils/system.py")
+def test_windows_hotkey_probe_stays_minimal_and_local_backend_starts_first() -> None:
+    broker_source = read_source("bomana/utils/hotkey_broker.py")
+    runtime_source = read_source("bomana/ui/runtime_services.py")
+    init_body = method_source(runtime_source, "AppRuntimeServices", "init_global_hotkeys")
 
-    assert "def _check_hotkey_integrity_context" not in app_source
-    assert "hotkey_integrity_context" not in app_source
-    assert "OpenProcess" not in system_source
-    assert "process_is_elevated" not in system_source
-    assert "process_ids_by_name" not in system_source
+    assert init_body.index("self._start_local_hotkeys(hotkeys)") < init_body.index(
+        "detect_war_thunder_integrity()"
+    )
+    assert "EnumWindows" in broker_source
+    assert "GetWindowTextW" in broker_source
+    assert "PROCESS_QUERY_LIMITED_INFORMATION" in broker_source
+    assert "CreateToolhelp32Snapshot" not in broker_source
+    assert "ReadProcessMemory" not in broker_source
 
 
 def test_windows_hotkey_path_bans_hook_and_polling_fallbacks() -> None:

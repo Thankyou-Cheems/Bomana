@@ -7,9 +7,9 @@ Prefix: `SIGN-`
 ## Scope
 
 This spec governs release manifests, signing keys, launcher verification,
-portable release builds, GitHub release workflows, and Tencent/EdgeOne update
-asset deployment, including Authenticode signing for the privileged native
-hotkey broker and its installer.
+portable release builds, GitHub Artifact Attestations, GitHub release workflows,
+and Tencent/EdgeOne update asset deployment, including the native hotkey broker
+bundled inside each App package.
 
 ## Non-goals
 
@@ -59,14 +59,20 @@ hotkey broker and its installer.
   `launcher/`, and release tools must live under the `launcher` package, not the
   app package namespace. This avoids app-package import isolation resolving a
   launcher helper from an installed app bundle with a different version.
-- `SIGN-12`: `BomanaHotkeyBroker.exe` and `BomanaHotkeyBrokerSetup.exe` MUST be
-  Authenticode-signed with SHA256 and timestamped before they enter `dist/`, an
-  Actions artifact, or a GitHub Release; release tooling MUST run
-  `signtool verify /pa /all` for both files before publication.
-- `SIGN-13`: Broker signing requires `BOMANA_AUTHENTICODE_PFX_B64` and
-  `BOMANA_AUTHENTICODE_PFX_PASSWORD`; the decoded PFX MUST exist only in a
-  temporary build directory and MUST NOT be printed, committed, uploaded, or
-  copied into release artifacts.
+- `SIGN-12`: Every App package MUST contain
+  `bomana/bin/BomanaHotkeyBroker.exe` plus its adjacent SHA256 sidecar, and the
+  release workflow MUST build that broker from `native/hotkey_broker/` in the
+  same workflow run before packaging; no separate broker installer or broker
+  GitHub Release asset may be published.
+- `SIGN-13`: Release jobs that produce App or Launcher assets MUST grant only
+  `contents: read`, `id-token: write`, `attestations: write`, and
+  `artifact-metadata: write`, then use a full-commit-pinned `actions/attest@v4`
+  step to attest the final executable/package, manifest, and checksum files
+  before uploading them as workflow artifacts.
+- `SIGN-14`: Artifact Attestations MUST supplement rather than replace Ed25519
+  manifest verification and SHA256 asset checks; user documentation MUST state
+  that `gh attestation verify <artifact> --repo Thankyou-Cheems/Bomana` verifies
+  GitHub build provenance but does not create an Authenticode/UAC publisher.
 
 ## Contract Coverage
 
@@ -80,8 +86,9 @@ hotkey broker and its installer.
 - [behavioral] `tests/test_build_metadata.py` enforces signing-input and version
   consistency rules in `SIGN-04` and `SIGN-09`.
 - [static] `tests/test_quality_release_workflows.py` enforces `SIGN-03` and
-  `SIGN-05..SIGN-09`, `SIGN-12`, and `SIGN-13`, including local-only Tencent
-  deployment, forwarding boundaries, input allowlists, permissions, SHA-pinned
-  actions, and fail-closed broker signing.
+  `SIGN-05..SIGN-09` and `SIGN-12..SIGN-14`, including local-only Tencent
+  deployment, forwarding boundaries, input allowlists, least permissions,
+  full-commit-pinned attestation actions, bundled broker packaging, and the
+  absence of an installer/release-side broker asset.
 - [manual] Explicit maintainer approval of any private-key retention or rotation
   plan covers the authorization portion of `SIGN-05`.

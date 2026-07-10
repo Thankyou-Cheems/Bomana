@@ -51,7 +51,6 @@ from bomana.ui.window_geometry import (
 )
 from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import ConfigManager, resource_path
-from bomana.utils.hotkey_broker import BROKER_RELEASES_URL
 from bomana.utils.math_utils import calculate_smart_scale
 from bomana.utils.sound import SoundManager
 from bomana.utils.system import SingleInstanceManager, Win32, resolve_tk_font_tuple
@@ -1066,10 +1065,8 @@ class App:
         return "提示：如果 Bomana 对你有帮助，欢迎点一个 GitHub Star（起飞后自动隐藏）"
 
     def _nudge_action_text(self) -> str:
-        if self._hotkey_broker_action == "retry":
-            return "启用游戏内热键"
-        if self._hotkey_broker_action == "install":
-            return "获取签名组件"
+        if self._hotkey_broker_action == "elevate":
+            return "授权管理员热键"
         return "GitHub Star" if self._nudge_visible else ""
 
     def _set_hotkey_broker_notice(self, message: str, action: str) -> None:
@@ -1078,12 +1075,22 @@ class App:
         self._update_hint()
 
     def _on_nudge_action(self) -> None:
-        if self._hotkey_broker_action == "retry":
+        if self._hotkey_broker_action == "elevate":
+            approved = messagebox.askokcancel(
+                "启用管理员热键",
+                (
+                    "Bomana 将只以管理员权限启动随 App 携带的固定功能热键组件。\n\n"
+                    "Windows 接下来会显示 UAC。由于项目没有商业代码签名证书，"
+                    "发布者会显示为“未知”。请仅在 Bomana 来自官方 GitHub Release，"
+                    "并且你愿意信任本次下载时继续。\n\n"
+                    "不会安装额外程序、服务、计划任务或开机启动项；关闭 Bomana 后"
+                    "该组件会退出。选择取消会继续使用普通热键。"
+                ),
+                parent=self.root,
+            )
+            if not approved:
+                return
             self.runtime_services.retry_hotkey_broker()
-            return
-        if self._hotkey_broker_action == "install":
-            with contextlib.suppress(Exception):
-                webbrowser.open(BROKER_RELEASES_URL)
             return
         self._open_star_url()
 

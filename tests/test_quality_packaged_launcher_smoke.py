@@ -77,6 +77,8 @@ def test_packaged_launcher_smoke_stages_hostile_path_and_app_layout() -> None:
     assert '"Bomana.pyw"' in source
     assert '"bomana\\config\\__init__.py"' in source
     assert '"bomana\\config\\feature_profile.py"' in source
+    assert '"bomana\\bin\\BomanaHotkeyBroker.exe"' in source
+    assert '"bomana\\bin\\BomanaHotkeyBroker.sha256"' in source
     assert '"bomana\\metadata.py"' in source
     assert "Assert-PathWithin" in source
     assert "Remove-Item -LiteralPath $workRoot -Recurse -Force" in source

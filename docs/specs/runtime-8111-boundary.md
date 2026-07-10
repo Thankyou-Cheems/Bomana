@@ -39,18 +39,20 @@ claim to protect the War Thunder data boundary.
 - `R8111-07`: Static bundled data is allowed only as project data such as
   `bomana/data/ccrp_bomb_params.json` and `bomana/data/fm_speed_limits.json`.
   Static data provenance must be documented when refreshed.
-- `R8111-08`: Runtime hotkey diagnostics must not enumerate or open War Thunder
-  or anti-cheat processes, query another process token, or infer hotkey delivery
-  from process elevation; the broker client may query only its own token to
-  construct the current-user IPC DACL, and diagnosis must use registration and
-  callback-delivery evidence.
+- `R8111-08`: Runtime hotkey startup may enumerate visible top-level windows,
+  filter `War Thunder` window-title candidates, and query only the image identity
+  and token elevation of exact War Thunder executable names using
+  `PROCESS_QUERY_LIMITED_INFORMATION` and `TOKEN_QUERY`;
+  it must not take process snapshots, inspect modules or anti-cheat internals,
+  read process memory, or use the result for any purpose except choosing whether
+  to show the optional privileged-hotkey action.
 
 ## Contract Coverage
 
 - [static] `tests/contracts/test_runtime_8111_boundary.py` enforces
   `R8111-01`, `R8111-02`, `R8111-04`, `R8111-06`, and `R8111-08` by checking
   the runtime base URL, endpoint whitelist, dangerous API strings, ownership,
-  polling defaults, and the ban on process inspection.
+  polling defaults, and the narrow process-query allowlist.
 - [behavioral] `tests/test_telemetry_fetch_result.py` and
   `tests/test_map_objects_contract.py` enforce the fetcher and coordinate
   ownership boundary in `R8111-04`.
