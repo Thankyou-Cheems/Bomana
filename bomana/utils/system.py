@@ -17,6 +17,7 @@ from bomana.config.settings import (
     FileConfig,
     HotkeyConfig,
 )
+from bomana.utils.diagnostics import log_event, log_exception
 
 _WIN32_ACCESS_ERRORS = (OSError, AttributeError)
 _MUTEX_HANDLE = None
@@ -228,8 +229,8 @@ class Win32:
     使用ctypes调用user32.dll和kernel32.dll。
     """
 
-    user32 = _win32_dll("user32")
     kernel32 = _win32_dll("kernel32")
+    user32 = _win32_dll("user32")
 
     @classmethod
     def enable_dpi(cls):
@@ -565,137 +566,273 @@ class SingleInstanceManager:
 class GlobalHotkeys:
     """全局热键管理器
 
-    在独立线程中监听Windows消息队列，响应热键事件。
-    使用RegisterHotKey API注册全局热键。
+    在 Tk 主线程拥有的 Win32 message-only window 上注册和接收热键。
+    窗口过程只把回调放入 TkEventDispatcher，不直接重入 Tk。
     """
 
-    # Windows消息常量
     WM_HOTKEY = 0x0312  # 热键消息
-    WM_QUIT = 0x0012  # 退出消息
     MOD_NOREPEAT = 0x4000  # 禁止重复触发
+    HWND_MESSAGE = -3
 
     def __init__(
         self,
-        root: tk.Tk,
+        dispatch: Callable[..., None],
         hotkeys: list[tuple[int, str, Callable[[], None]]],
         error_cb: Callable[[tuple[str, ...]], None] | None = None,
     ):
         """初始化热键管理器
 
         Args:
-            root: tkinter主窗口
+            dispatch: 线程安全的 Tk 主线程回调投递函数
             hotkeys: 热键列表 [(ID, 键名, 回调函数), ...]
         """
-        self.root = root
+        self.dispatch = dispatch
         self.hotkeys = hotkeys
         self.error_cb = error_cb
-        self._thread = None
-        self._tid = None
-        self._stop_event = threading.Event()
-        self._ready = threading.Event()
+        self._owner_thread_id = threading.get_ident()
+        self._message_hwnd: int | None = None
+        self._module_handle: int | None = None
+        self._window_class_name: str | None = None
+        self._wndproc: Any | None = None
+        self._registered_ids: list[int] = []
 
     def start(self):
-        """启动热键监听线程"""
+        """Register hotkeys on a Tk-thread-owned native message window."""
         if os.name != "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
             return
-        if self._thread and self._thread.is_alive():
+        if self._message_hwnd is not None:
             return
-        self._stop_event.clear()
-        self._ready.clear()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
+        self._require_owner_thread()
+
+        registered_keys: list[str] = []
+        failed_keys: list[str] = []
+        try:
+            self._create_message_window()
+        except _WIN32_ACCESS_ERRORS as exc:
+            log_exception("global_hotkey_window_create_failed", exc)
+            failed_keys.extend(str(key_name) for _hk_id, key_name, _cb in self.hotkeys)
+
+        hwnd = self._message_hwnd
+        user32 = Win32.user32
+        if hwnd is not None and user32 is not None:
+            for hk_id, key_name, _cb in self.hotkeys:
+                try:
+                    vk = HotkeyConfig.get_vk(str(key_name))
+                    ok = bool(
+                        user32.RegisterHotKey(
+                            hwnd,
+                            int(hk_id),
+                            int(self.MOD_NOREPEAT),
+                            int(vk),
+                        )
+                    )
+                except _WIN32_ACCESS_ERRORS:
+                    ok = False
+                if ok:
+                    self._registered_ids.append(int(hk_id))
+                    registered_keys.append(str(key_name))
+                else:
+                    failed_keys.append(str(key_name))
+
+        unique_failed_keys = tuple(dict.fromkeys(failed_keys))
+        log_event(
+            "global_hotkeys_registered",
+            backend="message_window",
+            registered_keys=tuple(dict.fromkeys(registered_keys)),
+            failed_keys=unique_failed_keys,
+        )
+        if failed_keys and self.error_cb:
+            self.dispatch(self.error_cb, unique_failed_keys)
 
     def stop(self):
-        """停止热键监听"""
-        self._stop_event.set()
-        thread = self._thread
+        """Unregister hotkeys and destroy the native message window."""
         if os.name != "nt":
             return
-        try:
-            # 向监听线程发送退出消息
-            if self._tid:
-                Win32.user32.PostThreadMessageW(int(self._tid), int(self.WM_QUIT), 0, 0)
-        except _WIN32_ACCESS_ERRORS:
-            pass
-        if thread:
-            thread.join(timeout=1.0)
-
-    def _run(self):
-        """热键监听主循环（运行在独立线程）"""
-        try:
-            # 获取线程ID（用于发送消息）
-            kernel32 = ctypes.windll.kernel32
-            kernel32.GetCurrentThreadId.restype = ctypes.c_uint
-            self._tid = int(kernel32.GetCurrentThreadId())
-            self._ready.set()
-        except _WIN32_ACCESS_ERRORS:
-            self._tid = None
-            self._ready.set()
+        if (
+            self._message_hwnd is None
+            and not self._registered_ids
+            and self._window_class_name is None
+        ):
             return
-        if self._stop_event.is_set():
-            return
+        self._require_owner_thread()
 
-        # 注册所有热键
-        failed_keys: list[str] = []
-        for hk_id, key_name, _cb in self.hotkeys:
+        user32 = Win32.user32
+        hwnd = self._message_hwnd
+        if user32 is not None and hwnd is not None:
+            for hk_id in self._registered_ids:
+                with contextlib.suppress(_WIN32_ACCESS_ERRORS):
+                    user32.UnregisterHotKey(hwnd, int(hk_id))
+        self._registered_ids.clear()
+        self._destroy_message_window()
+
+    def _require_owner_thread(self) -> None:
+        if threading.get_ident() != self._owner_thread_id:
+            raise RuntimeError("GlobalHotkeys lifecycle must run on the Tk owner thread")
+
+    def _dispatch_hotkey(self, hotkey_id: int) -> None:
+        for registered_id, key_name, callback in self.hotkeys:
+            if int(registered_id) != int(hotkey_id):
+                continue
             try:
-                vk = HotkeyConfig.get_vk(str(key_name))
-                ok = bool(
-                    Win32.user32.RegisterHotKey(
-                        None,
-                        int(hk_id),
-                        int(self.MOD_NOREPEAT),
-                        int(vk),
-                    )
+                self.dispatch(
+                    self._deliver_hotkey,
+                    int(hotkey_id),
+                    str(key_name),
+                    callback,
                 )
-                if not ok:
-                    failed_keys.append(str(key_name))
-            except _WIN32_ACCESS_ERRORS:
-                failed_keys.append(str(key_name))
+            except Exception as exc:
+                log_exception(
+                    "global_hotkey_dispatch_failed",
+                    exc,
+                    hotkey_id=int(hotkey_id),
+                )
+            return
 
-        if failed_keys and self.error_cb:
-            unique_keys = tuple(dict.fromkeys(failed_keys))
-            with contextlib.suppress(tk.TclError):
-                self.root.after(0, lambda keys=unique_keys: self.error_cb(keys))
+    @staticmethod
+    def _deliver_hotkey(
+        hotkey_id: int,
+        key_name: str,
+        callback: Callable[[], None],
+    ) -> None:
+        log_event(
+            "global_hotkey_received",
+            backend="message_window",
+            hotkey_id=int(hotkey_id),
+            key_name=str(key_name),
+        )
+        callback()
 
-        # 定义消息结构体
-        class POINT(ctypes.Structure):
-            _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+    def _create_message_window(self) -> None:
+        """Create an isolated HWND whose WndProc receives WM_HOTKEY on Tk's thread."""
+        user32 = Win32.user32
+        kernel32 = Win32.kernel32
+        if user32 is None or kernel32 is None:
+            raise OSError("Win32 user32/kernel32 is unavailable")
 
-        class MSG(ctypes.Structure):
+        from ctypes import wintypes
+
+        lresult = ctypes.c_ssize_t
+        wndproc_type = ctypes.WINFUNCTYPE(
+            lresult,
+            wintypes.HWND,
+            wintypes.UINT,
+            wintypes.WPARAM,
+            wintypes.LPARAM,
+        )
+
+        class WNDCLASSW(ctypes.Structure):
             _fields_ = [
-                ("hwnd", ctypes.c_void_p),
-                ("message", ctypes.c_uint),
-                ("wParam", ctypes.c_size_t),
-                ("lParam", ctypes.c_size_t),
-                ("time", ctypes.c_uint),
-                ("pt", POINT),
+                ("style", wintypes.UINT),
+                ("lpfnWndProc", wndproc_type),
+                ("cbClsExtra", ctypes.c_int),
+                ("cbWndExtra", ctypes.c_int),
+                ("hInstance", wintypes.HINSTANCE),
+                ("hIcon", wintypes.HICON),
+                ("hCursor", wintypes.HCURSOR),
+                ("hbrBackground", wintypes.HBRUSH),
+                ("lpszMenuName", wintypes.LPCWSTR),
+                ("lpszClassName", wintypes.LPCWSTR),
             ]
 
-        msg = MSG()
-        getmsg = Win32.user32.GetMessageW
-        getmsg.argtypes = [ctypes.POINTER(MSG), ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint]
-        getmsg.restype = ctypes.c_int
+        with contextlib.suppress(AttributeError, TypeError):
+            user32.DefWindowProcW.argtypes = [
+                wintypes.HWND,
+                wintypes.UINT,
+                wintypes.WPARAM,
+                wintypes.LPARAM,
+            ]
+            user32.DefWindowProcW.restype = lresult
+            user32.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
+            user32.RegisterClassW.restype = wintypes.ATOM
+            user32.CreateWindowExW.argtypes = [
+                wintypes.DWORD,
+                wintypes.LPCWSTR,
+                wintypes.LPCWSTR,
+                wintypes.DWORD,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                wintypes.HWND,
+                wintypes.HMENU,
+                wintypes.HINSTANCE,
+                wintypes.LPVOID,
+            ]
+            user32.CreateWindowExW.restype = wintypes.HWND
+            user32.RegisterHotKey.argtypes = [
+                wintypes.HWND,
+                ctypes.c_int,
+                wintypes.UINT,
+                wintypes.UINT,
+            ]
+            user32.RegisterHotKey.restype = wintypes.BOOL
+            user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.UnregisterHotKey.restype = wintypes.BOOL
+            user32.DestroyWindow.argtypes = [wintypes.HWND]
+            user32.DestroyWindow.restype = wintypes.BOOL
+            user32.UnregisterClassW.argtypes = [wintypes.LPCWSTR, wintypes.HINSTANCE]
+            user32.UnregisterClassW.restype = wintypes.BOOL
+            kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+            kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 
-        # 消息循环
-        while not self._stop_event.is_set():
-            try:
-                r = getmsg(ctypes.byref(msg), None, 0, 0)
-                if r == 0:  # WM_QUIT
-                    break
-                if msg.message == self.WM_HOTKEY:
-                    hk_id = int(msg.wParam)
-                    # 查找对应的回调函数
-                    for _id, _key_name, cb in self.hotkeys:
-                        if _id == hk_id:
-                            with contextlib.suppress(tk.TclError):
-                                # 在主线程执行回调
-                                self.root.after(0, cb)
-                            break
-            except _WIN32_ACCESS_ERRORS:
-                break
+        @wndproc_type
+        def window_proc(hwnd, message, wparam, lparam):
+            if int(message) == self.WM_HOTKEY:
+                self._dispatch_hotkey(int(wparam))
+                return 0
+            return user32.DefWindowProcW(hwnd, message, wparam, lparam)
 
-        # 注销所有热键
-        for hk_id, _key_name, _cb in self.hotkeys:
-            with contextlib.suppress(OSError, AttributeError):
-                Win32.user32.UnregisterHotKey(None, int(hk_id))
+        class_name = f"Bomana.GlobalHotkeys.{os.getpid()}.{id(self):x}"
+        module_handle = kernel32.GetModuleHandleW(None)
+        if not module_handle:
+            raise ctypes.WinError()
+        window_class = WNDCLASSW()
+        window_class.lpfnWndProc = window_proc
+        window_class.hInstance = module_handle
+        window_class.lpszClassName = class_name
+        if not user32.RegisterClassW(ctypes.byref(window_class)):
+            raise ctypes.WinError()
+
+        self._wndproc = window_proc
+        self._module_handle = int(module_handle)
+        self._window_class_name = class_name
+        hwnd = user32.CreateWindowExW(
+            0,
+            class_name,
+            class_name,
+            0,
+            0,
+            0,
+            0,
+            0,
+            wintypes.HWND(self.HWND_MESSAGE),
+            None,
+            module_handle,
+            None,
+        )
+        if not hwnd:
+            self._destroy_message_window()
+            raise ctypes.WinError()
+        self._message_hwnd = int(hwnd)
+
+    def _destroy_message_window(self) -> None:
+        user32 = Win32.user32
+        hwnd = self._message_hwnd
+        class_name = self._window_class_name
+        module_handle = self._module_handle
+        if user32 is None and (hwnd is not None or class_name is not None):
+            raise OSError("Win32 user32 is unavailable during hotkey cleanup")
+        if user32 is not None and hwnd is not None:
+            if not user32.DestroyWindow(hwnd):
+                raise ctypes.WinError()
+            self._message_hwnd = None
+        if (
+            user32 is not None
+            and class_name
+            and module_handle
+            and not user32.UnregisterClassW(class_name, module_handle)
+        ):
+            raise ctypes.WinError()
+        self._module_handle = None
+        self._window_class_name = None
+        self._wndproc = None

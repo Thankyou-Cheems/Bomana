@@ -1,6 +1,7 @@
 """Runtime threading helpers for the Tk app."""
 
 import contextlib
+import queue
 import threading
 import time
 import tkinter as tk
@@ -15,14 +16,40 @@ _LOGIC_POLLER_EXCEPTION_LOG_INTERVAL_SEC = 60.0
 
 
 class TkEventDispatcher:
-    """Post callbacks back to the Tk main thread from runtime workers."""
+    """Queue callbacks for execution on the Tk main thread."""
 
     def __init__(self, root: tk.Tk):
         self.root = root
+        self._pending: queue.SimpleQueue[tuple[Callable[..., Any], tuple[Any, ...]]] = (
+            queue.SimpleQueue()
+        )
+        self._after_id: str | None = None
+        self._poll_interval_ms = 25
+        self._polling = True
+        self._schedule()
 
     def post(self, callback: Callable[..., Any], *args: Any) -> None:
+        self._pending.put((callback, args))
+
+    def _schedule(self) -> None:
+        if not self._polling or self._after_id is not None:
+            return
         with contextlib.suppress(tk.TclError, RuntimeError):
-            self.root.after(0, callback, *args)
+            self._after_id = self.root.after(self._poll_interval_ms, self._drain)
+
+    def _drain(self) -> None:
+        self._after_id = None
+        try:
+            while True:
+                callback, args = self._pending.get_nowait()
+                try:
+                    callback(*args)
+                except Exception as exc:
+                    log_exception("tk_dispatcher_callback_failed", exc)
+        except queue.Empty:
+            pass
+        finally:
+            self._schedule()
 
 
 class LogicPoller:

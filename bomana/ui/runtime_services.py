@@ -58,7 +58,8 @@ class AppRuntimeServices:
 
     def init_global_hotkeys(self) -> None:
         """Initialize runtime-configurable Windows global hotkeys."""
-        self.stop_global_hotkeys()
+        if not self.stop_global_hotkeys():
+            return
         if os.name != "nt" or not HotkeyConfig.GLOBAL_HOTKEYS:
             return
 
@@ -73,19 +74,23 @@ class AppRuntimeServices:
                 (HotkeyConfig.HK_ID_ZONES, HotkeyConfig.KEY_ZONES, self.app._toggle_zone_sound)
             )
         self.global_hotkeys = GlobalHotkeys(
-            self.app.root,
+            self.app.dispatcher.post,
             hotkeys,
             error_cb=self.app._on_hotkey_registration_error,
         )
         self.global_hotkeys.start()
 
-    def stop_global_hotkeys(self) -> None:
+    def stop_global_hotkeys(self) -> bool:
         manager = self.global_hotkeys
-        self.global_hotkeys = None
         if manager is None:
-            return
-        with contextlib.suppress(Exception):
+            return True
+        try:
             manager.stop()
+        except Exception as exc:
+            log_exception("global_hotkeys_stop_failed", exc)
+            return False
+        self.global_hotkeys = None
+        return True
 
     def refresh_local_hotkey_bindings(self) -> None:
         """Refresh Tk-local hotkeys after settings mutate HotkeyConfig."""

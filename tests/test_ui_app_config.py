@@ -14,6 +14,9 @@ def _make_config_only_app() -> App:
     instance._manual_pos = None
     instance._user_moved = False
     instance._corner = Corner.TOP_RIGHT
+    instance._locked = True
+    instance._manual_reset_confirm_until = 0.0
+    instance._nudge_visible = False
     return instance
 
 

@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from bomana.config.settings import NetworkConfig
 from bomana.core.telemetry import MapObjectsFetcher
 
-# enforces: docs/specs/runtime-8111-boundary.md R8111-01..R8111-04
+# enforces: docs/specs/runtime-8111-boundary.md R8111-01..R8111-04, R8111-08
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_ENDPOINTS = {"/indicators", "/state", "/map_obj.json", "/map_info.json"}
@@ -64,11 +64,14 @@ def test_runtime_code_does_not_add_memory_or_injection_primitives() -> None:
     forbidden_tokens = (
         "ReadProcessMemory",
         "WriteProcessMemory",
-        "OpenProcess(",
         "CreateRemoteThread",
         "pymem",
         "frida",
         "pyinject",
+        "OpenProcess(",
+        "OpenProcessToken",
+        "GetTokenInformation",
+        "CreateToolhelp32Snapshot",
     )
 
     assert not [token for token in forbidden_tokens if token in source]

@@ -58,6 +58,7 @@ def test_hud_overlay_init_failure_disables_without_leaking_exception() -> None:
 def _make_hotkey_app() -> SimpleNamespace:
     return SimpleNamespace(
         root=object(),
+        dispatcher=SimpleNamespace(post=lambda _callback, *_args: None),
         _manual_reset_hotkey=lambda: None,
         _toggle_lock=lambda: None,
         _next_corner=lambda: None,
@@ -113,11 +114,37 @@ def test_init_global_hotkeys_stops_existing_manager_when_disabled(monkeypatch) -
     assert services.global_hotkeys is None
 
 
+def test_init_global_hotkeys_keeps_manager_when_stop_fails(monkeypatch) -> None:
+    class ExistingManager:
+        def stop(self) -> None:
+            raise RuntimeError("native window owned by another thread")
+
+    services = AppRuntimeServices(_make_hotkey_app())
+    existing = ExistingManager()
+    services.global_hotkeys = existing
+    logged: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    monkeypatch.setattr(runtime_services.os, "name", "nt")
+    monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
+    monkeypatch.setattr(
+        runtime_services,
+        "log_exception",
+        lambda *args, **kwargs: logged.append((args, kwargs)),
+    )
+
+    services.init_global_hotkeys()
+
+    assert services.global_hotkeys is existing
+    assert len(logged) == 1
+    assert logged[0][0][0] == "global_hotkeys_stop_failed"
+
+
 def test_init_global_hotkeys_omits_zones_when_feature_is_disabled(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     class FakeGlobalHotkeys:
-        def __init__(self, _root, hotkeys, **_kwargs) -> None:
+        def __init__(self, dispatch, hotkeys, **_kwargs) -> None:
+            captured["dispatch"] = dispatch
             captured["hotkeys"] = hotkeys
 
         def start(self) -> None:
@@ -134,6 +161,7 @@ def test_init_global_hotkeys_omits_zones_when_feature_is_disabled(monkeypatch) -
 
     hotkey_ids = [item[0] for item in captured["hotkeys"]]
     assert HotkeyConfig.HK_ID_ZONES not in hotkey_ids
+    assert captured["dispatch"] == services.app.dispatcher.post
     assert captured["started"] is True
 
 

@@ -194,9 +194,9 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - UI overlays & global hotkeys
 
 ## Runtime Thread Boundary
-- Tk widgets are owned by the Tk main thread. Background callbacks must use `TkEventDispatcher.post()` or an existing `root.after(0, ...)` bridge before touching UI state.
+- Tk widgets are owned by the Tk main thread. Background callbacks use `TkEventDispatcher.post()` or a Tk-owned queue/poller bridge before touching UI state; background threads do not call `root.after(...)` directly.
 - `LogicPoller` owns the `GameLogic.tick()` background loop. It samples 8111 data and updates core state only; UI reads immutable `UISnapshot` values from the main refresh loop.
-- `GlobalHotkeys` listens on a Windows message thread and posts configured callbacks back to Tk.
+- `GlobalHotkeys` registers a Win32 message-only window on the Tk owner thread. Its WndProc enqueues `WM_HOTKEY` callbacks through `TkEventDispatcher`, avoiding a separate message thread and reentrant Tk calls.
 - `pystray` runs on a daemon tray thread. Menu callbacks must dispatch UI actions through `TkEventDispatcher` instead of calling app methods directly.
 - `SoundManager` owns its own worker queue for audio playback. UI code enqueues sound requests and does not block on playback.
 

@@ -30,14 +30,22 @@ class ExplodingGame(FakeGame):
 
 
 class RuntimeThreadingTests(unittest.TestCase):
-    def test_dispatcher_posts_callback_to_tk_after(self) -> None:
+    def test_dispatcher_posts_callback_to_tk_poller_queue(self) -> None:
         root = FakeRoot()
         dispatcher = TkEventDispatcher(root)
-        callback = object()
+        called: list[str] = []
 
-        dispatcher.post(callback, "value")
+        dispatcher.post(lambda value: called.append(value), "value")
 
-        self.assertEqual(root.calls, [(0, callback, ("value",))])
+        self.assertEqual(len(root.calls), 1)
+        self.assertEqual(root.calls[0][0], 25)
+        self.assertEqual(called, [])
+
+        _delay_ms, drain, args = root.calls.pop(0)
+        drain(*args)
+
+        self.assertEqual(called, ["value"])
+        self.assertEqual(len(root.calls), 1)
 
     def test_dispatcher_ignores_destroyed_root(self) -> None:
         class ClosedRoot:

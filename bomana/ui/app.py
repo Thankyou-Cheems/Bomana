@@ -1043,14 +1043,12 @@ class App:
                 parts.append(f"[{k_zones}]战区音:{zone_sound}")
             base_text = "  ·  ".join(parts)
 
-        confirm_text = self._manual_reset_confirm_text()
+        prefix_parts = [text for text in (self._manual_reset_confirm_text(),) if text]
         if PanelConfig.speed_history_mode:
             history_text = "空历模式: 独立速度界面"
-            if confirm_text:
-                return f"{confirm_text}  ·  {history_text}  ·  {base_text}"
-            return f"{history_text}  ·  {base_text}"
-        if confirm_text:
-            return f"{confirm_text}  ·  {base_text}"
+            prefix_parts.append(history_text)
+        if prefix_parts:
+            return f"{'  ·  '.join(prefix_parts)}  ·  {base_text}"
         return base_text
 
     def _manual_reset_confirm_text(self) -> str:

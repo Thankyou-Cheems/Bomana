@@ -1,6 +1,6 @@
 # Runtime 8111 Boundary Spec
 
-Status: Accepted
+Status: Amended (2026-07)
 Owner: Bomana maintainers
 Prefix: `R8111-`
 
@@ -39,11 +39,15 @@ claim to protect the War Thunder data boundary.
 - `R8111-07`: Static bundled data is allowed only as project data such as
   `bomana/data/ccrp_bomb_params.json` and `bomana/data/fm_speed_limits.json`.
   Static data provenance must be documented when refreshed.
+- `R8111-08`: Runtime hotkey diagnostics must not enumerate or open War Thunder
+  processes, query process tokens, or infer hotkey delivery from process
+  elevation; diagnosis must use registration and callback-delivery evidence.
 
 ## Contract Coverage
 
 - `tests/contracts/test_runtime_8111_boundary.py` enforces `R8111-01` through
-  `R8111-04` by checking the runtime base URL, endpoint whitelist, dangerous API
-  strings, and centralized HTTP access.
+  `R8111-04` and `R8111-08` by checking the runtime base URL, endpoint
+  whitelist, dangerous API strings, centralized HTTP access, and the ban on
+  process inspection.
 - `tests/test_quality_gate_config.py` and `tools/scripts/check_smoke.bat` keep
   automated smoke on pytest rather than real 8111 access.
