@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-# enforces: docs/specs/threading-ui-contract.md THREAD-01..THREAD-08, HOTKEY-01..HOTKEY-04
+# enforces: docs/specs/threading-ui-contract.md THREAD-02..THREAD-06, THREAD-08, HOTKEY-01, HOTKEY-02, HOTKEY-04
 
 ROOT = Path(__file__).resolve().parents[2]
 TK_MUTATORS = (
@@ -140,3 +140,14 @@ def test_sound_manager_has_no_tk_dependency() -> None:
 
     assert "import tkinter" not in source
     assert "from tkinter" not in source
+    assert "queue.Queue" in source
+    assert "threading.Thread" in source
+    assert "self._queue.put(" in source
+
+
+def test_diagnostics_uses_queue_listener_for_disk_io() -> None:
+    source = read_source("bomana/utils/diagnostics.py")
+
+    assert "logging.handlers.QueueHandler" in source
+    assert "logging.handlers.QueueListener" in source
+    assert "record_queue" in source

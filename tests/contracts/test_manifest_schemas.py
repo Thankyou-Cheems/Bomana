@@ -9,7 +9,7 @@ import pytest
 
 from launcher import core as launcher_core
 
-# enforces: docs/specs/release-signing.md SIGN-01..SIGN-04
+# enforces: docs/specs/release-signing.md SIGN-01, SIGN-02, SIGN-10
 # enforces: docs/specs/schemas/app-manifest.schema.json
 # enforces: docs/specs/schemas/launcher-manifest.schema.json
 

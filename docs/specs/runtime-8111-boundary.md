@@ -45,9 +45,14 @@ claim to protect the War Thunder data boundary.
 
 ## Contract Coverage
 
-- `tests/contracts/test_runtime_8111_boundary.py` enforces `R8111-01` through
-  `R8111-04` and `R8111-08` by checking the runtime base URL, endpoint
-  whitelist, dangerous API strings, centralized HTTP access, and the ban on
-  process inspection.
-- `tests/test_quality_gate_config.py` and `tools/scripts/check_smoke.bat` keep
-  automated smoke on pytest rather than real 8111 access.
+- [static] `tests/contracts/test_runtime_8111_boundary.py` enforces
+  `R8111-01`, `R8111-02`, `R8111-04`, `R8111-06`, and `R8111-08` by checking
+  the runtime base URL, endpoint whitelist, dangerous API strings, ownership,
+  polling defaults, and the ban on process inspection.
+- [behavioral] `tests/test_telemetry_fetch_result.py` and
+  `tests/test_map_objects_contract.py` enforce the fetcher and coordinate
+  ownership boundary in `R8111-04`.
+- [manual] Runtime/data review covers the player-visible-information boundary in
+  `R8111-03`; handoffs must record real War Thunder smoke for `R8111-05`,
+  explicit approval for polling changes under `R8111-06`, and provenance review
+  for data refreshes under `R8111-07`.

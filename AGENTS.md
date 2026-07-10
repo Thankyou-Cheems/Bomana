@@ -19,7 +19,7 @@ Keep durable project rules in `docs/specs/`; keep this router concise.
 - Canonical specs live in `docs/specs/`; update them before duplicating durable rules elsewhere.
 - Only use the official 8111 API; no memory reads, injection, or game file edits. See `docs/specs/runtime-8111-boundary.md`.
 - Respect ENABLE_* feature flags. See `docs/specs/config-variants.md`.
-- Tk UI work must cross background threads through the documented dispatcher/`root.after` bridges. See `docs/specs/threading-ui-contract.md`.
+- Tk UI work must cross background threads through `TkEventDispatcher` or a Tk-owned queue; background threads must not call Tk APIs directly. See `docs/specs/threading-ui-contract.md`.
 
 ## Release Signing Workflow
 - For every release/update/deploy task, follow `docs/specs/release-signing.md` before acting.
@@ -57,14 +57,12 @@ Keep durable project rules in `docs/specs/`; keep this router concise.
 
 **When ending a work session**, complete ALL steps below. Work is normally NOT complete until `git push` succeeds, unless an active ADR/bd decision explicitly sets a narrower closeout policy.
 
-Current SDD exception: `docs/adr/0001-spec-anchored-docs.md` records that SDD refactor work is committed and merged locally until the user explicitly authorizes a remote push.
-
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Ruff, tests, builds
 3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - Mandatory except for explicit commit-only work such as the active SDD refactor:
+4. **PUSH TO REMOTE** - Mandatory except for an explicitly authorized commit-only task recorded in an active ADR/bd decision:
    ```bash
    git pull --rebase
    bd backup status

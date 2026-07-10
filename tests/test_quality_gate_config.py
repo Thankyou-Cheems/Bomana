@@ -33,6 +33,12 @@ def test_pytest_uses_sys_capture_for_wsl_windows_temp_stability() -> None:
     assert "--capture=sys" in addopts.split()
 
 
+def test_ruff_defaults_include_runtime_annotation_rules() -> None:
+    selected = set(read_pyproject()["tool"]["ruff"]["lint"]["select"])
+
+    assert {"RUF012", "RUF013"} <= selected
+
+
 def test_asset_generator_dependencies_are_declared() -> None:
     pyproject = read_pyproject()
     dev_dependencies = pyproject["project"]["optional-dependencies"]["dev"]

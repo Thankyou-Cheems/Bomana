@@ -45,6 +45,9 @@ submodule boundaries.
 
 ## Contract Coverage
 
-- `tests/contracts/test_config_variants.py` covers `VARIANT_SWITCHES`,
-  `PanelConfig`, compile-switch persistence, build patch target, and the
-  explicit config package boundary.
+- [static] `tests/contracts/test_config_variants.py` enforces
+  `CFG-01..CFG-04` and `CFG-06..CFG-08` across the variant matrix, build patch
+  target, shared config path, panel precedence, navigation fallback, and package
+  boundary.
+- [behavioral] `tests/test_file_utils_persistence.py` enforces `CFG-04` and
+  `CFG-05` with single-file persistence and compile-switch migration cases.

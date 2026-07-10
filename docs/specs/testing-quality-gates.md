@@ -1,6 +1,6 @@
 # Testing And Quality Gates Spec
 
-Status: Accepted
+Status: Amended (2026-07)
 Owner: Bomana maintainers
 Prefix: `QG-`
 
@@ -30,7 +30,8 @@ test layout, and release/deploy verification tests.
   --frozen`, Ruff, pytest smoke, and read-only default permissions.
 - `QG-05`: Test layers should stay searchable: `test_core_*`, `test_ui_*`,
   `test_launcher_*`, `test_utils_*`, `test_quality_*`. New spec contract tests
-  belong under `tests/contracts/` and should include `# enforces` headers.
+  belong under `tests/contracts/`, must include exact `# enforces` clause
+  headers, and must pass clause-level meta-traceability.
 - `QG-06`: Release/build/launcher/deploy tests must call
   `verify_release_manifest_signature`; do not only assert that signature fields
   exist or mock away verification.
@@ -40,12 +41,14 @@ test layout, and release/deploy verification tests.
   changes also need build or packaged-launcher smoke when appropriate.
 - `QG-09`: Ruff defaults include `RUF012` and `RUF013`. `RUF001`, `RUF002`, and
   `RUF003` are targeted scans only.
-- `QG-10`: During the SDD repository refactor consolidation, work is committed
-  and merged locally unless the user explicitly authorizes a remote push.
-
 ## Contract Coverage
 
-- `tests/test_quality_gate_config.py` checks pytest/smoke behavior.
-- `tests/test_quality_release_workflows.py` checks release workflow policy.
-- `tests/README.md` records `tests/contracts/` as the spec contract layer.
-- Task state remains in `bd`; durable validation rules live in `docs/specs/`.
+- [static] `tests/test_quality_gate_config.py` enforces smoke-runner and Ruff
+  configuration rules in `QG-03` and `QG-09`.
+- [static] `tests/test_quality_release_workflows.py` enforces Windows/Python/uv
+  CI and release verification rules in `QG-04` and `QG-06`.
+- [static] `tests/contracts/test_meta_traceability.py` enforces the contract
+  layout and exact clause mapping required by `QG-05`.
+- [manual] Task closeout and handoff review enforce `QG-01`, `QG-02`, `QG-07`,
+  and `QG-08`; automated results must identify any required real-environment
+  smoke that was not run.

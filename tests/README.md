@@ -20,6 +20,7 @@ Existing files may keep their current names until they need substantial edits. W
 - Use pytest-style tests by default. `tools/scripts/check_smoke.bat` is the canonical fast local suite and must run the same tests as `uv run --extra dev pytest`.
 - Add a regression test next to the layer where the bug lives. If a test needs broad cross-file setup, first ask whether the production boundary is too wide.
 - Add broad refactor guardrails under `tests/contracts/` and cite the matching spec file in the test name or module docstring.
+- Keep each spec's Contract Coverage bullets classified as `[static]`, `[behavioral]`, or `[manual]`, with exact clause IDs. `tests/contracts/test_meta_traceability.py` checks both directions of that map.
 
 ## Quality Gates
 

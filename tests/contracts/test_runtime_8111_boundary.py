@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from bomana.config.settings import NetworkConfig
 from bomana.core.telemetry import MapObjectsFetcher
 
-# enforces: docs/specs/runtime-8111-boundary.md R8111-01..R8111-04, R8111-08
+# enforces: docs/specs/runtime-8111-boundary.md R8111-01, R8111-02, R8111-04, R8111-06, R8111-08
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_ENDPOINTS = {"/indicators", "/state", "/map_obj.json", "/map_info.json"}
@@ -53,6 +53,11 @@ def test_runtime_api_base_remains_official_local_8111() -> None:
         "http://127.0.0.1:8111",
         "http://localhost:8111",
     }
+
+
+def test_runtime_polling_defaults_match_spec() -> None:
+    assert NetworkConfig.POLL_INTERVAL == 0.05
+    assert NetworkConfig.BACKOFF_MAX == 1.25
 
 
 def test_runtime_live_endpoint_whitelist_matches_spec() -> None:

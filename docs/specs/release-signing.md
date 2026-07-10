@@ -61,13 +61,17 @@ asset deployment.
 
 ## Contract Coverage
 
-- `tests/contracts/test_manifest_schemas.py` enforces `SIGN-01`, `SIGN-02`, and
-  `SIGN-10` with stdlib schema validation plus real Ed25519 sign/verify/tamper
-  checks.
-- `tests/test_launcher_core.py` covers signing, verification, tampering, and
-  kind-confusion behavior.
-- `tests/test_quality_release_workflows.py` covers verify-before-trust order,
-  local-only Tencent deployment, version allowlists, workflow permissions, and
-  SHA-pinned actions.
-- `tests/contracts/test_launcher_package_boundaries.py` covers launcher package
-  ownership for launcher release helpers.
+- [behavioral] `tests/contracts/test_manifest_schemas.py` enforces `SIGN-01`,
+  `SIGN-02`, and `SIGN-10` with schema validation plus real Ed25519
+  sign/verify/tamper checks.
+- [behavioral] `tests/contracts/test_launcher_package_boundaries.py` and
+  `tests/test_launcher_core.py` enforce verify-before-projection, version-source,
+  kind-confusion, and package-ownership rules in `SIGN-03`, `SIGN-09`, and
+  `SIGN-11`.
+- [behavioral] `tests/test_build_metadata.py` enforces signing-input and version
+  consistency rules in `SIGN-04` and `SIGN-09`.
+- [static] `tests/test_quality_release_workflows.py` enforces `SIGN-03` and
+  `SIGN-05..SIGN-09`, including local-only Tencent deployment,
+  forwarding boundaries, input allowlists, permissions, and SHA-pinned actions.
+- [manual] Explicit maintainer approval of any private-key retention or rotation
+  plan covers the authorization portion of `SIGN-05`.

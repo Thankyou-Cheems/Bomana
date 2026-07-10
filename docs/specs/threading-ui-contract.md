@@ -55,11 +55,16 @@ runtime app.
 
 ## Contract Coverage
 
-- `tests/contracts/test_tk_thread_contract.py` enforces `THREAD-02` through
-  `THREAD-05` and `HOTKEY-01` through `HOTKEY-04` by checking dispatcher,
-  hotkey, tray, poller routing, and forbidden input fallback APIs.
-- `tests/test_runtime_threading.py` and `tests/test_runtime_services.py` provide
-  focused behavioral coverage for runtime helpers.
-- `tests/test_system_portability.py` covers `THREAD-04`, `THREAD-08`,
-  `HOTKEY-02`, and `HOTKEY-03` with fake registration lifecycle tests plus a
-  real Windows message-window dispatch test.
+- [static] `tests/contracts/test_tk_thread_contract.py` enforces
+  `THREAD-02..THREAD-06`, `THREAD-08`, `HOTKEY-01`, `HOTKEY-02`, and
+  `HOTKEY-04` by checking dispatcher, hotkey, tray, poller, sound, and forbidden
+  fallback paths.
+- [behavioral] `tests/test_runtime_threading.py` and
+  `tests/test_runtime_services.py` enforce dispatcher, poller, shutdown, and
+  hotkey lifecycle behavior in `THREAD-02..THREAD-05`, `THREAD-07`,
+  `HOTKEY-02`, and `HOTKEY-03`.
+- [behavioral] `tests/test_system_portability.py` enforces `THREAD-04`,
+  `THREAD-08`, `HOTKEY-02`, and `HOTKEY-03` with registration lifecycle tests
+  plus a real Windows message-window dispatch test.
+- [manual] Runtime review and Windows smoke cover the whole-app Tk ownership
+  invariant in `THREAD-01` and real HUD/tray/hotkey lifecycle behavior.

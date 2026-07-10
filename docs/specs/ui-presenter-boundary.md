@@ -34,7 +34,12 @@ modules, Tk renderers, and runtime side effects.
 
 ## Contract Coverage
 
-- `tests/contracts/test_ui_presenter_boundaries.py` enforces `UI-PRES-01` and
-  `UI-PRES-02`.
-- Focused presenter tests cover status, panel, dialog, HUD, and navigation view
-  model behavior without creating Tk widgets.
+- [static] `tests/contracts/test_ui_presenter_boundaries.py` enforces
+  `UI-PRES-01` and `UI-PRES-02`.
+- [behavioral] `tests/test_dialog_presenter.py`, `tests/test_hud_presenter.py`,
+  `tests/test_navigation_presenter.py`, `tests/test_panel_presenter.py`, and
+  `tests/test_snapshot_presenter.py` enforce headless view-model behavior in
+  `UI-PRES-03` and `UI-PRES-04`.
+- [behavioral] `tests/test_panel_renderer.py` and
+  `tests/test_navigation_runtime.py` enforce renderer/runtime ownership of the
+  side effects described by `UI-PRES-03`.

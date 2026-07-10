@@ -1,3 +1,5 @@
+# enforces: docs/specs/release-signing.md SIGN-03, SIGN-09, SIGN-11
+
 from __future__ import annotations
 
 from pathlib import Path

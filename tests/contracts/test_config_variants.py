@@ -7,7 +7,7 @@ import bomana.config.feature_profile as feature_profile
 import bomana.config.settings as settings
 from bomana.utils.file_utils import ConfigManager
 
-# enforces: docs/specs/config-variants.md CFG-01..CFG-08
+# enforces: docs/specs/config-variants.md CFG-01..CFG-04, CFG-06..CFG-08
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -145,3 +145,21 @@ def test_portable_build_patches_feature_profile_not_config_facade() -> None:
 
     assert '"config" / "feature_profile.py"' in source
     assert 'root / "bomana" / "config.py"' not in source
+    assert "original_feature_profile = feature_profile_path.read_text" in source
+    assert "feature_profile_path.write_text(original_feature_profile" in source
+
+
+def test_variants_share_one_config_file() -> None:
+    settings_source = (ROOT / "bomana/config/settings.py").read_text(encoding="utf-8")
+    build_source = (ROOT / "tools/build_portable.py").read_text(encoding="utf-8")
+
+    assert 'CONFIG_FILE = Path.home() / ".wttimer_config.json"' in settings_source
+    assert "CONFIG_FILE" not in build_source
+
+
+def test_disabled_zones_force_integrated_navigation_mode() -> None:
+    source = (ROOT / "bomana/ui/app.py").read_text(encoding="utf-8")
+
+    assert "if ENABLE_ZONES:" in source
+    assert 'PanelConfig.navigation_mode = config.get("navigation_mode", "integrated")' in source
+    assert 'PanelConfig.navigation_mode = "integrated"' in source
