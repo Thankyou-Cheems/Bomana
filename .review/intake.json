@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-07-10T10:04:02+00:00",
+  "generated_at": "2026-07-10T12:52:08+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
-    "code_files": 113,
-    "code_lines": 34198,
-    "test_files": 48,
+    "code_files": 120,
+    "code_lines": 36165,
+    "test_files": 50,
     "todo_markers": 0
   },
   "languages": {
-    "python": 33396,
+    "python": 35363,
     "rust": 541,
     "shell": 167,
     "javascript": 94
@@ -60,7 +60,7 @@
       "path": "bomana\\ui\\app.py"
     },
     {
-      "lines": 1541,
+      "lines": 1547,
       "path": "bomana\\core\\logic.py"
     },
     {
@@ -84,19 +84,19 @@
       "path": "tests\\test_launcher_update_service.py"
     },
     {
-      "lines": 839,
-      "path": "bomana\\utils\\system.py"
+      "lines": 840,
+      "path": "bomana\\utils\\hotkey_broker.py"
     },
     {
-      "lines": 827,
-      "path": "bomana\\utils\\hotkey_broker.py"
+      "lines": 839,
+      "path": "bomana\\utils\\system.py"
     },
     {
       "lines": 809,
       "path": "bomana\\ui\\panel_renderer.py"
     },
     {
-      "lines": 717,
+      "lines": 719,
       "path": "bomana\\core\\telemetry.py"
     },
     {
@@ -115,21 +115,49 @@
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "654e955",
+    "head": "d14428e",
     "branch": "main",
-    "dirty_files": 35,
+    "dirty_files": 0,
     "recent_commits": [
+      "d14428e feat(replay): track real 8111 full-sortie fixture",
+      "c736230 feat(replay): add virtual-time 8111 session validation",
+      "fab46bb feat(recorder): add official 8111 session capture",
+      "7718d98 refactor(quality): modernize docs and test library",
+      "653066d feat(hotkeys): make admin mode explicit and zero-install",
       "654e955 feat(hotkeys): isolate privileged hotkeys in signed broker",
       "e063361 feat(site): refresh GitHub Pages for new users",
       "e3b9029 chore(review): refresh audit evidence after hotkey cleanup",
       "895ea85 feat(launcher): elevate only the app handoff by default",
-      "840d829 fix(specs): enforce clause-level contract traceability",
-      "6df2523 docs(readme): clarify Bomana game context",
-      "d92e640 fix(hotkeys): keep a single Tk-owned RegisterHotKey lifecycle",
-      "5662488 feat(ccrp): target forward POIs for bombing cues",
-      "e91bba0 refactor: harden post-SDD boundaries",
-      "0a55da3 docs: remove temporary SDD process notes"
+      "840d829 fix(specs): enforce clause-level contract traceability"
     ]
+  },
+  "sdd": {
+    "agents_md": true,
+    "spec_files": [
+      "docs\\specs\\config-variants.md",
+      "docs\\specs\\release-signing.md",
+      "docs\\specs\\runtime-8111-boundary.md",
+      "docs\\specs\\startup-elevation.md",
+      "docs\\specs\\testing-quality-gates.md",
+      "docs\\specs\\threading-ui-contract.md",
+      "docs\\specs\\ui-presenter-boundary.md"
+    ],
+    "clause_prefixes": [
+      "CFG",
+      "ELEV",
+      "HOTKEY",
+      "PRES",
+      "QG",
+      "R8111",
+      "SIGN",
+      "THREAD"
+    ],
+    "clause_mentions": 164,
+    "adr_dir": true,
+    "pitfalls": "docs\\PITFALLS.md",
+    "contract_tests_dir": true,
+    "changes_dir": false,
+    "detected": true
   },
   "coverage_gaps": [
     "typecheck"

@@ -1,7 +1,7 @@
 # Code Review Report
 
-**Open findings:** 1 high, 2 medium
-**Resolved:** 54  |  **Generated:** 2026-07-10T10:05:43+00:00
+**Open findings:** 2 high, 2 medium
+**Resolved:** 54  |  **Generated:** 2026-07-10T12:57:44+00:00
 
 ## F-4cfa222a [HIGH/confirmed] HUD can fall back to a non-click-through topmost window
 `bomana/ui/hud_overlay.py:419-432`
@@ -24,6 +24,29 @@
 - **Impact:** If Win32 layered setup fails while Tk color-key support exists, click_through=True falls back to only setting Tk alpha, leaving a topmost HUD that can intercept game clicks.
 - **Fix:** When click_through is requested and Win32.setup_window fails, raise HUDOverlayUnavailable or hide/destroy HUD; reserve Tk-only fallback for non-click-through contexts.
 - **Evidence:** [read] Fallback path applies only window.attributes("-alpha") and has no click-through equivalent.; [read] tests/test_hud_overlay.py raises only when tk_color_key=False; it does not cover the tk_color_key=True click-through failure path.
+
+## F-fb781d8f [HIGH/confirmed] Mutable adjacent checksum authenticates the elevated broker
+`bomana/utils/hotkey_broker.py:191-205`
+```
+def expected_broker_sha256(path: Path) -> str:
+    checksum = broker_checksum_path(path)
+    text = checksum.read_text(encoding="ascii").strip()
+    fields = text.split()
+    if len(fields) != 2 or fields[1] != BROKER_EXECUTABLE_NAME:
+        raise ValueError("invalid bundled hotkey broker checksum")
+    expected = fields[0].lower()
+    if len(expected) != 64 or any(char not in "0123456789abcdef" for char in expected):
+        raise ValueError("invalid bundled hotkey broker SHA-256")
+    return expected
+
+
+def verify_bundled_broker(path: Path) -> bool:
+    try:
+        return sha256_file(path) == expected_broker_sha256(path)
+```
+- **Impact:** A same-user writer to the supported portable App directory can replace BomanaHotkeyBroker.exe and its checksum; if the user then enables administrator hotkeys and approves UAC, the replacement executes as administrator.
+- **Fix:** Do not offer runas from a user-writable App package. Require an OS-protected or Authenticode-verified broker boundary, or explicitly disable privileged hotkeys when no independent trust anchor is available.
+- **Evidence:** [runtime] A temporary attacker-controlled BomanaHotkeyBroker.exe plus its matching adjacent sidecar made verify_bundled_broker() return True.; [read] hotkey_broker.py passes the accepted path to ShellExecuteExW with lpVerb=runas; build_portable.py packages the EXE and checksum together.; [read] launcher.pyw requires the install root to be writable and recommends a Desktop or Downloads Bomana directory; ADR 0003 acknowledges the user-writable package is weaker than Program Files plus Authenticode.; [tool] uv focused broker/elevation/build tests: 60 passed; existing tests pin matching-pair behavior but do not provide an independent trust anchor.
 
 ## F-61167c77 [MEDIUM/confirmed] Startup HUD initialization failure is not persisted
 `bomana/ui/app.py:177-178`  ⚠ snippet exists but not at lines 177-178; first line now near line 187
