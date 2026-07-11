@@ -71,19 +71,23 @@ those results.
   NOT use a shared altitude/airspeed bonus formula or constant-speed TTI; an
   unsupported conditional-propulsion record without a usable table MUST fail
   closed as `insufficient_data/conditional_propulsion_unsupported`.
-- `WFC-07`: Guided and glide bomb estimates MUST use Datamine mass,
-  aerodynamics, control-surface, guidance, and lifetime fields and MUST be
-  labelled as estimates; free-fall and high-drag bombs MUST continue to use the
-  existing CCRP solver. Every catalog weapon routed to CCRP MUST resolve its
+- `WFC-07`: Normal guided-bomb estimates MUST use Datamine mass, aerodynamics,
+  control-surface, guidance, and lifetime fields, while experimental glide
+  estimates MUST use the Datamine wing-area multiplier, lifetime, and hard
+  distance fields defined below; both MUST be labelled as estimates, and
+  free-fall and high-drag bombs MUST continue to use the existing CCRP solver.
+  Every catalog weapon routed to CCRP MUST resolve its
   freshly generated physics by exact catalog ID or by the Datamine source-file
   stem recorded in the CCRP asset; a missing mapping MUST produce
   `insufficient_data/ccrp_physics_unavailable` and MUST NOT reuse the previous
-  selection or generic fallback physics. Until a versioned provider supplies
-  sampled official-comparison curves or a repeatably calibrated independent
-  lift/autopilot model, a glide weapon MUST return
-  `insufficient_data/glide_envelope_unavailable` and MUST NOT calculate or
-  display the free-fall mass/caliber/`dragCx` trajectory as a practical glide
-  range cue.
+  selection or generic fallback physics. Under either ballistic-model policy,
+  a valid Datamine `guidance/tableN` MUST take priority for a glide weapon. With
+  no usable table, `strict_official` MUST return
+  `insufficient_data/glide_envelope_unavailable`; `foxthree_compatible` MUST
+  instead use the documented clean-room equivalent lift-to-drag/energy-height
+  estimate, return `quality=experimental` and
+  `reason=foxthree_compatible_glide`, and MUST NOT calculate or display the
+  free-fall mass/caliber/`dragCx` trajectory as a practical glide range cue.
 - `WFC-08`: AAM estimates MUST use only hostile aircraft contacts currently
   returned by `/map_obj.json`; finite current-response `dx`/`dy` values MUST be
   preserved and used only to infer a two-dimensional radial-aspect hint, while
@@ -112,9 +116,11 @@ those results.
   solver or fail solely because its propulsion model is unsupported.
 - `WFC-11`: Background calculation MUST follow the existing lock-in prepare,
   lock-free compute, lock-in apply pattern, and Tk presenters/renderers MUST
-  consume only immutable `UISnapshot` fields. Rate limiting MAY defer equivalent
-  ground-target work, but MUST NOT defer a current AAM contact update or the
-  transition from a present hostile contact to no target.
+  consume only immutable `UISnapshot` fields. Apply MUST reject work whose
+  weapon selection, target, or ballistic-model policy changed during compute.
+  Rate limiting MAY defer equivalent ground-target work, but MUST NOT defer a
+  current AAM contact update or the transition from a present hostile contact
+  to no target.
 - `WFC-12`: The primary UI MUST reuse the existing compact bombing card as a
   weapon-solution card and MUST NOT add a tactical map, a new primary navigation
   row, or promote POI above the existing zone-oriented navigation status. The
@@ -124,9 +130,10 @@ those results.
 - `WFC-13`: UI wording MUST distinguish supported ground `estimated in
   envelope`; AAM `within_all_aspect_reference`, `within_aspect_reference`,
   `head_on_only_reference`, and `beyond_envelope_reference` states as neutral
-  Datamine conditional-envelope references; glide
-  `insufficient_data/glide_envelope_unavailable`; and `align`, `too close`,
-  `out of range`, `no target`, and other `insufficient data` states. It MUST NOT
+  Datamine conditional-envelope references; experimental glide
+  `within_experimental_reference` and `beyond_experimental_reference`; strict
+  glide `insufficient_data/glide_envelope_unavailable`; and `align`, `too
+  close`, `out of range`, `no target`, and other `insufficient data` states. It MUST NOT
   call a conditional-table reference an exact hit range, call an estimated
   state a game lock, launch authorization, `Rtr`, `Rne`, or `NEZ`, present an
   iron-bomb trajectory as a glide envelope, or use a continuous flashing cue.
@@ -136,6 +143,12 @@ those results.
 - `WFC-15`: This spec MUST remain Draft until real War Thunder smoke covers at
   least one free-fall bomb, guided bomb, glide bomb, AGM, and AAM scenario plus
   directed selection-field capture across those categories.
+- `WFC-16`: `WeaponBallisticModelConfig` MUST accept only
+  `foxthree_compatible` and `strict_official`, MUST default to
+  `foxthree_compatible`, and the weapon selector MUST visibly explain both
+  choices, persist the selected value as `weapon_ballistic_model`, and apply it
+  to `WeaponBallisticModelConfig.selected_model` without requiring an app
+  restart.
 
 ## Model Notes
 
@@ -160,14 +173,20 @@ These are Bomana model choices, not imported weapon-performance values:
 - A normal guided bomb starts from the existing ballistic trajectory and only
   reduces that result using a fixed 0.85 ceiling plus a bounded Datamine
   guidance/control-authority factor; it never extends the ballistic result.
-- A glide bomb has no active range provider. The native game comparison path
-  exposes no public implementation or static trajectory curves that Bomana can
-  reproduce from the current Datamine checkout, so the card reports an
-  unavailable/uncalibrated state instead of repackaging the iron-bomb path.
+- A glide bomb without a usable official table follows the explicit user
+  policy. `strict_official` reports an unavailable state.
+  `foxthree_compatible` is the default temporary model and computes
+  `L/D = clamp(2.4 * wing_area_mult, 1.5, 12)`,
+  `energy_height = max(0, launch_altitude - target_altitude) + v^2/(2g)`, and
+  `range = 0.8 * L/D * energy_height`; unknown target altitude uses zero datum,
+  and Datamine lifetime times launch speed plus `hard_max_distance_m` cap the
+  result when present. It is an experimental reach cue, not an official curve,
+  lift/autopilot simulation, hit guarantee, or reuse of the iron-bomb path.
 - The card's green state is reserved for supported ground-weapon estimates that
   are inside the estimate and aligned within 10 degrees. AAM conditional-table
-  references are neutral/yellow, and an unavailable glide model has no
-  in-envelope cue. None is War Thunder's lock state or launch authorization.
+  references and experimental glide references are neutral/yellow, and an
+  unavailable glide model has no in-envelope cue. None is War Thunder's lock
+  state or launch authorization.
 
 ## Contract Coverage
 
@@ -188,15 +207,16 @@ These are Bomana model choices, not imported weapon-performance values:
   localization, and manual selection fallback cases.
 - [behavioral] `tests/test_weapon_solver.py` enforces `WFC-06..WFC-10` with
   conditional-table priority, table-backed conditional-propulsion references,
-  staged-motor fallback, aligned-SOG TTI, glide-provider unavailability,
-  ground-target, and failure cases.
+  staged-motor fallback, aligned-SOG TTI, strict glide-provider unavailability,
+  FoxThree-compatible experimental glide formula/caps, ground-target, and
+  failure cases.
 - [behavioral] `tests/test_weapon_envelope.py` enforces `WFC-06`, `WFC-08`, and
   `WFC-10` with altitude/carrier-Mach/target-radial-Mach interpolation,
   aspect/end-point selection, table-range independence from `maxDistance`,
   time-field lookup, and machine-readable malformed-cell failures.
 - [behavioral] `tests/test_weapon_scheduler.py` enforces `WFC-07`, `WFC-10`, and
   `WFC-11` with prepare/compute/apply state transitions, missing-CCRP
-  fail-closed behavior, and stale-result rejection.
+  fail-closed behavior, and stale selection/target/model result rejection.
 - [behavioral] `tests/test_map_objects_contract.py` enforces `WFC-08` by keeping
   only currently returned hostile aircraft contacts, preserving finite current
   `dx`/`dy`, and excluding the player and friendly aircraft.
@@ -204,6 +224,9 @@ These are Bomana model choices, not imported weapon-performance values:
   and `tests/test_ui_geometry.py` enforce `WFC-12` and `WFC-13` with compact-card
   conditional-reference/unavailable wording, conditional detail-row layout,
   and no added primary navigation row.
+- [behavioral] `tests/test_weapon_selector.py` enforces `WFC-16` with explicit
+  model labels, valid-value rejection, immediate runtime application, and
+  `weapon_ballistic_model` persistence.
 - [manual] `docs/guides/weapon-fire-control-smoke.md` covers `WFC-04`, `WFC-07`,
   `WFC-08`, `WFC-09`, and `WFC-15`; automated tests do not claim target-altitude,
   lock-state, current-store, terrain, or live-game accuracy coverage.

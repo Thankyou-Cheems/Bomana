@@ -77,15 +77,16 @@ uv run python Bomana.pyw
 | 15 分钟计时器 | 自动识别出生/着陆/死亡并重置周期 |
 | 导航（战区/机场） | 方位、距离、ETE，目标切换 |
 | 燃油管理 | 油量、油耗率、返航估算 |
-| CCRP 投弹预测 | 基于弹道参数的估算值，不是游戏内真实算法 |
+| 武器解算 | 自由落体 CCRP + AAM/AGM/制导与滑翔武器参考 |
 | 超速提醒 | IAS/Mach 双通道分级告警（safe/caution/warning/critical） |
 | HUD 叠加层 | 可选开启，提供目标与航向参考 |
 | 界面个性化 | 独立文字缩放、主题切换、自定义提示音 |
 
-CCRP 说明：
+武器解算说明：
 
 - 该功能是工程化估计，不是游戏内部真实投弹算法，存在误差是正常现象。
-- 仅对普通/高阻自由落体炸弹显示辅助释放点；制导炸弹、滑翔炸弹不显示投弹预测。
+- 普通/高阻炸弹使用 CCRP；AAM/AGM 优先使用 Datamine 条件表。
+- 无表滑翔武器默认使用明确标为实验参考的 FoxThree 兼容临时模型，也可在武器选择器切到严格模式停用临时模型。
 - 当前 Mach >= 1.0 时按多数炸弹无法投放处理，面板会提示超出投放限制。
 - 可在 `设置 -> 投弹` 中手动校准：`距离修正倍率`、`时间修正倍率`。
 - 静态炸弹库来源：War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` -> `tools/update_datamine_assets.py` -> `tools/blkx_extractor.py` -> `bomana/data/ccrp_bomb_params.json`
@@ -221,15 +222,16 @@ For source-mode admin-hotkey testing, first run `uv run python tools/build_hotke
 | 15-min timer | Tracks spawn/landing/death cycle automatically |
 | Navigation | Zone/airfield bearing, distance and ETE |
 | Fuel | Fuel amount, burn rate, return estimate |
-| CCRP | Ballistic-based estimate, not the in-game internal algorithm |
+| Weapon solution | Free-fall CCRP plus AAM/AGM/guided/glide references |
 | Overspeed | IAS/Mach dual-channel alerts (`safe/caution/warning/critical`) |
 | HUD overlay | Optional in-game navigation overlay |
 | UI personalization | Independent text scale, theme switching, custom alert sounds |
 
-CCRP note:
+Weapon-solution note:
 
 - This feature is an engineering estimate and not War Thunder's internal bombing algorithm.
-- Assisted release cues are shown only for free-fall or high-drag free-fall bombs; guided and glide bombs are marked as not applicable.
+- Free-fall/high-drag bombs use CCRP; AAM/AGM references prefer Datamine condition tables.
+- Glide stores without a usable table default to an explicitly experimental FoxThree-compatible temporary model; strict mode disables that temporary fallback.
 - Mach >= 1.0 is treated as above the release limit for normal bomb prediction.
 - Prediction error is expected; calibrate in `Settings -> Bombing` using `range correction` and `time correction`.
 - Static bomb DB provenance: War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` -> `tools/update_datamine_assets.py` -> `tools/blkx_extractor.py` -> `bomana/data/ccrp_bomb_params.json`

@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+from bomana.config.settings import WeaponBallisticModelConfig
 from bomana.ui import dialogs
 from bomana.ui.dialogs import WeaponSelectorDialog, build_weapon_selector_scope
 
@@ -122,6 +123,7 @@ def test_weapon_selector_persists_manual_bomb_and_syncs_ccrp_selection(monkeypat
     assert saved == {
         "keep": True,
         "selected_weapon": "su_fab100",
+        "weapon_ballistic_model": "foxthree_compatible",
         "selected_bomb": "su_fab100",
     }
     assert catalog.set_calls == [("su_fab100", "manual")]
@@ -155,6 +157,53 @@ def test_weapon_selector_keeps_ccrp_bomb_when_selecting_missile(monkeypatch) -> 
     assert saved == {
         "selected_bomb": "su_fab100",
         "selected_weapon": "agm_65d",
+        "weapon_ballistic_model": "foxthree_compatible",
     }
     assert catalog.set_calls == [("agm_65d", "manual")]
     assert dialogs.BombConfig.selected_bomb == "su_fab100"
+
+
+def test_weapon_ballistic_model_config_defaults_to_compatibility_and_rejects_unknown(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        WeaponBallisticModelConfig,
+        "selected_model",
+        WeaponBallisticModelConfig.DEFAULT_MODEL,
+    )
+
+    assert WeaponBallisticModelConfig.DEFAULT_MODEL == "foxthree_compatible"
+    assert WeaponBallisticModelConfig.set_selected("strict_official")
+    assert WeaponBallisticModelConfig.selected_model == "strict_official"
+    assert not WeaponBallisticModelConfig.set_selected("unlicensed_guess")
+    assert WeaponBallisticModelConfig.selected_model == "strict_official"
+
+
+def test_weapon_selector_model_buttons_are_explicit_and_choice_applies_immediately(
+    monkeypatch,
+) -> None:
+    saved = {}
+    current = {"value": "foxthree_compatible"}
+    dialog = WeaponSelectorDialog.__new__(WeaponSelectorDialog)
+    dialog.ballistic_model_var = SimpleNamespace(
+        get=lambda: current["value"],
+        set=lambda value: current.update(value=value),
+    )
+    dialog._refresh_ballistic_model_controls = lambda: None
+
+    monkeypatch.setattr(
+        WeaponBallisticModelConfig,
+        "selected_model",
+        "foxthree_compatible",
+    )
+    monkeypatch.setattr(dialogs.ConfigManager, "load", lambda: {"keep": True})
+    monkeypatch.setattr(dialogs.ConfigManager, "save", lambda config: saved.update(config) or True)
+
+    dialog._set_ballistic_model("strict_official")
+
+    assert set(dialog._MODEL_LABELS) == {"foxthree_compatible", "strict_official"}
+    assert "默认" in dialog._MODEL_LABELS["foxthree_compatible"]
+    assert "无临时滑翔" in dialog._MODEL_LABELS["strict_official"]
+    assert saved == {"keep": True, "weapon_ballistic_model": "strict_official"}
+    assert current["value"] == "strict_official"
+    assert WeaponBallisticModelConfig.selected_model == "strict_official"

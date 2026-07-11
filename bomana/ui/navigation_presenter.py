@@ -69,6 +69,21 @@ def build_navigation_tape_model(
     primary_target = primary_zone
     primary_target_info: dict[str, Any] | None = None
 
+    traceback_point = getattr(snap, "traceback_point", None)
+    if traceback_point is not None:
+        traceback_relative = _safe_float(getattr(traceback_point, "relative", 0.0))
+        traceback_distance = _safe_float(getattr(traceback_point, "distance_km", 0.0))
+        targets.append(
+            {
+                "type": "traceback",
+                "relative": traceback_relative,
+                "distance_km": traceback_distance,
+                "is_primary": False,
+                "is_target": True,
+                "name": str(getattr(traceback_point, "name", "") or "上次坠毁点"),
+            }
+        )
+
     if interest_point is not None:
         poi_relative = _safe_float(getattr(interest_point, "relative", 0.0))
         poi_distance = _safe_float(getattr(interest_point, "distance_km", 0.0))

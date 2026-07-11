@@ -40,7 +40,8 @@ test pins that field. A pulse correlated only with firing is not selection.
 |---|---|
 | Free-fall/high-drag bomb | Existing CCRP release cue remains available and uses the manually selected bomb. |
 | Guided bomb | Card says estimate, uses the forward POI/zone, and never says game lock or authorization. |
-| Glide bomb | Card reports `insufficient data` with `glide envelope unavailable` (or the localized equivalent), shows no iron-bomb range as a glide cue, and gives no synthetic toss command. |
+| Glide bomb, default model | Card names the FoxThree-compatible temporary model, reports a neutral/yellow experimental within/beyond reference, shows no iron-bomb trajectory as glide range, and makes no lock/hit guarantee. |
+| Glide bomb, strict mode | Card reports `insufficient data` with `glide envelope unavailable` (or the localized equivalent), shows no practical range, and gives no synthetic toss command. |
 | AGM | Too-close, align, estimated-in-envelope, and out-of-range transitions follow the same current ground target without a new map. |
 | Complex conditional propulsion | A weapon with a valid `guidance/tableN` envelope keeps its Datamine reference despite `conditional_propulsion_unsupported`; a weapon without a valid table still reports insufficient data instead of a guessed point-mass range. |
 | Ground countdown | Time-to-window appears only while aligned and closing; turning away or losing positive SOG closure removes it. |
@@ -72,13 +73,13 @@ axis endpoints and interior values before using interpolation, and keep sampled
 output versioned separately from the existing configuration-derived catalog.
 Alternatively, a new independent lift/autopilot solver must be calibrated with
 several repeatable official-comparison and live-release cases before it can
-replace `glide_envelope_unavailable`.
+replace the temporary compatibility heuristic as the default provider.
 
 Treat discrepancies as model evidence: adjust documented model choices only
 with several repeatable cases, never by importing GreasyFork/Wiki/forum range
 tables as runtime parameters. Do not mark a glide envelope as validated merely
-because the explicit unavailable state renders correctly; that smoke covers
-fail-closed presentation, not range accuracy.
+because the experimental cue or strict unavailable state renders correctly;
+that smoke covers presentation and policy switching, not range accuracy.
 
 The current Draft contract intentionally does not claim target altitude,
 terrain elevation, verified radar lock, three-dimensional target closure,

@@ -10,7 +10,6 @@ from bomana.config.feature_profile import ENABLE_CCRP
 from bomana.config.settings import (
     BombConfig,
     OverspeedConfig,
-    PanelConfig,
     UIConfig,
     ZoneConfig,
 )
@@ -18,6 +17,7 @@ from bomana.ui.icon_assets import IconManager
 from bomana.ui.panel_presenter import format_weapon_selection_label
 from bomana.ui.text_utils import bind_dynamic_wrap, measure_min_width
 from bomana.ui.theme import Theme
+from bomana.ui.tk_style import style_action_button
 from bomana.ui.widgets import HeadingTape, Pill
 
 if TYPE_CHECKING:
@@ -154,19 +154,19 @@ class MainWindowBuilder:
         )
         app.nudge_lbl.grid(row=0, column=0, sticky="ew")
 
-        app.star_lbl = tk.Label(
+        app.star_lbl = tk.Button(
             app.nudge_row,
             text=app._nudge_action_text() if nudge_visible else "",
             font=font_hint,
-            fg=Theme.BLUE,
-            bg=Theme.BG,
-            cursor="hand2" if app._nudge_action_text() else "arrow",
             padx=int(8 * s),
             pady=max(1, int(1 * s)),
+            command=app._on_nudge_action,
+            takefocus=False,
         )
-        app.star_lbl.bind("<Button-1>", lambda e: app._on_nudge_action())
-        app.star_lbl.bind("<Enter>", lambda e: app.star_lbl.config(fg=Theme.TEXT, bg=Theme.BORDER))
-        app.star_lbl.bind("<Leave>", lambda e: app.star_lbl.config(fg=Theme.BLUE, bg=Theme.BG))
+        style_action_button(
+            app.star_lbl,
+            "warning" if getattr(app, "_hotkey_broker_action", "") == "elevate" else "secondary",
+        )
         app.star_lbl.grid(row=0, column=1, sticky="e", padx=(int(8 * s), 0))
         if not nudge_visible:
             app.nudge_row.grid_remove()
@@ -641,40 +641,18 @@ class MainWindowBuilder:
         panel_key: str,
         font,
         scale: float,
-    ) -> tk.Label:
+    ) -> tk.Button:
         app = self.app
-        close_btn = tk.Label(
+        close_btn = tk.Button(
             parent,
             text="关闭",
             font=font,
-            fg=Theme.TEXT,
-            bg=Theme.BG,
-            cursor="hand2",
             padx=max(8, int(8 * scale)),
             pady=max(1, int(1 * scale)),
-            highlightthickness=1,
-            highlightbackground=Theme.BORDER,
-            highlightcolor=Theme.BORDER,
+            command=lambda key=panel_key: app._toggle_panel(key),
+            takefocus=False,
         )
-        close_btn.bind("<Button-1>", lambda e, key=panel_key: app._toggle_panel(key))
-        close_btn.bind(
-            "<Enter>",
-            lambda e, btn=close_btn: btn.config(
-                fg=Theme.RED,
-                bg=Theme.BORDER,
-                highlightbackground=Theme.RED,
-                highlightcolor=Theme.RED,
-            ),
-        )
-        close_btn.bind(
-            "<Leave>",
-            lambda e, btn=close_btn: btn.config(
-                fg=Theme.TEXT,
-                bg=Theme.BG,
-                highlightbackground=Theme.BORDER,
-                highlightcolor=Theme.BORDER,
-            ),
-        )
+        style_action_button(close_btn, "danger")
         return close_btn
 
     def _build_zone_card(self) -> None:
@@ -714,26 +692,16 @@ class MainWindowBuilder:
         )
         app.heading_lbl.grid(row=0, column=1, sticky="w", padx=(int(10 * s), 0))
 
-        app.standalone_btn = tk.Label(
+        app.standalone_btn = tk.Button(
             app.zone_header_frame,
             text="切换独立导航窗",
             font=font_item,
-            fg=Theme.TEXT_MUTED,
-            bg=Theme.BG,
-            cursor="hand2",
             padx=int(6 * s),
             pady=max(1, int(1 * s)),
+            command=app._toggle_navigation_mode,
+            takefocus=False,
         )
         app.standalone_btn.grid(row=0, column=3, sticky="e")
-        app.standalone_btn.bind("<Button-1>", lambda e: app._toggle_navigation_mode())
-        app.standalone_btn.bind(
-            "<Enter>",
-            lambda e: app.standalone_btn.config(
-                fg=(Theme.BLUE if PanelConfig.navigation_mode != "standalone" else Theme.GREEN),
-                bg=Theme.BORDER,
-            ),
-        )
-        app.standalone_btn.bind("<Leave>", lambda e: app._update_nav_mode_button())
         app._update_nav_mode_button()
 
         if ZoneConfig.HEADING_TAPE_ENABLED:
@@ -753,7 +721,7 @@ class MainWindowBuilder:
             app.tape_legend_row.pack(fill="x", pady=(int(1 * s), 0))
             legend_left = tk.Label(
                 app.tape_legend_row,
-                text="◇兴趣点  ⊚战区  ✈友方机场  ✈敌方机场  ✕摧毁目标",
+                text="POI四角标记  上次坠毁点  ⊚战区  ✈友方机场  ✈敌方机场  ✕摧毁目标",
                 font=legend_font,
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
@@ -1122,13 +1090,24 @@ class MainWindowBuilder:
                 anchor="e",
             )
             app.bomb_release_lbl.grid(row=0, column=1, sticky="e")
+            app.weapon_select_btn = tk.Button(
+                app.bombing_header_frame,
+                text="选择武器",
+                font=font_item,
+                padx=max(7, int(7 * s)),
+                pady=max(1, int(1 * s)),
+                command=app._show_bomb_selector,
+                takefocus=False,
+            )
+            style_action_button(app.weapon_select_btn, "neutral")
+            app.weapon_select_btn.grid(row=0, column=2, sticky="e", padx=(int(10 * s), 0))
             app.bombing_close_btn = self._build_panel_close_button(
                 app.bombing_header_frame,
                 panel_key="show_bombing",
                 font=font_item,
                 scale=s,
             )
-            app.bombing_close_btn.grid(row=0, column=2, sticky="e", padx=(int(10 * s), 0))
+            app.bombing_close_btn.grid(row=0, column=3, sticky="e", padx=(int(6 * s), 0))
             app.bombing_info_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
             app.bombing_info_frame.grid(
                 row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s))

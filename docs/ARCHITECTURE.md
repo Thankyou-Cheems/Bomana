@@ -32,6 +32,7 @@
 - Config variants and `ENABLE_*` precedence: `docs/specs/config-variants.md`
 - Test layers and quality gates: `docs/specs/testing-quality-gates.md`
 - Weapon catalog, selection, solver, and compact presentation: `docs/specs/weapon-fire-control.md`
+- Shared navigation markers, close semantics, and action affordances: `docs/specs/navigation-cues.md`
 
 ## Repository Layout
 ```
@@ -140,9 +141,11 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
      Supported powered weapons and guided bombs use the same separate
      prepare/compute/apply path: lock-owned
      state is projected into a work item, the numerical estimate runs outside
-     the state lock, and only a still-current selection/target result is applied.
-     Glide weapons currently have no validated lift/autopilot provider and
-     return an explicit unavailable result rather than a free-fall proxy.
+     the state lock, and only a still-current selection/target/model result is
+     applied. Glide weapons still have no validated native-equivalent
+     lift/autopilot provider: the default selectable policy supplies an
+     explicitly experimental FoxThree-compatible energy-height estimate, while
+     strict mode reports unavailable; neither path reuses the free-fall proxy.
    - Weapon selection is manual unless a future directed 8111 capture proves a
      named selection field. Button/release pulses such as `weapon2` are never
      treated as a selected category.
@@ -282,7 +285,8 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - Zone/airfield navigation
 - Fuel management
 - CCRP bombing predictor + estimated AGM/guided ranges, conditional-table AAM
-  references, and explicit unavailable states for uncalibrated glide envelopes
+  references, and selectable experimental/strict handling for uncalibrated
+  glide envelopes
 - UI overlays & global hotkeys
 
 ## Runtime Thread Boundary
@@ -308,6 +312,13 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   estimate. The AAM path may project current hostile `dx`/`dy` onto line of
   sight as a radial-aspect hint, but unknown target altitude and speed magnitude
   keep the result a conditional reference rather than an intercept solution.
+- Trace back retains only the player's own last position from a successful raw
+  `/map_obj.json` Player sample. A successful non-empty sequence without Player
+  freezes that position, and the existing `LOSS_PENDING -> WAIT_NEXT`
+  transition confirms it; source failure, an empty frame, or Player recovery
+  cancels the pending sequence. The confirmed point stays in process memory,
+  survives only a same-battle respawn, and is projected through the shared
+  heading-tape snapshot path without replacing the primary zone target.
 
 ## UI Stability & Performance Guardrails
 - Keep panel containers structurally stable during transient 8111 data drops (avoid frame-level mount/unmount churn).

@@ -146,8 +146,11 @@ def test_hotkey_broker_notice_uses_existing_nudge_row_with_elevation_action() ->
 
     app._update_hint()
 
-    assert app.nudge_lbl.options["text"] == "游戏前台热键需要单独授权。"
-    assert app.star_lbl.options["text"] == "授权管理员热键"
+    assert app.nudge_lbl.options["text"] == (
+        "游戏前台热键需要单独授权。 请先切出游戏按 "
+        f"[{app_module.HotkeyConfig.KEY_LOCK}] 解锁后点击，或直接从托盘菜单启用。"
+    )
+    assert app.star_lbl.options["text"] == "启用游戏内热键"
     assert app.star_lbl.options["cursor"] == "hand2"
     assert app.nudge_row.manager == "grid"
     assert recalc_calls == [{"force_shrink": False}]
@@ -239,6 +242,43 @@ def test_load_config_migrates_missing_selected_weapon_from_selected_bomb(monkeyp
     assert catalog.selection_source == "manual"
 
 
+def test_load_config_restores_ballistic_model_and_rejects_unknown(monkeypatch) -> None:
+    app = _make_config_only_app()
+    app.sound = SimpleNamespace(set_enabled=lambda _enabled: None, is_enabled=lambda: False)
+    catalog = _FakeWeaponCatalog()
+    monkeypatch.setattr(app_module, "get_weapon_catalog", lambda: catalog)
+    monkeypatch.setattr(app_module.BombConfig, "get_bomb_data", lambda _value: {})
+    monkeypatch.setattr(
+        app_module.ConfigManager,
+        "load",
+        lambda: {
+            "scale": 1.0,
+            "panels": {},
+            "weapon_ballistic_model": "strict_official",
+        },
+    )
+
+    app._load_config()
+
+    assert app_module.WeaponBallisticModelConfig.selected_model == "strict_official"
+
+    monkeypatch.setattr(
+        app_module.ConfigManager,
+        "load",
+        lambda: {
+            "scale": 1.0,
+            "panels": {},
+            "weapon_ballistic_model": "made_up_model",
+        },
+    )
+    app._load_config()
+
+    assert (
+        app_module.WeaponBallisticModelConfig.selected_model
+        == app_module.WeaponBallisticModelConfig.DEFAULT_MODEL
+    )
+
+
 def test_load_config_migrates_legacy_ccrp_key_to_datamine_source_id(monkeypatch) -> None:
     app = _make_config_only_app()
     app.sound = SimpleNamespace(set_enabled=lambda _enabled: None, is_enabled=lambda: False)
@@ -280,10 +320,16 @@ def test_save_config_writes_weapon_and_ccrp_bomb_selection_together(monkeypatch)
         app_module.ConfigManager, "save", lambda config: saved.update(config) or True
     )
     monkeypatch.setattr(app_module.BombConfig, "selected_bomb", "su_fab100")
+    monkeypatch.setattr(
+        app_module.WeaponBallisticModelConfig,
+        "selected_model",
+        "strict_official",
+    )
 
     assert app._save_config() is True
     assert saved["selected_weapon"] == "agm_65d"
     assert saved["selected_bomb"] == "su_fab100"
+    assert saved["weapon_ballistic_model"] == "strict_official"
 
 
 def test_main_card_selector_filters_with_current_aircraft_only_in_flight(monkeypatch) -> None:

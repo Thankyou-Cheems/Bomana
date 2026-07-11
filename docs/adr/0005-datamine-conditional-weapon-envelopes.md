@@ -1,6 +1,6 @@
 # ADR 0005: Prefer Datamine conditional weapon envelopes
 
-Status: Accepted
+Status: Accepted; glide availability superseded by ADR 0006
 Date: 2026-07-11
 Supersedes: the AAM and glide-model choices in ADR 0004; ADR 0004's compact UI,
 manual selection, current-contact, and no-new-map decisions remain in force.

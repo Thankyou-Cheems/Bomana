@@ -31,6 +31,7 @@ from bomana.config.settings import (
     SnapConfig,
     SoundConfig,
     UIConfig,
+    WeaponBallisticModelConfig,
 )
 from bomana.core.logic import GameLogic
 from bomana.core.state import Phase, UISnapshot
@@ -51,6 +52,7 @@ from bomana.ui.runtime import LogicPoller, TkEventDispatcher
 from bomana.ui.runtime_services import HAS_TRAY, AppRuntimeServices
 from bomana.ui.snapshot_presenter import build_status_presentation
 from bomana.ui.theme import Theme
+from bomana.ui.tk_style import style_action_button
 from bomana.ui.window_geometry import (
     apply_snap_anchor,
     capture_snap_anchor,
@@ -291,6 +293,15 @@ class App:
 
         # 武器解算沿用 CCRP 编译开关；精简构建不会触发目录懒加载。
         if ENABLE_CCRP:
+            requested_model = config.get(
+                "weapon_ballistic_model",
+                WeaponBallisticModelConfig.DEFAULT_MODEL,
+            )
+            if not WeaponBallisticModelConfig.set_selected(requested_model):
+                WeaponBallisticModelConfig.set_selected(WeaponBallisticModelConfig.DEFAULT_MODEL)
+            game_state = getattr(getattr(self, "game", None), "state", None)
+            if game_state is not None:
+                game_state.weapon_model = WeaponBallisticModelConfig.selected_model
             selected_bomb = config.get("selected_bomb", "su_fab100")
             if BombConfig.get_bomb_data(selected_bomb):
                 BombConfig.selected_bomb = selected_bomb
@@ -397,6 +408,7 @@ class App:
 
         # 武器选择与兼容的 CCRP 炸弹选择同时持久化。
         if ENABLE_CCRP:
+            config["weapon_ballistic_model"] = WeaponBallisticModelConfig.selected_model
             weapon_catalog = self._get_weapon_catalog()
             if weapon_catalog is not None:
                 selected_weapon_id = str(weapon_catalog.selected_weapon_id or "").strip()
@@ -721,7 +733,9 @@ class App:
 
         调用此方法以确保托盘菜单的勾选状态与实际状态同步。
         """
-        self.runtime_services.refresh_tray()
+        runtime_services = getattr(self, "runtime_services", None)
+        if runtime_services is not None:
+            runtime_services.refresh_tray()
 
     def _init_global_hotkeys(self):
         """初始化全局热键
@@ -1107,18 +1121,26 @@ class App:
 
     def _nudge_text(self) -> str:
         if self._hotkey_broker_notice:
+            if self._hotkey_broker_action == "elevate":
+                if self._locked:
+                    return (
+                        f"{self._hotkey_broker_notice} 请先切出游戏按 "
+                        f"[{HotkeyConfig.KEY_LOCK}] 解锁后点击，或直接从托盘菜单启用。"
+                    )
+                return f"{self._hotkey_broker_notice} 可点击右侧按钮，或从托盘菜单启用。"
             return self._hotkey_broker_notice
         return "提示：如果 Bomana 对你有帮助，欢迎点一个 GitHub Star（起飞后自动隐藏）"
 
     def _nudge_action_text(self) -> str:
         if self._hotkey_broker_action == "elevate":
-            return "授权管理员热键"
+            return "启用游戏内热键"
         return "GitHub Star" if self._nudge_visible else ""
 
     def _set_hotkey_broker_notice(self, message: str, action: str) -> None:
         self._hotkey_broker_notice = str(message or "").strip()
         self._hotkey_broker_action = str(action or "").strip()
         self._update_hint()
+        self._refresh_tray()
 
     def _on_nudge_action(self) -> None:
         if self._hotkey_broker_action == "elevate":
@@ -1195,9 +1217,11 @@ class App:
         if not ENABLE_ZONES or not hasattr(self, "standalone_btn"):
             return
         if PanelConfig.navigation_mode == "standalone":
-            self.standalone_btn.config(text="独立导航窗: 已启用", fg=Theme.GREEN, bg=Theme.BG)
+            self.standalone_btn.config(text="独立导航窗 · 已启用")
+            style_action_button(self.standalone_btn, "success")
         else:
-            self.standalone_btn.config(text="切换独立导航窗", fg=Theme.TEXT_MUTED, bg=Theme.BG)
+            self.standalone_btn.config(text="打开独立导航窗")
+            style_action_button(self.standalone_btn, "neutral")
 
     def _next_corner(self):
         """切换到下一个角落"""

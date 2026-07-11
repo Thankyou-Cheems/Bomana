@@ -19,7 +19,7 @@ implementation plans belong in git history, not here.
 Symptom: AIM-120C-5 showed a roughly 15 km two-dimensional cue despite its condition tables supporting much longer high-energy launch references, while glide weapons displayed an iron-bomb trajectory that did not account for lift or guidance.
 Root cause: the extractor discarded the condition-table maxima and axes, the solver substituted a one-dimensional missile path length for condition-dependent initial launch separation, failed the whole record on propulsion details even when an independent guidance table existed, and relabelled the available free-fall integration as a guided-ballistic reference.
 Spec: `docs/specs/weapon-fire-control.md` `WFC-02`, `WFC-06..WFC-08`, `WFC-10`, `WFC-13` (Draft 2026-07); ADR `docs/adr/0005-datamine-conditional-weapon-envelopes.md`.
-Pin: `tests/test_weapon_data_extractor.py` and `tests/contracts/test_weapon_fire_control_schema.py` retain the full conditional tables; `tests/test_weapon_envelope.py`, `tests/test_weapon_solver.py`, `tests/test_map_objects_contract.py`, and `tests/test_panel_presenter.py` require unclipped table interpolation, table-first AAM references, current `dx`/`dy` aspect only, and an explicit unavailable glide state.
+Pin: `tests/test_weapon_data_extractor.py` and `tests/contracts/test_weapon_fire_control_schema.py` retain the full conditional tables; `tests/test_weapon_envelope.py`, `tests/test_weapon_solver.py`, `tests/test_map_objects_contract.py`, and `tests/test_panel_presenter.py` require unclipped table interpolation, table-first AAM references, current `dx`/`dy` aspect only, and visibly experimental versus strict-unavailable glide policies.
 
 ### 2026-07-11 — An unavailable table condition must not poison an independent fallback
 
@@ -27,6 +27,13 @@ Symptom: AGM-65/RB75 records at high launch altitude returned `guidance_envelope
 Root cause: the solver treated every non-null conditional-table result as final instead of distinguishing a usable table reference from a launch condition with no table solution.
 Spec: `docs/specs/weapon-fire-control.md` `WFC-06`, `WFC-10` (Draft 2026-07).
 Pin: `tests/contracts/test_weapon_fire_control_runtime.py` requires the generated AGM-65D high-altitude zero-cell case to continue through the existing glide/unsupported guards and use the supported powered fallback.
+
+### 2026-07-11 — A selected policy is not necessarily the active provider
+
+Symptom: a non-glide AGM solved by the point-mass fallback displayed “FoxThree 兼容临时模型” merely because that was the selected glide policy.
+Root cause: the presenter treated `WeaponSolution.model` as the algorithm source even though it records the cross-calculation policy; valid Datamine tables and non-glide fallbacks can run under either policy.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-06`, `WFC-13`, `WFC-16` (Draft 2026-07); ADR `docs/adr/0006-selectable-temporary-glide-model.md`.
+Pin: `tests/test_panel_presenter.py` requires provider wording to follow the machine-readable solution reason and forbids the FoxThree label on `powered_point_mass_2d` results.
 
 ### 2026-07-10 — App helper extraction can strand lifecycle calls after `return`
 
@@ -40,7 +47,7 @@ Pin: `tests/test_ui_app_config.py` requires the tray call to remain in `App.__in
 Symptom: all 44 generated glide records return the same height-proportional envelope, so GBU-39 and GBU-53 differ in the catalog but not in the solver.
 Root cause: every real `0.08 * wingAreaMult / CxK` value fell below the hardcoded 1.5 floor, while mass, caliber, and `dragCx` never entered that path; the available fields also do not establish lift-curve or induced-drag coefficients for a defensible replacement L/D.
 Spec: `docs/specs/weapon-fire-control.md` `WFC-07`, `WFC-10`, `WFC-13` (Draft 2026-07).
-Pin: `tests/test_weapon_solver.py` requires `glide_envelope_unavailable` until a versioned sampled-curve or calibrated lift/autopilot provider satisfies the contract; the gravity/drag trajectory cannot be shown as a practical glide cue.
+Pin: `tests/test_weapon_solver.py` preserves this limitation explicitly: the user-selected default compatibility formula is `experimental`, while strict mode still requires `glide_envelope_unavailable`; neither path may relabel the gravity/drag trajectory as practical glide range. ADR 0006 records this deliberate temporary usability tradeoff.
 
 ### 2026-07-10 — Modern propulsion blocks are not always a flat motor schedule
 
@@ -241,6 +248,16 @@ Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, wi
   Cause: core navigation can leave every zone with `is_target=False`; the tape previously rendered overflow cues only for active targets
   Fix/Workaround: for tape rendering only, fall back to the smallest-angle zone as display-primary without changing core target-lock semantics
 
+- Context: closing the standalone navigation window
+  Symptom: the window disappeared, but integrated navigation did not return and the saved mode remained `standalone`
+  Cause: the title-bar X reused temporary `hide()` lifecycle behavior instead of performing a presentation-mode transition
+  Fix/Workaround: route X/WM close through the idempotent navigation mode service; reserve `hide()` for temporary history-mode suspension
+
+- Context: deriving an ownship Trace back point through short 8111 instability
+  Symptom: a failed/empty map response could freeze a stale or false crash location
+  Cause: cached map fallback is suitable for UI continuity but is not fresh evidence of player presence or loss
+  Fix/Workaround: sample and invalidate Trace back candidates only from raw successful map responses, then promote a point only at the existing confirmed loss transition
+
 ### UI And Dialog Layout
 
 - Context: settings dialog opened on taller tabs such as overspeed
@@ -257,6 +274,11 @@ Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, wi
   Symptom: text and controls visibly changed size while dragging the window, making the interface feel unstable and occasionally shifting layout more than the resize itself
   Cause: legacy UI code treated window width/height deltas as a font scaling signal on top of DPI and user text scaling
   Fix/Workaround: keep font sizing DPI/config driven, allow only wrap-length/layout reflow on resize, and avoid resize-triggered recursive font replacement
+
+- Context: optional administrator hotkeys while the overlay is locked/click-through
+  Symptom: the App displayed an authorization action that could not be clicked in-game, and users did not know they had to switch out and unlock first
+  Cause: the privilege recovery path existed only inside the click-through overlay and looked like ordinary text
+  Fix/Workaround: use persistent styled buttons, explain the lock-key step, and expose the same consent action dynamically in the tray through the Tk dispatcher
 
 ### Data Files
 

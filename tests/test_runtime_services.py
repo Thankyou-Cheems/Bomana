@@ -87,12 +87,14 @@ def _make_hotkey_app() -> SimpleNamespace:
     return SimpleNamespace(
         root=object(),
         dispatcher=SimpleNamespace(post=lambda _callback, *_args: None),
+        _hotkey_broker_action="",
         _manual_reset_hotkey=lambda: None,
         _toggle_lock=lambda: None,
         _next_corner=lambda: None,
         _toggle_beep=lambda: None,
         _toggle_zone_sound=lambda: None,
         _on_hotkey_registration_error=lambda _key_names: None,
+        _on_nudge_action=lambda: None,
         _set_hotkey_broker_notice=lambda _message, _action: None,
     )
 
@@ -264,7 +266,31 @@ def test_elevated_game_keeps_local_hotkeys_and_offers_manual_uac(monkeypatch) ->
 
     assert calls == ["local-create", "local-start"]
     assert notices[-1][1] == "elevate"
-    assert "管理员权限" in notices[-1][0]
+    assert notices[-1][0] == ("检测到 War Thunder 以管理员权限运行；普通热键可能在游戏前台失效。")
+
+
+def test_tray_hotkey_action_is_dynamic_and_dispatches_to_tk() -> None:
+    consent_calls: list[str] = []
+    dispatched: list[tuple[object, tuple[object, ...]]] = []
+    app = _make_hotkey_app()
+    app._on_nudge_action = lambda: consent_calls.append("consent")
+    app.dispatcher = SimpleNamespace(
+        post=lambda callback, *args: dispatched.append((callback, args))
+    )
+    services = AppRuntimeServices(app)
+    item = services._build_hotkey_broker_tray_item()
+
+    assert item.text == "启用游戏内热键…"
+    assert item.visible is False
+
+    app._hotkey_broker_action = "elevate"
+    assert item.visible is True
+    item(None)
+
+    assert consent_calls == []
+    assert dispatched == [(app._on_nudge_action, ())]
+    dispatched[0][0](*dispatched[0][1])
+    assert consent_calls == ["consent"]
 
 
 def test_cancelled_explicit_uac_restores_local_hotkeys(monkeypatch) -> None:

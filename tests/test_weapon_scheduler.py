@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import pytest
 
+from bomana.config.settings import WeaponBallisticModelConfig
 from bomana.core.state import GameState, Phase, TelemetryData, WeaponTarget
 from bomana.core.weapon_scheduler import (
     apply_weapon_calculation,
@@ -75,6 +76,7 @@ class FixedSolver:
             valid=True,
             status="in_envelope",
             quality="two_dimensional",
+            model=WeaponBallisticModelConfig.selected_model,
             reason="test_solution",
             target_kind=inputs["target_kind"],
             target_name=inputs["target_name"],
@@ -141,6 +143,7 @@ def test_prepare_compute_apply_projects_solution_into_state() -> None:
     assert state.weapon_solution_valid
     assert state.weapon_status == "in_envelope"
     assert state.weapon_quality == "two_dimensional"
+    assert state.weapon_model == WeaponBallisticModelConfig.DEFAULT_MODEL
     assert state.weapon_target_name == "Zone A"
     assert state.weapon_max_range_m == 5000.0
     assert state.weapon_rear_range_m == 3000.0
@@ -192,6 +195,61 @@ def test_apply_rejects_selection_changed_while_compute_was_outside_lock() -> Non
     assert work is not None
     result = compute_weapon_calculation(work, solver=FixedSolver())
     catalog.set_selected("su_fab100")
+
+    assert not apply_weapon_calculation(state, result, catalog=catalog)
+    assert state.weapon_id == ""
+
+
+def test_apply_rejects_ballistic_model_changed_while_compute_was_outside_lock(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        WeaponBallisticModelConfig,
+        "selected_model",
+        WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE,
+    )
+    catalog = FakeCatalog()
+    state = _alive_state()
+    work = prepare_weapon_calculation(
+        state,
+        _telemetry(),
+        1.0,
+        player_present=True,
+        target=_target(),
+        catalog=catalog,
+    )
+    assert work is not None
+    result = compute_weapon_calculation(work, solver=FixedSolver())
+    WeaponBallisticModelConfig.set_selected(WeaponBallisticModelConfig.STRICT_OFFICIAL)
+
+    assert not apply_weapon_calculation(state, result, catalog=catalog)
+    assert state.weapon_id == ""
+
+
+def test_apply_rejects_solution_computed_under_a_different_model(monkeypatch) -> None:
+    monkeypatch.setattr(
+        WeaponBallisticModelConfig,
+        "selected_model",
+        WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE,
+    )
+    catalog = FakeCatalog()
+    state = _alive_state()
+    work = prepare_weapon_calculation(
+        state,
+        _telemetry(),
+        1.0,
+        player_present=True,
+        target=_target(),
+        catalog=catalog,
+    )
+    assert work is not None
+    result = compute_weapon_calculation(work, solver=FixedSolver())
+    result["solution"] = WeaponSolution(
+        valid=True,
+        status="in_envelope",
+        quality="two_dimensional",
+        model=WeaponBallisticModelConfig.STRICT_OFFICIAL,
+    )
 
     assert not apply_weapon_calculation(state, result, catalog=catalog)
     assert state.weapon_id == ""

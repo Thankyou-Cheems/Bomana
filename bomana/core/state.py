@@ -7,6 +7,7 @@ from enum import Enum, auto
 from bomana.config.settings import (
     FuelConfig,
     GameConfig,
+    WeaponBallisticModelConfig,
 )
 
 # ============================================================================
@@ -194,6 +195,27 @@ class MapObjData:
     airfields: list[Airfield] = field(default_factory=list)  # 机场列表
     interest_points: list[InterestPoint] = field(default_factory=list)  # 兴趣点列表
     hostile_air_contacts: list[AirContact] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class TracebackSite:
+    """Last confirmed ownship position before a player-object loss."""
+
+    x: float
+    y: float
+    captured_at: float
+    life_index: int
+
+
+@dataclass
+class TracebackState:
+    """Battle-scoped observation and confirmed Trace back state."""
+
+    last_confirmed_pos: tuple[float, float] | None = None
+    last_confirmed_ts: float = 0.0
+    valid_absence_since: float | None = None
+    pending_site: TracebackSite | None = None
+    confirmed_site: TracebackSite | None = None
 
 
 @dataclass
@@ -493,6 +515,7 @@ class GameState:
     weapon_role: str = ""
     weapon_control: str = ""
     weapon_planform: str = ""
+    weapon_model: str = WeaponBallisticModelConfig.DEFAULT_MODEL
     weapon_selection_source: str = "manual"
     weapon_selection_compatible: bool = False
     weapon_solution_valid: bool = False
@@ -534,6 +557,7 @@ class GameState:
 
     # 导航状态
     zone_nav: ZoneNavigationState = field(default_factory=ZoneNavigationState)
+    traceback: TracebackState = field(default_factory=TracebackState)
 
     # v6.8.0 新增：姿态可信度（HUD 2.5D/2D 降级决策）
     attitude: AttitudeConfidenceState = field(default_factory=AttitudeConfidenceState)
@@ -686,6 +710,7 @@ class UISnapshot:
     friendly_airfield: AirfieldDisplayInfo | None = None
     enemy_airfields: list[AirfieldDisplayInfo] = field(default_factory=list)
     interest_point: NavigationPointDisplayInfo | None = None
+    traceback_point: NavigationPointDisplayInfo | None = None
     has_airfield_target: bool = False
     has_target: bool = False
     has_bombing_target: bool = False
@@ -762,6 +787,7 @@ class UISnapshot:
     weapon_role: str = ""
     weapon_control: str = ""
     weapon_planform: str = ""
+    weapon_model: str = WeaponBallisticModelConfig.DEFAULT_MODEL
     weapon_selection_source: str = "manual"
     weapon_selection_compatible: bool = False
     weapon_solution_valid: bool = False

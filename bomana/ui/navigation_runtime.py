@@ -30,17 +30,27 @@ class AppNavigationServices:
 
     def toggle_mode(self) -> None:
         """Switch between integrated and standalone navigation presentation."""
+        target_mode = "standalone" if PanelConfig.navigation_mode == "integrated" else "integrated"
+        self._set_mode(target_mode)
+
+    def switch_to_integrated(self) -> None:
+        """Return the standalone surface to the integrated presentation."""
+        self._set_mode("integrated")
+
+    def _set_mode(self, mode: str) -> bool:
+        """Apply one idempotent navigation-mode transition and its side effects."""
+        if mode not in {"integrated", "standalone"}:
+            raise ValueError(f"unsupported navigation mode: {mode}")
         window = self.window
-        if not ENABLE_ZONES or window is None:
-            return
+        if not ENABLE_ZONES or window is None or PanelConfig.navigation_mode == mode:
+            return False
 
         self.app.panel_renderer.reset_navigation_layout_state()
-        if PanelConfig.navigation_mode == "integrated":
-            PanelConfig.navigation_mode = "standalone"
+        PanelConfig.navigation_mode = mode
+        if mode == "standalone":
             window.clear_display()
             window.show()
         else:
-            PanelConfig.navigation_mode = "integrated"
             window.hide()
 
         self.app._update_nav_mode_button()
@@ -48,7 +58,8 @@ class AppNavigationServices:
         self.app._update_ui()
         self.app._recalc_size(force_shrink=True)
         self.app._refresh_tray()
-        log_event("navigation_mode_toggle", mode=PanelConfig.navigation_mode)
+        log_event("navigation_mode_toggle", mode=mode)
+        return True
 
     def apply_lock_state(self, *, locked: bool, alpha: int) -> None:
         """Mirror the main-window click-through state onto the standalone nav window."""

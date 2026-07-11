@@ -34,6 +34,7 @@ from bomana.core.state import (
     Phase,
     SourceDebugInfo,
     TelemetryData,
+    TracebackSite,
     UISnapshot,
     WeaponTarget,
     Zone,
@@ -315,6 +316,10 @@ class GameLogic:
                         player_present = True
                 spawn_candidate = player_present and tel.entity_like
 
+                # Trace back observes raw map responses only. Cached fallback data
+                # must never extend a player-loss candidate or move its position.
+                self._update_traceback_observation_locked(raw_mp, now)
+
                 # 更新导航信息（战区、地速）
                 self._update_zone_navigation_locked(mp, tel, now)
 
@@ -401,6 +406,7 @@ class GameLogic:
                         if s.missing_player_since is None:
                             s.missing_player_since = now
                         if (now - s.missing_player_since) >= GameConfig.DEAD_CONFIRM_SEC:
+                            self._confirm_traceback_loss_locked(now)
                             s.phase = Phase.WAIT_NEXT
                             s.spawn_candidate_since = None
 
@@ -745,6 +751,58 @@ class GameLogic:
         if abs(delta) >= 0.5:
             s.gear_stable_direction = delta < 0
         s.last_gear_pct = raw_gear_pct
+
+    def _update_traceback_observation_locked(self, raw_mp: MapObjData, now: float) -> None:
+        """Observe raw ownship presence while the caller holds the state lock."""
+        state = self.state
+        traceback = state.traceback
+        if state.phase not in (Phase.ALIVE, Phase.LOSS_PENDING):
+            return
+
+        if raw_mp.ok and raw_mp.player_aircraft_present and raw_mp.player_pos is not None:
+            px, py = raw_mp.player_pos
+            if math.isfinite(float(px)) and math.isfinite(float(py)):
+                traceback.last_confirmed_pos = (float(px), float(py))
+                traceback.last_confirmed_ts = now
+                traceback.valid_absence_since = None
+                traceback.pending_site = None
+                return
+
+        valid_absence = bool(
+            raw_mp.ok and raw_mp.obj_count > 0 and not raw_mp.player_aircraft_present
+        )
+        if not valid_absence:
+            traceback.valid_absence_since = None
+            traceback.pending_site = None
+            return
+
+        if traceback.valid_absence_since is not None:
+            return
+
+        traceback.valid_absence_since = now
+        if traceback.last_confirmed_pos is None or state.current_life is None:
+            traceback.pending_site = None
+            return
+        px, py = traceback.last_confirmed_pos
+        traceback.pending_site = TracebackSite(
+            x=px,
+            y=py,
+            captured_at=traceback.last_confirmed_ts,
+            life_index=state.current_life.life_index,
+        )
+
+    def _confirm_traceback_loss_locked(self, now: float) -> None:
+        """Promote a continuously observed player loss at WAIT_NEXT entry."""
+        traceback = self.state.traceback
+        if (
+            traceback.pending_site is None
+            or traceback.valid_absence_since is None
+            or (now - traceback.valid_absence_since) < GameConfig.DEAD_CONFIRM_SEC
+        ):
+            return
+        traceback.confirmed_site = traceback.pending_site
+        traceback.pending_site = None
+        traceback.valid_absence_since = None
 
     def _update_zone_navigation_locked(self, mp: MapObjData, tel: TelemetryData, now: float):
         """更新战区导航状态(须在锁内调用)
@@ -1339,6 +1397,50 @@ class GameLogic:
             cdi_color=cdi_clr,
         )
 
+    def _build_traceback_display(
+        self,
+        site: TracebackSite | None,
+        mp: MapObjData,
+        map_axis_scale_m: tuple[float, float] | None,
+        player_heading: float,
+        ground_speed: float,
+    ) -> NavigationPointDisplayInfo | None:
+        """Project the confirmed same-battle loss point from current ownship."""
+        if site is None or not (mp.ok and mp.player_pos):
+            return None
+        if not (math.isfinite(site.x) and math.isfinite(site.y)):
+            return None
+
+        px, py = mp.player_pos
+        bearing, distance = navigation.bearing_distance_norm(
+            px,
+            py,
+            site.x,
+            site.y,
+            map_axis_scale_m,
+        )
+        relative = calculate_relative_bearing(player_heading, bearing)
+        distance_km = distance * ZoneConfig.DISTANCE_SCALE
+        ete_text = ""
+        if ground_speed > 1e-7:
+            seconds_left = distance / ground_speed
+            if seconds_left < 5999:
+                mm, ss = divmod(int(seconds_left), 60)
+                ete_text = f"{mm:02d}:{ss:02d}"
+
+        cdi_str, cdi_clr = generate_cdi_indicator(relative, distance_km)
+        return NavigationPointDisplayInfo(
+            id=f"traceback-life-{site.life_index}",
+            name="上次坠毁点",
+            distance_km=distance_km,
+            direction=get_direction_text(relative),
+            relative=relative,
+            is_target=True,
+            ete_str=ete_text,
+            cdi_indicator=cdi_str,
+            cdi_color=cdi_clr,
+        )
+
     def _build_destroyed_zone_text(
         self,
         destroyed_zones: list[Zone],
@@ -1462,6 +1564,7 @@ class GameLogic:
             nav_player_heading = nav.player_heading
             nav_ground_speed = nav.ground_speed
             nav_should_play_destroyed_sound = nav.should_play_destroyed_sound
+            traceback_site = s.traceback.confirmed_site
 
             attitude_pitch_deg = s.attitude.pitch_deg
             attitude_roll_deg = s.attitude.roll_deg
@@ -1498,6 +1601,7 @@ class GameLogic:
                 "weapon_role": s.weapon_role,
                 "weapon_control": s.weapon_control,
                 "weapon_planform": s.weapon_planform,
+                "weapon_model": s.weapon_model,
                 "weapon_selection_source": s.weapon_selection_source,
                 "weapon_selection_compatible": s.weapon_selection_compatible,
                 "weapon_solution_valid": s.weapon_solution_valid,
@@ -1596,6 +1700,13 @@ class GameLogic:
             )
         )
         interest_point_display = self._build_interest_point_display(
+            mp=mp,
+            map_axis_scale_m=map_axis_scale_m,
+            player_heading=nav_player_heading,
+            ground_speed=nav_ground_speed,
+        )
+        traceback_point_display = self._build_traceback_display(
+            site=traceback_site,
             mp=mp,
             map_axis_scale_m=map_axis_scale_m,
             player_heading=nav_player_heading,
@@ -1704,6 +1815,7 @@ class GameLogic:
             friendly_airfield=friendly_airfield_display,
             enemy_airfields=enemy_airfields_display,
             interest_point=interest_point_display,
+            traceback_point=traceback_point_display,
             has_airfield_target=has_airfield_target,
             has_target=has_target,
             has_bombing_target=has_bombing_target,

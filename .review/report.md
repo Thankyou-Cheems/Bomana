@@ -1,7 +1,7 @@
 # Code Review Report
 
 **Open findings:** 2 high, 2 medium
-**Resolved:** 63  |  **Generated:** 2026-07-11T01:11:24+00:00
+**Resolved:** 68  |  **Generated:** 2026-07-11T05:17:04+00:00
 
 ## F-4cfa222a [HIGH/confirmed] HUD can fall back to a non-click-through topmost window
 `bomana/ui/hud_overlay.py:419-432`
@@ -49,7 +49,7 @@ def verify_bundled_broker(path: Path) -> bool:
 - **Evidence:** [runtime] A temporary attacker-controlled BomanaHotkeyBroker.exe plus its matching adjacent sidecar made verify_bundled_broker() return True.; [read] hotkey_broker.py passes the accepted path to ShellExecuteExW with lpVerb=runas; build_portable.py packages the EXE and checksum together.; [read] launcher.pyw requires the install root to be writable and recommends a Desktop or Downloads Bomana directory; ADR 0003 acknowledges the user-writable package is weaker than Program Files plus Authenticode.; [tool] uv focused broker/elevation/build tests: 60 passed; existing tests pin matching-pair behavior but do not provide an independent trust anchor.
 
 ## F-61167c77 [MEDIUM/confirmed] Startup HUD initialization failure is not persisted
-`bomana/ui/app.py:177-178`  ⚠ snippet exists but not at lines 177-178; first line now near line 193
+`bomana/ui/app.py:177-178`  ⚠ snippet exists but not at lines 177-178; first line now near line 195
 ```
         if HUDConfig.enabled and not self._show_hud_overlay():
             HUDConfig.enabled = False

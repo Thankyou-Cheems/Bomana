@@ -10,6 +10,7 @@ from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.text_utils import measure_min_width, set_elided_text
+from bomana.ui.theme import Theme
 from bomana.ui.widgets import HeadingTape
 
 
@@ -81,6 +82,23 @@ def test_scoped_mousewheel_binding_unbinds_only_owned_callback() -> None:
         (("bind", "all", "<MouseWheel>"), "func-1"),
         (("bind", "all", "<MouseWheel>"), "func-2"),
     ]
+
+
+def test_main_window_actions_have_persistent_button_affordances() -> None:
+    source = (Path(__file__).resolve().parents[1] / "bomana" / "ui" / "main_window.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "app.star_lbl = tk.Button(" in source
+    assert "app.standalone_btn = tk.Button(" in source
+    assert "app.weapon_select_btn = tk.Button(" in source
+    assert "close_btn = tk.Button(" in source
+    assert 'style_action_button(close_btn, "danger")' in source
+    assert "app.weapon_select_btn.grid(row=0, column=2" in source
+    assert "app.bombing_close_btn.grid(row=0, column=3" in source
+    assert "POI四角标记" in source
+    assert "上次坠毁点" in source
+    assert "◇" not in source
 
 
 class TkGeometryTests(unittest.TestCase):
@@ -167,8 +185,56 @@ class TkGeometryTests(unittest.TestCase):
                 for item_id in tape.find_all()
                 if tape.type(item_id) == "text"
             ]
-            self.assertTrue(any(text.startswith("◇") for text in texts))
-            self.assertTrue(tape.find_all())
+            marker_ids = tape.find_withtag("poi_marker")
+            self.assertEqual(len(marker_ids), 4)
+            self.assertTrue(all(tape.type(item_id) == "line" for item_id in marker_ids))
+            self.assertTrue(all(len(tape.coords(item_id)) == 6 for item_id in marker_ids))
+            self.assertTrue(
+                all(tape.itemcget(item_id, "fill") == Theme.RED for item_id in marker_ids)
+            )
+            self.assertTrue(any(text.startswith("POI ") for text in texts))
+            self.assertFalse(any("◇" in text for text in texts))
+        finally:
+            tape.destroy()
+
+    def test_heading_tape_traceback_has_distinct_marker_and_overflow(self) -> None:
+        tape = HeadingTape(self.root, width=280, height=36, text_scale=1.0)
+        try:
+            traceback = {
+                "type": "traceback",
+                "relative": 0.0,
+                "distance_km": 2.8,
+                "is_primary": False,
+                "is_target": True,
+            }
+            tape.update_tape_multi(90.0, [traceback], 10.0)
+            self.root.update_idletasks()
+
+            marker_ids = tape.find_withtag("traceback_marker")
+            self.assertEqual(len(marker_ids), 3)
+            self.assertEqual({tape.type(item_id) for item_id in marker_ids}, {"line", "oval"})
+            self.assertFalse(tape.find_withtag("poi_marker"))
+            self.assertTrue(
+                any(
+                    tape.itemcget(item_id, "text").startswith("坠毁 ")
+                    for item_id in tape.find_withtag("traceback_distance")
+                )
+            )
+
+            traceback["relative"] = 180.0
+            tape.update_tape_multi(90.0, [traceback], 10.0)
+            self.root.update_idletasks()
+
+            self.assertFalse(tape.find_withtag("traceback_marker"))
+            overflow_ids = tape.find_withtag("traceback_overflow")
+            self.assertGreaterEqual(len(overflow_ids), 2)
+            self.assertTrue(
+                any(
+                    tape.type(item_id) == "text"
+                    and tape.itemcget(item_id, "text").startswith("坠 ")
+                    for item_id in overflow_ids
+                )
+            )
         finally:
             tape.destroy()
 

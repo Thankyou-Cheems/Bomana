@@ -227,7 +227,7 @@ class NavigationWindow:
             pady=max(1, int(1 * s)),
         )
         self.close_btn.pack(side="right")
-        self.close_btn.bind("<Button-1>", lambda e: self.hide())
+        self.close_btn.bind("<Button-1>", self._on_close_requested)
         self.close_btn.bind(
             "<Enter>", lambda e: self.close_btn.config(fg=Theme.RED, bg=Theme.BORDER)
         )
@@ -364,7 +364,7 @@ class NavigationWindow:
         self.window.bind("<Button-3>", self._show_context_menu)
 
         # 窗口关闭事件（点X或Alt+F4）
-        self.window.protocol("WM_DELETE_WINDOW", self.hide)
+        self.window.protocol("WM_DELETE_WINDOW", self._on_close_requested)
         self.window.bind("<FocusIn>", self._on_focus_in)
 
     def _bind_drag_recursive(self, widget):
@@ -408,8 +408,12 @@ class NavigationWindow:
 
     def _switch_to_integrated(self):
         """切换到集成模式"""
-        if PanelConfig.navigation_mode == "standalone":
-            self.app._toggle_navigation_mode()
+        self.app.navigation_services.switch_to_integrated()
+
+    def _on_close_requested(self, _event=None):
+        """Treat window-manager close as a presentation-mode change."""
+        self._switch_to_integrated()
+        return "break"
 
     def _reset_position(self):
         """重置窗口位置到屏幕中央"""

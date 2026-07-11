@@ -776,6 +776,30 @@ class FileConfig:
 # ============================================================================
 
 
+class WeaponBallisticModelConfig:
+    """武器飞行包线模型策略。
+
+    官方 Datamine 条件表始终优先；该选项只决定无可用条件表时
+    是否允许明确标记的实验性滑翔估算。
+    """
+
+    FOXTHREE_COMPATIBLE = "foxthree_compatible"
+    STRICT_OFFICIAL = "strict_official"
+    DEFAULT_MODEL = FOXTHREE_COMPATIBLE
+    VALID_MODELS = frozenset({FOXTHREE_COMPATIBLE, STRICT_OFFICIAL})
+    selected_model = DEFAULT_MODEL
+
+    @classmethod
+    def set_selected(cls, value: object) -> bool:
+        """验证并立即应用模型策略；无效值不改变当前选择。"""
+
+        normalized = str(value or "").strip().lower()
+        if normalized not in cls.VALID_MODELS:
+            return False
+        cls.selected_model = normalized
+        return True
+
+
 class BallisticPhysicsParams:
     """弹道物理计算参数 (CCRP v3.0)
 

@@ -90,6 +90,18 @@ War Thunder data boundary.
 - `R8111-16`: Every tracked raw fixture MUST replay with exact manifest coverage
   in the standard pytest suite; coordinates MAY be retained, but recorder-omitted
   user, account, host, and process identity fields MUST remain absent.
+- `R8111-17`: Trace back sampling MUST update its last-coordinate candidate only
+  from a successful `/map_obj.json` response containing valid Player
+  coordinates.
+- `R8111-18`: Trace back MUST confirm a candidate only on
+  `LOSS_PENDING -> WAIT_NEXT` after uninterrupted successful non-empty map
+  responses without Player; source failure, an empty response, or Player
+  recovery MUST cancel the pending absence.
+- `R8111-19`: Confirmed Trace back coordinates MUST remain process-memory-only
+  and MUST NOT be written to App settings, timer restore, logs, or other
+  persistent storage.
+- `R8111-20`: A same-battle respawn MUST retain the confirmed Trace back point,
+  while `prepare_new_battle_context()` and `reset_life_state()` MUST clear it.
 
 ## Contract Coverage
 
@@ -111,7 +123,12 @@ War Thunder data boundary.
   complete-stream validation, sequence tamper rejection, virtual-time production
   logic replay, every `full-sortie` coverage gate, and byte/hash/schema/timeline
   verification of the tracked real-session fixture.
+- [behavioral] `tests/test_traceback.py` enforces `R8111-17`, `R8111-18`, and
+  `R8111-20` by separating raw Player samples from endpoint failures and empty
+  frames, pinning confirmation to the existing loss transition, preserving the
+  point across respawn, and clearing it at battle-context reset.
 - [manual] Runtime/data review covers the player-visible-information boundary in
   `R8111-03`; handoffs must record real War Thunder smoke for `R8111-05`,
   explicit approval for polling changes under `R8111-06`, and provenance review
-  for data refreshes under `R8111-07`.
+  for data refreshes under `R8111-07`; runtime/data-flow review covers the
+  process-memory-only persistence boundary in `R8111-19`.

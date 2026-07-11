@@ -6,6 +6,7 @@ from bomana.core.state import (
     GameState,
     LifeState,
     TelemetryData,
+    TracebackState,
     ZoneNavigationState,
 )
 
@@ -18,11 +19,16 @@ def start_new_life(state: GameState, now: float) -> None:
     state.last_refit_ts = now
     state.last_player_present_ts = now
     state.attitude = AttitudeConfidenceState()
+    state.traceback.last_confirmed_pos = None
+    state.traceback.last_confirmed_ts = 0.0
+    state.traceback.valid_absence_since = None
+    state.traceback.pending_site = None
 
 
 def prepare_new_battle_context(state: GameState) -> None:
     """Drop hangar-period cached context so the next battle refreshes map scale."""
     state.zone_nav = ZoneNavigationState()
+    state.traceback = TracebackState()
     state.map_info = None
 
 
@@ -37,6 +43,7 @@ def reset_life_state(state: GameState) -> None:
     state.landing_start_time = None
     state.landed_flash_until = 0.0
     state.zone_nav = ZoneNavigationState()
+    state.traceback = TracebackState()
     state.attitude = AttitudeConfidenceState()
     state.map_info = None
     state.fuel_state.reset()

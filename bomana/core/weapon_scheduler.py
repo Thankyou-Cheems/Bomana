@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from bomana.config.settings import ZoneConfig
+from bomana.config.settings import WeaponBallisticModelConfig, ZoneConfig
 from bomana.core.state import GameState, Phase, TelemetryData, WeaponTarget
 from bomana.core.weapon_catalog import WeaponCatalog, get_weapon_catalog
 from bomana.core.weapon_solver import (
@@ -70,6 +70,7 @@ def _precomputed(status: str, reason: str, target: WeaponTarget | None) -> Weapo
     return WeaponSolution(
         status=status,
         quality=QUALITY_NONE,
+        model=WeaponBallisticModelConfig.selected_model,
         reason=reason,
         target_kind=target.kind if target else "",
         target_name=target.name if target else "",
@@ -166,6 +167,7 @@ def prepare_weapon_calculation(
 
     return {
         "selection_token": (selected_id, source),
+        "model_token": WeaponBallisticModelConfig.selected_model,
         "target_token": _target_token(target),
         "weapon": weapon,
         "compatible": compatible,
@@ -212,6 +214,7 @@ def compute_weapon_calculation(
 
     return {
         "selection_token": work.get("selection_token"),
+        "model_token": work.get("model_token"),
         "target_token": work.get("target_token"),
         "weapon": work.get("weapon"),
         "compatible": bool(work.get("compatible")),
@@ -225,16 +228,19 @@ def apply_weapon_calculation(
     *,
     catalog: WeaponCatalog | None = None,
 ) -> bool:
-    """Apply a current result under lock; reject stale selection or target work."""
+    """Apply current work under lock; reject stale selection, model, or target."""
 
     catalog = catalog or get_weapon_catalog()
     if result is None:
         state.weapon_solution_valid = False
         state.weapon_status = STATUS_SOLVER_ERROR
         state.weapon_quality = QUALITY_NONE
+        state.weapon_model = WeaponBallisticModelConfig.selected_model
         state.weapon_reason = "calculation_missing"
         return True
     if result.get("selection_token") != _selection_token(catalog):
+        return False
+    if result.get("model_token") != WeaponBallisticModelConfig.selected_model:
         return False
     if result.get("target_token") != _target_token(state.weapon_target):
         return False
@@ -244,6 +250,8 @@ def apply_weapon_calculation(
     solution = result.get("solution")
     if not isinstance(solution, WeaponSolution):
         solution = _precomputed(STATUS_SOLVER_ERROR, "invalid_solver_result", state.weapon_target)
+    if solution.model != result.get("model_token"):
+        return False
     weapon = weapon if isinstance(weapon, dict) else {}
 
     state.weapon_id = str(selected_id or "")
@@ -253,6 +261,7 @@ def apply_weapon_calculation(
     state.weapon_role = str(weapon.get("role") or "")
     state.weapon_control = str(weapon.get("control") or "")
     state.weapon_planform = str(weapon.get("planform") or "")
+    state.weapon_model = solution.model
     state.weapon_selection_source = str(source or "unknown")
     state.weapon_selection_compatible = bool(result.get("compatible"))
     state.weapon_solution_valid = solution.valid

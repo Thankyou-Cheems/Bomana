@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-07-11T01:01:02+00:00",
+  "generated_at": "2026-07-11T05:06:13+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
-    "code_files": 133,
-    "code_lines": 44410,
-    "test_files": 58,
+    "code_files": 134,
+    "code_lines": 45707,
+    "test_files": 59,
     "todo_markers": 0
   },
   "languages": {
-    "python": 43597,
+    "python": 44894,
     "rust": 541,
     "shell": 178,
     "javascript": 94
@@ -52,19 +52,19 @@
   ],
   "largest_files": [
     {
-      "lines": 3301,
+      "lines": 3391,
       "path": "bomana\\ui\\dialogs.py"
     },
     {
-      "lines": 1761,
+      "lines": 1873,
       "path": "bomana\\core\\logic.py"
     },
     {
-      "lines": 1712,
+      "lines": 1733,
       "path": "bomana\\ui\\app.py"
     },
     {
-      "lines": 1374,
+      "lines": 1398,
       "path": "bomana\\config\\settings.py"
     },
     {
@@ -72,11 +72,11 @@
       "path": "tools\\weapon_fire_control_extractor.py"
     },
     {
-      "lines": 1232,
+      "lines": 1211,
       "path": "bomana\\ui\\main_window.py"
     },
     {
-      "lines": 1083,
+      "lines": 1152,
       "path": "bomana\\ui\\widgets.py"
     },
     {
@@ -86,6 +86,10 @@
     {
       "lines": 1021,
       "path": "tests\\test_launcher_update_service.py"
+    },
+    {
+      "lines": 861,
+      "path": "bomana\\core\\weapon_solver.py"
     },
     {
       "lines": 840,
@@ -104,21 +108,18 @@
       "path": "bomana\\ui\\panel_renderer.py"
     },
     {
-      "lines": 781,
+      "lines": 807,
       "path": "bomana\\core\\state.py"
-    },
-    {
-      "lines": 730,
-      "path": "bomana\\core\\weapon_solver.py"
     }
   ],
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "fd8dfd4",
+    "head": "e6a3302",
     "branch": "main",
-    "dirty_files": 26,
+    "dirty_files": 39,
     "recent_commits": [
+      "e6a3302 feat(weapons): use conditional Datamine launch envelopes",
       "fd8dfd4 feat(weapons): add datamine-backed fire-control cues",
       "27e8c1a chore(review): record accepted broker elevation risk",
       "d14428e feat(replay): track real 8111 full-sortie fixture",
@@ -127,14 +128,14 @@
       "7718d98 refactor(quality): modernize docs and test library",
       "653066d feat(hotkeys): make admin mode explicit and zero-install",
       "654e955 feat(hotkeys): isolate privileged hotkeys in signed broker",
-      "e063361 feat(site): refresh GitHub Pages for new users",
-      "e3b9029 chore(review): refresh audit evidence after hotkey cleanup"
+      "e063361 feat(site): refresh GitHub Pages for new users"
     ]
   },
   "sdd": {
     "agents_md": true,
     "spec_files": [
       "docs\\specs\\config-variants.md",
+      "docs\\specs\\navigation-cues.md",
       "docs\\specs\\release-signing.md",
       "docs\\specs\\runtime-8111-boundary.md",
       "docs\\specs\\startup-elevation.md",
@@ -147,6 +148,7 @@
       "CFG",
       "ELEV",
       "HOTKEY",
+      "NAVCUE",
       "PRES",
       "QG",
       "R8111",
@@ -154,11 +156,11 @@
       "THREAD",
       "WFC"
     ],
-    "clause_mentions": 212,
+    "clause_mentions": 238,
     "adr_dir": true,
     "pitfalls": "docs\\PITFALLS.md",
     "contract_tests_dir": true,
-    "changes_dir": false,
+    "changes_dir": true,
     "detected": true
   },
   "coverage_gaps": [

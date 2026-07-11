@@ -2,6 +2,7 @@
 
 import pytest
 
+from bomana.config.settings import WeaponBallisticModelConfig
 from bomana.core.weapon_solver import WeaponSolver, isa_air_density
 
 
@@ -69,7 +70,7 @@ def _aam_envelope_weapon(**overrides):
     return weapon
 
 
-def _solve(weapon, **overrides):
+def _solve(weapon, *, ballistic_model=None, **overrides):
     inputs = {
         "launch_altitude_m": 1000.0,
         "launch_speed_mps": 250.0,
@@ -79,7 +80,25 @@ def _solve(weapon, **overrides):
         "target_name": "Target",
     }
     inputs.update(overrides)
-    return WeaponSolver().solve(weapon, **inputs)
+    return WeaponSolver(ballistic_model=ballistic_model).solve(weapon, **inputs)
+
+
+def _glide_weapon(**overrides):
+    weapon = {
+        "id": "us_gbu_39",
+        "role": "bomb",
+        "propulsion": "unpowered",
+        "control": "guided",
+        "planform": "glide",
+        "wing_area_mult": 3.5,
+        "time_life_s": 700.0,
+        "min_distance_m": 0.0,
+        "hard_max_distance_m": 0.0,
+        "guidance_kind": "ins_gnss",
+        "guidance": {"type": "ins", "seeker": "gnss"},
+    }
+    weapon.update(overrides)
+    return weapon
 
 
 def test_isa_density_decreases_with_altitude() -> None:
@@ -342,7 +361,10 @@ def test_glide_does_not_reuse_the_iron_bomb_trajectory_as_an_envelope() -> None:
         wing_area_mult=0.001,
         cx_k=9999.0,
     )
-    solver = WeaponSolver(trajectory_func=trajectory)
+    solver = WeaponSolver(
+        trajectory_func=trajectory,
+        ballistic_model=WeaponBallisticModelConfig.STRICT_OFFICIAL,
+    )
     first = solver.solve(
         gbu_39,
         launch_altitude_m=1000.0,
@@ -359,6 +381,7 @@ def test_glide_does_not_reuse_the_iron_bomb_trajectory_as_an_envelope() -> None:
     assert calls == []
     assert {first.status, second.status} == {"insufficient_data"}
     assert {first.reason, second.reason} == {"glide_envelope_unavailable"}
+    assert {first.model, second.model} == {"strict_official"}
     assert not first.valid
     assert not second.valid
 
@@ -384,7 +407,10 @@ def test_glide_unavailable_state_precedes_flat_propulsion_fallback() -> None:
         "model_unsupported_reasons": ["conditional_propulsion_autopilot"],
     }
 
-    result = WeaponSolver(trajectory_func=trajectory).solve(
+    result = WeaponSolver(
+        trajectory_func=trajectory,
+        ballistic_model=WeaponBallisticModelConfig.STRICT_OFFICIAL,
+    ).solve(
         weapon,
         launch_altitude_m=3000.0,
         launch_speed_mps=250.0,
@@ -393,7 +419,109 @@ def test_glide_unavailable_state_precedes_flat_propulsion_fallback() -> None:
 
     assert result.status == "insufficient_data"
     assert result.reason == "glide_envelope_unavailable"
+    assert result.model == "strict_official"
     assert result.max_range_m == 0.0
+
+
+def test_foxthree_compatible_glide_uses_clean_room_energy_height_formula() -> None:
+    weapon = _glide_weapon(
+        wing_area_mult=2.0,
+        time_life_s=1000.0,
+        hard_max_distance_m=0.0,
+    )
+
+    result = _solve(
+        weapon,
+        ballistic_model=WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE,
+        launch_altitude_m=3000.0,
+        launch_speed_mps=200.0,
+        target_altitude_m=500.0,
+        target_distance_m=10_000.0,
+    )
+
+    energy_height_m = 2500.0 + 200.0**2 / (2.0 * 9.80665)
+    expected_range_m = 0.8 * (2.4 * 2.0) * energy_height_m
+    assert result.max_range_m == pytest.approx(expected_range_m)
+    assert result.time_to_target_s == pytest.approx(50.0)
+    assert result.status == "within_experimental_reference"
+    assert result.quality == "experimental"
+    assert result.reason == "foxthree_compatible_glide"
+    assert result.model == "foxthree_compatible"
+    assert result.valid
+
+
+def test_foxthree_compatible_glide_clamps_lift_drag_and_applies_lifetime_and_hard_caps() -> None:
+    energy_height_m = 4000.0 + 200.0**2 / (2.0 * 9.80665)
+    low = _solve(
+        _glide_weapon(wing_area_mult=0.0, time_life_s=0.0),
+        ballistic_model="foxthree_compatible",
+        launch_altitude_m=4000.0,
+        launch_speed_mps=200.0,
+        target_distance_m=1000.0,
+    )
+    high = _solve(
+        _glide_weapon(wing_area_mult=999.0, time_life_s=0.0),
+        ballistic_model="foxthree_compatible",
+        launch_altitude_m=4000.0,
+        launch_speed_mps=200.0,
+        target_distance_m=1000.0,
+    )
+    capped = _solve(
+        _glide_weapon(
+            wing_area_mult=999.0,
+            time_life_s=20.0,
+            hard_max_distance_m=2500.0,
+        ),
+        ballistic_model="foxthree_compatible",
+        launch_altitude_m=4000.0,
+        launch_speed_mps=200.0,
+        target_distance_m=3000.0,
+    )
+
+    assert low.max_range_m == pytest.approx(0.8 * 1.5 * energy_height_m)
+    assert high.max_range_m == pytest.approx(0.8 * 12.0 * energy_height_m)
+    assert capped.max_range_m == pytest.approx(2500.0)
+    assert capped.status == "beyond_experimental_reference"
+    assert capped.reason == "foxthree_compatible_glide"
+
+
+def test_foxthree_compatible_glide_handles_unsupported_flag_but_not_missing_wing_data() -> None:
+    supported_fallback = _solve(
+        _glide_weapon(model_unsupported_reasons=["conditional_propulsion_autopilot"]),
+        ballistic_model="foxthree_compatible",
+        target_distance_m=1000.0,
+    )
+    unavailable = _solve(
+        {key: value for key, value in _glide_weapon().items() if key != "wing_area_mult"},
+        ballistic_model="foxthree_compatible",
+        target_distance_m=1000.0,
+    )
+
+    assert supported_fallback.reason == "foxthree_compatible_glide"
+    assert supported_fallback.quality == "experimental"
+    assert unavailable.status == "insufficient_data"
+    assert unavailable.reason == "foxthree_compatible_glide_unavailable"
+    assert not unavailable.valid
+
+
+def test_existing_solver_observes_runtime_model_switch_without_restart(monkeypatch) -> None:
+    monkeypatch.setattr(
+        WeaponBallisticModelConfig,
+        "selected_model",
+        WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE,
+    )
+    solver = WeaponSolver()
+    assert WeaponBallisticModelConfig.set_selected("strict_official")
+
+    result = solver.solve(
+        _glide_weapon(),
+        launch_altitude_m=3000.0,
+        launch_speed_mps=250.0,
+        target_distance_m=1000.0,
+    )
+
+    assert result.model == "strict_official"
+    assert result.reason == "glide_envelope_unavailable"
 
 
 def test_freefall_and_high_drag_return_to_ccrp_without_integration() -> None:
@@ -463,9 +591,13 @@ def test_conditional_propulsion_fails_closed_before_integration(guard) -> None:
     assert not result.valid
 
 
-def test_aam_guidance_table_uses_current_aspect_and_bypasses_flat_model_limits() -> None:
+@pytest.mark.parametrize("ballistic_model", ["foxthree_compatible", "strict_official"])
+def test_aam_guidance_table_uses_current_aspect_and_bypasses_flat_model_limits(
+    ballistic_model,
+) -> None:
     head_on = _solve(
         _aam_envelope_weapon(),
+        ballistic_model=ballistic_model,
         launch_altitude_m=5000.0,
         launch_mach=0.9,
         target_distance_m=80_000.0,
@@ -480,6 +612,7 @@ def test_aam_guidance_table_uses_current_aspect_and_bypasses_flat_model_limits()
     assert head_on.head_range_m == pytest.approx(81_819.2)
     assert head_on.target_aspect_cosine == -1.0
     assert head_on.max_range_m > 10_000.0  # not clipped by missile maxDistance
+    assert head_on.model == ballistic_model
     assert head_on.valid
 
 

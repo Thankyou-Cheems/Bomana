@@ -308,8 +308,26 @@ def _weapon_quality_text(quality: str) -> str:
         return "二维估算"
     if quality == "conservative":
         return "保守估算"
+    if quality == "experimental":
+        return "实验估算"
     if quality in {"degraded", "coarse"}:
         return "粗略估算"
+    return ""
+
+
+def _weapon_model_text(model: str, reason: str) -> str:
+    model = str(model or "").strip().lower()
+    reason = str(reason or "").strip().lower()
+    if reason == "datamine_guidance_envelope":
+        return "Datamine 官方条件表"
+    if reason in {"foxthree_compatible_glide", "foxthree_compatible_glide_unavailable"}:
+        return "FoxThree 兼容临时模型"
+    if reason == "glide_envelope_unavailable" and model == "strict_official":
+        return "严格模式（无临时滑翔）"
+    if reason in {"powered_point_mass_2d", "aam_2d_max_only"}:
+        return "二维点质量回退"
+    if reason == "guided_ballistic_conservative":
+        return "保守制导弹道模型"
     return ""
 
 
@@ -331,6 +349,8 @@ def _weapon_status_presentation(status: str) -> IconTextModel:
         "within_aspect_reference": IconTextModel("aim", "当前航向内", Theme.YELLOW),
         "head_on_only_reference": IconTextModel("aim", "仅迎头可达", Theme.YELLOW),
         "beyond_envelope_reference": IconTextModel("aim", "超出表参考", Theme.YELLOW),
+        "within_experimental_reference": IconTextModel("aim", "实验参考内", Theme.YELLOW),
+        "beyond_experimental_reference": IconTextModel("aim", "实验参考外", Theme.YELLOW),
         "solver_error": IconTextModel("danger", "解算失败", Theme.RED),
     }
     return presentations.get(status, IconTextModel("clock", "等待估算", Theme.TEXT_MUTED))
@@ -349,7 +369,9 @@ def _weapon_fallback_detail(status: str, role: str, reason: str = "") -> str:
         return "朝向 POI 或战区后估算"
     if status == "insufficient_data":
         if reason == "glide_envelope_unavailable":
-            return "官方滑翔包线无可复用数据，已停用铁炸弹替代模型"
+            return "暂无可复用的滑翔包线，未启用临时模型"
+        if reason == "foxthree_compatible_glide_unavailable":
+            return "FoxThree 兼容模型缺少必要滑翔参数"
         if reason == "conditional_propulsion_unsupported":
             return "条件或变推力推进尚未建模，已停用估算"
         return "等待有效高度与速度数据"
@@ -363,6 +385,8 @@ def _weapon_fallback_detail(status: str, role: str, reason: str = "") -> str:
         return "仅重力/阻力弹道参考，未计滑翔增程"
     if status == "beyond_ballistic_reference":
         return "超出弹道参考，不代表超出滑翔能力"
+    if status in {"within_experimental_reference", "beyond_experimental_reference"}:
+        return "实验滑翔参考，不是命中或投放保证"
     if status == "within_2d_max_only":
         return "仅二维最大射程，未计目标速度、高差与迎尾角"
     if status in {
@@ -394,6 +418,8 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         "within_aspect_reference",
         "head_on_only_reference",
         "beyond_envelope_reference",
+        "within_experimental_reference",
+        "beyond_experimental_reference",
     }
     if status in usable_statuses and not compatible:
         status = "incompatible"
@@ -411,6 +437,12 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
             if max_range_m > 0.0
             else "弹道参考 --"
         )
+    elif status in {"within_experimental_reference", "beyond_experimental_reference"}:
+        range_text = (
+            f"滑翔参考约 {_format_weapon_distance(max_range_m)}"
+            if max_range_m > 0.0
+            else "滑翔参考 --"
+        )
     elif role == "aam" and rear_range_m > 0.0 and head_range_m > 0.0:
         range_text = _format_aam_aspect_range(rear_range_m, head_range_m)
     elif role == "aam" and max_range_m > 0.0:
@@ -426,6 +458,8 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         detail_parts.append(f"距估算窗约 {_format_weapon_time(time_to_window_s)}")
     elif status == "beyond_ballistic_reference" and time_to_window_s > 0.0:
         detail_parts.append(f"距弹道参考约 {_format_weapon_time(time_to_window_s)}")
+    elif status == "beyond_experimental_reference" and time_to_window_s > 0.0:
+        detail_parts.append(f"距滑翔参考约 {_format_weapon_time(time_to_window_s)}")
     elif status != "align" and time_to_target_s > 0.0:
         detail_parts.append(f"飞行约 {_format_weapon_time(time_to_target_s)}")
 
@@ -440,6 +474,8 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         detail_parts.append("仅重力/阻力弹道参考，未计滑翔增程")
     elif status == "beyond_ballistic_reference":
         detail_parts.append("仅超出弹道参考，不代表超出滑翔能力")
+    elif reason == "foxthree_compatible_glide":
+        detail_parts.append("等效升阻比/能量高度参考，未模拟舵面与自动驾驶")
 
     quality_text = ""
     if status in {
@@ -454,11 +490,19 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         "within_aspect_reference",
         "head_on_only_reference",
         "beyond_envelope_reference",
+        "within_experimental_reference",
+        "beyond_experimental_reference",
     }:
         quality_text = _weapon_quality_text(str(getattr(snap, "weapon_quality", "") or ""))
     if quality_text:
         detail_parts.append(quality_text)
     flight_text = " · ".join(detail_parts) or _weapon_fallback_detail(status, role, reason)
+    model_text = _weapon_model_text(
+        str(getattr(snap, "weapon_model", "") or ""),
+        reason,
+    )
+    if model_text:
+        flight_text = f"{flight_text} · {model_text}" if flight_text else model_text
 
     highlighted_statuses = usable_statuses | {"align"}
 

@@ -112,6 +112,14 @@ def action_button_style(
             border="#c79245",
             hover_border="#c79245",
         ),
+        "danger": TkButtonStyle(
+            bg="#672c32",
+            fg=colors.text,
+            hover_bg="#873940",
+            press_bg="#55242a",
+            border=colors.red,
+            hover_border=colors.red,
+        ),
         "accent": TkButtonStyle(
             bg=colors.yellow,
             fg=colors.text,

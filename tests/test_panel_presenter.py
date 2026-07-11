@@ -155,6 +155,18 @@ def test_weapon_solution_model_uses_compact_estimate_wording() -> None:
     assert model.release_detail_text == ""
 
 
+def test_powered_fallback_does_not_claim_the_foxthree_glide_model() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_model="foxthree_compatible",
+            weapon_reason="powered_point_mass_2d",
+        )
+    )
+
+    assert "二维点质量回退" in model.flight_text
+    assert "FoxThree" not in model.flight_text
+
+
 def test_weapon_solution_model_never_shows_countdown_while_aligning() -> None:
     model = build_bombing_display_model(
         _weapon_snapshot(
@@ -186,6 +198,7 @@ def test_glide_solution_explains_why_the_iron_bomb_surrogate_is_disabled() -> No
             weapon_status="insufficient_data",
             weapon_solution_valid=False,
             weapon_quality="none",
+            weapon_model="strict_official",
             weapon_reason="glide_envelope_unavailable",
             weapon_max_range_m=0.0,
             weapon_time_to_target_s=0.0,
@@ -195,7 +208,8 @@ def test_glide_solution_explains_why_the_iron_bomb_surrogate_is_disabled() -> No
     assert model.release.text == "数据不足"
     assert model.release.fg == Theme.TEXT_MUTED
     assert model.trajectory_text == "POI 12.4km · 估算窗 --"
-    assert "已停用铁炸弹替代模型" in model.flight_text
+    assert "严格模式" in model.flight_text
+    assert "无临时滑翔" in model.flight_text
 
 
 def test_glide_unavailable_state_does_not_claim_out_of_range() -> None:
@@ -208,6 +222,7 @@ def test_glide_unavailable_state_does_not_claim_out_of_range() -> None:
             weapon_status="insufficient_data",
             weapon_solution_valid=False,
             weapon_quality="none",
+            weapon_model="strict_official",
             weapon_reason="glide_envelope_unavailable",
             weapon_max_range_m=0.0,
             weapon_time_to_target_s=0.0,
@@ -216,8 +231,60 @@ def test_glide_unavailable_state_does_not_claim_out_of_range() -> None:
     )
 
     assert model.release.text == "数据不足"
-    assert "官方滑翔包线无可复用数据" in model.flight_text
+    assert "暂无可复用的滑翔包线" in model.flight_text
     assert "过远" not in model.release.text
+
+
+def test_foxthree_compatible_glide_is_an_experimental_reference_not_a_green_cue() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_id="us_gbu_39",
+            weapon_display_name="GBU-39/B",
+            weapon_role="bomb",
+            weapon_planform="glide",
+            weapon_status="within_experimental_reference",
+            weapon_solution_valid=True,
+            weapon_quality="experimental",
+            weapon_model="foxthree_compatible",
+            weapon_reason="foxthree_compatible_glide",
+            weapon_max_range_m=32_500.0,
+            weapon_time_to_target_s=42.0,
+        )
+    )
+
+    assert model.release.text == "实验参考内"
+    assert model.release.fg == Theme.YELLOW
+    assert model.trajectory_text == "POI 12.4km · 滑翔参考约 32.5km"
+    assert "实验估算" in model.flight_text
+    assert "FoxThree 兼容临时模型" in model.flight_text
+    assert "未模拟舵面与自动驾驶" in model.flight_text
+
+
+def test_experimental_glide_reference_still_requires_valid_compatible_solution() -> None:
+    invalid = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_status="within_experimental_reference",
+            weapon_solution_valid=False,
+            weapon_quality="experimental",
+            weapon_model="foxthree_compatible",
+            weapon_reason="foxthree_compatible_glide",
+            weapon_max_range_m=20_000.0,
+        )
+    )
+    incompatible = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_status="beyond_experimental_reference",
+            weapon_solution_valid=True,
+            weapon_selection_compatible=False,
+            weapon_quality="experimental",
+            weapon_model="foxthree_compatible",
+            weapon_reason="foxthree_compatible_glide",
+            weapon_max_range_m=20_000.0,
+        )
+    )
+
+    assert invalid.release.text == "数据不足"
+    assert incompatible.release.text == "不兼容"
 
 
 def test_aam_solution_states_2d_max_limitations_and_never_turns_green() -> None:
@@ -258,6 +325,7 @@ def test_aam_datamine_envelope_shows_tail_head_and_current_aspect_reference() ->
             weapon_head_range_m=81_819.2,
             weapon_target_aspect_cosine=-1.0,
             weapon_status="within_aspect_reference",
+            weapon_model="foxthree_compatible",
             weapon_reason="datamine_guidance_envelope",
             weapon_time_to_target_s=0.0,
         )
@@ -269,6 +337,8 @@ def test_aam_datamine_envelope_shows_tail_head_and_current_aspect_reference() ->
     assert model.release.icon != "ok"
     assert "当前航向约 81.8km" in model.flight_text
     assert "目标速率/高差未知" in model.flight_text
+    assert "Datamine 官方条件表" in model.flight_text
+    assert "FoxThree" not in model.flight_text
 
 
 def test_conditional_propulsion_failure_explains_fail_closed_state() -> None:

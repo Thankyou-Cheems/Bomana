@@ -29,6 +29,7 @@ from bomana.ui.hud_overlay import HUDOverlay
 from bomana.ui.hud_presenter import build_hud_target_model
 from bomana.ui.runtime import start_daemon_thread
 from bomana.ui.theme import Theme
+from bomana.ui.tk_style import style_action_button
 from bomana.utils.diagnostics import log_event, log_exception
 from bomana.utils.file_utils import resource_path
 from bomana.utils.hotkey_broker import (
@@ -203,6 +204,30 @@ class AppRuntimeServices:
         callback = getattr(self.app, "_set_hotkey_broker_notice", None)
         if callable(callback):
             callback(message, action)
+        button = getattr(self.app, "star_lbl", None)
+        if button is not None:
+            with contextlib.suppress(tk.TclError, AttributeError):
+                style_action_button(button, "warning" if action == "elevate" else "secondary")
+        self.refresh_tray()
+
+    def _tray_hotkey_action_visible(self, _item=None) -> bool:
+        """Expose the tray escape hatch exactly while a broker action is available."""
+        return getattr(self.app, "_hotkey_broker_action", "") == "elevate"
+
+    def _request_hotkey_broker_from_tray(self, _icon=None, _item=None) -> None:
+        """Cross from the tray worker to the existing Tk-owned consent action."""
+        if not self._tray_hotkey_action_visible():
+            return
+        callback = getattr(self.app, "_on_nudge_action", None)
+        if callable(callback):
+            self.app.dispatcher.post(callback)
+
+    def _build_hotkey_broker_tray_item(self):
+        return pystray.MenuItem(
+            "启用游戏内热键…",
+            self._request_hotkey_broker_from_tray,
+            visible=self._tray_hotkey_action_visible,
+        )
 
     def retry_hotkey_broker(self) -> None:
         """Retry one explicit UAC broker request from the App notice action."""
@@ -336,6 +361,7 @@ class AppRuntimeServices:
         menu_items = [
             pystray.MenuItem("立即重置计时器", do_reset),
             pystray.MenuItem(f"锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
+            self._build_hotkey_broker_tray_item(),
             pystray.MenuItem(f"切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
             pystray.MenuItem("空历速度模式", do_speed_history, checked=is_speed_history_mode),
             pystray.Menu.SEPARATOR,

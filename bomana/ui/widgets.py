@@ -59,6 +59,8 @@ class HeadingTape(tk.Canvas):
 
     目标类型及标记:
     - zone: 战区目标 - 红色标靶 ⊚
+    - poi: 兴趣点 - 红色四角开放标记
+    - traceback: 上次坠毁点 - 黄色圆环叉号
     - friendly: 友方机场 - 蓝色飞机 ✈
     - enemy: 敌方机场 - 橙色飞机 ✈
     - destroyed: 被摧毁战区 - 灰色X ✕
@@ -110,7 +112,8 @@ class HeadingTape(tk.Canvas):
         # 目标类型颜色配置
         self._target_colors = {
             "zone": Theme.RED,
-            "poi": Theme.YELLOW,
+            "poi": Theme.RED,
+            "traceback": Theme.YELLOW,
             "friendly": Theme.BLUE,
             "enemy": Theme.ORANGE,
             "destroyed": Theme.TEXT_MUTED,
@@ -247,7 +250,7 @@ class HeadingTape(tk.Canvas):
             current_hdg: 当前航向(0-360°)
             targets: 目标列表，每个目标为dict:
                 {
-                    'type': 'zone'/'poi'/'friendly'/'enemy'/'destroyed',
+                    'type': 'zone'/'poi'/'traceback'/'friendly'/'enemy'/'destroyed',
                     'relative': 相对角度(-180~180),
                     'distance_km': 距离(公里),
                     'is_primary': 是否主目标(用于偏航提示),
@@ -403,12 +406,17 @@ class HeadingTape(tk.Canvas):
                     width=1,
                 )
 
-        # 5. 绘制所有目标标记（按优先级：destroyed < enemy < friendly < zone < poi）
+        # 5. 绘制所有目标标记（列表后方目标覆盖前方目标）
         sorted_targets = sorted(
             targets,
-            key=lambda t: {"destroyed": 0, "enemy": 1, "friendly": 2, "zone": 3, "poi": 4}.get(
-                t.get("type", "zone"), 2
-            ),
+            key=lambda t: {
+                "destroyed": 0,
+                "enemy": 1,
+                "friendly": 2,
+                "zone": 3,
+                "traceback": 4,
+                "poi": 5,
+            }.get(t.get("type", "zone"), 2),
         )
 
         for target in sorted_targets:
@@ -609,31 +617,14 @@ class HeadingTape(tk.Canvas):
                 )
 
         elif t_type == "poi":
+            size = int((8 if is_target else 6) * icon_scale)
+            width = 2 if is_target else 1
+            self._draw_corner_bracket_marker(x, y_center, color, size=size, width=width)
+
+        elif t_type == "traceback":
             size = int((8 if is_primary else 6) * icon_scale)
             width = 2 if is_target else 1
-            self.create_polygon(
-                x,
-                y_center - size,
-                x + size,
-                y_center,
-                x,
-                y_center + size,
-                x - size,
-                y_center,
-                outline=color,
-                fill="" if is_primary else color,
-                width=width,
-            )
-            if is_primary:
-                dot_size = max(2, int(2 * icon_scale))
-                self.create_oval(
-                    x - dot_size,
-                    y_center - dot_size,
-                    x + dot_size,
-                    y_center + dot_size,
-                    fill=color,
-                    outline="",
-                )
+            self._draw_traceback_marker(x, y_center, color, size=size, width=width)
 
         elif t_type == "friendly":
             # v6.3: 友方机场 - 根据是否为目标调整大小
@@ -659,6 +650,73 @@ class HeadingTape(tk.Canvas):
             self.create_line(
                 x - size, y_center + size, x + size, y_center - size, fill=color, width=line_width
             )
+
+    def _draw_corner_bracket_marker(
+        self,
+        x: float,
+        y: float,
+        color: str,
+        *,
+        size: int,
+        width: int,
+    ) -> None:
+        """Draw the game's familiar four-corner open target cue."""
+        arm = max(3, round(size * 0.48))
+        corners = (
+            (x - size, y - size + arm, x - size, y - size, x - size + arm, y - size),
+            (x + size - arm, y - size, x + size, y - size, x + size, y - size + arm),
+            (x - size, y + size - arm, x - size, y + size, x - size + arm, y + size),
+            (x + size - arm, y + size, x + size, y + size, x + size, y + size - arm),
+        )
+        for points in corners:
+            self.create_line(
+                *points,
+                fill=color,
+                width=max(1, width),
+                joinstyle=tk.MITER,
+                tags=("target_marker", "poi_marker"),
+            )
+
+    def _draw_traceback_marker(
+        self,
+        x: float,
+        y: float,
+        color: str,
+        *,
+        size: int,
+        width: int,
+    ) -> None:
+        """Draw a distinct ring-and-cross cue for the previous crash location."""
+        tags = ("target_marker", "traceback_marker")
+        self.create_oval(
+            x - size,
+            y - size,
+            x + size,
+            y + size,
+            outline=color,
+            width=max(1, width),
+            fill="",
+            tags=tags,
+        )
+        cross = max(2, int(size * 0.42))
+        self.create_line(
+            x - cross,
+            y - cross,
+            x + cross,
+            y + cross,
+            fill=color,
+            width=max(1, width),
+            tags=tags,
+        )
+        self.create_line(
+            x - cross,
+            y + cross,
+            x + cross,
+            y - cross,
+            fill=color,
+            width=max(1, width),
+            tags=tags,
+        )
 
     def _draw_aircraft_icon(self, x: float, y: float, color: str, size: int = 7, width: int = 2):
         """绘制飞机图标（v6.4: 更粗更易识别）"""
@@ -779,10 +837,13 @@ class HeadingTape(tk.Canvas):
                     anchor="s",
                 )
 
-        elif t_type == "poi":
-            label_text = f"◇{dist_text}"
+        elif t_type in {"poi", "traceback"}:
+            label_prefix = "POI" if t_type == "poi" else "坠毁"
+            label_text = f"{label_prefix} {dist_text}"
+            marker_color = self._target_colors[t_type]
+            label_tag = f"{t_type}_distance"
             if is_primary:
-                bg_color = self._darken_color(Theme.YELLOW, 0.45)
+                bg_color = self._darken_color(marker_color, 0.45)
                 text_width = self._measure_text(label_text, bold_font)
                 pad = 2
                 self.create_rectangle(
@@ -800,15 +861,17 @@ class HeadingTape(tk.Canvas):
                     fill="#FFFFFF",
                     font=bold_font,
                     anchor="s",
+                    tags=(label_tag,),
                 )
             else:
                 self.create_text(
                     x,
                     dist_y,
                     text=label_text,
-                    fill=Theme.YELLOW if is_target else Theme.TEXT_MUTED,
+                    fill=marker_color if is_target else Theme.TEXT_MUTED,
                     font=text_font,
                     anchor="s",
+                    tags=(label_tag,),
                 )
 
         elif t_type == "friendly":
@@ -956,7 +1019,9 @@ class HeadingTape(tk.Canvas):
         elif t_type == "zone":
             prefix = "●"
         elif t_type == "poi":
-            prefix = "◇"
+            prefix = "POI "
+        elif t_type == "traceback":
+            prefix = "坠 "
 
         # v6.5: 格式化距离文本
         dist_text = ""
@@ -978,6 +1043,7 @@ class HeadingTape(tk.Canvas):
                 y + tri_size * 0.7,
                 fill=color,
                 outline="",
+                tags=("overflow_marker", f"{t_type}_overflow"),
             )
             # v6.5: 显示带前缀的距离
             if dist_text:
@@ -988,6 +1054,7 @@ class HeadingTape(tk.Canvas):
                     fill=color,
                     font=overflow_font,
                     anchor="w",
+                    tags=("overflow_label", f"{t_type}_overflow"),
                 )
         else:
             # 右侧小三角
@@ -1000,6 +1067,7 @@ class HeadingTape(tk.Canvas):
                 y + tri_size * 0.7,
                 fill=color,
                 outline="",
+                tags=("overflow_marker", f"{t_type}_overflow"),
             )
             # v6.5: 显示带前缀的距离
             if dist_text:
@@ -1010,6 +1078,7 @@ class HeadingTape(tk.Canvas):
                     fill=color,
                     font=overflow_font,
                     anchor="e",
+                    tags=("overflow_label", f"{t_type}_overflow"),
                 )
 
     def _draw_primary_overflow(self, diff: float, *, layout: dict[str, Any] | None = None):

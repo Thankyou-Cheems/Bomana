@@ -140,6 +140,56 @@ class NavigationRuntimeTests(unittest.TestCase):
         self.assertEqual(app.recalc_calls, [True])
         log_event.assert_called_once_with("navigation_mode_toggle", mode="standalone")
 
+    @patch("bomana.ui.navigation_runtime.log_event")
+    def test_switch_to_integrated_closes_standalone_and_persists(self, log_event) -> None:
+        app = FakeApp()
+        services = AppNavigationServices(app)
+        services.window = FakeNavigationWindow(app)
+        services.window.show()
+        PanelConfig.navigation_mode = "standalone"
+
+        services.switch_to_integrated()
+
+        self.assertEqual(PanelConfig.navigation_mode, "integrated")
+        self.assertFalse(services.window.visible)
+        self.assertEqual(app.reset_calls, 1)
+        self.assertEqual(app.nav_button_calls, 1)
+        self.assertEqual(app.save_calls, 1)
+        self.assertEqual(app.update_calls, 1)
+        self.assertEqual(app.recalc_calls, [True])
+        self.assertEqual(app.tray_calls, 1)
+        log_event.assert_called_once_with("navigation_mode_toggle", mode="integrated")
+
+    @patch("bomana.ui.navigation_runtime.log_event")
+    def test_explicit_mode_change_is_idempotent(self, log_event) -> None:
+        app = FakeApp()
+        services = AppNavigationServices(app)
+        services.window = FakeNavigationWindow(app)
+        PanelConfig.navigation_mode = "integrated"
+
+        services.switch_to_integrated()
+
+        self.assertEqual(app.reset_calls, 0)
+        self.assertEqual(app.save_calls, 0)
+        self.assertEqual(app.update_calls, 0)
+        self.assertEqual(app.recalc_calls, [])
+        self.assertEqual(app.tray_calls, 0)
+        log_event.assert_not_called()
+
+    def test_navigation_window_close_requests_integrated_mode(self) -> None:
+        calls: list[str] = []
+        nav = object.__new__(NavigationWindow)
+        nav.app = SimpleNamespace(
+            navigation_services=SimpleNamespace(
+                switch_to_integrated=lambda: calls.append("integrated")
+            )
+        )
+
+        result = nav._on_close_requested()
+
+        self.assertEqual(result, "break")
+        self.assertEqual(calls, ["integrated"])
+
     def test_history_mode_suspends_and_restores_visible_window(self) -> None:
         app = FakeApp()
         services = AppNavigationServices(app)
@@ -149,6 +199,7 @@ class NavigationRuntimeTests(unittest.TestCase):
 
         services.suspend_for_history_mode(state_changed=True)
         self.assertFalse(services.window.visible)
+        self.assertEqual(PanelConfig.navigation_mode, "standalone")
 
         services.restore_after_history_mode(state_changed=True)
         self.assertTrue(services.window.visible)

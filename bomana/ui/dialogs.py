@@ -32,6 +32,7 @@ from bomana.config.settings import (
     SnapConfig,
     SoundConfig,
     UIConfig,
+    WeaponBallisticModelConfig,
 )
 from bomana.core.overspeed import SpeedLimitDatabase
 from bomana.core.weapon_catalog import WeaponCatalog, get_weapon_catalog
@@ -2363,6 +2364,18 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         "glide": "滑翔",
         "high_drag": "高阻",
     }
+    _MODEL_LABELS: ClassVar[dict[str, str]] = {
+        WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE: "FoxThree 兼容（默认）",
+        WeaponBallisticModelConfig.STRICT_OFFICIAL: "严格模式（无临时滑翔）",
+    }
+    _MODEL_NOTES: ClassVar[dict[str, str]] = {
+        WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE: (
+            "官方条件表优先；无表滑翔武器使用显式标记的实验估算。"
+        ),
+        WeaponBallisticModelConfig.STRICT_OFFICIAL: (
+            "保留官方条件表、CCRP 与既有保守解算；无表滑翔武器不启用临时模型。"
+        ),
+    }
 
     def __init__(
         self,
@@ -2420,6 +2433,42 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
             anchor="w",
             justify="left",
         ).pack(fill="x", pady=(2, 0))
+
+        model_frame = tk.Frame(main, bg=Theme.BG)
+        model_frame.pack(fill="x", padx=12, pady=(2, 8))
+        tk.Label(
+            model_frame,
+            text="飞行包线模型",
+            font=("Segoe UI", 9, "bold"),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            anchor="w",
+        ).pack(anchor="w", pady=(0, 4))
+        self.ballistic_model_var = tk.StringVar(value=WeaponBallisticModelConfig.selected_model)
+        model_button_frame = tk.Frame(model_frame, bg=Theme.BG)
+        model_button_frame.pack(fill="x")
+        self.ballistic_model_buttons = {}
+        for model, label in self._MODEL_LABELS.items():
+            button = self._create_action_button(
+                model_button_frame,
+                label,
+                lambda value=model: self._set_ballistic_model(value),
+                variant="neutral",
+                width=18,
+            )
+            button.pack(side="left", padx=(0, 6))
+            self.ballistic_model_buttons[model] = button
+        self.ballistic_model_note_lbl = tk.Label(
+            model_frame,
+            text="",
+            font=("Segoe UI", 8),
+            bg=Theme.BG,
+            fg=Theme.TEXT_MUTED,
+            anchor="w",
+            justify="left",
+        )
+        self.ballistic_model_note_lbl.pack(fill="x", pady=(4, 0))
+        self._refresh_ballistic_model_controls()
 
         search_frame = tk.Frame(main, bg=Theme.BG)
         search_frame.pack(fill="x", padx=12, pady=(4, 8))
@@ -2526,6 +2575,40 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
             or "未命名武器"
         )
 
+    def _current_ballistic_model(self) -> str:
+        model_var = getattr(self, "ballistic_model_var", None)
+        value = model_var.get() if model_var is not None else None
+        normalized = str(value or WeaponBallisticModelConfig.selected_model).strip().lower()
+        if normalized not in WeaponBallisticModelConfig.VALID_MODELS:
+            return WeaponBallisticModelConfig.DEFAULT_MODEL
+        return normalized
+
+    def _refresh_ballistic_model_controls(self) -> None:
+        selected = self._current_ballistic_model()
+        for model, button in getattr(self, "ballistic_model_buttons", {}).items():
+            style_action_button(button, "primary" if model == selected else "neutral")
+        note_label = getattr(self, "ballistic_model_note_lbl", None)
+        if note_label is not None:
+            note = self._MODEL_NOTES.get(selected, "")
+            note_label.config(text=f"{note} 切换后立即保存并生效。")
+
+    def _set_ballistic_model(self, value: str) -> None:
+        normalized = str(value or "").strip().lower()
+        if normalized not in WeaponBallisticModelConfig.VALID_MODELS:
+            return
+        config = ConfigManager.load()
+        if not isinstance(config, dict):
+            config = {}
+        config["weapon_ballistic_model"] = normalized
+        if not ConfigManager.save(config):
+            messagebox.showerror("失败", "飞行包线模型保存失败", parent=self)
+            return
+        if not WeaponBallisticModelConfig.set_selected(normalized):
+            messagebox.showerror("失败", "无法应用所选飞行包线模型", parent=self)
+            return
+        self.ballistic_model_var.set(normalized)
+        self._refresh_ballistic_model_controls()
+
     def _set_role(self, role: str | None) -> None:
         self._current_role = role
         for button_role, button in self.role_buttons.items():
@@ -2602,11 +2685,18 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
             return
 
         config = ConfigManager.load()
+        if not isinstance(config, dict):
+            config = {}
+        ballistic_model = self._current_ballistic_model()
         config["selected_weapon"] = weapon_id
+        config["weapon_ballistic_model"] = ballistic_model
         if weapon.get("role") == "bomb" and BombConfig.get_bomb_data(weapon_id):
             config["selected_bomb"] = weapon_id
         if not ConfigManager.save(config):
             messagebox.showerror("失败", "武器选择保存失败", parent=self)
+            return
+        if not WeaponBallisticModelConfig.set_selected(ballistic_model):
+            messagebox.showerror("失败", "无法应用所选飞行包线模型", parent=self)
             return
         if not self.catalog.set_selected(weapon_id, source="manual"):
             messagebox.showerror("失败", "武器目录无法应用所选记录", parent=self)

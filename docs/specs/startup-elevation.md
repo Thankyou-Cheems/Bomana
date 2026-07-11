@@ -42,11 +42,14 @@ fixed-action IPC, fallback, and shutdown.
   keep the ordinary hotkey backend and MUST NOT show a privilege recommendation.
 - `ELEV-05`: When War Thunder is elevated, not running, or cannot be queried,
   Bomana MUST keep ordinary hotkeys active and MAY show one explicit optional
-  action to enable elevated hotkeys.
+  operation to enable elevated hotkeys. The same operation MAY be exposed on
+  both the unlocked App surface and the tray so a locked click-through overlay
+  cannot make it unreachable.
 - `ELEV-06`: Bomana MAY invoke `runas` only after the user clicks the optional
-  action and confirms a Bomana-owned dialog that states UAC will appear, the
-  broker is unsigned/Unknown publisher without Authenticode, and no installer,
-  service, scheduled task, or autostart entry will be created.
+  App or tray action and confirms the same Bomana-owned dialog that states UAC
+  will appear, the broker is unsigned/Unknown publisher without Authenticode,
+  and no installer, service, scheduled task, or autostart entry will be
+  created. A tray callback MUST dispatch that action to the Tk owner thread.
 - `ELEV-07`: The only broker executable path eligible for `runas` MUST be the
   resolved `bomana/bin/BomanaHotkeyBroker.exe` shipped in the current App
   package; it MUST NOT be overridden by environment, config, command-line, or
@@ -72,6 +75,10 @@ fixed-action IPC, fallback, and shutdown.
   when the App process exits, the App signals the per-launch stop event, or IPC
   delivery fails; it MUST execute in place and MUST NOT install another
   executable, service, scheduled task, or autostart entry.
+- `ELEV-13`: While the App is locked/click-through, a visible privilege notice
+  MUST explain that the user can switch out of the game and press the configured
+  lock key before clicking the App action, or invoke the same consent action
+  directly from the tray.
 
 ## Contract Coverage
 
@@ -83,8 +90,9 @@ fixed-action IPC, fallback, and shutdown.
   `ELEV-07..ELEV-12` with process-probe, fixed-path, hash, argument, frame,
   cancellation, failure, and lifecycle cases.
 - [behavioral] `tests/test_runtime_services.py` and
-  `tests/test_ui_app_config.py` enforce `ELEV-02`, `ELEV-04..ELEV-06`, and
-  `ELEV-11` with ordinary-first startup, no automatic UAC, explicit consent,
+  `tests/test_ui_app_config.py` enforce `ELEV-02`, `ELEV-04..ELEV-06`,
+  `ELEV-11`, and `ELEV-13` with ordinary-first startup, no automatic UAC,
+  App/tray dispatch to one explicit consent path, locked-overlay guidance,
   fallback, retry, and shutdown behavior.
 - [manual] A Windows release smoke covers `ELEV-03..ELEV-07`, `ELEV-10..ELEV-12`:
   start with War Thunder ordinary/elevated/closed, approve and deny UAC, verify

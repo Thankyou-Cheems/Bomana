@@ -920,7 +920,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T01:11:24+00:00"
+        "at": "2026-07-11T05:16:03+00:00"
       }
     },
     {
@@ -950,7 +950,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T01:11:24+00:00"
+        "at": "2026-07-11T05:16:03+00:00"
       }
     },
     {
@@ -1519,8 +1519,8 @@
       "created_at": "2026-06-28T03:59:35+00:00",
       "snippet_check": {
         "status": "drifted",
-        "detail": "snippet exists but not at lines 177-178; first line now near line 193",
-        "at": "2026-07-11T01:11:24+00:00"
+        "detail": "snippet exists but not at lines 177-178; first line now near line 195",
+        "at": "2026-07-11T05:16:03+00:00"
       }
     },
     {
@@ -1838,7 +1838,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T01:11:24+00:00"
+        "at": "2026-07-11T05:16:03+00:00"
       }
     },
     {
@@ -2138,6 +2138,182 @@
       },
       "resolved_at": "2026-07-11T01:11:19+00:00",
       "resolution_note": "Zero rangeMax endpoints now mark the conditional table unavailable for that launch condition, allowing the independent powered fallback only after existing glide/unsupported guards; generated AGM-65D contract pin plus weapon solver tests passed (32 tests)."
+    },
+    {
+      "file": "bomana/ui/nav_window.py",
+      "line_start": 230,
+      "line_end": 230,
+      "snippet": "        self.close_btn.bind(\"<Button-1>\", lambda e: self.hide())",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Standalone navigation close control leaves the app in standalone mode",
+      "impact": "Clicking the visible X withdraws the only standalone surface while PanelConfig.navigation_mode remains standalone, so the integrated navigation does not return and the persisted mode can reopen into the same hidden state.",
+      "fix": "Route both the title-bar X and WM_DELETE_WINDOW through _switch_to_integrated; keep hide() only for temporary lifecycle suspension such as history mode and teardown, and pin the mode transition in tests/test_navigation_runtime.py.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "NavigationWindow.hide only withdraws and clears the window; it never mutates PanelConfig.navigation_mode."
+        },
+        {
+          "kind": "read",
+          "detail": "AppNavigationServices.toggle_mode is the existing path that restores integrated mode, persists config, refreshes UI and tray."
+        },
+        {
+          "kind": "runtime",
+          "detail": "User reports the visible X permanently hides standalone navigation without restoring the integrated surface."
+        }
+      ],
+      "id": "F-203be1f5",
+      "status": "fixed",
+      "created_at": "2026-07-11T04:44:14+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T04:44:14+00:00"
+      },
+      "resolved_at": "2026-07-11T04:59:04+00:00",
+      "resolution_note": "X and WM_DELETE now call idempotent switch_to_integrated; focused navigation/UI/runtime/meta suite passed (78 tests)."
+    },
+    {
+      "file": "bomana/ui/app.py",
+      "line_start": 1113,
+      "line_end": 1116,
+      "snippet": "    def _nudge_action_text(self) -> str:\n        if self._hotkey_broker_action == \"elevate\":\n            return \"授权管理员热键\"\n        return \"GitHub Star\" if self._nudge_visible else \"\"",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Administrator-hotkey action ignores the default click-through lock state",
+      "impact": "The UI presents an authorization action as clickable while the app starts locked and click-through; a new user who loses F8 in an elevated game is not told to leave the game first, so the recovery action appears broken or unreachable.",
+      "fix": "Make the notice say to switch out of the game and press the configured lock key; while locked show a disabled ''先按 F8 解锁'' action, and after unlock show a visibly enabled ''启用游戏内热键'' button.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "App initializes self._locked = True and applies Win32 click-through at startup."
+        },
+        {
+          "kind": "read",
+          "detail": "_hint_text describes F8 only as ''解锁拖动'', not as the prerequisite for UI actions."
+        },
+        {
+          "kind": "runtime",
+          "detail": "User reports that the non-elevated F8 action may not work while the elevated game is foreground and the required switch-out step is not understood."
+        }
+      ],
+      "id": "F-4132e84b",
+      "status": "fixed",
+      "created_at": "2026-07-11T04:44:14+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T04:44:14+00:00"
+      },
+      "resolved_at": "2026-07-11T04:59:04+00:00",
+      "resolution_note": "Locked-state copy now explains switch-out/unlock and tray escape hatch; nudge is a styled button and tray dispatches consent on Tk; 78 focused tests passed."
+    },
+    {
+      "file": "bomana/ui/widgets.py",
+      "line_start": 611,
+      "line_end": 626,
+      "snippet": "        elif t_type == \"poi\":\n            size = int((8 if is_primary else 6) * icon_scale)\n            width = 2 if is_target else 1\n            self.create_polygon(\n                x,\n                y_center - size,\n                x + size,\n                y_center,\n                x,\n                y_center + size,\n                x - size,\n                y_center,\n                outline=color,\n                fill=\"\" if is_primary else color,\n                width=width,\n            )",
+      "category": "correctness",
+      "severity": "low",
+      "confidence": "confirmed",
+      "title": "POI heading cue uses a diamond instead of the game-style four-corner marker",
+      "impact": "Integrated and standalone heading tapes render POIs with a filled diamond, so the cue does not match the familiar open-center four-corner target marker supplied by the user.",
+      "fix": "Replace the POI polygon with four short L-shaped Canvas lines around an open center, use the same helper on both shared tape surfaces, and update the geometry test to assert the corner segments instead of the diamond glyph.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "HeadingTape is shared by integrated and standalone navigation and this branch unambiguously draws a diamond polygon."
+        },
+        {
+          "kind": "runtime",
+          "detail": "The user supplied a reference image showing four red right-angle corner brackets around an open center."
+        }
+      ],
+      "id": "F-188d7a9f",
+      "status": "fixed",
+      "created_at": "2026-07-11T04:44:15+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T04:44:15+00:00"
+      },
+      "resolved_at": "2026-07-11T04:59:04+00:00",
+      "resolution_note": "POI now uses four red L corners with an open center and no diamond label/overflow/legend; Canvas geometry tests passed in 78-test suite."
+    },
+    {
+      "file": "bomana/ui/main_window.py",
+      "line_start": 1190,
+      "line_end": 1202,
+      "snippet": "            for weapon_card_widget in (\n                app.bombing_info_frame,\n                app.bomb_select_lbl,\n                app.bomb_trajectory_lbl,\n                app.bomb_flight_lbl,\n                app.bomb_release_detail_lbl,\n            ):\n                weapon_card_widget.config(cursor=\"hand2\")\n                weapon_card_widget.bind(\n                    \"<Button-1>\",\n                    lambda _event: app._show_bomb_selector(),\n                    add=\"+\",\n                )",
+      "category": "maintainability",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Weapon selection is hidden behind an unlabelled whole-card click target",
+      "impact": "The cursor changes only after hovering an unlocked overlay, while the visible text contains no action cue; new users cannot discover that the weapon card and several other label-shaped controls are interactive.",
+      "fix": "Add an explicit right-aligned ''选择武器'' action and standardize main-window actions on the existing styled Tk button tokens: neutral for navigation/settings/select, warning for UAC, success for active toggles, and danger for rightmost close controls.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The card binds clicks and sets hand2 but has no always-visible border, button role, or action text."
+        },
+        {
+          "kind": "read",
+          "detail": "bomana/ui/tk_style.py already provides shared hover/press/border tokens for real Tk buttons, while main_window.py reimplements label hover behavior per control."
+        },
+        {
+          "kind": "runtime",
+          "detail": "User reports that unlocked clickable contents are difficult for new users to recognize."
+        }
+      ],
+      "id": "F-3ee8c14a",
+      "status": "fixed",
+      "created_at": "2026-07-11T04:44:15+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T04:44:15+00:00"
+      },
+      "resolved_at": "2026-07-11T04:59:05+00:00",
+      "resolution_note": "Added persistent styled Choose Weapon action before the rightmost Close button while retaining whole-card clicks; UI/style tests passed in 78-test suite."
+    },
+    {
+      "file": "bomana/ui/panel_presenter.py",
+      "line_start": 318,
+      "line_end": 327,
+      "snippet": "def _weapon_model_text(model: str, reason: str) -> str:\n    model = str(model or \"\").strip().lower()\n    reason = str(reason or \"\").strip().lower()\n    if reason == \"datamine_guidance_envelope\":\n        return \"Datamine 官方条件表\"\n    if model == \"strict_official\":\n        return \"严格模式（无临时滑翔）\"\n    if model == \"foxthree_compatible\":\n        return \"FoxThree 兼容临时模型\"\n    return \"\"",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "Non-glide fallback is labelled as the FoxThree model",
+      "impact": "A realistic no-table AGM such as fr_250kg_aasm_250_hammer_gps is solved by powered_point_mass_2d but the card tells the user that the active result is the FoxThree-compatible temporary model, misreporting the calculation provenance the new selector is meant to clarify.",
+      "fix": "Make the label reason-aware: identify FoxThree as the active model only for foxthree_compatible_glide, and otherwise describe it explicitly as the selected glide-fallback policy (or omit it for algorithms the policy does not affect); add a non-glide no-table presenter regression case.",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "Catalog/solver probe: fr_250kg_aasm_250_hammer_gps returned reason=powered_point_mass_2d, while build_bombing_display_model rendered '二维估算 · FoxThree 兼容临时模型'."
+        },
+        {
+          "kind": "read",
+          "detail": "_weapon_model_text special-cases Datamine tables but maps every other foxthree_compatible solution to the FoxThree model label without checking the solver reason or planform."
+        },
+        {
+          "kind": "spec",
+          "detail": "ADR 0006 defines the FoxThree-compatible estimate only for a glide record without a usable table; existing non-glide conservative solvers remain separate."
+        }
+      ],
+      "id": "F-483b8a12",
+      "status": "fixed",
+      "created_at": "2026-07-11T05:14:32+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T05:14:32+00:00"
+      },
+      "resolved_at": "2026-07-11T05:15:50+00:00",
+      "resolution_note": "Made provider label reason-aware: FoxThree appears only for foxthree_compatible_glide paths; powered and guided non-glide fallbacks name their actual model. Verified tests/test_panel_presenter.py (25 passed), Ruff check/format, and direct provider-label probe."
     }
   ]
 }

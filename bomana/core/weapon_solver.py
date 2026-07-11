@@ -1,4 +1,4 @@
-"""Conservative two-dimensional weapon engagement-envelope estimates."""
+"""Qualified two-dimensional weapon engagement-envelope estimates."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from bomana.config.settings import WeaponBallisticModelConfig
 from bomana.core.ballistics import calculate_bomb_trajectory
 from bomana.core.weapon_envelope import (
     FIELD_RANGE_MAX_M,
@@ -20,6 +21,7 @@ from bomana.core.weapon_envelope import (
 QUALITY_NONE = "none"
 QUALITY_TWO_DIMENSIONAL = "two_dimensional"
 QUALITY_CONSERVATIVE = "conservative"
+QUALITY_EXPERIMENTAL = "experimental"
 
 STATUS_CCRP = "ccrp"
 STATUS_UNKNOWN_WEAPON = "unknown_weapon"
@@ -37,6 +39,8 @@ STATUS_WITHIN_ALL_ASPECT_REFERENCE = "within_all_aspect_reference"
 STATUS_WITHIN_ASPECT_REFERENCE = "within_aspect_reference"
 STATUS_HEAD_ON_ONLY_REFERENCE = "head_on_only_reference"
 STATUS_BEYOND_ENVELOPE_REFERENCE = "beyond_envelope_reference"
+STATUS_WITHIN_EXPERIMENTAL_REFERENCE = "within_experimental_reference"
+STATUS_BEYOND_EXPERIMENTAL_REFERENCE = "beyond_experimental_reference"
 STATUS_SOLVER_ERROR = "solver_error"
 
 VALID_STATUSES = frozenset(
@@ -57,10 +61,14 @@ VALID_STATUSES = frozenset(
         STATUS_WITHIN_ASPECT_REFERENCE,
         STATUS_HEAD_ON_ONLY_REFERENCE,
         STATUS_BEYOND_ENVELOPE_REFERENCE,
+        STATUS_WITHIN_EXPERIMENTAL_REFERENCE,
+        STATUS_BEYOND_EXPERIMENTAL_REFERENCE,
         STATUS_SOLVER_ERROR,
     }
 )
-VALID_QUALITIES = frozenset({QUALITY_NONE, QUALITY_TWO_DIMENSIONAL, QUALITY_CONSERVATIVE})
+VALID_QUALITIES = frozenset(
+    {QUALITY_NONE, QUALITY_TWO_DIMENSIONAL, QUALITY_CONSERVATIVE, QUALITY_EXPERIMENTAL}
+)
 
 # Explicit conservative model constants. They are not weapon performance data.
 POWERED_TIME_STEP_S = 0.02
@@ -83,6 +91,7 @@ class WeaponSolution:
     valid: bool = False
     status: str = STATUS_INSUFFICIENT_DATA
     quality: str = QUALITY_NONE
+    model: str = ""
     reason: str = ""
     target_kind: str = ""
     target_name: str = ""
@@ -100,6 +109,8 @@ class WeaponSolution:
             raise ValueError(f"unsupported weapon solution status: {self.status}")
         if self.quality not in VALID_QUALITIES:
             raise ValueError(f"unsupported weapon solution quality: {self.quality}")
+        if self.model and self.model not in WeaponBallisticModelConfig.VALID_MODELS:
+            raise ValueError(f"unsupported weapon ballistic model: {self.model}")
 
 
 @dataclass(frozen=True)
@@ -148,6 +159,7 @@ def _mach_from_launch_state(altitude_m: float, speed_mps: float, mach: float | N
 def _guidance_envelope_solution(
     weapon: Mapping[str, Any],
     *,
+    ballistic_model: str,
     launch_altitude_m: float,
     launch_mach: float,
     target_distance_m: float,
@@ -179,6 +191,7 @@ def _guidance_envelope_solution(
         return WeaponSolution(
             status=STATUS_INSUFFICIENT_DATA,
             quality=QUALITY_NONE,
+            model=ballistic_model,
             reason=f"guidance_envelope_{endpoints.reason}",
             target_kind=target_kind,
             target_name=target_name,
@@ -191,6 +204,7 @@ def _guidance_envelope_solution(
         return WeaponSolution(
             status=STATUS_INSUFFICIENT_DATA,
             quality=QUALITY_NONE,
+            model=ballistic_model,
             reason="guidance_envelope_unavailable_cell",
             target_kind=target_kind,
             target_name=target_name,
@@ -226,6 +240,7 @@ def _guidance_envelope_solution(
         return WeaponSolution(
             status=STATUS_INSUFFICIENT_DATA,
             quality=QUALITY_NONE,
+            model=ballistic_model,
             reason="guidance_envelope_unavailable_cell",
             target_kind=target_kind,
             target_name=target_name,
@@ -251,6 +266,7 @@ def _guidance_envelope_solution(
     base = {
         "valid": True,
         "quality": QUALITY_TWO_DIMENSIONAL,
+        "model": ballistic_model,
         "target_kind": target_kind,
         "target_name": target_name,
         "target_distance_m": target_distance_m,
@@ -504,6 +520,47 @@ def _guided_normal_envelope(
     return _EnvelopeEstimate(range_m, effective_time, time_to_target, hard_limited)
 
 
+def _foxthree_compatible_glide_envelope(
+    weapon: Mapping[str, Any],
+    *,
+    launch_altitude_m: float,
+    launch_speed_mps: float,
+    target_altitude_m: float | None,
+    target_distance_m: float,
+) -> _EnvelopeEstimate:
+    """Clean-room compatibility estimate for glide stores without an official table."""
+
+    if "wing_area_mult" not in weapon:
+        raise ValueError("glide weapon is missing wing-area multiplier")
+    wing_area_mult = max(0.0, _finite_float(weapon.get("wing_area_mult")))
+    lift_drag_ratio = max(1.5, min(12.0, 2.4 * wing_area_mult))
+    target_altitude = _finite_float(target_altitude_m) if target_altitude_m is not None else 0.0
+    height_available_m = max(0.0, launch_altitude_m - target_altitude)
+    energy_height_m = height_available_m + launch_speed_mps**2 / (2.0 * GRAVITY_MPS2)
+    raw_range_m = 0.8 * lift_drag_ratio * energy_height_m
+    if raw_range_m <= 0.0:
+        raise ValueError("glide compatibility model returned no range")
+
+    range_m = raw_range_m
+    lifetime_s = _finite_float(weapon.get("time_life_s"))
+    if lifetime_s > 0.0:
+        range_m = min(range_m, launch_speed_mps * lifetime_s)
+    hard_limit_m = _finite_float(weapon.get("hard_max_distance_m"))
+    hard_limited = hard_limit_m > 0.0 and hard_limit_m <= range_m
+    if hard_limit_m > 0.0:
+        range_m = min(range_m, hard_limit_m)
+    if range_m <= 0.0:
+        raise ValueError("glide compatibility caps removed the estimated range")
+
+    duration_s = range_m / launch_speed_mps
+    if lifetime_s > 0.0:
+        duration_s = min(duration_s, lifetime_s)
+    time_to_target_s = (
+        target_distance_m / launch_speed_mps if 0.0 < target_distance_m <= range_m else 0.0
+    )
+    return _EnvelopeEstimate(range_m, duration_s, time_to_target_s, hard_limited)
+
+
 def _solution_from_envelope(
     estimate: _EnvelopeEstimate,
     *,
@@ -513,6 +570,7 @@ def _solution_from_envelope(
     target_relative_deg: float,
     target_kind: str,
     target_name: str,
+    ballistic_model: str,
     quality: str,
     model_reason: str,
     within_status: str = STATUS_IN_ENVELOPE,
@@ -524,6 +582,7 @@ def _solution_from_envelope(
     base = {
         "valid": max_range_m > 0.0,
         "quality": quality,
+        "model": ballistic_model,
         "target_kind": target_kind,
         "target_name": target_name,
         "target_distance_m": target_distance_m,
@@ -551,7 +610,8 @@ def _solution_from_envelope(
             status=beyond_status,
             reason=(
                 model_reason
-                if beyond_status == STATUS_BEYOND_BALLISTIC_REFERENCE
+                if beyond_status
+                in {STATUS_BEYOND_BALLISTIC_REFERENCE, STATUS_BEYOND_EXPERIMENTAL_REFERENCE}
                 else (
                     "beyond_hard_max_distance"
                     if estimate.hard_limited
@@ -575,8 +635,21 @@ class WeaponSolver:
         self,
         *,
         trajectory_func: Callable[..., tuple[Any, Any, Any]] = calculate_bomb_trajectory,
+        ballistic_model: str | None = None,
     ) -> None:
         self._trajectory_func = trajectory_func
+        if (
+            ballistic_model is not None
+            and ballistic_model not in WeaponBallisticModelConfig.VALID_MODELS
+        ):
+            raise ValueError(f"unsupported weapon ballistic model: {ballistic_model}")
+        self._ballistic_model = ballistic_model
+
+    def _selected_ballistic_model(self) -> str:
+        selected = self._ballistic_model or WeaponBallisticModelConfig.selected_model
+        if selected in WeaponBallisticModelConfig.VALID_MODELS:
+            return selected
+        return WeaponBallisticModelConfig.DEFAULT_MODEL
 
     def solve(
         self,
@@ -593,13 +666,23 @@ class WeaponSolver:
         target_aspect_cosine: float | None = None,
         ground_closing_speed_mps: float | None = None,
     ) -> WeaponSolution:
+        ballistic_model = self._selected_ballistic_model()
         if weapon is None:
-            return WeaponSolution(status=STATUS_UNKNOWN_WEAPON, reason="weapon_not_in_catalog")
+            return WeaponSolution(
+                status=STATUS_UNKNOWN_WEAPON,
+                model=ballistic_model,
+                reason="weapon_not_in_catalog",
+            )
         if uses_existing_ccrp(weapon):
-            return WeaponSolution(status=STATUS_CCRP, reason="existing_ccrp")
+            return WeaponSolution(
+                status=STATUS_CCRP,
+                model=ballistic_model,
+                reason="existing_ccrp",
+            )
         if target_distance_m is None:
             return WeaponSolution(
                 status=STATUS_NO_TARGET,
+                model=ballistic_model,
                 reason="target_unavailable",
                 target_kind=target_kind,
                 target_name=target_name,
@@ -612,6 +695,7 @@ class WeaponSolver:
         if altitude_m < 0.0 or speed_mps < 10.0 or distance_m <= 0.0:
             return WeaponSolution(
                 status=STATUS_INSUFFICIENT_DATA,
+                model=ballistic_model,
                 reason="invalid_launch_or_target_telemetry",
                 target_kind=target_kind,
                 target_name=target_name,
@@ -621,6 +705,7 @@ class WeaponSolver:
         fighter_mach = _mach_from_launch_state(altitude_m, speed_mps, launch_mach)
         table_solution = _guidance_envelope_solution(
             weapon,
+            ballistic_model=ballistic_model,
             launch_altitude_m=altitude_m,
             launch_mach=fighter_mach,
             target_distance_m=distance_m,
@@ -635,9 +720,43 @@ class WeaponSolver:
 
         planform = str(weapon.get("planform") or "")
         if planform == "glide":
+            if ballistic_model == WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE:
+                try:
+                    estimate = _foxthree_compatible_glide_envelope(
+                        weapon,
+                        launch_altitude_m=altitude_m,
+                        launch_speed_mps=speed_mps,
+                        target_altitude_m=target_altitude_m,
+                        target_distance_m=distance_m,
+                    )
+                    return _solution_from_envelope(
+                        estimate,
+                        weapon=weapon,
+                        ground_closing_speed_mps=ground_closing_speed_mps,
+                        target_distance_m=distance_m,
+                        target_relative_deg=relative_deg,
+                        target_kind=target_kind,
+                        target_name=target_name,
+                        ballistic_model=ballistic_model,
+                        quality=QUALITY_EXPERIMENTAL,
+                        model_reason="foxthree_compatible_glide",
+                        within_status=STATUS_WITHIN_EXPERIMENTAL_REFERENCE,
+                        beyond_status=STATUS_BEYOND_EXPERIMENTAL_REFERENCE,
+                    )
+                except ArithmeticError, TypeError, ValueError, OverflowError:
+                    return WeaponSolution(
+                        status=STATUS_INSUFFICIENT_DATA,
+                        quality=QUALITY_NONE,
+                        model=ballistic_model,
+                        reason="foxthree_compatible_glide_unavailable",
+                        target_kind=target_kind,
+                        target_name=target_name,
+                        target_distance_m=distance_m,
+                    )
             return WeaponSolution(
                 status=STATUS_INSUFFICIENT_DATA,
                 quality=QUALITY_NONE,
+                model=ballistic_model,
                 reason="glide_envelope_unavailable",
                 target_kind=target_kind,
                 target_name=target_name,
@@ -648,6 +767,7 @@ class WeaponSolver:
         if bool(unsupported_reasons) or weapon.get("physics_support") is False:
             return WeaponSolution(
                 status=STATUS_INSUFFICIENT_DATA,
+                model=ballistic_model,
                 reason="conditional_propulsion_unsupported",
                 target_kind=target_kind,
                 target_name=target_name,
@@ -686,6 +806,7 @@ class WeaponSolver:
             else:
                 return WeaponSolution(
                     status=STATUS_INSUFFICIENT_DATA,
+                    model=ballistic_model,
                     reason="unsupported_weapon_model",
                     target_kind=target_kind,
                     target_name=target_name,
@@ -700,6 +821,7 @@ class WeaponSolver:
                 target_relative_deg=relative_deg,
                 target_kind=target_kind,
                 target_name=target_name,
+                ballistic_model=ballistic_model,
                 quality=quality,
                 model_reason=model_reason,
                 within_status=within_status,
@@ -709,6 +831,7 @@ class WeaponSolver:
             return WeaponSolution(
                 status=STATUS_SOLVER_ERROR,
                 quality=QUALITY_NONE,
+                model=ballistic_model,
                 reason="solver_exception",
                 target_kind=target_kind,
                 target_name=target_name,
