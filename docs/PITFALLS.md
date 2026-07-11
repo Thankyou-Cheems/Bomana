@@ -301,12 +301,6 @@ Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, wi
   Cause: bomb database loading used separate path resolution and swallowed load failures into an empty in-memory database
   Fix/Workaround: resolve bomb JSON through the shared runtime-aware resource search, preserve a visible `load_error`, and surface it in the selector/settings UI
 
-### 2026-07-11 — 清单项目不要把标记与正文放进固定宽度 Label
-
-- 症状：提高 UI/文本缩放后，出击检查清单的 `○` 会独占一行，短中文指令也被拆成两三行，面板留下大量无效纵向空间。
-- 原因：项目使用 `○ + 正文` 的单个 Label，并把 `wraplength` 固定为 `180 * scale`，没有使用卡片已经获得的实际宽度。
-- 约束：重复的清单/步骤 UI 应将标记放在固定列、正文放在弹性列；正文换行宽度必须跟随实时容器宽度，换行后还要触发窗口高度回收。
-
 ### Beads Maintenance
 
 - Context: cleanup after upgrading Bomana to `bd 1.0.4`

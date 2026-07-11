@@ -920,7 +920,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T07:28:33+00:00"
+        "at": "2026-07-11T07:54:31+00:00"
       }
     },
     {
@@ -950,7 +950,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T07:28:33+00:00"
+        "at": "2026-07-11T07:54:31+00:00"
       }
     },
     {
@@ -1520,7 +1520,7 @@
       "snippet_check": {
         "status": "drifted",
         "detail": "snippet exists but not at lines 177-178; first line now near line 195",
-        "at": "2026-07-11T07:28:33+00:00"
+        "at": "2026-07-11T07:54:31+00:00"
       }
     },
     {
@@ -1838,7 +1838,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T07:28:33+00:00"
+        "at": "2026-07-11T07:54:31+00:00"
       }
     },
     {
@@ -2355,6 +2355,146 @@
       },
       "resolved_at": "2026-07-11T07:27:26+00:00",
       "resolution_note": "Changed the pystray enabled value to a live runtime predicate and pinned false/true/false LAN transitions; 24 focused runtime/contract tests passed."
+    },
+    {
+      "file": "docs/changes/2026-07-11-tactical-usability/work-order.md",
+      "line_start": 1,
+      "line_end": 5,
+      "snippet": "# Tactical Usability Work Order\n\nStatus: In progress\nDate: 2026-07-11\nTracking: `Bomana-7x2s.1`, `Bomana-2oa.1`, `Bomana-2oa.2`, `Bomana-2oa.3`, `Bomana-2oa.4`",
+      "category": "maintainability",
+      "severity": "low",
+      "confidence": "confirmed",
+      "title": "Completed tactical work remains as a stale in-progress work order",
+      "impact": "All five tracked implementation issues are closed, while this duplicate process document still says in progress and restates decisions already owned by bd, ADRs, specs, architecture, and tests.",
+      "fix": "Delete the consolidated work order and keep remaining live-smoke or provider work in its existing bd issues and guides.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "bd show confirms Bomana-7x2s.1 and Bomana-2oa.1 through Bomana-2oa.4 are closed; ADR 0001 says temporary phase proposals, deltas, and evidence notes are not retained after consolidation."
+        }
+      ],
+      "id": "F-6ea2d9bf",
+      "status": "fixed",
+      "created_at": "2026-07-11T07:53:31+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T07:53:31+00:00"
+      },
+      "resolved_at": "2026-07-11T07:54:23+00:00",
+      "resolution_note": "Deleted the completed tactical work order; bd, ADR/spec, and focused meta-traceability tests remain authoritative (focused pytest passed)."
+    },
+    {
+      "file": "docs/changes/2026-07-11-web-cockpit/work-order.md",
+      "line_start": 1,
+      "line_end": 5,
+      "snippet": "# Bomana Web Cockpit Work Order\n\n> Repo: `D:\\Dev\\Bomana`. This work order governs the 2026-07-11 local/LAN\n> dashboard upgrade. `AGENTS.md` remains authoritative for repository-wide\n> constraints; on a real conflict, stop and report instead of weakening either.",
+      "category": "maintainability",
+      "severity": "low",
+      "confidence": "confirmed",
+      "title": "Completed Web Cockpit work order duplicates landed contracts",
+      "impact": "The implementation issue is closed and the document repeats boundaries now owned by WDB clauses, ADR 0007, architecture, the smoke guide, and the follow-up bd issue.",
+      "fix": "Delete the consolidated work order and retain the canonical spec, ADR, guide, tests, and physical-smoke bd issue.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "bd show confirms Bomana-omis is closed and Bomana-l0dc separately tracks physical smoke; no repository file outside docs/changes references this work order."
+        }
+      ],
+      "id": "F-b4289c02",
+      "status": "fixed",
+      "created_at": "2026-07-11T07:53:31+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T07:53:31+00:00"
+      },
+      "resolved_at": "2026-07-11T07:54:24+00:00",
+      "resolution_note": "Deleted the completed Web Cockpit work order; WDB spec, ADR, smoke guide, tests, and Bomana-l0dc remain (focused pytest passed)."
+    },
+    {
+      "file": "AGENTS.md",
+      "line_start": 87,
+      "line_end": 95,
+      "snippet": "<!-- BEGIN BEADS INTEGRATION -->\n## Issue Tracking with bd (beads)\n\n**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.\n\n### Why bd?\n\n- Dependency-aware: Track blockers and relationships between issues\n- Dolt-backed: Issue state lives in beads' local Dolt database, not in git history",
+      "category": "maintainability",
+      "severity": "low",
+      "confidence": "confirmed",
+      "title": "AGENTS router embeds a second full beads manual",
+      "impact": "The 172-line router spends 86 lines repeating commands, types, priorities, and storage guidance already maintained in docs/CONTRIBUTING.md, increasing standing-instruction load and drift risk.",
+      "fix": "Keep only the non-negotiable bd conventions and a link to docs/CONTRIBUTING.md.",
+      "evidence": [
+        {
+          "kind": "grep",
+          "detail": "docs/CONTRIBUTING.md already contains the ready, update, create with discovered-from, close, backup status, Dolt source-of-truth, and retired-workflow guidance."
+        }
+      ],
+      "id": "F-1602c3e5",
+      "status": "fixed",
+      "created_at": "2026-07-11T07:53:31+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T07:53:31+00:00"
+      },
+      "resolved_at": "2026-07-11T07:54:24+00:00",
+      "resolution_note": "Condensed the duplicated beads manual to five router bullets linking docs/CONTRIBUTING.md; AGENTS.md is now 91 lines and the link target exists."
+    },
+    {
+      "file": "docs/PITFALLS.md",
+      "line_start": 304,
+      "line_end": 308,
+      "snippet": "### 2026-07-11 — 清单项目不要把标记与正文放进固定宽度 Label\n\n- 症状：提高 UI/文本缩放后，出击检查清单的 `○` 会独占一行，短中文指令也被拆成两三行，面板留下大量无效纵向空间。\n- 原因：项目使用 `○ + 正文` 的单个 Label，并把 `wraplength` 固定为 `180 * scale`，没有使用卡片已经获得的实际宽度。\n- 约束：重复的清单/步骤 UI 应将标记放在固定列、正文放在弹性列；正文换行宽度必须跟随实时容器宽度，换行后还要触发窗口高度回收。",
+      "category": "maintainability",
+      "severity": "low",
+      "confidence": "confirmed",
+      "title": "Checklist layout note creates an unowned pseudo-contract",
+      "impact": "This implementation-local UI note has neither a canonical spec clause nor a named regression pin and uses a different format from the incident entries around it, so it adds durable documentation without durable ownership.",
+      "fix": "Delete the note and rely on the focused checklist layout regression tests for the internal Tk implementation detail.",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "tests/test_ui_geometry.py pins responsive checklist wrapping, while no accepted cross-module spec governs this internal label layout."
+        }
+      ],
+      "id": "F-2916abd8",
+      "status": "fixed",
+      "created_at": "2026-07-11T07:53:31+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T07:53:31+00:00"
+      },
+      "resolved_at": "2026-07-11T07:54:25+00:00",
+      "resolution_note": "Removed the unowned checklist layout note; tests/test_ui_geometry.py remains the behavioral pin and passed."
+    },
+    {
+      "file": ".review/findings.json",
+      "line_start": 1,
+      "line_end": 6,
+      "snippet": "[\n  {\n    \"file\": \"docs/PITFALLS.md\",\n    \"line_start\": 24,\n    \"line_end\": 29,\n    \"snippet\": \"### 2026-07-10 — A clamped glide proxy can make every weapon the same\\n\\nSymptom: all 44 generated glide records return the same height-proportional envelope, so GBU-39 and GBU-53 differ in the catalog but not in the solver.",
+      "category": "slop",
+      "severity": "low",
+      "confidence": "confirmed",
+      "title": "One-time findings import duplicates the persistent ledger",
+      "impact": "The four import records are already registered and fixed in ledger.json, and no repository file consumes findings.json, leaving a stale second copy of review state.",
+      "fix": "Delete the one-time import file and keep ledger.json plus the generated report as the persistent review state.",
+      "evidence": [
+        {
+          "kind": "grep",
+          "detail": "Repository search finds no findings.json consumer; ledger.py list shows all four corresponding PITFALLS findings as fixed."
+        }
+      ],
+      "id": "F-f33f569e",
+      "status": "fixed",
+      "created_at": "2026-07-11T07:53:31+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T07:53:31+00:00"
+      },
+      "resolved_at": "2026-07-11T07:54:25+00:00",
+      "resolution_note": "Deleted the unreferenced one-time findings import; persistent ledger/report state remains and repository search found no consumer."
     }
   ]
 }

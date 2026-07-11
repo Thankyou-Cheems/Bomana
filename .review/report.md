@@ -1,7 +1,7 @@
 # Code Review Report
 
 **Open findings:** 2 high, 2 medium
-**Resolved:** 69  |  **Generated:** 2026-07-11T07:28:39+00:00
+**Resolved:** 74  |  **Generated:** 2026-07-11T07:54:31+00:00
 
 ## F-4cfa222a [HIGH/confirmed] HUD can fall back to a non-click-through topmost window
 `bomana/ui/hud_overlay.py:419-432`

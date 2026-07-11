@@ -1,16 +1,16 @@
 {
-  "generated_at": "2026-07-11T07:12:54+00:00",
+  "generated_at": "2026-07-11T07:55:40+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
     "code_files": 141,
-    "code_lines": 48163,
+    "code_lines": 48204,
     "test_files": 62,
     "todo_markers": 0
   },
   "languages": {
-    "python": 46937,
+    "python": 46969,
     "rust": 541,
-    "javascript": 507,
+    "javascript": 516,
     "shell": 178
   },
   "primary_language": "python",
@@ -57,7 +57,7 @@
       "path": "bomana\\ui\\dialogs.py"
     },
     {
-      "lines": 1931,
+      "lines": 1937,
       "path": "bomana\\core\\logic.py"
     },
     {
@@ -116,10 +116,11 @@
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "ae85c1c",
+    "head": "ff07afd",
     "branch": "main",
-    "dirty_files": 26,
+    "dirty_files": 8,
     "recent_commits": [
+      "ff07afd feat(web): add secure local and LAN Web Cockpit",
       "ae85c1c fix(checklist): use responsive compact item rows",
       "48371fa feat(tactical): add weapon and recovery cues",
       "e6a3302 feat(weapons): use conditional Datamine launch envelopes",
@@ -128,8 +129,7 @@
       "d14428e feat(replay): track real 8111 full-sortie fixture",
       "c736230 feat(replay): add virtual-time 8111 session validation",
       "fab46bb feat(recorder): add official 8111 session capture",
-      "7718d98 refactor(quality): modernize docs and test library",
-      "653066d feat(hotkeys): make admin mode explicit and zero-install"
+      "7718d98 refactor(quality): modernize docs and test library"
     ]
   },
   "sdd": {
@@ -163,7 +163,7 @@
     "adr_dir": true,
     "pitfalls": "docs\\PITFALLS.md",
     "contract_tests_dir": true,
-    "changes_dir": true,
+    "changes_dir": false,
     "detected": true
   },
   "coverage_gaps": [
