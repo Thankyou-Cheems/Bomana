@@ -7,10 +7,12 @@ Keep durable project rules in `docs/specs/`; keep this router concise.
 - Launcher entry: `launcher.pyw` (distribution/PyInstaller entrypoint)
 - Launcher package: `launcher/` (manifest projection, download cache, install transactions, bootstrap metadata)
 - App entry: `Bomana.pyw`
+- Shared App/Launcher version boundary: `bomana_version.py`
 - Config: `bomana/config/` (package marker: `__init__.py`; feature flags: `feature_profile.py`; settings: `settings.py`; static data: `static_data.py`)
 - Core: `bomana/core/` (state, telemetry, ballistics, logic)
 - UI: `bomana/ui/` (app, widgets, dialogs, nav window)
 - Utilities: `bomana/utils/` (system, math, file, sound)
+- Web Cockpit: `bomana/web/` (filtered projections, scoped sessions, semantic command protocol)
 - CCRP data: `bomana/data/ccrp_bomb_params.json`
 - Portable build: `tools/build_portable.py`, `tools/scripts/build_portable.bat`, `tools/scripts/build_app_package.bat`, `tools/scripts/build_launcher.bat`
 - Docs: `docs/ARCHITECTURE.md`, `docs/PITFALLS.md`, `docs/specs/`
@@ -21,6 +23,8 @@ Keep durable project rules in `docs/specs/`; keep this router concise.
 - Respect ENABLE_* feature flags. See `docs/specs/config-variants.md`.
 - Tk UI work must cross background threads through `TkEventDispatcher` or a Tk-owned queue; background threads must not call Tk APIs directly. See `docs/specs/threading-ui-contract.md`.
 - Keep the launcher and Python App at ordinary integrity; ordinary hotkeys start first, and only an explicit user-confirmed action may elevate the bundled fixed-action native broker. See `docs/specs/startup-elevation.md`.
+- Keep Web writes on the fixed semantic allowlist; HTTP workers validate and enqueue, while Tk reauthorizes and executes. See `docs/specs/web-dashboard.md`.
+- App 8.0.0+ requires Launcher 3.0.0+; only explicit non-frozen source development may omit launcher identity. See `docs/specs/version-compatibility.md`.
 
 ## Release Signing Workflow
 - For every release/update/deploy task, follow `docs/specs/release-signing.md` before acting.

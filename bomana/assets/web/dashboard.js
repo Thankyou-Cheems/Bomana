@@ -1,9 +1,66 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const state = { payload: null, zoom: 1, follow: true, panX: 0, panY: 0, dragging: false, pointerX: 0, pointerY: 0 };
+const state = {
+  payload: null,
+  control: null,
+  pendingCommands: new Map(),
+  submittingCommands: new Set(),
+  weaponSignature: "",
+  zoom: 1,
+  follow: true,
+  panX: 0,
+  panY: 0,
+  dragging: false,
+  pointerX: 0,
+  pointerY: 0,
+};
 let pollTimer = null;
+let controlPollTimer = null;
 let requestActive = false;
+let controlRequestActive = false;
+
+const PANEL_CONTROLS = Object.freeze([
+  Object.freeze({ inputId: "panelZones", labelId: "panelZonesLabel", target: "zones", label: "战区" }),
+  Object.freeze({ inputId: "panelAirfields", labelId: "panelAirfieldsLabel", target: "airfields", label: "机场" }),
+  Object.freeze({ inputId: "panelFuel", labelId: "panelFuelLabel", target: "fuel", label: "燃油" }),
+  Object.freeze({ inputId: "panelSpeed", labelId: "panelSpeedLabel", target: "speed", label: "速度" }),
+  Object.freeze({ inputId: "panelChecklist", labelId: "panelChecklistLabel", target: "checklist", label: "检查清单" }),
+  Object.freeze({ inputId: "panelWeapon", labelId: "panelWeaponLabel", target: "weapon_solution", label: "武器解算" }),
+]);
+
+const COMMAND_ERROR_TEXT = Object.freeze({
+  pairing_required: "会话已失效，请重新配对",
+  control_required: "当前会话只有查看权限",
+  host_invalid: "请求主机与 Bomana 监听地址不匹配",
+  origin_required: "浏览器未提供同源证明，操作已拒绝",
+  origin_mismatch: "页面来源与 Bomana 不匹配，操作已拒绝",
+  csrf_required: "当前会话缺少控制证明，请刷新状态",
+  csrf_invalid: "控制证明已失效，请刷新状态",
+  content_type_required: "命令格式不受支持",
+  content_length_required: "命令长度无效",
+  body_too_large: "命令内容超过限制",
+  chunked_not_allowed: "命令传输方式不受支持",
+  invalid_json: "命令内容不是有效 JSON",
+  schema_invalid: "命令字段不符合 Bomana 合同",
+  idempotency_required: "命令缺少防重复标识",
+  idempotency_invalid: "命令防重复标识无效",
+  idempotency_conflict: "防重复标识对应了不同操作",
+  idempotency_capacity: "本次会话的操作记录已满，请重新配对",
+  capability_unavailable: "当前构建或状态不允许此操作",
+  queue_unavailable: "Bomana 控制队列暂不可用，请稍后重试",
+});
+
+const COMPLETION_REASON_TEXT = Object.freeze({
+  authorization_revoked: "控制授权已被撤销",
+  feature_disabled: "当前构建未启用此功能",
+  invalid_target: "目标状态已不可用",
+  weapon_not_found: "所选武器已不在目录中",
+  weapon_incompatible: "所选武器与当前机型不兼容",
+  state_unavailable: "Bomana 当前状态无法执行该操作",
+  persistence_failed: "配置保存失败，原状态已保留",
+  execution_failed: "Bomana 执行操作失败",
+});
 
 function text(id, value) {
   const node = $(id);
@@ -47,12 +104,19 @@ function setConnection(mode, label, freshness) {
   text("freshnessText", freshness);
 }
 
-async function poll() {
+async function pollSnapshot() {
   if (requestActive) return;
   requestActive = true;
   try {
-    const response = await fetch("/api/v1/snapshot", { credentials: "same-origin", cache: "no-store" });
+    const response = await fetch("/api/v1/snapshot", {
+      credentials: "same-origin",
+      cache: "no-store",
+      mode: "same-origin",
+      headers: { Accept: "application/json" },
+    });
     if (response.status === 401) {
+      state.pendingCommands.clear();
+      setControlUnavailable("需要配对", "控制状态需要有效的独立配对会话。");
       showPairing();
       setConnection("offline", "需要配对", "等待授权");
       return;
@@ -66,6 +130,312 @@ async function poll() {
     setConnection("offline", "连接中断", "正在重试");
   } finally {
     requestActive = false;
+  }
+}
+
+function setCommandStatus(message, tone = "") {
+  const node = $("commandStatus");
+  node.className = `command-status${tone ? ` ${tone}` : ""}`;
+  node.textContent = message;
+}
+
+function setControlUnavailable(scopeLabel, helpText) {
+  state.control = null;
+  const scope = $("controlScope");
+  scope.className = "scope-chip pending";
+  scope.textContent = scopeLabel;
+  text("controlHelp", helpText);
+  for (const node of document.querySelectorAll(".control-deck button, .control-deck input, .control-deck select")) {
+    node.disabled = true;
+  }
+}
+
+function controlGranted() {
+  const payload = state.control;
+  return Boolean(
+    payload
+    && payload.permissions
+    && payload.permissions.scope === "control"
+    && typeof payload.csrf === "string"
+    && payload.csrf.length > 0,
+  );
+}
+
+function commandIsBusy(commandName) {
+  if (state.submittingCommands.has(commandName)) return true;
+  for (const pending of state.pendingCommands.values()) {
+    if (pending.command === commandName) return true;
+  }
+  return false;
+}
+
+function commandIsAvailable(commandName) {
+  const commands = state.control && state.control.capabilities && state.control.capabilities.commands;
+  return controlGranted() && Array.isArray(commands) && commands.includes(commandName);
+}
+
+function setCommandButtons(ids, commandName) {
+  const available = commandIsAvailable(commandName);
+  const busy = commandIsBusy(commandName);
+  for (const id of ids) $(id).disabled = !available || busy;
+  return available;
+}
+
+function setPressed(id, pressed) {
+  $(id).setAttribute("aria-pressed", pressed ? "true" : "false");
+}
+
+function renderWeaponChoices(weapons, selectedWeaponId) {
+  const select = $("weaponSelect");
+  const signature = JSON.stringify(weapons.map((weapon) => [
+    weapon.weapon_id,
+    weapon.display_name,
+    weapon.role,
+    weapon.compatible,
+  ]));
+  if (signature !== state.weaponSignature) {
+    state.weaponSignature = signature;
+    select.replaceChildren();
+    if (!weapons.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "当前没有可选武器";
+      select.append(option);
+    } else {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "请选择武器";
+      placeholder.disabled = true;
+      select.append(placeholder);
+      for (const weapon of weapons) {
+        const option = document.createElement("option");
+        option.value = weapon.weapon_id;
+        option.textContent = `${weapon.display_name} · ${weapon.role}${weapon.compatible ? "" : "（当前机型不兼容）"}`;
+        option.disabled = !weapon.compatible;
+        select.append(option);
+      }
+    }
+  }
+  select.value = selectedWeaponId;
+  if (select.value !== selectedWeaponId) select.value = "";
+}
+
+function renderControlState(payload) {
+  const permissions = payload.permissions;
+  const targetState = payload.state;
+  const commands = new Set(payload.capabilities.commands);
+  const panelTargets = new Set(payload.capabilities.panel_targets);
+  const granted = controlGranted();
+  const scope = $("controlScope");
+  scope.className = `scope-chip ${permissions.scope}`;
+
+  if (permissions.scope === "control" && permissions.transport === "loopback") {
+    scope.textContent = "本机控制";
+    text("controlHelp", "本机控制会话已授权；每项操作仍会在 Bomana 主线程重新校验。");
+  } else if (permissions.scope === "control") {
+    scope.textContent = "本次 LAN 控制";
+    text("controlHelp", "局域网控制仅在 Bomana 本次运行中有效，撤销后现有授权会立即失效。");
+  } else {
+    scope.textContent = "只读会话";
+    text("controlHelp", permissions.transport === "lan"
+      ? "局域网会话默认只读。需要在 Bomana 本机为本次运行明确开启 LAN 控制并重新配对。"
+      : "此会话只有查看权限，所有设置均显示当前值但不可修改。");
+  }
+
+  setCommandButtons(["resetTimerButton"], "action.reset_timer");
+  setCommandButtons(["cycleCornerButton"], "action.cycle_corner");
+
+  setCommandButtons(["lockedOnButton", "lockedOffButton"], "state.set_locked");
+  setPressed("lockedOnButton", targetState.locked);
+  setPressed("lockedOffButton", !targetState.locked);
+  $("lockedOnButton").closest(".target-setting").classList.toggle("unavailable", !commands.has("state.set_locked"));
+
+  setCommandButtons(["beepOnButton", "beepOffButton"], "state.set_beep_enabled");
+  setPressed("beepOnButton", targetState.beep_enabled);
+  setPressed("beepOffButton", !targetState.beep_enabled);
+  $("beepOnButton").closest(".target-setting").classList.toggle("unavailable", !commands.has("state.set_beep_enabled"));
+
+  setCommandButtons(
+    ["zoneSoundOnButton", "zoneSoundOffButton"],
+    "state.set_zone_sound_enabled",
+  );
+  setPressed("zoneSoundOnButton", targetState.zone_sound_enabled);
+  setPressed("zoneSoundOffButton", !targetState.zone_sound_enabled);
+  $("zoneSoundSetting").classList.toggle("unavailable", !commands.has("state.set_zone_sound_enabled"));
+
+  const panelCommandAvailable = granted && commands.has("config.set_panel_visibility");
+  const panelBusy = commandIsBusy("config.set_panel_visibility");
+  for (const panel of PANEL_CONTROLS) {
+    const input = $(panel.inputId);
+    const available = panelCommandAvailable && panelTargets.has(panel.target);
+    input.checked = Boolean(targetState.panel_visibility[panel.target]);
+    input.disabled = !available || panelBusy;
+    $(panel.labelId).classList.toggle("unavailable", !panelTargets.has(panel.target));
+  }
+
+  const weapons = Array.isArray(payload.weapons) ? payload.weapons : [];
+  renderWeaponChoices(weapons, targetState.selected_weapon_id);
+  const hasCompatibleWeapon = weapons.some((weapon) => weapon.compatible);
+  $("weaponSelect").disabled = !commandIsAvailable("weapon.select")
+    || commandIsBusy("weapon.select")
+    || !hasCompatibleWeapon;
+
+  setCommandButtons(
+    ["modelCompatibleButton", "modelOfficialButton"],
+    "weapon.set_ballistic_model",
+  );
+  setPressed("modelCompatibleButton", targetState.ballistic_model === "foxthree_compatible");
+  setPressed("modelOfficialButton", targetState.ballistic_model === "strict_official");
+
+}
+
+function processCommandCompletions(recentCommands) {
+  if (!Array.isArray(recentCommands) || !state.pendingCommands.size) return;
+  let latest = null;
+  for (const [commandId, pending] of state.pendingCommands) {
+    const completion = recentCommands.find((item) => item.command_id === commandId);
+    if (!completion) continue;
+    state.pendingCommands.delete(commandId);
+    latest = { completion, pending };
+  }
+  if (!latest) return;
+  if (latest.completion.status === "succeeded") {
+    setCommandStatus(`${latest.pending.label}已完成`, "success");
+  } else {
+    const detail = COMPLETION_REASON_TEXT[latest.completion.reason] || "Bomana 拒绝了此操作";
+    setCommandStatus(`${latest.pending.label}未执行：${detail}`, "error");
+  }
+}
+
+async function pollControlState() {
+  if (controlRequestActive) return;
+  controlRequestActive = true;
+  try {
+    const response = await fetch("/api/v1/control-state", {
+      credentials: "same-origin",
+      cache: "no-store",
+      mode: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (response.status === 401) {
+      state.pendingCommands.clear();
+      setControlUnavailable("需要配对", "控制状态需要有效的独立配对会话。");
+      showPairing();
+      return;
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    state.control = payload;
+    hidePairing();
+    processCommandCompletions(payload.recent_commands);
+    renderControlState(payload);
+  } catch (_error) {
+    setControlUnavailable("状态不可用", "暂时无法读取控制状态；所有写操作已禁用，正在重试。");
+  } finally {
+    controlRequestActive = false;
+  }
+}
+
+function createIdempotencyKey() {
+  if (!window.crypto || typeof window.crypto.getRandomValues !== "function") {
+    throw new Error("secure_random_unavailable");
+  }
+  const bytes = new Uint8Array(12);
+  window.crypto.getRandomValues(bytes);
+  const randomPart = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `web-${Date.now().toString(36)}-${randomPart}`;
+}
+
+function rememberPendingCommand(commandId, commandName, label, submittedRevision = null) {
+  state.pendingCommands.set(commandId, {
+    command: commandName,
+    label,
+    submittedRevision,
+  });
+}
+
+async function submitCommand(commandBody, label) {
+  const commandName = commandBody.command;
+  if (!commandIsAvailable(commandName)) {
+    setCommandStatus("当前会话或构建不允许此操作", "error");
+    return;
+  }
+  if (commandIsBusy(commandName)) return;
+  if (state.pendingCommands.size >= 16) {
+    setCommandStatus("仍有较多操作等待完成，请稍后再试", "error");
+    return;
+  }
+
+  let commandId;
+  try {
+    commandId = createIdempotencyKey();
+  } catch (_error) {
+    setCommandStatus("浏览器无法生成安全的防重复标识，操作未发送", "error");
+    return;
+  }
+
+  state.submittingCommands.add(commandName);
+  renderControlState(state.control);
+  setCommandStatus(`正在提交：${label}`, "pending");
+  try {
+    const response = await fetch("/api/v1/commands", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      mode: "same-origin",
+      redirect: "error",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Bomana-CSRF": state.control.csrf,
+        "Idempotency-Key": commandId,
+      },
+      body: JSON.stringify(commandBody),
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch (_error) {
+      // The stable fallback below handles a malformed or empty server response.
+    }
+    if (response.status === 401 || (payload && payload.error === "pairing_required")) {
+      state.pendingCommands.clear();
+      setControlUnavailable("需要配对", "会话已失效，请使用 Bomana 当前配对码重新连接。");
+      showPairing("会话已失效，请重新配对");
+      setCommandStatus("操作未发送：会话已失效", "error");
+      return;
+    }
+    if (response.status !== 202) {
+      const errorCode = payload && typeof payload.error === "string" ? payload.error : "";
+      const detail = COMMAND_ERROR_TEXT[errorCode] || `Bomana 拒绝了请求（HTTP ${response.status}）`;
+      setCommandStatus(`操作未入队：${detail}`, "error");
+      if (["csrf_required", "csrf_invalid", "control_required"].includes(errorCode)) {
+        void pollControlState();
+      }
+      return;
+    }
+    if (!payload || payload.status !== "queued") {
+      rememberPendingCommand(commandId, commandName, label);
+      setCommandStatus("Bomana 未返回有效的排队确认；操作状态未知，正在查询完成记录", "error");
+      void pollControlState();
+      return;
+    }
+    if (payload.command_id !== commandId || !Number.isInteger(payload.submitted_revision)) {
+      rememberPendingCommand(commandId, commandName, label);
+      setCommandStatus("Bomana 返回了无效的排队响应；操作状态未知，正在查询完成记录", "error");
+      void pollControlState();
+      return;
+    }
+    rememberPendingCommand(commandId, commandName, label, payload.submitted_revision);
+    setCommandStatus(`${label}已入队，等待 Bomana 完成`, "pending");
+    void pollControlState();
+  } catch (_error) {
+    rememberPendingCommand(commandId, commandName, label);
+    setCommandStatus("未收到排队确认；操作状态未知，正在查询完成记录，请勿立即重复", "error");
+    void pollControlState();
+  } finally {
+    state.submittingCommands.delete(commandName);
+    if (state.control) renderControlState(state.control);
   }
 }
 
@@ -367,6 +737,98 @@ function renderHeadingTape(payload) {
   ctx.beginPath(); ctx.moveTo(width/2, height); ctx.lineTo(width/2, height-18*ratio); ctx.stroke();
 }
 
+function installControlHandlers() {
+  $("resetTimerButton").addEventListener("click", () => {
+    if (!window.confirm("确定立即重置 Bomana 任务计时器吗？此操作只执行一次。")) return;
+    void submitCommand(
+      { schema_version: 1, command: "action.reset_timer", confirmed: true },
+      "重置计时器",
+    );
+  });
+  $("cycleCornerButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "action.cycle_corner" },
+      "切换界面位置",
+    );
+  });
+  $("lockedOnButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "state.set_locked", locked: true },
+      "锁定窗口",
+    );
+  });
+  $("lockedOffButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "state.set_locked", locked: false },
+      "解除窗口锁定",
+    );
+  });
+  $("beepOnButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "state.set_beep_enabled", enabled: true },
+      "开启提示音",
+    );
+  });
+  $("beepOffButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "state.set_beep_enabled", enabled: false },
+      "关闭提示音",
+    );
+  });
+  $("zoneSoundOnButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "state.set_zone_sound_enabled", enabled: true },
+      "开启战区提示音",
+    );
+  });
+  $("zoneSoundOffButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "state.set_zone_sound_enabled", enabled: false },
+      "关闭战区提示音",
+    );
+  });
+  for (const panel of PANEL_CONTROLS) {
+    $(panel.inputId).addEventListener("change", (event) => {
+      const enabled = event.currentTarget.checked;
+      if (state.control) renderControlState(state.control);
+      void submitCommand(
+        {
+          schema_version: 1,
+          command: "config.set_panel_visibility",
+          target: panel.target,
+          enabled,
+        },
+        `${enabled ? "显示" : "隐藏"}${panel.label}面板`,
+      );
+    });
+  }
+  $("weaponSelect").addEventListener("change", (event) => {
+    const weaponId = event.currentTarget.value;
+    const choice = state.control && state.control.weapons.find((weapon) => weapon.weapon_id === weaponId);
+    if (state.control) renderControlState(state.control);
+    if (!choice || !choice.compatible) {
+      setCommandStatus("该武器当前不可选择", "error");
+      return;
+    }
+    void submitCommand(
+      { schema_version: 1, command: "weapon.select", weapon_id: weaponId },
+      `选择武器：${choice.display_name}`,
+    );
+  });
+  $("modelCompatibleButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "weapon.set_ballistic_model", model: "foxthree_compatible" },
+      "使用 FoxThree 兼容模型",
+    );
+  });
+  $("modelOfficialButton").addEventListener("click", () => {
+    void submitCommand(
+      { schema_version: 1, command: "weapon.set_ballistic_model", model: "strict_official" },
+      "使用严格官方模型",
+    );
+  });
+}
+
 function installMapControls() {
   $("mapZoomIn").addEventListener("click", () => { state.zoom = Math.min(4, state.zoom * 1.25); renderCurrentMap(); });
   $("mapZoomOut").addEventListener("click", () => { state.zoom = Math.max(.75, state.zoom / 1.25); renderCurrentMap(); });
@@ -413,9 +875,15 @@ $("pairingForm").addEventListener("submit", (event) => {
   window.location.assign(`/?pair=${encodeURIComponent(code)}`);
 });
 
+installControlHandlers();
 installMapControls();
 if ("ResizeObserver" in window) new ResizeObserver(renderCurrentMap).observe($("mapStage"));
 window.addEventListener("resize", renderCurrentMap, { passive: true });
-poll();
-pollTimer = window.setInterval(poll, 350);
-window.addEventListener("pagehide", () => window.clearInterval(pollTimer), { once: true });
+pollSnapshot();
+pollControlState();
+pollTimer = window.setInterval(pollSnapshot, 350);
+controlPollTimer = window.setInterval(pollControlState, 650);
+window.addEventListener("pagehide", () => {
+  window.clearInterval(pollTimer);
+  window.clearInterval(controlPollTimer);
+}, { once: true });

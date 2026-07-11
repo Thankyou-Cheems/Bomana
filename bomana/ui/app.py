@@ -42,6 +42,9 @@ from bomana.ui.dialogs import (
     ChecklistEditor,
     SettingsDialog,
     WeaponSelectorDialog,
+    build_weapon_selector_scope,
+    persist_ballistic_model_selection,
+    persist_weapon_selection,
 )
 from bomana.ui.icon_assets import IconManager
 from bomana.ui.main_window import MainWindowBuilder
@@ -62,6 +65,13 @@ from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.math_utils import calculate_smart_scale
 from bomana.utils.sound import SoundManager
 from bomana.utils.system import SingleInstanceManager, Win32, resolve_tk_font_tuple
+from bomana.web.control import (
+    ControlStateProjection,
+    ControlTargetState,
+    PanelVisibility,
+    WeaponChoice,
+    WebCommandEnvelope,
+)
 
 
 def fmt_time(sec: float | None) -> str:
@@ -136,6 +146,10 @@ class App:
         self._last_overspeed_level = "unknown"
         self._zone_sound_enabled = True
         self._manual_reset_confirm_until = 0.0
+        self._web_control_revision = 0
+        self._web_control_signature: tuple[Any, ...] | None = None
+        self._web_weapon_choices_cache_key: tuple[Any, ...] | None = None
+        self._web_weapon_choices_cache: tuple[WeaponChoice, ...] = ()
 
         # 窗口状态
         self._user_moved = False
@@ -198,7 +212,11 @@ class App:
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
         self.logic_poller.start()
-        self.runtime_services.init_dashboard()
+        self._publish_web_control_state(force_revision=True)
+        if self.runtime_services.dashboard_autostart_enabled():
+            dashboard_started = self.runtime_services.init_dashboard()
+            if dashboard_started and self.runtime_services.dashboard_auto_open_enabled():
+                self._open_web_dashboard()
         self._update_ui()
 
         if HAS_TRAY:
@@ -212,6 +230,140 @@ class App:
             return game.weapon_catalog
         # Headless config tests and legacy embedders may not construct GameLogic.
         return get_weapon_catalog()
+
+    @staticmethod
+    def _web_display_name(record: dict[str, Any]) -> str:
+        value = (
+            record.get("display_name_zh")
+            or record.get("display_name")
+            or record.get("id")
+            or "未命名武器"
+        )
+        return " ".join(str(value).split())[:256] or "未命名武器"
+
+    def _build_web_control_projection(
+        self,
+        *,
+        revision: int,
+        snapshot: UISnapshot | None = None,
+    ) -> ControlStateProjection:
+        commands = [
+            "action.reset_timer",
+            "action.cycle_corner",
+            "state.set_locked",
+            "state.set_beep_enabled",
+            "config.set_panel_visibility",
+        ]
+        panel_targets = ["speed"]
+        if ENABLE_ZONES:
+            commands.append("state.set_zone_sound_enabled")
+            panel_targets.append("zones")
+        if ENABLE_AIRFIELDS:
+            panel_targets.append("airfields")
+        if ENABLE_FUEL:
+            panel_targets.append("fuel")
+        if ENABLE_CHECKLIST:
+            panel_targets.append("checklist")
+        if ENABLE_CCRP:
+            commands.extend(("weapon.select", "weapon.set_ballistic_model"))
+            panel_targets.append("weapon_solution")
+
+        catalog = self._get_weapon_catalog() if ENABLE_CCRP else None
+        selected_weapon_id = ""
+        weapon_choices: list[WeaponChoice] = []
+        if catalog is not None:
+            selected_weapon_id = str(catalog.selected_weapon_id or "")[:128]
+            snap = snapshot or self.game.snapshot()
+            airborne = snap.phase == Phase.ALIVE and not snap.on_ground
+            aircraft = str(getattr(snap, "aircraft_type_name", "") or "")
+            cache_key = (id(catalog), selected_weapon_id, airborne, aircraft)
+            if cache_key == getattr(self, "_web_weapon_choices_cache_key", None):
+                weapon_choices.extend(getattr(self, "_web_weapon_choices_cache", ()))
+            else:
+                records, _note, _compatible_only = build_weapon_selector_scope(
+                    catalog,
+                    aircraft_type_name=aircraft,
+                    airborne=airborne,
+                )
+                for record in records[:512]:
+                    weapon_id = str(record.get("id") or "")[:128]
+                    if not weapon_id:
+                        continue
+                    compatible = not airborne or bool(
+                        aircraft and catalog.compatible(weapon_id, aircraft)
+                    )
+                    weapon_choices.append(
+                        WeaponChoice(
+                            weapon_id=weapon_id,
+                            display_name=self._web_display_name(record),
+                            role=(" ".join(str(record.get("role") or "unknown").split())[:64]),
+                            compatible=compatible,
+                            selected=weapon_id == selected_weapon_id,
+                        )
+                    )
+                self._web_weapon_choices_cache_key = cache_key
+                self._web_weapon_choices_cache = tuple(weapon_choices)
+
+        ballistic_model = WeaponBallisticModelConfig.selected_model
+        if ballistic_model not in WeaponBallisticModelConfig.VALID_MODELS:
+            ballistic_model = WeaponBallisticModelConfig.DEFAULT_MODEL
+        target_state = ControlTargetState(
+            locked=bool(self._locked),
+            beep_enabled=bool(self.sound.is_enabled()),
+            zone_sound_enabled=bool(self._zone_sound_enabled) if ENABLE_ZONES else False,
+            panel_visibility=PanelVisibility(
+                zones=bool(ENABLE_ZONES and PanelConfig.show_zones),
+                airfields=bool(ENABLE_AIRFIELDS and PanelConfig.show_airfields),
+                fuel=bool(ENABLE_FUEL and PanelConfig.show_fuel),
+                speed=bool(PanelConfig.show_speed),
+                checklist=bool(ENABLE_CHECKLIST and PanelConfig.show_checklist),
+                weapon_solution=bool(ENABLE_CCRP and PanelConfig.show_bombing),
+            ),
+            selected_weapon_id=selected_weapon_id,
+            ballistic_model=ballistic_model,
+        )
+        return ControlStateProjection(
+            revision=revision,
+            commands=tuple(commands),
+            panel_targets=tuple(panel_targets),
+            state=target_state,
+            weapons=tuple(weapon_choices),
+        )
+
+    def _publish_web_control_state(
+        self,
+        *,
+        snapshot: UISnapshot | None = None,
+        force_revision: bool = False,
+    ) -> int:
+        if not hasattr(self, "_web_control_revision"):
+            self._web_control_revision = 0
+        if not hasattr(self, "_web_control_signature"):
+            self._web_control_signature = None
+        candidate = self._build_web_control_projection(
+            revision=max(1, self._web_control_revision),
+            snapshot=snapshot,
+        )
+        signature = (
+            candidate.commands,
+            candidate.panel_targets,
+            candidate.state,
+            candidate.weapons,
+        )
+        if force_revision or self._web_control_signature != signature:
+            self._web_control_revision += 1
+            candidate = self._build_web_control_projection(
+                revision=self._web_control_revision,
+                snapshot=snapshot,
+            )
+            self.runtime_services.publish_dashboard_control(candidate)
+            self._web_control_signature = (
+                candidate.commands,
+                candidate.panel_targets,
+                candidate.state,
+                candidate.weapons,
+            )
+        return self._web_control_revision
 
     @property
     def hud_overlay(self):
@@ -354,6 +506,8 @@ class App:
         # 检查清单
         self.chk_items = config.get("checklist_items", ChecklistConfig.DEFAULT_ITEMS.copy())
         self._zone_sound_enabled = config.get("zone_sound_enabled", True)
+        saved_locked = config.get("locked", True)
+        self._locked = saved_locked if isinstance(saved_locked, bool) else True
 
         # 恢复窗口位置（支持多显示器）
         saved_pos = config.get("window_position")
@@ -439,6 +593,7 @@ class App:
         config["checklist_items"] = self.chk_items
         config["beep_enabled"] = self.sound.is_enabled()
         config["zone_sound_enabled"] = self._zone_sound_enabled
+        config["locked"] = self._locked
         config["sound_settings"] = SoundConfig.export_user_config()
         config["overspeed"] = OverspeedConfig.export_user_config()
 
@@ -560,7 +715,8 @@ class App:
         self.H = req_h
         self._position()
         self.root.update_idletasks()
-        Win32.setup_window(self.hwnd, click_through=True, alpha=UIConfig.WINDOW_ALPHA)
+        alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
+        Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
 
     def _init_ui(self):
         """初始化 UI 布局（稳定的主窗口骨架）。"""
@@ -713,12 +869,76 @@ class App:
     def _toggle_panel(self, panel_key: str):
         """切换面板显示状态"""
         current = getattr(PanelConfig, panel_key)
-        setattr(PanelConfig, panel_key, not current)
-        self._save_config(warn_on_failure=True)
+        target = {
+            "show_zones": "zones",
+            "show_airfields": "airfields",
+            "show_fuel": "fuel",
+            "show_speed": "speed",
+            "show_checklist": "checklist",
+            "show_bombing": "weapon_solution",
+        }.get(panel_key)
+        if target is None:
+            return
+        self._set_panel_visibility(target, not current, warn_on_failure=True)
+
+    def _set_panel_visibility(
+        self,
+        target: str,
+        enabled: bool,
+        *,
+        warn_on_failure: bool = False,
+    ) -> bool:
+        """Set one explicit panel target and roll back if persistence fails."""
+        if target == "zones":
+            if not ENABLE_ZONES:
+                return False
+            previous = PanelConfig.show_zones
+            PanelConfig.show_zones = enabled
+        elif target == "airfields":
+            if not ENABLE_AIRFIELDS:
+                return False
+            previous = PanelConfig.show_airfields
+            PanelConfig.show_airfields = enabled
+        elif target == "fuel":
+            if not ENABLE_FUEL:
+                return False
+            previous = PanelConfig.show_fuel
+            PanelConfig.show_fuel = enabled
+        elif target == "speed":
+            previous = PanelConfig.show_speed
+            PanelConfig.show_speed = enabled
+        elif target == "checklist":
+            if not ENABLE_CHECKLIST:
+                return False
+            previous = PanelConfig.show_checklist
+            PanelConfig.show_checklist = enabled
+        elif target == "weapon_solution":
+            if not ENABLE_CCRP:
+                return False
+            previous = PanelConfig.show_bombing
+            PanelConfig.show_bombing = enabled
+        else:
+            return False
+
+        if not self._save_config(warn_on_failure=warn_on_failure):
+            if target == "zones":
+                PanelConfig.show_zones = previous
+            elif target == "airfields":
+                PanelConfig.show_airfields = previous
+            elif target == "fuel":
+                PanelConfig.show_fuel = previous
+            elif target == "speed":
+                PanelConfig.show_speed = previous
+            elif target == "checklist":
+                PanelConfig.show_checklist = previous
+            else:
+                PanelConfig.show_bombing = previous
+            return False
         # 立即刷新布局，避免留下空白
         self._recalc_size(force_shrink=True)
         self._update_ui()
         self._refresh_tray()
+        return True
 
     def _toggle_speed_history_mode(self):
         """切换空历速度模式。"""
@@ -837,14 +1057,32 @@ class App:
     def _toggle_debug(self):
         self.debug_support.toggle_debug()
 
-    def _toggle_zone_sound(self):
-        """切换战区提示音"""
-        self._zone_sound_enabled = not self._zone_sound_enabled
+    def _set_zone_sound_enabled(
+        self,
+        enabled: bool,
+        *,
+        warn_on_failure: bool = False,
+    ) -> bool:
+        """Set the explicit zone-sound target and persist before reporting success."""
+        if not ENABLE_ZONES:
+            return False
+        previous = self._zone_sound_enabled
+        self._zone_sound_enabled = enabled
+        if not self._save_config(warn_on_failure=warn_on_failure):
+            self._zone_sound_enabled = previous
+            return False
         self._update_hint()
-        self._save_config(warn_on_failure=True)
         self._refresh_tray()
         if self._zone_sound_enabled:
             self.sound.play(pattern="on")
+        return True
+
+    def _toggle_zone_sound(self):
+        """切换战区提示音"""
+        self._set_zone_sound_enabled(
+            not self._zone_sound_enabled,
+            warn_on_failure=True,
+        )
 
     def _show_hud_overlay(self) -> bool:
         """显示 HUD 叠加层。"""
@@ -1090,6 +1328,28 @@ class App:
 
         return x, y
 
+    def _set_locked_state(
+        self,
+        locked: bool,
+        *,
+        warn_on_failure: bool = False,
+    ) -> bool:
+        """Set and persist the explicit window lock target."""
+        if self._locked == locked:
+            return True
+        previous = self._locked
+        self._locked = locked
+        if not self._save_config(warn_on_failure=warn_on_failure):
+            self._locked = previous
+            return False
+        alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
+        Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
+        self.navigation_services.apply_lock_state(locked=self._locked, alpha=alpha)
+        self.runtime_services.apply_hud_lock_state(self._locked)
+        self._update_hint()
+        self._refresh_tray()
+        return True
+
     def _toggle_lock(self):
         """切换锁定/解锁
 
@@ -1097,14 +1357,7 @@ class App:
         - 锁定状态：使用配置的透明度（默认210）
         - 解锁状态：提高透明度到240，让窗口更明显便于拖动
         """
-        self._locked = not self._locked
-        # 解锁时提高不透明度，让用户更容易看到可拖动区域
-        alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
-        Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
-        self.navigation_services.apply_lock_state(locked=self._locked, alpha=alpha)
-        self.runtime_services.apply_hud_lock_state(self._locked)
-        self._update_hint()
-        self._refresh_tray()
+        self._set_locked_state(not self._locked, warn_on_failure=True)
 
     def _on_focus_in(self, event=None):
         """焦点保护：锁定状态下拒绝焦点
@@ -1288,25 +1541,50 @@ class App:
             self.standalone_btn.config(text="打开独立导航窗")
             style_action_button(self.standalone_btn, "neutral")
 
-    def _next_corner(self):
-        """切换到下一个角落"""
+    def _advance_corner(self, *, warn_on_failure: bool = False) -> bool:
+        """Advance once through the fixed corner order and persist atomically."""
         corners = list(Corner)
         i = (corners.index(self._corner) + 1) % len(corners)
+        previous = (self._corner, self._user_moved, self._manual_pos)
         self._corner = corners[i]
         self._user_moved = False
         self._manual_pos = None
+        if not self._save_config(warn_on_failure=warn_on_failure):
+            self._corner, self._user_moved, self._manual_pos = previous
+            return False
         self._position()
-        self._save_config(warn_on_failure=True)
+        return True
 
-    def _toggle_beep(self):
-        """切换提示音"""
-        enabled = not self.sound.is_enabled()
+    def _next_corner(self):
+        """切换到下一个角落"""
+        self._advance_corner(warn_on_failure=True)
+
+    def _set_beep_enabled(
+        self,
+        enabled: bool,
+        *,
+        warn_on_failure: bool = False,
+    ) -> bool:
+        """Set and persist the explicit general sound target."""
+        previous = self.sound.is_enabled()
+        if previous == enabled:
+            return True
         self.sound.set_enabled(enabled)
+        if not self._save_config(warn_on_failure=warn_on_failure):
+            self.sound.set_enabled(previous)
+            return False
         self._update_hint()
-        self._save_config(warn_on_failure=True)
         self._refresh_tray()
         if enabled:
             self.sound.play(pattern="on")
+        return True
+
+    def _toggle_beep(self):
+        """切换提示音"""
+        self._set_beep_enabled(
+            not self.sound.is_enabled(),
+            warn_on_failure=True,
+        )
 
     def _clear_manual_reset_confirmation(self, refresh_hint: bool = False) -> None:
         """清理热键重置确认态。"""
@@ -1451,8 +1729,123 @@ class App:
         """显示关于对话框"""
         AboutDialog(self.root, self)
 
+    def _complete_web_command(self, envelope: WebCommandEnvelope, reason: str) -> None:
+        try:
+            resulting_revision = self._publish_web_control_state(force_revision=True)
+        except Exception as exc:
+            log_exception("web_dashboard_control_publish_failed", exc)
+            resulting_revision = max(1, self._web_control_revision)
+        self.runtime_services.complete_web_command(
+            envelope,
+            status="succeeded" if reason == "ok" else "rejected",
+            reason=reason,
+            resulting_revision=resulting_revision,
+        )
+
+    def _apply_web_command(self, envelope: WebCommandEnvelope) -> str:
+        """Execute one schema-validated allowlisted semantic command on Tk."""
+        command = envelope.command
+        if command.name == "action.reset_timer":
+            if command.confirmed is not True or not hasattr(self.game, "manual_reset"):
+                return "state_unavailable"
+            self._manual_reset()
+            return "ok"
+        if command.name == "action.cycle_corner":
+            return "ok" if self._advance_corner() else "persistence_failed"
+        if command.name == "state.set_locked":
+            if not isinstance(command.locked, bool):
+                return "invalid_target"
+            return "ok" if self._set_locked_state(command.locked) else "persistence_failed"
+        if command.name == "state.set_beep_enabled":
+            if not isinstance(command.enabled, bool):
+                return "invalid_target"
+            return "ok" if self._set_beep_enabled(command.enabled) else "persistence_failed"
+        if command.name == "state.set_zone_sound_enabled":
+            if not ENABLE_ZONES:
+                return "feature_disabled"
+            if not isinstance(command.enabled, bool):
+                return "invalid_target"
+            return "ok" if self._set_zone_sound_enabled(command.enabled) else "persistence_failed"
+        if command.name == "config.set_panel_visibility":
+            if not isinstance(command.enabled, bool):
+                return "invalid_target"
+            target = command.target
+            if target == "zones" and not ENABLE_ZONES:
+                return "feature_disabled"
+            if target == "airfields" and not ENABLE_AIRFIELDS:
+                return "feature_disabled"
+            if target == "fuel" and not ENABLE_FUEL:
+                return "feature_disabled"
+            if target == "checklist" and not ENABLE_CHECKLIST:
+                return "feature_disabled"
+            if target == "weapon_solution" and not ENABLE_CCRP:
+                return "feature_disabled"
+            if target not in {
+                "zones",
+                "airfields",
+                "fuel",
+                "speed",
+                "checklist",
+                "weapon_solution",
+            }:
+                return "invalid_target"
+            return (
+                "ok"
+                if self._set_panel_visibility(target, command.enabled)
+                else "persistence_failed"
+            )
+        if command.name == "weapon.select":
+            if not ENABLE_CCRP:
+                return "feature_disabled"
+            catalog = self._get_weapon_catalog()
+            if catalog is None:
+                return "state_unavailable"
+            weapon_id = str(command.weapon_id or "")
+            weapon = catalog.get(weapon_id)
+            if not weapon:
+                return "weapon_not_found"
+            snap = self.game.snapshot()
+            airborne = snap.phase == Phase.ALIVE and not snap.on_ground
+            aircraft = str(getattr(snap, "aircraft_type_name", "") or "")
+            if airborne and (not aircraft or not catalog.compatible(weapon_id, aircraft)):
+                return "weapon_incompatible"
+            if not persist_weapon_selection(
+                catalog,
+                weapon_id,
+                WeaponBallisticModelConfig.selected_model,
+            ):
+                return "persistence_failed"
+            return "ok"
+        if command.name == "weapon.set_ballistic_model":
+            if not ENABLE_CCRP:
+                return "feature_disabled"
+            model = str(command.model or "")
+            if model not in WeaponBallisticModelConfig.VALID_MODELS:
+                return "invalid_target"
+            return "ok" if persist_ballistic_model_selection(model) else "persistence_failed"
+        return "invalid_target"
+
+    def _execute_web_command(self, envelope: WebCommandEnvelope) -> None:
+        """Reauthorize and execute a Web command exclusively on the Tk owner thread."""
+        if not isinstance(envelope, WebCommandEnvelope):
+            return
+        if not self.runtime_services.reauthorize_web_command(envelope):
+            self._complete_web_command(envelope, "authorization_revoked")
+            return
+        try:
+            reason = self._apply_web_command(envelope)
+        except Exception as exc:
+            log_exception("web_dashboard_command_execution_failed", exc)
+            reason = "execution_failed"
+        self._complete_web_command(envelope, reason)
+
     def _open_web_dashboard(self) -> None:
         dashboard = self.runtime_services.dashboard
+        if dashboard is None or not dashboard.is_running:
+            if self.runtime_services.init_dashboard():
+                self._publish_web_control_state(force_revision=True)
+                self._refresh_tray()
+            dashboard = self.runtime_services.dashboard
         url = dashboard.local_pairing_url if dashboard is not None else None
         if not url:
             messagebox.showerror(
@@ -1470,7 +1863,7 @@ class App:
             self._refresh_tray()
             messagebox.showinfo(
                 "网页驾驶舱",
-                "本次运行的局域网访问已关闭；本机页面仍可使用。",
+                "本次运行的局域网访问已关闭；局域网控制会话已撤销，本机页面仍可使用。",
                 parent=self.root,
             )
             return
@@ -1501,6 +1894,55 @@ class App:
             f"手机访问链接已复制：\n{link}\n\n"
             f"配对码：{dashboard.pairing_code}\n\n"
             "若手机无法连接，请在 Windows 防火墙中允许 Bomana 的专用网络访问。",
+            parent=self.root,
+        )
+
+    def _toggle_web_dashboard_lan_control(self) -> None:
+        dashboard = self.runtime_services.dashboard
+        if dashboard is None or not dashboard.lan_enabled:
+            messagebox.showinfo(
+                "网页驾驶舱",
+                "请先为本次运行开启局域网访问。",
+                parent=self.root,
+            )
+            return
+        if dashboard.lan_control_enabled:
+            self.runtime_services.disable_dashboard_lan_control()
+            self._refresh_tray()
+            messagebox.showinfo(
+                "局域网控制已撤销",
+                "已有局域网控制会话已立即失效；如需再次控制，必须重新开启并重新配对。",
+                parent=self.root,
+            )
+            return
+        confirmed = messagebox.askyesno(
+            "允许局域网控制",
+            (
+                "这会允许可信局域网中的新配对设备操作 Bomana 的固定语义功能。\n\n"
+                "不会模拟键盘、控制游戏或获得任意配置/命令能力；授权仅限本次运行。\n\n"
+                "开启会立即轮换配对码，现有只读设备不会自动升级为控制设备。是否继续？"
+            ),
+            parent=self.root,
+        )
+        if not confirmed:
+            return
+        try:
+            self.runtime_services.enable_dashboard_lan_control()
+        except Exception as exc:
+            messagebox.showerror("局域网控制失败", str(exc), parent=self.root)
+            return
+        self._refresh_tray()
+        dashboard = self.runtime_services.dashboard
+        if dashboard is None:
+            return
+        link = dashboard.lan_pairing_url or ""
+        self._copy_to_clipboard(link)
+        messagebox.showinfo(
+            "局域网控制已开启",
+            (
+                f"新的手机配对链接已复制：\n{link}\n\n配对码：{dashboard.pairing_code}\n\n"
+                "只有现在重新配对的局域网设备可控制；可随时从托盘立即撤销。"
+            ),
             parent=self.root,
         )
 
@@ -1670,6 +2112,8 @@ class App:
 
         debug_mock_mode = bool(self._debug and self._debug_effective_mock)
         self.runtime_services.publish_dashboard(snap, list(self.chk_items))
+        if hasattr(self.runtime_services, "publish_dashboard_control"):
+            self._publish_web_control_state(snapshot=snap)
 
         if not self._debug:
             # 高光时刻弱提醒：成功着陆后显示，起飞后消除（不弹窗）

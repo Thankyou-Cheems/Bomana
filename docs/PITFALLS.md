@@ -14,6 +14,63 @@ implementation plans belong in git history, not here.
 
 ## Entries
 
+### 2026-07-11 — Packaged GUI smoke needs a Tk-level launch shortcut
+
+Symptom: the packaged App handoff was healthy when clicked manually, but the smoke timed out on the modern Launcher because Windows UI Automation exposed anonymous Tk buttons and Tk used no native child button HWNDs.
+Root cause: the harness depended on an accessible button name or native `BM_CLICK`, neither of which is guaranteed by the bundled Tk runtime.
+Fix/Workaround: keep `Ctrl+Enter` as an enabled-launch-button shortcut at the Launcher toplevel and let the smoke fall back to it only after semantic UI Automation and native-button lookup, exact foreground-window verification, and guaranteed key release; a failed foreground check emits no input, an interactive operator may still activate the same-process launch action, and the smoke always requires that process to reach `WT Timer` before passing.
+The one-file launcher may retain a bootloader parent and a window-owning child with the same executable path, so window discovery and cleanup must cover that exact-path process family rather than only the PID returned by `Process.Start`.
+Pin: `tests/test_launcher_launch_flow.py` verifies the shortcut respects disabled state, and `tests/test_quality_packaged_launcher_smoke.py` pins input safety, exact-path family discovery, cleanup, and the packaged handoff contract.
+
+### 2026-07-11 — Session age must be rechecked at both Web write boundaries
+
+Symptom: a control session valid when the handler first read its cookie could cross the 12-hour maximum age during body validation or while queued and still be accepted or executed.
+Root cause: expiry pruning happened only while creating the initial session view; final submission and Tk-side reauthorization compared scope and epoch against the still-retained session without advancing the same monotonic expiry boundary.
+Spec: `docs/specs/web-dashboard.md` `WDB-24`, `WDB-33`.
+Pin: `tests/test_web_dashboard_server.py` advances a fake monotonic clock across the limit after the initial view and requires both HTTP submission and Tk reauthorization to reject without queueing or execution.
+
+### 2026-07-11 — Final handoff must not discard a newer recovery rejection
+
+Symptom: if a malformed App slot appeared after the Launcher window opened, the final recovery pass preserved every valid slot but entered a valid current App with the new rejection visible only in `launcher.log`.
+Root cause: bootstrap repeated recovery at handoff but ignored its returned user-facing warning because the earlier Launcher status was assumed to cover the whole run.
+Spec: `docs/specs/version-compatibility.md` `COMPAT-19`.
+Pin: `tests/test_launcher_launch_flow.py` requires bootstrap to synchronously show a newly observed handoff warning before any runtime lookup, suppress an already displayed warning, and fail closed if the new warning cannot be shown; a separately validated valid current App may continue after successful display.
+
+### 2026-07-11 — Recovery must prevalidate every slot before its first mutation
+
+Symptom: with a valid `app_backup` and malformed `app_new`, incomplete-install recovery moved the backup into `app` and then deleted the unvalidated staged directory instead of rejecting the layout unchanged.
+Root cause: slot checks were interleaved with `os.replace` and cleanup decisions, so a later candidate could be skipped once an earlier move made `app` exist; a follow-up `Path.exists()` check also followed dangling Windows reparse targets and treated the slot entry as absent.
+Spec: `docs/specs/version-compatibility.md` `COMPAT-12`, `COMPAT-17`, `COMPAT-19`.
+Pin: `tests/contracts/test_version_compatibility.py` and `tests/test_launcher_update_service.py` require every lexically present App slot, including a simulated dangling reparse entry, to pass the shared strict boundary before any rename, replacement, or deletion; `tests/test_launcher_launch_flow.py` requires the rejection reason to remain visible in Launcher status while a valid current App stays launchable.
+
+### 2026-07-11 — An allowlist write must also remove legacy persisted fields
+
+Symptom: Launcher 3 wrote the two allowed Web booleans but retained stale or manually injected Web host, LAN-control, pairing, or session fields already present in `launcher_state.json`.
+Root cause: `_save_launcher_state` updated an existing dictionary without projecting it back onto the exact Web persistence allowlist.
+Spec: `docs/specs/config-variants.md` `CFG-10..CFG-12`.
+Pin: `tests/test_launcher_launch_flow.py` seeds forbidden old and `extra` Web keys, then requires the saved state to contain exactly the two boolean preferences while preserving unrelated Launcher state.
+
+### 2026-07-11 — A browse fallback is not Web write authorization
+
+Symptom: while airborne with an unknown aircraft or no matching presets, the Web Cockpit marked the full weapon catalog compatible and allowed `weapon.select` even when `catalog.compatible()` was false.
+Root cause: the desktop selector's intentional “show all, compatibility unverified” browse fallback was reused as the Web command authorization scope.
+Spec: `docs/specs/web-dashboard.md` `WDB-34` and the `weapon.select` action matrix row.
+Pin: `tests/test_ui_app_config.py` keeps the desktop browse fallback but requires unknown/incompatible airborne choices to be disabled in the Web projection and rejected on the Tk owner thread without persistence.
+
+### 2026-07-11 — Explicit same-target commands must not depend on a new save
+
+Symptom: a Web request to keep window lock or general sound at its already-effective value returned `persistence_failed` when the config file was temporarily unwritable.
+Root cause: the explicit target setters mutated and saved unconditionally instead of implementing the action matrix's successful no-op semantics.
+Spec: `docs/specs/web-dashboard.md` Complete Action Matrix rows for `state.set_locked` and `state.set_beep_enabled`.
+Pin: `tests/test_ui_app_config.py` requires both same-target setters to return success before config, window, tray, or sound side effects.
+
+### 2026-07-11 — A worker queue bridge must own its availability state
+
+Symptom: the HTTP command sink safely rejected shutdown work but did so by reading private `App._stop` and `TkEventDispatcher._polling` fields directly from the request worker.
+Root cause: queue availability was inferred from Tk/App lifecycle state instead of being represented by the thread-safe bridge itself.
+Spec: `docs/specs/web-dashboard.md` `WDB-05`; `docs/specs/threading-ui-contract.md` `THREAD-10`.
+Pin: `tests/test_runtime_services.py` requires shutdown to close a bridge-owned Event before rejecting new envelopes, while `tests/contracts/test_web_dashboard_contract.py` forbids `self.app` reads inside the HTTP sink.
+
 ### 2026-07-11 — pystray runtime state must use callable menu properties
 
 Symptom: after enabling Web Cockpit LAN access, “复制手机访问链接” remained disabled even though the listener and pairing URL were ready.

@@ -61,6 +61,10 @@ def test_packaged_launcher_smoke_builds_and_requires_signed_artifacts() -> None:
     assert "package_sha256" in source
     assert "launcher_sha256" in source
     assert "launcher_size_bytes" in source
+    assert "Assert-StrictVersionAtLeast" in source
+    assert '"app_version") "8.0.0"' in source
+    assert '"min_launcher_version") "3.0.0"' in source
+    assert '"launcher_version") "3.0.0"' in source
 
 
 def test_packaged_launcher_smoke_stages_hostile_path_and_app_layout() -> None:
@@ -75,6 +79,7 @@ def test_packaged_launcher_smoke_stages_hostile_path_and_app_layout() -> None:
     assert "[System.IO.Compression.ZipFile]::ExtractToDirectory" in source
     assert '"app"' in source
     assert '"Bomana.pyw"' in source
+    assert '"bomana_version.py"' in source
     assert '"bomana\\config\\__init__.py"' in source
     assert '"bomana\\config\\feature_profile.py"' in source
     assert '"bomana\\bin\\BomanaHotkeyBroker.exe"' in source
@@ -105,6 +110,10 @@ def test_packaged_launcher_smoke_poisons_python_for_packaged_launch() -> None:
     assert "$psi.EnvironmentVariables.Remove($key)" in source
     assert 'BOMANA_UPDATE_BASE_URL = "http://127.0.0.1:9"' in source
     assert 'download_source_mode = "primary"' in source
+    assert "web_dashboard_autostart = $true" in source
+    assert "web_dashboard_auto_open = $false" in source
+    assert '"BOMANA_LAUNCHER_VERSION"' in source
+    assert '"BOMANA_SOURCE_DEVELOPMENT"' in source
 
 
 def test_packaged_launcher_smoke_verifies_gui_handoff_contract() -> None:
@@ -113,10 +122,22 @@ def test_packaged_launcher_smoke_verifies_gui_handoff_contract() -> None:
     assert "UIAutomationClient" in source
     assert "BomanaSmokeWin32" in source
     assert "Wait-AndInvokeLaunchButton" in source
+    assert '$title -eq "WT Timer"' in source
+    assert "Get-SmokeProcesses" in source
+    assert "candidate.Path" in source
+    assert "Stop-SmokeProcesses" in source
     assert "$script:LaunchButtonPattern" in source
+    assert "Invoke-KeyboardLaunchShortcut" in source
+    assert "keybd_event" in source
+    assert "GetForegroundWindow" in source
+    assert "finally" in source
     assert "0x542f, 0x52a8" in source
     assert "0x5668" in source
     assert "Wait-AppWindow" in source
     assert '$title -eq "WT Timer"' in source
     assert "interactive Windows desktop" in source
     assert "SkipGuiHandoff" in source
+
+    launcher_source = (ROOT / "launcher.pyw").read_text(encoding="utf-8")
+    assert 'self.root.bind("<Control-Return>", self._on_launch_shortcut' in launcher_source
+    assert "def _on_launch_shortcut" in launcher_source

@@ -43,6 +43,16 @@ runtime app.
 - `THREAD-09`: The privileged hotkey broker pipe reader MUST run outside the Tk
   thread and MUST route status, error, and fixed-action callbacks through
   `TkEventDispatcher.post()` before touching App or UI state.
+- `THREAD-10`: An HTTP worker MAY enqueue only an immutable validated Web command
+  envelope through `TkEventDispatcher.post()` and MUST NOT wait synchronously
+  for command execution.
+- `THREAD-11`: The Tk owner thread MUST recheck the queued session's current
+  authorization epoch, control scope, and current-run LAN-control authority
+  before executing a Web command.
+- `THREAD-12`: The Tk owner thread MUST recheck applicable `ENABLE_*` flags and
+  semantic target validity before executing a Web command.
+- `THREAD-13`: Only the Tk owner thread MAY publish Web command completion and
+  the resulting control-state revision after attempted execution.
 - `HOTKEY-01`: Windows global hotkeys must use `RegisterHotKey` as the default
   backend in both the local and privileged-broker paths. Runtime code must not
   add low-level keyboard hooks, polling fallback paths, or key-state polling for
@@ -65,10 +75,14 @@ runtime app.
   `THREAD-02..THREAD-06`, `THREAD-08`, `THREAD-09`, `HOTKEY-01`, `HOTKEY-02`, and
   `HOTKEY-04` by checking dispatcher, hotkey, tray, poller, sound, and forbidden
   fallback paths.
+- [static] `tests/contracts/test_web_dashboard_contract.py` enforces
+  `THREAD-10..THREAD-13` by checking the immutable dispatcher envelope,
+  owner-thread revalidation, completion publication, and absence of HTTP-worker
+  App/config mutation.
 - [behavioral] `tests/test_runtime_threading.py` and
   `tests/test_runtime_services.py` enforce dispatcher, poller, shutdown, and
   hotkey lifecycle behavior in `THREAD-02..THREAD-05`, `THREAD-07`,
-  `THREAD-09`, `HOTKEY-02`, and `HOTKEY-03`.
+  `THREAD-09..THREAD-13`, `HOTKEY-02`, and `HOTKEY-03`.
 - [behavioral] `tests/test_system_portability.py` enforces `THREAD-04`,
   `THREAD-08`, `HOTKEY-02`, and `HOTKEY-03` with registration lifecycle tests
   plus a real Windows message-window dispatch test.

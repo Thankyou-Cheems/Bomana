@@ -152,6 +152,28 @@ function Assert-FileSha256 {
     }
 }
 
+function Assert-StrictVersionAtLeast {
+    param(
+        [Parameter(Mandatory = $true)]$Value,
+        [Parameter(Mandatory = $true)][string]$Minimum,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    if ($Value -isnot [string] -or $Value -cnotmatch '^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$') {
+        throw "$Label must be a strict X.Y.Z version"
+    }
+    $actualParts = @($Value.Split('.') | ForEach-Object { [int]$_ })
+    $minimumParts = @($Minimum.Split('.') | ForEach-Object { [int]$_ })
+    for ($index = 0; $index -lt 3; $index++) {
+        if ($actualParts[$index] -gt $minimumParts[$index]) {
+            return
+        }
+        if ($actualParts[$index] -lt $minimumParts[$index]) {
+            throw "$Label must be at least $Minimum"
+        }
+    }
+}
+
 function Resolve-ReleaseArtifacts {
     param(
         [Parameter(Mandatory = $true)][string]$Directory,
@@ -166,6 +188,9 @@ function Resolve-ReleaseArtifacts {
 
     Assert-ManifestSignature $appManifest "manifest_$VariantName.json"
     Assert-ManifestSignature $launcherManifest "launcher_manifest.json"
+    Assert-StrictVersionAtLeast (Get-JsonProperty $appManifest "app_version") "8.0.0" "app_version"
+    Assert-StrictVersionAtLeast (Get-JsonProperty $appManifest "min_launcher_version") "3.0.0" "min_launcher_version"
+    Assert-StrictVersionAtLeast (Get-JsonProperty $launcherManifest "launcher_version") "3.0.0" "launcher_version"
 
     $appAsset = [string](Get-JsonProperty $appManifest "package_asset")
     $launcherAsset = [string](Get-JsonProperty $launcherManifest "launcher_asset")
@@ -220,6 +245,7 @@ function Install-AppPackage {
 
     $required = @(
         "Bomana.pyw",
+        "bomana_version.py",
         "bomana\config\__init__.py",
         "bomana\config\feature_profile.py",
         "bomana\metadata.py",
@@ -245,6 +271,8 @@ function Write-SmokeLauncherState {
         channel = $VariantName
         download_source_mode = "primary"
         use_system_proxy = $false
+        web_dashboard_autostart = $true
+        web_dashboard_auto_open = $false
         state_updated_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     }
     $statePath = Join-Path $InstallRoot "launcher_state.json"
@@ -349,6 +377,12 @@ public static class BomanaSmokeWin32 {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
+
     public static IntPtr[] TopLevelWindowsForProcess(int processId) {
         var handles = new List<IntPtr>();
         EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
@@ -432,27 +466,108 @@ function Invoke-Win32LaunchButton {
     return $false
 }
 
+function Invoke-KeyboardLaunchShortcut {
+    param([Parameter(Mandatory = $true)][IntPtr]$WindowHandle)
+
+    if ($WindowHandle -eq [IntPtr]::Zero) {
+        return $false
+    }
+    $keyUp = 0x0002
+    $virtualKeyControl = 0x11
+    $virtualKeyReturn = 0x0D
+    [BomanaSmokeWin32]::SetForegroundWindow($WindowHandle) | Out-Null
+    $foregroundDeadline = [DateTime]::UtcNow.AddSeconds(1)
+    while (
+        [DateTime]::UtcNow -lt $foregroundDeadline -and
+        [BomanaSmokeWin32]::GetForegroundWindow() -ne $WindowHandle
+    ) {
+        Start-Sleep -Milliseconds 50
+    }
+    if ([BomanaSmokeWin32]::GetForegroundWindow() -ne $WindowHandle) {
+        return $false
+    }
+
+    $controlDown = $false
+    $returnDown = $false
+    try {
+        [BomanaSmokeWin32]::keybd_event($virtualKeyControl, 0, 0, [UIntPtr]::Zero)
+        $controlDown = $true
+        if ([BomanaSmokeWin32]::GetForegroundWindow() -ne $WindowHandle) {
+            return $false
+        }
+        [BomanaSmokeWin32]::keybd_event($virtualKeyReturn, 0, 0, [UIntPtr]::Zero)
+        $returnDown = $true
+        return $true
+    }
+    finally {
+        if ($returnDown) {
+            [BomanaSmokeWin32]::keybd_event(
+                $virtualKeyReturn,
+                0,
+                $keyUp,
+                [UIntPtr]::Zero
+            )
+        }
+        if ($controlDown) {
+            [BomanaSmokeWin32]::keybd_event(
+                $virtualKeyControl,
+                0,
+                $keyUp,
+                [UIntPtr]::Zero
+            )
+        }
+    }
+}
+
+function Get-SmokeProcesses {
+    param([Parameter(Mandatory = $true)][string]$ExecutablePath)
+
+    $expectedPath = Resolve-FullPath $ExecutablePath
+    $processName = [System.IO.Path]::GetFileNameWithoutExtension($expectedPath)
+    $matches = @()
+    foreach ($candidate in @(Get-Process -Name $processName -ErrorAction SilentlyContinue)) {
+        try {
+            $candidatePath = Resolve-FullPath $candidate.Path
+            if ($candidatePath.Equals($expectedPath, [StringComparison]::OrdinalIgnoreCase)) {
+                $matches += $candidate
+            }
+        }
+        catch {
+        }
+    }
+    return @($matches)
+}
+
 function Wait-AndInvokeLaunchButton {
     param(
-        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
         [Parameter(Mandatory = $true)][int]$TimeoutSec
     )
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSec)
     while ([DateTime]::UtcNow -lt $deadline) {
-        if ($Process.HasExited) {
-            throw "launcher exited before the launch button was invoked; exit code $($Process.ExitCode)"
+        $processes = @(Get-SmokeProcesses -ExecutablePath $ExecutablePath)
+        if ($processes.Count -eq 0) {
+            throw "launcher process family exited before the launch button was invoked"
         }
-        foreach ($window in [BomanaSmokeWin32]::TopLevelWindowsForProcess($Process.Id)) {
-            $title = [BomanaSmokeWin32]::WindowText($window)
-            if ($title -notmatch "Bomana") {
-                continue
-            }
-            if (Invoke-UiAutomationLaunchButton $window) {
-                return
-            }
-            if (Invoke-Win32LaunchButton $window) {
-                return
+        foreach ($process in $processes) {
+            foreach ($window in [BomanaSmokeWin32]::TopLevelWindowsForProcess($process.Id)) {
+                $title = [BomanaSmokeWin32]::WindowText($window)
+                if ($title -eq "WT Timer") {
+                    return
+                }
+                if ($title -notmatch "Bomana") {
+                    continue
+                }
+                if (Invoke-UiAutomationLaunchButton $window) {
+                    return
+                }
+                if (Invoke-Win32LaunchButton $window) {
+                    return
+                }
+                if (Invoke-KeyboardLaunchShortcut $window) {
+                    return
+                }
             }
         }
         Start-Sleep -Milliseconds 500
@@ -462,19 +577,22 @@ function Wait-AndInvokeLaunchButton {
 
 function Wait-AppWindow {
     param(
-        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
         [Parameter(Mandatory = $true)][int]$TimeoutSec
     )
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSec)
     while ([DateTime]::UtcNow -lt $deadline) {
-        if ($Process.HasExited) {
-            throw "launcher/app process exited before the app window appeared; exit code $($Process.ExitCode)"
+        $processes = @(Get-SmokeProcesses -ExecutablePath $ExecutablePath)
+        if ($processes.Count -eq 0) {
+            throw "launcher/app process family exited before the app window appeared"
         }
-        foreach ($window in [BomanaSmokeWin32]::TopLevelWindowsForProcess($Process.Id)) {
-            $title = [BomanaSmokeWin32]::WindowText($window)
-            if ($title -eq "WT Timer") {
-                return $window
+        foreach ($process in $processes) {
+            foreach ($window in [BomanaSmokeWin32]::TopLevelWindowsForProcess($process.Id)) {
+                $title = [BomanaSmokeWin32]::WindowText($window)
+                if ($title -eq "WT Timer") {
+                    return $window
+                }
             }
         }
         Start-Sleep -Milliseconds 500
@@ -499,7 +617,16 @@ function Start-SmokeLauncher {
         $name = [string]$key
         if (
             $name -like "PYTHON*" -or
-            $name -in @("VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT", "UV_PYTHON", "CONDA_PREFIX")
+            $name -in @(
+                "VIRTUAL_ENV",
+                "UV_PROJECT_ENVIRONMENT",
+                "UV_PYTHON",
+                "CONDA_PREFIX",
+                "BOMANA_LAUNCHER_VERSION",
+                "BOMANA_SOURCE_DEVELOPMENT",
+                "BOMANA_WEB_DASHBOARD_AUTOSTART",
+                "BOMANA_WEB_DASHBOARD_AUTO_OPEN"
+            )
         ) {
             $removeKeys += $name
         }
@@ -514,25 +641,31 @@ function Start-SmokeLauncher {
     return [System.Diagnostics.Process]::Start($psi)
 }
 
-function Stop-SmokeProcess {
-    param($Process)
+function Stop-SmokeProcesses {
+    param([string]$ExecutablePath)
 
-    if ($null -eq $Process) {
+    if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
         return
     }
-    try {
-        if (-not $Process.HasExited) {
-            $Process.CloseMainWindow() | Out-Null
-            if (-not $Process.WaitForExit(5000)) {
-                $Process.Kill()
-                $Process.WaitForExit(5000) | Out-Null
-            }
+    foreach ($process in @(Get-SmokeProcesses -ExecutablePath $ExecutablePath)) {
+        try {
+            $process.CloseMainWindow() | Out-Null
+        }
+        catch {
         }
     }
-    catch {
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    while (
+        [DateTime]::UtcNow -lt $deadline -and
+        @(Get-SmokeProcesses -ExecutablePath $ExecutablePath).Count -gt 0
+    ) {
+        Start-Sleep -Milliseconds 100
+    }
+    foreach ($process in @(Get-SmokeProcesses -ExecutablePath $ExecutablePath)) {
         try {
-            if (-not $Process.HasExited) {
-                $Process.Kill()
+            if (-not $process.HasExited) {
+                $process.Kill()
+                $process.WaitForExit(5000) | Out-Null
             }
         }
         catch {
@@ -568,6 +701,7 @@ $installRoot = Join-Path $workRoot (
     "install target " + $script:TextLauncher + " " + $script:TextPath
 )
 $launcherProcess = $null
+$launcherTarget = ""
 $success = $false
 $failed = $false
 
@@ -642,9 +776,13 @@ try {
             -LauncherPath $launcherTarget `
             -WorkingDirectory $installRoot `
             -Environment $smokeEnv
-        Wait-AndInvokeLaunchButton -Process $launcherProcess -TimeoutSec $LaunchTimeoutSec
-        Wait-AppWindow -Process $launcherProcess -TimeoutSec $LaunchTimeoutSec | Out-Null
-        Write-Host "      app window appeared from packaged launcher process $($launcherProcess.Id)"
+        Wait-AndInvokeLaunchButton `
+            -ExecutablePath $launcherTarget `
+            -TimeoutSec $LaunchTimeoutSec
+        Wait-AppWindow `
+            -ExecutablePath $launcherTarget `
+            -TimeoutSec $LaunchTimeoutSec | Out-Null
+        Write-Host "      app window appeared from packaged launcher process family"
     }
 
     $success = $true
@@ -660,7 +798,7 @@ catch {
     }
 }
 finally {
-    Stop-SmokeProcess $launcherProcess
+    Stop-SmokeProcesses -ExecutablePath $launcherTarget
     if ($success -and (-not $KeepWorkDir) -and $createdSmokeRoot) {
         Assert-PathWithin $workRoot ([System.IO.Path]::GetTempPath())
         Remove-Item -LiteralPath $workRoot -Recurse -Force

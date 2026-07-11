@@ -1,4 +1,4 @@
-# enforces: docs/specs/config-variants.md CFG-01..CFG-04, CFG-06..CFG-09
+# enforces: docs/specs/config-variants.md CFG-01..CFG-04 CFG-06..CFG-13
 
 from __future__ import annotations
 
@@ -185,3 +185,25 @@ def test_weapon_solution_uses_legacy_bombing_gate_and_enhanced_packaging() -> No
     assert "weapon_fire_control.json" in batch
     assert 'if [ "$VARIANT" = "Enhanced" ]' in shell
     assert "weapon_fire_control.json" in shell
+
+
+def test_launcher_web_preferences_are_an_exact_two_boolean_allowlist() -> None:
+    launcher = (ROOT / "launcher.pyw").read_text(encoding="utf-8")
+    bootstrap = (ROOT / "launcher/bootstrap.py").read_text(encoding="utf-8")
+    combined = "\n".join((launcher, bootstrap))
+
+    assert "web_dashboard_autostart" in launcher
+    assert "web_dashboard_auto_open" in launcher
+    assert "web_dashboard_autostart" in bootstrap
+    assert "web_dashboard_auto_open" in bootstrap
+    for forbidden in (
+        "web_dashboard_host",
+        "web_dashboard_port",
+        "web_dashboard_pairing",
+        "web_dashboard_lan_enabled",
+        "web_dashboard_lan_control",
+        "web_dashboard_session",
+        "web_dashboard_csrf",
+        "web_dashboard_authorization_epoch",
+    ):
+        assert forbidden not in combined

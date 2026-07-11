@@ -66,8 +66,9 @@ def test_dashboard_runtime_start_publish_lan_toggle_and_stop(monkeypatch) -> Non
     calls: list[object] = []
 
     class FakeDashboard:
-        def __init__(self, store) -> None:
+        def __init__(self, store, *, control_store, command_sink) -> None:
             calls.append(("create", store))
+            calls.append(("control", control_store, command_sink))
             self.is_running = False
             self.lan_enabled = False
             self.port = 8777
@@ -101,7 +102,7 @@ def test_dashboard_runtime_start_publish_lan_toggle_and_stop(monkeypatch) -> Non
     services.disable_dashboard_lan()
     services.stop_dashboard()
 
-    assert calls[1:] == ["start", "lan-on", "lan-off", "stop"]
+    assert calls[2:] == ["start", "lan-on", "lan-off", "stop"]
     assert services.dashboard is None
 
 
@@ -109,7 +110,7 @@ def test_dashboard_start_failure_is_visible_and_retryable(monkeypatch) -> None:
     attempts = 0
 
     class FailingDashboard:
-        def __init__(self, _store) -> None:
+        def __init__(self, _store, **_kwargs) -> None:
             nonlocal attempts
             attempts += 1
             raise OSError("port unavailable")
@@ -134,9 +135,69 @@ def test_dashboard_lan_share_availability_tracks_runtime_state() -> None:
 
     dashboard.lan_enabled = True
     assert services._dashboard_lan_share_available() is True
-
     dashboard.lan_enabled = False
     assert services._dashboard_lan_share_available() is False
+
+
+def test_launcher_web_preferences_are_strict_and_default_safe(monkeypatch) -> None:
+    services = AppRuntimeServices(SimpleNamespace())
+    monkeypatch.delenv("BOMANA_WEB_DASHBOARD_AUTOSTART", raising=False)
+    monkeypatch.delenv("BOMANA_WEB_DASHBOARD_AUTO_OPEN", raising=False)
+    assert services.dashboard_autostart_enabled() is True
+    assert services.dashboard_auto_open_enabled() is False
+
+    monkeypatch.setenv("BOMANA_WEB_DASHBOARD_AUTOSTART", "0")
+    monkeypatch.setenv("BOMANA_WEB_DASHBOARD_AUTO_OPEN", "1")
+    assert services.dashboard_autostart_enabled() is False
+    assert services.dashboard_auto_open_enabled() is True
+
+    monkeypatch.setenv("BOMANA_WEB_DASHBOARD_AUTOSTART", "false")
+    monkeypatch.setenv("BOMANA_WEB_DASHBOARD_AUTO_OPEN", "yes")
+    assert services.dashboard_autostart_enabled() is True
+    assert services.dashboard_auto_open_enabled() is False
+
+
+def test_web_command_sink_reports_dispatcher_availability() -> None:
+    posted: list[tuple[object, tuple[object, ...]]] = []
+    dispatcher = SimpleNamespace(
+        post=lambda callback, *args: posted.append((callback, args)),
+    )
+    app = SimpleNamespace(
+        dispatcher=dispatcher,
+        _execute_web_command=lambda _envelope: None,
+    )
+    services = AppRuntimeServices(app)
+    envelope = object()
+
+    assert services._queue_web_command(envelope) is True
+    assert posted == [(app._execute_web_command, (envelope,))]
+
+    services.stop()
+    assert services._queue_web_command(envelope) is False
+    assert posted == [(app._execute_web_command, (envelope,))]
+
+
+def test_lan_control_is_current_runtime_only_and_requires_lan_listener() -> None:
+    calls: list[str] = []
+    services = AppRuntimeServices(SimpleNamespace())
+    dashboard = SimpleNamespace(
+        is_running=True,
+        lan_enabled=False,
+        lan_control_enabled=False,
+        enable_lan_control=lambda: calls.append("control-on"),
+        disable_lan_control=lambda: calls.append("control-off"),
+    )
+    services.dashboard = dashboard
+
+    with pytest.raises(runtime_services.DashboardServerError, match="先.*局域网访问"):
+        services.enable_dashboard_lan_control()
+
+    dashboard.lan_enabled = True
+    services.enable_dashboard_lan_control()
+    dashboard.lan_control_enabled = True
+    services.disable_dashboard_lan_control()
+
+    assert calls == ["control-on", "control-off"]
 
 
 def test_hud_overlay_init_failure_disables_without_leaking_exception() -> None:

@@ -35,6 +35,12 @@ from urllib.request import (
     build_opener,
 )
 
+from bomana_version import (
+    MIN_SUPPORTED_APP_VERSION,
+    MIN_SUPPORTED_LAUNCHER_VERSION,
+    VersionCompatibilityError,
+    require_minimum_version,
+)
 from launcher.core import (
     DOWNLOAD_SOURCE_CHOICES,
     DOWNLOAD_SOURCE_DETAILS,
@@ -54,8 +60,8 @@ from launcher.core import (
     normalize_download_source_mode as _normalize_download_source_mode,
     require_remote_checksum as _require_remote_checksum,
     sha256_bytes as _sha256_bytes,
+    verify_release_manifest_signature as _verify_release_manifest_signature,
     version_is_newer as _version_is_newer,
-    version_is_older as _version_is_older,
 )
 from bomana.ui.tk_style import style_action_button
 from bomana.utils.system import Win32, select_ui_font_family
@@ -73,7 +79,6 @@ except ImportError:
     _ssl_context = ssl.create_default_context()
 
 # Launcher metadata
-MIN_SUPPORTED_APP_VERSION = "6.7.0"
 DISPLAY_NAME = "Bomana香焦"
 REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
@@ -123,6 +128,11 @@ RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 _USE_SYSTEM_PROXY = True
 _URL_OPENERS: Dict[str, Any] = {}
 _PROXY_MODE_LOCAL = threading.local()
+DEFAULT_WEB_DASHBOARD_AUTOSTART = True
+DEFAULT_WEB_DASHBOARD_AUTO_OPEN = False
+_PENDING_WEB_DASHBOARD_AUTOSTART = DEFAULT_WEB_DASHBOARD_AUTOSTART
+_PENDING_WEB_DASHBOARD_AUTO_OPEN = DEFAULT_WEB_DASHBOARD_AUTO_OPEN
+_PENDING_DISPLAYED_RECOVERY_WARNING = ""
 _FAKE_IP_NETWORKS = (
     ipaddress.ip_network("198.18.0.0/15"),
     ipaddress.ip_network("100.64.0.0/10"),
@@ -170,6 +180,79 @@ CHANNEL_DETAILS = {
         "who": "适合：只想看计时、追求最小干扰和最低开销。",
     },
 }
+
+require_minimum_version(
+    LAUNCHER_VERSION,
+    MIN_SUPPORTED_LAUNCHER_VERSION,
+    identity_name="启动器版本",
+)
+
+
+def _strict_saved_bool(state: Dict[str, Any], key: str, default: bool) -> bool:
+    value = state.get(key, default)
+    return value if isinstance(value, bool) else default
+
+
+def _set_pending_web_preferences(autostart: bool, auto_open: bool) -> None:
+    if not isinstance(autostart, bool) or not isinstance(auto_open, bool):
+        raise TypeError("Web launch preferences must be bools")
+    global _PENDING_WEB_DASHBOARD_AUTOSTART, _PENDING_WEB_DASHBOARD_AUTO_OPEN
+    _PENDING_WEB_DASHBOARD_AUTOSTART = autostart
+    _PENDING_WEB_DASHBOARD_AUTO_OPEN = auto_open
+
+
+def _set_pending_recovery_warning(warning: object) -> None:
+    global _PENDING_DISPLAYED_RECOVERY_WARNING
+    _PENDING_DISPLAYED_RECOVERY_WARNING = str(warning or "").strip()
+
+
+def _launcher_meets_minimum(minimum: object) -> bool:
+    try:
+        require_minimum_version(
+            LAUNCHER_VERSION,
+            minimum,
+            identity_name="启动器版本",
+        )
+    except VersionCompatibilityError:
+        return False
+    return True
+
+
+def _strict_signed_app_versions(
+    manifest: Dict[str, Any],
+    *,
+    label: str,
+) -> Tuple[str, str]:
+    _verify_release_manifest_signature(
+        manifest,
+        manifest_label=label,
+        expected_kind="app",
+    )
+    return (
+        require_minimum_version(
+            manifest.get("app_version"),
+            MIN_SUPPORTED_APP_VERSION,
+            identity_name="已验证签名清单应用版本",
+        ),
+        require_minimum_version(
+            manifest.get("min_launcher_version"),
+            MIN_SUPPORTED_LAUNCHER_VERSION,
+            identity_name="已验证签名清单最低启动器版本",
+        ),
+    )
+
+
+def _strict_signed_launcher_version(manifest: Dict[str, Any], *, label: str) -> str:
+    _verify_release_manifest_signature(
+        manifest,
+        manifest_label=label,
+        expected_kind="launcher",
+    )
+    return require_minimum_version(
+        manifest.get("launcher_version"),
+        MIN_SUPPORTED_LAUNCHER_VERSION,
+        identity_name="已验证签名清单启动器版本",
+    )
 
 
 def _base_dir() -> Path:
@@ -462,6 +545,34 @@ def _show_error(title: str, msg: str) -> None:
         root.destroy()
     except tk.TclError:
         pass
+
+
+def _show_warning(title: str, msg: str) -> bool:
+    root = None
+    try:
+        Win32.enable_dpi()
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showwarning(title, msg)
+        return True
+    except tk.TclError:
+        return False
+    finally:
+        if root is not None:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
+
+
+def _show_handoff_recovery_warning(warning: str) -> bool:
+    return _show_warning(
+        f"{DISPLAY_NAME} 安装恢复警告",
+        (
+            f"{warning}\n\n"
+            "有效的本地 App 将继续启动；请在退出后处理上述安装槽问题。"
+        ),
+    )
 
 
 def _set_use_system_proxy(enabled: bool) -> None:
@@ -846,13 +957,31 @@ def _is_local_app_ready(base: Path) -> bool:
 
 
 def _is_previous_app_ready(base: Path) -> bool:
-    return (_previous_app_dir(base) / DEFAULT_ENTRYPOINT).exists()
+    try:
+        install_txn.validate_app_package_root(_previous_app_dir(base), DEFAULT_ENTRYPOINT)
+        install_txn.require_compatible_app_version(
+            _previous_app_dir(base),
+            identity_name="回退应用版本",
+        )
+    except Exception:
+        return False
+    return True
 
 
-def _recover_incomplete_install(base: Path) -> None:
-    steps = install_txn.InstallTransaction.recover_incomplete(base, log_cb=_log)
+def _recover_incomplete_install(base: Path) -> str:
+    recovery_errors: list[str] = []
+
+    def record_recovery_error(target: Path, message: str) -> None:
+        _log(target, message)
+        recovery_errors.append(str(message).strip())
+
+    steps = install_txn.InstallTransaction.recover_incomplete(
+        base,
+        log_cb=record_recovery_error,
+    )
     if steps:
         _log(base, f"检测到上次安装未完成，已恢复：{', '.join(steps)}")
+    return recovery_errors[-1] if recovery_errors else ""
 
 
 def _write_state(base: Path, state: Dict[str, Any]) -> None:
@@ -1148,14 +1277,16 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
         raise RuntimeError("发布清单下载地址无效")
 
     manifest = _fetch_json(manifest_url)
+    remote_version, min_launcher_version = _strict_signed_app_versions(
+        manifest,
+        label=f"{manifest_name} ",
+    )
     trusted = _launcher_manifest_sources.verified_app_manifest_fields(
         manifest,
         channel=channel,
         label=f"{manifest_name} ",
         default_entrypoint=DEFAULT_ENTRYPOINT,
     )
-    remote_version = str(trusted["remote_version"])
-    min_launcher_version = str(trusted["min_launcher_version"])
     package_asset = str(trusted["package_asset"])
     package_sha256 = str(trusted["package_sha256"])
     entrypoint = str(trusted["entrypoint"])
@@ -1190,12 +1321,15 @@ def _launcher_manifest_from_github_release(release: Dict[str, Any]) -> Dict[str,
     if not manifest_url:
         raise RuntimeError("启动器发布清单下载地址无效")
     manifest = _fetch_json(manifest_url)
+    remote_version = _strict_signed_launcher_version(
+        manifest,
+        label="launcher_manifest.json ",
+    )
     trusted = _launcher_manifest_sources.verified_launcher_manifest_fields(
         manifest,
         label="launcher_manifest.json ",
     )
     asset_name = str(trusted["package_asset"])
-    remote_version = str(trusted["remote_version"])
 
     launcher_asset = _find_asset(assets, asset_name)
     if not launcher_asset:
@@ -1301,13 +1435,16 @@ def _fetch_manifest_from_primary(
             used_anonymous_fallback = True
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
+    remote_version, min_launcher_version = _strict_signed_app_versions(
+        payload,
+        label="国内应用更新清单 ",
+    )
     trusted = _launcher_manifest_sources.verified_app_manifest_fields(
         payload,
         channel=channel,
         label="国内应用更新清单 ",
         default_entrypoint=DEFAULT_ENTRYPOINT,
     )
-    remote_version = str(trusted["remote_version"])
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
         _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
@@ -1315,7 +1452,6 @@ def _fetch_manifest_from_primary(
     package_sha256 = str(trusted["package_sha256"])
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
     entrypoint = str(trusted["entrypoint"])
-    min_launcher_version = str(trusted["min_launcher_version"])
     source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     if used_anonymous_fallback:
         source_name = f"{source_name} (匿名回退)"
@@ -1360,11 +1496,14 @@ def _fetch_launcher_manifest_from_primary(
         except Exception as anon_err:
             raise RuntimeError(f"{first_err}; 匿名回退失败: {anon_err}") from anon_err
 
+    remote_version = _strict_signed_launcher_version(
+        payload,
+        label="国内启动器更新清单 ",
+    )
     trusted = _launcher_manifest_sources.verified_launcher_manifest_fields(
         payload,
         label="国内启动器更新清单 ",
     )
-    remote_version = str(trusted["remote_version"])
     raw_package_url = str(payload.get("package_url", "")).strip()
     package_url = (
         _join_base_url_path(PRIMARY_UPDATE_BASE_URL, raw_package_url) if raw_package_url else ""
@@ -1614,18 +1753,23 @@ class UpdateService:
 
     def check(self) -> Dict[str, Any]:
         local_version, manifest = self.resolve_app_manifest()
-        remote_version = str(manifest.get("remote_version", "")).strip()
-        min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
+        remote_version = require_minimum_version(
+            manifest.get("remote_version"),
+            MIN_SUPPORTED_APP_VERSION,
+            identity_name="已验证签名清单应用版本",
+        )
+        min_launcher_version = require_minimum_version(
+            manifest.get("min_launcher_version"),
+            MIN_SUPPORTED_LAUNCHER_VERSION,
+            identity_name="已验证签名清单最低启动器版本",
+        )
         package_url = str(manifest.get("package_url", "")).strip()
         source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
-        if not remote_version:
-            raise RuntimeError("更新清单字段缺失")
-
         update_available = _version_is_newer(remote_version, local_version)
         app_requires_launcher_update = bool(
             update_available
             and min_launcher_version
-            and _version_is_older(LAUNCHER_VERSION, min_launcher_version)
+            and not _launcher_meets_minimum(min_launcher_version)
         )
         if update_available and not package_url:
             raise RuntimeError("更新清单字段缺失")
@@ -1642,7 +1786,11 @@ class UpdateService:
         launcher_check_warning = ""
         try:
             launcher_manifest = self.resolve_launcher_manifest()
-            launcher_remote_version = str(launcher_manifest.get("remote_version", "")).strip()
+            launcher_remote_version = require_minimum_version(
+                launcher_manifest.get("remote_version"),
+                MIN_SUPPORTED_LAUNCHER_VERSION,
+                identity_name="已验证签名清单启动器版本",
+            )
             launcher_source_name = (
                 str(launcher_manifest.get("source_name", "GitHub")).strip() or "GitHub"
             )
@@ -1742,8 +1890,16 @@ def _download_update_from_manifest(
         if status_cb:
             status_cb(title, detail, progress, level)
 
-    remote_version = str(manifest.get("remote_version", "")).strip()
-    min_launcher_version = str(manifest.get("min_launcher_version", "")).strip()
+    remote_version = require_minimum_version(
+        manifest.get("remote_version"),
+        MIN_SUPPORTED_APP_VERSION,
+        identity_name="已验证签名清单应用版本",
+    )
+    min_launcher_version = require_minimum_version(
+        manifest.get("min_launcher_version"),
+        MIN_SUPPORTED_LAUNCHER_VERSION,
+        identity_name="已验证签名清单最低启动器版本",
+    )
     package_url = str(manifest.get("package_url", "")).strip()
     package_asset = str(manifest.get("package_asset", "")).strip()
     package_sha256 = _require_remote_checksum(
@@ -1752,13 +1908,13 @@ def _download_update_from_manifest(
     )
     entrypoint = str(manifest.get("entrypoint", DEFAULT_ENTRYPOINT)).strip() or DEFAULT_ENTRYPOINT
     source_name = str(manifest.get("source_name", "GitHub")).strip() or "GitHub"
-    if not remote_version or not package_url:
+    if not package_url:
         raise RuntimeError("更新清单字段缺失")
     package_sha256 = _require_remote_checksum(
         package_sha256,
         artifact_label="应用更新清单",
     )
-    if min_launcher_version and _version_is_older(LAUNCHER_VERSION, min_launcher_version):
+    if min_launcher_version and not _launcher_meets_minimum(min_launcher_version):
         raise RuntimeError(
             f"此版本要求先更新启动器（当前 v{LAUNCHER_VERSION}，要求 >= v{min_launcher_version}）"
         )
@@ -1834,6 +1990,7 @@ def _download_update_from_manifest(
             entrypoint,
             status_cb=notify,
             cancel_cb=cancel_cb,
+            expected_version=remote_version,
         )
     finally:
         try:
@@ -2209,7 +2366,12 @@ def _launch_app(base: Path, channel: str) -> None:
         app_runtime_dir=_app_runtime_dir,
         is_local_app_ready=_is_local_app_ready,
         is_source_test_run=_is_source_test_run,
+        read_app_version=install_txn.read_app_version_identity,
         default_entrypoint=DEFAULT_ENTRYPOINT,
+        web_dashboard_autostart=_PENDING_WEB_DASHBOARD_AUTOSTART,
+        web_dashboard_auto_open=_PENDING_WEB_DASHBOARD_AUTO_OPEN,
+        displayed_recovery_warning=_PENDING_DISPLAYED_RECOVERY_WARNING,
+        recovery_warning_callback=_show_handoff_recovery_warning,
     )
 
 
@@ -2603,8 +2765,9 @@ class LauncherDetailsDialog(tk.Toplevel):
 class LauncherWindow:
     """Simple, user-friendly GUI for launcher status and recovery actions."""
 
-    def __init__(self, base: Path, channel: str):
+    def __init__(self, base: Path, channel: str, recovery_warning: str = ""):
         self.base = base
+        self.recovery_warning = str(recovery_warning or "").strip()[:1000]
         self.source_test_mode = _is_source_test_run(base)
         self.saved_state = _read_state(base)
         self.detected_channel = channel
@@ -2622,6 +2785,16 @@ class LauncherWindow:
             )
         else:
             self.use_system_proxy = bool(raw_proxy)
+        self.web_dashboard_autostart = _strict_saved_bool(
+            self.saved_state,
+            "web_dashboard_autostart",
+            DEFAULT_WEB_DASHBOARD_AUTOSTART,
+        )
+        self.web_dashboard_auto_open = _strict_saved_bool(
+            self.saved_state,
+            "web_dashboard_auto_open",
+            DEFAULT_WEB_DASHBOARD_AUTO_OPEN,
+        )
         _set_use_system_proxy(self.use_system_proxy)
         self.client_identity = _build_client_identity(base)
         self.local_version = install_txn.read_local_app_version(_app_runtime_dir(base))
@@ -2665,8 +2838,8 @@ class LauncherWindow:
         self.progress_height = 12
         self._button_styles: Dict[str, Dict[str, str]] = {}
         self._layout_after_id: Optional[str] = None
-        self._base_min_w = self._px(760)
-        self._base_min_h = self._px(520)
+        self._base_min_w = self._px(880)
+        self._base_min_h = self._px(600)
         self._max_w = self._base_min_w
         self._max_h = self._base_min_h
         self._min_w = self._base_min_w
@@ -2676,12 +2849,20 @@ class LauncherWindow:
         self.root.title(DISPLAY_NAME)
         _apply_window_icon(self.root)
         self._init_window_scale_context()
-        self.root.geometry(f"{self._px(760)}x{self._px(520)}")
+        self.root.geometry(f"{self._px(880)}x{self._px(600)}")
         self.root.resizable(True, True)
         self.root.configure(bg=_THEME["BG"])
         self.root.protocol("WM_DELETE_WINDOW", self._on_exit)
         self.channel_var = tk.StringVar(master=self.root, value=self.channel)
         self.proxy_var = tk.BooleanVar(master=self.root, value=self.use_system_proxy)
+        self.web_dashboard_autostart_var = tk.BooleanVar(
+            master=self.root,
+            value=self.web_dashboard_autostart,
+        )
+        self.web_dashboard_auto_open_var = tk.BooleanVar(
+            master=self.root,
+            value=self.web_dashboard_auto_open,
+        )
         self.download_source_var = tk.StringVar(
             master=self.root,
             value=_download_source_label(self.download_source_mode),
@@ -2690,9 +2871,17 @@ class LauncherWindow:
         self._build_ui()
         self._fit_window_to_screen()
         self.root.bind("<Configure>", self._on_window_configure, add="+")
+        self.root.bind("<Control-Return>", self._on_launch_shortcut, add="+")
         self._refresh_wraplengths()
         self._schedule_layout_reflow()
-        if self.source_test_mode:
+        if self.recovery_warning:
+            self._set_status(
+                "安装恢复已安全停止",
+                self._with_recovery_warning("有效的本地 App 仍可启动；请先处理上述安装槽问题。"),
+                0.0,
+                "warning",
+            )
+        elif self.source_test_mode:
             self._set_status(
                 "源码测试模式",
                 "检测到同目录 Bomana.pyw，已跳过自动在线更新检查，将直接启动本地源码。",
@@ -2878,7 +3067,7 @@ class LauncherWindow:
 
         self.eyebrow_lbl = tk.Label(
             title_stack,
-            text="WAR THUNDER FIELD CONSOLE",
+            text="BOMANA DESKTOP + WEB",
             font=self._font(8, "bold"),
             fg=_THEME["BLUE"],
             bg=_THEME["BG"],
@@ -2898,7 +3087,10 @@ class LauncherWindow:
 
         self.meta_lbl = tk.Label(
             title_stack,
-            text=f"启动器 v{LAUNCHER_VERSION}  |  最低兼容应用包 v{MIN_SUPPORTED_APP_VERSION}+",
+            text=(
+                f"Launcher {LAUNCHER_VERSION}  ·  App {MIN_SUPPORTED_APP_VERSION}+  ·  "
+                "普通权限运行"
+            ),
             font=self._font(10),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["BG"],
@@ -2936,7 +3128,7 @@ class LauncherWindow:
             padx=self._px(18),
             pady=(0, self._px(12)),
         )
-        content_row.grid_columnconfigure(0, weight=0, minsize=self._px(258))
+        content_row.grid_columnconfigure(0, weight=0, minsize=self._px(310))
         content_row.grid_columnconfigure(1, weight=1)
         content_row.grid_rowconfigure(0, weight=1)
 
@@ -2952,7 +3144,7 @@ class LauncherWindow:
         controls_head.pack(fill="x", padx=self._px(12), pady=(self._px(12), self._px(8)))
         tk.Label(
             controls_head,
-            text="部署配置",
+            text="启动与版本",
             font=self._font(10, "bold"),
             fg=_THEME["TEXT"],
             bg=_THEME["CARD_ALT"],
@@ -2960,7 +3152,7 @@ class LauncherWindow:
         ).pack(anchor="w")
         tk.Label(
             controls_head,
-            text="通道、下载源与代理",
+            text="选择应用版本，并配置本机 Web 控制台",
             font=self._font(8),
             fg=_THEME["TEXT_MUTED"],
             bg=_THEME["CARD_ALT"],
@@ -2969,9 +3161,11 @@ class LauncherWindow:
 
         picker_row = tk.Frame(controls_card, bg=_THEME["CARD_ALT"])
         picker_row.pack(fill="x", padx=self._px(12), pady=(0, self._px(10)))
+        picker_row.grid_columnconfigure(0, weight=1)
+        picker_row.grid_columnconfigure(1, weight=1)
 
         channel_cluster = tk.Frame(picker_row, bg=_THEME["CARD_ALT"])
-        channel_cluster.pack(fill="x", pady=(0, self._px(10)))
+        channel_cluster.grid(row=0, column=0, sticky="ew", padx=(0, self._px(5)))
         tk.Label(
             channel_cluster,
             text="通道",
@@ -2991,7 +3185,7 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
             bd=0,
-            width=18,
+            width=12,
             anchor="w",
             cursor="hand2",
             font=self._font(10),
@@ -3007,7 +3201,7 @@ class LauncherWindow:
         self.channel_menu.pack(anchor="w", pady=(self._px(5), 0))
 
         source_cluster = tk.Frame(picker_row, bg=_THEME["CARD_ALT"])
-        source_cluster.pack(fill="x", pady=(0, self._px(10)))
+        source_cluster.grid(row=0, column=1, sticky="ew", padx=(self._px(5), 0))
         tk.Label(
             source_cluster,
             text="来源",
@@ -3032,7 +3226,7 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
             bd=0,
-            width=20,
+            width=13,
             anchor="w",
             cursor="hand2",
             font=self._font(9),
@@ -3049,7 +3243,7 @@ class LauncherWindow:
 
         self.proxy_chk = tk.Checkbutton(
             picker_row,
-            text="使用系统代理",
+            text="优先使用系统代理（失败时直连重试）",
             variable=self.proxy_var,
             command=self._on_proxy_changed,
             bg=_THEME["CARD_ALT"],
@@ -3062,7 +3256,62 @@ class LauncherWindow:
             cursor="hand2",
             font=self._font(9),
         )
-        self.proxy_chk.pack(anchor="w", pady=(0, self._px(4)))
+        self.proxy_chk.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(self._px(8), self._px(2)),
+        )
+
+        web_card = tk.Frame(
+            controls_card,
+            bg=_THEME["CARD"],
+            highlightthickness=1,
+            highlightbackground=_THEME["SEPARATOR"],
+        )
+        web_card.pack(fill="x", padx=self._px(12), pady=(0, self._px(10)))
+        tk.Label(
+            web_card,
+            text="Web 控制台 · 端口与配对由 App 管理",
+            font=self._font(9, "bold"),
+            fg=_THEME["TEXT"],
+            bg=_THEME["CARD"],
+            anchor="w",
+        ).pack(fill="x", padx=self._px(10), pady=(self._px(7), self._px(4)))
+
+        web_check_style = {
+            "bg": _THEME["CARD"],
+            "fg": _THEME["TEXT_DIM"],
+            "activebackground": _THEME["CARD"],
+            "activeforeground": _THEME["TEXT"],
+            "selectcolor": _THEME["CARD_ALT"],
+            "bd": 0,
+            "highlightthickness": 0,
+            "cursor": "hand2",
+            "font": self._font(9),
+            "anchor": "w",
+        }
+        self.web_dashboard_autostart_chk = tk.Checkbutton(
+            web_card,
+            text="随 App 启动本机 Web 服务",
+            variable=self.web_dashboard_autostart_var,
+            command=self._on_web_preferences_changed,
+            **web_check_style,
+        )
+        self.web_dashboard_autostart_chk.pack(
+            fill="x", padx=self._px(10), pady=(0, self._px(1))
+        )
+        self.web_dashboard_auto_open_chk = tk.Checkbutton(
+            web_card,
+            text="启动成功后自动打开本机页面",
+            variable=self.web_dashboard_auto_open_var,
+            command=self._on_web_preferences_changed,
+            **web_check_style,
+        )
+        self.web_dashboard_auto_open_chk.pack(
+            fill="x", padx=self._px(10), pady=(0, self._px(6))
+        )
 
         self.selection_summary_lbl = tk.Label(
             controls_card,
@@ -3196,7 +3445,7 @@ class LauncherWindow:
 
         self.hint_lbl = tk.Label(
             card,
-            text="首次使用请先下载应用包；后续更新会自动保留一个上一版本供回退。",
+            text="首次使用请先安装应用包；每次更新会保留一个可验证的上一版本。",
             font=self._font(9),
             fg=_THEME["TEXT_MUTED"],
             bg=_THEME["CARD"],
@@ -3700,7 +3949,12 @@ class LauncherWindow:
                         self.latest_launcher_check_warning = ""
                         self.launcher_update_available = False
                         self.last_check_error = str(payload.get("error", "检查失败"))
-                        self._set_status("检查失败", self.last_check_error, 0.0, "warning")
+                        self._set_status(
+                            "检查失败",
+                            self._with_recovery_warning(self.last_check_error),
+                            0.0,
+                            "warning",
+                        )
                     self._refresh_installed_versions()
                     self.current_task = ""
                     self._set_running(False)
@@ -3846,6 +4100,8 @@ class LauncherWindow:
 
     def _compose_check_detail(self) -> str:
         lines = []
+        if self.recovery_warning:
+            lines.append(f"安装恢复已安全停止：{self.recovery_warning}")
         if self.last_check_ok and self.update_available:
             size_text = _format_size_text(self.latest_package_size)
             if self.app_requires_launcher_update and self.latest_min_launcher_version:
@@ -3872,21 +4128,30 @@ class LauncherWindow:
             lines.append(f"启动器更新检查暂不可用：{self.latest_launcher_check_warning}")
         return "\n".join(line for line in lines if line)
 
+    def _with_recovery_warning(self, detail: str) -> str:
+        lines = []
+        if self.recovery_warning:
+            lines.append(f"安装恢复已安全停止：{self.recovery_warning}")
+        if detail:
+            lines.append(detail)
+        return "\n".join(lines)
+
     def _subline_text(self) -> str:
         base = f"通道：{self.channel}  |  本地版本：v{self.local_version}"
         if self.previous_version != "0.0.0":
+            if not _is_previous_app_ready(self.base):
+                return f"{base}  |  上一版不兼容：v{self.previous_version}"
             return f"{base}  |  可回退：v{self.previous_version}"
         return base
 
     def _rollback_status_text(self) -> str:
         if self.source_test_mode:
-            return "源码模式不会写入 app/ 安装槽，因此不提供版本回退。"
+            return "源码模式不写入安装槽，因此不提供回退。"
         if self.previous_version != "0.0.0":
-            return (
-                f"上一版本 v{self.previous_version} 已保留。回退会与当前 v{self.local_version} "
-                "对调，可再次切回。"
-            )
-        return "更新或导入本地包后，会自动保留一个上一版本用于快速回退。"
+            if not _is_previous_app_ready(self.base):
+                return f"上一版 v{self.previous_version} 与 Launcher 3 不兼容，无法回退。"
+            return f"上一版 v{self.previous_version}；回退后仍保留当前 v{self.local_version}。"
+        return "成功更新或导入后，会自动保留一个上一版本。"
 
     def _refresh_installed_versions(self) -> None:
         self.local_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
@@ -3903,7 +4168,7 @@ class LauncherWindow:
     def _update_launch_button_label(self) -> None:
         if self.source_test_mode:
             self.launch_btn.config(text="启动源码应用")
-            self._style_action_button(self.launch_btn, "secondary")
+            self._style_action_button(self.launch_btn, "primary")
             return
         if self.last_download_success:
             self.launch_btn.config(text="启动（已下载更新）")
@@ -3911,14 +4176,14 @@ class LauncherWindow:
             return
         if self.last_check_ok and not self.update_available:
             self.launch_btn.config(text="启动应用")
-            self._style_action_button(self.launch_btn, "secondary")
+            self._style_action_button(self.launch_btn, "primary")
             return
         if self.last_check_ok and self.update_available:
             self.launch_btn.config(text="启动本地（跳过更新）")
             self._style_action_button(self.launch_btn, "secondary")
             return
         self.launch_btn.config(text="启动应用（本地）")
-        self._style_action_button(self.launch_btn, "secondary")
+        self._style_action_button(self.launch_btn, "primary")
 
     def _update_download_button_state(self) -> None:
         if self.source_test_mode:
@@ -3954,7 +4219,7 @@ class LauncherWindow:
                 self.rollback_status_lbl.config(text=self._rollback_status_text())
             self._style_action_button(self.rollback_btn, "secondary")
             return
-        if self.previous_version != "0.0.0":
+        if self.previous_version != "0.0.0" and _is_previous_app_ready(self.base):
             self.rollback_btn.config(text=f"回退 v{self.previous_version}", state="normal")
             if hasattr(self, "rollback_status_lbl"):
                 self.rollback_status_lbl.config(text=self._rollback_status_text())
@@ -3999,6 +4264,10 @@ class LauncherWindow:
             self.proxy_chk.config(
                 state=("normal" if running and self.current_task == "check" else state)
             )
+        if hasattr(self, "web_dashboard_autostart_chk"):
+            self.web_dashboard_autostart_chk.config(state="normal")
+        if hasattr(self, "web_dashboard_auto_open_chk"):
+            self.web_dashboard_auto_open_chk.config(state="normal")
 
         if running:
             self.retry_btn.pack_forget()
@@ -4093,7 +4362,7 @@ class LauncherWindow:
                     )
             else:
                 self.hint_lbl.config(text="启动后会自动检查更新。")
-            if (not self.source_test_mode) and self.previous_version != "0.0.0":
+            if (not self.source_test_mode) and _is_previous_app_ready(self.base):
                 self.hint_lbl.config(
                     text=f"{self.hint_lbl.cget('text')}\n可通过“回退 v{self.previous_version}”快速切回上一版。"
                 )
@@ -4102,7 +4371,7 @@ class LauncherWindow:
     def _show_error_actions(self) -> None:
         if _is_local_app_ready(self.base):
             text = "可点击“重新检查”或“打开下载页”。也可点“下载目录”查看已缓存文件，或直接点击“启动应用”。"
-            if self.previous_version != "0.0.0":
+            if _is_previous_app_ready(self.base):
                 text += f"\n如果新版异常，也可以点击“回退 v{self.previous_version}”。"
             self.hint_lbl.config(text=text)
         else:
@@ -4125,6 +4394,15 @@ class LauncherWindow:
             state.pop("download_source_mode", None)
         if extra:
             state.update(extra)
+        for key in tuple(state):
+            if isinstance(key, str) and key.startswith("web_dashboard_"):
+                state.pop(key, None)
+        state.update(
+            {
+                "web_dashboard_autostart": bool(self.web_dashboard_autostart),
+                "web_dashboard_auto_open": bool(self.web_dashboard_auto_open),
+            }
+        )
         _write_state(self.base, state)
 
     def _on_proxy_changed(self) -> None:
@@ -4134,7 +4412,11 @@ class LauncherWindow:
         self.use_system_proxy = bool(self.proxy_var.get())
         _set_use_system_proxy(self.use_system_proxy)
         self._save_launcher_state()
-        mode = "系统代理" if self.use_system_proxy else "直连模式"
+        mode = (
+            "系统代理优先（国内服务失败后自动直连重试）"
+            if self.use_system_proxy
+            else "直连优先（国内服务失败后自动尝试系统代理）"
+        )
         if self.running and self.current_task == "check":
             self._queue_recheck_after_check(
                 f"当前使用：{mode}。本次检查结束后会按新的网络设置自动重查。"
@@ -4145,6 +4427,15 @@ class LauncherWindow:
             f"当前使用：{mode}。后续检查/下载将按此设置进行。",
             self.progress_value,
             "info",
+        )
+
+    def _on_web_preferences_changed(self) -> None:
+        self.web_dashboard_autostart = bool(self.web_dashboard_autostart_var.get())
+        self.web_dashboard_auto_open = bool(self.web_dashboard_auto_open_var.get())
+        self._save_launcher_state()
+        _set_pending_web_preferences(
+            self.web_dashboard_autostart,
+            self.web_dashboard_auto_open,
         )
 
     def _on_download_source_changed(self, *_args) -> None:
@@ -4302,7 +4593,7 @@ class LauncherWindow:
             )
             return
         if self.previous_version == "0.0.0" or not _is_previous_app_ready(self.base):
-            messagebox.showinfo(DISPLAY_NAME, "当前没有可回退的上一版本。")
+            messagebox.showinfo(DISPLAY_NAME, "当前没有兼容 Launcher 3 的可回退版本。")
             return
         ok = messagebox.askyesno(
             DISPLAY_NAME,
@@ -4411,7 +4702,14 @@ class LauncherWindow:
             )
             self._set_status("无法启动", detail, None, "error")
             return None
-        return install_txn.read_local_app_version(_app_runtime_dir(self.base))
+        try:
+            return install_txn.require_compatible_app_version(
+                _app_runtime_dir(self.base),
+                identity_name="启动应用版本",
+            )
+        except Exception as exc:
+            self._set_status("无法启动", str(exc), None, "error")
+            return None
 
     def _prepare_ordinary_launch(self, final_version: str) -> None:
         self.decision = LaunchDecision(action="launch", final_version=final_version, warning="")
@@ -4428,6 +4726,11 @@ class LauncherWindow:
         if final_version is None:
             return
         self._prepare_ordinary_launch(final_version)
+
+    def _on_launch_shortcut(self, _event=None) -> str:
+        if str(self.launch_btn.cget("state")) != "disabled":
+            self._on_launch()
+        return "break"
 
     def _open_releases(self) -> None:
         try:
@@ -4457,6 +4760,10 @@ class LauncherWindow:
 
     def _commit_launch(self) -> None:
         if self.decision.action == "launch":
+            _set_pending_web_preferences(
+                self.web_dashboard_autostart,
+                self.web_dashboard_auto_open,
+            )
             self.root.destroy()
 
     def _finalize_exit(self) -> None:
@@ -4496,7 +4803,8 @@ class LauncherWindow:
 
 def main() -> None:
     base = _base_dir()
-    _recover_incomplete_install(base)
+    recovery_warning = _recover_incomplete_install(base)
+    _set_pending_recovery_warning(recovery_warning)
     _cleanup_temp_files_on_launcher_upgrade(base)
     _cleanup_stale_launcher_self_update_temp(base)
     _cleanup_legacy_launcher_self_update_files(base)
@@ -4505,7 +4813,7 @@ def main() -> None:
     detected_channel = _detect_channel()
     identity = _build_client_identity(base)
 
-    gui = LauncherWindow(base, detected_channel)
+    gui = LauncherWindow(base, detected_channel, recovery_warning=recovery_warning)
     decision = gui.run()
     if decision.action != "launch":
         return

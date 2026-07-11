@@ -3,7 +3,11 @@ from pathlib import Path
 import pytest
 
 from launcher import core as launcher_core
-from launcher.install_txn import read_local_app_version, validate_app_package_root
+from launcher.install_txn import (
+    read_local_app_version,
+    require_compatible_app_version,
+    validate_app_package_root,
+)
 
 
 def test_launcher_core_version_and_source_helpers() -> None:
@@ -133,9 +137,27 @@ def test_launcher_install_reads_metadata_version(tmp_path: Path) -> None:
         "from bomana import metadata as _metadata\n__version__ = _metadata.__version__\n",
         encoding="utf-8",
     )
-    (package_dir / "metadata.py").write_text('__version__ = "7.0.0"\n', encoding="utf-8")
+    (package_dir / "metadata.py").write_text('__version__ = "8.0.0"\n', encoding="utf-8")
 
-    assert read_local_app_version(app_dir) == "7.0.0"
+    assert read_local_app_version(app_dir) == "8.0.0"
+    assert require_compatible_app_version(app_dir) == "8.0.0"
+
+
+@pytest.mark.parametrize("version", ["7.99.99", " 8.0.0", "08.0.0", "8.0.0-rc1"])
+def test_launcher_install_rejects_incompatible_candidate_identity(
+    tmp_path: Path,
+    version: str,
+) -> None:
+    app_dir = tmp_path / "app"
+    package_dir = app_dir / "bomana"
+    package_dir.mkdir(parents=True)
+    (package_dir / "metadata.py").write_text(
+        f'__version__ = "{version}"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="(格式无效|过旧)"):
+        require_compatible_app_version(app_dir)
 
 
 def test_launcher_install_rejects_legacy_config_py_marker(tmp_path: Path) -> None:
@@ -143,8 +165,24 @@ def test_launcher_install_rejects_legacy_config_py_marker(tmp_path: Path) -> Non
     package_dir = app_dir / "bomana"
     package_dir.mkdir(parents=True)
     (app_dir / "Bomana.pyw").write_text("# entry\n", encoding="utf-8")
+    (app_dir / "bomana_version.py").write_text("# boundary\n", encoding="utf-8")
     (package_dir / "metadata.py").write_text('__version__ = "7.0.0"\n', encoding="utf-8")
     (package_dir / "config.py").write_text('__version__ = "7.0.0"\n', encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="bomana/config/__init__\\.py"):
+        validate_app_package_root(app_dir, "Bomana.pyw")
+
+
+def test_launcher_install_requires_shared_version_boundary_in_app_package(tmp_path: Path) -> None:
+    app_dir = tmp_path / "app"
+    config_dir = app_dir / "bomana" / "config"
+    config_dir.mkdir(parents=True)
+    (app_dir / "Bomana.pyw").write_text("# entry\n", encoding="utf-8")
+    (config_dir / "__init__.py").write_text("", encoding="utf-8")
+    (app_dir / "bomana" / "metadata.py").write_text(
+        '__version__ = "8.0.0"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="bomana_version\\.py"):
         validate_app_package_root(app_dir, "Bomana.pyw")

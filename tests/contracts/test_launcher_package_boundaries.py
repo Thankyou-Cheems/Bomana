@@ -19,13 +19,13 @@ class GuardedManifest(dict[str, Any]):
             {
                 "schema_version": 1,
                 "channel": "Enhanced",
-                "app_version": "7.0.0",
-                "min_launcher_version": "2.0.0",
+                "app_version": "8.0.0",
+                "min_launcher_version": "3.0.0",
                 "entrypoint": "Bomana.pyw",
-                "package_asset": "Bomana_app_Enhanced_v7.0.0.zip",
+                "package_asset": "Bomana_app_Enhanced_v8.0.0.zip",
                 "package_sha256": "a" * 64,
-                "launcher_version": "2.0.0",
-                "launcher_asset": "Bomana_launcher_v2.0.0.exe",
+                "launcher_version": "3.0.0",
+                "launcher_asset": "Bomana_launcher_v3.0.0.exe",
                 "launcher_sha256": "b" * 64,
                 "launcher_size_bytes": 123,
             }
@@ -67,10 +67,10 @@ def test_verified_app_manifest_projection_exposes_only_trusted_runtime_fields() 
     manifest = {
         "schema_version": 1,
         "channel": "Enhanced",
-        "app_version": "7.0.0",
-        "min_launcher_version": "2.0.0",
+        "app_version": "8.0.0",
+        "min_launcher_version": "3.0.0",
         "entrypoint": "Bomana.pyw",
-        "package_asset": "Bomana_app_Enhanced_v7.0.0.zip",
+        "package_asset": "Bomana_app_Enhanced_v8.0.0.zip",
         "package_sha256": "a" * 64,
     }
 
@@ -104,9 +104,9 @@ def test_verified_app_manifest_projection_exposes_only_trusted_runtime_fields() 
         verify.verify_release_manifest_signature = original
 
     assert trusted == {
-        "remote_version": "7.0.0",
-        "min_launcher_version": "2.0.0",
-        "package_asset": "Bomana_app_Enhanced_v7.0.0.zip",
+        "remote_version": "8.0.0",
+        "min_launcher_version": "3.0.0",
+        "package_asset": "Bomana_app_Enhanced_v8.0.0.zip",
         "package_sha256": "a" * 64,
         "entrypoint": "Bomana.pyw",
     }

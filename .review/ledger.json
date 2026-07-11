@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "findings": [
     {
       "file": "bomana/core/telemetry.py",
@@ -918,9 +918,9 @@
       "status": "open",
       "created_at": "2026-06-18T01:39:33+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-07-11T07:54:31+00:00"
+        "status": "near",
+        "detail": "snippet is near but outside exact range 419-432; first line near 422",
+        "at": "2026-07-11T12:20:04+00:00"
       }
     },
     {
@@ -948,9 +948,9 @@
       "status": "open",
       "created_at": "2026-06-18T01:39:33+00:00",
       "snippet_check": {
-        "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-07-11T07:54:31+00:00"
+        "status": "near",
+        "detail": "snippet is near but outside exact range 736-750; first line near 739",
+        "at": "2026-07-11T12:20:04+00:00"
       }
     },
     {
@@ -1519,8 +1519,8 @@
       "created_at": "2026-06-28T03:59:35+00:00",
       "snippet_check": {
         "status": "drifted",
-        "detail": "snippet exists but not at lines 177-178; first line now near line 195",
-        "at": "2026-07-11T07:54:31+00:00"
+        "detail": "snippet exists elsewhere, not at lines 177-178; first line near 209",
+        "at": "2026-07-11T12:20:04+00:00"
       }
     },
     {
@@ -1837,8 +1837,8 @@
       "created_at": "2026-07-10T12:54:01+00:00",
       "snippet_check": {
         "status": "ok",
-        "detail": "snippet matches cited lines",
-        "at": "2026-07-11T07:54:31+00:00"
+        "detail": "snippet matches cited range",
+        "at": "2026-07-11T12:20:04+00:00"
       }
     },
     {
@@ -2495,6 +2495,398 @@
       },
       "resolved_at": "2026-07-11T07:54:25+00:00",
       "resolution_note": "Deleted the unreferenced one-time findings import; persistent ledger/report state remains and repository search found no consumer."
+    },
+    {
+      "file": "launcher.pyw",
+      "line_start": 4311,
+      "line_end": 4329,
+      "snippet": "    def _save_launcher_state(self, extra: Optional[Dict[str, Any]] = None) -> None:\n        state = _read_state(self.base)\n        state.update(\n            {\n                \"launcher_version\": LAUNCHER_VERSION,\n                \"channel\": self.channel,\n                \"use_system_proxy\": bool(self.use_system_proxy),\n                \"web_dashboard_autostart\": bool(self.web_dashboard_autostart),\n                \"web_dashboard_auto_open\": bool(self.web_dashboard_auto_open),\n                \"state_updated_utc\": _now_utc_iso(),\n            }\n        )\n        if self.download_source_mode:\n            state[\"download_source_mode\"] = self.download_source_mode\n        else:\n            state.pop(\"download_source_mode\", None)\n        if extra:\n            state.update(extra)\n        _write_state(self.base, state)",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "CFG-10: Launcher retains forbidden legacy Web persistence fields",
+      "impact": "Saving either allowed Web preference preserves stale or manually injected LAN, host, pairing, session, or control Web fields in launcher_state.json, so Launcher persistence is broader than the exact two-boolean contract even though the current App does not consume those fields.",
+      "fix": "Before writing launcher state, remove every web_dashboard_ key and then write back only strict boolean web_dashboard_autostart and web_dashboard_auto_open; pin the migration behavior with a stale-state test.",
+      "spec_clause": "CFG-10",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "A LauncherWindow probe seeded web_dashboard_lan_control=true and web_dashboard_host=192.168.1.7; _save_launcher_state preserved both fields."
+        },
+        {
+          "kind": "read",
+          "detail": "_save_launcher_state reads the full prior state and updates allowed preferences without removing forbidden Web keys."
+        },
+        {
+          "kind": "spec",
+          "detail": "CFG-10: The only Launcher-persisted Web preferences MUST be boolean web_dashboard_autostart and boolean web_dashboard_auto_open."
+        }
+      ],
+      "id": "F-3a7fd0a2",
+      "status": "fixed",
+      "created_at": "2026-07-11T10:25:27+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T10:25:27+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-3a1728fc",
+          "name": "legacy:ruff",
+          "kind": "lint",
+          "cmd": "ruff check .",
+          "cwd": ".",
+          "started_at": "2026-07-11T11:24:40.841528+00:00"
+        },
+        {
+          "check_id": "C-a0da42b6",
+          "name": "legacy:pytest",
+          "kind": "test",
+          "cmd": "pytest -q",
+          "cwd": ".",
+          "started_at": "2026-07-11T11:24:40.878227+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T11:25:14+00:00",
+      "resolution_note": "Projected launcher persistence back onto exactly two strict boolean web_dashboard_ preferences after applying legacy state and extra metadata; added forbidden-key migration test and PITFALLS pin; project Ruff and all 620 tests passed."
+    },
+    {
+      "file": "launcher/install_txn.py",
+      "line_start": 275,
+      "line_end": 313,
+      "snippet": "    def recover_incomplete(cls, base: Path, log_cb: LogCallback | None = None) -> list[str]:\n        transaction = cls(base)\n        steps: list[str] = []\n        try:\n            if transaction.app_dir.exists() and transaction.backup_dir.exists():\n                require_compatible_app_version(\n                    transaction.app_dir,\n                    identity_name=\"当前应用版本\",\n                )\n                require_compatible_app_version(\n                    transaction.backup_dir,\n                    identity_name=\"恢复备份应用版本\",\n                )\n\n            if (not transaction.app_dir.exists()) and transaction.backup_dir.exists():\n                require_compatible_app_version(\n                    transaction.backup_dir,\n                    identity_name=\"恢复备份应用版本\",\n                )\n                os.replace(str(transaction.backup_dir), str(transaction.app_dir))\n                steps.append(\"restore_backup\")\n\n            if transaction.app_dir.exists() and transaction.backup_dir.exists():\n                if transaction.previous_dir.exists():\n                    shutil.rmtree(transaction.previous_dir, ignore_errors=True)\n                os.replace(str(transaction.backup_dir), str(transaction.previous_dir))\n                steps.append(\"promote_backup_to_previous\")\n\n            if transaction.new_dir.exists():\n                if not transaction.app_dir.exists():\n                    require_compatible_app_version(\n                        transaction.new_dir,\n                        identity_name=\"恢复暂存应用版本\",\n                    )\n                    os.replace(str(transaction.new_dir), str(transaction.app_dir))\n                    steps.append(\"promote_new\")\n                else:\n                    shutil.rmtree(transaction.new_dir, ignore_errors=True)\n                    steps.append(\"cleanup_new\")",
+      "category": "data-loss",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "COMPAT-12: recovery mutates valid slots before validating every candidate",
+      "impact": "With a missing app slot, a valid app_backup, and a malformed or below-8 app_new, recovery first moves the valid backup into app and then deletes the unvalidated app_new. Other combinations likewise move backup before inspecting app_new, so a compatibility rejection cannot guarantee a zero-change directory tree.",
+      "fix": "At recovery entry, validate every existing app, app_backup, app_new, and any app_previous slot that could be deleted or replaced before the first filesystem mutation; return unchanged on any validation failure, then execute the existing recovery decisions.",
+      "spec_clause": "COMPAT-12",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "The app_backup os.replace at lines 289-295 runs before the app_new branch; when app then exists, lines 311-312 delete app_new without version validation."
+        },
+        {
+          "kind": "runtime",
+          "detail": "A recovery fixture with missing app, valid 8.x backup, and malformed app_new moved backup to app and removed app_new instead of failing with all paths unchanged."
+        },
+        {
+          "kind": "spec",
+          "detail": "COMPAT-12: A malformed or below-floor candidate MUST fail before any valid installation directory is renamed, replaced, deleted, or swapped."
+        }
+      ],
+      "id": "F-4629036a",
+      "status": "fixed",
+      "created_at": "2026-07-11T10:26:21+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T10:26:21+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-3a1728fc",
+          "name": "legacy:ruff",
+          "kind": "lint",
+          "cmd": "ruff check .",
+          "cwd": ".",
+          "started_at": "2026-07-11T11:24:40.841528+00:00"
+        },
+        {
+          "check_id": "C-a0da42b6",
+          "name": "legacy:pytest",
+          "kind": "test",
+          "cmd": "pytest -q",
+          "cwd": ".",
+          "started_at": "2026-07-11T11:24:40.878227+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T11:25:07+00:00",
+      "resolution_note": "Prevalidated app, backup, previous, and new slots before the first filesystem mutation; added COMPAT-12/17 behavioral contract and PITFALLS incident pin; project Ruff and all 620 tests passed."
+    },
+    {
+      "file": "launcher/install_txn.py",
+      "line_start": 285,
+      "line_end": 290,
+      "snippet": "            for candidate, identity_name in candidates:\n                if candidate.exists():\n                    require_compatible_app_version(\n                        candidate,\n                        identity_name=identity_name,\n                    )",
+      "category": "data-loss",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "COMPAT-12: dangling reparse slots bypass recovery prevalidation",
+      "impact": "On Windows a dangling junction is a present slot but Path.exists() returns false. Recovery can therefore replace a valid previous slot with backup before noticing the malformed reparse entry, so the zero-mutation compatibility guarantee is false for a concrete filesystem layout.",
+      "fix": "Use a non-following lexical existence check for every recovery slot so any present but unreadable or malformed reparse entry reaches the shared strict version boundary before the first mutation; pin the dangling-entry layout.",
+      "spec_clause": "COMPAT-12",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "A valid app/backup/previous layout plus dangling app_new junction skipped candidate validation and replaced the valid previous slot with backup."
+        },
+        {
+          "kind": "read",
+          "detail": "Path.exists follows the reparse target and returns false when it is dangling, so the preflight loop skips it."
+        },
+        {
+          "kind": "spec",
+          "detail": "COMPAT-12: A malformed or below-floor candidate MUST fail before any valid installation directory is renamed, replaced, deleted, or swapped."
+        }
+      ],
+      "id": "F-f7a211e9",
+      "status": "fixed",
+      "created_at": "2026-07-11T11:37:20+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet not found in file",
+        "at": "2026-07-11T12:18:42+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-b39cd94d",
+          "name": "config:pytest",
+          "kind": "test",
+          "cmd": "uv run pytest -q",
+          "cwd": ".",
+          "started_at": "2026-07-11T12:18:53.590232+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T12:19:48+00:00",
+      "resolution_note": "Recovery now uses lexical slot existence and prevalidates dangling reparse entries before every mutation; focused and full tests pass."
+    },
+    {
+      "file": "launcher.pyw",
+      "line_start": 937,
+      "line_end": 940,
+      "snippet": "def _recover_incomplete_install(base: Path) -> None:\n    steps = install_txn.InstallTransaction.recover_incomplete(base, log_cb=_log)\n    if steps:\n        _log(base, f\"检测到上次安装未完成，已恢复：{', '.join(steps)}\")",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "COMPAT-19: recovery rejection is hidden from the Launcher user",
+      "impact": "When a malformed backup or staged slot is rejected, the wrapper only writes launcher.log and discards the failure. LauncherWindow then reports ready or update-check state, so the user cannot see which incompatible slot blocked recovery even though a valid current App may still launch.",
+      "fix": "Return the stable recovery rejection from the wrapper and inject it into LauncherWindow startup and subsequent check details as a persistent warning while keeping a separately validated current App launchable.",
+      "spec_clause": "COMPAT-19",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "With valid app 8.0.0 and malformed backup, recovery logged a format error but the real LauncherWindow displayed ready."
+        },
+        {
+          "kind": "read",
+          "detail": "The wrapper returns None and main discards recovery outcome before constructing LauncherWindow."
+        },
+        {
+          "kind": "spec",
+          "detail": "COMPAT-19: A compatibility rejection MUST preserve every pre-existing valid App slot and surface a stable user-visible reason naming malformed identity, below-floor App, below-floor Launcher, or signed/staged version mismatch."
+        }
+      ],
+      "id": "F-094508e3",
+      "status": "fixed",
+      "created_at": "2026-07-11T11:37:31+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet not found in file",
+        "at": "2026-07-11T12:18:42+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-b39cd94d",
+          "name": "config:pytest",
+          "kind": "test",
+          "cmd": "uv run pytest -q",
+          "cwd": ".",
+          "started_at": "2026-07-11T12:18:53.590232+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T12:19:48+00:00",
+      "resolution_note": "Recovery rejection is retained in Launcher status and final handoff surfaces any newly observed warning before App entry; tests pass."
+    },
+    {
+      "file": "bomana/ui/app.py",
+      "line_start": 1793,
+      "line_end": 1815,
+      "snippet": "        if command.name == \"weapon.select\":\n            if not ENABLE_CCRP:\n                return \"feature_disabled\"\n            catalog = self._get_weapon_catalog()\n            if catalog is None:\n                return \"state_unavailable\"\n            weapon_id = str(command.weapon_id or \"\")\n            weapon = catalog.get(weapon_id)\n            if not weapon:\n                return \"weapon_not_found\"\n            snap = self.game.snapshot()\n            airborne = snap.phase == Phase.ALIVE and not snap.on_ground\n            aircraft = str(getattr(snap, \"aircraft_type_name\", \"\") or \"\")\n            scoped_records, _note, compatible_only = build_weapon_selector_scope(\n                catalog,\n                aircraft_type_name=aircraft,\n                airborne=airborne,\n            )\n            scoped_ids = {str(record.get(\"id\") or \"\") for record in scoped_records}\n            if compatible_only and (\n                weapon_id not in scoped_ids or not catalog.compatible(weapon_id, aircraft)\n            ):\n                return \"weapon_incompatible\"",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "WDB-34: unknown aircraft bypasses Web weapon compatibility recheck",
+      "impact": "While airborne with an unknown aircraft or no matching presets, the desktop selector fallback returns all records with compatible_only false. The Web Tk path then skips catalog.compatible and persists an incompatible weapon, while its control projection marks those choices compatible.",
+      "fix": "Keep the desktop browse fallback, but for Web projection mark every airborne choice compatible only when an aircraft identity is present and catalog.compatible returns true; make the Tk write path reject all other airborne selections with weapon_incompatible.",
+      "spec_clause": "WDB-34",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "An airborne unknown-aircraft probe with catalog.compatible returning false still returned ok and invoked persistence."
+        },
+        {
+          "kind": "read",
+          "detail": "Both projection and Tk execution gate compatibility on compatible_only, which is false precisely for the unverified fallback scope."
+        },
+        {
+          "kind": "spec",
+          "detail": "WDB-34: The Tk owner thread MUST recheck every applicable ENABLE gate, catalog identity, aircraft compatibility, enum, and target validity immediately before execution."
+        }
+      ],
+      "id": "F-2eb7d61d",
+      "status": "fixed",
+      "created_at": "2026-07-11T11:37:47+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet not found in file",
+        "at": "2026-07-11T12:18:42+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-b39cd94d",
+          "name": "config:pytest",
+          "kind": "test",
+          "cmd": "uv run pytest -q",
+          "cwd": ".",
+          "started_at": "2026-07-11T12:18:53.590232+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T12:19:48+00:00",
+      "resolution_note": "Airborne Web projection and Tk execution now require a known aircraft and catalog compatibility; regression and full tests pass."
+    },
+    {
+      "file": "bomana/ui/app.py",
+      "line_start": 1331,
+      "line_end": 1349,
+      "snippet": "    def _set_locked_state(\n        self,\n        locked: bool,\n        *,\n        warn_on_failure: bool = False,\n    ) -> bool:\n        \"\"\"Set and persist the explicit window lock target.\"\"\"\n        previous = self._locked\n        self._locked = locked\n        if not self._save_config(warn_on_failure=warn_on_failure):\n            self._locked = previous\n            return False\n        alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)\n        Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)\n        self.navigation_services.apply_lock_state(locked=self._locked, alpha=alpha)\n        self.runtime_services.apply_hud_lock_state(self._locked)\n        self._update_hint()\n        self._refresh_tray()\n        return True",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "WDB action matrix: same-target locked and beep commands are not successful no-ops",
+      "impact": "When locked or beep already equals the requested target, both setters still persist and run side effects. A transient save failure turns an already-satisfied Web command into persistence_failed, contradicting its defined completion semantics.",
+      "fix": "Return true before persistence and UI/sound side effects when the current locked or beep state already equals the explicit target; add save-failure regression cases for both commands.",
+      "spec_clause": "WDB-37",
+      "evidence": [
+        {
+          "kind": "runtime",
+          "detail": "With save forced false, same-target probes returned locked_same_target=false and beep_same_target=false."
+        },
+        {
+          "kind": "read",
+          "detail": "The locked setter and analogous beep setter mutate then save without an equality fast path."
+        },
+        {
+          "kind": "spec",
+          "detail": "The Complete Action Matrix defines an already-satisfied state.set_locked or state.set_beep_enabled target as a successful no-op."
+        }
+      ],
+      "id": "F-48703b47",
+      "status": "fixed",
+      "created_at": "2026-07-11T11:38:02+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet not found in file",
+        "at": "2026-07-11T12:18:42+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-b39cd94d",
+          "name": "config:pytest",
+          "kind": "test",
+          "cmd": "uv run pytest -q",
+          "cwd": ".",
+          "started_at": "2026-07-11T12:18:53.590232+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T12:19:48+00:00",
+      "resolution_note": "Locked and beep explicit same-target requests now return successful no-op before persistence or side effects; regression and full tests pass."
+    },
+    {
+      "file": "bomana/ui/runtime_services.py",
+      "line_start": 100,
+      "line_end": 113,
+      "snippet": "    def _queue_web_command(self, envelope: WebCommandEnvelope) -> bool:\n        dispatcher = getattr(self.app, \"dispatcher\", None)\n        if (\n            dispatcher is None\n            or bool(getattr(self.app, \"_stop\", False))\n            or not bool(getattr(dispatcher, \"_polling\", True))\n        ):\n            return False\n        try:\n            dispatcher.post(self.app._execute_web_command, envelope)\n        except Exception as exc:\n            log_exception(\"web_dashboard_command_queue_failed\", exc)\n            return False\n        return True",
+      "category": "concurrency",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "WDB-05: HTTP command sink directly reads Tk/App-owned lifecycle state",
+      "impact": "The sink executes on an HTTP worker and reads app._stop plus dispatcher._polling without an ownership bridge. This violates the no-App-state worker contract and couples request acceptance to private Tk lifecycle fields even though the behavior is fail-safe on CPython.",
+      "fix": "Capture the dispatcher and bound Tk callback on the owner thread when AppRuntimeServices is constructed; expose a thread-safe bridge-owned Event for queue acceptance, clear it before runtime shutdown, and let the worker only check that Event then post the immutable envelope.",
+      "spec_clause": "WDB-05",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "_queue_web_command is the WebDashboardRuntime command_sink invoked from the POST worker and directly dereferences self.app plus dispatcher private state."
+        },
+        {
+          "kind": "spec",
+          "detail": "WDB-05: HTTP workers MUST NOT import or call Tk or directly read or mutate App state or config persistence."
+        },
+        {
+          "kind": "spec",
+          "detail": "THREAD-10 authorizes an HTTP worker only to enqueue an immutable validated envelope through TkEventDispatcher.post without waiting."
+        }
+      ],
+      "id": "F-851a25eb",
+      "status": "fixed",
+      "created_at": "2026-07-11T11:52:16+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet not found in file",
+        "at": "2026-07-11T12:18:42+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-b39cd94d",
+          "name": "config:pytest",
+          "kind": "test",
+          "cmd": "uv run pytest -q",
+          "cwd": ".",
+          "started_at": "2026-07-11T12:18:53.590232+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T12:19:48+00:00",
+      "resolution_note": "HTTP sink now reads only a bridge-owned threading Event and posts the immutable envelope through the captured dispatcher; contract and full tests pass."
+    },
+    {
+      "file": "launcher/bootstrap.py",
+      "line_start": 93,
+      "line_end": 106,
+      "snippet": "def launch_app(\n    base: Path,\n    channel: str,\n    *,\n    recover_incomplete_install,\n    app_runtime_dir,\n    is_local_app_ready,\n    is_source_test_run,\n    read_app_version,\n    default_entrypoint: str,\n    web_dashboard_autostart: bool,\n    web_dashboard_auto_open: bool,\n) -> None:\n    recover_incomplete_install(base)",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "COMPAT-19: handoff-time recovery warning is discarded after Launcher UI",
+      "impact": "A malformed recovery slot can appear after LauncherWindow displayed its initial state but before the user clicks launch. Bootstrap performs a second strict recovery check, discards the new warning, and enters the valid current App, so this concrete TOCTOU rejection is never user-visible.",
+      "fix": "Pass the warning already displayed by LauncherWindow into bootstrap; compare the second recovery result before handoff, allow an already-displayed identical warning, and raise a stable launch error for any new warning so the existing error UI surfaces it.",
+      "spec_clause": "COMPAT-19",
+      "evidence": [
+        {
+          "kind": "read",
+          "detail": "bootstrap calls recover_incomplete_install immediately before App validation but ignores its now user-facing string result."
+        },
+        {
+          "kind": "runtime",
+          "detail": "When a malformed app_new is inserted after the initial recovery call, the second check logs the error and App startup proceeds without showing the new reason."
+        },
+        {
+          "kind": "spec",
+          "detail": "COMPAT-19 requires every compatibility rejection to preserve valid slots and surface a stable user-visible reason."
+        }
+      ],
+      "id": "F-d79f9d50",
+      "status": "fixed",
+      "created_at": "2026-07-11T11:52:34+00:00",
+      "snippet_check": {
+        "status": "missing",
+        "detail": "snippet not found in file",
+        "at": "2026-07-11T12:18:42+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-b39cd94d",
+          "name": "config:pytest",
+          "kind": "test",
+          "cmd": "uv run pytest -q",
+          "cwd": ".",
+          "started_at": "2026-07-11T12:18:53.590232+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T12:19:49+00:00",
+      "resolution_note": "Bootstrap compares the final recovery warning with the already displayed reason and synchronously surfaces a new rejection before runtime lookup; tests pass."
     }
   ]
 }

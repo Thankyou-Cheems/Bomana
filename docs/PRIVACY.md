@@ -17,8 +17,8 @@ Bomana（以下简称"本应用"）致力于保护用户隐私。本应用仅收
 |---------|---------|------|---------------|
 | **设备标识符** (device_id) | SHA256哈希（基于Windows MachineGUID或本地随机UUID） | 统计独立设备数量，计算真实DAU | 否 - 已脱敏 |
 | **安装标识符** (install_id) | 本地随机生成的UUID | 区分同一设备上的多次安装 | 否 - 随机生成 |
-| **应用版本** (app_version) | 主应用版本号（如"6.13.1"） | 了解版本分布，定位版本特定问题 | 否 |
-| **启动器版本** (launcher_version) | 启动器版本号（如"1.5.5"） | 统计启动器使用情况 | 否 |
+| **应用版本** (app_version) | 主应用版本号（如"8.0.0"） | 了解版本分布，定位版本特定问题 | 否 |
+| **启动器版本** (launcher_version) | 启动器版本号（如"3.0.0"） | 统计启动器使用情况 | 否 |
 | **功能通道** (channel) | Enhanced/Standard/Lite | 分析功能偏好 | 否 |
 | **事件时间戳** (event_time_utc) | UTC标准时间 | 计算DAU、活跃时段分析 | 否 |
 | **事件类型** (event) | 如：`launcher_start`、`version_check`、`app_launch`、`launcher_update_result` | 追踪关键用户行为 | 否 |
@@ -38,17 +38,21 @@ Bomana（以下简称"本应用"）致力于保护用户隐私。本应用仅收
 
 ### 网页驾驶舱 | Web Cockpit
 
-Bomana 启动后会同时提供只读网页驾驶舱，方便在本机浏览器或同一局域网的手机上查看信息：
+Bomana 可在本机浏览器或同一局域网的手机上提供网页驾驶舱。它发布筛选后的状态，也可在严格授权后操作 Bomana 自身的固定语义功能：
 
-- 默认仅监听 `127.0.0.1`，优先使用端口 `8777`；端口占用时只会在有限的相邻端口中回退。
+- 本机 Web 服务默认随 App 启动，也可由用户在 Launcher 中关闭；Launcher 还可保存“启动成功后自动打开本机页面”。这两个布尔偏好是 Launcher 唯一保存的网页设置。
+- 监听器默认仅绑定 `127.0.0.1`，优先使用端口 `8777`；端口占用时只会在有限的相邻端口中回退。监听器、所选端口、配对 URL 和浏览器打开时机都由 App 管理。
 - 局域网访问必须由用户从托盘为**本次运行**显式开启，只绑定一个 RFC1918 私有 IPv4 地址；Bomana 不会保存该开关、修改 Windows 防火墙/UPnP，也不会为此请求管理员权限。
 - 网页只读取经过筛选的 `UISnapshot`，不代理 8111，也不发布敌机标记、原始 8111 响应或诊断数据。
-- 每次启动都会生成新的配对码与会话令牌；配对成功后浏览器使用 HttpOnly、`SameSite=Strict` Cookie 读取快照。
+- 每次启动都会生成新的配对材料；每次成功配对又会创建独立的会话令牌、授权记录、CSRF 证明和有界幂等记录。浏览器通过 HttpOnly、`SameSite=Strict` Cookie 读取快照与控制状态。
+- 本机会话可获得控制权限；局域网会话默认只读。LAN 控制必须在运行 Bomana 的电脑上为**本次运行**再次明确开启，开启时会轮换配对码，只有之后重新配对的设备才可控制。撤销会立即使已有 LAN 控制会话失效。
+- 写入只允许重置计时、切换窗口角落、设置窗口锁定/提示音/面板显示，以及在功能可用时选择当前武器与弹道模型。请求必须同源并带当前会话的 CSRF 与幂等证明；App 主线程会再次检查权限、功能开关和目标有效性。
+- 网页控制不会合成 F7-F11、控制 War Thunder、调用任意回调或配置路径，也不会增加热键 Broker 或网络能力。
 - 页面资源全部随 Bomana 打包。网页服务不使用外部资源、CORS、上传或分析脚本，也不记录客户端地址、请求路径、配对信息或飞行快照。
 
-局域网页面使用普通 HTTP，请只在可信的家庭或个人网络中临时开启。关闭局域网访问或退出 Bomana 后，该入口立即失效。此功能不会改变启动器匿名统计的范围。
+局域网页面使用普通 HTTP，请只在可信的家庭或个人网络中临时开启。端口、配对、LAN 访问、LAN 控制、会话、CSRF 与授权状态都不会持久化；关闭局域网访问或退出 Bomana 后，该入口立即失效。此功能不会改变启动器匿名统计的范围。
 
-Bomana's read-only Web Cockpit is loopback-only by default. LAN access is an explicit, current-run action for one private IPv4 address, protected by a per-process pairing code and HttpOnly `SameSite=Strict` cookie. It does not proxy 8111, publish hostile contacts, upload snapshots, load remote assets, or keep HTTP request logs.
+Bomana's Web Cockpit is loopback-only by default. Each successful pairing creates a distinct session; LAN sessions remain view-only unless control is explicitly enabled for the current run and the device pairs again. Writes are limited to allowlisted Bomana semantics with same-origin, CSRF, idempotency, and Tk-owner rechecks. No port, pairing, LAN, control, session, or authorization state is persisted. The Web Cockpit does not proxy 8111, publish hostile contacts, synthesize keys, control the game, upload snapshots, load remote assets, or keep HTTP request logs.
 
 ---
 

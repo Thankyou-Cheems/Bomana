@@ -29,10 +29,11 @@ def load_launcher_module():
     return module
 
 
-def make_app_zip(version: str = "2.0.0") -> bytes:
+def make_app_zip(version: str = "8.1.0") -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("Bomana.pyw", "# app entry\n")
+        zf.writestr("bomana_version.py", "# shared compatibility boundary\n")
         zf.writestr("bomana/config/__init__.py", f'__version__ = "{version}"\n')
         zf.writestr("bomana/config/feature_profile.py", "ENABLE_CCRP = True\n")
         zf.writestr("bomana/metadata.py", f'__version__ = "{version}"\n')
@@ -50,6 +51,10 @@ def write_config_package(package_dir: Path, version: str, *, sentinel: str | Non
     (config_dir / "feature_profile.py").write_text("ENABLE_CCRP = True\n", encoding="utf-8")
     (config_dir / "settings.py").write_text(sentinel_line, encoding="utf-8")
     (package_dir / "metadata.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
+    (package_dir.parent / "bomana_version.py").write_text(
+        "# shared compatibility boundary\n",
+        encoding="utf-8",
+    )
 
 
 class FakeResponse:
@@ -80,13 +85,13 @@ class LauncherUpdateServiceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def write_current_app(self, version: str = "1.0.0") -> None:
+    def write_current_app(self, version: str = "8.0.0") -> None:
         app_dir = self.base / self.launcher.APP_DIR_NAME
         (app_dir / "bomana").mkdir(parents=True)
         (app_dir / "Bomana.pyw").write_text("# app entry\n", encoding="utf-8")
         write_config_package(app_dir / "bomana", version)
 
-    def write_previous_app(self, version: str = "0.9.0") -> None:
+    def write_previous_app(self, version: str = "8.0.0") -> None:
         previous_dir = self.base / self.launcher.APP_PREVIOUS_DIR_NAME
         (previous_dir / "bomana").mkdir(parents=True)
         (previous_dir / "Bomana.pyw").write_text("# previous app entry\n", encoding="utf-8")
@@ -125,8 +130,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         manifest = {
             "schema_version": 1,
             "channel": "Enhanced",
-            "app_version": "2.0.0",
-            "min_launcher_version": "2.0.0",
+            "app_version": "8.1.0",
+            "min_launcher_version": "3.0.0",
             "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
             "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
             "package_sha256": "a" * 64,
@@ -157,8 +162,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             {
                 "schema_version": 1,
                 "channel": "Enhanced",
-                "app_version": "2.0.0",
-                "min_launcher_version": "2.0.0",
+                "app_version": "8.1.0",
+                "min_launcher_version": "3.0.0",
                 "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
                 "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
                 "package_sha256": "a" * 64,
@@ -171,9 +176,43 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         ):
             parsed = self.launcher._manifest_from_github_release(release, "Enhanced")
 
-        self.assertEqual(parsed["remote_version"], "2.0.0")
+        self.assertEqual(parsed["remote_version"], "8.1.0")
         self.assertEqual(parsed["package_sha256"], "a" * 64)
         self.assertEqual(parsed["package_url"], "https://example.invalid/app.zip")
+
+    def test_verified_manifest_version_is_not_whitespace_normalized(self) -> None:
+        release = {
+            "tag_name": "v8.1.0",
+            "assets": [
+                {
+                    "name": "manifest_Enhanced.json",
+                    "browser_download_url": "https://example.invalid/manifest.json",
+                },
+                {
+                    "name": "Bomana_app_Enhanced_v8.1.0.zip",
+                    "browser_download_url": "https://example.invalid/app.zip",
+                    "size": 10,
+                },
+            ],
+        }
+        manifest = self.signed_manifest(
+            {
+                "schema_version": 1,
+                "channel": "Enhanced",
+                "app_version": " 8.1.0",
+                "min_launcher_version": "3.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "package_asset": "Bomana_app_Enhanced_v8.1.0.zip",
+                "package_sha256": "a" * 64,
+            }
+        )
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_fetch_json", return_value=manifest),
+            self.assertRaisesRegex(RuntimeError, "应用版本格式无效"),
+        ):
+            self.launcher._manifest_from_github_release(release, "Enhanced")
 
     def test_github_app_manifest_rejects_signed_wrong_channel_manifest(self) -> None:
         release = {
@@ -194,8 +233,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             {
                 "schema_version": 1,
                 "channel": "Lite",
-                "app_version": "2.0.0",
-                "min_launcher_version": "2.0.0",
+                "app_version": "8.1.0",
+                "min_launcher_version": "3.0.0",
                 "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
                 "package_asset": "Bomana_app_Lite_v2.0.0.zip",
                 "package_sha256": "a" * 64,
@@ -228,8 +267,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             {
                 "schema_version": 1,
                 "channel": "Enhanced",
-                "app_version": "2.0.0",
-                "min_launcher_version": "2.0.0",
+                "app_version": "8.1.0",
+                "min_launcher_version": "3.0.0",
                 "entrypoint": "Other.pyw",
                 "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
                 "package_sha256": "a" * 64,
@@ -245,14 +284,14 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
     def test_github_launcher_manifest_uses_signed_asset_fields(self) -> None:
         release = {
-            "tag_name": "v2.0.0-launcher",
+            "tag_name": "v3.1.0-launcher",
             "assets": [
                 {
                     "name": "launcher_manifest.json",
                     "browser_download_url": "https://example.invalid/launcher_manifest.json",
                 },
                 {
-                    "name": "Bomana_launcher_v2.0.0.exe",
+                    "name": "Bomana_launcher_v3.1.0.exe",
                     "browser_download_url": "https://example.invalid/launcher.exe",
                     "size": 456,
                 },
@@ -261,8 +300,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         manifest = self.signed_manifest(
             {
                 "schema_version": 1,
-                "launcher_version": "2.0.0",
-                "launcher_asset": "Bomana_launcher_v2.0.0.exe",
+                "launcher_version": "3.1.0",
+                "launcher_asset": "Bomana_launcher_v3.1.0.exe",
                 "launcher_sha256": "b" * 64,
                 "launcher_size_bytes": 456,
             }
@@ -274,7 +313,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         ):
             parsed = self.launcher._launcher_manifest_from_github_release(release)
 
-        self.assertEqual(parsed["remote_version"], "2.0.0")
+        self.assertEqual(parsed["remote_version"], "3.1.0")
         self.assertEqual(parsed["package_sha256"], "b" * 64)
         self.assertEqual(parsed["package_url"], "https://example.invalid/launcher.exe")
 
@@ -282,8 +321,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         payload = self.signed_manifest(
             {
                 "schema_version": 1,
-                "launcher_version": "2.0.0",
-                "launcher_asset": "Bomana_launcher_v2.0.0.exe",
+                "launcher_version": "3.1.0",
+                "launcher_asset": "Bomana_launcher_v3.1.0.exe",
                 "launcher_sha256": "b" * 64,
                 "launcher_size_bytes": 456,
             }
@@ -304,7 +343,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
                 {"install_id": "abc"},
             )
 
-        self.assertEqual(parsed["remote_version"], "2.0.0")
+        self.assertEqual(parsed["remote_version"], "3.1.0")
         self.assertEqual(parsed["package_sha256"], "b" * 64)
         self.assertEqual(
             parsed["package_url"], "https://bomanaupdate.ruikang.wang/downloads/launcher.exe"
@@ -329,8 +368,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             {
                 "schema_version": 1,
                 "channel": "Enhanced",
-                "app_version": "2.0.0",
-                "min_launcher_version": "2.0.0",
+                "app_version": "8.1.0",
+                "min_launcher_version": "3.0.0",
                 "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
                 "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
                 "package_sha256": "a" * 64,
@@ -362,7 +401,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
     def test_primary_app_manifest_requires_release_signature(self) -> None:
         payload = {
-            "app_version": "2.0.0",
+            "app_version": "8.1.0",
             "package_url": "/downloads/app.zip",
             "package_sha256": "a" * 64,
         }
@@ -382,9 +421,9 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             {
                 "schema_version": 1,
                 "channel": "Enhanced",
-                "app_version": "2.0.0",
+                "app_version": "8.1.0",
                 "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
-                "min_launcher_version": "2.0.0",
+                "min_launcher_version": "3.0.0",
                 "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
                 "package_sha256": "a" * 64,
             }
@@ -402,7 +441,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
                 {"install_id": "abc"},
             )
 
-        self.assertEqual(parsed["remote_version"], "2.0.0")
+        self.assertEqual(parsed["remote_version"], "8.1.0")
         self.assertEqual(
             parsed["package_url"], "https://bomanaupdate.ruikang.wang/downloads/app.zip"
         )
@@ -413,9 +452,9 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             {
                 "schema_version": 1,
                 "channel": "Lite",
-                "app_version": "2.0.0",
+                "app_version": "8.1.0",
                 "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
-                "min_launcher_version": "2.0.0",
+                "min_launcher_version": "3.0.0",
                 "package_asset": "Bomana_app_Lite_v2.0.0.zip",
                 "package_sha256": "a" * 64,
             }
@@ -436,7 +475,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
     def test_check_reports_launcher_requirement_and_fetches_missing_size(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
         app_manifest = {
-            "remote_version": "2.0.0",
+            "remote_version": "8.1.0",
             "min_launcher_version": "999.0.0",
             "package_url": "https://example.invalid/app.zip",
             "package_sha256": "abc",
@@ -444,7 +483,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "source_name": "GitHub",
         }
         launcher_manifest = {
-            "remote_version": "2.2.0",
+            "remote_version": "3.1.0",
             "package_url": "https://example.invalid/launcher.exe",
             "package_sha256": "def",
             "package_size": "",
@@ -452,7 +491,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         }
 
         with (
-            patch.object(service, "resolve_app_manifest", return_value=("1.0.0", app_manifest)),
+            patch.object(service, "resolve_app_manifest", return_value=("8.0.0", app_manifest)),
             patch.object(service, "resolve_launcher_manifest", return_value=launcher_manifest),
             patch.object(self.launcher, "_fetch_content_length", return_value=456) as fetch_size,
         ):
@@ -471,7 +510,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
     def test_check_continues_when_launcher_manifest_check_fails(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
         app_manifest = {
-            "remote_version": "2.0.0",
+            "remote_version": "8.1.0",
             "min_launcher_version": self.launcher.LAUNCHER_VERSION,
             "package_url": "https://example.invalid/app.zip",
             "package_sha256": "abc",
@@ -480,7 +519,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         }
 
         with (
-            patch.object(service, "resolve_app_manifest", return_value=("1.0.0", app_manifest)),
+            patch.object(service, "resolve_app_manifest", return_value=("8.0.0", app_manifest)),
             patch.object(
                 service,
                 "resolve_launcher_manifest",
@@ -644,10 +683,10 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
     def test_app_install_preflight_runs_before_download(self) -> None:
         manifest = {
-            "remote_version": "2.0.0",
+            "remote_version": "8.1.0",
             "min_launcher_version": self.launcher.LAUNCHER_VERSION,
             "package_url": "https://example.invalid/app.zip",
-            "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+            "package_asset": "Bomana_app_Enhanced_v8.1.0.zip",
             "package_sha256": "a" * 64,
             "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
         }
@@ -666,14 +705,14 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         download.assert_not_called()
 
     def test_download_app_update_preserves_verified_package_in_download_dir(self) -> None:
-        package_bytes = make_app_zip("2.0.0")
+        package_bytes = make_app_zip("8.1.0")
         package_sha = self.launcher._sha256_bytes(package_bytes)
         download_dir = self.base / "visible-downloads"
         manifest = {
-            "remote_version": "2.0.0",
+            "remote_version": "8.1.0",
             "min_launcher_version": self.launcher.LAUNCHER_VERSION,
             "package_url": "https://example.invalid/app.zip",
-            "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+            "package_asset": "Bomana_app_Enhanced_v8.1.0.zip",
             "package_sha256": package_sha,
             "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
             "source_name": "GitHub",
@@ -693,10 +732,10 @@ class LauncherUpdateServiceTests(unittest.TestCase):
                 status_cb=lambda *args: statuses.append(args),
             )
 
-        self.assertEqual(final_version, "2.0.0")
+        self.assertEqual(final_version, "8.1.0")
         self.assertEqual(
             launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
-            "2.0.0",
+            "8.1.0",
         )
         cached = list(download_dir.glob("Bomana_app_*"))
         self.assertEqual(len(cached), 1)
@@ -704,14 +743,14 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertTrue(any(str(cached[0]) in event[1] for event in statuses))
 
     def test_download_app_hash_mismatch_preserves_existing_app_and_removes_bad_file(self) -> None:
-        self.write_current_app("1.0.0")
-        package_bytes = make_app_zip("2.0.0")
+        self.write_current_app("8.0.0")
+        package_bytes = make_app_zip("8.1.0")
         download_dir = self.base / "visible-downloads"
         manifest = {
-            "remote_version": "2.0.0",
+            "remote_version": "8.1.0",
             "min_launcher_version": self.launcher.LAUNCHER_VERSION,
             "package_url": "https://example.invalid/app.zip",
-            "package_asset": "Bomana_app_Enhanced_v2.0.0.zip",
+            "package_asset": "Bomana_app_Enhanced_v8.1.0.zip",
             "package_sha256": "0" * 64,
             "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
         }
@@ -728,7 +767,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
         self.assertEqual(
             launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
-            "1.0.0",
+            "8.0.0",
         )
         self.assertFalse(list(download_dir.glob("Bomana_app_*")))
 
@@ -835,9 +874,185 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertIn("Bomana启动器.exe", script)
         self.assertNotIn("\\u", script)
 
+    def test_online_install_rejects_signed_staged_version_mismatch_before_swap(self) -> None:
+        self.write_current_app("8.0.0")
+        package_bytes = make_app_zip("8.2.0")
+        package_sha = self.launcher._sha256_bytes(package_bytes)
+        manifest = {
+            "remote_version": "8.1.0",
+            "min_launcher_version": "3.0.0",
+            "package_url": "https://example.invalid/app.zip",
+            "package_asset": "Bomana_app_Enhanced_v8.1.0.zip",
+            "package_sha256": package_sha,
+            "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+        }
+
+        def fake_open(_req, timeout, use_system_proxy=None):
+            return FakeResponse(package_bytes, headers={"Content-Length": str(len(package_bytes))})
+
+        with (
+            patch.object(self.launcher, "_open_url", side_effect=fake_open),
+            self.assertRaisesRegex(RuntimeError, "签名清单版本与暂存包版本不匹配"),
+        ):
+            self.launcher._download_update_from_manifest(self.base, manifest)
+
+        self.assertEqual(
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "8.0.0",
+        )
+        self.assertFalse((self.base / self.launcher.APP_PREVIOUS_DIR_NAME).exists())
+
+    def test_local_import_rejects_below_floor_before_preserving_current_app(self) -> None:
+        self.write_current_app("8.0.0")
+        package_bytes = make_app_zip("7.99.99")
+
+        with self.assertRaisesRegex(RuntimeError, "暂存应用版本过旧"):
+            launcher_install.install_zip_package(
+                self.base,
+                package_bytes,
+                expected_sha256="",
+                entrypoint=self.launcher.DEFAULT_ENTRYPOINT,
+            )
+
+        self.assertEqual(
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "8.0.0",
+        )
+        self.assertFalse((self.base / self.launcher.APP_PREVIOUS_DIR_NAME).exists())
+
+    def test_rollback_rejects_incompatible_previous_slot_before_swap(self) -> None:
+        self.write_current_app("8.1.0")
+        self.write_previous_app("7.99.99")
+
+        with self.assertRaisesRegex(RuntimeError, "回退应用版本过旧"):
+            launcher_install.rollback_to_previous_app(self.base)
+
+        self.assertEqual(
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "8.1.0",
+        )
+        self.assertEqual(
+            launcher_install.read_local_app_version(
+                self.base / self.launcher.APP_PREVIOUS_DIR_NAME
+            ),
+            "7.99.99",
+        )
+
+    def test_recovery_rejects_incompatible_new_candidate_without_promotion(self) -> None:
+        new_dir = self.base / "app_new"
+        (new_dir / "bomana").mkdir(parents=True)
+        (new_dir / "Bomana.pyw").write_text("# app entry\n", encoding="utf-8")
+        write_config_package(new_dir / "bomana", "not-a-version")
+        logs = []
+
+        steps = launcher_install.InstallTransaction.recover_incomplete(
+            self.base,
+            log_cb=lambda _base, message: logs.append(message),
+        )
+
+        self.assertEqual(steps, [])
+        self.assertTrue(new_dir.exists())
+        self.assertFalse((self.base / self.launcher.APP_DIR_NAME).exists())
+        self.assertIn("格式无效", logs[-1])
+
+    def test_recovery_prevalidates_all_slots_before_restoring_valid_backup(self) -> None:
+        backup_dir = self.base / self.launcher.APP_BACKUP_DIR_NAME
+        (backup_dir / "bomana").mkdir(parents=True)
+        (backup_dir / "Bomana.pyw").write_text("# backup\n", encoding="utf-8")
+        write_config_package(backup_dir / "bomana", "8.1.0")
+        backup_marker = backup_dir / "backup-marker.txt"
+        backup_marker.write_text("preserve backup", encoding="utf-8")
+
+        new_dir = self.base / "app_new"
+        (new_dir / "bomana").mkdir(parents=True)
+        (new_dir / "Bomana.pyw").write_text("# staged\n", encoding="utf-8")
+        write_config_package(new_dir / "bomana", "not-a-version")
+        new_marker = new_dir / "new-marker.txt"
+        new_marker.write_text("preserve staged", encoding="utf-8")
+        logs = []
+
+        steps = launcher_install.InstallTransaction.recover_incomplete(
+            self.base,
+            log_cb=lambda _base, message: logs.append(message),
+        )
+
+        self.assertEqual(steps, [])
+        self.assertFalse((self.base / self.launcher.APP_DIR_NAME).exists())
+        self.assertEqual(launcher_install.read_local_app_version(backup_dir), "8.1.0")
+        self.assertEqual(backup_marker.read_text(encoding="utf-8"), "preserve backup")
+        self.assertEqual(new_marker.read_text(encoding="utf-8"), "preserve staged")
+        self.assertIn("格式无效", logs[-1])
+
+    def test_recovery_prevalidates_dangling_slot_before_replacing_previous(self) -> None:
+        self.write_current_app("8.2.0")
+        self.write_previous_app("8.0.0")
+        backup_dir = self.base / self.launcher.APP_BACKUP_DIR_NAME
+        (backup_dir / "bomana").mkdir(parents=True)
+        write_config_package(backup_dir / "bomana", "8.1.0")
+        dangling_new = self.base / "app_new"
+        real_lexists = launcher_install.os.path.lexists
+
+        with patch.object(
+            launcher_install.os.path,
+            "lexists",
+            side_effect=lambda path: Path(path) == dangling_new or real_lexists(path),
+        ):
+            steps = launcher_install.InstallTransaction.recover_incomplete(self.base)
+
+        self.assertEqual(steps, [])
+        self.assertEqual(
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "8.2.0",
+        )
+        self.assertEqual(launcher_install.read_local_app_version(backup_dir), "8.1.0")
+        self.assertEqual(
+            launcher_install.read_local_app_version(
+                self.base / self.launcher.APP_PREVIOUS_DIR_NAME
+            ),
+            "8.0.0",
+        )
+
+    def test_recovery_preserves_slots_when_current_identity_is_below_floor(self) -> None:
+        self.write_current_app("7.99.99")
+        self.write_previous_app("8.2.0")
+        backup_dir = self.base / self.launcher.APP_BACKUP_DIR_NAME
+        (backup_dir / "bomana").mkdir(parents=True)
+        (backup_dir / "Bomana.pyw").write_text("# backup\n", encoding="utf-8")
+        write_config_package(backup_dir / "bomana", "8.1.0")
+
+        steps = launcher_install.InstallTransaction.recover_incomplete(self.base)
+
+        self.assertEqual(steps, [])
+        self.assertEqual(
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "7.99.99",
+        )
+        self.assertEqual(launcher_install.read_local_app_version(backup_dir), "8.1.0")
+        self.assertEqual(
+            launcher_install.read_local_app_version(
+                self.base / self.launcher.APP_PREVIOUS_DIR_NAME
+            ),
+            "8.2.0",
+        )
+
+    def test_candidate_metadata_is_parsed_as_data_without_execution(self) -> None:
+        app_dir = self.base / "candidate"
+        metadata_dir = app_dir / "bomana"
+        metadata_dir.mkdir(parents=True)
+        sentinel = self.base / "executed.txt"
+        (metadata_dir / "metadata.py").write_text(
+            "from pathlib import Path\n"
+            f"Path({str(sentinel)!r}).write_text('executed', encoding='utf-8')\n"
+            '__version__ = "8.0.0"\n',
+            encoding="utf-8",
+        )
+
+        self.assertEqual(launcher_install.read_app_version_identity(app_dir), "8.0.0")
+        self.assertFalse(sentinel.exists())
+
     def test_fresh_lock_blocks_install_and_preserves_existing_app(self) -> None:
-        self.write_current_app("1.0.0")
-        package_bytes = make_app_zip("2.0.0")
+        self.write_current_app("8.0.0")
+        package_bytes = make_app_zip("8.1.0")
         package_sha = self.launcher._sha256_bytes(package_bytes)
         lock_path = self.base / self.launcher.UPDATE_LOCK_FILE_NAME
         lock_path.write_text("pid=1\n", encoding="utf-8")
@@ -854,14 +1069,14 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             (
                 self.base / self.launcher.APP_DIR_NAME / "bomana" / "config" / "__init__.py"
             ).read_text(encoding="utf-8"),
-            '__version__ = "1.0.0"\n',
+            '__version__ = "8.0.0"\n',
         )
 
     def test_install_zip_rejects_package_missing_metadata(self) -> None:
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as zf:
             zf.writestr("Bomana.pyw", "# app entry\n")
-            zf.writestr("bomana/config/__init__.py", '__version__ = "2.0.0"\n')
+            zf.writestr("bomana/config/__init__.py", '__version__ = "8.1.0"\n')
         package_bytes = buffer.getvalue()
         package_sha = self.launcher._sha256_bytes(package_bytes)
 
@@ -879,7 +1094,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         backup_dir = self.base / self.launcher.APP_BACKUP_DIR_NAME
         (backup_dir / "bomana").mkdir(parents=True)
         (backup_dir / "Bomana.pyw").write_text("# app entry\n", encoding="utf-8")
-        write_config_package(backup_dir / "bomana", "1.0.0")
+        write_config_package(backup_dir / "bomana", "8.0.0")
         lock_path = self.base / self.launcher.UPDATE_LOCK_FILE_NAME
         lock_path.write_text("pid=1\n", encoding="utf-8")
         stale_time = time.time() - self.launcher.UPDATE_LOCK_STALE_SEC - 10
@@ -893,8 +1108,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertTrue((self.base / self.launcher.APP_DIR_NAME / "Bomana.pyw").exists())
 
     def test_rollback_to_previous_app_swaps_current_and_previous_versions(self) -> None:
-        self.write_current_app("2.0.0")
-        self.write_previous_app("1.5.0")
+        self.write_current_app("8.1.0")
+        self.write_previous_app("8.0.0")
         status_events = []
 
         final_version, preserved_version = launcher_install.rollback_to_previous_app(
@@ -902,24 +1117,24 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             status_cb=lambda *args: status_events.append(args),
         )
 
-        self.assertEqual(final_version, "1.5.0")
-        self.assertEqual(preserved_version, "2.0.0")
+        self.assertEqual(final_version, "8.0.0")
+        self.assertEqual(preserved_version, "8.1.0")
         self.assertEqual(
             launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
-            "1.5.0",
+            "8.0.0",
         )
         self.assertEqual(
             launcher_install.read_local_app_version(
                 self.base / self.launcher.APP_PREVIOUS_DIR_NAME
             ),
-            "2.0.0",
+            "8.1.0",
         )
         self.assertTrue(status_events)
         self.assertFalse((self.base / self.launcher.UPDATE_LOCK_FILE_NAME).exists())
 
     def test_rollback_failure_after_previous_move_restores_current_version(self) -> None:
-        self.write_current_app("2.0.0")
-        self.write_previous_app("1.5.0")
+        self.write_current_app("8.1.0")
+        self.write_previous_app("8.0.0")
         real_replace = os.replace
         replace_calls = []
 
@@ -937,13 +1152,13 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
         self.assertEqual(
             launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
-            "2.0.0",
+            "8.1.0",
         )
         self.assertEqual(
             launcher_install.read_local_app_version(
                 self.base / self.launcher.APP_PREVIOUS_DIR_NAME
             ),
-            "1.5.0",
+            "8.0.0",
         )
         self.assertFalse((self.base / self.launcher.UPDATE_LOCK_FILE_NAME).exists())
 
@@ -957,7 +1172,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "Path('result.txt').write_text(SENTINEL, encoding='utf-8')\n",
             encoding="utf-8",
         )
-        write_config_package(package_dir, "2.0.0", sentinel="app")
+        write_config_package(package_dir, "8.0.0", sentinel="app")
 
         class FrozenBomanaLoader:
             def create_module(self, _spec):
@@ -991,7 +1206,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         old_modules = {
             name: module
             for name, module in sys.modules.items()
-            if name == "bomana" or name.startswith("bomana.")
+            if name == "bomana_version" or name == "bomana" or name.startswith("bomana.")
         }
         sys.meta_path.insert(0, finder)
         try:
@@ -1003,7 +1218,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             if finder in sys.meta_path:
                 sys.meta_path.remove(finder)
             for name in tuple(sys.modules):
-                if name == "bomana" or name.startswith("bomana."):
+                if name == "bomana_version" or name == "bomana" or name.startswith("bomana."):
                     sys.modules.pop(name, None)
             sys.modules.update(old_modules)
             if old_channel is None:

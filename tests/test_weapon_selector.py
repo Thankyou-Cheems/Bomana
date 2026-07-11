@@ -2,7 +2,12 @@ from types import SimpleNamespace
 
 from bomana.config.settings import WeaponBallisticModelConfig
 from bomana.ui import dialogs
-from bomana.ui.dialogs import WeaponSelectorDialog, build_weapon_selector_scope
+from bomana.ui.dialogs import (
+    WeaponSelectorDialog,
+    build_weapon_selector_scope,
+    persist_ballistic_model_selection,
+    persist_weapon_selection,
+)
 
 
 class FakeCatalog:
@@ -207,3 +212,37 @@ def test_weapon_selector_model_buttons_are_explicit_and_choice_applies_immediate
     assert saved == {"keep": True, "weapon_ballistic_model": "strict_official"}
     assert current["value"] == "strict_official"
     assert WeaponBallisticModelConfig.selected_model == "strict_official"
+
+
+def test_ballistic_model_persistence_failure_restores_runtime_choice(monkeypatch) -> None:
+    monkeypatch.setattr(
+        WeaponBallisticModelConfig,
+        "selected_model",
+        "foxthree_compatible",
+    )
+    monkeypatch.setattr(dialogs.ConfigManager, "load", lambda: {})
+    monkeypatch.setattr(dialogs.ConfigManager, "save", lambda _config: False)
+
+    assert not persist_ballistic_model_selection("strict_official")
+    assert WeaponBallisticModelConfig.selected_model == "foxthree_compatible"
+
+
+def test_weapon_persistence_failure_restores_runtime_selection(monkeypatch) -> None:
+    catalog = FakeCatalog()
+    monkeypatch.setattr(
+        WeaponBallisticModelConfig,
+        "selected_model",
+        "foxthree_compatible",
+    )
+    monkeypatch.setattr(dialogs.ConfigManager, "load", lambda: {})
+    monkeypatch.setattr(dialogs.ConfigManager, "save", lambda _config: False)
+    monkeypatch.setattr(dialogs.BombConfig, "selected_bomb", "su_fab100")
+
+    assert not persist_weapon_selection(catalog, "su_fab100", "strict_official")
+    assert catalog.selected_weapon_id == "agm_65d"
+    assert catalog.set_calls == [
+        ("su_fab100", "manual"),
+        ("agm_65d", "manual"),
+    ]
+    assert WeaponBallisticModelConfig.selected_model == "foxthree_compatible"
+    assert dialogs.BombConfig.selected_bomb == "su_fab100"

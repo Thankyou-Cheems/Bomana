@@ -25,6 +25,11 @@ Project-wide boundaries:
 - Track repository work in `bd`; do not add Markdown TODO/task systems.
 - Keep launcher and Python App at ordinary integrity. Privileged hotkeys follow
   [`startup-elevation.md`](./specs/startup-elevation.md).
+- Keep Web writes on the fixed semantic action matrix and Tk-owner execution
+  path in [`web-dashboard.md`](./specs/web-dashboard.md).
+- App/Launcher parsing, handoff, install, rollback, and recovery share the
+  fail-closed boundary in
+  [`version-compatibility.md`](./specs/version-compatibility.md).
 
 ## 环境准备 | Setup
 
@@ -32,11 +37,14 @@ Project-wide boundaries:
 git clone https://github.com/YOUR_USERNAME/Bomana.git
 cd Bomana
 uv sync --python 3.14.5 --extra dev
+$env:BOMANA_SOURCE_DEVELOPMENT = "1"
 uv run python Bomana.pyw
 ```
 
 `.python-version` pins the tested local interpreter. Packaging dependencies are
-separate:
+separate. The development marker is deliberately process-local and is accepted
+only by a non-frozen source run; do not set it as a machine-wide workaround for
+packaged App identity checks.
 
 ```powershell
 uv sync --python 3.14.5 --extra build
@@ -87,6 +95,8 @@ Additional gates by area:
 | `native/hotkey_broker/`, `tools/build_hotkey_broker.py` | `cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml`; `cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml`; `uv run python tools/build_hotkey_broker.py --mode dev` |
 | Release/build/launcher assets | relevant build tests and packaged-launcher smoke |
 | 8111, HUD, hotkeys, tray, navigation | focused automated tests plus clearly reported real War Thunder smoke |
+| Web Cockpit/control | protocol/server/runtime tests plus separate desktop browser, phone/LAN control/revoke, Firewall, multi-NIC, and packaged-resource smoke from [`web-cockpit-smoke.md`](./guides/web-cockpit-smoke.md) |
+| Launcher UI or App/Launcher boundary | packaged-launcher smoke plus manual DPI, keyboard navigation, App 8 / Launcher 3 rejection, and source-marker checks |
 | Unicode ambiguity investigation | `uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>` |
 
 CI uses Windows, Python 3.14, frozen `uv` dependencies, Ruff, pytest, and native
@@ -141,6 +151,9 @@ not a competing policy.
 1. Update `docs/CHANGELOG.md` and the authoritative version in
    `bomana/metadata.py` and/or `launcher/metadata.py`. If an App package now
    needs newer launcher behavior, update `PORTABLE_MIN_LAUNCHER_VERSION` too.
+   App 8.0.0 and Launcher 3.0.0 establish a deliberate mutual floor; every
+   Launcher-owned candidate path and the early App handoff must continue to use
+   `bomana_version.py` rather than a local version parser.
 2. Confirm the matching Ed25519 manifest-signing secrets; never generate,
    rotate, print, upload, or replace private keys without an approved retention
    plan.

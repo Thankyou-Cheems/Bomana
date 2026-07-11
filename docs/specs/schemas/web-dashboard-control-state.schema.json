@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Thankyou-Cheems/Bomana/docs/specs/schemas/web-dashboard-control-state.schema.json",
+  "title": "Bomana Web Dashboard Control State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision",
+    "permissions",
+    "csrf",
+    "capabilities",
+    "state",
+    "weapons",
+    "recent_commands"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "revision": {"type": "integer", "minimum": 0},
+    "permissions": {"$ref": "#/$defs/permissions"},
+    "csrf": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "minLength": 32, "maxLength": 256}
+      ]
+    },
+    "capabilities": {"$ref": "#/$defs/capabilities"},
+    "state": {"$ref": "#/$defs/state"},
+    "weapons": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {"$ref": "#/$defs/weaponChoice"}
+    },
+    "recent_commands": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {"$ref": "#/$defs/recentCommand"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "permissions": {
+            "properties": {"scope": {"const": "control"}},
+            "required": ["scope"]
+          }
+        },
+        "required": ["permissions"]
+      },
+      "then": {
+        "properties": {
+          "csrf": {"type": "string", "minLength": 32, "maxLength": 256}
+        }
+      },
+      "else": {
+        "properties": {
+          "csrf": {"type": "null"},
+          "capabilities": {
+            "properties": {
+              "commands": {"maxItems": 0},
+              "panel_targets": {"maxItems": 0}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "commandId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "commandName": {
+      "enum": [
+        "action.reset_timer",
+        "action.cycle_corner",
+        "state.set_locked",
+        "state.set_beep_enabled",
+        "state.set_zone_sound_enabled",
+        "config.set_panel_visibility",
+        "weapon.select",
+        "weapon.set_ballistic_model"
+      ]
+    },
+    "panelTarget": {
+      "enum": [
+        "zones",
+        "airfields",
+        "fuel",
+        "speed",
+        "checklist",
+        "weapon_solution"
+      ]
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "transport", "control_epoch", "lan_control_enabled"],
+      "properties": {
+        "scope": {"enum": ["view", "control"]},
+        "transport": {"enum": ["loopback", "lan"]},
+        "control_epoch": {"type": "integer", "minimum": 0},
+        "lan_control_enabled": {"type": "boolean"}
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "panel_targets"],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 8,
+          "items": {"$ref": "#/$defs/commandName"}
+        },
+        "panel_targets": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 6,
+          "items": {"$ref": "#/$defs/panelTarget"}
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locked",
+        "beep_enabled",
+        "zone_sound_enabled",
+        "panel_visibility",
+        "selected_weapon_id",
+        "ballistic_model"
+      ],
+      "properties": {
+        "locked": {"type": "boolean"},
+        "beep_enabled": {"type": "boolean"},
+        "zone_sound_enabled": {"type": "boolean"},
+        "panel_visibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "zones",
+            "airfields",
+            "fuel",
+            "speed",
+            "checklist",
+            "weapon_solution"
+          ],
+          "properties": {
+            "zones": {"type": "boolean"},
+            "airfields": {"type": "boolean"},
+            "fuel": {"type": "boolean"},
+            "speed": {"type": "boolean"},
+            "checklist": {"type": "boolean"},
+            "weapon_solution": {"type": "boolean"}
+          }
+        },
+        "selected_weapon_id": {"type": "string", "maxLength": 128},
+        "ballistic_model": {"enum": ["foxthree_compatible", "strict_official"]}
+      }
+    },
+    "weaponChoice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weapon_id", "display_name", "role", "compatible", "selected"],
+      "properties": {
+        "weapon_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "role": {"type": "string", "minLength": 1, "maxLength": 64},
+        "compatible": {"type": "boolean"},
+        "selected": {"type": "boolean"}
+      }
+    },
+    "completionReason": {
+      "enum": [
+        "ok",
+        "authorization_revoked",
+        "feature_disabled",
+        "invalid_target",
+        "weapon_not_found",
+        "weapon_incompatible",
+        "state_unavailable",
+        "persistence_failed",
+        "execution_failed"
+      ]
+    },
+    "recentCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command_id",
+        "command",
+        "status",
+        "reason",
+        "submitted_revision",
+        "resulting_revision"
+      ],
+      "properties": {
+        "command_id": {"$ref": "#/$defs/commandId"},
+        "command": {"$ref": "#/$defs/commandName"},
+        "status": {"enum": ["succeeded", "rejected"]},
+        "reason": {"$ref": "#/$defs/completionReason"},
+        "submitted_revision": {"type": "integer", "minimum": 0},
+        "resulting_revision": {"type": "integer", "minimum": 1}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"const": "succeeded"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"reason": {"const": "ok"}}
+          },
+          "else": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "authorization_revoked",
+                  "feature_disabled",
+                  "invalid_target",
+                  "weapon_not_found",
+                  "weapon_incompatible",
+                  "state_unavailable",
+                  "persistence_failed",
+                  "execution_failed"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

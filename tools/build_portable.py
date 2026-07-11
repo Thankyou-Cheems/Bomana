@@ -60,7 +60,12 @@ SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
 SIGNING_PUBLIC_KEY_ENV = "BOMANA_RELEASE_ED25519_PUBLIC_KEY"
 SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
 PACKAGED_LAUNCHER_REQUIRES_PYTHON = ">=3.14"
-PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "2.1.0"
+PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.0.0"
+WEB_CONTROL_SCHEMA_PATHS = (
+    Path("docs/specs/schemas/web-dashboard-command.schema.json"),
+    Path("docs/specs/schemas/web-dashboard-command-response.schema.json"),
+    Path("docs/specs/schemas/web-dashboard-control-state.schema.json"),
+)
 PACKAGED_LAUNCHER_RUNTIME_MODULES_BY_DEPENDENCY = {
     "requests": "requests",
     "certifi": "certifi",
@@ -308,6 +313,7 @@ def build_app_zip(
     ccrp_json = root / ccrp_json_rel
     weapon_catalog_rel = Path("bomana/data/weapon_fire_control.json")
     weapon_schema_rel = Path("docs/specs/schemas/weapon-fire-control.schema.json")
+    version_boundary = root / "bomana_version.py"
     legacy_ccrp_json = root / "ccrp_bomb_params.json"
     legacy_ccrp_py = root / "ccrp_bomb_params.py"
 
@@ -321,8 +327,19 @@ def build_app_zip(
             missing = ", ".join(path.as_posix() for path in missing_weapon_assets)
             raise RuntimeError(f"missing Enhanced weapon fire-control assets: {missing}")
 
+    missing_runtime_assets = [
+        path.relative_to(root).as_posix()
+        for path in (version_boundary, *(root / rel for rel in WEB_CONTROL_SCHEMA_PATHS))
+        if not path.is_file()
+    ]
+    if missing_runtime_assets:
+        raise RuntimeError(
+            "missing shared App runtime assets: " + ", ".join(missing_runtime_assets)
+        )
+
     with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         add_file_to_zip(zf, root, root / APP_ENTRY)
+        add_file_to_zip(zf, root, version_boundary)
 
         app_root = root / APP_DIR
         for path in app_root.rglob("*"):
@@ -344,6 +361,8 @@ def build_app_zip(
 
         if variant == "Enhanced":
             add_file_to_zip(zf, root, root / weapon_schema_rel)
+        for schema_path in WEB_CONTROL_SCHEMA_PATHS:
+            add_file_to_zip(zf, root, root / schema_path)
 
         broker_sha256 = sha256_file(hotkey_broker)
         zf.write(

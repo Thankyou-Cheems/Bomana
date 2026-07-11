@@ -82,6 +82,61 @@ def build_weapon_selector_scope(
     return all_records, note, False
 
 
+def persist_ballistic_model_selection(value: str) -> bool:
+    """Apply one validated ballistic model and persist it as one semantic action."""
+
+    normalized = str(value or "").strip().lower()
+    if normalized not in WeaponBallisticModelConfig.VALID_MODELS:
+        return False
+    previous = WeaponBallisticModelConfig.selected_model
+    if not WeaponBallisticModelConfig.set_selected(normalized):
+        return False
+    config = ConfigManager.load()
+    if not isinstance(config, dict):
+        config = {}
+    config["weapon_ballistic_model"] = normalized
+    if ConfigManager.save(config):
+        return True
+    WeaponBallisticModelConfig.set_selected(previous)
+    return False
+
+
+def persist_weapon_selection(catalog, weapon_id: str, ballistic_model: str) -> bool:
+    """Apply and persist an exact catalog selection, rolling runtime state back on failure."""
+
+    weapon_id = str(weapon_id or "").strip()
+    weapon = catalog.get(weapon_id) if catalog is not None and weapon_id else None
+    model = str(ballistic_model or "").strip().lower()
+    if not weapon or model not in WeaponBallisticModelConfig.VALID_MODELS:
+        return False
+
+    previous_weapon = str(getattr(catalog, "selected_weapon_id", "") or "")
+    previous_model = WeaponBallisticModelConfig.selected_model
+    if not WeaponBallisticModelConfig.set_selected(model):
+        return False
+    if not catalog.set_selected(weapon_id, source="manual"):
+        WeaponBallisticModelConfig.set_selected(previous_model)
+        return False
+
+    config = ConfigManager.load()
+    if not isinstance(config, dict):
+        config = {}
+    config["selected_weapon"] = weapon_id
+    config["weapon_ballistic_model"] = model
+    is_ccrp_bomb = weapon.get("role") == "bomb" and BombConfig.get_bomb_data(weapon_id)
+    if is_ccrp_bomb:
+        config["selected_bomb"] = weapon_id
+    if not ConfigManager.save(config):
+        if previous_weapon:
+            catalog.set_selected(previous_weapon, source="manual")
+        WeaponBallisticModelConfig.set_selected(previous_model)
+        return False
+
+    if is_ccrp_bomb:
+        BombConfig.selected_bomb = weapon_id
+    return True
+
+
 class _ScalableDialogMixin:
     """可缩放窗口通用逻辑（适配屏幕 + 稳定字体初始化）"""
 
@@ -2596,15 +2651,8 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         normalized = str(value or "").strip().lower()
         if normalized not in WeaponBallisticModelConfig.VALID_MODELS:
             return
-        config = ConfigManager.load()
-        if not isinstance(config, dict):
-            config = {}
-        config["weapon_ballistic_model"] = normalized
-        if not ConfigManager.save(config):
+        if not persist_ballistic_model_selection(normalized):
             messagebox.showerror("失败", "飞行包线模型保存失败", parent=self)
-            return
-        if not WeaponBallisticModelConfig.set_selected(normalized):
-            messagebox.showerror("失败", "无法应用所选飞行包线模型", parent=self)
             return
         self.ballistic_model_var.set(normalized)
         self._refresh_ballistic_model_controls()
@@ -2684,26 +2732,10 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         if not weapon:
             return
 
-        config = ConfigManager.load()
-        if not isinstance(config, dict):
-            config = {}
         ballistic_model = self._current_ballistic_model()
-        config["selected_weapon"] = weapon_id
-        config["weapon_ballistic_model"] = ballistic_model
-        if weapon.get("role") == "bomb" and BombConfig.get_bomb_data(weapon_id):
-            config["selected_bomb"] = weapon_id
-        if not ConfigManager.save(config):
+        if not persist_weapon_selection(self.catalog, weapon_id, ballistic_model):
             messagebox.showerror("失败", "武器选择保存失败", parent=self)
             return
-        if not WeaponBallisticModelConfig.set_selected(ballistic_model):
-            messagebox.showerror("失败", "无法应用所选飞行包线模型", parent=self)
-            return
-        if not self.catalog.set_selected(weapon_id, source="manual"):
-            messagebox.showerror("失败", "武器目录无法应用所选记录", parent=self)
-            return
-
-        if weapon.get("role") == "bomb" and BombConfig.get_bomb_data(weapon_id):
-            BombConfig.selected_bomb = weapon_id
         self.result = weapon_id
         self.selected_weapon = weapon_id
         if hasattr(self.app, "bomb_select_lbl"):

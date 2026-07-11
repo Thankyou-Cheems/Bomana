@@ -1,16 +1,102 @@
 {
-  "generated_at": "2026-07-11T07:55:40+00:00",
+  "version": 3,
+  "generated_at": "2026-07-11T12:18:53+00:00",
   "root": "D:\\Dev\\Bomana",
+  "state_dir": ".review",
+  "review_scope": {
+    "source": "working-tree",
+    "base": null,
+    "paths": [
+      ".review/work-order-Bomana-7nts.md",
+      "EADME.md",
+      "GENTS.md",
+      "auncher.pyw",
+      "auncher/bootstrap.py",
+      "auncher/install_txn.py",
+      "auncher/metadata.py",
+      "bomana/web/control.py",
+      "bomana_version.py",
+      "docs/adr/0008-authenticated-web-control-and-v8-boundary.md",
+      "docs/specs/schemas/web-dashboard-command-response.schema.json",
+      "docs/specs/schemas/web-dashboard-command.schema.json",
+      "docs/specs/schemas/web-dashboard-control-state.schema.json",
+      "docs/specs/version-compatibility.md",
+      "ests/contracts/test_config_variants.py",
+      "ests/contracts/test_launcher_package_boundaries.py",
+      "ests/contracts/test_web_dashboard_contract.py",
+      "ests/test_build_metadata.py",
+      "ests/test_launcher_core.py",
+      "ests/test_launcher_launch_flow.py",
+      "ests/test_launcher_update_service.py",
+      "ests/test_quality_packaged_launcher_smoke.py",
+      "ests/test_runtime_services.py",
+      "ests/test_ui_app_config.py",
+      "ests/test_weapon_selector.py",
+      "ests/test_web_dashboard_server.py",
+      "gitignore",
+      "ocs/ARCHITECTURE.md",
+      "ocs/CHANGELOG.md",
+      "ocs/CONTRIBUTING.md",
+      "ocs/PITFALLS.md",
+      "ocs/PRIVACY.md",
+      "ocs/QUICKSTART.md",
+      "ocs/guides/web-cockpit-smoke.md",
+      "ocs/specs/config-variants.md",
+      "ocs/specs/threading-ui-contract.md",
+      "ocs/specs/web-dashboard.md",
+      "omana.pyw",
+      "omana/assets/web/dashboard.css",
+      "omana/assets/web/dashboard.js",
+      "omana/assets/web/index.html",
+      "omana/metadata.py",
+      "omana/ui/app.py",
+      "omana/ui/dialogs.py",
+      "omana/ui/runtime_services.py",
+      "omana/web/__init__.py",
+      "omana/web/server.py",
+      "ools/build_portable.py",
+      "ools/scripts/packaged_launcher_smoke.ps1",
+      "review/checks.json",
+      "review/intake.json",
+      "review/ledger.json",
+      "review/report.md",
+      "tests/contracts/test_version_compatibility.py",
+      "tests/test_version_boundary.py",
+      "tests/test_web_dashboard_control.py",
+      "v.lock",
+      "yproject.toml"
+    ],
+    "candidate_tests": [
+      "tests/test_build_metadata.py",
+      "tests/test_launcher_core.py",
+      "tests/test_launcher_launch_flow.py",
+      "tests/test_launcher_update_service.py",
+      "tests/test_quality_packaged_launcher_smoke.py",
+      "tests/test_runtime_services.py",
+      "tests/test_ui_app_config.py",
+      "tests/test_version_boundary.py",
+      "tests/test_weapon_selector.py",
+      "tests/test_web_dashboard_control.py",
+      "tests/test_web_dashboard_presenter.py",
+      "tests/test_web_dashboard_server.py",
+      "tests/contracts/test_config_variants.py",
+      "tests/contracts/test_launcher_package_boundaries.py",
+      "tests/contracts/test_version_compatibility.py",
+      "tests/contracts/test_weapon_fire_control_runtime.py",
+      "tests/contracts/test_weapon_fire_control_schema.py",
+      "tests/contracts/test_web_dashboard_contract.py"
+    ]
+  },
   "size": {
-    "code_files": 141,
-    "code_lines": 48204,
-    "test_files": 62,
+    "code_files": 146,
+    "code_lines": 53182,
+    "test_files": 65,
     "todo_markers": 0
   },
   "languages": {
-    "python": 46969,
+    "python": 51479,
+    "javascript": 984,
     "rust": 541,
-    "javascript": 516,
     "shell": 178
   },
   "primary_language": "python",
@@ -28,12 +114,46 @@
     {
       "kind": "lockfile",
       "tool": "cargo",
-      "path": "native\\hotkey_broker\\Cargo.lock"
+      "path": "native/hotkey_broker/Cargo.lock"
     },
     {
       "kind": "manifest",
       "tool": "cargo",
-      "path": "native\\hotkey_broker\\Cargo.toml"
+      "path": "native/hotkey_broker/Cargo.toml"
+    }
+  ],
+  "package_json": [],
+  "declared_checks": [
+    {
+      "kind": "lint",
+      "name": "config:ruff",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "ruff",
+        "check",
+        "."
+      ],
+      "source": "pyproject.toml",
+      "priority": 80,
+      "origin": "configured-fallback",
+      "id": "D-001"
+    },
+    {
+      "kind": "test",
+      "name": "config:pytest",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "pytest",
+        "-q"
+      ],
+      "source": "pyproject.toml",
+      "priority": 80,
+      "origin": "configured-fallback",
+      "id": "D-002"
     }
   ],
   "check_capability": [
@@ -46,80 +166,88 @@
       "tool": "pytest"
     }
   ],
+  "check_kinds": [
+    "lint",
+    "test"
+  ],
+  "ci_commands_observed": [],
   "entry_points": [
-    "bomana\\ui\\app.py",
-    "bomana\\web\\server.py",
-    "native\\hotkey_broker\\src\\main.rs"
+    "bomana/ui/app.py",
+    "bomana/web/server.py",
+    "native/hotkey_broker/src/main.rs"
   ],
   "largest_files": [
     {
-      "lines": 3391,
-      "path": "bomana\\ui\\dialogs.py"
+      "lines": 3423,
+      "path": "bomana/ui/dialogs.py"
+    },
+    {
+      "lines": 2325,
+      "path": "bomana/ui/app.py"
     },
     {
       "lines": 1937,
-      "path": "bomana\\core\\logic.py"
-    },
-    {
-      "lines": 1881,
-      "path": "bomana\\ui\\app.py"
+      "path": "bomana/core/logic.py"
     },
     {
       "lines": 1398,
-      "path": "bomana\\config\\settings.py"
+      "path": "bomana/config/settings.py"
     },
     {
       "lines": 1372,
-      "path": "tools\\weapon_fire_control_extractor.py"
+      "path": "tools/weapon_fire_control_extractor.py"
+    },
+    {
+      "lines": 1236,
+      "path": "tests/test_launcher_update_service.py"
     },
     {
       "lines": 1211,
-      "path": "bomana\\ui\\main_window.py"
+      "path": "bomana/ui/main_window.py"
+    },
+    {
+      "lines": 1166,
+      "path": "bomana/web/server.py"
     },
     {
       "lines": 1152,
-      "path": "bomana\\ui\\widgets.py"
+      "path": "bomana/ui/widgets.py"
     },
     {
       "lines": 1034,
-      "path": "bomana\\ui\\hud_overlay.py"
+      "path": "bomana/ui/hud_overlay.py"
     },
     {
-      "lines": 1021,
-      "path": "tests\\test_launcher_update_service.py"
+      "lines": 908,
+      "path": "bomana/ui/runtime_services.py"
+    },
+    {
+      "lines": 890,
+      "path": "bomana/assets/web/dashboard.js"
     },
     {
       "lines": 861,
-      "path": "bomana\\core\\weapon_solver.py"
+      "path": "bomana/core/weapon_solver.py"
     },
     {
       "lines": 840,
-      "path": "bomana\\utils\\hotkey_broker.py"
+      "path": "bomana/utils/hotkey_broker.py"
     },
     {
       "lines": 839,
-      "path": "bomana\\utils\\system.py"
-    },
-    {
-      "lines": 836,
-      "path": "bomana\\core\\telemetry.py"
-    },
-    {
-      "lines": 824,
-      "path": "bomana\\core\\state.py"
-    },
-    {
-      "lines": 813,
-      "path": "bomana\\ui\\panel_renderer.py"
+      "path": "bomana/utils/system.py"
     }
   ],
-  "possible_hardcoded_secrets": [],
+  "possible_hardcoded_secrets": [
+    "tests/test_ui_app_config.py"
+  ],
   "git": {
     "is_repo": true,
-    "head": "ff07afd",
+    "head": "c0bbaba",
     "branch": "main",
-    "dirty_files": 8,
+    "dirty_files": 58,
     "recent_commits": [
+      "c0bbaba docs: remove redundant session artifacts",
       "ff07afd feat(web): add secure local and LAN Web Cockpit",
       "ae85c1c fix(checklist): use responsive compact item rows",
       "48371fa feat(tactical): add weapon and recovery cues",
@@ -128,26 +256,131 @@
       "27e8c1a chore(review): record accepted broker elevation risk",
       "d14428e feat(replay): track real 8111 full-sortie fixture",
       "c736230 feat(replay): add virtual-time 8111 session validation",
-      "fab46bb feat(recorder): add official 8111 session capture",
-      "7718d98 refactor(quality): modernize docs and test library"
+      "fab46bb feat(recorder): add official 8111 session capture"
+    ],
+    "base": "",
+    "scope_source": "working-tree",
+    "changed_files": [
+      ".review/work-order-Bomana-7nts.md",
+      "EADME.md",
+      "GENTS.md",
+      "auncher.pyw",
+      "auncher/bootstrap.py",
+      "auncher/install_txn.py",
+      "auncher/metadata.py",
+      "bomana/web/control.py",
+      "bomana_version.py",
+      "docs/adr/0008-authenticated-web-control-and-v8-boundary.md",
+      "docs/specs/schemas/web-dashboard-command-response.schema.json",
+      "docs/specs/schemas/web-dashboard-command.schema.json",
+      "docs/specs/schemas/web-dashboard-control-state.schema.json",
+      "docs/specs/version-compatibility.md",
+      "ests/contracts/test_config_variants.py",
+      "ests/contracts/test_launcher_package_boundaries.py",
+      "ests/contracts/test_web_dashboard_contract.py",
+      "ests/test_build_metadata.py",
+      "ests/test_launcher_core.py",
+      "ests/test_launcher_launch_flow.py",
+      "ests/test_launcher_update_service.py",
+      "ests/test_quality_packaged_launcher_smoke.py",
+      "ests/test_runtime_services.py",
+      "ests/test_ui_app_config.py",
+      "ests/test_weapon_selector.py",
+      "ests/test_web_dashboard_server.py",
+      "gitignore",
+      "ocs/ARCHITECTURE.md",
+      "ocs/CHANGELOG.md",
+      "ocs/CONTRIBUTING.md",
+      "ocs/PITFALLS.md",
+      "ocs/PRIVACY.md",
+      "ocs/QUICKSTART.md",
+      "ocs/guides/web-cockpit-smoke.md",
+      "ocs/specs/config-variants.md",
+      "ocs/specs/threading-ui-contract.md",
+      "ocs/specs/web-dashboard.md",
+      "omana.pyw",
+      "omana/assets/web/dashboard.css",
+      "omana/assets/web/dashboard.js",
+      "omana/assets/web/index.html",
+      "omana/metadata.py",
+      "omana/ui/app.py",
+      "omana/ui/dialogs.py",
+      "omana/ui/runtime_services.py",
+      "omana/web/__init__.py",
+      "omana/web/server.py",
+      "ools/build_portable.py",
+      "ools/scripts/packaged_launcher_smoke.ps1",
+      "review/checks.json",
+      "review/intake.json",
+      "review/ledger.json",
+      "review/report.md",
+      "tests/contracts/test_version_compatibility.py",
+      "tests/test_version_boundary.py",
+      "tests/test_web_dashboard_control.py",
+      "v.lock",
+      "yproject.toml"
+    ],
+    "diff_stat": [
+      "bomana/assets/web/dashboard.css                    | 109 ++-",
+      "bomana/assets/web/dashboard.js                     | 480 ++++++++++++-",
+      "bomana/assets/web/index.html                       |  82 ++-",
+      "bomana/metadata.py                                 |   4 +-",
+      "bomana/ui/app.py                                   | 492 +++++++++++++-",
+      "bomana/ui/dialogs.py                               |  82 ++-",
+      "bomana/ui/runtime_services.py                      | 139 +++-",
+      "bomana/web/__init__.py                             |  25 +-",
+      "bomana/web/server.py                               | 742 +++++++++++++++++++--",
+      "docs/ARCHITECTURE.md                               |  49 +-",
+      "docs/CHANGELOG.md                                  |  17 +-",
+      "docs/CONTRIBUTING.md                               |  15 +-",
+      "docs/PITFALLS.md                                   |  57 ++",
+      "docs/PRIVACY.md                                    |  18 +-",
+      "docs/QUICKSTART.md                                 |  40 +-",
+      "docs/guides/web-cockpit-smoke.md                   | 206 +++++-",
+      "docs/specs/config-variants.md                      |  28 +-",
+      "docs/specs/threading-ui-contract.md                |  16 +-",
+      "docs/specs/web-dashboard.md                        | 210 ++++--",
+      "launcher.pyw                                       | 422 ++++++++++--",
+      "launcher/bootstrap.py                              |  71 +-",
+      "launcher/install_txn.py                            | 175 ++++-",
+      "launcher/metadata.py                               |   2 +-",
+      "pyproject.toml                                     |   2 +-",
+      "tests/contracts/test_config_variants.py            |  24 +-",
+      ".../contracts/test_launcher_package_boundaries.py  |  22 +-",
+      "tests/contracts/test_web_dashboard_contract.py     | 395 ++++++++++-",
+      "tests/test_build_metadata.py                       |  25 +-",
+      "tests/test_launcher_core.py                        |  44 +-",
+      "tests/test_launcher_launch_flow.py                 | 282 +++++++-",
+      "tests/test_launcher_update_service.py              | 341 ++++++++--",
+      "tests/test_quality_packaged_launcher_smoke.py      |  21 +",
+      "tests/test_runtime_services.py                     |  69 +-",
+      "tests/test_ui_app_config.py                        | 223 +++++++",
+      "tests/test_weapon_selector.py                      |  41 +-",
+      "tests/test_web_dashboard_server.py                 | 587 +++++++++++++++-",
+      "tools/build_portable.py                            |  21 +-",
+      "tools/scripts/packaged_launcher_smoke.ps1          | 214 ++++--",
+      "uv.lock                                            |   2 +-",
+      "47 files changed, 5793 insertions(+), 518 deletions(-)"
     ]
   },
   "sdd": {
     "agents_md": true,
     "spec_files": [
-      "docs\\specs\\config-variants.md",
-      "docs\\specs\\navigation-cues.md",
-      "docs\\specs\\release-signing.md",
-      "docs\\specs\\runtime-8111-boundary.md",
-      "docs\\specs\\startup-elevation.md",
-      "docs\\specs\\testing-quality-gates.md",
-      "docs\\specs\\threading-ui-contract.md",
-      "docs\\specs\\ui-presenter-boundary.md",
-      "docs\\specs\\weapon-fire-control.md",
-      "docs\\specs\\web-dashboard.md"
+      "docs/specs/config-variants.md",
+      "docs/specs/navigation-cues.md",
+      "docs/specs/release-signing.md",
+      "docs/specs/runtime-8111-boundary.md",
+      "docs/specs/startup-elevation.md",
+      "docs/specs/testing-quality-gates.md",
+      "docs/specs/threading-ui-contract.md",
+      "docs/specs/ui-presenter-boundary.md",
+      "docs/specs/version-compatibility.md",
+      "docs/specs/weapon-fire-control.md",
+      "docs/specs/web-dashboard.md"
     ],
     "clause_prefixes": [
       "CFG",
+      "COMPAT",
       "ELEV",
       "HOTKEY",
       "NAVCUE",
@@ -159,9 +392,9 @@
       "WDB",
       "WFC"
     ],
-    "clause_mentions": 280,
+    "clause_mentions": 394,
     "adr_dir": true,
-    "pitfalls": "docs\\PITFALLS.md",
+    "pitfalls": "docs/PITFALLS.md",
     "contract_tests_dir": true,
     "changes_dir": false,
     "detected": true

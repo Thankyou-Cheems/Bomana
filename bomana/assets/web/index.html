@@ -39,6 +39,80 @@
       </div>
     </section>
 
+    <section class="control-deck card" aria-labelledby="controlTitle">
+      <div class="card-head control-head">
+        <div><span class="eyebrow">APP LINK</span><h2 id="controlTitle">Bomana 控制台</h2></div>
+        <span class="scope-chip pending" id="controlScope">正在核对权限</span>
+      </div>
+      <p class="control-help" id="controlHelp">控制状态正在加载。飞行数据仍会独立更新。</p>
+      <p class="command-status" id="commandStatus" role="status" aria-live="polite">尚未发送操作</p>
+
+      <div class="control-action-grid" aria-label="快捷动作">
+        <button class="action-tile danger-action" id="resetTimerButton" type="button" disabled>
+          <span>计时器</span><strong>重置计时</strong><small>需要再次确认</small>
+        </button>
+        <button class="action-tile" id="cycleCornerButton" type="button" disabled>
+          <span>界面位置</span><strong>切换下一角</strong><small>保存到 Bomana 配置</small>
+        </button>
+      </div>
+
+      <div class="control-settings-grid">
+        <fieldset class="control-group">
+          <legend>应用状态</legend>
+          <div class="target-setting">
+            <span>窗口锁定</span>
+            <div class="segmented-control" role="group" aria-label="窗口锁定目标状态">
+              <button id="lockedOnButton" type="button" aria-pressed="false" disabled>锁定</button>
+              <button id="lockedOffButton" type="button" aria-pressed="false" disabled>解除</button>
+            </div>
+          </div>
+          <div class="target-setting">
+            <span>提示音</span>
+            <div class="segmented-control" role="group" aria-label="提示音目标状态">
+              <button id="beepOnButton" type="button" aria-pressed="false" disabled>开启</button>
+              <button id="beepOffButton" type="button" aria-pressed="false" disabled>关闭</button>
+            </div>
+          </div>
+          <div class="target-setting" id="zoneSoundSetting">
+            <span>战区提示音</span>
+            <div class="segmented-control" role="group" aria-label="战区提示音目标状态">
+              <button id="zoneSoundOnButton" type="button" aria-pressed="false" disabled>开启</button>
+              <button id="zoneSoundOffButton" type="button" aria-pressed="false" disabled>关闭</button>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="control-group panel-controls">
+          <legend>面板显示</legend>
+          <div class="check-grid">
+            <label id="panelZonesLabel"><input id="panelZones" type="checkbox" disabled><span>战区</span></label>
+            <label id="panelAirfieldsLabel"><input id="panelAirfields" type="checkbox" disabled><span>机场</span></label>
+            <label id="panelFuelLabel"><input id="panelFuel" type="checkbox" disabled><span>燃油</span></label>
+            <label id="panelSpeedLabel"><input id="panelSpeed" type="checkbox" disabled><span>速度</span></label>
+            <label id="panelChecklistLabel"><input id="panelChecklist" type="checkbox" disabled><span>检查清单</span></label>
+            <label id="panelWeaponLabel"><input id="panelWeapon" type="checkbox" disabled><span>武器解算</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="control-group weapon-controls">
+          <legend>武器与模型</legend>
+          <label class="select-setting" for="weaponSelect">
+            <span>当前武器</span>
+            <select id="weaponSelect" disabled>
+              <option value="">等待武器目录</option>
+            </select>
+          </label>
+          <div class="target-setting model-setting">
+            <span>弹道模型</span>
+            <div class="segmented-control model-control" role="group" aria-label="弹道模型目标状态">
+              <button id="modelCompatibleButton" type="button" aria-pressed="false" disabled>FoxThree 兼容</button>
+              <button id="modelOfficialButton" type="button" aria-pressed="false" disabled>严格官方</button>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </section>
+
     <section class="map-card card">
       <div class="card-head">
         <div><span class="eyebrow">TACTICAL VIEW</span><h1>战术态势</h1></div>
@@ -140,8 +214,8 @@
   </main>
 
   <footer>
-    <span>只读投影 · 数据来自本机 Bomana</span>
-    <span>无游戏控制 · 无外网资源</span>
+    <span>本机投影 · 控制由 Bomana 按会话授权</span>
+    <span>无键盘模拟 · 无外网资源</span>
   </footer>
 
   <div class="pairing" id="pairingPanel" role="dialog" aria-modal="true" aria-labelledby="pairingTitle">
@@ -149,11 +223,11 @@
       <span class="brand-mark large" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="eyebrow">TRUSTED LAN ONLY</span>
       <h2 id="pairingTitle">连接 Bomana</h2>
-      <p>从 Bomana 托盘菜单查看本次运行的配对码。只在可信局域网中共享。</p>
+      <p>从 Bomana 托盘菜单查看本次运行的配对码。每次配对会创建独立会话，局域网会话默认只读。</p>
       <label for="pairingCode">配对码</label>
       <input id="pairingCode" name="pairingCode" inputmode="text" autocomplete="one-time-code" maxlength="9" placeholder="ABCD-EFGH" required>
       <button type="submit">进入驾驶舱</button>
-      <small id="pairingError">网页仅提供只读飞行信息。</small>
+      <small id="pairingError">只在可信局域网中共享配对码。</small>
     </form>
   </div>
 

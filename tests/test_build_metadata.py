@@ -32,6 +32,18 @@ def normalized_dependency_name(requirement: str) -> str:
     return re.sub(r"[-_.]+", "-", match.group(1)).lower()
 
 
+def write_shared_app_runtime_assets(root: Path) -> None:
+    (root / "bomana_version.py").write_text("# shared version boundary\n", encoding="utf-8")
+    schema_dir = root / "docs" / "specs" / "schemas"
+    schema_dir.mkdir(parents=True, exist_ok=True)
+    for name in (
+        "web-dashboard-command.schema.json",
+        "web-dashboard-command-response.schema.json",
+        "web-dashboard-control-state.schema.json",
+    ):
+        (schema_dir / name).write_text("{}\n", encoding="utf-8")
+
+
 def test_portable_build_reads_version_from_metadata() -> None:
     build_portable = load_tool_module("build_portable", "tools/build_portable.py")
     metadata_text = (ROOT / "bomana" / "metadata.py").read_text(encoding="utf-8")
@@ -71,6 +83,7 @@ def test_app_package_bundles_zero_install_hotkey_broker_and_checksum(tmp_path: P
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
     (root / "bomana" / "data").mkdir()
     (root / "bomana" / "data" / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
+    write_shared_app_runtime_assets(root)
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
@@ -96,6 +109,7 @@ def test_enhanced_app_package_bundles_weapon_catalog_and_shared_schema(tmp_path:
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
     (data_dir / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
     (schema_dir / "weapon-fire-control.schema.json").write_text("{}\n", encoding="utf-8")
+    write_shared_app_runtime_assets(root)
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
@@ -122,12 +136,13 @@ def test_all_app_variants_bundle_web_cockpit(tmp_path: Path, variant: str) -> No
         directory.mkdir(parents=True, exist_ok=True)
     (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
-    for name in ("__init__.py", "server.py", "snapshot.py"):
+    for name in ("__init__.py", "control.py", "server.py", "snapshot.py"):
         (web_module_dir / name).write_text("", encoding="utf-8")
     for name in ("index.html", "dashboard.css", "dashboard.js", "favicon.svg"):
         (web_asset_dir / name).write_text(name, encoding="utf-8")
     (data_dir / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
     (schema_dir / "weapon-fire-control.schema.json").write_text("{}\n", encoding="utf-8")
+    write_shared_app_runtime_assets(root)
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
@@ -135,12 +150,17 @@ def test_all_app_variants_bundle_web_cockpit(tmp_path: Path, variant: str) -> No
 
     expected = {
         "bomana/web/__init__.py",
+        "bomana/web/control.py",
         "bomana/web/server.py",
         "bomana/web/snapshot.py",
         "bomana/assets/web/index.html",
         "bomana/assets/web/dashboard.css",
         "bomana/assets/web/dashboard.js",
         "bomana/assets/web/favicon.svg",
+        "bomana_version.py",
+        "docs/specs/schemas/web-dashboard-command.schema.json",
+        "docs/specs/schemas/web-dashboard-command-response.schema.json",
+        "docs/specs/schemas/web-dashboard-control-state.schema.json",
     }
     with zipfile.ZipFile(package) as archive:
         assert expected <= set(archive.namelist())
@@ -156,6 +176,7 @@ def test_enhanced_app_package_rejects_missing_weapon_assets(tmp_path: Path) -> N
     output.mkdir()
     (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
+    write_shared_app_runtime_assets(root)
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
@@ -170,6 +191,8 @@ def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:
     )
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject["project"]
+
+    assert project["version"] == metadata.__version__
 
     pyproject_dependencies = {
         normalized_dependency_name(dependency) for dependency in project["dependencies"]

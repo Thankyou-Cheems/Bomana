@@ -1,10 +1,11 @@
-# Code Review Report
+# Code Review Audit
 
+**Scope:** working-tree — .review/work-order-Bomana-7nts.md, EADME.md, GENTS.md, auncher.pyw, auncher/bootstrap.py, auncher/install_txn.py, auncher/metadata.py, bomana/web/control.py …
 **Open findings:** 2 high, 2 medium
-**Resolved:** 74  |  **Generated:** 2026-07-11T07:54:31+00:00
+**Resolved:** 82  |  **Generated:** 2026-07-11T12:20:04+00:00
 
 ## F-4cfa222a [HIGH/confirmed] HUD can fall back to a non-click-through topmost window
-`bomana/ui/hud_overlay.py:419-432`
+`bomana/ui/hud_overlay.py:419-432`  WARNING: snippet is near but outside exact range 419-432; first line near 422
 ```
         if self._transparency_support.win32_layered:
             if Win32.setup_window(
@@ -49,7 +50,7 @@ def verify_bundled_broker(path: Path) -> bool:
 - **Evidence:** [runtime] A temporary attacker-controlled BomanaHotkeyBroker.exe plus its matching adjacent sidecar made verify_bundled_broker() return True.; [read] hotkey_broker.py passes the accepted path to ShellExecuteExW with lpVerb=runas; build_portable.py packages the EXE and checksum together.; [read] launcher.pyw requires the install root to be writable and recommends a Desktop or Downloads Bomana directory; ADR 0003 acknowledges the user-writable package is weaker than Program Files plus Authenticode.; [tool] uv focused broker/elevation/build tests: 60 passed; existing tests pin matching-pair behavior but do not provide an independent trust anchor.
 
 ## F-61167c77 [MEDIUM/confirmed] Startup HUD initialization failure is not persisted
-`bomana/ui/app.py:177-178`  ⚠ snippet exists but not at lines 177-178; first line now near line 195
+`bomana/ui/app.py:177-178`  WARNING: snippet exists elsewhere, not at lines 177-178; first line near 209
 ```
         if HUDConfig.enabled and not self._show_hud_overlay():
             HUDConfig.enabled = False
@@ -59,7 +60,7 @@ def verify_bundled_broker(path: Path) -> bool:
 - **Evidence:** [read] runtime_services.update_hud_overlay() persists the later failure path at runtime_services.py:315-319, but App.__init__ disables HUD at app.py:177-178 before the first frame and does not save.
 
 ## F-fdfd306f [MEDIUM/confirmed] Showing primary reticle re-shows stale secondary markers
-`bomana/ui/hud_overlay.py:736-750`
+`bomana/ui/hud_overlay.py:736-750`  WARNING: snippet is near but outside exact range 736-750; first line near 739
 ```
     def _set_reticle_visible(self, visible: bool) -> None:
         state = "normal" if visible else "hidden"
@@ -82,9 +83,15 @@ def verify_bundled_broker(path: Path) -> bool:
 - **Evidence:** [read] _render_reticle calls _render_secondary_targets at hud_overlay.py:999-1007 and then _set_reticle_visible(True) at line 1012.; [read] _render_secondary_targets hides unused/empty secondary IDs at hud_overlay.py:878-884.
 
 ## Spec Feedback (close the incident loop)
-Findings below violate normative clauses. For each confirmed one, deliver the three-part unit from spec-anchored development §7: spec amendment (if the clause was falsified or gapped), PITFALLS.md entry citing the clause, and a behavioral regression pin in tests/contracts/.
+For each confirmed critical/high violation, deliver the spec-anchored-development §7 unit: spec amendment when the contract was falsified/gapped, PITFALLS entry, and behavioral regression pin.
+- CFG-10: F-3a7fd0a2
+- COMPAT-12: F-4629036a, F-f7a211e9
+- COMPAT-19: F-094508e3, F-d79f9d50
 - R8111-03: F-ae1f420a
+- WDB-05: F-851a25eb
 - WDB-17: F-6822fd77
+- WDB-34: F-2eb7d61d
+- WDB-37: F-48703b47
 - WFC-06: F-be7d7ba5, F-90989824
 - WFC-07: F-cfbcfd11
 - WFC-08: F-43ae3a6c

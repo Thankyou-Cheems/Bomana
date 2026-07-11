@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import threading
 import time
 import tkinter as tk
 from typing import Any
@@ -40,6 +41,11 @@ from bomana.utils.hotkey_broker import (
     detect_war_thunder_integrity,
 )
 from bomana.utils.system import GlobalHotkeys
+from bomana.web.control import (
+    ControlStateProjection,
+    DashboardControlStore,
+    WebCommandEnvelope,
+)
 from bomana.web.server import DashboardServerError, WebDashboardRuntime
 from bomana.web.snapshot import DashboardSnapshotStore
 
@@ -57,6 +63,10 @@ class AppRuntimeServices:
 
     def __init__(self, app: Any):
         self.app = app
+        self._web_command_dispatcher = getattr(app, "dispatcher", None)
+        self._web_command_callback = getattr(app, "_execute_web_command", None)
+        self._web_command_queue_open = threading.Event()
+        self._web_command_queue_open.set()
         self.global_hotkeys: GlobalHotkeys | None = None
         self.hotkey_broker: ElevatedHotkeyBrokerClient | None = None
         self.tray: Any | None = None
@@ -67,15 +77,53 @@ class AppRuntimeServices:
         self._hud_target_hold_sec = 1.2
         self._hud_render_error_count = 0
         self.dashboard_store = DashboardSnapshotStore()
+        self.dashboard_control_store = DashboardControlStore()
         self.dashboard: WebDashboardRuntime | None = None
         self.dashboard_error = ""
+
+    @staticmethod
+    def _launcher_web_preference(name: str, *, default: bool) -> bool:
+        value = os.environ.get(name)
+        if value == "1":
+            return True
+        if value == "0":
+            return False
+        return default
+
+    def dashboard_autostart_enabled(self) -> bool:
+        return self._launcher_web_preference(
+            "BOMANA_WEB_DASHBOARD_AUTOSTART",
+            default=True,
+        )
+
+    def dashboard_auto_open_enabled(self) -> bool:
+        return self._launcher_web_preference(
+            "BOMANA_WEB_DASHBOARD_AUTO_OPEN",
+            default=False,
+        )
+
+    def _queue_web_command(self, envelope: WebCommandEnvelope) -> bool:
+        dispatcher = self._web_command_dispatcher
+        callback = self._web_command_callback
+        if not self._web_command_queue_open.is_set() or dispatcher is None or callback is None:
+            return False
+        try:
+            dispatcher.post(callback, envelope)
+        except Exception as exc:
+            log_exception("web_dashboard_command_queue_failed", exc)
+            return False
+        return True
 
     def init_dashboard(self) -> bool:
         """Start the extension-free loopback Web Cockpit."""
         if self.dashboard is not None and self.dashboard.is_running:
             return True
         try:
-            dashboard = WebDashboardRuntime(self.dashboard_store)
+            dashboard = WebDashboardRuntime(
+                self.dashboard_store,
+                control_store=self.dashboard_control_store,
+                command_sink=self._queue_web_command,
+            )
             dashboard.start()
         except Exception as exc:
             self.dashboard = None
@@ -90,6 +138,38 @@ class AppRuntimeServices:
     def publish_dashboard(self, snapshot: UISnapshot, checklist_items: list[str]) -> None:
         """Publish immutable presentation state; HTTP threads never read Tk/App."""
         self.dashboard_store.publish(snapshot, checklist_items)
+
+    def publish_dashboard_control(self, projection: ControlStateProjection) -> None:
+        """Publish immutable Tk-owned semantic state for paired Web sessions."""
+        self.dashboard_control_store.publish(projection)
+
+    def reauthorize_web_command(self, envelope: WebCommandEnvelope) -> bool:
+        """Recheck the session authorization_epoch and current-run control scope."""
+        dashboard = self.dashboard
+        return bool(
+            dashboard is not None
+            and dashboard.is_running
+            and dashboard.reauthorize_command(envelope)
+        )
+
+    def complete_web_command(
+        self,
+        envelope: WebCommandEnvelope,
+        *,
+        status: str,
+        reason: str,
+        resulting_revision: int,
+    ) -> bool:
+        """Publish one session-owned recent_commands result after its resulting_revision."""
+        dashboard = self.dashboard
+        if dashboard is None or not dashboard.is_running:
+            return False
+        return dashboard.publish_command_completion(
+            envelope,
+            status=status,
+            reason=reason,
+            resulting_revision=resulting_revision,
+        )
 
     def enable_dashboard_lan(self) -> str:
         dashboard = self.dashboard
@@ -109,6 +189,20 @@ class AppRuntimeServices:
             return
         dashboard.disable_lan()
         log_event("web_dashboard_lan_disabled")
+
+    def enable_dashboard_lan_control(self) -> None:
+        dashboard = self.dashboard
+        if dashboard is None or not dashboard.is_running or not dashboard.lan_enabled:
+            raise DashboardServerError("请先为本次运行开启局域网访问")
+        dashboard.enable_lan_control()
+        log_event("web_dashboard_lan_control_enabled")
+
+    def disable_dashboard_lan_control(self) -> None:
+        dashboard = self.dashboard
+        if dashboard is None or not dashboard.lan_control_enabled:
+            return
+        dashboard.disable_lan_control()
+        log_event("web_dashboard_lan_control_disabled")
 
     def _dashboard_lan_share_available(self, _item: Any | None = None) -> bool:
         dashboard = self.dashboard
@@ -403,6 +497,9 @@ class AppRuntimeServices:
         def do_toggle_dashboard_lan(icon, item):
             app.dispatcher.post(app._toggle_web_dashboard_lan)
 
+        def do_toggle_dashboard_lan_control(icon, item):
+            app.dispatcher.post(app._toggle_web_dashboard_lan_control)
+
         def do_copy_dashboard_link(icon, item):
             app.dispatcher.post(app._copy_web_dashboard_link)
 
@@ -436,18 +533,40 @@ class AppRuntimeServices:
             pystray.Menu.SEPARATOR,
         ]
 
-        dashboard = self.dashboard
-        dashboard_ready = bool(dashboard is not None and dashboard.is_running)
-        dashboard_code = dashboard.pairing_code if dashboard_ready and dashboard else "---- ----"
+        def dashboard_pairing_text(_item):
+            active = self.dashboard
+            code = active.pairing_code if active is not None and active.is_running else "---- ----"
+            return f"复制配对码：{code}"
+
+        def dashboard_title(_item):
+            active = self.dashboard
+            return (
+                "网页驾驶舱"
+                if active is not None and active.is_running
+                else "网页驾驶舱（按需启动）"
+            )
+
+        def dashboard_is_ready(_item):
+            active = self.dashboard
+            return bool(active is not None and active.is_running)
+
         dashboard_menu = pystray.Menu(
-            pystray.MenuItem("打开本机页面", do_open_dashboard, enabled=dashboard_ready),
+            pystray.MenuItem("打开本机页面", do_open_dashboard),
             pystray.MenuItem(
                 "允许局域网访问（本次运行）",
                 do_toggle_dashboard_lan,
                 checked=lambda _item: bool(
                     self.dashboard is not None and self.dashboard.lan_enabled
                 ),
-                enabled=dashboard_ready,
+                enabled=dashboard_is_ready,
+            ),
+            pystray.MenuItem(
+                "允许局域网控制（本次运行）",
+                do_toggle_dashboard_lan_control,
+                checked=lambda _item: bool(
+                    self.dashboard is not None and self.dashboard.lan_control_enabled
+                ),
+                enabled=self._dashboard_lan_share_available,
             ),
             pystray.MenuItem(
                 "复制手机访问链接",
@@ -455,16 +574,15 @@ class AppRuntimeServices:
                 enabled=self._dashboard_lan_share_available,
             ),
             pystray.MenuItem(
-                f"复制配对码：{dashboard_code}",
+                dashboard_pairing_text,
                 do_copy_dashboard_code,
-                enabled=dashboard_ready,
+                enabled=dashboard_is_ready,
             ),
         )
         menu_items.append(
             pystray.MenuItem(
-                "网页驾驶舱" if dashboard_ready else "网页驾驶舱（启动失败）",
+                dashboard_title,
                 dashboard_menu,
-                enabled=dashboard_ready,
             )
         )
         menu_items.append(pystray.Menu.SEPARATOR)
@@ -782,6 +900,7 @@ class AppRuntimeServices:
 
     def stop(self) -> None:
         """Stop all optional runtime services during app shutdown."""
+        self._web_command_queue_open.clear()
         self.stop_dashboard()
         self.stop_global_hotkeys()
         self.stop_tray()

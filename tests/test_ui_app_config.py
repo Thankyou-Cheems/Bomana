@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui import app as app_module
 from bomana.ui.app import App, Corner
+from bomana.web.control import ValidatedWebCommand, WebCommandEnvelope
 
 
 def _make_config_only_app() -> App:
@@ -23,6 +24,18 @@ def _make_config_only_app() -> App:
     instance._hotkey_broker_notice = ""
     instance._hotkey_broker_action = ""
     return instance
+
+
+def _web_envelope(command: ValidatedWebCommand) -> WebCommandEnvelope:
+    return WebCommandEnvelope(
+        session_token="session-token",
+        transport="loopback",
+        scope="control",
+        authorization_epoch=2,
+        command_id="mobile-1",
+        command=command,
+        submitted_revision=1,
+    )
 
 
 class _FakeLabel:
@@ -110,6 +123,216 @@ def test_init_ui_syncs_hint_after_build(monkeypatch) -> None:
     app._init_ui()
 
     assert calls == ["build", "hint"]
+
+
+def test_web_command_rechecks_authorization_before_semantic_execution() -> None:
+    app = _make_config_only_app()
+    reasons: list[str] = []
+    app.runtime_services = SimpleNamespace(reauthorize_web_command=lambda _envelope: False)
+    app._apply_web_command = lambda _envelope: (_ for _ in ()).throw(
+        AssertionError("revoked command must not execute")
+    )
+    app._complete_web_command = lambda _envelope, reason: reasons.append(reason)
+
+    app._execute_web_command(_web_envelope(ValidatedWebCommand(name="action.cycle_corner")))
+
+    assert reasons == ["authorization_revoked"]
+
+
+def test_web_zone_command_rechecks_compile_feature_gate(monkeypatch) -> None:
+    app = _make_config_only_app()
+    monkeypatch.setattr(app_module, "ENABLE_ZONES", False)
+    envelope = _web_envelope(ValidatedWebCommand(name="state.set_zone_sound_enabled", enabled=True))
+
+    assert app._apply_web_command(envelope) == "feature_disabled"
+
+
+def test_web_control_projection_respects_compile_feature_authority(monkeypatch) -> None:
+    app = _make_config_only_app()
+    app.game = SimpleNamespace(snapshot=lambda: SimpleNamespace(phase=Phase.IDLE, on_ground=True))
+    for name in (
+        "ENABLE_CCRP",
+        "ENABLE_ZONES",
+        "ENABLE_AIRFIELDS",
+        "ENABLE_FUEL",
+        "ENABLE_CHECKLIST",
+    ):
+        monkeypatch.setattr(app_module, name, False)
+    monkeypatch.setattr(app_module.PanelConfig, "show_zones", True)
+    monkeypatch.setattr(app_module.PanelConfig, "show_airfields", True)
+    monkeypatch.setattr(app_module.PanelConfig, "show_fuel", True)
+    monkeypatch.setattr(app_module.PanelConfig, "show_checklist", True)
+    monkeypatch.setattr(app_module.PanelConfig, "show_bombing", True)
+
+    projection = app._build_web_control_projection(revision=1)
+
+    assert projection.commands == (
+        "action.reset_timer",
+        "action.cycle_corner",
+        "state.set_locked",
+        "state.set_beep_enabled",
+        "config.set_panel_visibility",
+    )
+    assert projection.panel_targets == ("speed",)
+    assert projection.weapons == ()
+    assert projection.state.zone_sound_enabled is False
+    assert projection.state.panel_visibility.zones is False
+    assert projection.state.panel_visibility.weapon_solution is False
+
+
+def test_web_weapon_choices_are_cached_between_unchanged_ui_frames(monkeypatch) -> None:
+    app = _make_config_only_app()
+    searches: list[str] = []
+
+    class Catalog:
+        selected_weapon_id = "agm_65d"
+
+        def search(self, query: str):
+            searches.append(query)
+            return [
+                {
+                    "id": "agm_65d",
+                    "display_name": "AGM-65D",
+                    "role": "agm",
+                }
+            ]
+
+        def for_aircraft(self, _aircraft: str):
+            return []
+
+        def compatible(self, _weapon_id: str, _aircraft: str) -> bool:
+            return True
+
+    catalog = Catalog()
+    snap = SimpleNamespace(
+        phase=Phase.IDLE,
+        on_ground=True,
+        aircraft_type_name="f_16c_block_50",
+    )
+    app.game = SimpleNamespace(snapshot=lambda: snap)
+    app._get_weapon_catalog = lambda: catalog
+    monkeypatch.setattr(app_module, "ENABLE_CCRP", True)
+
+    first = app._build_web_control_projection(revision=1, snapshot=snap)
+    second = app._build_web_control_projection(revision=1, snapshot=snap)
+
+    assert first.weapons == second.weapons
+    assert searches == [""]
+
+
+def test_web_weapon_choices_disable_unverified_airborne_compatibility(monkeypatch) -> None:
+    app = _make_config_only_app()
+
+    class Catalog:
+        selected_weapon_id = "agm_65d"
+
+        @staticmethod
+        def search(_query: str):
+            return [{"id": "agm_65d", "display_name": "AGM-65D", "role": "agm"}]
+
+        @staticmethod
+        def for_aircraft(_aircraft: str):
+            return []
+
+        @staticmethod
+        def compatible(_weapon_id: str, _aircraft: str) -> bool:
+            return False
+
+    snap = SimpleNamespace(phase=Phase.ALIVE, on_ground=False, aircraft_type_name="")
+    app.game = SimpleNamespace(snapshot=lambda: snap)
+    app._get_weapon_catalog = lambda: Catalog()
+    monkeypatch.setattr(app_module, "ENABLE_CCRP", True)
+
+    projection = app._build_web_control_projection(revision=1, snapshot=snap)
+
+    assert len(projection.weapons) == 1
+    assert projection.weapons[0].compatible is False
+
+
+def test_web_weapon_select_rejects_unverified_airborne_compatibility(monkeypatch) -> None:
+    app = _make_config_only_app()
+    persisted: list[str] = []
+
+    class Catalog:
+        @staticmethod
+        def get(weapon_id: str):
+            return {"id": weapon_id, "role": "agm"}
+
+        @staticmethod
+        def compatible(_weapon_id: str, _aircraft: str) -> bool:
+            return False
+
+    app.game = SimpleNamespace(
+        snapshot=lambda: SimpleNamespace(
+            phase=Phase.ALIVE,
+            on_ground=False,
+            aircraft_type_name="unknown_aircraft",
+        )
+    )
+    app._get_weapon_catalog = lambda: Catalog()
+    monkeypatch.setattr(app_module, "ENABLE_CCRP", True)
+    monkeypatch.setattr(
+        app_module,
+        "persist_weapon_selection",
+        lambda _catalog, weapon_id, _model: persisted.append(weapon_id) or True,
+    )
+
+    reason = app._apply_web_command(
+        _web_envelope(ValidatedWebCommand(name="weapon.select", weapon_id="agm_65d"))
+    )
+
+    assert reason == "weapon_incompatible"
+    assert persisted == []
+
+
+def test_explicit_beep_target_rolls_back_when_persistence_fails() -> None:
+    app = _make_config_only_app()
+    current = {"enabled": False}
+    app.sound = SimpleNamespace(
+        is_enabled=lambda: current["enabled"],
+        set_enabled=lambda value: current.update(enabled=value),
+    )
+    app._save_config = lambda **_kwargs: False
+
+    assert app._set_beep_enabled(True) is False
+    assert current["enabled"] is False
+
+
+def test_same_locked_target_is_successful_noop_without_persistence() -> None:
+    app = _make_config_only_app()
+    app._locked = True
+    app._save_config = lambda **_kwargs: (_ for _ in ()).throw(
+        AssertionError("same target must not persist")
+    )
+
+    assert app._set_locked_state(True) is True
+
+
+def test_same_beep_target_is_successful_noop_without_persistence_or_sound() -> None:
+    app = _make_config_only_app()
+    app.sound = SimpleNamespace(
+        is_enabled=lambda: False,
+        set_enabled=lambda _value: (_ for _ in ()).throw(
+            AssertionError("same target must not mutate sound")
+        ),
+        play=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("same target must not play sound")
+        ),
+    )
+    app._save_config = lambda **_kwargs: (_ for _ in ()).throw(
+        AssertionError("same target must not persist")
+    )
+
+    assert app._set_beep_enabled(False) is True
+
+
+def test_explicit_panel_target_rolls_back_when_persistence_fails(monkeypatch) -> None:
+    app = _make_config_only_app()
+    monkeypatch.setattr(app_module.PanelConfig, "show_speed", True)
+    app._save_config = lambda **_kwargs: False
+
+    assert app._set_panel_visibility("speed", False) is False
+    assert app_module.PanelConfig.show_speed is True
 
 
 def test_update_hint_removes_hidden_star_nudge_row() -> None:

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Thankyou-Cheems/Bomana/docs/specs/schemas/web-dashboard-command.schema.json",
+  "title": "Bomana Web Dashboard Command",
+  "oneOf": [
+    {"$ref": "#/$defs/resetTimer"},
+    {"$ref": "#/$defs/cycleCorner"},
+    {"$ref": "#/$defs/setLocked"},
+    {"$ref": "#/$defs/setBeepEnabled"},
+    {"$ref": "#/$defs/setZoneSoundEnabled"},
+    {"$ref": "#/$defs/setPanelVisibility"},
+    {"$ref": "#/$defs/selectWeapon"},
+    {"$ref": "#/$defs/setBallisticModel"}
+  ],
+  "$defs": {
+    "resetTimer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "confirmed"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "action.reset_timer"},
+        "confirmed": {"const": true}
+      }
+    },
+    "cycleCorner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "action.cycle_corner"}
+      }
+    },
+    "setLocked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "locked"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "state.set_locked"},
+        "locked": {"type": "boolean"}
+      }
+    },
+    "setBeepEnabled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "enabled"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "state.set_beep_enabled"},
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "setZoneSoundEnabled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "enabled"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "state.set_zone_sound_enabled"},
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "setPanelVisibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "target", "enabled"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "config.set_panel_visibility"},
+        "target": {
+          "enum": [
+            "zones",
+            "airfields",
+            "fuel",
+            "speed",
+            "checklist",
+            "weapon_solution"
+          ]
+        },
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "selectWeapon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "weapon_id"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "weapon.select"},
+        "weapon_id": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "setBallisticModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "model"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "weapon.set_ballistic_model"},
+        "model": {"enum": ["foxthree_compatible", "strict_official"]}
+      }
+    }
+  }
+}

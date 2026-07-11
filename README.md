@@ -169,10 +169,12 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 - **托盘直达** - 从托盘打开本机页面，无需油猴、浏览器插件或修改 8111 页面
 - **移动端地图优先** - 响应式矢量地图集中显示己机、战区、机场、POI 与 Trace back，并提供缩放、平移和跟随
 - **一页关键信息** - 同步计时、速度/高度/航向、燃油、导航、武器/投弹参考、检查清单与告警
+- **实体化控制** - 页面可重置计时、切换角落、设定锁定/提示音/面板显示，并在可用通道中选择武器与弹道模型；不模拟 F7-F11 按键
+- **分级授权** - 本机会话可控制；局域网配对默认只读，只有在 App 本机为本次运行显式开启 LAN 控制并重新配对后才能操作，撤销立即生效
 - **按需共享** - 默认仅本机可用；从托盘显式允许本次运行的局域网访问后，可复制带配对码的手机链接
 - **通道一致** - Enhanced、Standard、Lite 都包含网页驾驶舱，页面卡片随当前通道功能自动调整
 
-The Web Cockpit is a Bomana-designed, read-only dashboard for desktop and mobile browsers. It runs independently from port 8111 and publishes only the filtered features available in the current build.
+The Web Cockpit combines a filtered dashboard with a small allowlist of Bomana semantic controls. It runs independently from port 8111, never synthesizes keys, and keeps LAN sessions view-only unless control is explicitly enabled for the current run and the device pairs again.
 
 ---
 
@@ -182,12 +184,12 @@ The Web Cockpit is a Bomana-designed, read-only dashboard for desktop and mobile
 
 - Bomana 通过 `http://localhost:8111` 读取战斗数据。
 - 无需额外“开启本地服务器”开关；通常只需启动 War Thunder 并进入战斗。
-- 网页驾驶舱随 Bomana 自动启动，默认仅供本机访问；手机访问需从托盘为本次运行单独开启。
+- 启动器默认让网页驾驶舱随 App 启动，也可关闭或选择启动成功后自动打开本机页面；手机访问与控制仍只能在 App 托盘中为本次运行单独开启。
 
 ### 安装路径选择
 
-- 启动器路径（推荐普通用户）：下载 `Bomana_launcher_vX.X.X.exe`，由启动器自动检查更新并按通道下载对应 app 包；新版会保留一个上一版本供回退。
-- uv 直运行路径（适合开发者/已有 Python 环境）：如果本机已经有 uv 环境，可直接执行 `uv sync --python 3.14.5` 和 `uv run python Bomana.pyw`，无需下载启动器。
+- 启动器路径（推荐普通用户）：下载 `Bomana_launcher_vX.X.X.exe`，由启动器自动检查更新并按通道下载对应 app 包；新版会保留一个上一版本供回退。App 8.0.0+ 需要 Launcher 3.0.0+。
+- uv 直运行路径（适合开发者/已有 Python 环境）：如果本机已经有 uv 环境，可直接同步依赖，并用显式开发标记启动源码，无需下载启动器。
 
 ### 方式一：下载预编译版本（推荐）
 
@@ -212,12 +214,13 @@ The Web Cockpit is a Bomana-designed, read-only dashboard for desktop and mobile
 3. 下载后双击运行（绿色版，无需安装）
 4. 启动器打开后会后台自动检查当前通道版本与启动器版本（优先腾讯云/EdgeOne 更新服务，必要时回退 GitHub），并在界面展示来源与下载总大小
 5. 检查进行中仍可切换通道、下载来源和代理设置；当前检查结束后会自动按新条件重查
-6. 若某个 app 更新要求更高版本的启动器，启动器会先提示升级启动器，并阻止继续下载不兼容的 app 包
-7. 点击“下载更新”后，启动器会先验证发布清单签名，再校验 app 包并原子替换本地 `app/` 目录，同时把旧版保留到 `app_previous/`
-8. 如新版本有问题，可直接通过启动器“回退 vX.Y.Z”按钮把当前版和上一版互换
-9. 仅“下载更新”操作需要用户确认；首次运行通常需联网下载应用包，后续可离线启动本地已下载版本
-10. 可用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 校验文件完整性
-11. 程序显示名为 `Bomana香焦`
+6. 可配置“随 App 启动本机 Web 服务”和“启动成功后自动打开本机页面”；启动器不会保存端口、配对、LAN 访问或 LAN 控制状态
+7. Launcher 3.0.0 会拒绝启动、导入、安装、回退或恢复版本格式无效或低于 8.0.0 的 App；App 8.0.0 也会在运行时初始化前拒绝缺失、无效或低于 3.0.0 的启动器身份
+8. 点击“下载更新”后，启动器会先验证发布清单签名，再校验 app 包及包内精确版本，最后原子替换本地 `app/` 目录，同时把旧版保留到 `app_previous/`
+9. 如新版本有问题，可直接通过启动器“回退 vX.Y.Z”按钮把当前版和上一版互换
+10. 仅“下载更新”操作需要用户确认；首次运行通常需联网下载应用包，后续可离线启动本地已下载版本
+11. 可用 `checksums_launcher.txt` 与 `checksums_app_*.txt` 校验文件完整性
+12. 程序显示名为 `Bomana香焦`
 
 ### 方式二：从源码运行
 
@@ -259,9 +262,12 @@ GitHub 云端自动打包发布：
 
 #### 运行
 
-```bash
+```powershell
+$env:BOMANA_SOURCE_DEVELOPMENT = "1"
 uv run python Bomana.pyw
 ```
+
+`BOMANA_SOURCE_DEVELOPMENT=1` 只允许明确的非冻结源码开发运行跳过启动器身份；打包 App 不接受该例外。
 
 ---
 
@@ -271,6 +277,7 @@ uv run python Bomana.pyw
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 当前代码结构、运行数据流与构建发布链路
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) - 基于 `bd` 的协作、提交流程与发布约定
 - [docs/specs/](docs/specs/) - 8111、发布签名、UI 线程、配置变体和质量门禁的 canonical specs
+- [docs/specs/version-compatibility.md](docs/specs/version-compatibility.md) - App 8 / Launcher 3 严格版本与交接边界
 - [docs/PRIVACY.md](docs/PRIVACY.md) - 启动器匿名统计与网页驾驶舱本机/LAN 数据边界
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) - 版本变更记录
 - [docs/PITFALLS.md](docs/PITFALLS.md) - 维护过程中的已知坑点与排障记录
@@ -411,7 +418,7 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 
 ### 网页驾驶舱数据流
 
-Bomana 仍是唯一的 8111 读取方。App 将筛选后的只读 `UISnapshot` 发布给独立 HTTP 服务；网页不会请求或代理任何 8111 路由，也不会发布敌机标记或原始响应。服务默认监听 `127.0.0.1:8777`，端口被占用时在有限范围内回退；托盘可为本次运行额外绑定一个 RFC1918 私有 IPv4 地址。页面资源全部随应用打包，不依赖 CDN、远程字体或分析脚本。完整边界见 [Web Dashboard Spec](docs/specs/web-dashboard.md)。
+Bomana 仍是唯一的 8111 读取方。App 向独立 HTTP 服务发布筛选后的 `UISnapshot` 和 Tk 主线程拥有的控制状态；网页不会请求或代理任何 8111 路由，也不会发布敌机标记或原始响应。每次成功配对都会创建独立会话，写入还需要控制权限、同源 `Origin`、会话 CSRF 和幂等键；HTTP 只返回“已排队”，最终成功或拒绝由页面轮询控制状态获得。所有动作都会回到 Tk 主线程再次检查授权、`ENABLE_*` 与目标有效性，只能执行固定的 Bomana 语义功能，不能模拟按键、调用任意回调或扩展热键 Broker。服务默认监听 `127.0.0.1:8777`，端口被占用时在有限范围内回退；托盘可为本次运行额外绑定一个 RFC1918 私有 IPv4 地址。页面资源全部随应用打包，不依赖 CDN、远程字体或分析脚本。完整边界见 [Web Dashboard Spec](docs/specs/web-dashboard.md)。
 
 ### 状态机
 
@@ -445,6 +452,8 @@ Bomana 仍是唯一的 8111 读取方。App 将筛选后的只读 `UISnapshot` �
 2. 在 Bomana 托盘菜单中打开“网页驾驶舱”，选择“允许局域网访问（本次运行）”
 3. 使用自动复制的手机链接；需要时可从同一菜单再次复制链接或配对码
 4. 如果无法连接，在 Windows 防火墙提示中允许 Bomana 的专用网络访问；Bomana 不会自动修改防火墙
+
+手机首次配对只有查看权限。如需控制 Bomana，请再从 App 托盘明确开启“允许局域网控制（本次运行）”，然后使用轮换后的新链接重新配对。已有只读会话不会自动升级；撤销后已有 LAN 控制会话立即失效。网页按钮只操作 Bomana 自身的计时、窗口、声音、面板和可用的武器设置，不会模拟热键或控制游戏。
 
 ### Q: 武器解算或投弹提示不准确？
 

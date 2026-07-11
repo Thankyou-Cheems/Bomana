@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
-import re
 import shutil
 import tempfile
 import time
@@ -13,6 +13,11 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
+from bomana_version import (
+    MIN_SUPPORTED_APP_VERSION,
+    require_exact_version,
+    require_minimum_version,
+)
 from launcher.core import normalize_package_root, safe_extract_zip, sha256_bytes
 
 APP_DIR_NAME = "app"
@@ -22,6 +27,7 @@ UPDATE_LOCK_FILE_NAME = ".bomana_update.lock"
 UPDATE_LOCK_STALE_SEC = 30 * 60
 APP_REQUIRED_FILES = (
     Path("Bomana.pyw"),
+    Path("bomana_version.py"),
     Path("bomana") / "metadata.py",
 )
 APP_CONFIG_MARKERS = (Path("bomana") / "config" / "__init__.py",)
@@ -38,24 +44,65 @@ def _now_utc_iso() -> str:
 def _read_literal_version(path: Path) -> str:
     try:
         text = path.read_text(encoding="utf-8")
-        match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', text)
-        if match:
-            return match.group(1).strip()
+        module = ast.parse(text, filename=str(path))
+        values: list[str] = []
+        for statement in module.body:
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            if not any(
+                isinstance(target, ast.Name) and target.id == "__version__" for target in targets
+            ):
+                continue
+            value = statement.value
+            if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+                return ""
+            values.append(value.value)
+        if len(values) == 1:
+            return values[0]
     except Exception:
         return ""
     return ""
 
 
+def read_app_version_identity(app_dir: Path) -> str:
+    """Read the candidate's canonical version literal without importing it."""
+
+    return _read_literal_version(app_dir / "bomana" / "metadata.py")
+
+
 def read_local_app_version(app_dir: Path) -> str:
-    for relative in (
-        Path("bomana") / "config" / "__init__.py",
-        Path("bomana") / "config" / "metadata.py",
-        Path("bomana") / "metadata.py",
-    ):
-        version = _read_literal_version(app_dir / relative)
-        if version:
-            return version
-    return "0.0.0"
+    return read_app_version_identity(app_dir) or "0.0.0"
+
+
+def slot_entry_exists(path: Path) -> bool:
+    """Return whether a slot entry exists without following a reparse target."""
+
+    return os.path.lexists(path)
+
+
+def require_compatible_app_version(
+    app_dir: Path,
+    *,
+    expected_version: str | None = None,
+    identity_name: str = "应用版本",
+) -> str:
+    """Validate one candidate against the shared App 8 compatibility floor."""
+
+    if expected_version is not None:
+        require_minimum_version(
+            expected_version,
+            MIN_SUPPORTED_APP_VERSION,
+            identity_name="已验证签名清单应用版本",
+        )
+    version = require_minimum_version(
+        read_app_version_identity(app_dir),
+        MIN_SUPPORTED_APP_VERSION,
+        identity_name=identity_name,
+    )
+    if expected_version is not None:
+        require_exact_version(version, expected_version, identity_name=identity_name)
+    return version
 
 
 def validate_app_package_root(app_root: Path, entrypoint: str) -> None:
@@ -125,6 +172,7 @@ class InstallTransaction:
         self.work_dir: Path | None = None
         self.zip_path: Path | None = None
         self.stage_dir: Path | None = None
+        self.validated_new_version: str | None = None
         self.moved_to_backup = False
         self.replaced_app = False
 
@@ -143,13 +191,29 @@ class InstallTransaction:
             shutil.rmtree(self.work_dir, ignore_errors=True)
         release_update_lock(self.lock_path)
 
-    def extract_package(self, package_bytes: bytes, entrypoint: str) -> Path:
+    def extract_package(
+        self,
+        package_bytes: bytes,
+        entrypoint: str,
+        *,
+        expected_version: str | None = None,
+    ) -> Path:
         if self.zip_path is None or self.stage_dir is None:
             raise RuntimeError("安装事务未启动")
         self.zip_path.write_bytes(package_bytes)
-        return self.extract_package_file(self.zip_path, entrypoint)
+        return self.extract_package_file(
+            self.zip_path,
+            entrypoint,
+            expected_version=expected_version,
+        )
 
-    def extract_package_file(self, package_path: Path, entrypoint: str) -> Path:
+    def extract_package_file(
+        self,
+        package_path: Path,
+        entrypoint: str,
+        *,
+        expected_version: str | None = None,
+    ) -> Path:
         if self.zip_path is None or self.stage_dir is None:
             raise RuntimeError("安装事务未启动")
         if package_path != self.zip_path:
@@ -157,14 +221,36 @@ class InstallTransaction:
         safe_extract_zip(self.zip_path, self.stage_dir)
         src_root = normalize_package_root(self.stage_dir, entrypoint)
         validate_app_package_root(src_root, entrypoint)
+        require_compatible_app_version(
+            src_root,
+            expected_version=expected_version,
+            identity_name="暂存应用版本",
+        )
         return src_root
 
-    def stage_new_app(self, src_root: Path) -> None:
+    def stage_new_app(self, src_root: Path, *, expected_version: str | None = None) -> None:
+        version = require_compatible_app_version(
+            src_root,
+            expected_version=expected_version,
+            identity_name="暂存应用版本",
+        )
         if self.new_dir.exists():
             shutil.rmtree(self.new_dir, ignore_errors=True)
         shutil.copytree(src_root, self.new_dir)
+        self.validated_new_version = require_compatible_app_version(
+            self.new_dir,
+            expected_version=version,
+            identity_name="暂存应用版本",
+        )
 
     def replace_app(self) -> None:
+        if self.validated_new_version is None:
+            raise RuntimeError("暂存应用尚未通过兼容性校验")
+        require_compatible_app_version(
+            self.new_dir,
+            expected_version=self.validated_new_version,
+            identity_name="暂存应用版本",
+        )
         if self.backup_dir.exists():
             shutil.rmtree(self.backup_dir, ignore_errors=True)
         if self.app_dir.exists():
@@ -196,6 +282,19 @@ class InstallTransaction:
         transaction = cls(base)
         steps: list[str] = []
         try:
+            candidates = (
+                (transaction.app_dir, "当前应用版本"),
+                (transaction.backup_dir, "恢复备份应用版本"),
+                (transaction.previous_dir, "保留应用版本"),
+                (transaction.new_dir, "恢复暂存应用版本"),
+            )
+            for candidate, identity_name in candidates:
+                if slot_entry_exists(candidate):
+                    require_compatible_app_version(
+                        candidate,
+                        identity_name=identity_name,
+                    )
+
             if (not transaction.app_dir.exists()) and transaction.backup_dir.exists():
                 os.replace(str(transaction.backup_dir), str(transaction.app_dir))
                 steps.append("restore_backup")
@@ -234,7 +333,14 @@ def install_zip_package(
     entrypoint: str,
     status_cb: StatusCallback | None = None,
     cancel_cb: CancelCallback | None = None,
+    expected_version: str | None = None,
 ) -> None:
+    if expected_version is not None:
+        require_minimum_version(
+            expected_version,
+            MIN_SUPPORTED_APP_VERSION,
+            identity_name="已验证签名清单应用版本",
+        )
     expected = (expected_sha256 or "").strip().lower()
     actual = sha256_bytes(package_bytes)
     if expected and actual != expected:
@@ -247,12 +353,16 @@ def install_zip_package(
             status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
-        src_root = transaction.extract_package(package_bytes, entrypoint)
+        src_root = transaction.extract_package(
+            package_bytes,
+            entrypoint,
+            expected_version=expected_version,
+        )
 
         if status_cb:
             status_cb("正在安装更新", "正在替换旧版本文件...", 0.94, "info")
 
-        transaction.stage_new_app(src_root)
+        transaction.stage_new_app(src_root, expected_version=expected_version)
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
         transaction.replace_app()
@@ -265,7 +375,14 @@ def install_zip_package_from_file(
     entrypoint: str,
     status_cb: StatusCallback | None = None,
     cancel_cb: CancelCallback | None = None,
+    expected_version: str | None = None,
 ) -> None:
+    if expected_version is not None:
+        require_minimum_version(
+            expected_version,
+            MIN_SUPPORTED_APP_VERSION,
+            identity_name="已验证签名清单应用版本",
+        )
     expected = (expected_sha256 or "").strip().lower()
     actual = sha256_file(package_path)
     if expected and actual != expected:
@@ -278,12 +395,16 @@ def install_zip_package_from_file(
             status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
-        src_root = transaction.extract_package_file(package_path, entrypoint)
+        src_root = transaction.extract_package_file(
+            package_path,
+            entrypoint,
+            expected_version=expected_version,
+        )
 
         if status_cb:
             status_cb("正在安装更新", "正在替换旧版本文件...", 0.94, "info")
 
-        transaction.stage_new_app(src_root)
+        transaction.stage_new_app(src_root, expected_version=expected_version)
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
         transaction.replace_app()
@@ -300,8 +421,14 @@ def rollback_to_previous_app(
     if not previous_dir.exists():
         raise RuntimeError("未找到可回退的上一版本。")
 
-    current_version = read_local_app_version(app_dir)
-    previous_version = read_local_app_version(previous_dir)
+    current_version = require_compatible_app_version(
+        app_dir,
+        identity_name="当前应用版本",
+    )
+    previous_version = require_compatible_app_version(
+        previous_dir,
+        identity_name="回退应用版本",
+    )
     lock_path = acquire_update_lock(base)
     work_dir = Path(tempfile.mkdtemp(prefix="bomana_rollback_", dir=str(base)))
     swap_dir = work_dir / "app_swap"

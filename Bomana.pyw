@@ -24,6 +24,11 @@ Maintenance notes:
 - Project-wide workflow and documentation rules live in `AGENTS.md` and
   `docs/`.
 """
+
+from bomana_version import validate_app_launcher_identity
+
+validate_app_launcher_identity()
+
 import sys
 import tkinter as tk
 from tkinter import messagebox
@@ -51,7 +56,7 @@ def main():
                 "Bomana",
                 (
                     f"当前运行时过旧，Bomana {__version__} 需要 Python 3.14+。\n"
-                    "如果你是通过绿色版启动器启动，请先更新启动器到 1.5.0 或更高版本。"
+                    "如果你是通过绿色版启动器启动，请先更新启动器到 3.0.0 或更高版本。"
                 ),
                 parent=root,
             )
@@ -81,4 +86,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
