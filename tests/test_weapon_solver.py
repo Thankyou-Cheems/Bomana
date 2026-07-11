@@ -33,6 +33,42 @@ def _powered_weapon(**overrides):
     return weapon
 
 
+def _aam_envelope_weapon(**overrides):
+    weapon = _powered_weapon(
+        id="us_aim_120c_5",
+        role="aam",
+        min_distance_m=30.0,
+        hard_max_distance_m=10_000.0,
+        model_unsupported_reasons=["conditional_propulsion_autopilot"],
+        guidance_envelope={
+            "tables": [
+                {
+                    "table": "table0",
+                    "altitude_m": 5000.0,
+                    "fighter_mach": [0.9, 1.2],
+                    "target_mach": [0.9, 0.9],
+                    "target_mach2_mult": -1.0,
+                    "range_min_m": [548.949, 1247.15, 632.025, 1288.37],
+                    "range_max_m": [13562.0, 81819.2, 15747.1, 92218.4],
+                    "time_max_s": [39.0833, 70.3742, 41.1873, 118.921],
+                },
+                {
+                    "table": "table1",
+                    "altitude_m": 10000.0,
+                    "fighter_mach": [0.9, 1.2],
+                    "target_mach": [0.9, 0.9],
+                    "target_mach2_mult": -1.0,
+                    "range_min_m": [913.146, 2079.19, 884.301, 2260.35],
+                    "range_max_m": [31951.9, 107881.0, 45065.3, 114953.0],
+                    "time_max_s": [86.772, 120.0, 113.982, 120.0],
+                },
+            ]
+        },
+    )
+    weapon.update(overrides)
+    return weapon
+
+
 def _solve(weapon, **overrides):
     inputs = {
         "launch_altitude_m": 1000.0,
@@ -261,7 +297,7 @@ def test_guided_normal_reuses_ballistic_integration_conservatively() -> None:
     assert weak_result.max_range_m < result.max_range_m
 
 
-def test_glide_uses_distinct_ballistic_surrogates_without_claiming_an_envelope() -> None:
+def test_glide_does_not_reuse_the_iron_bomb_trajectory_as_an_envelope() -> None:
     calls = []
 
     def trajectory(**kwargs):
@@ -320,36 +356,14 @@ def test_glide_uses_distinct_ballistic_surrogates_without_claiming_an_envelope()
         target_distance_m=1000.0,
     )
 
-    assert len(calls) == 2
-    assert calls[0]["bomb_params"] == {
-        "mass": 129.0,
-        "drag_cx": 0.08,
-        "caliber": 0.19,
-    }
-    assert calls[1]["bomb_params"] == {
-        "mass": 93.0,
-        "drag_cx": 0.11,
-        "caliber": 0.18,
-    }
-    assert first.max_range_m != second.max_range_m
-    assert {first.status, second.status} == {"within_ballistic_reference"}
-    assert {first.reason, second.reason} == {"guided_ballistic_surrogate"}
-    assert {first.quality, second.quality} == {"two_dimensional"}
-
-    beyond = solver.solve(
-        gbu_39,
-        launch_altitude_m=1000.0,
-        launch_speed_mps=250.0,
-        target_distance_m=10_000.0,
-        target_kind="zone",
-        ground_closing_speed_mps=100.0,
-    )
-    assert beyond.status == "beyond_ballistic_reference"
-    assert beyond.reason == "guided_ballistic_surrogate"
-    assert beyond.time_to_window_s > 0.0
+    assert calls == []
+    assert {first.status, second.status} == {"insufficient_data"}
+    assert {first.reason, second.reason} == {"glide_envelope_unavailable"}
+    assert not first.valid
+    assert not second.valid
 
 
-def test_glide_ballistic_surrogate_obeys_lifetime_and_hard_cap() -> None:
+def test_glide_unavailable_state_precedes_flat_propulsion_fallback() -> None:
     def trajectory(**_kwargs):
         return 40.0, 10_000.0, 250.0
 
@@ -367,6 +381,7 @@ def test_glide_ballistic_surrogate_obeys_lifetime_and_hard_cap() -> None:
         "fins_aoa_vert": 30.0,
         "guidance_kind": "ins_gnss",
         "guidance": {"type": "ins", "seeker": "gnss"},
+        "model_unsupported_reasons": ["conditional_propulsion_autopilot"],
     }
 
     result = WeaponSolver(trajectory_func=trajectory).solve(
@@ -376,8 +391,9 @@ def test_glide_ballistic_surrogate_obeys_lifetime_and_hard_cap() -> None:
         target_distance_m=1000.0,
     )
 
-    assert result.status == "within_ballistic_reference"
-    assert result.max_range_m == pytest.approx(2000.0)
+    assert result.status == "insufficient_data"
+    assert result.reason == "glide_envelope_unavailable"
+    assert result.max_range_m == 0.0
 
 
 def test_freefall_and_high_drag_return_to_ccrp_without_integration() -> None:
@@ -445,6 +461,84 @@ def test_conditional_propulsion_fails_closed_before_integration(guard) -> None:
     assert result.status == "insufficient_data"
     assert result.reason == "conditional_propulsion_unsupported"
     assert not result.valid
+
+
+def test_aam_guidance_table_uses_current_aspect_and_bypasses_flat_model_limits() -> None:
+    head_on = _solve(
+        _aam_envelope_weapon(),
+        launch_altitude_m=5000.0,
+        launch_mach=0.9,
+        target_distance_m=80_000.0,
+        target_kind="aircraft",
+        target_aspect_cosine=-1.0,
+    )
+
+    assert head_on.status == "within_aspect_reference"
+    assert head_on.reason == "datamine_guidance_envelope"
+    assert head_on.max_range_m == pytest.approx(81_819.2)
+    assert head_on.rear_range_m == pytest.approx(13_562.0)
+    assert head_on.head_range_m == pytest.approx(81_819.2)
+    assert head_on.target_aspect_cosine == -1.0
+    assert head_on.max_range_m > 10_000.0  # not clipped by missile maxDistance
+    assert head_on.valid
+
+
+@pytest.mark.parametrize(
+    ("distance_m", "aspect", "expected"),
+    [
+        (10_000.0, 1.0, "within_all_aspect_reference"),
+        (50_000.0, 1.0, "head_on_only_reference"),
+        (50_000.0, None, "head_on_only_reference"),
+        (90_000.0, -1.0, "beyond_envelope_reference"),
+    ],
+)
+def test_aam_guidance_table_exposes_all_current_and_best_aspect_states(
+    distance_m, aspect, expected
+) -> None:
+    result = _solve(
+        _aam_envelope_weapon(),
+        launch_altitude_m=5000.0,
+        launch_mach=0.9,
+        target_distance_m=distance_m,
+        target_kind="aircraft",
+        target_aspect_cosine=aspect,
+    )
+
+    assert result.status == expected
+    assert result.quality == "two_dimensional"
+    if aspect is None:
+        assert result.min_range_m == 0.0
+
+
+def test_agm_guidance_table_can_bypass_conditional_propulsion_failure() -> None:
+    weapon = _powered_weapon(
+        model_unsupported_reasons=["conditional_propulsion_autopilot"],
+        guidance_envelope={
+            "tables": [
+                {
+                    "table": "table0",
+                    "altitude_m": 500.0,
+                    "fighter_mach": [0.4, 0.8],
+                    "target_mach": [0.1, 0.1],
+                    "target_mach2_mult": -1.0,
+                    "range_min_m": [5000.0] * 4,
+                    "range_max_m": [65000.0] * 4,
+                }
+            ]
+        },
+    )
+
+    result = _solve(
+        weapon,
+        launch_altitude_m=500.0,
+        launch_mach=0.8,
+        target_distance_m=60_000.0,
+        target_kind="zone",
+    )
+
+    assert result.status == "in_envelope"
+    assert result.reason == "datamine_guidance_envelope"
+    assert result.max_range_m == pytest.approx(65_000.0)
 
 
 def test_aam_uses_only_a_2d_max_and_ignores_top_level_minimum() -> None:

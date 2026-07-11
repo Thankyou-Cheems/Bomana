@@ -262,6 +262,16 @@ def _format_weapon_range(min_range_m: float, max_range_m: float) -> str:
     return f"估算窗 {min_range_m:.0f}–{max_range_m:.0f}m"
 
 
+def _format_aam_aspect_range(rear_range_m: float, head_range_m: float) -> str:
+    rear_range_m = max(0.0, rear_range_m)
+    head_range_m = max(0.0, head_range_m)
+    if rear_range_m >= 1000.0 and head_range_m >= 1000.0:
+        return f"尾/迎 {rear_range_m / 1000.0:.1f}/{head_range_m / 1000.0:.1f}km"
+    return (
+        f"尾 {_format_weapon_distance(rear_range_m)} / 迎 {_format_weapon_distance(head_range_m)}"
+    )
+
+
 def _format_weapon_target(snap: Any) -> str:
     kind = str(getattr(snap, "weapon_target_kind", "") or "").strip().lower()
     name = str(getattr(snap, "weapon_target_name", "") or "").strip()
@@ -317,6 +327,10 @@ def _weapon_status_presentation(status: str) -> IconTextModel:
         "within_ballistic_reference": IconTextModel("aim", "弹道参考内", Theme.YELLOW),
         "beyond_ballistic_reference": IconTextModel("aim", "弹道参考外", Theme.YELLOW),
         "within_2d_max_only": IconTextModel("aim", "二维上限内", Theme.YELLOW),
+        "within_all_aspect_reference": IconTextModel("aim", "全向参考内", Theme.YELLOW),
+        "within_aspect_reference": IconTextModel("aim", "当前航向内", Theme.YELLOW),
+        "head_on_only_reference": IconTextModel("aim", "仅迎头可达", Theme.YELLOW),
+        "beyond_envelope_reference": IconTextModel("aim", "超出表参考", Theme.YELLOW),
         "solver_error": IconTextModel("danger", "解算失败", Theme.RED),
     }
     return presentations.get(status, IconTextModel("clock", "等待估算", Theme.TEXT_MUTED))
@@ -334,6 +348,8 @@ def _weapon_fallback_detail(status: str, role: str, reason: str = "") -> str:
             return "未发现可估算的敌机目标"
         return "朝向 POI 或战区后估算"
     if status == "insufficient_data":
+        if reason == "glide_envelope_unavailable":
+            return "官方滑翔包线无可复用数据，已停用铁炸弹替代模型"
         if reason == "conditional_propulsion_unsupported":
             return "条件或变推力推进尚未建模，已停用估算"
         return "等待有效高度与速度数据"
@@ -349,6 +365,13 @@ def _weapon_fallback_detail(status: str, role: str, reason: str = "") -> str:
         return "超出弹道参考，不代表超出滑翔能力"
     if status == "within_2d_max_only":
         return "仅二维最大射程，未计目标速度、高差与迎尾角"
+    if status in {
+        "within_all_aspect_reference",
+        "within_aspect_reference",
+        "head_on_only_reference",
+        "beyond_envelope_reference",
+    }:
+        return "Datamine 条件包线参考，不是锁定或发射授权"
     if status == "solver_error":
         return "暂时无法生成武器估算"
     return ""
@@ -367,6 +390,10 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         "within_ballistic_reference",
         "beyond_ballistic_reference",
         "within_2d_max_only",
+        "within_all_aspect_reference",
+        "within_aspect_reference",
+        "head_on_only_reference",
+        "beyond_envelope_reference",
     }
     if status in usable_statuses and not compatible:
         status = "incompatible"
@@ -376,12 +403,16 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
     release = _weapon_status_presentation(status)
     min_range_m = _safe_float(getattr(snap, "weapon_min_range_m", 0.0))
     max_range_m = _safe_float(getattr(snap, "weapon_max_range_m", 0.0))
+    rear_range_m = _safe_float(getattr(snap, "weapon_rear_range_m", 0.0))
+    head_range_m = _safe_float(getattr(snap, "weapon_head_range_m", 0.0))
     if status in {"within_ballistic_reference", "beyond_ballistic_reference"}:
         range_text = (
             f"弹道参考约 {_format_weapon_distance(max_range_m)}"
             if max_range_m > 0.0
             else "弹道参考 --"
         )
+    elif role == "aam" and rear_range_m > 0.0 and head_range_m > 0.0:
+        range_text = _format_aam_aspect_range(rear_range_m, head_range_m)
     elif role == "aam" and max_range_m > 0.0:
         range_text = f"二维最大约 {_format_weapon_distance(max_range_m)}"
     else:
@@ -398,7 +429,12 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
     elif status != "align" and time_to_target_s > 0.0:
         detail_parts.append(f"飞行约 {_format_weapon_time(time_to_target_s)}")
 
-    if role == "aam" and max_range_m > 0.0:
+    if role == "aam" and reason == "datamine_guidance_envelope":
+        aspect = getattr(snap, "weapon_target_aspect_cosine", None)
+        if aspect is not None and max_range_m > 0.0:
+            detail_parts.append(f"当前航向约 {_format_weapon_distance(max_range_m)}")
+        detail_parts.append("条件表参考 · 目标速率/高差未知")
+    elif role == "aam" and max_range_m > 0.0:
         detail_parts.append("仅二维最大射程，未计目标速度、高差与迎尾角")
     elif status == "within_ballistic_reference":
         detail_parts.append("仅重力/阻力弹道参考，未计滑翔增程")
@@ -414,6 +450,10 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         "within_ballistic_reference",
         "beyond_ballistic_reference",
         "within_2d_max_only",
+        "within_all_aspect_reference",
+        "within_aspect_reference",
+        "head_on_only_reference",
+        "beyond_envelope_reference",
     }:
         quality_text = _weapon_quality_text(str(getattr(snap, "weapon_quality", "") or ""))
     if quality_text:

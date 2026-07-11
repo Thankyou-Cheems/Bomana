@@ -14,6 +14,20 @@ implementation plans belong in git history, not here.
 
 ## Entries
 
+### 2026-07-11 — Over-conservative weapon models can be operationally useless
+
+Symptom: AIM-120C-5 showed a roughly 15 km two-dimensional cue despite its condition tables supporting much longer high-energy launch references, while glide weapons displayed an iron-bomb trajectory that did not account for lift or guidance.
+Root cause: the extractor discarded the condition-table maxima and axes, the solver substituted a one-dimensional missile path length for condition-dependent initial launch separation, failed the whole record on propulsion details even when an independent guidance table existed, and relabelled the available free-fall integration as a guided-ballistic reference.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-02`, `WFC-06..WFC-08`, `WFC-10`, `WFC-13` (Draft 2026-07); ADR `docs/adr/0005-datamine-conditional-weapon-envelopes.md`.
+Pin: `tests/test_weapon_data_extractor.py` and `tests/contracts/test_weapon_fire_control_schema.py` retain the full conditional tables; `tests/test_weapon_envelope.py`, `tests/test_weapon_solver.py`, `tests/test_map_objects_contract.py`, and `tests/test_panel_presenter.py` require unclipped table interpolation, table-first AAM references, current `dx`/`dy` aspect only, and an explicit unavailable glide state.
+
+### 2026-07-11 — An unavailable table condition must not poison an independent fallback
+
+Symptom: AGM-65/RB75 records at high launch altitude returned `guidance_envelope_endpoint_unavailable` because an official `rangeMax` endpoint was zero, even though their ordinary powered point-mass fallback remained supported.
+Root cause: the solver treated every non-null conditional-table result as final instead of distinguishing a usable table reference from a launch condition with no table solution.
+Spec: `docs/specs/weapon-fire-control.md` `WFC-06`, `WFC-10` (Draft 2026-07).
+Pin: `tests/contracts/test_weapon_fire_control_runtime.py` requires the generated AGM-65D high-altitude zero-cell case to continue through the existing glide/unsupported guards and use the supported powered fallback.
+
 ### 2026-07-10 — App helper extraction can strand lifecycle calls after `return`
 
 Symptom: the Windows tray stops initializing even though startup otherwise succeeds and tray support is available.
@@ -26,21 +40,21 @@ Pin: `tests/test_ui_app_config.py` requires the tray call to remain in `App.__in
 Symptom: all 44 generated glide records return the same height-proportional envelope, so GBU-39 and GBU-53 differ in the catalog but not in the solver.
 Root cause: every real `0.08 * wingAreaMult / CxK` value fell below the hardcoded 1.5 floor, while mass, caliber, and `dragCx` never entered that path; the available fields also do not establish lift-curve or induced-drag coefficients for a defensible replacement L/D.
 Spec: `docs/specs/weapon-fire-control.md` `WFC-07`, `WFC-10`, `WFC-13` (Draft 2026-07).
-Pin: `tests/test_weapon_solver.py` requires glide cues to use the Datamine-backed gravity/drag trajectory only as a non-green guided-ballistic reference until live calibration establishes a lift model.
+Pin: `tests/test_weapon_solver.py` requires `glide_envelope_unavailable` until a versioned sampled-curve or calibrated lift/autopilot provider satisfies the contract; the gravity/drag trajectory cannot be shown as a practical glide cue.
 
 ### 2026-07-10 — Modern propulsion blocks are not always a flat motor schedule
 
 Symptom: PGM, AGM-130, ALARM, Kh-31, and YJ-91-family records can show a valid range even though their conditional ignition, airflow/Mach factors, factor-indexed impulses, or instantaneous mass changes were discarded or interpolated across a burn.
 Root cause: flattening `propulsionN/impulseN` retained nominal thrust and mass but omitted `propulsionAutopilot`, `propulsionFactorN`, `factorIndex`, and discrete zero-time semantics.
 Spec: `docs/specs/weapon-fire-control.md` `WFC-02`, `WFC-05`, `WFC-06`, `WFC-10` (Draft 2026-07).
-Pin: `tests/test_weapon_data_extractor.py`, `tests/contracts/test_weapon_fire_control_schema.py`, and `tests/test_weapon_solver.py` retain machine-readable unsupported reasons and require runtime fail-closed behavior.
+Pin: `tests/test_weapon_data_extractor.py`, `tests/contracts/test_weapon_fire_control_schema.py`, and `tests/test_weapon_solver.py` retain machine-readable unsupported reasons, keep a valid independent conditional-table reference available, and fail closed only when neither that table nor the fallback is usable.
 
 ### 2026-07-10 — Missile `minDistance` is not an AAM engagement minimum
 
 Symptom: an AIM-9L target at 50 m receives a green in-envelope cue because the top-level Datamine `minDistance` is 30 m, while the same record's condition-dependent guidance tables contain minimum ranges in the hundreds or thousands of meters.
 Root cause: the solver treated a general top-level field as the lower edge of an AAM envelope even though 8111 does not provide the target aspect, motion, and altitude needed to select a guidance-table cell.
 Spec: `docs/specs/weapon-fire-control.md` `WFC-06`, `WFC-08`, `WFC-13` (Draft 2026-07).
-Pin: schema/extractor tests retain the guidance-table minima and their pointers, while `tests/test_weapon_solver.py` requires max-only neutral/yellow AAM output with unknown minimum range.
+Pin: schema/extractor tests retain every guidance-table axis, minimum, maximum, and time value with pointers, while `tests/test_weapon_solver.py` requires a neutral/yellow conditional-table reference and prohibits top-level `minDistance` from becoming the AAM engagement bound.
 
 ### 2026-07-10 — Weapon launch TAS is not ground-target closing speed
 

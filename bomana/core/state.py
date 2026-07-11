@@ -152,6 +152,8 @@ class AirContact:
     name: str = ""
     icon: str = ""
     color: str = ""
+    dx: float | None = None
+    dy: float | None = None
 
 
 # Descriptive alias retained for callers that prefer the explicit hostile name.
@@ -168,6 +170,9 @@ class WeaponTarget:
     distance_m: float
     relative_deg: float = 0.0
     altitude_m: float | None = None
+    # +1: target moving directly away along LOS; -1: directly approaching.
+    # This is a two-dimensional heading relationship, not target speed or closure.
+    aspect_cosine: float | None = None
 
 
 @dataclass
@@ -499,6 +504,9 @@ class GameState:
     weapon_target_distance_m: float = 0.0
     weapon_min_range_m: float = 0.0
     weapon_max_range_m: float = 0.0
+    weapon_rear_range_m: float = 0.0
+    weapon_head_range_m: float = 0.0
+    weapon_target_aspect_cosine: float | None = None
     weapon_time_to_target_s: float = 0.0
     weapon_time_to_window_s: float = 0.0
     weapon_target: WeaponTarget | None = None
@@ -765,5 +773,8 @@ class UISnapshot:
     weapon_target_distance_m: float = 0.0
     weapon_min_range_m: float = 0.0
     weapon_max_range_m: float = 0.0
+    weapon_rear_range_m: float = 0.0
+    weapon_head_range_m: float = 0.0
+    weapon_target_aspect_cosine: float | None = None
     weapon_time_to_target_s: float = 0.0
     weapon_time_to_window_s: float = 0.0

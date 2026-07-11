@@ -1,61 +1,21 @@
 {
-  "generated_at": "2026-07-10T14:59:42+00:00",
+  "generated_at": "2026-07-11T01:13:45+00:00",
   "results": [
     {
-      "tool": "pytest",
-      "cmd": "uv run --extra dev pytest tests/test_weapon_solver.py tests/test_weapon_scheduler.py tests/test_weapon_data_extractor.py tests/contracts/test_weapon_fire_control_schema.py tests/contracts/test_weapon_fire_control_runtime.py tests/test_panel_presenter.py tests/test_ui_app_config.py tests/test_bombing_prediction_constraints.py tests/test_settings_dialog_config.py",
-      "exit_code": 0,
-      "status": "pass",
-      "output_tail": "110 passed, 8 subtests passed in 1.35s",
-      "kind": "focused-test"
-    },
-    {
-      "tool": "pytest",
-      "cmd": "uv run --extra dev pytest",
-      "exit_code": 0,
-      "status": "pass",
-      "output_tail": "459 passed, 12 subtests passed in 18.59s",
-      "kind": "test"
-    },
-    {
       "tool": "ruff",
-      "cmd": "uv run --extra dev ruff check .",
+      "cmd": "ruff check .",
       "exit_code": 0,
       "status": "pass",
       "output_tail": "All checks passed!",
       "kind": "lint"
     },
     {
-      "tool": "ruff-format",
-      "cmd": "uv run --extra dev ruff format --check .",
+      "tool": "pytest",
+      "cmd": "pytest -x -q --no-header",
       "exit_code": 0,
       "status": "pass",
-      "output_tail": "128 files already formatted",
-      "kind": "format"
-    },
-    {
-      "tool": "bash",
-      "cmd": "bash -n tools/scripts/build.sh",
-      "exit_code": 0,
-      "status": "pass",
-      "output_tail": "",
-      "kind": "build-script-syntax"
-    },
-    {
-      "tool": "git",
-      "cmd": "git diff --check",
-      "exit_code": 0,
-      "status": "pass",
-      "output_tail": "Passed with line-ending warnings only.",
-      "kind": "diff"
-    },
-    {
-      "tool": "weapon-fire-control-extractor",
-      "cmd": "uv run --extra dev python tools/weapon_fire_control_extractor.py D:\\Dev\\War-Thunder-Datamine --output .review/regenerated_weapon_fire_control.json",
-      "exit_code": 0,
-      "status": "pass",
-      "output_tail": "Clean source 96787940b7d0a48fcd6eb153081b4c852f9435e9 / 2.57.1.16; 723 weapons, 1257 aircraft; generated catalog structurally equal after excluding generated_at_utc.",
-      "kind": "reproducibility"
+      "output_tail": "........................................................................ [ 14%]\n.......................uuuuuuuu......................................... [ 28%]\n........................................................................ [ 42%]\n........................................................................ [ 57%]\n........................................................................ [ 72%]\n..........uu..uu........................................................ [ 86%]\n................................................................         [100%]",
+      "kind": "test"
     }
   ]
 }

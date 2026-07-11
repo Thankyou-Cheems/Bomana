@@ -50,6 +50,8 @@ class MapObjectsContractTests(unittest.TestCase):
                         "color[]": [240, 12, 0],
                         "x": 0.6,
                         "y": 0.1,
+                        "dx": 0.6,
+                        "dy": -0.8,
                     },
                     {
                         "type": "aircraft",
@@ -87,6 +89,10 @@ class MapObjectsContractTests(unittest.TestCase):
             (data.hostile_air_contacts[0].x, data.hostile_air_contacts[0].y), (0.6, 0.1)
         )
         self.assertEqual(data.hostile_air_contacts[0].icon, "Fighter")
+        self.assertEqual(
+            (data.hostile_air_contacts[0].dx, data.hostile_air_contacts[0].dy),
+            (0.6, -0.8),
+        )
 
     def test_fetch_prefers_explicit_self_over_color_heuristic(self):
         fetcher = MapObjectsFetcher(
@@ -392,7 +398,15 @@ class MapObjectsContractTests(unittest.TestCase):
             player_pos=(0.5, 0.5),
             hostile_air_contacts=[
                 AirContact(id="near-offset", index=1, x=0.51, y=0.45, name="Near"),
-                AirContact(id="far-aligned", index=2, x=0.5, y=0.2, name="Aligned"),
+                AirContact(
+                    id="far-aligned",
+                    index=2,
+                    x=0.5,
+                    y=0.2,
+                    name="Aligned",
+                    dx=0.0,
+                    dy=1.0,
+                ),
                 AirContact(id="behind", index=3, x=0.5, y=0.8, name="Behind"),
             ],
         )
@@ -410,6 +424,7 @@ class MapObjectsContractTests(unittest.TestCase):
         self.assertEqual(target.id, "far-aligned")
         self.assertEqual(target.kind, "aircraft")
         self.assertEqual(target.name, "Aligned")
+        self.assertAlmostEqual(target.aspect_cosine, -1.0)
 
 
 if __name__ == "__main__":

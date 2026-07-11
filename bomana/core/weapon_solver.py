@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from bomana.core.ballistics import calculate_bomb_trajectory
+from bomana.core.weapon_envelope import (
+    FIELD_RANGE_MAX_M,
+    FIELD_RANGE_MIN_M,
+    REASON_ENDPOINT_UNAVAILABLE,
+    REASON_UNAVAILABLE_CELL,
+    interpolate_aspect,
+    interpolate_aspect_endpoints,
+)
 
 QUALITY_NONE = "none"
 QUALITY_TWO_DIMENSIONAL = "two_dimensional"
@@ -25,6 +33,10 @@ STATUS_IN_ENVELOPE = "in_envelope"
 STATUS_WITHIN_BALLISTIC_REFERENCE = "within_ballistic_reference"
 STATUS_BEYOND_BALLISTIC_REFERENCE = "beyond_ballistic_reference"
 STATUS_WITHIN_2D_MAX_ONLY = "within_2d_max_only"
+STATUS_WITHIN_ALL_ASPECT_REFERENCE = "within_all_aspect_reference"
+STATUS_WITHIN_ASPECT_REFERENCE = "within_aspect_reference"
+STATUS_HEAD_ON_ONLY_REFERENCE = "head_on_only_reference"
+STATUS_BEYOND_ENVELOPE_REFERENCE = "beyond_envelope_reference"
 STATUS_SOLVER_ERROR = "solver_error"
 
 VALID_STATUSES = frozenset(
@@ -41,6 +53,10 @@ VALID_STATUSES = frozenset(
         STATUS_WITHIN_BALLISTIC_REFERENCE,
         STATUS_BEYOND_BALLISTIC_REFERENCE,
         STATUS_WITHIN_2D_MAX_ONLY,
+        STATUS_WITHIN_ALL_ASPECT_REFERENCE,
+        STATUS_WITHIN_ASPECT_REFERENCE,
+        STATUS_HEAD_ON_ONLY_REFERENCE,
+        STATUS_BEYOND_ENVELOPE_REFERENCE,
         STATUS_SOLVER_ERROR,
     }
 )
@@ -73,6 +89,9 @@ class WeaponSolution:
     target_distance_m: float = 0.0
     min_range_m: float = 0.0
     max_range_m: float = 0.0
+    rear_range_m: float = 0.0
+    head_range_m: float = 0.0
+    target_aspect_cosine: float | None = None
     time_to_target_s: float = 0.0
     time_to_window_s: float = 0.0
 
@@ -114,6 +133,171 @@ def isa_air_density(altitude_m: float) -> float:
             -GRAVITY_MPS2 * (altitude - 11000.0) / (gas_constant * temperature)
         )
     return pressure / (gas_constant * temperature)
+
+
+def _mach_from_launch_state(altitude_m: float, speed_mps: float, mach: float | None) -> float:
+    supplied = _finite_float(mach, default=-1.0)
+    if supplied > 0.0:
+        return supplied
+    altitude = max(0.0, min(32000.0, _finite_float(altitude_m)))
+    temperature = 288.15 - 0.0065 * altitude if altitude <= 11000.0 else 216.65
+    speed_of_sound = math.sqrt(1.4 * 287.05287 * temperature)
+    return max(0.0, _finite_float(speed_mps) / speed_of_sound)
+
+
+def _guidance_envelope_solution(
+    weapon: Mapping[str, Any],
+    *,
+    launch_altitude_m: float,
+    launch_mach: float,
+    target_distance_m: float,
+    target_relative_deg: float,
+    target_kind: str,
+    target_name: str,
+    target_aspect_cosine: float | None,
+    ground_closing_speed_mps: float | None,
+) -> WeaponSolution | None:
+    """Prefer Datamine's condition table over Bomana's flat propulsion model."""
+
+    envelope = weapon.get("guidance_envelope")
+    if not isinstance(envelope, Mapping):
+        return None
+
+    endpoints = interpolate_aspect_endpoints(
+        envelope,
+        field=FIELD_RANGE_MAX_M,
+        altitude_m=launch_altitude_m,
+        fighter_mach=launch_mach,
+    )
+    if not endpoints.available:
+        # A zero rangeMax cell is how current Datamine tables mark launch
+        # conditions with no table solution (for example high-altitude
+        # AGM-65/RB75 tail-chase endpoints).  That condition makes the table
+        # unusable, not the independent powered-weapon model invalid.
+        if endpoints.reason in {REASON_ENDPOINT_UNAVAILABLE, REASON_UNAVAILABLE_CELL}:
+            return None
+        return WeaponSolution(
+            status=STATUS_INSUFFICIENT_DATA,
+            quality=QUALITY_NONE,
+            reason=f"guidance_envelope_{endpoints.reason}",
+            target_kind=target_kind,
+            target_name=target_name,
+            target_distance_m=target_distance_m,
+        )
+
+    tail_range_m = max(0.0, _finite_float(endpoints.tail_chase.value))
+    head_range_m = max(0.0, _finite_float(endpoints.head_on.value))
+    if tail_range_m <= 0.0 or head_range_m <= 0.0:
+        return WeaponSolution(
+            status=STATUS_INSUFFICIENT_DATA,
+            quality=QUALITY_NONE,
+            reason="guidance_envelope_unavailable_cell",
+            target_kind=target_kind,
+            target_name=target_name,
+            target_distance_m=target_distance_m,
+        )
+
+    role = str(weapon.get("role") or "")
+    aspect: float | None = None
+    if target_aspect_cosine is not None:
+        parsed_aspect = _finite_float(target_aspect_cosine, default=math.nan)
+        if math.isfinite(parsed_aspect):
+            aspect = max(-1.0, min(1.0, parsed_aspect))
+    # Static ground points have zero radial target motion.  For AAMs, retain
+    # unknown aspect when 8111 did not provide a current heading vector.
+    interpolation_aspect = aspect if role == "aam" else 0.0
+    current_value = (
+        interpolate_aspect(
+            envelope,
+            field=FIELD_RANGE_MAX_M,
+            altitude_m=launch_altitude_m,
+            fighter_mach=launch_mach,
+            aspect_cosine=interpolation_aspect,
+        )
+        if interpolation_aspect is not None
+        else None
+    )
+    current_range_m = (
+        max(0.0, _finite_float(current_value.value))
+        if current_value is not None and current_value.available
+        else max(tail_range_m, head_range_m)
+    )
+    if current_range_m <= 0.0:
+        return WeaponSolution(
+            status=STATUS_INSUFFICIENT_DATA,
+            quality=QUALITY_NONE,
+            reason="guidance_envelope_unavailable_cell",
+            target_kind=target_kind,
+            target_name=target_name,
+            target_distance_m=target_distance_m,
+        )
+
+    min_value = (
+        interpolate_aspect(
+            envelope,
+            field=FIELD_RANGE_MIN_M,
+            altitude_m=launch_altitude_m,
+            fighter_mach=launch_mach,
+            aspect_cosine=interpolation_aspect,
+        )
+        if interpolation_aspect is not None
+        else None
+    )
+    min_range_m = (
+        max(0.0, _finite_float(min_value.value))
+        if min_value is not None and min_value.available
+        else (0.0 if role == "aam" else max(0.0, _finite_float(weapon.get("min_distance_m"))))
+    )
+    base = {
+        "valid": True,
+        "quality": QUALITY_TWO_DIMENSIONAL,
+        "target_kind": target_kind,
+        "target_name": target_name,
+        "target_distance_m": target_distance_m,
+        "min_range_m": min_range_m,
+        "max_range_m": current_range_m,
+        "rear_range_m": tail_range_m,
+        "head_range_m": head_range_m,
+        "target_aspect_cosine": aspect,
+    }
+
+    if role == "aam":
+        if target_distance_m < min_range_m:
+            return WeaponSolution(
+                **base,
+                status=STATUS_TOO_CLOSE,
+                reason="datamine_guidance_envelope",
+            )
+        all_aspect_range_m = min(tail_range_m, head_range_m)
+        best_aspect_range_m = max(tail_range_m, head_range_m)
+        if target_distance_m <= all_aspect_range_m:
+            status = STATUS_WITHIN_ALL_ASPECT_REFERENCE
+        elif aspect is not None and target_distance_m <= current_range_m:
+            status = STATUS_WITHIN_ASPECT_REFERENCE
+        elif target_distance_m <= best_aspect_range_m:
+            status = STATUS_HEAD_ON_ONLY_REFERENCE
+        else:
+            status = STATUS_BEYOND_ENVELOPE_REFERENCE
+        return WeaponSolution(**base, status=status, reason="datamine_guidance_envelope")
+
+    if abs(target_relative_deg) > ALIGN_TOLERANCE_DEG:
+        return WeaponSolution(**base, status=STATUS_ALIGN, reason="target_off_axis")
+    if target_distance_m < min_range_m:
+        return WeaponSolution(**base, status=STATUS_TOO_CLOSE, reason="below_min_distance")
+    if target_distance_m > current_range_m:
+        closing_speed_mps = _finite_float(ground_closing_speed_mps)
+        if closing_speed_mps > 0.0:
+            base["time_to_window_s"] = (target_distance_m - current_range_m) / closing_speed_mps
+        return WeaponSolution(
+            **base,
+            status=STATUS_OUT_OF_RANGE,
+            reason="datamine_guidance_envelope",
+        )
+    return WeaponSolution(
+        **base,
+        status=STATUS_IN_ENVELOPE,
+        reason="datamine_guidance_envelope",
+    )
 
 
 def uses_existing_ccrp(weapon: Mapping[str, Any] | None) -> bool:
@@ -400,24 +584,17 @@ class WeaponSolver:
         *,
         launch_altitude_m: float,
         launch_speed_mps: float,
+        launch_mach: float | None = None,
         target_distance_m: float | None,
         target_relative_deg: float = 0.0,
         target_kind: str = "",
         target_name: str = "",
         target_altitude_m: float | None = None,
+        target_aspect_cosine: float | None = None,
         ground_closing_speed_mps: float | None = None,
     ) -> WeaponSolution:
         if weapon is None:
             return WeaponSolution(status=STATUS_UNKNOWN_WEAPON, reason="weapon_not_in_catalog")
-        unsupported_reasons = weapon.get("model_unsupported_reasons")
-        if bool(unsupported_reasons) or weapon.get("physics_support") is False:
-            return WeaponSolution(
-                status=STATUS_INSUFFICIENT_DATA,
-                reason="conditional_propulsion_unsupported",
-                target_kind=target_kind,
-                target_name=target_name,
-                target_distance_m=max(0.0, _finite_float(target_distance_m)),
-            )
         if uses_existing_ccrp(weapon):
             return WeaponSolution(status=STATUS_CCRP, reason="existing_ccrp")
         if target_distance_m is None:
@@ -441,9 +618,44 @@ class WeaponSolver:
                 target_distance_m=max(0.0, distance_m),
             )
 
+        fighter_mach = _mach_from_launch_state(altitude_m, speed_mps, launch_mach)
+        table_solution = _guidance_envelope_solution(
+            weapon,
+            launch_altitude_m=altitude_m,
+            launch_mach=fighter_mach,
+            target_distance_m=distance_m,
+            target_relative_deg=relative_deg,
+            target_kind=target_kind,
+            target_name=target_name,
+            target_aspect_cosine=target_aspect_cosine,
+            ground_closing_speed_mps=ground_closing_speed_mps,
+        )
+        if table_solution is not None:
+            return table_solution
+
+        planform = str(weapon.get("planform") or "")
+        if planform == "glide":
+            return WeaponSolution(
+                status=STATUS_INSUFFICIENT_DATA,
+                quality=QUALITY_NONE,
+                reason="glide_envelope_unavailable",
+                target_kind=target_kind,
+                target_name=target_name,
+                target_distance_m=distance_m,
+            )
+
+        unsupported_reasons = weapon.get("model_unsupported_reasons")
+        if bool(unsupported_reasons) or weapon.get("physics_support") is False:
+            return WeaponSolution(
+                status=STATUS_INSUFFICIENT_DATA,
+                reason="conditional_propulsion_unsupported",
+                target_kind=target_kind,
+                target_name=target_name,
+                target_distance_m=distance_m,
+            )
+
         try:
             propulsion = str(weapon.get("propulsion") or "")
-            planform = str(weapon.get("planform") or "")
             within_status = STATUS_IN_ENVELOPE
             beyond_status = STATUS_OUT_OF_RANGE
             if propulsion == "powered":
@@ -455,23 +667,6 @@ class WeaponSolver:
                 )
                 quality = QUALITY_TWO_DIMENSIONAL
                 model_reason = "powered_point_mass_2d"
-            elif planform == "glide":
-                estimate = _guided_normal_envelope(
-                    weapon,
-                    launch_altitude_m=altitude_m,
-                    launch_speed_mps=speed_mps,
-                    target_altitude_m=target_altitude_m,
-                    target_distance_m=distance_m,
-                    trajectory_func=self._trajectory_func,
-                )
-                quality = (
-                    QUALITY_CONSERVATIVE
-                    if target_altitude_m is not None
-                    else QUALITY_TWO_DIMENSIONAL
-                )
-                model_reason = "guided_ballistic_surrogate"
-                within_status = STATUS_WITHIN_BALLISTIC_REFERENCE
-                beyond_status = STATUS_BEYOND_BALLISTIC_REFERENCE
             elif propulsion == "unpowered" and weapon.get("control") == "guided":
                 estimate = _guided_normal_envelope(
                     weapon,

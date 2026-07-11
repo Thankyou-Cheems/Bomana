@@ -133,6 +133,9 @@ def _weapon_snapshot(**overrides):
         "weapon_target_distance_m": 12_400.0,
         "weapon_min_range_m": 600.0,
         "weapon_max_range_m": 18_600.0,
+        "weapon_rear_range_m": 0.0,
+        "weapon_head_range_m": 0.0,
+        "weapon_target_aspect_cosine": None,
         "weapon_time_to_target_s": 28.0,
         "weapon_time_to_window_s": 0.0,
     }
@@ -173,46 +176,47 @@ def test_weapon_solution_model_never_shows_countdown_while_aligning() -> None:
     assert "授权" not in rendered
 
 
-def test_glide_solution_is_presented_as_yellow_ballistic_reference() -> None:
+def test_glide_solution_explains_why_the_iron_bomb_surrogate_is_disabled() -> None:
     model = build_bombing_display_model(
         _weapon_snapshot(
             weapon_id="us_gbu_39",
             weapon_display_name="GBU-39/B",
             weapon_role="bomb",
             weapon_planform="glide",
-            weapon_status="within_ballistic_reference",
-            weapon_quality="conservative",
-            weapon_reason="guided_ballistic_surrogate",
+            weapon_status="insufficient_data",
+            weapon_solution_valid=False,
+            weapon_quality="none",
+            weapon_reason="glide_envelope_unavailable",
+            weapon_max_range_m=0.0,
+            weapon_time_to_target_s=0.0,
         )
     )
 
-    assert model.release.text == "弹道参考内"
-    assert model.release.fg == Theme.YELLOW
-    assert model.release.icon != "ok"
-    assert model.trajectory_text == "POI 12.4km · 弹道参考约 18.6km"
-    assert "仅重力/阻力弹道参考，未计滑翔增程" in model.flight_text
+    assert model.release.text == "数据不足"
+    assert model.release.fg == Theme.TEXT_MUTED
+    assert model.trajectory_text == "POI 12.4km · 估算窗 --"
+    assert "已停用铁炸弹替代模型" in model.flight_text
 
 
-def test_glide_target_beyond_reference_does_not_claim_out_of_range() -> None:
+def test_glide_unavailable_state_does_not_claim_out_of_range() -> None:
     model = build_bombing_display_model(
         _weapon_snapshot(
             weapon_id="us_gbu_53",
             weapon_display_name="GBU-53/B",
             weapon_role="bomb",
             weapon_planform="glide",
-            weapon_status="beyond_ballistic_reference",
-            weapon_quality="conservative",
-            weapon_reason="guided_ballistic_surrogate",
+            weapon_status="insufficient_data",
+            weapon_solution_valid=False,
+            weapon_quality="none",
+            weapon_reason="glide_envelope_unavailable",
+            weapon_max_range_m=0.0,
             weapon_time_to_target_s=0.0,
-            weapon_time_to_window_s=12.0,
+            weapon_time_to_window_s=0.0,
         )
     )
 
-    assert model.release.text == "弹道参考外"
-    assert model.release.fg == Theme.YELLOW
-    assert model.trajectory_text == "POI 12.4km · 弹道参考约 18.6km"
-    assert "距弹道参考约 12s" in model.flight_text
-    assert "不代表超出滑翔能力" in model.flight_text
+    assert model.release.text == "数据不足"
+    assert "官方滑翔包线无可复用数据" in model.flight_text
     assert "过远" not in model.release.text
 
 
@@ -237,6 +241,34 @@ def test_aam_solution_states_2d_max_limitations_and_never_turns_green() -> None:
     assert model.release.fg == Theme.YELLOW
     assert model.release.icon != "ok"
     assert "仅二维最大射程，未计目标速度、高差与迎尾角" in model.flight_text
+
+
+def test_aam_datamine_envelope_shows_tail_head_and_current_aspect_reference() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_id="us_aim_120c_5",
+            weapon_display_name="AIM-120C-5",
+            weapon_role="aam",
+            weapon_target_kind="aircraft",
+            weapon_target_name="Fighter",
+            weapon_target_distance_m=80_000.0,
+            weapon_min_range_m=1247.15,
+            weapon_max_range_m=81_819.2,
+            weapon_rear_range_m=13_562.0,
+            weapon_head_range_m=81_819.2,
+            weapon_target_aspect_cosine=-1.0,
+            weapon_status="within_aspect_reference",
+            weapon_reason="datamine_guidance_envelope",
+            weapon_time_to_target_s=0.0,
+        )
+    )
+
+    assert model.trajectory_text == "空中目标 Fighter 80.0km · 尾/迎 13.6/81.8km"
+    assert model.release.text == "当前航向内"
+    assert model.release.fg == Theme.YELLOW
+    assert model.release.icon != "ok"
+    assert "当前航向约 81.8km" in model.flight_text
+    assert "目标速率/高差未知" in model.flight_text
 
 
 def test_conditional_propulsion_failure_explains_fail_closed_state() -> None:

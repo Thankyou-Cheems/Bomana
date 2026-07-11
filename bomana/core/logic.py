@@ -62,6 +62,44 @@ from bomana.utils.math_utils import (
 # ============================================================================
 
 
+def _target_radial_aspect_cosine(
+    px: float,
+    py: float,
+    tx: float,
+    ty: float,
+    target_dx: float | None,
+    target_dy: float | None,
+    map_axis_scale_m: tuple[float, float] | None,
+) -> float | None:
+    """Return 2D target heading projected onto shooter-to-target LOS.
+
+    ``+1`` is directly away (tail chase), ``-1`` directly approaching
+    (head-on).  The 8111 ``dx``/``dy`` pair is a heading vector, not speed.
+    """
+
+    if target_dx is None or target_dy is None:
+        return None
+    try:
+        los_x = float(tx) - float(px)
+        los_y = float(ty) - float(py)
+        direction_x = float(target_dx)
+        direction_y = float(target_dy)
+    except TypeError, ValueError:
+        return None
+    if map_axis_scale_m is not None:
+        scale_x, scale_y = map_axis_scale_m
+        los_x *= scale_x
+        los_y *= scale_y
+        direction_x *= scale_x
+        direction_y *= scale_y
+    los_norm = math.hypot(los_x, los_y)
+    direction_norm = math.hypot(direction_x, direction_y)
+    if los_norm <= 1e-9 or direction_norm <= 1e-9:
+        return None
+    value = (los_x * direction_x + los_y * direction_y) / (los_norm * direction_norm)
+    return max(-1.0, min(1.0, value))
+
+
 class GameLogic:
     """游戏逻辑核心类
 
@@ -1062,6 +1100,15 @@ class GameLogic:
             distance_m=distance_m,
             relative_deg=relative,
             altitude_m=None,
+            aspect_cosine=_target_radial_aspect_cosine(
+                px,
+                py,
+                float(contact.x),
+                float(contact.y),
+                contact.dx,
+                contact.dy,
+                map_axis_scale_m,
+            ),
         )
 
     def _is_zone_of_interest(self, zone: Zone, target_zone: Zone | None) -> bool:
@@ -1462,6 +1509,9 @@ class GameLogic:
                 "weapon_target_distance_m": s.weapon_target_distance_m,
                 "weapon_min_range_m": s.weapon_min_range_m,
                 "weapon_max_range_m": s.weapon_max_range_m,
+                "weapon_rear_range_m": s.weapon_rear_range_m,
+                "weapon_head_range_m": s.weapon_head_range_m,
+                "weapon_target_aspect_cosine": s.weapon_target_aspect_cosine,
                 "weapon_time_to_target_s": s.weapon_time_to_target_s,
                 "weapon_time_to_window_s": s.weapon_time_to_window_s,
             }

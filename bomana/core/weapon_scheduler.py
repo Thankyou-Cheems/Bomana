@@ -62,6 +62,7 @@ def _target_token(target: WeaponTarget | None) -> tuple[Any, ...] | None:
         target.distance_m,
         target.relative_deg,
         target.altitude_m,
+        target.aspect_cosine,
     )
 
 
@@ -170,6 +171,7 @@ def prepare_weapon_calculation(
         "compatible": compatible,
         "launch_altitude_m": _finite_float(tel.altitude_m, default=-1.0),
         "launch_speed_mps": launch_speed_mps,
+        "launch_mach": (_finite_float(tel.mach, default=-1.0) if tel.mach is not None else None),
         "ground_closing_speed_mps": ground_closing_speed_mps,
         "target": target,
         "precomputed": precomputed,
@@ -192,6 +194,7 @@ def compute_weapon_calculation(
                 work.get("weapon"),
                 launch_altitude_m=work.get("launch_altitude_m", -1.0),
                 launch_speed_mps=work.get("launch_speed_mps", 0.0),
+                launch_mach=work.get("launch_mach"),
                 ground_closing_speed_mps=work.get("ground_closing_speed_mps"),
                 target_distance_m=(target.distance_m if isinstance(target, WeaponTarget) else None),
                 target_relative_deg=(
@@ -200,6 +203,9 @@ def compute_weapon_calculation(
                 target_kind=target.kind if isinstance(target, WeaponTarget) else "",
                 target_name=target.name if isinstance(target, WeaponTarget) else "",
                 target_altitude_m=(target.altitude_m if isinstance(target, WeaponTarget) else None),
+                target_aspect_cosine=(
+                    target.aspect_cosine if isinstance(target, WeaponTarget) else None
+                ),
             )
         except Exception:
             solution = _precomputed(STATUS_SOLVER_ERROR, "solver_exception", target)
@@ -258,6 +264,9 @@ def apply_weapon_calculation(
     state.weapon_target_distance_m = solution.target_distance_m
     state.weapon_min_range_m = solution.min_range_m
     state.weapon_max_range_m = solution.max_range_m
+    state.weapon_rear_range_m = solution.rear_range_m
+    state.weapon_head_range_m = solution.head_range_m
+    state.weapon_target_aspect_cosine = solution.target_aspect_cosine
     state.weapon_time_to_target_s = solution.time_to_target_s
     state.weapon_time_to_window_s = solution.time_to_window_s
     return True

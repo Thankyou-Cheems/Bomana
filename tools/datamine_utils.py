@@ -203,6 +203,9 @@ def _validate_json_schema(
         minimum = int(rules.get("minItems", 0))
         if len(value) < minimum:
             raise _schema_error(path, f"expected at least {minimum} items")
+        maximum = rules.get("maxItems")
+        if maximum is not None and len(value) > int(maximum):
+            raise _schema_error(path, f"expected at most {int(maximum)} items")
         if item_rules := rules.get("items"):
             for index, item in enumerate(value):
                 _validate_json_schema(item, item_rules, f"{path}[{index}]", schema)

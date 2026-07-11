@@ -1,7 +1,8 @@
-# enforces: docs/specs/weapon-fire-control.md WFC-07 WFC-08 WFC-10 WFC-11 WFC-12
+# enforces: docs/specs/weapon-fire-control.md WFC-06 WFC-07 WFC-08 WFC-10 WFC-11 WFC-12
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ from bomana.core.weapon_scheduler import (
     compute_weapon_calculation,
     prepare_weapon_calculation,
 )
+from bomana.core.weapon_solver import WeaponSolver
 from bomana.ui import app as app_module
 from bomana.ui.app import App
 from bomana.ui.panel_presenter import build_bombing_display_model
@@ -39,6 +41,51 @@ class _AamCatalog:
 
     def compatible(self, weapon_id: str, aircraft: str) -> bool:
         return weapon_id == self.selected_weapon_id and aircraft == "test_plane"
+
+
+def test_generated_aim120c5_uses_eighty_kilometre_head_on_table_reference() -> None:
+    payload = json.loads(
+        (ROOT / "bomana/data/weapon_fire_control.json").read_text(encoding="utf-8")
+    )
+    weapon = payload["weapons"]["us_aim_120c_5"]
+
+    solution = WeaponSolver().solve(
+        weapon,
+        launch_altitude_m=5000.0,
+        launch_speed_mps=306.0,
+        launch_mach=0.9,
+        target_distance_m=80_000.0,
+        target_kind="aircraft",
+        target_name="Hostile",
+        target_aspect_cosine=-1.0,
+    )
+
+    assert solution.status == "within_aspect_reference"
+    assert solution.reason == "datamine_guidance_envelope"
+    assert solution.rear_range_m == 13_562.0
+    assert solution.head_range_m == 81_819.2
+    assert solution.max_range_m == 81_819.2
+
+
+def test_generated_agm65d_zero_table_cell_uses_supported_powered_fallback() -> None:
+    payload = json.loads(
+        (ROOT / "bomana/data/weapon_fire_control.json").read_text(encoding="utf-8")
+    )
+    weapon = payload["weapons"]["us_agm_65d"]
+
+    solution = WeaponSolver().solve(
+        weapon,
+        launch_altitude_m=15_000.0,
+        launch_speed_mps=270.0,
+        launch_mach=0.9,
+        target_distance_m=5_000.0,
+        target_kind="zone",
+        target_name="Ground target",
+    )
+
+    assert solution.reason == "powered_point_mass_2d"
+    assert solution.quality == "two_dimensional"
+    assert solution.max_range_m > 0.0
 
 
 def test_ui_reuses_core_catalog_failure_and_disables_selector(monkeypatch) -> None:

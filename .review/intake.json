@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-07-10T13:55:56+00:00",
+  "generated_at": "2026-07-11T01:01:02+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
-    "code_files": 130,
-    "code_lines": 41348,
-    "test_files": 56,
+    "code_files": 133,
+    "code_lines": 44410,
+    "test_files": 58,
     "todo_markers": 0
   },
   "languages": {
-    "python": 40535,
+    "python": 43597,
     "rust": 541,
     "shell": 178,
     "javascript": 94
@@ -52,23 +52,27 @@
   ],
   "largest_files": [
     {
-      "lines": 3292,
+      "lines": 3301,
       "path": "bomana\\ui\\dialogs.py"
     },
     {
-      "lines": 1695,
+      "lines": 1761,
       "path": "bomana\\core\\logic.py"
     },
     {
-      "lines": 1687,
+      "lines": 1712,
       "path": "bomana\\ui\\app.py"
     },
     {
-      "lines": 1352,
+      "lines": 1374,
       "path": "bomana\\config\\settings.py"
     },
     {
-      "lines": 1228,
+      "lines": 1372,
+      "path": "tools\\weapon_fire_control_extractor.py"
+    },
+    {
+      "lines": 1232,
       "path": "bomana\\ui\\main_window.py"
     },
     {
@@ -78,10 +82,6 @@
     {
       "lines": 1034,
       "path": "bomana\\ui\\hud_overlay.py"
-    },
-    {
-      "lines": 1033,
-      "path": "tools\\weapon_fire_control_extractor.py"
     },
     {
       "lines": 1021,
@@ -96,7 +96,7 @@
       "path": "bomana\\utils\\system.py"
     },
     {
-      "lines": 823,
+      "lines": 836,
       "path": "bomana\\core\\telemetry.py"
     },
     {
@@ -104,21 +104,22 @@
       "path": "bomana\\ui\\panel_renderer.py"
     },
     {
-      "lines": 770,
+      "lines": 781,
       "path": "bomana\\core\\state.py"
     },
     {
-      "lines": 665,
-      "path": "tools\\build_portable.py"
+      "lines": 730,
+      "path": "bomana\\core\\weapon_solver.py"
     }
   ],
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "27e8c1a",
+    "head": "fd8dfd4",
     "branch": "main",
-    "dirty_files": 45,
+    "dirty_files": 26,
     "recent_commits": [
+      "fd8dfd4 feat(weapons): add datamine-backed fire-control cues",
       "27e8c1a chore(review): record accepted broker elevation risk",
       "d14428e feat(replay): track real 8111 full-sortie fixture",
       "c736230 feat(replay): add virtual-time 8111 session validation",
@@ -127,8 +128,7 @@
       "653066d feat(hotkeys): make admin mode explicit and zero-install",
       "654e955 feat(hotkeys): isolate privileged hotkeys in signed broker",
       "e063361 feat(site): refresh GitHub Pages for new users",
-      "e3b9029 chore(review): refresh audit evidence after hotkey cleanup",
-      "895ea85 feat(launcher): elevate only the app handoff by default"
+      "e3b9029 chore(review): refresh audit evidence after hotkey cleanup"
     ]
   },
   "sdd": {
@@ -150,12 +150,11 @@
       "PRES",
       "QG",
       "R8111",
-      "SHA",
       "SIGN",
       "THREAD",
       "WFC"
     ],
-    "clause_mentions": 199,
+    "clause_mentions": 212,
     "adr_dir": true,
     "pitfalls": "docs\\PITFALLS.md",
     "contract_tests_dir": true,

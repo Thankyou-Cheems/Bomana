@@ -69,7 +69,8 @@
 │  │  ├─ timing_store.py      # Battle-scoped timer signature helpers
 │  │  ├─ weapon_catalog.py    # Schema-backed weapon catalog and manual selection
 │  │  ├─ weapon_scheduler.py  # Lock-safe weapon-solution scheduling
-│  │  ├─ weapon_solver.py     # Headless powered/guided estimates + conservative references
+│  │  ├─ weapon_envelope.py   # Pure Datamine condition-table interpolation
+│  │  ├─ weapon_solver.py     # Conditional AAM/AGM references + powered/guided fallbacks
 │  │  └─ telemetry.py         # 8111 fetchers
 │  ├─ ui/
 │  │  ├─ app.py               # App coordinator (window lifecycle + main UI loop)
@@ -132,11 +133,16 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
      `ccrp_scheduler.py`, `weapon_catalog.py`, `weapon_scheduler.py`, and
      `weapon_solver.py` own focused helper responsibilities extracted from the
      former monolithic logic module.
-   - Free-fall/high-drag stores keep the existing CCRP path. Supported powered
-     weapons, guided bombs, and glide ballistic references use a separate
+   - Free-fall/high-drag stores keep the existing CCRP path. AAMs and AGMs with valid
+     Datamine `guidance/tableN` data use those conditional launch-envelope
+     tables before the one-dimensional powered fallback; a table reference is
+     independent of whether the fallback can model complex propulsion.
+     Supported powered weapons and guided bombs use the same separate
      prepare/compute/apply path: lock-owned
      state is projected into a work item, the numerical estimate runs outside
      the state lock, and only a still-current selection/target result is applied.
+     Glide weapons currently have no validated lift/autopilot provider and
+     return an explicit unavailable result rather than a free-fall proxy.
    - Weapon selection is manual unless a future directed 8111 capture proves a
      named selection field. Button/release pulses such as `weapon2` are never
      treated as a selected category.
@@ -221,7 +227,12 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   - Runtime consumers: `WeaponCatalog`, `weapon_solver`, and the existing
     Enhanced-only compact bombing/weapon-solution card
   - Each record retains its source path/SHA-256 and normalized-field JSON
-    pointers; top-level metadata retains the Datamine version and full commit.
+    pointers; AAM/AGM records retain ordered `guidance/tableN` identities, complete
+    altitude/carrier-Mach/target-Mach axes, scenario range outputs, and time
+    outputs. Top-level metadata retains the Datamine version and full commit.
+  - The game's native `buildMissileTrajectoryData` implementation and reusable
+    static comparison curves are not present in the current Datamine source, so
+    there is no active official-trajectory provider for glide weapons.
 - Generated JSON metadata records the datamine source version and git commit when available.
 
 ## Offline Session Capture and Replay
@@ -270,8 +281,8 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - Timer & lifecycle
 - Zone/airfield navigation
 - Fuel management
-- CCRP bombing predictor + estimated AGM/guided ranges, AAM max-only cues, and
-  glide ballistic references
+- CCRP bombing predictor + estimated AGM/guided ranges, conditional-table AAM
+  references, and explicit unavailable states for uncalibrated glide envelopes
 - UI overlays & global hotkeys
 
 ## Runtime Thread Boundary
@@ -287,12 +298,16 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   currently visible hostile-aircraft contacts, zone, POI, and airfield positions
   in the normalized coordinates provided by 8111 and does not accept or
   interpret `map_info`. It excludes friendly aircraft from fire-control targets
-  and does not persist contacts after 8111 stops returning them.
+  and does not persist contacts after 8111 stops returning them. Finite hostile
+  `dx`/`dy` values are preserved only on the current contact sample; missing
+  motion is not reconstructed from prior responses.
 - `GameLogic` owns coordinate semantics for navigation and weapon targeting. It
   derives X/Y meter scale from cached `MapInfo.map_min/map_max` and applies that
   scale when calculating bearing, distance, ground speed, airfield/zone display
   values, forward ground targets, and the current two-dimensional hostile-air
-  estimate.
+  estimate. The AAM path may project current hostile `dx`/`dy` onto line of
+  sight as a radial-aspect hint, but unknown target altitude and speed magnitude
+  keep the result a conditional reference rather than an intercept solution.
 
 ## UI Stability & Performance Guardrails
 - Keep panel containers structurally stable during transient 8111 data drops (avoid frame-level mount/unmount churn).

@@ -10,6 +10,7 @@ import pytest
 from tools.datamine_utils import normalize_datamine_caliber_m
 from tools.weapon_fire_control_extractor import (
     _extract_motor_stages,
+    _guidance_envelope_evidence,
     _guidance_min_range_evidence,
     _model_support_audit,
     extract_catalog,
@@ -237,6 +238,102 @@ def test_aam_guidance_min_range_evidence_is_condition_preserving() -> None:
         "guidance_min_ranges.table1.range_min_m": "/rocket/guidance/table1/rangeMin",
     }
     assert section["minDistance"] == 30.0
+
+
+def test_aam_guidance_envelope_preserves_conditions_and_orders_altitudes() -> None:
+    section = {
+        "guidance": {
+            "table0": {
+                "altitude": 5000.0,
+                "fighterMach": [0.9, 1.2],
+                "targetMach": [0.9, 0.9],
+                "targetMach2Mult": -1.0,
+                "rangeMin": [500.0, 1200.0, 600.0, 1300.0],
+                "rangeMax": [13000.0, 81000.0, 15000.0, 92000.0],
+                "rangeMinDogfight": [900.0, 3000.0, 1000.0, 2900.0],
+                "rangeMaxDogfight": [13000.0, 19000.0, 20000.0, 21000.0],
+                "rangeMaxAltDiff": [500.0, 0.0],
+                "rangeMaxDogfightAltDiff": [500.0, 0.0],
+                "timeMax": [39.0, 70.0, 41.0, 119.0],
+                "timeMaxAltDiff": [500.0, 0.0],
+                "altDiff": [500.0, 1000.0],
+            },
+            "table1": {
+                "altitude": 1000.0,
+                "fighterMach": [0.9, 1.2],
+                "targetMach": [0.9, 0.9],
+                "targetMach2Mult": -1.0,
+                "rangeMin": [400.0, 1100.0, 500.0, 1200.0],
+                "rangeMax": [8000.0, 62000.0, 9000.0, 67000.0],
+            },
+        }
+    }
+
+    envelope, pointers = _guidance_envelope_evidence("rocket", section, role="aam")
+
+    assert envelope is not None
+    assert [table["table"] for table in envelope["tables"]] == ["table1", "table0"]
+    assert envelope["tables"][1] == {
+        "table": "table0",
+        "altitude_m": 5000.0,
+        "fighter_mach": [0.9, 1.2],
+        "target_mach": [0.9, 0.9],
+        "target_mach2_mult": -1.0,
+        "range_min_m": [500.0, 1200.0, 600.0, 1300.0],
+        "range_max_m": [13000.0, 81000.0, 15000.0, 92000.0],
+        "range_min_dogfight_m": [900.0, 3000.0, 1000.0, 2900.0],
+        "range_max_dogfight_m": [13000.0, 19000.0, 20000.0, 21000.0],
+        "range_max_alt_diff_m": [500.0, 0.0],
+        "range_max_dogfight_alt_diff_m": [500.0, 0.0],
+        "time_max_s": [39.0, 70.0, 41.0, 119.0],
+        "time_max_alt_diff_m": [500.0, 0.0],
+        "alt_diff_m": [500.0, 1000.0],
+    }
+    assert pointers["guidance_envelope.table0"] == "/rocket/guidance/table0"
+    assert pointers["guidance_envelope.table0.range_max_m"] == "/rocket/guidance/table0/rangeMax"
+    document = {"rocket": section}
+    for pointer in pointers.values():
+        resolve_json_pointer(document, pointer)
+
+    agm_envelope, agm_pointers = _guidance_envelope_evidence("rocket", section, role="agm")
+    assert agm_envelope == envelope
+    assert agm_pointers == pointers
+
+
+def test_aam_guidance_envelope_skips_incomplete_legacy_tables() -> None:
+    section = {
+        "guidance": {
+            "table0": {
+                "altitude": 1000.0,
+                "fighterMach": [0.9, 1.2],
+                "targetMach": [0.9, 0.9],
+                "rangeMin": [400.0, 1100.0, 500.0, 1200.0],
+                "rangeMax": [8000.0, 62000.0, 9000.0, 67000.0],
+            }
+        }
+    }
+
+    assert _guidance_envelope_evidence("rocket", section, role="aam") == (None, {})
+    minimums, _ = _guidance_min_range_evidence("rocket", section, role="aam")
+    assert minimums is not None
+
+
+def test_aam_guidance_envelope_rejects_invalid_core_shape() -> None:
+    section = {
+        "guidance": {
+            "table0": {
+                "altitude": 1000.0,
+                "fighterMach": [0.9],
+                "targetMach": [0.9, 0.9],
+                "targetMach2Mult": -1.0,
+                "rangeMin": [400.0, 1100.0, 500.0, 1200.0],
+                "rangeMax": [8000.0, 62000.0, 9000.0, 67000.0],
+            }
+        }
+    }
+
+    with pytest.raises(RuntimeError, match="expected 2"):
+        _guidance_envelope_evidence("rocket", section, role="aam")
 
 
 def test_current_aam_guidance_table_coverage(catalog: dict[str, Any]) -> None:

@@ -710,6 +710,133 @@ def _finite_numbers(value: Any) -> list[float]:
     return []
 
 
+def _guidance_table_number(
+    table: dict[str, Any],
+    raw_name: str,
+    *,
+    source_pointer: str,
+) -> float:
+    value = table.get(raw_name)
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise RuntimeError(f"invalid guidance envelope number: {source_pointer}")
+    return float(value)
+
+
+def _guidance_table_array(
+    table: dict[str, Any],
+    raw_name: str,
+    *,
+    length: int,
+    source_pointer: str,
+    nonnegative: bool = False,
+) -> list[float]:
+    value = table.get(raw_name)
+    if not isinstance(value, list) or len(value) != length:
+        raise RuntimeError(
+            f"invalid guidance envelope array shape (expected {length}): {source_pointer}"
+        )
+    numbers: list[float] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int | float) or not math.isfinite(item):
+            raise RuntimeError(f"invalid guidance envelope number: {source_pointer}")
+        number = float(item)
+        if nonnegative and number < 0:
+            raise RuntimeError(f"negative guidance envelope value: {source_pointer}")
+        numbers.append(number)
+    return numbers
+
+
+def _guidance_envelope_evidence(
+    section_name: str,
+    section: dict[str, Any],
+    *,
+    role: str,
+) -> tuple[dict[str, Any] | None, dict[str, str]]:
+    """Preserve structured Datamine launch-envelope tables without interpreting them."""
+    if role not in {"aam", "agm"}:
+        return None, {}
+    guidance = section.get("guidance")
+    if not isinstance(guidance, dict):
+        return None, {}
+
+    core_arrays = {
+        "fighterMach": ("fighter_mach", 2, True),
+        "targetMach": ("target_mach", 2, False),
+        "rangeMin": ("range_min_m", 4, True),
+        "rangeMax": ("range_max_m", 4, True),
+    }
+    optional_arrays = {
+        "rangeMinDogfight": ("range_min_dogfight_m", 4, True),
+        "rangeMaxDogfight": ("range_max_dogfight_m", 4, True),
+        "rangeMaxAltDiff": ("range_max_alt_diff_m", 2, False),
+        "rangeMaxDogfightAltDiff": ("range_max_dogfight_alt_diff_m", 2, False),
+        "timeMax": ("time_max_s", 4, True),
+        "timeMaxAltDiff": ("time_max_alt_diff_m", 2, False),
+        "altDiff": ("alt_diff_m", 2, False),
+    }
+    tables: list[dict[str, Any]] = []
+    pointers: dict[str, str] = {}
+    for _, table_name, table in _numbered_blocks(guidance, "table"):
+        # Older tables without this condition do not have the complete shape needed by
+        # the conditional envelope. Their range minima remain available through the
+        # backwards-compatible guidance_min_ranges evidence.
+        if "targetMach2Mult" not in table:
+            continue
+
+        table_pointer = f"/{section_name}/guidance/{table_name}"
+        table_payload: dict[str, Any] = {
+            "table": table_name,
+            "altitude_m": _guidance_table_number(
+                table,
+                "altitude",
+                source_pointer=f"{table_pointer}/altitude",
+            ),
+            "target_mach2_mult": _guidance_table_number(
+                table,
+                "targetMach2Mult",
+                source_pointer=f"{table_pointer}/targetMach2Mult",
+            ),
+        }
+        if table_payload["altitude_m"] < 0:
+            raise RuntimeError(f"negative guidance envelope altitude: {table_pointer}/altitude")
+
+        pointer_prefix = f"guidance_envelope.{table_name}"
+        pointers[pointer_prefix] = table_pointer
+        pointers[f"{pointer_prefix}.altitude_m"] = f"{table_pointer}/altitude"
+        pointers[f"{pointer_prefix}.target_mach2_mult"] = f"{table_pointer}/targetMach2Mult"
+        for raw_name, (output_name, length, nonnegative) in core_arrays.items():
+            table_payload[output_name] = _guidance_table_array(
+                table,
+                raw_name,
+                length=length,
+                source_pointer=f"{table_pointer}/{raw_name}",
+                nonnegative=nonnegative,
+            )
+            pointers[f"{pointer_prefix}.{output_name}"] = f"{table_pointer}/{raw_name}"
+        for raw_name, (output_name, length, nonnegative) in optional_arrays.items():
+            if raw_name not in table:
+                continue
+            table_payload[output_name] = _guidance_table_array(
+                table,
+                raw_name,
+                length=length,
+                source_pointer=f"{table_pointer}/{raw_name}",
+                nonnegative=nonnegative,
+            )
+            pointers[f"{pointer_prefix}.{output_name}"] = f"{table_pointer}/{raw_name}"
+        tables.append(table_payload)
+
+    if not tables:
+        return None, {}
+    tables.sort(key=lambda table: (table["altitude_m"], table["table"]))
+    altitudes = [table["altitude_m"] for table in tables]
+    if any(
+        current <= previous for previous, current in zip(altitudes, altitudes[1:], strict=False)
+    ):
+        raise RuntimeError("guidance envelope table altitudes must be strictly increasing")
+    return {"tables": tables}, pointers
+
+
 def _guidance_min_range_evidence(
     section_name: str,
     section: dict[str, Any],
@@ -1067,6 +1194,12 @@ def _build_weapon_record(
         role=role,
     )
     pointers.update(guidance_min_range_pointers)
+    guidance_envelope, guidance_envelope_pointers = _guidance_envelope_evidence(
+        section_name,
+        section,
+        role=role,
+    )
+    pointers.update(guidance_envelope_pointers)
     for pointer in pointers.values():
         try:
             resolve_json_pointer(source_data, pointer)
@@ -1108,6 +1241,8 @@ def _build_weapon_record(
         record["normalizations"] = [caliber_normalization]
     if guidance_min_ranges is not None:
         record["guidance_min_ranges"] = guidance_min_ranges
+    if guidance_envelope is not None:
+        record["guidance_envelope"] = guidance_envelope
     return record
 
 
@@ -1194,7 +1329,11 @@ def extract_catalog(
 
 def write_catalog(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def main() -> int:

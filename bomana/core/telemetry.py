@@ -738,6 +738,15 @@ class MapObjectsFetcher:
                 contact_y = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
                 if contact_x is None or contact_y is None:
                     continue
+                contact_dx = self._first_float(o, ("dx", "DX", "vel_x", "vx"))
+                contact_dy = self._first_float(o, ("dy", "DY", "vel_y", "vy"))
+                if (
+                    contact_dx is None
+                    or contact_dy is None
+                    or math.hypot(contact_dx, contact_dy) <= 1e-9
+                ):
+                    contact_dx = None
+                    contact_dy = None
                 icon = self._first_text(o, ("icon", "class", "category"))
                 name = self._first_text(o, ("name", "label", "title", "callsign")) or icon
                 out.hostile_air_contacts.append(
@@ -749,6 +758,8 @@ class MapObjectsFetcher:
                         name=name,
                         icon=icon,
                         color=self._text(o.get("color", "")),
+                        dx=contact_dx,
+                        dy=contact_dy,
                     )
                 )
                 hostile_air_index += 1

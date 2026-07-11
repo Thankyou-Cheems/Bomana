@@ -920,7 +920,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-10T15:00:49+00:00"
+        "at": "2026-07-11T01:11:24+00:00"
       }
     },
     {
@@ -950,7 +950,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-10T15:00:49+00:00"
+        "at": "2026-07-11T01:11:24+00:00"
       }
     },
     {
@@ -1520,7 +1520,7 @@
       "snippet_check": {
         "status": "drifted",
         "detail": "snippet exists but not at lines 177-178; first line now near line 193",
-        "at": "2026-07-10T15:00:49+00:00"
+        "at": "2026-07-11T01:11:24+00:00"
       }
     },
     {
@@ -1838,7 +1838,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-10T15:00:49+00:00"
+        "at": "2026-07-11T01:11:24+00:00"
       }
     },
     {
@@ -2101,6 +2101,43 @@
       },
       "resolved_at": "2026-07-10T14:58:49+00:00",
       "resolution_note": "Scheduler now separates launch TAS from positive aligned SOG*cos(relative) ground closure; real-path probe kept launch speed 250 m/s, produced 199.878 m/s closure at 2 degrees, and suppressed closure at 20 degrees. Focused/full tests passed."
+    },
+    {
+      "file": "bomana/core/weapon_solver.py",
+      "line_start": 613,
+      "line_end": 626,
+      "snippet": "        fighter_mach = _mach_from_launch_state(altitude_m, speed_mps, launch_mach)\n        table_solution = _guidance_envelope_solution(\n            weapon,\n            launch_altitude_m=altitude_m,\n            launch_mach=fighter_mach,\n            target_distance_m=distance_m,\n            target_relative_deg=relative_deg,\n            target_kind=target_kind,\n            target_name=target_name,\n            target_aspect_cosine=target_aspect_cosine,\n            ground_closing_speed_mps=ground_closing_speed_mps,\n        )\n        if table_solution is not None:\n            return table_solution",
+      "category": "correctness",
+      "severity": "high",
+      "confidence": "likely",
+      "title": "WFC-06: unavailable table cells block the supported powered fallback",
+      "impact": "At 10-15 km launch altitude, generated AGM-65 and RB75-family tables contain zero rangeMax endpoints. The helper returns insufficient_data/guidance_envelope_endpoint_unavailable, and this unconditional return prevents their otherwise-supported point-mass path, so the compact card loses every range cue for a realistic high-altitude launch.",
+      "fix": "Return a table solution only when the requested condition is usable; when the table result is unavailable, continue into the existing glide and unsupported-model guards and then the powered point-mass fallback.",
+      "spec_clause": "WFC-06",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "Runtime probe against generated us_agm_65d at altitude 10000 m, Mach 0.8, 10 km target returned insufficient_data/guidance_envelope_endpoint_unavailable while model_unsupported_reasons was empty; the same result occurs at 15000 m."
+        },
+        {
+          "kind": "read",
+          "detail": "_guidance_envelope_solution returns a non-null insufficient-data WeaponSolution when aspect endpoints are unavailable; solve returns every non-null table result before reaching the powered fallback."
+        },
+        {
+          "kind": "spec",
+          "detail": "Draft WFC-06 says that when no valid conditional table is available, supported powered estimates must use point-mass integration, while only an unsupported conditional-propulsion record without a usable table fails closed."
+        }
+      ],
+      "id": "F-90989824",
+      "status": "fixed",
+      "created_at": "2026-07-11T01:09:28+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T01:09:52+00:00"
+      },
+      "resolved_at": "2026-07-11T01:11:19+00:00",
+      "resolution_note": "Zero rangeMax endpoints now mark the conditional table unavailable for that launch condition, allowing the independent powered fallback only after existing glide/unsupported guards; generated AGM-65D contract pin plus weapon solver tests passed (32 tests)."
     }
   ]
 }

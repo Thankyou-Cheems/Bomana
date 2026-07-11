@@ -81,6 +81,9 @@ class FixedSolver:
             target_distance_m=inputs["target_distance_m"],
             min_range_m=100.0,
             max_range_m=5000.0,
+            rear_range_m=3000.0,
+            head_range_m=8000.0,
+            target_aspect_cosine=inputs.get("target_aspect_cosine"),
             time_to_target_s=8.0,
         )
 
@@ -100,6 +103,7 @@ def _telemetry() -> TelemetryData:
         ias_kmh=720.0,
         tas_kmh=900.0,
         altitude_m=2000.0,
+        mach=0.82,
     )
 
 
@@ -139,6 +143,8 @@ def test_prepare_compute_apply_projects_solution_into_state() -> None:
     assert state.weapon_quality == "two_dimensional"
     assert state.weapon_target_name == "Zone A"
     assert state.weapon_max_range_m == 5000.0
+    assert state.weapon_rear_range_m == 3000.0
+    assert state.weapon_head_range_m == 8000.0
 
 
 def test_prepare_separates_launch_speed_from_aligned_ground_closing_speed() -> None:
@@ -155,6 +161,7 @@ def test_prepare_separates_launch_speed_from_aligned_ground_closing_speed() -> N
     )
     assert aligned is not None
     assert aligned["launch_speed_mps"] == 250.0
+    assert aligned["launch_mach"] == pytest.approx(0.82)
     assert aligned["ground_closing_speed_mps"] == pytest.approx(250.0 * math.cos(math.radians(2.0)))
 
     off_axis = _target(target_id="zone-b", relative=20.0)
@@ -204,6 +211,39 @@ def test_apply_rejects_target_changed_while_compute_was_outside_lock() -> None:
     assert work is not None
     result = compute_weapon_calculation(work, solver=FixedSolver())
     state.weapon_target = _target(target_id="zone-b", distance=2500.0)
+
+    assert not apply_weapon_calculation(state, result, catalog=catalog)
+    assert state.weapon_id == ""
+
+
+def test_apply_rejects_air_target_aspect_changed_while_compute_was_outside_lock() -> None:
+    catalog = FakeCatalog()
+    catalog.records["agm"] = dict(catalog.records["agm"], role="aam")
+    state = _alive_state()
+    target = WeaponTarget(
+        id="hostile-1",
+        kind="aircraft",
+        name="Hostile",
+        distance_m=20_000.0,
+        aspect_cosine=-1.0,
+    )
+    work = prepare_weapon_calculation(
+        state,
+        _telemetry(),
+        1.0,
+        player_present=True,
+        target=target,
+        catalog=catalog,
+    )
+    assert work is not None
+    result = compute_weapon_calculation(work, solver=FixedSolver())
+    state.weapon_target = WeaponTarget(
+        id="hostile-1",
+        kind="aircraft",
+        name="Hostile",
+        distance_m=20_000.0,
+        aspect_cosine=1.0,
+    )
 
     assert not apply_weapon_calculation(state, result, catalog=catalog)
     assert state.weapon_id == ""

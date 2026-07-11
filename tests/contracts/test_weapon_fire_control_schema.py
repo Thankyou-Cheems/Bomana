@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "docs/specs/schemas/weapon-fire-control.schema.json"
 CATALOG_PATH = ROOT / "bomana/data/weapon_fire_control.json"
 CCRP_PATH = ROOT / "bomana/data/ccrp_bomb_params.json"
-EXPECTED_COMMIT = "96787940b7d0a48fcd6eb153081b4c852f9435e9"
+EXPECTED_COMMIT = "d5575f185021a950ac34e3854f17a34bafdc73e8"
 
 
 @pytest.fixture(scope="module")
@@ -44,7 +44,7 @@ def test_generated_catalog_matches_canonical_schema(
 
 def test_catalog_records_pinned_clean_datamine_provenance(catalog: dict[str, Any]) -> None:
     meta = catalog["meta"]
-    assert meta["source_version"] == "2.57.1.16"
+    assert meta["source_version"] == "2.57.1.19"
     assert meta["source_commit"] == EXPECTED_COMMIT
     assert meta["source_repo"] == "https://github.com/gszabi99/War-Thunder-Datamine"
     assert len(meta["source_subdirs"]) >= 3
@@ -206,3 +206,51 @@ def test_schema_rejects_tampered_catalog(
     ]
     with pytest.raises(SchemaValidationError, match="allowed values"):
         validate_json_schema(invalid_reason, schema, path="tampered")
+
+
+def test_guidance_envelope_schema_requires_exact_condition_shapes(
+    schema: dict[str, Any],
+    catalog: dict[str, Any],
+) -> None:
+    table_schema = schema["$defs"]["guidance_envelope_table"]
+    pair_schema = schema["$defs"]["guidance_envelope_pair"]
+    quad_schema = schema["$defs"]["guidance_envelope_quad"]
+    assert set(table_schema["required"]) == {
+        "table",
+        "altitude_m",
+        "fighter_mach",
+        "target_mach",
+        "target_mach2_mult",
+        "range_min_m",
+        "range_max_m",
+    }
+    assert pair_schema["minItems"] == pair_schema["maxItems"] == 2
+    assert quad_schema["minItems"] == quad_schema["maxItems"] == 4
+
+    candidate = copy.deepcopy(catalog)
+    candidate["weapons"]["us_aim9l_sidewinder"]["guidance_envelope"] = {
+        "tables": [
+            {
+                "table": "table0",
+                "altitude_m": 1000.0,
+                "fighter_mach": [0.9, 1.2],
+                "target_mach": [0.9, 0.9],
+                "target_mach2_mult": -1.0,
+                "range_min_m": [430.0, 1100.0, 500.0, 950.0],
+                "range_max_m": [8000.0, 62000.0, 9000.0, 67000.0],
+            }
+        ]
+    }
+    validate_json_schema(candidate, schema, path="envelope candidate")
+
+    candidate["weapons"]["us_aim9l_sidewinder"]["guidance_envelope"]["tables"][0][
+        "fighter_mach"
+    ] = [0.9]
+    with pytest.raises(SchemaValidationError, match="at least 2 items"):
+        validate_json_schema(candidate, schema, path="invalid envelope")
+
+    candidate["weapons"]["us_aim9l_sidewinder"]["guidance_envelope"]["tables"][0][
+        "fighter_mach"
+    ] = [0.9, 1.0, 1.2]
+    with pytest.raises(SchemaValidationError, match="at most 2 items"):
+        validate_json_schema(candidate, schema, path="invalid envelope")
