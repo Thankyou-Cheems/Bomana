@@ -66,12 +66,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .brand > span:last-child { display: grid; }
 .brand strong { font-size: 15px; }
 .brand small { color: var(--muted); font-size: 8px; letter-spacing: .24em; }
-.brand-mark { position: relative; display: inline-flex; align-items: flex-end; gap: 3px; width: 27px; height: 25px; }
-.brand-mark i { display: block; width: 7px; border-radius: 3px 3px 1px 1px; background: linear-gradient(180deg, var(--cyan), var(--blue)); box-shadow: 0 0 12px rgba(112, 183, 255, .35); }
-.brand-mark i:nth-child(1) { height: 15px; }
-.brand-mark i:nth-child(2) { height: 23px; }
-.brand-mark i:nth-child(3) { height: 10px; }
-.brand-mark.large { transform: scale(1.45); margin-bottom: 12px; }
+.brand-logo { width: 34px; height: 34px; border-radius: 9px; object-fit: cover; box-shadow: 0 0 18px rgba(112, 183, 255, .2); }
 
 .connection { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 7px; text-align: right; font-size: 12px; }
 .connection small { grid-column: 2; color: var(--muted); font-size: 9px; }
@@ -95,10 +90,11 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .mission-strip { padding: 15px; margin-bottom: 12px; }
 .mission-clock { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 0 12px; }
 .mission-clock .eyebrow { grid-column: 1; align-self: start; }
-.mission-clock strong { grid-column: 1; font-variant-numeric: tabular-nums; font-size: clamp(46px, 14vw, 76px); line-height: .95; letter-spacing: -.075em; }
+.timer-display { position: relative; grid-column: 1; min-width: 0; padding: 5px 0 7px; overflow: hidden; }
+.mission-clock strong { position: relative; z-index: 1; display: block; font-variant-numeric: tabular-nums; font-size: clamp(46px, 14vw, 76px); line-height: .95; letter-spacing: -.075em; }
 .mission-clock > span:last-child { grid-column: 2; grid-row: 1 / 3; align-self: center; max-width: 115px; color: var(--muted); text-align: right; font-size: 11px; }
-.mission-progress { height: 3px; margin: 15px 0; overflow: hidden; background: rgba(255,255,255,.08); border-radius: 9px; }
-.mission-progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--blue), var(--cyan)); box-shadow: 0 0 12px var(--blue); transition: width .25s ease; }
+.mission-progress { position: absolute; z-index: 0; left: 0; right: 0; bottom: 0; height: 5px; overflow: hidden; background: rgba(255,255,255,.07); border-radius: 9px; }
+.mission-progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, rgba(112,183,255,.72), rgba(105,211,232,.9)); box-shadow: 0 0 12px var(--blue); transition: width .25s ease; }
 .quick-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 7px; }
 .quick-metrics div { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 11px; background: rgba(4, 12, 22, .28); }
 .quick-metrics span, .quick-metrics small { display: block; color: var(--muted); font-size: 8px; letter-spacing: .12em; }
@@ -137,11 +133,12 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .command-status.error { color: var(--red); border-color: rgba(255, 112, 120, .32); }
 .control-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 .action-tile {
-  display: grid;
-  align-content: center;
+  display: flex;
+  align-items: center;
+  gap: 9px;
   min-width: 0;
-  min-height: 76px;
-  padding: 11px 12px;
+  min-height: 50px;
+  padding: 7px 10px;
   text-align: left;
   border: 1px solid rgba(112, 183, 255, .34);
   border-radius: 12px;
@@ -149,8 +146,11 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   cursor: pointer;
   touch-action: manipulation;
 }
-.action-tile span, .action-tile small { color: var(--muted); font-size: 8px; }
-.action-tile strong { margin: 3px 0; font-size: 13px; }
+.action-icon { flex: none; display: grid; place-items: center; width: 29px; height: 29px; color: var(--blue); border: 1px solid var(--line-strong); border-radius: 8px; font-size: 16px; }
+.danger-action .action-icon { color: var(--red); }
+.action-copy { min-width: 0; display: grid; gap: 1px; text-align: left; }
+.action-copy small { color: var(--muted); font-size: 8px; }
+.action-copy strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .action-tile.danger-action { border-color: rgba(255, 112, 120, .3); background: linear-gradient(145deg, rgba(118, 42, 55, .2), rgba(5, 14, 25, .58)); }
 .action-tile:not(:disabled):active { transform: translateY(1px); }
 .action-tile:disabled { opacity: .45; cursor: not-allowed; }
@@ -196,6 +196,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .select-setting select:disabled { color: var(--muted); opacity: .62; }
 .model-setting { grid-template-columns: 1fr; align-items: stretch; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .model-control button { min-height: 44px; }
+.model-control button { padding-inline: 6px; font-size: 9px; line-height: 1.25; }
+.model-note { margin: 8px 1px 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 
 .map-card { padding: 15px; margin-bottom: 12px; }
 .map-tools { display: flex; gap: 5px; }
@@ -213,6 +215,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .legend-airfield { color: var(--cyan); width: 10px !important; height: 3px !important; }
 .legend-poi { color: var(--red); }
 .legend-trace { color: var(--violet); border-radius: 50%; }
+.legend-range { color: var(--blue); border-radius: 50%; background: rgba(112,183,255,.14); }
 .heading-tape-wrap { height: 44px; margin-top: 9px; border: 1px solid var(--line); border-radius: 11px; background: rgba(5,14,25,.55); overflow: hidden; }
 #headingTape { width: 100%; height: 100%; }
 
@@ -271,6 +274,7 @@ footer { display: flex; justify-content: space-between; gap: 10px; width: min(15
 .pairing { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 22px; background: rgba(3, 8, 15, .88); backdrop-filter: blur(22px); }
 .pairing.hidden { display: none; }
 .pairing-card { width: min(390px, 100%); padding: 28px; border: 1px solid var(--line-strong); border-radius: 22px; background: linear-gradient(145deg, #13243a, #0a1525); box-shadow: 0 30px 90px rgba(0,0,0,.45); }
+.pairing-logo { display: block; width: 58px; height: 58px; margin-bottom: 13px; border-radius: 15px; object-fit: cover; box-shadow: 0 0 24px rgba(112,183,255,.22); }
 .pairing-card h2 { margin: 8px 0; font-size: 26px; }
 .pairing-card p { color: var(--muted); line-height: 1.65; font-size: 12px; }
 .pairing-card label { display: block; margin: 18px 0 6px; color: var(--muted); font-size: 10px; }
@@ -281,15 +285,15 @@ footer { display: flex; justify-content: space-between; gap: 10px; width: min(15
 .pairing-card small.error { color: var(--red); }
 
 @media (max-width: 370px) {
-  .control-action-grid { grid-template-columns: 1fr; }
   .target-setting { grid-template-columns: 1fr; align-items: stretch; gap: 5px; padding: 7px 0; }
+  .action-tile { padding-inline: 8px; }
+  .action-icon { width: 27px; height: 27px; }
 }
 
 @media (min-width: 760px) {
   .cockpit { padding: 20px; }
   .mission-strip { display: grid; grid-template-columns: minmax(240px, .72fr) 1.28fr; gap: 0 26px; align-items: center; }
-  .mission-clock { grid-row: 1 / 3; }
-  .mission-progress { grid-column: 2; margin: 0 0 14px; }
+  .mission-clock { grid-row: 1; }
   .quick-metrics { grid-column: 2; }
   .control-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .weapon-controls { grid-column: 1 / 3; }

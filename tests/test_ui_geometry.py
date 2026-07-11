@@ -436,7 +436,7 @@ class TkGeometryTests(unittest.TestCase):
         self.assertGreaterEqual(labels[1].cget("wraplength"), 42)
         self.assertGreaterEqual(labels[3].cget("wraplength"), 72)
 
-    def test_renderer_splits_fuel_and_bombing_details_across_labels(self) -> None:
+    def test_renderer_compacts_fuel_to_one_line_and_keeps_bombing_details(self) -> None:
         app = SimpleNamespace(
             scale=1.0,
             icons=FakeIcons(),
@@ -499,6 +499,7 @@ class TkGeometryTests(unittest.TestCase):
         renderer.update_bombing_display(snap)
 
         fuel_texts = [
+            app.fuel_main_lbl.cget("text"),
             app.fuel_detail_lbl.cget("text"),
             app.fuel_return_detail_lbl.cget("text"),
         ]
@@ -508,12 +509,21 @@ class TkGeometryTests(unittest.TestCase):
             app.bomb_release_lbl.cget("text"),
             app.bomb_release_detail_lbl.cget("text"),
         ]
-        self.assertEqual(fuel_texts, ["油耗 96kg/min · 高度 4321m", "返航 需 650kg (27%) · 36km"])
+        self.assertEqual(
+            fuel_texts,
+            [
+                "油量 1800kg / 75% · 油耗 96kg/min · 高度 4321m · 返航需 650kg (27%) · 36km",
+                "",
+                "",
+            ],
+        )
         self.assertEqual(bomb_texts[0], "目标 战区 #2 3.12km · 弹道 2.14km · 飞行 12.3s")
         self.assertEqual(bomb_texts[1], "")
         self.assertEqual(bomb_texts[2], "接近")
         self.assertEqual(bomb_texts[3], "战区窗口 3.4s / 980m")
         self.assertEqual(app.fuel_alt_lbl.winfo_manager(), "")
+        self.assertEqual(app.fuel_detail_lbl.winfo_manager(), "")
+        self.assertEqual(app.fuel_return_detail_lbl.winfo_manager(), "")
         self.assertEqual(app.bomb_flight_lbl.winfo_manager(), "")
         self.assertEqual(app.bomb_release_detail_lbl.winfo_manager(), "pack")
         self.assertNotIn("│", " ".join(fuel_texts + bomb_texts))

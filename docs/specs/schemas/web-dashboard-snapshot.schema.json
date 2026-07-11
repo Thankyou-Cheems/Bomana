@@ -185,11 +185,13 @@
     "map": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["available", "player", "points"],
+      "required": ["available", "player", "points", "image", "weapon_range"],
       "properties": {
         "available": {"type": "boolean"},
         "player": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/player"}]},
-        "points": {"type": "array", "items": {"$ref": "#/$defs/mapPoint"}}
+        "points": {"type": "array", "items": {"$ref": "#/$defs/mapPoint"}},
+        "image": {"$ref": "#/$defs/mapImage"},
+        "weapon_range": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/weaponRange"}]}
       }
     }
   },
@@ -227,6 +229,28 @@
         "x": {"type": "number", "minimum": 0, "maximum": 1},
         "y": {"type": "number", "minimum": 0, "maximum": 1},
         "heading_deg": {"type": "number"}
+      }
+    },
+    "mapImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "revision", "url"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "revision": {"type": "integer", "minimum": 0},
+        "url": {"const": "/api/v1/map-image"}
+      }
+    },
+    "weaponRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_radius_x", "min_radius_y", "max_radius_x", "max_radius_y", "quality"],
+      "properties": {
+        "min_radius_x": {"type": "number", "minimum": 0, "maximum": 4},
+        "min_radius_y": {"type": "number", "minimum": 0, "maximum": 4},
+        "max_radius_x": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "max_radius_y": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "quality": {"type": "string"}
       }
     },
     "mapPoint": {

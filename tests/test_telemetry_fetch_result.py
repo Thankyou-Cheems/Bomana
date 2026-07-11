@@ -2,7 +2,13 @@ import unittest
 
 import requests
 
-from bomana.core.telemetry import Budget, HttpJson, MapObjectsFetcher, TelemetryFetcher
+from bomana.core.telemetry import (
+    Budget,
+    HttpJson,
+    MapImageFetcher,
+    MapObjectsFetcher,
+    TelemetryFetcher,
+)
 
 
 class FakeResponse:
@@ -43,6 +49,34 @@ class FakeRouteSession:
                     raise result
                 return result
         raise AssertionError(f"Unexpected URL: {url}")
+
+
+class FakeImageResponse:
+    def __init__(self, body_chunks, *, content_type="image/png", content_length=None):
+        self.ok = True
+        self.status_code = 200
+        self.headers = {"Content-Type": content_type}
+        if content_length is not None:
+            self.headers["Content-Length"] = str(content_length)
+        self.body_chunks = body_chunks
+        self.closed = False
+
+    def iter_content(self, *, chunk_size):
+        assert chunk_size == MapImageFetcher._CHUNK_SIZE
+        yield from self.body_chunks
+
+    def close(self):
+        self.closed = True
+
+
+class FakeImageSession:
+    def __init__(self, response):
+        self.response = response
+        self.calls = []
+
+    def get(self, url, *, timeout, stream):
+        self.calls.append((url, timeout, stream))
+        return self.response
 
 
 class HttpJsonFetchResultTests(unittest.TestCase):
@@ -101,6 +135,51 @@ class HttpJsonFetchResultTests(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.error_kind, "invalid_json")
+
+
+class MapImageFetcherTests(unittest.TestCase):
+    def test_accepts_bounded_png_from_fixed_official_route(self) -> None:
+        body = b"\x89PNG\r\n\x1a\nmap"
+        response = FakeImageResponse([body], content_length=len(body))
+        session = FakeImageSession(response)
+
+        result = MapImageFetcher(session).fetch()
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.body, body)
+        self.assertEqual(result.content_type, "image/png")
+        self.assertTrue(session.calls[0][0].endswith("/map.img"))
+        self.assertTrue(session.calls[0][2])
+        self.assertTrue(response.closed)
+
+    def test_rejects_wrong_type_signature_and_declared_oversize(self) -> None:
+        cases = (
+            (FakeImageResponse([b"bad"], content_type="text/html"), "invalid_content_type"),
+            (FakeImageResponse([b"not-png"]), "invalid_image"),
+            (
+                FakeImageResponse(
+                    [b"\x89PNG\r\n\x1a\n"],
+                    content_length=MapImageFetcher.MAX_IMAGE_BYTES + 1,
+                ),
+                "body_too_large",
+            ),
+        )
+        for response, reason in cases:
+            with self.subTest(reason=reason):
+                result = MapImageFetcher(FakeImageSession(response)).fetch()
+                self.assertFalse(result.ok)
+                self.assertEqual(result.error_kind, reason)
+                self.assertTrue(response.closed)
+
+    def test_rejects_stream_that_crosses_hard_body_limit(self) -> None:
+        response = FakeImageResponse(
+            [b"\x89PNG\r\n\x1a\n" + b"a" * MapImageFetcher.MAX_IMAGE_BYTES, b"b"]
+        )
+
+        result = MapImageFetcher(FakeImageSession(response)).fetch()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error_kind, "body_too_large")
 
 
 class FetcherDiagnosticTests(unittest.TestCase):

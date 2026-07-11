@@ -53,6 +53,10 @@ runtime app.
   semantic target validity before executing a Web command.
 - `THREAD-13`: Only the Tk owner thread MAY publish Web command completion and
   the resulting control-state revision after attempted execution.
+- `THREAD-14`: The optional map-image poller MUST own its dedicated HTTP session
+  and may publish immutable bounded bytes to the Web snapshot store, but MUST
+  NOT touch Tk, App config, or Web session authority. Start/stop requests belong
+  to the Tk-owned runtime service and shutdown MUST be bounded.
 - `HOTKEY-01`: Windows global hotkeys must use `RegisterHotKey` as the default
   backend in both the local and privileged-broker paths. Runtime code must not
   add low-level keyboard hooks, polling fallback paths, or key-state polling for
@@ -82,7 +86,7 @@ runtime app.
 - [behavioral] `tests/test_runtime_threading.py` and
   `tests/test_runtime_services.py` enforce dispatcher, poller, shutdown, and
   hotkey lifecycle behavior in `THREAD-02..THREAD-05`, `THREAD-07`,
-  `THREAD-09..THREAD-13`, `HOTKEY-02`, and `HOTKEY-03`.
+  `THREAD-09..THREAD-14`, `HOTKEY-02`, and `HOTKEY-03`.
 - [behavioral] `tests/test_system_portability.py` enforces `THREAD-04`,
   `THREAD-08`, `HOTKEY-02`, and `HOTKEY-03` with registration lifecycle tests
   plus a real Windows message-window dispatch test.

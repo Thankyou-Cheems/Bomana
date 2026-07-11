@@ -14,6 +14,13 @@ implementation plans belong in git history, not here.
 
 ## Entries
 
+### 2026-07-11 — LAN sharing must not stop after the first private adapter
+
+Symptom: the Web Cockpit opened on Wi-Fi `192.168.x.x`, but an iPhone using an EasyTier `10.x.x.x` route could not reach the same port even though both addresses were present and preferred on Windows.
+Root cause: address discovery returned every eligible RFC1918 interface, but `enable_lan()` returned immediately after binding the first one, so later physical or overlay-network addresses never received listeners or Host authorization.
+Spec: `docs/specs/web-dashboard.md` `WDB-02`, `WDB-46`.
+Pin: `tests/test_web_dashboard_server.py` requires one exact listener/Host entry per distinct bindable address plus all-listener revocation, and the Bomana-mv6j host-local smoke reached both `192.168.31.69` and `10.126.126.2` on the same selected port. Physical iPhone and Firewall behavior remain manual gates.
+
 ### 2026-07-11 — Packaged GUI smoke needs a Tk-level launch shortcut
 
 Symptom: the packaged App handoff was healthy when clicked manually, but the smoke timed out on the modern Launcher because Windows UI Automation exposed anonymous Tk buttons and Tk used no native child button HWNDs.
@@ -101,10 +108,10 @@ Pin: `tests/contracts/test_weapon_fire_control_runtime.py` requires the generate
 
 ### 2026-07-11 — A selected policy is not necessarily the active provider
 
-Symptom: a non-glide AGM solved by the point-mass fallback displayed “FoxThree 兼容临时模型” merely because that was the selected glide policy.
+Symptom: a non-glide AGM solved by the point-mass fallback displayed a provider-named temporary glide model merely because that was the selected glide policy.
 Root cause: the presenter treated `WeaponSolution.model` as the algorithm source even though it records the cross-calculation policy; valid Datamine tables and non-glide fallbacks can run under either policy.
 Spec: `docs/specs/weapon-fire-control.md` `WFC-06`, `WFC-13`, `WFC-16` (Draft 2026-07); ADR `docs/adr/0006-selectable-temporary-glide-model.md`.
-Pin: `tests/test_panel_presenter.py` requires provider wording to follow the machine-readable solution reason and forbids the FoxThree label on `powered_point_mass_2d` results.
+Pin: `tests/test_panel_presenter.py` requires public source wording to follow the machine-readable solution reason and forbids the internal compatibility-policy label on `powered_point_mass_2d` results.
 
 ### 2026-07-10 — App helper extraction can strand lifecycle calls after `return`
 

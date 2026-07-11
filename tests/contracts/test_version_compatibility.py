@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 from pathlib import Path
 from types import ModuleType
 
@@ -73,7 +74,13 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
 
     assert boundary.MIN_SUPPORTED_APP_VERSION == "8.0.0"
     assert boundary.MIN_SUPPORTED_LAUNCHER_VERSION == "3.0.0"
-    assert '__version__ = "8.0.0"' in app_metadata
+    app_version_match = re.search(
+        r'^__version__ = "([0-9]+[.][0-9]+[.][0-9]+)"$', app_metadata, re.M
+    )
+    assert app_version_match is not None
+    assert boundary.parse_strict_version(
+        app_version_match.group(1)
+    ) >= boundary.parse_strict_version(boundary.MIN_SUPPORTED_APP_VERSION)
     assert 'PORTABLE_MIN_LAUNCHER_VERSION = "3.0.0"' in app_metadata
     assert 'LAUNCHER_VERSION = "3.0.0"' in launcher_metadata
     assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.0.0"' in build

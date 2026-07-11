@@ -153,7 +153,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
      the state lock, and only a still-current selection/target/model result is
      applied. Glide weapons still have no validated native-equivalent
      lift/autopilot provider: the default selectable policy supplies an
-     explicitly experimental FoxThree-compatible energy-height estimate, while
+     explicitly experimental compatibility energy-height estimate, while
      strict mode reports unavailable; neither path reuses the free-fall proxy.
    - Weapon selection is manual unless a future directed 8111 capture proves a
      named selection field. Button/release pulses such as `weapon2` are never
@@ -219,12 +219,12 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `tools/build_hotkey_broker.py` builds only the native runtime. `tools/build_portable.py` embeds it and the adjacent checksum into each App package.
 10. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
 11. Web Cockpit flow:
-   - `App` publishes the selected live/debug `UISnapshot` plus a copied checklist into `DashboardSnapshotStore`, and separately publishes Tk-owned semantic target state into `DashboardControlStore`; HTTP threads consume only those immutable projections and never poll or proxy port 8111.
+   - `App` publishes the selected live/debug `UISnapshot` plus a copied checklist into `DashboardSnapshotStore`, and separately publishes Tk-owned semantic target state into `DashboardControlStore`; `MapImagePoller` uses a dedicated proxy-disabled session to publish a bounded low-cadence `/map.img` snapshot into the same in-memory store. HTTP threads consume only those immutable projections/bytes and never poll or proxy port 8111.
    - `WebDashboardRuntime` starts a loopback listener on `127.0.0.1`, preferring port `8777` and trying a bounded set of nearby ports when it is occupied.
-   - The tray can explicitly enable one RFC1918 IPv4 listener for the current process. LAN access and LAN control are separate current-run actions; neither is persisted, and Bomana does not bind `0.0.0.0`, modify Windows Firewall/UPnP, or request elevation for the dashboard.
+   - The compact App Web row and tray can explicitly enable exact listeners on every bindable RFC1918 IPv4 address for the current process, including simultaneous physical-LAN and overlay-VPN addresses. LAN access and LAN control are separate current-run actions; neither is persisted, and Bomana does not bind `0.0.0.0`, modify Windows Firewall/UPnP, or request elevation for the dashboard.
    - Each process has fresh pairing material. Every successful pairing creates a distinct session token, authorization record, CSRF proof, and bounded idempotency store; pairing redirects away from the code-bearing URL and authenticates later reads with an HttpOnly `SameSite=Strict` cookie.
    - Loopback pairings may receive `control`; LAN pairings receive `view` by default. Explicitly enabling LAN control rotates the pairing code and grants control only to later LAN pairings. Revocation advances the authorization epoch, invalidates existing LAN-control sessions immediately, and rotates the code again.
-   - The browser receives ownship, zones, airfields, POIs, Trace back, status, timer, flight, fuel, navigation, weapon, bombing, checklist, and alert fields permitted by the active `ENABLE_*` profile. Hostile-aircraft contacts, raw 8111 payloads, and diagnostics are excluded.
+   - The browser receives the App-published tactical image, ownship, zones, airfields, POIs, Trace back, normalized selected-weapon range radii, status, timer, flight, fuel, navigation, weapon, bombing, checklist, and alert fields permitted by the active `ENABLE_*` profile. Hostile-aircraft contacts, raw 8111 JSON payloads, and diagnostics are excluded.
    - `POST /api/v1/commands` is the only write route. It requires a current control session, exactly one non-empty same-origin `Origin`, per-session CSRF proof, `application/json` with a declared length of 1..4096 bytes, the shared command schema, and a bounded per-session idempotency key. A valid enqueue returns HTTP 202 with `schema_version: 1`, the idempotency key as `command_id`, `status: "queued"`, and `submitted_revision`; the browser polls `GET /api/v1/control-state` for the later per-session `succeeded` or `rejected` completion, stable reason, submitted revision, and resulting revision.
    - The complete command matrix is exactly `action.reset_timer`,
      `action.cycle_corner`, `state.set_locked`, `state.set_beep_enabled`,
@@ -331,10 +331,14 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - `LogicPoller` owns the `GameLogic.tick()` background loop. It samples 8111 data and updates core state only; UI reads immutable `UISnapshot` values from the main refresh loop.
 - `GlobalHotkeys` registers a Win32 message-only window on the Tk owner thread. Its WndProc enqueues `WM_HOTKEY` callbacks through `TkEventDispatcher`, avoiding a separate message thread and reentrant Tk calls.
 - `pystray` runs on a daemon tray thread. Menu callbacks must dispatch UI actions through `TkEventDispatcher` instead of calling app methods directly.
-- Web Cockpit HTTP workers never import or call Tk. They may validate and enqueue only immutable semantic command envelopes; the Tk owner reauthorizes, rechecks feature/target validity, executes, and publishes completion. Tray actions for opening, copying, or toggling Web Cockpit access/control also cross `TkEventDispatcher`; App shutdown stops both listeners before destroying Tk.
+- Web Cockpit HTTP workers never import or call Tk. They may validate and enqueue only immutable semantic command envelopes; the Tk owner reauthorizes, rechecks feature/target validity, executes, and publishes completion. The separate map-image worker never touches Tk. App/tray actions for opening, copying, or toggling Web Cockpit access/control cross `TkEventDispatcher`; App shutdown stops the image worker and every exact listener before destroying Tk.
 - `SoundManager` owns its own worker queue for audio playback. UI code enqueues sound requests and does not block on playback.
 
 ## 8111 Map Coordinate Contract
+- `MapImageFetcher` alone owns the fixed official `/map.img` route. Its
+  dedicated low-cadence worker accepts only bounded PNG/JPEG bytes and publishes
+  an immutable in-memory image; browser requests read that snapshot rather than
+  forwarding to 8111.
 - `MapInfoFetcher` owns `/map_info.json` retrieval and cache refresh timing on `GameState.map_info`.
 - `MapObjectsFetcher` owns `/map_obj.json` parsing only. It returns player,
   currently visible hostile-aircraft contacts, zone, POI, and airfield positions

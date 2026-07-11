@@ -28,7 +28,7 @@ from bomana.core.state import Phase, UISnapshot
 from bomana.metadata import __title__
 from bomana.ui.hud_overlay import HUDOverlay
 from bomana.ui.hud_presenter import build_hud_target_model
-from bomana.ui.runtime import start_daemon_thread
+from bomana.ui.runtime import MapImagePoller, start_daemon_thread
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_action_button
 from bomana.utils.diagnostics import log_event, log_exception
@@ -77,6 +77,7 @@ class AppRuntimeServices:
         self._hud_target_hold_sec = 1.2
         self._hud_render_error_count = 0
         self.dashboard_store = DashboardSnapshotStore()
+        self.map_image_poller = MapImagePoller(self.dashboard_store)
         self.dashboard_control_store = DashboardControlStore()
         self.dashboard: WebDashboardRuntime | None = None
         self.dashboard_error = ""
@@ -118,6 +119,7 @@ class AppRuntimeServices:
         """Start the extension-free loopback Web Cockpit."""
         if self.dashboard is not None and self.dashboard.is_running:
             return True
+        dashboard: WebDashboardRuntime | None = None
         try:
             dashboard = WebDashboardRuntime(
                 self.dashboard_store,
@@ -125,7 +127,13 @@ class AppRuntimeServices:
                 command_sink=self._queue_web_command,
             )
             dashboard.start()
+            self.map_image_poller.start()
         except Exception as exc:
+            with contextlib.suppress(Exception):
+                self.map_image_poller.stop()
+            if dashboard is not None:
+                with contextlib.suppress(Exception):
+                    dashboard.stop()
             self.dashboard = None
             self.dashboard_error = str(exc)
             log_exception("web_dashboard_start_failed", exc)
@@ -211,6 +219,7 @@ class AppRuntimeServices:
     def stop_dashboard(self) -> None:
         dashboard = self.dashboard
         self.dashboard = None
+        self.map_image_poller.stop()
         if dashboard is None:
             return
         with contextlib.suppress(Exception):

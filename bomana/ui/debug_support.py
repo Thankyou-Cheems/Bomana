@@ -43,7 +43,7 @@ class AppDebugSupport:
             and app.debug_ctrl_row.winfo_manager() != "grid"
         ):
             app.debug_ctrl_row.grid(
-                row=2,
+                row=3,
                 column=0,
                 sticky="ew",
                 padx=int(6 * app.scale),
@@ -51,7 +51,7 @@ class AppDebugSupport:
             )
         if hasattr(app, "diag_lbl") and app.diag_lbl and app.diag_lbl.winfo_manager() != "grid":
             app.diag_lbl.grid(
-                row=3,
+                row=4,
                 column=0,
                 sticky="ew",
                 padx=int(6 * app.scale),

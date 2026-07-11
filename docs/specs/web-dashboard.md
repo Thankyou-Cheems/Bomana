@@ -12,8 +12,10 @@ access, packaging, threading, privacy, and tray lifecycle.
 
 ## Non-goals
 
-- This spec does not authorize new War Thunder endpoints, a terrain-map fetch,
-  browser/game injection, game-file changes, or direct game input.
+- This spec authorizes only the bounded App-owned official `/map.img` path in
+  `runtime-8111-boundary.md`; it does not authorize any other new War Thunder
+  endpoint, browser-side terrain fetch, browser/game injection, game-file
+  change, or direct game input.
 - It does not make Bomana a general reverse proxy or remote administration API.
 - It does not authorize arbitrary config paths, keyboard synthesis, reflection,
   arbitrary callbacks, elevated-broker changes, or new network capabilities.
@@ -26,18 +28,22 @@ access, packaging, threading, privacy, and tray lifecycle.
   non-8111 listener on `127.0.0.1`; when disabled, only an explicit App action
   may lazily start that same loopback listener.
 - `WDB-02`: LAN listening MUST require an explicit current-run user action and
-  MUST bind one discovered RFC1918 IPv4 address rather than `0.0.0.0`.
+  MUST attempt every distinct discovered RFC1918 IPv4 address as an exact
+  listener rather than `0.0.0.0`. One interface bind failure MUST NOT prevent
+  another eligible address from starting; the action fails only if none bind.
 - `WDB-03`: Bomana MUST NOT persist LAN access, LAN control, selected listener
   address or port, pairing material, authorization epochs, or Web sessions.
 - `WDB-04`: The HTTP runtime MUST consume only published immutable projections
-  owned by the App; it MUST NOT request, proxy, or forward any 8111 route.
+  and image bytes owned by the App; it MUST NOT request, proxy, or forward any
+  8111 route.
 - `WDB-05`: HTTP workers MUST NOT import or call Tk or directly read or mutate
   App state or config persistence.
 - `WDB-06`: `/api/v1/snapshot` responses MUST conform to
   `docs/specs/schemas/web-dashboard-snapshot.schema.json`.
-- `WDB-07`: The map projection MUST be limited to ownship, zones, airfields,
-  POIs, current selected targets, and Trace back; hostile-aircraft contacts and
-  raw map payloads MUST NOT be published.
+- `WDB-07`: The map projection MUST be limited to the App-published tactical
+  image, ownship, zones, airfields, POIs, current selected targets, Trace back,
+  and the selected weapon's normalized minimum/maximum range radii;
+  hostile-aircraft contacts and raw JSON map payloads MUST NOT be published.
 - `WDB-08`: Every process MUST generate fresh high-entropy pairing material, and
   every rotation MUST immediately invalidate the preceding pairing code.
 - `WDB-09`: Every successful pairing MUST create a distinct session token,
@@ -55,15 +61,18 @@ access, packaging, threading, privacy, and tray lifecycle.
 - `WDB-14`: The runtime MUST NOT log client IPs, request paths, query strings,
   pairing codes, session tokens, CSRF proofs, idempotency keys, command bodies,
   or telemetry payloads, and MUST NOT persist dashboard projections.
-- `WDB-15`: The browser UI MUST load all HTML, CSS, JavaScript, and fonts from
-  packaged Bomana resources and MUST NOT use a CDN, remote font, analytics
-  script, or external request.
+- `WDB-15`: The browser UI MUST load all HTML, CSS, JavaScript, fonts, and the
+  existing project PNG logo from packaged Bomana resources and MUST NOT use a
+  CDN, remote font, analytics script, or external request.
 - `WDB-16`: The App MUST stop local and LAN listeners with bounded shutdown
   before destroying Tk, and stopped listener addresses MUST be reusable.
 - `WDB-17`: Every build variant MUST package the dashboard modules, schemas, and
   assets while existing `ENABLE_*` switches remain authoritative.
-- `WDB-18`: The tray MUST keep local open and current-run LAN actions
-  discoverable without adding a new always-visible primary App surface.
+- `WDB-18`: The App MUST show a compact secondary Web-access row in the existing
+  bottom card whenever the loopback dashboard is running. It MUST show the
+  current pairing code and local/LAN availability without exposing a token in
+  normal label text; compact App buttons and the tray MUST keep local open,
+  current-run LAN access, and current-run LAN control actions discoverable.
 - `WDB-19`: Release handoffs MUST report desktop browser, phone/LAN, Windows
   Firewall, multi-NIC, packaged-resource, DPI, and live-game smoke separately
   from CI.
@@ -137,6 +146,30 @@ access, packaging, threading, privacy, and tray lifecycle.
 - `WDB-43`: Before queueing, the HTTP layer MUST reject a command absent from
   the session's current immutable capabilities as `409 capability_unavailable`;
   this early check MUST NOT replace the Tk rechecks in `WDB-33` and `WDB-34`.
+- `WDB-44`: `GET /api/v1/map-image` MUST require a valid paired session and
+  return only the latest bounded App-published PNG/JPEG bytes with the common
+  security/no-store headers. No image returns 404; the handler MUST NOT wait on
+  or initiate an 8111 request.
+- `WDB-45`: The snapshot map object MUST carry a non-secret image availability
+  flag, monotonically changing image revision, same-origin map-image route, and
+  nullable normalized range ellipse. The range ellipse MUST derive from the
+  current selected weapon solution and map-axis scale, remain bounded, and be
+  omitted when ownship, scale, or a valid positive range is unavailable.
+- `WDB-46`: Multi-address LAN lifecycle is atomic at the runtime-state level:
+  every successful exact listener joins the Host allowlist, every active LAN
+  address is visible to the App, and disable/stop removes and closes all of
+  them before revocation returns.
+- `WDB-47`: Public App/Web wording MUST describe ballistic policy as either
+  using no substitute when official data is absent or allowing an estimated
+  substitute. It MUST state that official data always wins and MUST NOT expose
+  an implementation/provider name as a user-facing model label.
+- `WDB-48`: Desktop and narrow-mobile Web layouts MUST use the project logo,
+  compact reset/corner controls, touch-sized but non-dominant action buttons,
+  and place 15-minute progress adjacent to or behind the countdown rather than
+  as an ambiguous strip beneath unrelated flight metrics.
+- `WDB-49`: The tactical canvas MUST draw the current App-published map image at
+  reduced opacity under the existing filtered markers and selected-weapon range
+  ellipse. Image load failure MUST retain a usable abstract-map fallback.
 
 ## Complete Action Matrix
 
@@ -157,7 +190,7 @@ Persistence and stable completion-reason semantics are governed by `WDB-41` and
 ## Contract Coverage
 
 - [static] `tests/contracts/test_web_dashboard_contract.py` enforces
-  `WDB-01..WDB-09`, `WDB-11..WDB-18`, and `WDB-20..WDB-43` through ownership
+  `WDB-01..WDB-09`, `WDB-11..WDB-18`, and `WDB-20..WDB-49` through ownership
   scans, forbidden-path scans, schema
   self-checks, the exhaustive action discriminants, packaged assets, and
   response shapes.
@@ -169,7 +202,7 @@ Persistence and stable completion-reason semantics are governed by `WDB-41` and
   `WDB-40` with
   real ephemeral listeners, distinct pairing sessions, scope/revocation,
   submit/Tk-recheck expiry boundaries, Host/Origin/CSRF/body/idempotency cases,
-  headers, and port reuse.
+  headers, multi-address lifecycle, authenticated image delivery, and port reuse.
 - [behavioral] `tests/test_runtime_services.py` enforces `WDB-01..WDB-05`,
   `WDB-16`, `WDB-18`, `WDB-20..WDB-22`, and `WDB-32..WDB-36` with autostart,
   lazy-start, publish, LAN-control, revocation, dispatcher, and shutdown cases.

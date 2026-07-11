@@ -14,7 +14,7 @@ from bomana.config.settings import (
     ZoneConfig,
 )
 from bomana.ui.icon_assets import IconManager
-from bomana.ui.panel_presenter import format_weapon_selection_label
+from bomana.ui.panel_presenter import format_weapon_selection_label, overspeed_focus_ratio
 from bomana.ui.text_utils import bind_dynamic_wrap, measure_min_width
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_action_button
@@ -131,15 +131,77 @@ class MainWindowBuilder:
             pady=(int(4 * s), 0),
             padx=int(1 * s),
         )
-        bottom_frame.grid_rowconfigure(1, weight=1)
+        bottom_frame.grid_rowconfigure(2, weight=1)
         bottom_frame.grid_columnconfigure(0, weight=1)
+
+        app.web_access_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
+        app.web_access_row.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=int(6 * s),
+            pady=(int(4 * s), int(2 * s)),
+        )
+        app.web_access_row.grid_columnconfigure(0, weight=1)
+        app.web_access_lbl = tk.Label(
+            app.web_access_row,
+            text="",
+            font=font_hint,
+            fg=Theme.BLUE,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            justify="left",
+        )
+        app.web_access_lbl.grid(row=0, column=0, sticky="ew")
+        bind_dynamic_wrap(
+            app.web_access_lbl,
+            app.web_access_row,
+            minimum=max(150, int(180 * s)),
+            margin=max(170, int(205 * s)),
+        )
+        app.web_access_lbl.bind("<Button-1>", lambda _event: app._copy_web_dashboard_pairing_code())
+
+        app.web_open_btn = tk.Button(
+            app.web_access_row,
+            text="打开",
+            font=font_hint,
+            padx=int(7 * s),
+            pady=btn_pad_y,
+            command=app._open_web_dashboard,
+            takefocus=False,
+        )
+        style_action_button(app.web_open_btn, "secondary")
+        app.web_open_btn.grid(row=0, column=1, sticky="e", padx=(int(6 * s), 0))
+        app.web_lan_btn = tk.Button(
+            app.web_access_row,
+            text="开局域网",
+            font=font_hint,
+            padx=int(7 * s),
+            pady=btn_pad_y,
+            command=app._toggle_web_dashboard_lan,
+            takefocus=False,
+        )
+        style_action_button(app.web_lan_btn, "secondary")
+        app.web_lan_btn.grid(row=0, column=2, sticky="e", padx=(int(5 * s), 0))
+        app.web_control_btn = tk.Button(
+            app.web_access_row,
+            text="允许控制",
+            font=font_hint,
+            padx=int(7 * s),
+            pady=btn_pad_y,
+            command=app._toggle_web_dashboard_lan_control,
+            takefocus=False,
+        )
+        style_action_button(app.web_control_btn, "warning")
+        app.web_control_btn.grid(row=0, column=3, sticky="e", padx=(int(5 * s), 0))
+        app.web_access_row.grid_remove()
 
         nudge_visible = bool(
             getattr(app, "_hotkey_broker_notice", "") or getattr(app, "_nudge_visible", False)
         )
 
         app.nudge_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
-        app.nudge_row.grid(row=0, column=0, sticky="ew", padx=int(6 * s), pady=(int(4 * s), 0))
+        app.nudge_row.grid(row=1, column=0, sticky="ew", padx=int(6 * s), pady=(int(2 * s), 0))
         app.nudge_row.grid_columnconfigure(0, weight=1)
 
         app.nudge_lbl = tk.Label(
@@ -172,7 +234,7 @@ class MainWindowBuilder:
             app.nudge_row.grid_remove()
 
         app.hint_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
-        app.hint_row.grid(row=1, column=0, sticky="ew", padx=int(6 * s), pady=(0, int(4 * s)))
+        app.hint_row.grid(row=2, column=0, sticky="ew", padx=int(6 * s), pady=(0, int(4 * s)))
         app.hint_row.grid_columnconfigure(0, weight=1)
 
         app.hint_lbl = tk.Label(
@@ -484,14 +546,17 @@ class MainWindowBuilder:
                 width=max(1, int(2 * s)),
                 height=max(speed_bar_thickness + 2, int(7 * s)),
             )
-            marker.place(relx=max(0.0, min(1.0, relx)), rely=0.5, anchor="center")
+            marker.place(relx=overspeed_focus_ratio(relx), rely=0.5, anchor="center")
             app.speed_bar_markers[name] = marker
 
         bar_height = int(UIConfig.PROGRESS_BAR_HEIGHT * s)
-        app.progress_frame = tk.Frame(app.top_content, bg=Theme.GRAYPILL, height=bar_height)
+        app.progress_frame = tk.Frame(app.top_row1, bg=Theme.GRAYPILL, height=bar_height)
         pad_top, pad_bot = UIConfig.PADDING_PROGRESS
         app.progress_frame.grid(
-            row=4, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s))
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(int(pad_top * s), int(pad_bot * s)),
         )
         app.progress_frame.grid_propagate(False)
         bar_thickness = int(UIConfig.PROGRESS_BAR_THICKNESS * s)

@@ -31,6 +31,10 @@ modules, Tk renderers, and runtime side effects.
 - `UI-PRES-04`: `UISnapshot` is not a compatibility bridge for display strings
   or colors. New UI-facing strings, badges, fill ratios, and option summaries
   should be computed by presenter modules or a narrowly scoped renderer helper.
+- `UI-PRES-05`: Responsive compression for timer, speed, fuel, weapon, Web
+  access, and optional elevation rows MUST preserve domain facts in the
+  snapshot and compute focus ratios, concise copy, and visibility in presenters
+  or renderer helpers; core logic MUST NOT emit widget-layout strings.
 
 ## Contract Coverage
 
@@ -39,7 +43,7 @@ modules, Tk renderers, and runtime side effects.
 - [behavioral] `tests/test_dialog_presenter.py`, `tests/test_hud_presenter.py`,
   `tests/test_navigation_presenter.py`, `tests/test_panel_presenter.py`, and
   `tests/test_snapshot_presenter.py` enforce headless view-model behavior in
-  `UI-PRES-03` and `UI-PRES-04`.
+  `UI-PRES-03..UI-PRES-05`.
 - [behavioral] `tests/test_panel_renderer.py` and
   `tests/test_navigation_runtime.py` enforce renderer/runtime ownership of the
   side effects described by `UI-PRES-03`.

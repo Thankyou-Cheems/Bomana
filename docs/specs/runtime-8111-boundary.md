@@ -29,7 +29,9 @@ War Thunder data boundary.
   code must not read game memory, inject code, unpack or decrypt logs, inspect
   packets, or modify game files.
 - `R8111-02`: Runtime 8111 endpoint use is limited to `/indicators`, `/state`,
-  `/map_obj.json`, and `/map_info.json`.
+  `/map_obj.json`, `/map_info.json`, and the official tactical-map image
+  `/map.img`. The JSON recorder/replayer boundary remains limited to the four
+  JSON endpoints and MUST NOT record the image body.
 - `R8111-03`: Bomana must not display player-invisible enemy information,
   especially reconstructed enemy unit/player marker overlays. UI may use only
   information currently returned through 8111 and visible in-game or related to
@@ -39,8 +41,8 @@ War Thunder data boundary.
 - `R8111-04`: Ownership is fixed: `TelemetryFetcher` owns `/indicators` and
   `/state`; `MapInfoFetcher` owns `/map_info.json`; `MapObjectsFetcher` parses
   `/map_obj.json` normalized player, map-object, and visible-hostile-aircraft
-  coordinates only; `GameLogic` owns map scale semantics, coordinate conversion,
-  and target selection.
+  coordinates only; `MapImageFetcher` owns `/map.img`; `GameLogic` owns map
+  scale semantics, coordinate conversion, and target selection.
 - `R8111-05`: Automated tests must not claim to be real 8111 smoke. Changes to
   telemetry or logic data flow must report whether manual in-game smoke was run.
 - `R8111-06`: Polling defaults are 50 ms in normal mode and 1.25 s while the API
@@ -102,6 +104,15 @@ War Thunder data boundary.
   persistent storage.
 - `R8111-20`: A same-battle respawn MUST retain the confirmed Trace back point,
   while `prepare_new_battle_context()` and `reset_life_state()` MUST clear it.
+- `R8111-21`: `MapImageFetcher` MUST use a dedicated proxy-disabled session,
+  the fixed official loopback URL, bounded connect/read timeouts, streaming
+  reads, and a hard decoded-body ceiling of 4 MiB. It MUST accept only PNG or
+  JPEG image content and MUST fail closed on missing/invalid type, oversized
+  declared or streamed bodies, request errors, or non-success status.
+- `R8111-22`: The App MAY run one low-cadence map-image worker only while the
+  Web Cockpit is running. That worker MUST remain outside Tk, publish an
+  immutable in-memory image snapshot, stop with bounded shutdown, and MUST NOT
+  persist, log, transform, upload, or expose the raw 8111 URL to the browser.
 
 ## Contract Coverage
 
@@ -127,6 +138,10 @@ War Thunder data boundary.
   `R8111-20` by separating raw Player samples from endpoint failures and empty
   frames, pinning confirmation to the existing loss transition, preserving the
   point across respawn, and clearing it at battle-context reset.
+- [behavioral] `tests/test_telemetry_fetch_result.py`,
+  `tests/test_runtime_threading.py`, and `tests/test_runtime_services.py`
+  enforce `R8111-21` and `R8111-22` with type/size/stream failures, immutable
+  publication, low-cadence lifecycle, and bounded stop cases.
 - [manual] Runtime/data review covers the player-visible-information boundary in
   `R8111-03`; handoffs must record real War Thunder smoke for `R8111-05`,
   explicit approval for polling changes under `R8111-06`, and provenance review

@@ -4,7 +4,7 @@ import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlparse
 
 import requests
@@ -38,6 +38,97 @@ class FetchResult:
     error_kind: str = ""
     elapsed_ms: float = 0.0
     status_code: int | None = None
+
+
+@dataclass(frozen=True)
+class MapImageFetchResult:
+    """Bounded result for the official tactical-map image."""
+
+    ok: bool
+    body: bytes = b""
+    content_type: str = ""
+    error_kind: str = ""
+    status_code: int | None = None
+
+
+class MapImageFetcher:
+    """Fetch the official map image without sharing the JSON polling session."""
+
+    PATH = "/map.img"
+    MAX_IMAGE_BYTES = 4 * 1024 * 1024
+    CONNECT_TIMEOUT_SEC = 0.5
+    READ_TIMEOUT_SEC = 1.5
+    _CHUNK_SIZE = 64 * 1024
+    _CONTENT_TYPES: ClassVar[frozenset[str]] = frozenset(("image/png", "image/jpeg"))
+
+    def __init__(self, session: requests.Session | None = None) -> None:
+        self.session = session or requests.Session()
+        self._owns_session = session is None
+        if self._owns_session:
+            self.session.trust_env = False
+
+    def close(self) -> None:
+        if self._owns_session:
+            self.session.close()
+
+    def fetch(self) -> MapImageFetchResult:
+        response = None
+        try:
+            response = self.session.get(
+                f"{NetworkConfig.API_BASE}/map.img",
+                timeout=(self.CONNECT_TIMEOUT_SEC, self.READ_TIMEOUT_SEC),
+                stream=True,
+            )
+            if not response.ok:
+                return MapImageFetchResult(
+                    ok=False,
+                    error_kind="status",
+                    status_code=int(response.status_code),
+                )
+            content_type = str(response.headers.get("Content-Type") or "").split(";", 1)[0]
+            content_type = content_type.strip().lower()
+            if content_type not in self._CONTENT_TYPES:
+                return MapImageFetchResult(ok=False, error_kind="invalid_content_type")
+            declared_length = str(response.headers.get("Content-Length") or "").strip()
+            if declared_length:
+                if not declared_length.isascii() or not declared_length.isdigit():
+                    return MapImageFetchResult(ok=False, error_kind="invalid_content_length")
+                if int(declared_length) > self.MAX_IMAGE_BYTES:
+                    return MapImageFetchResult(ok=False, error_kind="body_too_large")
+
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in response.iter_content(chunk_size=self._CHUNK_SIZE):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > self.MAX_IMAGE_BYTES:
+                    return MapImageFetchResult(ok=False, error_kind="body_too_large")
+                chunks.append(bytes(chunk))
+            body = b"".join(chunks)
+            if not body or not self._matches_signature(content_type, body):
+                return MapImageFetchResult(ok=False, error_kind="invalid_image")
+            return MapImageFetchResult(
+                ok=True,
+                body=body,
+                content_type=content_type,
+                status_code=int(response.status_code),
+            )
+        except requests.Timeout:
+            return MapImageFetchResult(ok=False, error_kind="timeout")
+        except requests.RequestException:
+            return MapImageFetchResult(ok=False, error_kind="request_error")
+        finally:
+            if response is not None:
+                response.close()
+
+    @staticmethod
+    def _matches_signature(content_type: str, body: bytes) -> bool:
+        if content_type == "image/png":
+            return body.startswith(b"\x89PNG\r\n\x1a\n")
+        if content_type == "image/jpeg":
+            return body.startswith(b"\xff\xd8\xff")
+        return False
 
 
 class Budget:

@@ -45,6 +45,8 @@ class _FakeLabel:
     def config(self, **kwargs) -> None:
         self.options.update(kwargs)
 
+    configure = config
+
 
 class _FakeWeaponCatalog:
     def __init__(self, selected_weapon_id: str = "su_fab100") -> None:
@@ -137,6 +139,34 @@ def test_web_command_rechecks_authorization_before_semantic_execution() -> None:
     app._execute_web_command(_web_envelope(ValidatedWebCommand(name="action.cycle_corner")))
 
     assert reasons == ["authorization_revoked"]
+
+
+def test_web_access_row_shows_current_pairing_and_every_lan_address(monkeypatch) -> None:
+    app = _make_config_only_app()
+    app.web_access_row = _FakeNudgeRow("")
+    app.web_access_lbl = _FakeLabel()
+    app.web_lan_btn = _FakeLabel()
+    app.web_control_btn = _FakeLabel()
+    dashboard = SimpleNamespace(
+        is_running=True,
+        pairing_code="ABCD-EFGH",
+        port=8777,
+        lan_addresses=("192.168.31.69", "10.126.126.2"),
+        lan_control_enabled=False,
+    )
+    app.runtime_services = SimpleNamespace(dashboard=dashboard)
+    monkeypatch.setattr(app_module, "style_action_button", lambda *_args, **_kwargs: None)
+
+    app._refresh_web_access_row()
+
+    label = str(app.web_access_lbl.options["text"])
+    assert "ABCD-EFGH" in label
+    assert "192.168.31.69:8777" in label
+    assert "10.126.126.2:8777" in label
+    assert app.web_lan_btn.options["text"] == "关局域网"
+    assert app.web_control_btn.options["text"] == "允许控制"
+    assert app.web_control_btn.options["state"] == "normal"
+    assert app.web_access_row.manager == "grid"
 
 
 def test_web_zone_command_rechecks_compile_feature_gate(monkeypatch) -> None:
@@ -370,10 +400,9 @@ def test_hotkey_broker_notice_uses_existing_nudge_row_with_elevation_action() ->
     app._update_hint()
 
     assert app.nudge_lbl.options["text"] == (
-        "游戏前台热键需要单独授权。 请先切出游戏按 "
-        f"[{app_module.HotkeyConfig.KEY_LOCK}] 解锁后点击，或直接从托盘菜单启用。"
+        f"游戏前台热键需要单独授权。 先按 [{app_module.HotkeyConfig.KEY_LOCK}] 解锁 Bomana。"
     )
-    assert app.star_lbl.options["text"] == "启用游戏内热键"
+    assert app.star_lbl.options["text"] == "启用热键"
     assert app.star_lbl.options["cursor"] == "hand2"
     assert app.nudge_row.manager == "grid"
     assert recalc_calls == [{"force_shrink": False}]

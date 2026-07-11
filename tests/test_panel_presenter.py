@@ -29,14 +29,16 @@ def test_fuel_display_model_formats_return_warning() -> None:
 
     model = build_fuel_display_model(snap)
 
-    assert model.main_text == "油量 420kg / 18%"
+    assert model.main_text == (
+        "油量 420kg / 18% · 油耗 38kg/min · 高度 1234m · 返航需 250kg (50%) · 35km"
+    )
     assert model.main_fg == Theme.YELLOW
     assert model.time.text == "余 12:34"
     assert model.return_status.icon == "warning"
     assert model.return_status.text == "返航紧"
-    assert model.detail_text == "油耗 38kg/min · 高度 1234m"
+    assert model.detail_text == ""
     assert model.altitude_text == ""
-    assert model.return_detail_text == "返航 需 250kg (50%) · 35km"
+    assert model.return_detail_text == ""
 
 
 def test_bombing_display_model_ready_state(monkeypatch) -> None:
@@ -148,7 +150,7 @@ def test_weapon_solution_model_uses_compact_estimate_wording() -> None:
 
     assert model.bomb_label_text == "AGM-65D · AGM · 手选"
     assert model.trajectory_text == "POI 12.4km · 估算窗 0.6–18.6km"
-    assert model.flight_text == "飞行约 28s · 二维估算"
+    assert model.flight_text == "飞行约 28s · 二维参考"
     assert model.release.icon == "ok"
     assert model.release.text == "估算窗内"
     assert model.release.fg == Theme.GREEN
@@ -163,7 +165,7 @@ def test_powered_fallback_does_not_claim_the_foxthree_glide_model() -> None:
         )
     )
 
-    assert "二维点质量回退" in model.flight_text
+    assert "二维回退" in model.flight_text
     assert "FoxThree" not in model.flight_text
 
 
@@ -177,7 +179,7 @@ def test_weapon_solution_model_never_shows_countdown_while_aligning() -> None:
     )
 
     assert model.release.text == "请对准"
-    assert model.flight_text == "二维估算"
+    assert model.flight_text == "二维参考"
     assert "6.4s" not in model.flight_text
     assert "距估算窗" not in model.flight_text
     rendered = " ".join(
@@ -208,8 +210,7 @@ def test_glide_solution_explains_why_the_iron_bomb_surrogate_is_disabled() -> No
     assert model.release.text == "数据不足"
     assert model.release.fg == Theme.TEXT_MUTED
     assert model.trajectory_text == "POI 12.4km · 估算窗 --"
-    assert "严格模式" in model.flight_text
-    assert "无临时滑翔" in model.flight_text
+    assert model.flight_text == "无替代模型"
 
 
 def test_glide_unavailable_state_does_not_claim_out_of_range() -> None:
@@ -231,7 +232,7 @@ def test_glide_unavailable_state_does_not_claim_out_of_range() -> None:
     )
 
     assert model.release.text == "数据不足"
-    assert "暂无可复用的滑翔包线" in model.flight_text
+    assert "无替代模型" in model.flight_text
     assert "过远" not in model.release.text
 
 
@@ -255,9 +256,7 @@ def test_foxthree_compatible_glide_is_an_experimental_reference_not_a_green_cue(
     assert model.release.text == "实验参考内"
     assert model.release.fg == Theme.YELLOW
     assert model.trajectory_text == "POI 12.4km · 滑翔参考约 32.5km"
-    assert "实验估算" in model.flight_text
-    assert "FoxThree 兼容临时模型" in model.flight_text
-    assert "未模拟舵面与自动驾驶" in model.flight_text
+    assert model.flight_text == "飞行约 42s · 推测替代 · 推测参考"
 
 
 def test_experimental_glide_reference_still_requires_valid_compatible_solution() -> None:
@@ -307,7 +306,7 @@ def test_aam_solution_states_2d_max_limitations_and_never_turns_green() -> None:
     assert model.release.text == "二维上限内"
     assert model.release.fg == Theme.YELLOW
     assert model.release.icon != "ok"
-    assert "仅二维最大射程，未计目标速度、高差与迎尾角" in model.flight_text
+    assert model.flight_text == "二维回退 · 二维参考"
 
 
 def test_aam_datamine_envelope_shows_tail_head_and_current_aspect_reference() -> None:
@@ -335,9 +334,7 @@ def test_aam_datamine_envelope_shows_tail_head_and_current_aspect_reference() ->
     assert model.release.text == "当前航向内"
     assert model.release.fg == Theme.YELLOW
     assert model.release.icon != "ok"
-    assert "当前航向约 81.8km" in model.flight_text
-    assert "目标速率/高差未知" in model.flight_text
-    assert "Datamine 官方条件表" in model.flight_text
+    assert model.flight_text == "官方包线 · 二维参考"
     assert "FoxThree" not in model.flight_text
 
 
@@ -353,7 +350,7 @@ def test_conditional_propulsion_failure_explains_fail_closed_state() -> None:
     )
 
     assert model.release.text == "数据不足"
-    assert model.flight_text == "条件或变推力推进尚未建模，已停用估算"
+    assert model.flight_text == "条件推进数据不足"
 
 
 @pytest.mark.parametrize(
@@ -401,7 +398,7 @@ def test_catalog_failure_stays_visible_after_snapshot_render() -> None:
 
     assert model.bomb_label_text == "武器目录不可用 · 武器 · 来源未知"
     assert model.release.text == "目录不可用"
-    assert model.flight_text == "武器目录缺失或校验失败"
+    assert model.flight_text == "武器目录不可用"
 
 
 def test_incompatible_unguided_bomb_does_not_show_ccrp_release_cue() -> None:
@@ -419,7 +416,7 @@ def test_incompatible_unguided_bomb_does_not_show_ccrp_release_cue() -> None:
     )
 
     assert model.release.text == "不兼容"
-    assert model.flight_text == "请更换当前机型可用武器"
+    assert model.flight_text == "请更换兼容武器"
 
 
 def test_missing_aircraft_identity_stays_data_shortage_not_incompatible() -> None:
@@ -456,6 +453,24 @@ def test_speed_strip_model_clamps_ratio_and_formats_aircraft() -> None:
     assert model.value_text == "IAS 980/1040"
     assert model.fill_color == Theme.YELLOW
     assert model.fill_ratio == 1.0
+
+
+def test_speed_strip_expands_the_near_limit_band() -> None:
+    snap = SimpleNamespace(
+        overspeed_level="caution",
+        overspeed_ratio=0.80,
+        overspeed_current_ias_kmh=800.0,
+        overspeed_current_mach=None,
+        overspeed_limit_kmh=1000.0,
+        overspeed_limit_mach=0.0,
+        overspeed_match=True,
+        overspeed_reason="ias",
+        aircraft_type_name="test_plane",
+    )
+
+    model = build_speed_strip_model(snap)
+
+    assert model.fill_ratio == pytest.approx(0.375)
 
 
 def test_speed_history_header_model_uses_presented_aircraft_name() -> None:

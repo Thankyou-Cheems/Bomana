@@ -119,6 +119,8 @@ def _snapshot() -> UISnapshot:
         weapon_time_to_target_s=102,
         map_player_x=0.48,
         map_player_y=0.62,
+        map_scale_x_m=200000,
+        map_scale_y_m=100000,
         map_points=(
             TacticalMapPoint("zone-1", "zone", 0.61, 0.42, "战区 #1", "target", True),
             TacticalMapPoint("home", "airfield", 0.2, 0.8, "友方机场", "friendly", False, True),
@@ -154,6 +156,18 @@ def test_dashboard_payload_matches_schema_and_filters_hostile_contacts() -> None
     assert "hostile-1" not in json.dumps(payload, ensure_ascii=False)
     assert "source_debug" not in payload
     assert "perf_debug" not in payload
+    assert payload["map"]["weapon_range"] == {
+        "min_radius_x": 0.0,
+        "min_radius_y": 0.0,
+        "max_radius_x": 0.443,
+        "max_radius_y": 0.886,
+        "quality": "experimental",
+    }
+    assert payload["map"]["image"] == {
+        "available": False,
+        "revision": 0,
+        "url": "/api/v1/map-image",
+    }
 
 
 def test_dashboard_payload_normalizes_non_finite_values() -> None:
@@ -208,3 +222,22 @@ def test_snapshot_store_copies_checklist_and_advances_sequence() -> None:
     assert first.checklist_items == ("启动发动机",)
     assert second.sequence == 2
     assert second.checklist_items == ("启动发动机", "不应进入已发布快照")
+
+
+def test_snapshot_store_publishes_immutable_deduplicated_map_image_metadata() -> None:
+    store = DashboardSnapshotStore(wall_time=lambda: 10.0)
+    body = bytearray(b"\x89PNG\r\n\x1a\nmap")
+
+    assert store.publish_map_image(body, "image/png") is True
+    body.extend(b"mutated")
+    assert store.publish_map_image(b"\x89PNG\r\n\x1a\nmap", "image/png") is False
+    store.publish(_snapshot(), [])
+
+    image = store.read_map_image()
+    published = store.read()
+    assert image is not None and published is not None
+    assert image.body == b"\x89PNG\r\n\x1a\nmap"
+    assert image.revision == 1
+    assert published.map_image_available is True
+    assert published.map_image_revision == 1
+    assert store.publish_map_image(b"x" * (4 * 1024 * 1024 + 1), "image/png") is False

@@ -217,6 +217,7 @@ class App:
             dashboard_started = self.runtime_services.init_dashboard()
             if dashboard_started and self.runtime_services.dashboard_auto_open_enabled():
                 self._open_web_dashboard()
+        self._refresh_web_access_row()
         self._update_ui()
 
         if HAS_TRAY:
@@ -1442,16 +1443,15 @@ class App:
             if self._hotkey_broker_action == "elevate":
                 if self._locked:
                     return (
-                        f"{self._hotkey_broker_notice} 请先切出游戏按 "
-                        f"[{HotkeyConfig.KEY_LOCK}] 解锁后点击，或直接从托盘菜单启用。"
+                        f"{self._hotkey_broker_notice} 先按 [{HotkeyConfig.KEY_LOCK}] 解锁 Bomana。"
                     )
-                return f"{self._hotkey_broker_notice} 可点击右侧按钮，或从托盘菜单启用。"
+                return f"{self._hotkey_broker_notice} 可启用匹配权限的热键。"
             return self._hotkey_broker_notice
         return "提示：如果 Bomana 对你有帮助，欢迎点一个 GitHub Star（起飞后自动隐藏）"
 
     def _nudge_action_text(self) -> str:
         if self._hotkey_broker_action == "elevate":
-            return "启用游戏内热键"
+            return "启用热键"
         return "GitHub Star" if self._nudge_visible else ""
 
     def _set_hotkey_broker_notice(self, message: str, action: str) -> None:
@@ -1845,6 +1845,7 @@ class App:
             if self.runtime_services.init_dashboard():
                 self._publish_web_control_state(force_revision=True)
                 self._refresh_tray()
+                self._refresh_web_access_row()
             dashboard = self.runtime_services.dashboard
         url = dashboard.local_pairing_url if dashboard is not None else None
         if not url:
@@ -1861,6 +1862,7 @@ class App:
         if dashboard is not None and dashboard.lan_enabled:
             self.runtime_services.disable_dashboard_lan()
             self._refresh_tray()
+            self._refresh_web_access_row()
             messagebox.showinfo(
                 "网页驾驶舱",
                 "本次运行的局域网访问已关闭；局域网控制会话已撤销，本机页面仍可使用。",
@@ -1884,14 +1886,16 @@ class App:
             messagebox.showerror("局域网访问失败", str(exc), parent=self.root)
             return
         self._refresh_tray()
+        self._refresh_web_access_row()
         dashboard = self.runtime_services.dashboard
         if dashboard is None:
             return
-        link = dashboard.lan_pairing_url or ""
-        self._copy_to_clipboard(link)
+        links = dashboard.lan_pairing_urls
+        link_text = "\n".join(links)
+        self._copy_to_clipboard(link_text)
         messagebox.showinfo(
             "局域网访问已开启",
-            f"手机访问链接已复制：\n{link}\n\n"
+            f"手机访问链接已复制：\n{link_text}\n\n"
             f"配对码：{dashboard.pairing_code}\n\n"
             "若手机无法连接，请在 Windows 防火墙中允许 Bomana 的专用网络访问。",
             parent=self.root,
@@ -1909,6 +1913,7 @@ class App:
         if dashboard.lan_control_enabled:
             self.runtime_services.disable_dashboard_lan_control()
             self._refresh_tray()
+            self._refresh_web_access_row()
             messagebox.showinfo(
                 "局域网控制已撤销",
                 "已有局域网控制会话已立即失效；如需再次控制，必须重新开启并重新配对。",
@@ -1932,31 +1937,68 @@ class App:
             messagebox.showerror("局域网控制失败", str(exc), parent=self.root)
             return
         self._refresh_tray()
+        self._refresh_web_access_row()
         dashboard = self.runtime_services.dashboard
         if dashboard is None:
             return
-        link = dashboard.lan_pairing_url or ""
-        self._copy_to_clipboard(link)
+        link_text = "\n".join(dashboard.lan_pairing_urls)
+        self._copy_to_clipboard(link_text)
         messagebox.showinfo(
             "局域网控制已开启",
             (
-                f"新的手机配对链接已复制：\n{link}\n\n配对码：{dashboard.pairing_code}\n\n"
+                f"新的手机配对链接已复制：\n{link_text}\n\n配对码：{dashboard.pairing_code}\n\n"
                 "只有现在重新配对的局域网设备可控制；可随时从托盘立即撤销。"
             ),
             parent=self.root,
         )
 
+    def _refresh_web_access_row(self) -> None:
+        row = getattr(self, "web_access_row", None)
+        if row is None:
+            return
+        dashboard = self.runtime_services.dashboard
+        running = bool(dashboard is not None and dashboard.is_running)
+        if not running:
+            with contextlib.suppress(tk.TclError):
+                row.grid_remove()
+            return
+
+        port = dashboard.port
+        lan_addresses = dashboard.lan_addresses
+        destinations = (
+            " · ".join(f"{address}:{port}" for address in lan_addresses)
+            if lan_addresses
+            else f"本机 127.0.0.1:{port}"
+        )
+        self.web_access_lbl.config(
+            text=f"网页  {dashboard.pairing_code}  ·  {destinations}",
+            cursor="hand2",
+        )
+        self.web_lan_btn.config(text="关局域网" if lan_addresses else "开局域网")
+        control_enabled = bool(dashboard.lan_control_enabled)
+        self.web_control_btn.config(
+            text="撤销控制" if control_enabled else "允许控制",
+            state=("normal" if lan_addresses else "disabled"),
+        )
+        style_action_button(self.web_lan_btn, "danger" if lan_addresses else "secondary")
+        style_action_button(self.web_control_btn, "danger" if control_enabled else "warning")
+        if not lan_addresses:
+            self.web_control_btn.config(cursor="arrow")
+        with contextlib.suppress(tk.TclError):
+            if row.winfo_manager() != "grid":
+                row.grid()
+
     def _copy_web_dashboard_link(self) -> None:
         dashboard = self.runtime_services.dashboard
-        link = dashboard.lan_pairing_url if dashboard is not None else None
-        if not link:
+        links = dashboard.lan_pairing_urls if dashboard is not None else ()
+        if not links:
             messagebox.showinfo(
                 "网页驾驶舱",
-                "请先从托盘为本次运行开启局域网访问。",
+                "请先从主窗口或托盘为本次运行开启局域网访问。",
                 parent=self.root,
             )
             return
-        self._copy_to_clipboard(link)
+        self._copy_to_clipboard("\n".join(links))
 
     def _copy_web_dashboard_pairing_code(self) -> None:
         dashboard = self.runtime_services.dashboard

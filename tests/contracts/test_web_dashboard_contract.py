@@ -1,4 +1,4 @@
-# enforces: docs/specs/web-dashboard.md WDB-01..WDB-09 WDB-11..WDB-18 WDB-20..WDB-43
+# enforces: docs/specs/web-dashboard.md WDB-01..WDB-09 WDB-11..WDB-18 WDB-20..WDB-49
 # enforces: docs/specs/threading-ui-contract.md THREAD-10..THREAD-13
 
 from __future__ import annotations
@@ -364,6 +364,10 @@ def test_lan_and_tray_paths_are_explicit_current_run_actions() -> None:
     assert "app.dispatcher.post(app._open_web_dashboard)" in RUNTIME
     assert "enabled=self._dashboard_lan_share_available" in RUNTIME
     assert "web_dashboard_lan_enabled" not in APP
+    assert "lan_addresses" in SERVER
+    assert "for address in addresses" in SERVER
+    main_window = (ROOT / "bomana/ui/main_window.py").read_text(encoding="utf-8")
+    assert "web_access_row" in APP or "web_access_row" in main_window
 
 
 def test_map_projection_allowlist_excludes_hostile_contacts_and_raw_payloads() -> None:
@@ -381,9 +385,11 @@ def test_routes_auth_headers_and_no_cors_are_closed_by_construction() -> None:
         'path == "/healthz"',
         'path == "/api/v1/snapshot"',
         'path == "/api/v1/control-state"',
+        'path == "/api/v1/map-image"',
         'path == "/api/v1/commands"',
         '"/assets/dashboard.css"',
         '"/assets/dashboard.js"',
+        '"/assets/app.png"',
         '"/favicon.svg"',
     ):
         assert route in SERVER
@@ -415,10 +421,18 @@ def test_browser_assets_are_self_hosted_and_do_not_execute_remote_code() -> None
     assert 'fetch("/api/v1/snapshot"' in JS
     assert 'fetch("/api/v1/control-state"' in JS
     assert 'fetch("/api/v1/commands"' in JS
+    assert 'fetch("/api/v1/map-image"' in JS
     assert "innerHTML" not in JS
     assert 'data-capability="weapon"' in HTML
     assert 'querySelectorAll("[data-capability]")' in JS
     assert ".capability-hidden" in CSS
+    assert "缺少官方数据时：使用推测替代" in HTML
+    assert "缺少官方数据时：不应用模型" in HTML
+    assert "官方数据始终优先" in HTML
+    assert "Bomana 托盘" not in HTML
+    assert 'src="/assets/app.png"' in HTML
+    assert "weaponRange" in JS
+    assert "mapImage" in JS
 
 
 def test_command_dispatch_is_explicit_immutable_and_owner_thread_revalidated() -> None:

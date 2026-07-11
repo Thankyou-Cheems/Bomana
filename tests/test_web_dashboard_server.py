@@ -3,6 +3,7 @@ import json
 import socket
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,6 +25,7 @@ from bomana.web.server import (
     SESSION_MAX_AGE_SEC,
     DashboardServerError,
     _CommandBridge,
+    _Listener,
     _SecurityState,
     discover_private_ipv4,
 )
@@ -301,6 +303,53 @@ def test_lan_enable_rejects_public_or_missing_addresses() -> None:
         runtime.stop()
 
 
+def test_lan_enable_keeps_every_successful_exact_private_listener(monkeypatch) -> None:
+    store = DashboardSnapshotStore()
+    runtime = WebDashboardRuntime(
+        store,
+        preferred_port=0,
+        address_provider=lambda: [
+            "192.168.31.69",
+            "172.20.0.1",
+            "10.126.126.2",
+            "192.168.31.69",
+        ],
+    )
+    runtime.start()
+    assert runtime.port is not None
+    stopped = []
+    real_stop = runtime._stop_listener
+
+    def fake_start(address, port):
+        if address == "172.20.0.1":
+            raise OSError("adapter unavailable")
+        return _Listener(
+            server=SimpleNamespace(server_address=(address, port)),
+            thread=SimpleNamespace(),
+            address=address,
+        )
+
+    monkeypatch.setattr(runtime, "_start_listener", fake_start)
+    monkeypatch.setattr(
+        runtime, "_stop_listener", lambda listener: stopped.append(listener.address)
+    )
+    try:
+        assert runtime.enable_lan() == "192.168.31.69"
+        assert runtime.lan_addresses == ("192.168.31.69", "10.126.126.2")
+        assert runtime.lan_urls == (
+            f"http://192.168.31.69:{runtime.port}/",
+            f"http://10.126.126.2:{runtime.port}/",
+        )
+        for address in runtime.lan_addresses:
+            assert runtime.security.host_allowed(f"{address}:{runtime.port}")
+        runtime.disable_lan()
+        assert stopped == ["192.168.31.69", "10.126.126.2"]
+        assert runtime.lan_addresses == ()
+    finally:
+        monkeypatch.setattr(runtime, "_stop_listener", real_stop)
+        runtime.stop()
+
+
 def test_private_address_discovery_filters_and_prioritizes(monkeypatch) -> None:
     monkeypatch.setattr(
         socket,
@@ -324,6 +373,34 @@ def test_dashboard_assets_are_packaged_under_existing_asset_root() -> None:
         "dashboard.js",
         "favicon.svg",
     }
+
+
+def test_map_image_route_is_paired_and_serves_only_published_bytes(
+    running_dashboard: WebDashboardRuntime,
+) -> None:
+    status, _, _ = _request(running_dashboard, "GET", "/api/v1/map-image")
+    assert status == 401
+    cookie = _pair(running_dashboard)
+    status, _, _ = _request(
+        running_dashboard,
+        "GET",
+        "/api/v1/map-image",
+        headers={"Cookie": cookie},
+    )
+    assert status == 404
+
+    body = b"\x89PNG\r\n\x1a\nmap"
+    assert running_dashboard.store.publish_map_image(body, "image/png") is True
+    status, headers, returned = _request(
+        running_dashboard,
+        "GET",
+        "/api/v1/map-image",
+        headers={"Cookie": cookie},
+    )
+    assert status == 200
+    assert headers["content-type"] == "image/png"
+    assert headers["cache-control"].startswith("no-store")
+    assert returned == body
 
 
 def test_each_pairing_creates_a_distinct_control_session_and_csrf(

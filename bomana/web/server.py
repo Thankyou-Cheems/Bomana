@@ -651,9 +651,20 @@ def _make_handler(context: _RequestContext) -> type[BaseHTTPRequestHandler]:
                     return
                 self._send_json(HTTPStatus.OK, payload)
                 return
+            if path == "/api/v1/map-image":
+                if context.security.session_view(str(self.headers.get("Cookie") or "")) is None:
+                    self._send_json(HTTPStatus.UNAUTHORIZED, {"error": "pairing_required"})
+                    return
+                image = context.snapshot_store.read_map_image()
+                if image is None:
+                    self._send_text(HTTPStatus.NOT_FOUND, "map image unavailable")
+                    return
+                self._send_bytes(HTTPStatus.OK, image.body, image.content_type)
+                return
             asset_name = {
                 "/assets/dashboard.css": "dashboard.css",
                 "/assets/dashboard.js": "dashboard.js",
+                "/assets/app.png": "app.png",
                 "/favicon.svg": "favicon.svg",
             }.get(path)
             if asset_name:
@@ -916,14 +927,14 @@ def _make_handler(context: _RequestContext) -> type[BaseHTTPRequestHandler]:
 def _load_assets(asset_root: Path | None = None) -> dict[str, tuple[str, bytes]]:
     root = asset_root or Path(resource_path("bomana/assets/web"))
     definitions = {
-        "index.html": "text/html; charset=utf-8",
-        "dashboard.css": "text/css; charset=utf-8",
-        "dashboard.js": "text/javascript; charset=utf-8",
-        "favicon.svg": "image/svg+xml",
+        "index.html": (root / "index.html", "text/html; charset=utf-8"),
+        "dashboard.css": (root / "dashboard.css", "text/css; charset=utf-8"),
+        "dashboard.js": (root / "dashboard.js", "text/javascript; charset=utf-8"),
+        "favicon.svg": (root / "favicon.svg", "image/svg+xml"),
+        "app.png": (root.parent / "branding" / "app.png", "image/png"),
     }
     assets: dict[str, tuple[str, bytes]] = {}
-    for name, content_type in definitions.items():
-        path = root / name
+    for name, (path, content_type) in definitions.items():
         if not path.is_file():
             raise DashboardServerError(f"missing dashboard asset: {path}")
         assets[name] = (content_type, path.read_bytes())
@@ -991,7 +1002,7 @@ class WebDashboardRuntime:
         )
         self._handler = _make_handler(self._context)
         self._local: _Listener | None = None
-        self._lan: _Listener | None = None
+        self._lan: dict[str, _Listener] = {}
         self._lock = threading.RLock()
 
     @property
@@ -1000,7 +1011,7 @@ class WebDashboardRuntime:
 
     @property
     def lan_enabled(self) -> bool:
-        return self._lan is not None
+        return bool(self._lan)
 
     @property
     def lan_control_enabled(self) -> bool:
@@ -1017,7 +1028,11 @@ class WebDashboardRuntime:
 
     @property
     def lan_address(self) -> str | None:
-        return self._lan.address if self._lan is not None else None
+        return next(iter(self._lan), None)
+
+    @property
+    def lan_addresses(self) -> tuple[str, ...]:
+        return tuple(self._lan)
 
     @property
     def pairing_code(self) -> str:
@@ -1035,14 +1050,26 @@ class WebDashboardRuntime:
 
     @property
     def lan_url(self) -> str | None:
-        if self._lan is None:
+        address = self.lan_address
+        if address is None:
             return None
-        return f"http://{self._lan.address}:{self._lan.server.server_address[1]}/"
+        return f"http://{address}:{self._lan[address].server.server_address[1]}/"
+
+    @property
+    def lan_urls(self) -> tuple[str, ...]:
+        return tuple(
+            f"http://{address}:{listener.server.server_address[1]}/"
+            for address, listener in self._lan.items()
+        )
 
     @property
     def lan_pairing_url(self) -> str | None:
         url = self.lan_url
         return f"{url}?pair={self.pairing_code}" if url else None
+
+    @property
+    def lan_pairing_urls(self) -> tuple[str, ...]:
+        return tuple(f"{url}?pair={self.pairing_code}" for url in self.lan_urls)
 
     def set_command_sink(self, sink: Callable[[WebCommandEnvelope], bool] | None) -> None:
         self._bridge.set_sink(sink)
@@ -1095,12 +1122,16 @@ class WebDashboardRuntime:
         with self._lock:
             if self._local is None:
                 self.start()
-            if self._lan is not None:
-                return self._lan.address
+            if self._lan:
+                return self.lan_address or ""
             port = self.port
             if port is None:
                 raise DashboardServerError("loopback dashboard is not running")
-            addresses = [address for address in self.address_provider() if _is_rfc1918(address)]
+            addresses = list(
+                dict.fromkeys(
+                    address for address in self.address_provider() if _is_rfc1918(address)
+                )
+            )
             if not addresses:
                 raise DashboardServerError("no RFC1918 LAN address found")
             last_error: OSError | None = None
@@ -1111,13 +1142,14 @@ class WebDashboardRuntime:
                     last_error = exc
                     continue
                 self.security.add_host(address)
-                self._lan = listener
-                return address
+                self._lan[address] = listener
+            if self._lan:
+                return self.lan_address or ""
             raise DashboardServerError(f"unable to bind a private LAN address: {last_error}")
 
     def enable_lan_control(self) -> bool:
         with self._lock:
-            if self._lan is None:
+            if not self._lan:
                 raise DashboardServerError("LAN dashboard access is not enabled")
             return self.security.enable_lan_control()
 
@@ -1126,24 +1158,25 @@ class WebDashboardRuntime:
 
     def disable_lan(self) -> None:
         with self._lock:
-            listener = self._lan
-            self._lan = None
-            if listener is None:
+            listeners = tuple(self._lan.values())
+            self._lan = {}
+            if not listeners:
                 return
             self.security.disable_lan_access()
-            self.security.remove_host(listener.address)
-            self._stop_listener(listener)
+            for listener in listeners:
+                self.security.remove_host(listener.address)
+                self._stop_listener(listener)
 
     def stop(self) -> None:
         with self._lock:
-            lan = self._lan
+            lan = tuple(self._lan.values())
             local = self._local
-            self._lan = None
+            self._lan = {}
             self._local = None
             self.security.invalidate_all()
-            if lan is not None:
-                self.security.remove_host(lan.address)
-                self._stop_listener(lan)
+            for listener in lan:
+                self.security.remove_host(listener.address)
+                self._stop_listener(listener)
             if local is not None:
                 self._stop_listener(local)
 

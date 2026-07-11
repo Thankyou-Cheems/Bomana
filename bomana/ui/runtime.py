@@ -10,9 +10,12 @@ from typing import Any
 
 from bomana.config.settings import NetworkConfig
 from bomana.core.logic import GameLogic
+from bomana.core.telemetry import MapImageFetcher
 from bomana.utils.diagnostics import log_exception
+from bomana.web.snapshot import DashboardSnapshotStore
 
 _LOGIC_POLLER_EXCEPTION_LOG_INTERVAL_SEC = 60.0
+MAP_IMAGE_POLL_INTERVAL_SEC = 15.0
 
 
 class TkEventDispatcher:
@@ -94,6 +97,53 @@ class LogicPoller:
             exc,
             backoff_sec=NetworkConfig.BACKOFF_MAX,
         )
+
+
+class MapImagePoller:
+    """Low-cadence non-Tk worker for the official tactical-map image."""
+
+    def __init__(
+        self,
+        store: DashboardSnapshotStore,
+        *,
+        fetcher_factory=MapImageFetcher,
+        interval_sec: float = MAP_IMAGE_POLL_INTERVAL_SEC,
+    ) -> None:
+        self.store = store
+        self.fetcher_factory = fetcher_factory
+        self.interval_sec = max(0.1, float(interval_sec))
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._fetcher: MapImageFetcher | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event = threading.Event()
+        self._fetcher = self.fetcher_factory()
+        self._thread = start_daemon_thread("BomanaMapImagePoller", self._run)
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=2.25)
+        self._thread = None
+        fetcher = self._fetcher
+        self._fetcher = None
+        if fetcher is not None:
+            fetcher.close()
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            fetcher = self._fetcher
+            if fetcher is None:
+                return
+            result = fetcher.fetch()
+            if result.ok:
+                self.store.publish_map_image(result.body, result.content_type)
+            if self._stop_event.wait(self.interval_sec):
+                return
 
 
 def start_daemon_thread(name: str, target: Callable[[], Any]) -> threading.Thread:

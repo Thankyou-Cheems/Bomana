@@ -734,6 +734,10 @@ class AppPanelRenderer:
             fg=model.return_status.fg,
         )
         app.fuel_detail_lbl.config(text=model.detail_text)
+        if model.detail_text:
+            self._pack_if_needed(app.fuel_detail_lbl, fill="x")
+        else:
+            self._pack_forget_if_needed(app.fuel_detail_lbl)
         if hasattr(app, "fuel_alt_lbl"):
             app.fuel_alt_lbl.config(text=model.altitude_text)
             if model.altitude_text:
@@ -742,6 +746,10 @@ class AppPanelRenderer:
                 self._pack_forget_if_needed(app.fuel_alt_lbl)
         if hasattr(app, "fuel_return_detail_lbl"):
             app.fuel_return_detail_lbl.config(text=model.return_detail_text)
+            if model.return_detail_text:
+                self._pack_if_needed(app.fuel_return_detail_lbl, fill="x")
+            else:
+                self._pack_forget_if_needed(app.fuel_return_detail_lbl)
 
     def update_bombing_display(self, snap: UISnapshot) -> None:
         """更新武器解算信息显示（自由落体炸弹仍复用 CCRP 文案）。"""

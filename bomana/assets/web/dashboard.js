@@ -14,6 +14,9 @@ const state = {
   dragging: false,
   pointerX: 0,
   pointerY: 0,
+  mapImage: null,
+  mapImageRevision: 0,
+  mapImagePendingRevision: 0,
 };
 let pollTimer = null;
 let controlPollTimer = null;
@@ -475,14 +478,14 @@ function renderCapabilities(capabilities) {
 
 function renderWeapon(weapon) {
   text("weaponName", weapon.name || "未选择武器");
-  text("weaponModel", weapon.model || "无可用模型");
+  text("weaponModel", weaponModelLabel(weapon));
   text("weaponTarget", weapon.target_name || "--");
   text("weaponDistance", weapon.target_distance_km > 0 ? fmt(weapon.target_distance_km, 1, " km") : "--");
   const envelope = weapon.max_range_km > 0 ? `${fmt(weapon.min_range_km, 1)}–${fmt(weapon.max_range_km, 1)} km` : "--";
   text("weaponEnvelope", envelope);
   text("weaponTti", weapon.time_to_target_s > 0 ? fmt(weapon.time_to_target_s, 0, " s") : "--");
-  text("weaponStatus", weapon.reason || weapon.status || "等待有效解算");
-  text("weaponQuality", weapon.quality || "待机");
+  text("weaponStatus", weaponStatusLabel(weapon));
+  text("weaponQuality", weaponQualityLabel(weapon));
   const chip = $("weaponQuality");
   chip.className = "quality-chip";
   if (weapon.quality === "experimental") chip.classList.add("experimental");
@@ -491,6 +494,32 @@ function renderWeapon(weapon) {
   const max = Math.max(weapon.max_range_km, weapon.target_distance_km, 1);
   $("weaponRangeBar").style.width = `${Math.min(100, Math.max(0, weapon.max_range_km / max * 100))}%`;
   $("weaponTargetMark").style.left = `${Math.min(100, Math.max(0, weapon.target_distance_km / max * 100))}%`;
+}
+
+function weaponModelLabel(weapon) {
+  if (weapon.reason === "datamine_guidance_envelope") return "官方包线";
+  if (weapon.reason === "foxthree_compatible_glide") return "推测替代";
+  if (weapon.model === "strict_official" && !weapon.valid) return "未使用替代模型";
+  return weapon.valid ? "Bomana 估算" : "等待可用数据";
+}
+
+function weaponQualityLabel(weapon) {
+  if (weapon.reason === "datamine_guidance_envelope") return "官方";
+  if (weapon.quality === "experimental") return "推测";
+  if (weapon.quality === "two_dimensional") return "二维参考";
+  return weapon.valid ? "估算" : "待机";
+}
+
+function weaponStatusLabel(weapon) {
+  const labels = {
+    datamine_guidance_envelope: "官方条件包线",
+    foxthree_compatible_glide: "无官方包线，使用推测替代",
+    glide_envelope_unavailable: "无官方包线，未应用替代模型",
+    no_target: "尚未选择有效目标",
+    invalid_telemetry: "等待稳定飞行数据",
+    weapon_incompatible: "当前武器与机型不匹配",
+  };
+  return labels[weapon.reason] || (weapon.valid ? "当前解算可用" : "等待有效解算");
 }
 
 function renderBombing(bombing) {
@@ -626,8 +655,12 @@ function renderMap(map) {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, width, height);
   drawMapBackground(ctx, width, height, ratio);
+  void syncMapImage(map);
+  drawMapImage(ctx, map, width, height);
   $("mapEmpty").classList.toggle("hidden", map.available);
   if (!map.available) return;
+
+  drawWeaponRange(ctx, map, width, height, ratio);
 
   const pointsById = new Map(map.points.map((point) => [point.id, point]));
   const target = map.points.find((point) => point.kind === "poi" && point.is_target)
@@ -645,6 +678,96 @@ function renderMap(map) {
 
   for (const point of pointsById.values()) drawMapPoint(ctx, map, point, width, height, ratio);
   if (map.player) drawPlayer(ctx, map, map.player, width, height, ratio);
+}
+
+async function syncMapImage(map) {
+  const image = map && map.image;
+  if (!image || !image.available || image.revision <= 0) return;
+  if (state.mapImageRevision === image.revision || state.mapImagePendingRevision === image.revision) return;
+  state.mapImagePendingRevision = image.revision;
+  try {
+    const response = await fetch("/api/v1/map-image", {
+      credentials: "same-origin",
+      cache: "no-store",
+      mode: "same-origin",
+      headers: { Accept: "image/png,image/jpeg" },
+    });
+    if (!response.ok) return;
+    const blob = await response.blob();
+    let decoded;
+    if ("createImageBitmap" in window) {
+      decoded = await window.createImageBitmap(blob);
+    } else {
+      decoded = await imageElementFromBlob(blob);
+    }
+    if (state.mapImage && typeof state.mapImage.close === "function") state.mapImage.close();
+    state.mapImage = decoded;
+    state.mapImageRevision = image.revision;
+    renderCurrentMap();
+  } catch (_error) {
+    // The abstract tactical grid remains usable while the image is unavailable.
+  } finally {
+    if (state.mapImagePendingRevision === image.revision) state.mapImagePendingRevision = 0;
+  }
+}
+
+function imageElementFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+function drawMapImage(ctx, map, width, height) {
+  if (!state.mapImage || !map.image || state.mapImageRevision !== map.image.revision) return;
+  const topLeft = mapTransform(map, width, height, 0, 0);
+  const bottomRight = mapTransform(map, width, height, 1, 1);
+  ctx.save();
+  ctx.globalAlpha = .42;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(
+    state.mapImage,
+    topLeft.x,
+    topLeft.y,
+    bottomRight.x - topLeft.x,
+    bottomRight.y - topLeft.y,
+  );
+  ctx.restore();
+}
+
+function drawWeaponRange(ctx, map, width, height, ratio) {
+  const range = map.weapon_range;
+  if (!map.player || !range) return;
+  const center = mapTransform(map, width, height, map.player.x, map.player.y);
+  const maxX = mapTransform(map, width, height, map.player.x + finite(range.max_radius_x), map.player.y);
+  const maxY = mapTransform(map, width, height, map.player.x, map.player.y + finite(range.max_radius_y));
+  const radiusX = Math.abs(maxX.x - center.x);
+  const radiusY = Math.abs(maxY.y - center.y);
+  if (radiusX < ratio || radiusY < ratio) return;
+  ctx.save();
+  ctx.fillStyle = "rgba(112,183,255,.07)";
+  ctx.strokeStyle = range.quality === "experimental" ? "rgba(245,198,101,.72)" : "rgba(112,183,255,.74)";
+  ctx.lineWidth = 1.4 * ratio;
+  ctx.beginPath();
+  ctx.ellipse(center.x, center.y, radiusX, radiusY, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  if (finite(range.min_radius_x) > 0 && finite(range.min_radius_y) > 0) {
+    const minX = mapTransform(map, width, height, map.player.x + finite(range.min_radius_x), map.player.y);
+    const minY = mapTransform(map, width, height, map.player.x, map.player.y + finite(range.min_radius_y));
+    ctx.setLineDash([5 * ratio, 4 * ratio]);
+    ctx.beginPath();
+    ctx.ellipse(center.x, center.y, Math.abs(minX.x - center.x), Math.abs(minY.y - center.y), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawMapBackground(ctx, width, height, ratio) {
@@ -818,13 +941,13 @@ function installControlHandlers() {
   $("modelCompatibleButton").addEventListener("click", () => {
     void submitCommand(
       { schema_version: 1, command: "weapon.set_ballistic_model", model: "foxthree_compatible" },
-      "使用 FoxThree 兼容模型",
+      "允许在缺少官方数据时使用推测替代",
     );
   });
   $("modelOfficialButton").addEventListener("click", () => {
     void submitCommand(
       { schema_version: 1, command: "weapon.set_ballistic_model", model: "strict_official" },
-      "使用严格官方模型",
+      "缺少官方数据时不应用替代模型",
     );
   });
 }
@@ -869,7 +992,7 @@ $("pairingForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const code = $("pairingCode").value.trim().toUpperCase();
   if (!/^[A-Z2-9]{4}-?[A-Z2-9]{4}$/.test(code)) {
-    showPairing("请输入 Bomana 托盘显示的 8 位配对码");
+    showPairing("请输入 Bomana 主窗口底部显示的 8 位配对码");
     return;
   }
   window.location.assign(`/?pair=${encodeURIComponent(code)}`);

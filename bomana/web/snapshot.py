@@ -25,6 +25,7 @@ from bomana.core.state import (
 )
 
 SCHEMA_VERSION = 1
+MAX_MAP_IMAGE_BYTES = 4 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,15 @@ class PublishedDashboardSnapshot:
     snapshot: UISnapshot
     checklist_items: tuple[str, ...]
     capabilities: DashboardCapabilities
+    map_image_available: bool = False
+    map_image_revision: int = 0
+
+
+@dataclass(frozen=True)
+class PublishedMapImage:
+    revision: int
+    content_type: str
+    body: bytes
 
 
 class DashboardSnapshotStore:
@@ -60,6 +70,7 @@ class DashboardSnapshotStore:
         self._lock = threading.Lock()
         self._sequence = 0
         self._latest: PublishedDashboardSnapshot | None = None
+        self._map_image: PublishedMapImage | None = None
         self._wall_time = wall_time
 
     def publish(self, snapshot: UISnapshot, checklist_items: list[str] | tuple[str, ...]) -> None:
@@ -72,11 +83,38 @@ class DashboardSnapshotStore:
                 snapshot=snapshot,
                 checklist_items=safe_items,
                 capabilities=DashboardCapabilities.current_build(),
+                map_image_available=self._map_image is not None,
+                map_image_revision=(self._map_image.revision if self._map_image else 0),
             )
 
     def read(self) -> PublishedDashboardSnapshot | None:
         with self._lock:
             return self._latest
+
+    def publish_map_image(self, body: bytes, content_type: str) -> bool:
+        safe_body = bytes(body)
+        safe_type = str(content_type)
+        if (
+            not safe_body
+            or len(safe_body) > MAX_MAP_IMAGE_BYTES
+            or safe_type not in {"image/png", "image/jpeg"}
+        ):
+            return False
+        with self._lock:
+            current = self._map_image
+            if (
+                current is not None
+                and current.content_type == safe_type
+                and current.body == safe_body
+            ):
+                return False
+            revision = 1 if current is None else current.revision + 1
+            self._map_image = PublishedMapImage(revision, safe_type, safe_body)
+            return True
+
+    def read_map_image(self) -> PublishedMapImage | None:
+        with self._lock:
+            return self._map_image
 
 
 _PHASE_LABELS = {
@@ -166,6 +204,27 @@ def _filtered_map_points(
     if capabilities.navigation and ENABLE_AIRFIELDS:
         allowed.add("airfield")
     return [_map_point(point) for point in points if point.kind in allowed]
+
+
+def _weapon_range(
+    snapshot: UISnapshot, capabilities: DashboardCapabilities
+) -> dict[str, Any] | None:
+    if not capabilities.weapon or not snapshot.weapon_solution_valid:
+        return None
+    scale_x = _optional_number(snapshot.map_scale_x_m, minimum=1)
+    scale_y = _optional_number(snapshot.map_scale_y_m, minimum=1)
+    maximum = _optional_number(snapshot.weapon_max_range_m, minimum=0)
+    minimum = _optional_number(snapshot.weapon_min_range_m, minimum=0)
+    if scale_x is None or scale_y is None or maximum is None or maximum <= 0:
+        return None
+    bounded_minimum = min(maximum, minimum or 0.0)
+    return {
+        "min_radius_x": min(4.0, bounded_minimum / scale_x),
+        "min_radius_y": min(4.0, bounded_minimum / scale_y),
+        "max_radius_x": min(4.0, maximum / scale_x),
+        "max_radius_y": min(4.0, maximum / scale_y),
+        "quality": str(snapshot.weapon_quality or "none"),
+    }
 
 
 def _alerts(snapshot: UISnapshot, capabilities: DashboardCapabilities) -> list[dict[str, str]]:
@@ -402,8 +461,16 @@ def build_dashboard_payload(published: PublishedDashboardSnapshot) -> dict[str, 
         "checklist": {"items": list(published.checklist_items) if capabilities.checklist else []},
         "alerts": _alerts(snap, capabilities),
         "map": {
-            "available": bool(map_player is not None or map_points),
+            "available": bool(
+                published.map_image_available or map_player is not None or map_points
+            ),
             "player": map_player,
             "points": map_points,
+            "image": {
+                "available": bool(published.map_image_available),
+                "revision": max(0, int(published.map_image_revision)),
+                "url": "/api/v1/map-image",
+            },
+            "weapon_range": _weapon_range(snap, capabilities),
         },
     }

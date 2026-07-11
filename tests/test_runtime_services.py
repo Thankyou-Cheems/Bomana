@@ -125,6 +125,42 @@ def test_dashboard_start_failure_is_visible_and_retryable(monkeypatch) -> None:
     assert attempts == 2
 
 
+def test_dashboard_map_poller_start_failure_stops_partial_runtime(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeDashboard:
+        is_running = False
+        port = 8777
+
+        def __init__(self, _store, **_kwargs) -> None:
+            pass
+
+        def start(self) -> None:
+            calls.append("dashboard-start")
+            self.is_running = True
+
+        def stop(self) -> None:
+            calls.append("dashboard-stop")
+            self.is_running = False
+
+    class FailingPoller:
+        def start(self) -> None:
+            calls.append("poller-start")
+            raise OSError("map poller unavailable")
+
+        def stop(self) -> None:
+            calls.append("poller-stop")
+
+    services = AppRuntimeServices(SimpleNamespace())
+    services.map_image_poller = FailingPoller()
+    monkeypatch.setattr(runtime_services, "WebDashboardRuntime", FakeDashboard)
+
+    assert services.init_dashboard() is False
+    assert services.dashboard is None
+    assert services.dashboard_error == "map poller unavailable"
+    assert calls == ["dashboard-start", "poller-start", "poller-stop", "dashboard-stop"]
+
+
 def test_dashboard_lan_share_availability_tracks_runtime_state() -> None:
     services = AppRuntimeServices(SimpleNamespace())
 

@@ -727,6 +727,8 @@ class UISnapshot:
     traceback_point: NavigationPointDisplayInfo | None = None
     map_player_x: float | None = None
     map_player_y: float | None = None
+    map_scale_x_m: float | None = None
+    map_scale_y_m: float | None = None
     map_points: tuple[TacticalMapPoint, ...] = ()
     has_airfield_target: bool = False
     has_target: bool = False

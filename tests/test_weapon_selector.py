@@ -207,8 +207,9 @@ def test_weapon_selector_model_buttons_are_explicit_and_choice_applies_immediate
     dialog._set_ballistic_model("strict_official")
 
     assert set(dialog._MODEL_LABELS) == {"foxthree_compatible", "strict_official"}
-    assert "默认" in dialog._MODEL_LABELS["foxthree_compatible"]
-    assert "无临时滑翔" in dialog._MODEL_LABELS["strict_official"]
+    assert dialog._MODEL_LABELS["foxthree_compatible"] == "缺少官方数据时：使用推测替代"
+    assert dialog._MODEL_LABELS["strict_official"] == "缺少官方数据时：不应用模型"
+    assert all("官方数据始终优先" in note for note in dialog._MODEL_NOTES.values())
     assert saved == {"keep": True, "weapon_ballistic_model": "strict_official"}
     assert current["value"] == "strict_official"
     assert WeaponBallisticModelConfig.selected_model == "strict_official"

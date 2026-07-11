@@ -149,6 +149,16 @@ those results.
   choices, persist the selected value as `weapon_ballistic_model`, and apply it
   to `WeaponBallisticModelConfig.selected_model` without requiring an app
   restart.
+- `WFC-17`: A usable official condition-dependent table MUST remain authoritative
+  under both ballistic policies. Public App/Web labels MUST present the choice
+  only as `缺少官方数据时：使用推测替代` versus
+  `缺少官方数据时：不应用模型`, MUST explain that official data always wins,
+  and MUST NOT present the internal compatibility/provider identifier as the
+  model name.
+- `WFC-18`: The primary weapon card MUST lead with weapon, target, range/window,
+  and one short quality/source label. Repeated caveats and model explanations
+  belong in the selector/help surface; unavailable states MUST remain concise
+  without hiding the machine-readable reason from Web/API projections.
 
 ## Model Notes
 
@@ -221,10 +231,10 @@ These are Bomana model choices, not imported weapon-performance values:
   only currently returned hostile aircraft contacts, preserving finite current
   `dx`/`dy`, and excluding the player and friendly aircraft.
 - [behavioral] `tests/test_panel_presenter.py`, `tests/test_panel_renderer.py`,
-  and `tests/test_ui_geometry.py` enforce `WFC-12` and `WFC-13` with compact-card
+  and `tests/test_ui_geometry.py` enforce `WFC-12`, `WFC-13`, and `WFC-18` with compact-card
   conditional-reference/unavailable wording, conditional detail-row layout,
   and no added primary navigation row.
-- [behavioral] `tests/test_weapon_selector.py` enforces `WFC-16` with explicit
+- [behavioral] `tests/test_weapon_selector.py` enforces `WFC-16` and `WFC-17` with explicit
   model labels, valid-value rejection, immediate runtime application, and
   `weapon_ballistic_model` persistence.
 - [manual] `docs/guides/weapon-fire-control-smoke.md` covers `WFC-04`, `WFC-07`,

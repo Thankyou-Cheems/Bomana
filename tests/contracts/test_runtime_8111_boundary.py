@@ -9,11 +9,18 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from bomana.config.settings import NetworkConfig
-from bomana.core.telemetry import MapObjectsFetcher
+from bomana.core.telemetry import MapImageFetcher, MapObjectsFetcher
 from tools import record_8111_session
 
 ROOT = Path(__file__).resolve().parents[2]
-ALLOWED_ENDPOINTS = {"/indicators", "/state", "/map_obj.json", "/map_info.json"}
+ALLOWED_ENDPOINTS = {
+    "/indicators",
+    "/state",
+    "/map_obj.json",
+    "/map_info.json",
+    "/map.img",
+}
+RECORDER_ENDPOINTS = ALLOWED_ENDPOINTS - {"/map.img"}
 RUNTIME_SOURCES = sorted((ROOT / "bomana").rglob("*.py"))
 
 
@@ -113,6 +120,18 @@ def test_runtime_http_json_access_stays_centralized() -> None:
     assert violations == []
 
 
+def test_map_image_fetcher_is_fixed_bounded_and_content_typed() -> None:
+    source = inspect.getsource(MapImageFetcher)
+
+    assert '"/map.img"' in source
+    assert "MAX_IMAGE_BYTES = 4 * 1024 * 1024" in source
+    assert "stream=True" in source
+    assert "iter_content" in source
+    assert "image/png" in source
+    assert "image/jpeg" in source
+    assert "trust_env = False" in source
+
+
 def test_map_objects_fetcher_does_not_own_map_info_scale_conversion() -> None:
     source = inspect.getsource(MapObjectsFetcher.fetch)
 
@@ -124,7 +143,7 @@ def test_session_recorder_is_fixed_to_official_8111_endpoints() -> None:
         "http://127.0.0.1:8111",
         "http://localhost:8111",
     }
-    assert set(record_8111_session.OFFICIAL_ENDPOINTS) == ALLOWED_ENDPOINTS
+    assert set(record_8111_session.OFFICIAL_ENDPOINTS) == RECORDER_ENDPOINTS
     assert "api_base" not in vars(record_8111_session.parse_args([]))
 
 

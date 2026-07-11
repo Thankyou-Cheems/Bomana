@@ -1879,6 +1879,8 @@ class GameLogic:
             traceback_point=traceback_point_display,
             map_player_x=(float(map_player_pos[0]) if map_player_pos is not None else None),
             map_player_y=(float(map_player_pos[1]) if map_player_pos is not None else None),
+            map_scale_x_m=(float(map_axis_scale_m[0]) if map_axis_scale_m is not None else None),
+            map_scale_y_m=(float(map_axis_scale_m[1]) if map_axis_scale_m is not None else None),
             map_points=tuple(map_points),
             has_airfield_target=has_airfield_target,
             has_target=has_target,

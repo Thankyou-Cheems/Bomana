@@ -85,6 +85,12 @@ def _compute_overspeed_fill_ratio(snap: Any, ias_ratio: float) -> float:
     return max(ias_ratio, mach_ratio, 0.0)
 
 
+def overspeed_focus_ratio(value: float) -> float:
+    """Map the useful 65%-105% near-limit band across the visible strip."""
+
+    return max(0.0, min(1.0, (_safe_float(value) - 0.65) / 0.40))
+
+
 def format_aircraft_type_label(raw: str) -> str:
     text = str(raw or "").strip().replace("_", " ")
     text = " ".join(text.split())
@@ -122,7 +128,6 @@ def build_fuel_display_model(snap: Any) -> FuelDisplayModel:
         fuel_rate_text = "油耗 --"
 
     altitude_value_text = f"高度 {int(snap.altitude_m)}m" if snap.altitude_m > 0 else "高度 --"
-    detail_text = f"{fuel_rate_text} · {altitude_value_text}"
     altitude_text = ""
     return_detail_text = "返航 --"
     friendly_distance_text = (
@@ -149,14 +154,17 @@ def build_fuel_display_model(snap: Any) -> FuelDisplayModel:
         return_status = IconTextModel(None, "无机场", Theme.TEXT_MUTED)
         return_detail_text = "返航无机场数据"
 
+    return_summary = return_detail_text.replace("返航 ", "返航", 1)
+    main_text = f"{main_text} · {fuel_rate_text} · {altitude_value_text} · {return_summary}"
+
     return FuelDisplayModel(
         main_text=main_text,
         main_fg=main_fg,
         time=time,
         return_status=return_status,
-        detail_text=detail_text,
+        detail_text="",
         altitude_text=altitude_text,
-        return_detail_text=return_detail_text,
+        return_detail_text="",
     )
 
 
@@ -305,13 +313,13 @@ def _format_weapon_time(seconds: float) -> str:
 def _weapon_quality_text(quality: str) -> str:
     quality = str(quality or "").strip().lower()
     if quality in {"two_dimensional", "two-dimensional", "2d"}:
-        return "二维估算"
+        return "二维参考"
     if quality == "conservative":
-        return "保守估算"
+        return "保守参考"
     if quality == "experimental":
-        return "实验估算"
+        return "推测参考"
     if quality in {"degraded", "coarse"}:
-        return "粗略估算"
+        return "粗略参考"
     return ""
 
 
@@ -319,15 +327,15 @@ def _weapon_model_text(model: str, reason: str) -> str:
     model = str(model or "").strip().lower()
     reason = str(reason or "").strip().lower()
     if reason == "datamine_guidance_envelope":
-        return "Datamine 官方条件表"
+        return "官方包线"
     if reason in {"foxthree_compatible_glide", "foxthree_compatible_glide_unavailable"}:
-        return "FoxThree 兼容临时模型"
+        return "推测替代"
     if reason == "glide_envelope_unavailable" and model == "strict_official":
-        return "严格模式（无临时滑翔）"
+        return "无替代模型"
     if reason in {"powered_point_mass_2d", "aam_2d_max_only"}:
-        return "二维点质量回退"
+        return "二维回退"
     if reason == "guided_ballistic_conservative":
-        return "保守制导弹道模型"
+        return "保守估算"
     return ""
 
 
@@ -358,44 +366,44 @@ def _weapon_status_presentation(status: str) -> IconTextModel:
 
 def _weapon_fallback_detail(status: str, role: str, reason: str = "") -> str:
     if status == "catalog_unavailable":
-        return "武器目录缺失或校验失败"
+        return "武器目录不可用"
     if status == "unknown_weapon":
-        return "请选择武器目录中的记录"
+        return "请选择武器"
     if status == "incompatible":
-        return "请更换当前机型可用武器"
+        return "请更换兼容武器"
     if status == "no_target":
         if role == "aam":
-            return "未发现可估算的敌机目标"
-        return "朝向 POI 或战区后估算"
+            return "未发现可用空中目标"
+        return "请选择 POI 或战区"
     if status == "insufficient_data":
         if reason == "glide_envelope_unavailable":
-            return "暂无可复用的滑翔包线，未启用临时模型"
+            return "无官方包线，未应用替代模型"
         if reason == "foxthree_compatible_glide_unavailable":
-            return "FoxThree 兼容模型缺少必要滑翔参数"
+            return "替代模型缺少必要参数"
         if reason == "conditional_propulsion_unsupported":
-            return "条件或变推力推进尚未建模，已停用估算"
-        return "等待有效高度与速度数据"
+            return "条件推进数据不足"
+        return "等待高度与速度"
     if status == "too_close":
-        return "目标位于估算窗近端以内"
+        return "目标过近"
     if status == "out_of_range":
-        return "目标超出当前估算窗"
+        return "目标超出估算窗"
     if status == "align":
-        return "对准目标后更新估算"
+        return "对准目标后更新"
     if status == "within_ballistic_reference":
         return "仅重力/阻力弹道参考，未计滑翔增程"
     if status == "beyond_ballistic_reference":
         return "超出弹道参考，不代表超出滑翔能力"
     if status in {"within_experimental_reference", "beyond_experimental_reference"}:
-        return "实验滑翔参考，不是命中或投放保证"
+        return "推测替代，仅供参考"
     if status == "within_2d_max_only":
-        return "仅二维最大射程，未计目标速度、高差与迎尾角"
+        return "二维最大射程参考"
     if status in {
         "within_all_aspect_reference",
         "within_aspect_reference",
         "head_on_only_reference",
         "beyond_envelope_reference",
     }:
-        return "Datamine 条件包线参考，不是锁定或发射授权"
+        return "官方条件包线参考"
     if status == "solver_error":
         return "暂时无法生成武器估算"
     return ""
@@ -494,15 +502,13 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         "beyond_experimental_reference",
     }:
         quality_text = _weapon_quality_text(str(getattr(snap, "weapon_quality", "") or ""))
-    if quality_text:
-        detail_parts.append(quality_text)
-    flight_text = " · ".join(detail_parts) or _weapon_fallback_detail(status, role, reason)
     model_text = _weapon_model_text(
         str(getattr(snap, "weapon_model", "") or ""),
         reason,
     )
-    if model_text:
-        flight_text = f"{flight_text} · {model_text}" if flight_text else model_text
+    timing_text = next((part for part in detail_parts if "s" in part), "")
+    compact_details = [part for part in (timing_text, model_text, quality_text) if part]
+    flight_text = " · ".join(compact_details) or _weapon_fallback_detail(status, role, reason)
 
     highlighted_statuses = usable_statuses | {"align"}
 
@@ -699,7 +705,7 @@ def build_speed_strip_model(snap: Any) -> SpeedStripModel:
         value_text=value_text,
         value_fg=value_fg,
         fill_color=fill_color if matched else Theme.TEXT_MUTED,
-        fill_ratio=max(0.0, min(1.0, display_ratio if matched else 0.0)),
+        fill_ratio=overspeed_focus_ratio(display_ratio) if matched else 0.0,
     )
 
 

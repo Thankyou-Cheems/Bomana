@@ -2420,15 +2420,15 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         "high_drag": "高阻",
     }
     _MODEL_LABELS: ClassVar[dict[str, str]] = {
-        WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE: "FoxThree 兼容（默认）",
-        WeaponBallisticModelConfig.STRICT_OFFICIAL: "严格模式（无临时滑翔）",
+        WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE: "缺少官方数据时：使用推测替代",
+        WeaponBallisticModelConfig.STRICT_OFFICIAL: "缺少官方数据时：不应用模型",
     }
     _MODEL_NOTES: ClassVar[dict[str, str]] = {
         WeaponBallisticModelConfig.FOXTHREE_COMPATIBLE: (
-            "官方条件表优先；无表滑翔武器使用显式标记的实验估算。"
+            "官方数据始终优先；只有无官方包线的武器会使用推测替代。"
         ),
         WeaponBallisticModelConfig.STRICT_OFFICIAL: (
-            "保留官方条件表、CCRP 与既有保守解算；无表滑翔武器不启用临时模型。"
+            "官方数据始终优先；无官方包线时不显示替代射程。"
         ),
     }
 
@@ -2493,7 +2493,7 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
         model_frame.pack(fill="x", padx=12, pady=(2, 8))
         tk.Label(
             model_frame,
-            text="飞行包线模型",
+            text="缺少官方数据时",
             font=("Segoe UI", 9, "bold"),
             bg=Theme.BG,
             fg=Theme.TEXT,
@@ -2509,7 +2509,7 @@ class WeaponSelectorDialog(tk.Toplevel, _ScalableDialogMixin):
                 label,
                 lambda value=model: self._set_ballistic_model(value),
                 variant="neutral",
-                width=18,
+                width=26,
             )
             button.pack(side="left", padx=(0, 6))
             self.ballistic_model_buttons[model] = button

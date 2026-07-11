@@ -1,8 +1,11 @@
+import threading
 import tkinter as tk
 import unittest
 from unittest.mock import patch
 
-from bomana.ui.runtime import LogicPoller, TkEventDispatcher
+from bomana.core.telemetry import MapImageFetchResult
+from bomana.ui.runtime import LogicPoller, MapImagePoller, TkEventDispatcher
+from bomana.web.snapshot import DashboardSnapshotStore
 
 
 class FakeRoot:
@@ -27,6 +30,23 @@ class ExplodingGame(FakeGame):
     def tick(self) -> None:
         self.ticks += 1
         raise RuntimeError("tick failed")
+
+
+class FakeMapImageFetcher:
+    def __init__(self) -> None:
+        self.fetched = threading.Event()
+        self.closed = False
+
+    def fetch(self) -> MapImageFetchResult:
+        self.fetched.set()
+        return MapImageFetchResult(
+            ok=True,
+            body=b"\x89PNG\r\n\x1a\nmap",
+            content_type="image/png",
+        )
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class RuntimeThreadingTests(unittest.TestCase):
@@ -98,6 +118,21 @@ class RuntimeThreadingTests(unittest.TestCase):
 
         self.assertEqual(game.ticks, 2)
         self.assertEqual(log_exception.call_count, 2)
+
+    def test_map_image_poller_publishes_off_tk_and_stops_bounded(self) -> None:
+        store = DashboardSnapshotStore()
+        fetcher = FakeMapImageFetcher()
+        poller = MapImagePoller(store, fetcher_factory=lambda: fetcher, interval_sec=60.0)
+
+        poller.start()
+        self.assertTrue(fetcher.fetched.wait(1.0))
+        poller.stop()
+
+        image = store.read_map_image()
+        self.assertIsNotNone(image)
+        self.assertEqual(image.body, b"\x89PNG\r\n\x1a\nmap")
+        self.assertTrue(fetcher.closed)
+        self.assertIsNone(poller._thread)
 
 
 if __name__ == "__main__":

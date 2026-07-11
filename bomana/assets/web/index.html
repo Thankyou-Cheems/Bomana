@@ -13,7 +13,7 @@
   <div class="ambient ambient-b"></div>
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <img class="brand-logo" src="/assets/app.png" alt="Bomana">
       <span><strong>BOMANA</strong><small>WEB COCKPIT</small></span>
     </div>
     <div class="connection" id="connectionBadge">
@@ -27,10 +27,12 @@
     <section class="mission-strip card" aria-label="任务摘要">
       <div class="mission-clock">
         <span class="eyebrow" id="phaseLabel">等待游戏</span>
-        <strong id="timerValue">--:--</strong>
+        <div class="timer-display">
+          <div class="mission-progress" aria-hidden="true"><i id="timerProgress"></i></div>
+          <strong id="timerValue">--:--</strong>
+        </div>
         <span id="timerMeta">等待 8111 数据</span>
       </div>
-      <div class="mission-progress"><i id="timerProgress"></i></div>
       <div class="quick-metrics">
         <div><span>IAS</span><strong id="iasValue">---</strong><small>km/h</small></div>
         <div><span>ALT</span><strong id="altValue">---</strong><small>m</small></div>
@@ -49,10 +51,10 @@
 
       <div class="control-action-grid" aria-label="快捷动作">
         <button class="action-tile danger-action" id="resetTimerButton" type="button" disabled>
-          <span>计时器</span><strong>重置计时</strong><small>需要再次确认</small>
+          <span class="action-icon" aria-hidden="true">↺</span><span class="action-copy"><strong>重置计时</strong><small>点击后确认</small></span>
         </button>
         <button class="action-tile" id="cycleCornerButton" type="button" disabled>
-          <span>界面位置</span><strong>切换下一角</strong><small>保存到 Bomana 配置</small>
+          <span class="action-icon" aria-hidden="true">⌗</span><span class="action-copy"><strong>切换窗口角落</strong><small>立即保存</small></span>
         </button>
       </div>
 
@@ -103,12 +105,13 @@
             </select>
           </label>
           <div class="target-setting model-setting">
-            <span>弹道模型</span>
+            <span>缺少官方数据时</span>
             <div class="segmented-control model-control" role="group" aria-label="弹道模型目标状态">
-              <button id="modelCompatibleButton" type="button" aria-pressed="false" disabled>FoxThree 兼容</button>
-              <button id="modelOfficialButton" type="button" aria-pressed="false" disabled>严格官方</button>
+              <button id="modelCompatibleButton" type="button" aria-pressed="false" disabled>缺少官方数据时：使用推测替代</button>
+              <button id="modelOfficialButton" type="button" aria-pressed="false" disabled>缺少官方数据时：不应用模型</button>
             </div>
           </div>
+          <p class="model-note">官方数据始终优先；此选项只影响没有官方包线的武器。</p>
         </fieldset>
       </div>
     </section>
@@ -131,6 +134,7 @@
           <span><i class="legend-airfield"></i>机场</span>
           <span><i class="legend-poi"></i>POI</span>
           <span><i class="legend-trace"></i>Trace back</span>
+          <span><i class="legend-range"></i>当前武器射程</span>
         </div>
       </div>
       <div class="heading-tape-wrap">
@@ -220,10 +224,10 @@
 
   <div class="pairing" id="pairingPanel" role="dialog" aria-modal="true" aria-labelledby="pairingTitle">
     <form id="pairingForm" class="pairing-card">
-      <span class="brand-mark large" aria-hidden="true"><i></i><i></i><i></i></span>
+      <img class="pairing-logo" src="/assets/app.png" alt="Bomana">
       <span class="eyebrow">TRUSTED LAN ONLY</span>
       <h2 id="pairingTitle">连接 Bomana</h2>
-      <p>从 Bomana 托盘菜单查看本次运行的配对码。每次配对会创建独立会话，局域网会话默认只读。</p>
+      <p>在 Bomana 主窗口底部查看本次运行的配对码。每次配对会创建独立会话，局域网会话默认只读。</p>
       <label for="pairingCode">配对码</label>
       <input id="pairingCode" name="pairingCode" inputmode="text" autocomplete="one-time-code" maxlength="9" placeholder="ABCD-EFGH" required>
       <button type="submit">进入驾驶舱</button>
