@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from bomana.config.settings import UIConfig
 from bomana.core.state import Phase, UISnapshot
+from bomana.ui.app import App
 from bomana.ui.dialogs import _ScalableDialogMixin, _ScopedMousewheelBinding
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
@@ -160,6 +161,44 @@ class TkGeometryTests(unittest.TestCase):
 
         self.assertLess(heights[0], heights[1])
         self.assertLess(heights[1], heights[2])
+
+    def test_checklist_uses_full_card_width_and_keeps_markers_separate(self) -> None:
+        card = tk.Frame(self.root, width=640, height=360)
+        card.pack()
+        card.pack_propagate(False)
+        border = tk.Frame(card)
+        content = tk.Frame(card)
+        recalc_calls: list[bool] = []
+        app = SimpleNamespace(
+            root=self.root,
+            scale=1.5,
+            chk_border_frame=border,
+            chk_content_frame=content,
+            chk_items=[
+                "等待发动机转速稳定",
+                "Y66或地图设定打击目标",
+                "降落后Y65关闭座舱盖防噪音",
+            ],
+            _get_font=lambda _name: ("Segoe UI", 12),
+            _recalc_size=lambda *, force_shrink=False: recalc_calls.append(force_shrink),
+        )
+
+        App._rebuild_checklist(app)
+        self.root.update()
+        app._checklist_wrap_updater(SimpleNamespace(width=640))
+        self.root.update()
+
+        rows = content.winfo_children()[1:]
+        self.assertEqual(len(rows), 3)
+        for row, expected_text in zip(rows, app.chk_items, strict=True):
+            marker, item_label = row.winfo_children()
+            self.assertEqual(marker.cget("text"), "○")
+            self.assertEqual(item_label.cget("text"), expected_text)
+            self.assertNotIn("○", item_label.cget("text"))
+            self.assertGreater(int(float(item_label.cget("wraplength"))), 500)
+
+        self.assertTrue(recalc_calls)
+        self.assertTrue(all(recalc_calls))
 
     def test_heading_tape_renders_interest_point_marker(self) -> None:
         tape = HeadingTape(self.root, width=280, height=36, text_scale=1.0)

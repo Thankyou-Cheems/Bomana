@@ -567,7 +567,17 @@ class App:
         self._update_hint()
 
     def _rebuild_checklist(self):
-        """重建检查清单UI（纯展示模式）"""
+        """重建紧凑、响应式的检查清单 UI（纯展示模式）。"""
+        old_bind_id = getattr(self, "_checklist_wrap_bind_id", None)
+        if old_bind_id:
+            with contextlib.suppress(tk.TclError):
+                self.chk_content_frame.unbind("<Configure>", old_bind_id)
+        pending_recalc = getattr(self, "_checklist_recalc_after_id", None)
+        if pending_recalc:
+            with contextlib.suppress(tk.TclError):
+                self.root.after_cancel(pending_recalc)
+        self._checklist_recalc_after_id = None
+
         for widget in self.chk_content_frame.winfo_children():
             widget.destroy()
 
@@ -589,21 +599,75 @@ class App:
 
         font_item = self._get_font("checklist_item")
         pad_x = int(6 * s)
-        wrap_width = int(180 * s)
+        marker_gap = max(3, int(3 * s))
+        initial_wrap_width = int(180 * s)
+        marker_labels: list[tk.Label] = []
+        item_labels: list[tk.Label] = []
 
-        # 使用 Label + ○ 符号（纯展示，无交互）
+        # 标记与正文分列，避免窄宽度下出现“○”独占一行。
         for item in self.chk_items:
-            lbl = tk.Label(
-                self.chk_content_frame,
-                text=f"○ {item}",
+            row = tk.Frame(self.chk_content_frame, bg=Theme.GRAYPILL)
+            row.pack(fill="x", padx=(pad_x, pad_x), pady=0, anchor="w")
+
+            marker = tk.Label(
+                row,
+                text="○",
+                font=font_item,
+                fg=Theme.TEXT_DIM,
+                bg=Theme.GRAYPILL,
+                anchor="n",
+                justify="left",
+            )
+            marker.pack(side="left", anchor="n", padx=(0, marker_gap))
+            marker_labels.append(marker)
+
+            item_label = tk.Label(
+                row,
+                text=item,
                 font=font_item,
                 fg=Theme.TEXT_DIM,
                 bg=Theme.GRAYPILL,
                 anchor="w",
                 justify="left",
-                wraplength=wrap_width,
+                wraplength=initial_wrap_width,
             )
-            lbl.pack(fill="x", padx=(pad_x, pad_x), pady=1, anchor="w")
+            item_label.pack(side="left", fill="x", expand=True, anchor="n")
+            item_labels.append(item_label)
+
+        self._checklist_item_labels = item_labels
+
+        def update_item_wrap(event=None) -> None:
+            width = int(getattr(event, "width", 0) or self.chk_content_frame.winfo_width() or 0)
+            if width <= 1 or not item_labels:
+                return
+            marker_width = max(
+                (marker.winfo_reqwidth() for marker in marker_labels),
+                default=int(16 * s),
+            )
+            wrap_width = max(40, width - (pad_x * 2) - marker_width - marker_gap)
+            changed = False
+            for item_label in item_labels:
+                if int(float(item_label.cget("wraplength") or 0)) != wrap_width:
+                    item_label.configure(wraplength=wrap_width)
+                    changed = True
+
+            if changed:
+                pending = getattr(self, "_checklist_recalc_after_id", None)
+                if pending:
+                    with contextlib.suppress(tk.TclError):
+                        self.root.after_cancel(pending)
+
+                def recalc_after_wrap() -> None:
+                    self._checklist_recalc_after_id = None
+                    self._recalc_size(force_shrink=True)
+
+                self._checklist_recalc_after_id = self.root.after_idle(recalc_after_wrap)
+
+        self._checklist_wrap_updater = update_item_wrap
+        self._checklist_wrap_bind_id = self.chk_content_frame.bind(
+            "<Configure>", update_item_wrap, add="+"
+        )
+        self.chk_content_frame.after_idle(update_item_wrap)
 
     def _init_bindings(self):
         """初始化键盘/鼠标绑定
