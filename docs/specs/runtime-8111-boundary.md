@@ -32,17 +32,20 @@ War Thunder data boundary.
   `/map_obj.json`, `/map_info.json`, and the official tactical-map image
   `/map.img`. The JSON recorder/replayer boundary remains limited to the four
   JSON endpoints and MUST NOT record the image body.
-- `R8111-03`: Bomana must not display player-invisible enemy information,
-  especially reconstructed enemy unit/player marker overlays. UI may use only
-  information currently returned through 8111 and visible in-game or related to
-  the player; a hostile aircraft contact may feed an aggregate two-dimensional
-  weapon estimate only while `/map_obj.json` currently returns that contact and
-  must not be persisted or reconstructed after it disappears.
+- `R8111-03`: Bomana must not reconstruct, infer, or persist player-invisible
+  enemy information. The separate paired Web tactical map may mirror every
+  positioned hostile unit in the latest raw successful `/map_obj.json` sample,
+  and must clear that projection on raw failure or absence from the next sample;
+  these positions must not appear in the desktop HUD or heading tape. A hostile
+  aircraft contact may separately feed the existing aggregate two-dimensional
+  weapon estimate only while `/map_obj.json` currently returns that contact.
 - `R8111-04`: Ownership is fixed: `TelemetryFetcher` owns `/indicators` and
   `/state`; `MapInfoFetcher` owns `/map_info.json`; `MapObjectsFetcher` parses
-  `/map_obj.json` normalized player, map-object, and visible-hostile-aircraft
+  `/map_obj.json` normalized player, map-object, and current hostile-unit
   coordinates only; `MapImageFetcher` owns `/map.img`; `GameLogic` owns map
-  scale semantics, coordinate conversion, and target selection.
+  scale semantics, coordinate conversion, Web tactical projection, and target
+  selection. Only normalized hostile-aircraft contacts are eligible for the
+  existing AAM target-selection path.
 - `R8111-05`: Automated tests must not claim to be real 8111 smoke. Changes to
   telemetry or logic data flow must report whether manual in-game smoke was run.
 - `R8111-06`: Polling defaults are 50 ms in normal mode and 1.25 s while the API
@@ -123,7 +126,8 @@ War Thunder data boundary.
   recorder boundaries, and the replay adapter's lack of network/process paths.
 - [behavioral] `tests/test_telemetry_fetch_result.py` and
   `tests/test_map_objects_contract.py` enforce the current-contact visibility,
-  fetcher, and coordinate ownership boundaries in `R8111-03` and `R8111-04`.
+  hostile-unit classification, fetcher, and coordinate ownership boundaries in
+  `R8111-03` and `R8111-04`.
 - [behavioral] `tests/test_8111_recorder.py` enforces `R8111-10` and `R8111-11`
   with synchronized raw-payload capture, diagnostics, overwrite, timeout, and
   `Ctrl+C` finalization cases.

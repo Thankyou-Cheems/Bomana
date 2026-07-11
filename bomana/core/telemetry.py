@@ -13,6 +13,7 @@ from bomana.config.settings import NetworkConfig
 from bomana.core.state import (
     AirContact,
     Airfield,
+    HostileUnit,
     InterestPoint,
     MapInfo,
     MapObjData,
@@ -705,9 +706,7 @@ class MapObjectsFetcher:
         return fallback[0][2] if len(fallback) == 1 else None
 
     @staticmethod
-    def _is_hostile_aircraft(o: dict) -> bool:
-        if not MapObjectsFetcher._is_aircraft_object(o):
-            return False
+    def _is_hostile_object(o: dict) -> bool:
         side = MapObjectsFetcher._lower_text(o.get("side", o.get("team", o.get("army"))))
         if side in {"enemy", "hostile", "red", "team_b", "2"}:
             return True
@@ -727,12 +726,66 @@ class MapObjectsFetcher:
         return bool(red >= 120 and red >= green + 30 and red >= blue + 30)
 
     @staticmethod
-    def _air_contact_id(o: dict, x: float, y: float, index: int) -> str:
+    def _is_non_unit_map_feature(o: dict) -> bool:
+        if (
+            MapObjectsFetcher._is_interest_point_object(o)
+            or MapObjectsFetcher._is_airfield_object(o)
+            or MapObjectsFetcher._is_zone_object(o)
+        ):
+            return True
+        obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
+        icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
+        feature_tokens = ("capture_zone", "defending_point", "spawn_point", "waypoint")
+        return bool(
+            any(token in obj_type or token in icon for token in feature_tokens)
+            or obj_type.endswith("_point")
+            or "airfield" in obj_type
+            or "runway" in obj_type
+        )
+
+    @staticmethod
+    def _hostile_unit_kind(o: dict) -> str:
+        if MapObjectsFetcher._is_aircraft_object(o):
+            return "aircraft"
+        evidence = " ".join(
+            MapObjectsFetcher._lower_text(o.get(key, ""))
+            for key in ("type", "icon", "class", "category")
+        )
+        ground_tokens = (
+            "ground",
+            "tank",
+            "vehicle",
+            "artillery",
+            "spaa",
+            "sam",
+            "aaa",
+            "armored",
+            "armoured",
+            "bunker",
+        )
+        if any(token in evidence for token in ground_tokens):
+            return "ground"
+        naval_tokens = (
+            "ship",
+            "naval",
+            "boat",
+            "destroyer",
+            "cruiser",
+            "carrier",
+            "frigate",
+            "submarine",
+            "torpedo",
+        )
+        return "naval" if any(token in evidence for token in naval_tokens) else "unit"
+
+    @staticmethod
+    def _hostile_unit_id(o: dict, kind: str, x: float, y: float, index: int) -> str:
         api_id = MapObjectsFetcher._first_text(
             o,
             ("id", "uid", "object_id", "obj_id", "instance_id"),
-        )
-        return f"air_{api_id}" if api_id else f"air_{index}_{x:.6f}_{y:.6f}"
+        )[:64]
+        prefix = f"hostile_{kind}"
+        return f"{prefix}_{api_id}" if api_id else f"{prefix}_{index}_{x:.6f}_{y:.6f}"
 
     @staticmethod
     def _is_airfield_object(o: dict) -> bool:
@@ -806,6 +859,7 @@ class MapObjectsFetcher:
         airfield_index = 1
         interest_point_index = 1
         hostile_air_index = 1
+        hostile_unit_index = 1
         player_object = self._select_player_object(objs)
 
         # 遍历对象
@@ -824,36 +878,56 @@ class MapObjectsFetcher:
                 out.player_dx = self._first_float(o, ("dx", "DX", "vel_x", "vx")) or 0.0
                 out.player_dy = self._first_float(o, ("dy", "DY", "vel_y", "vy")) or 0.0
 
-            elif self._is_hostile_aircraft(o):
+            elif self._is_hostile_object(o) and not self._is_non_unit_map_feature(o):
                 contact_x = self._first_float(o, ("x", "X", "pos_x", "position_x"))
                 contact_y = self._first_float(o, ("y", "Y", "pos_y", "position_y"))
-                if contact_x is None or contact_y is None:
-                    continue
-                contact_dx = self._first_float(o, ("dx", "DX", "vel_x", "vx"))
-                contact_dy = self._first_float(o, ("dy", "DY", "vel_y", "vy"))
                 if (
-                    contact_dx is None
-                    or contact_dy is None
-                    or math.hypot(contact_dx, contact_dy) <= 1e-9
+                    contact_x is None
+                    or contact_y is None
+                    or not 0.0 <= contact_x <= 1.0
+                    or not 0.0 <= contact_y <= 1.0
                 ):
-                    contact_dx = None
-                    contact_dy = None
+                    continue
                 icon = self._first_text(o, ("icon", "class", "category"))
-                name = self._first_text(o, ("name", "label", "title", "callsign")) or icon
-                out.hostile_air_contacts.append(
-                    AirContact(
-                        id=self._air_contact_id(o, contact_x, contact_y, hostile_air_index),
-                        index=hostile_air_index,
+                name = (self._first_text(o, ("name", "label", "title", "callsign")) or icon)[:80]
+                kind = self._hostile_unit_kind(o)
+                unit_id = self._hostile_unit_id(o, kind, contact_x, contact_y, hostile_unit_index)
+                out.hostile_units.append(
+                    HostileUnit(
+                        id=unit_id,
+                        index=hostile_unit_index,
+                        kind=kind,
                         x=contact_x,
                         y=contact_y,
                         name=name,
-                        icon=icon,
-                        color=self._text(o.get("color", "")),
-                        dx=contact_dx,
-                        dy=contact_dy,
+                        icon=icon[:80],
                     )
                 )
-                hostile_air_index += 1
+                if kind == "aircraft":
+                    contact_dx = self._first_float(o, ("dx", "DX", "vel_x", "vx"))
+                    contact_dy = self._first_float(o, ("dy", "DY", "vel_y", "vy"))
+                    if (
+                        contact_dx is None
+                        or contact_dy is None
+                        or math.hypot(contact_dx, contact_dy) <= 1e-9
+                    ):
+                        contact_dx = None
+                        contact_dy = None
+                    out.hostile_air_contacts.append(
+                        AirContact(
+                            id=unit_id,
+                            index=hostile_air_index,
+                            x=contact_x,
+                            y=contact_y,
+                            name=name,
+                            icon=icon,
+                            color=self._text(o.get("color", "")),
+                            dx=contact_dx,
+                            dy=contact_dy,
+                        )
+                    )
+                    hostile_air_index += 1
+                hostile_unit_index += 1
 
             elif self._is_interest_point_object(o):
                 point_x = self._first_float(o, ("x", "X", "pos_x", "position_x"))

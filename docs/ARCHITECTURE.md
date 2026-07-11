@@ -226,7 +226,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - The compact App Web row, tray, or Launcher startup preference can enable exact listeners on every bindable automatically discovered RFC1918 IPv4 address, including simultaneous physical-LAN and overlay-VPN addresses. The single LAN action atomically grants control for later pairings; Bomana does not persist addresses or live authorization, bind `0.0.0.0`, modify Windows Firewall/UPnP, or request elevation for the dashboard.
    - Each process has fresh pairing material. Every successful pairing creates a distinct session token, authorization record, CSRF proof, and bounded idempotency store; pairing redirects away from the code-bearing URL and authenticates later reads with an HttpOnly `SameSite=Strict` cookie.
    - Loopback pairings may receive `control`. Enabling LAN rotates the pairing code and grants `control` only to later LAN pairings; disabling LAN first advances the authorization epoch, invalidates every LAN session, and rotates the code before removing hosts and listeners.
-   - The browser receives the App-published tactical image, ownship, zones, airfields, POIs, Trace back, normalized selected-weapon range radii, status, timer, flight, fuel, navigation, weapon, bombing, checklist, and alert fields permitted by the active `ENABLE_*` profile. Hostile-aircraft contacts, raw 8111 JSON payloads, and diagnostics are excluded.
+   - The browser receives the App-published tactical image, ownship, zones, airfields, POIs, Trace back, every current raw-sample hostile unit, normalized selected-weapon range radii, status, timer, flight, fuel, navigation, weapon, bombing, checklist, and alert fields permitted by the active `ENABLE_*` profile. Hostile units use the explicit aircraft/ground/naval/fallback map kinds in every variant; raw 8111 JSON payloads and diagnostics remain excluded.
    - `POST /api/v1/commands` is the only write route. It requires a current control session, exactly one non-empty same-origin `Origin`, per-session CSRF proof, `application/json` with a declared length of 1..4096 bytes, the shared command schema, and a bounded per-session idempotency key. A valid enqueue returns HTTP 202 with `schema_version: 1`, the idempotency key as `command_id`, `status: "queued"`, and `submitted_revision`; the browser polls `GET /api/v1/control-state` for the later per-session `succeeded` or `rejected` completion, stable reason, submitted revision, and resulting revision.
    - The complete command matrix is exactly `action.reset_timer`,
      `action.cycle_corner`, `state.set_locked`, `state.set_beep_enabled`,
@@ -344,10 +344,12 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   forwarding to 8111.
 - `MapInfoFetcher` owns `/map_info.json` retrieval and cache refresh timing on `GameState.map_info`.
 - `MapObjectsFetcher` owns `/map_obj.json` parsing only. It returns player,
-  currently visible hostile-aircraft contacts, zone, POI, and airfield positions
+  current hostile aircraft/ground/naval/fallback units, zone, POI, and airfield positions
   in the normalized coordinates provided by 8111 and does not accept or
-  interpret `map_info`. It excludes friendly aircraft from fire-control targets
-  and does not persist contacts after 8111 stops returning them. Finite hostile
+  interpret `map_info`. It excludes self/friendly units and map features from
+  the hostile-unit set. `GameLogic` publishes that set only from the latest raw
+  sample, so a raw failure or absence clears it without history reconstruction.
+  Only hostile aircraft enter the separate fire-control contact list. Finite hostile
   `dx`/`dy` values are preserved only on the current contact sample; missing
   motion is not reconstructed from prior responses.
 - `GameLogic` owns coordinate semantics for navigation and weapon targeting. It

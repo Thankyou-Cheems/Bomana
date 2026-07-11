@@ -142,7 +142,7 @@ def _published(*, capabilities: DashboardCapabilities | None = None) -> Publishe
     )
 
 
-def test_dashboard_payload_matches_schema_and_filters_hostile_contacts() -> None:
+def test_dashboard_payload_matches_schema_and_publishes_hostile_units() -> None:
     payload = build_dashboard_payload(_published())
 
     validate_json_schema(payload, SCHEMA, path="dashboard")
@@ -154,8 +154,9 @@ def test_dashboard_payload_matches_schema_and_filters_hostile_contacts() -> None
         "airfield",
         "poi",
         "traceback",
+        "hostile_aircraft",
     }
-    assert "hostile-1" not in json.dumps(payload, ensure_ascii=False)
+    assert "hostile-1" in json.dumps(payload, ensure_ascii=False)
     assert "source_debug" not in payload
     assert "perf_debug" not in payload
     assert payload["map"]["weapon_range"] == {
@@ -200,7 +201,18 @@ def test_disabled_capabilities_do_not_recreate_build_disabled_features() -> None
     assert payload["navigation"]["airfields"] == []
     assert payload["navigation"]["poi"] is None
     assert payload["navigation"]["traceback"] is None
-    assert payload["map"]["points"] == []
+    assert payload["map"]["points"] == [
+        {
+            "id": "hostile-1",
+            "kind": "hostile_aircraft",
+            "x": 0.8,
+            "y": 0.2,
+            "label": "敌机",
+            "color": "enemy",
+            "is_target": False,
+            "is_friendly": False,
+        }
+    ]
     assert payload["fuel"]["return_status"] == "unavailable"
     assert payload["weapon"]["reason"] == "build_disabled"
     assert payload["bombing"]["enabled"] is False

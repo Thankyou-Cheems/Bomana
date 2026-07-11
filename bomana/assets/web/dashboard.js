@@ -820,6 +820,19 @@ function drawMapPoint(ctx, map, point, width, height, ratio) {
   } else if (point.kind === "traceback") {
     ctx.beginPath(); ctx.arc(p.x, p.y, 8 * ratio, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(p.x - 11*ratio,p.y); ctx.lineTo(p.x + 11*ratio,p.y); ctx.moveTo(p.x,p.y-11*ratio); ctx.lineTo(p.x,p.y+11*ratio); ctx.stroke();
+  } else if (point.kind === "hostile_aircraft") {
+    ctx.translate(p.x, p.y);
+    ctx.beginPath(); ctx.moveTo(0, -9*ratio); ctx.lineTo(7*ratio, 7*ratio); ctx.lineTo(0, 4*ratio); ctx.lineTo(-7*ratio, 7*ratio); ctx.closePath(); ctx.stroke();
+  } else if (point.kind === "hostile_ground") {
+    const s = 7 * ratio;
+    ctx.strokeRect(p.x - s, p.y - s, s * 2, s * 2);
+    ctx.beginPath(); ctx.moveTo(p.x - s, p.y); ctx.lineTo(p.x + s, p.y); ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x, p.y + s); ctx.stroke();
+  } else if (point.kind === "hostile_naval") {
+    const s = 8 * ratio;
+    ctx.beginPath(); ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x + s, p.y); ctx.lineTo(p.x + s*.5, p.y + s*.6); ctx.lineTo(p.x - s*.5, p.y + s*.6); ctx.lineTo(p.x - s, p.y); ctx.closePath(); ctx.stroke();
+  } else if (point.kind === "hostile_unit") {
+    const s = 7 * ratio;
+    ctx.beginPath(); ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x + s, p.y); ctx.lineTo(p.x, p.y + s); ctx.lineTo(p.x - s, p.y); ctx.closePath(); ctx.stroke();
   }
   if (point.is_target || state.zoom >= 1.7 || point.kind === "traceback") {
     ctx.font = `${9 * ratio}px Segoe UI`;

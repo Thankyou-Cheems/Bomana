@@ -222,6 +222,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .legend-airfield { color: var(--cyan); width: 10px !important; height: 3px !important; }
 .legend-poi { color: var(--red); }
 .legend-trace { color: var(--violet); border-radius: 50%; }
+.legend-hostile { color: var(--red); transform: rotate(45deg); background: rgba(255,112,120,.22); }
 .legend-range { color: var(--blue); border-radius: 50%; background: rgba(112,183,255,.14); }
 .heading-tape-wrap { height: 44px; margin-top: 9px; border: 1px solid var(--line); border-radius: 11px; background: rgba(5,14,25,.55); overflow: hidden; }
 #headingTape { width: 100%; height: 100%; }

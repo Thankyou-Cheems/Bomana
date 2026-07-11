@@ -1,4 +1,4 @@
-# enforces: docs/specs/web-dashboard.md WDB-01..WDB-09 WDB-11..WDB-18 WDB-20..WDB-50
+# enforces: docs/specs/web-dashboard.md WDB-01..WDB-09 WDB-11..WDB-18 WDB-20..WDB-51
 # enforces: docs/specs/threading-ui-contract.md THREAD-10..THREAD-13
 
 from __future__ import annotations
@@ -413,13 +413,21 @@ def test_lan_and_tray_paths_use_auto_discovery_and_one_control_action() -> None:
     assert "keeps LAN sessions view-only unless control is explicitly enabled" not in readme
 
 
-def test_map_projection_allowlist_excludes_hostile_contacts_and_raw_payloads() -> None:
+def test_map_projection_allowlist_includes_current_hostile_units_not_raw_payloads() -> None:
     assert 'allowed.update(("poi", "traceback"))' in SNAPSHOT
     assert 'allowed.add("zone")' in SNAPSHOT
     assert 'allowed.add("airfield")' in SNAPSHOT
+    assert "HOSTILE_MAP_KINDS" in SNAPSHOT
+    assert '"hostile_aircraft"' in SNAPSHOT
+    assert '"hostile_ground"' in SNAPSHOT
+    assert '"hostile_naval"' in SNAPSHOT
+    assert '"hostile_unit"' in SNAPSHOT
     assert "hostile_air_contacts" not in SNAPSHOT
     assert "source_debug" not in SNAPSHOT
     assert "perf_debug" not in SNAPSHOT
+    assert "hostile_aircraft" in JS
+    assert "hostile_ground" in JS
+    assert "hostile_naval" in JS
 
 
 def test_routes_auth_headers_and_no_cors_are_closed_by_construction() -> None:

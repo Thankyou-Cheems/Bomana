@@ -17,7 +17,7 @@ suite is not evidence that any scenario below was performed.
 - 准备两个相互隔离的桌面浏览器 profile，以及连接到同一可信局域网的真实
   手机。不要在记录中保存配对码、Cookie、CSRF 或幂等键。
 - 打包检查使用真实 Launcher `3.1.0` 与
-  `Bomana_app_<Variant>_v8.2.0.zip`，不要用源码目录代替。
+  `Bomana_app_<Variant>_v8.3.0.zip`，不要用源码目录代替。
 - 如需源码对照，使用当前 PowerShell 进程内的显式开发标记：
 
   ```powershell
@@ -125,7 +125,7 @@ Bomana 本身不新增规则、不触发 UAC，也不开放公用网络规则。
 
 ### WDB-M08 三通道打包资源 | Packaged variants and offline assets
 
-分别从 Enhanced、Standard、Lite 的真实 App 8.2.0 包启动；断开外网后打开
+分别从 Enhanced、Standard、Lite 的真实 App 8.3.0 包启动；断开外网后打开
 页面并查看浏览器 Network 面板。
 
 预期：HTML/CSS/JS/SVG、项目 PNG 标识与字体均从 Bomana 自身地址加载，无 CDN、远程字体、
@@ -140,7 +140,9 @@ Standard 不发布武器选择/模型或武器解算面板目标；Lite 仍可�
 坠毁与同局复活；同时从本机页面切换一个面板、选择一个兼容武器并更改模型。
 
 预期：页面与 Bomana 主界面双向保持一致。地图在官方缩略图上显示己机、战区、
-机场、POI、Trace back 与当前武器射程，不出现敌机标记或原始 8111 JSON；
+机场、POI、Trace back、当前武器射程，以及原始 `/map_obj.json` 当前样本里的
+敌方飞机、地面、海上和未知单位；蓝方/己方单位与地图要素不被误判。单位从下
+一原始样本消失或采样失败时立即移除，桌面 HUD/航向带不出现这些标记；
 浏览器只请求 App 的配对后图片路由，不直接请求 8111。
 当前机型不兼容的武器在 Tk 执行前被拒绝。8111 断开时页面诚实进入不可用/
 待机状态，不显示伪造数据，也不扩大 Web 控制权限。
@@ -174,7 +176,7 @@ auto-open 在 autostart 关闭时不单独启动服务。退出后本机和 LAN 
 
 在隔离副本中运行 packaged-launcher smoke，并人工核对以下结果：
 
-- Launcher 3.1.0 + App 8.2.0 正常交接，App 在运行时初始化前拿到严格
+- Launcher 3.1.0 + App 8.3.0 正常交接，App 在运行时初始化前拿到严格
   `BOMANA_LAUNCHER_VERSION`；
 - 缺失、畸形或 `2.9.9` 的 Launcher 身份被打包 App 拒绝，即使设置
   `BOMANA_SOURCE_DEVELOPMENT=1` 也不能绕过；

@@ -12,6 +12,7 @@ from bomana.core import navigation
 from bomana.core.logic import GameLogic
 from bomana.core.state import (
     AirContact,
+    HostileUnit,
     InterestPoint,
     MapInfo,
     MapObjData,
@@ -31,7 +32,7 @@ class FakeHttp:
 
 
 class MapObjectsContractTests(unittest.TestCase):
-    def test_fetch_prefers_yellow_ownship_and_keeps_only_hostile_aircraft(self):
+    def test_fetch_prefers_yellow_ownship_and_classifies_all_hostile_units(self):
         fetcher = MapObjectsFetcher(
             FakeHttp(
                 [
@@ -77,6 +78,41 @@ class MapObjectsContractTests(unittest.TestCase):
                         "x": 0.8,
                         "y": 0.8,
                     },
+                    {
+                        "type": "ground_model",
+                        "icon": "LightTank",
+                        "color": "red",
+                        "x": 0.7,
+                        "y": 0.4,
+                    },
+                    {
+                        "type": "naval_model",
+                        "icon": "Destroyer",
+                        "side": "enemy",
+                        "x": 0.3,
+                        "y": 0.7,
+                    },
+                    {
+                        "type": "unknown_model",
+                        "side": "hostile",
+                        "name": "Unknown contact",
+                        "x": 0.1,
+                        "y": 0.9,
+                    },
+                    {
+                        "type": "ground_model",
+                        "icon": "MediumTank",
+                        "color": "blue",
+                        "x": 0.1,
+                        "y": 0.2,
+                    },
+                    {
+                        "type": "capture_zone",
+                        "icon": "capture_zone",
+                        "color": "red",
+                        "x": 0.5,
+                        "y": 0.5,
+                    },
                 ]
             )
         )
@@ -93,6 +129,15 @@ class MapObjectsContractTests(unittest.TestCase):
             (data.hostile_air_contacts[0].dx, data.hostile_air_contacts[0].dy),
             (0.6, -0.8),
         )
+        self.assertEqual(
+            [unit.kind for unit in data.hostile_units],
+            ["aircraft", "ground", "naval", "unit"],
+        )
+        self.assertEqual(
+            [(unit.x, unit.y) for unit in data.hostile_units],
+            [(0.6, 0.1), (0.7, 0.4), (0.3, 0.7), (0.1, 0.9)],
+        )
+        self.assertEqual(data.hostile_air_contacts[0].id, data.hostile_units[0].id)
 
     def test_fetch_prefers_explicit_self_over_color_heuristic(self):
         fetcher = MapObjectsFetcher(
@@ -139,6 +184,34 @@ class MapObjectsContractTests(unittest.TestCase):
 
         self.assertEqual(len(first.hostile_air_contacts), 1)
         self.assertEqual(second.hostile_air_contacts, [])
+        self.assertEqual(len(first.hostile_units), 1)
+        self.assertEqual(second.hostile_units, [])
+
+    def test_snapshot_projects_only_current_hostile_units_to_tactical_map(self):
+        logic = GameLogic()
+        with logic._lock:
+            logic.state.current_hostile_units = [
+                HostileUnit(
+                    id="hostile-ground-1",
+                    index=1,
+                    kind="ground",
+                    x=0.25,
+                    y=0.75,
+                    name="LightTank",
+                )
+            ]
+
+        points = {point.id: point for point in logic.snapshot().map_points}
+        self.assertEqual(points["hostile-ground-1"].kind, "hostile_ground")
+        self.assertEqual(points["hostile-ground-1"].label, "LightTank")
+        self.assertEqual(points["hostile-ground-1"].color, "enemy")
+
+        with logic._lock:
+            logic.state.current_hostile_units = []
+        self.assertNotIn(
+            "hostile-ground-1",
+            {point.id for point in logic.snapshot().map_points},
+        )
 
     def test_real_fixture_blue_squad_player_does_not_overwrite_yellow_ownship(self):
         fixture = Path(__file__).parent / "fixtures/8111/full_sortie_20260710.jsonl.gz"
@@ -179,6 +252,50 @@ class MapObjectsContractTests(unittest.TestCase):
         data = MapObjectsFetcher(FakeHttp([yellow_player, blue_player])).fetch(Budget(1.0))
         self.assertEqual(data.player_pos, expected_position)
         self.assertEqual(data.hostile_air_contacts, [])
+
+    def test_real_fixture_red_ground_models_are_units_not_map_features(self):
+        fixture = Path(__file__).parent / "fixtures/8111/full_sortie_20260710.jsonl.gz"
+        payload = None
+        with gzip.open(fixture, "rt", encoding="utf-8") as stream:
+            for line in stream:
+                record = json.loads(line)
+                response = record.get("responses", {}).get("/map_obj.json", {})
+                candidate = response.get("payload") if response.get("ok") else None
+                has_ownship = isinstance(candidate, list) and any(
+                    isinstance(item, dict)
+                    and item.get("type") == "aircraft"
+                    and item.get("icon") == "Player"
+                    and item.get("color") == "#faC81E"
+                    for item in candidate
+                )
+                has_hostile_ground = isinstance(candidate, list) and any(
+                    isinstance(item, dict)
+                    and item.get("type") == "ground_model"
+                    and item.get("color") == "#f00C00"
+                    and 0.0 <= item.get("x", -1.0) <= 1.0
+                    and 0.0 <= item.get("y", -1.0) <= 1.0
+                    for item in candidate
+                )
+                if has_ownship and has_hostile_ground:
+                    payload = candidate
+                    break
+
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        expected_ground_count = sum(
+            1
+            for item in payload
+            if isinstance(item, dict)
+            and item.get("type") == "ground_model"
+            and item.get("color") == "#f00C00"
+            and 0.0 <= item.get("x", -1.0) <= 1.0
+            and 0.0 <= item.get("y", -1.0) <= 1.0
+        )
+        data = MapObjectsFetcher(FakeHttp(payload)).fetch(Budget(1.0))
+
+        self.assertEqual(len(data.hostile_units), expected_ground_count)
+        self.assertEqual({unit.kind for unit in data.hostile_units}, {"ground"})
+        self.assertGreater(len(data.zones), 0)
 
     def test_fetch_parses_normalized_player_zones_and_airfields(self):
         fetcher = MapObjectsFetcher(

@@ -162,6 +162,19 @@ HostileAirContact = AirContact
 
 
 @dataclass(frozen=True)
+class HostileUnit:
+    """Current positioned hostile unit from one raw /map_obj.json response."""
+
+    id: str
+    index: int
+    kind: str  # aircraft | ground | naval | unit
+    x: float
+    y: float
+    name: str = ""
+    icon: str = ""
+
+
+@dataclass(frozen=True)
 class WeaponTarget:
     """Prepared 2D fire-control target; never represents a verified game lock."""
 
@@ -180,7 +193,7 @@ class WeaponTarget:
 class MapObjData:
     """地图对象数据（来自/map_obj.json）
 
-    包含玩家、战区、机场和自然导航兴趣点的所有信息。
+    包含玩家、战区、机场、自然导航兴趣点和当前敌方单位信息。
     """
 
     ok: bool = False  # 请求成功
@@ -195,6 +208,7 @@ class MapObjData:
     airfields: list[Airfield] = field(default_factory=list)  # 机场列表
     interest_points: list[InterestPoint] = field(default_factory=list)  # 兴趣点列表
     hostile_air_contacts: list[AirContact] = field(default_factory=list)
+    hostile_units: list[HostileUnit] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -553,6 +567,7 @@ class GameState:
     # 缓存的数据
     last_tel: TelemetryData | None = None  # 上一帧遥测数据
     last_map: MapObjData | None = None  # 上一帧地图数据
+    current_hostile_units: list[HostileUnit] = field(default_factory=list)
     map_info: MapInfo | None = None  # 地图元数据（缓存）
 
     # 导航状态

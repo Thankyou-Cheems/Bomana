@@ -266,6 +266,7 @@ class GameLogic:
                 api_up = bool(raw_api_up or used_tel_fallback or used_map_fallback)
                 s.last_tel = tel
                 s.last_map = mp
+                s.current_hostile_units = list(raw_mp.hostile_units) if raw_mp.ok else []
                 self._update_attitude_confidence_locked(raw_tel, now)
                 self._update_gear_state_locked(tel, now)
 
@@ -1566,6 +1567,7 @@ class GameLogic:
             nav_ground_speed = nav.ground_speed
             nav_should_play_destroyed_sound = nav.should_play_destroyed_sound
             traceback_site = s.traceback.confirmed_site
+            current_hostile_units = tuple(s.current_hostile_units)
             map_player_pos = tuple(mp.player_pos) if mp.player_pos is not None else None
             map_points: list[TacticalMapPoint] = []
             for zone in nav_zones:
@@ -1624,6 +1626,24 @@ class GameLogic:
                         label="上次坠毁点",
                         color="traceback",
                         is_target=True,
+                    )
+                )
+            hostile_kind_labels = {
+                "aircraft": "敌机",
+                "ground": "敌方地面单位",
+                "naval": "敌方海上单位",
+                "unit": "敌方单位",
+            }
+            for unit in current_hostile_units:
+                fallback_label = hostile_kind_labels.get(unit.kind, "敌方单位")
+                map_points.append(
+                    TacticalMapPoint(
+                        id=unit.id,
+                        kind=f"hostile_{unit.kind}",
+                        x=unit.x,
+                        y=unit.y,
+                        label=unit.name or f"{fallback_label} #{unit.index}",
+                        color="enemy",
                     )
                 )
 

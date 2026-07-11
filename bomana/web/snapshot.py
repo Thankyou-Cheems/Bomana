@@ -26,6 +26,9 @@ from bomana.core.state import (
 
 SCHEMA_VERSION = 1
 MAX_MAP_IMAGE_BYTES = 4 * 1024 * 1024
+HOSTILE_MAP_KINDS = frozenset(
+    ("hostile_aircraft", "hostile_ground", "hostile_naval", "hostile_unit")
+)
 
 
 @dataclass(frozen=True)
@@ -196,7 +199,7 @@ def _map_point(point: TacticalMapPoint) -> dict[str, Any]:
 def _filtered_map_points(
     points: tuple[TacticalMapPoint, ...], capabilities: DashboardCapabilities
 ) -> list[dict[str, Any]]:
-    allowed: set[str] = set()
+    allowed: set[str] = set(HOSTILE_MAP_KINDS)
     if capabilities.navigation:
         allowed.update(("poi", "traceback"))
     if capabilities.navigation and ENABLE_ZONES:
@@ -265,7 +268,7 @@ def _alerts(snapshot: UISnapshot, capabilities: DashboardCapabilities) -> list[d
 
 
 def build_dashboard_payload(published: PublishedDashboardSnapshot) -> dict[str, Any]:
-    """Build the schema-backed response without raw 8111 or hostile contacts."""
+    """Build the schema-backed response without raw 8111 payloads."""
 
     snap = published.snapshot
     capabilities = published.capabilities

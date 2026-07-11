@@ -45,8 +45,8 @@ access, packaging, threading, privacy, and tray lifecycle.
   `docs/specs/schemas/web-dashboard-snapshot.schema.json`.
 - `WDB-07`: The map projection MUST be limited to the App-published tactical
   image, ownship, zones, airfields, POIs, current selected targets, Trace back,
-  and the selected weapon's normalized minimum/maximum range radii;
-  hostile-aircraft contacts and raw JSON map payloads MUST NOT be published.
+  current hostile units, and the selected weapon's normalized minimum/maximum
+  range radii; raw JSON map payloads MUST NOT be published.
 - `WDB-08`: Every process MUST generate fresh high-entropy pairing material, and
   every rotation MUST immediately invalidate the preceding pairing code.
 - `WDB-09`: Every successful pairing MUST create a distinct session token,
@@ -179,6 +179,24 @@ access, packaging, threading, privacy, and tray lifecycle.
   mutation, MUST accept exactly one integer `minutes` from 1 through 180, and
   MUST persist and publish the explicit target state before successful
   completion.
+- `WDB-51`: Every finite hostile unit with normalized map coordinates in the latest raw successful
+  `/map_obj.json` sample MUST be projected to the Web tactical map as exactly
+  one of `hostile_aircraft`, `hostile_ground`, `hostile_naval`, or
+  `hostile_unit`. Map features and friendly/self units MUST remain excluded from
+  this projection. A failed raw sample or the next successful sample without a
+  unit MUST remove it; Bomana MUST NOT persist, reconstruct, infer, or project
+  these positions into the desktop HUD or heading tape. This projection MUST be
+  available in every App variant independently of navigation and weapon feature
+  flags.
+
+## Hostile Unit Projection Matrix
+
+| Normalized map kind | Current 8111 object evidence | Browser marker | Other consumers |
+|---|---|---|---|
+| `hostile_aircraft` | Hostile side/color plus aircraft type/icon | Red directional aircraft marker | Existing AAM selection may separately consume only `hostile_air_contacts`; this map projection does not broaden targeting. |
+| `hostile_ground` | Hostile side/color plus ground/unit type or icon | Red square/cross marker | Web tactical map only. |
+| `hostile_naval` | Hostile side/color plus naval/ship type or icon | Red hull/diamond marker | Web tactical map only. |
+| `hostile_unit` | Hostile side/color on a positioned object that is not self, friendly, or a recognized map feature | Red diamond fallback marker | Web tactical map only; no guessed platform category. |
 
 ## Complete Action Matrix
 
@@ -200,13 +218,14 @@ Persistence and stable completion-reason semantics are governed by `WDB-41` and
 ## Contract Coverage
 
 - [static] `tests/contracts/test_web_dashboard_contract.py` enforces
-  `WDB-01..WDB-09`, `WDB-11..WDB-18`, and `WDB-20..WDB-50` through ownership
+  `WDB-01..WDB-09`, `WDB-11..WDB-18`, and `WDB-20..WDB-51` through ownership
   scans, forbidden-path scans, schema
   self-checks, the exhaustive action discriminants, packaged assets, and
   response shapes.
 - [behavioral] `tests/test_web_dashboard_presenter.py` enforces `WDB-04`,
   `WDB-06`, `WDB-07`, `WDB-14`, and `WDB-17` with schema-valid finite snapshot
-  projection, feature gating, and hostile/raw-field exclusion.
+  projection, feature gating, current hostile-unit publication, and raw-field
+  exclusion.
 - [behavioral] `tests/test_web_dashboard_server.py` enforces `WDB-01..WDB-03`,
   `WDB-08..WDB-16`, `WDB-20..WDB-31`, `WDB-33`, `WDB-36`, `WDB-39`, and
   `WDB-40` with

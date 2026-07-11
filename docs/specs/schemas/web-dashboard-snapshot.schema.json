@@ -260,7 +260,18 @@
       "required": ["id", "kind", "x", "y", "label", "color", "is_target", "is_friendly"],
       "properties": {
         "id": {"type": "string"},
-        "kind": {"enum": ["zone", "airfield", "poi", "traceback"]},
+        "kind": {
+          "enum": [
+            "zone",
+            "airfield",
+            "poi",
+            "traceback",
+            "hostile_aircraft",
+            "hostile_ground",
+            "hostile_naval",
+            "hostile_unit"
+          ]
+        },
         "x": {"type": "number", "minimum": 0, "maximum": 1},
         "y": {"type": "number", "minimum": 0, "maximum": 1},
         "label": {"type": "string"},
