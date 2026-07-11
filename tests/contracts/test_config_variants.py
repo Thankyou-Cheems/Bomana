@@ -1,4 +1,4 @@
-# enforces: docs/specs/config-variants.md CFG-01..CFG-04 CFG-06..CFG-13
+# enforces: docs/specs/config-variants.md CFG-01..CFG-04 CFG-06..CFG-14
 
 from __future__ import annotations
 
@@ -187,7 +187,7 @@ def test_weapon_solution_uses_legacy_bombing_gate_and_enhanced_packaging() -> No
     assert "weapon_fire_control.json" in shell
 
 
-def test_launcher_web_preferences_are_an_exact_two_boolean_allowlist() -> None:
+def test_launcher_web_preferences_are_an_exact_three_boolean_allowlist() -> None:
     launcher = (ROOT / "launcher.pyw").read_text(encoding="utf-8")
     bootstrap = (ROOT / "launcher/bootstrap.py").read_text(encoding="utf-8")
     combined = "\n".join((launcher, bootstrap))
@@ -196,14 +196,23 @@ def test_launcher_web_preferences_are_an_exact_two_boolean_allowlist() -> None:
     assert "web_dashboard_auto_open" in launcher
     assert "web_dashboard_autostart" in bootstrap
     assert "web_dashboard_auto_open" in bootstrap
+    assert "web_dashboard_lan_enabled" in launcher
+    assert "web_dashboard_lan_enabled" in bootstrap
     for forbidden in (
         "web_dashboard_host",
         "web_dashboard_port",
         "web_dashboard_pairing",
-        "web_dashboard_lan_enabled",
         "web_dashboard_lan_control",
         "web_dashboard_session",
         "web_dashboard_csrf",
         "web_dashboard_authorization_epoch",
     ):
         assert forbidden not in combined
+
+    quickstart = (ROOT / "docs/QUICKSTART.md").read_text(encoding="utf-8")
+    assert "Launcher persists only Web autostart" in quickstart
+    assert "LAN access/control startup (off)" in quickstart
+    assert "persist only loopback Web autostart" not in quickstart
+
+    assert "DEFAULT_WEB_DASHBOARD_LAN_ENABLED = False" in launcher
+    assert "BOMANA_WEB_DASHBOARD_LAN_ENABLED" in bootstrap

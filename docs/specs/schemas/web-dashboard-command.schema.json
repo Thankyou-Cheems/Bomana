@@ -9,6 +9,7 @@
     {"$ref": "#/$defs/setBeepEnabled"},
     {"$ref": "#/$defs/setZoneSoundEnabled"},
     {"$ref": "#/$defs/setPanelVisibility"},
+    {"$ref": "#/$defs/setTimerCycleMinutes"},
     {"$ref": "#/$defs/selectWeapon"},
     {"$ref": "#/$defs/setBallisticModel"}
   ],
@@ -80,6 +81,16 @@
           ]
         },
         "enabled": {"type": "boolean"}
+      }
+    },
+    "setTimerCycleMinutes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "minutes"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "config.set_timer_cycle_minutes"},
+        "minutes": {"type": "integer", "minimum": 1, "maximum": 180}
       }
     },
     "selectWeapon": {

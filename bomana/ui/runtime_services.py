@@ -19,6 +19,7 @@ from bomana.config.feature_profile import (
 )
 from bomana.config.settings import (
     FileConfig,
+    GameConfig,
     HotkeyConfig,
     HUDConfig,
     PanelConfig,
@@ -102,6 +103,15 @@ class AppRuntimeServices:
             "BOMANA_WEB_DASHBOARD_AUTO_OPEN",
             default=False,
         )
+
+    def web_dashboard_lan_enabled(self) -> bool:
+        return self._launcher_web_preference(
+            "BOMANA_WEB_DASHBOARD_LAN_ENABLED",
+            default=False,
+        )
+
+    def dashboard_lan_autostart_enabled(self) -> bool:
+        return self.web_dashboard_lan_enabled()
 
     def _queue_web_command(self, envelope: WebCommandEnvelope) -> bool:
         dispatcher = self._web_command_dispatcher
@@ -197,20 +207,6 @@ class AppRuntimeServices:
             return
         dashboard.disable_lan()
         log_event("web_dashboard_lan_disabled")
-
-    def enable_dashboard_lan_control(self) -> None:
-        dashboard = self.dashboard
-        if dashboard is None or not dashboard.is_running or not dashboard.lan_enabled:
-            raise DashboardServerError("请先为本次运行开启局域网访问")
-        dashboard.enable_lan_control()
-        log_event("web_dashboard_lan_control_enabled")
-
-    def disable_dashboard_lan_control(self) -> None:
-        dashboard = self.dashboard
-        if dashboard is None or not dashboard.lan_control_enabled:
-            return
-        dashboard.disable_lan_control()
-        log_event("web_dashboard_lan_control_disabled")
 
     def _dashboard_lan_share_available(self, _item: Any | None = None) -> bool:
         dashboard = self.dashboard
@@ -485,6 +481,15 @@ class AppRuntimeServices:
         def do_speed_history(icon, item):
             app.dispatcher.post(app._toggle_speed_history_mode)
 
+        def do_timer_target(minutes: int):
+            def apply_target(icon, item):
+                app.dispatcher.post(app._set_timer_cycle_minutes, minutes)
+
+            return apply_target
+
+        def do_custom_timer(icon, item):
+            app.dispatcher.post(app._prompt_timer_cycle_minutes)
+
         def do_edit_checklist(icon, item):
             app.dispatcher.post(app._edit_checklist)
 
@@ -505,9 +510,6 @@ class AppRuntimeServices:
 
         def do_toggle_dashboard_lan(icon, item):
             app.dispatcher.post(app._toggle_web_dashboard_lan)
-
-        def do_toggle_dashboard_lan_control(icon, item):
-            app.dispatcher.post(app._toggle_web_dashboard_lan_control)
 
         def do_copy_dashboard_link(icon, item):
             app.dispatcher.post(app._copy_web_dashboard_link)
@@ -533,8 +535,25 @@ class AppRuntimeServices:
         def is_speed_history_mode(item):
             return PanelConfig.speed_history_mode
 
+        timer_menu_items = [
+            pystray.MenuItem(
+                f"{minutes} 分钟",
+                do_timer_target(minutes),
+                checked=lambda _item, target=minutes: GameConfig.cycle_minutes() == target,
+            )
+            for minutes in (15, 30, 45, 60)
+        ]
+        timer_menu_items.extend(
+            (pystray.Menu.SEPARATOR, pystray.MenuItem("自定义…", do_custom_timer))
+        )
+        timer_menu = pystray.Menu(*timer_menu_items)
+
         menu_items = [
             pystray.MenuItem("立即重置计时器", do_reset),
+            pystray.MenuItem(
+                lambda _item: f"计时周期 · {GameConfig.cycle_minutes()} 分钟",
+                timer_menu,
+            ),
             pystray.MenuItem(f"锁定/解锁 ({HotkeyConfig.KEY_LOCK})", do_lock, checked=is_locked),
             self._build_hotkey_broker_tray_item(),
             pystray.MenuItem(f"切换角落 ({HotkeyConfig.KEY_CORNER})", do_corner),
@@ -562,20 +581,12 @@ class AppRuntimeServices:
         dashboard_menu = pystray.Menu(
             pystray.MenuItem("打开本机页面", do_open_dashboard),
             pystray.MenuItem(
-                "允许局域网访问（本次运行）",
+                "开启局域网访问与控制（本次运行）",
                 do_toggle_dashboard_lan,
                 checked=lambda _item: bool(
                     self.dashboard is not None and self.dashboard.lan_enabled
                 ),
                 enabled=dashboard_is_ready,
-            ),
-            pystray.MenuItem(
-                "允许局域网控制（本次运行）",
-                do_toggle_dashboard_lan_control,
-                checked=lambda _item: bool(
-                    self.dashboard is not None and self.dashboard.lan_control_enabled
-                ),
-                enabled=self._dashboard_lan_share_available,
             ),
             pystray.MenuItem(
                 "复制手机访问链接",

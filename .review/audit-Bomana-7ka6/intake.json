@@ -1,0 +1,229 @@
+{
+  "version": 3,
+  "generated_at": "2026-07-11T17:04:17+00:00",
+  "root": "D:\\Dev\\Bomana",
+  "state_dir": ".review/audit-Bomana-7ka6",
+  "review_scope": {
+    "source": "git-base:24456ca",
+    "base": "24456ca",
+    "paths": [],
+    "candidate_tests": []
+  },
+  "size": {
+    "code_files": 148,
+    "code_lines": 54757,
+    "test_files": 67,
+    "todo_markers": 0
+  },
+  "languages": {
+    "python": 52909,
+    "javascript": 1129,
+    "rust": 541,
+    "shell": 178
+  },
+  "primary_language": "python",
+  "configs": [
+    {
+      "kind": "manifest",
+      "tool": "python",
+      "path": "pyproject.toml"
+    },
+    {
+      "kind": "lockfile",
+      "tool": "uv",
+      "path": "uv.lock"
+    },
+    {
+      "kind": "lockfile",
+      "tool": "cargo",
+      "path": "native/hotkey_broker/Cargo.lock"
+    },
+    {
+      "kind": "manifest",
+      "tool": "cargo",
+      "path": "native/hotkey_broker/Cargo.toml"
+    }
+  ],
+  "package_json": [],
+  "declared_checks": [
+    {
+      "kind": "lint",
+      "name": "config:ruff",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "ruff",
+        "check",
+        "."
+      ],
+      "source": "pyproject.toml",
+      "priority": 80,
+      "origin": "configured-fallback",
+      "id": "D-001"
+    },
+    {
+      "kind": "test",
+      "name": "config:pytest",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "pytest",
+        "-q"
+      ],
+      "source": "pyproject.toml",
+      "priority": 80,
+      "origin": "configured-fallback",
+      "id": "D-002"
+    }
+  ],
+  "check_capability": [
+    {
+      "kind": "lint",
+      "tool": "ruff"
+    },
+    {
+      "kind": "test",
+      "tool": "pytest"
+    }
+  ],
+  "check_kinds": [
+    "lint",
+    "test"
+  ],
+  "ci_commands_observed": [],
+  "entry_points": [
+    "bomana/ui/app.py",
+    "bomana/web/server.py",
+    "native/hotkey_broker/src/main.rs"
+  ],
+  "largest_files": [
+    {
+      "lines": 3426,
+      "path": "bomana/ui/dialogs.py"
+    },
+    {
+      "lines": 2382,
+      "path": "bomana/ui/app.py"
+    },
+    {
+      "lines": 1940,
+      "path": "bomana/core/logic.py"
+    },
+    {
+      "lines": 1425,
+      "path": "bomana/config/settings.py"
+    },
+    {
+      "lines": 1372,
+      "path": "tools/weapon_fire_control_extractor.py"
+    },
+    {
+      "lines": 1275,
+      "path": "bomana/ui/main_window.py"
+    },
+    {
+      "lines": 1242,
+      "path": "bomana/ui/widgets.py"
+    },
+    {
+      "lines": 1236,
+      "path": "tests/test_launcher_update_service.py"
+    },
+    {
+      "lines": 1203,
+      "path": "bomana/web/server.py"
+    },
+    {
+      "lines": 1035,
+      "path": "bomana/assets/web/dashboard.js"
+    },
+    {
+      "lines": 1034,
+      "path": "bomana/ui/hud_overlay.py"
+    },
+    {
+      "lines": 928,
+      "path": "tests/test_web_dashboard_server.py"
+    },
+    {
+      "lines": 928,
+      "path": "bomana/ui/runtime_services.py"
+    },
+    {
+      "lines": 927,
+      "path": "bomana/core/telemetry.py"
+    },
+    {
+      "lines": 890,
+      "path": "tests/test_ui_app_config.py"
+    }
+  ],
+  "possible_hardcoded_secrets": [
+    "tests/test_ui_app_config.py"
+  ],
+  "git": {
+    "is_repo": true,
+    "head": "24456ca",
+    "branch": "main",
+    "dirty_files": 59,
+    "recent_commits": [
+      "24456ca feat(cockpit): polish shared web and app experience",
+      "6f94803 feat: add authenticated Web controls and Launcher 3",
+      "c0bbaba docs: remove redundant session artifacts",
+      "ff07afd feat(web): add secure local and LAN Web Cockpit",
+      "ae85c1c fix(checklist): use responsive compact item rows",
+      "48371fa feat(tactical): add weapon and recovery cues",
+      "e6a3302 feat(weapons): use conditional Datamine launch envelopes",
+      "fd8dfd4 feat(weapons): add datamine-backed fire-control cues",
+      "27e8c1a chore(review): record accepted broker elevation risk",
+      "d14428e feat(replay): track real 8111 full-sortie fixture"
+    ],
+    "base": "24456ca",
+    "scope_source": "git-base:24456ca",
+    "changed_files": [],
+    "diff_stat": []
+  },
+  "sdd": {
+    "agents_md": true,
+    "spec_files": [
+      "docs/specs/config-variants.md",
+      "docs/specs/navigation-cues.md",
+      "docs/specs/release-signing.md",
+      "docs/specs/runtime-8111-boundary.md",
+      "docs/specs/startup-elevation.md",
+      "docs/specs/testing-quality-gates.md",
+      "docs/specs/threading-ui-contract.md",
+      "docs/specs/timer-cycle.md",
+      "docs/specs/ui-presenter-boundary.md",
+      "docs/specs/version-compatibility.md",
+      "docs/specs/weapon-fire-control.md",
+      "docs/specs/web-dashboard.md"
+    ],
+    "clause_prefixes": [
+      "CFG",
+      "COMPAT",
+      "ELEV",
+      "HOTKEY",
+      "NAVCUE",
+      "PRES",
+      "QG",
+      "R8111",
+      "SIGN",
+      "THREAD",
+      "TIMER",
+      "WDB",
+      "WFC"
+    ],
+    "clause_mentions": 437,
+    "adr_dir": true,
+    "pitfalls": "docs/PITFALLS.md",
+    "contract_tests_dir": true,
+    "changes_dir": false,
+    "detected": true
+  },
+  "coverage_gaps": [
+    "typecheck"
+  ]
+}

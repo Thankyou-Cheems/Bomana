@@ -130,8 +130,10 @@ _URL_OPENERS: Dict[str, Any] = {}
 _PROXY_MODE_LOCAL = threading.local()
 DEFAULT_WEB_DASHBOARD_AUTOSTART = True
 DEFAULT_WEB_DASHBOARD_AUTO_OPEN = False
+DEFAULT_WEB_DASHBOARD_LAN_ENABLED = False
 _PENDING_WEB_DASHBOARD_AUTOSTART = DEFAULT_WEB_DASHBOARD_AUTOSTART
 _PENDING_WEB_DASHBOARD_AUTO_OPEN = DEFAULT_WEB_DASHBOARD_AUTO_OPEN
+_PENDING_WEB_DASHBOARD_LAN_ENABLED = DEFAULT_WEB_DASHBOARD_LAN_ENABLED
 _PENDING_DISPLAYED_RECOVERY_WARNING = ""
 _FAKE_IP_NETWORKS = (
     ipaddress.ip_network("198.18.0.0/15"),
@@ -193,12 +195,23 @@ def _strict_saved_bool(state: Dict[str, Any], key: str, default: bool) -> bool:
     return value if isinstance(value, bool) else default
 
 
-def _set_pending_web_preferences(autostart: bool, auto_open: bool) -> None:
-    if not isinstance(autostart, bool) or not isinstance(auto_open, bool):
+def _set_pending_web_preferences(
+    autostart: bool,
+    auto_open: bool,
+    lan_enabled: bool,
+) -> None:
+    if not all(isinstance(value, bool) for value in (autostart, auto_open, lan_enabled)):
         raise TypeError("Web launch preferences must be bools")
-    global _PENDING_WEB_DASHBOARD_AUTOSTART, _PENDING_WEB_DASHBOARD_AUTO_OPEN
+    if lan_enabled:
+        autostart = True
+    if not autostart:
+        lan_enabled = False
+    global _PENDING_WEB_DASHBOARD_AUTOSTART
+    global _PENDING_WEB_DASHBOARD_AUTO_OPEN
+    global _PENDING_WEB_DASHBOARD_LAN_ENABLED
     _PENDING_WEB_DASHBOARD_AUTOSTART = autostart
     _PENDING_WEB_DASHBOARD_AUTO_OPEN = auto_open
+    _PENDING_WEB_DASHBOARD_LAN_ENABLED = lan_enabled
 
 
 def _set_pending_recovery_warning(warning: object) -> None:
@@ -2370,6 +2383,7 @@ def _launch_app(base: Path, channel: str) -> None:
         default_entrypoint=DEFAULT_ENTRYPOINT,
         web_dashboard_autostart=_PENDING_WEB_DASHBOARD_AUTOSTART,
         web_dashboard_auto_open=_PENDING_WEB_DASHBOARD_AUTO_OPEN,
+        web_dashboard_lan_enabled=_PENDING_WEB_DASHBOARD_LAN_ENABLED,
         displayed_recovery_warning=_PENDING_DISPLAYED_RECOVERY_WARNING,
         recovery_warning_callback=_show_handoff_recovery_warning,
     )
@@ -2795,6 +2809,13 @@ class LauncherWindow:
             "web_dashboard_auto_open",
             DEFAULT_WEB_DASHBOARD_AUTO_OPEN,
         )
+        self.web_dashboard_lan_enabled = _strict_saved_bool(
+            self.saved_state,
+            "web_dashboard_lan_enabled",
+            DEFAULT_WEB_DASHBOARD_LAN_ENABLED,
+        )
+        if not self.web_dashboard_autostart:
+            self.web_dashboard_lan_enabled = False
         _set_use_system_proxy(self.use_system_proxy)
         self.client_identity = _build_client_identity(base)
         self.local_version = install_txn.read_local_app_version(_app_runtime_dir(base))
@@ -2862,6 +2883,10 @@ class LauncherWindow:
         self.web_dashboard_auto_open_var = tk.BooleanVar(
             master=self.root,
             value=self.web_dashboard_auto_open,
+        )
+        self.web_dashboard_lan_enabled_var = tk.BooleanVar(
+            master=self.root,
+            value=self.web_dashboard_lan_enabled,
         )
         self.download_source_var = tk.StringVar(
             master=self.root,
@@ -3310,6 +3335,16 @@ class LauncherWindow:
             **web_check_style,
         )
         self.web_dashboard_auto_open_chk.pack(
+            fill="x", padx=self._px(10), pady=(0, self._px(1))
+        )
+        self.web_dashboard_lan_enabled_chk = tk.Checkbutton(
+            web_card,
+            text="启动时开启局域网访问与控制（自动识别专用网络）",
+            variable=self.web_dashboard_lan_enabled_var,
+            command=self._on_web_preferences_changed,
+            **web_check_style,
+        )
+        self.web_dashboard_lan_enabled_chk.pack(
             fill="x", padx=self._px(10), pady=(0, self._px(6))
         )
 
@@ -4268,6 +4303,8 @@ class LauncherWindow:
             self.web_dashboard_autostart_chk.config(state="normal")
         if hasattr(self, "web_dashboard_auto_open_chk"):
             self.web_dashboard_auto_open_chk.config(state="normal")
+        if hasattr(self, "web_dashboard_lan_enabled_chk"):
+            self.web_dashboard_lan_enabled_chk.config(state="normal")
 
         if running:
             self.retry_btn.pack_forget()
@@ -4401,6 +4438,7 @@ class LauncherWindow:
             {
                 "web_dashboard_autostart": bool(self.web_dashboard_autostart),
                 "web_dashboard_auto_open": bool(self.web_dashboard_auto_open),
+                "web_dashboard_lan_enabled": bool(self.web_dashboard_lan_enabled),
             }
         )
         _write_state(self.base, state)
@@ -4430,12 +4468,23 @@ class LauncherWindow:
         )
 
     def _on_web_preferences_changed(self) -> None:
-        self.web_dashboard_autostart = bool(self.web_dashboard_autostart_var.get())
-        self.web_dashboard_auto_open = bool(self.web_dashboard_auto_open_var.get())
+        autostart = bool(self.web_dashboard_autostart_var.get())
+        auto_open = bool(self.web_dashboard_auto_open_var.get())
+        lan_enabled = bool(self.web_dashboard_lan_enabled_var.get())
+        if lan_enabled and not self.web_dashboard_lan_enabled:
+            autostart = True
+        elif not autostart:
+            lan_enabled = False
+        self.web_dashboard_autostart = autostart
+        self.web_dashboard_auto_open = auto_open
+        self.web_dashboard_lan_enabled = lan_enabled
+        self.web_dashboard_autostart_var.set(autostart)
+        self.web_dashboard_lan_enabled_var.set(lan_enabled)
         self._save_launcher_state()
         _set_pending_web_preferences(
             self.web_dashboard_autostart,
             self.web_dashboard_auto_open,
+            self.web_dashboard_lan_enabled,
         )
 
     def _on_download_source_changed(self, *_args) -> None:
@@ -4763,6 +4812,7 @@ class LauncherWindow:
             _set_pending_web_preferences(
                 self.web_dashboard_autostart,
                 self.web_dashboard_auto_open,
+                self.web_dashboard_lan_enabled,
             )
             self.root.destroy()
 

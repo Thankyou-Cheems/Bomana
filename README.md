@@ -170,11 +170,11 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 - **移动端地图优先** - 响应式地图以官方 8111 地图缩略图为半透明底图，叠加己机、战区、机场、POI、Trace back 与当前武器射程
 - **一页关键信息** - 同步计时、速度/高度/航向、燃油、导航、武器/投弹参考、检查清单与告警
 - **实体化控制** - 页面可重置计时、切换角落、设定锁定/提示音/面板显示，并在可用通道中选择武器与弹道模型；不模拟 F7-F11 按键
-- **分级授权** - 本机会话可控制；局域网配对默认只读，只有在 App 本机为本次运行显式开启 LAN 控制并重新配对后才能操作，撤销立即生效
+- **分级授权** - 本机会话可控制；开启 LAN 会同时允许后来配对的局域网会话控制固定功能，关闭 LAN 会立即撤销全部 LAN 会话
 - **多网卡共享** - 默认仅本机可用；显式允许本次运行的 LAN 后，会同时监听可绑定的 Wi-Fi/以太网/EasyTier 等私网地址
 - **通道一致** - Enhanced、Standard、Lite 都包含网页驾驶舱，页面卡片随当前通道功能自动调整
 
-The Web Cockpit combines a filtered dashboard with a small allowlist of Bomana semantic controls. It runs independently from port 8111, never synthesizes keys, and keeps LAN sessions view-only unless control is explicitly enabled for the current run and the device pairs again.
+The Web Cockpit combines a filtered dashboard with a small allowlist of Bomana semantic controls. It runs independently from port 8111 and never synthesizes keys. Enabling LAN also grants fixed-function control to later LAN pairings; disabling LAN immediately invalidates every LAN session.
 
 ---
 
@@ -214,7 +214,7 @@ The Web Cockpit combines a filtered dashboard with a small allowlist of Bomana s
 3. 下载后双击运行（绿色版，无需安装）
 4. 启动器打开后会后台自动检查当前通道版本与启动器版本（优先腾讯云/EdgeOne 更新服务，必要时回退 GitHub），并在界面展示来源与下载总大小
 5. 检查进行中仍可切换通道、下载来源和代理设置；当前检查结束后会自动按新条件重查
-6. 可配置“随 App 启动本机 Web 服务”和“启动成功后自动打开本机页面”；启动器不会保存端口、配对、LAN 访问或 LAN 控制状态
+6. 可配置“随 App 启动本机 Web 服务”、“启动成功后自动打开本机页面”和“启动时开启局域网访问与控制”；启动器只保存这三个布尔偏好，不保存地址、端口、配对或会话
 7. Launcher 3.0.0 会拒绝启动、导入、安装、回退或恢复版本格式无效或低于 8.0.0 的 App；App 8.0.0 也会在运行时初始化前拒绝缺失、无效或低于 3.0.0 的启动器身份
 8. 点击“下载更新”后，启动器会先验证发布清单签名，再校验 app 包及包内精确版本，最后原子替换本地 `app/` 目录，同时把旧版保留到 `app_previous/`
 9. 如新版本有问题，可直接通过启动器“回退 vX.Y.Z”按钮把当前版和上一版互换
@@ -450,11 +450,11 @@ Bomana 仍是唯一的 8111 读取方。App 向独立 HTTP 服务发布筛选后
 ### Q: 如何在手机上打开网页驾驶舱？
 
 1. 让手机和电脑连接同一个可信局域网
-2. 在 Bomana 主窗口底部或托盘选择“允许局域网访问（本次运行）”
+2. 在 Bomana 主窗口底部或托盘选择“开启局域网访问与控制”，也可在 Launcher 中保存启动偏好
 3. 从主窗口查看配对码与实际监听地址，或使用自动复制的一个或多个手机链接
 4. 如果无法连接，在 Windows 防火墙提示中允许 Bomana 的专用网络访问；Bomana 不会自动修改防火墙
 
-手机首次配对只有查看权限。如需控制 Bomana，请再从 App 主窗口或托盘明确开启“允许局域网控制（本次运行）”，然后使用轮换后的新链接重新配对。已有只读会话不会自动升级；撤销后已有 LAN 控制会话立即失效。网页按钮只操作 Bomana 自身的计时、窗口、声音、面板和可用的武器设置，不会模拟热键或控制游戏。
+每次成功配对都会创建独立会话。LAN 已开启时，新配对会话可操作 Bomana 的固定功能；关闭 LAN 会立即失效全部已有 LAN 会话并轮换配对码。网页按钮只操作 Bomana 自身的计时、窗口、声音、面板和可用的武器设置，不会模拟热键或控制游戏。
 
 ### Q: 武器解算或投弹提示不准确？
 

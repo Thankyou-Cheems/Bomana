@@ -1,8 +1,15 @@
 import ast
+import tkinter as tk
+import unittest
 from pathlib import Path
 
 from bomana.ui.dialogs import _ScalableDialogMixin
-from bomana.ui.tk_style import TkPalette, action_button_style
+from bomana.ui.tk_style import (
+    TkPalette,
+    action_button_style,
+    clickable_surface_style,
+    style_clickable_surface,
+)
 
 
 def test_palette_from_source_fills_launcher_card_tokens() -> None:
@@ -53,6 +60,11 @@ def test_action_button_variants_share_control_tokens() -> None:
         "neutral", palette=palette
     )
 
+    clickable = clickable_surface_style(palette=palette)
+    assert clickable.border == "#405060"
+    assert clickable.hover_border == "#60aaff"
+    assert clickable.hover_bg == "#303840"
+
 
 def test_dialog_action_button_factory_stays_on_scalable_mixin() -> None:
     source = Path("bomana/ui/dialogs.py").read_text(encoding="utf-8")
@@ -65,3 +77,32 @@ def test_dialog_action_button_factory_stays_on_scalable_mixin() -> None:
 
     assert len(definitions) == 1
     assert "_create_action_button" in _ScalableDialogMixin.__dict__
+
+
+class TkClickableSurfaceTests(unittest.TestCase):
+    root: tk.Tk
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        try:
+            cls.root = tk.Tk()
+        except tk.TclError as exc:
+            raise unittest.SkipTest(f"Tk display unavailable: {exc}") from exc
+        cls.root.withdraw()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.root.destroy()
+
+    def test_real_label_and_frame_accept_clickable_surface_style(self) -> None:
+        label = tk.Label(self.root, text="copy")
+        frame = tk.Frame(self.root)
+
+        label_style = style_clickable_surface(label)
+        frame_style = style_clickable_surface(frame)
+
+        self.assertEqual(label.cget("fg"), label_style.fg)
+        self.assertNotIn("fg", frame.keys())
+        self.assertEqual(frame.cget("highlightbackground"), frame_style.border)
+        self.assertEqual(label.cget("cursor"), "hand2")
+        self.assertEqual(frame.cget("cursor"), "hand2")

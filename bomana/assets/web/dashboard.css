@@ -161,6 +161,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .target-setting + .target-setting { border-top: 1px solid var(--line); }
 .target-setting > span, .select-setting > span { color: var(--muted); font-size: 10px; }
 .target-setting.unavailable, .check-grid label.unavailable { opacity: .46; }
+.timer-cycle-setting { display: grid; grid-template-columns: 1fr minmax(150px, auto); align-items: center; gap: 10px; min-height: 48px; padding: 7px 0; border-top: 1px solid var(--line); }
+.timer-cycle-setting > label { color: var(--muted); font-size: 10px; }
+.timer-cycle-input { display: flex; align-items: center; gap: 6px; }
+.timer-cycle-input input { width: 68px; min-height: 40px; padding: 6px 8px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 9px; background: #0a1828; }
+.timer-cycle-input span { color: var(--muted); font-size: 9px; }
+.timer-cycle-input button { min-height: 40px; padding: 6px 11px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 9px; background: rgba(24, 44, 70, .78); cursor: pointer; }
+.timer-cycle-input button:disabled, .timer-cycle-input input:disabled { cursor: not-allowed; opacity: .55; }
 .segmented-control { display: flex; min-width: 0; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: rgba(2, 9, 17, .5); }
 .segmented-control button {
   flex: 1 1 0;

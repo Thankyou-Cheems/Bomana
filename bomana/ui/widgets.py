@@ -52,6 +52,96 @@ class Pill(tk.Label):
         self._apply_padding(text)
 
 
+class BananaProgress(tk.Canvas):
+    """Timer progress drawn around a muted vector banana silhouette."""
+
+    def __init__(self, parent, *, size: int = 52, bg: str = Theme.GRAYPILL):
+        self.size = max(24, int(size))
+        super().__init__(
+            parent,
+            width=self.size,
+            height=self.size,
+            bg=bg,
+            bd=0,
+            highlightthickness=0,
+        )
+        self.progress = 0.0
+        self._progress_color = Theme.BLUE
+        self.outline_points = self._build_outline_points()
+        flat = self._flatten(self.outline_points)
+        self.create_polygon(
+            *flat,
+            fill=Theme.SEPARATOR,
+            outline="",
+            smooth=True,
+            splinesteps=12,
+            tags=("banana_silhouette",),
+        )
+        self.create_line(
+            *flat,
+            fill=Theme.BORDER,
+            width=max(2, int(self.size * 0.055)),
+            smooth=True,
+            splinesteps=12,
+            tags=("banana_outline",),
+        )
+        self.progress_outline = self.create_line(
+            *flat[:4],
+            fill=self._progress_color,
+            width=max(2, int(self.size * 0.07)),
+            smooth=True,
+            splinesteps=12,
+            state="hidden",
+        )
+
+    @staticmethod
+    def _bezier(p0, p1, p2, p3, steps: int = 28) -> list[tuple[float, float]]:
+        points = []
+        for index in range(steps + 1):
+            t = index / steps
+            inv = 1.0 - t
+            x = inv**3 * p0[0] + 3 * inv**2 * t * p1[0] + 3 * inv * t**2 * p2[0] + t**3 * p3[0]
+            y = inv**3 * p0[1] + 3 * inv**2 * t * p1[1] + 3 * inv * t**2 * p2[1] + t**3 * p3[1]
+            points.append((x, y))
+        return points
+
+    def _build_outline_points(self) -> list[tuple[float, float]]:
+        scale = float(self.size)
+        outer = self._bezier((0.72, 0.12), (0.84, 0.54), (0.52, 0.92), (0.15, 0.72))
+        inner = self._bezier((0.15, 0.72), (0.38, 0.74), (0.58, 0.48), (0.72, 0.12))
+        return [(x * scale, y * scale) for x, y in (*outer, *inner[1:])]
+
+    @staticmethod
+    def _flatten(points: list[tuple[float, float]]) -> list[float]:
+        return [coordinate for point in points for coordinate in point]
+
+    def set_progress(self, value: float) -> None:
+        try:
+            progress = float(value)
+        except TypeError, ValueError:
+            progress = 0.0
+        self.progress = max(0.0, min(1.0, progress))
+        if self.progress <= 0.0:
+            self.itemconfigure(self.progress_outline, state="hidden")
+            return
+        point_count = max(
+            2,
+            min(
+                len(self.outline_points),
+                round(len(self.outline_points) * self.progress),
+            ),
+        )
+        self.coords(
+            self.progress_outline,
+            *self._flatten(self.outline_points[:point_count]),
+        )
+        self.itemconfigure(self.progress_outline, state="normal")
+
+    def set_color(self, color: str) -> None:
+        self._progress_color = str(color or Theme.BLUE)
+        self.itemconfigure(self.progress_outline, fill=self._progress_color)
+
+
 class HeadingTape(tk.Canvas):
     """统一航向带指示器 (Heading Tape)
 

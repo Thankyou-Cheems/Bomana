@@ -29,6 +29,7 @@ COMMAND_NAMES = (
     "state.set_beep_enabled",
     "state.set_zone_sound_enabled",
     "config.set_panel_visibility",
+    "config.set_timer_cycle_minutes",
     "weapon.select",
     "weapon.set_ballistic_model",
 )
@@ -60,6 +61,7 @@ type CommandName = Literal[
     "state.set_beep_enabled",
     "state.set_zone_sound_enabled",
     "config.set_panel_visibility",
+    "config.set_timer_cycle_minutes",
     "weapon.select",
     "weapon.set_ballistic_model",
 ]
@@ -250,6 +252,7 @@ class ValidatedWebCommand:
     locked: bool | None = None
     enabled: bool | None = None
     target: PanelTarget | None = None
+    minutes: int | None = None
     weapon_id: str | None = None
     model: BallisticModel | None = None
 
@@ -259,34 +262,42 @@ class ValidatedWebCommand:
             self.locked,
             self.enabled,
             self.target,
+            self.minutes,
             self.weapon_id,
             self.model,
         )
         expected: tuple[Any, ...]
         if self.name == "action.reset_timer":
-            expected = (True, None, None, None, None, None)
+            expected = (True, None, None, None, None, None, None)
         elif self.name == "action.cycle_corner":
-            expected = (None, None, None, None, None, None)
+            expected = (None, None, None, None, None, None, None)
         elif self.name == "state.set_locked" and isinstance(self.locked, bool):
-            expected = (None, self.locked, None, None, None, None)
+            expected = (None, self.locked, None, None, None, None, None)
         elif self.name in ("state.set_beep_enabled", "state.set_zone_sound_enabled") and isinstance(
             self.enabled, bool
         ):
-            expected = (None, None, self.enabled, None, None, None)
+            expected = (None, None, self.enabled, None, None, None, None)
         elif (
             self.name == "config.set_panel_visibility"
             and self.target in PANEL_TARGETS
             and isinstance(self.enabled, bool)
         ):
-            expected = (None, None, self.enabled, self.target, None, None)
+            expected = (None, None, self.enabled, self.target, None, None, None)
+        elif (
+            self.name == "config.set_timer_cycle_minutes"
+            and isinstance(self.minutes, int)
+            and not isinstance(self.minutes, bool)
+            and 1 <= self.minutes <= 180
+        ):
+            expected = (None, None, None, None, self.minutes, None, None)
         elif (
             self.name == "weapon.select"
             and isinstance(self.weapon_id, str)
             and 1 <= len(self.weapon_id) <= 128
         ):
-            expected = (None, None, None, None, self.weapon_id, None)
+            expected = (None, None, None, None, None, self.weapon_id, None)
         elif self.name == "weapon.set_ballistic_model" and self.model in BALLISTIC_MODELS:
-            expected = (None, None, None, None, None, self.model)
+            expected = (None, None, None, None, None, None, self.model)
         else:
             raise ControlValidationError("invalid semantic command fields")
         if fields != expected:
@@ -303,6 +314,8 @@ class ValidatedWebCommand:
         elif self.name == "config.set_panel_visibility":
             payload["target"] = str(self.target)
             payload["enabled"] = bool(self.enabled)
+        elif self.name == "config.set_timer_cycle_minutes":
+            payload["minutes"] = int(self.minutes or 0)
         elif self.name == "weapon.select":
             payload["weapon_id"] = str(self.weapon_id)
         elif self.name == "weapon.set_ballistic_model":
@@ -338,6 +351,8 @@ def validate_command_payload(payload: Any) -> ValidatedWebCommand:
             target=payload["target"],
             enabled=payload["enabled"],
         )
+    if name == "config.set_timer_cycle_minutes":
+        return ValidatedWebCommand(name=name, minutes=payload["minutes"])
     if name == "weapon.select":
         return ValidatedWebCommand(name=name, weapon_id=payload["weapon_id"])
     if name == "weapon.set_ballistic_model":
@@ -386,6 +401,7 @@ class ControlTargetState:
     panel_visibility: PanelVisibility
     selected_weapon_id: str
     ballistic_model: BallisticModel
+    timer_cycle_minutes: int = 15
 
     def as_payload(self) -> dict[str, Any]:
         return {
@@ -395,6 +411,7 @@ class ControlTargetState:
             "panel_visibility": self.panel_visibility.as_payload(),
             "selected_weapon_id": self.selected_weapon_id,
             "ballistic_model": self.ballistic_model,
+            "timer_cycle_minutes": self.timer_cycle_minutes,
         }
 
 

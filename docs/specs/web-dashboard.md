@@ -27,12 +27,15 @@ access, packaging, threading, privacy, and tray lifecycle.
 - `WDB-01`: When Web autostart is enabled, the App MUST start a dedicated
   non-8111 listener on `127.0.0.1`; when disabled, only an explicit App action
   may lazily start that same loopback listener.
-- `WDB-02`: LAN listening MUST require an explicit current-run user action and
-  MUST attempt every distinct discovered RFC1918 IPv4 address as an exact
-  listener rather than `0.0.0.0`. One interface bind failure MUST NOT prevent
-  another eligible address from starting; the action fails only if none bind.
-- `WDB-03`: Bomana MUST NOT persist LAN access, LAN control, selected listener
-  address or port, pairing material, authorization epochs, or Web sessions.
+- `WDB-02`: LAN listening MUST require either the explicit App LAN action or the
+  explicit Launcher `web_dashboard_lan_enabled` startup preference and MUST
+  attempt every distinct automatically discovered RFC1918 IPv4 address as an
+  exact listener rather than `0.0.0.0`; no machine-specific endpoint may be
+  hard-coded, one bind failure MUST NOT prevent another eligible address from
+  starting, and the action fails only if none bind.
+- `WDB-03`: Bomana MAY persist only the Launcher LAN-startup boolean and MUST NOT
+  persist selected listener addresses/ports, pairing material, separate LAN
+  control state, authorization epochs, CSRF proofs, or Web sessions.
 - `WDB-04`: The HTTP runtime MUST consume only published immutable projections
   and image bytes owned by the App; it MUST NOT request, proxy, or forward any
   8111 route.
@@ -71,18 +74,20 @@ access, packaging, threading, privacy, and tray lifecycle.
 - `WDB-18`: The App MUST show a compact secondary Web-access row in the existing
   bottom card whenever the loopback dashboard is running. It MUST show the
   current pairing code and local/LAN availability without exposing a token in
-  normal label text; compact App buttons and the tray MUST keep local open,
-  current-run LAN access, and current-run LAN control actions discoverable.
+  normal label text; compact App buttons and the tray MUST expose one LAN action
+  rather than separate LAN-access and LAN-control actions.
 - `WDB-19`: Release handoffs MUST report desktop browser, phone/LAN, Windows
   Firewall, multi-NIC, packaged-resource, DPI, and live-game smoke separately
   from CI.
-- `WDB-20`: A successful loopback pairing MAY receive `control` scope, but a LAN
-  pairing MUST receive `view` scope while current-run LAN control is disabled.
-- `WDB-21`: Enabling LAN control MUST require an explicit current-run App action,
-  rotate the pairing code, and grant `control` scope only to later successful
-  LAN pairings.
-- `WDB-22`: Revoking LAN control MUST immediately advance the authorization
-  epoch, invalidate every LAN-control session, and rotate the pairing code.
+- `WDB-20`: A successful loopback pairing MAY receive `control` scope; a LAN
+  pairing MUST receive `control` scope only while the exact LAN listeners are
+  enabled and MUST fail after those listeners are disabled.
+- `WDB-21`: Enabling LAN MUST atomically enable LAN control, rotate the pairing
+  code, and grant `control` scope only to later successful LAN pairings; there
+  MUST NOT be a separate user-facing control-enable state.
+- `WDB-22`: Disabling LAN MUST immediately advance the authorization epoch,
+  invalidate every LAN session, remove all LAN hosts, close all LAN listeners,
+  and rotate the pairing code before returning.
 - `WDB-23`: `GET /api/v1/control-state` MUST return a non-empty per-session CSRF
   proof only to `control` sessions and MUST return `null` for `view` sessions.
 - `WDB-24`: Every Web write MUST have a currently valid `control` session and a
@@ -113,7 +118,7 @@ access, packaging, threading, privacy, and tray lifecycle.
   transport, control scope, authorization epoch, command id, canonical command,
   and submitted revision.
 - `WDB-33`: The Tk owner thread MUST recheck the session's authorization epoch,
-  control scope, maximum age, and current-run LAN-control authority immediately
+  control scope, maximum age, and current LAN-listener authority immediately
   before execution.
 - `WDB-34`: The Tk owner thread MUST recheck every applicable `ENABLE_*` gate,
   catalog identity, aircraft compatibility, enum, and target validity
@@ -165,11 +170,15 @@ access, packaging, threading, privacy, and tray lifecycle.
   an implementation/provider name as a user-facing model label.
 - `WDB-48`: Desktop and narrow-mobile Web layouts MUST use the project logo,
   compact reset/corner controls, touch-sized but non-dominant action buttons,
-  and place 15-minute progress adjacent to or behind the countdown rather than
-  as an ambiguous strip beneath unrelated flight metrics.
+  and show progress adjacent to the countdown with the effective configured
+  timer period rather than assuming a fixed 15-minute cycle.
 - `WDB-49`: The tactical canvas MUST draw the current App-published map image at
   reduced opacity under the existing filtered markers and selected-weapon range
   ellipse. Image load failure MUST retain a usable abstract-map fallback.
+- `WDB-50`: `config.set_timer_cycle_minutes` MUST be the only Web timer-period
+  mutation, MUST accept exactly one integer `minutes` from 1 through 180, and
+  MUST persist and publish the explicit target state before successful
+  completion.
 
 ## Complete Action Matrix
 
@@ -181,6 +190,7 @@ access, packaging, threading, privacy, and tray lifecycle.
 | `state.set_beep_enabled` | `enabled: boolean` | Set the existing sound manager to the explicit target state and persist it; an already-satisfied target remains a successful no-op. | Current authorization and sound manager availability. |
 | `state.set_zone_sound_enabled` | `enabled: boolean` | Set the existing zone-sound preference to the explicit target state and persist it. | Current authorization and `ENABLE_ZONES`. |
 | `config.set_panel_visibility` | `target: zones|airfields|fuel|speed|checklist|weapon_solution`; `enabled: boolean` | Set exactly one existing panel preference and persist it. | `zones` -> `ENABLE_ZONES`; `airfields` -> `ENABLE_AIRFIELDS`; `fuel` -> `ENABLE_FUEL`; `speed` -> always available; `checklist` -> `ENABLE_CHECKLIST`; `weapon_solution` -> `ENABLE_CCRP`; plus current effective-state validity. |
+| `config.set_timer_cycle_minutes` | `minutes: integer 1..180` | Set and persist the exact shared timer period; retain the active life spawn timestamp and recompute immediately. | Current authorization, exact integer bounds, current timer/config availability, and persistence success. |
 | `weapon.select` | `weapon_id: non-empty string` | Select and persist exactly that existing catalog weapon id through the existing manual-selection semantic path. | Current authorization, `ENABLE_CCRP`, exact catalog membership, and current-aircraft compatibility. |
 | `weapon.set_ballistic_model` | `model: foxthree_compatible|strict_official` | Set and persist exactly that existing ballistic model. | Current authorization, `ENABLE_CCRP`, and exact enum membership. |
 
@@ -190,7 +200,7 @@ Persistence and stable completion-reason semantics are governed by `WDB-41` and
 ## Contract Coverage
 
 - [static] `tests/contracts/test_web_dashboard_contract.py` enforces
-  `WDB-01..WDB-09`, `WDB-11..WDB-18`, and `WDB-20..WDB-49` through ownership
+  `WDB-01..WDB-09`, `WDB-11..WDB-18`, and `WDB-20..WDB-50` through ownership
   scans, forbidden-path scans, schema
   self-checks, the exhaustive action discriminants, packaged assets, and
   response shapes.

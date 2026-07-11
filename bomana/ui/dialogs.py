@@ -51,7 +51,7 @@ from bomana.ui.settings_form import (
 from bomana.ui.settings_runtime import SettingsRuntimeMixin
 from bomana.ui.text_utils import bind_existing_label_wraps, scaled_control_length
 from bomana.ui.theme import Theme
-from bomana.ui.tk_style import style_action_button
+from bomana.ui.tk_style import style_action_button, style_clickable_surface
 from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.system import Win32, resolve_tk_font_tuple
 
@@ -3243,6 +3243,7 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
                 cursor="hand2",
             )
             github_btn.pack(side="left")
+            style_clickable_surface(github_btn)
             github_btn.bind("<Button-1>", lambda _e: self._open_url(AboutConfig.GITHUB_URL))
 
         privacy_desc = (
@@ -3269,6 +3270,7 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
             anchor="w",
         )
         privacy_link.pack(anchor="w", pady=(6, 0))
+        style_clickable_surface(privacy_link)
         privacy_link.bind(
             "<Button-1>",
             lambda _e: self._open_url(f"{AboutConfig.GITHUB_URL}/blob/main/docs/PRIVACY.md"),
@@ -3373,6 +3375,7 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
                 img_lbl = tk.Label(item_frame, image=photo, bg=bg, cursor="hand2" if url else "")
                 img_lbl.pack()
                 if url:
+                    style_clickable_surface(img_lbl)
                     img_lbl.bind("<Button-1>", lambda e, u=url: self._open_url(u))
 
                 tk.Label(

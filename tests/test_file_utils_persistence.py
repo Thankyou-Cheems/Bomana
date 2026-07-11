@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from bomana.config.settings import FileConfig
+from bomana.config.settings import FileConfig, GameConfig
 from bomana.utils.file_utils import ConfigManager, StateManager, atomic_write_json
 
 
@@ -22,6 +22,7 @@ class ResourcePathTests(unittest.TestCase):
 
 class PersistenceTests(unittest.TestCase):
     def setUp(self) -> None:
+        self._cycle_seconds = GameConfig.CYCLE_SECONDS
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp_path = Path(self._tmp.name)
         self.config_file = self.tmp_path / "config.json"
@@ -32,6 +33,7 @@ class PersistenceTests(unittest.TestCase):
         self.state_patch.start()
 
     def tearDown(self) -> None:
+        GameConfig.CYCLE_SECONDS = self._cycle_seconds
         self.state_patch.stop()
         self.config_patch.stop()
         self._tmp.cleanup()
@@ -153,6 +155,28 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(data["sortie_id"], 3)
         self.assertEqual(data["battle_signature"], "sig-1")
         self.assertEqual(data["battle_signature_version"], 1)
+        self.assertEqual(data["cycle_seconds"], GameConfig.CYCLE_SECONDS)
+
+    def test_state_restore_rejects_mismatched_timer_period(self) -> None:
+        StateManager.save(42.0, 2, 3, "sig-1")
+        GameConfig.CYCLE_SECONDS = 60 * 60
+
+        self.assertIsNone(StateManager.load())
+
+    def test_legacy_state_without_period_only_restores_at_fifteen_minutes(self) -> None:
+        legacy = {
+            "remaining_sec": 42.0,
+            "save_timestamp": time.time(),
+            "life_index": 2,
+            "sortie_id": 3,
+            "battle_signature": "sig-1",
+        }
+        self.state_file.write_text(json.dumps(legacy), encoding="utf-8")
+
+        GameConfig.CYCLE_SECONDS = GameConfig.LEGACY_CYCLE_SECONDS
+        self.assertIsNotNone(StateManager.load())
+        GameConfig.CYCLE_SECONDS = 60 * 60
+        self.assertIsNone(StateManager.load())
 
     def test_state_load_non_object_json_does_not_clear_file(self) -> None:
         self.state_file.write_text("[1, 2, 3]", encoding="utf-8")

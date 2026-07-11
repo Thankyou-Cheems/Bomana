@@ -112,6 +112,7 @@ def test_packaged_launcher_smoke_poisons_python_for_packaged_launch() -> None:
     assert 'download_source_mode = "primary"' in source
     assert "web_dashboard_autostart = $true" in source
     assert "web_dashboard_auto_open = $false" in source
+    assert "web_dashboard_lan_enabled = $false" in source
     assert '"BOMANA_LAUNCHER_VERSION"' in source
     assert '"BOMANA_SOURCE_DEVELOPMENT"' in source
 

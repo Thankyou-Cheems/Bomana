@@ -716,6 +716,7 @@ class UISnapshot:
     api_down_pending: bool
     on_ground: bool
     landed_flash: bool
+    timer_cycle_minutes: int = 15
     perf_debug: PerfDebugInfo = field(default_factory=PerfDebugInfo)
     source_debug: SourceDebugInfo = field(default_factory=SourceDebugInfo)
 

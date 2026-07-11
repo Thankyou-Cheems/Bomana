@@ -1865,6 +1865,7 @@ class GameLogic:
             cycle=cycle,
             remaining_sec=remaining,
             progress=progress,
+            timer_cycle_minutes=GameConfig.cycle_minutes(),
             sortie_id=sortie_id,
             api_down=api_down,
             api_down_pending=api_down_pending,

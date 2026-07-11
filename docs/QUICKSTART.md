@@ -79,10 +79,10 @@ uv run python Bomana.pyw
 
 1. 启动器默认让 Bomana 自动提供网页驾驶舱；若关闭了自动启动，也可从托盘按需启动。App 主窗口底部会显示当前配对码、监听地址与实体控制。
 2. 本机服务默认使用 `127.0.0.1:8777`，端口占用时会在有限范围内自动选择相邻端口，因此请优先使用 App 或托盘入口。
-3. 手机与电脑连接同一个可信局域网后，在 App 主窗口或托盘选择“允许局域网访问（本次运行）”并确认。Bomana 会为所有可绑定的 RFC1918 地址建立精确监听并复制对应链接。
-4. 在手机浏览器打开该链接。每次成功配对都会创建独立会话；局域网会话默认只有查看权限。
-5. 如需从手机操作 Bomana，在电脑端 App 或托盘中再开启“允许局域网控制（本次运行）”，并使用轮换后的新链接重新配对。已有只读会话不会自动升级；撤销会立即使已有 LAN 控制会话失效。
-6. 局域网访问与控制都不会保存到下次启动。Bomana 不会自动修改 Windows 防火墙；若手机无法连接，请允许 Bomana 的“专用网络”访问。
+3. 手机与电脑连接同一个可信局域网后，在 App 主窗口或托盘选择“开启局域网访问与控制”并确认；也可以在 Launcher 中保存下次启动时自动开启的布尔偏好。Bomana 每次都会自动发现当前网卡，为所有可绑定的 RFC1918 地址建立精确监听并复制对应链接。
+4. 在手机浏览器打开新链接。每次成功配对都会创建独立控制会话；网页写入仍需要同源 Origin、会话 CSRF、幂等键、共享 schema 和 App 主线程复核。
+5. 关闭 LAN 会立即撤销全部已有 LAN 会话、轮换配对码并回收所有监听。Launcher 只保存是否自动开启，不保存地址、端口、配对或实时授权。
+6. Bomana 不会自动修改 Windows 防火墙；若手机无法连接，请允许 Bomana 的“专用网络”访问。
 
 网页以官方地图缩略图为半透明底图，并叠加筛选后的标记和当前武器射程；同时集中显示计时、飞行、燃油、导航、武器/投弹参考、检查清单和告警。获得控制权限后，可用实体按钮重置计时、切换角落、设定窗口锁定与提示音、显示/隐藏可用面板，并在 Enhanced 中选择当前武器及“缺少官方数据时是否使用推测替代”。官方数据始终优先。页面不会模拟 F7-F11，也不会控制游戏或扩展热键 Broker。
 
@@ -90,7 +90,7 @@ uv run python Bomana.pyw
 
 | 功能 | 说明 |
 |------|------|
-| 15 分钟计时器 | 自动识别出生/着陆/死亡并重置周期 |
+| 可配置计时器 | 1–180 分钟周期，自动识别出生/着陆/死亡 |
 | 导航（战区/机场） | 方位、距离、ETE，目标切换 |
 | 燃油管理 | 油量、油耗率、返航估算 |
 | 武器解算 | 自由落体 CCRP + AAM/AGM/制导与滑翔武器参考 |
@@ -165,7 +165,7 @@ uv run python tools/update_datamine_assets.py ^
 - 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
 - App 发布构建会自动编译并内置 native 热键 Broker；Actions 使用 `actions/attest@v4` 为最终包、清单与校验文件生成来源证明。
 - 本地发布命令入口是 `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`；`--version` 只是可选一致性校验，app 目标必须匹配 `bomana/metadata.py` 的 `__version__`，launcher 目标必须匹配 `launcher/metadata.py` 的 `LAUNCHER_VERSION`。
-- 当前源码边界为 App `8.1.0` / Launcher `3.0.0`。App ZIP 必须包含共享版本边界与网页控制 schemas；不要用旧 Launcher 或旧 App 目录代替真实打包烟测。
+- 当前源码版本为 App `8.2.0` / Launcher `3.1.0`，兼容下限仍为 App `8.0.0` / Launcher `3.0.0`。App ZIP 必须包含共享版本边界与网页控制 schemas；不要用不兼容的 Launcher 或 App 目录代替真实打包烟测。
 - 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；GitHub Release 完成后在本机运行 `gh release download vX.Y.Z --dir dist`，再运行 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`。不要用 GitHub Actions 直连腾讯云主机部署，公开端点验证必须调用 `verify_release_manifest_signature`。
 - 发布签名字段、密钥处理和部署边界以 [release-signing spec](./specs/release-signing.md) 为准。
 
@@ -230,7 +230,7 @@ For source-mode admin-hotkey testing, first run `uv run python tools/build_hotke
 3. First launcher run usually downloads app package; later runs can be offline
 4. Changing channel/source during a check queues an automatic follow-up re-check
 5. After an app update, launcher keeps one previous version for rollback
-6. Launcher can persist only loopback Web autostart (on by default) and local-page auto-open (off by default); the App owns ports, pairing, and every LAN permission
+6. Launcher persists only Web autostart (on by default), local-page auto-open (off), and LAN access/control startup (off); the App still owns interface discovery, ports, pairing, sessions, and live authorization
 7. Use `F9` or the Web Cockpit action button to cycle the window corner
 
 #### Game-foreground hotkey permission
@@ -246,18 +246,18 @@ For source-mode admin-hotkey testing, first run `uv run python tools/build_hotke
 
 1. Bomana starts the Web Cockpit automatically by default. If autostart is disabled, the tray can start it on demand; the App bottom row shows the current pairing code, listener addresses, and physical actions.
 2. The local listener prefers `127.0.0.1:8777` and uses a bounded nearby-port fallback if that port is occupied, so use the App or tray entry instead of a hard-coded bookmark.
-3. Put the phone and PC on the same trusted LAN, then choose `Allow LAN access (this run)` in the App or tray. Bomana binds every eligible exact RFC1918 address and copies the corresponding phone links.
-4. Open that link on the phone. Every successful pairing creates a distinct session, and LAN sessions are view-only by default.
-5. To control Bomana from the phone, explicitly enable `Allow LAN control (this run)` in the App or tray and pair again with the rotated link. Existing view sessions are not upgraded; revocation immediately invalidates existing LAN control sessions.
-6. LAN access and control are never persisted. Bomana does not change Windows Firewall; if the phone cannot connect, allow Bomana on private networks.
+3. Put the phone and PC on the same trusted LAN, then choose `Enable LAN access and control` in the App or tray, or save the equivalent Launcher startup preference. Bomana rediscovers adapters each run, binds every eligible exact RFC1918 address, and copies the phone links.
+4. Open a new link on the phone. Every successful pairing creates a distinct control session; writes still require exact same-origin Origin, per-session CSRF, idempotency, shared-schema validation, and Tk-owner reauthorization.
+5. Disabling LAN immediately invalidates every LAN session, rotates the pairing code, and closes all LAN listeners. Launcher persists only the startup boolean, never addresses, ports, pairing material, or live authorization.
+6. Bomana does not change Windows Firewall; if the phone cannot connect, allow Bomana on private networks.
 
-The responsive page uses the official tactical-map thumbnail at reduced opacity below filtered markers and the current weapon-range ellipse. It combines timer, flight, fuel, navigation, weapon/bombing references, checklist, and alerts. A control session can reset the timer, cycle the window corner, set lock and sound targets, select visible panels, and—when CCRP is enabled—choose the current weapon and whether an estimated substitute may be used only when official data is absent. These are explicit Bomana actions, not synthesized F-keys or game controls.
+The responsive page uses the official tactical-map thumbnail at reduced opacity below filtered markers and the current weapon-range ellipse. It combines timer, flight, fuel, navigation, weapon/bombing references, checklist, and alerts. A control session can reset the timer, set its bounded 1–180 minute cycle, cycle the window corner, set lock and sound targets, select visible panels, and—when CCRP is enabled—choose the current weapon and whether an estimated substitute may be used only when official data is absent. These are explicit Bomana actions, not synthesized F-keys or game controls. The same timer-cycle target is available from the tray; an active sortie keeps its spawn timestamp and immediately recalculates progress against the new period.
 
 ### 3. Feature Snapshot
 
 | Feature | Description |
 |---------|-------------|
-| 15-min timer | Tracks spawn/landing/death cycle automatically |
+| Configurable timer | Tracks spawn/landing/death cycles automatically with a 1–180 minute period |
 | Navigation | Zone/airfield bearing, distance and ETE |
 | Fuel | Fuel amount, burn rate, return estimate |
 | Weapon solution | Free-fall CCRP plus AAM/AGM/guided/glide references |
@@ -315,7 +315,7 @@ to validate the complete core path in seconds without reopening the game.
 - Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).
 - App builds compile and bundle the native broker automatically. GitHub release jobs attest final packages, manifests, and checksum files with `actions/attest@v4`; Authenticode secrets are not required.
 - Local package entry: `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`; `--version` is an optional consistency check and must match `bomana/metadata.py __version__` for app builds or `launcher/metadata.py LAUNCHER_VERSION` for launcher builds.
-- The current source boundary is App `8.1.0` / Launcher `3.0.0`. App ZIPs must include the shared version boundary and Web control schemas; use real packaged artifacts for compatibility and DPI smoke.
+- The current source versions are App `8.2.0` / Launcher `3.1.0`; compatibility floors remain App `8.0.0` / Launcher `3.0.0`. App ZIPs must include the shared version boundary and Web control schemas; use real packaged artifacts for compatibility and DPI smoke.
 - Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; after GitHub finishes the Release, run `gh release download vX.Y.Z --dir dist` and then `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z` on the maintainer workstation. Do not deploy to Tencent from Actions. Public endpoint checks must call `verify_release_manifest_signature`.
 - Release signing fields, key handling, and deployment boundaries are canonical in [release-signing spec](./specs/release-signing.md).
 

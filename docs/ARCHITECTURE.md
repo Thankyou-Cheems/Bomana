@@ -172,7 +172,9 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `settings_form.py` owns headless settings value collection, validation, hotkey conflict checks, and save-payload construction; `dialogs.py` remains the Tk modal entrypoint and applies messagebox/file/runtime side effects.
    - `text_utils.py` owns shared Tk text measurement, label wrapping, elision, and scaled control-length helpers used by main-window and dialog layout.
    - `window_geometry.py` owns snap-anchor capture/application helpers so App geometry coordination can be tested without a Tk root.
-   - `theme.py` owns runtime theme tokens, while `tk_style.py` owns shared Tk palette/action-button styling used by the launcher and modal app dialogs.
+   - `theme.py` owns runtime theme tokens, while `tk_style.py` owns shared Tk palette, action-button, and bordered clickable-surface styling used by the App, launcher, and modal dialogs.
+   - Wrapped middle-surface content schedules one debounced expansion-only geometry sync. The sync compares current requested height with the root's actual height before reusing the existing window-size calculation, preventing the fixed bottom card from covering the final function/weapon row without creating a resize loop.
+   - The timer row renders normalized cycle progress through `BananaProgress`: a muted banana silhouette with a continuous highlighted outline segment. The configured integer cycle is shared by App config, core calculations, tray/Web target actions, snapshots, and persisted-state compatibility checks.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Diagnostics flow:
    - `Bomana.pyw` initializes `bomana/utils/diagnostics.py` at startup.
@@ -182,7 +184,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 6. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
-   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives compact speed strip + alert sound.
+   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives compact speed strip + alert sound. Below 70% of the first caution threshold the viewport stays full-scale and the fill grows progressively; from that trigger onward a continuous presenter projection narrows the viewport and stretches all three breakup markers.
 7. Launcher check flow:
    - `launcher.pyw` remains the user-facing and PyInstaller entrypoint, while
      the `launcher/` package owns development-time launcher boundaries.
@@ -195,7 +197,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - The Tencent/EdgeOne service does not hold the release private key. It forwards `manifest_signature` from the deployed JSON manifests and may add service-derived fields such as `package_url`, `source_name`, `package_size`, and the launcher compatibility alias `package_sha256`.
    - `tools/build_portable.py` signs manifests from `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, requires the matching `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and injects that public key into packaged launchers through a temporary `launcher/release_public_keys.py` module.
    - Resolves package total size from manifest value or HTTP `Content-Length` probe.
-   - Launcher 3.0.0 uses `bomana_version.py` as the only strict compatibility parser. App and Launcher manifests keep schema version 1 and their existing signed field sets; compatibility does not add a new signed field.
+   - Launcher 3 uses `bomana_version.py` as the only strict compatibility parser. App and Launcher manifests keep schema version 1 and their existing signed field sets; compatibility does not add a new signed field.
    - The redesigned tkinter surface groups status, primary launch/update action, channel/source/proxy controls, and Web startup preferences without adding a runtime dependency. The proxy labels describe the existing preferred-path/fallback behavior instead of changing it.
 8. Launcher download/apply flow:
    - Download only starts after explicit user confirmation.
@@ -207,8 +209,8 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
    - Launcher download/update/install and App launch all remain at ordinary user integrity. `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and the `launcher.bootstrap` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules without crossing UAC.
-   - Immediately before App entry, bootstrap supplies its own `BOMANA_LAUNCHER_VERSION` plus strict `0`/`1` values for loopback Web autostart and local-page auto-open. `Bomana.pyw` validates Launcher 3.0.0+ before importing diagnostics, Tk, `GameLogic`, runtime services, or Web listeners. Only `BOMANA_SOURCE_DEVELOPMENT=1` in an explicitly non-frozen source process may bypass a missing identity; malformed or old identities still fail.
-   - Launcher persists only `web_dashboard_autostart` (default `true`) and `web_dashboard_auto_open` (default `false`). The App owns listener creation, selected port, pairing URL, browser-open timing, and every LAN/control runtime decision.
+   - Immediately before App entry, bootstrap supplies its own `BOMANA_LAUNCHER_VERSION` plus strict `0`/`1` values for Web autostart, local-page auto-open, and LAN access/control startup. `Bomana.pyw` validates Launcher 3.0.0+ before importing diagnostics, Tk, `GameLogic`, runtime services, or Web listeners. Only `BOMANA_SOURCE_DEVELOPMENT=1` in an explicitly non-frozen source process may bypass a missing identity; malformed or old identities still fail.
+   - Launcher persists only `web_dashboard_autostart` (default `true`), `web_dashboard_auto_open` (default `false`), and `web_dashboard_lan_enabled` (default `false`). Selecting LAN forces Web autostart, while clearing autostart clears LAN. The App still owns interface discovery, exact listeners, selected port, pairing URLs, browser-open timing, and live authorization.
 9. Privileged hotkey flow:
    - The App registers ordinary `RegisterHotKey` bindings first and never opens UAC automatically. It then enumerates visible top-level windows and queries only the image name and elevation token for exact War Thunder executable names.
    - Confirmed ordinary War Thunder keeps the default path without a privilege notice. Elevated, absent, or unknown game state exposes an optional action; after explicit confirmation, the App resolves `bomana/bin/BomanaHotkeyBroker.exe`, validates its adjacent SHA-256, locks it against write/delete replacement, and requests UAC. No installer or persistent component is used; without Authenticode Windows shows Unknown publisher.
@@ -221,17 +223,18 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 11. Web Cockpit flow:
    - `App` publishes the selected live/debug `UISnapshot` plus a copied checklist into `DashboardSnapshotStore`, and separately publishes Tk-owned semantic target state into `DashboardControlStore`; `MapImagePoller` uses a dedicated proxy-disabled session to publish a bounded low-cadence `/map.img` snapshot into the same in-memory store. HTTP threads consume only those immutable projections/bytes and never poll or proxy port 8111.
    - `WebDashboardRuntime` starts a loopback listener on `127.0.0.1`, preferring port `8777` and trying a bounded set of nearby ports when it is occupied.
-   - The compact App Web row and tray can explicitly enable exact listeners on every bindable RFC1918 IPv4 address for the current process, including simultaneous physical-LAN and overlay-VPN addresses. LAN access and LAN control are separate current-run actions; neither is persisted, and Bomana does not bind `0.0.0.0`, modify Windows Firewall/UPnP, or request elevation for the dashboard.
+   - The compact App Web row, tray, or Launcher startup preference can enable exact listeners on every bindable automatically discovered RFC1918 IPv4 address, including simultaneous physical-LAN and overlay-VPN addresses. The single LAN action atomically grants control for later pairings; Bomana does not persist addresses or live authorization, bind `0.0.0.0`, modify Windows Firewall/UPnP, or request elevation for the dashboard.
    - Each process has fresh pairing material. Every successful pairing creates a distinct session token, authorization record, CSRF proof, and bounded idempotency store; pairing redirects away from the code-bearing URL and authenticates later reads with an HttpOnly `SameSite=Strict` cookie.
-   - Loopback pairings may receive `control`; LAN pairings receive `view` by default. Explicitly enabling LAN control rotates the pairing code and grants control only to later LAN pairings. Revocation advances the authorization epoch, invalidates existing LAN-control sessions immediately, and rotates the code again.
+   - Loopback pairings may receive `control`. Enabling LAN rotates the pairing code and grants `control` only to later LAN pairings; disabling LAN first advances the authorization epoch, invalidates every LAN session, and rotates the code before removing hosts and listeners.
    - The browser receives the App-published tactical image, ownship, zones, airfields, POIs, Trace back, normalized selected-weapon range radii, status, timer, flight, fuel, navigation, weapon, bombing, checklist, and alert fields permitted by the active `ENABLE_*` profile. Hostile-aircraft contacts, raw 8111 JSON payloads, and diagnostics are excluded.
    - `POST /api/v1/commands` is the only write route. It requires a current control session, exactly one non-empty same-origin `Origin`, per-session CSRF proof, `application/json` with a declared length of 1..4096 bytes, the shared command schema, and a bounded per-session idempotency key. A valid enqueue returns HTTP 202 with `schema_version: 1`, the idempotency key as `command_id`, `status: "queued"`, and `submitted_revision`; the browser polls `GET /api/v1/control-state` for the later per-session `succeeded` or `rejected` completion, stable reason, submitted revision, and resulting revision.
    - The complete command matrix is exactly `action.reset_timer`,
      `action.cycle_corner`, `state.set_locked`, `state.set_beep_enabled`,
      `state.set_zone_sound_enabled`, `config.set_panel_visibility`,
-     `weapon.select`, and `weapon.set_ballistic_model`. The last six use explicit
-     targets rather than generic toggles; applicable `ENABLE_*` flags and
-     current weapon compatibility remain authoritative.
+     `config.set_timer_cycle_minutes`, `weapon.select`, and
+     `weapon.set_ballistic_model`. Target-setting commands use explicit values
+     rather than generic toggles; applicable `ENABLE_*` flags, timer bounds,
+     and current weapon compatibility remain authoritative.
    - HTTP workers enqueue an immutable envelope through `TkEventDispatcher` and never wait for execution. The Tk owner thread rechecks session epoch/scope, current-run LAN authority, feature flags, catalog/aircraft compatibility, enums, and target validity before applying the existing App semantic path and publishing one bounded completion.
    - All browser resources are packaged under `bomana/assets/web/`; the dashboard has no CDN, remote font, analytics, upload, permissive CORS, synthesized keyboard input, arbitrary callback/config/command path, or new broker/network capability.
 
@@ -312,10 +315,10 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - Web commands persist through the same existing App config paths as desktop
   actions: corner, lock, general/zone sound, panel visibility, selected weapon,
   and ballistic model. Failed persistence restores the prior effective state.
-- Launcher state may persist only the loopback Web autostart and local-page
-  auto-open booleans. Listener address/port, pairing, LAN access/control,
-  sessions, CSRF, idempotency, and authorization epochs remain App-owned
-  process state.
+- Launcher state may persist only the Web autostart, local-page auto-open, and
+  LAN access/control startup booleans. Listener address/port, pairing, live LAN
+  authorization, sessions, CSRF, idempotency, and authorization epochs remain
+  App-owned process state.
 
 ## Functional Areas (Conceptual)
 - Timer & lifecycle

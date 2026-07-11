@@ -236,12 +236,12 @@ function renderControlState(payload) {
     scope.textContent = "本机控制";
     text("controlHelp", "本机控制会话已授权；每项操作仍会在 Bomana 主线程重新校验。");
   } else if (permissions.scope === "control") {
-    scope.textContent = "本次 LAN 控制";
-    text("controlHelp", "局域网控制仅在 Bomana 本次运行中有效，撤销后现有授权会立即失效。");
+    scope.textContent = "LAN 控制";
+    text("controlHelp", "Bomana 已开启局域网访问与控制；关闭局域网后现有授权会立即失效。");
   } else {
     scope.textContent = "只读会话";
     text("controlHelp", permissions.transport === "lan"
-      ? "局域网会话默认只读。需要在 Bomana 本机为本次运行明确开启 LAN 控制并重新配对。"
+      ? "当前局域网授权已失效。请在 Bomana 本机重新开启局域网访问与控制并配对。"
       : "此会话只有查看权限，所有设置均显示当前值但不可修改。");
   }
 
@@ -257,6 +257,17 @@ function renderControlState(payload) {
   setPressed("beepOnButton", targetState.beep_enabled);
   setPressed("beepOffButton", !targetState.beep_enabled);
   $("beepOnButton").closest(".target-setting").classList.toggle("unavailable", !commands.has("state.set_beep_enabled"));
+
+  const timerCommand = "config.set_timer_cycle_minutes";
+  const timerAvailable = granted && commands.has(timerCommand);
+  const timerBusy = commandIsBusy(timerCommand);
+  const timerInput = $("timerCycleMinutes");
+  if (document.activeElement !== timerInput) {
+    timerInput.value = String(targetState.timer_cycle_minutes || 15);
+  }
+  timerInput.disabled = !timerAvailable || timerBusy;
+  $("timerCycleApplyButton").disabled = !timerAvailable || timerBusy;
+  $("timerCycleSetting").classList.toggle("unavailable", !commands.has(timerCommand));
 
   setCommandButtons(
     ["zoneSoundOnButton", "zoneSoundOffButton"],
@@ -450,7 +461,7 @@ function render(payload) {
 
   text("phaseLabel", payload.status.phase_label);
   text("timerValue", fmtTime(payload.timer.remaining_sec));
-  text("timerMeta", payload.timer.cycle ? `第 ${payload.timer.cycle} 轮 · 第 ${payload.timer.life_index || "-"} 次复活` : "等待任务计时");
+  text("timerMeta", payload.timer.cycle ? `第 ${payload.timer.cycle} 轮 · ${payload.timer.cycle_minutes} 分钟周期 · 第 ${payload.timer.life_index || "-"} 次复活` : `等待任务计时 · ${payload.timer.cycle_minutes} 分钟周期`);
   $("timerProgress").style.width = `${Math.max(0, Math.min(100, finite(payload.timer.progress) * 100))}%`;
 
   text("iasValue", Math.round(finite(payload.flight.ias_kmh)) || "---");
@@ -896,6 +907,17 @@ function installControlHandlers() {
     void submitCommand(
       { schema_version: 1, command: "state.set_beep_enabled", enabled: false },
       "关闭提示音",
+    );
+  });
+  $("timerCycleApplyButton").addEventListener("click", () => {
+    const minutes = Number($("timerCycleMinutes").value);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) {
+      setCommandStatus("计时周期必须是 1–180 分钟的整数", "error");
+      return;
+    }
+    void submitCommand(
+      { schema_version: 1, command: "config.set_timer_cycle_minutes", minutes },
+      `设置 ${minutes} 分钟计时周期`,
     );
   });
   $("zoneSoundOnButton").addEventListener("click", () => {

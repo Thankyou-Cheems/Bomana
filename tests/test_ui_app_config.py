@@ -127,6 +127,40 @@ def test_init_ui_syncs_hint_after_build(monkeypatch) -> None:
     assert calls == ["build", "hint"]
 
 
+def test_content_geometry_sync_expands_when_required_height_grows() -> None:
+    calls: list[str] = []
+    app = SimpleNamespace(
+        root=SimpleNamespace(
+            winfo_height=lambda: 320,
+            update_idletasks=lambda: None,
+        ),
+        main_frame=SimpleNamespace(winfo_reqheight=lambda: 420),
+        scale=1.0,
+        _recalc_size=lambda: calls.append("expand"),
+    )
+
+    App._sync_content_geometry(app)
+
+    assert calls == ["expand"]
+
+
+def test_content_geometry_sync_does_not_loop_when_content_fits() -> None:
+    calls: list[str] = []
+    app = SimpleNamespace(
+        root=SimpleNamespace(
+            winfo_height=lambda: 420,
+            update_idletasks=lambda: None,
+        ),
+        main_frame=SimpleNamespace(winfo_reqheight=lambda: 400),
+        scale=1.0,
+        _recalc_size=lambda: calls.append("expand"),
+    )
+
+    App._sync_content_geometry(app)
+
+    assert calls == []
+
+
 def test_web_command_rechecks_authorization_before_semantic_execution() -> None:
     app = _make_config_only_app()
     reasons: list[str] = []
@@ -146,13 +180,12 @@ def test_web_access_row_shows_current_pairing_and_every_lan_address(monkeypatch)
     app.web_access_row = _FakeNudgeRow("")
     app.web_access_lbl = _FakeLabel()
     app.web_lan_btn = _FakeLabel()
-    app.web_control_btn = _FakeLabel()
     dashboard = SimpleNamespace(
         is_running=True,
         pairing_code="ABCD-EFGH",
         port=8777,
         lan_addresses=("192.168.31.69", "10.126.126.2"),
-        lan_control_enabled=False,
+        lan_control_enabled=True,
     )
     app.runtime_services = SimpleNamespace(dashboard=dashboard)
     monkeypatch.setattr(app_module, "style_action_button", lambda *_args, **_kwargs: None)
@@ -164,8 +197,6 @@ def test_web_access_row_shows_current_pairing_and_every_lan_address(monkeypatch)
     assert "192.168.31.69:8777" in label
     assert "10.126.126.2:8777" in label
     assert app.web_lan_btn.options["text"] == "关局域网"
-    assert app.web_control_btn.options["text"] == "允许控制"
-    assert app.web_control_btn.options["state"] == "normal"
     assert app.web_access_row.manager == "grid"
 
 
@@ -202,10 +233,12 @@ def test_web_control_projection_respects_compile_feature_authority(monkeypatch) 
         "state.set_locked",
         "state.set_beep_enabled",
         "config.set_panel_visibility",
+        "config.set_timer_cycle_minutes",
     )
     assert projection.panel_targets == ("speed",)
     assert projection.weapons == ()
     assert projection.state.zone_sound_enabled is False
+    assert projection.state.timer_cycle_minutes == 15
     assert projection.state.panel_visibility.zones is False
     assert projection.state.panel_visibility.weapon_solution is False
 
@@ -313,6 +346,24 @@ def test_web_weapon_select_rejects_unverified_airborne_compatibility(monkeypatch
 
     assert reason == "weapon_incompatible"
     assert persisted == []
+
+
+def test_web_timer_command_rechecks_exact_target_and_persistence(monkeypatch) -> None:
+    app = _make_config_only_app()
+    targets: list[int] = []
+    app._set_timer_cycle_minutes = lambda minutes: targets.append(minutes) or True
+
+    reason = app._apply_web_command(
+        _web_envelope(
+            ValidatedWebCommand(
+                name="config.set_timer_cycle_minutes",
+                minutes=60,
+            )
+        )
+    )
+
+    assert reason == "ok"
+    assert targets == [60]
 
 
 def test_explicit_beep_target_rolls_back_when_persistence_fails() -> None:
@@ -805,7 +856,10 @@ def test_update_ui_frame_refreshes_visible_standalone_navigation_when_phase_exit
     )
     app._apply_speed_history_layout = lambda _active: None
     app._refresh_speed_history_ui = lambda _snap, _speed_level: None
-    app.bar_fill = SimpleNamespace(place=lambda **_kwargs: None, config=lambda **_kwargs: None)
+    app.banana_progress = SimpleNamespace(
+        set_progress=lambda _value: None,
+        set_color=lambda _value: None,
+    )
     app.timer_lbl = SimpleNamespace(config=lambda **_kwargs: None)
     app.life_lbl = SimpleNamespace(config=lambda **_kwargs: None)
     app.cycle_lbl = SimpleNamespace(config=lambda **_kwargs: None)

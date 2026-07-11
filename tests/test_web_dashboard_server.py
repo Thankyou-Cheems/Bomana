@@ -335,6 +335,7 @@ def test_lan_enable_keeps_every_successful_exact_private_listener(monkeypatch) -
     )
     try:
         assert runtime.enable_lan() == "192.168.31.69"
+        assert runtime.lan_control_enabled is True
         assert runtime.lan_addresses == ("192.168.31.69", "10.126.126.2")
         assert runtime.lan_urls == (
             f"http://192.168.31.69:{runtime.port}/",
@@ -345,6 +346,49 @@ def test_lan_enable_keeps_every_successful_exact_private_listener(monkeypatch) -
         runtime.disable_lan()
         assert stopped == ["192.168.31.69", "10.126.126.2"]
         assert runtime.lan_addresses == ()
+        assert runtime.lan_control_enabled is False
+    finally:
+        monkeypatch.setattr(runtime, "_stop_listener", real_stop)
+        runtime.stop()
+
+
+def test_lan_enable_rolls_back_listeners_if_control_authority_fails(monkeypatch) -> None:
+    runtime = WebDashboardRuntime(
+        DashboardSnapshotStore(),
+        preferred_port=0,
+        address_provider=lambda: ["192.168.31.69"],
+    )
+    runtime.start()
+    assert runtime.port is not None
+    stopped: list[str] = []
+    real_stop = runtime._stop_listener
+
+    monkeypatch.setattr(
+        runtime,
+        "_start_listener",
+        lambda address, port: _Listener(
+            server=SimpleNamespace(server_address=(address, port)),
+            thread=SimpleNamespace(),
+            address=address,
+        ),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_stop_listener",
+        lambda listener: stopped.append(listener.address),
+    )
+    monkeypatch.setattr(
+        runtime.security,
+        "enable_lan_control",
+        lambda: (_ for _ in ()).throw(RuntimeError("control unavailable")),
+    )
+    try:
+        with pytest.raises(RuntimeError, match="control unavailable"):
+            runtime.enable_lan()
+        assert runtime.lan_addresses == ()
+        assert runtime.lan_control_enabled is False
+        assert stopped == ["192.168.31.69"]
+        assert not runtime.security.host_allowed(f"192.168.31.69:{runtime.port}")
     finally:
         monkeypatch.setattr(runtime, "_stop_listener", real_stop)
         runtime.stop()
@@ -740,7 +784,7 @@ def test_current_capabilities_are_checked_before_queueing(
     assert envelopes == []
 
 
-def test_lan_pairing_is_view_only_until_enable_and_revocation_is_immediate() -> None:
+def test_lan_control_rotation_and_revocation_are_immediate() -> None:
     security = _SecurityState()
     old_code = security.pairing_code
     result, view_token = security.verify_pairing("client-1", old_code, "lan")

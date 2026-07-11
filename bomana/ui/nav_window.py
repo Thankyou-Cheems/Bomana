@@ -16,6 +16,7 @@ from bomana.config.settings import (
 )
 from bomana.ui.navigation_presenter import build_navigation_tape_model
 from bomana.ui.theme import Theme
+from bomana.ui.tk_style import style_clickable_surface
 from bomana.ui.widgets import HeadingTape
 from bomana.utils.math_utils import (
     calculate_airfield_status,
@@ -227,6 +228,7 @@ class NavigationWindow:
             pady=max(1, int(1 * s)),
         )
         self.close_btn.pack(side="right")
+        style_clickable_surface(self.close_btn)
         self.close_btn.bind("<Button-1>", self._on_close_requested)
         self.close_btn.bind(
             "<Enter>", lambda e: self.close_btn.config(fg=Theme.RED, bg=Theme.BORDER)

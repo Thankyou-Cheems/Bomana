@@ -43,8 +43,35 @@ class GameConfig:
     这些参数直接影响游戏状态判断的准确性，修改时需谨慎测试。
     """
 
-    # 复活周期：15分钟（战雷SB标准）
-    CYCLE_SECONDS = 15 * 60
+    DEFAULT_CYCLE_MINUTES = 15
+    MIN_CYCLE_MINUTES = 1
+    MAX_CYCLE_MINUTES = 180
+    LEGACY_CYCLE_SECONDS = 15 * 60
+
+    # 复活/结算周期：默认15分钟，可由用户按玩法调整。
+    CYCLE_SECONDS = DEFAULT_CYCLE_MINUTES * 60
+
+    @classmethod
+    def normalize_cycle_minutes(cls, value: object) -> int | None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            return None
+        if not cls.MIN_CYCLE_MINUTES <= value <= cls.MAX_CYCLE_MINUTES:
+            return None
+        return value
+
+    @classmethod
+    def set_cycle_minutes(cls, value: object) -> bool:
+        minutes = cls.normalize_cycle_minutes(value)
+        if minutes is None:
+            return False
+        cls.CYCLE_SECONDS = minutes * 60
+        return True
+
+    @classmethod
+    def cycle_minutes(cls) -> int:
+        minutes = cls.CYCLE_SECONDS // 60
+        normalized = cls.normalize_cycle_minutes(minutes)
+        return normalized if normalized is not None else cls.DEFAULT_CYCLE_MINUTES
 
     # 最后警告时间：30秒（进入黄色/红色警告区）
     FINAL_WARNING_SEC = 30

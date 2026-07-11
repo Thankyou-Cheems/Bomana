@@ -14,8 +14,9 @@ submodule boundaries.
 
 - This spec does not introduce variant-specific user config files.
 - This spec does not change current default feature behavior.
-- This spec does not authorize persisted LAN, listener, pairing, session, or
-  Web-control state.
+- This spec authorizes only the explicit Launcher LAN-startup boolean; it does
+  not authorize persisted listener addresses/ports, pairing, sessions, CSRF,
+  authorization epochs, or other Web-control state.
 
 ## Normative Clauses
 
@@ -49,29 +50,34 @@ submodule boundaries.
   CCRP, AAM, AGM, guided-bomb, and glide-bomb estimates; code MUST NOT create a
   parallel feature flag or panel key for that card.
 - `CFG-10`: The only Launcher-persisted Web preferences MUST be boolean
-  `web_dashboard_autostart` (default `true`) and boolean
-  `web_dashboard_auto_open` (default `false`).
+  `web_dashboard_autostart` (default `true`), boolean
+  `web_dashboard_auto_open` (default `false`), and boolean
+  `web_dashboard_lan_enabled` (default `false`).
 - `CFG-11`: A missing or non-boolean Launcher Web preference MUST fall back to
   its `CFG-10` default rather than applying truthiness coercion.
-- `CFG-12`: Launcher bootstrap MUST pass only the two `CFG-10` booleans to the
-  App and MUST NOT pass or persist a Web host, port, pairing URL, LAN-access
-  choice, LAN-control choice, session, CSRF proof, or authorization epoch.
+- `CFG-12`: Launcher bootstrap MUST pass only the three `CFG-10` booleans to the
+  App and MUST NOT pass or persist a Web host, port, pairing URL, selected
+  interface, separate LAN-control choice, session, CSRF proof, or authorization
+  epoch.
 - `CFG-13`: The App MUST choose the listener and port, generate pairing URLs,
-  decide browser-open timing after successful loopback startup, and own all
-  current-run LAN and control state.
+  discover eligible interfaces, decide browser-open timing after successful
+  loopback startup, and own all live LAN listeners and control state.
+- `CFG-14`: Selecting `web_dashboard_lan_enabled` MUST also select
+  `web_dashboard_autostart`; clearing Web autostart MUST clear LAN startup so
+  the Launcher cannot request LAN without an App Web runtime.
 
 ## Contract Coverage
 
 - [static] `tests/contracts/test_config_variants.py` enforces
-  `CFG-01..CFG-04` and `CFG-06..CFG-13` across the variant matrix, build patch
+  `CFG-01..CFG-04` and `CFG-06..CFG-14` across the variant matrix, build patch
   target, shared config path, panel precedence, navigation fallback, package
   boundary, and the exact Launcher Web preference allowlist.
 - [behavioral] `tests/test_file_utils_persistence.py` enforces `CFG-04` and
   `CFG-05` with single-file persistence and compile-switch migration cases.
 - [behavioral] `tests/test_launcher_update_service.py` and
-  `tests/test_launcher_launch_flow.py` enforce `CFG-10..CFG-12` with defaults,
+  `tests/test_launcher_launch_flow.py` enforce `CFG-10..CFG-14` with defaults,
   strict boolean recovery, forbidden legacy-key migration, state round-trips,
   and bootstrap handoff cases.
 - [behavioral] `tests/test_runtime_services.py` enforces `CFG-10`, `CFG-12`, and
-  `CFG-13` with loopback autostart, lazy start, optional local open, and App-owned
-  LAN/control lifecycle cases.
+  `CFG-13` with loopback autostart, lazy start, optional local open, automatic
+  interface discovery, and App-owned LAN/control lifecycle cases.

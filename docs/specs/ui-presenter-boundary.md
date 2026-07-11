@@ -1,6 +1,6 @@
 # UI Presenter Boundary Spec
 
-Status: Accepted
+Status: Amended (2026-07)
 Owner: Bomana maintainers
 Prefix: `UI-PRES-`
 
@@ -35,6 +35,21 @@ modules, Tk renderers, and runtime side effects.
   access, and optional elevation rows MUST preserve domain facts in the
   snapshot and compute focus ratios, concise copy, and visibility in presenters
   or renderer helpers; core logic MUST NOT emit widget-layout strings.
+- `UI-PRES-06`: The speed strip MUST project the full current ratio below
+  `0.7 * OverspeedConfig.CAUTION_RATIO` and continuously interpolate its lower
+  viewport bound until the caution threshold so fill and all three breakup
+  markers remain monotonic, visible, and dynamically separated.
+- `UI-PRES-07`: Dynamic label wrapping or row visibility that increases required
+  height MUST schedule one debounced geometry expansion; at supported App
+  scale/DPI combinations the weapon card's bottom edge MUST remain at or above
+  the bottom-card top edge.
+- `UI-PRES-08`: Every App click target MUST use the shared clickable border or
+  shadow plus pointer/hover feedback, while non-clickable labels MUST NOT use
+  that affordance.
+- `UI-PRES-09`: App fuel and weapon copy MUST use operationally clear air-combat
+  terms, MUST NOT show selection-source text such as `手选`, and MUST omit a
+  separate weapon model/quality row when the range/status rows already convey
+  the actionable solution.
 
 ## Contract Coverage
 
@@ -43,7 +58,10 @@ modules, Tk renderers, and runtime side effects.
 - [behavioral] `tests/test_dialog_presenter.py`, `tests/test_hud_presenter.py`,
   `tests/test_navigation_presenter.py`, `tests/test_panel_presenter.py`, and
   `tests/test_snapshot_presenter.py` enforce headless view-model behavior in
-  `UI-PRES-03..UI-PRES-05`.
+  `UI-PRES-03..UI-PRES-06` and `UI-PRES-09`.
 - [behavioral] `tests/test_panel_renderer.py` and
   `tests/test_navigation_runtime.py` enforce renderer/runtime ownership of the
   side effects described by `UI-PRES-03`.
+- [behavioral] `tests/test_ui_geometry.py` and `tests/test_tk_style.py` enforce
+  `UI-PRES-07..UI-PRES-08` with narrow wrapped-content geometry and shared
+  clickable-affordance cases.

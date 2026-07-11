@@ -41,6 +41,7 @@ def _projection(revision: int = 1) -> ControlStateProjection:
             ),
             selected_weapon_id="aim_9l",
             ballistic_model="foxthree_compatible",
+            timer_cycle_minutes=15,
         ),
         weapons=(
             WeaponChoice(
@@ -97,6 +98,14 @@ def _projection(revision: int = 1) -> ControlStateProjection:
         (
             {
                 "schema_version": 1,
+                "command": "config.set_timer_cycle_minutes",
+                "minutes": 60,
+            },
+            ValidatedWebCommand(name="config.set_timer_cycle_minutes", minutes=60),
+        ),
+        (
+            {
+                "schema_version": 1,
                 "command": "weapon.set_ballistic_model",
                 "model": "strict_official",
             },
@@ -126,6 +135,11 @@ def test_exact_command_matrix_builds_frozen_semantic_commands(payload, expected)
             "command": "config.set_panel_visibility",
             "target": "arbitrary",
             "enabled": True,
+        },
+        {
+            "schema_version": 1,
+            "command": "config.set_timer_cycle_minutes",
+            "minutes": 181,
         },
     ],
 )

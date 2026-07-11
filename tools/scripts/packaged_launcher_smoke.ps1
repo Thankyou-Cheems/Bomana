@@ -273,6 +273,7 @@ function Write-SmokeLauncherState {
         use_system_proxy = $false
         web_dashboard_autostart = $true
         web_dashboard_auto_open = $false
+        web_dashboard_lan_enabled = $false
         state_updated_utc = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     }
     $statePath = Join-Path $InstallRoot "launcher_state.json"

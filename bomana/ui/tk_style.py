@@ -132,6 +132,56 @@ def action_button_style(
     return styles.get(str(variant or "neutral"), styles["neutral"])
 
 
+def clickable_surface_style(
+    *,
+    palette: Mapping[str, str] | TkPalette | None = None,
+) -> TkButtonStyle:
+    """Return the shared non-button click-target affordance."""
+    colors = palette if isinstance(palette, TkPalette) else TkPalette.from_source(palette)
+    return TkButtonStyle(
+        bg=colors.card,
+        fg=colors.blue,
+        hover_bg=colors.separator,
+        press_bg=colors.card_alt,
+        border=colors.border,
+        hover_border=colors.blue,
+    )
+
+
+def style_clickable_surface(
+    widget: tk.Widget,
+    *,
+    palette: Mapping[str, str] | TkPalette | None = None,
+) -> TkButtonStyle:
+    """Give clickable labels/frames a visible border and hover response."""
+    style = clickable_surface_style(palette=palette)
+    options = {
+        "bg": style.bg,
+        "cursor": "hand2",
+        "highlightthickness": 1,
+        "highlightbackground": style.border,
+        "highlightcolor": style.hover_border,
+    }
+    supported_options = set(widget.keys())
+    if "fg" in supported_options:
+        options["fg"] = style.fg
+    widget.configure(**options)
+    widget._bomana_clickable_style = style
+    if getattr(widget, "_bomana_clickable_bound", False):
+        return style
+    widget._bomana_clickable_bound = True
+
+    def on_enter(_event: tk.Event | None = None) -> None:
+        widget.configure(bg=style.hover_bg, highlightbackground=style.hover_border)
+
+    def on_leave(_event: tk.Event | None = None) -> None:
+        widget.configure(bg=style.bg, highlightbackground=style.border)
+
+    widget.bind("<Enter>", on_enter, add="+")
+    widget.bind("<Leave>", on_leave, add="+")
+    return style
+
+
 def style_action_button(
     button: tk.Button,
     variant: str = "neutral",

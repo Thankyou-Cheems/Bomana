@@ -349,6 +349,7 @@ def build_dashboard_payload(published: PublishedDashboardSnapshot) -> dict[str, 
                 else None
             ),
             "sortie_id": max(0, int(snap.sortie_id)),
+            "cycle_minutes": max(1, min(180, int(snap.timer_cycle_minutes))),
         },
         "flight": {
             "aircraft": str(snap.aircraft_type_name or ""),

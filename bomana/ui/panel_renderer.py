@@ -793,6 +793,14 @@ class AppPanelRenderer:
         app.speed_value_lbl.config(text=model.value_text, fg=model.value_fg)
         app.speed_bar_fill.config(bg=model.fill_color)
         app.speed_bar_fill.place(relwidth=model.fill_ratio)
+        for name, relx in zip(
+            ("caution", "warning", "critical"),
+            model.marker_ratios,
+            strict=True,
+        ):
+            marker = app.speed_bar_markers.get(name)
+            if marker is not None:
+                marker.place_configure(relx=relx)
 
         if model.level != app._last_overspeed_level:
             app._last_overspeed_level = model.level

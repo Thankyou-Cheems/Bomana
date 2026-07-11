@@ -16,8 +16,8 @@ suite is not evidence that any scenario below was performed.
 - 使用普通权限运行 Launcher 和 Bomana；网页驾驶舱不需要管理员权限。
 - 准备两个相互隔离的桌面浏览器 profile，以及连接到同一可信局域网的真实
   手机。不要在记录中保存配对码、Cookie、CSRF 或幂等键。
-- 打包检查使用真实 Launcher `3.0.0` 与
-  `Bomana_app_<Variant>_v8.0.0.zip`，不要用源码目录代替。
+- 打包检查使用真实 Launcher `3.1.0` 与
+  `Bomana_app_<Variant>_v8.2.0.zip`，不要用源码目录代替。
 - 如需源码对照，使用当前 PowerShell 进程内的显式开发标记：
 
   ```powershell
@@ -65,30 +65,26 @@ suite is not evidence that any scenario below was performed.
 与 App 一致。当前通道禁用的控制不可用，武器选择仍受当前机型兼容范围约束。
 页面不产生键盘输入，不触发 UAC，也不新增 Broker 或 8111 请求。
 
-### WDB-M03 LAN 默认只读 | LAN is view-only by default
+### WDB-M03 LAN 自动发现与统一控制 | LAN discovery and unified control
 
-1. 从 App 或托盘开启“允许局域网访问（本次运行）”，用自动复制的新链接在真实手机
-   配对，并分别检查竖屏和横屏。
-2. 保持 LAN 控制关闭，尝试操作控制区，并检查控制状态响应。
+1. 从 App 或托盘开启“局域网访问与控制”，用自动复制的新链接在真实手机配对，
+   并分别检查竖屏和横屏。
+2. 执行一个可逆的显式目标操作，并检查控制状态响应与 App 最终状态。
 
 预期：每个可绑定的 RFC1918 IPv4 都有独立精确监听，主窗口列出全部地址且没有
-`0.0.0.0`；手机会话显示“只读会话”，CSRF 为 `null`，
-所有写控件禁用，直接写请求也以 `control_required` 失败。地图是移动端主要
-信息入口，页面无横向溢出，计时/飞行/导航/告警无需桌面宽度即可读取。
+`0.0.0.0`；手机获得独立控制会话，写入仍经过 Origin、CSRF、幂等、schema
+和 Tk 主线程复核。地图是移动端主要信息入口，页面无横向溢出，计时/飞行/
+导航/告警无需桌面宽度即可读取。
 
 ### WDB-M04 LAN 控制、重新配对与立即撤销 | LAN control and revoke
 
-1. 保留 WDB-M03 的只读手机会话，在电脑 App 或托盘明确开启“允许局域网控制（本次
-   运行）”并确认。
-2. 验证配对码已轮换，旧手机会话仍为只读；使用轮换后的新链接在另一个手机
-   profile 重新配对。
-3. 在新会话执行一个可逆的显式目标操作，例如设定提示音状态。
-4. 从电脑 App 或托盘撤销 LAN 控制；不刷新页面，立即再次尝试操作并轮询控制状态。
+1. 保留 WDB-M03 的手机控制会话，从电脑 App 或托盘关闭 LAN。
+2. 验证配对码已轮换；不刷新页面，立即再次尝试操作并轮询控制状态。
+3. 重新开启 LAN，使用轮换后的新链接在另一个手机 profile 配对并执行一个可逆操作。
 
-预期：只有开启后重新配对的 LAN 会话获得控制，已有只读会话不会自动升级。
-撤销会再次轮换配对码，并立即使已有 LAN 控制会话失效；后续写入不得执行。
+预期：关闭会轮换配对码并立即使所有已有 LAN 会话失效；后续写入不得执行。
 若命令恰好已排队但尚未到达 Tk，Tk 侧重新授权必须产生
-`authorization_revoked`，不得晚执行。再次控制必须重新开启并重新配对。
+`authorization_revoked`，不得晚执行。再次控制必须重新开启 LAN 并重新配对。
 
 ### WDB-M05 写入安全与幂等 | Write security and idempotency
 
@@ -129,7 +125,7 @@ Bomana 本身不新增规则、不触发 UAC，也不开放公用网络规则。
 
 ### WDB-M08 三通道打包资源 | Packaged variants and offline assets
 
-分别从 Enhanced、Standard、Lite 的真实 App 8.0.0 包启动；断开外网后打开
+分别从 Enhanced、Standard、Lite 的真实 App 8.2.0 包启动；断开外网后打开
 页面并查看浏览器 Network 面板。
 
 预期：HTML/CSS/JS/SVG、项目 PNG 标识与字体均从 Bomana 自身地址加载，无 CDN、远程字体、
@@ -151,33 +147,34 @@ Standard 不发布武器选择/模型或武器解算面板目标；Lite 仍可�
 
 ### WDB-M10 进程生命周期与偏好持久化 | Lifecycle and preferences
 
-1. 在 Launcher 中关闭 Web autostart 后启动 App；确认没有监听器，再从托盘
+1. 在 Launcher 中关闭 Web autostart 后启动 App；确认 LAN 偏好同步清除且没有监听器，再从托盘
    “打开本机页面”按需启动。
 2. 开启 autostart、关闭 auto-open，重启后确认只启动服务而不打开浏览器；再
    开启 auto-open，确认只有本机监听成功后才打开页面。
-3. 开启 LAN 访问和 LAN 控制后退出并重启 App。
+3. 在 Launcher 中开启 LAN 启动偏好，确认 Web autostart 同步开启；启动 App 后
+   检查自动发现的精确 LAN 监听与控制会话。随后关闭 LAN 并退出。
 
-预期：Launcher 只保存两个布尔偏好。按需启动、端口选择、配对 URL 与浏览器
-打开由 App 决定；auto-open 在 autostart 关闭时不单独启动服务。退出后本机和
-LAN 端口释放；重启后 LAN 访问/控制关闭，配对材料和会话已更换，旧手机会话
-不能读取或控制新进程。
+预期：Launcher 只保存 Web autostart、local auto-open 与 LAN startup 三个布尔
+偏好。按需启动、接口发现、端口选择、配对 URL 与浏览器打开由 App 决定；
+auto-open 在 autostart 关闭时不单独启动服务。退出后本机和 LAN 端口释放；
+每次启动的配对材料和会话都不同，旧手机会话不能读取或控制新进程。
 
 ### WDB-M11 Launcher 3 打包 UI、DPI 与键盘 | Packaged Launcher UI
 
-用真实 `Bomana_launcher_v3.0.0.exe` 在 Windows 100%、125%、150% 和 200%
+用真实 `Bomana_launcher_v3.1.0.exe` 在 Windows 100%、125%、150% 和 200%
 缩放下启动，调整窗口大小，并只用 Tab / Shift+Tab / 方向键 / Space / Enter
-完成通道、下载源、代理、两个 Web 偏好、主要启动/更新动作与辅助动作的遍历。
+完成通道、下载源、代理、三个 Web 偏好、主要启动/更新动作与辅助动作的遍历。
 
 预期：标题、状态、主要动作、启动与版本设置、更新/网络选项层级清晰；没有
 文字或按钮裁切、重叠、不可达控件或焦点丢失。原有检查、安装、离线启动、
 导入、回退、支持页和 Launcher 自更新入口仍可发现。代理文案与实际优先/
-回退顺序一致，两个 Web 偏好在重启 Launcher 后保持。
+回退顺序一致，三个 Web 偏好在重启 Launcher 后保持且依赖关系正确。
 
 ### WDB-M12 App 8 / Launcher 3 打包边界 | Packaged compatibility
 
 在隔离副本中运行 packaged-launcher smoke，并人工核对以下结果：
 
-- Launcher 3.0.0 + App 8.0.0 正常交接，App 在运行时初始化前拿到严格
+- Launcher 3.1.0 + App 8.2.0 正常交接，App 在运行时初始化前拿到严格
   `BOMANA_LAUNCHER_VERSION`；
 - 缺失、畸形或 `2.9.9` 的 Launcher 身份被打包 App 拒绝，即使设置
   `BOMANA_SOURCE_DEVELOPMENT=1` 也不能绕过；

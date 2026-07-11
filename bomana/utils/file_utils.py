@@ -327,6 +327,7 @@ class StateManager:
             "sortie_id": sortie_id,
             "battle_signature": battle_signature,
             "battle_signature_version": 1,
+            "cycle_seconds": GameConfig.CYCLE_SECONDS,
         }
         try:
             atomic_write_json(FileConfig.STATE_FILE, state_data, ensure_ascii=False)
@@ -367,6 +368,19 @@ class StateManager:
             StateManager._normalize_optional_int(data, "sortie_id")
             data["remaining_sec"] = saved_remaining
             data["save_timestamp"] = save_time
+
+            raw_cycle_seconds = data.get("cycle_seconds")
+            if raw_cycle_seconds is None:
+                saved_cycle_seconds = GameConfig.LEGACY_CYCLE_SECONDS
+                if GameConfig.CYCLE_SECONDS != GameConfig.LEGACY_CYCLE_SECONDS:
+                    return None
+            else:
+                if isinstance(raw_cycle_seconds, bool) or not isinstance(raw_cycle_seconds, int):
+                    raise ValueError("cycle_seconds must be an integer")
+                saved_cycle_seconds = raw_cycle_seconds
+                if saved_cycle_seconds != GameConfig.CYCLE_SECONDS:
+                    return None
+            data["cycle_seconds"] = saved_cycle_seconds
 
             # 计算实际流逝的时间
             now = time.time()

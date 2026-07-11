@@ -1,0 +1,99 @@
+{
+  "version": 3,
+  "findings": [
+    {
+      "file": "README.md",
+      "line_start": 177,
+      "line_end": 177,
+      "snippet": "The Web Cockpit combines a filtered dashboard with a small allowlist of Bomana semantic controls. It runs independently from port 8111, never synthesizes keys, and keeps LAN sessions view-only unless control is explicitly enabled for the current run and the device pairs again.",
+      "category": "security",
+      "severity": "high",
+      "confidence": "confirmed",
+      "title": "English README misstates the new LAN control grant",
+      "impact": "An English-reading user can enable LAN believing paired devices remain view-only, while the implemented one-action flow grants fixed-function control to later LAN pairings. The public security posture therefore understates the authority exposed on the LAN path.",
+      "fix": "Update the English Web Cockpit summary to state that enabling LAN also enables control for later pairings and that disabling LAN immediately invalidates all LAN sessions.",
+      "spec_clause": "INV-2, WDB-20, WDB-21, WDB-22",
+      "evidence": [
+        {
+          "kind": "diff",
+          "detail": "The adjacent Chinese README bullet was updated to the unified LAN action, but this English paragraph retained the previous two-step view-only model."
+        },
+        {
+          "kind": "spec",
+          "detail": "WDB-20 through WDB-22 define one-action LAN control grant and immediate full LAN-session revocation."
+        },
+        {
+          "kind": "read",
+          "detail": "WebDashboardRuntime.enable_lan now enables LAN control authority after exact listeners bind; there is no separate App or tray control-enable action."
+        }
+      ],
+      "id": "F-22471fe1",
+      "status": "fixed",
+      "created_at": "2026-07-11T17:17:39+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited range",
+        "at": "2026-07-11T17:17:39+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-0243dab0",
+          "name": "reviewer-fixes",
+          "kind": "test",
+          "cmd": "uv run --extra dev pytest -q tests/test_tk_style.py tests/contracts/test_web_dashboard_contract.py",
+          "cwd": ".",
+          "started_at": "2026-07-11T17:19:40.068659+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T17:19:51+00:00",
+      "resolution_note": "English README now states one-action LAN control grant and immediate all-session revocation; contract pin passes."
+    },
+    {
+      "file": "bomana/ui/tk_style.py",
+      "line_start": 165,
+      "line_end": 165,
+      "snippet": "    if \"fg\" in widget:",
+      "category": "correctness",
+      "severity": "critical",
+      "confidence": "confirmed",
+      "title": "Clickable-surface styling crashes App startup",
+      "impact": "Every normal App startup reaches MainWindowBuilder.build(), which unconditionally styles web_access_lbl. tkinter widgets implement __getitem__ but not __contains__, so the membership expression probes a numeric configuration key and raises TypeError before the main window finishes building.",
+      "fix": "Detect foreground support without membership iteration, for example by checking widget.keys() or by applying fg only to widget classes/options known to support it, and add a Tk-backed regression test that calls style_clickable_surface on both a Label and a Frame.",
+      "spec_clause": "INV-8",
+      "evidence": [
+        {
+          "kind": "diff",
+          "detail": "The new helper added this membership expression and MainWindowBuilder now calls the helper unconditionally while constructing the main window."
+        },
+        {
+          "kind": "tool",
+          "detail": "Runtime introspection confirmed tkinter.Widget has no __contains__; its inherited __getitem__ is cget, so membership falls back to numeric indexing and raises instead of returning a boolean."
+        },
+        {
+          "kind": "spec",
+          "detail": "UI-PRES-08 requires clickable styling to work on App click targets; this failure prevents the App surface from starting."
+        }
+      ],
+      "id": "F-1c091313",
+      "status": "fixed",
+      "created_at": "2026-07-11T17:17:54+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited range",
+        "at": "2026-07-11T17:17:54+00:00"
+      },
+      "resolution_checks": [
+        {
+          "check_id": "C-0243dab0",
+          "name": "reviewer-fixes",
+          "kind": "test",
+          "cmd": "uv run --extra dev pytest -q tests/test_tk_style.py tests/contracts/test_web_dashboard_contract.py",
+          "cwd": ".",
+          "started_at": "2026-07-11T17:19:40.068659+00:00"
+        }
+      ],
+      "resolved_at": "2026-07-11T17:19:51+00:00",
+      "resolution_note": "Use a materialized widget.keys() set; real Tk Label/Frame regression and real App startup probe pass."
+    }
+  ]
+}

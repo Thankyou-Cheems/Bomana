@@ -12,7 +12,7 @@ from bomana.ui.nav_window import NavigationWindow
 from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.text_utils import measure_min_width, set_elided_text
 from bomana.ui.theme import Theme
-from bomana.ui.widgets import HeadingTape
+from bomana.ui.widgets import BananaProgress, HeadingTape
 
 
 class FakeIcons:
@@ -100,6 +100,10 @@ def test_main_window_actions_have_persistent_button_affordances() -> None:
     assert "POI四角标记" in source
     assert "上次坠毁点" in source
     assert "◇" not in source
+    assert "style_clickable_surface(app.web_access_lbl" in source
+    assert "style_clickable_surface(app.speed_threshold_btn" in source
+    assert "style_clickable_surface(app.bombing_info_frame" in source
+    assert "app.web_control_btn" not in source
 
 
 class TkGeometryTests(unittest.TestCase):
@@ -161,6 +165,51 @@ class TkGeometryTests(unittest.TestCase):
 
         self.assertLess(heights[0], heights[1])
         self.assertLess(heights[1], heights[2])
+
+    def test_banana_progress_clamps_and_draws_partial_outline(self) -> None:
+        banana = BananaProgress(self.root, size=64)
+        banana.pack()
+        try:
+            banana.set_progress(0.5)
+            self.root.update_idletasks()
+            self.assertEqual(banana.progress, 0.5)
+            self.assertGreater(len(banana.coords(banana.progress_outline)), 4)
+            self.assertLess(
+                len(banana.coords(banana.progress_outline)),
+                len(banana.outline_points) * 2,
+            )
+
+            banana.set_progress(2.0)
+            self.assertEqual(banana.progress, 1.0)
+            self.assertEqual(
+                len(banana.coords(banana.progress_outline)),
+                len(banana.outline_points) * 2,
+            )
+        finally:
+            banana.destroy()
+
+    def test_wrapped_content_schedules_geometry_expansion(self) -> None:
+        calls: list[str] = []
+        parent = tk.Frame(self.root, width=180)
+        parent.pack(fill="x")
+        label = tk.Label(
+            parent,
+            text="这是一段会在窄窗口换行并增加武器卡高度的测试文本",
+            justify="left",
+        )
+        label.pack(fill="x")
+        app = SimpleNamespace(
+            scale=1.0,
+            _schedule_content_geometry_sync=lambda: calls.append("sync"),
+        )
+        MainWindowBuilder(app)._bind_label_wrap(label, parent, margin=12)
+
+        self.root.deiconify()
+        self.root.geometry("180x80")
+        self.root.update()
+
+        self.assertTrue(calls)
+        self.assertGreaterEqual(int(float(label.cget("wraplength"))), 80)
 
     def test_checklist_uses_full_card_width_and_keeps_markers_separate(self) -> None:
         card = tk.Frame(self.root, width=640, height=360)

@@ -134,7 +134,7 @@ def test_weapon_selector_persists_manual_bomb_and_syncs_ccrp_selection(monkeypat
     assert catalog.set_calls == [("su_fab100", "manual")]
     assert dialogs.BombConfig.selected_bomb == "su_fab100"
     assert dialog.result == "su_fab100"
-    assert label_updates == [{"text": "FAB-100 · 炸弹 · 手选"}]
+    assert label_updates == [{"text": "FAB-100 · 炸弹 · 点击切换"}]
 
 
 def test_weapon_selector_keeps_ccrp_bomb_when_selecting_missile(monkeypatch) -> None:

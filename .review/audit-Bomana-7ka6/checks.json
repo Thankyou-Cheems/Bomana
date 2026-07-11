@@ -1,0 +1,164 @@
+{
+  "version": 2,
+  "runs": [
+    {
+      "id": "C-f05ef463",
+      "name": "config:ruff",
+      "kind": "lint",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "ruff",
+        "check",
+        "."
+      ],
+      "cmd": "uv run ruff check .",
+      "source": "pyproject.toml",
+      "origin": "configured-fallback",
+      "started_at": "2026-07-11T17:04:22.107248+00:00",
+      "duration_seconds": 0.101,
+      "exit_code": 0,
+      "status": "pass",
+      "output_tail": "All checks passed!"
+    },
+    {
+      "id": "C-5be9c9e3",
+      "name": "config:pytest",
+      "kind": "test",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "pytest",
+        "-q"
+      ],
+      "cmd": "uv run pytest -q",
+      "source": "pyproject.toml",
+      "origin": "configured-fallback",
+      "started_at": "2026-07-11T17:04:22.213003+00:00",
+      "duration_seconds": 23.978,
+      "exit_code": 1,
+      "status": "fail",
+      "output_tail": "........................................................................ [ 10%]\n.....................................................uuuuuuuu........... [ 20%]\n........................................................................ [ 30%]\n...........................F............................................ [ 41%]\n........................................................................ [ 51%]\n........................................................................ [ 62%]\n....................uuu.uu..uu.......................................... [ 72%]\n........................................................................ [ 82%]\n........................................................................ [ 93%]\n..............................................                           [100%]\n================================== FAILURES ===================================\n_ LauncherUpdateServiceTests.test_check_reports_launcher_requirement_and_fetches_missing_size _\n\nself = <test_launcher_update_service.LauncherUpdateServiceTests testMethod=test_check_reports_launcher_requirement_and_fetches_missing_size>\n\n    def test_check_reports_launcher_requirement_and_fetches_missing_size(self) -> None:\n        service = self.launcher.UpdateService(self.base, \"Enhanced\", {\"install_id\": \"abc\"})\n        app_manifest = {\n            \"remote_version\": \"8.1.0\",\n            \"min_launcher_version\": \"999.0.0\",\n            \"package_url\": \"https://example.invalid/app.zip\",\n            \"package_sha256\": \"abc\",\n            \"package_size\": \"123\",\n            \"source_name\": \"GitHub\",\n        }\n        launcher_manifest = {\n            \"remote_version\": \"3.1.0\",\n            \"package_url\": \"https://example.invalid/launcher.exe\",\n            \"package_sha256\": \"def\",\n            \"package_size\": \"\",\n            \"source_name\": \"GitHub\",\n        }\n    \n        with (\n            patch.object(service, \"resolve_app_manifest\", return_value=(\"8.0.0\", app_manifest)),\n            patch.object(service, \"resolve_launcher_manifest\", return_value=launcher_manifest),\n            patch.object(self.launcher, \"_fetch_content_length\", return_value=456) as fetch_size,\n        ):\n            info = service.check()\n    \n        self.assertTrue(info[\"update_available\"])\n        self.assertTrue(info[\"app_requires_launcher_update\"])\n>       self.assertTrue(info[\"launcher_update_available\"])\nE       AssertionError: False is not true\n\ntests\\test_launcher_update_service.py:502: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_launcher_update_service.py::LauncherUpdateServiceTests::test_check_reports_launcher_requirement_and_fetches_missing_size"
+    },
+    {
+      "id": "C-710040f9",
+      "name": "config:ruff",
+      "kind": "lint",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "ruff",
+        "check",
+        "."
+      ],
+      "cmd": "uv run ruff check .",
+      "source": "pyproject.toml",
+      "origin": "configured-fallback",
+      "started_at": "2026-07-11T17:05:19.752070+00:00",
+      "duration_seconds": 0.121,
+      "exit_code": 0,
+      "status": "pass",
+      "output_tail": "All checks passed!"
+    },
+    {
+      "id": "C-5f822b1e",
+      "name": "config:pytest",
+      "kind": "test",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "pytest",
+        "-q"
+      ],
+      "cmd": "uv run pytest -q",
+      "source": "pyproject.toml",
+      "origin": "configured-fallback",
+      "started_at": "2026-07-11T17:05:19.877738+00:00",
+      "duration_seconds": 23.544,
+      "exit_code": 0,
+      "status": "pass",
+      "output_tail": "........................................................................ [ 10%]\n.....................................................uuuuuuuu........... [ 20%]\n........................................................................ [ 30%]\n........................................................................ [ 41%]\n........................................................................ [ 51%]\n........................................................................ [ 62%]\n....................uuu.uu..uu.......................................... [ 72%]\n........................................................................ [ 82%]\n........................................................................ [ 93%]\n..............................................                           [100%]"
+    },
+    {
+      "id": "C-0243dab0",
+      "name": "reviewer-fixes",
+      "kind": "test",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "--extra",
+        "dev",
+        "pytest",
+        "-q",
+        "tests/test_tk_style.py",
+        "tests/contracts/test_web_dashboard_contract.py"
+      ],
+      "cmd": "uv run --extra dev pytest -q tests/test_tk_style.py tests/contracts/test_web_dashboard_contract.py",
+      "source": "ad-hoc review command",
+      "origin": "ad-hoc",
+      "started_at": "2026-07-11T17:19:40.068659+00:00",
+      "duration_seconds": 0.738,
+      "exit_code": 0,
+      "status": "pass",
+      "output_tail": "..................                                                       [100%]"
+    },
+    {
+      "id": "C-942aed74",
+      "name": "config:ruff",
+      "kind": "lint",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "ruff",
+        "check",
+        "."
+      ],
+      "cmd": "uv run ruff check .",
+      "source": "pyproject.toml",
+      "origin": "configured-fallback",
+      "started_at": "2026-07-11T17:21:05.756626+00:00",
+      "duration_seconds": 0.111,
+      "exit_code": 0,
+      "status": "pass",
+      "output_tail": "All checks passed!"
+    },
+    {
+      "id": "C-0dd3aca8",
+      "name": "config:pytest",
+      "kind": "test",
+      "cwd": ".",
+      "argv": [
+        "uv",
+        "run",
+        "pytest",
+        "-q"
+      ],
+      "cmd": "uv run pytest -q",
+      "source": "pyproject.toml",
+      "origin": "configured-fallback",
+      "started_at": "2026-07-11T17:21:05.873139+00:00",
+      "duration_seconds": 25.751,
+      "exit_code": 0,
+      "status": "pass",
+      "output_tail": "........................................................................ [ 10%]\n.....................................................uuuuuuuu........... [ 20%]\n........................................................................ [ 30%]\n........................................................................ [ 41%]\n........................................................................ [ 51%]\n........................................................................ [ 62%]\n....................uuu.uu..uu.......................................... [ 71%]\n........................................................................ [ 82%]\n........................................................................ [ 93%]\n...............................................                          [100%]"
+    }
+  ],
+  "generated_at": "2026-07-11T17:21:31.630040+00:00",
+  "latest_run_ids": [
+    "C-942aed74",
+    "C-0dd3aca8"
+  ],
+  "summary": {
+    "pass": 2,
+    "fail": 0,
+    "timeout": 0,
+    "error": 0,
+    "unavailable": 0
+  }
+}

@@ -6,6 +6,7 @@ from typing import Any
 from bomana.config.settings import (
     BombConfig,
     FuelConfig,
+    OverspeedConfig,
 )
 from bomana.ui.theme import Theme
 
@@ -50,6 +51,15 @@ class SpeedStripModel:
     value_fg: str
     fill_color: str
     fill_ratio: float
+    marker_ratios: tuple[float, float, float]
+    viewport_min_ratio: float
+
+
+@dataclass(frozen=True, slots=True)
+class OverspeedScaleProjection:
+    fill_ratio: float
+    marker_ratios: tuple[float, float, float]
+    viewport_min_ratio: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,10 +95,34 @@ def _compute_overspeed_fill_ratio(snap: Any, ias_ratio: float) -> float:
     return max(ias_ratio, mach_ratio, 0.0)
 
 
-def overspeed_focus_ratio(value: float) -> float:
-    """Map the useful 65%-105% near-limit band across the visible strip."""
+def overspeed_dynamic_projection(value: float) -> OverspeedScaleProjection:
+    """Continuously zoom from full acceleration into the breakup-threshold band."""
 
-    return max(0.0, min(1.0, (_safe_float(value) - 0.65) / 0.40))
+    current = max(0.0, _safe_float(value))
+    caution = float(OverspeedConfig.CAUTION_RATIO)
+    warning = float(OverspeedConfig.WARNING_RATIO)
+    critical = float(OverspeedConfig.CRITICAL_RATIO)
+    zoom_trigger = caution * 0.70
+    focused_minimum = max(0.0, caution - 0.30)
+    upper = max(1.02, critical + 0.02)
+    if current <= zoom_trigger:
+        lower = 0.0
+    elif current >= caution:
+        lower = focused_minimum
+    else:
+        zoom = (current - zoom_trigger) / max(0.001, caution - zoom_trigger)
+        lower = focused_minimum * zoom
+
+    span = max(0.001, upper - lower)
+
+    def project(ratio: float) -> float:
+        return max(0.0, min(1.0, (ratio - lower) / span))
+
+    return OverspeedScaleProjection(
+        fill_ratio=project(current),
+        marker_ratios=(project(caution), project(warning), project(critical)),
+        viewport_min_ratio=lower,
+    )
 
 
 def format_aircraft_type_label(raw: str) -> str:
@@ -141,17 +175,17 @@ def build_fuel_display_model(snap: Any) -> FuelDisplayModel:
             needed_text += f" ({return_percent:.0f}%)"
 
         if snap.return_status == "safe":
-            return_status = IconTextModel("ok", "返航足", Theme.GREEN)
+            return_status = IconTextModel("ok", "返航油量充足", Theme.GREEN)
         elif snap.return_status == "warning":
-            return_status = IconTextModel("warning", "返航紧", Theme.YELLOW)
+            return_status = IconTextModel("warning", "返航油量临界", Theme.YELLOW)
         else:
-            return_status = IconTextModel("danger", "返航不足", Theme.RED)
+            return_status = IconTextModel("danger", "返航油量不足", Theme.RED)
         return_detail_text = f"返航 {needed_text}{friendly_distance_text}"
     elif snap.friendly_distance_km > 0:
         return_status = IconTextModel(None, "返航估算", Theme.TEXT_MUTED)
         return_detail_text = f"返航估算中 · {snap.friendly_distance_km:.0f}km"
     else:
-        return_status = IconTextModel(None, "无机场", Theme.TEXT_MUTED)
+        return_status = IconTextModel(None, "无返航机场", Theme.TEXT_MUTED)
         return_detail_text = "返航无机场数据"
 
     return_summary = return_detail_text.replace("返航 ", "返航", 1)
@@ -191,12 +225,6 @@ _WEAPON_ROLE_LABELS = {
     "bomb": "炸弹",
 }
 
-_WEAPON_SOURCE_LABELS = {
-    "manual": "手选",
-    "8111": "8111",
-    "unknown": "来源未知",
-}
-
 
 def format_weapon_selection_label(
     display_name: str,
@@ -206,11 +234,8 @@ def format_weapon_selection_label(
     """Format the clickable first row shared by CCRP and envelope estimates."""
     name = _short_label(display_name, fallback="未选择武器", limit=28)
     role_label = _WEAPON_ROLE_LABELS.get(str(role or "").strip().lower(), "武器")
-    source_label = _WEAPON_SOURCE_LABELS.get(
-        str(selection_source or "").strip().lower(),
-        "来源未知",
-    )
-    return f"{name} · {role_label} · {source_label}"
+    del selection_source
+    return f"{name} · {role_label} · 点击切换"
 
 
 def _weapon_selection_label_from_snapshot(snap: Any) -> str:
@@ -310,35 +335,6 @@ def _format_weapon_time(seconds: float) -> str:
     return f"{seconds:.0f}s"
 
 
-def _weapon_quality_text(quality: str) -> str:
-    quality = str(quality or "").strip().lower()
-    if quality in {"two_dimensional", "two-dimensional", "2d"}:
-        return "二维参考"
-    if quality == "conservative":
-        return "保守参考"
-    if quality == "experimental":
-        return "推测参考"
-    if quality in {"degraded", "coarse"}:
-        return "粗略参考"
-    return ""
-
-
-def _weapon_model_text(model: str, reason: str) -> str:
-    model = str(model or "").strip().lower()
-    reason = str(reason or "").strip().lower()
-    if reason == "datamine_guidance_envelope":
-        return "官方包线"
-    if reason in {"foxthree_compatible_glide", "foxthree_compatible_glide_unavailable"}:
-        return "推测替代"
-    if reason == "glide_envelope_unavailable" and model == "strict_official":
-        return "无替代模型"
-    if reason in {"powered_point_mass_2d", "aam_2d_max_only"}:
-        return "二维回退"
-    if reason == "guided_ballistic_conservative":
-        return "保守估算"
-    return ""
-
-
 def _weapon_status_presentation(status: str) -> IconTextModel:
     presentations = {
         "unknown_weapon": IconTextModel("warning", "武器未知", Theme.YELLOW),
@@ -346,19 +342,19 @@ def _weapon_status_presentation(status: str) -> IconTextModel:
         "incompatible": IconTextModel("danger", "不兼容", Theme.RED),
         "no_target": IconTextModel("aim", "无目标", Theme.TEXT_MUTED),
         "insufficient_data": IconTextModel("clock", "数据不足", Theme.TEXT_MUTED),
-        "too_close": IconTextModel("warning", "过近", Theme.YELLOW),
-        "out_of_range": IconTextModel("aim", "过远", Theme.YELLOW),
-        "align": IconTextModel("aim", "请对准", Theme.YELLOW),
-        "in_envelope": IconTextModel("ok", "估算窗内", Theme.GREEN),
-        "within_ballistic_reference": IconTextModel("aim", "弹道参考内", Theme.YELLOW),
-        "beyond_ballistic_reference": IconTextModel("aim", "弹道参考外", Theme.YELLOW),
-        "within_2d_max_only": IconTextModel("aim", "二维上限内", Theme.YELLOW),
-        "within_all_aspect_reference": IconTextModel("aim", "全向参考内", Theme.YELLOW),
-        "within_aspect_reference": IconTextModel("aim", "当前航向内", Theme.YELLOW),
+        "too_close": IconTextModel("warning", "低于最小射程", Theme.YELLOW),
+        "out_of_range": IconTextModel("aim", "超出射程", Theme.YELLOW),
+        "align": IconTextModel("aim", "调整航向", Theme.YELLOW),
+        "in_envelope": IconTextModel("ok", "进入发射包线", Theme.GREEN),
+        "within_ballistic_reference": IconTextModel("aim", "弹道射程内", Theme.YELLOW),
+        "beyond_ballistic_reference": IconTextModel("aim", "超出弹道射程", Theme.YELLOW),
+        "within_2d_max_only": IconTextModel("aim", "最大射程内", Theme.YELLOW),
+        "within_all_aspect_reference": IconTextModel("aim", "全向可达", Theme.YELLOW),
+        "within_aspect_reference": IconTextModel("aim", "当前交战态势可达", Theme.YELLOW),
         "head_on_only_reference": IconTextModel("aim", "仅迎头可达", Theme.YELLOW),
-        "beyond_envelope_reference": IconTextModel("aim", "超出表参考", Theme.YELLOW),
-        "within_experimental_reference": IconTextModel("aim", "实验参考内", Theme.YELLOW),
-        "beyond_experimental_reference": IconTextModel("aim", "实验参考外", Theme.YELLOW),
+        "beyond_envelope_reference": IconTextModel("aim", "超出发射包线", Theme.YELLOW),
+        "within_experimental_reference": IconTextModel("aim", "推测射程内", Theme.YELLOW),
+        "beyond_experimental_reference": IconTextModel("aim", "超出推测射程", Theme.YELLOW),
         "solver_error": IconTextModel("danger", "解算失败", Theme.RED),
     }
     return presentations.get(status, IconTextModel("clock", "等待估算", Theme.TEXT_MUTED))
@@ -388,7 +384,7 @@ def _weapon_fallback_detail(status: str, role: str, reason: str = "") -> str:
     if status == "out_of_range":
         return "目标超出估算窗"
     if status == "align":
-        return "对准目标后更新"
+        return "调整航向后更新解算"
     if status == "within_ballistic_reference":
         return "仅重力/阻力弹道参考，未计滑翔增程"
     if status == "beyond_ballistic_reference":
@@ -485,30 +481,13 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
     elif reason == "foxthree_compatible_glide":
         detail_parts.append("等效升阻比/能量高度参考，未模拟舵面与自动驾驶")
 
-    quality_text = ""
-    if status in {
-        "too_close",
-        "out_of_range",
-        "align",
-        "in_envelope",
-        "within_ballistic_reference",
-        "beyond_ballistic_reference",
-        "within_2d_max_only",
-        "within_all_aspect_reference",
-        "within_aspect_reference",
-        "head_on_only_reference",
-        "beyond_envelope_reference",
-        "within_experimental_reference",
-        "beyond_experimental_reference",
-    }:
-        quality_text = _weapon_quality_text(str(getattr(snap, "weapon_quality", "") or ""))
-    model_text = _weapon_model_text(
-        str(getattr(snap, "weapon_model", "") or ""),
-        reason,
-    )
     timing_text = next((part for part in detail_parts if "s" in part), "")
-    compact_details = [part for part in (timing_text, model_text, quality_text) if part]
-    flight_text = " · ".join(compact_details) or _weapon_fallback_detail(status, role, reason)
+    if timing_text:
+        flight_text = timing_text
+    elif status in usable_statuses:
+        flight_text = ""
+    else:
+        flight_text = _weapon_fallback_detail(status, role, reason)
 
     highlighted_statuses = usable_statuses | {"align"}
 
@@ -696,6 +675,7 @@ def build_speed_strip_model(snap: Any) -> SpeedStripModel:
 
     model_fg = Theme.TEXT if speed_level in ("warning", "critical") else Theme.TEXT_DIM
     value_fg = state_fg if speed_level in ("caution", "warning", "critical") else Theme.TEXT_DIM
+    projection = overspeed_dynamic_projection(display_ratio)
     return SpeedStripModel(
         level=speed_level,
         state_text=state_text,
@@ -705,7 +685,9 @@ def build_speed_strip_model(snap: Any) -> SpeedStripModel:
         value_text=value_text,
         value_fg=value_fg,
         fill_color=fill_color if matched else Theme.TEXT_MUTED,
-        fill_ratio=overspeed_focus_ratio(display_ratio) if matched else 0.0,
+        fill_ratio=projection.fill_ratio if matched else 0.0,
+        marker_ratios=projection.marker_ratios,
+        viewport_min_ratio=projection.viewport_min_ratio,
     )
 
 

@@ -75,6 +75,14 @@
               <button id="beepOffButton" type="button" aria-pressed="false" disabled>关闭</button>
             </div>
           </div>
+          <div class="timer-cycle-setting" id="timerCycleSetting">
+            <label for="timerCycleMinutes">每轮计时</label>
+            <div class="timer-cycle-input">
+              <input id="timerCycleMinutes" type="number" min="1" max="180" step="1" inputmode="numeric" disabled>
+              <span>分钟</span>
+              <button id="timerCycleApplyButton" type="button" disabled>应用</button>
+            </div>
+          </div>
           <div class="target-setting" id="zoneSoundSetting">
             <span>战区提示音</span>
             <div class="segmented-control" role="group" aria-label="战区提示音目标状态">
@@ -227,7 +235,7 @@
       <img class="pairing-logo" src="/assets/app.png" alt="Bomana">
       <span class="eyebrow">TRUSTED LAN ONLY</span>
       <h2 id="pairingTitle">连接 Bomana</h2>
-      <p>在 Bomana 主窗口底部查看本次运行的配对码。每次配对会创建独立会话，局域网会话默认只读。</p>
+      <p>在 Bomana 主窗口底部查看当前配对码。每次配对会创建独立会话；只有 Bomana 已开启局域网访问与控制时，手机才可配对并操作固定功能。</p>
       <label for="pairingCode">配对码</label>
       <input id="pairingCode" name="pairingCode" inputmode="text" autocomplete="one-time-code" maxlength="9" placeholder="ABCD-EFGH" required>
       <button type="submit">进入驾驶舱</button>

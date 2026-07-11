@@ -217,6 +217,7 @@ def test_final_handoff_fails_closed_if_new_warning_cannot_be_shown(tmp_path: Pat
             default_entrypoint="Bomana.pyw",
             web_dashboard_autostart=True,
             web_dashboard_auto_open=False,
+            web_dashboard_lan_enabled=False,
             displayed_recovery_warning="already visible",
             recovery_warning_callback=lambda _warning: False,
         )
@@ -262,17 +263,19 @@ def test_launcher_state_web_preferences_require_real_booleans() -> None:
 
     assert launcher._strict_saved_bool({}, "web_dashboard_autostart", True) is True
     assert launcher._strict_saved_bool({}, "web_dashboard_auto_open", False) is False
+    assert launcher._strict_saved_bool({}, "web_dashboard_lan_enabled", False) is False
     assert launcher._strict_saved_bool({"value": False}, "value", True) is False
     assert launcher._strict_saved_bool({"value": "false"}, "value", True) is True
     assert launcher._strict_saved_bool({"value": 0}, "value", True) is True
 
 
-def test_launcher_state_save_migrates_to_exact_two_web_preferences(tmp_path: Path) -> None:
+def test_launcher_state_save_migrates_to_exact_three_web_preferences(tmp_path: Path) -> None:
     launcher, window = make_window(tmp_path)
     window.use_system_proxy = False
     window.download_source_mode = "primary"
     window.web_dashboard_autostart = False
     window.web_dashboard_auto_open = True
+    window.web_dashboard_lan_enabled = True
     launcher._write_state(
         tmp_path,
         {
@@ -289,9 +292,11 @@ def test_launcher_state_save_migrates_to_exact_two_web_preferences(tmp_path: Pat
     assert {key for key in state if key.startswith("web_dashboard_")} == {
         "web_dashboard_autostart",
         "web_dashboard_auto_open",
+        "web_dashboard_lan_enabled",
     }
     assert state["web_dashboard_autostart"] is False
     assert state["web_dashboard_auto_open"] is True
+    assert state["web_dashboard_lan_enabled"] is True
     assert state["preserved_non_web_value"] == "keep"
 
 
@@ -308,6 +313,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
         "    'launcher': os.environ.get('BOMANA_LAUNCHER_VERSION'),\n"
         "    'autostart': os.environ.get('BOMANA_WEB_DASHBOARD_AUTOSTART'),\n"
         "    'auto_open': os.environ.get('BOMANA_WEB_DASHBOARD_AUTO_OPEN'),\n"
+        "    'lan_enabled': os.environ.get('BOMANA_WEB_DASHBOARD_LAN_ENABLED'),\n"
         "}), encoding='utf-8')\n"
     )
     app_dir = _write_app_package(tmp_path, "8.0.0", entry)
@@ -330,7 +336,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
             return None
 
     frozen_finder = FrozenBoundaryFinder()
-    launcher._set_pending_web_preferences(False, True)
+    launcher._set_pending_web_preferences(True, True, True)
     old_cwd = Path.cwd()
     old_path = list(sys.path)
     old_modules = {
@@ -344,6 +350,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
             "BOMANA_LAUNCHER_VERSION",
             "BOMANA_WEB_DASHBOARD_AUTOSTART",
             "BOMANA_WEB_DASHBOARD_AUTO_OPEN",
+            "BOMANA_WEB_DASHBOARD_LAN_ENABLED",
         )
     }
     sys.meta_path.insert(0, frozen_finder)
@@ -361,9 +368,22 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
 
     assert json.loads(result_path.read_text(encoding="utf-8")) == {
         "boundary": "installed",
-        "launcher": "3.0.0",
-        "autostart": "0",
+        "launcher": "3.1.0",
+        "autostart": "1",
         "auto_open": "1",
+        "lan_enabled": "1",
     }
     for name, old_value in previous.items():
         assert os.environ.get(name) == old_value
+
+
+def test_launcher_web_preferences_keep_lan_and_autostart_coherent() -> None:
+    launcher = load_launcher_module()
+
+    launcher._set_pending_web_preferences(False, False, True)
+    assert launcher._PENDING_WEB_DASHBOARD_AUTOSTART is True
+    assert launcher._PENDING_WEB_DASHBOARD_LAN_ENABLED is True
+
+    launcher._set_pending_web_preferences(False, True, False)
+    assert launcher._PENDING_WEB_DASHBOARD_AUTOSTART is False
+    assert launcher._PENDING_WEB_DASHBOARD_LAN_ENABLED is False

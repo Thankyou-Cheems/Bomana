@@ -14,6 +14,27 @@ implementation plans belong in git history, not here.
 
 ## Entries
 
+### 2026-07-12 — Tk option support must be queried through widget keys
+
+Symptom: App startup aborted while building the main window after clickable borders were applied to labels and frames.
+Root cause: the shared style helper used `"fg" in widget`; real tkinter widgets have `__getitem__` but no membership implementation, so Python probed a numeric option and raised `TypeError` instead of checking supported options.
+Spec: `docs/specs/ui-presenter-boundary.md` `UI-PRES-08`.
+Pin: `tests/test_tk_style.py` applies the shared style to real `tk.Label` and `tk.Frame` instances and requires foreground styling only where `widget.keys()` reports support.
+
+### 2026-07-12 — Public LAN copy must change with the authorization contract
+
+Symptom: the English README still promised view-only LAN sessions, while the English Quickstart still described only two Launcher Web preferences, after the implementation combined LAN access/control and added a third startup boolean.
+Root cause: adjacent Chinese and detailed sections were updated, but duplicated English security/overview descriptions were not included in the same contract-change sweep.
+Spec: `docs/specs/web-dashboard.md` `WDB-20..WDB-22`.
+Pin: `tests/contracts/test_web_dashboard_contract.py` requires the current one-action LAN grant/revocation wording and rejects the retired view-only sentence; `tests/contracts/test_config_variants.py` requires all three Launcher booleans in the English Quickstart.
+
+### 2026-07-12 — Primary silhouettes must not depend on system emoji fonts
+
+Symptom: the banana timer indicator could render inconsistently or as a missing glyph on systems where `Segoe UI Emoji` was unavailable or shaped differently.
+Root cause: the progress outline was vector geometry, but its muted interior used a system emoji glyph despite the existing primary-UI font boundary.
+Spec: `docs/specs/timer-cycle.md` `TIMER-07` and `docs/ARCHITECTURE.md` primary-UI font rule.
+Pin: `tests/contracts/test_timer_cycle_contract.py` requires `BananaProgress` while rejecting system emoji font/text dependencies; `tests/test_ui_geometry.py` verifies the vector outline and progress segment.
+
 ### 2026-07-11 — LAN sharing must not stop after the first private adapter
 
 Symptom: the Web Cockpit opened on Wi-Fi `192.168.x.x`, but an iPhone using an EasyTier `10.x.x.x` route could not reach the same port even though both addresses were present and preferred on Windows.
@@ -337,6 +358,11 @@ Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, wi
   Fix/Workaround: sample and invalidate Trace back candidates only from raw successful map responses, then promote a point only at the existing confirmed loss transition
 
 ### UI And Dialog Layout
+
+- Context: narrow App window or increased text scale with a wrapped weapon/status label
+  Symptom: the lowest visible function or weapon card could slide behind the fixed bottom card even though the initial window-size calculation had passed
+  Cause: label wrapping changed the middle surface's requested height after the one-time geometry calculation, and only the checklist path scheduled a later size correction
+  Fix/Workaround: route wrapped-label and middle-surface configure events through one debounced expansion-only geometry sync; compare the main surface's current requested height with the actual root height before calling the existing size recalculation path
 
 - Context: settings dialog opened on taller tabs such as overspeed
   Symptom: Save/Cancel buttons could be pushed below the visible area

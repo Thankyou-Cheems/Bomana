@@ -7,7 +7,7 @@ import tkinter as tk
 import webbrowser
 from enum import Enum
 from tkinter import font as tkfont
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
 from typing import Any
 
 from bomana.config.feature_profile import (
@@ -49,7 +49,10 @@ from bomana.ui.dialogs import (
 from bomana.ui.icon_assets import IconManager
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.navigation_runtime import AppNavigationServices
-from bomana.ui.panel_presenter import build_speed_history_header_model
+from bomana.ui.panel_presenter import (
+    build_speed_history_header_model,
+    overspeed_dynamic_projection,
+)
 from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.runtime import LogicPoller, TkEventDispatcher
 from bomana.ui.runtime_services import HAS_TRAY, AppRuntimeServices
@@ -187,6 +190,7 @@ class App:
         self._last_layout_signature = None
         self._last_expand_ts = 0.0
         self._last_zone_recalc_ts = 0.0
+        self._geometry_sync_after_id = None
         self._zone_layout_mode = None
         self._airport_layout_mode = None
         self._history_mode_layout_active = False
@@ -215,6 +219,16 @@ class App:
         self._publish_web_control_state(force_revision=True)
         if self.runtime_services.dashboard_autostart_enabled():
             dashboard_started = self.runtime_services.init_dashboard()
+            if dashboard_started and self.runtime_services.dashboard_lan_autostart_enabled():
+                try:
+                    self.runtime_services.enable_dashboard_lan()
+                except Exception as exc:
+                    log_exception("web_dashboard_lan_autostart_failed", exc)
+                    messagebox.showwarning(
+                        "局域网网页服务未开启",
+                        f"本机网页服务已启动，但自动开启局域网访问与控制失败：\n{exc}",
+                        parent=self.root,
+                    )
             if dashboard_started and self.runtime_services.dashboard_auto_open_enabled():
                 self._open_web_dashboard()
         self._refresh_web_access_row()
@@ -254,6 +268,7 @@ class App:
             "state.set_locked",
             "state.set_beep_enabled",
             "config.set_panel_visibility",
+            "config.set_timer_cycle_minutes",
         ]
         panel_targets = ["speed"]
         if ENABLE_ZONES:
@@ -322,6 +337,7 @@ class App:
             ),
             selected_weapon_id=selected_weapon_id,
             ballistic_model=ballistic_model,
+            timer_cycle_minutes=GameConfig.cycle_minutes(),
         )
         return ControlStateProjection(
             revision=revision,
@@ -430,6 +446,11 @@ class App:
         PanelConfig.speed_history_mode = panels.get("speed_history_mode", False)
         PanelConfig.show_checklist = panels.get("show_checklist", True)
         PanelConfig.show_bombing = panels.get("show_bombing", True)  # v6.0 新增
+
+        timer_minutes = GameConfig.normalize_cycle_minutes(config.get("timer_cycle_minutes"))
+        GameConfig.set_cycle_minutes(
+            timer_minutes if timer_minutes is not None else GameConfig.DEFAULT_CYCLE_MINUTES
+        )
 
         # v6.2.1: 导航条模式（仅在战区功能启用时生效）
         if ENABLE_ZONES:
@@ -555,6 +576,7 @@ class App:
         if ENABLE_CCRP:
             panels_config["show_bombing"] = PanelConfig.show_bombing
         config["panels"] = panels_config
+        config["timer_cycle_minutes"] = GameConfig.cycle_minutes()
 
         # v6.2.1: 导航条模式
         config["navigation_mode"] = PanelConfig.navigation_mode
@@ -723,6 +745,28 @@ class App:
         """初始化 UI 布局（稳定的主窗口骨架）。"""
         MainWindowBuilder(self).build()
         self._update_hint()
+
+    def _schedule_content_geometry_sync(self) -> None:
+        """Debounce required-height growth after wrapping or row changes."""
+        if self._geometry_sync_after_id is not None:
+            return
+
+        def sync() -> None:
+            self._geometry_sync_after_id = None
+            self._sync_content_geometry()
+
+        self._geometry_sync_after_id = self.root.after_idle(sync)
+
+    def _sync_content_geometry(self) -> None:
+        """Expand when wrapped content outgrows the current frameless window."""
+        try:
+            self.root.update_idletasks()
+            required = int(self.main_frame.winfo_reqheight()) + max(2, int(8 * self.scale))
+            actual = int(self.root.winfo_height())
+        except AttributeError, TypeError, ValueError, tk.TclError:
+            return
+        if required > actual + max(1, int(2 * self.scale)):
+            self._recalc_size()
 
     def _rebuild_checklist(self):
         """重建紧凑、响应式的检查清单 UI（纯展示模式）。"""
@@ -963,8 +1007,6 @@ class App:
                 self.top_row1.grid_remove()
             if self.top_row2.winfo_manager() == "grid":
                 self.top_row2.grid_remove()
-            if self.progress_frame.winfo_manager() == "grid":
-                self.progress_frame.grid_remove()
             if self.history_mode_frame.winfo_manager() != "grid":
                 self.history_mode_frame.grid(
                     row=2,
@@ -989,15 +1031,6 @@ class App:
                 pad_top, pad_bot = UIConfig.PADDING_ROW2
                 self.top_row2.grid(
                     row=1,
-                    column=0,
-                    sticky="ew",
-                    padx=int(8 * self.scale),
-                    pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
-                )
-            if self.progress_frame.winfo_manager() != "grid":
-                pad_top, pad_bot = UIConfig.PADDING_PROGRESS
-                self.progress_frame.grid(
-                    row=4,
                     column=0,
                     sticky="ew",
                     padx=int(8 * self.scale),
@@ -1619,15 +1652,51 @@ class App:
         """
         SettingsDialog(self.root, self, initial_tab=initial_tab)
 
+    def _set_timer_cycle_minutes(
+        self,
+        minutes: object,
+        *,
+        warn_on_failure: bool = False,
+    ) -> bool:
+        target = GameConfig.normalize_cycle_minutes(minutes)
+        if target is None:
+            return False
+        previous = GameConfig.cycle_minutes()
+        if not GameConfig.set_cycle_minutes(target):
+            return False
+        if not self._save_config(warn_on_failure=warn_on_failure):
+            GameConfig.set_cycle_minutes(previous)
+            return False
+        publish = getattr(self, "_publish_web_control_state", None)
+        if callable(publish):
+            publish(force_revision=True)
+        refresh_tray = getattr(self, "_refresh_tray", None)
+        if callable(refresh_tray):
+            refresh_tray()
+        return True
+
+    def _prompt_timer_cycle_minutes(self) -> None:
+        minutes = simpledialog.askinteger(
+            "自定义计时周期",
+            "输入每轮分钟数（1–180）：",
+            parent=self.root,
+            initialvalue=GameConfig.cycle_minutes(),
+            minvalue=GameConfig.MIN_CYCLE_MINUTES,
+            maxvalue=GameConfig.MAX_CYCLE_MINUTES,
+        )
+        if minutes is not None:
+            self._set_timer_cycle_minutes(minutes, warn_on_failure=True)
+
     def _refresh_overspeed_threshold_ui(self) -> None:
         """刷新速度条上的阈值刻度位置。"""
         markers = getattr(self, "speed_bar_markers", None)
         if not markers:
             return
-        for name, relx in (
-            ("caution", OverspeedConfig.CAUTION_RATIO),
-            ("warning", OverspeedConfig.WARNING_RATIO),
-            ("critical", OverspeedConfig.CRITICAL_RATIO),
+        initial_ratios = overspeed_dynamic_projection(0.0).marker_ratios
+        for name, relx in zip(
+            ("caution", "warning", "critical"),
+            initial_ratios,
+            strict=True,
         ):
             marker = markers.get(name)
             if marker:
@@ -1794,6 +1863,10 @@ class App:
                 if self._set_panel_visibility(target, command.enabled)
                 else "persistence_failed"
             )
+        if command.name == "config.set_timer_cycle_minutes":
+            if GameConfig.normalize_cycle_minutes(command.minutes) is None:
+                return "invalid_target"
+            return "ok" if self._set_timer_cycle_minutes(command.minutes) else "persistence_failed"
         if command.name == "weapon.select":
             if not ENABLE_CCRP:
                 return "feature_disabled"
@@ -1871,10 +1944,11 @@ class App:
             return
 
         confirmed = messagebox.askyesno(
-            "允许局域网访问",
+            "开启局域网访问与控制",
             "仅应在可信的家庭或个人局域网中开启。\n\n"
             "Bomana 不会自动修改 Windows 防火墙，也不会把数据上传到互联网。\n\n"
-            "开启后，同一网络中持有本次配对码的设备可查看实时飞行信息。\n\n"
+            "开启后，同一网络中持有新配对码的设备可查看信息，并操作 Bomana 的固定功能。"
+            "不会模拟键盘、控制游戏或提供任意命令能力。\n\n"
             "是否为本次运行开启？",
             parent=self.root,
         )
@@ -1883,7 +1957,7 @@ class App:
         try:
             self.runtime_services.enable_dashboard_lan()
         except Exception as exc:
-            messagebox.showerror("局域网访问失败", str(exc), parent=self.root)
+            messagebox.showerror("局域网访问与控制失败", str(exc), parent=self.root)
             return
         self._refresh_tray()
         self._refresh_web_access_row()
@@ -1894,61 +1968,10 @@ class App:
         link_text = "\n".join(links)
         self._copy_to_clipboard(link_text)
         messagebox.showinfo(
-            "局域网访问已开启",
+            "局域网访问与控制已开启",
             f"手机访问链接已复制：\n{link_text}\n\n"
             f"配对码：{dashboard.pairing_code}\n\n"
             "若手机无法连接，请在 Windows 防火墙中允许 Bomana 的专用网络访问。",
-            parent=self.root,
-        )
-
-    def _toggle_web_dashboard_lan_control(self) -> None:
-        dashboard = self.runtime_services.dashboard
-        if dashboard is None or not dashboard.lan_enabled:
-            messagebox.showinfo(
-                "网页驾驶舱",
-                "请先为本次运行开启局域网访问。",
-                parent=self.root,
-            )
-            return
-        if dashboard.lan_control_enabled:
-            self.runtime_services.disable_dashboard_lan_control()
-            self._refresh_tray()
-            self._refresh_web_access_row()
-            messagebox.showinfo(
-                "局域网控制已撤销",
-                "已有局域网控制会话已立即失效；如需再次控制，必须重新开启并重新配对。",
-                parent=self.root,
-            )
-            return
-        confirmed = messagebox.askyesno(
-            "允许局域网控制",
-            (
-                "这会允许可信局域网中的新配对设备操作 Bomana 的固定语义功能。\n\n"
-                "不会模拟键盘、控制游戏或获得任意配置/命令能力；授权仅限本次运行。\n\n"
-                "开启会立即轮换配对码，现有只读设备不会自动升级为控制设备。是否继续？"
-            ),
-            parent=self.root,
-        )
-        if not confirmed:
-            return
-        try:
-            self.runtime_services.enable_dashboard_lan_control()
-        except Exception as exc:
-            messagebox.showerror("局域网控制失败", str(exc), parent=self.root)
-            return
-        self._refresh_tray()
-        self._refresh_web_access_row()
-        dashboard = self.runtime_services.dashboard
-        if dashboard is None:
-            return
-        link_text = "\n".join(dashboard.lan_pairing_urls)
-        self._copy_to_clipboard(link_text)
-        messagebox.showinfo(
-            "局域网控制已开启",
-            (
-                f"新的手机配对链接已复制：\n{link_text}\n\n配对码：{dashboard.pairing_code}\n\n"
-                "只有现在重新配对的局域网设备可控制；可随时从托盘立即撤销。"
-            ),
             parent=self.root,
         )
 
@@ -1975,15 +1998,7 @@ class App:
             cursor="hand2",
         )
         self.web_lan_btn.config(text="关局域网" if lan_addresses else "开局域网")
-        control_enabled = bool(dashboard.lan_control_enabled)
-        self.web_control_btn.config(
-            text="撤销控制" if control_enabled else "允许控制",
-            state=("normal" if lan_addresses else "disabled"),
-        )
         style_action_button(self.web_lan_btn, "danger" if lan_addresses else "secondary")
-        style_action_button(self.web_control_btn, "danger" if control_enabled else "warning")
-        if not lan_addresses:
-            self.web_control_btn.config(cursor="arrow")
         with contextlib.suppress(tk.TclError):
             if row.winfo_manager() != "grid":
                 row.grid()
@@ -2236,14 +2251,14 @@ class App:
         # 更新计时器显示
         if history_mode_active:
             self._last_beep_sec = -1
-            self.bar_fill.place(relwidth=0)
-            self.bar_fill.config(bg=Theme.BLUE)
+            self.banana_progress.set_progress(0.0)
+            self.banana_progress.set_color(Theme.BLUE)
         else:
             self.timer_lbl.config(text=fmt_time(snap.remaining_sec))
             if snap.remaining_sec is None:
                 self.timer_lbl.config(fg=Theme.TEXT_MUTED)
-                self.bar_fill.place(relwidth=0)
-                self.bar_fill.config(bg=Theme.BLUE)
+                self.banana_progress.set_progress(0.0)
+                self.banana_progress.set_color(Theme.BLUE)
             else:
                 remain = snap.remaining_sec
                 color = (
@@ -2261,8 +2276,8 @@ class App:
                     else Theme.BLUE
                 )
                 self.timer_lbl.config(fg=color)
-                self.bar_fill.place(relwidth=snap.progress)
-                self.bar_fill.config(bg=bar)
+                self.banana_progress.set_progress(snap.progress)
+                self.banana_progress.set_color(bar)
 
                 # 播放警告音
                 remain_int = int(remain)

@@ -50,13 +50,14 @@
     "timer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["remaining_sec", "progress", "cycle", "life_index", "sortie_id"],
+      "required": ["remaining_sec", "progress", "cycle", "life_index", "sortie_id", "cycle_minutes"],
       "properties": {
         "remaining_sec": {"type": ["number", "null"], "minimum": 0},
         "progress": {"type": "number", "minimum": 0, "maximum": 1},
         "cycle": {"type": ["integer", "null"], "minimum": 1},
         "life_index": {"type": ["integer", "null"], "minimum": 1},
-        "sortie_id": {"type": "integer", "minimum": 0}
+        "sortie_id": {"type": "integer", "minimum": 0},
+        "cycle_minutes": {"type": "integer", "minimum": 1, "maximum": 180}
       }
     },
     "flight": {

@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -35,7 +36,7 @@ def test_fuel_display_model_formats_return_warning() -> None:
     assert model.main_fg == Theme.YELLOW
     assert model.time.text == "余 12:34"
     assert model.return_status.icon == "warning"
-    assert model.return_status.text == "返航紧"
+    assert model.return_status.text == "返航油量临界"
     assert model.detail_text == ""
     assert model.altitude_text == ""
     assert model.return_detail_text == ""
@@ -60,7 +61,7 @@ def test_bombing_display_model_ready_state(monkeypatch) -> None:
 
     model = build_bombing_display_model(snap)
 
-    assert model.bomb_label_text == "FAB-100 · 炸弹 · 手选"
+    assert model.bomb_label_text == "FAB-100 · 炸弹 · 点击切换"
     assert model.trajectory_text == "目标 战区 #1 1.42km · 弹道 1.42km · 飞行 3.6s"
     assert model.flight_text == ""
     assert model.release.icon == "bomb"
@@ -148,11 +149,11 @@ def _weapon_snapshot(**overrides):
 def test_weapon_solution_model_uses_compact_estimate_wording() -> None:
     model = build_bombing_display_model(_weapon_snapshot())
 
-    assert model.bomb_label_text == "AGM-65D · AGM · 手选"
+    assert model.bomb_label_text == "AGM-65D · AGM · 点击切换"
     assert model.trajectory_text == "POI 12.4km · 估算窗 0.6–18.6km"
-    assert model.flight_text == "飞行约 28s · 二维参考"
+    assert model.flight_text == "飞行约 28s"
     assert model.release.icon == "ok"
-    assert model.release.text == "估算窗内"
+    assert model.release.text == "进入发射包线"
     assert model.release.fg == Theme.GREEN
     assert model.release_detail_text == ""
 
@@ -165,7 +166,7 @@ def test_powered_fallback_does_not_claim_the_foxthree_glide_model() -> None:
         )
     )
 
-    assert "二维回退" in model.flight_text
+    assert model.flight_text == "飞行约 28s"
     assert "FoxThree" not in model.flight_text
 
 
@@ -178,8 +179,8 @@ def test_weapon_solution_model_never_shows_countdown_while_aligning() -> None:
         )
     )
 
-    assert model.release.text == "请对准"
-    assert model.flight_text == "二维参考"
+    assert model.release.text == "调整航向"
+    assert model.flight_text == "调整航向后更新解算"
     assert "6.4s" not in model.flight_text
     assert "距估算窗" not in model.flight_text
     rendered = " ".join(
@@ -210,7 +211,7 @@ def test_glide_solution_explains_why_the_iron_bomb_surrogate_is_disabled() -> No
     assert model.release.text == "数据不足"
     assert model.release.fg == Theme.TEXT_MUTED
     assert model.trajectory_text == "POI 12.4km · 估算窗 --"
-    assert model.flight_text == "无替代模型"
+    assert model.flight_text == "无官方包线，未应用替代模型"
 
 
 def test_glide_unavailable_state_does_not_claim_out_of_range() -> None:
@@ -232,7 +233,7 @@ def test_glide_unavailable_state_does_not_claim_out_of_range() -> None:
     )
 
     assert model.release.text == "数据不足"
-    assert "无替代模型" in model.flight_text
+    assert "未应用替代模型" in model.flight_text
     assert "过远" not in model.release.text
 
 
@@ -253,10 +254,10 @@ def test_foxthree_compatible_glide_is_an_experimental_reference_not_a_green_cue(
         )
     )
 
-    assert model.release.text == "实验参考内"
+    assert model.release.text == "推测射程内"
     assert model.release.fg == Theme.YELLOW
     assert model.trajectory_text == "POI 12.4km · 滑翔参考约 32.5km"
-    assert model.flight_text == "飞行约 42s · 推测替代 · 推测参考"
+    assert model.flight_text == "飞行约 42s"
 
 
 def test_experimental_glide_reference_still_requires_valid_compatible_solution() -> None:
@@ -303,10 +304,10 @@ def test_aam_solution_states_2d_max_limitations_and_never_turns_green() -> None:
     )
 
     assert model.trajectory_text == "空中目标 Hostile 50m · 二维最大约 18.6km"
-    assert model.release.text == "二维上限内"
+    assert model.release.text == "最大射程内"
     assert model.release.fg == Theme.YELLOW
     assert model.release.icon != "ok"
-    assert model.flight_text == "二维回退 · 二维参考"
+    assert model.flight_text == ""
 
 
 def test_aam_datamine_envelope_shows_tail_head_and_current_aspect_reference() -> None:
@@ -331,10 +332,10 @@ def test_aam_datamine_envelope_shows_tail_head_and_current_aspect_reference() ->
     )
 
     assert model.trajectory_text == "空中目标 Fighter 80.0km · 尾/迎 13.6/81.8km"
-    assert model.release.text == "当前航向内"
+    assert model.release.text == "当前交战态势可达"
     assert model.release.fg == Theme.YELLOW
     assert model.release.icon != "ok"
-    assert model.flight_text == "官方包线 · 二维参考"
+    assert model.flight_text == ""
     assert "FoxThree" not in model.flight_text
 
 
@@ -359,8 +360,8 @@ def test_conditional_propulsion_failure_explains_fail_closed_state() -> None:
         ("incompatible", "不兼容"),
         ("no_target", "无目标"),
         ("insufficient_data", "数据不足"),
-        ("too_close", "过近"),
-        ("out_of_range", "过远"),
+        ("too_close", "低于最小射程"),
+        ("out_of_range", "超出射程"),
     ],
 )
 def test_weapon_solution_model_distinguishes_unavailable_states(
@@ -396,7 +397,7 @@ def test_catalog_failure_stays_visible_after_snapshot_render() -> None:
         )
     )
 
-    assert model.bomb_label_text == "武器目录不可用 · 武器 · 来源未知"
+    assert model.bomb_label_text == "武器目录不可用 · 武器 · 点击切换"
     assert model.release.text == "目录不可用"
     assert model.flight_text == "武器目录不可用"
 
@@ -470,7 +471,66 @@ def test_speed_strip_expands_the_near_limit_band() -> None:
 
     model = build_speed_strip_model(snap)
 
-    assert model.fill_ratio == pytest.approx(0.375)
+    assert 0.0 < model.fill_ratio < 1.0
+    caution, warning, critical = model.marker_ratios
+    assert 0.0 < caution < warning < critical < 1.0
+
+
+def test_speed_strip_keeps_progress_below_dynamic_zoom_trigger() -> None:
+    low = build_speed_strip_model(
+        SimpleNamespace(
+            overspeed_level="safe",
+            overspeed_ratio=0.20,
+            overspeed_current_ias_kmh=200.0,
+            overspeed_current_mach=None,
+            overspeed_limit_kmh=1000.0,
+            overspeed_limit_mach=0.0,
+            overspeed_match=True,
+            overspeed_reason="ias",
+            aircraft_type_name="test_plane",
+        )
+    )
+    trigger = build_speed_strip_model(
+        SimpleNamespace(
+            overspeed_level="safe",
+            overspeed_ratio=panel_presenter.OverspeedConfig.CAUTION_RATIO * 0.70,
+            overspeed_current_ias_kmh=658.0,
+            overspeed_current_mach=None,
+            overspeed_limit_kmh=1000.0,
+            overspeed_limit_mach=0.0,
+            overspeed_match=True,
+            overspeed_reason="ias",
+            aircraft_type_name="test_plane",
+        )
+    )
+
+    assert low.fill_ratio > 0.0
+    assert trigger.fill_ratio > low.fill_ratio
+
+
+def test_speed_strip_dynamically_stretches_breakup_markers() -> None:
+    def model(ratio: float):
+        return build_speed_strip_model(
+            SimpleNamespace(
+                overspeed_level="safe",
+                overspeed_ratio=ratio,
+                overspeed_current_ias_kmh=ratio * 1000,
+                overspeed_current_mach=None,
+                overspeed_limit_kmh=1000.0,
+                overspeed_limit_mach=0.0,
+                overspeed_match=True,
+                overspeed_reason="ias",
+                aircraft_type_name="test_plane",
+            )
+        )
+
+    before = model(0.50)
+    focused = model(panel_presenter.OverspeedConfig.CAUTION_RATIO)
+    before_span = before.marker_ratios[2] - before.marker_ratios[0]
+    focused_span = focused.marker_ratios[2] - focused.marker_ratios[0]
+
+    assert focused_span > before_span
+    assert focused.viewport_min_ratio > before.viewport_min_ratio
 
 
 def test_speed_history_header_model_uses_presented_aircraft_name() -> None:
@@ -486,6 +546,12 @@ def test_speed_history_header_model_uses_presented_aircraft_name() -> None:
     assert model.phase_text == "飞行中"
     assert model.phase_fg == Theme.GREEN
     assert model.hint_text == "计时和导航已隐藏，当前机型：f 16c block 50"
+
+
+def test_app_panel_copy_omits_legacy_ambiguous_terms() -> None:
+    text = Path(panel_presenter.__file__).read_text(encoding="utf-8")
+    for legacy in ("返航紧", "当前航向内", "手选", "官方包线 ·", "二维参考"):
+        assert legacy not in text
 
 
 def test_format_aircraft_type_label_handles_empty_and_long_names() -> None:

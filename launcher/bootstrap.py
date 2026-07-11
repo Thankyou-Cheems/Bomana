@@ -21,6 +21,7 @@ _APP_HANDOFF_ENV_NAMES = (
     "BOMANA_LAUNCHER_VERSION",
     "BOMANA_WEB_DASHBOARD_AUTOSTART",
     "BOMANA_WEB_DASHBOARD_AUTO_OPEN",
+    "BOMANA_WEB_DASHBOARD_LAN_ENABLED",
 )
 
 
@@ -122,6 +123,7 @@ def launch_app(
     default_entrypoint: str,
     web_dashboard_autostart: bool,
     web_dashboard_auto_open: bool,
+    web_dashboard_lan_enabled: bool,
     displayed_recovery_warning: str = "",
     recovery_warning_callback: Callable[[str], bool] | None = None,
 ) -> None:
@@ -144,6 +146,10 @@ def launch_app(
         raise TypeError("web_dashboard_autostart must be a bool")
     if not isinstance(web_dashboard_auto_open, bool):
         raise TypeError("web_dashboard_auto_open must be a bool")
+    if not isinstance(web_dashboard_lan_enabled, bool):
+        raise TypeError("web_dashboard_lan_enabled must be a bool")
+    if web_dashboard_lan_enabled and not web_dashboard_autostart:
+        raise ValueError("web_dashboard_lan_enabled requires web_dashboard_autostart")
 
     if is_source_test_run(base):
         prepare_source_test_runtime(base)
@@ -152,6 +158,7 @@ def launch_app(
     os.environ["BOMANA_LAUNCHER_VERSION"] = LAUNCHER_VERSION
     os.environ["BOMANA_WEB_DASHBOARD_AUTOSTART"] = "1" if web_dashboard_autostart else "0"
     os.environ["BOMANA_WEB_DASHBOARD_AUTO_OPEN"] = "1" if web_dashboard_auto_open else "0"
+    os.environ["BOMANA_WEB_DASHBOARD_LAN_ENABLED"] = "1" if web_dashboard_lan_enabled else "0"
     os.environ["BOMANA_CHANNEL"] = channel
     os.environ["BOMANA_RUNTIME_ROOT"] = str(app_dir)
     os.chdir(app_dir)

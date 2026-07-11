@@ -483,7 +483,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "source_name": "GitHub",
         }
         launcher_manifest = {
-            "remote_version": "3.1.0",
+            "remote_version": "3.2.0",
             "package_url": "https://example.invalid/launcher.exe",
             "package_sha256": "def",
             "package_size": "",

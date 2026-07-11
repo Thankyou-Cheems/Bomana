@@ -1123,6 +1123,10 @@ class WebDashboardRuntime:
             if self._local is None:
                 self.start()
             if self._lan:
+                self.security.enable_lan_control()
+                if not self.security.lan_control_enabled:
+                    self._disable_lan_locked()
+                    raise DashboardServerError("unable to enable LAN control authority")
                 return self.lan_address or ""
             port = self.port
             if port is None:
@@ -1144,28 +1148,28 @@ class WebDashboardRuntime:
                 self.security.add_host(address)
                 self._lan[address] = listener
             if self._lan:
+                try:
+                    self.security.enable_lan_control()
+                except Exception:
+                    self._disable_lan_locked()
+                    raise
+                if not self.security.lan_control_enabled:
+                    self._disable_lan_locked()
+                    raise DashboardServerError("unable to enable LAN control authority")
                 return self.lan_address or ""
             raise DashboardServerError(f"unable to bind a private LAN address: {last_error}")
 
-    def enable_lan_control(self) -> bool:
-        with self._lock:
-            if not self._lan:
-                raise DashboardServerError("LAN dashboard access is not enabled")
-            return self.security.enable_lan_control()
-
-    def disable_lan_control(self) -> bool:
-        return self.security.disable_lan_control()
+    def _disable_lan_locked(self) -> None:
+        listeners = tuple(self._lan.values())
+        self._lan = {}
+        self.security.disable_lan_access()
+        for listener in listeners:
+            self.security.remove_host(listener.address)
+            self._stop_listener(listener)
 
     def disable_lan(self) -> None:
         with self._lock:
-            listeners = tuple(self._lan.values())
-            self._lan = {}
-            if not listeners:
-                return
-            self.security.disable_lan_access()
-            for listener in listeners:
-                self.security.remove_host(listener.address)
-                self._stop_listener(listener)
+            self._disable_lan_locked()
 
     def stop(self) -> None:
         with self._lock:

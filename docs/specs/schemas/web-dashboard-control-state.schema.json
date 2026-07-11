@@ -79,6 +79,7 @@
         "state.set_beep_enabled",
         "state.set_zone_sound_enabled",
         "config.set_panel_visibility",
+        "config.set_timer_cycle_minutes",
         "weapon.select",
         "weapon.set_ballistic_model"
       ]
@@ -112,7 +113,7 @@
         "commands": {
           "type": "array",
           "uniqueItems": true,
-          "maxItems": 8,
+          "maxItems": 9,
           "items": {"$ref": "#/$defs/commandName"}
         },
         "panel_targets": {
@@ -130,6 +131,7 @@
         "locked",
         "beep_enabled",
         "zone_sound_enabled",
+        "timer_cycle_minutes",
         "panel_visibility",
         "selected_weapon_id",
         "ballistic_model"
@@ -138,6 +140,7 @@
         "locked": {"type": "boolean"},
         "beep_enabled": {"type": "boolean"},
         "zone_sound_enabled": {"type": "boolean"},
+        "timer_cycle_minutes": {"type": "integer", "minimum": 1, "maximum": 180},
         "panel_visibility": {
           "type": "object",
           "additionalProperties": false,

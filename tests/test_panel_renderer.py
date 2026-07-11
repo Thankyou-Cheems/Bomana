@@ -74,9 +74,9 @@ class PanelRendererNavListTests(unittest.TestCase):
         AppPanelRenderer(app).update_bombing_display(snap)
 
         self.assertEqual(app.bomb_flight_lbl.winfo_manager(), "pack")
-        self.assertEqual(app.bomb_flight_lbl.cget("text"), "飞行约 28s · 二维参考")
+        self.assertEqual(app.bomb_flight_lbl.cget("text"), "飞行约 28s")
         self.assertEqual(app.bomb_release_detail_lbl.winfo_manager(), "")
-        self.assertEqual(app.bomb_release_lbl.cget("text"), "估算窗内")
+        self.assertEqual(app.bomb_release_lbl.cget("text"), "进入发射包线")
 
     def test_selected_nav_icon_replaces_base_icon(self) -> None:
         self.assertEqual(AppPanelRenderer._nav_list_icon("zone", selected=True), "target")

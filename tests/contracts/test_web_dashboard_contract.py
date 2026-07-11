@@ -1,4 +1,4 @@
-# enforces: docs/specs/web-dashboard.md WDB-01..WDB-09 WDB-11..WDB-18 WDB-20..WDB-49
+# enforces: docs/specs/web-dashboard.md WDB-01..WDB-09 WDB-11..WDB-18 WDB-20..WDB-50
 # enforces: docs/specs/threading-ui-contract.md THREAD-10..THREAD-13
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ COMMAND_NAMES = {
     "state.set_beep_enabled",
     "state.set_zone_sound_enabled",
     "config.set_panel_visibility",
+    "config.set_timer_cycle_minutes",
     "weapon.select",
     "weapon.set_ballistic_model",
 }
@@ -128,6 +129,13 @@ def _schema_errors(
         and value < schema["minimum"]
     ):
         errors.append(f"{path}: below minimum")
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and "maximum" in schema
+        and value > schema["maximum"]
+    ):
+        errors.append(f"{path}: above maximum")
 
     for child in schema.get("allOf", []):
         errors.extend(_schema_errors(value, child, root, path))
@@ -164,6 +172,7 @@ def _control_state(*, scope: str = "control") -> dict[str, Any]:
             "locked": True,
             "beep_enabled": True,
             "zone_sound_enabled": False,
+            "timer_cycle_minutes": 15,
             "panel_visibility": {
                 "zones": True,
                 "airfields": True,
@@ -197,17 +206,22 @@ def _control_state(*, scope: str = "control") -> dict[str, Any]:
     }
 
 
-def test_command_schema_is_the_exact_eight_command_matrix() -> None:
+def test_command_schema_is_the_exact_nine_command_matrix() -> None:
     definitions = COMMAND_SCHEMA["$defs"]
     commands = {definition["properties"]["command"]["const"] for definition in definitions.values()}
     assert commands == COMMAND_NAMES
-    assert len(COMMAND_SCHEMA["oneOf"]) == len(COMMAND_NAMES) == 8
+    assert len(COMMAND_SCHEMA["oneOf"]) == len(COMMAND_NAMES) == 9
     assert set(definitions["setPanelVisibility"]["properties"]["target"]["enum"]) == (PANEL_TARGETS)
     assert definitions["setBallisticModel"]["properties"]["model"]["enum"] == [
         "foxthree_compatible",
         "strict_official",
     ]
     assert definitions["resetTimer"]["properties"]["confirmed"] == {"const": True}
+    assert definitions["setTimerCycleMinutes"]["properties"]["minutes"] == {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 180,
+    }
 
 
 def test_command_schema_accepts_only_exact_bounded_semantic_requests() -> None:
@@ -226,6 +240,11 @@ def test_command_schema_accepts_only_exact_bounded_semantic_requests() -> None:
             "command": "config.set_panel_visibility",
             "target": "weapon_solution",
             "enabled": True,
+        },
+        {
+            "schema_version": 1,
+            "command": "config.set_timer_cycle_minutes",
+            "minutes": 60,
         },
         {"schema_version": 1, "command": "weapon.select", "weapon_id": "agm_65d"},
         {
@@ -246,6 +265,21 @@ def test_command_schema_accepts_only_exact_bounded_semantic_requests() -> None:
             "command": "config.set_panel_visibility",
             "target": "arbitrary.config.path",
             "enabled": True,
+        },
+        {
+            "schema_version": 1,
+            "command": "config.set_timer_cycle_minutes",
+            "minutes": 0,
+        },
+        {
+            "schema_version": 1,
+            "command": "config.set_timer_cycle_minutes",
+            "minutes": 181,
+        },
+        {
+            "schema_version": 1,
+            "command": "config.set_timer_cycle_minutes",
+            "minutes": True,
         },
         {"schema_version": 1, "command": "weapon.select", "weapon_id": ""},
         {
@@ -325,7 +359,7 @@ def test_schema_bounds_match_http_and_session_contract() -> None:
     assert command_id["pattern"] == "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
     assert CONTROL_STATE_SCHEMA["properties"]["recent_commands"]["maxItems"] == 64
     assert CONTROL_STATE_SCHEMA["properties"]["weapons"]["maxItems"] == 512
-    assert CONTROL_STATE_SCHEMA["$defs"]["capabilities"]["properties"]["commands"]["maxItems"] == 8
+    assert CONTROL_STATE_SCHEMA["$defs"]["capabilities"]["properties"]["commands"]["maxItems"] == 9
 
 
 def test_server_is_dedicated_loopback_first_and_never_an_8111_proxy() -> None:
@@ -352,22 +386,31 @@ def test_server_has_no_tk_dependency_and_app_publishes_snapshot_state() -> None:
     assert "DashboardSnapshotStore" in RUNTIME
 
 
-def test_lan_and_tray_paths_are_explicit_current_run_actions() -> None:
+def test_lan_and_tray_paths_use_auto_discovery_and_one_control_action() -> None:
     assert "_is_rfc1918" in SERVER
+    assert "discover_private_ipv4" in SERVER
+    assert "self.address_provider()" in SERVER
     assert '("0.0.0.0"' not in SERVER
+    assert "10.126.126.2" not in SERVER
+    assert "192.168.31.69" not in SERVER
     assert "enable_dashboard_lan" in RUNTIME
     assert "disable_dashboard_lan" in RUNTIME
-    assert "enable_dashboard_lan_control" in RUNTIME
-    assert "disable_dashboard_lan_control" in RUNTIME
-    assert "允许局域网访问（本次运行）" in RUNTIME
+    assert "enable_dashboard_lan_control" not in RUNTIME
+    assert "disable_dashboard_lan_control" not in RUNTIME
+    assert "开启局域网访问与控制" in RUNTIME
     assert "app.dispatcher.post(app._toggle_web_dashboard_lan)" in RUNTIME
+    assert "app.dispatcher.post(app._toggle_web_dashboard_lan_control)" not in RUNTIME
     assert "app.dispatcher.post(app._open_web_dashboard)" in RUNTIME
-    assert "enabled=self._dashboard_lan_share_available" in RUNTIME
-    assert "web_dashboard_lan_enabled" not in APP
+    assert "web_dashboard_lan_enabled" in RUNTIME
     assert "lan_addresses" in SERVER
     assert "for address in addresses" in SERVER
     main_window = (ROOT / "bomana/ui/main_window.py").read_text(encoding="utf-8")
     assert "web_access_row" in APP or "web_access_row" in main_window
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Enabling LAN also grants fixed-function control" in readme
+    assert "disabling LAN immediately invalidates every LAN session" in readme
+    assert "keeps LAN sessions view-only unless control is explicitly enabled" not in readme
 
 
 def test_map_projection_allowlist_excludes_hostile_contacts_and_raw_payloads() -> None:

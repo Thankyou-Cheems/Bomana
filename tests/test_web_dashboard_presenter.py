@@ -35,6 +35,7 @@ def _snapshot() -> UISnapshot:
         api_down_pending=False,
         on_ground=False,
         landed_flash=False,
+        timer_cycle_minutes=60,
         zones=[
             ZoneDisplayInfo(
                 id="zone-1",
@@ -146,6 +147,7 @@ def test_dashboard_payload_matches_schema_and_filters_hostile_contacts() -> None
 
     validate_json_schema(payload, SCHEMA, path="dashboard")
     assert payload["schema_version"] == 1
+    assert payload["timer"]["cycle_minutes"] == 60
     assert payload["map"]["player"] == {"x": 0.48, "y": 0.62, "heading_deg": 93.0}
     assert {point["kind"] for point in payload["map"]["points"]} == {
         "zone",

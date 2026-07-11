@@ -9,16 +9,18 @@ from typing import TYPE_CHECKING
 from bomana.config.feature_profile import ENABLE_CCRP
 from bomana.config.settings import (
     BombConfig,
-    OverspeedConfig,
     UIConfig,
     ZoneConfig,
 )
 from bomana.ui.icon_assets import IconManager
-from bomana.ui.panel_presenter import format_weapon_selection_label, overspeed_focus_ratio
+from bomana.ui.panel_presenter import (
+    format_weapon_selection_label,
+    overspeed_dynamic_projection,
+)
 from bomana.ui.text_utils import bind_dynamic_wrap, measure_min_width
 from bomana.ui.theme import Theme
-from bomana.ui.tk_style import style_action_button
-from bomana.ui.widgets import HeadingTape, Pill
+from bomana.ui.tk_style import style_action_button, style_clickable_surface
+from bomana.ui.widgets import BananaProgress, HeadingTape, Pill
 
 if TYPE_CHECKING:
     from bomana.ui.app import App
@@ -58,6 +60,11 @@ class MainWindowBuilder:
         self._build_top_card()
         self._build_mid_cards()
         self._build_bottom_card()
+        app.surface_frame.bind(
+            "<Configure>",
+            lambda _event: app._schedule_content_geometry_sync(),
+            add="+",
+        )
 
     def _create_card(
         self,
@@ -92,6 +99,11 @@ class MainWindowBuilder:
     def _bind_label_wrap(self, label: tk.Label, parent: tk.Misc, *, margin: int = 0) -> None:
         """Keep label wrapping aligned with its live container width."""
         bind_dynamic_wrap(label, parent, minimum=80, margin=margin)
+        parent.bind(
+            "<Configure>",
+            lambda _event: self.app._schedule_content_geometry_sync(),
+            add="+",
+        )
 
     def _configure_heading_status_row(
         self,
@@ -153,6 +165,7 @@ class MainWindowBuilder:
             justify="left",
         )
         app.web_access_lbl.grid(row=0, column=0, sticky="ew")
+        style_clickable_surface(app.web_access_lbl)
         bind_dynamic_wrap(
             app.web_access_lbl,
             app.web_access_row,
@@ -183,17 +196,6 @@ class MainWindowBuilder:
         )
         style_action_button(app.web_lan_btn, "secondary")
         app.web_lan_btn.grid(row=0, column=2, sticky="e", padx=(int(5 * s), 0))
-        app.web_control_btn = tk.Button(
-            app.web_access_row,
-            text="允许控制",
-            font=font_hint,
-            padx=int(7 * s),
-            pady=btn_pad_y,
-            command=app._toggle_web_dashboard_lan_control,
-            takefocus=False,
-        )
-        style_action_button(app.web_control_btn, "warning")
-        app.web_control_btn.grid(row=0, column=3, sticky="e", padx=(int(5 * s), 0))
         app.web_access_row.grid_remove()
 
         nudge_visible = bool(
@@ -262,6 +264,7 @@ class MainWindowBuilder:
             pady=btn_pad_y,
         )
         app.debug_source_btn.grid(row=0, column=0, sticky="w")
+        style_clickable_surface(app.debug_source_btn)
         app.debug_source_btn.bind(
             "<Button-1>", lambda e: app.debug_support.toggle_debug_mock_mode()
         )
@@ -281,6 +284,7 @@ class MainWindowBuilder:
             pady=btn_pad_y,
         )
         app.debug_prev_btn.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+        style_clickable_surface(app.debug_prev_btn)
         app.debug_prev_btn.bind("<Button-1>", lambda e: app.debug_support.cycle_debug_scene(-1))
         app.debug_prev_btn.bind("<Enter>", lambda e: app.debug_prev_btn.config(bg=Theme.BORDER))
         app.debug_prev_btn.bind("<Leave>", lambda e: app.debug_prev_btn.config(bg=Theme.BG))
@@ -306,6 +310,7 @@ class MainWindowBuilder:
             pady=btn_pad_y,
         )
         app.debug_next_btn.grid(row=0, column=3, sticky="w")
+        style_clickable_surface(app.debug_next_btn)
         app.debug_next_btn.bind("<Button-1>", lambda e: app.debug_support.cycle_debug_scene(1))
         app.debug_next_btn.bind("<Enter>", lambda e: app.debug_next_btn.config(bg=Theme.BORDER))
         app.debug_next_btn.bind("<Leave>", lambda e: app.debug_next_btn.config(bg=Theme.BG))
@@ -352,7 +357,7 @@ class MainWindowBuilder:
 
         app.top_row1 = tk.Frame(app.top_content, bg=Theme.GRAYPILL)
         app.top_row1.grid(row=0, column=0, sticky="ew", padx=int(8 * s), pady=(int(6 * s), 0))
-        app.top_row1.grid_columnconfigure(0, weight=1)
+        app.top_row1.grid_columnconfigure(2, weight=1)
 
         app.timer_lbl = tk.Label(
             app.top_row1,
@@ -364,8 +369,15 @@ class MainWindowBuilder:
         )
         app.timer_lbl.grid(row=0, column=0, sticky="w")
 
+        app.banana_progress = BananaProgress(
+            app.top_row1,
+            size=max(38, int(48 * s)),
+            bg=Theme.GRAYPILL,
+        )
+        app.banana_progress.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+
         right = tk.Frame(app.top_row1, bg=Theme.GRAYPILL)
-        right.grid(row=0, column=1, sticky="e", padx=(int(12 * s), 0))
+        right.grid(row=0, column=2, sticky="e", padx=(int(12 * s), 0))
         app.life_lbl = tk.Label(
             right,
             text="未复活",
@@ -492,6 +504,7 @@ class MainWindowBuilder:
             pady=max(1, int(1 * s)),
         )
         app.speed_threshold_btn.grid(row=0, column=1, sticky="w", padx=(max(6, int(8 * s)), 0))
+        style_clickable_surface(app.speed_threshold_btn)
         app.speed_threshold_btn.bind(
             "<Button-1>",
             lambda _e: app._show_settings(initial_tab="空速"),
@@ -535,10 +548,11 @@ class MainWindowBuilder:
         app.speed_bar_fill = tk.Frame(app.speed_bar_bg, bg=Theme.GREEN, height=speed_bar_thickness)
         app.speed_bar_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
         app.speed_bar_markers = {}
+        initial_marker_ratios = overspeed_dynamic_projection(0.0).marker_ratios
         for name, relx, color in (
-            ("caution", OverspeedConfig.CAUTION_RATIO, Theme.BLUE),
-            ("warning", OverspeedConfig.WARNING_RATIO, Theme.YELLOW),
-            ("critical", OverspeedConfig.CRITICAL_RATIO, Theme.RED),
+            ("caution", initial_marker_ratios[0], Theme.BLUE),
+            ("warning", initial_marker_ratios[1], Theme.YELLOW),
+            ("critical", initial_marker_ratios[2], Theme.RED),
         ):
             marker = tk.Frame(
                 app.speed_bar_bg,
@@ -546,24 +560,8 @@ class MainWindowBuilder:
                 width=max(1, int(2 * s)),
                 height=max(speed_bar_thickness + 2, int(7 * s)),
             )
-            marker.place(relx=overspeed_focus_ratio(relx), rely=0.5, anchor="center")
+            marker.place(relx=relx, rely=0.5, anchor="center")
             app.speed_bar_markers[name] = marker
-
-        bar_height = int(UIConfig.PROGRESS_BAR_HEIGHT * s)
-        app.progress_frame = tk.Frame(app.top_row1, bg=Theme.GRAYPILL, height=bar_height)
-        pad_top, pad_bot = UIConfig.PADDING_PROGRESS
-        app.progress_frame.grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(int(pad_top * s), int(pad_bot * s)),
-        )
-        app.progress_frame.grid_propagate(False)
-        bar_thickness = int(UIConfig.PROGRESS_BAR_THICKNESS * s)
-        app.bar_bg = tk.Frame(app.progress_frame, bg=Theme.SEPARATOR, height=bar_thickness)
-        app.bar_bg.place(relx=0, rely=0.5, relwidth=1, anchor="w")
-        app.bar_fill = tk.Frame(app.bar_bg, bg=Theme.BLUE, height=bar_thickness)
-        app.bar_fill.place(relx=0, rely=0, relwidth=0, relheight=1)
 
     def _build_mid_cards(self) -> None:
         app = self.app
@@ -1177,6 +1175,7 @@ class MainWindowBuilder:
             app.bombing_info_frame.grid(
                 row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s))
             )
+            style_clickable_surface(app.bombing_info_frame)
             app.bomb_select_lbl = tk.Label(
                 app.bombing_info_frame,
                 text=format_weapon_selection_label(
