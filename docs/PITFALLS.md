@@ -14,6 +14,20 @@ implementation plans belong in git history, not here.
 
 ## Entries
 
+### 2026-07-11 — pystray runtime state must use callable menu properties
+
+Symptom: after enabling Web Cockpit LAN access, “复制手机访问链接” remained disabled even though the listener and pairing URL were ready.
+Root cause: `MenuItem.enabled` received the Boolean value captured while the tray was created; `update_menu()` only re-evaluates callable properties and cannot change that immutable value.
+Spec: `docs/specs/web-dashboard.md` `WDB-17` (Draft 2026-07).
+Pin: `tests/test_runtime_services.py` exercises the false/true/false LAN-share predicate, while `tests/contracts/test_web_dashboard_contract.py` requires the tray item to bind that callable.
+
+### 2026-07-11 — Windows local HTTP listeners must not enable SO_REUSEADDR
+
+Symptom: two Web Cockpit preview processes both appeared to own `127.0.0.1:8777`, so browser requests could reach a process with a different pairing token.
+Root cause: `socketserver.TCPServer.allow_reuse_address=True` maps to permissive Windows `SO_REUSEADDR` behavior instead of merely providing Unix-style quick restart semantics.
+Spec: `docs/specs/web-dashboard.md` `WDB-01`, `WDB-08`, `WDB-15` (Draft 2026-07).
+Pin: `tests/test_web_dashboard_server.py` requires an active listener to reject a second runtime and still permits address reuse after bounded shutdown.
+
 ### 2026-07-11 — Over-conservative weapon models can be operationally useless
 
 Symptom: AIM-120C-5 showed a roughly 15 km two-dimensional cue despite its condition tables supporting much longer high-energy launch references, while glide weapons displayed an iron-bomb trajectory that did not account for lift or guidance.

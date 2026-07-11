@@ -339,6 +339,8 @@ class MapObjectsContractTests(unittest.TestCase):
 
         with logic._lock:
             logic.state.phase = Phase.ALIVE
+            logic.state.last_map = mp
+            logic.state.last_tel = tel
             logic.state.map_info = MapInfo(
                 valid=True,
                 map_min=[0.0, 0.0],
@@ -354,6 +356,8 @@ class MapObjectsContractTests(unittest.TestCase):
         self.assertEqual(target.kind, "poi")
         self.assertEqual(target.id, "poi-forward")
         self.assertEqual(target.name, "Smoke")
+        map_target = next(point for point in logic.snapshot().map_points if point.id == target.id)
+        self.assertTrue(map_target.is_target)
 
     def test_zone_navigation_keeps_zone_bombing_target_when_poi_outside_heading_gate(self):
         logic = GameLogic()

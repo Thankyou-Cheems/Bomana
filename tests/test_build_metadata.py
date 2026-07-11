@@ -106,6 +106,46 @@ def test_enhanced_app_package_bundles_weapon_catalog_and_shared_schema(tmp_path:
         assert "docs/specs/schemas/weapon-fire-control.schema.json" in archive.namelist()
 
 
+@pytest.mark.parametrize("variant", ["Enhanced", "Standard", "Lite"])
+def test_all_app_variants_bundle_web_cockpit(tmp_path: Path, variant: str) -> None:
+    build_portable = load_tool_module(
+        f"build_portable_web_cockpit_{variant.lower()}",
+        "tools/build_portable.py",
+    )
+    root = tmp_path / "repo"
+    output = tmp_path / "dist"
+    web_module_dir = root / "bomana" / "web"
+    web_asset_dir = root / "bomana" / "assets" / "web"
+    data_dir = root / "bomana" / "data"
+    schema_dir = root / "docs" / "specs" / "schemas"
+    for directory in (web_module_dir, web_asset_dir, data_dir, schema_dir, output):
+        directory.mkdir(parents=True, exist_ok=True)
+    (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
+    (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
+    for name in ("__init__.py", "server.py", "snapshot.py"):
+        (web_module_dir / name).write_text("", encoding="utf-8")
+    for name in ("index.html", "dashboard.css", "dashboard.js", "favicon.svg"):
+        (web_asset_dir / name).write_text(name, encoding="utf-8")
+    (data_dir / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
+    (schema_dir / "weapon-fire-control.schema.json").write_text("{}\n", encoding="utf-8")
+    broker = tmp_path / "BomanaHotkeyBroker.exe"
+    broker.write_bytes(b"native broker payload")
+
+    package = build_portable.build_app_zip(root, variant, "1.2.3", output, broker)
+
+    expected = {
+        "bomana/web/__init__.py",
+        "bomana/web/server.py",
+        "bomana/web/snapshot.py",
+        "bomana/assets/web/index.html",
+        "bomana/assets/web/dashboard.css",
+        "bomana/assets/web/dashboard.js",
+        "bomana/assets/web/favicon.svg",
+    }
+    with zipfile.ZipFile(package) as archive:
+        assert expected <= set(archive.namelist())
+
+
 def test_enhanced_app_package_rejects_missing_weapon_assets(tmp_path: Path) -> None:
     build_portable = load_tool_module(
         "build_portable_missing_weapon_data", "tools/build_portable.py"
@@ -148,7 +188,17 @@ def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:
     )
     assert runtime_args == [
         "--hidden-import",
+        "http.cookies",
+        "--hidden-import",
+        "http.server",
+        "--hidden-import",
+        "ipaddress",
+        "--hidden-import",
+        "mimetypes",
+        "--hidden-import",
         "pystray._win32",
+        "--hidden-import",
+        "socketserver",
         "--hidden-import",
         "winsound",
         "--hidden-import",

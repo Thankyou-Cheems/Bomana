@@ -170,12 +170,34 @@ def _validate_json_schema(
         _validate_json_schema(value, _resolve_schema_ref(str(rules["$ref"]), schema), path, schema)
         return
 
+    if "oneOf" in rules:
+        matches = 0
+        for option in rules["oneOf"]:
+            try:
+                _validate_json_schema(value, option, path, schema)
+            except SchemaValidationError:
+                continue
+            matches += 1
+        if matches != 1:
+            raise _schema_error(path, f"expected exactly one schema match, got {matches}")
+        return
+
     if "const" in rules and value != rules["const"]:
         raise _schema_error(path, f"expected constant {rules['const']!r}")
     if "enum" in rules and value not in rules["enum"]:
         raise _schema_error(path, f"not in allowed values {rules['enum']!r}")
 
     expected_type = rules.get("type")
+    if isinstance(expected_type, list):
+        for option in expected_type:
+            branch = dict(rules)
+            branch["type"] = option
+            try:
+                _validate_json_schema(value, branch, path, schema)
+            except SchemaValidationError:
+                continue
+            return
+        raise _schema_error(path, f"expected one of types {expected_type!r}")
     if expected_type == "object":
         if not isinstance(value, dict):
             raise _schema_error(path, "expected object")
@@ -231,6 +253,10 @@ def _validate_json_schema(
             raise _schema_error(path, "expected finite number")
     elif expected_type == "boolean" and not isinstance(value, bool):
         raise _schema_error(path, "expected boolean")
+    elif expected_type == "null":
+        if value is not None:
+            raise _schema_error(path, "expected null")
+        return
 
     if "minimum" in rules and value < rules["minimum"]:
         raise _schema_error(path, f"must be at least {rules['minimum']}")

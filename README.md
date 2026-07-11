@@ -164,6 +164,16 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 - **自定义提示音** - 可按“计时/导航/空速”分类导入本地音频文件
 - **历史速度模式** - 可切换为仅保留速度提醒的极简飞行界面
 
+### 网页驾驶舱（本机与手机） | Local & Mobile Web Cockpit
+
+- **托盘直达** - 从托盘打开本机页面，无需油猴、浏览器插件或修改 8111 页面
+- **移动端地图优先** - 响应式矢量地图集中显示己机、战区、机场、POI 与 Trace back，并提供缩放、平移和跟随
+- **一页关键信息** - 同步计时、速度/高度/航向、燃油、导航、武器/投弹参考、检查清单与告警
+- **按需共享** - 默认仅本机可用；从托盘显式允许本次运行的局域网访问后，可复制带配对码的手机链接
+- **通道一致** - Enhanced、Standard、Lite 都包含网页驾驶舱，页面卡片随当前通道功能自动调整
+
+The Web Cockpit is a Bomana-designed, read-only dashboard for desktop and mobile browsers. It runs independently from port 8111 and publishes only the filtered features available in the current build.
+
 ---
 
 ## 安装与使用 | Installation & Usage
@@ -172,6 +182,7 @@ War Thunder 全真模式（SB）中，每次出生后有 15 分钟的收益周�
 
 - Bomana 通过 `http://localhost:8111` 读取战斗数据。
 - 无需额外“开启本地服务器”开关；通常只需启动 War Thunder 并进入战斗。
+- 网页驾驶舱随 Bomana 自动启动，默认仅供本机访问；手机访问需从托盘为本次运行单独开启。
 
 ### 安装路径选择
 
@@ -260,10 +271,11 @@ uv run python Bomana.pyw
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 当前代码结构、运行数据流与构建发布链路
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) - 基于 `bd` 的协作、提交流程与发布约定
 - [docs/specs/](docs/specs/) - 8111、发布签名、UI 线程、配置变体和质量门禁的 canonical specs
-- [docs/PRIVACY.md](docs/PRIVACY.md) - 启动器更新检查与匿名统计上报说明
+- [docs/PRIVACY.md](docs/PRIVACY.md) - 启动器匿名统计与网页驾驶舱本机/LAN 数据边界
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) - 版本变更记录
 - [docs/PITFALLS.md](docs/PITFALLS.md) - 维护过程中的已知坑点与排障记录
 - [docs/guides/8111-session-recording.md](docs/guides/8111-session-recording.md) - 录制真实 8111 对局数据用于离线回放
+- [docs/guides/web-cockpit-smoke.md](docs/guides/web-cockpit-smoke.md) - 网页驾驶舱的真实浏览器、手机/LAN 与打包产物人工核对
 - [tests/README.md](tests/README.md) - 测试分层、放置规则与规范映射
 
 ---
@@ -280,7 +292,9 @@ uv run python Bomana.pyw
 │  ├─ data/
 │  │  ├─ ccrp_bomb_params.json
 │  │  └─ fm_speed_limits.json
+│  ├─ assets/web/
 │  ├─ ui/
+│  ├─ web/
 │  └─ utils/
 ├─ tools/
 │  ├─ blkx_extractor.py
@@ -395,6 +409,10 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 - 正常状态：50ms（20Hz）
 - API 断线：1.25s（降低 CPU 占用）
 
+### 网页驾驶舱数据流
+
+Bomana 仍是唯一的 8111 读取方。App 将筛选后的只读 `UISnapshot` 发布给独立 HTTP 服务；网页不会请求或代理任何 8111 路由，也不会发布敌机标记或原始响应。服务默认监听 `127.0.0.1:8777`，端口被占用时在有限范围内回退；托盘可为本次运行额外绑定一个 RFC1918 私有 IPv4 地址。页面资源全部随应用打包，不依赖 CDN、远程字体或分析脚本。完整边界见 [Web Dashboard Spec](docs/specs/web-dashboard.md)。
+
 ### 状态机
 
 ```
@@ -420,6 +438,13 @@ Bomana 通过 War Thunder 官方提供的本地 HTTP 服务器获取数据：
 1. 确认已出生在战场中
 2. 检查 8111 端口是否可访问
 3. 等待 1-2 秒让程序检测到玩家
+
+### Q: 如何在手机上打开网页驾驶舱？
+
+1. 让手机和电脑连接同一个可信局域网
+2. 在 Bomana 托盘菜单中打开“网页驾驶舱”，选择“允许局域网访问（本次运行）”
+3. 使用自动复制的手机链接；需要时可从同一菜单再次复制链接或配对码
+4. 如果无法连接，在 Windows 防火墙提示中允许 Bomana 的专用网络访问；Bomana 不会自动修改防火墙
 
 ### Q: 武器解算或投弹提示不准确？
 

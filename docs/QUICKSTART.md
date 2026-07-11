@@ -70,6 +70,16 @@ uv run python Bomana.pyw
 - 拒绝 UAC 不会阻止 Bomana 启动；窗口按钮、托盘、计时、导航和官方 8111 数据保持可用，只是游戏获得焦点时的全局 F7-F11 可能失效。
 - Broker 只注册当前启用的固定动作，不使用键盘钩子、轮询、Raw Input、游戏内存读取、服务或计划任务。
 
+#### 网页驾驶舱（本机 / 手机）
+
+1. Bomana 启动后会自动提供网页驾驶舱。在系统托盘中打开“网页驾驶舱 -> 打开本机页面”即可使用；无需油猴或浏览器插件。
+2. 本机服务默认使用 `127.0.0.1:8777`，端口占用时会在有限范围内自动选择相邻端口，因此请优先使用托盘入口。
+3. 手机与电脑连接同一个可信局域网后，在托盘中选择“允许局域网访问（本次运行）”并确认。Bomana 会复制带本次配对码的手机链接。
+4. 在手机浏览器打开该链接。配对成功后，浏览器会保存仅供该页面使用的会话 Cookie；也可从托盘再次复制手机链接或配对码。
+5. 局域网访问不会保存到下次启动，退出 Bomana 后立即关闭。Bomana 不会自动修改 Windows 防火墙；若手机无法连接，请允许 Bomana 的“专用网络”访问。
+
+网页以地图为主要信息入口，并集中显示计时、飞行、燃油、导航、武器/投弹参考、检查清单和告警。所有通道都包含网页资源，卡片会按当前通道实际启用的功能显示。
+
 ### 3. 核心功能速览
 
 | 功能 | 说明 |
@@ -80,6 +90,7 @@ uv run python Bomana.pyw
 | 武器解算 | 自由落体 CCRP + AAM/AGM/制导与滑翔武器参考 |
 | 超速提醒 | IAS/Mach 双通道分级告警（safe/caution/warning/critical） |
 | HUD 叠加层 | 可选开启，提供目标与航向参考 |
+| 网页驾驶舱 | 本机/手机响应式地图与关键信息面板 |
 | 界面个性化 | 独立文字缩放、主题切换、自定义提示音 |
 
 武器解算说明：
@@ -115,6 +126,10 @@ A: 这是估计算法，不是游戏内真实算法。可在 `设置 -> 投弹` 
 
 **Q: 计时器不准？**  
 A: 使用当前配置的重置热键连续按两次，手动重置周期；默认是 `F7`。
+
+**Q: 手机打不开网页驾驶舱？**
+
+A: 确认已从托盘为本次运行开启局域网访问，手机与电脑位于同一局域网，并在 Windows 防火墙中允许 Bomana 的专用网络访问。VPN、访客 Wi-Fi 或 AP 隔离也可能阻止设备互访。
 
 ### 5. 开发者：更新数据文件
 
@@ -215,6 +230,16 @@ For source-mode admin-hotkey testing, first run `uv run python tools/build_hotke
 - Denying UAC keeps buttons, tray actions, timer/navigation, and official 8111 data available; only global F7-F11 delivery while the game has focus may be unavailable.
 - The broker registers only enabled fixed actions and does not use hooks, polling, Raw Input, game-memory access, a service, or a scheduled task.
 
+#### Web Cockpit (Local / Mobile)
+
+1. Bomana starts the Web Cockpit automatically. Open `Web Cockpit -> Open local page` from the system tray; no userscript manager or browser extension is required.
+2. The local listener prefers `127.0.0.1:8777` and uses a bounded nearby-port fallback if that port is occupied, so use the tray entry instead of a hard-coded bookmark.
+3. Put the phone and PC on the same trusted LAN, then choose `Allow LAN access (this run)` from the tray and confirm. Bomana copies a phone link containing the current pairing code.
+4. Open that link on the phone. Successful pairing stores a page-only session cookie; the tray can copy the phone link or pairing code again.
+5. LAN access is not persisted and ends when Bomana exits. Bomana does not change Windows Firewall; if the phone cannot connect, allow Bomana on private networks.
+
+The responsive page is map-first and combines timer, flight, fuel, navigation, weapon/bombing references, checklist, and alerts. All channels package the dashboard; cards follow the capabilities enabled by the active channel.
+
 ### 3. Feature Snapshot
 
 | Feature | Description |
@@ -225,6 +250,7 @@ For source-mode admin-hotkey testing, first run `uv run python tools/build_hotke
 | Weapon solution | Free-fall CCRP plus AAM/AGM/guided/glide references |
 | Overspeed | IAS/Mach dual-channel alerts (`safe/caution/warning/critical`) |
 | HUD overlay | Optional in-game navigation overlay |
+| Web Cockpit | Responsive local/mobile map and key information panels |
 | UI personalization | Independent text scale, theme switching, custom alert sounds |
 
 Weapon-solution note:
@@ -256,6 +282,10 @@ A: Aircraft FM may not be matched in the current speed-limit database.
 
 **Q: CCRP prediction is off?**  
 A: Expected for an estimate-based model. Tune `range correction` and `time correction` in `Settings -> Bombing`.
+
+**Q: The phone cannot open Web Cockpit?**
+
+A: Enable LAN access for this run from the tray, keep both devices on the same LAN, and allow Bomana on Windows private networks. VPNs, guest Wi-Fi, or AP isolation can also block device-to-device access.
 
 ### 5. Developer: Build/Release Checks
 

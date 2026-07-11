@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08111f">
+  <title>Bomana Web Cockpit</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/dashboard.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><strong>BOMANA</strong><small>WEB COCKPIT</small></span>
+    </div>
+    <div class="connection" id="connectionBadge">
+      <span class="connection-dot"></span>
+      <span id="connectionText">正在连接</span>
+      <small id="freshnessText">--</small>
+    </div>
+  </header>
+
+  <main class="cockpit" id="cockpit">
+    <section class="mission-strip card" aria-label="任务摘要">
+      <div class="mission-clock">
+        <span class="eyebrow" id="phaseLabel">等待游戏</span>
+        <strong id="timerValue">--:--</strong>
+        <span id="timerMeta">等待 8111 数据</span>
+      </div>
+      <div class="mission-progress"><i id="timerProgress"></i></div>
+      <div class="quick-metrics">
+        <div><span>IAS</span><strong id="iasValue">---</strong><small>km/h</small></div>
+        <div><span>ALT</span><strong id="altValue">---</strong><small>m</small></div>
+        <div><span>HDG</span><strong id="headingValue">---</strong><small>deg</small></div>
+        <div data-capability="fuel"><span>FUEL</span><strong id="fuelValue">---</strong><small>%</small></div>
+      </div>
+    </section>
+
+    <section class="map-card card">
+      <div class="card-head">
+        <div><span class="eyebrow">TACTICAL VIEW</span><h1>战术态势</h1></div>
+        <div class="map-tools" aria-label="地图控制">
+          <button id="mapZoomOut" type="button" aria-label="缩小地图">−</button>
+          <button id="mapFollow" type="button" class="active">跟随</button>
+          <button id="mapZoomIn" type="button" aria-label="放大地图">＋</button>
+        </div>
+      </div>
+      <div class="map-stage" id="mapStage">
+        <canvas id="tacticalMap" aria-label="Bomana 矢量战术地图"></canvas>
+        <div class="map-empty" id="mapEmpty">等待地图数据</div>
+        <div class="map-legend">
+          <span><i class="legend-player"></i>本机</span>
+          <span><i class="legend-zone"></i>战区</span>
+          <span><i class="legend-airfield"></i>机场</span>
+          <span><i class="legend-poi"></i>POI</span>
+          <span><i class="legend-trace"></i>Trace back</span>
+        </div>
+      </div>
+      <div class="heading-tape-wrap">
+        <canvas id="headingTape" aria-label="航向带"></canvas>
+      </div>
+    </section>
+
+    <section class="systems-grid">
+      <article class="card weapon-card" data-capability="weapon">
+        <div class="card-head">
+          <div><span class="eyebrow">FIRE CONTROL</span><h2>武器解算</h2></div>
+          <span class="quality-chip" id="weaponQuality">待机</span>
+        </div>
+        <div class="weapon-name"><strong id="weaponName">未选择武器</strong><span id="weaponModel">--</span></div>
+        <div class="range-rail"><i id="weaponRangeBar"></i><b id="weaponTargetMark"></b></div>
+        <div class="data-pairs">
+          <div><span>目标</span><strong id="weaponTarget">--</strong></div>
+          <div><span>距离</span><strong id="weaponDistance">--</strong></div>
+          <div><span>参考包线</span><strong id="weaponEnvelope">--</strong></div>
+          <div><span>预计时间</span><strong id="weaponTti">--</strong></div>
+        </div>
+        <p class="system-note" id="weaponStatus">等待有效解算</p>
+      </article>
+
+      <article class="card navigation-card" data-capability="navigation">
+        <div class="card-head">
+          <div><span class="eyebrow">NAVIGATION</span><h2>导航目标</h2></div>
+          <strong class="deviation" id="deviationValue">±0°</strong>
+        </div>
+        <div class="nav-list" id="navigationList"><p class="empty-line">暂无导航目标</p></div>
+      </article>
+
+      <article class="card airframe-card">
+        <div class="card-head">
+          <div><span class="eyebrow">AIRFRAME</span><h2>飞行状态</h2></div>
+          <span id="aircraftName">--</span>
+        </div>
+        <div class="gauge-grid">
+          <div class="ring" id="fuelRing" data-capability="fuel"><span>燃油</span><strong id="fuelRingValue">--%</strong></div>
+          <div class="ring" id="speedRing"><span>限速</span><strong id="speedRingValue">--%</strong></div>
+          <div class="ring" id="gearRing"><span>起落架</span><strong id="gearRingValue">--%</strong></div>
+        </div>
+        <div class="data-pairs compact">
+          <div data-capability="fuel"><span>油耗</span><strong id="fuelRate">--</strong></div>
+          <div data-capability="fuel"><span>续航</span><strong id="fuelTime">--</strong></div>
+          <div data-capability="fuel"><span>返航需求</span><strong id="returnFuel">--</strong></div>
+          <div><span>俯仰 / 横滚</span><strong id="attitudeValue">--</strong></div>
+        </div>
+      </article>
+
+      <article class="card bombing-card" data-capability="weapon">
+        <div class="card-head">
+          <div><span class="eyebrow">RELEASE CUE</span><h2>投放提示</h2></div>
+          <span class="release-chip" id="releaseStatus">待机</span>
+        </div>
+        <div class="data-pairs">
+          <div><span>弹药</span><strong id="bombName">--</strong></div>
+          <div><span>目标</span><strong id="bombTarget">--</strong></div>
+          <div><span>投放距离</span><strong id="releaseDistance">--</strong></div>
+          <div><span>窗口时间</span><strong id="releaseTime">--</strong></div>
+        </div>
+        <p class="system-note" id="bombReason">等待计算</p>
+      </article>
+
+      <article class="card checklist-card" data-capability="checklist">
+        <div class="card-head">
+          <div><span class="eyebrow">SORTIE</span><h2>出击检查</h2></div>
+          <span id="checklistCount">0 项</span>
+        </div>
+        <ol class="checklist" id="checklist"><li>等待清单</li></ol>
+      </article>
+
+      <article class="card alerts-card">
+        <div class="card-head">
+          <div><span class="eyebrow">PRIORITY</span><h2>告警与提示</h2></div>
+          <span id="alertCount">0</span>
+        </div>
+        <div class="alert-list" id="alertList"><p class="all-clear">当前无告警</p></div>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <span>只读投影 · 数据来自本机 Bomana</span>
+    <span>无游戏控制 · 无外网资源</span>
+  </footer>
+
+  <div class="pairing" id="pairingPanel" role="dialog" aria-modal="true" aria-labelledby="pairingTitle">
+    <form id="pairingForm" class="pairing-card">
+      <span class="brand-mark large" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="eyebrow">TRUSTED LAN ONLY</span>
+      <h2 id="pairingTitle">连接 Bomana</h2>
+      <p>从 Bomana 托盘菜单查看本次运行的配对码。只在可信局域网中共享。</p>
+      <label for="pairingCode">配对码</label>
+      <input id="pairingCode" name="pairingCode" inputmode="text" autocomplete="one-time-code" maxlength="9" placeholder="ABCD-EFGH" required>
+      <button type="submit">进入驾驶舱</button>
+      <small id="pairingError">网页仅提供只读飞行信息。</small>
+    </form>
+  </div>
+
+  <script src="/assets/dashboard.js" defer></script>
+</body>
+</html>

@@ -40,6 +40,8 @@ from bomana.utils.hotkey_broker import (
     detect_war_thunder_integrity,
 )
 from bomana.utils.system import GlobalHotkeys
+from bomana.web.server import DashboardServerError, WebDashboardRuntime
+from bomana.web.snapshot import DashboardSnapshotStore
 
 try:
     import pystray
@@ -64,6 +66,61 @@ class AppRuntimeServices:
         self._hud_last_target: dict[str, Any] | None = None
         self._hud_target_hold_sec = 1.2
         self._hud_render_error_count = 0
+        self.dashboard_store = DashboardSnapshotStore()
+        self.dashboard: WebDashboardRuntime | None = None
+        self.dashboard_error = ""
+
+    def init_dashboard(self) -> bool:
+        """Start the extension-free loopback Web Cockpit."""
+        if self.dashboard is not None and self.dashboard.is_running:
+            return True
+        try:
+            dashboard = WebDashboardRuntime(self.dashboard_store)
+            dashboard.start()
+        except Exception as exc:
+            self.dashboard = None
+            self.dashboard_error = str(exc)
+            log_exception("web_dashboard_start_failed", exc)
+            return False
+        self.dashboard = dashboard
+        self.dashboard_error = ""
+        log_event("web_dashboard_started", port=dashboard.port, scope="loopback")
+        return True
+
+    def publish_dashboard(self, snapshot: UISnapshot, checklist_items: list[str]) -> None:
+        """Publish immutable presentation state; HTTP threads never read Tk/App."""
+        self.dashboard_store.publish(snapshot, checklist_items)
+
+    def enable_dashboard_lan(self) -> str:
+        dashboard = self.dashboard
+        if dashboard is None or not dashboard.is_running:
+            if not self.init_dashboard():
+                raise DashboardServerError(self.dashboard_error or "网页驾驶舱启动失败")
+            dashboard = self.dashboard
+        if dashboard is None:
+            raise DashboardServerError("网页驾驶舱启动失败")
+        address = dashboard.enable_lan()
+        log_event("web_dashboard_lan_enabled", port=dashboard.port)
+        return address
+
+    def disable_dashboard_lan(self) -> None:
+        dashboard = self.dashboard
+        if dashboard is None or not dashboard.lan_enabled:
+            return
+        dashboard.disable_lan()
+        log_event("web_dashboard_lan_disabled")
+
+    def _dashboard_lan_share_available(self, _item: Any | None = None) -> bool:
+        dashboard = self.dashboard
+        return bool(dashboard is not None and dashboard.is_running and dashboard.lan_enabled)
+
+    def stop_dashboard(self) -> None:
+        dashboard = self.dashboard
+        self.dashboard = None
+        if dashboard is None:
+            return
+        with contextlib.suppress(Exception):
+            dashboard.stop()
 
     def init_global_hotkeys(self) -> None:
         """Initialize runtime-configurable Windows global hotkeys."""
@@ -340,6 +397,18 @@ class AppRuntimeServices:
         def do_about(icon, item):
             app.dispatcher.post(app._show_about)
 
+        def do_open_dashboard(icon, item):
+            app.dispatcher.post(app._open_web_dashboard)
+
+        def do_toggle_dashboard_lan(icon, item):
+            app.dispatcher.post(app._toggle_web_dashboard_lan)
+
+        def do_copy_dashboard_link(icon, item):
+            app.dispatcher.post(app._copy_web_dashboard_link)
+
+        def do_copy_dashboard_code(icon, item):
+            app.dispatcher.post(app._copy_web_dashboard_pairing_code)
+
         def do_star(icon, item):
             app.dispatcher.post(app._open_star_url)
 
@@ -366,6 +435,39 @@ class AppRuntimeServices:
             pystray.MenuItem("空历速度模式", do_speed_history, checked=is_speed_history_mode),
             pystray.Menu.SEPARATOR,
         ]
+
+        dashboard = self.dashboard
+        dashboard_ready = bool(dashboard is not None and dashboard.is_running)
+        dashboard_code = dashboard.pairing_code if dashboard_ready and dashboard else "---- ----"
+        dashboard_menu = pystray.Menu(
+            pystray.MenuItem("打开本机页面", do_open_dashboard, enabled=dashboard_ready),
+            pystray.MenuItem(
+                "允许局域网访问（本次运行）",
+                do_toggle_dashboard_lan,
+                checked=lambda _item: bool(
+                    self.dashboard is not None and self.dashboard.lan_enabled
+                ),
+                enabled=dashboard_ready,
+            ),
+            pystray.MenuItem(
+                "复制手机访问链接",
+                do_copy_dashboard_link,
+                enabled=self._dashboard_lan_share_available,
+            ),
+            pystray.MenuItem(
+                f"复制配对码：{dashboard_code}",
+                do_copy_dashboard_code,
+                enabled=dashboard_ready,
+            ),
+        )
+        menu_items.append(
+            pystray.MenuItem(
+                "网页驾驶舱" if dashboard_ready else "网页驾驶舱（启动失败）",
+                dashboard_menu,
+                enabled=dashboard_ready,
+            )
+        )
+        menu_items.append(pystray.Menu.SEPARATOR)
 
         if ENABLE_ADVANCED_SETTINGS:
 
@@ -680,6 +782,7 @@ class AppRuntimeServices:
 
     def stop(self) -> None:
         """Stop all optional runtime services during app shutdown."""
+        self.stop_dashboard()
         self.stop_global_hotkeys()
         self.stop_tray()
         self.destroy_hud_overlay()

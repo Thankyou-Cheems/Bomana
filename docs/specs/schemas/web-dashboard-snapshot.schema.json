@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Thankyou-Cheems/Bomana/docs/specs/schemas/web-dashboard-snapshot.schema.json",
+  "title": "Bomana Web Dashboard Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sequence",
+    "generated_at",
+    "capabilities",
+    "status",
+    "timer",
+    "flight",
+    "fuel",
+    "navigation",
+    "weapon",
+    "bombing",
+    "checklist",
+    "alerts",
+    "map"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "sequence": {"type": "integer", "minimum": 0},
+    "generated_at": {"type": "number", "minimum": 0},
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["navigation", "fuel", "checklist", "weapon"],
+      "properties": {
+        "navigation": {"type": "boolean"},
+        "fuel": {"type": "boolean"},
+        "checklist": {"type": "boolean"},
+        "weapon": {"type": "boolean"}
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connected", "api_down", "phase", "phase_label", "on_ground"],
+      "properties": {
+        "connected": {"type": "boolean"},
+        "api_down": {"type": "boolean"},
+        "phase": {"type": "string"},
+        "phase_label": {"type": "string"},
+        "on_ground": {"type": "boolean"}
+      }
+    },
+    "timer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["remaining_sec", "progress", "cycle", "life_index", "sortie_id"],
+      "properties": {
+        "remaining_sec": {"type": ["number", "null"], "minimum": 0},
+        "progress": {"type": "number", "minimum": 0, "maximum": 1},
+        "cycle": {"type": ["integer", "null"], "minimum": 1},
+        "life_index": {"type": ["integer", "null"], "minimum": 1},
+        "sortie_id": {"type": "integer", "minimum": 0}
+      }
+    },
+    "flight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aircraft", "heading_deg", "altitude_m", "ground_speed_kmh", "ias_kmh", "mach", "attitude", "gear", "overspeed"],
+      "properties": {
+        "aircraft": {"type": "string"},
+        "heading_deg": {"type": "number"},
+        "altitude_m": {"type": "number"},
+        "ground_speed_kmh": {"type": "number", "minimum": 0},
+        "ias_kmh": {"type": "number", "minimum": 0},
+        "mach": {"type": ["number", "null"], "minimum": 0},
+        "attitude": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pitch_deg", "roll_deg", "reliable"],
+          "properties": {
+            "pitch_deg": {"type": "number"},
+            "roll_deg": {"type": "number"},
+            "reliable": {"type": "boolean"}
+          }
+        },
+        "gear": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["percent", "moving", "retracting", "warning"],
+          "properties": {
+            "percent": {"type": "number", "minimum": 0, "maximum": 100},
+            "moving": {"type": "boolean"},
+            "retracting": {"type": "boolean"},
+            "warning": {"type": "boolean"}
+          }
+        },
+        "overspeed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "ratio", "limit_kmh", "limit_mach", "matched"],
+          "properties": {
+            "level": {"type": "string"},
+            "ratio": {"type": "number", "minimum": 0},
+            "limit_kmh": {"type": "number", "minimum": 0},
+            "limit_mach": {"type": "number", "minimum": 0},
+            "matched": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "fuel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current_kg", "percent", "rate_kg_min", "rate_stable", "remaining_min", "return_needed_kg", "return_status", "home_distance_km"],
+      "properties": {
+        "current_kg": {"type": "number", "minimum": 0},
+        "percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "rate_kg_min": {"type": "number", "minimum": 0},
+        "rate_stable": {"type": "boolean"},
+        "remaining_min": {"type": ["number", "null"], "minimum": 0},
+        "return_needed_kg": {"type": "number", "minimum": 0},
+        "return_status": {"type": "string"},
+        "home_distance_km": {"type": "number", "minimum": 0}
+      }
+    },
+    "navigation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deviation_deg", "deviating", "target", "zones", "airfields", "poi", "traceback"],
+      "properties": {
+        "deviation_deg": {"type": "number"},
+        "deviating": {"type": "boolean"},
+        "target": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/navItem"}]},
+        "zones": {"type": "array", "items": {"$ref": "#/$defs/navItem"}},
+        "airfields": {"type": "array", "items": {"$ref": "#/$defs/navItem"}},
+        "poi": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/navItem"}]},
+        "traceback": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/navItem"}]}
+      }
+    },
+    "weapon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "role", "model", "quality", "valid", "status", "reason", "target_kind", "target_name", "target_distance_km", "min_range_km", "max_range_km", "head_range_km", "rear_range_km", "time_to_target_s", "time_to_window_s"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "role": {"type": "string"},
+        "model": {"type": "string"},
+        "quality": {"type": "string"},
+        "valid": {"type": "boolean"},
+        "status": {"type": "string"},
+        "reason": {"type": "string"},
+        "target_kind": {"type": "string"},
+        "target_name": {"type": "string"},
+        "target_distance_km": {"type": "number", "minimum": 0},
+        "min_range_km": {"type": "number", "minimum": 0},
+        "max_range_km": {"type": "number", "minimum": 0},
+        "head_range_km": {"type": "number", "minimum": 0},
+        "rear_range_km": {"type": "number", "minimum": 0},
+        "time_to_target_s": {"type": "number", "minimum": 0},
+        "time_to_window_s": {"type": "number", "minimum": 0}
+      }
+    },
+    "bombing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "valid", "bomb_name", "target_kind", "target_name", "release_status", "release_distance_km", "time_to_release_s", "flight_time_s", "unavailable_reason"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "valid": {"type": "boolean"},
+        "bomb_name": {"type": "string"},
+        "target_kind": {"type": "string"},
+        "target_name": {"type": "string"},
+        "release_status": {"type": "string"},
+        "release_distance_km": {"type": "number", "minimum": 0},
+        "time_to_release_s": {"type": "number", "minimum": 0},
+        "flight_time_s": {"type": "number", "minimum": 0},
+        "unavailable_reason": {"type": "string"}
+      }
+    },
+    "checklist": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {"items": {"type": "array", "items": {"type": "string"}, "maxItems": 16}}
+    },
+    "alerts": {"type": "array", "items": {"$ref": "#/$defs/alert"}},
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "player", "points"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "player": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/player"}]},
+        "points": {"type": "array", "items": {"$ref": "#/$defs/mapPoint"}}
+      }
+    }
+  },
+  "$defs": {
+    "navItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "kind", "distance_km", "direction", "relative_deg", "is_target", "ete"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "kind": {"type": "string"},
+        "distance_km": {"type": "number", "minimum": 0},
+        "direction": {"type": "string"},
+        "relative_deg": {"type": "number"},
+        "is_target": {"type": "boolean"},
+        "ete": {"type": "string"}
+      }
+    },
+    "alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "code", "text"],
+      "properties": {
+        "level": {"enum": ["info", "warning", "danger"]},
+        "code": {"type": "string"},
+        "text": {"type": "string"}
+      }
+    },
+    "player": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "heading_deg"],
+      "properties": {
+        "x": {"type": "number", "minimum": 0, "maximum": 1},
+        "y": {"type": "number", "minimum": 0, "maximum": 1},
+        "heading_deg": {"type": "number"}
+      }
+    },
+    "mapPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "x", "y", "label", "color", "is_target", "is_friendly"],
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {"enum": ["zone", "airfield", "poi", "traceback"]},
+        "x": {"type": "number", "minimum": 0, "maximum": 1},
+        "y": {"type": "number", "minimum": 0, "maximum": 1},
+        "label": {"type": "string"},
+        "color": {"type": "string"},
+        "is_target": {"type": "boolean"},
+        "is_friendly": {"type": "boolean"}
+      }
+    }
+  }
+}

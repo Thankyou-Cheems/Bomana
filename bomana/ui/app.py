@@ -198,6 +198,7 @@ class App:
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
         self.logic_poller.start()
+        self.runtime_services.init_dashboard()
         self._update_ui()
 
         if HAS_TRAY:
@@ -1450,6 +1451,85 @@ class App:
         """显示关于对话框"""
         AboutDialog(self.root, self)
 
+    def _open_web_dashboard(self) -> None:
+        dashboard = self.runtime_services.dashboard
+        url = dashboard.local_pairing_url if dashboard is not None else None
+        if not url:
+            messagebox.showerror(
+                "网页驾驶舱",
+                self.runtime_services.dashboard_error or "网页驾驶舱当前不可用。",
+                parent=self.root,
+            )
+            return
+        webbrowser.open(url)
+
+    def _toggle_web_dashboard_lan(self) -> None:
+        dashboard = self.runtime_services.dashboard
+        if dashboard is not None and dashboard.lan_enabled:
+            self.runtime_services.disable_dashboard_lan()
+            self._refresh_tray()
+            messagebox.showinfo(
+                "网页驾驶舱",
+                "本次运行的局域网访问已关闭；本机页面仍可使用。",
+                parent=self.root,
+            )
+            return
+
+        confirmed = messagebox.askyesno(
+            "允许局域网访问",
+            "仅应在可信的家庭或个人局域网中开启。\n\n"
+            "Bomana 不会自动修改 Windows 防火墙，也不会把数据上传到互联网。\n\n"
+            "开启后，同一网络中持有本次配对码的设备可查看实时飞行信息。\n\n"
+            "是否为本次运行开启？",
+            parent=self.root,
+        )
+        if not confirmed:
+            return
+        try:
+            self.runtime_services.enable_dashboard_lan()
+        except Exception as exc:
+            messagebox.showerror("局域网访问失败", str(exc), parent=self.root)
+            return
+        self._refresh_tray()
+        dashboard = self.runtime_services.dashboard
+        if dashboard is None:
+            return
+        link = dashboard.lan_pairing_url or ""
+        self._copy_to_clipboard(link)
+        messagebox.showinfo(
+            "局域网访问已开启",
+            f"手机访问链接已复制：\n{link}\n\n"
+            f"配对码：{dashboard.pairing_code}\n\n"
+            "若手机无法连接，请在 Windows 防火墙中允许 Bomana 的专用网络访问。",
+            parent=self.root,
+        )
+
+    def _copy_web_dashboard_link(self) -> None:
+        dashboard = self.runtime_services.dashboard
+        link = dashboard.lan_pairing_url if dashboard is not None else None
+        if not link:
+            messagebox.showinfo(
+                "网页驾驶舱",
+                "请先从托盘为本次运行开启局域网访问。",
+                parent=self.root,
+            )
+            return
+        self._copy_to_clipboard(link)
+
+    def _copy_web_dashboard_pairing_code(self) -> None:
+        dashboard = self.runtime_services.dashboard
+        if dashboard is None:
+            return
+        self._copy_to_clipboard(dashboard.pairing_code)
+
+    def _copy_to_clipboard(self, value: str) -> None:
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(str(value))
+            self.root.update_idletasks()
+        except tk.TclError as exc:
+            log_exception("clipboard_copy_failed", exc)
+
     def _adjust_alpha(self, event):
         """Ctrl+滚轮调整透明度"""
         if not self._locked:
@@ -1589,6 +1669,7 @@ class App:
             self._debug_live_available = False
 
         debug_mock_mode = bool(self._debug and self._debug_effective_mock)
+        self.runtime_services.publish_dashboard(snap, list(self.chk_items))
 
         if not self._debug:
             # 高光时刻弱提醒：成功着陆后显示，起飞后消除（不弹窗）

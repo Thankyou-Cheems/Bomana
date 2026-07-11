@@ -1,7 +1,7 @@
 # 隐私政策 | Privacy Policy
 
 **生效日期：** 2026年2月6日
-**最后更新：** 2026年7月10日
+**最后更新：** 2026年7月11日
 
 ---
 
@@ -35,6 +35,20 @@ Bomana（以下简称"本应用"）致力于保护用户隐私。本应用仅收
 - 任何剪贴板或输入法数据
 
 可选的高权限热键 Broker 不进行网络访问或事件上报；它只向当前 Bomana App 发送固定动作 ID，不记录按键内容，不读取游戏进程、账号、文件或 8111 数据。普通 App 启动时只会对可见 War Thunder 窗口查询进程文件名和管理员状态，用于决定是否显示可选授权按钮；不会读取进程内存或模块。
+
+### 网页驾驶舱 | Web Cockpit
+
+Bomana 启动后会同时提供只读网页驾驶舱，方便在本机浏览器或同一局域网的手机上查看信息：
+
+- 默认仅监听 `127.0.0.1`，优先使用端口 `8777`；端口占用时只会在有限的相邻端口中回退。
+- 局域网访问必须由用户从托盘为**本次运行**显式开启，只绑定一个 RFC1918 私有 IPv4 地址；Bomana 不会保存该开关、修改 Windows 防火墙/UPnP，也不会为此请求管理员权限。
+- 网页只读取经过筛选的 `UISnapshot`，不代理 8111，也不发布敌机标记、原始 8111 响应或诊断数据。
+- 每次启动都会生成新的配对码与会话令牌；配对成功后浏览器使用 HttpOnly、`SameSite=Strict` Cookie 读取快照。
+- 页面资源全部随 Bomana 打包。网页服务不使用外部资源、CORS、上传或分析脚本，也不记录客户端地址、请求路径、配对信息或飞行快照。
+
+局域网页面使用普通 HTTP，请只在可信的家庭或个人网络中临时开启。关闭局域网访问或退出 Bomana 后，该入口立即失效。此功能不会改变启动器匿名统计的范围。
+
+Bomana's read-only Web Cockpit is loopback-only by default. LAN access is an explicit, current-run action for one private IPv4 address, protected by a per-process pairing code and HttpOnly `SameSite=Strict` cookie. It does not proxy 8111, publish hostile contacts, upload snapshots, load remote assets, or keep HTTP request logs.
 
 ---
 
@@ -206,8 +220,8 @@ Bomana_launcher_vX.X.X.exe
 
 ---
 
-**最后更新：** 2026年7月10日
-**版本：** 1.0.0
+**最后更新：** 2026年7月11日
+**版本：** 1.1.0
 
 *Bomana团队致力于保护您的隐私。如有疑问，请随时联系我们。*
 

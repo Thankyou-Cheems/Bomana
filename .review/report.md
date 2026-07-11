@@ -1,7 +1,7 @@
 # Code Review Report
 
 **Open findings:** 2 high, 2 medium
-**Resolved:** 68  |  **Generated:** 2026-07-11T05:17:04+00:00
+**Resolved:** 69  |  **Generated:** 2026-07-11T07:28:39+00:00
 
 ## F-4cfa222a [HIGH/confirmed] HUD can fall back to a non-click-through topmost window
 `bomana/ui/hud_overlay.py:419-432`
@@ -84,6 +84,7 @@ def verify_bundled_broker(path: Path) -> bool:
 ## Spec Feedback (close the incident loop)
 Findings below violate normative clauses. For each confirmed one, deliver the three-part unit from spec-anchored development §7: spec amendment (if the clause was falsified or gapped), PITFALLS.md entry citing the clause, and a behavioral regression pin in tests/contracts/.
 - R8111-03: F-ae1f420a
+- WDB-17: F-6822fd77
 - WFC-06: F-be7d7ba5, F-90989824
 - WFC-07: F-cfbcfd11
 - WFC-08: F-43ae3a6c

@@ -641,6 +641,20 @@ class NavigationPointDisplayInfo:
 
 
 @dataclass(frozen=True)
+class TacticalMapPoint:
+    """Filtered normalized point safe for Bomana presentation surfaces."""
+
+    id: str
+    kind: str
+    x: float
+    y: float
+    label: str
+    color: str
+    is_target: bool = False
+    is_friendly: bool = False
+
+
+@dataclass(frozen=True)
 class PerfDebugInfo:
     """性能诊断信息。"""
 
@@ -711,6 +725,9 @@ class UISnapshot:
     enemy_airfields: list[AirfieldDisplayInfo] = field(default_factory=list)
     interest_point: NavigationPointDisplayInfo | None = None
     traceback_point: NavigationPointDisplayInfo | None = None
+    map_player_x: float | None = None
+    map_player_y: float | None = None
+    map_points: tuple[TacticalMapPoint, ...] = ()
     has_airfield_target: bool = False
     has_target: bool = False
     has_bombing_target: bool = False

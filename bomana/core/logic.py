@@ -33,6 +33,7 @@ from bomana.core.state import (
     PerfDebugInfo,
     Phase,
     SourceDebugInfo,
+    TacticalMapPoint,
     TelemetryData,
     TracebackSite,
     UISnapshot,
@@ -1565,6 +1566,66 @@ class GameLogic:
             nav_ground_speed = nav.ground_speed
             nav_should_play_destroyed_sound = nav.should_play_destroyed_sound
             traceback_site = s.traceback.confirmed_site
+            map_player_pos = tuple(mp.player_pos) if mp.player_pos is not None else None
+            map_points: list[TacticalMapPoint] = []
+            for zone in nav_zones:
+                map_points.append(
+                    TacticalMapPoint(
+                        id=zone.id,
+                        kind="zone",
+                        x=zone.x,
+                        y=zone.y,
+                        label=f"战区 #{zone.index}",
+                        color="target" if zone.is_target else "zone",
+                        is_target=zone.is_target,
+                    )
+                )
+            for airfield in tuple(mp.airfields):
+                map_points.append(
+                    TacticalMapPoint(
+                        id=airfield.id,
+                        kind="airfield",
+                        x=airfield.x,
+                        y=airfield.y,
+                        label=(
+                            f"友方机场 #{airfield.index}"
+                            if airfield.is_friendly
+                            else f"敌方机场 #{airfield.index}"
+                        ),
+                        color="friendly" if airfield.is_friendly else "enemy",
+                        is_target=airfield.is_target,
+                        is_friendly=airfield.is_friendly,
+                    )
+                )
+            for point in tuple(mp.interest_points):
+                point_is_target = bool(
+                    nav_bombing_target is not None
+                    and nav_bombing_target.kind == "poi"
+                    and nav_bombing_target.id == point.id
+                )
+                map_points.append(
+                    TacticalMapPoint(
+                        id=point.id,
+                        kind="poi",
+                        x=point.x,
+                        y=point.y,
+                        label=point.name or f"兴趣点 #{point.index}",
+                        color="poi",
+                        is_target=point_is_target,
+                    )
+                )
+            if traceback_site is not None:
+                map_points.append(
+                    TacticalMapPoint(
+                        id=f"traceback-{traceback_site.life_index}",
+                        kind="traceback",
+                        x=traceback_site.x,
+                        y=traceback_site.y,
+                        label="上次坠毁点",
+                        color="traceback",
+                        is_target=True,
+                    )
+                )
 
             attitude_pitch_deg = s.attitude.pitch_deg
             attitude_roll_deg = s.attitude.roll_deg
@@ -1816,6 +1877,9 @@ class GameLogic:
             enemy_airfields=enemy_airfields_display,
             interest_point=interest_point_display,
             traceback_point=traceback_point_display,
+            map_player_x=(float(map_player_pos[0]) if map_player_pos is not None else None),
+            map_player_y=(float(map_player_pos[1]) if map_player_pos is not None else None),
+            map_points=tuple(map_points),
             has_airfield_target=has_airfield_target,
             has_target=has_target,
             has_bombing_target=has_bombing_target,

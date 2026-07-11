@@ -7,6 +7,7 @@ from bomana.config.settings import (
     HotkeyConfig,
     HUDConfig,
 )
+from bomana.core.state import Phase, UISnapshot
 from bomana.ui import runtime_services
 from bomana.ui.dialogs import SettingsDialog
 from bomana.ui.runtime_services import AppRuntimeServices
@@ -44,6 +45,98 @@ class FakeSound:
 
     def play(self, *, pattern: str) -> None:
         self.patterns.append(pattern)
+
+
+def _minimal_dashboard_snapshot() -> UISnapshot:
+    return UISnapshot(
+        phase=Phase.IDLE,
+        life_index=None,
+        cycle=None,
+        remaining_sec=None,
+        progress=0,
+        sortie_id=0,
+        api_down=False,
+        api_down_pending=False,
+        on_ground=False,
+        landed_flash=False,
+    )
+
+
+def test_dashboard_runtime_start_publish_lan_toggle_and_stop(monkeypatch) -> None:
+    calls: list[object] = []
+
+    class FakeDashboard:
+        def __init__(self, store) -> None:
+            calls.append(("create", store))
+            self.is_running = False
+            self.lan_enabled = False
+            self.port = 8777
+
+        def start(self) -> None:
+            calls.append("start")
+            self.is_running = True
+
+        def enable_lan(self) -> str:
+            calls.append("lan-on")
+            self.lan_enabled = True
+            return "192.168.1.20"
+
+        def disable_lan(self) -> None:
+            calls.append("lan-off")
+            self.lan_enabled = False
+
+        def stop(self) -> None:
+            calls.append("stop")
+            self.is_running = False
+
+    services = AppRuntimeServices(SimpleNamespace())
+    monkeypatch.setattr(runtime_services, "WebDashboardRuntime", FakeDashboard)
+
+    assert services.init_dashboard() is True
+    services.publish_dashboard(_minimal_dashboard_snapshot(), ["启动发动机"])
+    published = services.dashboard_store.read()
+    assert published is not None
+    assert published.checklist_items == ("启动发动机",)
+    assert services.enable_dashboard_lan() == "192.168.1.20"
+    services.disable_dashboard_lan()
+    services.stop_dashboard()
+
+    assert calls[1:] == ["start", "lan-on", "lan-off", "stop"]
+    assert services.dashboard is None
+
+
+def test_dashboard_start_failure_is_visible_and_retryable(monkeypatch) -> None:
+    attempts = 0
+
+    class FailingDashboard:
+        def __init__(self, _store) -> None:
+            nonlocal attempts
+            attempts += 1
+            raise OSError("port unavailable")
+
+    services = AppRuntimeServices(SimpleNamespace())
+    monkeypatch.setattr(runtime_services, "WebDashboardRuntime", FailingDashboard)
+
+    assert services.init_dashboard() is False
+    assert services.init_dashboard() is False
+    assert services.dashboard is None
+    assert services.dashboard_error == "port unavailable"
+    assert attempts == 2
+
+
+def test_dashboard_lan_share_availability_tracks_runtime_state() -> None:
+    services = AppRuntimeServices(SimpleNamespace())
+
+    assert services._dashboard_lan_share_available() is False
+    dashboard = SimpleNamespace(is_running=True, lan_enabled=False)
+    services.dashboard = dashboard
+    assert services._dashboard_lan_share_available() is False
+
+    dashboard.lan_enabled = True
+    assert services._dashboard_lan_share_available() is True
+
+    dashboard.lan_enabled = False
+    assert services._dashboard_lan_share_available() is False
 
 
 def test_hud_overlay_init_failure_disables_without_leaking_exception() -> None:

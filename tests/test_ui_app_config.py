@@ -571,7 +571,10 @@ def test_update_ui_frame_refreshes_visible_standalone_navigation_when_phase_exit
         grid_remove=lambda: None,
     )
     app.status_txt = SimpleNamespace(config=lambda **_kwargs: None)
-    app.runtime_services = SimpleNamespace(update_hud_overlay=lambda _snap: None)
+    app.runtime_services = SimpleNamespace(
+        publish_dashboard=lambda _snap, _items: None,
+        update_hud_overlay=lambda _snap: None,
+    )
     monkeypatch.setattr(app_module.PanelConfig, "is_effectively_enabled", lambda _feature: False)
     monkeypatch.setattr(app_module.PanelConfig, "speed_history_mode", False)
 

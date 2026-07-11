@@ -68,7 +68,12 @@ PACKAGED_LAUNCHER_RUNTIME_MODULES_BY_DEPENDENCY = {
     "pystray": "pystray",
 }
 PACKAGED_LAUNCHER_HIDDEN_IMPORTS = (
+    "http.cookies",
+    "http.server",
+    "ipaddress",
+    "mimetypes",
     "pystray._win32",
+    "socketserver",
     "winsound",
     "launcher.release_public_keys",
 )

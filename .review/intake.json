@@ -1,17 +1,17 @@
 {
-  "generated_at": "2026-07-11T05:06:13+00:00",
+  "generated_at": "2026-07-11T07:12:54+00:00",
   "root": "D:\\Dev\\Bomana",
   "size": {
-    "code_files": 134,
-    "code_lines": 45707,
-    "test_files": 59,
+    "code_files": 141,
+    "code_lines": 48163,
+    "test_files": 62,
     "todo_markers": 0
   },
   "languages": {
-    "python": 44894,
+    "python": 46937,
     "rust": 541,
-    "shell": 178,
-    "javascript": 94
+    "javascript": 507,
+    "shell": 178
   },
   "primary_language": "python",
   "configs": [
@@ -48,6 +48,7 @@
   ],
   "entry_points": [
     "bomana\\ui\\app.py",
+    "bomana\\web\\server.py",
     "native\\hotkey_broker\\src\\main.rs"
   ],
   "largest_files": [
@@ -56,11 +57,11 @@
       "path": "bomana\\ui\\dialogs.py"
     },
     {
-      "lines": 1873,
+      "lines": 1931,
       "path": "bomana\\core\\logic.py"
     },
     {
-      "lines": 1733,
+      "lines": 1881,
       "path": "bomana\\ui\\app.py"
     },
     {
@@ -104,21 +105,23 @@
       "path": "bomana\\core\\telemetry.py"
     },
     {
-      "lines": 813,
-      "path": "bomana\\ui\\panel_renderer.py"
+      "lines": 824,
+      "path": "bomana\\core\\state.py"
     },
     {
-      "lines": 807,
-      "path": "bomana\\core\\state.py"
+      "lines": 813,
+      "path": "bomana\\ui\\panel_renderer.py"
     }
   ],
   "possible_hardcoded_secrets": [],
   "git": {
     "is_repo": true,
-    "head": "e6a3302",
+    "head": "ae85c1c",
     "branch": "main",
-    "dirty_files": 39,
+    "dirty_files": 26,
     "recent_commits": [
+      "ae85c1c fix(checklist): use responsive compact item rows",
+      "48371fa feat(tactical): add weapon and recovery cues",
       "e6a3302 feat(weapons): use conditional Datamine launch envelopes",
       "fd8dfd4 feat(weapons): add datamine-backed fire-control cues",
       "27e8c1a chore(review): record accepted broker elevation risk",
@@ -126,9 +129,7 @@
       "c736230 feat(replay): add virtual-time 8111 session validation",
       "fab46bb feat(recorder): add official 8111 session capture",
       "7718d98 refactor(quality): modernize docs and test library",
-      "653066d feat(hotkeys): make admin mode explicit and zero-install",
-      "654e955 feat(hotkeys): isolate privileged hotkeys in signed broker",
-      "e063361 feat(site): refresh GitHub Pages for new users"
+      "653066d feat(hotkeys): make admin mode explicit and zero-install"
     ]
   },
   "sdd": {
@@ -142,7 +143,8 @@
       "docs\\specs\\testing-quality-gates.md",
       "docs\\specs\\threading-ui-contract.md",
       "docs\\specs\\ui-presenter-boundary.md",
-      "docs\\specs\\weapon-fire-control.md"
+      "docs\\specs\\weapon-fire-control.md",
+      "docs\\specs\\web-dashboard.md"
     ],
     "clause_prefixes": [
       "CFG",
@@ -154,9 +156,10 @@
       "R8111",
       "SIGN",
       "THREAD",
+      "WDB",
       "WFC"
     ],
-    "clause_mentions": 238,
+    "clause_mentions": 280,
     "adr_dir": true,
     "pitfalls": "docs\\PITFALLS.md",
     "contract_tests_dir": true,

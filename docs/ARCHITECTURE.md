@@ -33,6 +33,7 @@
 - Test layers and quality gates: `docs/specs/testing-quality-gates.md`
 - Weapon catalog, selection, solver, and compact presentation: `docs/specs/weapon-fire-control.md`
 - Shared navigation markers, close semantics, and action affordances: `docs/specs/navigation-cues.md`
+- Local/LAN Web Cockpit, snapshot filtering, pairing, and HTTP lifecycle: `docs/specs/web-dashboard.md`
 
 ## Repository Layout
 ```
@@ -57,7 +58,8 @@
 │  ├─ assets/
 │  │  ├─ branding/             # App icon, promo image, sponsor image
 │  │  ├─ fonts/                # Private Bomana UI Sans font subsets + OFL license
-│  │  └─ icons/                # PNG icon assets used instead of emoji glyphs
+│  │  ├─ icons/                # PNG icon assets used instead of emoji glyphs
+│  │  └─ web/                  # Self-hosted Web Cockpit HTML/CSS/JS/SVG assets
 │  ├─ core/
 │  │  ├─ ballistics.py        # Bombing ballistics
 │  │  ├─ ccrp_scheduler.py    # CCRP input gating, calculation, and result storage helpers
@@ -97,6 +99,9 @@
 │  │  ├─ tk_style.py          # Shared Tk palette/action-button styling tokens
 │  │  ├─ window_geometry.py   # Headless snap-anchor geometry helpers used by App
 │  │  └─ widgets.py           # Pill/HeadingTape widgets
+│  ├─ web/
+│  │  ├─ server.py            # Loopback/LAN HTTP listeners, pairing, and route security
+│  │  └─ snapshot.py          # Schema-backed, read-only UISnapshot projection
 │  └─ utils/
 │     ├─ hotkey_broker.py    # Minimal game elevation probe, bundled broker hash lock, UAC/IPC client
 │     ├─ diagnostics.py      # Structured async diagnostics logging
@@ -204,6 +209,13 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - The App stop event or App process exit unregisters all broker hotkeys and ends the broker. No hook, polling, game-memory access, service, scheduled task, autostart, network, plugin, or arbitrary command/path surface exists in the broker.
    - `tools/build_hotkey_broker.py` builds only the native runtime. `tools/build_portable.py` embeds it and the adjacent checksum into each App package.
 10. Launcher telemetry flow: `version_check` / `launcher_start` / `app_launch` / `launcher_update_result` events to Tencent API (best effort).
+11. Web Cockpit flow:
+   - `App` publishes the selected live/debug `UISnapshot` plus a copied checklist into `DashboardSnapshotStore`; HTTP threads consume only that immutable projection and never poll or proxy port 8111.
+   - `WebDashboardRuntime` starts a loopback listener on `127.0.0.1`, preferring port `8777` and trying a bounded set of nearby ports when it is occupied.
+   - The tray can explicitly enable one RFC1918 IPv4 listener for the current process. The setting is not persisted, and Bomana does not bind `0.0.0.0`, modify Windows Firewall/UPnP, or request elevation for the dashboard.
+   - Each process has a fresh pairing code and session token. Successful pairing redirects away from the code-bearing URL and authenticates later reads with an HttpOnly `SameSite=Strict` cookie.
+   - The browser receives ownship, zones, airfields, POIs, Trace back, status, timer, flight, fuel, navigation, weapon, bombing, checklist, and alert fields permitted by the active `ENABLE_*` profile. Hostile-aircraft contacts, raw 8111 payloads, and diagnostics are excluded.
+   - All browser resources are packaged under `bomana/assets/web/`; the dashboard has no CDN, remote font, analytics, upload, permissive CORS, or game-control route.
 
 Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.
 
@@ -294,6 +306,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - `LogicPoller` owns the `GameLogic.tick()` background loop. It samples 8111 data and updates core state only; UI reads immutable `UISnapshot` values from the main refresh loop.
 - `GlobalHotkeys` registers a Win32 message-only window on the Tk owner thread. Its WndProc enqueues `WM_HOTKEY` callbacks through `TkEventDispatcher`, avoiding a separate message thread and reentrant Tk calls.
 - `pystray` runs on a daemon tray thread. Menu callbacks must dispatch UI actions through `TkEventDispatcher` instead of calling app methods directly.
+- Web Cockpit HTTP workers never import or call Tk. Tray actions for opening, copying, or toggling Web Cockpit access cross `TkEventDispatcher`; App shutdown stops both listeners before destroying Tk.
 - `SoundManager` owns its own worker queue for audio playback. UI code enqueues sound requests and does not block on playback.
 
 ## 8111 Map Coordinate Contract
@@ -343,6 +356,7 @@ Portable release uses:
 Bundled assets:
 - App packages include `bomana/assets/` automatically because `build_app_zip()` packages the whole `bomana/` tree.
 - Launcher builds also add `bomana/assets/` so launcher/dialog text can use the same private UI font when running as a onefile executable.
+- Every App variant includes the self-hosted Web Cockpit assets; feature flags still decide which dashboard capabilities are published.
 - Root-level branding files were folded into `bomana/assets/branding/`; runtime and packaging paths use only the bundled asset location.
 
 Local build helper:
@@ -378,6 +392,7 @@ CI:
 - `docs/CONTRIBUTING.md`: current contribution workflow, `bd` tracking, release expectations
 - `docs/specs/`: canonical runtime, release, threading, config, and quality contracts
 - `docs/adr/`: durable architecture decisions and their status
-- `docs/PRIVACY.md`: launcher telemetry/update-service privacy disclosure
+- `docs/PRIVACY.md`: launcher telemetry plus local/LAN Web Cockpit privacy disclosure
+- `docs/guides/web-cockpit-smoke.md`: real-browser, phone/LAN, Firewall, packaged-build, and live-game manual smoke
 - `docs/PITFALLS.md`: operational failure log for maintainers
 - `tests/README.md`: test-layer router; quality obligations remain canonical in `docs/specs/testing-quality-gates.md`

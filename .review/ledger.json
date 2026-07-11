@@ -920,7 +920,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T05:16:03+00:00"
+        "at": "2026-07-11T07:28:33+00:00"
       }
     },
     {
@@ -950,7 +950,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T05:16:03+00:00"
+        "at": "2026-07-11T07:28:33+00:00"
       }
     },
     {
@@ -1520,7 +1520,7 @@
       "snippet_check": {
         "status": "drifted",
         "detail": "snippet exists but not at lines 177-178; first line now near line 195",
-        "at": "2026-07-11T05:16:03+00:00"
+        "at": "2026-07-11T07:28:33+00:00"
       }
     },
     {
@@ -1838,7 +1838,7 @@
       "snippet_check": {
         "status": "ok",
         "detail": "snippet matches cited lines",
-        "at": "2026-07-11T05:16:03+00:00"
+        "at": "2026-07-11T07:28:33+00:00"
       }
     },
     {
@@ -2314,6 +2314,47 @@
       },
       "resolved_at": "2026-07-11T05:15:50+00:00",
       "resolution_note": "Made provider label reason-aware: FoxThree appears only for foxthree_compatible_glide paths; powered and guided non-glide fallbacks name their actual model. Verified tests/test_panel_presenter.py (25 passed), Ruff check/format, and direct provider-label probe."
+    },
+    {
+      "file": "bomana/ui/runtime_services.py",
+      "line_start": 435,
+      "line_end": 453,
+      "snippet": "        dashboard = self.dashboard\n        dashboard_ready = bool(dashboard is not None and dashboard.is_running)\n        dashboard_lan = bool(dashboard_ready and dashboard and dashboard.lan_enabled)\n        dashboard_code = dashboard.pairing_code if dashboard_ready and dashboard else \"---- ----\"\n        dashboard_menu = pystray.Menu(\n            pystray.MenuItem(\"打开本机页面\", do_open_dashboard, enabled=dashboard_ready),\n            pystray.MenuItem(\n                \"允许局域网访问（本次运行）\",\n                do_toggle_dashboard_lan,\n                checked=lambda _item: bool(\n                    self.dashboard is not None and self.dashboard.lan_enabled\n                ),\n                enabled=dashboard_ready,\n            ),\n            pystray.MenuItem(\n                \"复制手机访问链接\",\n                do_copy_dashboard_link,\n                enabled=dashboard_lan,\n            ),",
+      "category": "correctness",
+      "severity": "medium",
+      "confidence": "confirmed",
+      "title": "WDB-17: LAN share action remains disabled after LAN is enabled",
+      "impact": "The tray menu is built while LAN is off, so dashboard_lan is the constant False captured by the immutable pystray MenuItem. Calling update_menu after enabling LAN cannot change that constant; users therefore cannot use the documented tray action to copy the phone link again during the same run, even though LAN is active.",
+      "fix": "Pass a callable to the share item's enabled parameter that reads self.dashboard.lan_enabled at menu refresh time, and add a tray-menu behavior test that observes the item disabled before LAN enable and enabled afterward.",
+      "spec_clause": "WDB-17",
+      "evidence": [
+        {
+          "kind": "tool",
+          "detail": "Installed pystray source probe: MenuItem is immutable; _wrap converts a bool to a callable returning that constant, while Icon.update_menu only refreshes dynamic callable properties."
+        },
+        {
+          "kind": "read",
+          "detail": "dashboard_lan is evaluated once in init_tray before the user can enable LAN, then passed as the share item's enabled value."
+        },
+        {
+          "kind": "spec",
+          "detail": "WDB-17 requires the tray, when LAN is active, to provide a private-IP share action plus pairing code."
+        },
+        {
+          "kind": "diff",
+          "detail": "The new Web Cockpit tray submenu and static enabled value are introduced by the current work-order diff."
+        }
+      ],
+      "id": "F-6822fd77",
+      "status": "fixed",
+      "created_at": "2026-07-11T07:25:33+00:00",
+      "snippet_check": {
+        "status": "ok",
+        "detail": "snippet matches cited lines",
+        "at": "2026-07-11T07:25:33+00:00"
+      },
+      "resolved_at": "2026-07-11T07:27:26+00:00",
+      "resolution_note": "Changed the pystray enabled value to a live runtime predicate and pinned false/true/false LAN transitions; 24 focused runtime/contract tests passed."
     }
   ]
 }
