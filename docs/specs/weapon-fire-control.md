@@ -88,12 +88,15 @@ those results.
   estimate, return `quality=experimental` and
   `reason=foxthree_compatible_glide`, and MUST NOT calculate or display the
   free-fall mass/caliber/`dragCx` trajectory as a practical glide range cue.
-- `WFC-08`: AAM estimates MUST use only hostile aircraft contacts currently
-  returned by `/map_obj.json`; finite current-response `dx`/`dy` values MUST be
-  preserved and used only to infer a two-dimensional radial-aspect hint, while
-  absent or invalid motion MUST remain unknown and MUST NOT be reconstructed
-  from a persisted track. When the selected hostile contact disappears from the
-  current response, its valid cue MUST be cleared in that calculation cycle;
+- `WFC-08`: AAM estimates MUST use only hostile aircraft contacts or POIs
+  currently returned by `/map_obj.json`; this permits a current POI that follows
+  a pod/radar point to act as a beyond-visual-range calculation candidate without
+  claiming its semantic identity. Finite current-response aircraft `dx`/`dy`
+  values MUST be preserved and used only to infer a two-dimensional radial-aspect
+  hint, while POI, absent, or invalid motion MUST remain unknown and MUST NOT be
+  reconstructed from a persisted track. When the selected hostile contact or
+  POI disappears from the current response, its valid cue MUST be cleared in
+  that calculation cycle;
   calculation throttling MUST NOT defer the disappearance or preserve a stale
   target. Because 8111 does not provide target altitude, target speed magnitude,
   verified lock identity, or a three-dimensional aspect, every conditional-table
@@ -123,8 +126,11 @@ those results.
   to no target.
 - `WFC-12`: The primary UI MUST reuse the existing compact bombing card as a
   weapon-solution card and MUST NOT add a tactical map, a new primary navigation
-  row, or promote POI above the existing zone-oriented navigation status. The
-  App and its builders MUST reuse GameLogic's single validated catalog result;
+  row, or promote POI into a primary navigation target. AAM navigation mode MAY
+  show POIs beside all current hostile aircraft only as non-primary potential
+  navigation cues while explicitly pausing zone preference; the same current
+  POIs MAY participate in AAM fire-control target selection under `WFC-08`.
+  The App and its builders MUST reuse GameLogic's single validated catalog result;
   if that result is unavailable, the card MUST show an unavailable state and
   the selector MUST be disabled without attempting an independent reload.
 - `WFC-13`: UI wording MUST distinguish supported ground `estimated in
@@ -228,8 +234,9 @@ These are Bomana model choices, not imported weapon-performance values:
   `WFC-11` with prepare/compute/apply state transitions, missing-CCRP
   fail-closed behavior, and stale selection/target/model result rejection.
 - [behavioral] `tests/test_map_objects_contract.py` enforces `WFC-08` by keeping
-  only currently returned hostile aircraft contacts, preserving finite current
-  `dx`/`dy`, and excluding the player and friendly aircraft.
+  only currently returned hostile aircraft/POI candidates, preserving finite
+  aircraft `dx`/`dy`, treating POI motion as unknown, and excluding the player
+  and friendly aircraft.
 - [behavioral] `tests/test_panel_presenter.py`, `tests/test_panel_renderer.py`,
   and `tests/test_ui_geometry.py` enforce `WFC-12`, `WFC-13`, and `WFC-18` with compact-card
   conditional-reference/unavailable wording, conditional detail-row layout,

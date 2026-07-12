@@ -199,6 +199,7 @@ class HeadingTape(tk.Canvas):
             "traceback": Theme.YELLOW,
             "friendly": Theme.BLUE,
             "enemy": Theme.ORANGE,
+            "hostile_aircraft": Theme.RED,
             "destroyed": Theme.TEXT_MUTED,
         }
 
@@ -333,7 +334,7 @@ class HeadingTape(tk.Canvas):
             current_hdg: 当前航向(0-360°)
             targets: 目标列表，每个目标为dict:
                 {
-                    'type': 'zone'/'poi'/'traceback'/'friendly'/'enemy'/'destroyed',
+                    'type': 'zone'/'poi'/'traceback'/'friendly'/'enemy'/'hostile_aircraft'/'destroyed',
                     'relative': 相对角度(-180~180),
                     'distance_km': 距离(公里),
                     'is_primary': 是否主目标(用于偏航提示),
@@ -499,6 +500,7 @@ class HeadingTape(tk.Canvas):
                 "zone": 3,
                 "traceback": 4,
                 "poi": 5,
+                "hostile_aircraft": 6,
             }.get(t.get("type", "zone"), 2),
         )
 
@@ -720,6 +722,11 @@ class HeadingTape(tk.Canvas):
             # v6.3: 敌方机场 - 根据是否为目标调整大小
             # v6.5.2: 调小尺寸
             size = int((7 if is_target else 5) * icon_scale)
+            width = 2 if is_target else 1
+            self._draw_aircraft_icon(x, y_center, color, size=size, width=width)
+
+        elif t_type == "hostile_aircraft":
+            size = int((8 if is_target else 6) * icon_scale)
             width = 2 if is_target else 1
             self._draw_aircraft_icon(x, y_center, color, size=size, width=width)
 
@@ -957,6 +964,18 @@ class HeadingTape(tk.Canvas):
                     tags=(label_tag,),
                 )
 
+        elif t_type == "hostile_aircraft":
+            label_text = f"敌机 {dist_text}"
+            self.create_text(
+                x,
+                dist_y,
+                text=label_text,
+                fill=self._target_colors[t_type] if is_target else Theme.TEXT_MUTED,
+                font=text_font,
+                anchor="s",
+                tags=("hostile_aircraft_distance",),
+            )
+
         elif t_type == "friendly":
             if is_target:
                 # 友方机场：蓝色系 + ⌂ 标记
@@ -1105,6 +1124,8 @@ class HeadingTape(tk.Canvas):
             prefix = "POI "
         elif t_type == "traceback":
             prefix = "坠 "
+        elif t_type == "hostile_aircraft":
+            prefix = "敌 "
 
         # v6.5: 格式化距离文本
         dist_text = ""

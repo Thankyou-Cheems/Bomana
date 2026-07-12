@@ -121,10 +121,14 @@ class NavigationRuntimeTests(unittest.TestCase):
     def setUp(self) -> None:
         self._old_mode = PanelConfig.navigation_mode
         self._old_pos = PanelConfig.navigation_window_pos
+        self._old_show_zones = PanelConfig.show_zones
+        self._old_show_airfields = PanelConfig.show_airfields
 
     def tearDown(self) -> None:
         PanelConfig.navigation_mode = self._old_mode
         PanelConfig.navigation_window_pos = self._old_pos
+        PanelConfig.show_zones = self._old_show_zones
+        PanelConfig.show_airfields = self._old_show_airfields
 
     @patch("bomana.ui.navigation_runtime.log_event")
     def test_toggle_mode_moves_window_to_standalone(self, log_event) -> None:
@@ -132,10 +136,14 @@ class NavigationRuntimeTests(unittest.TestCase):
         services = AppNavigationServices(app)
         services.window = FakeNavigationWindow(app)
         PanelConfig.navigation_mode = "integrated"
+        PanelConfig.show_zones = True
+        PanelConfig.show_airfields = False
 
         services.toggle_mode()
 
         self.assertEqual(PanelConfig.navigation_mode, "standalone")
+        self.assertTrue(PanelConfig.show_zones)
+        self.assertFalse(PanelConfig.show_airfields)
         self.assertTrue(services.window.visible)
         self.assertEqual(services.window.clear_calls, 1)
         self.assertEqual(app.reset_calls, 1)

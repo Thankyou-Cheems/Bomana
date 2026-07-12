@@ -198,6 +198,34 @@ class PanelRendererNavListTests(unittest.TestCase):
         self.assertTrue(app.tape_deviation_lbl.cget("text"))
         self.assertIn("°", app.tape_tolerance_legend.cget("text"))
 
+    def test_aam_tape_status_explicitly_pauses_zone_solving(self) -> None:
+        app = SimpleNamespace(
+            tape_zone_label=FakeLabel(),
+            tape_turn_lbl=FakeLabel(),
+            tape_deviation_lbl=FakeLabel(),
+            tape_tolerance_lbl=FakeLabel(),
+            tape_zone_info=FakeLabel(),
+            tape_tolerance_legend=FakeLabel(),
+            tape_friendly_turn=None,
+            tape_friendly_status=None,
+            tape_friendly_info=None,
+        )
+
+        AppPanelRenderer(app).update_tape_info_labels(
+            [],
+            None,
+            "战区解算已暂停，仅进行导航",
+        )
+
+        self.assertEqual(app.tape_zone_label.cget("text"), "空空导航:")
+        self.assertEqual(app.tape_deviation_lbl.cget("text"), "战区解算已暂停，仅进行导航")
+        self.assertEqual(app.tape_tolerance_legend.cget("text"), "敌机 / POI")
+        self.assertEqual(app.tape_zone_info.cget("text"), "")
+
+    def test_standalone_heading_tape_does_not_hide_persisted_navigation_lists(self) -> None:
+        self.assertTrue(AppPanelRenderer._main_navigation_lists_visible(True))
+        self.assertFalse(AppPanelRenderer._main_navigation_lists_visible(False))
+
     def test_icon_manager_uses_nearest_generated_size(self) -> None:
         self.assertEqual(IconManager._nearest_asset_size(17), 18)
         self.assertEqual(IconManager._nearest_asset_size(26), 28)

@@ -618,7 +618,13 @@ class NavigationWindow:
         primary_dist = self._safe_float(primary_info.get("distance_km")) if primary_info else 10.0
         self.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
 
-        if primary_info:
+        if model.mode_notice:
+            self.zone_label.config(text="空空导航", fg=Theme.YELLOW)
+            self.tolerance_lbl.config(text="敌机 / POI")
+            self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
+            self.zone_status.config(text=model.mode_notice, fg=Theme.YELLOW)
+            self.zone_info.config(text="", fg=Theme.TEXT_DIM)
+        elif primary_info:
             rel = self._safe_float(primary_info.get("relative", 0.0))
             distance = self._safe_float(primary_info.get("distance_km", 0.0))
             info_text = self._format_active_info_text(primary_info)

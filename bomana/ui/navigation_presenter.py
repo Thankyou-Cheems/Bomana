@@ -5,9 +5,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from bomana.config.settings import ZoneConfig
+from bomana.core import navigation
 from bomana.ui.theme import Theme
+from bomana.utils.math_utils import calculate_relative_bearing
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
+AAM_NAVIGATION_NOTICE = "战区解算已暂停，仅进行导航"
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -27,6 +30,37 @@ class NavigationTapeModel:
     primary_zone: Any | None
     primary_target: Any | None = None
     primary_target_info: dict[str, Any] | None = None
+    mode_notice: str = ""
+
+
+def _snapshot_map_target(snap: Any, point: Any) -> tuple[float, float] | None:
+    """Project one normalized immutable map point into tape-relative coordinates."""
+    try:
+        px = float(snap.map_player_x)
+        py = float(snap.map_player_y)
+        tx = float(point.x)
+        ty = float(point.y)
+        heading = float(getattr(snap, "player_heading", 0.0))
+    except (*_NUMERIC_PARSE_ERRORS, AttributeError):
+        return None
+    if not all(math.isfinite(value) for value in (px, py, tx, ty, heading)):
+        return None
+
+    scale: tuple[float, float] | None = None
+    try:
+        scale_x = float(snap.map_scale_x_m)
+        scale_y = float(snap.map_scale_y_m)
+        if math.isfinite(scale_x) and math.isfinite(scale_y) and scale_x > 0 and scale_y > 0:
+            scale = (scale_x, scale_y)
+    except (*_NUMERIC_PARSE_ERRORS, AttributeError):
+        pass
+
+    bearing, distance_norm = navigation.bearing_distance_norm(px, py, tx, ty, scale)
+    distance_km = distance_norm * ZoneConfig.DISTANCE_SCALE
+    relative = calculate_relative_bearing(heading, bearing)
+    if not (math.isfinite(distance_km) and math.isfinite(relative)) or distance_km <= 0.0:
+        return None
+    return relative, distance_km
 
 
 def select_display_primary_zone(zones: list[Any]) -> Any | None:
@@ -64,10 +98,14 @@ def build_navigation_tape_model(
     """Build shared heading-tape target data for main and standalone nav UI."""
     targets: list[dict[str, Any]] = []
     active_targets_info: list[dict[str, Any]] = []
-    primary_zone = select_display_primary_zone(getattr(snap, "zones", []))
+    aam_navigation = str(getattr(snap, "weapon_role", "") or "").strip().lower() == "aam"
+    primary_zone = (
+        None if aam_navigation else select_display_primary_zone(getattr(snap, "zones", []))
+    )
     interest_point = getattr(snap, "interest_point", None)
     primary_target = primary_zone
     primary_target_info: dict[str, Any] | None = None
+    mode_notice = AAM_NAVIGATION_NOTICE if aam_navigation else ""
 
     traceback_point = getattr(snap, "traceback_point", None)
     if traceback_point is not None:
@@ -84,7 +122,7 @@ def build_navigation_tape_model(
             }
         )
 
-    if interest_point is not None:
+    if interest_point is not None and not aam_navigation:
         poi_relative = _safe_float(getattr(interest_point, "relative", 0.0))
         poi_distance = _safe_float(getattr(interest_point, "distance_km", 0.0))
         poi_name = str(getattr(interest_point, "name", "") or "兴趣点")
@@ -99,13 +137,45 @@ def build_navigation_tape_model(
             }
         )
 
+    if aam_navigation:
+        seen_candidates: set[tuple[str, str]] = set()
+        for point in getattr(snap, "map_points", ()) or ():
+            point_kind = str(getattr(point, "kind", "") or "")
+            if point_kind not in {"hostile_aircraft", "poi"}:
+                continue
+            projected = _snapshot_map_target(snap, point)
+            if projected is None:
+                continue
+            point_id = str(getattr(point, "id", "") or "")
+            target_type = "hostile_aircraft" if point_kind == "hostile_aircraft" else "poi"
+            candidate_key = (target_type, point_id)
+            if candidate_key in seen_candidates:
+                continue
+            seen_candidates.add(candidate_key)
+            relative, distance_km = projected
+            targets.append(
+                {
+                    "type": target_type,
+                    "relative": relative,
+                    "distance_km": distance_km,
+                    "is_primary": False,
+                    "is_target": True,
+                    "name": str(
+                        getattr(point, "label", "")
+                        or ("敌机" if target_type == "hostile_aircraft" else "兴趣点")
+                    ),
+                }
+            )
+
     for zone in getattr(snap, "zones", []):
         zone_id = getattr(zone, "id", None)
         primary_zone_id = getattr(primary_zone, "id", None)
-        is_primary = bool(primary_zone is not None and zone_id == primary_zone_id)
+        is_primary = bool(
+            not aam_navigation and primary_zone is not None and zone_id == primary_zone_id
+        )
         zone_relative = _safe_float(getattr(zone, "relative", 0.0))
         zone_distance = _safe_float(getattr(zone, "distance_km", 0.0))
-        zone_is_target = bool(getattr(zone, "is_target", False))
+        zone_is_target = bool(not aam_navigation and getattr(zone, "is_target", False))
         targets.append(
             {
                 "type": "zone",
@@ -202,4 +272,5 @@ def build_navigation_tape_model(
         primary_zone=primary_zone,
         primary_target=primary_target,
         primary_target_info=primary_target_info,
+        mode_notice=mode_notice,
     )

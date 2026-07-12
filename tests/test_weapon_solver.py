@@ -643,6 +643,26 @@ def test_aam_guidance_table_exposes_all_current_and_best_aspect_states(
         assert result.min_range_m == 0.0
 
 
+def test_aam_poi_candidate_keeps_unknown_motion_reference() -> None:
+    result = _solve(
+        _aam_envelope_weapon(),
+        launch_altitude_m=5000.0,
+        launch_mach=0.9,
+        target_distance_m=50_000.0,
+        target_kind="poi",
+        target_name="Radar Point",
+        target_aspect_cosine=None,
+    )
+
+    assert result.valid
+    assert result.status == "head_on_only_reference"
+    assert result.reason == "datamine_guidance_envelope"
+    assert result.quality == "two_dimensional"
+    assert result.target_kind == "poi"
+    assert result.target_name == "Radar Point"
+    assert result.target_aspect_cosine is None
+
+
 def test_agm_guidance_table_can_bypass_conditional_propulsion_failure() -> None:
     weapon = _powered_weapon(
         model_unsupported_reasons=["conditional_propulsion_autopilot"],

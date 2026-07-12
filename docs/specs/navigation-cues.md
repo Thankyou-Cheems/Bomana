@@ -44,6 +44,16 @@ and the tray fallback for optional administrator hotkeys.
 - `NAVCUE-07`: `App._nudge_text()` MUST tell a locked user to switch out of the
   game and press the configured lock key before clicking the App action, or to
   use the tray action directly.
+- `NAVCUE-08`: Standalone navigation mode MUST move only the shared heading
+  tape out of the main window; main-window zone and airfield list visibility
+  MUST continue to follow the persisted `show_zones` and `show_airfields`
+  choices and MUST change only through the existing manual panel actions.
+- `NAVCUE-09`: While the selected weapon role is `aam`, both heading tapes
+  MUST project every current `hostile_aircraft` and every POI in the immutable
+  snapshot as non-primary potential navigation targets, MUST remove primary and
+  active-target emphasis from every zone, and MUST visibly state
+  `战区解算已暂停，仅进行导航`. These cues and any selected AAM calculation
+  target MUST NOT imply a game lock, launch authorization, or verified target.
 
 ## Contract Coverage
 
@@ -58,3 +68,10 @@ and the tray fallback for optional administrator hotkeys.
   dynamic tray visibility and dispatcher delivery.
 - [behavioral] `tests/test_ui_app_config.py` enforces `NAVCUE-07` with locked
   and unlocked privilege-guidance cases.
+- [behavioral] `tests/test_panel_renderer.py` enforces `NAVCUE-08` by keeping
+  persisted zone and airfield lists mounted while the heading tape is
+  standalone.
+- [behavioral] `tests/test_navigation_presenter.py`,
+  `tests/test_panel_renderer.py`, and `tests/test_navigation_window.py` enforce
+  `NAVCUE-09` with all-current-hostile/POI projection, neutral zones, and the
+  shared navigation-only notice.

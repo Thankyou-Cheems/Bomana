@@ -360,10 +360,11 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - `GameLogic` owns coordinate semantics for navigation and weapon targeting. It
   derives X/Y meter scale from cached `MapInfo.map_min/map_max` and applies that
   scale when calculating bearing, distance, ground speed, airfield/zone display
-  values, forward ground targets, and the current two-dimensional hostile-air
-  estimate. The AAM path may project current hostile `dx`/`dy` onto line of
-  sight as a radial-aspect hint, but unknown target altitude and speed magnitude
-  keep the result a conditional reference rather than an intercept solution.
+  values, forward ground targets, and the current two-dimensional AAM estimate.
+  The AAM path selects between current hostile-air contacts and current POIs;
+  it may project hostile `dx`/`dy` onto line of sight as a radial-aspect hint,
+  while POI motion remains unknown. Unknown target altitude and speed magnitude
+  keep either result a conditional reference rather than an intercept solution.
 - Trace back retains only the player's own last position from a successful raw
   `/map_obj.json` Player sample. A successful non-empty sequence without Player
   freezes that position, and the existing `LOSS_PENDING -> WAIT_NEXT`

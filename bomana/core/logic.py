@@ -187,6 +187,7 @@ class GameLogic:
         bombing_work: dict[str, Any] | None = None
         bombing_selection_token: tuple[str, str] | None = None
         weapon_work: dict[str, Any] | None = None
+        selection_snapshot: tuple[str, str, dict[str, Any] | None] | None = None
 
         # 1. 获取遥测数据
         tel = self.tel.fetch(budget)
@@ -322,8 +323,23 @@ class GameLogic:
                 # must never extend a player-loss candidate or move its position.
                 self._update_traceback_observation_locked(raw_mp, now)
 
-                # 更新导航信息（战区、地速）
-                self._update_zone_navigation_locked(mp, tel, now)
+                # 更新导航信息（战区、地速）。AAM 模式保留列表/航向数据，但
+                # 暂停战区与地面投射点的目标倾向，导弹候选由当前敌机/POI单独选择。
+                if ENABLE_CCRP and self.weapon_catalog is not None:
+                    selection_snapshot = self.weapon_catalog.selection_snapshot()
+                selected_weapon_for_navigation = (
+                    selection_snapshot[2] if selection_snapshot is not None else None
+                )
+                zone_targeting_enabled = not (
+                    selected_weapon_for_navigation
+                    and selected_weapon_for_navigation.get("role") == "aam"
+                )
+                self._update_zone_navigation_locked(
+                    mp,
+                    tel,
+                    now,
+                    zone_targeting_enabled=zone_targeting_enabled,
+                )
 
                 self._resolve_pending_timer_restore_locked(
                     mp=mp,
@@ -427,7 +443,8 @@ class GameLogic:
                 # Ballistics integration can be expensive on abnormal settlement frames;
                 # keep it outside the lock so UI snapshots do not stall behind it.
                 if ENABLE_CCRP and self.weapon_catalog is not None:
-                    selection_snapshot = self.weapon_catalog.selection_snapshot()
+                    if selection_snapshot is None:
+                        selection_snapshot = self.weapon_catalog.selection_snapshot()
                     selected_id, _selection_source, selected_weapon = selection_snapshot
                     weapon_target = self._select_weapon_target_locked(selected_weapon, mp)
                     usable_player_frame = player_present and (not used_map_fallback)
@@ -806,7 +823,14 @@ class GameLogic:
         traceback.pending_site = None
         traceback.valid_absence_since = None
 
-    def _update_zone_navigation_locked(self, mp: MapObjData, tel: TelemetryData, now: float):
+    def _update_zone_navigation_locked(
+        self,
+        mp: MapObjData,
+        tel: TelemetryData,
+        now: float,
+        *,
+        zone_targeting_enabled: bool = True,
+    ):
         """更新战区导航状态(须在锁内调用)
 
         功能: 计算地速/检测战区摧毁/计算导航信息/选择目标战区
@@ -946,7 +970,7 @@ class GameLogic:
         target = None
         is_airborne = not tel.is_on_ground  # 判断是否在空中
 
-        if is_airborne and zones_with_nav:
+        if zone_targeting_enabled and is_airborne and zones_with_nav:
             # 创建ID到Zone的映射，方便查找
             zone_by_id = {z.id: z for z in zones_with_nav}
 
@@ -1032,7 +1056,7 @@ class GameLogic:
                     break
 
         poi_bombing_target = None
-        if is_airborne and getattr(mp, "interest_points", None):
+        if zone_targeting_enabled and is_airborne and getattr(mp, "interest_points", None):
             poi_candidates: list[tuple[float, float, InterestPoint, float]] = []
             for point in mp.interest_points:
                 try:
@@ -1119,13 +1143,17 @@ class GameLogic:
                 altitude_m=None,
             )
 
-        if not (mp.ok and mp.player_pos and mp.hostile_air_contacts):
+        if not (mp.ok and mp.player_pos):
             return None
         px, py = mp.player_pos
         map_axis_scale_m = navigation.map_axis_scale_m(self.state.map_info)
         heading = self.state.zone_nav.player_heading
-        candidates: list[tuple[float, float, Any, float]] = []
-        for contact in mp.hostile_air_contacts:
+        candidates: list[tuple[float, float, Any, float, str]] = []
+        candidate_sources = [
+            *((contact, "aircraft") for contact in mp.hostile_air_contacts),
+            *((point, "poi") for point in mp.interest_points),
+        ]
+        for contact, target_kind in candidate_sources:
             try:
                 contact_x = float(contact.x)
                 contact_y = float(contact.y)
@@ -1142,11 +1170,11 @@ class GameLogic:
             )
             relative = calculate_relative_bearing(heading, bearing)
             if abs(relative) <= 60.0:
-                candidates.append((abs(relative), distance, contact, relative))
+                candidates.append((abs(relative), distance, contact, relative, target_kind))
         if not candidates:
             return None
 
-        _angle, distance, contact, relative = min(
+        _angle, distance, contact, relative, target_kind = min(
             candidates,
             key=lambda item: (item[0], item[1]),
         )
@@ -1155,19 +1183,31 @@ class GameLogic:
             return None
         return WeaponTarget(
             id=contact.id,
-            kind="aircraft",
-            name=str(contact.name or contact.icon or f"敌机 #{contact.index}"),
+            kind=target_kind,
+            name=str(
+                contact.name
+                or getattr(contact, "icon", "")
+                or (
+                    f"敌机 #{contact.index}"
+                    if target_kind == "aircraft"
+                    else f"兴趣点 #{contact.index}"
+                )
+            ),
             distance_m=distance_m,
             relative_deg=relative,
             altitude_m=None,
-            aspect_cosine=_target_radial_aspect_cosine(
-                px,
-                py,
-                float(contact.x),
-                float(contact.y),
-                contact.dx,
-                contact.dy,
-                map_axis_scale_m,
+            aspect_cosine=(
+                _target_radial_aspect_cosine(
+                    px,
+                    py,
+                    float(contact.x),
+                    float(contact.y),
+                    contact.dx,
+                    contact.dy,
+                    map_axis_scale_m,
+                )
+                if target_kind == "aircraft"
+                else None
             ),
         )
 

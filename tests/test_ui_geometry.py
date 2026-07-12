@@ -405,6 +405,31 @@ class TkGeometryTests(unittest.TestCase):
         finally:
             tape.destroy()
 
+    def test_heading_tape_renders_hostile_aircraft_candidate_in_red(self) -> None:
+        tape = HeadingTape(self.root, width=280, height=36, text_scale=1.0)
+        try:
+            tape.update_tape_multi(
+                90.0,
+                [
+                    {
+                        "type": "hostile_aircraft",
+                        "relative": 0.0,
+                        "distance_km": 15.7,
+                        "is_primary": False,
+                        "is_target": True,
+                    }
+                ],
+                10.0,
+            )
+            self.root.update_idletasks()
+
+            distance_ids = tape.find_withtag("hostile_aircraft_distance")
+            self.assertEqual(len(distance_ids), 1)
+            self.assertEqual(tape.itemcget(distance_ids[0], "text"), "敌机 15.7")
+            self.assertEqual(tape.itemcget(distance_ids[0], "fill"), Theme.RED)
+        finally:
+            tape.destroy()
+
     def test_integrated_navigation_status_row_uses_elastic_columns(self) -> None:
         row = tk.Frame(self.root)
         row.pack(fill="x")

@@ -554,6 +554,75 @@ class MapObjectsContractTests(unittest.TestCase):
         self.assertEqual(target.name, "Aligned")
         self.assertAlmostEqual(target.aspect_cosine, -1.0)
 
+    def test_aam_target_can_use_current_poi_with_unknown_motion(self):
+        logic = GameLogic()
+        mp = MapObjData(
+            ok=True,
+            player_aircraft_present=True,
+            player_pos=(0.5, 0.5),
+            hostile_air_contacts=[
+                AirContact(id="offset-hostile", index=1, x=0.55, y=0.45, name="Offset")
+            ],
+            interest_points=[
+                InterestPoint(id="radar-poi", index=2, x=0.5, y=0.2, name="Radar Point")
+            ],
+        )
+        with logic._lock:
+            logic.state.map_info = MapInfo(
+                valid=True,
+                map_min=[0.0, 0.0],
+                map_max=[1000.0, 1000.0],
+            )
+            logic.state.zone_nav.player_heading = 0.0
+            target = logic._select_weapon_target_locked({"role": "aam"}, mp)
+
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.id, "radar-poi")
+        self.assertEqual(target.kind, "poi")
+        self.assertEqual(target.name, "Radar Point")
+        self.assertIsNone(target.aspect_cosine)
+
+    def test_aam_navigation_pauses_zone_and_ground_target_preference(self):
+        logic = GameLogic()
+        tel = TelemetryData(
+            ind_ok=True,
+            state_resp_ok=True,
+            valid=True,
+            type_name="test_plane",
+            ias_kmh=300.0,
+            compass=0.0,
+            compass_present=True,
+        )
+        mp = MapObjData(
+            ok=True,
+            player_aircraft_present=True,
+            player_pos=(0.5, 0.5),
+            zones=[Zone(id="zone-a", index=1, x=0.5, y=0.2)],
+            interest_points=[
+                InterestPoint(id="radar-poi", index=2, x=0.5, y=0.3, name="Radar Point")
+            ],
+        )
+
+        with logic._lock:
+            logic.state.phase = Phase.ALIVE
+            logic.state.map_info = MapInfo(
+                valid=True,
+                map_min=[0.0, 0.0],
+                map_max=[1000.0, 1000.0],
+            )
+            logic._update_zone_navigation_locked(
+                mp,
+                tel,
+                time.time(),
+                zone_targeting_enabled=False,
+            )
+
+        self.assertEqual(len(logic.state.zone_nav.zones), 1)
+        self.assertFalse(logic.state.zone_nav.zones[0].is_target)
+        self.assertIsNone(logic.state.zone_nav.target_zone)
+        self.assertIsNone(logic.state.zone_nav.bombing_target)
+
 
 if __name__ == "__main__":
     unittest.main()

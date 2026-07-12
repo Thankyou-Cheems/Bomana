@@ -1,6 +1,11 @@
 from types import SimpleNamespace
 
-from bomana.ui.navigation_presenter import build_navigation_tape_model
+import pytest
+
+from bomana.ui.navigation_presenter import (
+    AAM_NAVIGATION_NOTICE,
+    build_navigation_tape_model,
+)
 
 
 def test_enemy_airfield_marker_respects_core_target_selection() -> None:
@@ -137,3 +142,65 @@ def test_destroyed_markers_use_snapshot_owned_display_data() -> None:
             "is_primary": False,
         }
     ]
+
+
+def test_aam_navigation_projects_all_hostile_aircraft_and_pois_without_zone_bias() -> None:
+    zones = [
+        SimpleNamespace(id="zone-1", relative=2.0, distance_km=5.0, is_target=True),
+        SimpleNamespace(id="zone-2", relative=-20.0, distance_km=15.0, is_target=False),
+    ]
+    map_points = (
+        SimpleNamespace(
+            id="hostile-a",
+            kind="hostile_aircraft",
+            x=0.5,
+            y=0.4,
+            label="Fighter A",
+        ),
+        SimpleNamespace(
+            id="hostile-b",
+            kind="hostile_aircraft",
+            x=0.6,
+            y=0.5,
+            label="Fighter B",
+        ),
+        SimpleNamespace(id="poi-a", kind="poi", x=0.4, y=0.5, label="Radar Point"),
+        SimpleNamespace(id="ground-a", kind="hostile_ground", x=0.5, y=0.6, label="Tank"),
+    )
+    snap = SimpleNamespace(
+        weapon_role="aam",
+        player_heading=0.0,
+        map_player_x=0.5,
+        map_player_y=0.5,
+        map_scale_x_m=100_000.0,
+        map_scale_y_m=100_000.0,
+        map_points=map_points,
+        interest_point=SimpleNamespace(relative=30.0, distance_km=3.0, name="Nearest only"),
+        traceback_point=None,
+        zones=zones,
+        friendly_airfield=None,
+        enemy_airfields=[],
+        zone_destroyed_alert=False,
+    )
+
+    model = build_navigation_tape_model(snap)
+
+    candidates = [
+        target for target in model.targets if target["type"] in {"hostile_aircraft", "poi"}
+    ]
+    assert {(target["type"], target["name"]) for target in candidates} == {
+        ("hostile_aircraft", "Fighter A"),
+        ("hostile_aircraft", "Fighter B"),
+        ("poi", "Radar Point"),
+    }
+    assert all(target["is_target"] and not target["is_primary"] for target in candidates)
+    assert sorted(target["relative"] for target in candidates) == pytest.approx([-90.0, 0.0, 90.0])
+    assert all(target["distance_km"] == pytest.approx(10.0) for target in candidates)
+
+    zone_targets = [target for target in model.targets if target["type"] == "zone"]
+    assert zone_targets
+    assert all(not target["is_target"] and not target["is_primary"] for target in zone_targets)
+    assert model.primary_zone is None
+    assert model.primary_target is None
+    assert model.primary_target_info is None
+    assert model.mode_notice == AAM_NAVIGATION_NOTICE

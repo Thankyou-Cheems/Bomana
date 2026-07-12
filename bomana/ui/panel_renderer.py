@@ -60,6 +60,11 @@ class AppPanelRenderer:
         self.app = app
 
     @staticmethod
+    def _main_navigation_lists_visible(feature_enabled: bool) -> bool:
+        """Keep persisted list visibility independent from heading-tape placement."""
+        return bool(feature_enabled)
+
+    @staticmethod
     def _normalize_geom_value(value: Any) -> str:
         """Normalize geometry-manager values for stable comparisons."""
         if isinstance(value, bool):
@@ -252,13 +257,26 @@ class AppPanelRenderer:
         )
 
     def update_tape_info_labels(
-        self, targets_info: list[dict[str, Any]], primary_target_info: Any = None
+        self,
+        targets_info: list[dict[str, Any]],
+        primary_target_info: Any = None,
+        mode_notice: str = "",
     ) -> None:
         """更新航向带下方的主导航目标和友方机场状态提示。"""
         app = self.app
         target_info = self._primary_target_info(targets_info, primary_target_info)
         has_primary_labels = app.tape_turn_lbl and app.tape_deviation_lbl and app.tape_tolerance_lbl
-        if target_info and has_primary_labels:
+        if mode_notice and has_primary_labels:
+            if hasattr(app, "tape_zone_label") and app.tape_zone_label:
+                app.tape_zone_label.config(text="空空导航:", fg=Theme.YELLOW)
+            app.tape_turn_lbl.config(text="", fg=Theme.TEXT_MUTED)
+            app.tape_deviation_lbl.config(text=mode_notice, fg=Theme.YELLOW)
+            if hasattr(app, "tape_zone_info") and app.tape_zone_info:
+                app.tape_zone_info.config(text="")
+            if hasattr(app, "tape_tolerance_legend") and app.tape_tolerance_legend:
+                app.tape_tolerance_legend.config(text="敌机 / POI")
+            app.tape_tolerance_lbl.config(text="")
+        elif target_info and has_primary_labels:
             rel = self._safe_float(target_info.get("relative", 0.0))
             distance = self._safe_float(target_info.get("distance_km", 0.0))
             info_text = self._format_active_info_text(target_info)
@@ -401,7 +419,7 @@ class AppPanelRenderer:
 
     def _build_heading_targets(
         self, snap: UISnapshot
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any, str]:
         """Build integrated heading-tape targets and status items."""
         destroyed_zones = (
             getattr(snap, "destroyed_zones", [])
@@ -409,7 +427,12 @@ class AppPanelRenderer:
             else None
         )
         model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)
-        return model.targets, model.active_targets_info, model.primary_target_info
+        return (
+            model.targets,
+            model.active_targets_info,
+            model.primary_target_info,
+            model.mode_notice,
+        )
 
     def update_zone_display(self, snap: UISnapshot):
         """更新战区显示，并返回是否需要重算布局尺寸。"""
@@ -453,12 +476,18 @@ class AppPanelRenderer:
             nav_in_main = PanelConfig.navigation_mode == "integrated"
             if app.heading_tape is not None:
                 if nav_in_main and heading_available:
-                    targets, active_targets_info, primary_info = self._build_heading_targets(snap)
+                    targets, active_targets_info, primary_info, mode_notice = (
+                        self._build_heading_targets(snap)
+                    )
                     primary_dist = (
                         self._safe_float(primary_info.get("distance_km")) if primary_info else 10.0
                     )
                     app.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
-                    self.update_tape_info_labels(active_targets_info, primary_info)
+                    self.update_tape_info_labels(
+                        active_targets_info,
+                        primary_info,
+                        mode_notice,
+                    )
                     self._grid_if_needed(
                         app.heading_tape_frame,
                         row=1,
@@ -509,13 +538,14 @@ class AppPanelRenderer:
                 app.icons.configure_label(app.zone_alert_lbl, icon=None, text="")
                 app._last_zone_destroyed_alert = False
 
-            zone_layout_mode = "full" if nav_in_main else "hidden"
+            show_zone_lists = self._main_navigation_lists_visible(zones_enabled)
+            zone_layout_mode = "full" if show_zone_lists else "hidden"
             if app._zone_layout_mode != zone_layout_mode:
                 self._clear_nav_rows(app._zone_row_pool)
                 self._clear_nav_rows(app._compact_zone_row_pool)
                 app._zone_layout_mode = zone_layout_mode
 
-            if nav_in_main:
+            if show_zone_lists:
                 self._grid_if_needed(
                     app.zone_list_header_frame,
                     row=3,
@@ -536,7 +566,7 @@ class AppPanelRenderer:
                 self._grid_remove_if_needed(app.zone_list_header_frame)
                 self._grid_remove_if_needed(app.zone_list_frame)
 
-            row_pool = app._zone_row_pool if nav_in_main else app._compact_zone_row_pool
+            row_pool = app._zone_row_pool
 
             idx = 0
             if not snap.zones:
@@ -566,7 +596,7 @@ class AppPanelRenderer:
                     )
                     idx += 1
             self._clear_nav_rows(row_pool, start=idx)
-            self._sync_nav_row_visibility(app._zone_row_pool, idx if nav_in_main else 0)
+            self._sync_nav_row_visibility(app._zone_row_pool, idx if show_zone_lists else 0)
             self._sync_nav_row_visibility(app._compact_zone_row_pool, 0)
         else:
             self._grid_remove_if_needed(app.zone_header_frame)
@@ -581,14 +611,14 @@ class AppPanelRenderer:
             app._zone_layout_mode = None
 
         if airfields_enabled:
-            nav_in_main = PanelConfig.navigation_mode == "integrated"
-            airport_layout_mode = "full" if nav_in_main else "hidden"
+            show_airfield_lists = self._main_navigation_lists_visible(airfields_enabled)
+            airport_layout_mode = "full" if show_airfield_lists else "hidden"
             if app._airport_layout_mode != airport_layout_mode:
                 self._clear_nav_rows(app._airport_row_pool)
                 self._clear_nav_rows(app._compact_airport_row_pool)
                 app._airport_layout_mode = airport_layout_mode
 
-            if nav_in_main:
+            if show_airfield_lists:
                 self._grid_if_needed(
                     app.airport_header_frame,
                     row=5,
@@ -605,11 +635,10 @@ class AppPanelRenderer:
                     padx=pad_x,
                     pady=(0, int(3 * s)),
                 )
-                row_pool = app._airport_row_pool
             else:
                 self._grid_remove_if_needed(app.airport_header_frame)
                 self._grid_remove_if_needed(app.airport_list_frame)
-                row_pool = app._compact_airport_row_pool
+            row_pool = app._airport_row_pool
 
             ap_idx = 0
             if snap.friendly_airfield:
@@ -648,7 +677,10 @@ class AppPanelRenderer:
                 self._set_nav_row(row_pool[0], NavListItem(direction="无数据"))
                 ap_idx = 1
             self._clear_nav_rows(row_pool, start=ap_idx)
-            self._sync_nav_row_visibility(app._airport_row_pool, ap_idx if nav_in_main else 0)
+            self._sync_nav_row_visibility(
+                app._airport_row_pool,
+                ap_idx if show_airfield_lists else 0,
+            )
             self._sync_nav_row_visibility(app._compact_airport_row_pool, 0)
         else:
             self._grid_remove_if_needed(app.airport_header_frame)
