@@ -194,7 +194,7 @@
         </div>
       </section>
 
-      <!-- GALLERY: real UI placeholders -->
+      <!-- GALLERY: real UI (web + mobile live; other slots optional) -->
       <section class="gallery-section" id="gallery" aria-labelledby="gallery-title">
         <div class="section-head split">
           <div>
@@ -202,54 +202,96 @@
             <h2 id="gallery-title">实机界面</h2>
           </div>
           <p class="section-aside-text">
-            下列位置留给真实运行截图。把 PNG 放到
-            <code>docs/assets/shots/</code> 对应文件名后，页面会自动显示。
+            桌面主窗、独立导航、启动器与网页驾驶舱（桌面 / 手机）均为实机截图。
           </p>
         </div>
 
         <div class="gallery-bento">
-          <figure class="shot shot-wide" data-shot="assets/shots/desktop-main.png">
+          <figure class="shot shot-wide shot-web" data-shot="assets/shots/web-cockpit-desktop.png">
             <div class="shot-frame">
-              <img class="shot-img" alt="Bomana 主窗口实机截图" width="1600" height="1000" hidden>
+              <img
+                class="shot-img"
+                alt="Bomana 网页驾驶舱桌面实机：战术地图、计时与武器解算"
+                width="2026"
+                height="1512"
+                hidden
+              >
               <div class="shot-empty">
-                <span class="shot-meta">DESKTOP · MAIN</span>
-                <strong>主窗口</strong>
-                <p>计时 · 仪表 · 导航条</p>
-                <code>shots/desktop-main.png</code>
+                <span class="shot-meta">WEB · DESKTOP</span>
+                <strong>网页驾驶舱 · 桌面</strong>
+                <p>地图 · 计时 · 武器 / 导航</p>
+                <code>shots/web-cockpit-desktop.png</code>
               </div>
             </div>
-            <figcaption>主窗口 · 可置顶 / 点击穿透</figcaption>
+            <figcaption>桌面浏览器 · Enhanced 网页驾驶舱</figcaption>
           </figure>
 
-          <figure class="shot" data-shot="assets/shots/nav-hud.png">
+          <figure class="shot shot-tall shot-web" data-shot="assets/shots/web-cockpit.png">
             <div class="shot-frame">
-              <img class="shot-img" alt="导航与 HUD 叠加层实机截图" width="1600" height="900" hidden>
-              <div class="shot-empty">
-                <span class="shot-meta">HUD · NAV</span>
-                <strong>导航叠加</strong>
-                <p>航向 · 目标 · 可选 HUD</p>
-                <code>shots/nav-hud.png</code>
-              </div>
-            </div>
-            <figcaption>导航 / HUD（默认关闭叠加）</figcaption>
-          </figure>
-
-          <figure class="shot shot-tall" data-shot="assets/shots/web-cockpit.png">
-            <div class="shot-frame">
-              <img class="shot-img" alt="网页驾驶舱实机截图" width="900" height="1600" hidden>
+              <img
+                class="shot-img"
+                alt="Bomana 网页驾驶舱手机实机：局域网访问与态势图"
+                width="960"
+                height="1600"
+                hidden
+              >
               <div class="shot-empty">
                 <span class="shot-meta">WEB · MOBILE</span>
-                <strong>网页驾驶舱</strong>
-                <p>本机 / 手机局域网</p>
+                <strong>网页驾驶舱 · 手机</strong>
+                <p>本机 / 局域网配对</p>
                 <code>shots/web-cockpit.png</code>
               </div>
             </div>
-            <figcaption>网页驾驶舱 · 本机与手机</figcaption>
+            <figcaption>手机 · 局域网态势（已裁系统栏）</figcaption>
           </figure>
 
-          <figure class="shot" data-shot="assets/shots/launcher.png">
+          <figure class="shot shot-app" data-shot="assets/shots/desktop-main.png">
             <div class="shot-frame">
-              <img class="shot-img" alt="启动器实机截图" width="1600" height="1000" hidden>
+              <img
+                class="shot-img"
+                alt="Bomana 桌面主窗口实机：计时、导航与武器解算"
+                width="714"
+                height="1417"
+                hidden
+              >
+              <div class="shot-empty">
+                <span class="shot-meta">DESKTOP · MAIN</span>
+                <strong>主窗口</strong>
+                <p>计时 · 导航 · 武器</p>
+                <code>shots/desktop-main.png</code>
+              </div>
+            </div>
+            <figcaption>桌面主窗 · 可置顶 / 点击穿透</figcaption>
+          </figure>
+
+          <figure class="shot shot-nav" data-shot="assets/shots/nav-hud.png">
+            <div class="shot-frame shot-frame-wide-strip">
+              <img
+                class="shot-img"
+                alt="Bomana 独立导航航向带实机"
+                width="1588"
+                height="296"
+                hidden
+              >
+              <div class="shot-empty">
+                <span class="shot-meta">NAV · TAPE</span>
+                <strong>独立导航</strong>
+                <p>航向带 · 战区 / 机场</p>
+                <code>shots/nav-hud.png</code>
+              </div>
+            </div>
+            <figcaption>独立导航窗 · 航向带与偏差提示</figcaption>
+          </figure>
+
+          <figure class="shot shot-app" data-shot="assets/shots/launcher.png">
+            <div class="shot-frame">
+              <img
+                class="shot-img"
+                alt="Bomana 启动器实机：通道、更新与启动"
+                width="1182"
+                height="1179"
+                hidden
+              >
               <div class="shot-empty">
                 <span class="shot-meta">LAUNCHER</span>
                 <strong>启动器</strong>
@@ -257,7 +299,7 @@
                 <code>shots/launcher.png</code>
               </div>
             </div>
-            <figcaption>绿色启动器 · 签名校验</figcaption>
+            <figcaption>启动器 3.2.2 · 签名更新与通道选择</figcaption>
           </figure>
         </div>
       </section>
