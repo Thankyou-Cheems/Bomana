@@ -90,4 +90,25 @@ async function loadRelease() {
   }
 }
 
+function loadShotPlaceholders() {
+  const shots = document.querySelectorAll(".shot[data-shot]");
+  for (const shot of shots) {
+    const path = shot.getAttribute("data-shot");
+    const img = shot.querySelector(".shot-img");
+    if (!path || !img) continue;
+
+    const probe = new Image();
+    probe.onload = () => {
+      img.src = path;
+      img.hidden = false;
+      shot.classList.add("is-loaded");
+    };
+    probe.onerror = () => {
+      // Keep designed empty slot until a real screenshot is uploaded.
+    };
+    probe.src = path;
+  }
+}
+
 loadRelease();
+loadShotPlaceholders();

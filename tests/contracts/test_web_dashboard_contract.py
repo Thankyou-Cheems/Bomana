@@ -431,10 +431,10 @@ def test_lan_and_tray_paths_use_auto_discovery_and_one_control_action() -> None:
     main_window = (ROOT / "bomana/ui/main_window.py").read_text(encoding="utf-8")
     assert "web_access_row" in APP or "web_access_row" in main_window
 
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "Enabling LAN also grants fixed-function control" in readme
-    assert "disabling LAN immediately invalidates every LAN session" in readme
-    assert "keeps LAN sessions view-only unless control is explicitly enabled" not in readme
+    readme_en = (ROOT / "README.en.md").read_text(encoding="utf-8")
+    assert "Enabling LAN also grants fixed-function control" in readme_en
+    assert "disabling LAN immediately invalidates every LAN session" in readme_en
+    assert "keeps LAN sessions view-only unless control is explicitly enabled" not in readme_en
 
 
 def test_map_projection_allowlist_includes_current_hostile_units_not_raw_payloads() -> None:
