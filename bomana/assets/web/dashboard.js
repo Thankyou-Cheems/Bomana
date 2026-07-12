@@ -8,6 +8,7 @@ const state = {
   submittingCommands: new Set(),
   weaponSignature: "",
   weaponListSignature: "",
+  _openLanSheetOnce: false,
   zoom: 2.2,
   displayZoom: 2.2,
   followZoomBias: 1,
@@ -424,11 +425,21 @@ function renderControlState(payload) {
     (payload.permissions && payload.permissions.lan_control_enabled)
     || network.lan_enabled,
   );
-  setPressed("lanOnButton", lanEnabled);
-  setPressed("lanOffButton", !lanEnabled);
-  $("lanOnButton").disabled = !lanAvailable || lanBusy || lanEnabled;
-  $("lanOffButton").disabled = !lanAvailable || lanBusy || !lanEnabled;
-  $("lanEnabledSetting").classList.toggle("unavailable", !lanAvailable);
+  const lanButton = $("dockLanButton");
+  if (lanButton) {
+    lanButton.disabled = !lanAvailable || lanBusy;
+    lanButton.classList.toggle("is-on", lanEnabled && lanAvailable);
+    lanButton.hidden = false;
+    text("dockLanLabel", "局域网");
+    text(
+      "dockLanState",
+      !lanAvailable
+        ? "仅本机可管理"
+        : (lanEnabled ? "已开启 · 扫码接入" : "未开启 · 点此打开"),
+    );
+  }
+  const lanOff = $("lanOffButton");
+  if (lanOff) lanOff.disabled = !lanAvailable || lanBusy || !lanEnabled;
   const links = Array.isArray(network.lan_pairing_urls) ? network.lan_pairing_urls.filter(Boolean) : [];
   const linksBlock = $("lanLinksBlock");
   const linkList = $("lanLinkList");
@@ -448,10 +459,15 @@ function renderControlState(payload) {
     "lanNetworkHelp",
     lanAvailable
       ? (lanEnabled
-        ? "局域网已开启。关闭会立即撤销全部局域网会话并轮换配对码。"
+        ? "局域网已开启。可扫码或复制链接给手机；关闭会立即撤销全部局域网会话。"
         : "仅在可信家庭或个人网络中开启。开启后会轮换配对码，手机需使用新链接。")
       : "当前会话不能管理局域网（需要本机控制会话）。",
   );
+  // After enabling LAN, surface the pairing sheet so QR is one tap away.
+  if (lanAvailable && lanEnabled && links.length && state._openLanSheetOnce) {
+    state._openLanSheetOnce = false;
+    openSheet("lanAccessSheet");
+  }
 
   setCommandButtons(["lockedOnButton", "lockedOffButton"], "state.set_locked");
   setPressed("lockedOnButton", targetState.locked);
@@ -1413,13 +1429,27 @@ function installControlHandlers() {
       "切换界面位置",
     );
   });
-  $("lanOnButton").addEventListener("click", () => {
+  $("dockLanButton").addEventListener("click", () => {
+    if (!commandIsAvailable("network.set_lan_enabled")) {
+      setCommandStatus("当前会话不能管理局域网", "error");
+      return;
+    }
+    const network = state.control && state.control.network ? state.control.network : {};
+    const enabled = Boolean(
+      (state.control && state.control.permissions && state.control.permissions.lan_control_enabled)
+      || network.lan_enabled,
+    );
+    if (enabled) {
+      openSheet("lanAccessSheet");
+      return;
+    }
     if (!window.confirm(
       "仅应在可信的家庭或个人局域网中开启。\n\n"
       + "Bomana 不会自动修改 Windows 防火墙，也不会把数据上传到互联网。\n\n"
       + "开启后，同一网络中持有新配对码的设备可查看信息并操作 Bomana 的固定功能。\n"
       + "是否为本次运行开启？",
     )) return;
+    state._openLanSheetOnce = true;
     void submitCommand(
       {
         schema_version: 1,
@@ -1432,6 +1462,7 @@ function installControlHandlers() {
   });
   $("lanOffButton").addEventListener("click", () => {
     if (!window.confirm("关闭局域网后，所有手机会话会立即失效。确定关闭？")) return;
+    closeSheet("lanAccessSheet");
     void submitCommand(
       { schema_version: 1, command: "network.set_lan_enabled", enabled: false },
       "关闭局域网访问与控制",
@@ -1566,6 +1597,7 @@ function openSheet(sheetId) {
   if (!sheet) return;
   closeSheet("controlSheet", true);
   closeSheet("weaponSheet", true);
+  closeSheet("lanAccessSheet", true);
   sheet.hidden = false;
   $("sheetBackdrop").hidden = false;
   document.body.classList.add("sheet-open");
@@ -1577,7 +1609,8 @@ function closeSheet(sheetId, quiet = false) {
   if (quiet) return;
   const controlOpen = $("controlSheet") && !$("controlSheet").hidden;
   const weaponOpen = $("weaponSheet") && !$("weaponSheet").hidden;
-  if (!controlOpen && !weaponOpen) {
+  const lanOpen = $("lanAccessSheet") && !$("lanAccessSheet").hidden;
+  if (!controlOpen && !weaponOpen && !lanOpen) {
     $("sheetBackdrop").hidden = true;
     document.body.classList.remove("sheet-open");
   }
@@ -1586,6 +1619,7 @@ function closeSheet(sheetId, quiet = false) {
 function closeAllSheets() {
   closeSheet("controlSheet", true);
   closeSheet("weaponSheet", true);
+  closeSheet("lanAccessSheet", true);
   $("sheetBackdrop").hidden = true;
   document.body.classList.remove("sheet-open");
 }
@@ -1595,6 +1629,8 @@ function installSheetHandlers() {
   $("controlSheetClose").addEventListener("click", () => closeSheet("controlSheet"));
   $("dockWeaponButton").addEventListener("click", () => openSheet("weaponSheet"));
   $("weaponSheetClose").addEventListener("click", () => closeSheet("weaponSheet"));
+  const lanClose = $("lanAccessSheetClose");
+  if (lanClose) lanClose.addEventListener("click", () => closeSheet("lanAccessSheet"));
   $("mapLegendToggle").addEventListener("click", () => {
     setLegendOpen($("mapLegend").hidden);
   });

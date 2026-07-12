@@ -144,6 +144,18 @@
 
     <footer class="hud-bottom">
       <p class="command-status" id="commandStatus" role="status" aria-live="polite"></p>
+      <div class="quick-actions" role="toolbar" aria-label="快捷动作">
+        <button type="button" class="quick-btn danger-action" id="resetTimerButton" disabled>
+          <strong>重置计时</strong>
+        </button>
+        <button type="button" class="quick-btn" id="cycleCornerButton" disabled>
+          <strong>切换角落</strong>
+        </button>
+        <button type="button" class="quick-btn" id="dockLanButton" disabled>
+          <strong id="dockLanLabel">局域网</strong>
+          <small id="dockLanState">本机</small>
+        </button>
+      </div>
       <div class="rail rail-two" role="toolbar" aria-label="主操作">
         <button type="button" class="rail-btn rail-btn-primary" id="dockWeaponButton" data-capability="weapon" disabled>
           <span class="rail-kicker">切换武器</span>
@@ -151,7 +163,7 @@
         </button>
         <button type="button" class="rail-btn" id="dockOpsButton">
           <span class="rail-icon" aria-hidden="true">⚙</span>
-          <span class="rail-copy"><strong>设置</strong><small>计时 · 状态 · 动作</small></span>
+          <span class="rail-copy"><strong>设置</strong><small>状态 · 显示 · 策略</small></span>
         </button>
       </div>
     </footer>
@@ -199,50 +211,11 @@
     <p class="control-help" id="controlHelp">控制状态正在加载。</p>
     <div class="control-deck" id="controlDeck">
       <div class="sheet-tabs" role="tablist">
-        <button type="button" class="sheet-tab active" data-control-tab="actions" role="tab" aria-selected="true">动作</button>
-        <button type="button" class="sheet-tab" data-control-tab="network" role="tab" aria-selected="false">网络</button>
-        <button type="button" class="sheet-tab" data-control-tab="state" role="tab" aria-selected="false">状态</button>
+        <button type="button" class="sheet-tab active" data-control-tab="state" role="tab" aria-selected="true">状态</button>
         <button type="button" class="sheet-tab" data-control-tab="panels" role="tab" aria-selected="false">显示</button>
         <button type="button" class="sheet-tab" data-control-tab="weapon" role="tab" aria-selected="false">武器策略</button>
       </div>
-      <div class="control-tab-panel active" data-control-panel="actions">
-        <div class="control-action-grid">
-          <button class="action-tile danger-action" id="resetTimerButton" type="button" disabled>
-            <strong>重置计时</strong><small>需确认 · 对应桌面重置</small>
-          </button>
-          <button class="action-tile" id="cycleCornerButton" type="button" disabled>
-            <strong>切换角落</strong><small>立即保存 · 对应 F9</small>
-          </button>
-        </div>
-      </div>
-      <div class="control-tab-panel" data-control-panel="network" hidden>
-        <fieldset class="control-group" id="lanNetworkGroup">
-          <legend>局域网访问</legend>
-          <p class="model-note" id="lanNetworkHelp">仅本机控制会话可开启或关闭局域网。请只在可信网络中开启。</p>
-          <div class="target-setting" id="lanEnabledSetting">
-            <span>局域网访问与控制</span>
-            <div class="segmented-control" role="group" aria-label="局域网访问目标状态">
-              <button id="lanOnButton" type="button" aria-pressed="false" disabled>开启</button>
-              <button id="lanOffButton" type="button" aria-pressed="false" disabled>关闭</button>
-            </div>
-          </div>
-          <div class="lan-links" id="lanLinksBlock" hidden>
-            <div class="lan-qr-card">
-              <span class="eyebrow">扫码接入</span>
-              <canvas id="lanQrCanvas" class="lan-qr-canvas" width="200" height="200" aria-label="局域网配对二维码"></canvas>
-              <p class="model-note" id="lanQrHint">用手机相机扫描后将直接打开配对链接。</p>
-              <label class="select-setting" for="lanQrUrlSelect" id="lanQrUrlLabel" hidden>
-                <span>选择链接</span>
-                <select id="lanQrUrlSelect"></select>
-              </label>
-            </div>
-            <span class="eyebrow">手机访问链接</span>
-            <ul class="lan-link-list" id="lanLinkList"></ul>
-            <button type="button" class="ghost-btn" id="copyLanLinksButton" disabled>复制全部链接</button>
-          </div>
-        </fieldset>
-      </div>
-      <div class="control-tab-panel" data-control-panel="state" hidden>
+      <div class="control-tab-panel active" data-control-panel="state">
         <fieldset class="control-group">
           <legend>应用状态</legend>
           <div class="target-setting">
@@ -323,6 +296,35 @@
     </div>
     <p class="control-help" id="weaponSheetHelp">选择与当前机型兼容的武器。</p>
     <div class="weapon-list" id="weaponList" role="listbox" aria-label="可选武器"></div>
+  </aside>
+
+  <aside class="sheet lan-sheet" id="lanAccessSheet" hidden role="dialog" aria-modal="true" aria-labelledby="lanAccessTitle">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <div>
+        <span class="eyebrow">LAN ACCESS</span>
+        <h2 id="lanAccessTitle">局域网接入</h2>
+      </div>
+      <button type="button" class="sheet-close" id="lanAccessSheetClose">关闭</button>
+    </div>
+    <p class="control-help" id="lanNetworkHelp">仅本机控制会话可管理局域网。请只在可信网络中开启。</p>
+    <div class="lan-links" id="lanLinksBlock" hidden>
+      <div class="lan-qr-card">
+        <span class="eyebrow">扫码接入</span>
+        <canvas id="lanQrCanvas" class="lan-qr-canvas" width="200" height="200" aria-label="局域网配对二维码"></canvas>
+        <p class="model-note" id="lanQrHint">用手机相机扫描后将直接打开配对链接。</p>
+        <label class="select-setting" for="lanQrUrlSelect" id="lanQrUrlLabel" hidden>
+          <span>选择链接</span>
+          <select id="lanQrUrlSelect"></select>
+        </label>
+      </div>
+      <span class="eyebrow">手机访问链接</span>
+      <ul class="lan-link-list" id="lanLinkList"></ul>
+      <button type="button" class="ghost-btn" id="copyLanLinksButton" disabled>复制全部链接</button>
+      <button type="button" class="action-tile danger-action" id="lanOffButton" disabled>
+        <strong>关闭局域网</strong><small>立即撤销全部局域网会话</small>
+      </button>
+    </div>
   </aside>
 
   <div class="pairing" id="pairingPanel" role="dialog" aria-modal="true" aria-labelledby="pairingTitle">

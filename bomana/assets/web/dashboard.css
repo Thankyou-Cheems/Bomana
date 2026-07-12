@@ -22,7 +22,7 @@
   --safe-t: env(safe-area-inset-top);
   --safe-l: env(safe-area-inset-left);
   --safe-r: env(safe-area-inset-right);
-  --rail-h: calc(74px + var(--safe-b));
+  --rail-h: calc(128px + var(--safe-b));
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
 }
 
@@ -712,11 +712,54 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .command-status.pending { color: var(--amber); border-color: var(--line); }
 .command-status.success { color: var(--green); border-color: rgba(110,208,129,.35); }
 .command-status.error { color: var(--red); border-color: rgba(255,77,90,.4); }
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.quick-btn {
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(240, 160, 32, .22);
+  background: linear-gradient(180deg, rgba(28, 24, 18, .94), rgba(10, 12, 16, .95));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.24);
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  text-align: center;
+}
+.quick-btn strong {
+  font-size: 12px;
+  font-weight: 700;
+}
+.quick-btn small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.quick-btn.danger-action {
+  border-color: rgba(255,77,90,.38);
+  color: #ffc2c6;
+}
+.quick-btn.is-on {
+  border-color: rgba(110, 208, 129, .5);
+  background: linear-gradient(180deg, rgba(44, 116, 84, .28), rgba(10, 12, 16, .95));
+}
+.quick-btn.is-on strong { color: var(--green); }
+.quick-btn.is-on small { color: rgba(110, 208, 129, .9); }
+.quick-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.quick-btn:not(:disabled):active { transform: translateY(1px); }
 .rail {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(108px, .9fr);
   gap: 8px;
-  max-width: 520px;
+  max-width: 560px;
   margin: 0 auto;
 }
 .rail-two { grid-template-columns: minmax(0, 1.55fr) minmax(108px, .9fr); }
@@ -965,7 +1008,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .sheet-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   margin-bottom: 10px;
   padding: 3px;
@@ -1318,7 +1361,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 @media (min-width: 900px) {
   .desktop-only { display: grid !important; }
   .rail { max-width: 560px; }
-  .map-legend-shell { bottom: calc(92px + var(--safe-b)); }
+  .quick-actions { max-width: 560px; }
+  .map-legend-shell { bottom: calc(140px + var(--safe-b)); }
   .hud-right {
     width: min(300px, 28vw);
     max-height: calc(100dvh - 180px - var(--safe-t) - var(--safe-b));
