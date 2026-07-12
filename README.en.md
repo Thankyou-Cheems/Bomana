@@ -1,36 +1,29 @@
+<div align="center">
+
+<img src="bomana/assets/branding/app.png" width="200" alt="Bomana">
+
 # Bomana
 
-> **New here?** China-friendly site (EdgeOne CDN): [https://ruikang.wang/bomana/](https://ruikang.wang/bomana/).  
-> GitHub Pages mirror: [https://thankyou-cheems.github.io/Bomana/](https://thankyou-cheems.github.io/Bomana/).
+**War Thunder SB Timer** · 战雷全真模式收益计时器
 
-**战雷全真模式收益计时器** | War Thunder SB Timer
+<!-- Versions from EdgeOne CDN (what players actually get). GitHub "latest" is often a launcher-only tag. -->
+[![App](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fversion%3Fchannel%3DEnhanced&query=%24.app_version&label=app&prefix=v&color=0ea5e9)](https://ruikang.wang/bomana/)
+[![Launcher](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Flauncher&query=%24.launcher_version&label=launcher&prefix=v&color=6366f1)](https://ruikang.wang/bomana/)
+[![License](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.14%2B-eab308)](https://www.python.org/)
+[![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=22c55e)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
+[![Launches](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.launcher_start_total&label=launches&color=3b82f6)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 
-War Thunder is a vehicle-combat video game; Bomana is a multifunction timer for War Thunder simulator battles.
-In this README, terms like "bomb", "bombing", and "CCRP" refer only to virtual in-game concepts, not anything in the real world. Have fun!
+**[Site / CDN download](https://ruikang.wang/bomana/)** ·
+[GitHub Pages](https://thankyou-cheems.github.io/Bomana/) ·
+[Releases (backup)](https://github.com/Thankyou-Cheems/Bomana/releases)
 
-War Thunder 是一款载具对战电子游戏；Bomana 是一个面向 War Thunder 全真模式的多功能计时器。
-本文档中的“炸弹”“投弹”“CCRP”等词均指代游戏内的虚拟概念，不对应任何现实内容。祝你玩得开心！
+**[English](#english-documentation)** · **[中文](README.md)**
 
-<p align="center">
-  <img src="bomana/assets/branding/app.png" width="320" alt="Bomana promotional art">
-</p>
+</div>
 
-[![App Release](https://img.shields.io/github/v/release/Thankyou-Cheems/Bomana?label=app%20release)](https://github.com/Thankyou-Cheems/Bomana/releases/latest)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.14%2B-yellow.svg)](https://www.python.org/)
-[![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=brightgreen)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
-[![Launches](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.launcher_start_total&label=Launches&color=blue)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
-
-[China site / CDN downloads](https://ruikang.wang/bomana/) | [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) | [GitHub Releases (backup)](https://github.com/Thankyou-Cheems/Bomana/releases)
-
----
-
-## Choose Language | 选择语言
-
-|  |  |
-|:--|:--|
-| **[中文文档](README.md)** | Chinese (default on GitHub landing) |
-| **[English Documentation](#english-documentation)** | This page |
+> War Thunder is a vehicle-combat game; Bomana is a multifunction timer for simulator battles.  
+> Words like “bomb / CCRP” here mean **in-game virtual concepts only**. Have fun!
 
 ---
 
