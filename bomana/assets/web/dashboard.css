@@ -1034,11 +1034,15 @@ button:focus-visible, input:focus-visible, select:focus-visible {
     linear-gradient(165deg, rgba(240,160,32,.1), rgba(8, 11, 16, .55));
 }
 .lan-qr-canvas {
-  width: min(220px, 70vw);
+  width: min(280px, 78vw);
   height: auto;
-  border-radius: 10px;
-  background: #f7f2e8;
+  image-rendering: pixelated;
+  border-radius: 8px;
+  background: #ffffff;
   box-shadow: 0 8px 24px rgba(0,0,0,.28);
+  /* Keep a visible white bezel so the quiet zone is never cropped by the card. */
+  padding: 0;
+  border: 8px solid #ffffff;
 }
 .lan-qr-card .model-note,
 .lan-qr-card .select-setting {

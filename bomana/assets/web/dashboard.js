@@ -223,10 +223,12 @@ function renderLanPairingQr(links) {
   const qr = window.BomanaQr;
   const ok = qr && typeof qr.renderToCanvas === "function"
     ? qr.renderToCanvas(canvas, active, {
-      size: 220,
-      margin: 2,
-      dark: "#14110c",
-      light: "#f7f2e8",
+      // Larger modules + ISO quiet zone (>=4) for Apple Camera and strict scanners.
+      size: 280,
+      margin: 4,
+      ecc: "M",
+      dark: "#000000",
+      light: "#FFFFFF",
     })
     : false;
   if (hint) {
