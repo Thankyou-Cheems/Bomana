@@ -54,8 +54,14 @@ def test_repository_local_markdown_links_resolve() -> None:
     assert problems == []
 
 
-def test_readme_app_release_badge_tracks_latest_full_release() -> None:
+def test_readme_version_badges_use_cdn_not_github_latest() -> None:
+    """GitHub 'latest' is often a launcher-only tag; player versions live on CDN."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_en = (ROOT / "README.en.md").read_text(encoding="utf-8")
 
-    assert "img.shields.io/github/v/release/Thankyou-Cheems/Bomana" in readme
-    assert "filter=v*.*.*-app" not in readme
+    for text in (readme, readme_en):
+        assert "bomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fversion" in text
+        assert "bomanaupdate.ruikang.wang%2Fapi%2Fv1%2Flauncher" in text
+        assert "img.shields.io/github/v/release/Thankyou-Cheems/Bomana" not in text
+        assert 'align="center"' in text
+        assert "bomana/assets/branding/app.png" in text
