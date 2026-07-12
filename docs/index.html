@@ -62,11 +62,22 @@
             并把导航、燃油、超速与投弹估算收进一个可置顶的轻量窗口。
           </p>
           <div class="hero-actions">
-            <a class="button primary" id="heroDownload" href="https://github.com/Thankyou-Cheems/Bomana/releases">
+            <a
+              class="button primary"
+              id="heroDownload"
+              href="https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.2.2.exe"
+            >
               下载 Windows 启动器
               <span class="button-arrow" aria-hidden="true">→</span>
             </a>
             <a class="button ghost" href="#start">三步开始</a>
+            <a
+              class="text-link"
+              id="heroDownloadGithub"
+              href="https://github.com/Thankyou-Cheems/Bomana/releases"
+            >
+              GitHub 备用下载
+            </a>
           </div>
           <ul class="hero-trust" aria-label="产品边界">
             <li>只读官方 localhost:8111</li>
@@ -120,7 +131,7 @@
           <li>
             <span class="step-index">01</span>
             <h3>下载启动器</h3>
-            <p>从 GitHub Release 获取通用启动器，无需安装 Python。</p>
+            <p>优先走国内 CDN（腾讯云 / EdgeOne）；GitHub Release 作为备用，无需安装 Python。</p>
           </li>
           <li>
             <span class="step-index">02</span>
@@ -138,20 +149,34 @@
           <div class="download-copy">
             <p class="section-label">LATEST RELEASE</p>
             <h3 id="download-title">先下载启动器，其余交给它</h3>
-            <p id="releaseStatus" role="status" aria-live="polite">正在读取最新 Release…</p>
+            <p id="releaseStatus" role="status" aria-live="polite">正在读取国内 CDN 版本信息…</p>
             <div class="download-actions">
-              <a class="button primary" id="launcherDownload" href="https://github.com/Thankyou-Cheems/Bomana/releases">
-                打开 Releases
+              <a
+                class="button primary"
+                id="launcherDownload"
+                href="https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.2.2.exe"
+              >
+                下载启动器（国内 CDN）
+              </a>
+              <a
+                class="button secondary"
+                id="launcherDownloadGithub"
+                href="https://github.com/Thankyou-Cheems/Bomana/releases"
+              >
+                GitHub 备用
               </a>
               <a class="text-link" id="allReleasesLink" href="https://github.com/Thankyou-Cheems/Bomana/releases">
                 查看所有版本
               </a>
             </div>
+            <p class="download-cdn-note">
+              主下载走 <strong>bomanaupdate.ruikang.wang</strong>（腾讯云 + EdgeOne）。站点镜像不依赖 GitHub 资源。
+            </p>
           </div>
           <div class="release-files">
-            <p class="release-files-label">当前 Release 文件</p>
+            <p class="release-files-label">CDN 分发文件</p>
             <div id="releaseAssets" class="release-assets" aria-live="polite">
-              <span>Launcher</span><span>Signed manifests</span><span>Checksums</span>
+              <span>Launcher</span><span>Enhanced / Standard / Lite</span><span>Signed manifests</span>
             </div>
           </div>
         </div>
@@ -206,12 +231,9 @@
           </p>
         </div>
 
-        <div class="gallery-bento">
-          <figure
-            class="shot shot--web-desktop"
-            data-shot="assets/shots/web-cockpit-desktop.png"
-            style="--shot-ar: 2026 / 1512"
-          >
+        <div class="gallery-stack">
+          <!-- Full-bleed landscape: whole map, no crop -->
+          <figure class="shot shot--hero" data-shot="assets/shots/web-cockpit-desktop.png">
             <div class="shot-frame">
               <img
                 class="shot-img"
@@ -220,67 +242,56 @@
                 height="1512"
                 hidden
               >
-              <div class="shot-empty">
+              <div class="shot-empty" data-ar="2026/1512">
                 <span class="shot-meta">WEB · DESKTOP</span>
                 <strong>网页驾驶舱 · 桌面</strong>
                 <p>地图 · 计时 · 武器 / 导航</p>
-                <code>shots/web-cockpit-desktop.png</code>
               </div>
             </div>
-            <figcaption>桌面浏览器 · Enhanced 网页驾驶舱</figcaption>
+            <figcaption>桌面浏览器 · Enhanced 网页驾驶舱（完整地图与侧栏）</figcaption>
           </figure>
 
-          <figure
-            class="shot shot--web-mobile"
-            data-shot="assets/shots/web-cockpit.png"
-            style="--shot-ar: 960 / 1600"
-          >
-            <div class="shot-frame">
-              <img
-                class="shot-img"
-                alt="Bomana 网页驾驶舱手机实机：局域网访问与态势图"
-                width="960"
-                height="1600"
-                hidden
-              >
-              <div class="shot-empty">
-                <span class="shot-meta">WEB · MOBILE</span>
-                <strong>网页驾驶舱 · 手机</strong>
-                <p>本机 / 局域网配对</p>
-                <code>shots/web-cockpit.png</code>
+          <!-- Portrait pair: phone + main window -->
+          <div class="gallery-row gallery-row--pair">
+            <figure class="shot shot--portrait" data-shot="assets/shots/web-cockpit.png">
+              <div class="shot-frame">
+                <img
+                  class="shot-img"
+                  alt="Bomana 网页驾驶舱手机实机：局域网访问与态势图"
+                  width="960"
+                  height="1600"
+                  hidden
+                >
+                <div class="shot-empty" data-ar="960/1600">
+                  <span class="shot-meta">WEB · MOBILE</span>
+                  <strong>网页驾驶舱 · 手机</strong>
+                  <p>本机 / 局域网配对</p>
+                </div>
               </div>
-            </div>
-            <figcaption>手机 · 局域网态势（已裁系统栏）</figcaption>
-          </figure>
+              <figcaption>手机 · 局域网态势（已裁系统栏）</figcaption>
+            </figure>
 
-          <figure
-            class="shot shot--main"
-            data-shot="assets/shots/desktop-main.png"
-            style="--shot-ar: 714 / 1417"
-          >
-            <div class="shot-frame">
-              <img
-                class="shot-img"
-                alt="Bomana 桌面主窗口实机：计时、导航与武器解算"
-                width="714"
-                height="1417"
-                hidden
-              >
-              <div class="shot-empty">
-                <span class="shot-meta">DESKTOP · MAIN</span>
-                <strong>主窗口</strong>
-                <p>计时 · 导航 · 武器</p>
-                <code>shots/desktop-main.png</code>
+            <figure class="shot shot--portrait" data-shot="assets/shots/desktop-main.png">
+              <div class="shot-frame">
+                <img
+                  class="shot-img"
+                  alt="Bomana 桌面主窗口实机：计时、导航与武器解算"
+                  width="714"
+                  height="1417"
+                  hidden
+                >
+                <div class="shot-empty" data-ar="714/1417">
+                  <span class="shot-meta">DESKTOP · MAIN</span>
+                  <strong>主窗口</strong>
+                  <p>计时 · 导航 · 武器</p>
+                </div>
               </div>
-            </div>
-            <figcaption>桌面主窗 · 可置顶 / 点击穿透</figcaption>
-          </figure>
+              <figcaption>桌面主窗 · 可置顶 / 点击穿透</figcaption>
+            </figure>
+          </div>
 
-          <figure
-            class="shot shot--launcher"
-            data-shot="assets/shots/launcher.png"
-            style="--shot-ar: 1182 / 1179"
-          >
+          <!-- Square-ish launcher, capped width -->
+          <figure class="shot shot--launcher" data-shot="assets/shots/launcher.png">
             <div class="shot-frame">
               <img
                 class="shot-img"
@@ -289,21 +300,17 @@
                 height="1179"
                 hidden
               >
-              <div class="shot-empty">
+              <div class="shot-empty" data-ar="1/1">
                 <span class="shot-meta">LAUNCHER</span>
                 <strong>启动器</strong>
                 <p>通道 · 更新 · 回退</p>
-                <code>shots/launcher.png</code>
               </div>
             </div>
             <figcaption>启动器 3.2.2 · 签名更新与通道选择</figcaption>
           </figure>
 
-          <figure
-            class="shot shot--nav"
-            data-shot="assets/shots/nav-hud.png"
-            style="--shot-ar: 1588 / 296"
-          >
+          <!-- Wide strip: full length visible -->
+          <figure class="shot shot--strip" data-shot="assets/shots/nav-hud.png">
             <div class="shot-frame">
               <img
                 class="shot-img"
@@ -312,14 +319,13 @@
                 height="296"
                 hidden
               >
-              <div class="shot-empty">
+              <div class="shot-empty" data-ar="1588/296">
                 <span class="shot-meta">NAV · TAPE</span>
                 <strong>独立导航</strong>
                 <p>航向带 · 战区 / 机场</p>
-                <code>shots/nav-hud.png</code>
               </div>
             </div>
-            <figcaption>独立导航窗 · 航向带与偏差提示</figcaption>
+            <figcaption>独立导航窗 · 完整航向带与偏差提示</figcaption>
           </figure>
         </div>
       </section>
@@ -531,10 +537,23 @@
         <div class="cta-inner">
           <p class="section-label">READY</p>
           <h2>进战斗前，把计时器打开。</h2>
-          <a class="button primary large" href="https://github.com/Thankyou-Cheems/Bomana/releases">
-            前往 Releases
-            <span class="button-arrow" aria-hidden="true">→</span>
-          </a>
+          <div class="cta-actions">
+            <a
+              class="button primary large"
+              id="ctaDownload"
+              href="https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.2.2.exe"
+            >
+              下载启动器（国内 CDN）
+              <span class="button-arrow" aria-hidden="true">→</span>
+            </a>
+            <a
+              class="button ghost large"
+              id="ctaDownloadGithub"
+              href="https://github.com/Thankyou-Cheems/Bomana/releases"
+            >
+              GitHub 备用
+            </a>
+          </div>
         </div>
       </section>
     </main>

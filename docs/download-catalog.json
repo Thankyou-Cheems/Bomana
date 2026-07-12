@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "primary_source": "TencentCloud",
+  "cdn_base": "https://bomanaupdate.ruikang.wang",
+  "updated_at": "2026-07-12T10:23:43Z",
+  "launcher": {
+    "version": "3.2.2",
+    "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.2.2.exe",
+    "asset": "Bomana_launcher_v3.2.2.exe",
+    "sha256": "216b42b2e120a222bec6c9995331b88f804a78218168b45c67daa6c64cf6494b"
+  },
+  "channels": {
+    "Enhanced": {
+      "app_version": "8.5.0",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Enhanced_v8.5.0.zip",
+      "asset": "Bomana_app_Enhanced_v8.5.0.zip",
+      "sha256": "05fe24ca37345987f7fc587de6e66dc3f980534a7299b1a811bc9244a21b6eed"
+    },
+    "Standard": {
+      "app_version": "8.5.0",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Standard_v8.5.0.zip",
+      "asset": "Bomana_app_Standard_v8.5.0.zip",
+      "sha256": "d8bbdbe364ca55a238e693fb54f744855d88f6ca42eafaa5c12a46d7fcb808a8"
+    },
+    "Lite": {
+      "app_version": "8.5.0",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Lite_v8.5.0.zip",
+      "asset": "Bomana_app_Lite_v8.5.0.zip",
+      "sha256": "72f28f6d544780de9510d833ff236cb57e9fe305aac060d21e50104f768c6c53"
+    }
+  },
+  "github_releases_url": "https://github.com/Thankyou-Cheems/Bomana/releases",
+  "notes": "Primary downloads use EdgeOne CDN. Refreshed on the maintainer workstation; the mirror host never fetches GitHub."
+}

@@ -1,6 +1,7 @@
 # Bomana
 
-> **新用户请先看官网：** [https://thankyou-cheems.github.io/Bomana/](https://thankyou-cheems.github.io/Bomana/) — 功能介绍、下载入口与使用说明都在这里。
+> **新用户请先看官网（国内镜像优先）：** [https://ruikang.wang/bomana/](https://ruikang.wang/bomana/) — 功能介绍与 CDN 下载。  
+> GitHub Pages 备用：[https://thankyou-cheems.github.io/Bomana/](https://thankyou-cheems.github.io/Bomana/)
 
 **战雷全真模式收益计时器** | War Thunder SB Timer
 
@@ -20,7 +21,7 @@ In this README, terms like "bomb", "bombing", and "CCRP" refer only to virtual i
 [![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=brightgreen)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 [![Launches](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.launcher_start_total&label=Launches&color=blue)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 
-[Bomana website / 下载入口](https://thankyou-cheems.github.io/Bomana/) | [GitHub Releases](https://github.com/Thankyou-Cheems/Bomana/releases)
+[官网镜像 / CDN 下载](https://ruikang.wang/bomana/) | [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) | [GitHub Releases 备用](https://github.com/Thankyou-Cheems/Bomana/releases)
 
 ---
 
@@ -210,7 +211,7 @@ Standard / Lite **不会打包**网页驾驶舱代码；若启动器勾选了网
 - 新版启动器会保留一个上一版本，出问题时可一键回退
 - App 8.0.0 及以上需要启动器 3.0.0 及以上
 - 程序显示名：`Bomana香焦`
-- 也可从 [项目网站](https://thankyou-cheems.github.io/Bomana/) 进入下载
+- 也可从 [官网镜像](https://ruikang.wang/bomana/)（国内 CDN）或 [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) 进入下载
 
 ### 源码运行（可选）
 

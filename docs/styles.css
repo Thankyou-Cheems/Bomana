@@ -635,6 +635,27 @@ h3 {
   margin-top: 24px;
 }
 
+.download-cdn-note {
+  margin: 14px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 36rem;
+}
+
+.download-cdn-note strong {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+
 .release-files-label {
   margin: 0 0 14px;
   color: var(--faint);
@@ -745,18 +766,29 @@ h3 {
 }
 
 /* —— Gallery shots ——
-   Real screenshots have mixed aspect ratios (landscape web, tall phone/main,
-   square launcher, wide nav strip). Size frames to each image — do not force
-   a shared min-height or cover-crop template. */
-.gallery-bento {
+   Rule: once a real screenshot loads, the <img> is width:100% / height:auto.
+   Never force a frame aspect-ratio or object-fit:cover on product shots —
+   that crops maps and wide nav strips. */
+.gallery-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.gallery-row {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
 }
 
+.gallery-row--pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 56rem;
+  margin-inline: auto;
+  width: 100%;
+}
+
 .shot {
-  --shot-ar: 16 / 10;
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -764,37 +796,32 @@ h3 {
   min-width: 0;
 }
 
-/* Web desktop: full-width landscape hero */
-.shot--web-desktop {
-  grid-column: 1 / -1;
-}
-
-/* Three product UIs — width weighted by aspect ratio so row heights stay closer:
-   phone ~0.6, main ~0.5 (narrower), launcher ~1.0 (wider). */
-.shot--web-mobile {
-  grid-column: span 3;
-}
-
-.shot--main {
-  grid-column: span 3;
+.shot--hero {
+  width: 100%;
 }
 
 .shot--launcher {
-  grid-column: span 6;
+  width: min(100%, 36rem);
+  margin-inline: auto;
 }
 
-/* Nav heading tape: full-width strip */
-.shot--nav {
-  grid-column: 1 / -1;
+.shot--strip {
+  width: 100%;
 }
 
 .shot-frame {
   position: relative;
   width: 100%;
-  aspect-ratio: var(--shot-ar);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   overflow: hidden;
+  background: #050b10;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  line-height: 0;
+}
+
+/* Placeholder only (image not loaded yet) */
+.shot:not(.is-loaded) .shot-frame {
   background:
     linear-gradient(145deg, rgba(15, 40, 48, 0.5), rgba(5, 12, 18, 0.95)),
     repeating-linear-gradient(
@@ -804,19 +831,21 @@ h3 {
       rgba(94, 234, 212, 0.03) 12px,
       rgba(94, 234, 212, 0.03) 13px
     );
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  min-height: 180px;
 }
 
-.shot.is-loaded .shot-frame {
-  background: #050b10;
+.shot:not(.is-loaded) .shot--strip .shot-frame,
+.shot--strip:not(.is-loaded) .shot-frame {
+  min-height: 100px;
 }
 
+/* Natural image geometry — no cover crop, no forced box */
 .shot-img {
   display: block;
   width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center center;
+  height: auto;
+  max-width: 100%;
+  vertical-align: top;
   background: #050b10;
 }
 
@@ -833,6 +862,7 @@ h3 {
   justify-content: flex-end;
   gap: 6px;
   padding: 28px;
+  line-height: 1.35;
   background:
     radial-gradient(circle at 80% 20%, rgba(94, 234, 212, 0.1), transparent 40%),
     linear-gradient(180deg, transparent 20%, rgba(0, 0, 0, 0.55) 100%);
@@ -869,6 +899,7 @@ h3 {
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.04em;
+  line-height: 1.4;
 }
 
 /* —— Features bento —— */
@@ -1257,22 +1288,8 @@ h3 {
 
 /* —— Responsive —— */
 @media (max-width: 1100px) {
-  .gallery-bento {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  .shot--web-desktop,
-  .shot--nav {
-    grid-column: 1 / -1;
-  }
-
-  .shot--web-mobile,
-  .shot--main {
-    grid-column: span 3;
-  }
-
-  .shot--launcher {
-    grid-column: span 6;
+  .gallery-row--pair {
+    max-width: none;
   }
 
   .feature-bento {
@@ -1385,7 +1402,7 @@ h3 {
     width: 100%;
   }
 
-  .gallery-bento,
+  .gallery-row--pair,
   .feature-bento,
   .docs-grid {
     grid-template-columns: 1fr;
@@ -1400,17 +1417,8 @@ h3 {
     min-height: 240px;
   }
 
-  .shot--web-desktop,
-  .shot--web-mobile,
-  .shot--main,
-  .shot--launcher,
-  .shot--nav {
-    grid-column: 1;
-  }
-
-  /* Tall portraits: cap width so the stack stays scannable on phones */
-  .shot--web-mobile,
-  .shot--main {
+  .shot--portrait,
+  .shot--launcher {
     max-width: 22rem;
     margin-inline: auto;
     width: 100%;

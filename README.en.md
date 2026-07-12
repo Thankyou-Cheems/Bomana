@@ -1,6 +1,7 @@
 # Bomana
 
-> **New here?** Start at the project site: [https://thankyou-cheems.github.io/Bomana/](https://thankyou-cheems.github.io/Bomana/) — features, downloads, and how to get started.
+> **New here?** China-friendly site (EdgeOne CDN): [https://ruikang.wang/bomana/](https://ruikang.wang/bomana/).  
+> GitHub Pages mirror: [https://thankyou-cheems.github.io/Bomana/](https://thankyou-cheems.github.io/Bomana/).
 
 **战雷全真模式收益计时器** | War Thunder SB Timer
 
@@ -20,7 +21,7 @@ War Thunder 是一款载具对战电子游戏；Bomana 是一个面向 War Thund
 [![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=brightgreen)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 [![Launches](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.launcher_start_total&label=Launches&color=blue)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 
-[Bomana website / downloads](https://thankyou-cheems.github.io/Bomana/) | [GitHub Releases](https://github.com/Thankyou-Cheems/Bomana/releases)
+[China site / CDN downloads](https://ruikang.wang/bomana/) | [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) | [GitHub Releases (backup)](https://github.com/Thankyou-Cheems/Bomana/releases)
 
 ---
 
@@ -210,7 +211,7 @@ Notes:
 - Newer launchers keep one previous app version for rollback  
 - App 8.0.0+ requires Launcher 3.0.0+  
 - Display name: `Bomana香焦`  
-- Site entry: [project site](https://thankyou-cheems.github.io/Bomana/)
+- Site entry: [China site / CDN](https://ruikang.wang/bomana/) or [GitHub Pages](https://thankyou-cheems.github.io/Bomana/)
 
 ### Optional: source run
 

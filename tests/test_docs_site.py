@@ -7,6 +7,14 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 
+ALLOWED_EXTERNAL_NETLOCS = {
+    "docs.github.com",
+    "github.com",
+    "thankyou-cheems.github.io",
+    "bomanaupdate.ruikang.wang",
+    "ruikang.wang",
+}
+
 
 class SiteParser(HTMLParser):
     def __init__(self) -> None:
@@ -46,6 +54,7 @@ def test_github_pages_site_has_new_user_and_permission_paths() -> None:
         "docs",
         "heroDownload",
         "launcherDownload",
+        "launcherDownloadGithub",
         "releaseStatus",
         "releaseAssets",
     } <= parser.ids
@@ -53,6 +62,8 @@ def test_github_pages_site_has_new_user_and_permission_paths() -> None:
     assert "三步开始" in html
     assert "只读官方 localhost:8111" in html
     assert "Artifact Attestations" in html
+    assert "国内 CDN" in html
+    assert "GitHub 备用" in html
     assert parser.inline_scripts == 0
 
 
@@ -65,13 +76,23 @@ def test_github_pages_local_assets_exist_and_no_external_runtime_assets() -> Non
     assert not [
         asset
         for asset in parser.external_assets
-        if urlparse(asset).netloc
-        not in {
-            "docs.github.com",
-            "github.com",
-            "thankyou-cheems.github.io",
-        }
+        if urlparse(asset).netloc not in ALLOWED_EXTERNAL_NETLOCS
     ]
+
+
+def test_download_catalog_points_at_tencent_cdn() -> None:
+    import json
+
+    catalog = json.loads((DOCS / "download-catalog.json").read_text(encoding="utf-8"))
+    assert catalog["primary_source"] == "TencentCloud"
+    assert catalog["cdn_base"].startswith("https://bomanaupdate.ruikang.wang")
+    assert catalog["launcher"]["package_url"].startswith(
+        "https://bomanaupdate.ruikang.wang/downloads/"
+    )
+    assert "Enhanced" in catalog["channels"]
+    assert catalog["channels"]["Enhanced"]["package_url"].startswith(
+        "https://bomanaupdate.ruikang.wang/downloads/"
+    )
 
 
 def test_site_styles_are_responsive_and_accessible() -> None:
@@ -82,7 +103,22 @@ def test_site_styles_are_responsive_and_accessible() -> None:
     assert "@media (prefers-reduced-motion: reduce)" in css
     assert ":focus-visible" in css
     assert ".skip-link" in css
-    assert "api.github.com" in javascript
+    assert "gallery-stack" in css
+    assert "height: auto" in css
+    assert "bomanaupdate.ruikang.wang" in javascript
+    assert "download-catalog.json" in javascript
+    assert "api.github.com" in javascript  # backup metadata only
     assert "BomanaHotkeyBrokerSetup" not in javascript
     assert "textContent" in javascript
     assert "innerHTML" not in javascript
+
+
+def test_deploy_pages_mirror_tool_is_local_push_only() -> None:
+    source = (ROOT / "tools" / "deploy_pages_mirror.py").read_text(encoding="utf-8")
+    assert "never pull from GitHub" in source or "never fetches GitHub" in source
+    assert "TencentCloudPublic" in source
+    assert "/opt/Website/bomana" in source
+    assert "scp" in source
+    # Must not instruct the remote to clone or curl GitHub.
+    assert "git clone" not in source
+    assert "api.github.com" not in source
