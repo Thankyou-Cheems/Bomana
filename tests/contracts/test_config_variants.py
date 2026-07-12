@@ -1,4 +1,4 @@
-# enforces: docs/specs/config-variants.md CFG-01..CFG-04 CFG-06..CFG-14
+# enforces: docs/specs/config-variants.md CFG-01..CFG-04 CFG-06..CFG-16
 
 from __future__ import annotations
 
