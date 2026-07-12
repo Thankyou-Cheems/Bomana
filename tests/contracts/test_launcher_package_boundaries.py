@@ -17,13 +17,15 @@ class GuardedManifest(dict[str, Any]):
     def __init__(self) -> None:
         super().__init__(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "channel": "Enhanced",
                 "app_version": "8.0.0",
                 "min_launcher_version": "3.0.0",
                 "entrypoint": "Bomana.pyw",
                 "package_asset": "Bomana_app_Enhanced_v8.0.0.zip",
                 "package_sha256": "a" * 64,
+                "changelog_asset": "CHANGELOG_Enhanced_v8.0.0.md",
+                "changelog_sha256": "c" * 64,
                 "launcher_version": "3.0.0",
                 "launcher_asset": "Bomana_launcher_v3.0.0.exe",
                 "launcher_sha256": "b" * 64,
@@ -65,13 +67,15 @@ def test_project_verified_manifest_fields_does_not_trust_fields_before_verify(
 
 def test_verified_app_manifest_projection_exposes_only_trusted_runtime_fields() -> None:
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "channel": "Enhanced",
         "app_version": "8.0.0",
         "min_launcher_version": "3.0.0",
         "entrypoint": "Bomana.pyw",
         "package_asset": "Bomana_app_Enhanced_v8.0.0.zip",
         "package_sha256": "a" * 64,
+        "changelog_asset": "CHANGELOG_Enhanced_v8.0.0.md",
+        "changelog_sha256": "c" * 64,
     }
 
     signed = launcher_core.sign_release_manifest(
@@ -108,6 +112,8 @@ def test_verified_app_manifest_projection_exposes_only_trusted_runtime_fields() 
         "min_launcher_version": "3.0.0",
         "package_asset": "Bomana_app_Enhanced_v8.0.0.zip",
         "package_sha256": "a" * 64,
+        "changelog_asset": "CHANGELOG_Enhanced_v8.0.0.md",
+        "changelog_sha256": "c" * 64,
         "entrypoint": "Bomana.pyw",
     }
 

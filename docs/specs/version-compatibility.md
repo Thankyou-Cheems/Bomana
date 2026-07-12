@@ -12,8 +12,9 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 
 ## Non-goals
 
-- This spec does not change release-manifest schema version 1, Ed25519 signing,
-  signed field sets, update-service internals, or release deployment ordering.
+- This spec does not change Ed25519 signing, update-service internals, or
+  release deployment ordering; those remain governed by the release-signing
+  contract.
 - It does not authorize importing or executing untrusted staged package code to
   discover a version.
 - It does not make version identity a substitute for release signature or
@@ -73,9 +74,10 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
   final Launcher-to-App handoff MUST surface any new recovery rejection that
   appeared after the Launcher window was rendered, synchronously before App
   entry; a separately validated valid current App MAY continue afterward.
-- `COMPAT-20`: This boundary MUST retain manifest `schema_version: 1` and the
-  exact App and Launcher signed field sets in the release-signing contract; it MUST NOT add a
-  compatibility field to either signed payload or manifest schema.
+- `COMPAT-20`: The App release manifest MUST use `schema_version: 2` and retain
+  the exact App signed field set from the release-signing contract, including
+  its signed changelog asset and SHA256. It MUST NOT add a compatibility field
+  beyond `min_launcher_version` to either signed payload or manifest schema.
 
 ## Contract Coverage
 
@@ -97,7 +99,7 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
   install-transaction preflight failures.
 - [behavioral] `tests/test_build_metadata.py` enforces `COMPAT-04..COMPAT-07`,
   `COMPAT-13`, `COMPAT-14`, and `COMPAT-20` through App/Launcher metadata,
-  package-manifest agreement, and unchanged schema/signature fields.
+  package-manifest agreement, and schema/signature fields.
 - [manual] Packaged Launcher smoke confirms `COMPAT-07..COMPAT-10`,
   `COMPAT-18`, and `COMPAT-19` before release without claiming that source-mode
   tests prove the frozen initialization boundary.

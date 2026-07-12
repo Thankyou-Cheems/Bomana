@@ -324,6 +324,8 @@ _APP_MANIFEST_SIGNATURE_FIELDS = (
     "entrypoint",
     "package_asset",
     "package_sha256",
+    "changelog_asset",
+    "changelog_sha256",
 )
 _LAUNCHER_MANIFEST_SIGNATURE_FIELDS = (
     "schema_version",

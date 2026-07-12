@@ -249,6 +249,7 @@ def test_local_deploy_script_accepts_build_portable_all_checksum_names(tmp_path:
     for channel in deploy.CHANNELS:
         (tmp_path / f"Bomana_app_{channel}_v{metadata.__version__}.zip").touch()
         (tmp_path / f"manifest_{channel}.json").touch()
+        (tmp_path / f"CHANGELOG_{channel}_v{metadata.__version__}.md").touch()
         (tmp_path / f"checksums_app_{channel}.txt").touch()
     (tmp_path / f"Bomana_launcher_v{launcher_version}.exe").touch()
     (tmp_path / "launcher_manifest.json").touch()

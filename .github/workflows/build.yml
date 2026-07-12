@@ -298,6 +298,7 @@ jobs:
           subject-path: |
             dist/Bomana_app_${{ matrix.variant.slug }}_v${{ needs.prepare.outputs.version }}.zip
             dist/manifest_${{ matrix.variant.slug }}.json
+            dist/CHANGELOG_${{ matrix.variant.slug }}_v${{ needs.prepare.outputs.version }}.md
             dist/checksums_app_${{ matrix.variant.slug }}.txt
 
       - name: 上传应用包产物
@@ -307,6 +308,7 @@ jobs:
           path: |
             dist/Bomana_app_${{ matrix.variant.slug }}_v${{ needs.prepare.outputs.version }}.zip
             dist/manifest_${{ matrix.variant.slug }}.json
+            dist/CHANGELOG_${{ matrix.variant.slug }}_v${{ needs.prepare.outputs.version }}.md
             dist/checksums_app_${{ matrix.variant.slug }}.txt
 
   build_launcher:

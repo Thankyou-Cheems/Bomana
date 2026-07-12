@@ -62,13 +62,15 @@ def test_release_manifest_signature_rejects_tampering() -> None:
     private_key = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
     public_key = launcher_core.ed25519_public_key_from_private_key(private_key)
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "channel": "Enhanced",
         "app_version": "6.14.4",
         "min_launcher_version": "2.0.0",
         "entrypoint": "Bomana.pyw",
         "package_asset": "Bomana_app_Enhanced_v6.14.4.zip",
         "package_sha256": "a" * 64,
+        "changelog_asset": "CHANGELOG_Enhanced_v6.14.4.md",
+        "changelog_sha256": "c" * 64,
     }
     signed = launcher_core.sign_release_manifest(
         manifest,
@@ -100,13 +102,15 @@ def test_release_manifest_signature_rejects_kind_confusion() -> None:
     public_key = launcher_core.ed25519_public_key_from_private_key(private_key)
     signed = launcher_core.sign_release_manifest(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "channel": "Enhanced",
             "app_version": "6.14.4",
             "min_launcher_version": "2.0.0",
             "entrypoint": "Bomana.pyw",
             "package_asset": "Bomana_app_Enhanced_v6.14.4.zip",
             "package_sha256": "a" * 64,
+            "changelog_asset": "CHANGELOG_Enhanced_v6.14.4.md",
+            "changelog_sha256": "c" * 64,
         },
         private_key,
         key_id="test-key",

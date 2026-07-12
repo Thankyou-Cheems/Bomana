@@ -92,6 +92,7 @@ def required_assets(dist: Path, target: str, app_version: str, launcher_version:
                 [
                     dist / f"Bomana_app_{channel}_v{app_version}.zip",
                     dist / f"manifest_{channel}.json",
+                    dist / f"CHANGELOG_{channel}_v{app_version}.md",
                     dist / f"checksums_app_{channel}.txt",
                 ]
             )
@@ -173,6 +174,11 @@ def validate_local_release_assets(
             asset_src = local_asset_path(dist, manifest.get("package_asset"), "package_asset")
             if sha256_file(asset_src) != str(manifest.get("package_sha256", "")).lower():
                 raise RuntimeError(f"{asset_src.name} sha256 mismatch")
+            changelog_src = local_asset_path(
+                dist, manifest.get("changelog_asset"), "changelog_asset"
+            )
+            if sha256_file(changelog_src) != str(manifest.get("changelog_sha256", "")).lower():
+                raise RuntimeError(f"{changelog_src.name} sha256 mismatch")
 
     if target in {"launcher", "all"}:
         manifest_src = dist / "launcher_manifest.json"
@@ -307,13 +313,20 @@ if target in {"app", "all"}:
         manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
         require_manifest_signature(manifest, manifest_src.name)
         asset_src = stage_asset_path(stage_dir, manifest["package_asset"], "package_asset")
+        changelog_src = stage_asset_path(
+            stage_dir, manifest["changelog_asset"], "changelog_asset"
+        )
         asset_sha = hashlib.sha256(asset_src.read_bytes()).hexdigest()
         if asset_sha != manifest["package_sha256"]:
             raise SystemExit(f"{asset_src.name} sha256 mismatch")
+        changelog_sha = hashlib.sha256(changelog_src.read_bytes()).hexdigest()
+        if changelog_sha != manifest["changelog_sha256"]:
+            raise SystemExit(f"{changelog_src.name} sha256 mismatch")
         if manifest["app_version"] != app_version:
             raise SystemExit(f"{manifest_src.name} app_version mismatch")
 
         shutil.copy2(asset_src, download_dir / asset_src.name)
+        shutil.copy2(changelog_src, download_dir / changelog_src.name)
         checksum_src = stage_dir / f"checksums_app_{channel}.txt"
         if checksum_src.exists():
             shutil.copy2(checksum_src, download_dir / checksum_src.name)
@@ -424,6 +437,12 @@ def verify_public(
                 expected_kind="app",
             )
             verify_public_asset(payload, f"app_{channel}", payload["package_sha256"])
+            package_url = public_asset_url(payload.get("package_url"))
+            changelog_url = urljoin(package_url, str(payload["changelog_asset"]))
+            if sha256_url(changelog_url) != str(payload["changelog_sha256"]).lower():
+                raise RuntimeError(
+                    f"app_{channel} public changelog sha256 mismatch: {changelog_url}"
+                )
             print(
                 "verified_app=",
                 payload["app_version"],

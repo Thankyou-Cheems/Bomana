@@ -60,7 +60,7 @@ SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
 SIGNING_PUBLIC_KEY_ENV = "BOMANA_RELEASE_ED25519_PUBLIC_KEY"
 SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
 PACKAGED_LAUNCHER_REQUIRES_PYTHON = ">=3.14"
-PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.0.0"
+PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.2.0"
 WEB_CONTROL_SCHEMA_PATHS = (
     Path("docs/specs/schemas/web-dashboard-command.schema.json"),
     Path("docs/specs/schemas/web-dashboard-command-response.schema.json"),
@@ -480,19 +480,36 @@ def write_manifest(
     app_zip_name: str,
     app_sha256: str,
     min_launcher_version: str,
+    changelog_name: str,
+    changelog_sha256: str,
 ) -> Path:
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "channel": variant,
         "app_version": version,
         "min_launcher_version": min_launcher_version,
         "entrypoint": APP_ENTRY,
         "package_asset": app_zip_name,
         "package_sha256": app_sha256,
+        "changelog_asset": changelog_name,
+        "changelog_sha256": changelog_sha256,
     }
     manifest = sign_manifest(manifest)
     path = out_dir / f"manifest_{variant}.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def write_changelog_asset(root: Path, out_dir: Path, variant: str, version: str) -> Path:
+    source = (root / "docs" / "CHANGELOG.md").read_text(encoding="utf-8")
+    marker = f"## [{version}]"
+    start = source.find(marker)
+    if start < 0:
+        raise RuntimeError(f"docs/CHANGELOG.md missing release section {marker}")
+    next_heading = source.find("\n## [", start + len(marker))
+    notes = source[start : next_heading if next_heading >= 0 else len(source)].strip() + "\n"
+    path = out_dir / f"CHANGELOG_{variant}_v{version}.md"
+    path.write_text(notes, encoding="utf-8")
     return path
 
 
@@ -578,6 +595,7 @@ def main() -> int:
     app_version: str | None = None
     launcher_version: str | None = None
     checksums: list[Path] = []
+    changelog: Path | None = None
 
     try:
         source_app_version = read_version(metadata_text)
@@ -608,6 +626,7 @@ def main() -> int:
                 hotkey_broker,
             )
             app_sha = sha256_file(app_zip)
+            changelog = write_changelog_asset(root, out_dir, args.variant, app_version)
             manifest = write_manifest(
                 out_dir,
                 args.variant,
@@ -615,6 +634,8 @@ def main() -> int:
                 app_zip.name,
                 app_sha,
                 min_launcher_version,
+                changelog.name,
+                sha256_file(changelog),
             )
 
         if args.target in ("all", "launcher"):
@@ -664,6 +685,8 @@ def main() -> int:
             safe_print(f"  - app package: {app_zip}")
         if manifest and manifest.exists():
             safe_print(f"  - manifest:    {manifest}")
+        if changelog and changelog.exists():
+            safe_print(f"  - changelog:   {changelog}")
         if launcher and launcher.exists():
             safe_print(f"  - launcher:    {launcher}")
         if launcher_manifest and launcher_manifest.exists():

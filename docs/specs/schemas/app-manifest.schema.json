@@ -10,7 +10,9 @@
     "min_launcher_version",
     "entrypoint",
     "package_asset",
-    "package_sha256"
+    "package_sha256",
+    "changelog_asset",
+    "changelog_sha256"
   ],
   "type": "object",
   "required": [
@@ -21,12 +23,14 @@
     "entrypoint",
     "package_asset",
     "package_sha256",
+    "changelog_asset",
+    "changelog_sha256",
     "manifest_signature"
   ],
   "properties": {
     "schema_version": {
       "type": "integer",
-      "minimum": 1
+      "const": 2
     },
     "channel": {
       "type": "string",
@@ -49,6 +53,14 @@
       "pattern": "^Bomana_app_(Enhanced|Standard|Lite)_v.+[.]zip$"
     },
     "package_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "changelog_asset": {
+      "type": "string",
+      "pattern": "^CHANGELOG_(Enhanced|Standard|Lite)_v.+[.]md$"
+    },
+    "changelog_sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },

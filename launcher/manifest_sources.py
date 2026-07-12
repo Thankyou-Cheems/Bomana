@@ -47,7 +47,8 @@ def verified_app_manifest_fields(
     validate_app_manifest_channel(fields, channel, label)
     remote_version = str(fields.get("app_version", "")).strip()
     package_asset = str(fields.get("package_asset", "")).strip()
-    if not remote_version or not package_asset:
+    changelog_asset = str(fields.get("changelog_asset", "")).strip()
+    if not remote_version or not package_asset or not changelog_asset:
         raise RuntimeError("发布清单字段缺失")
     return {
         "remote_version": remote_version,
@@ -56,6 +57,11 @@ def verified_app_manifest_fields(
         "package_sha256": require_remote_checksum(
             fields.get("package_sha256", ""),
             artifact_label=label,
+        ),
+        "changelog_asset": changelog_asset,
+        "changelog_sha256": require_remote_checksum(
+            fields.get("changelog_sha256", ""),
+            artifact_label=f"{label}更新日志",
         ),
         "entrypoint": validate_app_manifest_entrypoint(
             fields.get("entrypoint", default_entrypoint),

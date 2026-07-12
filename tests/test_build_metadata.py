@@ -286,7 +286,28 @@ def test_build_portable_refuses_unsigned_manifests(tmp_path: Path, monkeypatch) 
             f"Bomana_app_Enhanced_v{metadata.__version__}.zip",
             "a" * 64,
             metadata.PORTABLE_MIN_LAUNCHER_VERSION,
+            f"CHANGELOG_Enhanced_v{metadata.__version__}.md",
+            "c" * 64,
         )
+
+
+def test_build_portable_writes_version_specific_changelog(tmp_path: Path) -> None:
+    build_portable = load_tool_module("build_portable_changelog", "tools/build_portable.py")
+    root = tmp_path / "repo"
+    output = tmp_path / "dist"
+    root.mkdir()
+    output.mkdir()
+    (root / "docs").mkdir()
+    (root / "docs" / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [2.0.0]\n\n- new feature\n\n---\n## [1.0.0]\n\n- old\n",
+        encoding="utf-8",
+    )
+
+    path = build_portable.write_changelog_asset(root, output, "Enhanced", "2.0.0")
+
+    assert path.name == "CHANGELOG_Enhanced_v2.0.0.md"
+    assert "new feature" in path.read_text(encoding="utf-8")
+    assert "old" not in path.read_text(encoding="utf-8")
 
 
 def test_build_portable_rejects_signing_key_mismatch(tmp_path: Path, monkeypatch) -> None:
@@ -302,6 +323,8 @@ def test_build_portable_rejects_signing_key_mismatch(tmp_path: Path, monkeypatch
             f"Bomana_app_Enhanced_v{metadata.__version__}.zip",
             "a" * 64,
             metadata.PORTABLE_MIN_LAUNCHER_VERSION,
+            f"CHANGELOG_Enhanced_v{metadata.__version__}.md",
+            "c" * 64,
         )
 
 

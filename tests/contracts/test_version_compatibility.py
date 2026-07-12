@@ -81,9 +81,9 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
     assert boundary.parse_strict_version(
         app_version_match.group(1)
     ) >= boundary.parse_strict_version(boundary.MIN_SUPPORTED_APP_VERSION)
-    assert 'PORTABLE_MIN_LAUNCHER_VERSION = "3.0.0"' in app_metadata
-    assert 'LAUNCHER_VERSION = "3.1.0"' in launcher_metadata
-    assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.0.0"' in build
+    assert 'PORTABLE_MIN_LAUNCHER_VERSION = "3.2.0"' in app_metadata
+    assert 'LAUNCHER_VERSION = "3.2.0"' in launcher_metadata
+    assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.2.0"' in build
 
 
 def test_all_compatibility_entry_paths_use_the_shared_boundary() -> None:
@@ -180,7 +180,7 @@ def test_recovery_treats_a_dangling_reparse_entry_as_a_present_slot(
     assert not (tmp_path / install_txn.APP_DIR_NAME).exists()
 
 
-def test_release_manifest_v1_and_signed_fields_are_unchanged() -> None:
+def test_release_manifest_v2_and_signed_fields_match_contract() -> None:
     app_schema = json.loads(
         (ROOT / "docs/specs/schemas/app-manifest.schema.json").read_text(encoding="utf-8")
     )
@@ -198,6 +198,8 @@ def test_release_manifest_v1_and_signed_fields_are_unchanged() -> None:
             "entrypoint",
             "package_asset",
             "package_sha256",
+            "changelog_asset",
+            "changelog_sha256",
         )
         == launcher_core._APP_MANIFEST_SIGNATURE_FIELDS
     )
@@ -212,7 +214,7 @@ def test_release_manifest_v1_and_signed_fields_are_unchanged() -> None:
         )
         == launcher_core._LAUNCHER_MANIFEST_SIGNATURE_FIELDS
     )
-    assert app_schema["properties"]["schema_version"]["minimum"] == 1
+    assert app_schema["properties"]["schema_version"]["const"] == 2
     assert launcher_schema["properties"]["schema_version"]["minimum"] == 1
     assert "min_app_version" not in app_schema["properties"]
     assert "min_app_version" not in launcher_schema["properties"]

@@ -25,9 +25,9 @@ bundled inside each App package.
   and `manifest_signature.signature`.
 - `SIGN-02`: The signed app payload is exactly `schema_version`, `channel`,
   `app_version`, `min_launcher_version`, `entrypoint`, `package_asset`, and
-  `package_sha256`. The signed launcher payload is exactly `schema_version`,
-  `launcher_version`, `launcher_asset`, `launcher_sha256`, and
-  `launcher_size_bytes`.
+  `package_sha256`, `changelog_asset`, and `changelog_sha256`. The signed
+  launcher payload is exactly `schema_version`, `launcher_version`,
+  `launcher_asset`, `launcher_sha256`, and `launcher_size_bytes`.
 - `SIGN-03`: Launcher and deploy code must call
   `verify_release_manifest_signature(expected_kind=...)` before trusting version,
   asset, SHA256, entrypoint, or URL fields. Launcher updates must prefer signed
@@ -73,11 +73,16 @@ bundled inside each App package.
   manifest verification and SHA256 asset checks; user documentation MUST state
   that `gh attestation verify <artifact> --repo Thankyou-Cheems/Bomana` verifies
   GitHub build provenance but does not create an Authenticode/UAC publisher.
+- `SIGN-15`: Each App release MUST publish a version-specific changelog asset;
+  Launcher MUST resolve it from the same selected source as the App manifest,
+  verify its signed SHA256 before display, and show it after a successful App
+  update. Changelog retrieval failure MAY warn without rolling back an already
+  verified App install.
 
 ## Contract Coverage
 
 - [behavioral] `tests/contracts/test_manifest_schemas.py` enforces `SIGN-01`,
-  `SIGN-02`, and `SIGN-10` with schema validation plus real Ed25519
+  `SIGN-02`, `SIGN-10`, and `SIGN-15` with schema validation plus real Ed25519
   sign/verify/tamper checks.
 - [behavioral] `tests/contracts/test_launcher_package_boundaries.py` and
   `tests/test_launcher_core.py` enforce verify-before-projection, version-source,
@@ -90,5 +95,7 @@ bundled inside each App package.
   deployment, forwarding boundaries, input allowlists, least permissions,
   full-commit-pinned attestation actions, bundled broker packaging, and the
   absence of an installer/release-side broker asset.
+- [behavioral] `tests/test_launcher_update_service.py` enforces source-aligned
+  changelog resolution and SHA256 verification in `SIGN-15`.
 - [manual] Explicit maintainer approval of any private-key retention or rotation
   plan covers the authorization portion of `SIGN-05`.

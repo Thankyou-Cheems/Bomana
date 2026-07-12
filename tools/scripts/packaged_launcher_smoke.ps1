@@ -193,17 +193,23 @@ function Resolve-ReleaseArtifacts {
     Assert-StrictVersionAtLeast (Get-JsonProperty $launcherManifest "launcher_version") "3.0.0" "launcher_version"
 
     $appAsset = [string](Get-JsonProperty $appManifest "package_asset")
+    $changelogAsset = [string](Get-JsonProperty $appManifest "changelog_asset")
     $launcherAsset = [string](Get-JsonProperty $launcherManifest "launcher_asset")
     if ([string]::IsNullOrWhiteSpace($appAsset)) {
         throw "manifest_$VariantName.json package_asset is empty"
+    }
+    if ([string]::IsNullOrWhiteSpace($changelogAsset)) {
+        throw "manifest_$VariantName.json changelog_asset is empty"
     }
     if ([string]::IsNullOrWhiteSpace($launcherAsset)) {
         throw "launcher_manifest.json launcher_asset is empty"
     }
 
     $appPackage = Join-Path $artifactRoot $appAsset
+    $changelogFile = Join-Path $artifactRoot $changelogAsset
     $launcherExe = Join-Path $artifactRoot $launcherAsset
     Assert-FileSha256 $appPackage ([string](Get-JsonProperty $appManifest "package_sha256")) $appAsset
+    Assert-FileSha256 $changelogFile ([string](Get-JsonProperty $appManifest "changelog_sha256")) $changelogAsset
     Assert-FileSha256 $launcherExe ([string](Get-JsonProperty $launcherManifest "launcher_sha256")) $launcherAsset
 
     $expectedLauncherSize = [int64](Get-JsonProperty $launcherManifest "launcher_size_bytes")

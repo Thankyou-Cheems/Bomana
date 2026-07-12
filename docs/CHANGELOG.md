@@ -7,6 +7,12 @@
 ---
 ## [Unreleased]
 
+### Added
+
+- Launcher updates now show a signed, channel-matched "What's New" summary;
+  GitHub and Tencent Cloud releases publish and verify the same version-specific
+  changelog asset.
+
 ### 改进
 - 网页驾驶舱改为全屏战术 HUD：地图铺满视口，琥珀色仪器浮层叠在态势上；手机底栏突出切换武器，控制台与图例收入浮层。
 - 网页快照轮询提至约 20Hz（与 App UI 刷新对齐），地图与航向带优先重绘；官方地图底图后台刷新由 15s 收紧至 2s。

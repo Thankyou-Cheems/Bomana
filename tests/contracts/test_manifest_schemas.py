@@ -1,4 +1,4 @@
-# enforces: docs/specs/release-signing.md SIGN-01, SIGN-02, SIGN-10
+# enforces: docs/specs/release-signing.md SIGN-01, SIGN-02, SIGN-10, SIGN-15
 
 from __future__ import annotations
 
@@ -119,13 +119,15 @@ def test_app_manifest_schema_matches_signed_payload_fields() -> None:
     assert signed_fields == launcher_core._APP_MANIFEST_SIGNATURE_FIELDS
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "channel": "Enhanced",
         "app_version": "7.0.0",
         "min_launcher_version": "2.0.0",
         "entrypoint": "Bomana.pyw",
         "package_asset": "Bomana_app_Enhanced_v7.0.0.zip",
         "package_sha256": "a" * 64,
+        "changelog_asset": "CHANGELOG_Enhanced_v7.0.0.md",
+        "changelog_sha256": "c" * 64,
     }
 
     signed_manifest = sign_and_roundtrip(manifest)

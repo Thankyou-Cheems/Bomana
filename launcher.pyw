@@ -26,7 +26,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import (
     HTTPHandler,
     HTTPSHandler,
@@ -1311,6 +1311,13 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
     if not package_url:
         raise RuntimeError("应用包下载地址无效")
     package_size = app_asset.get("size", None)
+    changelog_asset = str(trusted["changelog_asset"])
+    changelog_release_asset = _find_asset(assets, changelog_asset)
+    if not changelog_release_asset:
+        raise RuntimeError(f"未找到更新日志: {changelog_asset}")
+    changelog_url = str(changelog_release_asset.get("browser_download_url", "")).strip()
+    if not changelog_url:
+        raise RuntimeError("更新日志下载地址无效")
 
     return {
         "remote_version": remote_version,
@@ -1320,6 +1327,9 @@ def _manifest_from_github_release(release: Dict[str, Any], channel: str) -> Dict
         "package_asset": package_asset,
         "entrypoint": entrypoint,
         "package_size": package_size,
+        "changelog_url": changelog_url,
+        "changelog_asset": changelog_asset,
+        "changelog_sha256": str(trusted["changelog_sha256"]),
         "source_name": (f"GitHub ({tag_name})" if tag_name else "GitHub"),
     }
 
@@ -1464,6 +1474,8 @@ def _fetch_manifest_from_primary(
     )
     package_sha256 = str(trusted["package_sha256"])
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
+    changelog_asset = str(trusted["changelog_asset"])
+    changelog_url = urljoin(package_url, changelog_asset)
     entrypoint = str(trusted["entrypoint"])
     source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     if used_anonymous_fallback:
@@ -1477,6 +1489,9 @@ def _fetch_manifest_from_primary(
         "package_asset": str(trusted["package_asset"]),
         "entrypoint": entrypoint,
         "package_size": package_size,
+        "changelog_url": changelog_url,
+        "changelog_asset": changelog_asset,
+        "changelog_sha256": str(trusted["changelog_sha256"]),
         "source_name": source_name,
     }
 
@@ -1843,6 +1858,24 @@ class UpdateService:
             status_cb=self.notify,
             cancel_cb=self.cancel_cb,
         )
+
+    def fetch_whats_new(self, manifest: Dict[str, Any]) -> str:
+        changelog_url = str(manifest.get("changelog_url", "")).strip()
+        expected_sha256 = _require_remote_checksum(
+            manifest.get("changelog_sha256", ""),
+            artifact_label="更新日志清单",
+        )
+        if not changelog_url:
+            raise RuntimeError("更新日志地址缺失")
+        content = _fetch_bytes(changelog_url, cancel_cb=self.cancel_cb)
+        if len(content) > 512 * 1024:
+            raise RuntimeError("更新日志超过 512 KiB 限制")
+        if _sha256_bytes(content) != expected_sha256:
+            raise RuntimeError("更新日志 SHA256 校验失败")
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError("更新日志不是有效 UTF-8") from exc
 
     def download_launcher_update(self, manifest: Dict[str, Any]) -> Tuple[str, str]:
         return _download_launcher_update_from_manifest(
@@ -2774,6 +2807,58 @@ class LauncherDetailsDialog(tk.Toplevel):
         x = max(0, px + (pw - w) // 2)
         y = max(0, py + (ph - h) // 2)
         self.geometry(f"+{x}+{y}")
+
+
+class WhatsNewDialog(tk.Toplevel):
+    """Verified release notes shown after a successful App update."""
+
+    def __init__(self, parent: tk.Tk, version: str, source_name: str, content: str):
+        super().__init__(parent)
+        self.title("What's New")
+        self.configure(bg=_THEME["BG"])
+        self.transient(parent)
+        self.grab_set()
+        self.geometry("720x560")
+        self.minsize(560, 420)
+        _apply_window_icon(self)
+
+        tk.Label(
+            self,
+            text=f"Bomana v{version} · What's New",
+            bg=_THEME["BG"],
+            fg=_THEME["TEXT"],
+            font=("Segoe UI", 16, "bold"),
+            anchor="w",
+        ).pack(fill="x", padx=18, pady=(16, 4))
+        tk.Label(
+            self,
+            text=f"已从 {source_name or '当前更新渠道'} 获取并通过 SHA256 校验",
+            bg=_THEME["BG"],
+            fg=_THEME["TEXT_DIM"],
+            anchor="w",
+        ).pack(fill="x", padx=18, pady=(0, 10))
+        frame = tk.Frame(self, bg=_THEME["BORDER"])
+        frame.pack(fill="both", expand=True, padx=18, pady=(0, 12))
+        scrollbar = tk.Scrollbar(frame)
+        scrollbar.pack(side="right", fill="y")
+        text = tk.Text(
+            frame,
+            wrap="word",
+            bg=_THEME["GRAYPILL"],
+            fg=_THEME["TEXT"],
+            insertbackground=_THEME["TEXT"],
+            relief="flat",
+            padx=12,
+            pady=10,
+            yscrollcommand=scrollbar.set,
+        )
+        text.pack(fill="both", expand=True, padx=1, pady=1)
+        scrollbar.config(command=text.yview)
+        text.insert("1.0", content)
+        text.config(state="disabled")
+        close_btn = tk.Button(self, text="知道了", command=self.destroy, takefocus=False)
+        style_action_button(close_btn, "primary")
+        close_btn.pack(side="right", padx=18, pady=(0, 16))
 
 
 class LauncherWindow:
@@ -3814,6 +3899,8 @@ class LauncherWindow:
         update_ok = False
         update_source = ""
         update_error = ""
+        whats_new = ""
+        whats_new_warning = ""
         local_ready = _is_local_app_ready(self.base)
         manifest = dict(self.latest_manifest or {})
         try:
@@ -3822,6 +3909,11 @@ class LauncherWindow:
             final_version, update_source = service.download_app_update(manifest)
             update_ok = True
             local_ready = _is_local_app_ready(self.base)
+            try:
+                whats_new = service.fetch_whats_new(manifest)
+            except Exception as exc:
+                whats_new_warning = f"更新日志获取失败：{exc}"
+                _log(self.base, whats_new_warning)
         except Exception as e:
             update_error = _friendly_error_text(e, self.channel)
             _log(self.base, f"下载更新失败：{e}")
@@ -3860,6 +3952,9 @@ class LauncherWindow:
                         "update_ok": True,
                         "final_version": final_version,
                         "warning": "",
+                        "whats_new": whats_new,
+                        "whats_new_warning": whats_new_warning,
+                        "source_name": update_source,
                         "status": "下载完成",
                         "detail": (
                             f"已更新到 v{final_version}（来源：{update_source}）。现在可点击“启动应用”。\n"
@@ -4025,6 +4120,18 @@ class LauncherWindow:
                         self.latest_package_size = None
                         self.last_check_ok = True
                         self.last_download_success = True
+                        whats_new = str(payload.get("whats_new", "")).strip()
+                        if whats_new:
+                            WhatsNewDialog(
+                                self.root,
+                                final_version,
+                                str(payload.get("source_name", "")),
+                                whats_new,
+                            )
+                        else:
+                            whats_new_warning = str(payload.get("whats_new_warning", "")).strip()
+                            if whats_new_warning:
+                                messagebox.showwarning("What's New", whats_new_warning, parent=self.root)
                     else:
                         self.last_download_success = False
                     self._set_running(False)

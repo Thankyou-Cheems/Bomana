@@ -1,3 +1,4 @@
+import hashlib
 import importlib.machinery
 import importlib.util
 import io
@@ -98,6 +99,12 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         write_config_package(previous_dir / "bomana", version)
 
     def signed_manifest(self, manifest: dict) -> dict:
+        manifest = dict(manifest)
+        manifest["schema_version"] = 2
+        channel = str(manifest.get("channel", "Enhanced"))
+        version = str(manifest.get("app_version", "0.0.0")).strip()
+        manifest.setdefault("changelog_asset", f"CHANGELOG_{channel}_v{version}.md")
+        manifest.setdefault("changelog_sha256", "c" * 64)
         return launcher_core.sign_release_manifest(
             manifest,
             TEST_SIGNING_PRIVATE_KEY,
@@ -124,6 +131,10 @@ class LauncherUpdateServiceTests(unittest.TestCase):
                     "name": "Bomana_app_Enhanced_v2.0.0.zip",
                     "browser_download_url": "https://example.invalid/app.zip",
                     "size": 10,
+                },
+                {
+                    "name": "CHANGELOG_Enhanced_v8.1.0.md",
+                    "browser_download_url": "https://example.invalid/changelog.md",
                 },
             ],
         }
@@ -156,6 +167,10 @@ class LauncherUpdateServiceTests(unittest.TestCase):
                     "browser_download_url": "https://example.invalid/app.zip",
                     "size": 10,
                 },
+                {
+                    "name": "CHANGELOG_Enhanced_v8.1.0.md",
+                    "browser_download_url": "https://example.invalid/changelog.md",
+                },
             ],
         }
         manifest = self.signed_manifest(
@@ -179,6 +194,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertEqual(parsed["remote_version"], "8.1.0")
         self.assertEqual(parsed["package_sha256"], "a" * 64)
         self.assertEqual(parsed["package_url"], "https://example.invalid/app.zip")
+        self.assertEqual(parsed["changelog_url"], "https://example.invalid/changelog.md")
 
     def test_verified_manifest_version_is_not_whitespace_normalized(self) -> None:
         release = {
@@ -446,6 +462,30 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             parsed["package_url"], "https://bomanaupdate.ruikang.wang/downloads/app.zip"
         )
         self.assertEqual(parsed["package_sha256"], "a" * 64)
+        self.assertEqual(
+            parsed["changelog_url"],
+            "https://bomanaupdate.ruikang.wang/downloads/CHANGELOG_Enhanced_v8.1.0.md",
+        )
+
+    def test_fetch_whats_new_verifies_signed_hash(self) -> None:
+        content = b"## [8.1.0]\n\n- verified notes\n"
+        service = self.launcher.UpdateService(self.base, "Enhanced", {})
+        manifest = {
+            "changelog_url": "https://example.invalid/CHANGELOG_Enhanced_v8.1.0.md",
+            "changelog_sha256": hashlib.sha256(content).hexdigest(),
+        }
+
+        with patch.object(self.launcher, "_fetch_bytes", return_value=content) as fetch:
+            result = service.fetch_whats_new(manifest)
+
+        self.assertEqual(result, content.decode("utf-8"))
+        fetch.assert_called_once_with(manifest["changelog_url"], cancel_cb=None)
+
+        with (
+            patch.object(self.launcher, "_fetch_bytes", return_value=b"tampered"),
+            self.assertRaisesRegex(RuntimeError, "SHA256"),
+        ):
+            service.fetch_whats_new(manifest)
 
     def test_primary_app_manifest_rejects_signed_wrong_channel_payload(self) -> None:
         payload = self.signed_manifest(
@@ -483,7 +523,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "source_name": "GitHub",
         }
         launcher_manifest = {
-            "remote_version": "3.2.0",
+            "remote_version": "3.3.0",
             "package_url": "https://example.invalid/launcher.exe",
             "package_sha256": "def",
             "package_size": "",
