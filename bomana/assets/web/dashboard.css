@@ -59,6 +59,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   z-index: 0;
   background: #04070c;
   touch-action: none;
+  transition: left .2s ease;
 }
 #tacticalMap {
   display: block;
@@ -1365,9 +1366,21 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 @media (max-width: 899px) {
   .hud-right { display: none; }
   .hud-left {
+    --hud-left-span: min(150px, 40vw);
     width: min(148px, 38vw);
     max-width: 150px;
     gap: 6px;
+  }
+  /* Expand readouts: shift the map into free space so ownship/targets stay usable. */
+  body.hud-left-expanded .map-stage {
+    left: calc(var(--hud-left-span, 150px) + 12px);
+  }
+  body.hud-left-expanded .map-legend-shell {
+    left: calc(var(--hud-left-span, 150px) + 14px);
+  }
+  body.hud-left-expanded .hud-left {
+    width: var(--hud-left-span, 150px);
+    max-width: none;
   }
   .hud-left-toggle {
     display: block;

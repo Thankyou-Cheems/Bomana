@@ -1814,12 +1814,25 @@ if (systemsToggle && systemsGrid) {
 const hudLeft = $("hudLeft");
 const hudLeftToggle = $("hudLeftToggle");
 if (hudLeft && hudLeftToggle) {
-  hudLeftToggle.addEventListener("click", () => {
-    const collapsed = hudLeft.classList.toggle("is-collapsed");
+  const syncHudLeftLayout = (collapsed) => {
     hudLeftToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     text("hudLeftToggleLabel", collapsed ? "展开读数" : "收起读数");
     const compact = $("hudLeftCompact");
     if (compact) compact.setAttribute("aria-hidden", collapsed ? "false" : "true");
+    document.body.classList.toggle("hud-left-expanded", !collapsed);
+    // Wait for CSS left transition to apply, then reflow the tactical canvas.
+    window.requestAnimationFrame(() => {
+      refreshCanvasMetrics(true);
+      renderCurrentMap();
+      window.setTimeout(() => {
+        refreshCanvasMetrics(true);
+        renderCurrentMap();
+      }, 220);
+    });
+  };
+  hudLeftToggle.addEventListener("click", () => {
+    const collapsed = hudLeft.classList.toggle("is-collapsed");
+    syncHudLeftLayout(collapsed);
   });
 }
 if (document.fonts) document.fonts.load("bold 18px Bomana8111Icons").then(renderCurrentMap, () => {});
