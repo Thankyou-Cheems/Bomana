@@ -674,6 +674,7 @@ def _make_handler(context: _RequestContext) -> type[BaseHTTPRequestHandler]:
             asset_name = {
                 "/assets/dashboard.css": "dashboard.css",
                 "/assets/dashboard.js": "dashboard.js",
+                "/assets/qrcode.js": "qrcode.js",
                 "/assets/app.png": "app.png",
                 "/favicon.svg": "favicon.svg",
             }.get(path)
@@ -940,6 +941,7 @@ def _load_assets(asset_root: Path | None = None) -> dict[str, tuple[str, bytes]]
         "index.html": (root / "index.html", "text/html; charset=utf-8"),
         "dashboard.css": (root / "dashboard.css", "text/css; charset=utf-8"),
         "dashboard.js": (root / "dashboard.js", "text/javascript; charset=utf-8"),
+        "qrcode.js": (root / "qrcode.js", "text/javascript; charset=utf-8"),
         "favicon.svg": (root / "favicon.svg", "image/svg+xml"),
         "app.png": (root.parent / "branding" / "app.png", "image/png"),
     }

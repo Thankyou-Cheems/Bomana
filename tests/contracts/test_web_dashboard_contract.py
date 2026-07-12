@@ -476,6 +476,7 @@ def test_routes_auth_headers_and_no_cors_are_closed_by_construction() -> None:
         'path == "/api/v1/commands"',
         '"/assets/dashboard.css"',
         '"/assets/dashboard.js"',
+        '"/assets/qrcode.js"',
         '"/assets/app.png"',
         '"/favicon.svg"',
     ):
@@ -499,7 +500,8 @@ def test_routes_auth_headers_and_no_cors_are_closed_by_construction() -> None:
 
 
 def test_browser_assets_are_self_hosted_and_do_not_execute_remote_code() -> None:
-    combined = "\n".join((HTML, CSS, JS)).lower()
+    qr_js = (ROOT / "bomana/assets/web/qrcode.js").read_text(encoding="utf-8")
+    combined = "\n".join((HTML, CSS, JS, qr_js)).lower()
     assert "http://" not in combined
     assert "https://" not in combined
     assert "@import" not in combined
@@ -519,6 +521,9 @@ def test_browser_assets_are_self_hosted_and_do_not_execute_remote_code() -> None
     assert "官方数据始终优先" in HTML
     assert "Bomana 托盘" not in HTML
     assert 'src="/assets/app.png"' in HTML
+    assert 'src="/assets/qrcode.js"' in HTML
+    assert "BomanaQr" in qr_js
+    assert "renderLanPairingQr" in JS
     assert "weaponRange" in JS
     assert "mapImage" in JS
 

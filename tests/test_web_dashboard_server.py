@@ -183,6 +183,7 @@ def test_dashboard_serves_self_hosted_assets_and_strict_headers(
     for path, expected_type in (
         ("/assets/dashboard.css", "text/css"),
         ("/assets/dashboard.js", "text/javascript"),
+        ("/assets/qrcode.js", "text/javascript"),
         ("/favicon.svg", "image/svg+xml"),
     ):
         asset_status, asset_headers, asset_body = _request(running_dashboard, "GET", path)
@@ -415,6 +416,7 @@ def test_dashboard_assets_are_packaged_under_existing_asset_root() -> None:
         "index.html",
         "dashboard.css",
         "dashboard.js",
+        "qrcode.js",
         "favicon.svg",
     }
 

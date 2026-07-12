@@ -187,6 +187,54 @@ function setWeaponPickersDisabled(disabled) {
   if (node) node.disabled = disabled;
 }
 
+function renderLanPairingQr(links) {
+  const canvas = $("lanQrCanvas");
+  const select = $("lanQrUrlSelect");
+  const label = $("lanQrUrlLabel");
+  const hint = $("lanQrHint");
+  if (!canvas) return;
+  const urls = (Array.isArray(links) ? links : []).map((item) => String(item || "")).filter(Boolean);
+  if (!urls.length) {
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      canvas.width = 200;
+      canvas.height = 200;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    if (label) label.hidden = true;
+    if (select) select.replaceChildren();
+    if (hint) hint.textContent = "开启局域网后将显示可扫码接入的配对二维码。";
+    return;
+  }
+  if (select && label) {
+    const previous = select.value;
+    select.replaceChildren();
+    for (const url of urls.slice(0, 16)) {
+      const option = document.createElement("option");
+      option.value = url;
+      option.textContent = url;
+      select.append(option);
+    }
+    if (previous && urls.includes(previous)) select.value = previous;
+    label.hidden = urls.length < 2;
+  }
+  const active = (select && select.value) || urls[0];
+  const qr = window.BomanaQr;
+  const ok = qr && typeof qr.renderToCanvas === "function"
+    ? qr.renderToCanvas(canvas, active, {
+      size: 220,
+      margin: 2,
+      dark: "#14110c",
+      light: "#f7f2e8",
+    })
+    : false;
+  if (hint) {
+    hint.textContent = ok
+      ? "用手机相机或系统扫码扫描后，将直接打开配对链接并接入。"
+      : "二维码生成失败，请改用下方链接复制。";
+  }
+}
+
 function setControlUnavailable(scopeLabel, helpText) {
   state.control = null;
   const scope = $("controlScope");
@@ -394,6 +442,7 @@ function renderControlState(payload) {
     }
     const copyButton = $("copyLanLinksButton");
     if (copyButton) copyButton.disabled = !links.length;
+    renderLanPairingQr(links);
   }
   text(
     "lanNetworkHelp",
@@ -1403,6 +1452,13 @@ function installControlHandlers() {
       setCommandStatus("无法复制链接，请手动长按选择", "error");
     }
   });
+  const lanQrSelect = $("lanQrUrlSelect");
+  if (lanQrSelect) {
+    lanQrSelect.addEventListener("change", () => {
+      const links = Array.from($("lanLinkList").querySelectorAll("li")).map((node) => node.textContent || "");
+      renderLanPairingQr(links.filter(Boolean));
+    });
+  }
   $("lockedOnButton").addEventListener("click", () => {
     void submitCommand(
       { schema_version: 1, command: "state.set_locked", locked: true },

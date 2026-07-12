@@ -980,6 +980,31 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   display: grid;
   gap: 8px;
 }
+.lan-qr-card {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(240, 160, 32, .28);
+  background:
+    linear-gradient(165deg, rgba(240,160,32,.1), rgba(8, 11, 16, .55));
+}
+.lan-qr-canvas {
+  width: min(220px, 70vw);
+  height: auto;
+  border-radius: 10px;
+  background: #f7f2e8;
+  box-shadow: 0 8px 24px rgba(0,0,0,.28);
+}
+.lan-qr-card .model-note,
+.lan-qr-card .select-setting {
+  width: 100%;
+  text-align: center;
+}
+.lan-qr-card .select-setting select {
+  text-align: left;
+}
 .lan-link-list {
   margin: 0;
   padding: 0;

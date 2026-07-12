@@ -145,7 +145,7 @@ def test_all_app_variants_bundle_web_cockpit(tmp_path: Path, variant: str) -> No
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
     for name in ("__init__.py", "control.py", "server.py", "snapshot.py"):
         (web_module_dir / name).write_text("", encoding="utf-8")
-    for name in ("index.html", "dashboard.css", "dashboard.js", "favicon.svg"):
+    for name in ("index.html", "dashboard.css", "dashboard.js", "qrcode.js", "favicon.svg"):
         (web_asset_dir / name).write_text(name, encoding="utf-8")
     (data_dir / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
     (schema_dir / "weapon-fire-control.schema.json").write_text("{}\n", encoding="utf-8")
@@ -163,6 +163,7 @@ def test_all_app_variants_bundle_web_cockpit(tmp_path: Path, variant: str) -> No
         "bomana/assets/web/index.html",
         "bomana/assets/web/dashboard.css",
         "bomana/assets/web/dashboard.js",
+        "bomana/assets/web/qrcode.js",
         "bomana/assets/web/favicon.svg",
         "bomana_version.py",
         "docs/specs/schemas/web-dashboard-command.schema.json",

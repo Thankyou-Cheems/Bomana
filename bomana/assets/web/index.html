@@ -227,6 +227,15 @@
             </div>
           </div>
           <div class="lan-links" id="lanLinksBlock" hidden>
+            <div class="lan-qr-card">
+              <span class="eyebrow">扫码接入</span>
+              <canvas id="lanQrCanvas" class="lan-qr-canvas" width="200" height="200" aria-label="局域网配对二维码"></canvas>
+              <p class="model-note" id="lanQrHint">用手机相机扫描后将直接打开配对链接。</p>
+              <label class="select-setting" for="lanQrUrlSelect" id="lanQrUrlLabel" hidden>
+                <span>选择链接</span>
+                <select id="lanQrUrlSelect"></select>
+              </label>
+            </div>
             <span class="eyebrow">手机访问链接</span>
             <ul class="lan-link-list" id="lanLinkList"></ul>
             <button type="button" class="ghost-btn" id="copyLanLinksButton" disabled>复制全部链接</button>
@@ -330,6 +339,7 @@
     </form>
   </div>
 
+  <script src="/assets/qrcode.js" defer></script>
   <script src="/assets/dashboard.js" defer></script>
 </body>
 </html>
