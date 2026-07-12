@@ -32,6 +32,12 @@
   on Standard/Lite, and forces those options off for the App handoff while
   keeping saved preferences for a later Enhanced channel.
 
+### Fixed
+- Launcher 3.2.2: What's New dialog no longer crashes on a missing theme key
+  (`GRAYPILL`), which left the window grab held and the UI stuck after download.
+  Download completion now leaves the running state before any modal, and release
+  notes fetch ignores cancel mid-flight.
+
 ### Added
 - Launcher updates now show a signed, channel-matched "What's New" summary;
   GitHub and Tencent Cloud releases publish and verify the same version-specific

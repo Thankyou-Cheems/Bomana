@@ -180,7 +180,7 @@ auto-open 在 autostart 关闭时不单独启动服务。退出后本机和 LAN 
 
 在隔离副本中运行 packaged-launcher smoke，并人工核对以下结果：
 
-- Launcher 3.2.1 + App 8.5.0 正常交接，App 在运行时初始化前拿到严格
+- Launcher 3.2.2 + App 8.5.0 正常交接，App 在运行时初始化前拿到严格
   `BOMANA_LAUNCHER_VERSION`；
 - 缺失、畸形或 `2.9.9` 的 Launcher 身份被打包 App 拒绝，即使设置
   `BOMANA_SOURCE_DEVELOPMENT=1` 也不能绕过；

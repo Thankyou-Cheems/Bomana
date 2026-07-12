@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Bomana portable launcher with user-friendly GUI update flow."""
 
+import contextlib
 import ctypes
 import hashlib
 import ipaddress
@@ -497,9 +498,7 @@ def _windows_system_dir() -> Path:
 
 
 def _system_windows_powershell_exe() -> Path:
-    powershell = (
-        _windows_system_dir() / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    )
+    powershell = _windows_system_dir() / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     if not powershell.is_file():
         raise RuntimeError(f"无法定位系统 PowerShell：{powershell}")
     return powershell
@@ -620,10 +619,7 @@ def _show_warning(title: str, msg: str) -> bool:
 def _show_handoff_recovery_warning(warning: str) -> bool:
     return _show_warning(
         f"{DISPLAY_NAME} 安装恢复警告",
-        (
-            f"{warning}\n\n"
-            "有效的本地 App 将继续启动；请在退出后处理上述安装槽问题。"
-        ),
+        (f"{warning}\n\n有效的本地 App 将继续启动；请在退出后处理上述安装槽问题。"),
     )
 
 
@@ -973,7 +969,9 @@ def _normalize_channel(value: Any) -> str:
     return mapped or ""
 
 
-def _validate_app_manifest_channel(manifest: Dict[str, Any], expected_channel: str, label: str) -> None:
+def _validate_app_manifest_channel(
+    manifest: Dict[str, Any], expected_channel: str, label: str
+) -> None:
     _launcher_manifest_sources.validate_app_manifest_channel(
         {"channel": _normalize_channel(manifest.get("channel", ""))},
         _normalize_channel(expected_channel),
@@ -1171,7 +1169,11 @@ def _cleanup_temp_files_on_launcher_upgrade(base: Path) -> None:
 
 def _consume_launcher_update_result(base: Path) -> None:
     path = next(
-        (candidate for candidate in _data_read_candidates(base, LAUNCHER_UPDATE_RESULT_FILE_NAME) if candidate.exists()),
+        (
+            candidate
+            for candidate in _data_read_candidates(base, LAUNCHER_UPDATE_RESULT_FILE_NAME)
+            if candidate.exists()
+        ),
         None,
     )
     if path is None:
@@ -1514,7 +1516,10 @@ def _fetch_manifest_from_primary(
     package_sha256 = str(trusted["package_sha256"])
     package_size = payload.get("package_size_bytes", payload.get("package_size"))
     changelog_asset = str(trusted["changelog_asset"])
-    changelog_url = urljoin(package_url, changelog_asset)
+    # Prefer the service-provided absolute URL when present; fall back to package dir.
+    changelog_url = str(payload.get("changelog_url", "")).strip() or urljoin(
+        package_url, changelog_asset
+    )
     entrypoint = str(trusted["entrypoint"])
     source_name = str(payload.get("source_name", "腾讯云更新服务")).strip() or "腾讯云更新服务"
     if used_anonymous_fallback:
@@ -1906,15 +1911,23 @@ class UpdateService:
         )
         if not changelog_url:
             raise RuntimeError("更新日志地址缺失")
-        content = _fetch_bytes(changelog_url, cancel_cb=self.cancel_cb)
+        # Do not honor cancel_cb here: install already succeeded; aborting notes
+        # fetch must not leave the GUI stuck mid-download state.
+        content = _fetch_bytes(
+            changelog_url,
+            headers={"Accept": "text/plain, text/markdown, */*"},
+        )
         if len(content) > 512 * 1024:
             raise RuntimeError("更新日志超过 512 KiB 限制")
         if _sha256_bytes(content) != expected_sha256:
             raise RuntimeError("更新日志 SHA256 校验失败")
         try:
-            return content.decode("utf-8")
+            text = content.decode("utf-8-sig")
         except UnicodeDecodeError as exc:
             raise RuntimeError("更新日志不是有效 UTF-8") from exc
+        if not text.strip():
+            raise RuntimeError("更新日志内容为空")
+        return text
 
     def download_launcher_update(self, manifest: Dict[str, Any]) -> Tuple[str, str]:
         return _download_launcher_update_from_manifest(
@@ -2856,10 +2869,13 @@ class WhatsNewDialog(tk.Toplevel):
         self.title("What's New")
         self.configure(bg=_THEME["BG"])
         self.transient(parent)
-        self.grab_set()
         self.geometry("720x560")
         self.minsize(560, 420)
         _apply_window_icon(self)
+        self.protocol("WM_DELETE_WINDOW", self._close)
+        body = str(content or "").strip()
+        if not body:
+            body = "本次更新未提供可读的更新说明，但安装已完成。"
 
         tk.Label(
             self,
@@ -2883,7 +2899,7 @@ class WhatsNewDialog(tk.Toplevel):
         text = tk.Text(
             frame,
             wrap="word",
-            bg=_THEME["GRAYPILL"],
+            bg=_THEME["CARD"],
             fg=_THEME["TEXT"],
             insertbackground=_THEME["TEXT"],
             relief="flat",
@@ -2893,11 +2909,24 @@ class WhatsNewDialog(tk.Toplevel):
         )
         text.pack(fill="both", expand=True, padx=1, pady=1)
         scrollbar.config(command=text.yview)
-        text.insert("1.0", content)
+        text.insert("1.0", body)
         text.config(state="disabled")
-        close_btn = tk.Button(self, text="知道了", command=self.destroy, takefocus=False)
+        close_btn = tk.Button(self, text="知道了", command=self._close, takefocus=False)
         style_action_button(close_btn, "primary")
         close_btn.pack(side="right", padx=18, pady=(0, 16))
+        self.grab_set()
+        self.focus_set()
+        try:
+            self.wait_window(self)
+        finally:
+            with contextlib.suppress(tk.TclError):
+                self.grab_release()
+
+    def _close(self) -> None:
+        with contextlib.suppress(tk.TclError):
+            self.grab_release()
+        with contextlib.suppress(tk.TclError):
+            self.destroy()
 
 
 class LauncherWindow:
@@ -3237,8 +3266,7 @@ class LauncherWindow:
         self.meta_lbl = tk.Label(
             title_stack,
             text=(
-                f"Launcher {LAUNCHER_VERSION}  ·  App {MIN_SUPPORTED_APP_VERSION}+  ·  "
-                "普通权限运行"
+                f"Launcher {LAUNCHER_VERSION}  ·  App {MIN_SUPPORTED_APP_VERSION}+  ·  普通权限运行"
             ),
             font=self._font(10),
             fg=_THEME["TEXT_DIM"],
@@ -3448,9 +3476,7 @@ class LauncherWindow:
             command=self._on_web_preferences_changed,
             **web_check_style,
         )
-        self.web_dashboard_autostart_chk.pack(
-            fill="x", padx=self._px(10), pady=(0, self._px(1))
-        )
+        self.web_dashboard_autostart_chk.pack(fill="x", padx=self._px(10), pady=(0, self._px(1)))
         self.web_dashboard_auto_open_chk = tk.Checkbutton(
             web_card,
             text="启动成功后自动打开本机页面",
@@ -3458,9 +3484,7 @@ class LauncherWindow:
             command=self._on_web_preferences_changed,
             **web_check_style,
         )
-        self.web_dashboard_auto_open_chk.pack(
-            fill="x", padx=self._px(10), pady=(0, self._px(1))
-        )
+        self.web_dashboard_auto_open_chk.pack(fill="x", padx=self._px(10), pady=(0, self._px(1)))
         self.web_dashboard_lan_enabled_chk = tk.Checkbutton(
             web_card,
             text="启动时开启局域网访问与控制（自动识别专用网络）",
@@ -3468,9 +3492,7 @@ class LauncherWindow:
             command=self._on_web_preferences_changed,
             **web_check_style,
         )
-        self.web_dashboard_lan_enabled_chk.pack(
-            fill="x", padx=self._px(10), pady=(0, self._px(6))
-        )
+        self.web_dashboard_lan_enabled_chk.pack(fill="x", padx=self._px(10), pady=(0, self._px(6)))
 
         self.selection_summary_lbl = tk.Label(
             controls_card,
@@ -4139,45 +4161,66 @@ class LauncherWindow:
                 elif typ == "download_done":
                     final_version = str(payload.get("final_version", self.local_version))
                     warning = str(payload.get("warning", ""))
-                    self.decision = LaunchDecision(
-                        action="exit",
-                        final_version=final_version,
-                        warning=warning,
-                    )
-                    self._set_status(
-                        str(payload.get("status", "")),
-                        str(payload.get("detail", "")),
-                        self.progress_value,
-                        str(payload.get("level", "info")),
-                    )
-                    self._refresh_installed_versions()
+                    update_ok = bool(payload.get("update_ok", False))
+                    # Keep a launchable decision after successful install; only
+                    # preserve exit when the window was already closing.
+                    if not self._exit_after_task:
+                        self.decision = LaunchDecision(
+                            action="idle" if update_ok else "exit",
+                            final_version=final_version,
+                            warning=warning,
+                        )
                     self.current_task = ""
-                    if bool(payload.get("update_ok", False)):
-                        self.update_available = False
-                        self.app_requires_launcher_update = False
-                        self.latest_min_launcher_version = ""
-                        self.latest_package_size = None
-                        self.last_check_ok = True
-                        self.last_download_success = True
-                        whats_new = str(payload.get("whats_new", "")).strip()
-                        if whats_new:
-                            WhatsNewDialog(
-                                self.root,
-                                final_version,
-                                str(payload.get("source_name", "")),
-                                whats_new,
-                            )
+                    try:
+                        # Always leave the download-running state before any modal UI.
+                        self._set_status(
+                            str(payload.get("status", "")),
+                            str(payload.get("detail", "")),
+                            1.0 if update_ok else self.progress_value,
+                            str(payload.get("level", "info")),
+                        )
+                        self._refresh_installed_versions()
+                        if update_ok:
+                            self.update_available = False
+                            self.app_requires_launcher_update = False
+                            self.latest_min_launcher_version = ""
+                            self.latest_package_size = None
+                            self.last_check_ok = True
+                            self.last_download_success = True
                         else:
-                            whats_new_warning = str(payload.get("whats_new_warning", "")).strip()
-                            if whats_new_warning:
-                                messagebox.showwarning("What's New", whats_new_warning, parent=self.root)
-                    else:
-                        self.last_download_success = False
-                    self._set_running(False)
+                            self.last_download_success = False
+                    finally:
+                        self._set_running(False)
+
+                    if update_ok:
+                        whats_new = str(payload.get("whats_new", "")).strip()
+                        whats_new_warning = str(payload.get("whats_new_warning", "")).strip()
+                        try:
+                            if whats_new:
+                                WhatsNewDialog(
+                                    self.root,
+                                    final_version,
+                                    str(payload.get("source_name", "")),
+                                    whats_new,
+                                )
+                            elif whats_new_warning:
+                                messagebox.showwarning(
+                                    "What's New",
+                                    whats_new_warning,
+                                    parent=self.root,
+                                )
+                        except Exception as exc:
+                            _log(self.base, f"What's New 显示失败：{exc}")
+                            with contextlib.suppress(tk.TclError):
+                                messagebox.showwarning(
+                                    "What's New",
+                                    f"更新说明窗口显示失败，但应用已安装完成。\n{exc}",
+                                    parent=self.root,
+                                )
                     if self._exit_after_task:
                         self._finalize_exit()
                         continue
-                    if not bool(payload.get("update_ok", False)):
+                    if not update_ok:
                         self._show_error_actions()
                 elif typ == "rollback_done":
                     ok = bool(payload.get("update_ok", False))
@@ -4558,7 +4601,9 @@ class LauncherWindow:
                 text += f"\n如果新版异常，也可以点击“回退 v{self.previous_version}”。"
             self.hint_lbl.config(text=text)
         else:
-            self.hint_lbl.config(text="可点击“重新检查”或“打开下载页”。也可点“下载目录”查看已下载文件。首次使用请先完成下载。")
+            self.hint_lbl.config(
+                text="可点击“重新检查”或“打开下载页”。也可点“下载目录”查看已下载文件。首次使用请先完成下载。"
+            )
         self._schedule_layout_reflow()
 
     def _save_launcher_state(self, extra: Optional[Dict[str, Any]] = None) -> None:
@@ -4996,13 +5041,11 @@ class LauncherWindow:
 
     def _commit_launch(self) -> None:
         if self.decision.action == "launch":
-            autostart, auto_open, lan_enabled, degraded = (
-                _effective_web_preferences_for_channel(
-                    self.channel,
-                    self.web_dashboard_autostart,
-                    self.web_dashboard_auto_open,
-                    self.web_dashboard_lan_enabled,
-                )
+            autostart, auto_open, lan_enabled, degraded = _effective_web_preferences_for_channel(
+                self.channel,
+                self.web_dashboard_autostart,
+                self.web_dashboard_auto_open,
+                self.web_dashboard_lan_enabled,
             )
             if degraded:
                 messagebox.showwarning(

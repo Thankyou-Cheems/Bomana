@@ -479,7 +479,15 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             result = service.fetch_whats_new(manifest)
 
         self.assertEqual(result, content.decode("utf-8"))
-        fetch.assert_called_once_with(manifest["changelog_url"], cancel_cb=None)
+        fetch.assert_called_once()
+        self.assertEqual(fetch.call_args.args[0], manifest["changelog_url"])
+        # Post-install notes fetch must ignore cancel_cb so the UI can leave
+        # the downloading state even if a cancel was requested mid-flight.
+        self.assertNotIn("cancel_cb", fetch.call_args.kwargs)
+        self.assertEqual(
+            fetch.call_args.kwargs.get("headers", {}).get("Accept"),
+            "text/plain, text/markdown, */*",
+        )
 
         with (
             patch.object(self.launcher, "_fetch_bytes", return_value=b"tampered"),

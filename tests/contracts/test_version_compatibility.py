@@ -82,7 +82,7 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
         app_version_match.group(1)
     ) >= boundary.parse_strict_version(boundary.MIN_SUPPORTED_APP_VERSION)
     assert 'PORTABLE_MIN_LAUNCHER_VERSION = "3.2.0"' in app_metadata
-    assert 'LAUNCHER_VERSION = "3.2.1"' in launcher_metadata
+    assert 'LAUNCHER_VERSION = "3.2.2"' in launcher_metadata
     assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.2.0"' in build
 
 
