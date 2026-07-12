@@ -55,6 +55,7 @@ War Thunder 是一款载具对战电子游戏；Bomana 是一个面向 War Thund
 - [Project layout](#project-layout)
 - [Advanced configuration](#advanced-configuration)
 - [Technical details](#technical-details)
+- [Runtime isolation and security boundary](#runtime-isolation-and-security-boundary)
 - [Build and release](#build-and-release)
 - [References](#references)
 - [Update service repository](#update-service-repository)
@@ -69,6 +70,11 @@ Everyday use: download, features, and common questions—with as little jargon a
 
 > Older builds published before this statement were removed. Downloading and using a current build means you have read and accept this statement.
 
+### Boundary in one sentence
+
+Bomana does **not** read game memory, inject code, edit game files, or press keys / automate the match for you.  
+It only reads data the game **already exposes on your machine**, and shows timing and cues in **its own** windows or web page.
+
 ### What the studio has said
 
 In a [forum reply](https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664/16) (13 May 2024), community manager **Stona_WT** roughly indicated:
@@ -76,24 +82,35 @@ In a [forum reply](https://forum.warthunder.com/t/tools-using-data-provided-on-p
 - Using localhost data for flight info and overlays is generally fine and not a bannable offense by itself.
 - Showing enemy markers in markerless modes via a compass-style HUD overlay that the official map tool does not do is **not approved** and can be treated as an unfair advantage.
 
-### What Bomana does
+### Allowed / not approved / decide yourself
 
 | Approach | Stance |
 |----------|--------|
-| Show your own speed, altitude, fuel, etc. | Allowed |
-| Use official local data for timing and navigation cues | Allowed |
-| Draw enemies into a game-like compass / HUD overlay in markerless modes | Not approved |
-| Mirror currently returned hostile units on a separate web map | Not explicitly ruled on—judge for yourself |
-| Memory reads, injection, game-file edits | Forbidden |
+| Your own speed, altitude, fuel, reward timer | Studio-leaning **allowed** |
+| Local public data for navigation, fuel, overspeed cues | Studio-leaning **allowed** (same class as tools like WTRTI) |
+| Drawing enemies into a **game-like** compass / HUD overlay in markerless modes | **Not approved** |
+| Mirroring hostiles that the official local map sample already returns, on a **separate web map only** | **Not explicitly ruled on**—you decide |
+| Memory reads, injection, client-file edits, macros, driving the game for you | **Forbidden**; Bomana does not ship this |
 
-Bomana’s principles:
+### What Bomana actually does (player wording)
 
-1. Read only the official local game API—no memory reads, injection, or game-file edits
-2. The timer is based on your own spawn time; it does not manipulate the server
-3. Hostile units appear only on the separate web map from the current official sample; they do not enter the desktop HUD or heading tape
-4. No trajectory reconstruction from history and no invented missing targets
+| Topic | Behavior |
+|-------|----------|
+| Data source | Only the game’s local info pages (you can open `http://localhost:8111` in a browser). **No** process memory reads. |
+| Process relationship | Separate program and windows; not embedded in the game, no DLL injection, no game-file edits. |
+| Hotkeys | F7–F11 control **Bomana only** (timer, lock, corner, sound). They do **not** synthesize keys into the game. |
+| Optional elevated hotkeys | Shown only when the game may be elevated and global hotkeys can fail; **you** confirm before any system UAC. Decline → timer / nav / window buttons still work. |
+| Optional desktop overlay | Off by default; Bomana’s own transparent window for **ownship navigation**. Hostiles never go on the desktop HUD or heading tape. |
+| Hostiles on the web map | If shown, only from the **current** official local map sample; cleared on failure or absence. No history tracks, no invented targets. |
+| Web buttons | Change Bomana only (timer, corner, sound, panels, optional weapon settings)—**not** the game client. |
 
-**You are responsible for how you use the tool.** “Technically possible” is not the same as “officially approved.”
+### What you should know
+
+1. A **clean technical design is not a written guarantee** of never being sanctioned. Follow the EULA and your own risk judgment.  
+2. More conservative use: keep LAN off, leave the overlay off, avoid web-map hostile display if you prefer.  
+3. Endpoint lists, process-query scope, and contract tests: [Runtime isolation and security boundary](#runtime-isolation-and-security-boundary).
+
+**You are responsible for how you use the tool.**
 
 ---
 
@@ -127,8 +144,9 @@ Notes:
 
 ### On-screen navigation overlay (optional)
 
-- Main-target cue over the game window (off by default; enable in settings)
-- Opacity, scale, and display options
+- Bomana’s own transparent window **above** the game for a main-target cue (off by default; enable in settings)
+- Not a game render change and not process injection; opacity, scale, and display options available
+- Hostile units never appear on this overlay
 
 ### Fuel and overspeed cues
 
@@ -153,11 +171,12 @@ Custom pre-takeoff items (engine, gear, and so on).
 
 ### Local and phone web panel
 
-View timer, map, fuel, and navigation in a browser on the PC or a phone on a trusted LAN. You can also run a small allowlist of Bomana controls (reset timer, corner, sound, and similar).
+View timer, map, fuel, and navigation in a browser on the PC or a phone on a trusted LAN. You can also run a small allowlist of **Bomana-only** controls (reset timer, corner, sound, and similar).
 
 - Local-only by default; enable **LAN access and control** for phone use
 - Enabling LAN also grants fixed-function control to later LAN pairings; disabling LAN immediately invalidates every LAN session
-- It does not synthesize game hotkeys or drive the game client
+- The page does **not** synthesize game hotkeys or drive the game client
+- If the web map shows hostiles, they only mirror the current official local sample—decide whether to use that under the compliance notes above
 
 More step-by-step help: [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
@@ -209,11 +228,27 @@ If you already have Python / uv, you can run from source—see [Run from source]
 
 Hotkeys are remappable. The HUD overlay is settings-only (off by default).
 
-If the game runs elevated, global hotkeys may ask you to approve a one-time helper. Declining does not block timing, navigation, or on-window buttons—only global shortcuts while the game is focused may fail.
+**About optional elevated hotkeys:**
+
+- Bomana and the launcher always run at ordinary integrity; **startup never auto-prompts UAC**.
+- An optional grant appears only when the game may be elevated (or elevation cannot be determined).
+- After you confirm, Windows may ask to allow a **hotkey-only** helper that notifies Bomana of reset / lock / corner / sound—**no** game injection and **no** game key synthesis.
+- If you decline: timer, navigation, window buttons, and local data reads keep working; only global F7–F11 while the game is focused may fail.
 
 ---
 
 ## FAQ
+
+### Does it read memory, inject, or play the game for me?
+
+No. Runtime data is only the game’s local info pages; UI is separate windows; hotkeys and web buttons only change Bomana. No memory reads, injection, game-file edits, macros, or synthesized game keys. Details and contract tests: [Runtime isolation and security boundary](#runtime-isolation-and-security-boundary).
+
+### Is this treated as cheating?
+
+- Timer and ownship flight/nav cues align with the studio’s public stance that localhost overlays for that class of data are generally fine.  
+- Bomana does **not** draw enemies onto a game-like HUD / compass overlay.  
+- Hostiles on a **separate web map** are a **gray area** (not explicitly ruled on)—your call.  
+- No third-party tool can promise “never sanctioned.” Follow the EULA and your own risk judgment.
 
 ### Window missing or in the wrong place?
 
@@ -424,11 +459,14 @@ Overspeed grading is cross-checked against [KaerMorh/WTSpeeder](https://github.c
 |----------|---------|
 | `/indicators` | Instruments (speed, fuel, validity, …) |
 | `/state` | State (IAS, altitude, vertical speed, …) |
-| `/map_obj.json` | Map objects (zones, airfields, player, …) |
+| `/map_obj.json` | Map objects (zones, airfields, player, units in the current sample, …) |
 | `/map_info.json` | Map metadata |
-| `/map.img` | Official tactical thumbnail (bounded, low-rate) |
+| `/map.img` | Official tactical thumbnail (bounded, low-rate, content-typed) |
+| `/icons.ttf` | Official tactical icon font (bounded, low-cadence, signature-checked) |
 
-Official 8111 only—see [docs/specs/runtime-8111-boundary.md](docs/specs/runtime-8111-boundary.md).
+- Fixed base: `http://127.0.0.1:8111` (or equivalent localhost)  
+- JSON access is centralized in `bomana/core/telemetry.py`; runtime must not scatter raw `requests` / `urlopen`  
+- Spec: [docs/specs/runtime-8111-boundary.md](docs/specs/runtime-8111-boundary.md)
 
 ### Bundled static data
 
@@ -438,6 +476,8 @@ Official 8111 only—see [docs/specs/runtime-8111-boundary.md](docs/specs/runtim
 | `weapon_fire_control.json` | Weapon catalog, loadouts, condition tables |
 | `fm_speed_limits.json` | Airframe IAS / Mach limits |
 
+Static libraries are **build-time** extracts from public datamine sources. Runtime only reads the JSON; it does not open the game install tree or decrypt client packs mid-sortie.
+
 ### Polling
 
 - Healthy: ~50 ms (20 Hz)  
@@ -445,10 +485,10 @@ Official 8111 only—see [docs/specs/runtime-8111-boundary.md](docs/specs/runtim
 
 ### Web cockpit data flow
 
-- Bomana is the only 8111 reader; the web stack never proxies 8111  
+- Bomana is the only 8111 reader; the web stack never proxies or forwards 8111 routes  
 - App publishes filtered snapshots, bounded map bitmaps, and Tk-owned control state  
 - Hostiles mirror the current `/map_obj.json` sample only; never desktop HUD / heading tape  
-- Writes require session CSRF, idempotency keys, and main-thread re-authorization; fixed semantic actions only  
+- Writes require session CSRF, idempotency keys, and main-thread re-authorization; fixed semantic actions only (`bomana/web/control.py` allowlist)  
 - Default `127.0.0.1:8777`; LAN binds concrete RFC1918 addresses, not `0.0.0.0`  
 - Spec: [docs/specs/web-dashboard.md](docs/specs/web-dashboard.md)  
 
@@ -460,6 +500,69 @@ Official 8111 only—see [docs/specs/runtime-8111-boundary.md](docs/specs/runtim
    │                      ↓                              │
    └───no player ~1.2s──[Dead / hangar]←────~10s─────────┘
 ```
+
+---
+
+## Runtime isolation and security boundary
+
+Implementation detail for “official 8111 only, process isolation, no game automation.” Player summary: [Compliance statement](#compliance-statement).
+
+### Isolation sketch
+
+```text
+War Thunder  ──official loopback HTTP :8111 only──►  Bomana App (ordinary integrity)
+                                                       ├─ Own Tk / HUD windows (not game children)
+                                                       ├─ Optional web cockpit (separate port; no 8111 proxy)
+                                                       └─ Optional hotkey broker (after user UAC confirm)
+                                                            └─ Named pipe: Bomana action IDs only
+```
+
+| Boundary | Implementation notes |
+|----------|----------------------|
+| No memory / injection | Runtime must not contain `ReadProcessMemory`, `WriteProcessMemory`, `CreateRemoteThread`, `pymem`, `frida`, etc. |
+| No game input synthesis | Runtime must not use `SendInput` / `keybd_event` into the game; web contracts ban the same |
+| No client edits | Runtime does not use `game.log`, client packs, or install trees as live data sources |
+| Windows | Independent topmost layered windows; no `SetParent` onto the game HWND |
+| Hotkeys | `RegisterHotKey` → callbacks mutate Bomana only; broker also only registers hotkeys (no hooks / polling) |
+
+### Sole optional touch of the game process (read-only)
+
+To decide whether to **show** the elevated-hotkey affordance, the App may:
+
+1. Enumerate **visible** top-level windows whose title contains `War Thunder`  
+2. Open candidates with `PROCESS_QUERY_LIMITED_INFORMATION`  
+3. Confirm image name `aces.exe` / `aces64.exe` / `aces_BE.exe`  
+4. `TOKEN_QUERY` for elevation  
+
+It must **not** snapshot all processes, enumerate modules, read memory, or reuse a game handle for other purposes. Spec: `docs/specs/startup-elevation.md` (`ELEV-03`, …).
+
+### Optional hotkey broker
+
+| Item | Constraint |
+|------|------------|
+| When | Only after explicit user confirm; never auto-UAC on startup |
+| Path | Packaged `bomana/bin/BomanaHotkeyBroker.exe` + adjacent SHA256 only |
+| Actions | Fixed: `reset` / `lock` / `corner` / `beep` / optional `zones`; keys F1–F12 |
+| IPC | Local named pipe; frames carry status / action IDs only |
+| App process | May open Bomana with `SYNCHRONIZE \| PROCESS_QUERY_LIMITED_INFORMATION` to wait for exit—target is **Bomana**, not the game |
+| Forbidden | No keyboard hooks, no game inspection, no network, no service / task / autostart install |
+
+### Contract tests (run when touching boundaries)
+
+```bash
+uv run --extra dev python -m pytest ^
+  tests/contracts/test_runtime_8111_boundary.py ^
+  tests/contracts/test_startup_elevation_contract.py ^
+  tests/contracts/test_web_dashboard_contract.py -q
+```
+
+| Test | Covers |
+|------|--------|
+| `test_runtime_8111_boundary` | API base, endpoint allowlist, dangerous API tokens, centralized HTTP, recorder/replay |
+| `test_startup_elevation_contract` | Ordinary integrity, narrow probe, broker path/hash/forbiddens |
+| `test_web_dashboard_contract` | No 8111 proxy, semantic command matrix, no input synthesis |
+
+Dev-only note: datamine tools, session recording, and packaged-launcher smoke (PowerShell `keybd_event` for launcher UI only) are **outside** the player combat runtime. Recording defaults to gitignored `recordings/` and does not upload.
 
 ---
 
