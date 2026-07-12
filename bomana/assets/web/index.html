@@ -52,6 +52,20 @@
         <div class="readout"><span>HDG</span><strong id="headingValue">---</strong><small>deg</small></div>
         <div class="readout" data-capability="fuel"><span>FUEL</span><strong id="fuelValue">---</strong><small>%</small></div>
       </div>
+      <div class="speed-strip" id="speedStrip" aria-label="超速提示">
+        <div class="speed-strip-head">
+          <span class="eyebrow">SPEED</span>
+          <span class="speed-state" id="speedState">速度监视</span>
+        </div>
+        <strong class="speed-value" id="speedValue">IAS --</strong>
+        <div class="speed-track" aria-hidden="true">
+          <i id="speedFill"></i>
+          <b class="mark caution" style="left:70%"></b>
+          <b class="mark warning" style="left:85%"></b>
+          <b class="mark critical" style="left:100%"></b>
+        </div>
+        <small class="speed-meta" id="speedMeta">等待限速数据</small>
+      </div>
       <div class="aircraft-block">
         <span class="eyebrow">AIRFRAME</span>
         <strong id="aircraftName">--</strong>
@@ -64,7 +78,7 @@
     </aside>
 
     <aside class="hud-right" aria-label="战术信息">
-      <article class="glass weapon-card" data-capability="weapon">
+      <article class="glass panel weapon-card" data-capability="weapon">
         <div class="card-head">
           <div><span class="eyebrow">FIRE</span><h2>武器解算</h2></div>
           <span class="quality-chip" id="weaponQuality">待机</span>
@@ -81,7 +95,7 @@
         <button class="ghost-btn" id="weaponCardOpen" type="button">选择武器</button>
       </article>
 
-      <article class="glass bombing-card" data-capability="weapon">
+      <article class="glass panel bombing-card" data-capability="weapon">
         <div class="card-head">
           <div><span class="eyebrow">RELEASE</span><h2>投放</h2></div>
           <span class="release-chip" id="releaseStatus">待机</span>
@@ -95,7 +109,7 @@
         <p class="system-note" id="bombReason">等待计算</p>
       </article>
 
-      <article class="glass navigation-card" data-capability="navigation">
+      <article class="glass panel navigation-card" data-capability="navigation">
         <div class="card-head">
           <div><span class="eyebrow">NAV</span><h2>导航</h2></div>
           <strong class="deviation" id="deviationValue">±0°</strong>
@@ -103,7 +117,7 @@
         <div class="nav-list" id="navigationList"><p class="empty-line">暂无导航目标</p></div>
       </article>
 
-      <article class="glass alerts-card">
+      <article class="glass panel alerts-card">
         <div class="card-head">
           <div><span class="eyebrow">ALERT</span><h2>告警</h2></div>
           <span id="alertCount">0</span>
@@ -130,14 +144,19 @@
 
     <footer class="hud-bottom">
       <p class="command-status" id="commandStatus" role="status" aria-live="polite"></p>
-      <div class="rail">
-        <button type="button" class="rail-side" id="dockLegendButton"><strong>图例</strong><small>过滤</small></button>
-        <button type="button" class="rail-weapon" id="dockWeaponButton" data-capability="weapon" disabled>
-          <span>切换武器</span>
+      <div class="rail" role="toolbar" aria-label="主操作">
+        <button type="button" class="rail-btn" id="dockLegendButton">
+          <span class="rail-icon" aria-hidden="true">☰</span>
+          <span class="rail-copy"><strong>图例</strong><small>过滤标记</small></span>
+        </button>
+        <button type="button" class="rail-btn rail-btn-primary" id="dockWeaponButton" data-capability="weapon" disabled>
+          <span class="rail-kicker">切换武器</span>
           <strong id="dockWeaponName">未选择</strong>
         </button>
-        <button type="button" class="rail-side" id="dockOpsButton"><strong>操作</strong><small>计时 · 设置</small></button>
-        <button type="button" class="rail-side desktop-only" id="openControlButton"><strong>控制台</strong><small>完整设置</small></button>
+        <button type="button" class="rail-btn" id="dockOpsButton">
+          <span class="rail-icon" aria-hidden="true">⚙</span>
+          <span class="rail-copy"><strong>设置</strong><small>计时 · 状态</small></span>
+        </button>
       </div>
       <div class="secondary-rail desktop-only">
         <button type="button" class="weapon-chip" id="weaponChip" data-capability="weapon" disabled>

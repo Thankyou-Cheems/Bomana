@@ -620,6 +620,7 @@ function render(payload) {
   const aircraft = payload.flight.aircraft || "未识别机型";
   text("aircraftName", aircraft);
   text("airframeAircraft", aircraft);
+  renderOverspeed(payload.flight);
 
   renderWeapon(payload.weapon);
   renderBombing(payload.bombing);
@@ -634,6 +635,59 @@ function renderCapabilities(capabilities) {
     node.classList.toggle("capability-hidden", !Boolean(capabilities[node.dataset.capability]));
   }
   document.querySelector(".airframe-card").classList.toggle("fuel-disabled", !capabilities.fuel);
+}
+
+function renderOverspeed(flight) {
+  const strip = $("speedStrip");
+  const fill = $("speedFill");
+  if (!strip || !fill) return;
+  const overspeed = flight && flight.overspeed ? flight.overspeed : {};
+  const level = String(overspeed.level || "unknown");
+  const matched = Boolean(overspeed.matched);
+  const ratio = Math.max(0, finite(overspeed.ratio));
+  const ias = Math.round(finite(flight.ias_kmh));
+  const limit = Math.round(finite(overspeed.limit_kmh));
+  const mach = finite(flight.mach, NaN);
+  const limitMach = finite(overspeed.limit_mach, NaN);
+
+  let stateText = "速度监视";
+  let tone = "unknown";
+  if (level === "critical") {
+    stateText = "超速危险";
+    tone = "critical";
+  } else if (level === "warning") {
+    stateText = "接近极限";
+    tone = "warning";
+  } else if (level === "caution") {
+    stateText = "高速预警";
+    tone = "caution";
+  } else if (matched) {
+    stateText = "速度安全";
+    tone = "safe";
+  } else if (!matched) {
+    stateText = "限速未匹配";
+    tone = "unknown";
+  }
+
+  const fillPct = matched ? Math.min(100, Math.max(0, ratio * 100)) : 0;
+  fill.style.width = `${fillPct}%`;
+  strip.className = `speed-strip level-${tone}`;
+  text("speedState", stateText);
+
+  let value = ias > 0 ? `IAS ${ias}` : "IAS --";
+  if (matched && limit > 0) value = `IAS ${ias}/${limit}`;
+  if (matched) value += ` · ${Math.round(fillPct)}%`;
+  text("speedValue", value);
+
+  const metaParts = [];
+  if (Number.isFinite(mach) && Number.isFinite(limitMach) && limitMach > 0) {
+    metaParts.push(`M${mach.toFixed(2)}/${limitMach.toFixed(2)}`);
+  } else if (Number.isFinite(mach) && mach > 0) {
+    metaParts.push(`M${mach.toFixed(2)}`);
+  }
+  if (!matched) metaParts.push("无可用机型限速");
+  else if (limit > 0) metaParts.push(`极限 ${limit} km/h`);
+  text("speedMeta", metaParts.join(" · ") || "等待限速数据");
 }
 
 function renderWeapon(weapon) {
@@ -1239,7 +1293,6 @@ function closeAllSheets() {
 
 function installSheetHandlers() {
   $("dockOpsButton").addEventListener("click", () => openSheet("controlSheet"));
-  $("openControlButton").addEventListener("click", () => openSheet("controlSheet"));
   $("controlSheetClose").addEventListener("click", () => closeSheet("controlSheet"));
   $("dockWeaponButton").addEventListener("click", () => openSheet("weaponSheet"));
   $("weaponChip").addEventListener("click", () => openSheet("weaponSheet"));
