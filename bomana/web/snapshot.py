@@ -26,6 +26,7 @@ from bomana.core.state import (
 
 SCHEMA_VERSION = 1
 MAX_MAP_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_MAP_ICON_FONT_BYTES = 1024 * 1024
 HOSTILE_MAP_KINDS = frozenset(
     ("hostile_aircraft", "hostile_ground", "hostile_naval", "hostile_unit")
 )
@@ -66,6 +67,11 @@ class PublishedMapImage:
     body: bytes
 
 
+@dataclass(frozen=True)
+class PublishedMapIconFont:
+    body: bytes
+
+
 class DashboardSnapshotStore:
     """Thread-safe handoff from the Tk refresh loop to HTTP workers."""
 
@@ -74,6 +80,7 @@ class DashboardSnapshotStore:
         self._sequence = 0
         self._latest: PublishedDashboardSnapshot | None = None
         self._map_image: PublishedMapImage | None = None
+        self._map_icon_font: PublishedMapIconFont | None = None
         self._wall_time = wall_time
 
     def publish(self, snapshot: UISnapshot, checklist_items: list[str] | tuple[str, ...]) -> None:
@@ -118,6 +125,23 @@ class DashboardSnapshotStore:
     def read_map_image(self) -> PublishedMapImage | None:
         with self._lock:
             return self._map_image
+
+    def publish_map_icon_font(self, body: bytes) -> bool:
+        safe_body = bytes(body)
+        if (
+            not safe_body.startswith(b"\x00\x01\x00\x00")
+            or len(safe_body) > MAX_MAP_ICON_FONT_BYTES
+        ):
+            return False
+        with self._lock:
+            if self._map_icon_font is not None and self._map_icon_font.body == safe_body:
+                return False
+            self._map_icon_font = PublishedMapIconFont(safe_body)
+            return True
+
+    def read_map_icon_font(self) -> PublishedMapIconFont | None:
+        with self._lock:
+            return self._map_icon_font
 
 
 _PHASE_LABELS = {

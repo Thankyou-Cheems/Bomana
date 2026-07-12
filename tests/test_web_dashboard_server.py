@@ -447,6 +447,25 @@ def test_map_image_route_is_paired_and_serves_only_published_bytes(
     assert returned == body
 
 
+def test_map_icon_font_route_is_paired_and_serves_only_valid_published_bytes(
+    running_dashboard: WebDashboardRuntime,
+) -> None:
+    route = "/api/v1/map-icons-font"
+    assert _request(running_dashboard, "GET", route)[0] == 401
+    cookie = _pair(running_dashboard)
+    assert _request(running_dashboard, "GET", route, headers={"Cookie": cookie})[0] == 404
+
+    body = b"\x00\x01\x00\x00" + b"official-font"
+    assert running_dashboard.store.publish_map_icon_font(body) is True
+    status, headers, returned = _request(
+        running_dashboard, "GET", route, headers={"Cookie": cookie}
+    )
+    assert status == 200
+    assert headers["content-type"] == "font/ttf"
+    assert headers["cache-control"].startswith("no-store")
+    assert returned == body
+
+
 def test_each_pairing_creates_a_distinct_control_session_and_csrf(
     controlled_dashboard: tuple[WebDashboardRuntime, list[WebCommandEnvelope]],
 ) -> None:

@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from bomana.config.settings import NetworkConfig
-from bomana.core.telemetry import MapImageFetcher, MapObjectsFetcher
+from bomana.core.telemetry import MapIconFontFetcher, MapImageFetcher, MapObjectsFetcher
 from tools import record_8111_session
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -129,6 +129,17 @@ def test_map_image_fetcher_is_fixed_bounded_and_content_typed() -> None:
     assert "iter_content" in source
     assert "image/png" in source
     assert "image/jpeg" in source
+    assert "trust_env = False" in source
+
+
+def test_map_icon_font_fetcher_is_fixed_bounded_and_signature_checked() -> None:
+    source = inspect.getsource(MapIconFontFetcher)
+
+    assert 'PATH = "/icons.ttf"' in source
+    assert "MAX_FONT_BYTES = 1024 * 1024" in source
+    assert "stream=True" in source
+    assert "iter_content" in source
+    assert "\\x00\\x01\\x00\\x00" in source
     assert "trust_env = False" in source
 
 

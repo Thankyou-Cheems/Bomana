@@ -430,6 +430,10 @@ def test_map_projection_allowlist_includes_current_hostile_units_not_raw_payload
     assert "hostile_ground" in JS
     assert "hostile_naval" in JS
     assert "hostileIconFamily" in JS
+    assert "officialMapGlyph" in JS
+    assert "drawHostileIcon" not in JS
+    assert "Bomana8111Icons" in CSS
+    assert "url('/api/v1/map-icons-font')" in CSS
     assert "mapFilters" in JS
     assert 'data-map-filter="hostile_armor"' in HTML
     assert 'data-map-filter="hostile_air_defense"' in HTML
@@ -444,6 +448,7 @@ def test_routes_auth_headers_and_no_cors_are_closed_by_construction() -> None:
         'path == "/api/v1/snapshot"',
         'path == "/api/v1/control-state"',
         'path == "/api/v1/map-image"',
+        'path == "/api/v1/map-icons-font"',
         'path == "/api/v1/commands"',
         '"/assets/dashboard.css"',
         '"/assets/dashboard.js"',
@@ -480,6 +485,7 @@ def test_browser_assets_are_self_hosted_and_do_not_execute_remote_code() -> None
     assert 'fetch("/api/v1/control-state"' in JS
     assert 'fetch("/api/v1/commands"' in JS
     assert 'fetch("/api/v1/map-image"' in JS
+    assert "127.0.0.1:8111" not in combined
     assert "innerHTML" not in JS
     assert 'data-capability="weapon"' in HTML
     assert 'querySelectorAll("[data-capability]")' in JS

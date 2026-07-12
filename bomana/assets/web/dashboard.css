@@ -1,3 +1,5 @@
+@font-face { font-family: "Bomana8111Icons"; src: url('/api/v1/map-icons-font') format('truetype'); font-display: swap; }
+
 :root {
   color-scheme: dark;
   --bg: #07101d;
@@ -219,10 +221,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .map-legend button:hover, .map-legend button:focus-visible { border-color: rgba(112,183,255,.46); color: var(--text); outline: none; }
 .map-legend button.is-off { opacity: .38; text-decoration: line-through; }
 .map-legend i { width: 7px; height: 7px; border: 1px solid currentColor; }
-.legend-aircraft { color: #ff7078; transform: rotate(45deg); }
-.legend-armor { color: #ff9b70; border-radius: 2px; }
-.legend-air-defense { color: #f5c665; border-radius: 50%; }
-.legend-naval { color: #a99af6; transform: rotate(45deg); }
+.map-legend .official-map-icon { width: 15px; height: 15px; border: 0; color: var(--red); font: bold 14px/15px "Bomana8111Icons", sans-serif; text-align: center; }
 .legend-player { color: var(--blue); transform: rotate(45deg); background: var(--blue); }
 .legend-zone { color: var(--yellow); border-radius: 50%; }
 .legend-airfield { color: var(--cyan); width: 10px !important; height: 3px !important; }

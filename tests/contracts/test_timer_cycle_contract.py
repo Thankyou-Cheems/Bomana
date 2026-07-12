@@ -41,15 +41,16 @@ def test_timer_restore_persists_and_checks_exact_cycle_seconds() -> None:
     assert "LEGACY_CYCLE_SECONDS" in persistence
 
 
-def test_timer_uses_banana_outline_and_removes_legacy_horizontal_strip() -> None:
+def test_timer_uses_banana_emoji_percent_and_removes_legacy_horizontal_strip() -> None:
     main_window = (ROOT / "bomana/ui/main_window.py").read_text(encoding="utf-8")
     app = (ROOT / "bomana/ui/app.py").read_text(encoding="utf-8")
     widgets = (ROOT / "bomana/ui/widgets.py").read_text(encoding="utf-8")
     assert "BananaProgress" in main_window
     assert "banana_progress.set_progress" in app
     assert "class BananaProgress" in widgets
-    assert "Segoe UI Emoji" not in widgets
-    assert 'text="🍌"' not in widgets
+    assert 'text="🍌"' in widgets
+    assert "Segoe UI Emoji" in widgets
+    assert "percent_text" in widgets
     assert "app.bar_bg" not in main_window
     assert "app.bar_fill" not in main_window
 

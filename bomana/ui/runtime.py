@@ -10,7 +10,7 @@ from typing import Any
 
 from bomana.config.settings import NetworkConfig
 from bomana.core.logic import GameLogic
-from bomana.core.telemetry import MapImageFetcher
+from bomana.core.telemetry import MapIconFontFetcher, MapImageFetcher
 from bomana.utils.diagnostics import log_exception
 from bomana.web.snapshot import DashboardSnapshotStore
 
@@ -143,6 +143,58 @@ class MapImagePoller:
             if result.ok:
                 self.store.publish_map_image(result.body, result.content_type)
             if self._stop_event.wait(self.interval_sec):
+                return
+
+
+class MapIconFontPoller:
+    """Low-cadence non-Tk worker that stops after the first valid official font."""
+
+    def __init__(
+        self,
+        store: DashboardSnapshotStore,
+        *,
+        fetcher_factory=MapIconFontFetcher,
+        interval_sec: float = MAP_IMAGE_POLL_INTERVAL_SEC,
+    ):
+        self.store = store
+        self.fetcher_factory = fetcher_factory
+        self.interval_sec = max(0.1, float(interval_sec))
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._fetcher: MapIconFontFetcher | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        if self.store.read_map_icon_font() is not None:
+            return
+        stop_event = threading.Event()
+        fetcher = self.fetcher_factory()
+        self._stop_event = stop_event
+        self._fetcher = fetcher
+        self._thread = start_daemon_thread(
+            "BomanaMapIconFontPoller",
+            lambda: self._run(stop_event, fetcher),
+        )
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=2.25)
+        self._thread = None
+        fetcher = self._fetcher
+        self._fetcher = None
+        if fetcher is not None:
+            fetcher.close()
+
+    def _run(self, stop_event: threading.Event, fetcher: MapIconFontFetcher) -> None:
+        while not stop_event.is_set():
+            result = fetcher.fetch()
+            if result.ok and not stop_event.is_set():
+                self.store.publish_map_icon_font(result.body)
+                return
+            if stop_event.wait(self.interval_sec):
                 return
 
 

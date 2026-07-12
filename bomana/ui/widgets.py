@@ -53,7 +53,7 @@ class Pill(tk.Label):
 
 
 class BananaProgress(tk.Canvas):
-    """Large timer progress with a yellow banana outline and percent label."""
+    """Large timer progress with a banana emoji and percent label."""
 
     def __init__(self, parent, *, size: int = 52, bg: str = Theme.GRAYPILL):
         self.size = max(24, int(size))
@@ -93,13 +93,26 @@ class BananaProgress(tk.Canvas):
             splinesteps=12,
             state="hidden",
         )
+        emoji_font = resolve_tk_font_tuple(
+            self,
+            ("Segoe UI Emoji", max(18, int(self.size * 0.42))),
+        )
+        self.emoji_text = self.create_text(
+            self.size * 0.48,
+            self.size * 0.38,
+            text="🍌",
+            fill=Theme.YELLOW,
+            font=emoji_font,
+            anchor="center",
+            tags=("banana_emoji",),
+        )
         percent_font = resolve_tk_font_tuple(
             self,
             ("Segoe UI", max(8, int(self.size * 0.17)), "bold"),
         )
         self.percent_text = self.create_text(
             self.size * 0.48,
-            self.size * 0.54,
+            self.size * 0.73,
             text="0%",
             fill=Theme.TEXT,
             font=percent_font,

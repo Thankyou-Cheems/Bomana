@@ -3,8 +3,8 @@ import tkinter as tk
 import unittest
 from unittest.mock import patch
 
-from bomana.core.telemetry import MapImageFetchResult
-from bomana.ui.runtime import LogicPoller, MapImagePoller, TkEventDispatcher
+from bomana.core.telemetry import MapIconFontFetchResult, MapImageFetchResult
+from bomana.ui.runtime import LogicPoller, MapIconFontPoller, MapImagePoller, TkEventDispatcher
 from bomana.web.snapshot import DashboardSnapshotStore
 
 
@@ -47,6 +47,51 @@ class FakeMapImageFetcher:
 
     def close(self) -> None:
         self.closed = True
+
+
+class FakeMapIconFontFetcher:
+    def __init__(self) -> None:
+        self.fetched = threading.Event()
+        self.closed = False
+
+    def fetch(self) -> MapIconFontFetchResult:
+        self.fetched.set()
+        return MapIconFontFetchResult(ok=True, body=b"\x00\x01\x00\x00official")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class RetryMapIconFontFetcher(FakeMapIconFontFetcher):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    def fetch(self) -> MapIconFontFetchResult:
+        self.calls += 1
+        if self.calls == 1:
+            return MapIconFontFetchResult(ok=False, error_kind="status")
+        return super().fetch()
+
+
+class BlockingMapIconFontFetcher(FakeMapIconFontFetcher):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.finished = threading.Event()
+
+    def fetch(self) -> MapIconFontFetchResult:
+        self.started.set()
+        self.release.wait(5.0)
+        self.finished.set()
+        return MapIconFontFetchResult(ok=True, body=b"\x00\x01\x00\x00old")
+
+
+class FailingMapIconFontFetcher(FakeMapIconFontFetcher):
+    def fetch(self) -> MapIconFontFetchResult:
+        self.fetched.set()
+        return MapIconFontFetchResult(ok=False, error_kind="status")
 
 
 class RuntimeThreadingTests(unittest.TestCase):
@@ -133,6 +178,59 @@ class RuntimeThreadingTests(unittest.TestCase):
         self.assertEqual(image.body, b"\x89PNG\r\n\x1a\nmap")
         self.assertTrue(fetcher.closed)
         self.assertIsNone(poller._thread)
+
+    def test_map_icon_font_poller_fetches_once_off_tk_and_stops_bounded(self) -> None:
+        store = DashboardSnapshotStore()
+        fetcher = FakeMapIconFontFetcher()
+        poller = MapIconFontPoller(store, fetcher_factory=lambda: fetcher)
+
+        poller.start()
+        self.assertTrue(fetcher.fetched.wait(1.0))
+        poller.stop()
+
+        font = store.read_map_icon_font()
+        self.assertIsNotNone(font)
+        self.assertEqual(font.body, b"\x00\x01\x00\x00official")
+        self.assertTrue(fetcher.closed)
+        self.assertIsNone(poller._thread)
+
+    def test_map_icon_font_poller_retries_until_first_valid_font(self) -> None:
+        store = DashboardSnapshotStore()
+        fetcher = RetryMapIconFontFetcher()
+        poller = MapIconFontPoller(
+            store,
+            fetcher_factory=lambda: fetcher,
+            interval_sec=0.1,
+        )
+
+        poller.start()
+        self.assertTrue(fetcher.fetched.wait(1.0))
+        poller.stop()
+
+        self.assertEqual(fetcher.calls, 2)
+        self.assertIsNotNone(store.read_map_icon_font())
+
+    def test_stopped_font_generation_cannot_publish_into_restarted_poller(self) -> None:
+        store = DashboardSnapshotStore()
+        old_fetcher = BlockingMapIconFontFetcher()
+        new_fetcher = FailingMapIconFontFetcher()
+        fetchers = iter((old_fetcher, new_fetcher))
+        poller = MapIconFontPoller(
+            store,
+            fetcher_factory=lambda: next(fetchers),
+            interval_sec=60.0,
+        )
+
+        poller.start()
+        self.assertTrue(old_fetcher.started.wait(1.0))
+        poller.stop()
+        poller.start()
+        self.assertTrue(new_fetcher.fetched.wait(1.0))
+        old_fetcher.release.set()
+        self.assertTrue(old_fetcher.finished.wait(1.0))
+        poller.stop()
+
+        self.assertIsNone(store.read_map_icon_font())
 
 
 if __name__ == "__main__":

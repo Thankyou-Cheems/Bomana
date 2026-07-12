@@ -661,6 +661,16 @@ def _make_handler(context: _RequestContext) -> type[BaseHTTPRequestHandler]:
                     return
                 self._send_bytes(HTTPStatus.OK, image.body, image.content_type)
                 return
+            if path == "/api/v1/map-icons-font":
+                if context.security.session_view(str(self.headers.get("Cookie") or "")) is None:
+                    self._send_json(HTTPStatus.UNAUTHORIZED, {"error": "pairing_required"})
+                    return
+                font = context.snapshot_store.read_map_icon_font()
+                if font is None:
+                    self._send_text(HTTPStatus.NOT_FOUND, "map icon font unavailable")
+                    return
+                self._send_bytes(HTTPStatus.OK, font.body, "font/ttf")
+                return
             asset_name = {
                 "/assets/dashboard.css": "dashboard.css",
                 "/assets/dashboard.js": "dashboard.js",

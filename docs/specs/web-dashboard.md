@@ -189,28 +189,33 @@ access, packaging, threading, privacy, and tray lifecycle.
   available in every App variant independently of navigation and weapon feature
   flags.
 - `WDB-52`: Each hostile map point MUST carry its bounded current-sample 8111
-  `icon` semantic, and the bundled browser MUST map known official icon values
-  to recognizable aircraft, armor, air-defense, and naval vector symbols with
-  an explicit fallback. A compact over-map legend MUST expose click/tap filters
-  for ownship, navigation, weapon range, and each hostile icon family. Filter
-  state MUST remain browser-session-local, MUST default to all visible, and MUST
-  NOT call a write route, persist configuration, or alter the App snapshot.
+  `icon` semantic. The App MUST fetch the bounded official `/icons.ttf` resource
+  at low cadence until the first valid response and then stop fetching it,
+  outside Tk, publish it through a paired same-origin read route, and the browser
+  MUST use the official page's exact icon-to-glyph mapping and that font rather
+  than hand-drawn hostile vectors. Map markers and their compact over-map
+  legend MUST use the same glyph function and font. The legend MUST expose
+  click/tap filters for ownship, navigation, weapon range, and each hostile icon
+  family. Filter state MUST remain browser-session-local, MUST default to all
+  visible, and MUST NOT call a write route, persist configuration, or alter the
+  App snapshot. Missing/rejected font data MUST retain a bounded text-glyph
+  fallback without contacting 8111 from the browser.
 
 ## Hostile Unit Projection Matrix
 
 | Normalized map kind | Current 8111 object evidence | Browser marker | Other consumers |
 |---|---|---|---|
-| `hostile_aircraft` | Hostile side/color plus aircraft type/icon | Red directional aircraft marker | Existing AAM selection may separately consume only `hostile_air_contacts`; this map projection does not broaden targeting. |
-| `hostile_ground` | Hostile side/color plus ground/unit type or icon | Red square/cross marker | Web tactical map only. |
-| `hostile_naval` | Hostile side/color plus naval/ship type or icon | Red hull/diamond marker | Web tactical map only. |
-| `hostile_unit` | Hostile side/color on a positioned object that is not self, friendly, or a recognized map feature | Red diamond fallback marker | Web tactical map only; no guessed platform category. |
+| `hostile_aircraft` | Hostile side/color plus aircraft type/icon | Official 8111 icon-font glyph | Existing AAM selection may separately consume only `hostile_air_contacts`; this map projection does not broaden targeting. |
+| `hostile_ground` | Hostile side/color plus ground/unit type or icon | Official 8111 icon-font glyph | Web tactical map only. |
+| `hostile_naval` | Hostile side/color plus naval/ship type or icon | Official 8111 icon-font glyph | Web tactical map only. |
+| `hostile_unit` | Hostile side/color on a positioned object that is not self, friendly, or a recognized map feature | Official 8111 icon-font glyph or bounded text fallback | Web tactical map only; no guessed platform category. |
 
 Official icon-family projection is fixed as follows: aircraft icons such as
 `Fighter`, `Assault`, `Bomber`, and `Helicopter`; armor icons containing `Tank`
 or `Vehicle`; air-defense icons `SPAA`, `SAM`, and `AAA`; naval icons such as
 `Frigate`, `Boat`, `Destroyer`, `Cruiser`, `Carrier`, and `Ship`; every other
-value uses the fallback family. The browser may vary silhouettes within a
-family but must not invent target capabilities from the icon name.
+value uses the fallback family. Families control filtering only; their visual
+glyph is selected by the exact official 8111 mapping and bundled runtime font.
 
 ## Complete Action Matrix
 

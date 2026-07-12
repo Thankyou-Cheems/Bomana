@@ -174,7 +174,7 @@ class TkGeometryTests(unittest.TestCase):
             self.root.update_idletasks()
             self.assertEqual(banana.progress, 0.5)
             self.assertEqual(banana.itemcget(banana.percent_text, "text"), "50%")
-            self.assertEqual(banana.itemcget(banana.base_outline, "fill"), Theme.YELLOW)
+            self.assertEqual(banana.itemcget(banana.emoji_text, "text"), "🍌")
             self.assertGreater(len(banana.coords(banana.progress_outline)), 4)
             self.assertLess(
                 len(banana.coords(banana.progress_outline)),

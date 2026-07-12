@@ -174,7 +174,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `window_geometry.py` owns snap-anchor capture/application helpers so App geometry coordination can be tested without a Tk root.
    - `theme.py` owns runtime theme tokens, while `tk_style.py` owns shared Tk palette, action-button, and bordered clickable-surface styling used by the App, launcher, and modal dialogs.
    - Wrapped middle-surface content schedules one debounced expansion-only geometry sync. The sync compares current requested height with the root's actual height before reusing the existing window-size calculation, preventing the fixed bottom card from covering the final function/weapon row without creating a resize loop.
-   - The timer row renders normalized cycle progress through a large `BananaProgress` spanning the timer and badge rows: the banana-yellow base outline remains visible, the state-colored segment advances continuously, and a centered integer percentage makes progress readable at a glance. The configured integer cycle is shared by App config, core calculations, tray/Web target actions, snapshots, and persisted-state compatibility checks.
+   - The timer row renders normalized cycle progress through a large `BananaProgress` spanning the timer and badge rows: a banana emoji makes the cue immediately recognizable, the state-colored segment advances continuously, and a centered integer percentage makes progress readable at a glance. The configured integer cycle is shared by App config, core calculations, tray/Web target actions, snapshots, and persisted-state compatibility checks.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Diagnostics flow:
    - `Bomana.pyw` initializes `bomana/utils/diagnostics.py` at startup.
@@ -334,7 +334,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - `LogicPoller` owns the `GameLogic.tick()` background loop. It samples 8111 data and updates core state only; UI reads immutable `UISnapshot` values from the main refresh loop.
 - `GlobalHotkeys` registers a Win32 message-only window on the Tk owner thread. Its WndProc enqueues `WM_HOTKEY` callbacks through `TkEventDispatcher`, avoiding a separate message thread and reentrant Tk calls.
 - `pystray` runs on a daemon tray thread. Menu callbacks must dispatch UI actions through `TkEventDispatcher` instead of calling app methods directly.
-- Web Cockpit HTTP workers never import or call Tk. They may validate and enqueue only immutable semantic command envelopes; the Tk owner reauthorizes, rechecks feature/target validity, executes, and publishes completion. The separate map-image worker never touches Tk. App/tray actions for opening, copying, or toggling Web Cockpit access/control cross `TkEventDispatcher`; App shutdown stops the image worker and every exact listener before destroying Tk.
+- Web Cockpit HTTP workers never import or call Tk. They may validate and enqueue only immutable semantic command envelopes; the Tk owner reauthorizes, rechecks feature/target validity, executes, and publishes completion. The separate map-image and one-shot official icon-font workers never touch Tk. App/tray actions for opening, copying, or toggling Web Cockpit access/control cross `TkEventDispatcher`; App shutdown stops both asset workers and every exact listener before destroying Tk.
 - `SoundManager` owns its own worker queue for audio playback. UI code enqueues sound requests and does not block on playback.
 
 ## 8111 Map Coordinate Contract
@@ -342,6 +342,11 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   dedicated low-cadence worker accepts only bounded PNG/JPEG bytes and publishes
   an immutable in-memory image; browser requests read that snapshot rather than
   forwarding to 8111.
+- `MapIconFontFetcher` performs bounded, low-cadence, TrueType-signature-checked
+  fetches of official `/icons.ttf` until the first valid response. Its worker
+  then stops fetching and publishes immutable bytes to the dashboard
+  store, and a paired same-origin route serves them so map contacts and legend
+  samples share the official page's glyph mapping without browser access to 8111.
 - `MapInfoFetcher` owns `/map_info.json` retrieval and cache refresh timing on `GameState.map_info`.
 - `MapObjectsFetcher` owns `/map_obj.json` parsing only. It returns player,
   current hostile aircraft/ground/naval/fallback units, zone, POI, and airfield positions
@@ -376,7 +381,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - `HeadingTape` (`bomana/ui/widgets.py`) uses render-signature dedup to skip equivalent canvas redraw frames.
 - Standalone nav window rows (`bomana/ui/nav_window.py`) stay mounted; update text/color only to reduce micro-flicker.
 - Launcher and modal dialogs must treat DPI/text preferences as the font scale source of truth; normal window resize may reflow text, but must not continuously recalculate widget font sizes.
-- Do not rely on system emoji fonts for primary UI. Use `IconManager` PNG assets for visual icons and keep text labels emoji-free.
+- Do not rely on system emoji fonts for primary action/navigation icons. Use `IconManager` PNG assets there; the banana timer is the deliberate decorative emoji exception and retains a numeric percentage fallback.
 - `bomana/utils/system.py` privately loads bundled `Bomana UI Sans` fonts before selecting a UI family; this avoids requiring users to install fonts system-wide.
 
 ## Build & Release

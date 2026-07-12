@@ -5,6 +5,7 @@ import requests
 from bomana.core.telemetry import (
     Budget,
     HttpJson,
+    MapIconFontFetcher,
     MapImageFetcher,
     MapObjectsFetcher,
     TelemetryFetcher,
@@ -62,7 +63,7 @@ class FakeImageResponse:
         self.closed = False
 
     def iter_content(self, *, chunk_size):
-        assert chunk_size == MapImageFetcher._CHUNK_SIZE
+        assert chunk_size > 0
         yield from self.body_chunks
 
     def close(self):
@@ -180,6 +181,39 @@ class MapImageFetcherTests(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.error_kind, "body_too_large")
+
+
+class MapIconFontFetcherTests(unittest.TestCase):
+    def test_accepts_bounded_truetype_font_from_fixed_official_route(self) -> None:
+        body = b"\x00\x01\x00\x00" + b"official-font"
+        response = FakeImageResponse([body], content_type="text/plain", content_length=len(body))
+        session = FakeImageSession(response)
+
+        result = MapIconFontFetcher(session).fetch()
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.body, body)
+        self.assertTrue(session.calls[0][0].endswith("/icons.ttf"))
+        self.assertTrue(response.closed)
+
+    def test_rejects_invalid_signature_and_oversize_font(self) -> None:
+        cases = (
+            (FakeImageResponse([b"not-font"], content_type="text/plain"), "invalid_font"),
+            (
+                FakeImageResponse(
+                    [b"\x00\x01\x00\x00"],
+                    content_type="text/plain",
+                    content_length=MapIconFontFetcher.MAX_FONT_BYTES + 1,
+                ),
+                "body_too_large",
+            ),
+        )
+        for response, reason in cases:
+            with self.subTest(reason=reason):
+                result = MapIconFontFetcher(FakeImageSession(response)).fetch()
+                self.assertFalse(result.ok)
+                self.assertEqual(result.error_kind, reason)
+                self.assertTrue(response.closed)
 
 
 class FetcherDiagnosticTests(unittest.TestCase):

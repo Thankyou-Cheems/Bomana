@@ -29,9 +29,10 @@ War Thunder data boundary.
   code must not read game memory, inject code, unpack or decrypt logs, inspect
   packets, or modify game files.
 - `R8111-02`: Runtime 8111 endpoint use is limited to `/indicators`, `/state`,
-  `/map_obj.json`, `/map_info.json`, and the official tactical-map image
-  `/map.img`. The JSON recorder/replayer boundary remains limited to the four
-  JSON endpoints and MUST NOT record the image body.
+  `/map_obj.json`, `/map_info.json`, the official tactical-map image `/map.img`,
+  and the official tactical-map glyph font `/icons.ttf`. The JSON
+  recorder/replayer boundary remains limited to the four JSON endpoints and
+  MUST NOT record either binary body.
 - `R8111-03`: Bomana must not reconstruct, infer, or persist player-invisible
   enemy information. The separate paired Web tactical map may mirror every
   positioned hostile unit in the latest raw successful `/map_obj.json` sample,
@@ -42,7 +43,9 @@ War Thunder data boundary.
 - `R8111-04`: Ownership is fixed: `TelemetryFetcher` owns `/indicators` and
   `/state`; `MapInfoFetcher` owns `/map_info.json`; `MapObjectsFetcher` parses
   `/map_obj.json` normalized player, map-object, and current hostile-unit
-  coordinates plus bounded official `icon` semantics only; `MapImageFetcher` owns `/map.img`; `GameLogic` owns map
+  coordinates plus bounded official `icon` semantics only; `MapImageFetcher`
+  owns `/map.img`; `MapIconFontFetcher` owns bounded low-cadence `/icons.ttf`
+  retries that stop after the first valid font; `GameLogic` owns map
   scale semantics, coordinate conversion, Web tactical projection, and target
   selection. Only normalized hostile-aircraft contacts are eligible for the
   existing AAM target-selection path.

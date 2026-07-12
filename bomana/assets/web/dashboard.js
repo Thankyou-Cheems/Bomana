@@ -685,6 +685,7 @@ function renderMap(map) {
   $("mapEmpty").classList.toggle("hidden", map.available);
   if (!map.available) return;
 
+  syncHostileLegendIcons(map.points);
   if (state.mapFilters.weapon_range) drawWeaponRange(ctx, map, width, height, ratio);
 
   const pointsById = new Map(map.points.map((point) => [point.id, point]));
@@ -714,6 +715,34 @@ function hostileIconFamily(point) {
   if (/(tank|vehicle|artillery|armou?r|bunker)/.test(icon)) return "armor";
   if (point.kind === "hostile_naval" || /(ship|naval|boat|destroyer|cruiser|carrier|frigate|submarine|torpedo)/.test(icon)) return "naval";
   return "other";
+}
+
+function officialMapGlyph(iconValue) {
+  const icon = String(iconValue || "");
+  const fixed = Object.freeze({
+    Airdefence: "4", Structure: "5", waypoint: "6", capture_zone: "7",
+    bombing_point: "8", defending_point: "9", respawn_base_tank: "0",
+    respawn_base_fighter: ".", respawn_base_bomber: ":",
+  });
+  return fixed[icon] || icon.charAt(0) || "?";
+}
+
+function syncHostileLegendIcons(points) {
+  const representatives = { aircraft: "Fighter", armor: "MediumTank", air_defense: "SPAA", naval: "Frigate", other: "?" };
+  const found = new Set();
+  for (const point of points) {
+    if (!HOSTILE_MAP_KINDS.has(String(point.kind || ""))) continue;
+    const family = hostileIconFamily(point);
+    if (!found.has(family)) {
+      representatives[family] = point.icon || "?";
+      found.add(family);
+    }
+  }
+  for (const marker of document.querySelectorAll("[data-map-icon-family]")) {
+    const icon = representatives[marker.dataset.mapIconFamily] || "?";
+    marker.textContent = officialMapGlyph(icon);
+    marker.title = icon;
+  }
 }
 
 function mapPointFilterKey(point) {
@@ -851,7 +880,14 @@ function drawMapPoint(ctx, map, point, width, height, ratio) {
     ctx.beginPath(); ctx.arc(p.x, p.y, 8 * ratio, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(p.x - 11*ratio,p.y); ctx.lineTo(p.x + 11*ratio,p.y); ctx.moveTo(p.x,p.y-11*ratio); ctx.lineTo(p.x,p.y+11*ratio); ctx.stroke();
   } else if (HOSTILE_MAP_KINDS.has(String(point.kind || ""))) {
-    drawHostileIcon(ctx, p, point, ratio);
+    ctx.font = `bold ${24 * ratio}px Bomana8111Icons, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const glyph = officialMapGlyph(point.icon);
+    ctx.fillText(glyph, p.x, p.y);
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = ratio;
+    ctx.strokeText(glyph, p.x, p.y);
   }
   if (point.is_target || state.zoom >= 1.7 || point.kind === "traceback") {
     ctx.font = `${9 * ratio}px Segoe UI`;
@@ -859,46 +895,6 @@ function drawMapPoint(ctx, map, point, width, height, ratio) {
     ctx.fillText(point.label, p.x + 12 * ratio, p.y - 9 * ratio);
   }
   ctx.restore();
-}
-
-function drawHostileIcon(ctx, p, point, ratio) {
-  const family = hostileIconFamily(point);
-  const icon = String(point.icon || "").toLowerCase();
-  ctx.translate(p.x, p.y);
-  if (family === "aircraft") {
-    ctx.beginPath();
-    ctx.moveTo(0, -11 * ratio); ctx.lineTo(2 * ratio, -2 * ratio);
-    ctx.lineTo(10 * ratio, 3 * ratio); ctx.lineTo(3 * ratio, 4 * ratio);
-    ctx.lineTo(3 * ratio, 9 * ratio); ctx.lineTo(0, 7 * ratio);
-    ctx.lineTo(-3 * ratio, 9 * ratio); ctx.lineTo(-3 * ratio, 4 * ratio);
-    ctx.lineTo(-10 * ratio, 3 * ratio); ctx.lineTo(-2 * ratio, -2 * ratio);
-    ctx.closePath(); ctx.stroke();
-  } else if (family === "armor") {
-    ctx.strokeRect(-10 * ratio, -6 * ratio, 20 * ratio, 12 * ratio);
-    ctx.strokeRect(-5 * ratio, -4 * ratio, 9 * ratio, 8 * ratio);
-    ctx.beginPath(); ctx.moveTo(4 * ratio, -2 * ratio); ctx.lineTo(11 * ratio, -5 * ratio); ctx.stroke();
-  } else if (family === "air_defense") {
-    ctx.strokeRect(-9 * ratio, 2 * ratio, 18 * ratio, 6 * ratio);
-    ctx.beginPath();
-    if (icon.includes("sam")) {
-      ctx.moveTo(-6 * ratio, 2 * ratio); ctx.lineTo(5 * ratio, -9 * ratio);
-      ctx.moveTo(-1 * ratio, 2 * ratio); ctx.lineTo(9 * ratio, -8 * ratio);
-    } else {
-      ctx.moveTo(-3 * ratio, 2 * ratio); ctx.lineTo(-6 * ratio, -10 * ratio);
-      ctx.moveTo(3 * ratio, 2 * ratio); ctx.lineTo(6 * ratio, -10 * ratio);
-    }
-    ctx.stroke();
-  } else if (family === "naval") {
-    ctx.beginPath();
-    ctx.moveTo(-11 * ratio, 1 * ratio); ctx.lineTo(10 * ratio, 1 * ratio);
-    ctx.lineTo(6 * ratio, 7 * ratio); ctx.lineTo(-7 * ratio, 7 * ratio); ctx.closePath(); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-3 * ratio, 1 * ratio); ctx.lineTo(-3 * ratio, -5 * ratio);
-    ctx.lineTo(4 * ratio, -5 * ratio); ctx.lineTo(4 * ratio, 1 * ratio);
-    ctx.moveTo(0, -5 * ratio); ctx.lineTo(0, -10 * ratio); ctx.stroke();
-  } else {
-    const s = 8 * ratio;
-    ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); ctx.stroke();
-  }
 }
 
 function drawPlayer(ctx, map, player, width, height, ratio) {
@@ -1106,6 +1102,7 @@ $("pairingForm").addEventListener("submit", (event) => {
 
 installControlHandlers();
 installMapControls();
+if (document.fonts) document.fonts.load("bold 18px Bomana8111Icons").then(renderCurrentMap, () => {});
 if ("ResizeObserver" in window) new ResizeObserver(renderCurrentMap).observe($("mapStage"));
 window.addEventListener("resize", renderCurrentMap, { passive: true });
 pollSnapshot();

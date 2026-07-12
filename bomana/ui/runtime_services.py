@@ -29,7 +29,7 @@ from bomana.core.state import Phase, UISnapshot
 from bomana.metadata import __title__
 from bomana.ui.hud_overlay import HUDOverlay
 from bomana.ui.hud_presenter import build_hud_target_model
-from bomana.ui.runtime import MapImagePoller, start_daemon_thread
+from bomana.ui.runtime import MapIconFontPoller, MapImagePoller, start_daemon_thread
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_action_button
 from bomana.utils.diagnostics import log_event, log_exception
@@ -79,6 +79,7 @@ class AppRuntimeServices:
         self._hud_render_error_count = 0
         self.dashboard_store = DashboardSnapshotStore()
         self.map_image_poller = MapImagePoller(self.dashboard_store)
+        self.map_icon_font_poller = MapIconFontPoller(self.dashboard_store)
         self.dashboard_control_store = DashboardControlStore()
         self.dashboard: WebDashboardRuntime | None = None
         self.dashboard_error = ""
@@ -138,9 +139,12 @@ class AppRuntimeServices:
             )
             dashboard.start()
             self.map_image_poller.start()
+            self.map_icon_font_poller.start()
         except Exception as exc:
             with contextlib.suppress(Exception):
                 self.map_image_poller.stop()
+            with contextlib.suppress(Exception):
+                self.map_icon_font_poller.stop()
             if dashboard is not None:
                 with contextlib.suppress(Exception):
                     dashboard.stop()
@@ -216,6 +220,7 @@ class AppRuntimeServices:
         dashboard = self.dashboard
         self.dashboard = None
         self.map_image_poller.stop()
+        self.map_icon_font_poller.stop()
         if dashboard is None:
             return
         with contextlib.suppress(Exception):

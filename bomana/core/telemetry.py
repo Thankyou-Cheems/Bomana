@@ -52,6 +52,81 @@ class MapImageFetchResult:
     status_code: int | None = None
 
 
+@dataclass(frozen=True)
+class MapIconFontFetchResult:
+    """Bounded result for the official tactical-map TrueType glyph font."""
+
+    ok: bool
+    body: bytes = b""
+    error_kind: str = ""
+    status_code: int | None = None
+
+
+class MapIconFontFetcher:
+    """Fetch the official 8111 icon font once through a bounded binary path."""
+
+    PATH = "/icons.ttf"
+    MAX_FONT_BYTES = 1024 * 1024
+    CONNECT_TIMEOUT_SEC = 0.5
+    READ_TIMEOUT_SEC = 1.5
+    _CHUNK_SIZE = 64 * 1024
+
+    def __init__(self, session: requests.Session | None = None) -> None:
+        self.session = session or requests.Session()
+        self._owns_session = session is None
+        if self._owns_session:
+            self.session.trust_env = False
+
+    def close(self) -> None:
+        if self._owns_session:
+            self.session.close()
+
+    def fetch(self) -> MapIconFontFetchResult:
+        response = None
+        try:
+            response = self.session.get(
+                f"{NetworkConfig.API_BASE}{self.PATH}",
+                timeout=(self.CONNECT_TIMEOUT_SEC, self.READ_TIMEOUT_SEC),
+                stream=True,
+            )
+            if not response.ok:
+                return MapIconFontFetchResult(
+                    ok=False,
+                    error_kind="status",
+                    status_code=int(response.status_code),
+                )
+            declared_length = str(response.headers.get("Content-Length") or "").strip()
+            if declared_length:
+                if not declared_length.isascii() or not declared_length.isdigit():
+                    return MapIconFontFetchResult(ok=False, error_kind="invalid_content_length")
+                if int(declared_length) > self.MAX_FONT_BYTES:
+                    return MapIconFontFetchResult(ok=False, error_kind="body_too_large")
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in response.iter_content(chunk_size=self._CHUNK_SIZE):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > self.MAX_FONT_BYTES:
+                    return MapIconFontFetchResult(ok=False, error_kind="body_too_large")
+                chunks.append(bytes(chunk))
+            body = b"".join(chunks)
+            if not body.startswith(b"\x00\x01\x00\x00"):
+                return MapIconFontFetchResult(ok=False, error_kind="invalid_font")
+            return MapIconFontFetchResult(
+                ok=True,
+                body=body,
+                status_code=int(response.status_code),
+            )
+        except requests.Timeout:
+            return MapIconFontFetchResult(ok=False, error_kind="timeout")
+        except requests.RequestException:
+            return MapIconFontFetchResult(ok=False, error_kind="request_error")
+        finally:
+            if response is not None:
+                response.close()
+
+
 class MapImageFetcher:
     """Fetch the official map image without sharing the JSON polling session."""
 
