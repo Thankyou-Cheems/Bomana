@@ -408,6 +408,14 @@ class TkGeometryTests(unittest.TestCase):
 
         self.assertNotIn("show_relative=False", source)
 
+    def test_main_card_stack_does_not_expand_middle_row_vertically(self) -> None:
+        surface = tk.Frame(self.root)
+
+        MainWindowBuilder._configure_surface_grid(surface)
+
+        self.assertEqual(surface.grid_columnconfigure(0)["weight"], 1)
+        self.assertEqual(surface.grid_rowconfigure(1)["weight"], 0)
+
     def test_set_elided_text_uses_label_font_metrics(self) -> None:
         label = tk.Label(self.root, font=("Segoe UI", 10))
         full_text = "Very long aircraft display name"

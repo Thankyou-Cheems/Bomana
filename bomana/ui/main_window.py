@@ -54,8 +54,7 @@ class MainWindowBuilder:
 
         app.surface_frame = tk.Frame(app.main_frame, bg=Theme.BG, bd=0, highlightthickness=0)
         app.surface_frame.pack(fill="both", expand=True)
-        app.surface_frame.grid_columnconfigure(0, weight=1)
-        app.surface_frame.grid_rowconfigure(1, weight=1)
+        self._configure_surface_grid(app.surface_frame)
 
         self._build_top_card()
         self._build_mid_cards()
@@ -65,6 +64,14 @@ class MainWindowBuilder:
             lambda _event: app._schedule_content_geometry_sync(),
             add="+",
         )
+
+    @staticmethod
+    def _configure_surface_grid(surface: tk.Misc) -> None:
+        surface.grid_columnconfigure(0, weight=1)
+        # The cards are a compact vertical stack.  Giving the middle row a
+        # positive weight turns any transient surplus startup height into two
+        # conspicuous blank bands around that card.
+        surface.grid_rowconfigure(1, weight=0)
 
     def _create_card(
         self,
