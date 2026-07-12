@@ -157,6 +157,7 @@ class App:
         # 窗口状态
         self._user_moved = False
         self._manual_pos = None
+        self._saved_monitor_index = None
         self._last_sortie_id = -1
         self._restored_state = False
         self._last_zone_destroyed_alert = False
@@ -563,9 +564,12 @@ class App:
                 self._manual_pos = tuple(manual_pos)
                 self._user_moved = saved_pos.get("user_moved", False)
             # 记录显示器索引（用于多显示器支持）
-            self._saved_monitor_index = saved_pos.get("monitor_index", 0)
+            saved_monitor_index = saved_pos.get("monitor_index")
+            self._saved_monitor_index = (
+                saved_monitor_index if isinstance(saved_monitor_index, int) else None
+            )
         else:
-            self._saved_monitor_index = 0
+            self._saved_monitor_index = None
 
         beep_enabled = config.get("beep_enabled", False)
         self.sound.set_enabled(beep_enabled)
@@ -642,11 +646,11 @@ class App:
         config["overspeed"] = OverspeedConfig.export_user_config()
 
         # 窗口位置（包含多显示器信息）
-        monitor_index = 0
+        monitor_index = self._saved_monitor_index
         if self._manual_pos:
             monitor = Win32.get_monitor_at(self._manual_pos[0], self._manual_pos[1])
             if monitor:
-                monitor_index = monitor.get("index", 0)
+                monitor_index = monitor.get("index")
 
         config["window_position"] = {
             "corner": self._corner.name,
@@ -1299,21 +1303,21 @@ class App:
         """定位窗口到指定角落(支持多显示器)"""
         m = int(UIConfig.WINDOW_MARGIN * self.scale)
 
-        # 获取当前窗口所在的显示器
-        try:
-            current_x = self.root.winfo_x()
-            current_y = self.root.winfo_y()
-        except tk.TclError:
-            current_x, current_y = 0, 0
-
-        # 如果窗口位置有效，获取该位置所在的显示器
-        if (current_x, current_y) != (0, 0):
-            monitor = Win32.get_monitor_at(current_x, current_y)
-        else:
-            # 否则使用主显示器
-            monitors = Win32.get_all_monitors()
+        # Corner placement must not depend on the transient coordinates of a
+        # hidden/just-created Tk root (often 0,0 or an off-screen sentinel).
+        # Use persisted monitor identity when valid, otherwise the primary.
+        monitors = Win32.get_all_monitors()
+        monitor = None
+        saved_monitor_index = getattr(self, "_saved_monitor_index", None)
+        if isinstance(saved_monitor_index, int):
             monitor = next(
-                (m for m in monitors if m.get("is_primary")), monitors[0] if monitors else None
+                (item for item in monitors if item.get("index") == saved_monitor_index),
+                None,
+            )
+        if monitor is None:
+            monitor = next(
+                (item for item in monitors if item.get("is_primary")),
+                monitors[0] if monitors else None,
             )
 
         # 如果无法获取显示器信息，回退到主屏幕
@@ -1326,6 +1330,7 @@ class App:
         mon_y = monitor["y"]
         mon_w = monitor["width"]
         mon_h = monitor["height"]
+        self._saved_monitor_index = monitor.get("index")
 
         pos = {
             Corner.TOP_RIGHT: (mon_x + mon_w - self.W - m, mon_y + m),

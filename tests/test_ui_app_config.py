@@ -17,6 +17,7 @@ def _make_config_only_app() -> App:
     instance._zone_sound_enabled = False
     instance._manual_pos = None
     instance._user_moved = False
+    instance._saved_monitor_index = None
     instance._corner = Corner.TOP_RIGHT
     instance._locked = True
     instance._manual_reset_confirm_until = 0.0
@@ -140,6 +141,82 @@ def test_finalize_window_geometry_forces_content_sized_recalculation(monkeypatch
 
     assert recalc_calls == [{"keep_pos": False, "force_shrink": True}]
     assert update_calls == ["update", "update"]
+
+
+def test_default_corner_placement_ignores_transient_root_origin(monkeypatch) -> None:
+    geometry_calls: list[str] = []
+    monitor_lookup_points: list[tuple[int, int]] = []
+    primary = {
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 1080,
+        "is_primary": True,
+    }
+    secondary = {
+        "index": 1,
+        "x": -1280,
+        "y": 0,
+        "width": 1280,
+        "height": 1024,
+        "is_primary": False,
+    }
+    app = _make_config_only_app()
+    app.root = SimpleNamespace(
+        winfo_x=lambda: -32000,
+        winfo_y=lambda: -32000,
+        geometry=lambda value: geometry_calls.append(value),
+    )
+    app.W = 500
+    app.H = 300
+    app.scale = 1.0
+    monkeypatch.setattr(app_module.Win32, "get_all_monitors", lambda: [secondary, primary])
+
+    def monitor_at(x: int, y: int):
+        monitor_lookup_points.append((x, y))
+        return primary
+
+    monkeypatch.setattr(app_module.Win32, "get_monitor_at", monitor_at)
+
+    app._position()
+
+    assert geometry_calls == ["500x300+1400+20"]
+    assert monitor_lookup_points == [(1650, 170)]
+    assert app._saved_monitor_index == 0
+
+
+def test_corner_placement_uses_valid_saved_monitor_index(monkeypatch) -> None:
+    geometry_calls: list[str] = []
+    primary = {
+        "index": 0,
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 1080,
+        "is_primary": True,
+    }
+    secondary = {
+        "index": 1,
+        "x": -1280,
+        "y": 0,
+        "width": 1280,
+        "height": 1024,
+        "is_primary": False,
+    }
+    app = _make_config_only_app()
+    app._saved_monitor_index = 1
+    app.root = SimpleNamespace(geometry=lambda value: geometry_calls.append(value))
+    app.W = 500
+    app.H = 300
+    app.scale = 1.0
+    monkeypatch.setattr(app_module.Win32, "get_all_monitors", lambda: [secondary, primary])
+    monkeypatch.setattr(app_module.Win32, "get_monitor_at", lambda _x, _y: secondary)
+
+    app._position()
+
+    assert geometry_calls == ["500x300+-520+20"]
+    assert app._saved_monitor_index == 1
 
 
 def test_content_geometry_sync_expands_when_required_height_grows() -> None:
