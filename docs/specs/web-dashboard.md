@@ -230,6 +230,7 @@ glyph is selected by the exact official 8111 mapping and bundled runtime font.
 | `config.set_timer_cycle_minutes` | `minutes: integer 1..180` | Set and persist the exact shared timer period; retain the active life spawn timestamp and recompute immediately. | Current authorization, exact integer bounds, current timer/config availability, and persistence success. |
 | `weapon.select` | `weapon_id: non-empty string` | Select and persist exactly that existing catalog weapon id through the existing manual-selection semantic path. | Current authorization, `ENABLE_CCRP`, exact catalog membership, and current-aircraft compatibility. |
 | `weapon.set_ballistic_model` | `model: foxthree_compatible|strict_official` | Set and persist exactly that existing ballistic model. | Current authorization, `ENABLE_CCRP`, and exact enum membership. |
+| `network.set_lan_enabled` | enable: `enabled: true`, `confirmed: true`; disable: `enabled: false` | Enable or disable the current-run LAN access/control path through the existing App LAN lifecycle (exact RFC1918 listeners, pairing rotation, and LAN-session revocation on disable). | Loopback `control` transport only; current dashboard availability; enable requires confirmation; bind/control authority success before completion. |
 
 Persistence and stable completion-reason semantics are governed by `WDB-41` and
 `WDB-42`.

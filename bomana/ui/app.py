@@ -269,6 +269,7 @@ class App:
             "state.set_beep_enabled",
             "config.set_panel_visibility",
             "config.set_timer_cycle_minutes",
+            "network.set_lan_enabled",
         ]
         panel_targets = ["speed"]
         if ENABLE_ZONES:
@@ -339,12 +340,24 @@ class App:
             ballistic_model=ballistic_model,
             timer_cycle_minutes=GameConfig.cycle_minutes(),
         )
+        runtime_services = getattr(self, "runtime_services", None)
+        dashboard = getattr(runtime_services, "dashboard", None) if runtime_services else None
+        lan_enabled = bool(dashboard is not None and dashboard.lan_enabled)
+        lan_urls: tuple[str, ...] = ()
+        if lan_enabled and dashboard is not None:
+            lan_urls = tuple(
+                str(url)[:256]
+                for url in dashboard.lan_pairing_urls[:16]
+                if isinstance(url, str) and url
+            )
         return ControlStateProjection(
             revision=revision,
             commands=tuple(commands),
             panel_targets=tuple(panel_targets),
             state=target_state,
             weapons=tuple(weapon_choices),
+            lan_enabled=lan_enabled,
+            lan_pairing_urls=lan_urls,
         )
 
     def _publish_web_control_state(
@@ -366,6 +379,8 @@ class App:
             candidate.panel_targets,
             candidate.state,
             candidate.weapons,
+            candidate.lan_enabled,
+            candidate.lan_pairing_urls,
         )
         if force_revision or self._web_control_signature != signature:
             self._web_control_revision += 1
@@ -379,6 +394,8 @@ class App:
                 candidate.panel_targets,
                 candidate.state,
                 candidate.weapons,
+                candidate.lan_enabled,
+                candidate.lan_pairing_urls,
             )
         return self._web_control_revision
 
@@ -1898,6 +1915,35 @@ class App:
             if model not in WeaponBallisticModelConfig.VALID_MODELS:
                 return "invalid_target"
             return "ok" if persist_ballistic_model_selection(model) else "persistence_failed"
+        if command.name == "network.set_lan_enabled":
+            # Only the loopback owner may open or close LAN access for this process.
+            if envelope.transport != "loopback":
+                return "authorization_revoked"
+            if not isinstance(command.enabled, bool):
+                return "invalid_target"
+            dashboard = self.runtime_services.dashboard
+            currently_enabled = bool(dashboard is not None and dashboard.lan_enabled)
+            if command.enabled is currently_enabled:
+                return "ok"
+            if command.enabled:
+                if command.confirmed is not True:
+                    return "invalid_target"
+                try:
+                    self.runtime_services.enable_dashboard_lan()
+                except Exception as exc:
+                    log_exception("web_dashboard_lan_enable_failed", exc)
+                    return "execution_failed"
+                self._refresh_tray()
+                self._refresh_web_access_row()
+                return "ok"
+            try:
+                self.runtime_services.disable_dashboard_lan()
+            except Exception as exc:
+                log_exception("web_dashboard_lan_disable_failed", exc)
+                return "execution_failed"
+            self._refresh_tray()
+            self._refresh_web_access_row()
+            return "ok"
         return "invalid_target"
 
     def _execute_web_command(self, envelope: WebCommandEnvelope) -> None:

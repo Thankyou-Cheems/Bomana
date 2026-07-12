@@ -38,6 +38,7 @@ COMMAND_NAMES = {
     "config.set_timer_cycle_minutes",
     "weapon.select",
     "weapon.set_ballistic_model",
+    "network.set_lan_enabled",
 }
 PANEL_TARGETS = {
     "zones",
@@ -184,6 +185,10 @@ def _control_state(*, scope: str = "control") -> dict[str, Any]:
             "selected_weapon_id": "agm_65d",
             "ballistic_model": "foxthree_compatible",
         },
+        "network": {
+            "lan_enabled": False,
+            "lan_pairing_urls": [],
+        },
         "weapons": [
             {
                 "weapon_id": "agm_65d",
@@ -206,17 +211,22 @@ def _control_state(*, scope: str = "control") -> dict[str, Any]:
     }
 
 
-def test_command_schema_is_the_exact_nine_command_matrix() -> None:
+def test_command_schema_is_the_exact_command_matrix() -> None:
     definitions = COMMAND_SCHEMA["$defs"]
     commands = {definition["properties"]["command"]["const"] for definition in definitions.values()}
     assert commands == COMMAND_NAMES
-    assert len(COMMAND_SCHEMA["oneOf"]) == len(COMMAND_NAMES) == 9
+    assert len(COMMAND_NAMES) == 10
+    # LAN on/off are two exact schema branches of one command name.
+    assert len(COMMAND_SCHEMA["oneOf"]) == 11
     assert set(definitions["setPanelVisibility"]["properties"]["target"]["enum"]) == (PANEL_TARGETS)
     assert definitions["setBallisticModel"]["properties"]["model"]["enum"] == [
         "foxthree_compatible",
         "strict_official",
     ]
     assert definitions["resetTimer"]["properties"]["confirmed"] == {"const": True}
+    assert definitions["setLanEnabledOn"]["properties"]["confirmed"] == {"const": True}
+    assert definitions["setLanEnabledOn"]["properties"]["enabled"] == {"const": True}
+    assert definitions["setLanEnabledOff"]["properties"]["enabled"] == {"const": False}
     assert definitions["setTimerCycleMinutes"]["properties"]["minutes"] == {
         "type": "integer",
         "minimum": 1,
@@ -252,12 +262,26 @@ def test_command_schema_accepts_only_exact_bounded_semantic_requests() -> None:
             "command": "weapon.set_ballistic_model",
             "model": "strict_official",
         },
+        {
+            "schema_version": 1,
+            "command": "network.set_lan_enabled",
+            "enabled": True,
+            "confirmed": True,
+        },
+        {"schema_version": 1, "command": "network.set_lan_enabled", "enabled": False},
     ]
     for request in accepted:
         _assert_valid(COMMAND_SCHEMA, request)
 
     rejected = [
         {"schema_version": 1, "command": "action.reset_timer", "confirmed": False},
+        {"schema_version": 1, "command": "network.set_lan_enabled", "enabled": True},
+        {
+            "schema_version": 1,
+            "command": "network.set_lan_enabled",
+            "enabled": False,
+            "confirmed": True,
+        },
         {"schema_version": 1, "command": "state.toggle_locked"},
         {"schema_version": 1, "command": "action.cycle_corner", "callback": "_next_corner"},
         {
@@ -359,7 +383,7 @@ def test_schema_bounds_match_http_and_session_contract() -> None:
     assert command_id["pattern"] == "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
     assert CONTROL_STATE_SCHEMA["properties"]["recent_commands"]["maxItems"] == 64
     assert CONTROL_STATE_SCHEMA["properties"]["weapons"]["maxItems"] == 512
-    assert CONTROL_STATE_SCHEMA["$defs"]["capabilities"]["properties"]["commands"]["maxItems"] == 9
+    assert CONTROL_STATE_SCHEMA["$defs"]["capabilities"]["properties"]["commands"]["maxItems"] == 10
 
 
 def test_server_is_dedicated_loopback_first_and_never_an_8111_proxy() -> None:

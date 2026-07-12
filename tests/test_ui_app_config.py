@@ -234,6 +234,7 @@ def test_web_control_projection_respects_compile_feature_authority(monkeypatch) 
         "state.set_beep_enabled",
         "config.set_panel_visibility",
         "config.set_timer_cycle_minutes",
+        "network.set_lan_enabled",
     )
     assert projection.panel_targets == ("speed",)
     assert projection.weapons == ()

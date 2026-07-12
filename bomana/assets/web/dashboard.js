@@ -369,6 +369,41 @@ function renderControlState(payload) {
   setCommandButtons(["resetTimerButton"], "action.reset_timer");
   setCommandButtons(["cycleCornerButton"], "action.cycle_corner");
 
+  const lanAvailable = commandIsAvailable("network.set_lan_enabled");
+  const lanBusy = commandIsBusy("network.set_lan_enabled");
+  const network = payload.network || {};
+  const lanEnabled = Boolean(
+    (payload.permissions && payload.permissions.lan_control_enabled)
+    || network.lan_enabled,
+  );
+  setPressed("lanOnButton", lanEnabled);
+  setPressed("lanOffButton", !lanEnabled);
+  $("lanOnButton").disabled = !lanAvailable || lanBusy || lanEnabled;
+  $("lanOffButton").disabled = !lanAvailable || lanBusy || !lanEnabled;
+  $("lanEnabledSetting").classList.toggle("unavailable", !lanAvailable);
+  const links = Array.isArray(network.lan_pairing_urls) ? network.lan_pairing_urls.filter(Boolean) : [];
+  const linksBlock = $("lanLinksBlock");
+  const linkList = $("lanLinkList");
+  if (linksBlock && linkList) {
+    linksBlock.hidden = !(lanEnabled && links.length);
+    linkList.replaceChildren();
+    for (const url of links.slice(0, 16)) {
+      const item = document.createElement("li");
+      item.textContent = String(url);
+      linkList.append(item);
+    }
+    const copyButton = $("copyLanLinksButton");
+    if (copyButton) copyButton.disabled = !links.length;
+  }
+  text(
+    "lanNetworkHelp",
+    lanAvailable
+      ? (lanEnabled
+        ? "局域网已开启。关闭会立即撤销全部局域网会话并轮换配对码。"
+        : "仅在可信家庭或个人网络中开启。开启后会轮换配对码，手机需使用新链接。")
+      : "当前会话不能管理局域网（需要本机控制会话）。",
+  );
+
   setCommandButtons(["lockedOnButton", "lockedOffButton"], "state.set_locked");
   setPressed("lockedOnButton", targetState.locked);
   setPressed("lockedOffButton", !targetState.locked);
@@ -1328,6 +1363,45 @@ function installControlHandlers() {
       { schema_version: 1, command: "action.cycle_corner" },
       "切换界面位置",
     );
+  });
+  $("lanOnButton").addEventListener("click", () => {
+    if (!window.confirm(
+      "仅应在可信的家庭或个人局域网中开启。\n\n"
+      + "Bomana 不会自动修改 Windows 防火墙，也不会把数据上传到互联网。\n\n"
+      + "开启后，同一网络中持有新配对码的设备可查看信息并操作 Bomana 的固定功能。\n"
+      + "是否为本次运行开启？",
+    )) return;
+    void submitCommand(
+      {
+        schema_version: 1,
+        command: "network.set_lan_enabled",
+        enabled: true,
+        confirmed: true,
+      },
+      "开启局域网访问与控制",
+    );
+  });
+  $("lanOffButton").addEventListener("click", () => {
+    if (!window.confirm("关闭局域网后，所有手机会话会立即失效。确定关闭？")) return;
+    void submitCommand(
+      { schema_version: 1, command: "network.set_lan_enabled", enabled: false },
+      "关闭局域网访问与控制",
+    );
+  });
+  $("copyLanLinksButton").addEventListener("click", async () => {
+    const links = Array.from($("lanLinkList").querySelectorAll("li")).map((node) => node.textContent || "");
+    const textValue = links.filter(Boolean).join("\n");
+    if (!textValue) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textValue);
+      } else {
+        throw new Error("clipboard_unavailable");
+      }
+      setCommandStatus("手机访问链接已复制", "success");
+    } catch (_error) {
+      setCommandStatus("无法复制链接，请手动长按选择", "error");
+    }
   });
   $("lockedOnButton").addEventListener("click", () => {
     void submitCommand(

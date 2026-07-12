@@ -11,6 +11,7 @@
     "csrf",
     "capabilities",
     "state",
+    "network",
     "weapons",
     "recent_commands"
   ],
@@ -26,6 +27,7 @@
     },
     "capabilities": {"$ref": "#/$defs/capabilities"},
     "state": {"$ref": "#/$defs/state"},
+    "network": {"$ref": "#/$defs/network"},
     "weapons": {
       "type": "array",
       "maxItems": 512,
@@ -81,7 +83,8 @@
         "config.set_panel_visibility",
         "config.set_timer_cycle_minutes",
         "weapon.select",
-        "weapon.set_ballistic_model"
+        "weapon.set_ballistic_model",
+        "network.set_lan_enabled"
       ]
     },
     "panelTarget": {
@@ -113,7 +116,7 @@
         "commands": {
           "type": "array",
           "uniqueItems": true,
-          "maxItems": 9,
+          "maxItems": 10,
           "items": {"$ref": "#/$defs/commandName"}
         },
         "panel_targets": {
@@ -163,6 +166,23 @@
         },
         "selected_weapon_id": {"type": "string", "maxLength": 128},
         "ballistic_model": {"enum": ["foxthree_compatible", "strict_official"]}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lan_enabled", "lan_pairing_urls"],
+      "properties": {
+        "lan_enabled": {"type": "boolean"},
+        "lan_pairing_urls": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
       }
     },
     "weaponChoice": {

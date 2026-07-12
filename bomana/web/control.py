@@ -32,6 +32,7 @@ COMMAND_NAMES = (
     "config.set_timer_cycle_minutes",
     "weapon.select",
     "weapon.set_ballistic_model",
+    "network.set_lan_enabled",
 )
 PANEL_TARGETS = (
     "zones",
@@ -64,6 +65,7 @@ type CommandName = Literal[
     "config.set_timer_cycle_minutes",
     "weapon.select",
     "weapon.set_ballistic_model",
+    "network.set_lan_enabled",
 ]
 type PanelTarget = Literal["zones", "airfields", "fuel", "speed", "checklist", "weapon_solution"]
 type BallisticModel = Literal["foxthree_compatible", "strict_official"]
@@ -298,6 +300,18 @@ class ValidatedWebCommand:
             expected = (None, None, None, None, None, self.weapon_id, None)
         elif self.name == "weapon.set_ballistic_model" and self.model in BALLISTIC_MODELS:
             expected = (None, None, None, None, None, None, self.model)
+        elif (
+            self.name == "network.set_lan_enabled"
+            and self.enabled is True
+            and self.confirmed is True
+        ):
+            expected = (True, None, True, None, None, None, None)
+        elif (
+            self.name == "network.set_lan_enabled"
+            and self.enabled is False
+            and self.confirmed is None
+        ):
+            expected = (None, None, False, None, None, None, None)
         else:
             raise ControlValidationError("invalid semantic command fields")
         if fields != expected:
@@ -320,6 +334,10 @@ class ValidatedWebCommand:
             payload["weapon_id"] = str(self.weapon_id)
         elif self.name == "weapon.set_ballistic_model":
             payload["model"] = str(self.model)
+        elif self.name == "network.set_lan_enabled":
+            payload["enabled"] = bool(self.enabled)
+            if self.enabled is True:
+                payload["confirmed"] = True
         return payload
 
     @property
@@ -357,6 +375,11 @@ def validate_command_payload(payload: Any) -> ValidatedWebCommand:
         return ValidatedWebCommand(name=name, weapon_id=payload["weapon_id"])
     if name == "weapon.set_ballistic_model":
         return ValidatedWebCommand(name=name, model=payload["model"])
+    if name == "network.set_lan_enabled":
+        enabled = bool(payload["enabled"])
+        if enabled:
+            return ValidatedWebCommand(name=name, enabled=True, confirmed=True)
+        return ValidatedWebCommand(name=name, enabled=False)
     raise ControlValidationError("command is outside the action matrix")
 
 
@@ -442,6 +465,8 @@ class ControlStateProjection:
     panel_targets: tuple[PanelTarget, ...]
     state: ControlTargetState
     weapons: tuple[WeaponChoice, ...]
+    lan_enabled: bool = False
+    lan_pairing_urls: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.commands, tuple) or not isinstance(self.panel_targets, tuple):
@@ -452,6 +477,14 @@ class ControlStateProjection:
             raise ControlValidationError("control target state has the wrong type")
         if any(not isinstance(weapon, WeaponChoice) for weapon in self.weapons):
             raise ControlValidationError("weapon choice has the wrong type")
+        if not isinstance(self.lan_pairing_urls, tuple):
+            raise ControlValidationError("LAN pairing URLs must be an immutable tuple")
+        if any(
+            not isinstance(url, str) or not (1 <= len(url) <= 256) for url in self.lan_pairing_urls
+        ):
+            raise ControlValidationError("LAN pairing URL is invalid")
+        if len(self.lan_pairing_urls) > 16:
+            raise ControlValidationError("too many LAN pairing URLs")
 
     def base_payload(self) -> dict[str, Any]:
         return {
@@ -462,6 +495,10 @@ class ControlStateProjection:
                 "panel_targets": list(self.panel_targets),
             },
             "state": self.state.as_payload(),
+            "network": {
+                "lan_enabled": bool(self.lan_enabled),
+                "lan_pairing_urls": list(self.lan_pairing_urls),
+            },
             "weapons": [weapon.as_payload() for weapon in self.weapons],
         }
 
@@ -483,7 +520,7 @@ class DashboardControlStore:
                 "scope": "control",
                 "transport": "loopback",
                 "control_epoch": 0,
-                "lan_control_enabled": False,
+                "lan_control_enabled": bool(projection.lan_enabled),
             },
             "csrf": "x" * 43,
             "recent_commands": [],
@@ -521,6 +558,16 @@ def build_control_state_payload(
     """Add session-owned authority and bounded history to an App projection."""
 
     can_control = scope == "control"
+    commands = list(projection.commands) if can_control else []
+    # LAN lifecycle is a loopback-only App action; remote sessions must not see it.
+    if can_control and transport != "loopback":
+        commands = [name for name in commands if name != "network.set_lan_enabled"]
+    network = {
+        "lan_enabled": bool(projection.lan_enabled),
+        "lan_pairing_urls": (
+            list(projection.lan_pairing_urls) if can_control and transport == "loopback" else []
+        ),
+    }
     payload = {
         **projection.base_payload(),
         "permissions": {
@@ -531,9 +578,10 @@ def build_control_state_payload(
         },
         "csrf": csrf if can_control else None,
         "capabilities": {
-            "commands": list(projection.commands) if can_control else [],
+            "commands": commands,
             "panel_targets": list(projection.panel_targets) if can_control else [],
         },
+        "network": network,
         "recent_commands": [dict(item) for item in recent_commands] if can_control else [],
     }
     validate_schema_payload(CONTROL_STATE_SCHEMA_NAME, payload)

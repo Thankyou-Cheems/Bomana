@@ -111,6 +111,19 @@ def _projection(revision: int = 1) -> ControlStateProjection:
             },
             ValidatedWebCommand(name="weapon.set_ballistic_model", model="strict_official"),
         ),
+        (
+            {
+                "schema_version": 1,
+                "command": "network.set_lan_enabled",
+                "enabled": True,
+                "confirmed": True,
+            },
+            ValidatedWebCommand(name="network.set_lan_enabled", enabled=True, confirmed=True),
+        ),
+        (
+            {"schema_version": 1, "command": "network.set_lan_enabled", "enabled": False},
+            ValidatedWebCommand(name="network.set_lan_enabled", enabled=False),
+        ),
     ],
 )
 def test_exact_command_matrix_builds_frozen_semantic_commands(payload, expected) -> None:
@@ -140,6 +153,13 @@ def test_exact_command_matrix_builds_frozen_semantic_commands(payload, expected)
             "schema_version": 1,
             "command": "config.set_timer_cycle_minutes",
             "minutes": 181,
+        },
+        {"schema_version": 1, "command": "network.set_lan_enabled", "enabled": True},
+        {
+            "schema_version": 1,
+            "command": "network.set_lan_enabled",
+            "enabled": False,
+            "confirmed": True,
         },
     ],
 )
@@ -191,7 +211,13 @@ def test_control_store_rejects_schema_overflow_and_duplicate_capabilities() -> N
 
 
 def test_control_state_payload_scopes_csrf_capabilities_and_recent_results() -> None:
-    projection = _projection()
+    projection = ControlStateProjection(
+        **{
+            **_projection().__dict__,
+            "lan_enabled": True,
+            "lan_pairing_urls": ("http://192.168.1.8:8777/?pair=ABCD-EFGH",),
+        }
+    )
     recent = (
         {
             "command_id": "command-1",
@@ -207,8 +233,17 @@ def test_control_state_payload_scopes_csrf_capabilities_and_recent_results() -> 
         scope="control",
         transport="loopback",
         authorization_epoch=4,
-        lan_control_enabled=False,
+        lan_control_enabled=True,
         csrf="c" * 43,
+        recent_commands=recent,
+    )
+    lan_control = build_control_state_payload(
+        projection,
+        scope="control",
+        transport="lan",
+        authorization_epoch=4,
+        lan_control_enabled=True,
+        csrf="d" * 43,
         recent_commands=recent,
     )
     view = build_control_state_payload(
@@ -222,12 +257,21 @@ def test_control_state_payload_scopes_csrf_capabilities_and_recent_results() -> 
     )
 
     validate_schema_payload(CONTROL_STATE_SCHEMA_NAME, control)
+    validate_schema_payload(CONTROL_STATE_SCHEMA_NAME, lan_control)
     validate_schema_payload(CONTROL_STATE_SCHEMA_NAME, view)
     assert control["csrf"] == "c" * 43
     assert control["recent_commands"] == list(recent)
+    assert "network.set_lan_enabled" in control["capabilities"]["commands"]
+    assert control["network"] == {
+        "lan_enabled": True,
+        "lan_pairing_urls": ["http://192.168.1.8:8777/?pair=ABCD-EFGH"],
+    }
+    assert "network.set_lan_enabled" not in lan_control["capabilities"]["commands"]
+    assert lan_control["network"]["lan_pairing_urls"] == []
     assert view["csrf"] is None
     assert view["capabilities"] == {"commands": [], "panel_targets": []}
     assert view["recent_commands"] == []
+    assert view["network"]["lan_pairing_urls"] == []
 
 
 def test_command_response_schema_rejects_unknown_or_synchronous_results() -> None:

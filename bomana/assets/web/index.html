@@ -200,6 +200,7 @@
     <div class="control-deck" id="controlDeck">
       <div class="sheet-tabs" role="tablist">
         <button type="button" class="sheet-tab active" data-control-tab="actions" role="tab" aria-selected="true">动作</button>
+        <button type="button" class="sheet-tab" data-control-tab="network" role="tab" aria-selected="false">网络</button>
         <button type="button" class="sheet-tab" data-control-tab="state" role="tab" aria-selected="false">状态</button>
         <button type="button" class="sheet-tab" data-control-tab="panels" role="tab" aria-selected="false">显示</button>
         <button type="button" class="sheet-tab" data-control-tab="weapon" role="tab" aria-selected="false">武器策略</button>
@@ -213,6 +214,24 @@
             <strong>切换角落</strong><small>立即保存 · 对应 F9</small>
           </button>
         </div>
+      </div>
+      <div class="control-tab-panel" data-control-panel="network" hidden>
+        <fieldset class="control-group" id="lanNetworkGroup">
+          <legend>局域网访问</legend>
+          <p class="model-note" id="lanNetworkHelp">仅本机控制会话可开启或关闭局域网。请只在可信网络中开启。</p>
+          <div class="target-setting" id="lanEnabledSetting">
+            <span>局域网访问与控制</span>
+            <div class="segmented-control" role="group" aria-label="局域网访问目标状态">
+              <button id="lanOnButton" type="button" aria-pressed="false" disabled>开启</button>
+              <button id="lanOffButton" type="button" aria-pressed="false" disabled>关闭</button>
+            </div>
+          </div>
+          <div class="lan-links" id="lanLinksBlock" hidden>
+            <span class="eyebrow">手机访问链接</span>
+            <ul class="lan-link-list" id="lanLinkList"></ul>
+            <button type="button" class="ghost-btn" id="copyLanLinksButton" disabled>复制全部链接</button>
+          </div>
+        </fieldset>
       </div>
       <div class="control-tab-panel" data-control-panel="state" hidden>
         <fieldset class="control-group">

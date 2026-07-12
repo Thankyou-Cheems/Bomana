@@ -11,7 +11,9 @@
     {"$ref": "#/$defs/setPanelVisibility"},
     {"$ref": "#/$defs/setTimerCycleMinutes"},
     {"$ref": "#/$defs/selectWeapon"},
-    {"$ref": "#/$defs/setBallisticModel"}
+    {"$ref": "#/$defs/setBallisticModel"},
+    {"$ref": "#/$defs/setLanEnabledOn"},
+    {"$ref": "#/$defs/setLanEnabledOff"}
   ],
   "$defs": {
     "resetTimer": {
@@ -111,6 +113,27 @@
         "schema_version": {"const": 1},
         "command": {"const": "weapon.set_ballistic_model"},
         "model": {"enum": ["foxthree_compatible", "strict_official"]}
+      }
+    },
+    "setLanEnabledOn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "enabled", "confirmed"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "network.set_lan_enabled"},
+        "enabled": {"const": true},
+        "confirmed": {"const": true}
+      }
+    },
+    "setLanEnabledOff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "command", "enabled"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "command": {"const": "network.set_lan_enabled"},
+        "enabled": {"const": false}
       }
     }
   }

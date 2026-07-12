@@ -965,13 +965,37 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .sheet-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   margin-bottom: 10px;
   padding: 3px;
   border: 1px solid var(--line-soft);
   border-radius: 11px;
   background: rgba(0,0,0,.28);
+}
+.lan-links {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  display: grid;
+  gap: 8px;
+}
+.lan-link-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.lan-link-list li {
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line-soft);
+  background: rgba(0,0,0,.28);
+  color: var(--text);
+  font-size: 11px;
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
 }
 .sheet-tab {
   min-height: 36px;
