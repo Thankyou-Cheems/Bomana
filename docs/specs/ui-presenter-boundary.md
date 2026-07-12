@@ -41,7 +41,13 @@ modules, Tk renderers, and runtime side effects.
   above `50%`, and MUST reach its maximum scale at `70%`. At maximum focus the
   configured caution-through-critical band MUST occupy approximately half of
   the horizontal strip through a continuous non-linear scale lens, rather than
-  relying on thickness alone; the displayed value MUST include the current
+  relying on thickness alone. The focused marker positions MUST be derived
+  from the current configured caution, warning, and critical ratios: preserve
+  the warning point's relative position within the configured band when the
+  markers do not collide, derive the critical headroom from the configured
+  remaining range, and prioritize a minimum visible marker gap for equal or
+  near-equal thresholds; fixed output marker anchors are forbidden. The
+  displayed value MUST include the current
   active-limit percentage while current fill and all three breakup markers
   remain monotonic and visible.
 - `UI-PRES-07`: Dynamic label wrapping or row visibility that increases required

@@ -26,6 +26,9 @@ class OverspeedDecision:
     mach_limit: float | None = None
     ias_ratio: float | None = None  # IAS / ias_limit_kmh
     mach_margin: float | None = None  # mach_limit - mach
+    caution_ratio: float = 0.94
+    warning_ratio: float = 0.97
+    critical_ratio: float = 0.992
     reason: str = ""
 
 
@@ -403,5 +406,8 @@ class OverspeedAnalyzer:
             mach_limit=mach_limit,
             ias_ratio=ias_ratio,
             mach_margin=mach_margin,
+            caution_ratio=thresholds["caution_ratio"],
+            warning_ratio=thresholds["warning_ratio"],
+            critical_ratio=thresholds["critical_ratio"],
             reason=reason,
         )

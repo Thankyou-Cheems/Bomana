@@ -816,6 +816,9 @@ class UISnapshot:
     overspeed_limit_mach: float = 0.0  # 机型马赫限速
     overspeed_match: bool = False  # 是否成功匹配机型限速
     overspeed_reason: str = ""  # 判定来源（ias/mach/ias+mach/safe/unknown）
+    overspeed_caution_ratio: float = 0.94  # 当前机型实际提示阈值
+    overspeed_warning_ratio: float = 0.97  # 当前机型实际警告阈值
+    overspeed_critical_ratio: float = 0.992  # 当前机型实际危险阈值
 
     # v7.0.0: schema-backed weapon fire-control estimate
     weapon_id: str = ""

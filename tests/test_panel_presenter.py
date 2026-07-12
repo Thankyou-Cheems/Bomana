@@ -535,8 +535,8 @@ def test_speed_strip_dynamically_stretches_breakup_markers() -> None:
 
     assert before_span == pytest.approx(0.052)
     assert before_span < middle_span < focused_span
-    assert focused_span == pytest.approx(0.43)
-    assert focused.marker_ratios == pytest.approx((0.55, 0.78, 0.98))
+    assert focused_span == pytest.approx(0.416)
+    assert focused.marker_ratios == pytest.approx((0.564, 0.804, 0.98))
     assert focused.fill_ratio == pytest.approx(0.50)
     assert before.visual_scale == 1.0
     assert 1.0 < middle.visual_scale < focused.visual_scale
@@ -547,6 +547,52 @@ def test_speed_strip_dynamically_stretches_breakup_markers() -> None:
 
     transition_fills = [model(ratio).fill_ratio for ratio in (0.50, 0.55, 0.60, 0.65, 0.70)]
     assert transition_fills == sorted(transition_fills)
+
+
+@pytest.mark.parametrize(
+    ("thresholds", "expected_markers"),
+    [
+        ((0.80, 0.85, 0.90), (0.525, 0.7375, 0.95)),
+        ((0.90, 0.91, 0.95), (0.575, 0.655, 0.975)),
+    ],
+)
+def test_speed_scale_lens_derives_layout_from_config(
+    monkeypatch, thresholds, expected_markers
+) -> None:
+    caution, warning, critical = thresholds
+    monkeypatch.setattr(panel_presenter.OverspeedConfig, "CAUTION_RATIO", caution)
+    monkeypatch.setattr(panel_presenter.OverspeedConfig, "WARNING_RATIO", warning)
+    monkeypatch.setattr(panel_presenter.OverspeedConfig, "CRITICAL_RATIO", critical)
+
+    projection = panel_presenter.overspeed_dynamic_projection(0.70)
+
+    assert projection.marker_ratios == pytest.approx(expected_markers)
+    configured_warning_position = (warning - caution) / (critical - caution)
+    focused_warning_position = (projection.marker_ratios[1] - projection.marker_ratios[0]) / (
+        projection.marker_ratios[2] - projection.marker_ratios[0]
+    )
+    assert focused_warning_position == pytest.approx(configured_warning_position)
+
+
+def test_speed_strip_uses_active_aircraft_thresholds_from_snapshot() -> None:
+    snap = SimpleNamespace(
+        overspeed_level="safe",
+        overspeed_ratio=0.70,
+        overspeed_current_ias_kmh=700.0,
+        overspeed_current_mach=None,
+        overspeed_limit_kmh=1000.0,
+        overspeed_limit_mach=0.0,
+        overspeed_match=True,
+        overspeed_reason="ias",
+        overspeed_caution_ratio=0.80,
+        overspeed_warning_ratio=0.85,
+        overspeed_critical_ratio=0.90,
+        aircraft_type_name="test_plane",
+    )
+
+    model = build_speed_strip_model(snap)
+
+    assert model.marker_ratios == pytest.approx((0.525, 0.7375, 0.95))
 
 
 def test_speed_scale_lens_separates_equal_configured_thresholds(monkeypatch) -> None:
@@ -570,6 +616,19 @@ def test_speed_scale_lens_separates_equal_configured_thresholds(monkeypatch) -> 
     assert 0.0 < caution < warning < critical < 1.0
     assert warning - caution >= 0.0249
     assert critical - warning >= 0.0249
+    assert critical - caution >= 0.39
+
+
+def test_speed_scale_lens_prioritizes_visibility_for_near_equal_thresholds() -> None:
+    projection = panel_presenter.overspeed_dynamic_projection(
+        0.70,
+        (0.94, 0.940001, 0.941),
+    )
+
+    caution, warning, critical = projection.marker_ratios
+    assert warning - caution >= 0.0249
+    assert critical - warning >= 0.0249
+    assert critical - caution >= 0.39
 
 
 def test_speed_history_header_model_uses_presented_aircraft_name() -> None:

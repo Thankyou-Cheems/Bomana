@@ -97,13 +97,20 @@ def _compute_overspeed_fill_ratio(snap: Any, ias_ratio: float) -> float:
     return max(ias_ratio, mach_ratio, 0.0)
 
 
-def overspeed_dynamic_projection(value: float) -> OverspeedScaleProjection:
+def overspeed_dynamic_projection(
+    value: float,
+    thresholds: tuple[float, float, float] | None = None,
+) -> OverspeedScaleProjection:
     """Keep full scale through 50%, then reach obvious maximum zoom at 70%."""
 
     current = max(0.0, _safe_float(value))
-    caution = float(OverspeedConfig.CAUTION_RATIO)
-    warning = float(OverspeedConfig.WARNING_RATIO)
-    critical = float(OverspeedConfig.CRITICAL_RATIO)
+    if thresholds is None:
+        thresholds = (
+            float(OverspeedConfig.CAUTION_RATIO),
+            float(OverspeedConfig.WARNING_RATIO),
+            float(OverspeedConfig.CRITICAL_RATIO),
+        )
+    caution, warning, critical = thresholds
     zoom_trigger = 0.50
     zoom_maximum = 0.70
     if current <= zoom_trigger:
@@ -113,7 +120,28 @@ def overspeed_dynamic_projection(value: float) -> OverspeedScaleProjection:
     else:
         zoom = (current - zoom_trigger) / (zoom_maximum - zoom_trigger)
 
-    threshold_targets = (0.55, 0.78, 0.98)
+    configured_span = max(0.0, critical - caution)
+    configured_headroom = max(0.0, 1.0 - critical)
+    marker_gap = 0.025
+    focused_critical = 1.0 - min(0.08, max(0.02, configured_headroom * 0.5))
+    available_focused_span = max(
+        marker_gap * 2.0,
+        focused_critical - (zoom_trigger + marker_gap),
+    )
+    focused_span = min(
+        available_focused_span,
+        max(configured_span * 8.0, available_focused_span * 0.88),
+    )
+    focused_caution = focused_critical - focused_span
+    if configured_span <= 1e-9:
+        warning_position = 0.5
+    else:
+        warning_position = max(
+            0.0,
+            min(1.0, (warning - caution) / configured_span),
+        )
+    focused_warning = focused_caution + focused_span * warning_position
+    threshold_targets = (focused_caution, focused_warning, focused_critical)
     threshold_anchors = tuple(
         (source, source + (target - source) * zoom)
         for source, target in zip(
@@ -144,10 +172,10 @@ def overspeed_dynamic_projection(value: float) -> OverspeedScaleProjection:
                 return y0 + (y1 - y0) * offset
         return 1.0
 
-    raw_markers = [project(ratio) for ratio in (caution, warning, critical)]
+    raw_markers = [target for _source, target in threshold_anchors]
     markers = raw_markers
     if zoom > 0.0:
-        marker_gap = 0.025 * zoom
+        marker_gap *= zoom
         markers = [raw_markers[0]]
         for marker in raw_markers[1:]:
             markers.append(max(marker, markers[-1] + marker_gap))
@@ -716,7 +744,14 @@ def build_speed_strip_model(snap: Any) -> SpeedStripModel:
 
     model_fg = Theme.TEXT if speed_level in ("warning", "critical") else Theme.TEXT_DIM
     value_fg = state_fg if speed_level in ("caution", "warning", "critical") else Theme.TEXT_DIM
-    projection = overspeed_dynamic_projection(display_ratio)
+    projection = overspeed_dynamic_projection(
+        display_ratio,
+        (
+            _safe_float(getattr(snap, "overspeed_caution_ratio", OverspeedConfig.CAUTION_RATIO)),
+            _safe_float(getattr(snap, "overspeed_warning_ratio", OverspeedConfig.WARNING_RATIO)),
+            _safe_float(getattr(snap, "overspeed_critical_ratio", OverspeedConfig.CRITICAL_RATIO)),
+        ),
+    )
     return SpeedStripModel(
         level=speed_level,
         state_text=state_text,

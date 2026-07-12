@@ -1956,5 +1956,8 @@ class GameLogic:
             overspeed_limit_mach=float(overspeed.mach_limit or 0.0),
             overspeed_match=bool(overspeed.resolved_fm),
             overspeed_reason=overspeed.reason,
+            overspeed_caution_ratio=overspeed.caution_ratio,
+            overspeed_warning_ratio=overspeed.warning_ratio,
+            overspeed_critical_ratio=overspeed.critical_ratio,
             **weapon_snapshot,
         )
