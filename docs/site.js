@@ -95,12 +95,19 @@ function loadShotPlaceholders() {
   for (const shot of shots) {
     const path = shot.getAttribute("data-shot");
     const img = shot.querySelector(".shot-img");
+    const frame = shot.querySelector(".shot-frame");
     if (!path || !img) continue;
 
     const probe = new Image();
     probe.onload = () => {
       img.src = path;
+      img.width = probe.naturalWidth;
+      img.height = probe.naturalHeight;
       img.hidden = false;
+      // Drive frame aspect-ratio from the real file so layout never fights the image.
+      if (frame && probe.naturalWidth > 0 && probe.naturalHeight > 0) {
+        frame.style.aspectRatio = `${probe.naturalWidth} / ${probe.naturalHeight}`;
+      }
       shot.classList.add("is-loaded");
     };
     probe.onerror = () => {

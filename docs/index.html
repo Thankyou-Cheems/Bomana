@@ -207,7 +207,11 @@
         </div>
 
         <div class="gallery-bento">
-          <figure class="shot shot-wide shot-web" data-shot="assets/shots/web-cockpit-desktop.png">
+          <figure
+            class="shot shot--web-desktop"
+            data-shot="assets/shots/web-cockpit-desktop.png"
+            style="--shot-ar: 2026 / 1512"
+          >
             <div class="shot-frame">
               <img
                 class="shot-img"
@@ -226,7 +230,11 @@
             <figcaption>桌面浏览器 · Enhanced 网页驾驶舱</figcaption>
           </figure>
 
-          <figure class="shot shot-tall shot-web" data-shot="assets/shots/web-cockpit.png">
+          <figure
+            class="shot shot--web-mobile"
+            data-shot="assets/shots/web-cockpit.png"
+            style="--shot-ar: 960 / 1600"
+          >
             <div class="shot-frame">
               <img
                 class="shot-img"
@@ -245,7 +253,11 @@
             <figcaption>手机 · 局域网态势（已裁系统栏）</figcaption>
           </figure>
 
-          <figure class="shot shot-app" data-shot="assets/shots/desktop-main.png">
+          <figure
+            class="shot shot--main"
+            data-shot="assets/shots/desktop-main.png"
+            style="--shot-ar: 714 / 1417"
+          >
             <div class="shot-frame">
               <img
                 class="shot-img"
@@ -264,26 +276,11 @@
             <figcaption>桌面主窗 · 可置顶 / 点击穿透</figcaption>
           </figure>
 
-          <figure class="shot shot-nav" data-shot="assets/shots/nav-hud.png">
-            <div class="shot-frame shot-frame-wide-strip">
-              <img
-                class="shot-img"
-                alt="Bomana 独立导航航向带实机"
-                width="1588"
-                height="296"
-                hidden
-              >
-              <div class="shot-empty">
-                <span class="shot-meta">NAV · TAPE</span>
-                <strong>独立导航</strong>
-                <p>航向带 · 战区 / 机场</p>
-                <code>shots/nav-hud.png</code>
-              </div>
-            </div>
-            <figcaption>独立导航窗 · 航向带与偏差提示</figcaption>
-          </figure>
-
-          <figure class="shot shot-app" data-shot="assets/shots/launcher.png">
+          <figure
+            class="shot shot--launcher"
+            data-shot="assets/shots/launcher.png"
+            style="--shot-ar: 1182 / 1179"
+          >
             <div class="shot-frame">
               <img
                 class="shot-img"
@@ -300,6 +297,29 @@
               </div>
             </div>
             <figcaption>启动器 3.2.2 · 签名更新与通道选择</figcaption>
+          </figure>
+
+          <figure
+            class="shot shot--nav"
+            data-shot="assets/shots/nav-hud.png"
+            style="--shot-ar: 1588 / 296"
+          >
+            <div class="shot-frame">
+              <img
+                class="shot-img"
+                alt="Bomana 独立导航航向带实机"
+                width="1588"
+                height="296"
+                hidden
+              >
+              <div class="shot-empty">
+                <span class="shot-meta">NAV · TAPE</span>
+                <strong>独立导航</strong>
+                <p>航向带 · 战区 / 机场</p>
+                <code>shots/nav-hud.png</code>
+              </div>
+            </div>
+            <figcaption>独立导航窗 · 航向带与偏差提示</figcaption>
           </figure>
         </div>
       </section>
