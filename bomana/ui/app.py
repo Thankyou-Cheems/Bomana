@@ -753,11 +753,10 @@ class App:
     def _finalize_window_geometry_and_styles(self):
         """最终确定窗口几何和样式"""
         self.root.update_idletasks()
-        req_w = self.root.winfo_reqwidth()
-        req_h = self.root.winfo_reqheight()
-        self.W = req_w
-        self.H = req_h
-        self._position()
+        # The root can retain a transient oversized geometry while its packed
+        # children are settling.  Finalize from the content request instead of
+        # treating that root geometry as the desired startup size.
+        self._recalc_size(keep_pos=False, force_shrink=True)
         self.root.update_idletasks()
         alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
@@ -1797,7 +1796,8 @@ class App:
 
         if ENABLE_ZONES and need_nav_rebuild:
             self.navigation_services.rebuild_after_display_change(
-                preserve_text_only_geometry=preserve_text_only_geometry
+                preserve_text_only_geometry=preserve_text_only_geometry,
+                reset_position=bool(nav_width_changed or nav_scale_changed),
             )
 
         # 重新应用窗口样式（锁定态穿透 + 透明度）

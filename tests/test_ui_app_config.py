@@ -127,6 +127,21 @@ def test_init_ui_syncs_hint_after_build(monkeypatch) -> None:
     assert calls == ["build", "hint"]
 
 
+def test_finalize_window_geometry_forces_content_sized_recalculation(monkeypatch) -> None:
+    app = _make_config_only_app()
+    update_calls: list[str] = []
+    recalc_calls: list[dict[str, object]] = []
+    app.root = SimpleNamespace(update_idletasks=lambda: update_calls.append("update"))
+    app.hwnd = 123
+    app._recalc_size = lambda **kwargs: recalc_calls.append(kwargs)
+    monkeypatch.setattr(app_module.Win32, "setup_window", lambda *_args, **_kwargs: None)
+
+    app._finalize_window_geometry_and_styles()
+
+    assert recalc_calls == [{"keep_pos": False, "force_shrink": True}]
+    assert update_calls == ["update", "update"]
+
+
 def test_content_geometry_sync_expands_when_required_height_grows() -> None:
     calls: list[str] = []
     app = SimpleNamespace(

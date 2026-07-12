@@ -91,7 +91,12 @@ class AppNavigationServices:
             window.show()
         self._history_mode_window_was_visible = False
 
-    def rebuild_after_display_change(self, *, preserve_text_only_geometry: bool) -> None:
+    def rebuild_after_display_change(
+        self,
+        *,
+        preserve_text_only_geometry: bool,
+        reset_position: bool = False,
+    ) -> None:
         """Recreate the standalone nav surface after theme/scale/nav-width updates."""
         if not ENABLE_ZONES:
             return
@@ -104,7 +109,7 @@ class AppNavigationServices:
                 nav_was_visible = bool(window.is_visible())
             except Exception:
                 nav_was_visible = False
-            if preserve_text_only_geometry and nav_was_visible:
+            if preserve_text_only_geometry and not reset_position and nav_was_visible:
                 try:
                     nav_position = (
                         window.window.winfo_x(),
@@ -115,10 +120,15 @@ class AppNavigationServices:
             with contextlib.suppress(Exception):
                 window.destroy()
 
+        if reset_position:
+            PanelConfig.navigation_window_pos = None
         self.window = NavigationWindow(self.app)
+        if reset_position:
+            with contextlib.suppress(Exception):
+                self.app._save_config()
         if PanelConfig.navigation_mode == "standalone" and nav_was_visible:
             self.window.show()
-            if preserve_text_only_geometry and nav_position:
+            if preserve_text_only_geometry and not reset_position and nav_position:
                 nav_x, nav_y = nav_position
                 with contextlib.suppress(Exception):
                     self.window.window.update_idletasks()

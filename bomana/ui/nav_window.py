@@ -430,6 +430,7 @@ class NavigationWindow:
 
     def _reset_position(self):
         """重置窗口位置到屏幕中央"""
+        self.window.update_idletasks()
         sw, _ = Win32.screen_size()
         w = self.window.winfo_width()
         x = (sw - w) // 2

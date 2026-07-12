@@ -120,9 +120,11 @@ class FakeApp:
 class NavigationRuntimeTests(unittest.TestCase):
     def setUp(self) -> None:
         self._old_mode = PanelConfig.navigation_mode
+        self._old_pos = PanelConfig.navigation_window_pos
 
     def tearDown(self) -> None:
         PanelConfig.navigation_mode = self._old_mode
+        PanelConfig.navigation_window_pos = self._old_pos
 
     @patch("bomana.ui.navigation_runtime.log_event")
     def test_toggle_mode_moves_window_to_standalone(self, log_event) -> None:
@@ -233,6 +235,30 @@ class NavigationRuntimeTests(unittest.TestCase):
         self.assertTrue(services.window.visible)
         self.assertEqual(services.window.window.update_idletasks_calls, 1)
         self.assertEqual(services.window.window.geometry_calls, ["+11+22"])
+
+    def test_rebuild_resets_and_persists_position_after_navigation_resize(self) -> None:
+        class ResettingNavigationWindow(FakeNavigationWindow):
+            def __init__(self, app) -> None:
+                super().__init__(app)
+                if PanelConfig.navigation_window_pos is None:
+                    PanelConfig.navigation_window_pos = (500, 50)
+
+        app = FakeApp()
+        services = AppNavigationServices(app)
+        services.window = FakeNavigationWindow(app)
+        services.window.show()
+        PanelConfig.navigation_mode = "standalone"
+        PanelConfig.navigation_window_pos = (1400, 200)
+
+        with patch("bomana.ui.navigation_runtime.NavigationWindow", ResettingNavigationWindow):
+            services.rebuild_after_display_change(
+                preserve_text_only_geometry=False,
+                reset_position=True,
+            )
+
+        self.assertEqual(PanelConfig.navigation_window_pos, (500, 50))
+        self.assertEqual(app.save_calls, 1)
+        self.assertTrue(services.window.visible)
 
     def test_apply_lock_state_updates_owned_window(self) -> None:
         app = FakeApp()
