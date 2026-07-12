@@ -72,9 +72,10 @@
       </div>
       <div class="map-tools" aria-label="地图控制">
         <button id="mapZoomOut" type="button" aria-label="缩小地图">−</button>
-        <button id="mapFollow" type="button" class="active">跟随</button>
+        <button id="mapFollow" type="button" class="active" aria-pressed="true">跟随</button>
         <button id="mapZoomIn" type="button" aria-label="放大地图">＋</button>
       </div>
+      <div class="map-zoom-meta" id="mapZoomMeta">跟随 · 自动缩放</div>
     </aside>
 
     <aside class="hud-right" aria-label="战术信息">
@@ -92,7 +93,6 @@
           <div><span>时间</span><strong id="weaponTti">--</strong></div>
         </div>
         <p class="system-note" id="weaponStatus">等待有效解算</p>
-        <button class="ghost-btn" id="weaponCardOpen" type="button">选择武器</button>
       </article>
 
       <article class="glass panel bombing-card" data-capability="weapon">
@@ -144,28 +144,15 @@
 
     <footer class="hud-bottom">
       <p class="command-status" id="commandStatus" role="status" aria-live="polite"></p>
-      <div class="rail" role="toolbar" aria-label="主操作">
-        <button type="button" class="rail-btn" id="dockLegendButton">
-          <span class="rail-icon" aria-hidden="true">☰</span>
-          <span class="rail-copy"><strong>图例</strong><small>过滤标记</small></span>
-        </button>
+      <div class="rail rail-two" role="toolbar" aria-label="主操作">
         <button type="button" class="rail-btn rail-btn-primary" id="dockWeaponButton" data-capability="weapon" disabled>
           <span class="rail-kicker">切换武器</span>
           <strong id="dockWeaponName">未选择</strong>
         </button>
         <button type="button" class="rail-btn" id="dockOpsButton">
           <span class="rail-icon" aria-hidden="true">⚙</span>
-          <span class="rail-copy"><strong>设置</strong><small>计时 · 状态</small></span>
+          <span class="rail-copy"><strong>设置</strong><small>计时 · 状态 · 动作</small></span>
         </button>
-      </div>
-      <div class="secondary-rail desktop-only">
-        <button type="button" class="weapon-chip" id="weaponChip" data-capability="weapon" disabled>
-          <span>WEAPON</span>
-          <strong id="weaponChipName">未选择</strong>
-          <small id="weaponChipMeta">点击切换</small>
-        </button>
-        <button type="button" class="action-pill danger-action" id="resetTimerButtonDesktop" disabled>重置计时</button>
-        <button type="button" class="action-pill" id="cycleCornerButtonDesktop" disabled>切换角落</button>
       </div>
     </footer>
   </div>
@@ -175,12 +162,10 @@
     <div class="systems-grid" id="systemsGrid" hidden>
       <article class="glass airframe-card">
         <div class="card-head">
-          <div><span class="eyebrow">SYSTEMS</span><h2>飞行状态</h2></div>
-          <span id="airframeAircraft">--</span>
+          <div><span class="eyebrow">SYSTEMS</span><h2>机体细节</h2></div>
         </div>
         <div class="gauge-grid">
           <div class="ring" id="fuelRing" data-capability="fuel"><span>燃油</span><strong id="fuelRingValue">--%</strong></div>
-          <div class="ring" id="speedRing"><span>限速</span><strong id="speedRingValue">--%</strong></div>
           <div class="ring" id="gearRing"><span>起落架</span><strong id="gearRingValue">--%</strong></div>
         </div>
         <div class="data-pairs compact">
@@ -279,12 +264,13 @@
       <div class="control-tab-panel" data-control-panel="weapon" hidden>
         <fieldset class="control-group weapon-controls">
           <legend>武器与模型</legend>
-          <label class="select-setting" for="weaponSelect">
-            <span>当前武器（后备）</span>
+          <label class="select-setting visually-hidden" for="weaponSelect">
+            <span>当前武器</span>
             <select id="weaponSelect" disabled>
               <option value="">等待武器目录</option>
             </select>
           </label>
+          <p class="model-note">切换武器请用底部主按钮；此处仅配置弹道策略。</p>
           <div class="target-setting model-setting">
             <span>缺少官方数据时</span>
             <div class="segmented-control model-control" role="group" aria-label="弹道模型目标状态">

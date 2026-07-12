@@ -8,7 +8,9 @@ const state = {
   submittingCommands: new Set(),
   weaponSignature: "",
   weaponListSignature: "",
-  zoom: 1,
+  zoom: 2.2,
+  displayZoom: 2.2,
+  followZoomBias: 1,
   follow: true,
   panX: 0,
   panY: 0,
@@ -175,10 +177,8 @@ function setCommandStatus(message, tone = "") {
 }
 
 function setWeaponPickersDisabled(disabled) {
-  for (const id of ["weaponChip", "dockWeaponButton", "weaponCardOpen"]) {
-    const node = $(id);
-    if (node) node.disabled = disabled;
-  }
+  const node = $("dockWeaponButton");
+  if (node) node.disabled = disabled;
 }
 
 function setControlUnavailable(scopeLabel, helpText) {
@@ -189,10 +189,6 @@ function setControlUnavailable(scopeLabel, helpText) {
   text("controlHelp", helpText);
   for (const node of document.querySelectorAll(".control-deck button, .control-deck input, .control-deck select")) {
     node.disabled = true;
-  }
-  for (const id of ["resetTimerButtonDesktop", "cycleCornerButtonDesktop"]) {
-    const node = $(id);
-    if (node) node.disabled = true;
   }
   setWeaponPickersDisabled(true);
 }
@@ -270,9 +266,7 @@ function renderWeaponChoices(weapons, selectedWeaponId) {
   if (select.value !== selectedWeaponId) select.value = "";
   const selected = weapons.find((weapon) => weapon.weapon_id === selectedWeaponId);
   if (selected) {
-    text("weaponChipName", selected.display_name);
     text("dockWeaponName", selected.display_name);
-    text("weaponChipMeta", selected.compatible ? `${selected.role} · 点击切换` : "当前机型不兼容");
   }
   const canSelect = commandIsAvailable("weapon.select") && !commandIsBusy("weapon.select");
   const listSignature = `${signature}|${selectedWeaponId || ""}|${canSelect}|${controlGranted()}`;
@@ -366,8 +360,8 @@ function renderControlState(payload) {
       : "此会话只有查看权限，所有设置均显示当前值但不可修改。");
   }
 
-  setCommandButtons(["resetTimerButton", "resetTimerButtonDesktop"], "action.reset_timer");
-  setCommandButtons(["cycleCornerButton", "cycleCornerButtonDesktop"], "action.cycle_corner");
+  setCommandButtons(["resetTimerButton"], "action.reset_timer");
+  setCommandButtons(["cycleCornerButton"], "action.cycle_corner");
 
   setCommandButtons(["lockedOnButton", "lockedOffButton"], "state.set_locked");
   setPressed("lockedOnButton", targetState.locked);
@@ -619,7 +613,6 @@ function render(payload) {
   text("fuelValue", payload.capabilities.fuel ? Math.round(finite(payload.fuel.percent)) : "---");
   const aircraft = payload.flight.aircraft || "未识别机型";
   text("aircraftName", aircraft);
-  text("airframeAircraft", aircraft);
   renderOverspeed(payload.flight);
 
   renderWeapon(payload.weapon);
@@ -701,9 +694,7 @@ function renderWeapon(weapon) {
   text("weaponTti", weapon.time_to_target_s > 0 ? fmt(weapon.time_to_target_s, 0, " s") : "--");
   text("weaponStatus", weaponStatusLabel(weapon));
   text("weaponQuality", weaponQualityLabel(weapon));
-  text("weaponChipName", weaponName);
   text("dockWeaponName", weaponName === "未选择武器" ? "未选择" : weaponName);
-  text("weaponChipMeta", weapon.max_range_km > 0 ? `包线 ${envelope}` : weaponModelLabel(weapon));
   const chip = $("weaponQuality");
   chip.className = "quality-chip";
   if (weapon.quality === "experimental") chip.classList.add("experimental");
@@ -786,10 +777,8 @@ function renderNavigation(nav) {
 
 function renderAirframe(payload) {
   const fuel = payload.capabilities.fuel ? finite(payload.fuel.percent) : 0;
-  const speed = Math.min(100, finite(payload.flight.overspeed.ratio) * 100);
   const gear = finite(payload.flight.gear.percent);
   setRing("fuelRing", "fuelRingValue", fuel, `${Math.round(fuel)}%`);
-  setRing("speedRing", "speedRingValue", speed, payload.flight.overspeed.matched ? `${Math.round(speed)}%` : "--%");
   setRing("gearRing", "gearRingValue", gear, `${Math.round(gear)}%`);
   text("fuelRate", payload.fuel.rate_stable ? fmt(payload.fuel.rate_kg_min, 1, " kg/min") : "稳定中");
   text("fuelTime", payload.fuel.remaining_min !== null ? fmt(payload.fuel.remaining_min, 0, " min") : "--");
@@ -852,9 +841,81 @@ function canvasSize(canvas) {
   return { width, height, ratio };
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function mapViewZoom() {
+  return Math.max(0.75, finite(state.displayZoom, state.zoom) || state.zoom);
+}
+
+function computeFollowCoverRadius(map) {
+  if (!map || !map.player) return 0.14;
+  let cover = 0.1;
+  const range = map.weapon_range;
+  if (range) {
+    const radius = Math.max(finite(range.max_radius_x), finite(range.max_radius_y), 0);
+    if (radius > 0) cover = Math.max(cover, radius * 1.18);
+  }
+  const target = Array.isArray(map.points)
+    ? (map.points.find((point) => point.kind === "poi" && point.is_target)
+      || map.points.find((point) => point.is_target && point.kind !== "traceback"))
+    : null;
+  if (target) {
+    const distance = Math.hypot(target.x - map.player.x, target.y - map.player.y);
+    if (distance > 0) cover = Math.max(cover, distance * 1.32);
+  }
+  let farContact = 0;
+  for (const point of map.points || []) {
+    const kind = String(point.kind || "");
+    if (!HOSTILE_MAP_KINDS.has(kind) && kind !== "zone" && kind !== "airfield" && kind !== "poi") continue;
+    const distance = Math.hypot(point.x - map.player.x, point.y - map.player.y);
+    if (distance > 0 && distance < 0.32) farContact = Math.max(farContact, distance);
+  }
+  if (farContact > 0) cover = Math.max(cover, farContact * 1.22);
+  return clamp(cover, 0.055, 0.42);
+}
+
+function computeFollowZoom(map, width, height) {
+  const padding = 28;
+  const span = Math.max(1, Math.min(width, height) - padding * 2);
+  const cover = computeFollowCoverRadius(map);
+  // Keep the tactical cover ring near ~38% of the short canvas edge.
+  const targetScreen = Math.min(width, height) * 0.38;
+  const autoZoom = targetScreen / (span * cover);
+  return clamp(autoZoom * finite(state.followZoomBias, 1), 1.35, 4.8);
+}
+
+function updateMapCamera(map, width, height) {
+  let targetZoom = state.zoom;
+  if (state.follow) {
+    targetZoom = computeFollowZoom(map, width, height);
+    state.zoom = targetZoom;
+    state.panX = 0;
+    state.panY = 0;
+  } else {
+    targetZoom = clamp(state.zoom, 0.75, 5);
+    state.zoom = targetZoom;
+  }
+  const blend = state.follow ? 0.18 : 0.28;
+  state.displayZoom += (targetZoom - state.displayZoom) * blend;
+  if (Math.abs(targetZoom - state.displayZoom) < 0.004) state.displayZoom = targetZoom;
+  updateMapZoomMeta();
+}
+
+function updateMapZoomMeta() {
+  const node = $("mapZoomMeta");
+  if (!node) return;
+  const zoomLabel = mapViewZoom().toFixed(1);
+  node.textContent = state.follow
+    ? `跟随 · 自动 ×${zoomLabel}`
+    : `自由 · 手动 ×${zoomLabel}`;
+}
+
 function mapTransform(map, width, height, x, y) {
   const padding = 28;
   const span = Math.min(width, height) - padding * 2;
+  const zoom = mapViewZoom();
   let centerX = .5 + state.panX;
   let centerY = .5 + state.panY;
   if (state.follow && map.player) {
@@ -862,14 +923,15 @@ function mapTransform(map, width, height, x, y) {
     centerY = map.player.y;
   }
   return {
-    x: width / 2 + (x - centerX) * span * state.zoom,
-    y: height / 2 + (y - centerY) * span * state.zoom,
+    x: width / 2 + (x - centerX) * span * zoom,
+    y: height / 2 + (y - centerY) * span * zoom,
   };
 }
 
 function renderMap(map) {
   const canvas = $("tacticalMap");
   const { width, height, ratio } = canvasSize(canvas);
+  updateMapCamera(map, width, height);
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, width, height);
   drawMapBackground(ctx, width, height, ratio);
@@ -1082,7 +1144,7 @@ function drawMapPoint(ctx, map, point, width, height, ratio) {
     ctx.lineWidth = ratio;
     ctx.strokeText(glyph, p.x, p.y);
   }
-  if (point.is_target || state.zoom >= 1.7 || point.kind === "traceback") {
+  if (point.is_target || mapViewZoom() >= 1.7 || point.kind === "traceback") {
     ctx.font = `${9 * ratio}px Segoe UI`;
     ctx.fillStyle = color;
     ctx.fillText(point.label, p.x + 12 * ratio, p.y - 9 * ratio);
@@ -1132,34 +1194,20 @@ function renderHeadingTape(payload) {
   ctx.beginPath(); ctx.moveTo(width/2, height); ctx.lineTo(width/2, height-18*ratio); ctx.stroke();
 }
 
-function bindResetTimer(id) {
-  const node = $(id);
-  if (!node) return;
-  node.addEventListener("click", () => {
+function installControlHandlers() {
+  $("resetTimerButton").addEventListener("click", () => {
     if (!window.confirm("确定立即重置 Bomana 任务计时器吗？此操作只执行一次。")) return;
     void submitCommand(
       { schema_version: 1, command: "action.reset_timer", confirmed: true },
       "重置计时器",
     );
   });
-}
-
-function bindCycleCorner(id) {
-  const node = $(id);
-  if (!node) return;
-  node.addEventListener("click", () => {
+  $("cycleCornerButton").addEventListener("click", () => {
     void submitCommand(
       { schema_version: 1, command: "action.cycle_corner" },
       "切换界面位置",
     );
   });
-}
-
-function installControlHandlers() {
-  bindResetTimer("resetTimerButton");
-  bindResetTimer("resetTimerButtonDesktop");
-  bindCycleCorner("cycleCornerButton");
-  bindCycleCorner("cycleCornerButtonDesktop");
   $("lockedOnButton").addEventListener("click", () => {
     void submitCommand(
       { schema_version: 1, command: "state.set_locked", locked: true },
@@ -1295,15 +1343,7 @@ function installSheetHandlers() {
   $("dockOpsButton").addEventListener("click", () => openSheet("controlSheet"));
   $("controlSheetClose").addEventListener("click", () => closeSheet("controlSheet"));
   $("dockWeaponButton").addEventListener("click", () => openSheet("weaponSheet"));
-  $("weaponChip").addEventListener("click", () => openSheet("weaponSheet"));
-  $("weaponCardOpen").addEventListener("click", () => openSheet("weaponSheet"));
   $("weaponSheetClose").addEventListener("click", () => closeSheet("weaponSheet"));
-  $("dockLegendButton").addEventListener("click", () => {
-    const legend = $("mapLegend");
-    const next = legend.hidden;
-    setLegendOpen(next);
-    if (next) $("mapStage").scrollIntoView({ block: "nearest", behavior: "smooth" });
-  });
   $("mapLegendToggle").addEventListener("click", () => {
     setLegendOpen($("mapLegend").hidden);
   });
@@ -1330,15 +1370,37 @@ function installSheetHandlers() {
   });
 }
 
+function applyZoomStep(factor) {
+  if (state.follow) {
+    state.followZoomBias = clamp(state.followZoomBias * factor, 0.55, 2.4);
+  } else {
+    state.zoom = clamp(state.zoom * factor, 0.75, 5);
+  }
+  renderCurrentMap();
+}
+
+function setFollowMode(enabled) {
+  state.follow = Boolean(enabled);
+  const button = $("mapFollow");
+  if (button) {
+    button.classList.toggle("active", state.follow);
+    button.setAttribute("aria-pressed", state.follow ? "true" : "false");
+  }
+  if (state.follow) {
+    state.panX = 0;
+    state.panY = 0;
+    state.followZoomBias = 1;
+  } else {
+    state.zoom = clamp(state.displayZoom || state.zoom, 0.75, 5);
+  }
+  updateMapZoomMeta();
+  renderCurrentMap();
+}
+
 function installMapControls() {
-  $("mapZoomIn").addEventListener("click", () => { state.zoom = Math.min(4, state.zoom * 1.25); renderCurrentMap(); });
-  $("mapZoomOut").addEventListener("click", () => { state.zoom = Math.max(.75, state.zoom / 1.25); renderCurrentMap(); });
-  $("mapFollow").addEventListener("click", () => {
-    state.follow = !state.follow;
-    $("mapFollow").classList.toggle("active", state.follow);
-    if (state.follow) { state.panX = 0; state.panY = 0; }
-    renderCurrentMap();
-  });
+  $("mapZoomIn").addEventListener("click", () => applyZoomStep(1.22));
+  $("mapZoomOut").addEventListener("click", () => applyZoomStep(1 / 1.22));
+  $("mapFollow").addEventListener("click", () => setFollowMode(!state.follow));
   const stage = $("mapStage");
   const legend = $("mapLegend");
   const legendShell = legend.closest(".map-legend-shell");
@@ -1360,21 +1422,36 @@ function installMapControls() {
     });
   }
   updateLegendCount();
+  updateMapZoomMeta();
   stage.addEventListener("wheel", (event) => {
     event.preventDefault();
-    state.zoom = Math.max(.75, Math.min(4, state.zoom * (event.deltaY < 0 ? 1.12 : .89)));
-    renderCurrentMap();
+    applyZoomStep(event.deltaY < 0 ? 1.12 : 1 / 1.12);
   }, { passive: false });
   stage.addEventListener("pointerdown", (event) => {
-    state.dragging = true; state.pointerX = event.clientX; state.pointerY = event.clientY; state.follow = false;
-    $("mapFollow").classList.remove("active"); stage.setPointerCapture(event.pointerId);
+    state.dragging = true;
+    state.pointerX = event.clientX;
+    state.pointerY = event.clientY;
+    if (state.follow) {
+      state.follow = false;
+      state.zoom = clamp(mapViewZoom(), 0.75, 5);
+      const followButton = $("mapFollow");
+      if (followButton) {
+        followButton.classList.remove("active");
+        followButton.setAttribute("aria-pressed", "false");
+      }
+      updateMapZoomMeta();
+    }
+    stage.setPointerCapture(event.pointerId);
   });
   stage.addEventListener("pointermove", (event) => {
     if (!state.dragging) return;
     const rect = stage.getBoundingClientRect();
-    state.panX -= (event.clientX - state.pointerX) / Math.max(1, rect.width) / state.zoom;
-    state.panY -= (event.clientY - state.pointerY) / Math.max(1, rect.height) / state.zoom;
-    state.pointerX = event.clientX; state.pointerY = event.clientY; renderCurrentMap();
+    const zoom = mapViewZoom();
+    state.panX -= (event.clientX - state.pointerX) / Math.max(1, rect.width) / zoom;
+    state.panY -= (event.clientY - state.pointerY) / Math.max(1, rect.height) / zoom;
+    state.pointerX = event.clientX;
+    state.pointerY = event.clientY;
+    renderCurrentMap();
   });
   stage.addEventListener("pointerup", (event) => { state.dragging = false; stage.releasePointerCapture(event.pointerId); });
   stage.addEventListener("pointercancel", () => { state.dragging = false; });
