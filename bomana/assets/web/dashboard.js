@@ -33,6 +33,10 @@ let pollTimer = null;
 let controlPollTimer = null;
 let requestActive = false;
 let controlRequestActive = false;
+let pollsStopped = false;
+// Match App UI_REFRESH_MS / logic cadence (~20 Hz) for map + heading smoothness.
+const SNAPSHOT_POLL_MS = 50;
+const CONTROL_POLL_MS = 400;
 
 const PANEL_CONTROLS = Object.freeze([
   Object.freeze({ inputId: "panelZones", labelId: "panelZonesLabel", target: "zones", label: "战区" }),
@@ -151,6 +155,18 @@ async function pollSnapshot() {
   }
 }
 
+function scheduleSnapshotPoll() {
+  if (pollsStopped) return;
+  window.clearTimeout(pollTimer);
+  pollTimer = window.setTimeout(async () => {
+    const started = performance.now();
+    await pollSnapshot();
+    if (pollsStopped) return;
+    const wait = Math.max(0, SNAPSHOT_POLL_MS - (performance.now() - started));
+    pollTimer = window.setTimeout(scheduleSnapshotPoll, wait);
+  }, 0);
+}
+
 function setCommandStatus(message, tone = "") {
   const node = $("commandStatus");
   const visible = Boolean(message);
@@ -173,6 +189,10 @@ function setControlUnavailable(scopeLabel, helpText) {
   text("controlHelp", helpText);
   for (const node of document.querySelectorAll(".control-deck button, .control-deck input, .control-deck select")) {
     node.disabled = true;
+  }
+  for (const id of ["resetTimerButtonDesktop", "cycleCornerButtonDesktop"]) {
+    const node = $(id);
+    if (node) node.disabled = true;
   }
   setWeaponPickersDisabled(true);
 }
@@ -204,7 +224,10 @@ function commandIsAvailable(commandName) {
 function setCommandButtons(ids, commandName) {
   const available = commandIsAvailable(commandName);
   const busy = commandIsBusy(commandName);
-  for (const id of ids) $(id).disabled = !available || busy;
+  for (const id of ids) {
+    const node = $(id);
+    if (node) node.disabled = !available || busy;
+  }
   return available;
 }
 
@@ -343,8 +366,8 @@ function renderControlState(payload) {
       : "此会话只有查看权限，所有设置均显示当前值但不可修改。");
   }
 
-  setCommandButtons(["resetTimerButton"], "action.reset_timer");
-  setCommandButtons(["cycleCornerButton"], "action.cycle_corner");
+  setCommandButtons(["resetTimerButton", "resetTimerButtonDesktop"], "action.reset_timer");
+  setCommandButtons(["cycleCornerButton", "cycleCornerButtonDesktop"], "action.cycle_corner");
 
   setCommandButtons(["lockedOnButton", "lockedOffButton"], "state.set_locked");
   setPressed("lockedOnButton", targetState.locked);
@@ -456,6 +479,18 @@ async function pollControlState() {
   }
 }
 
+function scheduleControlPoll() {
+  if (pollsStopped) return;
+  window.clearTimeout(controlPollTimer);
+  controlPollTimer = window.setTimeout(async () => {
+    const started = performance.now();
+    await pollControlState();
+    if (pollsStopped) return;
+    const wait = Math.max(0, CONTROL_POLL_MS - (performance.now() - started));
+    controlPollTimer = window.setTimeout(scheduleControlPoll, wait);
+  }, 0);
+}
+
 function createIdempotencyKey() {
   if (!window.crypto || typeof window.crypto.getRandomValues !== "function") {
     throw new Error("secure_random_unavailable");
@@ -562,8 +597,16 @@ async function submitCommand(commandBody, label) {
 function render(payload) {
   const age = Math.max(0, Date.now() / 1000 - finite(payload.generated_at));
   const connected = payload.status.connected && age < 3;
-  setConnection(connected ? "online" : "offline", connected ? "实时" : "数据暂停", age < 1 ? "刚刚更新" : `${age.toFixed(1)} 秒前`);
+  setConnection(
+    connected ? "online" : "offline",
+    connected ? "实时" : "数据暂停",
+    age < 0.15 ? "刚刚" : `${age.toFixed(2)}s`,
+  );
   renderCapabilities(payload.capabilities);
+
+  // Tactical surfaces first so map/heading stay on the high-rate path.
+  renderMap(payload.map, payload.flight.heading_deg);
+  renderHeadingTape(payload);
 
   text("phaseLabel", payload.status.phase_label);
   text("timerValue", fmtTime(payload.timer.remaining_sec));
@@ -578,8 +621,6 @@ function render(payload) {
   text("aircraftName", aircraft);
   text("airframeAircraft", aircraft);
 
-  renderMap(payload.map, payload.flight.heading_deg);
-  renderHeadingTape(payload);
   renderWeapon(payload.weapon);
   renderBombing(payload.bombing);
   renderNavigation(payload.navigation);
@@ -940,19 +981,19 @@ function drawWeaponRange(ctx, map, width, height, ratio) {
 
 function drawMapBackground(ctx, width, height, ratio) {
   const gradient = ctx.createRadialGradient(width * .5, height * .42, 0, width * .5, height * .5, Math.max(width, height) * .72);
-  gradient.addColorStop(0, "#10253b");
-  gradient.addColorStop(1, "#06111e");
+  gradient.addColorStop(0, "#14110c");
+  gradient.addColorStop(1, "#050608");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = "rgba(118,161,207,.10)";
+  ctx.strokeStyle = "rgba(240,160,32,.06)";
   ctx.lineWidth = ratio;
-  const step = 48 * ratio;
+  const step = 56 * ratio;
   for (let x = width % step; x < width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
   for (let y = height % step; y < height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
-  ctx.fillStyle = "rgba(143,164,190,.46)";
+  ctx.fillStyle = "rgba(240,160,32,.55)";
   ctx.font = `${9 * ratio}px Segoe UI`;
   ctx.fillText("N", 12 * ratio, 18 * ratio);
-  ctx.beginPath(); ctx.moveTo(15 * ratio, 24 * ratio); ctx.lineTo(15 * ratio, 38 * ratio); ctx.strokeStyle = "rgba(112,183,255,.7)"; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(15 * ratio, 24 * ratio); ctx.lineTo(15 * ratio, 38 * ratio); ctx.strokeStyle = "rgba(61,224,208,.75)"; ctx.stroke();
 }
 
 function drawMapPoint(ctx, map, point, width, height, ratio) {
@@ -1037,20 +1078,34 @@ function renderHeadingTape(payload) {
   ctx.beginPath(); ctx.moveTo(width/2, height); ctx.lineTo(width/2, height-18*ratio); ctx.stroke();
 }
 
-function installControlHandlers() {
-  $("resetTimerButton").addEventListener("click", () => {
+function bindResetTimer(id) {
+  const node = $(id);
+  if (!node) return;
+  node.addEventListener("click", () => {
     if (!window.confirm("确定立即重置 Bomana 任务计时器吗？此操作只执行一次。")) return;
     void submitCommand(
       { schema_version: 1, command: "action.reset_timer", confirmed: true },
       "重置计时器",
     );
   });
-  $("cycleCornerButton").addEventListener("click", () => {
+}
+
+function bindCycleCorner(id) {
+  const node = $(id);
+  if (!node) return;
+  node.addEventListener("click", () => {
     void submitCommand(
       { schema_version: 1, command: "action.cycle_corner" },
       "切换界面位置",
     );
   });
+}
+
+function installControlHandlers() {
+  bindResetTimer("resetTimerButton");
+  bindResetTimer("resetTimerButtonDesktop");
+  bindCycleCorner("cycleCornerButton");
+  bindCycleCorner("cycleCornerButtonDesktop");
   $("lockedOnButton").addEventListener("click", () => {
     void submitCommand(
       { schema_version: 1, command: "state.set_locked", locked: true },
@@ -1291,14 +1346,23 @@ $("pairingForm").addEventListener("submit", (event) => {
 installControlHandlers();
 installMapControls();
 installSheetHandlers();
+const systemsToggle = $("systemsToggle");
+const systemsGrid = $("systemsGrid");
+if (systemsToggle && systemsGrid) {
+  systemsToggle.addEventListener("click", () => {
+    const open = systemsGrid.hidden;
+    systemsGrid.hidden = !open;
+    systemsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    systemsToggle.textContent = open ? "收起系统" : "更多系统";
+  });
+}
 if (document.fonts) document.fonts.load("bold 18px Bomana8111Icons").then(renderCurrentMap, () => {});
 if ("ResizeObserver" in window) new ResizeObserver(renderCurrentMap).observe($("mapStage"));
 window.addEventListener("resize", renderCurrentMap, { passive: true });
-pollSnapshot();
-pollControlState();
-pollTimer = window.setInterval(pollSnapshot, 350);
-controlPollTimer = window.setInterval(pollControlState, 650);
+scheduleSnapshotPoll();
+scheduleControlPoll();
 window.addEventListener("pagehide", () => {
-  window.clearInterval(pollTimer);
-  window.clearInterval(controlPollTimer);
+  pollsStopped = true;
+  window.clearTimeout(pollTimer);
+  window.clearTimeout(controlPollTimer);
 }, { once: true });

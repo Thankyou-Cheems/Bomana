@@ -3,93 +3,70 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#10151d">
+  <meta name="theme-color" content="#050608">
   <title>Bomana Web Cockpit</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/dashboard.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <img class="brand-logo" src="/assets/app.png" alt="Bomana">
-      <span><strong>BOMANA</strong><small>COCKPIT</small></span>
+  <div class="stage" id="stage">
+    <div class="map-stage" id="mapStage">
+      <canvas id="tacticalMap" aria-label="Bomana 矢量战术地图"></canvas>
+      <div class="map-empty" id="mapEmpty">等待地图数据</div>
+      <div class="map-vignette" aria-hidden="true"></div>
     </div>
-    <div class="topbar-center">
-      <span class="aircraft-chip" id="aircraftName">--</span>
-      <span class="scope-chip pending" id="controlScope">正在核对权限</span>
-    </div>
-    <div class="topbar-end">
-      <button type="button" class="ops-open" id="openControlButton">操作</button>
-      <div class="connection" id="connectionBadge">
-        <span class="connection-dot"></span>
-        <span id="connectionText">正在连接</span>
-        <small id="freshnessText">--</small>
-      </div>
-    </div>
-  </header>
 
-  <p class="command-status" id="commandStatus" role="status" aria-live="polite">尚未发送操作</p>
-
-  <main class="cockpit" id="cockpit">
-    <section class="mission-strip card" aria-label="任务摘要">
-      <div class="mission-clock">
-        <span class="eyebrow" id="phaseLabel">等待游戏</span>
-        <div class="timer-display">
-          <div class="mission-progress" aria-hidden="true"><i id="timerProgress"></i></div>
-          <strong id="timerValue">--:--</strong>
-        </div>
-        <span id="timerMeta">等待 8111 数据</span>
-      </div>
-      <div class="quick-metrics">
-        <div><span>IAS</span><strong id="iasValue">---</strong><small>km/h</small></div>
-        <div><span>ALT</span><strong id="altValue">---</strong><small>m</small></div>
-        <div><span>HDG</span><strong id="headingValue">---</strong><small>deg</small></div>
-        <div data-capability="fuel"><span>FUEL</span><strong id="fuelValue">---</strong><small>%</small></div>
-      </div>
-      <button class="weapon-chip" id="weaponChip" type="button" data-capability="weapon" disabled>
-        <span class="weapon-chip-label">武器</span>
-        <strong id="weaponChipName">未选择</strong>
-        <small id="weaponChipMeta">点击切换</small>
-      </button>
-    </section>
-
-    <section class="map-card card">
-      <div class="card-head map-head">
-        <div><span class="eyebrow">TACTICAL</span><h1>战术态势</h1></div>
-        <div class="map-tools" aria-label="地图控制">
-          <button id="mapZoomOut" type="button" aria-label="缩小地图">−</button>
-          <button id="mapFollow" type="button" class="active">跟随</button>
-          <button id="mapZoomIn" type="button" aria-label="放大地图">＋</button>
-        </div>
-      </div>
-      <div class="map-stage" id="mapStage">
-        <canvas id="tacticalMap" aria-label="Bomana 矢量战术地图"></canvas>
-        <div class="map-empty" id="mapEmpty">等待地图数据</div>
-        <div class="map-legend-shell">
-          <button class="map-legend-toggle" id="mapLegendToggle" type="button" aria-expanded="false" aria-controls="mapLegend">
-            图例 <span id="mapLegendCount">8</span>
-          </button>
-          <div class="map-legend" id="mapLegend" hidden aria-label="地图图例与显示过滤">
-            <button type="button" data-map-filter="player" aria-pressed="true"><i class="legend-player"></i>本机</button>
-            <button type="button" data-map-filter="navigation" aria-pressed="true"><i class="legend-zone"></i>导航标记</button>
-            <button type="button" data-map-filter="hostile_aircraft" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="aircraft">F</i>敌机</button>
-            <button type="button" data-map-filter="hostile_armor" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="armor">M</i>装甲</button>
-            <button type="button" data-map-filter="hostile_air_defense" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="air_defense">S</i>防空</button>
-            <button type="button" data-map-filter="hostile_naval" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="naval">F</i>舰艇</button>
-            <button type="button" data-map-filter="hostile_other" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="other">?</i>其他敌方</button>
-            <button type="button" data-map-filter="weapon_range" aria-pressed="true"><i class="legend-range"></i>武器射程</button>
-          </div>
+    <header class="hud-top">
+      <div class="brand">
+        <img class="brand-logo" src="/assets/app.png" alt="Bomana">
+        <div>
+          <strong>BOMANA</strong>
+          <small>SORTIE LINK</small>
         </div>
       </div>
       <div class="heading-tape-wrap">
         <canvas id="headingTape" aria-label="航向带"></canvas>
       </div>
-    </section>
+      <div class="hud-top-end">
+        <span class="scope-chip pending" id="controlScope">核对中</span>
+        <div class="connection" id="connectionBadge">
+          <span class="connection-dot"></span>
+          <div>
+            <span id="connectionText">连接中</span>
+            <small id="freshnessText">--</small>
+          </div>
+        </div>
+      </div>
+    </header>
 
-    <section class="systems-grid">
-      <article class="card weapon-card" data-capability="weapon">
+    <aside class="hud-left" aria-label="飞行读数">
+      <div class="timer-block">
+        <span class="eyebrow" id="phaseLabel">等待游戏</span>
+        <strong id="timerValue">--:--</strong>
+        <div class="mission-progress" aria-hidden="true"><i id="timerProgress"></i></div>
+        <span class="meta" id="timerMeta">等待 8111 数据</span>
+      </div>
+      <div class="readout-stack">
+        <div class="readout"><span>IAS</span><strong id="iasValue">---</strong><small>km/h</small></div>
+        <div class="readout"><span>ALT</span><strong id="altValue">---</strong><small>m</small></div>
+        <div class="readout"><span>HDG</span><strong id="headingValue">---</strong><small>deg</small></div>
+        <div class="readout" data-capability="fuel"><span>FUEL</span><strong id="fuelValue">---</strong><small>%</small></div>
+      </div>
+      <div class="aircraft-block">
+        <span class="eyebrow">AIRFRAME</span>
+        <strong id="aircraftName">--</strong>
+      </div>
+      <div class="map-tools" aria-label="地图控制">
+        <button id="mapZoomOut" type="button" aria-label="缩小地图">−</button>
+        <button id="mapFollow" type="button" class="active">跟随</button>
+        <button id="mapZoomIn" type="button" aria-label="放大地图">＋</button>
+      </div>
+    </aside>
+
+    <aside class="hud-right" aria-label="战术信息">
+      <article class="glass weapon-card" data-capability="weapon">
         <div class="card-head">
-          <div><span class="eyebrow">FIRE CONTROL</span><h2>武器解算</h2></div>
+          <div><span class="eyebrow">FIRE</span><h2>武器解算</h2></div>
           <span class="quality-chip" id="weaponQuality">待机</span>
         </div>
         <div class="weapon-name"><strong id="weaponName">未选择武器</strong><span id="weaponModel">--</span></div>
@@ -97,24 +74,89 @@
         <div class="data-pairs">
           <div><span>目标</span><strong id="weaponTarget">--</strong></div>
           <div><span>距离</span><strong id="weaponDistance">--</strong></div>
-          <div><span>参考包线</span><strong id="weaponEnvelope">--</strong></div>
-          <div><span>预计时间</span><strong id="weaponTti">--</strong></div>
+          <div><span>包线</span><strong id="weaponEnvelope">--</strong></div>
+          <div><span>时间</span><strong id="weaponTti">--</strong></div>
         </div>
         <p class="system-note" id="weaponStatus">等待有效解算</p>
-        <button class="inline-weapon-open" id="weaponCardOpen" type="button">选择武器</button>
+        <button class="ghost-btn" id="weaponCardOpen" type="button">选择武器</button>
       </article>
 
-      <article class="card navigation-card" data-capability="navigation">
+      <article class="glass bombing-card" data-capability="weapon">
         <div class="card-head">
-          <div><span class="eyebrow">NAVIGATION</span><h2>导航目标</h2></div>
+          <div><span class="eyebrow">RELEASE</span><h2>投放</h2></div>
+          <span class="release-chip" id="releaseStatus">待机</span>
+        </div>
+        <div class="data-pairs">
+          <div><span>弹药</span><strong id="bombName">--</strong></div>
+          <div><span>目标</span><strong id="bombTarget">--</strong></div>
+          <div><span>投放距</span><strong id="releaseDistance">--</strong></div>
+          <div><span>窗口</span><strong id="releaseTime">--</strong></div>
+        </div>
+        <p class="system-note" id="bombReason">等待计算</p>
+      </article>
+
+      <article class="glass navigation-card" data-capability="navigation">
+        <div class="card-head">
+          <div><span class="eyebrow">NAV</span><h2>导航</h2></div>
           <strong class="deviation" id="deviationValue">±0°</strong>
         </div>
         <div class="nav-list" id="navigationList"><p class="empty-line">暂无导航目标</p></div>
       </article>
 
-      <article class="card airframe-card">
+      <article class="glass alerts-card">
         <div class="card-head">
-          <div><span class="eyebrow">AIRFRAME</span><h2>飞行状态</h2></div>
+          <div><span class="eyebrow">ALERT</span><h2>告警</h2></div>
+          <span id="alertCount">0</span>
+        </div>
+        <div class="alert-list" id="alertList"><p class="all-clear">当前无告警</p></div>
+      </article>
+    </aside>
+
+    <div class="map-legend-shell">
+      <button class="map-legend-toggle" id="mapLegendToggle" type="button" aria-expanded="false" aria-controls="mapLegend">
+        图例 <span id="mapLegendCount">8</span>
+      </button>
+      <div class="map-legend" id="mapLegend" hidden aria-label="地图图例与显示过滤">
+        <button type="button" data-map-filter="player" aria-pressed="true"><i class="legend-player"></i>本机</button>
+        <button type="button" data-map-filter="navigation" aria-pressed="true"><i class="legend-zone"></i>导航</button>
+        <button type="button" data-map-filter="hostile_aircraft" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="aircraft">F</i>敌机</button>
+        <button type="button" data-map-filter="hostile_armor" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="armor">M</i>装甲</button>
+        <button type="button" data-map-filter="hostile_air_defense" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="air_defense">S</i>防空</button>
+        <button type="button" data-map-filter="hostile_naval" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="naval">F</i>舰艇</button>
+        <button type="button" data-map-filter="hostile_other" aria-pressed="true"><i class="official-map-icon" data-map-icon-family="other">?</i>其他</button>
+        <button type="button" data-map-filter="weapon_range" aria-pressed="true"><i class="legend-range"></i>射程</button>
+      </div>
+    </div>
+
+    <footer class="hud-bottom">
+      <p class="command-status" id="commandStatus" role="status" aria-live="polite"></p>
+      <div class="rail">
+        <button type="button" class="rail-side" id="dockLegendButton"><strong>图例</strong><small>过滤</small></button>
+        <button type="button" class="rail-weapon" id="dockWeaponButton" data-capability="weapon" disabled>
+          <span>切换武器</span>
+          <strong id="dockWeaponName">未选择</strong>
+        </button>
+        <button type="button" class="rail-side" id="dockOpsButton"><strong>操作</strong><small>计时 · 设置</small></button>
+        <button type="button" class="rail-side desktop-only" id="openControlButton"><strong>控制台</strong><small>完整设置</small></button>
+      </div>
+      <div class="secondary-rail desktop-only">
+        <button type="button" class="weapon-chip" id="weaponChip" data-capability="weapon" disabled>
+          <span>WEAPON</span>
+          <strong id="weaponChipName">未选择</strong>
+          <small id="weaponChipMeta">点击切换</small>
+        </button>
+        <button type="button" class="action-pill danger-action" id="resetTimerButtonDesktop" disabled>重置计时</button>
+        <button type="button" class="action-pill" id="cycleCornerButtonDesktop" disabled>切换角落</button>
+      </div>
+    </footer>
+  </div>
+
+  <section class="systems-drawer" id="systemsDrawer" aria-label="扩展系统">
+    <button type="button" class="systems-toggle" id="systemsToggle" aria-expanded="false">更多系统</button>
+    <div class="systems-grid" id="systemsGrid" hidden>
+      <article class="glass airframe-card">
+        <div class="card-head">
+          <div><span class="eyebrow">SYSTEMS</span><h2>飞行状态</h2></div>
           <span id="airframeAircraft">--</span>
         </div>
         <div class="gauge-grid">
@@ -125,57 +167,19 @@
         <div class="data-pairs compact">
           <div data-capability="fuel"><span>油耗</span><strong id="fuelRate">--</strong></div>
           <div data-capability="fuel"><span>续航</span><strong id="fuelTime">--</strong></div>
-          <div data-capability="fuel"><span>返航需求</span><strong id="returnFuel">--</strong></div>
-          <div><span>俯仰 / 横滚</span><strong id="attitudeValue">--</strong></div>
+          <div data-capability="fuel"><span>返航</span><strong id="returnFuel">--</strong></div>
+          <div><span>俯仰/横滚</span><strong id="attitudeValue">--</strong></div>
         </div>
       </article>
-
-      <article class="card bombing-card" data-capability="weapon">
-        <div class="card-head">
-          <div><span class="eyebrow">RELEASE CUE</span><h2>投放提示</h2></div>
-          <span class="release-chip" id="releaseStatus">待机</span>
-        </div>
-        <div class="data-pairs">
-          <div><span>弹药</span><strong id="bombName">--</strong></div>
-          <div><span>目标</span><strong id="bombTarget">--</strong></div>
-          <div><span>投放距离</span><strong id="releaseDistance">--</strong></div>
-          <div><span>窗口时间</span><strong id="releaseTime">--</strong></div>
-        </div>
-        <p class="system-note" id="bombReason">等待计算</p>
-      </article>
-
-      <article class="card checklist-card" data-capability="checklist">
+      <article class="glass checklist-card" data-capability="checklist">
         <div class="card-head">
           <div><span class="eyebrow">SORTIE</span><h2>出击检查</h2></div>
           <span id="checklistCount">0 项</span>
         </div>
         <ol class="checklist" id="checklist"><li>等待清单</li></ol>
       </article>
-
-      <article class="card alerts-card">
-        <div class="card-head">
-          <div><span class="eyebrow">PRIORITY</span><h2>告警与提示</h2></div>
-          <span id="alertCount">0</span>
-        </div>
-        <div class="alert-list" id="alertList"><p class="all-clear">当前无告警</p></div>
-      </article>
-    </section>
-  </main>
-
-  <nav class="action-dock" id="actionDock" aria-label="快捷操作">
-    <button type="button" id="dockLegendButton" class="dock-side">
-      <strong>图例</strong>
-      <small>过滤</small>
-    </button>
-    <button type="button" id="dockWeaponButton" class="dock-weapon" data-capability="weapon" disabled>
-      <span>切换武器</span>
-      <strong id="dockWeaponName">未选择</strong>
-    </button>
-    <button type="button" id="dockOpsButton" class="dock-side">
-      <strong>操作</strong>
-      <small>计时 · 设置</small>
-    </button>
-  </nav>
+    </div>
+  </section>
 
   <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
 
@@ -183,34 +187,29 @@
     <div class="sheet-handle" aria-hidden="true"></div>
     <div class="sheet-head">
       <div>
-        <span class="eyebrow">APP LINK</span>
+        <span class="eyebrow">CONTROL</span>
         <h2 id="controlTitle">Bomana 控制台</h2>
       </div>
-      <button type="button" class="sheet-close" id="controlSheetClose" aria-label="关闭控制台">关闭</button>
+      <button type="button" class="sheet-close" id="controlSheetClose">关闭</button>
     </div>
-    <p class="control-help" id="controlHelp">控制状态正在加载。飞行数据仍会独立更新。</p>
-
+    <p class="control-help" id="controlHelp">控制状态正在加载。</p>
     <div class="control-deck" id="controlDeck">
-      <div class="sheet-tabs" role="tablist" aria-label="控制分类">
+      <div class="sheet-tabs" role="tablist">
         <button type="button" class="sheet-tab active" data-control-tab="actions" role="tab" aria-selected="true">动作</button>
         <button type="button" class="sheet-tab" data-control-tab="state" role="tab" aria-selected="false">状态</button>
         <button type="button" class="sheet-tab" data-control-tab="panels" role="tab" aria-selected="false">显示</button>
         <button type="button" class="sheet-tab" data-control-tab="weapon" role="tab" aria-selected="false">武器策略</button>
       </div>
-
       <div class="control-tab-panel active" data-control-panel="actions">
-        <div class="control-action-grid" aria-label="快捷动作">
+        <div class="control-action-grid">
           <button class="action-tile danger-action" id="resetTimerButton" type="button" disabled>
-            <span class="action-icon" aria-hidden="true">↺</span>
-            <span class="action-copy"><strong>重置计时</strong><small>需确认 · 对应桌面重置</small></span>
+            <strong>重置计时</strong><small>需确认 · 对应桌面重置</small>
           </button>
           <button class="action-tile" id="cycleCornerButton" type="button" disabled>
-            <span class="action-icon" aria-hidden="true">⌗</span>
-            <span class="action-copy"><strong>切换角落</strong><small>立即保存 · 对应 F9</small></span>
+            <strong>切换角落</strong><small>立即保存 · 对应 F9</small>
           </button>
         </div>
       </div>
-
       <div class="control-tab-panel" data-control-panel="state" hidden>
         <fieldset class="control-group">
           <legend>应用状态</legend>
@@ -245,7 +244,6 @@
           </div>
         </fieldset>
       </div>
-
       <div class="control-tab-panel" data-control-panel="panels" hidden>
         <fieldset class="control-group panel-controls">
           <legend>面板显示</legend>
@@ -259,12 +257,11 @@
           </div>
         </fieldset>
       </div>
-
       <div class="control-tab-panel" data-control-panel="weapon" hidden>
         <fieldset class="control-group weapon-controls">
           <legend>武器与模型</legend>
           <label class="select-setting" for="weaponSelect">
-            <span>当前武器（列表后备）</span>
+            <span>当前武器（后备）</span>
             <select id="weaponSelect" disabled>
               <option value="">等待武器目录</option>
             </select>
@@ -289,23 +286,19 @@
         <span class="eyebrow">WEAPON</span>
         <h2 id="weaponSheetTitle">切换武器</h2>
       </div>
-      <button type="button" class="sheet-close" id="weaponSheetClose" aria-label="关闭武器列表">关闭</button>
+      <button type="button" class="sheet-close" id="weaponSheetClose">关闭</button>
     </div>
-    <p class="control-help" id="weaponSheetHelp">选择与当前机型兼容的武器。官方数据始终优先。</p>
+    <p class="control-help" id="weaponSheetHelp">选择与当前机型兼容的武器。</p>
     <div class="weapon-list" id="weaponList" role="listbox" aria-label="可选武器"></div>
   </aside>
 
-  <footer>
-    <span>本机投影 · 控制由 Bomana 按会话授权</span>
-    <span>无键盘模拟 · 无外网资源</span>
-  </footer>
-
   <div class="pairing" id="pairingPanel" role="dialog" aria-modal="true" aria-labelledby="pairingTitle">
+    <div class="pairing-glow" aria-hidden="true"></div>
     <form id="pairingForm" class="pairing-card">
       <img class="pairing-logo" src="/assets/app.png" alt="Bomana">
       <span class="eyebrow">TRUSTED LAN ONLY</span>
-      <h2 id="pairingTitle">连接 Bomana</h2>
-      <p>在 Bomana 主窗口底部查看当前配对码。每次配对会创建独立会话；只有 Bomana 已开启局域网访问与控制时，手机才可配对并操作固定功能。</p>
+      <h2 id="pairingTitle">接入出击链路</h2>
+      <p>在 Bomana 主窗口底部查看配对码。每次配对创建独立会话；仅在已开启局域网访问与控制时，手机可操作固定功能。</p>
       <label for="pairingCode">配对码</label>
       <input id="pairingCode" name="pairingCode" inputmode="text" autocomplete="one-time-code" maxlength="9" placeholder="ABCD-EFGH" required>
       <button type="submit">进入驾驶舱</button>

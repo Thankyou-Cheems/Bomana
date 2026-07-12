@@ -15,7 +15,8 @@ from bomana.utils.diagnostics import log_exception
 from bomana.web.snapshot import DashboardSnapshotStore
 
 _LOGIC_POLLER_EXCEPTION_LOG_INTERVAL_SEC = 60.0
-MAP_IMAGE_POLL_INTERVAL_SEC = 15.0
+# Terrain thumbnail only; marker positions still ride the high-rate snapshot path.
+MAP_IMAGE_POLL_INTERVAL_SEC = 2.0
 
 
 class TkEventDispatcher:
