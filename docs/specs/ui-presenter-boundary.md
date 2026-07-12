@@ -35,10 +35,12 @@ modules, Tk renderers, and runtime side effects.
   access, and optional elevation rows MUST preserve domain facts in the
   snapshot and compute focus ratios, concise copy, and visibility in presenters
   or renderer helpers; core logic MUST NOT emit widget-layout strings.
-- `UI-PRES-06`: The speed strip MUST project the full current ratio below
-  `0.7 * OverspeedConfig.CAUTION_RATIO` and continuously interpolate its lower
-  viewport bound until the caution threshold so fill and all three breakup
-  markers remain monotonic, visible, and dynamically separated.
+- `UI-PRES-06`: The speed strip MUST keep an unscaled full-range viewport and
+  physical thickness through `50%` of the active breakup limit, MUST
+  continuously and visibly increase both viewport focus and physical scale from
+  above `50%`, and MUST reach its maximum scale at `70%`; the displayed value
+  MUST include the current active-limit percentage while fill and all three
+  breakup markers remain monotonic and visible.
 - `UI-PRES-07`: Dynamic label wrapping or row visibility that increases required
   height MUST schedule one debounced geometry expansion; at supported App
   scale/DPI combinations the weapon card's bottom edge MUST remain at or above
@@ -50,6 +52,10 @@ modules, Tk renderers, and runtime side effects.
   terms, MUST NOT show selection-source text such as `手选`, and MUST omit a
   separate weapon model/quality row when the range/status rows already convey
   the actionable solution.
+- `UI-PRES-10`: The timer MUST use a large vector banana spanning the timer and
+  badge-row height, with a banana-yellow base outline, a distinct state-colored
+  progress segment, and a centered integer cycle-progress percentage that
+  remains inside the canvas at supported App scale/DPI combinations.
 
 ## Contract Coverage
 
@@ -63,5 +69,5 @@ modules, Tk renderers, and runtime side effects.
   `tests/test_navigation_runtime.py` enforce renderer/runtime ownership of the
   side effects described by `UI-PRES-03`.
 - [behavioral] `tests/test_ui_geometry.py` and `tests/test_tk_style.py` enforce
-  `UI-PRES-07..UI-PRES-08` with narrow wrapped-content geometry and shared
-  clickable-affordance cases.
+  `UI-PRES-07..UI-PRES-08` and `UI-PRES-10` with narrow wrapped-content
+  geometry, banana containment, and shared clickable-affordance cases.

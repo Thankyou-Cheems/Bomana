@@ -1644,6 +1644,7 @@ class GameLogic:
                         y=unit.y,
                         label=unit.name or f"{fallback_label} #{unit.index}",
                         color="enemy",
+                        icon=unit.icon,
                     )
                 )
 

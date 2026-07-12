@@ -451,7 +451,7 @@ def test_speed_strip_model_clamps_ratio_and_formats_aircraft() -> None:
     assert model.level == "warning"
     assert model.state_text == "接近极限"
     assert model.model_text == "very long aircraft name w...  |  M1.10/0.88"
-    assert model.value_text == "IAS 980/1040"
+    assert model.value_text == "IAS 980/1040 · 极限 125%"
     assert model.fill_color == Theme.YELLOW
     assert model.fill_ratio == 1.0
 
@@ -493,8 +493,8 @@ def test_speed_strip_keeps_progress_below_dynamic_zoom_trigger() -> None:
     trigger = build_speed_strip_model(
         SimpleNamespace(
             overspeed_level="safe",
-            overspeed_ratio=panel_presenter.OverspeedConfig.CAUTION_RATIO * 0.70,
-            overspeed_current_ias_kmh=658.0,
+            overspeed_ratio=0.50,
+            overspeed_current_ias_kmh=500.0,
             overspeed_current_mach=None,
             overspeed_limit_kmh=1000.0,
             overspeed_limit_mach=0.0,
@@ -505,7 +505,9 @@ def test_speed_strip_keeps_progress_below_dynamic_zoom_trigger() -> None:
     )
 
     assert low.fill_ratio > 0.0
-    assert trigger.fill_ratio > low.fill_ratio
+    assert trigger.fill_ratio == 0.50
+    assert trigger.viewport_min_ratio == 0.0
+    assert trigger.visual_scale == 1.0
 
 
 def test_speed_strip_dynamically_stretches_breakup_markers() -> None:
@@ -525,11 +527,15 @@ def test_speed_strip_dynamically_stretches_breakup_markers() -> None:
         )
 
     before = model(0.50)
-    focused = model(panel_presenter.OverspeedConfig.CAUTION_RATIO)
+    middle = model(0.60)
+    focused = model(0.70)
     before_span = before.marker_ratios[2] - before.marker_ratios[0]
     focused_span = focused.marker_ratios[2] - focused.marker_ratios[0]
 
     assert focused_span > before_span
+    assert before.visual_scale == 1.0
+    assert 1.0 < middle.visual_scale < focused.visual_scale
+    assert focused.visual_scale == 1.8
     assert focused.viewport_min_ratio > before.viewport_min_ratio
 
 

@@ -191,6 +191,7 @@ def _map_point(point: TacticalMapPoint) -> dict[str, Any]:
         "y": _number(point.y, minimum=0, maximum=1),
         "label": str(point.label),
         "color": str(point.color),
+        "icon": str(point.icon or "")[:64],
         "is_target": bool(point.is_target),
         "is_friendly": bool(point.is_friendly),
     }

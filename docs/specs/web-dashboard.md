@@ -188,6 +188,13 @@ access, packaging, threading, privacy, and tray lifecycle.
   these positions into the desktop HUD or heading tape. This projection MUST be
   available in every App variant independently of navigation and weapon feature
   flags.
+- `WDB-52`: Each hostile map point MUST carry its bounded current-sample 8111
+  `icon` semantic, and the bundled browser MUST map known official icon values
+  to recognizable aircraft, armor, air-defense, and naval vector symbols with
+  an explicit fallback. A compact over-map legend MUST expose click/tap filters
+  for ownship, navigation, weapon range, and each hostile icon family. Filter
+  state MUST remain browser-session-local, MUST default to all visible, and MUST
+  NOT call a write route, persist configuration, or alter the App snapshot.
 
 ## Hostile Unit Projection Matrix
 
@@ -197,6 +204,13 @@ access, packaging, threading, privacy, and tray lifecycle.
 | `hostile_ground` | Hostile side/color plus ground/unit type or icon | Red square/cross marker | Web tactical map only. |
 | `hostile_naval` | Hostile side/color plus naval/ship type or icon | Red hull/diamond marker | Web tactical map only. |
 | `hostile_unit` | Hostile side/color on a positioned object that is not self, friendly, or a recognized map feature | Red diamond fallback marker | Web tactical map only; no guessed platform category. |
+
+Official icon-family projection is fixed as follows: aircraft icons such as
+`Fighter`, `Assault`, `Bomber`, and `Helicopter`; armor icons containing `Tank`
+or `Vehicle`; air-defense icons `SPAA`, `SAM`, and `AAA`; naval icons such as
+`Frigate`, `Boat`, `Destroyer`, `Cruiser`, `Carrier`, and `Ship`; every other
+value uses the fallback family. The browser may vary silhouettes within a
+family but must not invent target capabilities from the icon name.
 
 ## Complete Action Matrix
 
@@ -218,14 +232,14 @@ Persistence and stable completion-reason semantics are governed by `WDB-41` and
 ## Contract Coverage
 
 - [static] `tests/contracts/test_web_dashboard_contract.py` enforces
-  `WDB-01..WDB-09`, `WDB-11..WDB-18`, and `WDB-20..WDB-51` through ownership
+  `WDB-01..WDB-09`, `WDB-11..WDB-18`, and `WDB-20..WDB-52` through ownership
   scans, forbidden-path scans, schema
   self-checks, the exhaustive action discriminants, packaged assets, and
   response shapes.
 - [behavioral] `tests/test_web_dashboard_presenter.py` enforces `WDB-04`,
-  `WDB-06`, `WDB-07`, `WDB-14`, and `WDB-17` with schema-valid finite snapshot
-  projection, feature gating, current hostile-unit publication, and raw-field
-  exclusion.
+  `WDB-06`, `WDB-07`, `WDB-14`, `WDB-17`, and `WDB-52` with schema-valid finite
+  snapshot projection, bounded icon semantics, feature gating, current
+  hostile-unit publication, and raw-field exclusion.
 - [behavioral] `tests/test_web_dashboard_server.py` enforces `WDB-01..WDB-03`,
   `WDB-08..WDB-16`, `WDB-20..WDB-31`, `WDB-33`, `WDB-36`, `WDB-39`, and
   `WDB-40` with

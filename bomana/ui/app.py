@@ -1032,9 +1032,11 @@ class App:
                 self.top_row2.grid(
                     row=1,
                     column=0,
-                    sticky="ew",
-                    padx=int(8 * self.scale),
-                    pady=(int(pad_top * self.scale), int(pad_bot * self.scale)),
+                    sticky="w",
+                    pady=(
+                        int(max(2, pad_top // 2) * self.scale),
+                        int(pad_bot * self.scale),
+                    ),
                 )
             self.panel_renderer.update_mid_panel_layout()
 

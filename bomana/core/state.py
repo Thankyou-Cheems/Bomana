@@ -667,6 +667,7 @@ class TacticalMapPoint:
     color: str
     is_target: bool = False
     is_friendly: bool = False
+    icon: str = ""
 
 
 @dataclass(frozen=True)

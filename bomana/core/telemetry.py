@@ -747,12 +747,9 @@ class MapObjectsFetcher:
     def _hostile_unit_kind(o: dict) -> str:
         if MapObjectsFetcher._is_aircraft_object(o):
             return "aircraft"
-        evidence = " ".join(
-            MapObjectsFetcher._lower_text(o.get(key, ""))
-            for key in ("type", "icon", "class", "category")
-        )
-        ground_tokens = (
-            "ground",
+        icon = MapObjectsFetcher._lower_text(o.get("icon", ""))
+        obj_type = MapObjectsFetcher._lower_text(o.get("type", ""))
+        ground_icon_tokens = (
             "tank",
             "vehicle",
             "artillery",
@@ -763,7 +760,7 @@ class MapObjectsFetcher:
             "armoured",
             "bunker",
         )
-        if any(token in evidence for token in ground_tokens):
+        if any(token in icon for token in ground_icon_tokens):
             return "ground"
         naval_tokens = (
             "ship",
@@ -776,7 +773,11 @@ class MapObjectsFetcher:
             "submarine",
             "torpedo",
         )
-        return "naval" if any(token in evidence for token in naval_tokens) else "unit"
+        if any(token in icon for token in naval_tokens) or any(
+            token in obj_type for token in ("ship", "naval", "boat")
+        ):
+            return "naval"
+        return "ground" if "ground" in obj_type else "unit"
 
     @staticmethod
     def _hostile_unit_id(o: dict, kind: str, x: float, y: float, index: int) -> str:

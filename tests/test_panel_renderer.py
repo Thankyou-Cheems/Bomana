@@ -35,6 +35,18 @@ class FakePackLabel(FakeLabel):
         self.manager = ""
 
 
+class FakePlacedLabel(FakeLabel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.place_options: dict[str, object] = {}
+
+    def place(self, **kwargs) -> None:
+        self.place_options.update(kwargs)
+
+    def place_configure(self, **kwargs) -> None:
+        self.place_options.update(kwargs)
+
+
 class FakeIcons:
     @staticmethod
     def configure_label(label, *, icon, text, **_kwargs) -> None:
@@ -42,6 +54,42 @@ class FakeIcons:
 
 
 class PanelRendererNavListTests(unittest.TestCase):
+    def test_speed_strip_physically_reaches_maximum_scale_at_seventy_percent(self) -> None:
+        markers = {name: FakePlacedLabel() for name in ("caution", "warning", "critical")}
+        app = SimpleNamespace(
+            speed_state_lbl=FakeLabel(),
+            speed_model_lbl=FakeLabel(),
+            speed_value_lbl=FakeLabel(),
+            speed_bar_host=FakeLabel(),
+            speed_bar_bg=FakeLabel(),
+            speed_bar_fill=FakePlacedLabel(),
+            speed_bar_markers=markers,
+            speed_bar_host_base_height=20,
+            speed_bar_base_thickness=4,
+            speed_bar_marker_base_height=10,
+            _last_overspeed_level="safe",
+            _last_overspeed_sound_ts=0.0,
+            sound=SimpleNamespace(play=lambda **_kwargs: None),
+        )
+        snap = SimpleNamespace(
+            overspeed_level="safe",
+            overspeed_ratio=0.7,
+            overspeed_current_ias_kmh=700.0,
+            overspeed_current_mach=None,
+            overspeed_limit_kmh=1000.0,
+            overspeed_limit_mach=0.0,
+            overspeed_match=True,
+            overspeed_reason="",
+            aircraft_type_name="test-aircraft",
+        )
+
+        AppPanelRenderer(app).update_speed_strip(snap, debug_mock_mode=True)
+
+        self.assertEqual(app.speed_value_lbl.cget("text"), "IAS 700/1000 · 极限 70%")
+        self.assertGreater(app.speed_bar_host.cget("height"), app.speed_bar_host_base_height)
+        self.assertEqual(app.speed_bar_bg.cget("height"), 7)
+        self.assertTrue(all(marker.cget("height") == 18 for marker in markers.values()))
+
     def test_weapon_detail_row_replaces_legacy_ccrp_detail_row(self) -> None:
         app = SimpleNamespace(
             scale=1.0,

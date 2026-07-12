@@ -53,6 +53,7 @@ class SpeedStripModel:
     fill_ratio: float
     marker_ratios: tuple[float, float, float]
     viewport_min_ratio: float
+    visual_scale: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +61,7 @@ class OverspeedScaleProjection:
     fill_ratio: float
     marker_ratios: tuple[float, float, float]
     viewport_min_ratio: float
+    visual_scale: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,21 +98,24 @@ def _compute_overspeed_fill_ratio(snap: Any, ias_ratio: float) -> float:
 
 
 def overspeed_dynamic_projection(value: float) -> OverspeedScaleProjection:
-    """Continuously zoom from full acceleration into the breakup-threshold band."""
+    """Keep full scale through 50%, then reach obvious maximum zoom at 70%."""
 
     current = max(0.0, _safe_float(value))
     caution = float(OverspeedConfig.CAUTION_RATIO)
     warning = float(OverspeedConfig.WARNING_RATIO)
     critical = float(OverspeedConfig.CRITICAL_RATIO)
-    zoom_trigger = caution * 0.70
-    focused_minimum = max(0.0, caution - 0.30)
-    upper = max(1.02, critical + 0.02)
+    zoom_trigger = 0.50
+    zoom_maximum = 0.70
+    focused_minimum = 1.0 / 3.0
+    upper = 1.0
     if current <= zoom_trigger:
         lower = 0.0
-    elif current >= caution:
+        zoom = 0.0
+    elif current >= zoom_maximum:
         lower = focused_minimum
+        zoom = 1.0
     else:
-        zoom = (current - zoom_trigger) / max(0.001, caution - zoom_trigger)
+        zoom = (current - zoom_trigger) / (zoom_maximum - zoom_trigger)
         lower = focused_minimum * zoom
 
     span = max(0.001, upper - lower)
@@ -122,6 +127,7 @@ def overspeed_dynamic_projection(value: float) -> OverspeedScaleProjection:
         fill_ratio=project(current),
         marker_ratios=(project(caution), project(warning), project(critical)),
         viewport_min_ratio=lower,
+        visual_scale=1.0 + 0.8 * zoom,
     )
 
 
@@ -663,6 +669,8 @@ def build_speed_strip_model(snap: Any) -> SpeedStripModel:
             value_text = "IAS --"
     else:
         value_text = f"IAS {current_ias:.0f}" if current_ias > 0.0 else "IAS --"
+    if matched:
+        value_text = f"{value_text} · 极限 {round(display_ratio * 100):d}%"
 
     model_parts = [aircraft_type_name]
     if current_mach is not None and limit_mach > 0.0:
@@ -688,6 +696,7 @@ def build_speed_strip_model(snap: Any) -> SpeedStripModel:
         fill_ratio=projection.fill_ratio if matched else 0.0,
         marker_ratios=projection.marker_ratios,
         viewport_min_ratio=projection.viewport_min_ratio,
+        visual_scale=projection.visual_scale,
     )
 
 

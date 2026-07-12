@@ -136,14 +136,15 @@
       <div class="map-stage" id="mapStage">
         <canvas id="tacticalMap" aria-label="Bomana 矢量战术地图"></canvas>
         <div class="map-empty" id="mapEmpty">等待地图数据</div>
-        <div class="map-legend">
-          <span><i class="legend-player"></i>本机</span>
-          <span><i class="legend-zone"></i>战区</span>
-          <span><i class="legend-airfield"></i>机场</span>
-          <span><i class="legend-poi"></i>POI</span>
-          <span><i class="legend-trace"></i>Trace back</span>
-          <span><i class="legend-hostile"></i>当前敌方单位</span>
-          <span><i class="legend-range"></i>当前武器射程</span>
+        <div class="map-legend" id="mapLegend" aria-label="地图图例与显示过滤">
+          <button type="button" data-map-filter="player" aria-pressed="true"><i class="legend-player"></i>本机</button>
+          <button type="button" data-map-filter="navigation" aria-pressed="true"><i class="legend-zone"></i>导航标记</button>
+          <button type="button" data-map-filter="hostile_aircraft" aria-pressed="true"><i class="legend-aircraft"></i>敌机</button>
+          <button type="button" data-map-filter="hostile_armor" aria-pressed="true"><i class="legend-armor"></i>装甲</button>
+          <button type="button" data-map-filter="hostile_air_defense" aria-pressed="true"><i class="legend-air-defense"></i>防空</button>
+          <button type="button" data-map-filter="hostile_naval" aria-pressed="true"><i class="legend-naval"></i>舰艇</button>
+          <button type="button" data-map-filter="hostile_other" aria-pressed="true"><i class="legend-hostile"></i>其他敌方</button>
+          <button type="button" data-map-filter="weapon_range" aria-pressed="true"><i class="legend-range"></i>武器射程</button>
         </div>
       </div>
       <div class="heading-tape-wrap">

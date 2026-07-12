@@ -93,6 +93,13 @@ class MapObjectsContractTests(unittest.TestCase):
                         "y": 0.7,
                     },
                     {
+                        "type": "ground_model",
+                        "icon": "Frigate",
+                        "color": "red",
+                        "x": 0.32,
+                        "y": 0.72,
+                    },
+                    {
                         "type": "unknown_model",
                         "side": "hostile",
                         "name": "Unknown contact",
@@ -131,11 +138,11 @@ class MapObjectsContractTests(unittest.TestCase):
         )
         self.assertEqual(
             [unit.kind for unit in data.hostile_units],
-            ["aircraft", "ground", "naval", "unit"],
+            ["aircraft", "ground", "naval", "naval", "unit"],
         )
         self.assertEqual(
             [(unit.x, unit.y) for unit in data.hostile_units],
-            [(0.6, 0.1), (0.7, 0.4), (0.3, 0.7), (0.1, 0.9)],
+            [(0.6, 0.1), (0.7, 0.4), (0.3, 0.7), (0.32, 0.72), (0.1, 0.9)],
         )
         self.assertEqual(data.hostile_air_contacts[0].id, data.hostile_units[0].id)
 

@@ -1,4 +1,4 @@
-# enforces: docs/specs/web-dashboard.md WDB-01..WDB-09 WDB-11..WDB-18 WDB-20..WDB-51
+# enforces: docs/specs/web-dashboard.md WDB-01..WDB-09 WDB-11..WDB-18 WDB-20..WDB-52
 # enforces: docs/specs/threading-ui-contract.md THREAD-10..THREAD-13
 
 from __future__ import annotations
@@ -422,12 +422,19 @@ def test_map_projection_allowlist_includes_current_hostile_units_not_raw_payload
     assert '"hostile_ground"' in SNAPSHOT
     assert '"hostile_naval"' in SNAPSHOT
     assert '"hostile_unit"' in SNAPSHOT
+    assert '"icon"' in SNAPSHOT
     assert "hostile_air_contacts" not in SNAPSHOT
     assert "source_debug" not in SNAPSHOT
     assert "perf_debug" not in SNAPSHOT
     assert "hostile_aircraft" in JS
     assert "hostile_ground" in JS
     assert "hostile_naval" in JS
+    assert "hostileIconFamily" in JS
+    assert "mapFilters" in JS
+    assert 'data-map-filter="hostile_armor"' in HTML
+    assert 'data-map-filter="hostile_air_defense"' in HTML
+    assert 'data-map-filter="hostile_naval"' in HTML
+    assert "localStorage" not in JS
 
 
 def test_routes_auth_headers_and_no_cors_are_closed_by_construction() -> None:

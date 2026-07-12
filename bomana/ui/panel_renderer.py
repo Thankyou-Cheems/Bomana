@@ -791,7 +791,20 @@ class AppPanelRenderer:
         app.speed_state_lbl.config(text=model.state_text, fg=model.state_fg)
         app.speed_model_lbl.config(text=model.model_text, fg=model.model_fg)
         app.speed_value_lbl.config(text=model.value_text, fg=model.value_fg)
+        visual_scale = max(1.0, float(model.visual_scale))
+        host_height = max(
+            app.speed_bar_host_base_height,
+            round(app.speed_bar_host_base_height * (1.0 + 0.45 * (visual_scale - 1.0))),
+        )
+        thickness = max(1, round(app.speed_bar_base_thickness * visual_scale))
+        marker_height = max(
+            thickness + 2,
+            round(app.speed_bar_marker_base_height * visual_scale),
+        )
+        app.speed_bar_host.config(height=host_height)
+        app.speed_bar_bg.config(height=thickness)
         app.speed_bar_fill.config(bg=model.fill_color)
+        app.speed_bar_fill.config(height=thickness)
         app.speed_bar_fill.place(relwidth=model.fill_ratio)
         for name, relx in zip(
             ("caution", "warning", "critical"),
@@ -800,6 +813,7 @@ class AppPanelRenderer:
         ):
             marker = app.speed_bar_markers.get(name)
             if marker is not None:
+                marker.config(height=marker_height)
                 marker.place_configure(relx=relx)
 
         if model.level != app._last_overspeed_level:

@@ -53,7 +53,7 @@ class Pill(tk.Label):
 
 
 class BananaProgress(tk.Canvas):
-    """Timer progress drawn around a muted vector banana silhouette."""
+    """Large timer progress with a yellow banana outline and percent label."""
 
     def __init__(self, parent, *, size: int = 52, bg: str = Theme.GRAYPILL):
         self.size = max(24, int(size))
@@ -77,9 +77,9 @@ class BananaProgress(tk.Canvas):
             splinesteps=12,
             tags=("banana_silhouette",),
         )
-        self.create_line(
+        self.base_outline = self.create_line(
             *flat,
-            fill=Theme.BORDER,
+            fill=Theme.YELLOW,
             width=max(2, int(self.size * 0.055)),
             smooth=True,
             splinesteps=12,
@@ -92,6 +92,19 @@ class BananaProgress(tk.Canvas):
             smooth=True,
             splinesteps=12,
             state="hidden",
+        )
+        percent_font = resolve_tk_font_tuple(
+            self,
+            ("Segoe UI", max(8, int(self.size * 0.17)), "bold"),
+        )
+        self.percent_text = self.create_text(
+            self.size * 0.48,
+            self.size * 0.54,
+            text="0%",
+            fill=Theme.TEXT,
+            font=percent_font,
+            anchor="center",
+            tags=("banana_percent",),
         )
 
     @staticmethod
@@ -121,6 +134,7 @@ class BananaProgress(tk.Canvas):
         except TypeError, ValueError:
             progress = 0.0
         self.progress = max(0.0, min(1.0, progress))
+        self.itemconfigure(self.percent_text, text=f"{round(self.progress * 100):d}%")
         if self.progress <= 0.0:
             self.itemconfigure(self.progress_outline, state="hidden")
             return

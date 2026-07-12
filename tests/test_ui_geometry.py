@@ -173,6 +173,8 @@ class TkGeometryTests(unittest.TestCase):
             banana.set_progress(0.5)
             self.root.update_idletasks()
             self.assertEqual(banana.progress, 0.5)
+            self.assertEqual(banana.itemcget(banana.percent_text, "text"), "50%")
+            self.assertEqual(banana.itemcget(banana.base_outline, "fill"), Theme.YELLOW)
             self.assertGreater(len(banana.coords(banana.progress_outline)), 4)
             self.assertLess(
                 len(banana.coords(banana.progress_outline)),
@@ -181,10 +183,18 @@ class TkGeometryTests(unittest.TestCase):
 
             banana.set_progress(2.0)
             self.assertEqual(banana.progress, 1.0)
+            self.assertEqual(banana.itemcget(banana.percent_text, "text"), "100%")
             self.assertEqual(
                 len(banana.coords(banana.progress_outline)),
                 len(banana.outline_points) * 2,
             )
+            bbox = banana.bbox("all")
+            self.assertIsNotNone(bbox)
+            assert bbox is not None
+            self.assertGreaterEqual(bbox[0], 0)
+            self.assertGreaterEqual(bbox[1], 0)
+            self.assertLessEqual(bbox[2], banana.size)
+            self.assertLessEqual(bbox[3], banana.size)
         finally:
             banana.destroy()
 

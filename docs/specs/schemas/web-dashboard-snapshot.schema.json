@@ -257,7 +257,7 @@
     "mapPoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "kind", "x", "y", "label", "color", "is_target", "is_friendly"],
+      "required": ["id", "kind", "x", "y", "label", "color", "icon", "is_target", "is_friendly"],
       "properties": {
         "id": {"type": "string"},
         "kind": {
@@ -276,6 +276,7 @@
         "y": {"type": "number", "minimum": 0, "maximum": 1},
         "label": {"type": "string"},
         "color": {"type": "string"},
+        "icon": {"type": "string", "maxLength": 64},
         "is_target": {"type": "boolean"},
         "is_friendly": {"type": "boolean"}
       }

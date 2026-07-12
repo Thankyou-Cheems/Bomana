@@ -42,7 +42,7 @@ War Thunder data boundary.
 - `R8111-04`: Ownership is fixed: `TelemetryFetcher` owns `/indicators` and
   `/state`; `MapInfoFetcher` owns `/map_info.json`; `MapObjectsFetcher` parses
   `/map_obj.json` normalized player, map-object, and current hostile-unit
-  coordinates only; `MapImageFetcher` owns `/map.img`; `GameLogic` owns map
+  coordinates plus bounded official `icon` semantics only; `MapImageFetcher` owns `/map.img`; `GameLogic` owns map
   scale semantics, coordinate conversion, Web tactical projection, and target
   selection. Only normalized hostile-aircraft contacts are eligible for the
   existing AAM target-selection path.

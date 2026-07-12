@@ -174,7 +174,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `window_geometry.py` owns snap-anchor capture/application helpers so App geometry coordination can be tested without a Tk root.
    - `theme.py` owns runtime theme tokens, while `tk_style.py` owns shared Tk palette, action-button, and bordered clickable-surface styling used by the App, launcher, and modal dialogs.
    - Wrapped middle-surface content schedules one debounced expansion-only geometry sync. The sync compares current requested height with the root's actual height before reusing the existing window-size calculation, preventing the fixed bottom card from covering the final function/weapon row without creating a resize loop.
-   - The timer row renders normalized cycle progress through `BananaProgress`: a muted banana silhouette with a continuous highlighted outline segment. The configured integer cycle is shared by App config, core calculations, tray/Web target actions, snapshots, and persisted-state compatibility checks.
+   - The timer row renders normalized cycle progress through a large `BananaProgress` spanning the timer and badge rows: the banana-yellow base outline remains visible, the state-colored segment advances continuously, and a centered integer percentage makes progress readable at a glance. The configured integer cycle is shared by App config, core calculations, tray/Web target actions, snapshots, and persisted-state compatibility checks.
 4. Alerts and sounds via `SoundConfig` + Windows Beep/custom files; `SoundManager` serializes playback through one worker queue and drops overlapping requests while a sound is active.
 5. Diagnostics flow:
    - `Bomana.pyw` initializes `bomana/utils/diagnostics.py` at startup.
@@ -184,7 +184,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 6. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
-   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives compact speed strip + alert sound. Below 70% of the first caution threshold the viewport stays full-scale and the fill grows progressively; from that trigger onward a continuous presenter projection narrows the viewport and stretches all three breakup markers.
+   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives the speed strip, explicit active-limit percentage, and alert sound. Through 50% the viewport and physical bar size stay fixed; from 50% to 70% a continuous presenter projection narrows the viewport and clearly enlarges the bar and all three breakup markers, reaching maximum scale at 70%.
 7. Launcher check flow:
    - `launcher.pyw` remains the user-facing and PyInstaller entrypoint, while
      the `launcher/` package owns development-time launcher boundaries.

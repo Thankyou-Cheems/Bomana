@@ -127,7 +127,15 @@ def _snapshot() -> UISnapshot:
             TacticalMapPoint("home", "airfield", 0.2, 0.8, "友方机场", "friendly", False, True),
             TacticalMapPoint("poi-1", "poi", 0.55, 0.52, "烟柱", "poi"),
             TacticalMapPoint("trace-1", "traceback", 0.35, 0.68, "上次坠毁点", "traceback"),
-            TacticalMapPoint("hostile-1", "hostile_aircraft", 0.8, 0.2, "敌机", "enemy"),
+            TacticalMapPoint(
+                "hostile-1",
+                "hostile_aircraft",
+                0.8,
+                0.2,
+                "敌机",
+                "enemy",
+                icon="Fighter",
+            ),
         ),
     )
 
@@ -209,6 +217,7 @@ def test_disabled_capabilities_do_not_recreate_build_disabled_features() -> None
             "y": 0.2,
             "label": "敌机",
             "color": "enemy",
+            "icon": "Fighter",
             "is_target": False,
             "is_friendly": False,
         }

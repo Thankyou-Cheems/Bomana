@@ -17,6 +17,16 @@ const state = {
   mapImage: null,
   mapImageRevision: 0,
   mapImagePendingRevision: 0,
+  mapFilters: {
+    player: true,
+    navigation: true,
+    hostile_aircraft: true,
+    hostile_armor: true,
+    hostile_air_defense: true,
+    hostile_naval: true,
+    hostile_other: true,
+    weapon_range: true,
+  },
 };
 let pollTimer = null;
 let controlPollTimer = null;
@@ -31,6 +41,10 @@ const PANEL_CONTROLS = Object.freeze([
   Object.freeze({ inputId: "panelChecklist", labelId: "panelChecklistLabel", target: "checklist", label: "检查清单" }),
   Object.freeze({ inputId: "panelWeapon", labelId: "panelWeaponLabel", target: "weapon_solution", label: "武器解算" }),
 ]);
+
+const HOSTILE_MAP_KINDS = Object.freeze(new Set([
+  "hostile_aircraft", "hostile_ground", "hostile_naval", "hostile_unit",
+]));
 
 const COMMAND_ERROR_TEXT = Object.freeze({
   pairing_required: "会话已失效，请重新配对",
@@ -671,12 +685,12 @@ function renderMap(map) {
   $("mapEmpty").classList.toggle("hidden", map.available);
   if (!map.available) return;
 
-  drawWeaponRange(ctx, map, width, height, ratio);
+  if (state.mapFilters.weapon_range) drawWeaponRange(ctx, map, width, height, ratio);
 
   const pointsById = new Map(map.points.map((point) => [point.id, point]));
   const target = map.points.find((point) => point.kind === "poi" && point.is_target)
     || map.points.find((point) => point.is_target && point.kind !== "traceback");
-  if (map.player && target) {
+  if (state.mapFilters.navigation && map.player && target) {
     const from = mapTransform(map, width, height, map.player.x, map.player.y);
     const to = mapTransform(map, width, height, target.x, target.y);
     ctx.save();
@@ -687,8 +701,24 @@ function renderMap(map) {
     ctx.restore();
   }
 
-  for (const point of pointsById.values()) drawMapPoint(ctx, map, point, width, height, ratio);
-  if (map.player) drawPlayer(ctx, map, map.player, width, height, ratio);
+  for (const point of pointsById.values()) {
+    if (state.mapFilters[mapPointFilterKey(point)]) drawMapPoint(ctx, map, point, width, height, ratio);
+  }
+  if (state.mapFilters.player && map.player) drawPlayer(ctx, map, map.player, width, height, ratio);
+}
+
+function hostileIconFamily(point) {
+  const icon = String(point.icon || "").toLowerCase();
+  if (point.kind === "hostile_aircraft" || /(fighter|assault|bomber|helicopter|aircraft|plane)/.test(icon)) return "aircraft";
+  if (/(spaa|sam|aaa|air.?defen)/.test(icon)) return "air_defense";
+  if (/(tank|vehicle|artillery|armou?r|bunker)/.test(icon)) return "armor";
+  if (point.kind === "hostile_naval" || /(ship|naval|boat|destroyer|cruiser|carrier|frigate|submarine|torpedo)/.test(icon)) return "naval";
+  return "other";
+}
+
+function mapPointFilterKey(point) {
+  if (!HOSTILE_MAP_KINDS.has(String(point.kind || ""))) return "navigation";
+  return `hostile_${hostileIconFamily(point)}`;
 }
 
 async function syncMapImage(map) {
@@ -820,19 +850,8 @@ function drawMapPoint(ctx, map, point, width, height, ratio) {
   } else if (point.kind === "traceback") {
     ctx.beginPath(); ctx.arc(p.x, p.y, 8 * ratio, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(p.x - 11*ratio,p.y); ctx.lineTo(p.x + 11*ratio,p.y); ctx.moveTo(p.x,p.y-11*ratio); ctx.lineTo(p.x,p.y+11*ratio); ctx.stroke();
-  } else if (point.kind === "hostile_aircraft") {
-    ctx.translate(p.x, p.y);
-    ctx.beginPath(); ctx.moveTo(0, -9*ratio); ctx.lineTo(7*ratio, 7*ratio); ctx.lineTo(0, 4*ratio); ctx.lineTo(-7*ratio, 7*ratio); ctx.closePath(); ctx.stroke();
-  } else if (point.kind === "hostile_ground") {
-    const s = 7 * ratio;
-    ctx.strokeRect(p.x - s, p.y - s, s * 2, s * 2);
-    ctx.beginPath(); ctx.moveTo(p.x - s, p.y); ctx.lineTo(p.x + s, p.y); ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x, p.y + s); ctx.stroke();
-  } else if (point.kind === "hostile_naval") {
-    const s = 8 * ratio;
-    ctx.beginPath(); ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x + s, p.y); ctx.lineTo(p.x + s*.5, p.y + s*.6); ctx.lineTo(p.x - s*.5, p.y + s*.6); ctx.lineTo(p.x - s, p.y); ctx.closePath(); ctx.stroke();
-  } else if (point.kind === "hostile_unit") {
-    const s = 7 * ratio;
-    ctx.beginPath(); ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x + s, p.y); ctx.lineTo(p.x, p.y + s); ctx.lineTo(p.x - s, p.y); ctx.closePath(); ctx.stroke();
+  } else if (HOSTILE_MAP_KINDS.has(String(point.kind || ""))) {
+    drawHostileIcon(ctx, p, point, ratio);
   }
   if (point.is_target || state.zoom >= 1.7 || point.kind === "traceback") {
     ctx.font = `${9 * ratio}px Segoe UI`;
@@ -840,6 +859,46 @@ function drawMapPoint(ctx, map, point, width, height, ratio) {
     ctx.fillText(point.label, p.x + 12 * ratio, p.y - 9 * ratio);
   }
   ctx.restore();
+}
+
+function drawHostileIcon(ctx, p, point, ratio) {
+  const family = hostileIconFamily(point);
+  const icon = String(point.icon || "").toLowerCase();
+  ctx.translate(p.x, p.y);
+  if (family === "aircraft") {
+    ctx.beginPath();
+    ctx.moveTo(0, -11 * ratio); ctx.lineTo(2 * ratio, -2 * ratio);
+    ctx.lineTo(10 * ratio, 3 * ratio); ctx.lineTo(3 * ratio, 4 * ratio);
+    ctx.lineTo(3 * ratio, 9 * ratio); ctx.lineTo(0, 7 * ratio);
+    ctx.lineTo(-3 * ratio, 9 * ratio); ctx.lineTo(-3 * ratio, 4 * ratio);
+    ctx.lineTo(-10 * ratio, 3 * ratio); ctx.lineTo(-2 * ratio, -2 * ratio);
+    ctx.closePath(); ctx.stroke();
+  } else if (family === "armor") {
+    ctx.strokeRect(-10 * ratio, -6 * ratio, 20 * ratio, 12 * ratio);
+    ctx.strokeRect(-5 * ratio, -4 * ratio, 9 * ratio, 8 * ratio);
+    ctx.beginPath(); ctx.moveTo(4 * ratio, -2 * ratio); ctx.lineTo(11 * ratio, -5 * ratio); ctx.stroke();
+  } else if (family === "air_defense") {
+    ctx.strokeRect(-9 * ratio, 2 * ratio, 18 * ratio, 6 * ratio);
+    ctx.beginPath();
+    if (icon.includes("sam")) {
+      ctx.moveTo(-6 * ratio, 2 * ratio); ctx.lineTo(5 * ratio, -9 * ratio);
+      ctx.moveTo(-1 * ratio, 2 * ratio); ctx.lineTo(9 * ratio, -8 * ratio);
+    } else {
+      ctx.moveTo(-3 * ratio, 2 * ratio); ctx.lineTo(-6 * ratio, -10 * ratio);
+      ctx.moveTo(3 * ratio, 2 * ratio); ctx.lineTo(6 * ratio, -10 * ratio);
+    }
+    ctx.stroke();
+  } else if (family === "naval") {
+    ctx.beginPath();
+    ctx.moveTo(-11 * ratio, 1 * ratio); ctx.lineTo(10 * ratio, 1 * ratio);
+    ctx.lineTo(6 * ratio, 7 * ratio); ctx.lineTo(-7 * ratio, 7 * ratio); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-3 * ratio, 1 * ratio); ctx.lineTo(-3 * ratio, -5 * ratio);
+    ctx.lineTo(4 * ratio, -5 * ratio); ctx.lineTo(4 * ratio, 1 * ratio);
+    ctx.moveTo(0, -5 * ratio); ctx.lineTo(0, -10 * ratio); ctx.stroke();
+  } else {
+    const s = 8 * ratio;
+    ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); ctx.stroke();
+  }
 }
 
 function drawPlayer(ctx, map, player, width, height, ratio) {
@@ -997,6 +1056,18 @@ function installMapControls() {
     renderCurrentMap();
   });
   const stage = $("mapStage");
+  const legend = $("mapLegend");
+  legend.addEventListener("pointerdown", (event) => event.stopPropagation());
+  legend.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+  for (const button of legend.querySelectorAll("[data-map-filter]")) {
+    button.addEventListener("click", () => {
+      const key = button.dataset.mapFilter;
+      state.mapFilters[key] = !state.mapFilters[key];
+      button.classList.toggle("is-off", !state.mapFilters[key]);
+      button.setAttribute("aria-pressed", String(state.mapFilters[key]));
+      renderCurrentMap();
+    });
+  }
   stage.addEventListener("wheel", (event) => {
     event.preventDefault();
     state.zoom = Math.max(.75, Math.min(4, state.zoom * (event.deltaY < 0 ? 1.12 : .89)));

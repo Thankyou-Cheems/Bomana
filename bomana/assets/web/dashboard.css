@@ -214,9 +214,15 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 #tacticalMap { display: block; width: 100%; height: 100%; }
 .map-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; pointer-events: none; }
 .map-empty.hidden { display: none; }
-.map-legend { position: absolute; left: 9px; right: 9px; bottom: 9px; display: flex; flex-wrap: wrap; gap: 7px 12px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 10px; background: rgba(4, 12, 22, .76); backdrop-filter: blur(8px); color: var(--muted); font-size: 8px; }
-.map-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.map-legend { position: absolute; z-index: 3; left: 9px; bottom: 9px; display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100% - 18px); padding: 5px; border: 1px solid var(--line); border-radius: 10px; background: rgba(4, 12, 22, .82); backdrop-filter: blur(8px); color: var(--muted); font-size: 8px; }
+.map-legend button { display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 3px 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.map-legend button:hover, .map-legend button:focus-visible { border-color: rgba(112,183,255,.46); color: var(--text); outline: none; }
+.map-legend button.is-off { opacity: .38; text-decoration: line-through; }
 .map-legend i { width: 7px; height: 7px; border: 1px solid currentColor; }
+.legend-aircraft { color: #ff7078; transform: rotate(45deg); }
+.legend-armor { color: #ff9b70; border-radius: 2px; }
+.legend-air-defense { color: #f5c665; border-radius: 50%; }
+.legend-naval { color: #a99af6; transform: rotate(45deg); }
 .legend-player { color: var(--blue); transform: rotate(45deg); background: var(--blue); }
 .legend-zone { color: var(--yellow); border-radius: 50%; }
 .legend-airfield { color: var(--cyan); width: 10px !important; height: 3px !important; }

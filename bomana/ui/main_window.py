@@ -371,10 +371,16 @@ class MainWindowBuilder:
 
         app.banana_progress = BananaProgress(
             app.top_row1,
-            size=max(38, int(48 * s)),
+            size=max(64, int(78 * s)),
             bg=Theme.GRAYPILL,
         )
-        app.banana_progress.grid(row=0, column=1, sticky="w", padx=(int(6 * s), 0))
+        app.banana_progress.grid(
+            row=0,
+            column=1,
+            rowspan=2,
+            sticky="w",
+            padx=(int(6 * s), int(6 * s)),
+        )
 
         right = tk.Frame(app.top_row1, bg=Theme.GRAYPILL)
         right.grid(row=0, column=2, sticky="e", padx=(int(12 * s), 0))
@@ -397,10 +403,13 @@ class MainWindowBuilder:
         )
         app.cycle_lbl.grid(row=1, column=0, sticky="e", pady=(int(2 * s), 0))
 
-        app.top_row2 = tk.Frame(app.top_content, bg=Theme.GRAYPILL)
+        app.top_row2 = tk.Frame(app.top_row1, bg=Theme.GRAYPILL)
         pad_top, pad_bot = UIConfig.PADDING_ROW2
         app.top_row2.grid(
-            row=1, column=0, sticky="ew", padx=int(8 * s), pady=(int(pad_top * s), int(pad_bot * s))
+            row=1,
+            column=0,
+            sticky="w",
+            pady=(int(max(2, pad_top // 2) * s), int(pad_bot * s)),
         )
         app.top_row2.grid_columnconfigure(1, weight=1)
 
@@ -416,14 +425,14 @@ class MainWindowBuilder:
         app.gear_progress_bar = tk.Frame(app.badge_gear, bg=Theme.BLUE, height=int(3 * s))
 
         app.status_txt = tk.Label(
-            app.top_row2,
+            app.top_row1,
             text="等待中",
             font=font_status,
             fg=Theme.TEXT_DIM,
             bg=Theme.GRAYPILL,
             anchor="e",
         )
-        app.status_txt.grid(row=0, column=1, sticky="e")
+        app.status_txt.grid(row=1, column=2, sticky="e")
         app._update_lock_badge()
 
         app.history_mode_frame = tk.Frame(app.top_content, bg=Theme.GRAYPILL)
@@ -538,6 +547,9 @@ class MainWindowBuilder:
 
         speed_bar_height = max(8, int(UIConfig.SPEED_STRIP_HEIGHT * s))
         speed_bar_thickness = max(3, int(UIConfig.SPEED_STRIP_THICKNESS * s))
+        app.speed_bar_host_base_height = speed_bar_height
+        app.speed_bar_base_thickness = speed_bar_thickness
+        app.speed_bar_marker_base_height = max(speed_bar_thickness + 2, int(7 * s))
         app.speed_bar_host = tk.Frame(app.speed_row, bg=Theme.GRAYPILL, height=speed_bar_height)
         app.speed_bar_host.grid(row=1, column=0, sticky="ew", pady=(max(1, int(2 * s)), 0))
         app.speed_bar_host.grid_propagate(False)
@@ -558,7 +570,7 @@ class MainWindowBuilder:
                 app.speed_bar_bg,
                 bg=color,
                 width=max(1, int(2 * s)),
-                height=max(speed_bar_thickness + 2, int(7 * s)),
+                height=app.speed_bar_marker_base_height,
             )
             marker.place(relx=relx, rely=0.5, anchor="center")
             app.speed_bar_markers[name] = marker
