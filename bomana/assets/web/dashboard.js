@@ -7,6 +7,7 @@ const state = {
   pendingCommands: new Map(),
   submittingCommands: new Set(),
   weaponSignature: "",
+  weaponListSignature: "",
   zoom: 1,
   follow: true,
   panX: 0,
@@ -152,8 +153,16 @@ async function pollSnapshot() {
 
 function setCommandStatus(message, tone = "") {
   const node = $("commandStatus");
-  node.className = `command-status${tone ? ` ${tone}` : ""}`;
-  node.textContent = message;
+  const visible = Boolean(message);
+  node.className = `command-status${tone ? ` ${tone}` : ""}${visible ? " is-visible" : ""}`;
+  node.textContent = message || "";
+}
+
+function setWeaponPickersDisabled(disabled) {
+  for (const id of ["weaponChip", "dockWeaponButton", "weaponCardOpen"]) {
+    const node = $(id);
+    if (node) node.disabled = disabled;
+  }
 }
 
 function setControlUnavailable(scopeLabel, helpText) {
@@ -165,6 +174,7 @@ function setControlUnavailable(scopeLabel, helpText) {
   for (const node of document.querySelectorAll(".control-deck button, .control-deck input, .control-deck select")) {
     node.disabled = true;
   }
+  setWeaponPickersDisabled(true);
 }
 
 function controlGranted() {
@@ -235,6 +245,80 @@ function renderWeaponChoices(weapons, selectedWeaponId) {
   }
   select.value = selectedWeaponId;
   if (select.value !== selectedWeaponId) select.value = "";
+  const selected = weapons.find((weapon) => weapon.weapon_id === selectedWeaponId);
+  if (selected) {
+    text("weaponChipName", selected.display_name);
+    text("dockWeaponName", selected.display_name);
+    text("weaponChipMeta", selected.compatible ? `${selected.role} · 点击切换` : "当前机型不兼容");
+  }
+  const canSelect = commandIsAvailable("weapon.select") && !commandIsBusy("weapon.select");
+  const listSignature = `${signature}|${selectedWeaponId || ""}|${canSelect}|${controlGranted()}`;
+  if (listSignature !== state.weaponListSignature) {
+    state.weaponListSignature = listSignature;
+    renderWeaponList(weapons, selectedWeaponId, canSelect);
+  }
+}
+
+function renderWeaponList(weapons, selectedWeaponId, canSelect) {
+  const list = $("weaponList");
+  if (!list) return;
+  list.replaceChildren();
+  if (!weapons.length) {
+    const empty = document.createElement("p");
+    empty.className = "weapon-empty";
+    empty.textContent = "当前没有可选武器";
+    list.append(empty);
+    return;
+  }
+  const viewOnly = !controlGranted();
+  for (const weapon of weapons) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "weapon-option";
+    button.setAttribute("role", "option");
+    button.dataset.weaponId = weapon.weapon_id;
+    if (weapon.weapon_id === selectedWeaponId) button.classList.add("is-current");
+    if (!weapon.compatible) button.classList.add("incompatible");
+    const name = document.createElement("strong");
+    name.textContent = weapon.display_name;
+    const detail = document.createElement("small");
+    detail.textContent = weapon.compatible
+      ? `${weapon.role}`
+      : `${weapon.role} · 当前机型不兼容`;
+    const badge = document.createElement("span");
+    badge.className = "weapon-badge";
+    badge.textContent = weapon.weapon_id === selectedWeaponId
+      ? "当前"
+      : (weapon.compatible ? "选择" : "不可用");
+    button.append(name, badge, detail);
+    if (!weapon.compatible) {
+      button.disabled = true;
+    } else if (viewOnly) {
+      button.disabled = false;
+    } else {
+      button.disabled = !canSelect;
+    }
+    button.addEventListener("click", () => {
+      if (!controlGranted()) {
+        setCommandStatus("当前会话只有查看权限", "error");
+        return;
+      }
+      if (!weapon.compatible) {
+        setCommandStatus("该武器当前不可选择", "error");
+        return;
+      }
+      if (weapon.weapon_id === selectedWeaponId) {
+        closeSheet("weaponSheet");
+        return;
+      }
+      void submitCommand(
+        { schema_version: 1, command: "weapon.select", weapon_id: weapon.weapon_id },
+        `选择武器：${weapon.display_name}`,
+      );
+      closeSheet("weaponSheet");
+    });
+    list.append(button);
+  }
 }
 
 function renderControlState(payload) {
@@ -307,6 +391,14 @@ function renderControlState(payload) {
   $("weaponSelect").disabled = !commandIsAvailable("weapon.select")
     || commandIsBusy("weapon.select")
     || !hasCompatibleWeapon;
+  const weaponBusy = commandIsBusy("weapon.select");
+  setWeaponPickersDisabled(weaponBusy);
+  text(
+    "weaponSheetHelp",
+    granted
+      ? "选择与当前机型兼容的武器。官方数据始终优先。"
+      : "当前为只读会话，可浏览武器列表但无法切换。",
+  );
 
   setCommandButtons(
     ["modelCompatibleButton", "modelOfficialButton"],
@@ -482,7 +574,9 @@ function render(payload) {
   text("altValue", Math.round(finite(payload.flight.altitude_m)) || "---");
   text("headingValue", String(Math.round((finite(payload.flight.heading_deg) + 360) % 360)).padStart(3, "0"));
   text("fuelValue", payload.capabilities.fuel ? Math.round(finite(payload.fuel.percent)) : "---");
-  text("aircraftName", payload.flight.aircraft || "未识别机型");
+  const aircraft = payload.flight.aircraft || "未识别机型";
+  text("aircraftName", aircraft);
+  text("airframeAircraft", aircraft);
 
   renderMap(payload.map, payload.flight.heading_deg);
   renderHeadingTape(payload);
@@ -502,7 +596,8 @@ function renderCapabilities(capabilities) {
 }
 
 function renderWeapon(weapon) {
-  text("weaponName", weapon.name || "未选择武器");
+  const weaponName = weapon.name || "未选择武器";
+  text("weaponName", weaponName);
   text("weaponModel", weaponModelLabel(weapon));
   text("weaponTarget", weapon.target_name || "--");
   text("weaponDistance", weapon.target_distance_km > 0 ? fmt(weapon.target_distance_km, 1, " km") : "--");
@@ -511,6 +606,9 @@ function renderWeapon(weapon) {
   text("weaponTti", weapon.time_to_target_s > 0 ? fmt(weapon.time_to_target_s, 0, " s") : "--");
   text("weaponStatus", weaponStatusLabel(weapon));
   text("weaponQuality", weaponQualityLabel(weapon));
+  text("weaponChipName", weaponName);
+  text("dockWeaponName", weaponName === "未选择武器" ? "未选择" : weaponName);
+  text("weaponChipMeta", weapon.max_range_km > 0 ? `包线 ${envelope}` : weaponModelLabel(weapon));
   const chip = $("weaponQuality");
   chip.className = "quality-chip";
   if (weapon.quality === "experimental") chip.classList.add("experimental");
@@ -1042,6 +1140,88 @@ function installControlHandlers() {
   });
 }
 
+function updateLegendCount() {
+  const enabled = Object.values(state.mapFilters).filter(Boolean).length;
+  text("mapLegendCount", String(enabled));
+}
+
+function setLegendOpen(open) {
+  const legend = $("mapLegend");
+  const toggle = $("mapLegendToggle");
+  if (!legend || !toggle) return;
+  legend.hidden = !open;
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function openSheet(sheetId) {
+  const sheet = $(sheetId);
+  if (!sheet) return;
+  closeSheet("controlSheet", true);
+  closeSheet("weaponSheet", true);
+  sheet.hidden = false;
+  $("sheetBackdrop").hidden = false;
+  document.body.classList.add("sheet-open");
+}
+
+function closeSheet(sheetId, quiet = false) {
+  const sheet = $(sheetId);
+  if (sheet) sheet.hidden = true;
+  if (quiet) return;
+  const controlOpen = $("controlSheet") && !$("controlSheet").hidden;
+  const weaponOpen = $("weaponSheet") && !$("weaponSheet").hidden;
+  if (!controlOpen && !weaponOpen) {
+    $("sheetBackdrop").hidden = true;
+    document.body.classList.remove("sheet-open");
+  }
+}
+
+function closeAllSheets() {
+  closeSheet("controlSheet", true);
+  closeSheet("weaponSheet", true);
+  $("sheetBackdrop").hidden = true;
+  document.body.classList.remove("sheet-open");
+}
+
+function installSheetHandlers() {
+  $("dockOpsButton").addEventListener("click", () => openSheet("controlSheet"));
+  $("openControlButton").addEventListener("click", () => openSheet("controlSheet"));
+  $("controlSheetClose").addEventListener("click", () => closeSheet("controlSheet"));
+  $("dockWeaponButton").addEventListener("click", () => openSheet("weaponSheet"));
+  $("weaponChip").addEventListener("click", () => openSheet("weaponSheet"));
+  $("weaponCardOpen").addEventListener("click", () => openSheet("weaponSheet"));
+  $("weaponSheetClose").addEventListener("click", () => closeSheet("weaponSheet"));
+  $("dockLegendButton").addEventListener("click", () => {
+    const legend = $("mapLegend");
+    const next = legend.hidden;
+    setLegendOpen(next);
+    if (next) $("mapStage").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
+  $("mapLegendToggle").addEventListener("click", () => {
+    setLegendOpen($("mapLegend").hidden);
+  });
+  $("sheetBackdrop").addEventListener("click", () => closeAllSheets());
+  for (const tab of document.querySelectorAll("[data-control-tab]")) {
+    tab.addEventListener("click", () => {
+      const name = tab.dataset.controlTab;
+      for (const node of document.querySelectorAll("[data-control-tab]")) {
+        const active = node.dataset.controlTab === name;
+        node.classList.toggle("active", active);
+        node.setAttribute("aria-selected", active ? "true" : "false");
+      }
+      for (const panel of document.querySelectorAll("[data-control-panel]")) {
+        panel.hidden = panel.dataset.controlPanel !== name;
+        panel.classList.toggle("active", panel.dataset.controlPanel === name);
+      }
+    });
+  }
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeAllSheets();
+      setLegendOpen(false);
+    }
+  });
+}
+
 function installMapControls() {
   $("mapZoomIn").addEventListener("click", () => { state.zoom = Math.min(4, state.zoom * 1.25); renderCurrentMap(); });
   $("mapZoomOut").addEventListener("click", () => { state.zoom = Math.max(.75, state.zoom / 1.25); renderCurrentMap(); });
@@ -1053,17 +1233,25 @@ function installMapControls() {
   });
   const stage = $("mapStage");
   const legend = $("mapLegend");
-  legend.addEventListener("pointerdown", (event) => event.stopPropagation());
-  legend.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+  const legendShell = legend.closest(".map-legend-shell");
+  const stopMapGesture = (event) => event.stopPropagation();
+  if (legendShell) {
+    legendShell.addEventListener("pointerdown", stopMapGesture);
+    legendShell.addEventListener("wheel", stopMapGesture, { passive: true });
+  }
+  legend.addEventListener("pointerdown", stopMapGesture);
+  legend.addEventListener("wheel", stopMapGesture, { passive: true });
   for (const button of legend.querySelectorAll("[data-map-filter]")) {
     button.addEventListener("click", () => {
       const key = button.dataset.mapFilter;
       state.mapFilters[key] = !state.mapFilters[key];
       button.classList.toggle("is-off", !state.mapFilters[key]);
       button.setAttribute("aria-pressed", String(state.mapFilters[key]));
+      updateLegendCount();
       renderCurrentMap();
     });
   }
+  updateLegendCount();
   stage.addEventListener("wheel", (event) => {
     event.preventDefault();
     state.zoom = Math.max(.75, Math.min(4, state.zoom * (event.deltaY < 0 ? 1.12 : .89)));
@@ -1102,6 +1290,7 @@ $("pairingForm").addEventListener("submit", (event) => {
 
 installControlHandlers();
 installMapControls();
+installSheetHandlers();
 if (document.fonts) document.fonts.load("bold 18px Bomana8111Icons").then(renderCurrentMap, () => {});
 if ("ResizeObserver" in window) new ResizeObserver(renderCurrentMap).observe($("mapStage"));
 window.addEventListener("resize", renderCurrentMap, { passive: true });
