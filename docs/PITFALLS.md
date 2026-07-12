@@ -17,9 +17,9 @@ implementation plans belong in git history, not here.
 ### 2026-07-12 — Frameless startup size must come from content geometry
 
 Symptom: the main App opened at nearly screen height even after elastic card-row spacing was removed, leaving the surplus area as one large blank block below the cards.
-Root cause: startup finalization trusted transient Tk root state twice: its requested size instead of the existing content-based recalculation, and its temporary origin when choosing a monitor for corner placement; standalone navigation rebuilds also restored coordinates calculated for the old width.
+Root cause: startup finalization trusted transient Tk root state in several ways: rows populated after construction (Web access, hotkey notices, and the first game snapshot) could briefly wrap into an oversized requested height after the one forced size pass, runtime geometry sync intentionally did not shrink it, and the temporary root origin was previously used to choose a monitor; standalone navigation rebuilds also restored coordinates calculated for the old width.
 Spec: internal Tk geometry lifecycle; no cross-module invariant changed.
-Pin: `tests/test_ui_app_config.py` requires forced content-sized startup recalculation plus primary/saved-monitor corner selection independent of the root's transient origin, and `tests/test_navigation_runtime.py` requires resized standalone navigation to reset and persist its position.
+Pin: `tests/test_ui_app_config.py` requires three bounded post-construction shrink passes plus primary/saved-monitor corner selection independent of the root's transient origin, and `tests/test_navigation_runtime.py` requires resized standalone navigation to reset and persist its position.
 
 ### 2026-07-12 — Tk option support must be queried through widget keys
 

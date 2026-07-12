@@ -256,6 +256,40 @@ class TkGeometryTests(unittest.TestCase):
         self.assertTrue(calls)
         self.assertGreaterEqual(int(float(label.cget("wraplength"))), 80)
 
+    def test_startup_geometry_convergence_shrinks_late_transient_wrap(self) -> None:
+        frame = tk.Frame(self.root)
+        frame.pack(fill="both", expand=True)
+        label = tk.Label(frame, text="late startup row " * 80, wraplength=40)
+        label.pack(fill="x")
+        self.root.deiconify()
+        self.root.geometry("300x100")
+        self.root.update_idletasks()
+
+        app = SimpleNamespace(
+            root=self.root,
+            _startup_geometry_after_id=None,
+            _STARTUP_GEOMETRY_SETTLE_DELAYS_MS=(20, 20),
+        )
+
+        def recalc_size(**_kwargs) -> None:
+            self.root.update_idletasks()
+            self.root.geometry(f"300x{frame.winfo_reqheight() + 8}")
+
+        app._recalc_size = recalc_size
+        App._schedule_startup_geometry_convergence(app)
+        self.root.update()
+        inflated_height = self.root.winfo_height()
+
+        label.config(text="settled", wraplength=280)
+        self.root.update_idletasks()
+        settled_requested_height = frame.winfo_reqheight() + 8
+        self.root.after(80, self.root.quit)
+        self.root.mainloop()
+
+        self.assertGreater(inflated_height, settled_requested_height)
+        self.assertLess(self.root.winfo_height(), inflated_height)
+        self.assertLessEqual(self.root.winfo_height(), settled_requested_height + 64)
+
     def test_checklist_uses_full_card_width_and_keeps_markers_separate(self) -> None:
         card = tk.Frame(self.root, width=640, height=360)
         card.pack()

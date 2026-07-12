@@ -115,6 +115,8 @@ class App:
     - 通过UISnapshot传递数据（无锁读取）
     """
 
+    _STARTUP_GEOMETRY_SETTLE_DELAYS_MS = (250, 750)
+
     def __init__(self, root: tk.Tk):
         self.root = root
         self.game = GameLogic()
@@ -192,6 +194,7 @@ class App:
         self._last_expand_ts = 0.0
         self._last_zone_recalc_ts = 0.0
         self._geometry_sync_after_id = None
+        self._startup_geometry_after_id = None
         self._zone_layout_mode = None
         self._airport_layout_mode = None
         self._history_mode_layout_active = False
@@ -757,13 +760,15 @@ class App:
     def _finalize_window_geometry_and_styles(self):
         """最终确定窗口几何和样式"""
         self.root.update_idletasks()
-        # The root can retain a transient oversized geometry while its packed
-        # children are settling.  Finalize from the content request instead of
-        # treating that root geometry as the desired startup size.
+        # Establish the real width after the 10x10 bootstrap geometry.  Rows
+        # populated later in startup (Web access, hotkey notices, first game
+        # snapshot) can still cause transient wrapping, so a bounded idle-time
+        # convergence pass is scheduled below.
         self._recalc_size(keep_pos=False, force_shrink=True)
         self.root.update_idletasks()
         alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
+        self._schedule_startup_geometry_convergence()
 
     def _init_ui(self):
         """初始化 UI 布局（稳定的主窗口骨架）。"""
@@ -780,6 +785,26 @@ class App:
             self._sync_content_geometry()
 
         self._geometry_sync_after_id = self.root.after_idle(sync)
+
+    def _schedule_startup_geometry_convergence(self) -> None:
+        """Shrink transient startup geometry after late rows and wraps settle."""
+        settle_delays_ms = self._STARTUP_GEOMETRY_SETTLE_DELAYS_MS
+
+        def settle(step: int = 0) -> None:
+            self._startup_geometry_after_id = None
+            try:
+                self.root.update_idletasks()
+                self._recalc_size(keep_pos=False, force_shrink=True)
+                self.root.update_idletasks()
+            except tk.TclError:
+                return
+            if step < len(settle_delays_ms):
+                self._startup_geometry_after_id = self.root.after(
+                    settle_delays_ms[step],
+                    lambda: settle(step + 1),
+                )
+
+        self._startup_geometry_after_id = self.root.after_idle(settle)
 
     def _sync_content_geometry(self) -> None:
         """Expand when wrapped content outgrows the current frameless window."""

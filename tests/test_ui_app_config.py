@@ -128,19 +128,54 @@ def test_init_ui_syncs_hint_after_build(monkeypatch) -> None:
     assert calls == ["build", "hint"]
 
 
-def test_finalize_window_geometry_forces_content_sized_recalculation(monkeypatch) -> None:
+def test_finalize_window_geometry_schedules_post_startup_convergence(monkeypatch) -> None:
     app = _make_config_only_app()
     update_calls: list[str] = []
     recalc_calls: list[dict[str, object]] = []
     app.root = SimpleNamespace(update_idletasks=lambda: update_calls.append("update"))
     app.hwnd = 123
     app._recalc_size = lambda **kwargs: recalc_calls.append(kwargs)
+    convergence_calls: list[str] = []
+    app._schedule_startup_geometry_convergence = lambda: convergence_calls.append("scheduled")
     monkeypatch.setattr(app_module.Win32, "setup_window", lambda *_args, **_kwargs: None)
 
     app._finalize_window_geometry_and_styles()
 
     assert recalc_calls == [{"keep_pos": False, "force_shrink": True}]
     assert update_calls == ["update", "update"]
+    assert convergence_calls == ["scheduled"]
+
+
+def test_startup_geometry_convergence_forces_three_bounded_shrink_passes() -> None:
+    idle_callbacks: list[object] = []
+    timer_callbacks: list[tuple[int, object]] = []
+    update_calls: list[str] = []
+    recalc_calls: list[dict[str, object]] = []
+    app = _make_config_only_app()
+    app.root = SimpleNamespace(
+        after_idle=lambda callback: idle_callbacks.append(callback) or "idle-id",
+        after=lambda delay, callback: timer_callbacks.append((delay, callback)) or "timer-id",
+        update_idletasks=lambda: update_calls.append("update"),
+    )
+    app._startup_geometry_after_id = None
+    app._recalc_size = lambda **kwargs: recalc_calls.append(kwargs)
+
+    app._schedule_startup_geometry_convergence()
+
+    assert app._startup_geometry_after_id == "idle-id"
+    idle_callbacks.pop()()
+    assert timer_callbacks[0][0] == 250
+    timer_callbacks.pop(0)[1]()
+    assert timer_callbacks[0][0] == 750
+    timer_callbacks.pop(0)[1]()
+
+    assert recalc_calls == [
+        {"keep_pos": False, "force_shrink": True},
+        {"keep_pos": False, "force_shrink": True},
+        {"keep_pos": False, "force_shrink": True},
+    ]
+    assert update_calls == ["update"] * 6
+    assert app._startup_geometry_after_id is None
 
 
 def test_default_corner_placement_ignores_transient_root_origin(monkeypatch) -> None:
