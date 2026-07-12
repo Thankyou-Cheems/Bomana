@@ -1360,6 +1360,11 @@ class PanelConfig:
     navigation_mode = "integrated"
     navigation_window_pos = None  # 独立窗口位置 (x, y)
     navigation_bar_width = 1.0  # 独立导航栏宽度倍率（0.5-2.0）
+    navigation_bar_scale = 1.0  # 独立导航栏整体缩放倍率（0.5-2.0）
+
+    @staticmethod
+    def clamp_navigation_scale(value: float) -> float:
+        return max(0.5, min(2.0, float(value)))
 
     @classmethod
     def init_from_compile_switches(cls):

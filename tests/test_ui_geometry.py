@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from bomana.config.settings import UIConfig
+from bomana.config.settings import PanelConfig, UIConfig
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui.app import App
 from bomana.ui.dialogs import _ScalableDialogMixin, _ScopedMousewheelBinding
@@ -165,6 +165,42 @@ class TkGeometryTests(unittest.TestCase):
 
         self.assertLess(heights[0], heights[1])
         self.assertLess(heights[1], heights[2])
+
+    def test_standalone_navigation_scale_includes_heading_tape(self) -> None:
+        old_scale = PanelConfig.navigation_bar_scale
+        old_width = PanelConfig.navigation_bar_width
+        app = SimpleNamespace(
+            root=self.root,
+            scale=1.0,
+            _locked=False,
+            navigation_services=SimpleNamespace(switch_to_integrated=lambda: None),
+            _scaled_font=lambda font, *, size_mult=1.0, min_size=1: (
+                font[0],
+                max(min_size, round(font[1] * size_mult)),
+            ),
+        )
+        windows = []
+        try:
+            PanelConfig.navigation_bar_width = 1.0
+            PanelConfig.navigation_bar_scale = 1.0
+            base = NavigationWindow(app)
+            windows.append(base)
+
+            PanelConfig.navigation_bar_scale = 1.5
+            scaled = NavigationWindow(app)
+            windows.append(scaled)
+
+            self.assertGreater(scaled.heading_tape.tape_height, base.heading_tape.tape_height)
+            self.assertGreater(scaled.heading_tape.tape_width, base.heading_tape.tape_width)
+            self.assertAlmostEqual(
+                scaled.heading_tape.text_scale,
+                UIConfig.clamp_text_scale(UIConfig.TEXT_SCALE_MULT * 1.5),
+            )
+        finally:
+            for window in windows:
+                window.destroy()
+            PanelConfig.navigation_bar_scale = old_scale
+            PanelConfig.navigation_bar_width = old_width
 
     def test_banana_progress_ring_separates_emoji_and_percent(self) -> None:
         banana = BananaProgress(self.root, size=64)

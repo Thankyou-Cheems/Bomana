@@ -28,6 +28,7 @@ class SettingsRuntimeMixin:
             "scale": float(UIConfig.UI_SCALE_MULT),
             "text_scale": float(UIConfig.TEXT_SCALE_MULT),
             "nav_width": float(PanelConfig.navigation_bar_width),
+            "nav_scale": float(PanelConfig.navigation_bar_scale),
             "hud_enabled": bool(HUDConfig.enabled),
             "hud_alpha": int(HUDConfig.alpha),
             "hud_scale": float(HUDConfig.scale),
@@ -50,6 +51,7 @@ class SettingsRuntimeMixin:
         *,
         new_window_alpha: int,
         new_nav_width: float,
+        new_nav_scale: float,
         new_ui_scale: float,
         new_text_scale: float,
         new_hud_enabled: bool,
@@ -69,6 +71,7 @@ class SettingsRuntimeMixin:
     ) -> None:
         UIConfig.WINDOW_ALPHA = new_window_alpha
         PanelConfig.navigation_bar_width = new_nav_width
+        PanelConfig.navigation_bar_scale = new_nav_scale
         UIConfig.UI_SCALE_MULT = new_ui_scale
         UIConfig.TEXT_SCALE_MULT = new_text_scale
         HUDConfig.enabled = new_hud_enabled

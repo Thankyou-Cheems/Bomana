@@ -479,6 +479,9 @@ class App:
             nav_width = config.get("navigation_bar_width")
             if nav_width and isinstance(nav_width, (int, float)):
                 PanelConfig.navigation_bar_width = max(0.5, min(2.0, float(nav_width)))
+            nav_scale = config.get("navigation_bar_scale")
+            if nav_scale and isinstance(nav_scale, (int, float)):
+                PanelConfig.navigation_bar_scale = PanelConfig.clamp_navigation_scale(nav_scale)
         else:
             # 精简版强制使用集成模式，忽略配置文件中的设置
             PanelConfig.navigation_mode = "integrated"
@@ -600,6 +603,7 @@ class App:
         if PanelConfig.navigation_window_pos:
             config["navigation_window_pos"] = list(PanelConfig.navigation_window_pos)
         config["navigation_bar_width"] = PanelConfig.navigation_bar_width
+        config["navigation_bar_scale"] = PanelConfig.navigation_bar_scale
 
         # 武器选择与兼容的 CCRP 炸弹选择同时持久化。
         if ENABLE_CCRP:
@@ -1727,13 +1731,14 @@ class App:
         ui_scale_changed: bool,
         text_scale_changed: bool = False,
         nav_width_changed: bool = False,
+        nav_scale_changed: bool = False,
     ) -> None:
-        """运行时应用显示设置（主题/缩放/导航宽度）
+        """运行时应用显示设置（主题/全局缩放/独立导航尺寸）
 
         通过局部重建UI避免强制重启应用。
         """
         need_main_rebuild = bool(theme_changed or ui_scale_changed or text_scale_changed)
-        need_nav_rebuild = bool(need_main_rebuild or nav_width_changed)
+        need_nav_rebuild = bool(need_main_rebuild or nav_width_changed or nav_scale_changed)
         if not (need_main_rebuild or need_nav_rebuild):
             return
 

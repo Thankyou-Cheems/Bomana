@@ -26,6 +26,7 @@ def make_payload_kwargs(**overrides):
     kwargs = {
         "alpha_var": FakeVar(210),
         "nav_width_var": FakeVar(1.35),
+        "nav_scale_var": FakeVar(1.2),
         "scale_var": FakeVar(UIConfig.DEFAULT_UI_SCALE_MULT),
         "text_scale_var": FakeVar(1.0),
         "theme_var": FakeVar("fluent_dark"),
@@ -62,13 +63,16 @@ def test_collect_hotkey_bindings_rejects_duplicates() -> None:
 
 
 def test_build_settings_save_payload_clamps_hud_and_merges_panels() -> None:
-    payload = settings_form.build_settings_save_payload(**make_payload_kwargs())
+    payload = settings_form.build_settings_save_payload(
+        **make_payload_kwargs(nav_scale_var=FakeVar(9.0))
+    )
 
     assert payload.panel_config == {"show_bombing": False, "show_zones": False}
     assert payload.hud_config["alpha"] == 255
     assert payload.hud_config["scale"] == 2.0
     assert payload.hud_config["smoothing"] == 0.0
     assert payload.hud_config["color_style"] == "auto"
+    assert payload.nav_scale == 2.0
     assert payload.hud_config["horizontal_fov_deg"] == float(HUDConfig.horizontal_fov_deg)
 
 
@@ -108,6 +112,7 @@ def test_apply_settings_payload_to_config_writes_expected_sections() -> None:
     )
 
     assert config["navigation_bar_width"] == 1.35
+    assert config["navigation_bar_scale"] == 1.2
     assert config["sound_settings"] == {"alert": "custom.wav"}
     assert config["ccrp_tuning"] == {"range_correction_mult": 1.1, "time_correction_mult": 0.9}
     assert config["selected_bomb"] == "fab_500"

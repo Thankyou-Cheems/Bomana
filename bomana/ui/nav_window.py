@@ -63,7 +63,9 @@ class NavigationWindow:
         """
         self.app = parent_app
         self.root = parent_app.root
-        self.scale = parent_app.scale
+        self.scale = parent_app.scale * PanelConfig.clamp_navigation_scale(
+            PanelConfig.navigation_bar_scale
+        )
         self._visible = False
         self._drag_data = {"x": 0, "y": 0}
 
@@ -181,9 +183,16 @@ class NavigationWindow:
         )
         self.content_frame.pack(fill="both", expand=True, padx=1, pady=1)
 
-        title_font = self.app._scaled_font(UIConfig.FONT_ZONE_TITLE, size_mult=0.9, min_size=8)
-        item_font = self.app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.92, min_size=7)
-        hint_font = self.app._scaled_font(UIConfig.FONT_HINT, size_mult=0.75, min_size=7)
+        nav_scale = PanelConfig.clamp_navigation_scale(PanelConfig.navigation_bar_scale)
+        title_font = self.app._scaled_font(
+            UIConfig.FONT_ZONE_TITLE, size_mult=0.9 * nav_scale, min_size=8
+        )
+        item_font = self.app._scaled_font(
+            UIConfig.FONT_ZONE_ITEM, size_mult=0.92 * nav_scale, min_size=7
+        )
+        hint_font = self.app._scaled_font(
+            UIConfig.FONT_HINT, size_mult=0.75 * nav_scale, min_size=7
+        )
 
         self.title_bar = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.title_bar.pack(fill="x", padx=pad, pady=(pad, 0))
@@ -256,11 +265,13 @@ class NavigationWindow:
             self.tape_frame,
             width=tape_width,
             height=tape_height,
-            text_scale=UIConfig.TEXT_SCALE_MULT,
+            text_scale=UIConfig.TEXT_SCALE_MULT * nav_scale,
         )
         self.heading_tape.pack(fill="x", expand=True)
 
-        status_font = self.app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.9, min_size=7)
+        status_font = self.app._scaled_font(
+            UIConfig.FONT_ZONE_ITEM, size_mult=0.9 * nav_scale, min_size=7
+        )
         self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
         self.zone_row.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
         self.zone_label = tk.Label(

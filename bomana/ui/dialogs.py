@@ -591,7 +591,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         row += 1
 
         # 独立导航栏宽度
-        tk.Label(frame, text="导航栏宽度:", bg=Theme.BG, fg=Theme.TEXT).grid(
+        tk.Label(frame, text="独立导航宽度:", bg=Theme.BG, fg=Theme.TEXT).grid(
             row=row, column=0, sticky="w", pady=5
         )
         self.nav_width_var = tk.DoubleVar(value=PanelConfig.navigation_bar_width)
@@ -603,6 +603,26 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             orient="horizontal",
             length=180,
             variable=self.nav_width_var,
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            highlightthickness=0,
+            troughcolor=Theme.BORDER,
+            activebackground=Theme.BLUE,
+        ).grid(row=row, column=1, padx=10, pady=5)
+        row += 1
+
+        tk.Label(frame, text="独立导航缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
+            row=row, column=0, sticky="w", pady=5
+        )
+        self.nav_scale_var = tk.DoubleVar(value=PanelConfig.navigation_bar_scale)
+        tk.Scale(
+            frame,
+            from_=0.5,
+            to=2.0,
+            resolution=0.05,
+            orient="horizontal",
+            length=180,
+            variable=self.nav_scale_var,
             bg=Theme.BG,
             fg=Theme.TEXT,
             highlightthickness=0,
@@ -1660,6 +1680,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             # 重置显示设置
             self.alpha_var.set(210)
             self.nav_width_var.set(1.0)
+            self.nav_scale_var.set(1.0)
             self.scale_var.set(UIConfig.DEFAULT_UI_SCALE_MULT)
             self.text_scale_var.set(1.0)
             self.theme_var.set("fluent_dark")
@@ -1741,6 +1762,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             payload = build_settings_save_payload(
                 alpha_var=self.alpha_var,
                 nav_width_var=self.nav_width_var,
+                nav_scale_var=self.nav_scale_var,
                 scale_var=self.scale_var,
                 text_scale_var=self.text_scale_var,
                 theme_var=self.theme_var,
@@ -1803,6 +1825,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         self._apply_runtime_settings(
             new_window_alpha=payload.window_alpha,
             new_nav_width=payload.nav_width,
+            new_nav_scale=payload.nav_scale,
             new_ui_scale=payload.ui_scale,
             new_text_scale=payload.text_scale,
             new_hud_enabled=payload.hud_enabled,
@@ -1854,6 +1877,9 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         nav_width_changed = (
             abs(PanelConfig.navigation_bar_width - float(previous["nav_width"])) > 1e-6
         )
+        nav_scale_changed = (
+            abs(PanelConfig.navigation_bar_scale - float(previous["nav_scale"])) > 1e-6
+        )
         Theme.apply(payload.theme)
 
         # 运行时应用显示设置，无需重启应用。
@@ -1863,6 +1889,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
                 ui_scale_changed=ui_scale_changed,
                 text_scale_changed=text_scale_changed,
                 nav_width_changed=nav_width_changed,
+                nav_scale_changed=nav_scale_changed,
             )
 
         self._refresh_runtime_hud_after_settings(previous)

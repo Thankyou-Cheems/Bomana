@@ -39,6 +39,7 @@ def _dialog_for_save() -> SettingsDialog:
     dialog = SettingsDialog.__new__(SettingsDialog)
     dialog.alpha_var = FakeVar(210)
     dialog.nav_width_var = FakeVar(1.35)
+    dialog.nav_scale_var = FakeVar(1.2)
     dialog.scale_var = FakeVar(UIConfig.DEFAULT_UI_SCALE_MULT)
     dialog.text_scale_var = FakeVar(1.0)
     dialog.theme_var = FakeVar("fluent_dark")
@@ -113,6 +114,7 @@ def test_settings_save_persists_nav_width_and_merges_panels(monkeypatch) -> None
     dialog._save()
 
     assert saved["navigation_bar_width"] == 1.35
+    assert saved["navigation_bar_scale"] == 1.2
     assert saved["panels"] == {"show_bombing": False, "show_zones": False}
 
 

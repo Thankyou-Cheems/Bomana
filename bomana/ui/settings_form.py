@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from bomana.config.settings import (
     HUDConfig,
     OverspeedConfig,
+    PanelConfig,
     UIConfig,
 )
 
@@ -38,6 +39,7 @@ HOTKEY_ACTION_LABELS = {
 class SettingsSavePayload:
     window_alpha: int
     nav_width: float
+    nav_scale: float
     ui_scale: float
     text_scale: float
     theme: str
@@ -139,6 +141,7 @@ def build_settings_save_payload(
     *,
     alpha_var: object,
     nav_width_var: object,
+    nav_scale_var: object,
     scale_var: object,
     text_scale_var: object,
     theme_var: object,
@@ -165,6 +168,7 @@ def build_settings_save_payload(
 ) -> SettingsSavePayload:
     window_alpha = int(alpha_var.get())
     nav_width = float(nav_width_var.get())
+    nav_scale = PanelConfig.clamp_navigation_scale(nav_scale_var.get())
     ui_scale = UIConfig.clamp_ui_scale(scale_var.get())
     text_scale = UIConfig.clamp_text_scale(text_scale_var.get())
     hud_color_style = normalized_hud_color_style(hud_color_style_var.get())
@@ -187,6 +191,7 @@ def build_settings_save_payload(
     return SettingsSavePayload(
         window_alpha=window_alpha,
         nav_width=nav_width,
+        nav_scale=nav_scale,
         ui_scale=ui_scale,
         text_scale=text_scale,
         theme=str(theme_var.get()),
@@ -214,6 +219,7 @@ def apply_settings_payload_to_config(
 ) -> dict[str, object]:
     config["alpha"] = payload.window_alpha
     config["navigation_bar_width"] = payload.nav_width
+    config["navigation_bar_scale"] = payload.nav_scale
     config["scale"] = payload.ui_scale
     config["text_scale"] = payload.text_scale
     config["theme"] = payload.theme
