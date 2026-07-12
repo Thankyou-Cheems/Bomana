@@ -6,7 +6,7 @@ import tkinter as tk
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from bomana.config.feature_profile import ENABLE_CCRP
+from bomana.config.feature_profile import ENABLE_CCRP, ENABLE_WEB_DASHBOARD
 from bomana.config.settings import (
     BombConfig,
     UIConfig,
@@ -153,57 +153,66 @@ class MainWindowBuilder:
         bottom_frame.grid_rowconfigure(2, weight=1)
         bottom_frame.grid_columnconfigure(0, weight=1)
 
-        app.web_access_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
-        app.web_access_row.grid(
-            row=0,
-            column=0,
-            sticky="ew",
-            padx=int(6 * s),
-            pady=(int(4 * s), int(2 * s)),
-        )
-        app.web_access_row.grid_columnconfigure(0, weight=1)
-        app.web_access_lbl = tk.Label(
-            app.web_access_row,
-            text="",
-            font=font_hint,
-            fg=Theme.BLUE,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-            justify="left",
-        )
-        app.web_access_lbl.grid(row=0, column=0, sticky="ew")
-        style_clickable_surface(app.web_access_lbl)
-        bind_dynamic_wrap(
-            app.web_access_lbl,
-            app.web_access_row,
-            minimum=max(150, int(180 * s)),
-            margin=max(170, int(205 * s)),
-        )
-        app.web_access_lbl.bind("<Button-1>", lambda _event: app._copy_web_dashboard_pairing_code())
+        if ENABLE_WEB_DASHBOARD:
+            app.web_access_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
+            app.web_access_row.grid(
+                row=0,
+                column=0,
+                sticky="ew",
+                padx=int(6 * s),
+                pady=(int(4 * s), int(2 * s)),
+            )
+            app.web_access_row.grid_columnconfigure(0, weight=1)
+            app.web_access_lbl = tk.Label(
+                app.web_access_row,
+                text="",
+                font=font_hint,
+                fg=Theme.BLUE,
+                bg=Theme.GRAYPILL,
+                anchor="w",
+                justify="left",
+            )
+            app.web_access_lbl.grid(row=0, column=0, sticky="ew")
+            style_clickable_surface(app.web_access_lbl)
+            bind_dynamic_wrap(
+                app.web_access_lbl,
+                app.web_access_row,
+                minimum=max(150, int(180 * s)),
+                margin=max(170, int(205 * s)),
+            )
+            app.web_access_lbl.bind(
+                "<Button-1>",
+                lambda _event: app._copy_web_dashboard_pairing_code(),
+            )
 
-        app.web_open_btn = tk.Button(
-            app.web_access_row,
-            text="打开",
-            font=font_hint,
-            padx=int(7 * s),
-            pady=btn_pad_y,
-            command=app._open_web_dashboard,
-            takefocus=False,
-        )
-        style_action_button(app.web_open_btn, "secondary")
-        app.web_open_btn.grid(row=0, column=1, sticky="e", padx=(int(6 * s), 0))
-        app.web_lan_btn = tk.Button(
-            app.web_access_row,
-            text="开局域网",
-            font=font_hint,
-            padx=int(7 * s),
-            pady=btn_pad_y,
-            command=app._toggle_web_dashboard_lan,
-            takefocus=False,
-        )
-        style_action_button(app.web_lan_btn, "secondary")
-        app.web_lan_btn.grid(row=0, column=2, sticky="e", padx=(int(5 * s), 0))
-        app.web_access_row.grid_remove()
+            app.web_open_btn = tk.Button(
+                app.web_access_row,
+                text="打开",
+                font=font_hint,
+                padx=int(7 * s),
+                pady=btn_pad_y,
+                command=app._open_web_dashboard,
+                takefocus=False,
+            )
+            style_action_button(app.web_open_btn, "secondary")
+            app.web_open_btn.grid(row=0, column=1, sticky="e", padx=(int(6 * s), 0))
+            app.web_lan_btn = tk.Button(
+                app.web_access_row,
+                text="开局域网",
+                font=font_hint,
+                padx=int(7 * s),
+                pady=btn_pad_y,
+                command=app._toggle_web_dashboard_lan,
+                takefocus=False,
+            )
+            style_action_button(app.web_lan_btn, "secondary")
+            app.web_lan_btn.grid(row=0, column=2, sticky="e", padx=(int(5 * s), 0))
+            app.web_access_row.grid_remove()
+        else:
+            app.web_access_row = None
+            app.web_access_lbl = None
+            app.web_open_btn = None
+            app.web_lan_btn = None
 
         nudge_visible = bool(
             getattr(app, "_hotkey_broker_notice", "") or getattr(app, "_nudge_visible", False)

@@ -42,6 +42,13 @@ def write_shared_app_runtime_assets(root: Path) -> None:
         "web-dashboard-control-state.schema.json",
     ):
         (schema_dir / name).write_text("{}\n", encoding="utf-8")
+    # Enhanced packaging requires the Web tree to exist; Standard/Lite still omit it.
+    web_dir = root / "bomana" / "web"
+    web_assets = root / "bomana" / "assets" / "web"
+    web_dir.mkdir(parents=True, exist_ok=True)
+    web_assets.mkdir(parents=True, exist_ok=True)
+    (web_dir / "__init__.py").write_text("", encoding="utf-8")
+    (web_assets / "index.html").write_text("<html></html>\n", encoding="utf-8")
 
 
 def test_portable_build_reads_version_from_metadata() -> None:
@@ -127,19 +134,28 @@ def test_enhanced_app_package_bundles_weapon_catalog_and_shared_schema(tmp_path:
         assert "docs/specs/schemas/weapon-fire-control.schema.json" in archive.namelist()
 
 
-@pytest.mark.parametrize("variant", ["Enhanced", "Standard", "Lite"])
-def test_all_app_variants_bundle_web_cockpit(tmp_path: Path, variant: str) -> None:
-    build_portable = load_tool_module(
-        f"build_portable_web_cockpit_{variant.lower()}",
-        "tools/build_portable.py",
-    )
-    root = tmp_path / "repo"
-    output = tmp_path / "dist"
+WEB_COCKPIT_PACKAGE_PATHS = {
+    "bomana/web/__init__.py",
+    "bomana/web/control.py",
+    "bomana/web/server.py",
+    "bomana/web/snapshot.py",
+    "bomana/assets/web/index.html",
+    "bomana/assets/web/dashboard.css",
+    "bomana/assets/web/dashboard.js",
+    "bomana/assets/web/qrcode.js",
+    "bomana/assets/web/favicon.svg",
+    "docs/specs/schemas/web-dashboard-command.schema.json",
+    "docs/specs/schemas/web-dashboard-command-response.schema.json",
+    "docs/specs/schemas/web-dashboard-control-state.schema.json",
+}
+
+
+def _seed_web_cockpit_package_tree(root: Path) -> None:
     web_module_dir = root / "bomana" / "web"
     web_asset_dir = root / "bomana" / "assets" / "web"
     data_dir = root / "bomana" / "data"
     schema_dir = root / "docs" / "specs" / "schemas"
-    for directory in (web_module_dir, web_asset_dir, data_dir, schema_dir, output):
+    for directory in (web_module_dir, web_asset_dir, data_dir, schema_dir):
         directory.mkdir(parents=True, exist_ok=True)
     (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
@@ -150,28 +166,49 @@ def test_all_app_variants_bundle_web_cockpit(tmp_path: Path, variant: str) -> No
     (data_dir / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
     (schema_dir / "weapon-fire-control.schema.json").write_text("{}\n", encoding="utf-8")
     write_shared_app_runtime_assets(root)
+
+
+def test_enhanced_app_package_bundles_web_cockpit(tmp_path: Path) -> None:
+    build_portable = load_tool_module(
+        "build_portable_web_cockpit_enhanced",
+        "tools/build_portable.py",
+    )
+    root = tmp_path / "repo"
+    output = tmp_path / "dist"
+    output.mkdir()
+    _seed_web_cockpit_package_tree(root)
+    broker = tmp_path / "BomanaHotkeyBroker.exe"
+    broker.write_bytes(b"native broker payload")
+
+    package = build_portable.build_app_zip(root, "Enhanced", "1.2.3", output, broker)
+
+    with zipfile.ZipFile(package) as archive:
+        names = set(archive.namelist())
+        assert names >= WEB_COCKPIT_PACKAGE_PATHS
+        assert "bomana_version.py" in names
+
+
+@pytest.mark.parametrize("variant", ["Standard", "Lite"])
+def test_standard_and_lite_app_packages_omit_web_cockpit(tmp_path: Path, variant: str) -> None:
+    build_portable = load_tool_module(
+        f"build_portable_web_cockpit_{variant.lower()}",
+        "tools/build_portable.py",
+    )
+    root = tmp_path / "repo"
+    output = tmp_path / "dist"
+    output.mkdir()
+    _seed_web_cockpit_package_tree(root)
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
     package = build_portable.build_app_zip(root, variant, "1.2.3", output, broker)
 
-    expected = {
-        "bomana/web/__init__.py",
-        "bomana/web/control.py",
-        "bomana/web/server.py",
-        "bomana/web/snapshot.py",
-        "bomana/assets/web/index.html",
-        "bomana/assets/web/dashboard.css",
-        "bomana/assets/web/dashboard.js",
-        "bomana/assets/web/qrcode.js",
-        "bomana/assets/web/favicon.svg",
-        "bomana_version.py",
-        "docs/specs/schemas/web-dashboard-command.schema.json",
-        "docs/specs/schemas/web-dashboard-command-response.schema.json",
-        "docs/specs/schemas/web-dashboard-control-state.schema.json",
-    }
     with zipfile.ZipFile(package) as archive:
-        assert expected <= set(archive.namelist())
+        names = set(archive.namelist())
+        assert "bomana_version.py" in names
+        assert not (WEB_COCKPIT_PACKAGE_PATHS & names)
+        assert not any(name.startswith("bomana/web/") for name in names)
+        assert not any(name.startswith("bomana/assets/web/") for name in names)
 
 
 def test_enhanced_app_package_rejects_missing_weapon_assets(tmp_path: Path) -> None:

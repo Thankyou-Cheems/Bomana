@@ -23,9 +23,11 @@ submodule boundaries.
 - `CFG-01`: Source runs default to full functionality. Build scripts may
   temporarily patch `ENABLE_*` flags in `bomana/config/feature_profile.py` while
   building variants and must restore the source file afterward.
-- `CFG-02`: Variant matrix is fixed: Enhanced enables all listed features;
-  Standard disables only `ENABLE_CCRP`; Lite disables CCRP/weapon solution,
-  zones, airfields, fuel, and checklist. `ENABLE_ADVANCED_SETTINGS` stays true.
+- `CFG-02`: Variant matrix is fixed: Enhanced enables all listed features
+  including `ENABLE_WEB_DASHBOARD`; Standard disables `ENABLE_CCRP` and
+  `ENABLE_WEB_DASHBOARD`; Lite disables CCRP/weapon solution, zones, airfields,
+  fuel, checklist, and `ENABLE_WEB_DASHBOARD`. `ENABLE_ADVANCED_SETTINGS` stays
+  true.
 - `CFG-03`: `ENABLE_*` flags take precedence over user config. A build-disabled
   feature must not be re-enabled by persisted config, UI, tray, hotkey, or core
   code.
@@ -65,13 +67,23 @@ submodule boundaries.
 - `CFG-14`: Selecting `web_dashboard_lan_enabled` MUST also select
   `web_dashboard_autostart`; clearing Web autostart MUST clear LAN startup so
   the Launcher cannot request LAN without an App Web runtime.
+- `CFG-15`: Portable packaging for Standard and Lite MUST omit Web Cockpit
+  Python modules under `bomana/web/`, front-end assets under
+  `bomana/assets/web/`, and the three `web-dashboard-*.schema.json` control
+  schemas; a disabled flag alone is not sufficient. Enhanced MUST package them.
+- `CFG-16`: When the selected channel is not Enhanced and any Launcher Web
+  preference is true, the Launcher MUST show an explicit degradation notice and
+  MUST hand off only forced-off Web booleans to the App for that launch while
+  still allowing the three preferences to remain saved for a later Enhanced
+  channel.
 
 ## Contract Coverage
 
 - [static] `tests/contracts/test_config_variants.py` enforces
-  `CFG-01..CFG-04` and `CFG-06..CFG-14` across the variant matrix, build patch
+  `CFG-01..CFG-04` and `CFG-06..CFG-16` across the variant matrix, build patch
   target, shared config path, panel precedence, navigation fallback, package
-  boundary, and the exact Launcher Web preference allowlist.
+  boundary, packaging exclusion, launch degradation, and the exact Launcher Web
+  preference allowlist.
 - [behavioral] `tests/test_file_utils_persistence.py` enforces `CFG-04` and
   `CFG-05` with single-file persistence and compile-switch migration cases.
 - [behavioral] `tests/test_launcher_update_service.py` and

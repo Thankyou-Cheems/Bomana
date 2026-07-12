@@ -35,6 +35,7 @@ def test_variant_switch_matrix_matches_spec() -> None:
             "ENABLE_FUEL": "True",
             "ENABLE_CHECKLIST": "True",
             "ENABLE_ADVANCED_SETTINGS": "True",
+            "ENABLE_WEB_DASHBOARD": "True",
         },
         "Standard": {
             "ENABLE_CCRP": "False",
@@ -43,6 +44,7 @@ def test_variant_switch_matrix_matches_spec() -> None:
             "ENABLE_FUEL": "True",
             "ENABLE_CHECKLIST": "True",
             "ENABLE_ADVANCED_SETTINGS": "True",
+            "ENABLE_WEB_DASHBOARD": "False",
         },
         "Lite": {
             "ENABLE_CCRP": "False",
@@ -51,6 +53,7 @@ def test_variant_switch_matrix_matches_spec() -> None:
             "ENABLE_FUEL": "False",
             "ENABLE_CHECKLIST": "False",
             "ENABLE_ADVANCED_SETTINGS": "True",
+            "ENABLE_WEB_DASHBOARD": "False",
         },
     }
 
@@ -63,6 +66,7 @@ def test_source_feature_profile_defaults_to_enhanced() -> None:
         "ENABLE_FUEL",
         "ENABLE_CHECKLIST",
         "ENABLE_ADVANCED_SETTINGS",
+        "ENABLE_WEB_DASHBOARD",
     )
     assert all(
         getattr(feature_profile, name) is True for name in feature_profile.FEATURE_FLAG_NAMES

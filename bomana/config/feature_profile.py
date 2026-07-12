@@ -10,6 +10,8 @@ ENABLE_AIRFIELDS = True
 ENABLE_FUEL = True
 ENABLE_CHECKLIST = True
 ENABLE_ADVANCED_SETTINGS = True
+# Web Cockpit modules/assets are packaged only when this is True (Enhanced).
+ENABLE_WEB_DASHBOARD = True
 
 FEATURE_FLAG_NAMES = (
     "ENABLE_CCRP",
@@ -18,6 +20,7 @@ FEATURE_FLAG_NAMES = (
     "ENABLE_FUEL",
     "ENABLE_CHECKLIST",
     "ENABLE_ADVANCED_SETTINGS",
+    "ENABLE_WEB_DASHBOARD",
 )
 
 __all__ = [
@@ -26,6 +29,7 @@ __all__ = [
     "ENABLE_CCRP",
     "ENABLE_CHECKLIST",
     "ENABLE_FUEL",
+    "ENABLE_WEB_DASHBOARD",
     "ENABLE_ZONES",
     "FEATURE_FLAG_NAMES",
 ]

@@ -69,8 +69,11 @@ access, packaging, threading, privacy, and tray lifecycle.
   CDN, remote font, analytics script, or external request.
 - `WDB-16`: The App MUST stop local and LAN listeners with bounded shutdown
   before destroying Tk, and stopped listener addresses MUST be reusable.
-- `WDB-17`: Every build variant MUST package the dashboard modules, schemas, and
-  assets while existing `ENABLE_*` switches remain authoritative.
+- `WDB-17`: Only the Enhanced build variant MUST package the dashboard modules
+  (`bomana/web/`), front-end assets (`bomana/assets/web/`), and Web control
+  schemas. Standard and Lite MUST omit those paths entirely. When
+  `ENABLE_WEB_DASHBOARD` is false, the App MUST not import, start, or expose the
+  cockpit even if leftover files are present in a source tree.
 - `WDB-18`: The App MUST show a compact secondary Web-access row in the existing
   bottom card whenever the loopback dashboard is running. It MUST show the
   current pairing code and local/LAN availability without exposing a token in
@@ -258,8 +261,9 @@ Persistence and stable completion-reason semantics are governed by `WDB-41` and
 - [behavioral] `tests/test_ui_app_config.py` enforces `WDB-33..WDB-35` and
   `WDB-37..WDB-42` with Tk reauthorization, feature/target rechecks, airborne
   weapon compatibility, rollback-on-save-failure, and completion reasons.
-- [behavioral] `tests/test_build_metadata.py` enforces `WDB-17` by building all
-  three App variants and checking their Web modules, schemas, and assets.
+- [behavioral] `tests/test_build_metadata.py` enforces `WDB-17` by requiring Web
+  modules, schemas, and assets only in Enhanced App packages and asserting
+  Standard/Lite packages exclude them.
 - [manual] Trusted-LAN phone/control/revoke, firewall allow/deny, multi-NIC,
   packaged variant, DPI, and live War Thunder checks cover `WDB-02`, `WDB-03`,
   `WDB-15..WDB-22`, `WDB-33..WDB-36`, and `WDB-40` without claiming automated

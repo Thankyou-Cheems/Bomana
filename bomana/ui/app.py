@@ -15,6 +15,7 @@ from bomana.config.feature_profile import (
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
     ENABLE_FUEL,
+    ENABLE_WEB_DASHBOARD,
     ENABLE_ZONES,
 )
 from bomana.config.settings import (
@@ -68,13 +69,31 @@ from bomana.utils.file_utils import ConfigManager, resource_path
 from bomana.utils.math_utils import calculate_smart_scale
 from bomana.utils.sound import SoundManager
 from bomana.utils.system import SingleInstanceManager, Win32, resolve_tk_font_tuple
-from bomana.web.control import (
-    ControlStateProjection,
-    ControlTargetState,
-    PanelVisibility,
-    WeaponChoice,
-    WebCommandEnvelope,
-)
+
+if ENABLE_WEB_DASHBOARD:
+    from bomana.web.control import (
+        ControlStateProjection,
+        ControlTargetState,
+        PanelVisibility,
+        WeaponChoice,
+        WebCommandEnvelope,
+    )
+else:
+
+    class ControlStateProjection:
+        pass
+
+    class ControlTargetState:
+        pass
+
+    class PanelVisibility:
+        pass
+
+    class WeaponChoice:
+        pass
+
+    class WebCommandEnvelope:
+        pass
 
 
 def fmt_time(sec: float | None) -> str:
@@ -220,22 +239,23 @@ class App:
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
         self.logic_poller.start()
-        self._publish_web_control_state(force_revision=True)
-        if self.runtime_services.dashboard_autostart_enabled():
-            dashboard_started = self.runtime_services.init_dashboard()
-            if dashboard_started and self.runtime_services.dashboard_lan_autostart_enabled():
-                try:
-                    self.runtime_services.enable_dashboard_lan()
-                except Exception as exc:
-                    log_exception("web_dashboard_lan_autostart_failed", exc)
-                    messagebox.showwarning(
-                        "局域网网页服务未开启",
-                        f"本机网页服务已启动，但自动开启局域网访问与控制失败：\n{exc}",
-                        parent=self.root,
-                    )
-            if dashboard_started and self.runtime_services.dashboard_auto_open_enabled():
-                self._open_web_dashboard()
-        self._refresh_web_access_row()
+        if ENABLE_WEB_DASHBOARD:
+            self._publish_web_control_state(force_revision=True)
+            if self.runtime_services.dashboard_autostart_enabled():
+                dashboard_started = self.runtime_services.init_dashboard()
+                if dashboard_started and self.runtime_services.dashboard_lan_autostart_enabled():
+                    try:
+                        self.runtime_services.enable_dashboard_lan()
+                    except Exception as exc:
+                        log_exception("web_dashboard_lan_autostart_failed", exc)
+                        messagebox.showwarning(
+                            "局域网网页服务未开启",
+                            f"本机网页服务已启动，但自动开启局域网访问与控制失败：\n{exc}",
+                            parent=self.root,
+                        )
+                if dashboard_started and self.runtime_services.dashboard_auto_open_enabled():
+                    self._open_web_dashboard()
+            self._refresh_web_access_row()
         self._update_ui()
 
         if HAS_TRAY:
@@ -370,6 +390,8 @@ class App:
         snapshot: UISnapshot | None = None,
         force_revision: bool = False,
     ) -> int:
+        if not ENABLE_WEB_DASHBOARD:
+            return 0
         if not hasattr(self, "_web_control_revision"):
             self._web_control_revision = 0
         if not hasattr(self, "_web_control_signature"):
@@ -1996,6 +2018,13 @@ class App:
         self._complete_web_command(envelope, reason)
 
     def _open_web_dashboard(self) -> None:
+        if not ENABLE_WEB_DASHBOARD:
+            messagebox.showinfo(
+                "网页驾驶舱",
+                "当前通道未包含网页驾驶舱。\n请使用 Enhanced（增强版）通道以获得该功能。",
+                parent=self.root,
+            )
+            return
         dashboard = self.runtime_services.dashboard
         if dashboard is None or not dashboard.is_running:
             if self.runtime_services.init_dashboard():

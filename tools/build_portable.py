@@ -30,6 +30,7 @@ VARIANT_SWITCHES = {
         "ENABLE_FUEL": "True",
         "ENABLE_CHECKLIST": "True",
         "ENABLE_ADVANCED_SETTINGS": "True",
+        "ENABLE_WEB_DASHBOARD": "True",
     },
     "Standard": {
         "ENABLE_CCRP": "False",
@@ -38,6 +39,7 @@ VARIANT_SWITCHES = {
         "ENABLE_FUEL": "True",
         "ENABLE_CHECKLIST": "True",
         "ENABLE_ADVANCED_SETTINGS": "True",
+        "ENABLE_WEB_DASHBOARD": "False",
     },
     "Lite": {
         "ENABLE_CCRP": "False",
@@ -46,8 +48,16 @@ VARIANT_SWITCHES = {
         "ENABLE_FUEL": "False",
         "ENABLE_CHECKLIST": "False",
         "ENABLE_ADVANCED_SETTINGS": "True",
+        "ENABLE_WEB_DASHBOARD": "False",
     },
 }
+
+# Packaged only when ENABLE_WEB_DASHBOARD is true (Enhanced). Standard/Lite omit
+# the modules, front-end assets, and control schemas entirely—not just flags.
+WEB_DASHBOARD_PACKAGE_PREFIXES = (
+    "bomana/web/",
+    "bomana/assets/web/",
+)
 
 APP_ENTRY = "Bomana.pyw"
 APP_DIR = "bomana"
@@ -327,10 +337,17 @@ def build_app_zip(
             missing = ", ".join(path.as_posix() for path in missing_weapon_assets)
             raise RuntimeError(f"missing Enhanced weapon fire-control assets: {missing}")
 
+    package_web = VARIANT_SWITCHES[variant].get("ENABLE_WEB_DASHBOARD") == "True"
+    required_runtime_paths = [version_boundary]
+    if package_web:
+        required_runtime_paths.extend(root / rel for rel in WEB_CONTROL_SCHEMA_PATHS)
+        web_module_root = root / APP_DIR / "web"
+        web_asset_root = root / APP_DIR / "assets" / "web"
+        required_runtime_paths.extend((web_module_root, web_asset_root))
     missing_runtime_assets = [
-        path.relative_to(root).as_posix()
-        for path in (version_boundary, *(root / rel for rel in WEB_CONTROL_SCHEMA_PATHS))
-        if not path.is_file()
+        path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
+        for path in required_runtime_paths
+        if not path.exists()
     ]
     if missing_runtime_assets:
         raise RuntimeError(
@@ -357,12 +374,18 @@ def build_app_zip(
                 weapon_catalog_rel.as_posix(),
             }:
                 continue
+            if not package_web and any(
+                rel_path == prefix.rstrip("/") or rel_path.startswith(prefix)
+                for prefix in WEB_DASHBOARD_PACKAGE_PREFIXES
+            ):
+                continue
             add_file_to_zip(zf, root, path)
 
         if variant == "Enhanced":
             add_file_to_zip(zf, root, root / weapon_schema_rel)
-        for schema_path in WEB_CONTROL_SCHEMA_PATHS:
-            add_file_to_zip(zf, root, root / schema_path)
+        if package_web:
+            for schema_path in WEB_CONTROL_SCHEMA_PATHS:
+                add_file_to_zip(zf, root, root / schema_path)
 
         broker_sha256 = sha256_file(hotkey_broker)
         zf.write(

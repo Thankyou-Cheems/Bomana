@@ -7,12 +7,6 @@
 ---
 ## [Unreleased]
 
-### Added
-
-- Launcher updates now show a signed, channel-matched "What's New" summary;
-  GitHub and Tencent Cloud releases publish and verify the same version-specific
-  changelog asset.
-
 ### 改进
 - 独立导航模式只移出航向带，不再自动隐藏主窗口的战区与机场列表；列表显隐继续由用户关闭操作和持久化配置决定。
 - 选择空空武器时暂停战区目标倾向，在集成/独立航向带显示全部当前敌机与 POI；敌机和 POI 共同参与二维导弹参考解算，并明确提示当前仅进行导航、不代表游戏锁定或发射许可。
@@ -26,6 +20,22 @@
 - 常用操作外置到底栏：重置计时、切换角落、局域网开关/接入；设置仅保留状态、显示与武器策略。
 - 手机端左侧读数默认折叠为紧凑条，缩放控件移到右下角，减少对战术地图的遮挡。
 - 手机端展开读数时地图舞台右移并重绘，保证展开状态下态势仍可用。
+
+---
+## [8.5.0] - 2026-07-12
+
+### Changed
+- Web Cockpit is **Enhanced-only** in portable packages: Standard and Lite omit
+  `bomana/web/`, `bomana/assets/web/`, and Web control schemas entirely (not only
+  a runtime flag).
+- Launcher 3.2.1 shows a degradation notice when Web startup options are checked
+  on Standard/Lite, and forces those options off for the App handoff while
+  keeping saved preferences for a later Enhanced channel.
+
+### Added
+- Launcher updates now show a signed, channel-matched "What's New" summary;
+  GitHub and Tencent Cloud releases publish and verify the same version-specific
+  changelog asset.
 
 ---
 ## [8.4.4] - 2026-07-12

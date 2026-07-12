@@ -97,14 +97,17 @@ if /I "%VARIANT%"=="Enhanced" (
     set "ENABLE_CCRP=True"
     set "ENABLE_ZONES=True"
     set "ENABLE_FUEL=True"
+    set "ENABLE_WEB_DASHBOARD=True"
 ) else if /I "%VARIANT%"=="Standard" (
     set "ENABLE_CCRP=False"
     set "ENABLE_ZONES=True"
     set "ENABLE_FUEL=True"
+    set "ENABLE_WEB_DASHBOARD=False"
 ) else (
     set "ENABLE_CCRP=False"
     set "ENABLE_ZONES=False"
     set "ENABLE_FUEL=False"
+    set "ENABLE_WEB_DASHBOARD=False"
 )
 set "ENABLE_ADVANCED_SETTINGS=True"
 set "ENABLE_AIRFIELDS=%ENABLE_ZONES%"
@@ -113,7 +116,7 @@ set "ENABLE_CHECKLIST=%ENABLE_ZONES%"
 powershell -NoProfile -Command ^
   "$path = '%CONFIG_FILE%';" ^
   "$code = Get-Content $path -Raw;" ^
-  "$switches = @{ 'ENABLE_CCRP' = '%ENABLE_CCRP%'; 'ENABLE_ZONES' = '%ENABLE_ZONES%'; 'ENABLE_AIRFIELDS' = '%ENABLE_AIRFIELDS%'; 'ENABLE_FUEL' = '%ENABLE_FUEL%'; 'ENABLE_CHECKLIST' = '%ENABLE_CHECKLIST%'; 'ENABLE_ADVANCED_SETTINGS' = '%ENABLE_ADVANCED_SETTINGS%' };" ^
+  "$switches = @{ 'ENABLE_CCRP' = '%ENABLE_CCRP%'; 'ENABLE_ZONES' = '%ENABLE_ZONES%'; 'ENABLE_AIRFIELDS' = '%ENABLE_AIRFIELDS%'; 'ENABLE_FUEL' = '%ENABLE_FUEL%'; 'ENABLE_CHECKLIST' = '%ENABLE_CHECKLIST%'; 'ENABLE_ADVANCED_SETTINGS' = '%ENABLE_ADVANCED_SETTINGS%'; 'ENABLE_WEB_DASHBOARD' = '%ENABLE_WEB_DASHBOARD%' };" ^
   "foreach ($key in $switches.Keys) { $val = $switches[$key]; $code = $code -replace '(?m)^' + $key + '\s*=.*', ($key + ' = ' + $val); }" ^
   "$code | Set-Content $path -NoNewline"
 

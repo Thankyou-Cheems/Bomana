@@ -168,20 +168,22 @@ _LAUNCHER_SPINNER_FRAMES = ("|", "/", "-", "\\")
 CHANNEL_DETAILS = {
     "Enhanced": {
         "title": "增强版 (推荐大多数玩家)",
-        "desc": "包含计时器 + 战区/机场导航 + 燃油管理 + CCRP投弹预测。",
-        "who": "适合：轰炸、导航、编队协同等完整玩法。",
+        "desc": "包含计时器 + 战区/机场导航 + 燃油管理 + CCRP投弹预测 + 网页驾驶舱。",
+        "who": "适合：轰炸、导航、编队协同与手机/本机网页面板。",
     },
     "Standard": {
         "title": "标准版 (稳定轻量)",
-        "desc": "包含计时器 + 战区/机场导航 + 燃油管理，不含CCRP投弹预测。",
-        "who": "适合：不需要投弹预测，但需要导航和油量信息。",
+        "desc": "包含计时器 + 战区/机场导航 + 燃油管理；不含 CCRP 与网页驾驶舱。",
+        "who": "适合：不需要投弹预测与网页控制台，但需要导航和油量信息。",
     },
     "Lite": {
         "title": "精简版 (极简模式)",
-        "desc": "仅保留核心复活计时器，资源占用最低。",
+        "desc": "仅保留核心复活计时器，不含网页驾驶舱；资源占用最低。",
         "who": "适合：只想看计时、追求最小干扰和最低开销。",
     },
 }
+
+WEB_COCKPIT_CHANNELS = frozenset({"Enhanced"})
 
 require_minimum_version(
     LAUNCHER_VERSION,
@@ -193,6 +195,43 @@ require_minimum_version(
 def _strict_saved_bool(state: Dict[str, Any], key: str, default: bool) -> bool:
     value = state.get(key, default)
     return value if isinstance(value, bool) else default
+
+
+def _channel_supports_web_cockpit(channel: object) -> bool:
+    return _normalize_channel(channel) in WEB_COCKPIT_CHANNELS
+
+
+def _effective_web_preferences_for_channel(
+    channel: object,
+    autostart: bool,
+    auto_open: bool,
+    lan_enabled: bool,
+) -> tuple[bool, bool, bool, bool]:
+    """Return effective Web prefs and whether a degradation notice is needed.
+
+    The fourth element is True when the user requested Web on a channel that
+    does not ship the cockpit (prefs stay saved, but launch handoff forces off).
+    """
+    if not all(isinstance(value, bool) for value in (autostart, auto_open, lan_enabled)):
+        raise TypeError("Web launch preferences must be bools")
+    if lan_enabled:
+        autostart = True
+    if not autostart:
+        lan_enabled = False
+    if _channel_supports_web_cockpit(channel):
+        return autostart, auto_open, lan_enabled, False
+    degraded = bool(autostart or auto_open or lan_enabled)
+    return False, False, False, degraded
+
+
+def _web_cockpit_degradation_message(channel: object) -> str:
+    ch = _normalize_channel(channel) or str(channel or "")
+    return (
+        f"当前通道（{ch}）的应用包不包含网页驾驶舱。\n\n"
+        "启动器中已勾选的「随 App 启动网页 / 启动后打开本机页面 / 局域网」"
+        "仅在 Enhanced（增强版）生效；本次启动将忽略这些选项。\n\n"
+        "偏好设置仍会保留，切换回 Enhanced 后可继续使用。"
+    )
 
 
 def _set_pending_web_preferences(
@@ -4582,17 +4621,41 @@ class LauncherWindow:
             autostart = True
         elif not autostart:
             lan_enabled = False
+        previous = (
+            self.web_dashboard_autostart,
+            self.web_dashboard_auto_open,
+            self.web_dashboard_lan_enabled,
+        )
         self.web_dashboard_autostart = autostart
         self.web_dashboard_auto_open = auto_open
         self.web_dashboard_lan_enabled = lan_enabled
         self.web_dashboard_autostart_var.set(autostart)
         self.web_dashboard_lan_enabled_var.set(lan_enabled)
         self._save_launcher_state()
-        _set_pending_web_preferences(
-            self.web_dashboard_autostart,
-            self.web_dashboard_auto_open,
-            self.web_dashboard_lan_enabled,
+        effective_autostart, effective_auto_open, effective_lan, degraded = (
+            _effective_web_preferences_for_channel(
+                self.channel,
+                self.web_dashboard_autostart,
+                self.web_dashboard_auto_open,
+                self.web_dashboard_lan_enabled,
+            )
         )
+        _set_pending_web_preferences(
+            effective_autostart,
+            effective_auto_open,
+            effective_lan,
+        )
+        newly_requested = (
+            (autostart and not previous[0])
+            or (auto_open and not previous[1])
+            or (lan_enabled and not previous[2])
+        )
+        if degraded and newly_requested:
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                _web_cockpit_degradation_message(self.channel),
+                parent=self.root,
+            )
 
     def _on_download_source_changed(self, *_args) -> None:
         new_mode = _DOWNLOAD_SOURCE_LABEL_TO_MODE.get(
@@ -4819,10 +4882,27 @@ class LauncherWindow:
         if self.running and self.current_task != "check":
             self.channel_var.set(self.channel)
             return
+        previous_channel = self.channel
         self.channel = self.channel_var.get().strip() or self.detected_channel
         self._save_launcher_state()
         self._refresh_installed_versions()
         self._refresh_channel_details()
+        _a, _o, _l, degraded = _effective_web_preferences_for_channel(
+            self.channel,
+            self.web_dashboard_autostart,
+            self.web_dashboard_auto_open,
+            self.web_dashboard_lan_enabled,
+        )
+        if (
+            degraded
+            and _normalize_channel(previous_channel) != _normalize_channel(self.channel)
+            and _channel_supports_web_cockpit(previous_channel)
+        ):
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                _web_cockpit_degradation_message(self.channel),
+                parent=self.root,
+            )
         if self.running and self.current_task == "check":
             self._queue_recheck_after_check(
                 f"通道已切换到 {self.channel}，当前检查结束后将自动重查。"
@@ -4916,11 +4996,21 @@ class LauncherWindow:
 
     def _commit_launch(self) -> None:
         if self.decision.action == "launch":
-            _set_pending_web_preferences(
-                self.web_dashboard_autostart,
-                self.web_dashboard_auto_open,
-                self.web_dashboard_lan_enabled,
+            autostart, auto_open, lan_enabled, degraded = (
+                _effective_web_preferences_for_channel(
+                    self.channel,
+                    self.web_dashboard_autostart,
+                    self.web_dashboard_auto_open,
+                    self.web_dashboard_lan_enabled,
+                )
             )
+            if degraded:
+                messagebox.showwarning(
+                    DISPLAY_NAME,
+                    _web_cockpit_degradation_message(self.channel),
+                    parent=self.root,
+                )
+            _set_pending_web_preferences(autostart, auto_open, lan_enabled)
             self.root.destroy()
 
     def _finalize_exit(self) -> None:

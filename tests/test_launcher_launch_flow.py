@@ -387,3 +387,67 @@ def test_launcher_web_preferences_keep_lan_and_autostart_coherent() -> None:
     launcher._set_pending_web_preferences(False, True, False)
     assert launcher._PENDING_WEB_DASHBOARD_AUTOSTART is False
     assert launcher._PENDING_WEB_DASHBOARD_LAN_ENABLED is False
+
+
+@pytest.mark.parametrize("channel", ["Standard", "Lite"])
+def test_non_enhanced_channels_force_off_web_preferences(channel: str) -> None:
+    launcher = load_launcher_module()
+
+    autostart, auto_open, lan, degraded = launcher._effective_web_preferences_for_channel(
+        channel,
+        True,
+        True,
+        True,
+    )
+    assert (autostart, auto_open, lan) == (False, False, False)
+    assert degraded is True
+    assert "网页驾驶舱" in launcher._web_cockpit_degradation_message(channel)
+    assert channel in launcher._web_cockpit_degradation_message(channel)
+
+
+def test_enhanced_channel_keeps_web_preferences() -> None:
+    launcher = load_launcher_module()
+
+    autostart, auto_open, lan, degraded = launcher._effective_web_preferences_for_channel(
+        "Enhanced",
+        True,
+        False,
+        True,
+    )
+    assert (autostart, auto_open, lan) == (True, False, True)
+    assert degraded is False
+
+
+def test_commit_launch_degrades_web_prefs_for_standard_channel(tmp_path: Path) -> None:
+    launcher, window = make_window(tmp_path)
+    warnings: list[str] = []
+    destroyed: list[bool] = []
+    window.channel = "Standard"
+    window.web_dashboard_autostart = True
+    window.web_dashboard_auto_open = True
+    window.web_dashboard_lan_enabled = False
+    window.decision = launcher.LaunchDecision(action="launch", final_version="8.0.0")
+    window.root.destroy = lambda: destroyed.append(True)
+    # make_window stubs _commit_launch; restore the real implementation for this case.
+    window._commit_launch = launcher.LauncherWindow._commit_launch.__get__(
+        window, launcher.LauncherWindow
+    )
+
+    def capture_warning(*_args, **_kwargs):
+        if len(_args) > 1:
+            warnings.append(str(_args[1]))
+        elif "message" in _kwargs:
+            warnings.append(str(_kwargs["message"]))
+
+    original = launcher.messagebox.showwarning
+    launcher.messagebox.showwarning = capture_warning
+    try:
+        window._commit_launch()
+    finally:
+        launcher.messagebox.showwarning = original
+
+    assert destroyed == [True]
+    assert warnings and "Standard" in warnings[0]
+    assert launcher._PENDING_WEB_DASHBOARD_AUTOSTART is False
+    assert launcher._PENDING_WEB_DASHBOARD_AUTO_OPEN is False
+    assert launcher._PENDING_WEB_DASHBOARD_LAN_ENABLED is False

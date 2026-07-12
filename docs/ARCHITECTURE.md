@@ -400,10 +400,14 @@ manifest schema version 1 and the established signed field sets remain
 unchanged.
 
 Bundled assets:
-- App packages include `bomana/assets/` automatically because `build_app_zip()` packages the whole `bomana/` tree.
+- App packages include most of `bomana/` via `build_app_zip()`, with variant exclusions:
+  non-Enhanced omits weapon/CCRP data; Standard/Lite also omit `bomana/web/`,
+  `bomana/assets/web/`, and Web control schemas (`ENABLE_WEB_DASHBOARD=false`).
 - Launcher builds also add `bomana/assets/` so launcher/dialog text can use the same private UI font when running as a onefile executable.
-- Every App variant includes the self-hosted Web Cockpit assets; feature flags still decide which dashboard capabilities are published.
-- Every App variant also includes `bomana_version.py` and the Web command,
+- Only Enhanced packages the self-hosted Web Cockpit modules, front-end assets,
+  and control schemas; launcher Web prefs degrade with a notice when a
+  non-Enhanced channel is selected while those prefs remain saved.
+- Every App variant also includes `bomana_version.py`; Enhanced also packages the Web command,
   command-response, and control-state schemas used by production validation.
 - Root-level branding files were folded into `bomana/assets/branding/`; runtime and packaging paths use only the bundled asset location.
 

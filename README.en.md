@@ -198,9 +198,11 @@ More step-by-step help: [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
 | Channel | Includes | Best for |
 |---------|----------|----------|
-| **Enhanced** | Timer + navigation + fuel + weapon reference | Full toolkit (recommended) |
-| **Standard** | Timer + navigation + fuel | No weapon reference |
-| **Lite** | Timer only | Minimal UI |
+| **Enhanced** | Timer + navigation + fuel + weapon reference + web cockpit | Full toolkit (recommended) |
+| **Standard** | Timer + navigation + fuel (no weapon reference, no web cockpit) | No weapon reference or web panel |
+| **Lite** | Timer only (no web cockpit) | Minimal UI |
+
+Standard / Lite packages **omit** web-cockpit code. If Launcher web options are checked, launch shows a degradation notice and forces those options off for that run (saved prefs remain for a later Enhanced channel).
 
 Notes:
 

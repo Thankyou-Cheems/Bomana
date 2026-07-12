@@ -18,6 +18,7 @@ from bomana.config.feature_profile import (
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
     ENABLE_FUEL,
+    ENABLE_WEB_DASHBOARD,
     ENABLE_ZONES,
 )
 from bomana.config.settings import (
@@ -182,6 +183,7 @@ class ConfigManager:
             "ENABLE_FUEL": ENABLE_FUEL,
             "ENABLE_CHECKLIST": ENABLE_CHECKLIST,
             "ENABLE_ADVANCED_SETTINGS": ENABLE_ADVANCED_SETTINGS,
+            "ENABLE_WEB_DASHBOARD": ENABLE_WEB_DASHBOARD,
         }
 
     @staticmethod

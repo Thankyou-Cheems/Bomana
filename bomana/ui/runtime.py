@@ -12,7 +12,6 @@ from bomana.config.settings import NetworkConfig
 from bomana.core.logic import GameLogic
 from bomana.core.telemetry import MapIconFontFetcher, MapImageFetcher
 from bomana.utils.diagnostics import log_exception
-from bomana.web.snapshot import DashboardSnapshotStore
 
 _LOGIC_POLLER_EXCEPTION_LOG_INTERVAL_SEC = 60.0
 # Terrain thumbnail only; marker positions still ride the high-rate snapshot path.
@@ -105,7 +104,7 @@ class MapImagePoller:
 
     def __init__(
         self,
-        store: DashboardSnapshotStore,
+        store: Any,
         *,
         fetcher_factory=MapImageFetcher,
         interval_sec: float = MAP_IMAGE_POLL_INTERVAL_SEC,
@@ -152,7 +151,7 @@ class MapIconFontPoller:
 
     def __init__(
         self,
-        store: DashboardSnapshotStore,
+        store: Any,
         *,
         fetcher_factory=MapIconFontFetcher,
         interval_sec: float = MAP_IMAGE_POLL_INTERVAL_SEC,

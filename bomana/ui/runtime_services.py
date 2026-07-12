@@ -15,6 +15,7 @@ from bomana.config.feature_profile import (
     ENABLE_CCRP,
     ENABLE_CHECKLIST,
     ENABLE_FUEL,
+    ENABLE_WEB_DASHBOARD,
     ENABLE_ZONES,
 )
 from bomana.config.settings import (
@@ -42,13 +43,49 @@ from bomana.utils.hotkey_broker import (
     detect_war_thunder_integrity,
 )
 from bomana.utils.system import GlobalHotkeys
-from bomana.web.control import (
-    ControlStateProjection,
-    DashboardControlStore,
-    WebCommandEnvelope,
-)
-from bomana.web.server import DashboardServerError, WebDashboardRuntime
-from bomana.web.snapshot import DashboardSnapshotStore
+
+if ENABLE_WEB_DASHBOARD:
+    from bomana.web.control import (
+        ControlStateProjection,
+        DashboardControlStore,
+        WebCommandEnvelope,
+    )
+    from bomana.web.server import DashboardServerError, WebDashboardRuntime
+    from bomana.web.snapshot import DashboardSnapshotStore
+else:
+    # Standard/Lite packages omit bomana/web; keep inert stubs for shared call sites.
+
+    class DashboardServerError(RuntimeError):
+        """Raised when a Web cockpit start is requested without the feature."""
+
+    class _NullDashboardStore:
+        def publish(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        def publish_map_image(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        def publish_map_icon_font(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        def read_map_icon_font(self) -> None:
+            return None
+
+    class DashboardSnapshotStore(_NullDashboardStore):
+        pass
+
+    class DashboardControlStore(_NullDashboardStore):
+        pass
+
+    class ControlStateProjection:
+        pass
+
+    class WebCommandEnvelope:
+        pass
+
+    class WebDashboardRuntime:
+        pass
+
 
 try:
     import pystray
@@ -94,18 +131,24 @@ class AppRuntimeServices:
         return default
 
     def dashboard_autostart_enabled(self) -> bool:
+        if not ENABLE_WEB_DASHBOARD:
+            return False
         return self._launcher_web_preference(
             "BOMANA_WEB_DASHBOARD_AUTOSTART",
             default=True,
         )
 
     def dashboard_auto_open_enabled(self) -> bool:
+        if not ENABLE_WEB_DASHBOARD:
+            return False
         return self._launcher_web_preference(
             "BOMANA_WEB_DASHBOARD_AUTO_OPEN",
             default=False,
         )
 
     def web_dashboard_lan_enabled(self) -> bool:
+        if not ENABLE_WEB_DASHBOARD:
+            return False
         return self._launcher_web_preference(
             "BOMANA_WEB_DASHBOARD_LAN_ENABLED",
             default=False,
@@ -128,6 +171,10 @@ class AppRuntimeServices:
 
     def init_dashboard(self) -> bool:
         """Start the extension-free loopback Web Cockpit."""
+        if not ENABLE_WEB_DASHBOARD:
+            self.dashboard = None
+            self.dashboard_error = "当前通道未包含网页驾驶舱（仅 Enhanced 提供）。"
+            return False
         if self.dashboard is not None and self.dashboard.is_running:
             return True
         dashboard: WebDashboardRuntime | None = None
@@ -566,51 +613,55 @@ class AppRuntimeServices:
             pystray.Menu.SEPARATOR,
         ]
 
-        def dashboard_pairing_text(_item):
-            active = self.dashboard
-            code = active.pairing_code if active is not None and active.is_running else "---- ----"
-            return f"复制配对码：{code}"
+        if ENABLE_WEB_DASHBOARD:
 
-        def dashboard_title(_item):
-            active = self.dashboard
-            return (
-                "网页驾驶舱"
-                if active is not None and active.is_running
-                else "网页驾驶舱（按需启动）"
-            )
+            def dashboard_pairing_text(_item):
+                active = self.dashboard
+                code = (
+                    active.pairing_code if active is not None and active.is_running else "---- ----"
+                )
+                return f"复制配对码：{code}"
 
-        def dashboard_is_ready(_item):
-            active = self.dashboard
-            return bool(active is not None and active.is_running)
+            def dashboard_title(_item):
+                active = self.dashboard
+                return (
+                    "网页驾驶舱"
+                    if active is not None and active.is_running
+                    else "网页驾驶舱（按需启动）"
+                )
 
-        dashboard_menu = pystray.Menu(
-            pystray.MenuItem("打开本机页面", do_open_dashboard),
-            pystray.MenuItem(
-                "开启局域网访问与控制（本次运行）",
-                do_toggle_dashboard_lan,
-                checked=lambda _item: bool(
-                    self.dashboard is not None and self.dashboard.lan_enabled
+            def dashboard_is_ready(_item):
+                active = self.dashboard
+                return bool(active is not None and active.is_running)
+
+            dashboard_menu = pystray.Menu(
+                pystray.MenuItem("打开本机页面", do_open_dashboard),
+                pystray.MenuItem(
+                    "开启局域网访问与控制（本次运行）",
+                    do_toggle_dashboard_lan,
+                    checked=lambda _item: bool(
+                        self.dashboard is not None and self.dashboard.lan_enabled
+                    ),
+                    enabled=dashboard_is_ready,
                 ),
-                enabled=dashboard_is_ready,
-            ),
-            pystray.MenuItem(
-                "复制手机访问链接",
-                do_copy_dashboard_link,
-                enabled=self._dashboard_lan_share_available,
-            ),
-            pystray.MenuItem(
-                dashboard_pairing_text,
-                do_copy_dashboard_code,
-                enabled=dashboard_is_ready,
-            ),
-        )
-        menu_items.append(
-            pystray.MenuItem(
-                dashboard_title,
-                dashboard_menu,
+                pystray.MenuItem(
+                    "复制手机访问链接",
+                    do_copy_dashboard_link,
+                    enabled=self._dashboard_lan_share_available,
+                ),
+                pystray.MenuItem(
+                    dashboard_pairing_text,
+                    do_copy_dashboard_code,
+                    enabled=dashboard_is_ready,
+                ),
             )
-        )
-        menu_items.append(pystray.Menu.SEPARATOR)
+            menu_items.append(
+                pystray.MenuItem(
+                    dashboard_title,
+                    dashboard_menu,
+                )
+            )
+            menu_items.append(pystray.Menu.SEPARATOR)
 
         if ENABLE_ADVANCED_SETTINGS:
 
