@@ -17,7 +17,7 @@ suite is not evidence that any scenario below was performed.
 - 准备两个相互隔离的桌面浏览器 profile，以及连接到同一可信局域网的真实
   手机。不要在记录中保存配对码、Cookie、CSRF 或幂等键。
 - 打包检查使用真实 Launcher `3.1.0` 与
-  `Bomana_app_<Variant>_v8.4.2.zip`，不要用源码目录代替。
+  `Bomana_app_<Variant>_v8.4.3.zip`，不要用源码目录代替。
 - 如需源码对照，使用当前 PowerShell 进程内的显式开发标记：
 
   ```powershell
@@ -125,7 +125,7 @@ Bomana 本身不新增规则、不触发 UAC，也不开放公用网络规则。
 
 ### WDB-M08 三通道打包资源 | Packaged variants and offline assets
 
-分别从 Enhanced、Standard、Lite 的真实 App 8.4.2 包启动；断开外网后打开
+分别从 Enhanced、Standard、Lite 的真实 App 8.4.3 包启动；断开外网后打开
 页面并查看浏览器 Network 面板。
 
 预期：HTML/CSS/JS/SVG、项目 PNG 标识与字体均从 Bomana 自身地址加载，无 CDN、远程字体、
@@ -180,7 +180,7 @@ auto-open 在 autostart 关闭时不单独启动服务。退出后本机和 LAN 
 
 在隔离副本中运行 packaged-launcher smoke，并人工核对以下结果：
 
-- Launcher 3.1.0 + App 8.4.2 正常交接，App 在运行时初始化前拿到严格
+- Launcher 3.1.0 + App 8.4.3 正常交接，App 在运行时初始化前拿到严格
   `BOMANA_LAUNCHER_VERSION`；
 - 缺失、畸形或 `2.9.9` 的 Launcher 身份被打包 App 拒绝，即使设置
   `BOMANA_SOURCE_DEVELOPMENT=1` 也不能绕过；

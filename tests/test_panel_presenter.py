@@ -506,7 +506,7 @@ def test_speed_strip_keeps_progress_below_dynamic_zoom_trigger() -> None:
 
     assert low.fill_ratio > 0.0
     assert trigger.fill_ratio == 0.50
-    assert trigger.viewport_min_ratio == 0.0
+    assert trigger.horizontal_focus == 0.0
     assert trigger.visual_scale == 1.0
 
 
@@ -530,13 +530,46 @@ def test_speed_strip_dynamically_stretches_breakup_markers() -> None:
     middle = model(0.60)
     focused = model(0.70)
     before_span = before.marker_ratios[2] - before.marker_ratios[0]
+    middle_span = middle.marker_ratios[2] - middle.marker_ratios[0]
     focused_span = focused.marker_ratios[2] - focused.marker_ratios[0]
 
-    assert focused_span > before_span
+    assert before_span == pytest.approx(0.052)
+    assert before_span < middle_span < focused_span
+    assert focused_span == pytest.approx(0.43)
+    assert focused.marker_ratios == pytest.approx((0.55, 0.78, 0.98))
+    assert focused.fill_ratio == pytest.approx(0.50)
     assert before.visual_scale == 1.0
     assert 1.0 < middle.visual_scale < focused.visual_scale
     assert focused.visual_scale == 1.8
-    assert focused.viewport_min_ratio > before.viewport_min_ratio
+    assert before.horizontal_focus == 0.0
+    assert 0.0 < middle.horizontal_focus < focused.horizontal_focus
+    assert focused.horizontal_focus == 1.0
+
+    transition_fills = [model(ratio).fill_ratio for ratio in (0.50, 0.55, 0.60, 0.65, 0.70)]
+    assert transition_fills == sorted(transition_fills)
+
+
+def test_speed_scale_lens_separates_equal_configured_thresholds(monkeypatch) -> None:
+    monkeypatch.setattr(panel_presenter.OverspeedConfig, "CAUTION_RATIO", 0.94)
+    monkeypatch.setattr(panel_presenter.OverspeedConfig, "WARNING_RATIO", 0.94)
+    monkeypatch.setattr(panel_presenter.OverspeedConfig, "CRITICAL_RATIO", 0.94)
+
+    trigger = panel_presenter.overspeed_dynamic_projection(0.50)
+    just_above = panel_presenter.overspeed_dynamic_projection(0.500001)
+    projection = panel_presenter.overspeed_dynamic_projection(0.70)
+
+    caution, warning, critical = projection.marker_ratios
+    assert (
+        max(
+            abs(after - before)
+            for before, after in zip(trigger.marker_ratios, just_above.marker_ratios, strict=True)
+        )
+        < 0.0001
+    )
+    assert just_above.marker_ratios[0] < just_above.marker_ratios[1] < just_above.marker_ratios[2]
+    assert 0.0 < caution < warning < critical < 1.0
+    assert warning - caution >= 0.0249
+    assert critical - warning >= 0.0249
 
 
 def test_speed_history_header_model_uses_presented_aircraft_name() -> None:

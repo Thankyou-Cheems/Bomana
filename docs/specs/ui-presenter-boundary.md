@@ -38,9 +38,12 @@ modules, Tk renderers, and runtime side effects.
 - `UI-PRES-06`: The speed strip MUST keep an unscaled full-range viewport and
   physical thickness through `50%` of the active breakup limit, MUST
   continuously and visibly increase both viewport focus and physical scale from
-  above `50%`, and MUST reach its maximum scale at `70%`; the displayed value
-  MUST include the current active-limit percentage while fill and all three
-  breakup markers remain monotonic and visible.
+  above `50%`, and MUST reach its maximum scale at `70%`. At maximum focus the
+  configured caution-through-critical band MUST occupy approximately half of
+  the horizontal strip through a continuous non-linear scale lens, rather than
+  relying on thickness alone; the displayed value MUST include the current
+  active-limit percentage while current fill and all three breakup markers
+  remain monotonic and visible.
 - `UI-PRES-07`: Dynamic label wrapping or row visibility that increases required
   height MUST schedule one debounced geometry expansion; at supported App
   scale/DPI combinations the weapon card's bottom edge MUST remain at or above

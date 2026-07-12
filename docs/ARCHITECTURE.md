@@ -184,7 +184,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 6. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
-   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives the speed strip, explicit active-limit percentage, and alert sound. Through 50% the viewport and physical bar size stay fixed; from 50% to 70% a continuous presenter projection narrows the viewport and clearly enlarges the bar and all three breakup markers, reaching maximum scale at 70%.
+   - IAS/Mach dual-channel grading (`safe/caution/warning/critical`) drives the speed strip, explicit active-limit percentage, and alert sound. Through 50% the scale and physical bar size stay fixed; from 50% to 70% a continuous non-linear presenter lens expands the configured caution-to-critical band to roughly half the horizontal strip while clearly enlarging the bar and all three breakup markers, reaching maximum focus and physical scale at 70% without hiding the current value.
 7. Launcher check flow:
    - `launcher.pyw` remains the user-facing and PyInstaller entrypoint, while
      the `launcher/` package owns development-time launcher boundaries.

@@ -52,7 +52,7 @@ class SpeedStripModel:
     fill_color: str
     fill_ratio: float
     marker_ratios: tuple[float, float, float]
-    viewport_min_ratio: float
+    horizontal_focus: float
     visual_scale: float
 
 
@@ -60,7 +60,7 @@ class SpeedStripModel:
 class OverspeedScaleProjection:
     fill_ratio: float
     marker_ratios: tuple[float, float, float]
-    viewport_min_ratio: float
+    horizontal_focus: float
     visual_scale: float
 
 
@@ -106,27 +106,60 @@ def overspeed_dynamic_projection(value: float) -> OverspeedScaleProjection:
     critical = float(OverspeedConfig.CRITICAL_RATIO)
     zoom_trigger = 0.50
     zoom_maximum = 0.70
-    focused_minimum = 1.0 / 3.0
-    upper = 1.0
     if current <= zoom_trigger:
-        lower = 0.0
         zoom = 0.0
     elif current >= zoom_maximum:
-        lower = focused_minimum
         zoom = 1.0
     else:
         zoom = (current - zoom_trigger) / (zoom_maximum - zoom_trigger)
-        lower = focused_minimum * zoom
 
-    span = max(0.001, upper - lower)
+    threshold_targets = (0.55, 0.78, 0.98)
+    threshold_anchors = tuple(
+        (source, source + (target - source) * zoom)
+        for source, target in zip(
+            (caution, warning, critical),
+            threshold_targets,
+            strict=True,
+        )
+    )
+    raw_anchors = (
+        (0.0, 0.0),
+        (zoom_trigger, zoom_trigger),
+        (min(current, zoom_maximum), zoom_trigger),
+        *threshold_anchors,
+        (1.0, 1.0),
+    )
+    anchors: list[tuple[float, float]] = []
+    for source, target in sorted(raw_anchors):
+        if anchors and abs(source - anchors[-1][0]) <= 1e-9:
+            anchors[-1] = (source, max(target, anchors[-1][1]))
+        else:
+            anchors.append((source, target))
 
     def project(ratio: float) -> float:
-        return max(0.0, min(1.0, (ratio - lower) / span))
+        bounded = max(0.0, min(1.0, ratio))
+        for (x0, y0), (x1, y1) in zip(anchors, anchors[1:], strict=True):
+            if bounded <= x1:
+                offset = (bounded - x0) / max(0.001, x1 - x0)
+                return y0 + (y1 - y0) * offset
+        return 1.0
+
+    raw_markers = [project(ratio) for ratio in (caution, warning, critical)]
+    markers = raw_markers
+    if zoom > 0.0:
+        marker_gap = 0.025 * zoom
+        markers = [raw_markers[0]]
+        for marker in raw_markers[1:]:
+            markers.append(max(marker, markers[-1] + marker_gap))
+        marker_ceiling = 1.0 - 0.02 * zoom
+        if markers[-1] > marker_ceiling:
+            shift = markers[-1] - marker_ceiling
+            markers = [marker - shift for marker in markers]
 
     return OverspeedScaleProjection(
         fill_ratio=project(current),
-        marker_ratios=(project(caution), project(warning), project(critical)),
-        viewport_min_ratio=lower,
+        marker_ratios=tuple(markers),
+        horizontal_focus=zoom,
         visual_scale=1.0 + 0.8 * zoom,
     )
 
@@ -695,7 +728,7 @@ def build_speed_strip_model(snap: Any) -> SpeedStripModel:
         fill_color=fill_color if matched else Theme.TEXT_MUTED,
         fill_ratio=projection.fill_ratio if matched else 0.0,
         marker_ratios=projection.marker_ratios,
-        viewport_min_ratio=projection.viewport_min_ratio,
+        horizontal_focus=projection.horizontal_focus,
         visual_scale=projection.visual_scale,
     )
 
