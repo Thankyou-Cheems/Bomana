@@ -6,6 +6,12 @@
 
 **War Thunder SB Timer** · 战雷全真模式收益计时器
 
+War Thunder is a vehicle-combat video game; Bomana is a multifunction timer for simulator battles.<br>
+Terms like “bomb / bombing / CCRP” here mean **in-game virtual concepts only**, not anything in the real world. Have fun!
+
+War Thunder 是一款载具对战电子游戏；Bomana 是面向全真模式的多功能计时器。<br>
+文中的「炸弹 / 投弹 / CCRP」等均指**游戏内虚拟概念**，与现实无关。祝你玩得开心！
+
 <!-- Versions from EdgeOne CDN (what players actually get). GitHub "latest" is often a launcher-only tag. -->
 [![App](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fversion%3Fchannel%3DEnhanced&query=%24.app_version&label=app&prefix=v&color=0ea5e9)](https://ruikang.wang/bomana/)
 [![Launcher](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Flauncher&query=%24.launcher_version&label=launcher&prefix=v&color=6366f1)](https://ruikang.wang/bomana/)
@@ -21,9 +27,6 @@
 **[English](#english-documentation)** · **[中文](README.md)**
 
 </div>
-
-> War Thunder is a vehicle-combat game; Bomana is a multifunction timer for simulator battles.  
-> Words like “bomb / CCRP” here mean **in-game virtual concepts only**. Have fun!
 
 ---
 
