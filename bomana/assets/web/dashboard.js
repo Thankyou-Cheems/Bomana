@@ -11,6 +11,12 @@ const state = {
   zoom: 2.2,
   displayZoom: 2.2,
   followZoomBias: 1,
+  followCover: null,
+  followContactCover: 0,
+  followContactAt: 0,
+  zoomMetaText: "",
+  legendIconSignature: "",
+  canvasMetrics: null,
   follow: true,
   panX: 0,
   panY: 0,
@@ -829,16 +835,43 @@ function renderAlerts(alerts) {
   }
 }
 
-function canvasSize(canvas) {
-  const rect = canvas.getBoundingClientRect();
+const MAP_PADDING_PX = 28;
+const FOLLOW_CONTACT_REFRESH_MS = 400;
+const FOLLOW_EXPAND_RATIO = 1.14;
+const FOLLOW_SHRINK_RATIO = 0.78;
+
+function refreshCanvasMetrics(force = false) {
+  const canvas = $("tacticalMap");
+  if (!canvas) return state.canvasMetrics;
+  const stage = $("mapStage") || canvas;
+  const rect = stage.getBoundingClientRect();
   const ratio = Math.min(2, window.devicePixelRatio || 1);
   const width = Math.max(1, Math.round(rect.width * ratio));
   const height = Math.max(1, Math.round(rect.height * ratio));
+  const prev = state.canvasMetrics;
+  if (
+    !force
+    && prev
+    && prev.width === width
+    && prev.height === height
+    && prev.ratio === ratio
+  ) {
+    return prev;
+  }
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
   }
-  return { width, height, ratio };
+  state.canvasMetrics = { width, height, ratio, cssWidth: rect.width, cssHeight: rect.height };
+  return state.canvasMetrics;
+}
+
+function canvasSize(canvas) {
+  return refreshCanvasMetrics(false) || {
+    width: canvas.width || 1,
+    height: canvas.height || 1,
+    ratio: 1,
+  };
 }
 
 function clamp(value, min, max) {
@@ -849,72 +882,128 @@ function mapViewZoom() {
   return Math.max(0.75, finite(state.displayZoom, state.zoom) || state.zoom);
 }
 
-function computeFollowCoverRadius(map) {
+function findMapTarget(map) {
+  if (!map || !Array.isArray(map.points)) return null;
+  return map.points.find((point) => point.kind === "poi" && point.is_target)
+    || map.points.find((point) => point.is_target && point.kind !== "traceback")
+    || null;
+}
+
+function computePrimaryCoverRadius(map) {
   if (!map || !map.player) return 0.14;
   let cover = 0.1;
   const range = map.weapon_range;
   if (range) {
     const radius = Math.max(finite(range.max_radius_x), finite(range.max_radius_y), 0);
-    if (radius > 0) cover = Math.max(cover, radius * 1.18);
+    if (radius > 0) cover = Math.max(cover, radius * 1.12);
   }
-  const target = Array.isArray(map.points)
-    ? (map.points.find((point) => point.kind === "poi" && point.is_target)
-      || map.points.find((point) => point.is_target && point.kind !== "traceback"))
-    : null;
+  const target = findMapTarget(map);
   if (target) {
     const distance = Math.hypot(target.x - map.player.x, target.y - map.player.y);
-    if (distance > 0) cover = Math.max(cover, distance * 1.32);
+    if (distance > 0) cover = Math.max(cover, distance * 1.28);
   }
-  let farContact = 0;
-  for (const point of map.points || []) {
-    const kind = String(point.kind || "");
-    if (!HOSTILE_MAP_KINDS.has(kind) && kind !== "zone" && kind !== "airfield" && kind !== "poi") continue;
-    const distance = Math.hypot(point.x - map.player.x, point.y - map.player.y);
-    if (distance > 0 && distance < 0.32) farContact = Math.max(farContact, distance);
-  }
-  if (farContact > 0) cover = Math.max(cover, farContact * 1.22);
-  return clamp(cover, 0.055, 0.42);
+  return clamp(cover, 0.06, 0.42);
 }
 
-function computeFollowZoom(map, width, height) {
-  const padding = 28;
-  const span = Math.max(1, Math.min(width, height) - padding * 2);
-  const cover = computeFollowCoverRadius(map);
-  // Keep the tactical cover ring near ~38% of the short canvas edge.
-  const targetScreen = Math.min(width, height) * 0.38;
-  const autoZoom = targetScreen / (span * cover);
-  return clamp(autoZoom * finite(state.followZoomBias, 1), 1.35, 4.8);
+function computeContactCoverRadius(map) {
+  if (!map || !map.player || !Array.isArray(map.points) || !map.points.length) return 0;
+  let farContact = 0;
+  const px = map.player.x;
+  const py = map.player.y;
+  for (let index = 0; index < map.points.length; index += 1) {
+    const point = map.points[index];
+    const kind = String(point.kind || "");
+    if (!HOSTILE_MAP_KINDS.has(kind) && kind !== "zone" && kind !== "airfield") continue;
+    const distance = Math.hypot(point.x - px, point.y - py);
+    if (distance > 0 && distance < 0.28) farContact = Math.max(farContact, distance);
+  }
+  return farContact > 0 ? farContact * 1.18 : 0;
+}
+
+function zoomFromCover(cover, width, height) {
+  const span = Math.max(1, Math.min(width, height) - MAP_PADDING_PX * 2);
+  const targetScreen = Math.min(width, height) * 0.36;
+  const autoZoom = targetScreen / (span * Math.max(cover, 0.06));
+  return clamp(autoZoom * finite(state.followZoomBias, 1), 1.4, 4.5);
+}
+
+function stabilizeFollowCover(rawCover) {
+  if (state.followCover == null || !Number.isFinite(state.followCover)) {
+    state.followCover = rawCover;
+    return rawCover;
+  }
+  // Dead-zone: ignore jitter inside the band so zoom does not thrash every tick.
+  if (rawCover > state.followCover * FOLLOW_EXPAND_RATIO) {
+    state.followCover += (rawCover - state.followCover) * 0.22;
+  } else if (rawCover < state.followCover * FOLLOW_SHRINK_RATIO) {
+    state.followCover += (rawCover - state.followCover) * 0.06;
+  }
+  return state.followCover;
+}
+
+function computeFollowZoom(map, width, height, now = performance.now()) {
+  let cover = computePrimaryCoverRadius(map);
+  if (now - state.followContactAt >= FOLLOW_CONTACT_REFRESH_MS) {
+    state.followContactCover = computeContactCoverRadius(map);
+    state.followContactAt = now;
+  }
+  if (state.followContactCover > 0) cover = Math.max(cover, state.followContactCover);
+  cover = stabilizeFollowCover(clamp(cover, 0.06, 0.42));
+  return zoomFromCover(cover, width, height);
+}
+
+function snapFollowCamera(map) {
+  const metrics = refreshCanvasMetrics(false);
+  if (!metrics) return;
+  state.followCover = null;
+  state.followContactAt = 0;
+  state.followContactCover = 0;
+  const zoom = map
+    ? computeFollowZoom(map, metrics.width, metrics.height, performance.now())
+    : 2.2;
+  state.zoom = zoom;
+  state.displayZoom = zoom;
+  state.panX = 0;
+  state.panY = 0;
+  updateMapZoomMeta(true);
 }
 
 function updateMapCamera(map, width, height) {
-  let targetZoom = state.zoom;
   if (state.follow) {
-    targetZoom = computeFollowZoom(map, width, height);
-    state.zoom = targetZoom;
+    const targetZoom = computeFollowZoom(map, width, height);
+    const delta = targetZoom - state.displayZoom;
+    // Large intentional steps ease briefly; tiny noise is snapped away.
+    if (Math.abs(delta) >= 0.12) {
+      state.displayZoom += delta * 0.1;
+    } else if (Math.abs(delta) >= 0.02) {
+      state.displayZoom += delta * 0.2;
+    } else {
+      state.displayZoom = targetZoom;
+    }
+    state.zoom = state.displayZoom;
     state.panX = 0;
     state.panY = 0;
   } else {
-    targetZoom = clamp(state.zoom, 0.75, 5);
-    state.zoom = targetZoom;
+    state.zoom = clamp(state.zoom, 0.75, 5);
+    state.displayZoom = state.zoom;
   }
-  const blend = state.follow ? 0.18 : 0.28;
-  state.displayZoom += (targetZoom - state.displayZoom) * blend;
-  if (Math.abs(targetZoom - state.displayZoom) < 0.004) state.displayZoom = targetZoom;
-  updateMapZoomMeta();
+  updateMapZoomMeta(false);
 }
 
-function updateMapZoomMeta() {
+function updateMapZoomMeta(force = false) {
   const node = $("mapZoomMeta");
   if (!node) return;
   const zoomLabel = mapViewZoom().toFixed(1);
-  node.textContent = state.follow
+  const next = state.follow
     ? `跟随 · 自动 ×${zoomLabel}`
     : `自由 · 手动 ×${zoomLabel}`;
+  if (!force && next === state.zoomMetaText) return;
+  state.zoomMetaText = next;
+  node.textContent = next;
 }
 
 function mapTransform(map, width, height, x, y) {
-  const padding = 28;
-  const span = Math.min(width, height) - padding * 2;
+  const span = Math.min(width, height) - MAP_PADDING_PX * 2;
   const zoom = mapViewZoom();
   let centerX = .5 + state.panX;
   let centerY = .5 + state.panY;
@@ -993,10 +1082,20 @@ function syncHostileLegendIcons(points) {
       found.add(family);
     }
   }
+  const signature = [
+    representatives.aircraft,
+    representatives.armor,
+    representatives.air_defense,
+    representatives.naval,
+    representatives.other,
+  ].join("|");
+  if (signature === state.legendIconSignature) return;
+  state.legendIconSignature = signature;
   for (const marker of document.querySelectorAll("[data-map-icon-family]")) {
     const icon = representatives[marker.dataset.mapIconFamily] || "?";
-    marker.textContent = officialMapGlyph(icon);
-    marker.title = icon;
+    const glyph = officialMapGlyph(icon);
+    if (marker.textContent !== glyph) marker.textContent = glyph;
+    if (marker.title !== icon) marker.title = icon;
   }
 }
 
@@ -1096,20 +1195,42 @@ function drawWeaponRange(ctx, map, width, height, ratio) {
 }
 
 function drawMapBackground(ctx, width, height, ratio) {
-  const gradient = ctx.createRadialGradient(width * .5, height * .42, 0, width * .5, height * .5, Math.max(width, height) * .72);
-  gradient.addColorStop(0, "#14110c");
+  ctx.fillStyle = "#080a0e";
+  ctx.fillRect(0, 0, width, height);
+  // Single soft vignette is far cheaper than per-frame multi-stop radial + dense grids.
+  const gradient = ctx.createRadialGradient(
+    width * .5,
+    height * .45,
+    Math.min(width, height) * .08,
+    width * .5,
+    height * .5,
+    Math.max(width, height) * .62,
+  );
+  gradient.addColorStop(0, "#16120d");
   gradient.addColorStop(1, "#050608");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = "rgba(240,160,32,.06)";
+  ctx.strokeStyle = "rgba(240,160,32,.05)";
   ctx.lineWidth = ratio;
-  const step = 56 * ratio;
-  for (let x = width % step; x < width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
-  for (let y = height % step; y < height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
+  const step = 72 * ratio;
+  ctx.beginPath();
+  for (let x = width % step; x < width; x += step) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+  }
+  for (let y = height % step; y < height; y += step) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+  }
+  ctx.stroke();
   ctx.fillStyle = "rgba(240,160,32,.55)";
   ctx.font = `${9 * ratio}px Segoe UI`;
   ctx.fillText("N", 12 * ratio, 18 * ratio);
-  ctx.beginPath(); ctx.moveTo(15 * ratio, 24 * ratio); ctx.lineTo(15 * ratio, 38 * ratio); ctx.strokeStyle = "rgba(61,224,208,.75)"; ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(15 * ratio, 24 * ratio);
+  ctx.lineTo(15 * ratio, 38 * ratio);
+  ctx.strokeStyle = "rgba(61,224,208,.75)";
+  ctx.stroke();
 }
 
 function drawMapPoint(ctx, map, point, width, height, ratio) {
@@ -1373,9 +1494,25 @@ function installSheetHandlers() {
 function applyZoomStep(factor) {
   if (state.follow) {
     state.followZoomBias = clamp(state.followZoomBias * factor, 0.55, 2.4);
+    // Re-snap from the stabilized cover instead of stacking lerp lag.
+    if (state.payload) {
+      const metrics = refreshCanvasMetrics(false);
+      if (metrics) {
+        const zoom = computeFollowZoom(
+          state.payload.map,
+          metrics.width,
+          metrics.height,
+          performance.now(),
+        );
+        state.zoom = zoom;
+        state.displayZoom = zoom;
+      }
+    }
   } else {
     state.zoom = clamp(state.zoom * factor, 0.75, 5);
+    state.displayZoom = state.zoom;
   }
+  updateMapZoomMeta(true);
   renderCurrentMap();
 }
 
@@ -1387,13 +1524,14 @@ function setFollowMode(enabled) {
     button.setAttribute("aria-pressed", state.follow ? "true" : "false");
   }
   if (state.follow) {
-    state.panX = 0;
-    state.panY = 0;
     state.followZoomBias = 1;
+    snapFollowCamera(state.payload ? state.payload.map : null);
   } else {
     state.zoom = clamp(state.displayZoom || state.zoom, 0.75, 5);
+    state.displayZoom = state.zoom;
+    state.followCover = null;
+    updateMapZoomMeta(true);
   }
-  updateMapZoomMeta();
   renderCurrentMap();
 }
 
@@ -1487,8 +1625,23 @@ if (systemsToggle && systemsGrid) {
   });
 }
 if (document.fonts) document.fonts.load("bold 18px Bomana8111Icons").then(renderCurrentMap, () => {});
-if ("ResizeObserver" in window) new ResizeObserver(renderCurrentMap).observe($("mapStage"));
-window.addEventListener("resize", renderCurrentMap, { passive: true });
+refreshCanvasMetrics(true);
+if ("ResizeObserver" in window) {
+  let resizeFrame = 0;
+  new ResizeObserver(() => {
+    if (resizeFrame) return;
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = 0;
+      refreshCanvasMetrics(true);
+      renderCurrentMap();
+    });
+  }).observe($("mapStage"));
+}
+window.addEventListener("resize", () => {
+  refreshCanvasMetrics(true);
+  renderCurrentMap();
+}, { passive: true });
+if (state.follow) snapFollowCamera(null);
 scheduleSnapshotPoll();
 scheduleControlPoll();
 window.addEventListener("pagehide", () => {
