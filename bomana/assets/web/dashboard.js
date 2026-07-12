@@ -711,14 +711,25 @@ function render(payload) {
   renderHeadingTape(payload);
 
   text("phaseLabel", payload.status.phase_label);
-  text("timerValue", fmtTime(payload.timer.remaining_sec));
+  text("phaseLabelCompact", payload.status.phase_label);
+  const timerText = fmtTime(payload.timer.remaining_sec);
+  text("timerValue", timerText);
+  text("timerValueCompact", timerText);
   text("timerMeta", payload.timer.cycle ? `第 ${payload.timer.cycle} 轮 · ${payload.timer.cycle_minutes} 分钟周期 · 第 ${payload.timer.life_index || "-"} 次复活` : `等待任务计时 · ${payload.timer.cycle_minutes} 分钟周期`);
   $("timerProgress").style.width = `${Math.max(0, Math.min(100, finite(payload.timer.progress) * 100))}%`;
 
-  text("iasValue", Math.round(finite(payload.flight.ias_kmh)) || "---");
-  text("altValue", Math.round(finite(payload.flight.altitude_m)) || "---");
-  text("headingValue", String(Math.round((finite(payload.flight.heading_deg) + 360) % 360)).padStart(3, "0"));
-  text("fuelValue", payload.capabilities.fuel ? Math.round(finite(payload.fuel.percent)) : "---");
+  const iasText = String(Math.round(finite(payload.flight.ias_kmh)) || "---");
+  const altText = String(Math.round(finite(payload.flight.altitude_m)) || "---");
+  const hdgText = String(Math.round((finite(payload.flight.heading_deg) + 360) % 360)).padStart(3, "0");
+  const fuelText = String(payload.capabilities.fuel ? Math.round(finite(payload.fuel.percent)) : "---");
+  text("iasValue", iasText);
+  text("altValue", altText);
+  text("headingValue", hdgText);
+  text("fuelValue", fuelText);
+  text("iasValueCompact", iasText);
+  text("altValueCompact", altText);
+  text("headingValueCompact", hdgText);
+  text("fuelValueCompact", fuelText);
   const aircraft = payload.flight.aircraft || "未识别机型";
   text("aircraftName", aircraft);
   renderOverspeed(payload.flight);
@@ -773,7 +784,15 @@ function renderOverspeed(flight) {
   const fillPct = matched ? Math.min(100, Math.max(0, ratio * 100)) : 0;
   fill.style.width = `${fillPct}%`;
   strip.className = `speed-strip level-${tone}`;
+  const left = $("hudLeft");
+  if (left) {
+    left.classList.remove("level-safe", "level-caution", "level-warning", "level-critical", "level-unknown");
+    left.classList.add(`level-${tone}`);
+  }
+  const compactFill = $("speedFillCompact");
+  if (compactFill) compactFill.style.width = `${fillPct}%`;
   text("speedState", stateText);
+  text("speedStateCompact", stateText.length > 4 ? stateText.slice(0, 2) : stateText);
 
   let value = ias > 0 ? `IAS ${ias}` : "IAS --";
   if (matched && limit > 0) value = `IAS ${ias}/${limit}`;
@@ -1790,6 +1809,17 @@ if (systemsToggle && systemsGrid) {
     systemsGrid.hidden = !open;
     systemsToggle.setAttribute("aria-expanded", open ? "true" : "false");
     systemsToggle.textContent = open ? "收起系统" : "更多系统";
+  });
+}
+const hudLeft = $("hudLeft");
+const hudLeftToggle = $("hudLeftToggle");
+if (hudLeft && hudLeftToggle) {
+  hudLeftToggle.addEventListener("click", () => {
+    const collapsed = hudLeft.classList.toggle("is-collapsed");
+    hudLeftToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    text("hudLeftToggleLabel", collapsed ? "展开读数" : "收起读数");
+    const compact = $("hudLeftCompact");
+    if (compact) compact.setAttribute("aria-hidden", collapsed ? "false" : "true");
   });
 }
 if (document.fonts) document.fonts.load("bold 18px Bomana8111Icons").then(renderCurrentMap, () => {});

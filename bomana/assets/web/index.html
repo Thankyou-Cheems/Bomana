@@ -39,44 +39,66 @@
       </div>
     </header>
 
-    <aside class="hud-left" aria-label="飞行读数">
-      <div class="timer-block">
-        <span class="eyebrow" id="phaseLabel">等待游戏</span>
-        <strong id="timerValue">--:--</strong>
-        <div class="mission-progress" aria-hidden="true"><i id="timerProgress"></i></div>
-        <span class="meta" id="timerMeta">等待 8111 数据</span>
-      </div>
-      <div class="readout-stack">
-        <div class="readout"><span>IAS</span><strong id="iasValue">---</strong><small>km/h</small></div>
-        <div class="readout"><span>ALT</span><strong id="altValue">---</strong><small>m</small></div>
-        <div class="readout"><span>HDG</span><strong id="headingValue">---</strong><small>deg</small></div>
-        <div class="readout" data-capability="fuel"><span>FUEL</span><strong id="fuelValue">---</strong><small>%</small></div>
-      </div>
-      <div class="speed-strip" id="speedStrip" aria-label="超速提示">
-        <div class="speed-strip-head">
-          <span class="eyebrow">SPEED</span>
-          <span class="speed-state" id="speedState">速度监视</span>
+    <aside class="hud-left is-collapsed" id="hudLeft" aria-label="飞行读数">
+      <button type="button" class="hud-left-toggle" id="hudLeftToggle" aria-expanded="false" aria-controls="hudLeftBody">
+        <span id="hudLeftToggleLabel">展开读数</span>
+      </button>
+      <div class="hud-left-body" id="hudLeftBody">
+        <div class="timer-block">
+          <span class="eyebrow" id="phaseLabel">等待游戏</span>
+          <strong id="timerValue">--:--</strong>
+          <div class="mission-progress" aria-hidden="true"><i id="timerProgress"></i></div>
+          <span class="meta" id="timerMeta">等待 8111 数据</span>
         </div>
-        <strong class="speed-value" id="speedValue">IAS --</strong>
-        <div class="speed-track" aria-hidden="true">
-          <i id="speedFill"></i>
-          <b class="mark caution" style="left:70%"></b>
-          <b class="mark warning" style="left:85%"></b>
-          <b class="mark critical" style="left:100%"></b>
+        <div class="readout-stack">
+          <div class="readout"><span>IAS</span><strong id="iasValue">---</strong><small>km/h</small></div>
+          <div class="readout"><span>ALT</span><strong id="altValue">---</strong><small>m</small></div>
+          <div class="readout"><span>HDG</span><strong id="headingValue">---</strong><small>deg</small></div>
+          <div class="readout" data-capability="fuel"><span>FUEL</span><strong id="fuelValue">---</strong><small>%</small></div>
         </div>
-        <small class="speed-meta" id="speedMeta">等待限速数据</small>
+        <div class="speed-strip" id="speedStrip" aria-label="超速提示">
+          <div class="speed-strip-head">
+            <span class="eyebrow">SPEED</span>
+            <span class="speed-state" id="speedState">速度监视</span>
+          </div>
+          <strong class="speed-value" id="speedValue">IAS --</strong>
+          <div class="speed-track" aria-hidden="true">
+            <i id="speedFill"></i>
+            <b class="mark caution" style="left:70%"></b>
+            <b class="mark warning" style="left:85%"></b>
+            <b class="mark critical" style="left:100%"></b>
+          </div>
+          <small class="speed-meta" id="speedMeta">等待限速数据</small>
+        </div>
+        <div class="aircraft-block">
+          <span class="eyebrow">AIRFRAME</span>
+          <strong id="aircraftName">--</strong>
+        </div>
       </div>
-      <div class="aircraft-block">
-        <span class="eyebrow">AIRFRAME</span>
-        <strong id="aircraftName">--</strong>
+      <div class="hud-left-compact" id="hudLeftCompact" aria-hidden="false">
+        <div class="compact-timer">
+          <span class="eyebrow" id="phaseLabelCompact">等待游戏</span>
+          <strong id="timerValueCompact">--:--</strong>
+        </div>
+        <div class="compact-metrics">
+          <span><i>IAS</i><b id="iasValueCompact">---</b></span>
+          <span><i>ALT</i><b id="altValueCompact">---</b></span>
+          <span><i>HDG</i><b id="headingValueCompact">---</b></span>
+          <span data-capability="fuel"><i>FUEL</i><b id="fuelValueCompact">---</b></span>
+        </div>
+        <div class="compact-speed" id="compactSpeed">
+          <span id="speedStateCompact">监视</span>
+          <i id="speedFillCompact"></i>
+        </div>
       </div>
-      <div class="map-tools" aria-label="地图控制">
-        <button id="mapZoomOut" type="button" aria-label="缩小地图">−</button>
-        <button id="mapFollow" type="button" class="active" aria-pressed="true">跟随</button>
-        <button id="mapZoomIn" type="button" aria-label="放大地图">＋</button>
-      </div>
-      <div class="map-zoom-meta" id="mapZoomMeta">跟随 · 自动缩放</div>
     </aside>
+
+    <div class="map-tools-float" aria-label="地图控制">
+      <button id="mapZoomOut" type="button" aria-label="缩小地图">−</button>
+      <button id="mapFollow" type="button" class="active" aria-pressed="true">跟随</button>
+      <button id="mapZoomIn" type="button" aria-label="放大地图">＋</button>
+      <span class="map-zoom-meta" id="mapZoomMeta">跟随 · 自动</span>
+    </div>
 
     <aside class="hud-right" aria-label="战术信息">
       <article class="glass panel weapon-card" data-capability="weapon">
