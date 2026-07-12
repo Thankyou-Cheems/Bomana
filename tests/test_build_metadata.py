@@ -55,6 +55,13 @@ def test_portable_build_reads_version_from_metadata() -> None:
     )
 
 
+def test_packaged_web_smoke_tracks_current_app_version() -> None:
+    smoke = (ROOT / "docs" / "guides" / "web-cockpit-smoke.md").read_text(encoding="utf-8")
+
+    assert f"Bomana_app_<Variant>_v{metadata.__version__}.zip" in smoke
+    assert smoke.count(f"App {metadata.__version__}") >= 2
+
+
 def test_build_portable_script_runs_without_pythonpath() -> None:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)

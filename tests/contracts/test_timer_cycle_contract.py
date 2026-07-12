@@ -51,6 +51,10 @@ def test_timer_uses_banana_emoji_percent_and_removes_legacy_horizontal_strip() -
     assert 'text="🍌"' in widgets
     assert "Segoe UI Emoji" in widgets
     assert "percent_text" in widgets
+    assert "progress_arc" in widgets
+    assert "banana_silhouette" not in widgets
+    assert "banana_outline" not in widgets
+    assert "outline_points" not in widgets
     assert "app.bar_bg" not in main_window
     assert "app.bar_fill" not in main_window
 

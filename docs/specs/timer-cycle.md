@@ -35,9 +35,10 @@ state, Web commands, and the main-window progress presentation.
 - `TIMER-06`: Dashboard snapshot and control-state projections MUST expose the
   effective `cycle_minutes`, and the exhaustive Web command matrix MAY change it
   only through a bounded integer `config.set_timer_cycle_minutes` command.
-- `TIMER-07`: The App timer MUST render progress as a muted banana silhouette
-  with a continuous outline segment equal to normalized timer progress and MUST
-  remove the legacy horizontal timer strip.
+- `TIMER-07`: The App timer MUST render normalized progress as a continuous
+  circular ring around one banana emoji, place the integer percentage in a
+  separate lower visual band without overlapping the emoji, and MUST remove
+  both the legacy horizontal timer strip and the banana silhouette outline.
 - `TIMER-08`: `FINAL_WARNING_SEC` and the existing warning-sound seconds MUST
   remain absolute seconds independent of the configured period.
 

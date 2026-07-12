@@ -166,7 +166,7 @@ class TkGeometryTests(unittest.TestCase):
         self.assertLess(heights[0], heights[1])
         self.assertLess(heights[1], heights[2])
 
-    def test_banana_progress_clamps_and_draws_partial_outline(self) -> None:
+    def test_banana_progress_ring_separates_emoji_and_percent(self) -> None:
         banana = BananaProgress(self.root, size=64)
         banana.pack()
         try:
@@ -175,19 +175,18 @@ class TkGeometryTests(unittest.TestCase):
             self.assertEqual(banana.progress, 0.5)
             self.assertEqual(banana.itemcget(banana.percent_text, "text"), "50%")
             self.assertEqual(banana.itemcget(banana.emoji_text, "text"), "🍌")
-            self.assertGreater(len(banana.coords(banana.progress_outline)), 4)
-            self.assertLess(
-                len(banana.coords(banana.progress_outline)),
-                len(banana.outline_points) * 2,
-            )
+            self.assertEqual(float(banana.itemcget(banana.progress_arc, "extent")), -180.0)
+            emoji_bbox = banana.bbox(banana.emoji_text)
+            percent_bbox = banana.bbox(banana.percent_text)
+            self.assertIsNotNone(emoji_bbox)
+            self.assertIsNotNone(percent_bbox)
+            assert emoji_bbox is not None and percent_bbox is not None
+            self.assertLess(emoji_bbox[3], percent_bbox[1])
 
             banana.set_progress(2.0)
             self.assertEqual(banana.progress, 1.0)
             self.assertEqual(banana.itemcget(banana.percent_text, "text"), "100%")
-            self.assertEqual(
-                len(banana.coords(banana.progress_outline)),
-                len(banana.outline_points) * 2,
-            )
+            self.assertEqual(float(banana.itemcget(banana.progress_arc, "extent")), -359.9)
             bbox = banana.bbox("all")
             self.assertIsNotNone(bbox)
             assert bbox is not None

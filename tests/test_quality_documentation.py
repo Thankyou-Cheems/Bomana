@@ -51,3 +51,10 @@ def test_repository_local_markdown_links_resolve() -> None:
                     problems.append(f"{source.relative_to(ROOT)}:{line_number}: missing {target}")
 
     assert problems == []
+
+
+def test_readme_app_release_badge_tracks_latest_full_release() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "img.shields.io/github/v/release/Thankyou-Cheems/Bomana" in readme
+    assert "filter=v*.*.*-app" not in readme

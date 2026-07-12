@@ -165,7 +165,7 @@ uv run python tools/update_datamine_assets.py ^
 - 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
 - App 发布构建会自动编译并内置 native 热键 Broker；Actions 使用 `actions/attest@v4` 为最终包、清单与校验文件生成来源证明。
 - 本地发布命令入口是 `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`；`--version` 只是可选一致性校验，app 目标必须匹配 `bomana/metadata.py` 的 `__version__`，launcher 目标必须匹配 `launcher/metadata.py` 的 `LAUNCHER_VERSION`。
-- 当前源码版本为 App `8.4.1` / Launcher `3.1.0`，兼容下限仍为 App `8.0.0` / Launcher `3.0.0`。App ZIP 必须包含共享版本边界与网页控制 schemas；不要用不兼容的 Launcher 或 App 目录代替真实打包烟测。
+- 当前源码版本为 App `8.4.2` / Launcher `3.1.0`，兼容下限仍为 App `8.0.0` / Launcher `3.0.0`。App ZIP 必须包含共享版本边界与网页控制 schemas；不要用不兼容的 Launcher 或 App 目录代替真实打包烟测。
 - 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；GitHub Release 完成后在本机运行 `gh release download vX.Y.Z --dir dist`，再运行 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`。不要用 GitHub Actions 直连腾讯云主机部署，公开端点验证必须调用 `verify_release_manifest_signature`。
 - 发布签名字段、密钥处理和部署边界以 [release-signing spec](./specs/release-signing.md) 为准。
 
@@ -315,7 +315,7 @@ to validate the complete core path in seconds without reopening the game.
 - Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).
 - App builds compile and bundle the native broker automatically. GitHub release jobs attest final packages, manifests, and checksum files with `actions/attest@v4`; Authenticode secrets are not required.
 - Local package entry: `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`; `--version` is an optional consistency check and must match `bomana/metadata.py __version__` for app builds or `launcher/metadata.py LAUNCHER_VERSION` for launcher builds.
-- The current source versions are App `8.4.1` / Launcher `3.1.0`; compatibility floors remain App `8.0.0` / Launcher `3.0.0`. App ZIPs must include the shared version boundary and Web control schemas; use real packaged artifacts for compatibility and DPI smoke.
+- The current source versions are App `8.4.2` / Launcher `3.1.0`; compatibility floors remain App `8.0.0` / Launcher `3.0.0`. App ZIPs must include the shared version boundary and Web control schemas; use real packaged artifacts for compatibility and DPI smoke.
 - Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; after GitHub finishes the Release, run `gh release download vX.Y.Z --dir dist` and then `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z` on the maintainer workstation. Do not deploy to Tencent from Actions. Public endpoint checks must call `verify_release_manifest_signature`.
 - Release signing fields, key handling, and deployment boundaries are canonical in [release-signing spec](./specs/release-signing.md).
 

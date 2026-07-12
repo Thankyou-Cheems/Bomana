@@ -52,10 +52,11 @@ modules, Tk renderers, and runtime side effects.
   terms, MUST NOT show selection-source text such as `手选`, and MUST omit a
   separate weapon model/quality row when the range/status rows already convey
   the actionable solution.
-- `UI-PRES-10`: The timer MUST use a large banana display spanning the timer and
-  badge-row height, with a visible banana emoji, a distinct state-colored
-  progress cue, and a centered integer cycle-progress percentage that remains
-  inside the canvas at supported App scale/DPI combinations.
+- `UI-PRES-10`: The timer MUST use a large circular progress display spanning
+  the timer and badge-row height, with one visible banana emoji in the upper
+  center and a centered integer cycle-progress percentage in a separate lower
+  band. The state-colored ring, emoji, and percentage MUST remain mutually
+  non-overlapping and inside the canvas at supported App scale/DPI combinations.
 
 ## Contract Coverage
 

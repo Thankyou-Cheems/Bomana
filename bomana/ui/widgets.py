@@ -53,7 +53,7 @@ class Pill(tk.Label):
 
 
 class BananaProgress(tk.Canvas):
-    """Large timer progress with a banana emoji and percent label."""
+    """Timer progress ring with separated banana emoji and percent label."""
 
     def __init__(self, parent, *, size: int = 52, bg: str = Theme.GRAYPILL):
         self.size = max(24, int(size))
@@ -67,39 +67,33 @@ class BananaProgress(tk.Canvas):
         )
         self.progress = 0.0
         self._progress_color = Theme.BLUE
-        self.outline_points = self._build_outline_points()
-        flat = self._flatten(self.outline_points)
-        self.create_polygon(
-            *flat,
+        ring_inset = max(3, int(self.size * 0.065))
+        ring_width = max(3, int(self.size * 0.065))
+        ring_bounds = (ring_inset, ring_inset, self.size - ring_inset, self.size - ring_inset)
+        self.base_ring = self.create_oval(
+            *ring_bounds,
             fill=Theme.SEPARATOR,
-            outline="",
-            smooth=True,
-            splinesteps=12,
-            tags=("banana_silhouette",),
+            outline=Theme.BORDER,
+            width=ring_width,
+            tags=("timer_ring_base",),
         )
-        self.base_outline = self.create_line(
-            *flat,
-            fill=Theme.YELLOW,
-            width=max(2, int(self.size * 0.055)),
-            smooth=True,
-            splinesteps=12,
-            tags=("banana_outline",),
-        )
-        self.progress_outline = self.create_line(
-            *flat[:4],
-            fill=self._progress_color,
-            width=max(2, int(self.size * 0.07)),
-            smooth=True,
-            splinesteps=12,
+        self.progress_arc = self.create_arc(
+            *ring_bounds,
+            start=90,
+            extent=0,
+            style=tk.ARC,
+            outline=self._progress_color,
+            width=ring_width,
             state="hidden",
+            tags=("timer_progress_arc",),
         )
         emoji_font = resolve_tk_font_tuple(
             self,
-            ("Segoe UI Emoji", max(18, int(self.size * 0.42))),
+            ("Segoe UI Emoji", max(16, int(self.size * 0.32))),
         )
         self.emoji_text = self.create_text(
-            self.size * 0.48,
-            self.size * 0.38,
+            self.size * 0.50,
+            self.size * 0.29,
             text="🍌",
             fill=Theme.YELLOW,
             font=emoji_font,
@@ -111,35 +105,14 @@ class BananaProgress(tk.Canvas):
             ("Segoe UI", max(8, int(self.size * 0.17)), "bold"),
         )
         self.percent_text = self.create_text(
-            self.size * 0.48,
-            self.size * 0.73,
+            self.size * 0.50,
+            self.size * 0.76,
             text="0%",
             fill=Theme.TEXT,
             font=percent_font,
             anchor="center",
             tags=("banana_percent",),
         )
-
-    @staticmethod
-    def _bezier(p0, p1, p2, p3, steps: int = 28) -> list[tuple[float, float]]:
-        points = []
-        for index in range(steps + 1):
-            t = index / steps
-            inv = 1.0 - t
-            x = inv**3 * p0[0] + 3 * inv**2 * t * p1[0] + 3 * inv * t**2 * p2[0] + t**3 * p3[0]
-            y = inv**3 * p0[1] + 3 * inv**2 * t * p1[1] + 3 * inv * t**2 * p2[1] + t**3 * p3[1]
-            points.append((x, y))
-        return points
-
-    def _build_outline_points(self) -> list[tuple[float, float]]:
-        scale = float(self.size)
-        outer = self._bezier((0.72, 0.12), (0.84, 0.54), (0.52, 0.92), (0.15, 0.72))
-        inner = self._bezier((0.15, 0.72), (0.38, 0.74), (0.58, 0.48), (0.72, 0.12))
-        return [(x * scale, y * scale) for x, y in (*outer, *inner[1:])]
-
-    @staticmethod
-    def _flatten(points: list[tuple[float, float]]) -> list[float]:
-        return [coordinate for point in points for coordinate in point]
 
     def set_progress(self, value: float) -> None:
         try:
@@ -149,24 +122,17 @@ class BananaProgress(tk.Canvas):
         self.progress = max(0.0, min(1.0, progress))
         self.itemconfigure(self.percent_text, text=f"{round(self.progress * 100):d}%")
         if self.progress <= 0.0:
-            self.itemconfigure(self.progress_outline, state="hidden")
+            self.itemconfigure(self.progress_arc, extent=0, state="hidden")
             return
-        point_count = max(
-            2,
-            min(
-                len(self.outline_points),
-                round(len(self.outline_points) * self.progress),
-            ),
+        self.itemconfigure(
+            self.progress_arc,
+            extent=-min(359.9, 360.0 * self.progress),
+            state="normal",
         )
-        self.coords(
-            self.progress_outline,
-            *self._flatten(self.outline_points[:point_count]),
-        )
-        self.itemconfigure(self.progress_outline, state="normal")
 
     def set_color(self, color: str) -> None:
         self._progress_color = str(color or Theme.BLUE)
-        self.itemconfigure(self.progress_outline, fill=self._progress_color)
+        self.itemconfigure(self.progress_arc, outline=self._progress_color)
 
 
 class HeadingTape(tk.Canvas):
