@@ -4,10 +4,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from bomana.config.settings import (
+    BallisticPhysicsParams,
     BombConfig,
     FuelConfig,
     OverspeedConfig,
 )
+from bomana.core.offline_ballistics_model import OFFLINE_RIGIDBODY_PROJECTION_MODEL_ID
 from bomana.ui.theme import Theme
 
 
@@ -38,6 +40,9 @@ class BombingDisplayModel:
     flight_fg: str
     release: IconTextModel
     release_detail_text: str
+    target_summary_text: str = ""
+    target_altitude_text: str = ""
+    target_mode_text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -402,7 +407,12 @@ def _format_weapon_time(seconds: float) -> str:
     return f"{seconds:.0f}s"
 
 
-def _weapon_status_presentation(status: str) -> IconTextModel:
+def _weapon_status_presentation(status: str, reason: str = "") -> IconTextModel:
+    if reason == "player_visible_trajectory_reference":
+        if status == "within_experimental_reference":
+            return IconTextModel("aim", "样本条件参考", Theme.YELLOW)
+        if status == "beyond_experimental_reference":
+            return IconTextModel("aim", "超出已见样本", Theme.YELLOW)
     presentations = {
         "unknown_weapon": IconTextModel("warning", "武器未知", Theme.YELLOW),
         "catalog_unavailable": IconTextModel("danger", "目录不可用", Theme.RED),
@@ -457,6 +467,10 @@ def _weapon_fallback_detail(status: str, role: str, reason: str = "") -> str:
     if status == "beyond_ballistic_reference":
         return "超出弹道参考，不代表超出滑翔能力"
     if status in {"within_experimental_reference", "beyond_experimental_reference"}:
+        if reason == "player_visible_trajectory_reference":
+            return "仅覆盖已记录的公开曲线条件"
+        if reason == "guided_ballistic_uncalibrated":
+            return "未校准升力与制导，仅供参考"
         return "推测替代，仅供参考"
     if status == "within_2d_max_only":
         return "二维最大射程参考"
@@ -497,7 +511,7 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
     elif status in usable_statuses and not solution_valid:
         status = "insufficient_data"
 
-    release = _weapon_status_presentation(status)
+    release = _weapon_status_presentation(status, reason)
     min_range_m = _safe_float(getattr(snap, "weapon_min_range_m", 0.0))
     max_range_m = _safe_float(getattr(snap, "weapon_max_range_m", 0.0))
     rear_range_m = _safe_float(getattr(snap, "weapon_rear_range_m", 0.0))
@@ -509,11 +523,24 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
             else "弹道参考 --"
         )
     elif status in {"within_experimental_reference", "beyond_experimental_reference"}:
-        range_text = (
-            f"滑翔参考约 {_format_weapon_distance(max_range_m)}"
-            if max_range_m > 0.0
-            else "滑翔参考 --"
-        )
+        if reason == "player_visible_trajectory_reference":
+            range_text = (
+                f"目标高0.1km样本 ≥{_format_weapon_distance(max_range_m)}"
+                if max_range_m > 0.0
+                else "目标高0.1km样本 --"
+            )
+        elif reason == "guided_ballistic_uncalibrated":
+            range_text = (
+                f"未校准参考约 {_format_weapon_distance(max_range_m)}"
+                if max_range_m > 0.0
+                else "未校准参考 --"
+            )
+        else:
+            range_text = (
+                f"滑翔参考约 {_format_weapon_distance(max_range_m)}"
+                if max_range_m > 0.0
+                else "滑翔参考 --"
+            )
     elif role == "aam" and rear_range_m > 0.0 and head_range_m > 0.0:
         range_text = _format_aam_aspect_range(rear_range_m, head_range_m)
     elif role == "aam" and max_range_m > 0.0:
@@ -530,7 +557,10 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
     elif status == "beyond_ballistic_reference" and time_to_window_s > 0.0:
         detail_parts.append(f"距弹道参考约 {_format_weapon_time(time_to_window_s)}")
     elif status == "beyond_experimental_reference" and time_to_window_s > 0.0:
-        detail_parts.append(f"距滑翔参考约 {_format_weapon_time(time_to_window_s)}")
+        reference_label = (
+            "已见样本" if reason == "player_visible_trajectory_reference" else "滑翔参考"
+        )
+        detail_parts.append(f"距{reference_label}约 {_format_weapon_time(time_to_window_s)}")
     elif status != "align" and time_to_target_s > 0.0:
         detail_parts.append(f"飞行约 {_format_weapon_time(time_to_target_s)}")
 
@@ -547,6 +577,10 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         detail_parts.append("仅超出弹道参考，不代表超出滑翔能力")
     elif reason == "foxthree_compatible_glide":
         detail_parts.append("等效升阻比/能量高度参考，未模拟舵面与自动驾驶")
+    elif reason == "player_visible_trajectory_reference":
+        detail_parts.append("公开界面曲线转录，仅覆盖相邻高度/速度条件")
+    elif reason == "guided_ballistic_uncalibrated":
+        detail_parts.append("重力/阻力下界，未校准升力与制导")
 
     timing_text = next((part for part in detail_parts if "s" in part), "")
     if timing_text:
@@ -566,6 +600,9 @@ def _build_weapon_solution_display_model(snap: Any) -> BombingDisplayModel:
         flight_fg=release.fg if status in highlighted_statuses else Theme.TEXT_MUTED,
         release=release,
         release_detail_text="",
+        target_summary_text="",
+        target_altitude_text="",
+        target_mode_text="",
     )
 
 
@@ -605,10 +642,26 @@ def build_bombing_display_model(snap: Any) -> BombingDisplayModel:
     bomb_data = BombConfig.get_bomb_data(snap.bomb_name) or {}
     prediction_kind = str(bomb_data.get("prediction_kind", "freefall") or "freefall")
     target_text, target_fg, target_short, has_bombing_target = _format_bombing_target(snap)
+    target_mode = BombConfig.normalize_target_mode(
+        getattr(snap, "bombing_target_mode", BombConfig.target_mode)
+    )
+    target_mode_text = "目标：战区" if target_mode == "zone" else "目标：兴趣点"
+    target_altitude_m = _safe_float(getattr(snap, "target_altitude_m", 0.0))
+    target_altitude_source = str(getattr(snap, "target_altitude_source", "") or "")
+    if has_bombing_target and target_altitude_source == "terrain":
+        target_altitude_text = f"目标高程 {target_altitude_m:.0f}m"
+    elif has_bombing_target:
+        target_altitude_text = "目标高程 --"
+    else:
+        target_altitude_text = "目标高程 -- · 等待目标"
+    target_summary_text = target_text
 
     if snap.bombing_valid:
         bomb_range_km = snap.bomb_range_m / 1000.0
+        model_id = str(getattr(snap, "bomb_trajectory_model_id", "") or "")
         trajectory_label = "高阻" if prediction_kind == "high_drag" else "弹道"
+        if model_id == OFFLINE_RIGIDBODY_PROJECTION_MODEL_ID:
+            trajectory_label = "高精度弹道"
         flight_label = "直落" if prediction_kind == "high_drag" else "飞行"
         trajectory_text = (
             f"目标 {target_text} · {trajectory_label} {bomb_range_km:.2f}km"
@@ -621,7 +674,12 @@ def build_bombing_display_model(snap: Any) -> BombingDisplayModel:
         status = snap.release_status
         dist_str = _format_release_distance(snap.release_distance_m)
         if status == "ready":
-            release = IconTextModel("bomb", "投弹", Theme.GREEN)
+            release_now = snap.time_to_release <= BallisticPhysicsParams.RELEASE_PROMPT_SEC
+            release = (
+                IconTextModel("bomb", "投弹", Theme.GREEN)
+                if release_now
+                else IconTextModel("clock", "准备", Theme.GREEN)
+            )
             release_detail_text = f"{target_short}窗口 {snap.time_to_release:.2f}s / {dist_str}"
         elif status == "approaching":
             release = IconTextModel("clock", "接近", Theme.YELLOW)
@@ -644,15 +702,48 @@ def build_bombing_display_model(snap: Any) -> BombingDisplayModel:
             flight_fg = Theme.TEXT_MUTED
             release = IconTextModel("aim", "未辅助", Theme.YELLOW)
             release_detail_text = "不显示CCRP释放点"
-        elif unavailable_reason == "release_mach_limit":
-            trajectory_text = f"目标 {target_text} · 超马赫限制"
+        elif unavailable_reason == "offline_high_drag_unavailable":
+            trajectory_text = f"目标 {target_text} · 高阻高精度模型缺失"
             trajectory_fg = Theme.TEXT_MUTED
             flight_text = ""
             flight_fg = Theme.TEXT_MUTED
-            mach = getattr(snap, "overspeed_current_mach", None)
-            mach_text = f"M{float(mach):.2f}" if mach is not None else "M≥1.00"
-            release = IconTextModel("danger", "不可投", Theme.RED)
-            release_detail_text = f"{mach_text} 超过投放限制，减速后再投"
+            release = IconTextModel("danger", "未解算", Theme.RED)
+            release_detail_text = "当前高阻弹药未配置高精度模型"
+        elif unavailable_reason == "terrain_unavailable":
+            trajectory_text = f"目标 {target_text} · 等待离线高程"
+            trajectory_fg = Theme.TEXT_MUTED
+            flight_text = ""
+            flight_fg = Theme.TEXT_MUTED
+            release = IconTextModel("aim", "无高程", Theme.YELLOW)
+            release_detail_text = "校验内置高程数据并等待当前地图识别"
+        elif unavailable_reason == "release_state_unavailable":
+            trajectory_text = f"目标 {target_text} · 建立 8111 航迹"
+            trajectory_fg = Theme.TEXT_MUTED
+            flight_text = ""
+            flight_fg = Theme.TEXT_MUTED
+            release = IconTextModel("clock", "采样中", Theme.TEXT_MUTED)
+            release_detail_text = "保持飞行约 0.2 秒后更新"
+        elif unavailable_reason == "time_alignment_unavailable":
+            trajectory_text = f"目标 {target_text} · 对齐 8111 时间轴"
+            trajectory_fg = Theme.TEXT_MUTED
+            flight_text = ""
+            flight_fg = Theme.TEXT_MUTED
+            release = IconTextModel("clock", "同步中", Theme.YELLOW)
+            release_detail_text = "过旧或错位的数据帧不会生成提示"
+        elif unavailable_reason == "release_dynamics_unresolved":
+            trajectory_text = f"目标 {target_text} · 侧飞/转弯过大"
+            trajectory_fg = Theme.TEXT_MUTED
+            flight_text = ""
+            flight_fg = Theme.TEXT_MUTED
+            release = IconTextModel("clock", "转弯中", Theme.YELLOW)
+            release_detail_text = ""
+        elif unavailable_reason == "off_axis":
+            trajectory_text = f"目标 {target_text} · 航迹未对准"
+            trajectory_fg = Theme.TEXT_MUTED
+            flight_text = ""
+            flight_fg = Theme.TEXT_MUTED
+            release = IconTextModel(None, "对准目标", Theme.YELLOW)
+            release_detail_text = "横向误差超过 100m"
         else:
             trajectory_text = f"目标 {target_text} · 弹道 --"
             trajectory_fg = Theme.TEXT_MUTED
@@ -666,7 +757,8 @@ def build_bombing_display_model(snap: Any) -> BombingDisplayModel:
                 release_detail_text = "高度 >50m 后计算"
             elif not has_bombing_target:
                 release = IconTextModel("aim", "无投弹目标", Theme.TEXT_MUTED)
-                release_detail_text = "朝向POI或战区后计算"
+                mode_label = "战区" if target_mode == "zone" else "兴趣点"
+                release_detail_text = f"当前目标模式：{mode_label}；目标出现后计算"
             else:
                 release = IconTextModel(None, "对准目标", Theme.TEXT_MUTED)
                 release_detail_text = "进入释放航线后显示窗口"
@@ -679,6 +771,9 @@ def build_bombing_display_model(snap: Any) -> BombingDisplayModel:
         flight_fg=flight_fg,
         release=release,
         release_detail_text=release_detail_text,
+        target_summary_text=target_summary_text,
+        target_altitude_text=target_altitude_text,
+        target_mode_text=target_mode_text,
     )
 
 

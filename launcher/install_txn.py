@@ -15,10 +15,12 @@ from pathlib import Path
 
 from bomana_version import (
     MIN_SUPPORTED_APP_VERSION,
+    MIN_SUPPORTED_LAUNCHER_VERSION,
     require_exact_version,
     require_minimum_version,
 )
 from launcher.core import normalize_package_root, safe_extract_zip, sha256_bytes
+from launcher.metadata import LAUNCHER_VERSION
 
 APP_DIR_NAME = "app"
 APP_PREVIOUS_DIR_NAME = "app_previous"
@@ -65,10 +67,48 @@ def _read_literal_version(path: Path) -> str:
     return ""
 
 
+def _read_optional_literal_version(path: Path, name: str) -> tuple[bool, str]:
+    """Read one optional version assignment without executing candidate code."""
+
+    try:
+        text = path.read_text(encoding="utf-8")
+        module = ast.parse(text, filename=str(path))
+        values: list[str] = []
+        found = False
+        for statement in module.body:
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            if not any(isinstance(target, ast.Name) and target.id == name for target in targets):
+                continue
+            found = True
+            value = statement.value
+            if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+                return True, ""
+            values.append(value.value)
+        if len(values) == 1:
+            return True, values[0]
+        if found:
+            return True, ""
+    except Exception:
+        return False, ""
+    return False, ""
+
+
 def read_app_version_identity(app_dir: Path) -> str:
     """Read the candidate's canonical version literal without importing it."""
 
     return _read_literal_version(app_dir / "bomana" / "metadata.py")
+
+
+def read_app_min_launcher_version_identity(app_dir: Path) -> str:
+    """Read the candidate release floor, preserving legacy App compatibility."""
+
+    found, value = _read_optional_literal_version(
+        app_dir / "bomana" / "metadata.py",
+        "PORTABLE_MIN_LAUNCHER_VERSION",
+    )
+    return value if found else MIN_SUPPORTED_LAUNCHER_VERSION
 
 
 def read_local_app_version(app_dir: Path) -> str:
@@ -85,9 +125,10 @@ def require_compatible_app_version(
     app_dir: Path,
     *,
     expected_version: str | None = None,
+    launcher_version: str = LAUNCHER_VERSION,
     identity_name: str = "应用版本",
 ) -> str:
-    """Validate one candidate against the shared App 8 compatibility floor."""
+    """Validate App identity and its declared Launcher release floor."""
 
     if expected_version is not None:
         require_minimum_version(
@@ -99,6 +140,16 @@ def require_compatible_app_version(
         read_app_version_identity(app_dir),
         MIN_SUPPORTED_APP_VERSION,
         identity_name=identity_name,
+    )
+    min_launcher_version = require_minimum_version(
+        read_app_min_launcher_version_identity(app_dir),
+        MIN_SUPPORTED_LAUNCHER_VERSION,
+        identity_name="应用最低启动器版本",
+    )
+    require_minimum_version(
+        launcher_version,
+        min_launcher_version,
+        identity_name="当前启动器版本",
     )
     if expected_version is not None:
         require_exact_version(version, expected_version, identity_name=identity_name)

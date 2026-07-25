@@ -52,7 +52,7 @@ def test_launcher_and_python_app_remain_as_invoker() -> None:
     assert "_launch_app(base, selected_channel)" in main_body
 
 
-def test_ordinary_hotkeys_start_before_probe_and_uac_is_explicit() -> None:
+def test_ordinary_hotkeys_start_without_game_process_probe_and_uac_is_explicit() -> None:
     runtime_source = read_source("bomana/ui/runtime_services.py")
     app_source = read_source("bomana/ui/app.py")
     init_body = method_source(runtime_source, "AppRuntimeServices", "init_global_hotkeys")
@@ -63,9 +63,8 @@ def test_ordinary_hotkeys_start_before_probe_and_uac_is_explicit() -> None:
     )
     action_body = method_source(app_source, "App", "_on_nudge_action")
 
-    assert init_body.index("self._start_local_hotkeys(hotkeys)") < init_body.index(
-        "detect_war_thunder_integrity()"
-    )
+    assert "self._start_local_hotkeys(hotkeys)" in init_body
+    assert "detect_war_thunder_integrity" not in init_body
     assert "ElevatedHotkeyBrokerClient(" not in init_body
     assert "ElevatedHotkeyBrokerClient(" in elevate_body
     assert 'self._hotkey_broker_action == "elevate"' in action_body
@@ -74,35 +73,27 @@ def test_ordinary_hotkeys_start_before_probe_and_uac_is_explicit() -> None:
     assert "不会安装额外程序" in action_body
 
 
-def test_probe_is_limited_to_visible_allowlisted_war_thunder_tokens() -> None:
+def test_production_hotkey_client_contains_no_game_process_probe() -> None:
     source = read_source("bomana/utils/hotkey_broker.py")
-    probe_body = function_source(source, "detect_war_thunder_integrity")
-
-    for token in (
+    forbidden = (
+        "detect_war_thunder_integrity",
         "EnumWindows",
-        "IsWindowVisible",
         "GetWindowTextW",
-        "WAR_THUNDER_WINDOW_TITLE",
         "QueryFullProcessImageNameW",
         "PROCESS_QUERY_LIMITED_INFORMATION",
-        "OpenProcessToken",
-        "TOKEN_QUERY",
-        "TokenElevation",
+        "WAR_THUNDER_EXECUTABLES",
+        "WAR_THUNDER_WINDOW_TITLE",
         "aces.exe",
         "aces64.exe",
         "aces_be.exe",
-    ):
-        assert token in source
-    assert "WAR_THUNDER_EXECUTABLES" in probe_body
-    for forbidden in (
         "CreateToolhelp32Snapshot",
         "Process32First",
         "Process32Next",
         "Module32First",
         "ReadProcessMemory",
         "WriteProcessMemory",
-    ):
-        assert forbidden not in source
+    )
+    assert not [token for token in forbidden if token in source]
 
 
 def test_only_fixed_bundled_hash_locked_broker_path_crosses_uac() -> None:
@@ -154,6 +145,7 @@ def test_native_broker_has_only_allowlisted_hotkey_surface() -> None:
         "corner",
         "beep",
         "zones",
+        "bomb_target",
     )
     assert not [token for token in required if token not in broker_source]
     forbidden = (

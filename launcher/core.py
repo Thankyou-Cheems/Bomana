@@ -334,6 +334,14 @@ _LAUNCHER_MANIFEST_SIGNATURE_FIELDS = (
     "launcher_sha256",
     "launcher_size_bytes",
 )
+_TERRAIN_MANIFEST_SIGNATURE_FIELDS = (
+    "schema_version",
+    "terrain_pack_id",
+    "terrain_revision",
+    "map_count",
+    "total_size_bytes",
+    "files",
+)
 
 
 def _manifest_signature_core(
@@ -345,9 +353,11 @@ def _manifest_signature_core(
     kind = str(expected_kind or "").strip().lower()
     has_app_version = "app_version" in unsigned_manifest
     has_launcher_version = "launcher_version" in unsigned_manifest
-    if has_app_version and has_launcher_version:
-        raise RuntimeError("发布清单不能同时包含应用和启动器版本字段")
-    if kind and kind not in ("app", "launcher"):
+    has_terrain_revision = "terrain_revision" in unsigned_manifest
+    identities = sum((has_app_version, has_launcher_version, has_terrain_revision))
+    if identities > 1:
+        raise RuntimeError("发布清单不能同时包含应用、启动器和地形版本字段")
+    if kind and kind not in ("app", "launcher", "terrain"):
         raise RuntimeError("发布清单签名类型不支持")
     if kind == "app" or (not kind and has_app_version):
         fields = _APP_MANIFEST_SIGNATURE_FIELDS
@@ -359,6 +369,11 @@ def _manifest_signature_core(
         label = "启动器发布清单"
         if not has_launcher_version:
             raise RuntimeError("启动器发布清单缺少 launcher_version")
+    elif kind == "terrain" or (not kind and has_terrain_revision):
+        fields = _TERRAIN_MANIFEST_SIGNATURE_FIELDS
+        label = "地形发布清单"
+        if not has_terrain_revision:
+            raise RuntimeError("地形发布清单缺少 terrain_revision")
     else:
         raise RuntimeError("发布清单缺少可签名的版本字段")
 

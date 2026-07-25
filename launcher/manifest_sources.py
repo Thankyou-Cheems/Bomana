@@ -7,9 +7,11 @@ from typing import Any
 from launcher.core import (
     _APP_MANIFEST_SIGNATURE_FIELDS,
     _LAUNCHER_MANIFEST_SIGNATURE_FIELDS,
+    _TERRAIN_MANIFEST_SIGNATURE_FIELDS,
     parse_launcher_version_from_asset_name,
     require_remote_checksum,
 )
+from launcher.terrain_store import parse_terrain_manifest
 
 from .verify import project_verified_manifest_fields
 
@@ -92,4 +94,34 @@ def verified_launcher_manifest_fields(manifest: dict[str, Any], *, label: str) -
             artifact_label=label,
         ),
         "launcher_size_bytes": fields.get("launcher_size_bytes"),
+    }
+
+
+def verified_terrain_manifest_fields(
+    manifest: dict[str, Any],
+    *,
+    label: str,
+) -> dict[str, Any]:
+    fields = project_verified_manifest_fields(
+        manifest,
+        _TERRAIN_MANIFEST_SIGNATURE_FIELDS,
+        manifest_label=label,
+        expected_kind="terrain",
+    )
+    parsed = parse_terrain_manifest(fields)
+    return {
+        "schema_version": parsed.schema_version,
+        "terrain_pack_id": parsed.pack_id,
+        "terrain_revision": parsed.revision,
+        "map_count": parsed.map_count,
+        "total_size_bytes": parsed.total_size_bytes,
+        "files": [
+            {
+                "path": item.path,
+                "asset": item.asset,
+                "sha256": item.sha256,
+                "size_bytes": item.size_bytes,
+            }
+            for item in parsed.files
+        ],
     }

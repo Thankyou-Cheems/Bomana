@@ -58,7 +58,7 @@ def test_github_pages_site_has_new_user_and_permission_paths() -> None:
         "releaseStatus",
         "releaseAssets",
     } <= parser.ids
-    assert "提权只给热键，不给整个应用" in html
+    assert "系统热键只控制 Bomana" in html
     assert "三步开始" in html
     assert "只读官方 localhost:8111" in html
     assert "Artifact Attestations" in html

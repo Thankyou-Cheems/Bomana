@@ -3,27 +3,84 @@
 War Thunder .blkx bomb parameter extractor.
 
 Input: the extracted .blkx files from the War Thunder datamine repo.
-Output: bomana/data/ccrp_bomb_params.json for Bomana.
+Output: bomana/data/offline_rigidbody_catalog.bin for Bomana.
 """
 
 import argparse
 import json
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
-from datamine_utils import (
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from datamine_utils import (  # noqa: E402
     BOMBGUNS_SUBDIR,
-    build_source_metadata,
     normalize_datamine_caliber_m,
     require_datamine_dir,
+)
+
+from bomana.core.offline_rigidbody_catalog import (  # noqa: E402
+    CATALOG_PROFILE_ID,
+    CATALOG_SCHEMA_VERSION,
+    encode_catalog,
+)
+from bomana.core.offline_rigidbody_properties import (  # noqa: E402
+    OFFLINE_DEFAULT_AOA_DRAG_COEFFICIENT,
+    OFFLINE_DEFAULT_AXIAL_COEFFICIENT,
+    OFFLINE_DEFAULT_LIFT_AREA_SCALE,
+    OFFLINE_DEFAULT_NORMAL_AOA_LIMIT,
+    OFFLINE_DEFAULT_NORMAL_COEFFICIENT,
 )
 
 
 class BlkxExtractor:
     """Batch-extract bomb ballistic parameters from .blkx files."""
+
+    GUIDED_OR_GLIDE_KEYWORDS: ClassVar[tuple[str, ...]] = (
+        "agm",
+        "bgl",
+        "gbu",
+        "gbu_",
+        "gb250",
+        "gcs_1",
+        "glide",
+        "grom",
+        "guided",
+        "hosbo",
+        "jdam",
+        "jsow",
+        "kab",
+        "kggb",
+        "laser",
+        "lizard",
+        "lgb",
+        "ljdam",
+        "ls_6",
+        "paveway",
+        "pgb",
+        "sdb",
+        "spice",
+        "tv",
+        "umpk",
+        "upab",
+        "walleye",
+        "fx1400",
+    )
+    HIGH_DRAG_KEYWORDS: ClassVar[tuple[str, ...]] = (
+        "air_na",
+        "ballute",
+        "brp",
+        "fab500sh",
+        "ofab250sh",
+        "parachute",
+        "retarded",
+        "snakeye",
+    )
+    HIGH_DRAG_BRAKE_COEFFICIENT_MIN = 10.0
 
     REQUIRED_PARAMS: ClassVar[list[str]] = [
         "mass",
@@ -32,6 +89,15 @@ class BlkxExtractor:
         "length",
         "distFromCmToStab",
         "dragCx",
+        "wingAreaMult",
+        "CxK",
+        "CyK",
+        "CyMaxAoA",
+        "CxAoA",
+        "fluidResistanceMultiplier",
+        "fluidRotationResistanceMultiplier",
+        "finsAoaHor",
+        "finsAoaVer",
         "brakeTime",
         "brakeCxK",
         "brakeArm",
@@ -207,15 +273,35 @@ class BlkxExtractor:
                 for t, c in sorted(type_counts.items()):
                     print(f"  - {t}: {c}")
 
-    def export_ccrp_params(
+    @classmethod
+    def _prediction_kind(cls, key: str, bomb: dict) -> str:
+        text = " ".join(
+            (
+                key,
+                str(bomb.get("source_file", "") or ""),
+                str(bomb.get("filename", "") or ""),
+            )
+        ).lower()
+        if any(keyword in text for keyword in cls.GUIDED_OR_GLIDE_KEYWORDS):
+            return "guided_glide"
+        try:
+            brake_coefficient = float(bomb.get("brakeCxK", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            brake_coefficient = 0.0
+        if (
+            brake_coefficient >= cls.HIGH_DRAG_BRAKE_COEFFICIENT_MIN
+            or any(keyword in text for keyword in cls.HIGH_DRAG_KEYWORDS)
+        ):
+            return "high_drag"
+        return "freefall"
+
+    def export_offline_catalog(
         self,
-        output_file: str = "bomana/data/ccrp_bomb_params.json",
-        *,
-        source_root: Path | None = None,
-        source_subdir: Path | None = None,
+        output_file: str = "bomana/data/offline_rigidbody_catalog.bin",
     ):
-        """Export BALLISTIC_PARAMS for Bomana (JSON)."""
-        ccrp_params = {}
+        """Export a compact runtime catalog without per-record source metadata."""
+
+        catalog_records = {}
         collision_count = 0
 
         for bomb in self.results:
@@ -227,57 +313,64 @@ class BlkxExtractor:
             key = re.sub(r"[^\w-]", "_", stem.lower())
             key = re.sub(r"(_na|_mesh|_bomb)$", "", key)
 
-            if key in ccrp_params:
+            if key in catalog_records:
                 # Rare fallback if filenames still collide.
                 collision_count += 1
                 suffix = 2
                 new_key = f"{key}_{suffix}"
-                while new_key in ccrp_params:
+                while new_key in catalog_records:
                     suffix += 1
                     new_key = f"{key}_{suffix}"
                 key = new_key
 
+            source_stem = Path(str(bomb.get("source_file", ""))).stem
+            aliases = [source_stem] if source_stem and source_stem != key else []
+            diameter = float(bomb["caliber"])
+            length = float(bomb.get("length", 4.0 * diameter))
+            lift_area_scale = float(
+                bomb.get("wingAreaMult", OFFLINE_DEFAULT_LIFT_AREA_SCALE)
+            )
             record = {
-                "mass": float(bomb["mass"]),
-                "caliber": float(bomb["caliber"]),
-                "dragCx": float(bomb["dragCx"]),
-                "distFromCmToStab": float(bomb.get("distFromCmToStab", 0.0)),
-                "brakeTime": bomb.get("brakeTime", [0.0, 0.0]),
-                "brakeCxK": float(bomb.get("brakeCxK", 0.0)),
-                "brakeArm": float(bomb.get("brakeArm", 0.0)),
-                "stab_enabled": bool(bomb.get("brakeCxK", 0.0) > 0.0),
-                "source_file": bomb.get("source_file", ""),
-                "mesh": bomb.get("filename", ""),
+                "mass_kg": float(bomb["mass"]),
+                "diameter_m": diameter,
+                "length_m": length,
+                "display_drag_reference": float(bomb["dragCx"]),
+                "prediction_kind": self._prediction_kind(key, bomb),
+                "lift_area_scale": lift_area_scale,
+                "stabilizer_lever_m": float(
+                    bomb.get("distFromCmToStab", 0.3 * length)
+                )
+                / lift_area_scale,
+                "axial_coefficient": float(
+                    bomb.get("CxK", OFFLINE_DEFAULT_AXIAL_COEFFICIENT)
+                ),
+                "normal_coefficient": float(
+                    bomb.get("CyK", OFFLINE_DEFAULT_NORMAL_COEFFICIENT)
+                ),
+                "normal_aoa_limit": float(
+                    bomb.get("CyMaxAoA", OFFLINE_DEFAULT_NORMAL_AOA_LIMIT)
+                ),
+                "aoa_drag_coefficient": float(
+                    bomb.get("CxAoA", OFFLINE_DEFAULT_AOA_DRAG_COEFFICIENT)
+                ),
             }
-            if "caliber_normalization" in bomb:
-                record["raw_caliber"] = float(bomb["raw_caliber"])
-                record["caliber_source_pointer"] = "/bomb/caliber"
-                record["caliber_normalization"] = bomb["caliber_normalization"]
-            ccrp_params[key] = record
-
-        meta = {
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "bombs": len(ccrp_params),
-            "collisions": collision_count,
-            "skipped_non_bomb": len(self.no_bomb_files),
-        }
-        if source_root is not None and source_subdir is not None:
-            meta.update(build_source_metadata(source_root, source_subdir))
+            if aliases:
+                record["aliases"] = aliases
+            catalog_records[key] = record
 
         payload = {
-            "meta": meta,
-            "ballistic_params": ccrp_params,
+            "schema_version": CATALOG_SCHEMA_VERSION,
+            "profile_id": CATALOG_PROFILE_ID,
+            "records": catalog_records,
         }
+        destination = Path(output_file)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(encode_catalog(payload))
 
-        Path(output_file).write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-
-        print(f"Wrote {len(ccrp_params)} bombs to {output_file}")
+        print(f"Wrote {len(catalog_records)} bombs to {output_file}")
         if collision_count:
             print(f"  Note: {collision_count} key collisions resolved with suffixes")
-        return ccrp_params
+        return catalog_records
 
 
 def main():
@@ -290,8 +383,8 @@ def main():
     parser.add_argument(
         "-o",
         "--output",
-        default="bomana/data/ccrp_bomb_params.json",
-        help="output file (default: bomana/data/ccrp_bomb_params.json)",
+        default="bomana/data/offline_rigidbody_catalog.bin",
+        help="output file (default: bomana/data/offline_rigidbody_catalog.bin)",
     )
     parser.add_argument("--single", help="process a single .blkx file")
     parser.add_argument(
@@ -303,17 +396,13 @@ def main():
     args = parser.parse_args()
     extractor = BlkxExtractor()
 
-    source_root: Path | None = None
-    source_subdir: Path | None = None
-
     if args.single:
         print(f"Processing file: {args.single}")
         extractor.process_file(Path(args.single))
     elif args.datamine_root:
         source_root = Path(args.datamine_root).resolve()
-        source_subdir = BOMBGUNS_SUBDIR
         try:
-            extractor.process_directory(require_datamine_dir(source_root, source_subdir))
+            extractor.process_directory(require_datamine_dir(source_root, BOMBGUNS_SUBDIR))
         except FileNotFoundError as exc:
             print(f"[error] {exc}")
             sys.exit(1)
@@ -326,11 +415,7 @@ def main():
     if extractor.results:
         if not args.no_report:
             extractor.generate_report()
-        extractor.export_ccrp_params(
-            args.output,
-            source_root=source_root,
-            source_subdir=source_subdir,
-        )
+        extractor.export_offline_catalog(args.output)
     else:
         print("No bomb parameters extracted.")
         sys.exit(1)

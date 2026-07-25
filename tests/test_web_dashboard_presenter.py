@@ -92,6 +92,25 @@ def _snapshot() -> UISnapshot:
         release_status="approaching",
         bombing_target_kind="zone",
         bombing_target_name="战区 #1",
+        bomb_trajectory_model_id="offline_rigidbody_projection_v2",
+        bomb_trajectory_model_category="freefall",
+        bomb_trajectory_model_quality="offline_rigidbody_8111_projection",
+        target_altitude_m=345.25,
+        target_altitude_source="terrain",
+        atmosphere_model_id="dagor_gamephys_atmosphere_v2",
+        atmosphere_altitude_datum_m=60.0,
+        altitude_datum_source="terrain_pack",
+        air_density_sea_level=1.22504,
+        air_density_source="8111_ias_tas_filtered",
+        bombing_state_age_s=0.012,
+        bombing_map_age_s=0.004,
+        bombing_endpoint_skew_s=0.008,
+        bombing_altitude_projection_m=-0.51,
+        bombing_tas_projection_ms=0.0,
+        bombing_vertical_acceleration_ms2=1.8,
+        bombing_release_state_source="8111_dynamics_gated",
+        bombing_maneuver_score=0.64,
+        bombing_precision_gate_available=True,
         ground_speed_kmh=910,
         aircraft_type_name="f-15e",
         attitude_pitch_deg=4.2,
@@ -179,6 +198,29 @@ def test_dashboard_payload_matches_schema_and_publishes_hostile_units() -> None:
         "revision": 0,
         "url": "/api/v1/map-image",
     }
+    assert payload["bombing"]["model_id"] == "offline_rigidbody_projection_v2"
+    assert payload["bombing"]["model_category"] == "freefall"
+    assert (
+        payload["bombing"]["model_quality"]
+        == "offline_rigidbody_8111_projection"
+    )
+    assert payload["bombing"]["target_altitude_m"] == 345.25
+    assert payload["bombing"]["target_altitude_source"] == "terrain"
+    assert payload["bombing"]["target_mode"] == "zone"
+    assert payload["bombing"]["atmosphere_model_id"] == "dagor_gamephys_atmosphere_v2"
+    assert payload["bombing"]["atmosphere_altitude_datum_m"] == 60.0
+    assert payload["bombing"]["altitude_datum_source"] == "terrain_pack"
+    assert payload["bombing"]["air_density_sea_level_kg_m3"] == 1.22504
+    assert payload["bombing"]["air_density_source"] == "8111_ias_tas_filtered"
+    assert payload["bombing"]["state_age_ms"] == 12.0
+    assert payload["bombing"]["map_age_ms"] == 4.0
+    assert payload["bombing"]["endpoint_skew_ms"] == 8.0
+    assert payload["bombing"]["altitude_projection_m"] == -0.51
+    assert payload["bombing"]["tas_projection_ms"] == 0.0
+    assert payload["bombing"]["vertical_acceleration_ms2"] == 1.8
+    assert payload["bombing"]["release_state_source"] == "8111_dynamics_gated"
+    assert payload["bombing"]["maneuver_score"] == 0.64
+    assert payload["bombing"]["precision_gate_available"] is True
 
 
 def test_dashboard_payload_normalizes_non_finite_values() -> None:
@@ -225,6 +267,17 @@ def test_disabled_capabilities_do_not_recreate_build_disabled_features() -> None
     assert payload["fuel"]["return_status"] == "unavailable"
     assert payload["weapon"]["reason"] == "build_disabled"
     assert payload["bombing"]["enabled"] is False
+    assert payload["bombing"]["model_id"] == ""
+    assert payload["bombing"]["model_category"] == ""
+    assert payload["bombing"]["model_quality"] == ""
+    assert payload["bombing"]["target_altitude_m"] == 0.0
+    assert payload["bombing"]["target_altitude_source"] == ""
+    assert payload["bombing"]["atmosphere_model_id"] == ""
+    assert payload["bombing"]["air_density_source"] == ""
+    assert payload["bombing"]["state_age_ms"] == 0.0
+    assert payload["bombing"]["map_age_ms"] == 0.0
+    assert payload["bombing"]["endpoint_skew_ms"] == 0.0
+    assert payload["bombing"]["altitude_projection_m"] == 0.0
     assert payload["checklist"]["items"] == []
 
 

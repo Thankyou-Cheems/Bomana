@@ -21,8 +21,6 @@ from bomana.utils.diagnostics import log_event, log_exception
 BROKER_EXECUTABLE_NAME = "BomanaHotkeyBroker.exe"
 BROKER_CHECKSUM_NAME = "BomanaHotkeyBroker.sha256"
 BROKER_BIN_DIRECTORY = "bin"
-WAR_THUNDER_EXECUTABLES = frozenset({"aces.exe", "aces64.exe", "aces_be.exe"})
-WAR_THUNDER_WINDOW_TITLE = "war thunder"
 
 ERROR_CANCELLED = 1223
 ERROR_PIPE_CONNECTED = 535
@@ -37,8 +35,6 @@ PIPE_READMODE_MESSAGE = 0x00000002
 PIPE_WAIT = 0x00000000
 PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
-PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-TOKEN_QUERY = 0x0008
 GENERIC_READ = 0x80000000
 FILE_SHARE_READ = 0x00000001
 OPEN_EXISTING = 3
@@ -51,6 +47,7 @@ FRAME_READY = 1
 FRAME_ACTION = 2
 
 ACTION_IDS = {
+    "bomb_target": 6,
     "reset": 1,
     "lock": 2,
     "corner": 3,
@@ -58,7 +55,7 @@ ACTION_IDS = {
     "zones": 5,
 }
 REQUIRED_ACTIONS = frozenset({"reset", "lock", "corner", "beep"})
-OPTIONAL_ACTIONS = frozenset({"zones"})
+OPTIONAL_ACTIONS = frozenset({"zones", "bomb_target"})
 
 
 class BrokerStartStatus(StrEnum):
@@ -70,27 +67,11 @@ class BrokerStartStatus(StrEnum):
     UNSUPPORTED = "unsupported"
 
 
-class GameIntegrityStatus(StrEnum):
-    ORDINARY = "ordinary"
-    ELEVATED = "elevated"
-    NOT_RUNNING = "not_running"
-    UNKNOWN = "unknown"
-    UNSUPPORTED = "unsupported"
-
-
 @dataclass(frozen=True, slots=True)
 class BrokerStartResult:
     status: BrokerStartStatus
     message: str = ""
     error_code: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class GameIntegrityResult:
-    status: GameIntegrityStatus
-    process_id: int | None = None
-    image_name: str = ""
-    message: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,10 +122,6 @@ class SID_AND_ATTRIBUTES(ctypes.Structure):
 
 class TOKEN_USER(ctypes.Structure):
     _fields_ = [("User", SID_AND_ATTRIBUTES)]
-
-
-class TOKEN_ELEVATION(ctypes.Structure):
-    _fields_ = [("TokenIsElevated", wintypes.DWORD)]
 
 
 def _is_windows() -> bool:
@@ -229,179 +206,6 @@ def find_bundled_broker() -> BrokerStartResult | Path:
     return actual
 
 
-def _open_limited_process(process_id: int) -> int:
-    kernel32 = _windows_dll("kernel32")
-    if kernel32 is None:
-        raise OSError("Windows process APIs are unavailable")
-    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(process_id))
-    if not handle:
-        raise ctypes.WinError(ctypes.get_last_error())
-    return int(handle)
-
-
-def _visible_window_process_ids() -> tuple[int, ...]:
-    user32 = _windows_dll("user32")
-    if not _is_windows() or user32 is None:
-        return ()
-    callback_type = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)(
-        wintypes.BOOL,
-        wintypes.HWND,
-        wintypes.LPARAM,
-    )
-    user32.IsWindowVisible.argtypes = [wintypes.HWND]
-    user32.IsWindowVisible.restype = wintypes.BOOL
-    user32.GetWindowThreadProcessId.argtypes = [
-        wintypes.HWND,
-        ctypes.POINTER(wintypes.DWORD),
-    ]
-    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-    user32.GetWindowTextLengthW.restype = ctypes.c_int
-    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-    user32.GetWindowTextW.restype = ctypes.c_int
-    process_ids: set[int] = set()
-
-    @callback_type
-    def collect(hwnd: int, _parameter: int) -> bool:
-        if not user32.IsWindowVisible(hwnd):
-            return True
-        length = int(user32.GetWindowTextLengthW(hwnd))
-        if length <= 0:
-            return True
-        title = ctypes.create_unicode_buffer(length + 1)
-        if user32.GetWindowTextW(hwnd, title, len(title)) <= 0:
-            return True
-        if WAR_THUNDER_WINDOW_TITLE not in title.value.casefold():
-            return True
-        process_id = wintypes.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
-        if process_id.value:
-            process_ids.add(int(process_id.value))
-        return True
-
-    user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
-    user32.EnumWindows.restype = wintypes.BOOL
-    if not user32.EnumWindows(collect, 0):
-        raise ctypes.WinError(ctypes.get_last_error())
-    return tuple(sorted(process_ids))
-
-
-def _process_image_name(process_id: int) -> str:
-    kernel32 = _windows_dll("kernel32")
-    if kernel32 is None:
-        raise OSError("Windows process APIs are unavailable")
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-    kernel32.CloseHandle.restype = wintypes.BOOL
-    handle = _open_limited_process(process_id)
-    try:
-        kernel32.QueryFullProcessImageNameW.argtypes = [
-            wintypes.HANDLE,
-            wintypes.DWORD,
-            wintypes.LPWSTR,
-            ctypes.POINTER(wintypes.DWORD),
-        ]
-        kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
-        buffer = ctypes.create_unicode_buffer(32768)
-        length = wintypes.DWORD(len(buffer))
-        if not kernel32.QueryFullProcessImageNameW(
-            wintypes.HANDLE(handle),
-            0,
-            buffer,
-            ctypes.byref(length),
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
-        return Path(buffer.value).name.casefold()
-    finally:
-        kernel32.CloseHandle(wintypes.HANDLE(handle))
-
-
-def _process_is_elevated(process_id: int) -> bool:
-    kernel32 = _windows_dll("kernel32")
-    advapi32 = _windows_dll("advapi32")
-    if kernel32 is None or advapi32 is None:
-        raise OSError("Windows token APIs are unavailable")
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-    kernel32.CloseHandle.restype = wintypes.BOOL
-    process = _open_limited_process(process_id)
-    token = wintypes.HANDLE()
-    try:
-        advapi32.OpenProcessToken.argtypes = [
-            wintypes.HANDLE,
-            wintypes.DWORD,
-            ctypes.POINTER(wintypes.HANDLE),
-        ]
-        advapi32.OpenProcessToken.restype = wintypes.BOOL
-        if not advapi32.OpenProcessToken(
-            wintypes.HANDLE(process), TOKEN_QUERY, ctypes.byref(token)
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
-        elevation = TOKEN_ELEVATION()
-        returned = wintypes.DWORD()
-        advapi32.GetTokenInformation.argtypes = [
-            wintypes.HANDLE,
-            ctypes.c_int,
-            wintypes.LPVOID,
-            wintypes.DWORD,
-            ctypes.POINTER(wintypes.DWORD),
-        ]
-        advapi32.GetTokenInformation.restype = wintypes.BOOL
-        if not advapi32.GetTokenInformation(
-            token,
-            20,  # TokenElevation
-            ctypes.byref(elevation),
-            ctypes.sizeof(elevation),
-            ctypes.byref(returned),
-        ):
-            raise ctypes.WinError(ctypes.get_last_error())
-        return bool(elevation.TokenIsElevated)
-    finally:
-        if token:
-            kernel32.CloseHandle(token)
-        kernel32.CloseHandle(wintypes.HANDLE(process))
-
-
-def detect_war_thunder_integrity() -> GameIntegrityResult:
-    """Inspect only visible War Thunder-titled windows and token elevation."""
-
-    if not _is_windows():
-        return GameIntegrityResult(GameIntegrityStatus.UNSUPPORTED)
-    try:
-        process_ids = _visible_window_process_ids()
-    except OSError as exc:
-        return GameIntegrityResult(GameIntegrityStatus.UNKNOWN, message=str(exc))
-
-    ordinary: GameIntegrityResult | None = None
-    unknown: GameIntegrityResult | None = None
-    for process_id in process_ids:
-        try:
-            image_name = _process_image_name(process_id)
-        except OSError:
-            continue
-        if image_name not in WAR_THUNDER_EXECUTABLES:
-            continue
-        try:
-            elevated = _process_is_elevated(process_id)
-        except OSError as exc:
-            unknown = GameIntegrityResult(
-                GameIntegrityStatus.UNKNOWN,
-                process_id,
-                image_name,
-                str(exc),
-            )
-            continue
-        result = GameIntegrityResult(
-            GameIntegrityStatus.ELEVATED if elevated else GameIntegrityStatus.ORDINARY,
-            process_id,
-            image_name,
-        )
-        if elevated:
-            return result
-        ordinary = result
-    return ordinary or unknown or GameIntegrityResult(GameIntegrityStatus.NOT_RUNNING)
-
-
 def _lock_broker_file(path: Path) -> int:
     kernel32 = _windows_dll("kernel32")
     if kernel32 is None:
@@ -449,8 +253,10 @@ def normalize_bindings(bindings: Sequence[BrokerBinding]) -> tuple[BrokerBinding
         seen_actions.add(action)
         seen_keys.add(key_name)
         normalized.append(BrokerBinding(action, key_name, binding.callback))
-    if not seen_actions >= REQUIRED_ACTIONS or len(normalized) not in (4, 5):
-        raise ValueError("broker requires reset, lock, corner, beep, and optional zones")
+    if not seen_actions >= REQUIRED_ACTIONS or not 4 <= len(normalized) <= 6:
+        raise ValueError(
+            "broker requires reset, lock, corner, beep, and optional zones/bomb_target"
+        )
     return tuple(sorted(normalized, key=lambda item: ACTION_IDS[item.action]))
 
 
@@ -471,7 +277,7 @@ def decode_frame(payload: bytes) -> BrokerFrame:
     code = int(payload[5])
     detail = int.from_bytes(payload[6:8], "little")
     if kind == FRAME_READY:
-        if code > 5 or detail & ~0x001F:
+        if code > 6 or detail & ~0x003F:
             raise ValueError("invalid broker ready frame")
     elif kind == FRAME_ACTION:
         if code not in ACTION_IDS.values() or detail != 0:

@@ -298,6 +298,19 @@ class HttpJson:
             )
 
 
+@dataclass(frozen=True, slots=True)
+class _StateDynamicsSample:
+    """One parsed /state midpoint retained for causal first differences."""
+
+    sample_time: float
+    type_name: str
+    tas_kmh: float
+    vy_ms: float
+    aoa_deg: float | None
+    aos_deg: float | None
+    mach: float | None
+
+
 class TelemetryFetcher:
     """遥测数据获取器
 
@@ -372,9 +385,38 @@ class TelemetryFetcher:
         ("landing_gear, %", 1.0),
         ("gear_down, %", 1.0),
     )
+    _AILERON_KEYS = (
+        ("aileron, %", 1.0),
+        ("aileron", 1.0),
+    )
+    _ELEVATOR_KEYS = (
+        ("elevator, %", 1.0),
+        ("elevator", 1.0),
+    )
+    _RUDDER_KEYS = (
+        ("rudder, %", 1.0),
+        ("rudder", 1.0),
+    )
+    _FLAPS_KEYS = (
+        ("flaps, %", 1.0),
+        ("flaps", 1.0),
+    )
+    _AIRBRAKE_KEYS = (
+        ("airbrake, %", 1.0),
+        ("airbrake", 1.0),
+    )
+    _MIN_DYNAMICS_SPAN_SECONDS = 0.02
+    _MAX_DYNAMICS_SPAN_SECONDS = 0.50
 
-    def __init__(self, http: HttpJson):
+    def __init__(
+        self,
+        http: HttpJson,
+        *,
+        now: Callable[[], float] | None = None,
+    ):
         self.http = http
+        self._now = now or time.time
+        self._previous_state_dynamics: _StateDynamicsSample | None = None
 
     @staticmethod
     def _finite_float_or_none(raw: Any) -> float | None:
@@ -490,6 +532,77 @@ class TelemetryFetcher:
             data.attitude_bank_deg = bank
             data.attitude_bank_present = True
 
+    @staticmethod
+    def _difference_rate(
+        current: float | None,
+        previous: float | None,
+        dt: float,
+        *,
+        scale: float = 1.0,
+    ) -> float | None:
+        if current is None or previous is None:
+            return None
+        if not all(math.isfinite(value) for value in (current, previous, dt, scale)):
+            return None
+        if dt <= 0.0:
+            return None
+        return (current - previous) * scale / dt
+
+    def _derive_state_dynamics(self, data: TelemetryData) -> None:
+        """Derive causal rates without looking ahead or crossing aircraft changes."""
+
+        if not data.state_resp_ok or data.state_sample_time <= 0.0:
+            self._previous_state_dynamics = None
+            return
+
+        current = _StateDynamicsSample(
+            sample_time=data.state_sample_time,
+            type_name=str(data.type_name or ""),
+            tas_kmh=float(data.tas_kmh),
+            vy_ms=float(data.vy_ms),
+            aoa_deg=data.aoa_deg,
+            aos_deg=data.aos_deg,
+            mach=data.mach,
+        )
+        previous = self._previous_state_dynamics
+        self._previous_state_dynamics = current
+        if previous is None:
+            return
+        if current.type_name and previous.type_name and current.type_name != previous.type_name:
+            return
+
+        dt = current.sample_time - previous.sample_time
+        if not self._MIN_DYNAMICS_SPAN_SECONDS <= dt <= self._MAX_DYNAMICS_SPAN_SECONDS:
+            return
+
+        data.dynamics_sample_span_s = dt
+        data.tas_acceleration_ms2 = self._difference_rate(
+            current.tas_kmh,
+            previous.tas_kmh,
+            dt,
+            scale=1.0 / 3.6,
+        )
+        data.vertical_acceleration_ms2 = self._difference_rate(
+            current.vy_ms,
+            previous.vy_ms,
+            dt,
+        )
+        data.aoa_rate_deg_s = self._difference_rate(
+            current.aoa_deg,
+            previous.aoa_deg,
+            dt,
+        )
+        data.aos_rate_deg_s = self._difference_rate(
+            current.aos_deg,
+            previous.aos_deg,
+            dt,
+        )
+        data.mach_rate_per_s = self._difference_rate(
+            current.mach,
+            previous.mach,
+            dt,
+        )
+
     def fetch(self, budget: Budget) -> TelemetryData:
         """获取遥测数据
 
@@ -502,10 +615,14 @@ class TelemetryFetcher:
         data = TelemetryData()
 
         # 请求 /indicators (飞机基本信息)
+        indicators_started_at = self._now()
         indicators_result = self.http.get_json(f"{NetworkConfig.API_BASE}/indicators", budget)
+        indicators_completed_at = self._now()
         data.ind_ok = indicators_result.ok
         data.ind_error_kind = indicators_result.error_kind
         data.ind_elapsed_ms = indicators_result.elapsed_ms
+        if indicators_result.ok:
+            data.ind_sample_time = (indicators_started_at + indicators_completed_at) * 0.5
         j = indicators_result.payload
         if indicators_result.ok and isinstance(j, dict):
             data.valid = bool(j.get("valid", False))
@@ -530,9 +647,13 @@ class TelemetryFetcher:
             self._merge_attitude_fields(j, data)
 
         # 请求 /state (飞机状态)
+        state_started_at = self._now()
         state_result = self.http.get_json(f"{NetworkConfig.API_BASE}/state", budget)
+        state_completed_at = self._now()
         data.state_error_kind = state_result.error_kind
         data.state_elapsed_ms = state_result.elapsed_ms
+        if state_result.ok:
+            data.state_sample_time = (state_started_at + state_completed_at) * 0.5
         j = state_result.payload
         if state_result.ok and isinstance(j, dict):
             ias_kmh, ias_present = self._read_scaled_float(j, self._IAS_KEYS)
@@ -558,6 +679,31 @@ class TelemetryFetcher:
                 data.mach = self._to_optional_float(
                     j.get("M", j.get("Mach", j.get("mach", j.get("mach_number"))))
                 )
+                data.aoa_deg = self._to_optional_float(
+                    j.get("AoA, deg", j.get("AoA", j.get("aoa")))
+                )
+                data.aos_deg = self._to_optional_float(
+                    j.get("AoS, deg", j.get("AoS", j.get("aos")))
+                )
+                data.normal_load_factor = self._to_optional_float(
+                    j.get("Ny", j.get("normal_load_factor"))
+                )
+                data.angular_velocity_x = self._to_optional_float(
+                    j.get(
+                        "Wx, deg/s",
+                        j.get("Wx", j.get("angular_velocity_x")),
+                    )
+                )
+                value, present = self._read_scaled_float(j, self._AILERON_KEYS)
+                data.aileron_pct = value if present else None
+                value, present = self._read_scaled_float(j, self._ELEVATOR_KEYS)
+                data.elevator_pct = value if present else None
+                value, present = self._read_scaled_float(j, self._RUDDER_KEYS)
+                data.rudder_pct = value if present else None
+                value, present = self._read_scaled_float(j, self._FLAPS_KEYS)
+                data.flaps_pct = value if present else None
+                value, present = self._read_scaled_float(j, self._AIRBRAKE_KEYS)
+                data.airbrake_pct = value if present else None
 
                 # v5.9.6 + v6.6.0：解析起落架状态和百分比
                 gear_pct, _ = self._read_scaled_float(j, self._GEAR_KEYS)
@@ -572,6 +718,7 @@ class TelemetryFetcher:
             and data.attitude_pitch_present
             and (data.attitude_roll_present or data.attitude_bank_present)
         )
+        self._derive_state_dynamics(data)
 
         return data
 
@@ -622,8 +769,14 @@ class MapObjectsFetcher:
     坐标保持8111返回的归一化地图坐标；map_info 尺度换算由逻辑层负责。
     """
 
-    def __init__(self, http: HttpJson):
+    def __init__(
+        self,
+        http: HttpJson,
+        *,
+        now: Callable[[], float] | None = None,
+    ):
         self.http = http
+        self._now = now or time.time
         self.last_result = FetchResult(endpoint="/map_obj.json", ok=False, error_kind="not_fetched")
 
     @staticmethod
@@ -914,10 +1067,14 @@ class MapObjectsFetcher:
             MapObjData对象
         """
         out = MapObjData()
+        request_started_at = self._now()
         result = self.http.get_json(f"{NetworkConfig.API_BASE}/map_obj.json", budget)
+        request_completed_at = self._now()
         self.last_result = result
         out.error_kind = result.error_kind
         out.elapsed_ms = result.elapsed_ms
+        if result.ok:
+            out.sample_time = (request_started_at + request_completed_at) * 0.5
         j = result.payload
         if not result.ok:
             return out

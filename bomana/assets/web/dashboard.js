@@ -860,7 +860,11 @@ function weaponStatusLabel(weapon) {
 
 function renderBombing(bombing) {
   text("bombName", bombing.bomb_name || "--");
-  text("bombTarget", bombing.target_name || "--");
+  const targetMode = bombing.target_mode === "poi" ? "兴趣点" : "战区";
+  const targetAltitude = bombing.target_altitude_source === "terrain"
+    ? ` · ${fmt(bombing.target_altitude_m, 0, " m")}`
+    : "";
+  text("bombTarget", `${targetMode} · ${bombing.target_name || "--"}${targetAltitude}`);
   text("releaseDistance", bombing.release_distance_km > 0 ? fmt(bombing.release_distance_km, 1, " km") : "--");
   text("releaseTime", bombing.time_to_release_s > 0 ? fmt(bombing.time_to_release_s, 0, " s") : "--");
   text("bombReason", bombing.unavailable_reason || (bombing.valid ? "投放解算有效" : "等待计算"));

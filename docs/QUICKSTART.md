@@ -23,13 +23,13 @@
 3. 启动器会优先从腾讯云/EdgeOne 获取对应通道的 app 包，失败时自动回退 GitHub；启动器本体也支持独立自更新
 4. 新版启动器会保留一个上一版本应用，可在出现坏版本时直接回退
 
-App 8.0.0+ 只与 Launcher 3.0.0+ 兼容。Launcher 会在启动、在线安装、本地导入、回退和异常恢复前拒绝版本格式无效或低于 8.0.0 的 App，并在替换现有有效目录前核对签名清单版本与包内版本完全一致。
+App 8 / Launcher 3 的协议基线是 `8.0.0` / `3.0.0`，但每个 App 发布还会声明自己的最低 Launcher 版本；当前 App 8.6.2 要求 Launcher 3.3.0+。旧启动器会根据签名清单在下载前阻止更新；Launcher 在启动、在线安装、本地导入、回退和异常恢复前也会读取包内最低版本，并在替换现有有效目录前核对签名清单版本与包内版本完全一致。
 
 可选通道：
 
 | 通道 | 功能 | 适合人群 |
 |------|------|----------|
-| **Enhanced** | 计时 + 导航 + 燃油 + CCRP | 完整功能 |
+| **超级爆弹版**（内部通道 `Enhanced`） | 深度学习的高精度打击模型与地形数据 | 最高精度投弹预测与离线地形参考 |
 | **Standard** | 计时 + 导航 + 燃油 | 不使用 CCRP |
 | **Lite** | 计时 | 最低占用 |
 
@@ -53,7 +53,7 @@ uv run python Bomana.pyw
 ```
 
 如果你已经有 uv 环境，可以直接使用方式 B，不需要下载启动器；仓库 `.python-version` 默认 pin 到 Python 3.14.5。
-显式 `BOMANA_SOURCE_DEVELOPMENT=1` 只用于非冻结源码开发；打包 App 始终需要有效的 Launcher 3.0.0+ 身份。
+显式 `BOMANA_SOURCE_DEVELOPMENT=1` 只用于非冻结源码开发；打包 App 始终需要有效的 Launcher 身份。当前 App 8.6.2 要求 Launcher 3.3.0+，旧启动器会在下载前阻止更新，App 本身也会在业务模块加载前拒绝旧版本。
 源码调试若要测试可选管理员热键，可先运行 `uv run python tools/build_hotkey_broker.py --mode dev --output bomana/bin`；这只在仓库内生成被忽略的 native 文件，不会安装程序或修改系统。
 
 ### 2. 启动流程
@@ -69,11 +69,9 @@ uv run python Bomana.pyw
 #### 游戏前台热键权限
 
 - Launcher 与 Bomana App 始终以普通权限运行；启动时先启用普通热键，不会自动弹 UAC。
-- Bomana 只检查可见 War Thunder 窗口对应的进程名和管理员状态，不读取游戏内存、模块或文件。确认游戏普通运行时不会显示提权建议。
-- 游戏以管理员运行、尚未启动或权限无法判断时，App 会显示“授权管理员热键”。点击后先阅读确认说明，再由你在 Windows UAC 中手动批准随 App 包携带的最小 Broker；无需安装任何额外 EXE、服务或计划任务。
-- 项目没有商业 Authenticode 证书，因此 UAC 会显示“未知发布者”。可用 `gh attestation verify <下载文件> --repo Thankyou-Cheems/Bomana` 验证 GitHub Actions 构建来源。
-- 拒绝 UAC 不会阻止 Bomana 启动；窗口按钮、托盘、计时、导航和官方 8111 数据保持可用，只是游戏获得焦点时的全局 F7-F11 可能失效。
-- Broker 只注册当前启用的固定动作，不使用键盘钩子、轮询、Raw Input、游戏内存读取、服务或计划任务。
+- Bomana 不枚举游戏窗口或进程，不查询游戏进程名、令牌、模块或内存，也不会根据游戏状态显示提权建议。
+- 普通热键仅使用 Windows `RegisterHotKey`，不使用键盘钩子、轮询、Raw Input 或游戏输入模拟。
+- 若游戏前台权限边界使全局 F6-F11 失效，请使用投弹栏、主窗或托盘里的等价按钮；计时、导航和官方 8111 数据保持可用。
 
 #### 网页驾驶舱（本机 / 手机）
 
@@ -84,7 +82,7 @@ uv run python Bomana.pyw
 5. 关闭 LAN 会立即撤销全部已有 LAN 会话、轮换配对码并回收所有监听。Launcher 只保存是否自动开启，不保存地址、端口、配对或实时授权。
 6. Bomana 不会自动修改 Windows 防火墙；若手机无法连接，请允许 Bomana 的“专用网络”访问。
 
-网页以官方地图缩略图为半透明底图，并叠加筛选后的标记和当前武器射程；同时集中显示计时、飞行、燃油、导航、武器/投弹参考、检查清单和告警。获得控制权限后，可用实体按钮重置计时、切换角落、设定窗口锁定与提示音、显示/隐藏可用面板，并在 Enhanced 中选择当前武器及“缺少官方数据时是否使用推测替代”。官方数据始终优先。页面不会模拟 F7-F11，也不会控制游戏或扩展热键 Broker。
+网页以官方地图缩略图为半透明底图，并叠加筛选后的标记和当前武器射程；同时集中显示计时、飞行、燃油、导航、武器/投弹参考、检查清单和告警。获得控制权限后，可用实体按钮重置计时、切换角落、设定窗口锁定与提示音、显示/隐藏可用面板，并在超级爆弹版中选择当前武器。页面不会模拟 F6-F11，也不会控制游戏或扩展热键 Broker。
 
 ### 3. 核心功能速览
 
@@ -95,18 +93,17 @@ uv run python Bomana.pyw
 | 燃油管理 | 油量、油耗率、返航估算 |
 | 武器解算 | 自由落体 CCRP + AAM/AGM/制导与滑翔武器参考 |
 | 超速提醒 | IAS/Mach 双通道分级告警（safe/caution/warning/critical） |
-| HUD 叠加层 | 可选开启，提供目标与航向参考 |
 | 网页驾驶舱 | 本机/手机响应式地图与关键信息面板 |
 | 界面个性化 | 独立文字缩放、主题切换、自定义提示音 |
 
 武器解算说明：
 
 - 该功能是工程化估计，不是游戏内部真实投弹算法，存在误差是正常现象。
-- 普通/高阻炸弹使用 CCRP；AAM/AGM 优先使用 Datamine 条件表。
+- 普通自由落体炸弹使用 CCRP；高阻炸弹在缺少已验证离线模型时会停用预测；AAM/AGM 优先使用 Datamine 条件表。
 - 无官方包线的滑翔武器可选择使用明确标记的推测替代，或不应用替代模型；官方数据在两种策略下始终优先。
 - 当前 Mach >= 1.0 时按多数炸弹无法投放处理，面板会提示超出投放限制。
-- 可在 `设置 -> 投弹` 中手动校准：`距离修正倍率`、`时间修正倍率`。
-- 静态炸弹库来源：War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` -> `tools/update_datamine_assets.py` -> `tools/blkx_extractor.py` -> `bomana/data/ccrp_bomb_params.json`
+- CCRP 不接受运行时距离、时间或阻力修正；请确保手动选择的弹药与实际挂载一致。
+- 静态炸弹库由 `tools/update_datamine_assets.py` / `tools/blkx_extractor.py` 构建为 `bomana/data/offline_rigidbody_catalog.bin`。
 
 超速提醒说明：
 
@@ -128,7 +125,7 @@ A: 检查当前通道（Lite 不含这些面板），并确认在多人全真战
 A: 需要匹配到机型 FM 限速库；若当前机型未匹配，会保持 `unknown/safe`。
 
 **Q: CCRP 预测有偏差？**  
-A: 这是估计算法，不是游戏内真实算法。可在 `设置 -> 投弹` 中调整 `距离修正倍率` 和 `时间修正倍率`。
+A: 这是基于 8111 与离线地形/刚体数据的工程化投影。请先核对弹药选择、战区/兴趣点目标模式和地图包状态；运行时不会套用用户阻力或距离修正。
 
 **Q: 计时器不准？**  
 A: 使用当前配置的重置热键连续按两次，手动重置周期；默认是 `F7`。
@@ -142,8 +139,8 @@ A: 确认已从 App 或托盘为本次运行开启局域网访问，并在主窗
 统一更新炸弹参数与机型超速限速库：
 
 - 输入：War Thunder datamine 仓库根目录
-- 输出：`ccrp_bomb_params.json` + `fm_speed_limits.json`
-- 元数据：自动记录 datamine `source_version` / `source_commit`
+- 输出：`offline_rigidbody_catalog.bin` + `fm_speed_limits.json`
+- 元数据：离线刚体目录不写入逐条来源元数据；限速与武器 JSON 仍记录其构建版本
 
 ```bash
 uv run python tools/update_datamine_assets.py ^
@@ -165,7 +162,7 @@ uv run python tools/update_datamine_assets.py ^
 - 生成 `manifest_<Variant>.json` 或 `launcher_manifest.json` 必须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY` 和 `BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）。
 - App 发布构建会自动编译并内置 native 热键 Broker；Actions 使用 `actions/attest@v4` 为最终包、清单与校验文件生成来源证明。
 - 本地发布命令入口是 `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`；`--version` 只是可选一致性校验，app 目标必须匹配 `bomana/metadata.py` 的 `__version__`，launcher 目标必须匹配 `launcher/metadata.py` 的 `LAUNCHER_VERSION`。
-- 当前源码版本为 App `8.5.0` / Launcher `3.2.2`，兼容下限仍为 App `8.0.0` / Launcher `3.0.0`。仅 Enhanced App ZIP 包含网页控制 schemas 与驾驶舱资源；不要用不兼容的 Launcher 或 App 目录代替真实打包烟测。
+- 当前源码版本为 App `8.6.2` / Launcher `3.3.0`，基础兼容下限仍为 App `8.0.0` / Launcher `3.0.0`，当前 App 发布清单要求 Launcher `3.3.0`。仅内部通道 `Enhanced`（超级爆弹版）App ZIP 包含深度学习的高精度打击模型、网页控制 schemas 与驾驶舱资源；`terrain-v1` 由启动器在 App 目录外独立维护，不进入任何 App ZIP。不要用不兼容的 Launcher 或 App 目录代替真实打包烟测。
 - 部署前先确认 `gh secret list --repo Thankyou-Cheems/Bomana`；GitHub Release 完成后在本机运行 `gh release download vX.Y.Z --dir dist`，再运行 `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z`。不要用 GitHub Actions 直连腾讯云主机部署，公开端点验证必须调用 `verify_release_manifest_signature`。
 - 发布签名字段、密钥处理和部署边界以 [release-signing spec](./specs/release-signing.md) 为准。
 
@@ -190,13 +187,13 @@ uv run python tools/update_datamine_assets.py ^
 3. Let launcher fetch and verify the app package for your channel
 4. New launcher builds retain one previous app version so you can roll back quickly if a bad app package ships
 
-App 8.0.0+ requires Launcher 3.0.0+. Launcher 3 validates the same strict App version boundary before launch, online install, local import, rollback, or incomplete-install recovery, and preserves a valid install when a candidate is malformed or older.
+The App 8 / Launcher 3 protocol floor is `8.0.0` / `3.0.0`, but each App release also declares its own Launcher requirement; App 8.6.2 requires Launcher 3.3.0+. An older Launcher blocks the update before downloading package bytes from the signed manifest. Launcher also validates the package-declared floor before launch, online install, local import, rollback, or incomplete-install recovery.
 
 Channels:
 
 | Channel | Features |
 |---------|----------|
-| **Enhanced** | Timer + navigation + fuel + CCRP |
+| **超级爆弹版** (internal channel: `Enhanced`) | Deep-learning high-precision strike model and terrain data |
 | **Standard** | Timer + navigation + fuel |
 | **Lite** | Timer only |
 
@@ -220,7 +217,7 @@ uv run python Bomana.pyw
 ```
 
 If you already use uv, Option B is enough; the repo `.python-version` pins Python 3.14.5.
-The explicit marker is accepted only for a non-frozen source/development run. A packaged App always requires a valid Launcher 3.0.0+ identity.
+The explicit marker is accepted only for a non-frozen source/development run. A packaged App always requires a valid Launcher identity meeting that App release's floor; App 8.6.2 requires Launcher 3.3.0+.
 For source-mode admin-hotkey testing, first run `uv run python tools/build_hotkey_broker.py --mode dev --output bomana/bin`; this creates an ignored native file inside the checkout and does not install or modify the system.
 
 ### 2. Start Flow
@@ -236,11 +233,9 @@ For source-mode admin-hotkey testing, first run `uv run python tools/build_hotke
 #### Game-foreground hotkey permission
 
 - Launcher and the Python App always stay at ordinary integrity; ordinary hotkeys start first and UAC is never automatic.
-- Bomana queries only the executable name and elevation token for visible War Thunder windows. If the game is confirmed ordinary, no privilege recommendation is shown.
-- If the game is elevated, closed, or its token cannot be queried, the App offers “Authorize admin hotkeys”. After an explanatory confirmation, you can manually approve the bundled native broker in UAC; no helper installer, service, or scheduled task is created.
-- Without a commercial Authenticode certificate, UAC shows “Unknown publisher”. Run `gh attestation verify <download> --repo Thankyou-Cheems/Bomana` to verify GitHub build provenance.
-- Denying UAC keeps buttons, tray actions, timer/navigation, and official 8111 data available; only global F7-F11 delivery while the game has focus may be unavailable.
-- The broker registers only enabled fixed actions and does not use hooks, polling, Raw Input, game-memory access, a service, or a scheduled task.
+- Bomana does not enumerate game windows or processes, query game executable identities or tokens, inspect modules or memory, or derive a privilege recommendation from game state.
+- Ordinary hotkeys use only Windows `RegisterHotKey`, with no hook, polling, Raw Input, or synthesized game input.
+- If foreground integrity blocks F6-F11, use the equivalent bombing-bar, main-window, or tray buttons; timer/navigation and official 8111 data remain available.
 
 #### Web Cockpit (Local / Mobile)
 
@@ -251,7 +246,7 @@ For source-mode admin-hotkey testing, first run `uv run python tools/build_hotke
 5. Disabling LAN immediately invalidates every LAN session, rotates the pairing code, and closes all LAN listeners. Launcher persists only the startup boolean, never addresses, ports, pairing material, or live authorization.
 6. Bomana does not change Windows Firewall; if the phone cannot connect, allow Bomana on private networks.
 
-The responsive page uses the official tactical-map thumbnail at reduced opacity below filtered markers and the current weapon-range ellipse. Its tactical map also mirrors every hostile aircraft, ground, naval, or unknown unit in the current raw `/map_obj.json` sample and renders it with the official 8111 `/icons.ttf` glyph resource; the over-map legend uses the same glyph mapping. These markers are cleared without history reconstruction and never enter the desktop HUD/heading tape. It combines timer, flight, fuel, navigation, weapon/bombing references, checklist, and alerts. A control session can reset the timer, set its bounded 1–180 minute cycle, cycle the window corner, set lock and sound targets, select visible panels, and—when CCRP is enabled—choose the current weapon and whether an estimated substitute may be used only when official data is absent. These are explicit Bomana actions, not synthesized F-keys or game controls. The same timer-cycle target is available from the tray; an active sortie keeps its spawn timestamp and immediately recalculates progress against the new period.
+The responsive page uses the official tactical-map thumbnail at reduced opacity below filtered markers and the current weapon-range ellipse. Its tactical map also mirrors every hostile aircraft, ground, naval, or unknown unit in the current raw `/map_obj.json` sample and renders it with the official 8111 `/icons.ttf` glyph resource; the over-map legend uses the same glyph mapping. These markers are cleared without history reconstruction and never enter standalone navigation or CCRP bars. It combines timer, flight, fuel, navigation, weapon/bombing references, checklist, and alerts. A control session can reset the timer, set its bounded 1–180 minute cycle, cycle the window corner, set lock and sound targets, select visible panels, and—when CCRP is enabled—choose the current weapon and whether an estimated substitute may be used only when official data is absent. These are explicit Bomana actions, not synthesized F-keys or game controls. The same timer-cycle target is available from the tray; an active sortie keeps its spawn timestamp and immediately recalculates progress against the new period.
 
 ### 3. Feature Snapshot
 
@@ -262,18 +257,17 @@ The responsive page uses the official tactical-map thumbnail at reduced opacity 
 | Fuel | Fuel amount, burn rate, return estimate |
 | Weapon solution | Free-fall CCRP plus AAM/AGM/guided/glide references |
 | Overspeed | IAS/Mach dual-channel alerts (`safe/caution/warning/critical`) |
-| HUD overlay | Optional in-game navigation overlay |
 | Web Cockpit | Responsive local/mobile map and key information panels |
 | UI personalization | Independent text scale, theme switching, custom alert sounds |
 
 Weapon-solution note:
 
 - This feature is an engineering estimate and not War Thunder's internal bombing algorithm.
-- Free-fall/high-drag bombs use CCRP; AAM/AGM references prefer Datamine condition tables.
+- Free-fall bombs use CCRP; high-drag prediction stays disabled without a validated offline model. AAM/AGM references prefer Datamine condition tables.
 - Glide stores without an official table may use an explicitly marked estimated substitute or no substitute; official data always takes priority.
 - Mach >= 1.0 is treated as above the release limit for normal bomb prediction.
-- Prediction error is expected; calibrate in `Settings -> Bombing` using `range correction` and `time correction`.
-- Static bomb DB provenance: War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx` -> `tools/update_datamine_assets.py` -> `tools/blkx_extractor.py` -> `bomana/data/ccrp_bomb_params.json`
+- Runtime range, time, and drag corrections are not accepted; make sure the selected store matches the actual loadout.
+- The static store catalog is built by `tools/update_datamine_assets.py` / `tools/blkx_extractor.py` as `bomana/data/offline_rigidbody_catalog.bin`.
 
 Overspeed specifics:
 
@@ -315,7 +309,7 @@ to validate the complete core path in seconds without reopening the game.
 - Signed manifests require `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`).
 - App builds compile and bundle the native broker automatically. GitHub release jobs attest final packages, manifests, and checksum files with `actions/attest@v4`; Authenticode secrets are not required.
 - Local package entry: `uv run --frozen python tools/build_portable.py --variant Enhanced|Standard|Lite --target app|launcher|all`; `--version` is an optional consistency check and must match `bomana/metadata.py __version__` for app builds or `launcher/metadata.py LAUNCHER_VERSION` for launcher builds.
-- The current source versions are App `8.5.0` / Launcher `3.2.2`; compatibility floors remain App `8.0.0` / Launcher `3.0.0`. Only Enhanced App ZIPs include Web control schemas and cockpit assets; use real packaged artifacts for compatibility and DPI smoke.
+- The current source versions are App `8.6.2` / Launcher `3.3.0`; base compatibility floors remain App `8.0.0` / Launcher `3.0.0`, while the current App manifest requires Launcher `3.3.0`. Only the internal `Enhanced` channel (超级爆弹版) embeds the deep-learning high-precision strike resources, Web control schemas, and cockpit assets. Launcher maintains `terrain-v1` outside the rotating App directory, and no App ZIP contains it; use real packaged artifacts for compatibility and DPI smoke.
 - Before deploy, check `gh secret list --repo Thankyou-Cheems/Bomana`; after GitHub finishes the Release, run `gh release download vX.Y.Z --dir dist` and then `uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z` on the maintainer workstation. Do not deploy to Tencent from Actions. Public endpoint checks must call `verify_release_manifest_signature`.
 - Release signing fields, key handling, and deployment boundaries are canonical in [release-signing spec](./specs/release-signing.md).
 

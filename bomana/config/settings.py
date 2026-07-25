@@ -13,9 +13,8 @@ from bomana.config.feature_profile import (
 )
 from bomana.config.static_data import (
     APP_ICON_FILE,
-    BOMB_PARAMS_JSON,
     FM_SPEED_LIMITS_JSON,
-    LEGACY_BOMB_PARAMS_JSON,
+    OFFLINE_RIGIDBODY_CATALOG,
     SPONSOR_WECHAT_IMAGE,
 )
 from bomana.metadata import __author__, __repository__, __title__, __version__
@@ -335,67 +334,12 @@ class UIConfig:
         return (font_def[0], signed_size * scaled_size, *font_def[2:])
 
 
-class HUDConfig:
-    """HUD 叠加层基础配置
-
-    v6.8.0 首版仅提供开关与基础参数，具体渲染由后续模块实现。
-    """
-
-    # HUD 总开关（仅由设置页和配置控制）
-    enabled = False
-
-    # 基础显示参数
-    alpha = 255  # 叠加层透明度（0-255）
-    scale = 1.0  # 全局缩放倍率
-    smoothing = 0.35  # 位移平滑系数（0-1）
-    follow_main_window_monitor = True  # True=跟随主窗口显示器，False=跟随鼠标所在显示器
-    color_style = "auto"  # 配色风格：auto/green/amber/cyan/white
-
-    # 透视投影FOV参数（v6.8.1新增：匹配游戏画面）
-    horizontal_fov_deg = 73.0  # 水平FOV（度），战雷16:9默认约73°
-    vertical_fov_deg = 55.0  # 垂直FOV（度），战雷16:9默认约55°
-
-    @classmethod
-    def to_dict(cls) -> dict:
-        """导出 HUD 基础配置用于保存。"""
-        return {
-            "alpha": int(cls.alpha),
-            "scale": float(cls.scale),
-            "smoothing": float(cls.smoothing),
-            "follow_main_window_monitor": bool(cls.follow_main_window_monitor),
-            "color_style": str(cls.color_style),
-            "horizontal_fov_deg": float(cls.horizontal_fov_deg),
-            "vertical_fov_deg": float(cls.vertical_fov_deg),
-        }
-
-    @classmethod
-    def apply_dict(cls, data: dict) -> None:
-        """从配置字典应用 HUD 参数（兼容缺省字段）。"""
-        if not isinstance(data, dict):
-            return
-        if isinstance(data.get("alpha"), (int, float)):
-            cls.alpha = max(30, min(255, int(data["alpha"])))
-        if isinstance(data.get("scale"), (int, float)):
-            cls.scale = max(0.5, min(2.0, float(data["scale"])))
-        if isinstance(data.get("smoothing"), (int, float)):
-            cls.smoothing = max(0.0, min(1.0, float(data["smoothing"])))
-        if isinstance(data.get("follow_main_window_monitor"), bool):
-            cls.follow_main_window_monitor = data["follow_main_window_monitor"]
-        style = str(data.get("color_style", cls.color_style) or "").strip().lower()
-        if style in {"auto", "green", "amber", "cyan", "white"}:
-            cls.color_style = style
-        if isinstance(data.get("horizontal_fov_deg"), (int, float)):
-            cls.horizontal_fov_deg = max(40.0, min(120.0, float(data["horizontal_fov_deg"])))
-        if isinstance(data.get("vertical_fov_deg"), (int, float)):
-            cls.vertical_fov_deg = max(30.0, min(90.0, float(data["vertical_fov_deg"])))
-
-
 class HotkeyConfig:
     """热键配置
 
     [快捷键自定义]
     - 支持功能键: F1-F12
-    - 默认绑定: F7=双击重置, F8=锁定, F9=角落, F10=声音, F11=战区
+    - 默认绑定: F6=投弹目标模式, F7=双击重置, F8=锁定, F9=角落, F10=声音, F11=战区
     - 可在设置对话框中自定义
     - 注意: 避免与游戏快捷键冲突(F1-F4通常被游戏占用)
     """
@@ -433,6 +377,7 @@ class HotkeyConfig:
     ]
 
     DEFAULT_BINDINGS: ClassVar[dict[str, str]] = {
+        "bomb_target": "F6",
         "reset": "F7",
         "lock": "F8",
         "corner": "F9",
@@ -440,6 +385,7 @@ class HotkeyConfig:
         "zones": "F11",
     }
     BINDING_ATTRS: ClassVar[dict[str, str]] = {
+        "bomb_target": "KEY_BOMB_TARGET",
         "reset": "KEY_RESET",
         "lock": "KEY_LOCK",
         "corner": "KEY_CORNER",
@@ -448,6 +394,7 @@ class HotkeyConfig:
     }
 
     # 当前绑定（可运行时修改）
+    KEY_BOMB_TARGET = DEFAULT_BINDINGS["bomb_target"]  # 战区/兴趣点投弹目标模式
     KEY_RESET = DEFAULT_BINDINGS["reset"]  # 双击确认后重置计时器
     KEY_LOCK = DEFAULT_BINDINGS["lock"]  # 锁定/解锁
     KEY_CORNER = DEFAULT_BINDINGS["corner"]  # 切换角落
@@ -455,6 +402,7 @@ class HotkeyConfig:
     KEY_ZONES = DEFAULT_BINDINGS["zones"]  # 战区提示音
 
     # 热键ID（用于注册/注销）
+    HK_ID_BOMB_TARGET = 7006
     HK_ID_RESET = 7007
     HK_ID_LOCK = 7008
     HK_ID_CORNER = 7009
@@ -500,6 +448,7 @@ class HotkeyConfig:
         """获取当前所有绑定"""
         return cls.normalize_bindings(
             {
+                "bomb_target": cls.KEY_BOMB_TARGET,
                 "reset": cls.KEY_RESET,
                 "lock": cls.KEY_LOCK,
                 "corner": cls.KEY_CORNER,
@@ -795,7 +744,8 @@ class FileConfig:
 
     # 配置文件版本（用于迁移旧配置）
     # v3: 添加编译开关状态记录，解决精简版/完整版配置冲突
-    CONFIG_VERSION = 3
+    # v4: 移除实验性桌面 HUD 配置
+    CONFIG_VERSION = 4
 
 
 # ============================================================================
@@ -828,105 +778,17 @@ class WeaponBallisticModelConfig:
 
 
 class BallisticPhysicsParams:
-    """弹道物理计算参数 (CCRP v3.0)
+    """Runtime limits for the versioned offline CCRP solver."""
 
-    基于War Thunder大气模型:
-    - 空气密度: rho(h) = 1.225 * exp(-h/14426) kg/m^3
-    - 标高H = 14426m (源自Wiki "10km约一半密度")
-    - 支持地图温度修正(冷图+12%, 热图-6%)
-    """
-
-    # ==================== 基础物理常量 ====================
-    GRAVITY = 9.8
-    AIR_DENSITY_SEA = 1.225
-    AIR_DENSITY_SCALE_HEIGHT = 14426.0
-
-    # ==================== 地图温度修正 ====================
-    TEMP_REFERENCE_K = 288.15
-    MAP_TEMPERATURE_K = 288.0
-    USE_TEMPERATURE_CORRECTION = True
-
-    # ==================== 阻力模型配置 ====================
-    DRAG_MODEL = "advanced"
-    DRAG_COEFFICIENT_MULT = 0.5
-    DRAG_REFERENCE_AREA_MULT = 0.8
-
-    # ==================== 减速伞参数 ====================
-    BRAKE_DRAG_MULT = 0.1
-    BRAKE_DEPLOY_DELAY = 1.0
+    # Static classification only. High-drag stores are not integrated until an
+    # independently validated offline deployment model is available.
     HIGH_DRAG_BRAKE_CXK_MIN = 10.0
-    HIGH_DRAG_OPEN_TIME_SEC = 0.12
-    HIGH_DRAG_RELEASE_LEAD_BASE_SEC = 0.30
-    HIGH_DRAG_RELEASE_LEAD_PER_ALT_M = 0.00016
-    HIGH_DRAG_RELEASE_LEAD_MAX_SEC = 1.50
-
-    # ==================== 投放限制 ====================
-    RELEASE_MAX_MACH = 1.0
-
-    # ==================== 数值计算精度 ====================
-    TIME_STEP = 0.005
     MAX_FLIGHT_TIME = 120.0
-    GROUND_MARGIN = 1.0
-
-    # ==================== 校准修正参数 ====================
-    RANGE_CORRECTION_MULT = 1.0
-    TIME_CORRECTION_MULT = 1.0
-    ALTITUDE_CORRECTION_OFFSET = 0.0
-
-    # ==================== 飞机状态参数 ====================
-    USE_AIRCRAFT_VY = True
-    DEFAULT_TARGET_ALT = 0.0
-
-    # ==================== 投弹提示配置 ====================
     RELEASE_WARNING_SEC = 5.0
     RELEASE_READY_SEC = 0.5
-
-    # ==================== 用户可调参数（全局） ====================
-    _DEFAULT_TUNING: ClassVar[dict[str, float]] = {
-        "range_correction_mult": 1.0,
-        "time_correction_mult": 1.0,
-    }
-    _TUNING_LIMITS: ClassVar[dict[str, tuple[float, float]]] = {
-        "range_correction_mult": (0.6, 1.6),
-        "time_correction_mult": (0.6, 1.6),
-    }
-
-    @classmethod
-    def apply_user_tuning(cls, tuning: dict) -> None:
-        """应用用户全局调参（来自配置文件/UI）"""
-        if not isinstance(tuning, dict):
-            return
-
-        def _clamp(name: str, value: float) -> float:
-            low, high = cls._TUNING_LIMITS[name]
-            return max(low, min(high, float(value)))
-
-        if "range_correction_mult" in tuning and isinstance(
-            tuning["range_correction_mult"], (int, float)
-        ):
-            cls.RANGE_CORRECTION_MULT = _clamp(
-                "range_correction_mult", tuning["range_correction_mult"]
-            )
-
-        if "time_correction_mult" in tuning and isinstance(
-            tuning["time_correction_mult"], (int, float)
-        ):
-            cls.TIME_CORRECTION_MULT = _clamp(
-                "time_correction_mult", tuning["time_correction_mult"]
-            )
-
-    @classmethod
-    def get_user_tuning(cls) -> dict:
-        """获取当前用户调参（用于保存）"""
-        return {
-            "range_correction_mult": float(cls.RANGE_CORRECTION_MULT),
-            "time_correction_mult": float(cls.TIME_CORRECTION_MULT),
-        }
-
-    @classmethod
-    def get_default_tuning(cls) -> dict:
-        """获取默认调参（用于重置）"""
-        return dict(cls._DEFAULT_TUNING)
+    # Manual-release UI prompt. The wider READY window is only for countdown
+    # styling; showing "release" for all 0.5 s can shift impact by 50–100 m.
+    RELEASE_PROMPT_SEC = 0.10
 
 
 class AboutConfig:
@@ -976,66 +838,31 @@ class ChecklistConfig:
 
 
 class BombConfig:
-    """投弹预测配置（CCRP v2.0 - 外部参数加载版）
-
-    ╔══════════════════════════════════════════════════════════════════════════╗
-    ║ 投弹系统说明 (CCRP v2.0)                                                   ║
-    ╠══════════════════════════════════════════════════════════════════════════╣
-    ║ 炸弹参数从外部 bomana/data/ccrp_bomb_params.json 加载                        ║
-    ║ 弹道计算参数集中到BallisticPhysicsParams配置块                              ║
-    ║ 支持动态切换阻力模型（none/simple/advanced）                                ║
-    ╚══════════════════════════════════════════════════════════════════════════╝
-    """
+    """CCRP selection backed by the bundled offline rigid-body catalog."""
 
     selected_bomb = "su_fab100"
+    # 明确的投弹目标来源。禁止依靠重叠目标的隐式优先级自动判断。
+    target_mode = "zone"
+    TARGET_MODES: ClassVar[frozenset[str]] = frozenset({"zone", "poi"})
     BOMB_DATABASE: ClassVar[dict[str, dict[str, Any]]] = {}
-    _SOURCE_ID_INDEX: ClassVar[dict[str, str]] = {}
+    _CATALOG_ALIAS_INDEX: ClassVar[dict[str, str]] = {}
     _database_loaded = False
     load_error: str | None = None
     database_source: str | None = None
-    JSON_FILE = BOMB_PARAMS_JSON
-    LEGACY_JSON_FILE = LEGACY_BOMB_PARAMS_JSON
-    GUIDED_OR_GLIDE_KEYWORDS: ClassVar[tuple[str, ...]] = (
-        "agm",
-        "bgl",
-        "gbu",
-        "gbu_",
-        "gb250",
-        "gcs_1",
-        "glide",
-        "grom",
-        "guided",
-        "hosbo",
-        "jdam",
-        "jsow",
-        "kab",
-        "kggb",
-        "laser",
-        "lizard",
-        "lgb",
-        "ljdam",
-        "ls_6",
-        "paveway",
-        "pgb",
-        "sdb",
-        "spice",
-        "tv",
-        "umpk",
-        "upab",
-        "walleye",
-        "fx1400",
-    )
-    HIGH_DRAG_KEYWORDS: ClassVar[tuple[str, ...]] = (
-        "air_na",
-        "ballute",
-        "brp",
-        "fab500sh",
-        "ofab250sh",
-        "parachute",
-        "retarded",
-        "snakeye",
-    )
+    CATALOG_FILE = OFFLINE_RIGIDBODY_CATALOG
 
+    @classmethod
+    def normalize_target_mode(cls, value: object) -> str:
+        mode = str(value or "").strip().lower()
+        return mode if mode in cls.TARGET_MODES else "zone"
+
+    @classmethod
+    def set_target_mode(cls, value: object) -> bool:
+        mode = str(value or "").strip().lower()
+        if mode not in cls.TARGET_MODES:
+            return False
+        cls.target_mode = mode
+        return True
     @classmethod
     def _ensure_database_loaded(cls):
         """确保炸弹数据库已加载"""
@@ -1043,58 +870,57 @@ class BombConfig:
             return
 
         try:
-            from bomana.utils.file_utils import load_json_resource
+            from bomana.core.offline_rigidbody_catalog import load_catalog
+            from bomana.core.offline_rigidbody_properties import (
+                derive_offline_rigidbody_properties,
+            )
+            from bomana.utils.file_utils import resolve_existing_resource
 
             cls.BOMB_DATABASE.clear()
-            cls._SOURCE_ID_INDEX.clear()
+            cls._CATALOG_ALIAS_INDEX.clear()
             cls.load_error = None
             cls.database_source = None
-            external_params = None
-            result = load_json_resource(
-                [cls.JSON_FILE, cls.LEGACY_JSON_FILE],
-                missing_error_prefix="bomb params file not found",
-                parse_error_prefix="bomb params json parse failed",
-            )
-
-            if result.error:
-                if result.path is not None and result.path.exists():
-                    raise RuntimeError(result.error)
-                from ccrp_bomb_params import BALLISTIC_PARAMS as external_params
-
-                source = "ccrp_bomb_params.py"
-            else:
-                payload = result.payload if isinstance(result.payload, dict) else {}
-                external_params = payload.get("ballistic_params", {})
-                source = str(result.path or result.source_label or cls.JSON_FILE)
-
-            if not external_params:
+            path, source_label = resolve_existing_resource([cls.CATALOG_FILE])
+            if path is None or not path.is_file():
+                raise RuntimeError(f"offline rigid-body catalog not found: {path}")
+            payload = load_catalog(path)
+            records = payload.get("records")
+            if not isinstance(records, dict) or not records:
                 raise RuntimeError("炸弹数据库为空")
 
-            for bomb_id, params in external_params.items():
-                profile = cls._infer_prediction_profile(bomb_id, params)
+            for bomb_id, params in records.items():
+                properties = derive_offline_rigidbody_properties(params)
+                prediction_kind = str(params["prediction_kind"])
+                prediction_supported = prediction_kind == "freefall"
                 record = {
-                    "mass": params.get("mass", 100.0),
-                    "drag_cx": params.get("dragCx", 0.04),
-                    "caliber": params.get("caliber", 0.2),
-                    "distFromCmToStab": params.get("distFromCmToStab", 0.5),
-                    "brakeTime": params.get("brakeTime", [0.0, 0.0]),
-                    "brakeCxK": params.get("brakeCxK", 0.0),
-                    "brakeArm": params.get("brakeArm", 0.0),
-                    "stab_enabled": params.get("stab_enabled", False),
-                    "source_file": params.get("source_file", ""),
-                    "mesh": params.get("mesh", ""),
+                    "mass": properties.mass_kg,
+                    "drag_cx": params["display_drag_reference"],
+                    "caliber": properties.diameter_m,
+                    "aliases": tuple(params.get("aliases", ())),
                     "category": cls._infer_category(bomb_id),
-                    **profile,
+                    "prediction_supported": prediction_supported,
+                    "prediction_kind": prediction_kind,
+                    "prediction_note": (
+                        "freefall"
+                        if prediction_supported
+                        else (
+                            "guided_or_glide"
+                            if prediction_kind == "guided_glide"
+                            else "offline_high_drag_unavailable"
+                        )
+                    ),
+                    "release_mach_max": None,
+                    "offline_rigidbody": properties.to_solver_payload(),
                 }
                 cls.BOMB_DATABASE[bomb_id] = record
-                source_id = Path(str(record.get("source_file") or "")).stem.casefold()
-                if source_id:
-                    cls._SOURCE_ID_INDEX.setdefault(source_id, bomb_id)
+                cls._CATALOG_ALIAS_INDEX.setdefault(bomb_id.casefold(), bomb_id)
+                for alias in record["aliases"]:
+                    cls._CATALOG_ALIAS_INDEX.setdefault(str(alias).casefold(), bomb_id)
 
             selected_key = str(cls.selected_bomb or "").casefold()
             if (
                 cls.selected_bomb not in cls.BOMB_DATABASE
-                and selected_key not in cls._SOURCE_ID_INDEX
+                and selected_key not in cls._CATALOG_ALIAS_INDEX
                 and cls.BOMB_DATABASE
             ):
                 cls.selected_bomb = (
@@ -1104,14 +930,11 @@ class BombConfig:
                 )
 
             cls._database_loaded = True
-            cls.database_source = source
-            _safe_print(f"[BombConfig] 已从{source}加载 {len(cls.BOMB_DATABASE)} 种炸弹参数")
+            cls.database_source = str(path or source_label or cls.CATALOG_FILE)
+            _safe_print(
+                f"[BombConfig] 已加载 {len(cls.BOMB_DATABASE)} 种离线刚体参数"
+            )
 
-        except ImportError as e:
-            _safe_print(f"[BombConfig] 警告: 无法加载ccrp_bomb_params模块: {e}")
-            cls.BOMB_DATABASE.clear()
-            cls.load_error = str(e)
-            cls._database_loaded = False
         except Exception as e:
             _safe_print(f"[BombConfig] 加载炸弹参数时出错: {e}")
             cls.BOMB_DATABASE.clear()
@@ -1147,53 +970,6 @@ class BombConfig:
             return "美国"
 
         return "通用"
-
-    @classmethod
-    def _prediction_text(cls, bomb_id: str, params: dict[str, Any] | None) -> str:
-        params = params if isinstance(params, dict) else {}
-        return " ".join(
-            (
-                str(bomb_id or ""),
-                str(params.get("source_file", "") or ""),
-                str(params.get("mesh", "") or ""),
-            )
-        ).lower()
-
-    @classmethod
-    def _infer_prediction_profile(cls, bomb_id: str, params: dict[str, Any] | None) -> dict:
-        """Infer the CCRP prediction profile from static bomb metadata."""
-        params = params if isinstance(params, dict) else {}
-        text = cls._prediction_text(bomb_id, params)
-        brake_cx_k = 0.0
-        try:
-            brake_cx_k = float(params.get("brakeCxK", 0.0) or 0.0)
-        except _NUMERIC_PARSE_ERRORS:
-            brake_cx_k = 0.0
-
-        if any(keyword in text for keyword in cls.GUIDED_OR_GLIDE_KEYWORDS):
-            return {
-                "prediction_supported": False,
-                "prediction_kind": "guided_glide",
-                "prediction_note": "guided_or_glide",
-                "release_mach_max": None,
-            }
-
-        if brake_cx_k >= BallisticPhysicsParams.HIGH_DRAG_BRAKE_CXK_MIN or any(
-            keyword in text for keyword in cls.HIGH_DRAG_KEYWORDS
-        ):
-            return {
-                "prediction_supported": True,
-                "prediction_kind": "high_drag",
-                "prediction_note": "retarded_or_parachute",
-                "release_mach_max": BallisticPhysicsParams.RELEASE_MAX_MACH,
-            }
-
-        return {
-            "prediction_supported": True,
-            "prediction_kind": "freefall",
-            "prediction_note": "freefall",
-            "release_mach_max": BallisticPhysicsParams.RELEASE_MAX_MACH,
-        }
 
     @classmethod
     def get_categories(cls, *, include_unsupported: bool = False) -> list:
@@ -1238,15 +1014,18 @@ class BombConfig:
         direct = cls.BOMB_DATABASE.get(name)
         if direct is not None:
             return direct
-        source_key = cls._SOURCE_ID_INDEX.get(str(name or "").casefold())
-        return cls.BOMB_DATABASE.get(source_key) if source_key is not None else None
+        catalog_key = cls._CATALOG_ALIAS_INDEX.get(str(name or "").casefold())
+        return cls.BOMB_DATABASE.get(catalog_key) if catalog_key is not None else None
 
     @classmethod
-    def get_bomb_source_id(cls, name: str) -> str:
-        """Return the Datamine source stem used by the weapon catalog."""
+    def get_bomb_catalog_id(cls, name: str) -> str:
+        """Return the canonical identifier for a catalog ID or alias."""
 
-        data = cls.get_bomb_data(name)
-        return Path(str(data.get("source_file") or "")).stem if data is not None else ""
+        cls._ensure_database_loaded()
+        candidate = str(name or "")
+        if candidate in cls.BOMB_DATABASE:
+            return candidate
+        return cls._CATALOG_ALIAS_INDEX.get(candidate.casefold(), "")
 
     @classmethod
     def get_selected_bomb_data(cls) -> dict:
@@ -1284,9 +1063,7 @@ class BombConfig:
                 + " "
                 + data.get("category", "")
                 + " "
-                + str(data.get("source_file", ""))
-                + " "
-                + str(data.get("mesh", ""))
+                + " ".join(str(alias) for alias in data.get("aliases", ()))
                 + " "
                 + str(int(data.get("mass", 0)))
             )
@@ -1311,7 +1088,7 @@ class BombConfig:
         if prediction_kind == "guided_glide":
             profile_suffix = " [制导/滑翔]"
         elif prediction_kind == "high_drag":
-            profile_suffix = " [高阻]"
+            profile_suffix = " [高阻/无离线模型]"
         return f"{name} ({mass_str}){profile_suffix}"
 
     @classmethod
@@ -1319,26 +1096,25 @@ class BombConfig:
         """获取炸弹的完整物理参数"""
         cls._ensure_database_loaded()
         data = cls.get_selected_bomb_data() if name is None else (cls.get_bomb_data(name) or {})
-        return {
+        result = {
+            "weapon_id": (
+                cls.get_bomb_catalog_id(name or cls.selected_bomb)
+                if (name or cls.selected_bomb)
+                else ""
+            ),
             "mass": data.get("mass", 100.0),
             "caliber": data.get("caliber", 0.2),
             "drag_cx": data.get("drag_cx", 0.04),
-            "distFromCmToStab": data.get("distFromCmToStab", 0.5),
-            "brakeTime": data.get("brakeTime", [0.0, 0.0]),
-            "brakeCxK": data.get("brakeCxK", 0.0),
-            "brakeArm": data.get("brakeArm", 0.0),
-            "stab_enabled": data.get("stab_enabled", False),
             "prediction_supported": data.get("prediction_supported", True),
             "prediction_kind": data.get("prediction_kind", "freefall"),
             "prediction_note": data.get("prediction_note", "freefall"),
-            "release_mach_max": data.get(
-                "release_mach_max",
-                BallisticPhysicsParams.RELEASE_MAX_MACH,
-            ),
-            "source_file": data.get("source_file", ""),
-            "mesh": data.get("mesh", ""),
+            "release_mach_max": data.get("release_mach_max"),
             "reference_area": 3.14159 * (data.get("caliber", 0.2) / 2) ** 2,
         }
+        offline_rigidbody = data.get("offline_rigidbody")
+        if isinstance(offline_rigidbody, dict):
+            result["offline_rigidbody"] = dict(offline_rigidbody)
+        return result
 
 
 class PanelConfig:
@@ -1356,6 +1132,9 @@ class PanelConfig:
     speed_history_mode = False  # 空历模式：仅保留速度提醒，其它扩展面板临时关闭
     show_checklist = True  # 检查清单
     show_bombing = True  # v6.0新增：投弹预测（受ENABLE_CCRP开关控制）
+    # CCRP 模式 - "integrated"(主面板集成) / "standalone"(独立提示栏)
+    bombing_mode = "integrated"
+    bombing_window_pos = None  # 独立 CCRP 位置 (x, y)
     # v6.2.1: 导航条模式 - "integrated"(集成) / "standalone"(独立窗口)
     navigation_mode = "integrated"
     navigation_window_pos = None  # 独立窗口位置 (x, y)

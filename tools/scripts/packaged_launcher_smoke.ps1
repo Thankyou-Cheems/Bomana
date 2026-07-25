@@ -20,6 +20,8 @@ param(
 
     [string]$ArtifactDir = "",
 
+    [string]$TerrainArtifactDir = "",
+
     [string]$SmokeRoot = "",
 
     [switch]$NoBuild,
@@ -231,6 +233,151 @@ function Resolve-ReleaseArtifacts {
         LauncherManifest = $launcherManifestPath
         Entrypoint = $entrypoint
     }
+}
+
+function Resolve-TerrainReleaseArtifacts {
+    param([Parameter(Mandatory = $true)][string]$Directory)
+
+    $artifactRoot = Resolve-FullPath $Directory
+    $manifestPath = Join-Path $artifactRoot "terrain_manifest.json"
+    $manifest = Read-JsonFile $manifestPath
+    Assert-ManifestSignature $manifest "terrain_manifest.json"
+
+    $packId = [string](Get-JsonProperty $manifest "terrain_pack_id")
+    $revision = [string](Get-JsonProperty $manifest "terrain_revision")
+    $files = @(Get-JsonProperty $manifest "files")
+    if ($packId -notmatch "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$") {
+        throw "terrain_manifest.json terrain_pack_id is invalid"
+    }
+    if ($revision -notmatch "^[0-9a-f]{64}$") {
+        throw "terrain_manifest.json terrain_revision is invalid"
+    }
+    if ($files.Count -eq 0) {
+        throw "terrain_manifest.json files must not be empty"
+    }
+
+    $totalSize = [int64]0
+    $resolvedFiles = @()
+    $seenPaths = @{}
+    foreach ($item in $files) {
+        $relativePath = [string](Get-JsonProperty $item "path")
+        $asset = [string](Get-JsonProperty $item "asset")
+        $sha256 = [string](Get-JsonProperty $item "sha256")
+        $sizeBytes = [int64](Get-JsonProperty $item "size_bytes")
+        if (
+            [string]::IsNullOrWhiteSpace($relativePath) -or
+            [System.IO.Path]::GetFileName($relativePath) -ne $relativePath -or
+            $relativePath -in @(".", "..")
+        ) {
+            throw "terrain manifest contains an unsafe file path: $relativePath"
+        }
+        if (
+            [string]::IsNullOrWhiteSpace($asset) -or
+            [System.IO.Path]::GetFileName($asset) -ne $asset
+        ) {
+            throw "terrain manifest contains an unsafe object asset: $asset"
+        }
+        if ($sha256 -notmatch "^[0-9a-f]{64}$") {
+            throw "terrain manifest contains an invalid object hash: $relativePath"
+        }
+        if (-not $asset.StartsWith("Bomana_terrain_object_$sha256")) {
+            throw "terrain object asset does not match its content hash: $asset"
+        }
+        if ($sizeBytes -le 0) {
+            throw "terrain manifest contains an invalid object size: $relativePath"
+        }
+        if ($seenPaths.ContainsKey($relativePath)) {
+            throw "terrain manifest contains a duplicate file path: $relativePath"
+        }
+        $seenPaths[$relativePath] = $true
+
+        $objectPath = Join-Path (Join-Path $artifactRoot "objects") $asset
+        Assert-FileSha256 $objectPath $sha256 $asset
+        $actualSize = (Get-Item -LiteralPath $objectPath).Length
+        if ($actualSize -ne $sizeBytes) {
+            throw "$asset size mismatch: expected $sizeBytes, got $actualSize"
+        }
+        $totalSize += $sizeBytes
+        $resolvedFiles += [pscustomobject]@{
+            RelativePath = $relativePath
+            Asset = $asset
+            Sha256 = $sha256
+            SizeBytes = $sizeBytes
+            ObjectPath = $objectPath
+        }
+    }
+    $expectedTotal = [int64](Get-JsonProperty $manifest "total_size_bytes")
+    if ($expectedTotal -ne $totalSize) {
+        throw "terrain_manifest.json total_size_bytes mismatch"
+    }
+
+    return [pscustomobject]@{
+        ArtifactRoot = $artifactRoot
+        ManifestPath = $manifestPath
+        Manifest = $manifest
+        PackId = $packId
+        Revision = $revision
+        Files = $resolvedFiles
+    }
+}
+
+function Install-TerrainRelease {
+    param(
+        [Parameter(Mandatory = $true)]$Artifacts,
+        [Parameter(Mandatory = $true)][string]$LauncherDataRoot
+    )
+
+    $terrainRoot = Join-Path $LauncherDataRoot "terrain"
+    $objectsDir = Join-Path $terrainRoot "objects"
+    $packsDir = Join-Path $terrainRoot "packs"
+    $packName = "$($Artifacts.PackId)-$($Artifacts.Revision.Substring(0, 20))"
+    $packDir = Join-Path $packsDir $packName
+    foreach ($directory in @($objectsDir, $packsDir, $packDir)) {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+
+    $stateFiles = @()
+    foreach ($item in @($Artifacts.Files)) {
+        $objectDestination = Join-Path $objectsDir $item.Sha256
+        Copy-Item -LiteralPath $item.ObjectPath -Destination $objectDestination -Force
+        Assert-FileSha256 $objectDestination $item.Sha256 $item.Asset
+
+        $packDestination = Join-Path $packDir $item.RelativePath
+        Copy-Item -LiteralPath $objectDestination -Destination $packDestination -Force
+        Assert-FileSha256 $packDestination $item.Sha256 $item.RelativePath
+        $stateFiles += [ordered]@{
+            path = $item.RelativePath
+            asset = $item.Asset
+            sha256 = $item.Sha256
+            size_bytes = $item.SizeBytes
+        }
+    }
+
+    $manifest = $Artifacts.Manifest
+    $current = [ordered]@{
+        schema_version = [int](Get-JsonProperty $manifest "schema_version")
+        terrain_pack_id = $Artifacts.PackId
+        terrain_revision = $Artifacts.Revision
+        map_count = [int](Get-JsonProperty $manifest "map_count")
+        total_size_bytes = [int64](Get-JsonProperty $manifest "total_size_bytes")
+        files = $stateFiles
+        pack_dir = $packName
+    }
+    $currentPath = Join-Path $terrainRoot "current.json"
+    $temporaryPath = "$currentPath.$([Guid]::NewGuid().ToString('N')).tmp"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText(
+        $temporaryPath,
+        (($current | ConvertTo-Json -Depth 8) + "`n"),
+        $utf8NoBom
+    )
+    if (Test-Path -LiteralPath $currentPath -PathType Leaf) {
+        [System.IO.File]::Replace($temporaryPath, $currentPath, $null)
+    }
+    else {
+        [System.IO.File]::Move($temporaryPath, $currentPath)
+    }
+    return $packDir
 }
 
 function Install-AppPackage {
@@ -709,6 +856,7 @@ $installRoot = Join-Path $workRoot (
 )
 $launcherProcess = $null
 $launcherTarget = ""
+$terrainArtifacts = $null
 $success = $false
 $failed = $false
 
@@ -753,6 +901,13 @@ try {
 
     Write-Host "[3/7] Validating signed release manifests and asset hashes"
     $artifacts = Resolve-ReleaseArtifacts -Directory $ArtifactDir -VariantName $Variant
+    if ($Variant -eq "Enhanced") {
+        if ([string]::IsNullOrWhiteSpace($TerrainArtifactDir)) {
+            $TerrainArtifactDir = Join-Path $repoRoot "dist\terrain-release"
+        }
+        Write-Host "      validating independent terrain release: $TerrainArtifactDir"
+        $terrainArtifacts = Resolve-TerrainReleaseArtifacts -Directory $TerrainArtifactDir
+    }
 
     Write-Host "[4/7] Copying packaged launcher and app assets into hostile path"
     $assetCopyRoot = Join-Path $installRoot ("release assets " + $script:TextReleaseAssets)
@@ -772,6 +927,12 @@ try {
     Write-Host "[6/7] Preparing poisoned Python environment"
     $poisonBin = New-PoisonBin $workRoot
     $smokeEnv = New-SmokeEnvironment -SmokeRootPath $workRoot -PoisonBin $poisonBin -VariantName $Variant
+    if ($null -ne $terrainArtifacts) {
+        $terrainDir = Install-TerrainRelease `
+            -Artifacts $terrainArtifacts `
+            -LauncherDataRoot $smokeEnv["BOMANA_LAUNCHER_DATA_DIR"]
+        Write-Host "      installed independent terrain: $terrainDir"
+    }
 
     if ($SkipGuiHandoff) {
         Write-Host "[7/7] Skipping GUI launcher/app handoff by request"

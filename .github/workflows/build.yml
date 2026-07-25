@@ -128,12 +128,12 @@ jobs:
             all)
               BUILD_DESC="完整发布（启动器 + 三通道应用包）"
               RELEASE_NAME="Bomana v$VERSION"
-              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 启动器清单：`launcher_manifest.json`\n- 内置零安装热键组件的应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt`'
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 超级爆弹版（`Enhanced`）：深度学习的高精度打击模型与启动器独立维护的地形数据\n- 应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt`'
               ;;
             app)
-              BUILD_DESC="应用包发布（Enhanced/Standard/Lite）"
+              BUILD_DESC="应用包发布（超级爆弹版/Standard/Lite）"
               RELEASE_NAME="Bomana v$VERSION · App Packages"
-              ASSET_DESC=$'- 应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_app_*.txt`'
+              ASSET_DESC=$'- 超级爆弹版（`Enhanced`）：深度学习的高精度打击模型与启动器独立维护的地形数据\n- 应用包：`Bomana_app_Enhanced_v*.zip` / `Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 清单：`manifest_Enhanced.json` / `manifest_Standard.json` / `manifest_Lite.json`\n- 校验：`checksums_app_*.txt`'
               ;;
             launcher)
               BUILD_DESC="启动器发布（通用启动器）"
@@ -246,7 +246,7 @@ jobs:
       fail-fast: false
       matrix:
         variant:
-          - { name: "增强版", slug: "Enhanced", description: "全功能，含CCRP投弹预测" }
+          - { name: "超级爆弹版", slug: "Enhanced", description: "深度学习的高精度打击模型与独立地形数据" }
           - { name: "标准版", slug: "Standard", description: "含导航与燃油管理，无CCRP" }
           - { name: "精简版", slug: "Lite", description: "仅计时器，极致轻量" }
 
@@ -254,7 +254,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          clean: false
+          clean: true
           persist-credentials: false
 
       - name: Set up Python
@@ -326,7 +326,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          clean: false
+          clean: true
           persist-credentials: false
 
       - name: Set up Python

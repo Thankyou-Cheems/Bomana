@@ -1,5 +1,3 @@
-# enforces: docs/specs/runtime-8111-boundary.md R8111-12..R8111-16
-
 from __future__ import annotations
 
 import argparse

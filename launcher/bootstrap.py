@@ -19,6 +19,7 @@ from launcher.metadata import LAUNCHER_VERSION
 
 _APP_HANDOFF_ENV_NAMES = (
     "BOMANA_LAUNCHER_VERSION",
+    "BOMANA_TERRAIN_DIR",
     "BOMANA_WEB_DASHBOARD_AUTOSTART",
     "BOMANA_WEB_DASHBOARD_AUTO_OPEN",
     "BOMANA_WEB_DASHBOARD_LAN_ENABLED",
@@ -124,6 +125,7 @@ def launch_app(
     web_dashboard_autostart: bool,
     web_dashboard_auto_open: bool,
     web_dashboard_lan_enabled: bool,
+    terrain_dir: Path | None = None,
     displayed_recovery_warning: str = "",
     recovery_warning_callback: Callable[[str], bool] | None = None,
 ) -> None:
@@ -159,6 +161,10 @@ def launch_app(
     os.environ["BOMANA_WEB_DASHBOARD_AUTOSTART"] = "1" if web_dashboard_autostart else "0"
     os.environ["BOMANA_WEB_DASHBOARD_AUTO_OPEN"] = "1" if web_dashboard_auto_open else "0"
     os.environ["BOMANA_WEB_DASHBOARD_LAN_ENABLED"] = "1" if web_dashboard_lan_enabled else "0"
+    if terrain_dir is not None:
+        os.environ["BOMANA_TERRAIN_DIR"] = str(terrain_dir)
+    elif str(channel).strip().lower() != "enhanced":
+        os.environ.pop("BOMANA_TERRAIN_DIR", None)
     os.environ["BOMANA_CHANNEL"] = channel
     os.environ["BOMANA_RUNTIME_ROOT"] = str(app_dir)
     os.chdir(app_dir)

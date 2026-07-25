@@ -17,7 +17,14 @@ from bomana.config.settings import (
     PanelConfig,
     ZoneConfig,
 )
-from bomana.core import ccrp_scheduler, lifecycle, navigation, timing_store, weapon_scheduler
+from bomana.core import (
+    ccrp_scheduler,
+    lifecycle,
+    navigation,
+    release_state,
+    timing_store,
+    weapon_scheduler,
+)
 from bomana.core import diagnostics as core_diagnostics
 from bomana.core.ballistics import calculate_bomb_trajectory, calculate_release_timing_from_range
 from bomana.core.clock import SystemClock, WallClock
@@ -48,6 +55,7 @@ from bomana.core.telemetry import (
     MapObjectsFetcher,
     TelemetryFetcher,
 )
+from bomana.core.terrain_elevation import TerrainElevationService
 from bomana.core.weapon_catalog import WeaponCatalogError, get_weapon_catalog
 from bomana.core.weapon_solver import WeaponSolver, uses_existing_ccrp
 from bomana.utils.diagnostics import log_event
@@ -121,8 +129,7 @@ class GameLogic:
     - 弹道计算移至tick线程，降低UI线程负载
     """
 
-    # v6.8.0 姿态可信度检测参数（供 HUD 回退决策）
-    ATTITUDE_MISSING_CONFIRM_SEC = 1.0
+    # 公开姿态读数可信度检测参数
     ATTITUDE_ZERO_CONFIRM_SEC = 3.0
     ATTITUDE_ZERO_EPS_DEG = 0.35
     ATTITUDE_JITTER_DECAY_PER_SEC = 1.5
@@ -141,12 +148,13 @@ class GameLogic:
             self.http = HttpJson(self.session)
         else:
             self.http = http
-        self.tel = TelemetryFetcher(self.http)
+        self.tel = TelemetryFetcher(self.http, now=self.clock.time)
         self.map_info_fetcher = MapInfoFetcher(self.http, now=self.clock.time)
-        self.map = MapObjectsFetcher(self.http)
+        self.map = MapObjectsFetcher(self.http, now=self.clock.time)
         self.overspeed = OverspeedAnalyzer()
         self.weapon_catalog = None
         self.weapon_solver = WeaponSolver() if ENABLE_CCRP else None
+        self.terrain_elevation = TerrainElevationService() if ENABLE_CCRP else None
         if ENABLE_CCRP:
             try:
                 self.weapon_catalog = get_weapon_catalog()
@@ -171,13 +179,79 @@ class GameLogic:
         with self._lock:
             return self.state.api_down
 
+    @property
+    def terrain_pack_available(self) -> bool:
+        service = self.terrain_elevation
+        return bool(service is not None and service.available)
+
+    def set_bombing_target_mode(self, mode: object) -> bool:
+        """Atomically switch the explicit CCRP target source and invalidate stale output."""
+        normalized = str(mode or "").strip().lower()
+        if not ENABLE_CCRP or normalized not in BombConfig.TARGET_MODES:
+            return False
+        with self._lock:
+            BombConfig.target_mode = normalized
+            self.state.zone_nav.bombing_target = None
+            self.state.bombing_calc_valid = False
+            self.state.cached_bombing_target_kind = ""
+            self.state.cached_bombing_target_name = ""
+            self.state.cached_target_altitude_m = 0.0
+            self.state.cached_target_altitude_source = ""
+            self.state.cached_bombing_unavailable_reason = "target_mode_changed"
+        return True
+
+    def update_terrain_map_image(self, image_bytes: bytes) -> bool:
+        """Identify the active map from a low-cadence official 8111 image."""
+        service = self.terrain_elevation
+        if service is None or not service.available:
+            return False
+        with self._lock:
+            map_info = self.state.map_info
+            map_info_valid = bool(map_info is not None and map_info.valid)
+            if not map_info_valid:
+                return False
+            map_min = tuple(map_info.map_min)
+            map_max = tuple(map_info.map_max)
+        previous = service.current_match
+        match = service.update_map_image(
+            image_bytes,
+            map_min=map_min,
+            map_max=map_max,
+        )
+        if match is not None and (previous is None or previous.map_id != match.map_id):
+            log_event(
+                "terrain_map_identified",
+                map_id=match.map_id,
+                fingerprint_distance=match.distance,
+                fingerprint_margin=match.margin,
+            )
+        return match is not None
+
+    def _bombing_altitude_context_locked(self) -> tuple[float | None, float | None]:
+        service = self.terrain_elevation
+        if service is None:
+            return None, None
+        nav = self.state.zone_nav
+        target = nav.bombing_target
+        if target is None:
+            return None, None
+        target_x = getattr(target, "x", None)
+        target_y = getattr(target, "y", None)
+        if target_x is None or target_y is None:
+            return None, None
+        return service.altitude_context_at_normalized(
+            target_x,
+            target_y,
+            self.state.map_info,
+        )
+
     def tick(self) -> None:
-        """主逻辑循环（每250ms执行一次）
+        """主逻辑循环（正常状态约 20 Hz）
 
         流程：
         1. 获取遥测数据
-        2. 获取/缓存地图元数据
-        3. 获取地图对象
+        2. 紧邻获取地图对象并建立共同求解时刻
+        3. 获取/缓存低频地图元数据
         4. 更新游戏状态（状态机）
         5. 更新导航信息
         """
@@ -185,7 +259,7 @@ class GameLogic:
         now = self.clock.time()
         budget = Budget(NetworkConfig.MAX_TICK_NET_BUDGET)
         bombing_work: dict[str, Any] | None = None
-        bombing_selection_token: tuple[str, str] | None = None
+        bombing_selection_token: tuple[str, str, str, str] | None = None
         weapon_work: dict[str, Any] | None = None
         selection_snapshot: tuple[str, str, dict[str, Any] | None] | None = None
 
@@ -193,7 +267,13 @@ class GameLogic:
         tel = self.tel.fetch(budget)
         raw_tel = tel
 
-        # 2. 检查是否需要更新地图元数据（30秒缓存）
+        # 2. 获取地图对象。/state 与 /map_obj.json 保持相邻请求，避免低频
+        # map_info 刷新把两套动态状态人为拉开。
+        mp = self.map.fetch(budget)
+        raw_mp = mp
+        solution_time = self.clock.time()
+
+        # 3. 检查是否需要更新地图元数据（30秒缓存）
         map_info_result = None
         with self._lock:
             map_info = self.state.map_info
@@ -216,10 +296,6 @@ class GameLogic:
                 with self._lock:
                     self.state.map_info_error_kind = map_info_result.error_kind
                     self.state.map_info_elapsed_ms = map_info_result.elapsed_ms
-
-        # 3. 获取地图对象
-        mp = self.map.fetch(budget)
-        raw_mp = mp
 
         # 4. 记录原始API状态（后续可能在锁内应用短时缓存兜底）
         raw_api_up = bool(tel.ind_ok or tel.state_resp_ok or mp.ok)
@@ -338,6 +414,8 @@ class GameLogic:
                     mp,
                     tel,
                     now,
+                    map_sample_time=(mp.sample_time if mp.sample_time > 0.0 else solution_time),
+                    solution_time=solution_time,
                     zone_targeting_enabled=zone_targeting_enabled,
                 )
 
@@ -466,14 +544,28 @@ class GameLogic:
                     )
                     if selected_is_ccrp and selected_is_compatible and ccrp_data is not None:
                         BombConfig.selected_bomb = selected_id
+                        target_alt_m, altitude_datum_m = self._bombing_altitude_context_locked()
                         bombing_work = ccrp_scheduler.prepare_bombing_calculation(
                             self.state,
                             tel,
-                            now,
+                            solution_time,
                             player_present=usable_player_frame,
                             bomb_params=BombConfig.get_bomb_physics_params(selected_id),
+                            target_alt_m=target_alt_m,
+                            atmosphere_altitude_datum_m=altitude_datum_m,
+                            terrain_height_at_world=(
+                                self.terrain_elevation.height_at_world
+                                if self.terrain_elevation is not None
+                                else None
+                            ),
                         )
-                        bombing_selection_token = selection_snapshot[:2]
+                        bombing_target = self.state.zone_nav.bombing_target
+                        bombing_selection_token = (
+                            selection_snapshot[0],
+                            selection_snapshot[1],
+                            BombConfig.normalize_target_mode(BombConfig.target_mode),
+                            str(getattr(bombing_target, "id", "") or ""),
+                        )
                     else:
                         self.state.bombing_calc_valid = False
                 elif ENABLE_CCRP:
@@ -497,11 +589,18 @@ class GameLogic:
                 timing_func=calculate_release_timing_from_range,
             )
             with self._lock:
-                current_selection = (
-                    self.weapon_catalog.selection_snapshot()[:2]
-                    if self.weapon_catalog is not None
-                    else None
-                )
+                current_target = self.state.zone_nav.bombing_target
+                current_selection = None
+                if self.weapon_catalog is not None:
+                    selected_id, selection_source, _weapon = (
+                        self.weapon_catalog.selection_snapshot()
+                    )
+                    current_selection = (
+                        selected_id,
+                        selection_source,
+                        BombConfig.normalize_target_mode(BombConfig.target_mode),
+                        str(getattr(current_target, "id", "") or ""),
+                    )
                 if current_selection == bombing_selection_token:
                     ccrp_scheduler.apply_bombing_calculation(self.state, bombing_result)
                 else:
@@ -678,7 +777,6 @@ class GameLogic:
             att.roll_deg = lateral
             att.bank_deg = float(tel.attitude_bank_deg)
             att.available = True
-            att.missing_since = None
 
             # 长期恒零检测（仅在空中启用，避免地面状态误判）。
             if (
@@ -706,18 +804,12 @@ class GameLogic:
             att.last_sample_ts = now
         else:
             att.available = False
-            if att.missing_since is None:
-                att.missing_since = now
             att.zero_since = None
             # 数据缺失时清理历史角速度基线，避免恢复后误判抖动。
             att.last_pitch_deg = None
             att.last_roll_deg = None
             att.last_sample_ts = now
 
-        missing_unreliable = bool(
-            (att.missing_since is not None)
-            and ((now - att.missing_since) >= self.ATTITUDE_MISSING_CONFIRM_SEC)
-        )
         zero_unreliable = bool(
             (att.zero_since is not None)
             and ((now - att.zero_since) >= self.ATTITUDE_ZERO_CONFIRM_SEC)
@@ -725,16 +817,6 @@ class GameLogic:
         jitter_unreliable = bool(att.jitter_score >= self.ATTITUDE_JITTER_TRIGGER_SCORE)
 
         att.reliable = bool(available and (not zero_unreliable) and (not jitter_unreliable))
-        att.fallback = not att.reliable
-
-        if missing_unreliable or (not available):
-            att.fallback_reason = "missing"
-        elif zero_unreliable:
-            att.fallback_reason = "stuck_zero"
-        elif jitter_unreliable:
-            att.fallback_reason = "jitter"
-        else:
-            att.fallback_reason = ""
 
     def _update_gear_state_locked(self, tel: TelemetryData, now: float) -> None:
         """更新起落架显示状态（须在锁内调用）。"""
@@ -829,6 +911,8 @@ class GameLogic:
         tel: TelemetryData,
         now: float,
         *,
+        map_sample_time: float | None = None,
+        solution_time: float | None = None,
         zone_targeting_enabled: bool = True,
     ):
         """更新战区导航状态(须在锁内调用)
@@ -844,8 +928,7 @@ class GameLogic:
             nav.target_zone = None
             nav.bombing_target = None
             nav.is_deviating = False
-            nav.last_pos = None
-            nav.ground_speed = 0.0
+            release_state.reset_release_track(nav)
             if previous_target_id is not None:
                 log_event(
                     "navigation_target_changed",
@@ -859,7 +942,7 @@ class GameLogic:
         map_axis_scale_m = navigation.map_axis_scale_m(self.state.map_info)
 
         # 计算航向：
-        # HUD/导航优先使用机头罗盘（更贴近驾驶视角），
+        # 导航优先使用机头罗盘（更贴近驾驶视角），
         # 罗盘不可用时再回退到地速向量航向。
         heading = None
         if tel.ind_ok and tel.compass_present and math.isfinite(float(tel.compass)):
@@ -874,38 +957,19 @@ class GameLogic:
             heading = 0.0
         nav.player_heading = heading
 
-        # === 地速(SOG)计算 ===
-        # 原理：通过位置微分计算真实地速，不受风速影响
-        if nav.last_pos and tel.ias_kmh > 40:
-            dt = now - nav.last_pos_ts
-
-            # 限制计算频率（>0.4s），避免除法震荡
-            if dt >= 0.4:
-                dx = px - nav.last_pos[0]
-                dy = py - nav.last_pos[1]
-                dist_moved = navigation.distance_norm_from_delta(dx, dy, map_axis_scale_m)
-
-                if dist_moved > 0:
-                    current_speed = dist_moved / dt
-
-                    # 指数平滑滤波（EMA）
-                    alpha = 0.2
-                    if nav.ground_speed == 0:
-                        nav.ground_speed = current_speed
-                    else:
-                        nav.ground_speed = (nav.ground_speed * (1 - alpha)) + (
-                            current_speed * alpha
-                        )
-
-                nav.last_pos = (px, py)
-                nav.last_pos_ts = now
-        else:
-            # 初始化或低速时
-            if not nav.last_pos or (now - nav.last_pos_ts > 2.0):
-                nav.last_pos = (px, py)
-                nav.last_pos_ts = now
-                if tel.ias_kmh <= 40:
-                    nav.ground_speed = 0.0
+        # 20 Hz 因果位置回归同时提供地速和真实地面航迹。它是 CCRP
+        # 唯一的水平释放状态来源；8111 的 dx/dy 只保留给机头导航回退。
+        track = release_state.update_release_track(
+            nav,
+            normalized_x=px,
+            normalized_y=py,
+            map_info=self.state.map_info,
+            sample_time=map_sample_time if map_sample_time is not None else now,
+            solution_time=solution_time if solution_time is not None else now,
+            body_direction_x=mp.player_dx,
+            body_direction_y=mp.player_dy,
+        )
+        bombing_heading = track.heading_deg if track.valid else heading
 
         # === 战区被摧毁检测 ===
         current_zone_ids = {z.id for z in mp.zones}
@@ -1055,8 +1119,36 @@ class GameLogic:
                     target = zones_with_nav[i]
                     break
 
+        bombing_target_mode = BombConfig.normalize_target_mode(BombConfig.target_mode)
+        bombing_zone = None
+        if (
+            bombing_target_mode == "zone"
+            and zone_targeting_enabled
+            and is_airborne
+            and zones_with_nav
+        ):
+            track_zone_candidates: list[tuple[float, float, Zone, float]] = []
+            for zone in zones_with_nav:
+                track_relative = calculate_relative_bearing(bombing_heading, zone.bearing)
+                if abs(track_relative) <= ZoneConfig.HEADING_TOLERANCE:
+                    track_zone_candidates.append(
+                        (abs(track_relative), zone.distance, zone, track_relative)
+                    )
+            if track_zone_candidates:
+                _, _distance, bombing_zone, bombing_zone_relative = min(
+                    track_zone_candidates,
+                    key=lambda item: (item[0], item[1]),
+                )
+            else:
+                bombing_zone_relative = 0.0
+
         poi_bombing_target = None
-        if zone_targeting_enabled and is_airborne and getattr(mp, "interest_points", None):
+        if (
+            bombing_target_mode == "poi"
+            and zone_targeting_enabled
+            and is_airborne
+            and getattr(mp, "interest_points", None)
+        ):
             poi_candidates: list[tuple[float, float, InterestPoint, float]] = []
             for point in mp.interest_points:
                 try:
@@ -1070,7 +1162,7 @@ class GameLogic:
                 bearing, distance = navigation.bearing_distance_norm(
                     px, py, point_x, point_y, map_axis_scale_m
                 )
-                relative = calculate_relative_bearing(heading, bearing)
+                relative = calculate_relative_bearing(bombing_heading, bearing)
                 if abs(relative) <= ZoneConfig.HEADING_TOLERANCE:
                     poi_candidates.append((abs(relative), distance, point, relative))
 
@@ -1086,19 +1178,23 @@ class GameLogic:
                     name=point_name,
                     distance=distance,
                     relative=relative,
+                    x=point.x,
+                    y=point.y,
                 )
 
         nav.zones = zones_with_nav
         nav.target_zone = target
-        if poi_bombing_target is not None:
+        if bombing_target_mode == "poi" and poi_bombing_target is not None:
             nav.bombing_target = poi_bombing_target
-        elif target:
+        elif bombing_target_mode == "zone" and bombing_zone is not None:
             nav.bombing_target = BombingTarget(
-                id=target.id,
+                id=bombing_zone.id,
                 kind="zone",
-                name=f"战区 #{target.index}",
-                distance=target.distance,
-                relative=target.relative,
+                name=f"战区 #{bombing_zone.index}",
+                distance=bombing_zone.distance,
+                relative=bombing_zone_relative,
+                x=bombing_zone.x,
+                y=bombing_zone.y,
             )
         else:
             nav.bombing_target = None
@@ -1692,8 +1788,6 @@ class GameLogic:
             attitude_roll_deg = s.attitude.roll_deg
             attitude_bank_deg = s.attitude.bank_deg
             attitude_reliable = s.attitude.reliable
-            attitude_fallback = s.attitude.fallback
-            attitude_fallback_reason = s.attitude.fallback_reason
 
             fuel_current_kg = s.fuel_state.current_kg
             fuel_initial_kg = s.fuel_state.initial_kg
@@ -1716,7 +1810,27 @@ class GameLogic:
             cached_target_distance_m = s.cached_target_distance_m
             cached_bombing_target_kind = s.cached_bombing_target_kind
             cached_bombing_target_name = s.cached_bombing_target_name
+            cached_bombing_model_id = s.cached_bombing_model_id
+            cached_bombing_model_category = s.cached_bombing_model_category
+            cached_bombing_model_quality = s.cached_bombing_model_quality
+            cached_target_altitude_m = s.cached_target_altitude_m
+            cached_target_altitude_source = s.cached_target_altitude_source
+            cached_atmosphere_model_id = s.cached_atmosphere_model_id
+            cached_atmosphere_altitude_datum_m = s.cached_atmosphere_altitude_datum_m
+            cached_altitude_datum_source = s.cached_altitude_datum_source
+            cached_air_density_sea_level = s.cached_air_density_sea_level
+            cached_air_density_source = s.cached_air_density_source
+            cached_bombing_state_age_s = s.cached_bombing_state_age_s
+            cached_bombing_map_age_s = s.cached_bombing_map_age_s
+            cached_bombing_endpoint_skew_s = s.cached_bombing_endpoint_skew_s
+            cached_bombing_altitude_projection_m = s.cached_bombing_altitude_projection_m
+            cached_bombing_tas_projection_ms = s.cached_bombing_tas_projection_ms
+            cached_bombing_vertical_acceleration_ms2 = s.cached_bombing_vertical_acceleration_ms2
+            cached_bombing_release_state_source = s.cached_bombing_release_state_source
+            cached_bombing_maneuver_score = s.cached_bombing_maneuver_score
+            cached_bombing_precision_gate_available = s.cached_bombing_precision_gate_available
             cached_bombing_unavailable_reason = s.cached_bombing_unavailable_reason
+            cached_bombing_solution_time = s.cached_bombing_solution_time
             weapon_snapshot = {
                 "weapon_id": s.weapon_id,
                 "weapon_display_name": s.weapon_display_name,
@@ -1839,10 +1953,6 @@ class GameLogic:
         has_bombing_target = nav_bombing_target is not None
         bombing_target_kind = str(nav_bombing_target.kind) if nav_bombing_target else ""
         bombing_target_name = str(nav_bombing_target.name) if nav_bombing_target else ""
-        if (not has_bombing_target) and nav_target_zone is not None:
-            has_bombing_target = True
-            bombing_target_kind = "zone"
-            bombing_target_name = f"战区 #{nav_target_zone.index}"
         deviation_angle = nav_target_zone.relative if nav_target_zone else 0.0
         zone_destroyed_alert = nav_destroyed_alert_until > now
         destroyed_count = len(nav_destroyed_zones) if zone_destroyed_alert else 0
@@ -1902,11 +2012,29 @@ class GameLogic:
         time_to_release = 0.0
         release_status = "invalid"
         target_zone_distance_m = 0.0
+        bomb_trajectory_model_id = ""
+        bomb_trajectory_model_category = ""
+        bomb_trajectory_model_quality = ""
+        target_altitude_m = cached_target_altitude_m
+        target_altitude_source = cached_target_altitude_source
+        atmosphere_model_id = ""
+        atmosphere_altitude_datum_m = 0.0
+        altitude_datum_source = ""
+        air_density_sea_level = 0.0
+        air_density_source = ""
+        bombing_state_age_s = 0.0
+        bombing_map_age_s = 0.0
+        bombing_endpoint_skew_s = 0.0
+        bombing_altitude_projection_m = 0.0
+        bombing_tas_projection_ms = cached_bombing_tas_projection_ms
+        bombing_vertical_acceleration_ms2 = cached_bombing_vertical_acceleration_ms2
+        bombing_release_state_source = cached_bombing_release_state_source
+        bombing_maneuver_score = cached_bombing_maneuver_score
+        bombing_precision_gate_available = cached_bombing_precision_gate_available
         bombing_unavailable_reason = cached_bombing_unavailable_reason
+        bombing_solution_age_s = 0.0
         if nav_bombing_target is not None:
             target_zone_distance_m = nav_bombing_target.distance * ZoneConfig.DISTANCE_SCALE * 1000
-        elif nav_target_zone is not None:
-            target_zone_distance_m = nav_target_zone.distance * ZoneConfig.DISTANCE_SCALE * 1000
         if ENABLE_CCRP and bombing_calc_valid:
             bombing_valid = True
             bomb_flight_time = cached_bomb_flight_time
@@ -1917,8 +2045,24 @@ class GameLogic:
             target_zone_distance_m = cached_target_distance_m
             bombing_target_kind = cached_bombing_target_kind or bombing_target_kind
             bombing_target_name = cached_bombing_target_name or bombing_target_name
+            bomb_trajectory_model_id = cached_bombing_model_id
+            bomb_trajectory_model_category = cached_bombing_model_category
+            bomb_trajectory_model_quality = cached_bombing_model_quality
+            target_altitude_m = cached_target_altitude_m
+            target_altitude_source = cached_target_altitude_source
+            atmosphere_model_id = cached_atmosphere_model_id
+            atmosphere_altitude_datum_m = cached_atmosphere_altitude_datum_m
+            altitude_datum_source = cached_altitude_datum_source
+            air_density_sea_level = cached_air_density_sea_level
+            air_density_source = cached_air_density_source
+            bombing_state_age_s = cached_bombing_state_age_s
+            bombing_map_age_s = cached_bombing_map_age_s
+            bombing_endpoint_skew_s = cached_bombing_endpoint_skew_s
+            bombing_altitude_projection_m = cached_bombing_altitude_projection_m
             has_bombing_target = bool(bombing_target_kind)
             bombing_unavailable_reason = ""
+            if cached_bombing_solution_time > 0.0:
+                bombing_solution_age_s = max(0.0, now - cached_bombing_solution_time)
 
         return UISnapshot(
             phase=phase,
@@ -1947,6 +2091,7 @@ class GameLogic:
             has_airfield_target=has_airfield_target,
             has_target=has_target,
             has_bombing_target=has_bombing_target,
+            bombing_target_mode=BombConfig.normalize_target_mode(BombConfig.target_mode),
             bombing_target_kind=bombing_target_kind,
             bombing_target_name=bombing_target_name,
             is_deviating=nav_is_deviating,
@@ -1979,15 +2124,33 @@ class GameLogic:
             time_to_release=time_to_release,
             release_status=release_status,
             target_zone_distance_m=target_zone_distance_m,
+            bomb_trajectory_model_id=bomb_trajectory_model_id,
+            bomb_trajectory_model_category=bomb_trajectory_model_category,
+            bomb_trajectory_model_quality=bomb_trajectory_model_quality,
+            target_altitude_m=target_altitude_m,
+            target_altitude_source=target_altitude_source,
+            atmosphere_model_id=atmosphere_model_id,
+            atmosphere_altitude_datum_m=atmosphere_altitude_datum_m,
+            altitude_datum_source=altitude_datum_source,
+            air_density_sea_level=air_density_sea_level,
+            air_density_source=air_density_source,
+            bombing_state_age_s=bombing_state_age_s,
+            bombing_map_age_s=bombing_map_age_s,
+            bombing_endpoint_skew_s=bombing_endpoint_skew_s,
+            bombing_altitude_projection_m=bombing_altitude_projection_m,
+            bombing_tas_projection_ms=bombing_tas_projection_ms,
+            bombing_vertical_acceleration_ms2=bombing_vertical_acceleration_ms2,
+            bombing_release_state_source=bombing_release_state_source,
+            bombing_maneuver_score=bombing_maneuver_score,
+            bombing_precision_gate_available=bombing_precision_gate_available,
             bombing_unavailable_reason=bombing_unavailable_reason,
+            bombing_solution_age_s=bombing_solution_age_s,
             ground_speed_kmh=ground_speed_kmh_for_bombing,
             aircraft_type_name=str(tel.type_name or ""),
             attitude_pitch_deg=attitude_pitch_deg,
             attitude_roll_deg=attitude_roll_deg,
             attitude_bank_deg=attitude_bank_deg,
             attitude_reliable=attitude_reliable,
-            hud_attitude_fallback=attitude_fallback,
-            hud_attitude_fallback_reason=attitude_fallback_reason,
             overspeed_level=overspeed.level,
             overspeed_ratio=float(overspeed.ias_ratio or 0.0),
             overspeed_current_ias_kmh=float(overspeed.ias_kmh or 0.0),

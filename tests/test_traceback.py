@@ -1,5 +1,3 @@
-# enforces: docs/specs/runtime-8111-boundary.md R8111-17..R8111-18 R8111-20
-
 import pytest
 
 from bomana.config.settings import GameConfig

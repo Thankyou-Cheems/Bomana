@@ -8,15 +8,12 @@ from typing import TYPE_CHECKING
 
 from bomana.config.feature_profile import ENABLE_CCRP, ENABLE_WEB_DASHBOARD
 from bomana.config.settings import (
-    BombConfig,
     UIConfig,
     ZoneConfig,
 )
+from bomana.ui.bombing_bar import BombingBar
 from bomana.ui.icon_assets import IconManager
-from bomana.ui.panel_presenter import (
-    format_weapon_selection_label,
-    overspeed_dynamic_projection,
-)
+from bomana.ui.panel_presenter import overspeed_dynamic_projection
 from bomana.ui.text_utils import bind_dynamic_wrap, measure_min_width
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_action_button, style_clickable_surface
@@ -1144,133 +1141,34 @@ class MainWindowBuilder:
         self._bind_label_wrap(app.fuel_return_detail_lbl, app.fuel_info_frame)
 
         if ENABLE_CCRP:
-            weapon_catalog = app._get_weapon_catalog()
-            selected_weapon = weapon_catalog.selected_weapon if weapon_catalog is not None else {}
-            selected_weapon = selected_weapon or {}
-            selected_weapon_name = str(
-                selected_weapon.get("display_name_zh")
-                or selected_weapon.get("display_name")
-                or (
-                    BombConfig.format_bomb_name(BombConfig.selected_bomb)
-                    if weapon_catalog is not None
-                    else "武器目录不可用"
-                )
+            app.bombing_bar = BombingBar(
+                app.zone_frame,
+                app,
+                scale=app.scale,
+                standalone=False,
             )
-            selected_weapon_role = str(selected_weapon.get("role") or "bomb")
-            app.bombing_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-            app.bombing_header_frame.grid(
-                row=9, column=0, sticky="ew", padx=pad_x, pady=(0, int(2 * s))
+            app.bombing_bar.refresh_mode()
+            app.bombing_frame = app.bombing_bar.frame
+            app.bombing_frame.grid(
+                row=9,
+                column=0,
+                sticky="ew",
+                padx=0,
+                pady=(0, int(6 * s)),
             )
-            app.bombing_header_frame.grid_columnconfigure(1, weight=1)
-            app.bombing_title_lbl = tk.Label(
-                app.bombing_header_frame,
-                text="武器解算",
-                font=font_title,
-                fg=Theme.TEXT,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-            )
-            app.bombing_title_lbl.grid(row=0, column=0, sticky="w")
-            font_release = app._get_font("zone_title")
-            app.bomb_release_lbl = tk.Label(
-                app.bombing_header_frame,
-                text="等待目标",
-                font=font_release,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="e",
-            )
-            app.bomb_release_lbl.grid(row=0, column=1, sticky="e")
-            app.weapon_select_btn = tk.Button(
-                app.bombing_header_frame,
-                text="选择武器",
-                font=font_item,
-                padx=max(7, int(7 * s)),
-                pady=max(1, int(1 * s)),
-                command=app._show_bomb_selector,
-                takefocus=False,
-            )
-            style_action_button(app.weapon_select_btn, "neutral")
-            app.weapon_select_btn.grid(row=0, column=2, sticky="e", padx=(int(10 * s), 0))
-            app.bombing_close_btn = self._build_panel_close_button(
-                app.bombing_header_frame,
-                panel_key="show_bombing",
-                font=font_item,
-                scale=s,
-            )
-            app.bombing_close_btn.grid(row=0, column=3, sticky="e", padx=(int(6 * s), 0))
-            app.bombing_info_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
-            app.bombing_info_frame.grid(
-                row=10, column=0, sticky="ew", padx=pad_x, pady=(0, int(6 * s))
-            )
-            style_clickable_surface(app.bombing_info_frame)
-            app.bomb_select_lbl = tk.Label(
-                app.bombing_info_frame,
-                text=format_weapon_selection_label(
-                    selected_weapon_name,
-                    selected_weapon_role,
-                    weapon_catalog.selection_source if weapon_catalog is not None else "unknown",
-                ),
-                font=font_item,
-                fg=Theme.BLUE,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-                justify="left",
-                cursor="hand2",
-            )
-            app.bomb_select_lbl.pack(fill="x")
-            self._bind_label_wrap(app.bomb_select_lbl, app.bombing_info_frame)
-            app.bomb_select_lbl.bind(
-                "<Enter>", lambda e: app.bomb_select_lbl.config(fg=Theme.TEXT, bg=Theme.BG)
-            )
-            app.bomb_select_lbl.bind(
-                "<Leave>", lambda e: app.bomb_select_lbl.config(fg=Theme.BLUE, bg=Theme.GRAYPILL)
-            )
-            app.bomb_trajectory_lbl = tk.Label(
-                app.bombing_info_frame,
-                text="目标 -- · 弹道 --",
-                font=font_item,
-                fg=Theme.TEXT_DIM,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-                justify="left",
-            )
-            app.bomb_trajectory_lbl.pack(fill="x")
-            app.bomb_flight_lbl = tk.Label(
-                app.bombing_info_frame,
-                text="",
-                font=font_item,
-                fg=Theme.TEXT_DIM,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-                justify="left",
-            )
-            app.bomb_release_detail_lbl = tk.Label(
-                app.bombing_info_frame,
-                text="朝向POI或战区后计算",
-                font=font_item,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-                justify="left",
-            )
-            app.bomb_release_detail_lbl.pack(fill="x")
-            self._bind_label_wrap(app.bomb_trajectory_lbl, app.bombing_info_frame)
-            self._bind_label_wrap(app.bomb_flight_lbl, app.bombing_info_frame)
-            self._bind_label_wrap(app.bomb_release_detail_lbl, app.bombing_info_frame)
-            for weapon_card_widget in (
-                app.bombing_info_frame,
-                app.bomb_select_lbl,
-                app.bomb_trajectory_lbl,
-                app.bomb_flight_lbl,
-                app.bomb_release_detail_lbl,
-            ):
-                weapon_card_widget.config(cursor="hand2")
-                weapon_card_widget.bind(
-                    "<Button-1>",
-                    lambda _event: app._show_bomb_selector(),
-                    add="+",
-                )
+            if app.bombing_bar.standalone:
+                app.bombing_frame.grid_remove()
+            # Compatibility aliases for dialog/tests that inspect the established names.
+            app.bombing_header_frame = app.bombing_bar.header_frame
+            app.bombing_info_frame = app.bombing_bar.info_frame
+            app.bombing_title_lbl = app.bombing_bar.title_lbl
+            app.bomb_release_lbl = app.bombing_bar.release_lbl
+            app.weapon_select_btn = app.bombing_bar.weapon_btn
+            app.bombing_close_btn = app.bombing_bar.close_btn
+            app.bomb_select_lbl = app.bombing_bar.weapon_btn
+            app.bomb_trajectory_lbl = app.bombing_bar.trajectory_lbl
+            app.bomb_flight_lbl = app.bombing_bar.flight_lbl
+            app.bomb_release_detail_lbl = app.bombing_bar.release_detail_lbl
 
         app._zone_row_pool = self._build_nav_row_pool(
             app.zone_list_frame,

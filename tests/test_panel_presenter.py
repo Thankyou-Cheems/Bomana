@@ -3,6 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from bomana.core.offline_ballistics_model import (
+    OFFLINE_RIGIDBODY_PROJECTION_MODEL_ID,
+)
 from bomana.ui import panel_presenter
 from bomana.ui.panel_presenter import (
     build_bombing_display_model,
@@ -42,7 +45,7 @@ def test_fuel_display_model_formats_return_warning() -> None:
     assert model.return_detail_text == ""
 
 
-def test_bombing_display_model_ready_state(monkeypatch) -> None:
+def test_bombing_display_model_ready_state_counts_down_before_prompt(monkeypatch) -> None:
     monkeypatch.setattr(panel_presenter.BombConfig, "format_bomb_name", lambda _name: "FAB-100")
     monkeypatch.setattr(panel_presenter.BombConfig, "get_bomb_data", lambda _name: {})
     snap = SimpleNamespace(
@@ -64,10 +67,34 @@ def test_bombing_display_model_ready_state(monkeypatch) -> None:
     assert model.bomb_label_text == "FAB-100 · 炸弹 · 点击切换"
     assert model.trajectory_text == "目标 战区 #1 1.42km · 弹道 1.42km · 飞行 3.6s"
     assert model.flight_text == ""
+    assert model.release.icon == "clock"
+    assert model.release.text == "准备"
+    assert model.release.fg == Theme.GREEN
+    assert model.release_detail_text == "战区窗口 0.42s / 95m"
+
+
+def test_bombing_display_model_prompts_only_at_release_threshold(monkeypatch) -> None:
+    monkeypatch.setattr(panel_presenter.BombConfig, "format_bomb_name", lambda _name: "FAB-100")
+    monkeypatch.setattr(panel_presenter.BombConfig, "get_bomb_data", lambda _name: {})
+    snap = SimpleNamespace(
+        bomb_name="su_fab100",
+        bombing_valid=True,
+        bomb_range_m=1420.0,
+        bomb_flight_time=3.6,
+        release_status="ready",
+        release_distance_m=18.0,
+        time_to_release=0.08,
+        target_zone_distance_m=1420.0,
+        has_bombing_target=True,
+        bombing_target_kind="zone",
+        bombing_target_name="战区 #1",
+    )
+
+    model = build_bombing_display_model(snap)
+
     assert model.release.icon == "bomb"
     assert model.release.text == "投弹"
     assert model.release.fg == Theme.GREEN
-    assert model.release_detail_text == "战区窗口 0.42s / 95m"
 
 
 def test_bombing_display_model_marks_poi_target(monkeypatch) -> None:
@@ -95,14 +122,36 @@ def test_bombing_display_model_marks_poi_target(monkeypatch) -> None:
     assert model.release_detail_text == "POI窗口 4.2s / 950m"
 
 
-def test_bombing_display_model_explains_mach_limit(monkeypatch) -> None:
+def test_bombing_display_model_identifies_offline_rigidbody_profile(monkeypatch) -> None:
+    monkeypatch.setattr(panel_presenter.BombConfig, "format_bomb_name", lambda _name: "1000 lb GP")
+    monkeypatch.setattr(panel_presenter.BombConfig, "get_bomb_data", lambda _name: {})
+    snap = SimpleNamespace(
+        bomb_name="uk_1000lbs_gp",
+        bombing_valid=True,
+        bomb_range_m=4980.0,
+        bomb_flight_time=20.1,
+        release_status="approaching",
+        release_distance_m=800.0,
+        time_to_release=3.5,
+        target_zone_distance_m=5780.0,
+        has_bombing_target=True,
+        bombing_target_kind="zone",
+        bombing_target_name="战区 #2",
+        bomb_trajectory_model_id=OFFLINE_RIGIDBODY_PROJECTION_MODEL_ID,
+    )
+
+    model = build_bombing_display_model(snap)
+
+    assert "高精度弹道 4.98km" in model.trajectory_text
+
+
+def test_bombing_display_model_explains_missing_terrain(monkeypatch) -> None:
     monkeypatch.setattr(panel_presenter.BombConfig, "format_bomb_name", lambda _name: "FAB-100")
     monkeypatch.setattr(panel_presenter.BombConfig, "get_bomb_data", lambda _name: {})
     snap = SimpleNamespace(
         bomb_name="su_fab100",
         bombing_valid=False,
-        bombing_unavailable_reason="release_mach_limit",
-        overspeed_current_mach=1.08,
+        bombing_unavailable_reason="terrain_unavailable",
         on_ground=False,
         altitude_m=500.0,
         has_target=True,
@@ -110,12 +159,76 @@ def test_bombing_display_model_explains_mach_limit(monkeypatch) -> None:
 
     model = build_bombing_display_model(snap)
 
-    assert model.trajectory_text == "目标 战区 · 超马赫限制"
+    assert model.trajectory_text == "目标 战区 · 等待离线高程"
     assert model.flight_text == ""
-    assert model.release.icon == "danger"
-    assert model.release.text == "不可投"
-    assert model.release.fg == Theme.RED
-    assert model.release_detail_text == "M1.08 超过投放限制，减速后再投"
+    assert model.release.icon == "aim"
+    assert model.release.text == "无高程"
+    assert model.release.fg == Theme.YELLOW
+    assert model.release_detail_text == "校验内置高程数据并等待当前地图识别"
+
+
+def test_bombing_display_model_explains_8111_time_alignment(monkeypatch) -> None:
+    monkeypatch.setattr(panel_presenter.BombConfig, "format_bomb_name", lambda _name: "FAB-100")
+    monkeypatch.setattr(panel_presenter.BombConfig, "get_bomb_data", lambda _name: {})
+    snap = SimpleNamespace(
+        bomb_name="su_fab100",
+        bombing_valid=False,
+        bombing_unavailable_reason="time_alignment_unavailable",
+        on_ground=False,
+        altitude_m=500.0,
+        has_target=True,
+    )
+
+    model = build_bombing_display_model(snap)
+
+    assert model.trajectory_text == "目标 战区 · 对齐 8111 时间轴"
+    assert model.release.text == "同步中"
+    assert model.release.fg == Theme.YELLOW
+    assert model.release_detail_text == "过旧或错位的数据帧不会生成提示"
+
+
+def test_bombing_display_model_explains_unresolved_release_dynamics(monkeypatch) -> None:
+    monkeypatch.setattr(panel_presenter.BombConfig, "format_bomb_name", lambda _name: "FAB-100")
+    monkeypatch.setattr(panel_presenter.BombConfig, "get_bomb_data", lambda _name: {})
+    snap = SimpleNamespace(
+        bomb_name="su_fab100",
+        bombing_valid=False,
+        bombing_unavailable_reason="release_dynamics_unresolved",
+        on_ground=False,
+        altitude_m=500.0,
+        has_target=True,
+    )
+
+    model = build_bombing_display_model(snap)
+
+    assert model.trajectory_text == "目标 战区 · 侧飞/转弯过大"
+    assert model.release.text == "转弯中"
+    assert model.release.fg == Theme.YELLOW
+    assert model.release_detail_text == ""
+
+
+def test_bombing_target_altitude_omits_terrain_provenance_from_compact_ui(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(panel_presenter.BombConfig, "format_bomb_name", lambda _name: "FAB-100")
+    monkeypatch.setattr(panel_presenter.BombConfig, "get_bomb_data", lambda _name: {})
+    snap = SimpleNamespace(
+        bomb_name="su_fab100",
+        bombing_valid=False,
+        bombing_unavailable_reason="release_state_unavailable",
+        on_ground=False,
+        altitude_m=500.0,
+        has_bombing_target=True,
+        bombing_target_kind="zone",
+        bombing_target_name="战区 #1",
+        target_altitude_m=315.0,
+        target_altitude_source="terrain",
+    )
+
+    model = build_bombing_display_model(snap)
+
+    assert model.target_altitude_text == "目标高程 315m"
+    assert "离线地形" not in model.target_altitude_text
 
 
 def _weapon_snapshot(**overrides):
@@ -258,6 +371,66 @@ def test_foxthree_compatible_glide_is_an_experimental_reference_not_a_green_cue(
     assert model.release.fg == Theme.YELLOW
     assert model.trajectory_text == "POI 12.4km · 滑翔参考约 32.5km"
     assert model.flight_text == "飞行约 42s"
+
+
+def test_player_visible_trajectory_reference_is_a_lower_bound_not_a_max_claim() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_id="us_2000lb_gbu31_usaf",
+            weapon_display_name="GBU-31 JDAM",
+            weapon_role="bomb",
+            weapon_status="within_experimental_reference",
+            weapon_quality="experimental",
+            weapon_reason="player_visible_trajectory_reference",
+            weapon_target_distance_m=9000.0,
+            weapon_max_range_m=10000.0,
+            weapon_time_to_target_s=44.0,
+        )
+    )
+
+    assert model.release.text == "样本条件参考"
+    assert model.release.fg == Theme.YELLOW
+    assert model.trajectory_text == "POI 9.0km · 目标高0.1km样本 ≥10.0km"
+    assert model.flight_text == "飞行约 44s"
+
+
+def test_normal_guided_ballistic_fallback_is_visibly_uncalibrated() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_role="bomb",
+            weapon_status="within_experimental_reference",
+            weapon_quality="experimental",
+            weapon_reason="guided_ballistic_uncalibrated",
+            weapon_target_distance_m=3000.0,
+            weapon_max_range_m=4967.0,
+            weapon_time_to_target_s=20.0,
+        )
+    )
+
+    assert model.release.text == "推测射程内"
+    assert model.release.fg == Theme.YELLOW
+    assert model.trajectory_text == "POI 3.0km · 未校准参考约 5.0km"
+    assert model.flight_text == "飞行约 20s"
+
+
+def test_beyond_visible_curve_means_unobserved_not_out_of_range() -> None:
+    model = build_bombing_display_model(
+        _weapon_snapshot(
+            weapon_role="bomb",
+            weapon_status="beyond_experimental_reference",
+            weapon_quality="experimental",
+            weapon_reason="player_visible_trajectory_reference",
+            weapon_target_distance_m=12000.0,
+            weapon_max_range_m=10000.0,
+            weapon_time_to_target_s=0.0,
+            weapon_time_to_window_s=20.0,
+        )
+    )
+
+    assert model.release.text == "超出已见样本"
+    assert model.release.fg == Theme.YELLOW
+    assert model.trajectory_text == "POI 12.0km · 目标高0.1km样本 ≥10.0km"
+    assert model.flight_text == "距已见样本约 20s"
 
 
 def test_experimental_glide_reference_still_requires_valid_compatible_solution() -> None:

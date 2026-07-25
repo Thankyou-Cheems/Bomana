@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "pack_id": "terrain-v1",
+  "archive_asset": "Bomana-terrain-offline-balanced-v1.zip",
+  "archive_sha256": "5614ba601bfde441ea4d0e8c45e532cd8026ac0ab3e6f41162a1567dcb3210a1",
+  "archive_size_bytes": 118027775,
+  "archive_root": "terrain-v1",
+  "map_count": 67,
+  "package_prefix": "bomana/data/terrain-v1",
+  "download_urls": [
+    "https://bomanaupdate.ruikang.wang/downloads/Bomana-terrain-offline-balanced-v1.zip",
+    "https://github.com/Thankyou-Cheems/Bomana/releases/download/terrain-v1/Bomana-terrain-offline-balanced-v1.zip"
+  ]
+}

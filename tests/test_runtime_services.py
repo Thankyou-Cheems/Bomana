@@ -1,12 +1,8 @@
 from types import SimpleNamespace
-from unittest import mock
 
 import pytest
 
-from bomana.config.settings import (
-    HotkeyConfig,
-    HUDConfig,
-)
+from bomana.config.settings import HotkeyConfig
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui import runtime_services
 from bomana.ui.dialogs import SettingsDialog
@@ -14,8 +10,6 @@ from bomana.ui.runtime_services import AppRuntimeServices
 from bomana.utils.hotkey_broker import (
     BrokerStartResult,
     BrokerStartStatus,
-    GameIntegrityResult,
-    GameIntegrityStatus,
 )
 
 
@@ -32,19 +26,6 @@ def _default_to_unavailable_broker(monkeypatch):
             pass
 
     monkeypatch.setattr(runtime_services, "ElevatedHotkeyBrokerClient", UnavailableBroker)
-    monkeypatch.setattr(
-        runtime_services,
-        "detect_war_thunder_integrity",
-        lambda: GameIntegrityResult(GameIntegrityStatus.NOT_RUNNING),
-    )
-
-
-class FakeSound:
-    def __init__(self) -> None:
-        self.patterns: list[str] = []
-
-    def play(self, *, pattern: str) -> None:
-        self.patterns.append(pattern)
 
 
 def _minimal_dashboard_snapshot() -> UISnapshot:
@@ -227,43 +208,6 @@ def test_runtime_has_no_separate_lan_control_lifecycle() -> None:
     assert "disable_dashboard_lan_control" not in AppRuntimeServices.__dict__
 
 
-def test_hud_overlay_init_failure_disables_without_leaking_exception() -> None:
-    calls: list[str] = []
-    app = SimpleNamespace(
-        _locked=True,
-        sound=FakeSound(),
-        _update_hint=lambda: calls.append("hint"),
-        _save_config=lambda: calls.append("save"),
-    )
-    services = AppRuntimeServices(app)
-    original_enabled = HUDConfig.enabled
-    HUDConfig.enabled = False
-
-    class FailingHUDOverlay:
-        def __init__(self, _app) -> None:
-            raise RuntimeError("transparent overlay unavailable")
-
-    try:
-        with (
-            mock.patch.object(runtime_services, "HUDOverlay", FailingHUDOverlay),
-            mock.patch.object(runtime_services, "log_exception") as log_exception,
-            mock.patch.object(AppRuntimeServices, "refresh_tray") as refresh_tray,
-        ):
-            assert services.ensure_hud_overlay() is False
-            assert services.hud_overlay is None
-            assert services.show_hud_overlay() is False
-
-            services.toggle_hud()
-
-            assert HUDConfig.enabled is False
-            assert services.hud_overlay is None
-            assert calls == ["hint", "save"]
-            refresh_tray.assert_called_once()
-            assert log_exception.call_count >= 2
-    finally:
-        HUDConfig.enabled = original_enabled
-
-
 def _make_hotkey_app() -> SimpleNamespace:
     return SimpleNamespace(
         root=object(),
@@ -274,6 +218,7 @@ def _make_hotkey_app() -> SimpleNamespace:
         _next_corner=lambda: None,
         _toggle_beep=lambda: None,
         _toggle_zone_sound=lambda: None,
+        _toggle_bomb_target_mode=lambda: None,
         _on_hotkey_registration_error=lambda _key_names: None,
         _on_nudge_action=lambda: None,
         _set_hotkey_broker_notice=lambda _message, _action: None,
@@ -401,23 +346,18 @@ def test_init_global_hotkeys_uses_local_backend_without_automatic_uac(monkeypatc
     monkeypatch.setattr(runtime_services.os, "name", "nt")
     monkeypatch.setattr(runtime_services, "ElevatedHotkeyBrokerClient", UnexpectedBroker)
     monkeypatch.setattr(runtime_services, "GlobalHotkeys", LocalHotkeys)
-    monkeypatch.setattr(
-        runtime_services,
-        "detect_war_thunder_integrity",
-        lambda: GameIntegrityResult(GameIntegrityStatus.ORDINARY, 42, "aces.exe"),
-    )
     monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
 
     services.init_global_hotkeys()
 
-    assert calls == ["local-create:5", "local-start"]
+    assert calls == ["local-create:6", "local-start"]
     assert services.hotkey_broker is None
     assert services.global_hotkeys is not None
     assert notices[-1][1] == ""
     assert notices[-1][0] == ""
 
 
-def test_elevated_game_keeps_local_hotkeys_and_offers_manual_uac(monkeypatch) -> None:
+def test_startup_does_not_probe_game_process_or_offer_uac(monkeypatch) -> None:
     calls: list[str] = []
     notices: list[tuple[str, str]] = []
 
@@ -436,18 +376,13 @@ def test_elevated_game_keeps_local_hotkeys_and_offers_manual_uac(monkeypatch) ->
     services = AppRuntimeServices(app)
     monkeypatch.setattr(runtime_services.os, "name", "nt")
     monkeypatch.setattr(runtime_services, "GlobalHotkeys", LocalHotkeys)
-    monkeypatch.setattr(
-        runtime_services,
-        "detect_war_thunder_integrity",
-        lambda: GameIntegrityResult(GameIntegrityStatus.ELEVATED, 42, "aces.exe"),
-    )
     monkeypatch.setattr(HotkeyConfig, "GLOBAL_HOTKEYS", True)
 
     services.init_global_hotkeys()
 
     assert calls == ["local-create", "local-start"]
-    assert notices[-1][1] == "elevate"
-    assert notices[-1][0] == ("检测到 War Thunder 以管理员权限运行；普通热键可能在游戏前台失效。")
+    assert notices[-1] == ("", "")
+    assert not hasattr(runtime_services, "detect_war_thunder_integrity")
 
 
 def test_tray_hotkey_action_is_dynamic_and_dispatches_to_tk() -> None:
@@ -511,12 +446,12 @@ def test_cancelled_explicit_uac_restores_local_hotkeys(monkeypatch) -> None:
     services.enable_elevated_hotkeys()
 
     assert calls == [
-        "local-create:5",
+        "local-create:6",
         "local-start",
         "local-stop",
         "broker-start",
         "broker-stop",
-        "local-create:5",
+        "local-create:6",
         "local-start",
     ]
     assert services.hotkey_broker is None
@@ -554,13 +489,14 @@ def test_refresh_local_hotkey_bindings_unbinds_old_sequences(monkeypatch) -> Non
     monkeypatch.setattr(HotkeyConfig, "KEY_CORNER", "F2")
     monkeypatch.setattr(HotkeyConfig, "KEY_BEEP", "F3")
     monkeypatch.setattr(HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(HotkeyConfig, "KEY_BOMB_TARGET", "F5")
     monkeypatch.setattr(runtime_services, "ENABLE_ZONES", True)
 
     services.refresh_local_hotkey_bindings()
 
     assert unbound == ["<F8>", "<F9>"]
-    assert bound == ["<F1>", "<F2>", "<F3>", "<F4>"]
-    assert services.local_hotkey_sequences == ["<F1>", "<F2>", "<F3>", "<F4>"]
+    assert bound == ["<F5>", "<F1>", "<F2>", "<F3>", "<F4>"]
+    assert services.local_hotkey_sequences == ["<F5>", "<F1>", "<F2>", "<F3>", "<F4>"]
 
 
 def test_refresh_local_hotkey_bindings_omits_zones_when_disabled(monkeypatch) -> None:
@@ -575,11 +511,12 @@ def test_refresh_local_hotkey_bindings_omits_zones_when_disabled(monkeypatch) ->
     monkeypatch.setattr(HotkeyConfig, "KEY_CORNER", "F2")
     monkeypatch.setattr(HotkeyConfig, "KEY_BEEP", "F3")
     monkeypatch.setattr(HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(HotkeyConfig, "KEY_BOMB_TARGET", "F5")
     monkeypatch.setattr(runtime_services, "ENABLE_ZONES", False)
 
     services.refresh_local_hotkey_bindings()
 
-    assert bound == ["<F1>", "<F2>", "<F3>"]
+    assert bound == ["<F5>", "<F1>", "<F2>", "<F3>"]
 
 
 def test_refresh_local_hotkey_bindings_skips_invalid_runtime_key(monkeypatch) -> None:
@@ -597,12 +534,13 @@ def test_refresh_local_hotkey_bindings_skips_invalid_runtime_key(monkeypatch) ->
     monkeypatch.setattr(HotkeyConfig, "KEY_CORNER", "F2")
     monkeypatch.setattr(HotkeyConfig, "KEY_BEEP", "F3")
     monkeypatch.setattr(HotkeyConfig, "KEY_ZONES", "F4")
+    monkeypatch.setattr(HotkeyConfig, "KEY_BOMB_TARGET", "F5")
     monkeypatch.setattr(runtime_services, "ENABLE_ZONES", True)
 
     services.refresh_local_hotkey_bindings()
 
-    assert bound == ["<F2>", "<F3>", "<F4>"]
-    assert services.local_hotkey_sequences == ["<F2>", "<F3>", "<F4>"]
+    assert bound == ["<F5>", "<F2>", "<F3>", "<F4>"]
+    assert services.local_hotkey_sequences == ["<F5>", "<F2>", "<F3>", "<F4>"]
 
 
 def test_settings_hotkey_restart_uses_runtime_services(monkeypatch) -> None:

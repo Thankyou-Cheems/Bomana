@@ -1,7 +1,8 @@
 # ADR 0003: Use an optional zero-install privileged hotkey broker
 
-Status: Accepted
+Status: Amended
 Date: 2026-07-10
+Amended: 2026-07-24
 
 ## Context
 
@@ -20,17 +21,18 @@ Authenticode publisher identity.
 ## Decision
 
 Keep the launcher and Python App at ordinary integrity and register ordinary
-hotkeys first. At startup, make a narrowly allowlisted read-only query of visible
-War Thunder top-level processes to determine whether the game is elevated. Do
-not request UAC when the game is confirmed ordinary.
+hotkeys directly. The production App does not enumerate game windows or
+processes, query executable identities or tokens, or use game focus/integrity
+as a runtime input. Startup never requests UAC.
 
-Ship the fixed-action native broker inside each verified App package. When the
-game is elevated, absent, or unknown, expose an optional button. Only after the
-user clicks it and acknowledges that Windows will show an Unknown publisher
-prompt may Bomana launch the bundled broker with `runas`. Validate the adjacent
-SHA-256 and hold the broker file against write/delete replacement while it
-starts. The broker executes in place and sends only fixed action IDs over
-per-launch ACL-restricted IPC; it is never installed or persisted.
+The fixed-action native broker remains package-verifiable compatibility
+infrastructure. A build may expose it only as an explicit user-initiated action,
+never because it inspected the game. After the user acknowledges that Windows
+will show an Unknown publisher prompt, Bomana may launch only the bundled broker
+with `runas`. It validates the adjacent SHA-256 and holds the file against
+write/delete replacement while it starts. The broker executes in place and
+sends only fixed Bomana action IDs over per-launch ACL-restricted IPC; it is
+never installed or persisted.
 
 Generate GitHub Artifact Attestations for release assets. Keep Tencent/EdgeOne
 deployment on the maintainer workstation; Actions must not carry CVM deployment
@@ -38,7 +40,7 @@ credentials or upload release assets to Tencent.
 
 ## Consequences
 
-- Ordinary-integrity games use the default hotkey path without UAC or warnings.
+- The default hotkey path has no game-process query, UAC, or warning.
 - Users can manually approve one UAC prompt when an elevated game needs it,
   without installing a helper, service, certificate, or scheduled task.
 - Without Authenticode, Windows correctly displays Unknown publisher. Users who

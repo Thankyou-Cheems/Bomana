@@ -81,6 +81,21 @@ class PersistenceTests(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(migrated["panels"], {"show_bombing": True})
 
+    def test_config_migration_removes_retired_desktop_hud_keys(self) -> None:
+        migrated, changed = ConfigManager._migrate_config(
+            {
+                "config_version": 3,
+                "panels": {},
+                "hud_enabled": True,
+                "hud": {"alpha": 220},
+            }
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(migrated["config_version"], FileConfig.CONFIG_VERSION)
+        self.assertNotIn("hud_enabled", migrated)
+        self.assertNotIn("hud", migrated)
+
     def test_config_save_persists_current_compile_switches(self) -> None:
         ok = ConfigManager.save({"alpha": 180})
 

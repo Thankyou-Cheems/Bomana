@@ -24,20 +24,30 @@ from launcher.core import (  # noqa: E402
     RELEASE_MANIFEST_DEFAULT_KEY_ID,
     verify_release_manifest_signature,
 )
+from launcher.terrain_store import (  # noqa: E402
+    TERRAIN_MANIFEST_ASSET,
+    TerrainStoreError,
+    parse_terrain_manifest,
+)
 
 CHANNELS = ("Enhanced", "Standard", "Lite")
 DEFAULT_HOST = "TencentCloudPublic"
 DEFAULT_REMOTE_ROOT = "/opt/stacks/bomana-update"
 DEFAULT_PUBLIC_BASE_URL = "https://bomanaupdate.ruikang.wang"
+TERRAIN_RELEASE_DIR_NAME = "terrain-release"
+TERRAIN_CHECKSUM_FILE_NAME = "checksums_terrain.txt"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--target",
-        choices=("app", "launcher", "all"),
+        choices=("app", "launcher", "terrain", "all"),
         default="app",
-        help="Asset group to deploy from dist/",
+        help=(
+            "Asset group to deploy from dist/; terrain is an independent low-frequency "
+            "release and is intentionally excluded from all"
+        ),
     )
     parser.add_argument(
         "--version",
@@ -84,6 +94,22 @@ def read_literal(path: Path, name: str) -> str:
     return match.group(1).strip()
 
 
+def terrain_release_assets(dist: Path) -> list[Path]:
+    release_dir = dist / TERRAIN_RELEASE_DIR_NAME
+    manifest_path = release_dir / TERRAIN_MANIFEST_ASSET
+    checksum_path = release_dir / TERRAIN_CHECKSUM_FILE_NAME
+    assets = [manifest_path, checksum_path]
+    if not manifest_path.is_file():
+        return assets
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = parse_terrain_manifest(payload)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TerrainStoreError) as exc:
+        raise RuntimeError(f"terrain release manifest is invalid: {manifest_path}") from exc
+    assets.extend(release_dir / "objects" / item.asset for item in manifest.files)
+    return list(dict.fromkeys(assets))
+
+
 def required_assets(dist: Path, target: str, app_version: str, launcher_version: str) -> list[Path]:
     assets: list[Path] = []
     if target in {"app", "all"}:
@@ -104,6 +130,8 @@ def required_assets(dist: Path, target: str, app_version: str, launcher_version:
                 dist / "checksums_launcher.txt",
             ]
         )
+    if target == "terrain":
+        assets.extend(terrain_release_assets(dist))
     missing = [path for path in assets if not path.exists()]
     if missing:
         raise FileNotFoundError(
@@ -158,7 +186,9 @@ def validate_local_release_assets(
     app_version: str,
     launcher_version: str,
 ) -> None:
-    _key_id, public_keys = public_key_config()
+    public_keys: dict[str, str] = {}
+    if target in {"app", "launcher", "terrain", "all"}:
+        _key_id, public_keys = public_key_config()
     if target in {"app", "all"}:
         for channel in CHANNELS:
             manifest_src = dist / f"manifest_{channel}.json"
@@ -195,6 +225,54 @@ def validate_local_release_assets(
         if sha256_file(asset_src) != str(manifest.get("launcher_sha256", "")).lower():
             raise RuntimeError(f"{asset_src.name} sha256 mismatch")
 
+    if target == "terrain":
+        release_dir = dist / TERRAIN_RELEASE_DIR_NAME
+        manifest_src = release_dir / TERRAIN_MANIFEST_ASSET
+        try:
+            payload = json.loads(manifest_src.read_text(encoding="utf-8"))
+            verify_release_manifest_signature(
+                payload,
+                manifest_label=f"{manifest_src.name} ",
+                public_keys=public_keys,
+                expected_kind="terrain",
+            )
+            manifest = parse_terrain_manifest(payload)
+        except (
+            OSError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            TerrainStoreError,
+        ) as exc:
+            raise RuntimeError(f"terrain release validation failed: {exc}") from exc
+        expected_checksums = {
+            f"{sha256_file(manifest_src)}  {manifest_src.name}",
+        }
+        for item in manifest.files:
+            object_path = local_asset_path(
+                release_dir / "objects",
+                item.asset,
+                "terrain object",
+            )
+            if (
+                object_path.stat().st_size != item.size_bytes
+                or sha256_file(object_path) != item.sha256
+            ):
+                raise RuntimeError(f"terrain object integrity mismatch: {object_path.name}")
+            expected_checksums.add(
+                f"{item.sha256}  objects/{item.asset}",
+            )
+        checksum = release_dir / TERRAIN_CHECKSUM_FILE_NAME
+        try:
+            actual_checksums = {
+                line.strip()
+                for line in checksum.read_text(encoding="ascii").splitlines()
+                if line.strip()
+            }
+        except (OSError, UnicodeDecodeError) as exc:
+            raise RuntimeError(f"terrain checksum is invalid: {checksum}") from exc
+        if actual_checksums != expected_checksums:
+            raise RuntimeError("terrain checksum list does not match the signed release")
+
 
 def shell_quote(value: str) -> str:
     return shlex.quote(value)
@@ -214,6 +292,8 @@ def remote_env_command(
         "TARGET": target,
         "APP_VERSION": app_version,
         "LAUNCHER_VERSION": launcher_version,
+        "TERRAIN_MANIFEST_ASSET": TERRAIN_MANIFEST_ASSET,
+        "TERRAIN_CHECKSUM_ASSET": TERRAIN_CHECKSUM_FILE_NAME,
     }
     assignments = " ".join(f"{name}={shell_quote(value)}" for name, value in env.items())
     return f"{assignments} python3 -"
@@ -251,7 +331,16 @@ remote_root = Path(__import__("os").environ["REMOTE_ROOT"])
 target = __import__("os").environ["TARGET"]
 app_version = __import__("os").environ["APP_VERSION"]
 launcher_version = __import__("os").environ["LAUNCHER_VERSION"]
+terrain_manifest_asset = __import__("os").environ["TERRAIN_MANIFEST_ASSET"]
+terrain_checksum_asset = __import__("os").environ["TERRAIN_CHECKSUM_ASSET"]
 channels = ("Enhanced", "Standard", "Lite")
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file_obj:
+        for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 def stage_asset_path(stage_dir: Path, asset_name: object, field_name: str) -> Path:
     if not isinstance(asset_name, str) or not asset_name.strip():
@@ -281,6 +370,8 @@ def require_manifest_signature(manifest: dict, manifest_name: str) -> None:
 manifest_dir = remote_root / "data" / "manifests"
 download_dir = remote_root / "data" / "downloads"
 launcher_manifest = remote_root / "data" / "launcher_manifest.json"
+manifest_dir.mkdir(parents=True, exist_ok=True)
+download_dir.mkdir(parents=True, exist_ok=True)
 backup_dir = Path("/opt/backups/bomana-update") / (
     "release-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 )
@@ -316,10 +407,10 @@ if target in {"app", "all"}:
         changelog_src = stage_asset_path(
             stage_dir, manifest["changelog_asset"], "changelog_asset"
         )
-        asset_sha = hashlib.sha256(asset_src.read_bytes()).hexdigest()
+        asset_sha = sha256_file(asset_src)
         if asset_sha != manifest["package_sha256"]:
             raise SystemExit(f"{asset_src.name} sha256 mismatch")
-        changelog_sha = hashlib.sha256(changelog_src.read_bytes()).hexdigest()
+        changelog_sha = sha256_file(changelog_src)
         if changelog_sha != manifest["changelog_sha256"]:
             raise SystemExit(f"{changelog_src.name} sha256 mismatch")
         if manifest["app_version"] != app_version:
@@ -340,7 +431,7 @@ if target in {"launcher", "all"}:
     manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
     require_manifest_signature(manifest, manifest_src.name)
     asset_src = stage_asset_path(stage_dir, manifest["launcher_asset"], "launcher_asset")
-    asset_sha = hashlib.sha256(asset_src.read_bytes()).hexdigest()
+    asset_sha = sha256_file(asset_src)
     if asset_sha != manifest["launcher_sha256"]:
         raise SystemExit(f"{asset_src.name} sha256 mismatch")
     if manifest["launcher_version"] != launcher_version:
@@ -353,6 +444,96 @@ if target in {"launcher", "all"}:
     shutil.copy2(manifest_src, launcher_manifest.parent / f"launcher_manifest_v{launcher_version}.json")
     shutil.copy2(manifest_src, launcher_manifest)
     print("deployed_launcher=", launcher_version, asset_src.name)
+
+if target == "terrain":
+    manifest_src = stage_asset_path(
+        stage_dir,
+        terrain_manifest_asset,
+        "terrain_manifest",
+    )
+    checksum_src = stage_asset_path(
+        stage_dir,
+        terrain_checksum_asset,
+        "terrain_checksum",
+    )
+    manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+    require_manifest_signature(manifest, manifest_src.name)
+    revision = str(manifest.get("terrain_revision", "")).strip().lower()
+    files = manifest.get("files")
+    if len(revision) != 64 or any(char not in "0123456789abcdef" for char in revision):
+        raise SystemExit("terrain revision is invalid")
+    if not isinstance(files, list) or not files:
+        raise SystemExit("terrain files are missing")
+
+    expected_checksums = {f"{sha256_file(manifest_src)}  {terrain_manifest_asset}"}
+    terrain_dir = download_dir / "terrain"
+    object_dir = terrain_dir / "objects"
+    terrain_manifest_dir = terrain_dir / "manifests"
+    object_dir.mkdir(parents=True, exist_ok=True)
+    terrain_manifest_dir.mkdir(parents=True, exist_ok=True)
+    deployed_objects = 0
+    reused_objects = 0
+    seen_assets = {}
+    for entry in files:
+        if not isinstance(entry, dict):
+            raise SystemExit("terrain file entry is invalid")
+        asset = str(entry.get("asset", "")).strip()
+        digest = str(entry.get("sha256", "")).strip().lower()
+        try:
+            size_bytes = int(entry["size_bytes"])
+        except (KeyError, TypeError, ValueError):
+            raise SystemExit("terrain object size is invalid")
+        if len(digest) != 64 or digest not in asset or size_bytes <= 0:
+            raise SystemExit("terrain object identity is invalid")
+        if asset in seen_assets:
+            if seen_assets[asset] != (digest, size_bytes):
+                raise SystemExit("terrain object identity is conflicting")
+            continue
+        seen_assets[asset] = (digest, size_bytes)
+        object_src = stage_asset_path(stage_dir, asset, "terrain_object")
+        if object_src.stat().st_size != size_bytes or sha256_file(object_src) != digest:
+            raise SystemExit(f"terrain object integrity mismatch: {asset}")
+        expected_checksums.add(f"{digest}  objects/{asset}")
+        object_dest = object_dir / asset
+        if object_dest.exists():
+            if object_dest.stat().st_size != size_bytes or sha256_file(object_dest) != digest:
+                raise SystemExit(
+                    f"refusing to overwrite mismatched immutable terrain object: {object_dest}"
+                )
+            reused_objects += 1
+        else:
+            shutil.copy2(object_src, object_dest)
+            deployed_objects += 1
+
+    actual_checksums = {
+        line.strip()
+        for line in checksum_src.read_text(encoding="ascii").splitlines()
+        if line.strip()
+    }
+    if actual_checksums != expected_checksums:
+        raise SystemExit(f"{checksum_src.name} content mismatch")
+
+    versioned_manifest = terrain_manifest_dir / f"terrain_manifest_{revision}.json"
+    if versioned_manifest.exists():
+        if sha256_file(versioned_manifest) != sha256_file(manifest_src):
+            raise SystemExit(
+                f"refusing to overwrite mismatched immutable terrain manifest: {versioned_manifest}"
+            )
+    else:
+        shutil.copy2(manifest_src, versioned_manifest)
+    current_manifest = terrain_dir / terrain_manifest_asset
+    current_temp = terrain_dir / f".{terrain_manifest_asset}.tmp"
+    shutil.copy2(manifest_src, current_temp)
+    current_temp.replace(current_manifest)
+    shutil.copy2(checksum_src, terrain_dir / terrain_checksum_asset)
+    print(
+        "deployed_terrain=",
+        revision[:12],
+        "new_objects=",
+        deployed_objects,
+        "reused_objects=",
+        reused_objects,
+    )
 
 shutil.rmtree(stage_dir, ignore_errors=True)
 print("backup_dir=", backup_dir)
@@ -376,7 +557,9 @@ print("backup_dir=", backup_dir)
 def verify_public(
     *, host: str, public_base_url: str, target: str, app_version: str, launcher_version: str
 ) -> None:
-    _key_id, public_keys = public_key_config()
+    public_keys: dict[str, str] = {}
+    if target in {"app", "launcher", "terrain", "all"}:
+        _key_id, public_keys = public_key_config()
 
     def public_asset_url(package_url: object) -> str:
         raw = str(package_url or "").strip()
@@ -468,6 +651,33 @@ def verify_public(
             payload["launcher_version"],
             launcher_sha256[:12],
             payload["manifest_signature"]["key_id"],
+        )
+    if target == "terrain":
+        manifest_url = urljoin(
+            f"{public_base_url.rstrip('/')}/",
+            f"downloads/terrain/{TERRAIN_MANIFEST_ASSET}",
+        )
+        with urlopen(manifest_url, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        verify_release_manifest_signature(
+            payload,
+            manifest_label="terrain ",
+            public_keys=public_keys,
+            expected_kind="terrain",
+        )
+        manifest = parse_terrain_manifest(payload)
+        for item in manifest.files:
+            object_url = urljoin(
+                f"{public_base_url.rstrip('/')}/",
+                f"downloads/terrain/objects/{item.asset}",
+            )
+            if sha256_url(object_url) != item.sha256:
+                raise RuntimeError(f"terrain public object sha256 mismatch: {object_url}")
+        print(
+            "verified_terrain=",
+            manifest.pack_id,
+            manifest.revision[:12],
+            len(manifest.files),
         )
 
 

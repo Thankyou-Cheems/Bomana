@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from launcher import core as launcher_core
 from launcher import install_txn as launcher_install
+from launcher.terrain_store import TERRAIN_OBJECT_ASSET_PREFIX, TerrainFile, terrain_revision
 
 TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 
@@ -30,14 +31,26 @@ def load_launcher_module():
     return module
 
 
-def make_app_zip(version: str = "8.1.0") -> bytes:
+def make_app_zip(
+    version: str = "8.1.0",
+    *,
+    min_launcher_version: str | None = None,
+) -> bytes:
     buffer = io.BytesIO()
+    min_launcher_line = (
+        f'PORTABLE_MIN_LAUNCHER_VERSION = "{min_launcher_version}"\n'
+        if min_launcher_version is not None
+        else ""
+    )
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("Bomana.pyw", "# app entry\n")
         zf.writestr("bomana_version.py", "# shared compatibility boundary\n")
         zf.writestr("bomana/config/__init__.py", f'__version__ = "{version}"\n')
         zf.writestr("bomana/config/feature_profile.py", "ENABLE_CCRP = True\n")
-        zf.writestr("bomana/metadata.py", f'__version__ = "{version}"\n')
+        zf.writestr(
+            "bomana/metadata.py",
+            f'__version__ = "{version}"\n{min_launcher_line}',
+        )
     return buffer.getvalue()
 
 
@@ -86,6 +99,55 @@ class LauncherUpdateServiceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
+    def test_super_bomb_display_name_preserves_enhanced_channel_identity(self) -> None:
+        self.assertEqual(
+            self.launcher._normalize_channel("超级爆弹版"),
+            "Enhanced",
+        )
+        self.assertEqual(
+            self.launcher._channel_display_name("Enhanced"),
+            "超级爆弹版",
+        )
+
+    def test_terrain_status_copy_covers_installed_update_and_unused_states(self) -> None:
+        installed = self.launcher._terrain_status_copy(
+            "Enhanced",
+            local_state="ready",
+            local_revision="a" * 64,
+            remote_revision="a" * 64,
+            map_count=67,
+            total_size_bytes=118 * 1024 * 1024,
+        )
+        self.assertEqual(installed[0], "已是最新")
+        self.assertIn("67 张地图", installed[1])
+        self.assertIn("rev aaaaaaaaaaaa", installed[1])
+
+        update = self.launcher._terrain_status_copy(
+            "Enhanced",
+            local_state="ready",
+            local_revision="a" * 64,
+            remote_revision="b" * 64,
+            map_count=67,
+            total_size_bytes=118 * 1024 * 1024,
+            update_available=True,
+            download_size=4 * 1024 * 1024,
+        )
+        self.assertEqual(update[0], "可更新")
+        self.assertIn("aaaaaaaaaaaa → bbbbbbbbbbbb", update[1])
+        self.assertIn("差量", update[1])
+
+        unused = self.launcher._terrain_status_copy(
+            "Standard",
+            local_state="missing",
+        )
+        self.assertEqual(unused, ("未使用", "Standard / Lite 不安装离线地图包。", "muted"))
+
+    def test_local_zip_import_uses_streaming_file_installer(self) -> None:
+        source = Path("launcher.pyw").read_text(encoding="utf-8")
+
+        self.assertIn("install_txn.install_zip_package_from_file(", source)
+        self.assertNotIn("package_bytes = zip_file.read_bytes()", source)
+
     def write_current_app(self, version: str = "8.0.0") -> None:
         app_dir = self.base / self.launcher.APP_DIR_NAME
         (app_dir / "bomana").mkdir(parents=True)
@@ -118,6 +180,47 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             {"test-key": public_key},
             clear=True,
         )
+
+    def signed_terrain_manifest(self, contents: dict[str, bytes]) -> dict:
+        files = tuple(
+            TerrainFile(
+                path=name,
+                asset=(
+                    f"{TERRAIN_OBJECT_ASSET_PREFIX}{hashlib.sha256(data).hexdigest()}"
+                    f"{Path(name).suffix}"
+                ),
+                sha256=hashlib.sha256(data).hexdigest(),
+                size_bytes=len(data),
+            )
+            for name, data in sorted(contents.items())
+        )
+        payload = {
+            "schema_version": 1,
+            "terrain_pack_id": "terrain-v1",
+            "terrain_revision": terrain_revision("terrain-v1", 1, files),
+            "map_count": 1,
+            "total_size_bytes": sum(len(data) for data in contents.values()),
+            "files": [
+                {
+                    "path": item.path,
+                    "asset": item.asset,
+                    "sha256": item.sha256,
+                    "size_bytes": item.size_bytes,
+                }
+                for item in files
+            ],
+        }
+        signed = launcher_core.sign_release_manifest(
+            payload,
+            TEST_SIGNING_PRIVATE_KEY,
+            key_id="test-key",
+        )
+        signed["source_name"] = "test-terrain"
+        signed["object_base_urls"] = (
+            "https://primary.invalid/objects/",
+            "https://github.invalid/objects/",
+        )
+        return signed
 
     def test_github_app_manifest_requires_release_signature(self) -> None:
         release = {
@@ -531,7 +634,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "source_name": "GitHub",
         }
         launcher_manifest = {
-            "remote_version": "3.3.0",
+            "remote_version": "3.4.0",
             "package_url": "https://example.invalid/launcher.exe",
             "package_sha256": "def",
             "package_size": "",
@@ -540,6 +643,11 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
         with (
             patch.object(service, "resolve_app_manifest", return_value=("8.0.0", app_manifest)),
+            patch.object(
+                service,
+                "resolve_terrain_manifest",
+                side_effect=RuntimeError("terrain offline"),
+            ),
             patch.object(service, "resolve_launcher_manifest", return_value=launcher_manifest),
             patch.object(self.launcher, "_fetch_content_length", return_value=456) as fetch_size,
         ):
@@ -554,6 +662,25 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "https://example.invalid/launcher.exe",
             timeout_sec=self.launcher.NET_TIMEOUT_SEC,
         )
+
+    def test_old_launcher_blocks_new_app_before_package_download(self) -> None:
+        manifest = {
+            "remote_version": "8.5.0",
+            "min_launcher_version": "3.3.0",
+            "package_url": "https://example.invalid/app.zip",
+            "package_asset": "Bomana_app_Enhanced_v8.5.0.zip",
+            "package_sha256": "a" * 64,
+            "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+        }
+
+        with (
+            patch.object(self.launcher, "LAUNCHER_VERSION", "3.2.2"),
+            patch.object(self.launcher, "_download_to_file") as download,
+            self.assertRaisesRegex(RuntimeError, "要求 >= v3.3.0"),
+        ):
+            self.launcher._download_update_from_manifest(self.base, manifest)
+
+        download.assert_not_called()
 
     def test_check_continues_when_launcher_manifest_check_fails(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
@@ -570,6 +697,11 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             patch.object(service, "resolve_app_manifest", return_value=("8.0.0", app_manifest)),
             patch.object(
                 service,
+                "resolve_terrain_manifest",
+                side_effect=RuntimeError("terrain offline"),
+            ),
+            patch.object(
+                service,
                 "resolve_launcher_manifest",
                 side_effect=RuntimeError("launcher offline"),
             ),
@@ -580,6 +712,136 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertFalse(info["app_requires_launcher_update"])
         self.assertFalse(info["launcher_update_available"])
         self.assertEqual(info["launcher_check_warning"], "launcher offline")
+
+    def test_enhanced_check_reports_independent_terrain_delta(self) -> None:
+        service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
+        app_manifest = {
+            "remote_version": "8.0.0",
+            "min_launcher_version": self.launcher.LAUNCHER_VERSION,
+            "package_url": "",
+            "package_sha256": "abc",
+            "package_size": "123",
+            "source_name": "GitHub",
+        }
+        launcher_manifest = {
+            "remote_version": self.launcher.LAUNCHER_VERSION,
+            "package_url": "",
+            "package_sha256": "def",
+            "package_size": "456",
+            "source_name": "GitHub",
+        }
+        contents = {
+            "index.json": b"index",
+            "manifest.json": b"manifest",
+            "map.bth": b"terrain-grid",
+        }
+        terrain_manifest = self.signed_terrain_manifest(contents)
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(service, "resolve_app_manifest", return_value=("8.0.0", app_manifest)),
+            patch.object(
+                service,
+                "resolve_terrain_manifest",
+                return_value=terrain_manifest,
+            ),
+            patch.object(
+                service,
+                "resolve_launcher_manifest",
+                return_value=launcher_manifest,
+            ),
+        ):
+            info = service.check()
+
+        self.assertFalse(info["update_available"])
+        self.assertTrue(info["terrain_update_available"])
+        self.assertEqual(info["terrain_download_size"], sum(map(len, contents.values())))
+        self.assertEqual(info["terrain_reuse_size"], 0)
+        self.assertFalse(info["terrain_check_blocking"])
+
+    def test_standard_check_does_not_resolve_terrain_manifest(self) -> None:
+        service = self.launcher.UpdateService(self.base, "Standard", {"install_id": "abc"})
+        app_manifest = {
+            "remote_version": "8.0.0",
+            "min_launcher_version": self.launcher.LAUNCHER_VERSION,
+            "package_url": "",
+            "package_sha256": "abc",
+            "package_size": "123",
+            "source_name": "GitHub",
+        }
+        launcher_manifest = {
+            "remote_version": self.launcher.LAUNCHER_VERSION,
+            "package_url": "",
+            "package_sha256": "def",
+            "package_size": "456",
+            "source_name": "GitHub",
+        }
+
+        with (
+            patch.object(service, "resolve_app_manifest", return_value=("8.0.0", app_manifest)),
+            patch.object(service, "resolve_terrain_manifest") as resolve_terrain,
+            patch.object(
+                service,
+                "resolve_launcher_manifest",
+                return_value=launcher_manifest,
+            ),
+        ):
+            info = service.check()
+
+        resolve_terrain.assert_not_called()
+        self.assertFalse(info["terrain_update_available"])
+        self.assertEqual(info["terrain_download_size"], 0)
+
+    def test_terrain_download_falls_back_per_object_and_then_stays_zero_download(
+        self,
+    ) -> None:
+        contents = {
+            "index.json": b"index",
+            "manifest.json": b"manifest",
+            "map.bth": b"terrain-grid",
+        }
+        terrain_manifest = self.signed_terrain_manifest(contents)
+        by_asset = {item["asset"]: contents[item["path"]] for item in terrain_manifest["files"]}
+        urls: list[str] = []
+
+        def fake_download(url, destination, progress_cb=None, **_kwargs):
+            urls.append(url)
+            asset = url.rsplit("/", 1)[-1]
+            data = b"bad" if "primary.invalid" in url else by_asset[asset]
+            destination.write_bytes(data)
+            if progress_cb:
+                progress_cb(len(data), len(data))
+            return destination
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(self.launcher, "_download_to_file", side_effect=fake_download),
+        ):
+            result = self.launcher._download_terrain_update_from_manifest(
+                self.base,
+                terrain_manifest,
+            )
+
+        self.assertEqual(result.downloaded_objects, 3)
+        self.assertEqual(len(urls), 6)
+        self.assertTrue(all("primary.invalid" in url for url in urls[0::2]))
+        self.assertTrue(all("github.invalid" in url for url in urls[1::2]))
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(
+                self.launcher,
+                "_download_to_file",
+                side_effect=AssertionError("unchanged terrain must not download"),
+            ),
+        ):
+            current = self.launcher._download_terrain_update_from_manifest(
+                self.base,
+                terrain_manifest,
+            )
+
+        self.assertTrue(current.already_current)
+        self.assertEqual(current.downloaded_bytes, 0)
 
     def test_check_propagates_resolver_failure_without_network_fallback_hiding_it(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {"install_id": "abc"})
@@ -711,6 +973,48 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertFalse(part.exists())
         self.assertEqual(requests[0][0].headers["Range"], "bytes=3-")
         self.assertEqual(progress[-1], (6, 6))
+
+    def test_download_to_file_rejects_declared_size_above_limit_before_write(self) -> None:
+        dest = self.base / "terrain-object.bin"
+        response = FakeResponse(
+            b"abcdef",
+            headers={"Content-Length": "6"},
+        )
+
+        with (
+            patch.object(self.launcher, "_open_url", return_value=response),
+            self.assertRaisesRegex(RuntimeError, "超过允许大小"),
+        ):
+            self.launcher._download_to_file(
+                "https://example.invalid/terrain-object.bin",
+                dest,
+                max_bytes=3,
+            )
+
+        self.assertFalse(dest.exists())
+        self.assertFalse(dest.with_name(f"{dest.name}.part").exists())
+
+    def test_download_to_file_stops_undeclared_body_before_exceeding_limit(self) -> None:
+        dest = self.base / "terrain-object.bin"
+
+        with (
+            patch.object(
+                self.launcher,
+                "_open_url",
+                return_value=FakeResponse(b"abcdef"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "超过允许大小"),
+        ):
+            self.launcher._download_to_file(
+                "https://example.invalid/terrain-object.bin",
+                dest,
+                max_bytes=3,
+            )
+
+        part = dest.with_name(f"{dest.name}.part")
+        self.assertFalse(dest.exists())
+        self.assertTrue(part.exists())
+        self.assertLessEqual(part.stat().st_size, 3)
 
     def test_download_dir_falls_back_when_user_downloads_is_not_writable(self) -> None:
         user_downloads = self.base / "readonly-downloads"
@@ -1091,12 +1395,34 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         (metadata_dir / "metadata.py").write_text(
             "from pathlib import Path\n"
             f"Path({str(sentinel)!r}).write_text('executed', encoding='utf-8')\n"
-            '__version__ = "8.0.0"\n',
+            '__version__ = "8.0.0"\n'
+            'PORTABLE_MIN_LAUNCHER_VERSION = "3.3.0"\n',
             encoding="utf-8",
         )
 
         self.assertEqual(launcher_install.read_app_version_identity(app_dir), "8.0.0")
+        self.assertEqual(
+            launcher_install.read_app_min_launcher_version_identity(app_dir),
+            "3.3.0",
+        )
         self.assertFalse(sentinel.exists())
+
+    def test_local_zip_rejects_app_requiring_newer_launcher(self) -> None:
+        self.write_current_app("8.0.0")
+        package_bytes = make_app_zip("8.5.0", min_launcher_version="3.4.0")
+
+        with self.assertRaisesRegex(RuntimeError, "当前启动器版本过旧"):
+            launcher_install.install_zip_package(
+                self.base,
+                package_bytes,
+                self.launcher._sha256_bytes(package_bytes),
+                self.launcher.DEFAULT_ENTRYPOINT,
+            )
+
+        self.assertEqual(
+            launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
+            "8.0.0",
+        )
 
     def test_fresh_lock_blocks_install_and_preserves_existing_app(self) -> None:
         self.write_current_app("8.0.0")
@@ -1214,6 +1540,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         app_dir = self.base / self.launcher.APP_DIR_NAME
         package_dir = app_dir / "bomana"
         package_dir.mkdir(parents=True)
+        (package_dir / "data" / "terrain-v1").mkdir(parents=True)
         (app_dir / "Bomana.pyw").write_text(
             "from pathlib import Path\n"
             "from bomana.config.settings import SENTINEL\n"

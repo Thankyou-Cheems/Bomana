@@ -18,7 +18,6 @@ def test_core_does_not_import_ui_presenters() -> None:
 def test_headless_presenters_do_not_import_tkinter() -> None:
     presenter_paths = [
         ROOT / "bomana" / "ui" / "dialog_presenter.py",
-        ROOT / "bomana" / "ui" / "hud_presenter.py",
         ROOT / "bomana" / "ui" / "navigation_presenter.py",
         ROOT / "bomana" / "ui" / "panel_presenter.py",
         ROOT / "bomana" / "ui" / "snapshot_presenter.py",

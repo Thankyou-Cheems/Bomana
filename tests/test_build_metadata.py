@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from bomana import metadata
+from bomana_version import APP_REQUIRED_LAUNCHER_VERSION
 from launcher import core as launcher_core
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,36 @@ def write_shared_app_runtime_assets(root: Path) -> None:
     (web_assets / "index.html").write_text("<html></html>\n", encoding="utf-8")
 
 
+def source_closure(root: Path) -> frozenset[str]:
+    return frozenset(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file()
+    )
+
+
+def test_release_source_closure_detects_unexpected_package_file(tmp_path: Path) -> None:
+    build_portable = load_tool_module(
+        "build_portable_source_closure",
+        "tools/build_portable.py",
+    )
+    root = tmp_path / "repo"
+    tracked_asset = root / "bomana" / "assets" / "branding" / "app.png"
+    tracked_asset.parent.mkdir(parents=True)
+    tracked_asset.write_bytes(b"tracked")
+    tracked = source_closure(root)
+    unexpected = root / "bomana" / "assets" / "research" / "capture.txt"
+    unexpected.parent.mkdir()
+    unexpected.write_text("sentinel", encoding="utf-8")
+
+    assert build_portable._unexpected_release_files(
+        root,
+        "all",
+        "Enhanced",
+        tracked,
+    ) == ("bomana/assets/research/capture.txt",)
+
+
 def test_portable_build_reads_version_from_metadata() -> None:
     build_portable = load_tool_module("build_portable", "tools/build_portable.py")
     metadata_text = (ROOT / "bomana" / "metadata.py").read_text(encoding="utf-8")
@@ -60,6 +91,21 @@ def test_portable_build_reads_version_from_metadata() -> None:
         build_portable.read_min_launcher_version(metadata_text)
         == metadata.PORTABLE_MIN_LAUNCHER_VERSION
     )
+    boundary_text = (ROOT / "bomana_version.py").read_text(encoding="utf-8")
+    assert (
+        build_portable.validate_app_launcher_floor(metadata_text, boundary_text)
+        == APP_REQUIRED_LAUNCHER_VERSION
+    )
+
+
+def test_portable_build_rejects_mismatched_app_launcher_floor() -> None:
+    build_portable = load_tool_module("build_portable_floor", "tools/build_portable.py")
+
+    with pytest.raises(RuntimeError, match="App Launcher floor mismatch"):
+        build_portable.validate_app_launcher_floor(
+            'PORTABLE_MIN_LAUNCHER_VERSION = "3.4.0"\n',
+            'APP_REQUIRED_LAUNCHER_VERSION = "3.3.0"\n',
+        )
 
 
 def test_packaged_web_smoke_tracks_current_app_version() -> None:
@@ -97,20 +143,31 @@ def test_app_package_bundles_zero_install_hotkey_broker_and_checksum(tmp_path: P
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
     (root / "bomana" / "data").mkdir()
     (root / "bomana" / "data" / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
+    (root / "bomana" / "data" / "visible_trajectory_references.json").write_text(
+        "{}\n", encoding="utf-8"
+    )
     write_shared_app_runtime_assets(root)
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
-    package = build_portable.build_app_zip(root, "Lite", "1.2.3", output, broker)
+    package = build_portable.build_app_zip(
+        root,
+        "Lite",
+        "1.2.3",
+        output,
+        broker,
+        source_closure(root),
+    )
 
     with zipfile.ZipFile(package) as archive:
         assert "bomana/bin/BomanaHotkeyBroker.exe" in archive.namelist()
         assert "bomana/data/weapon_fire_control.json" not in archive.namelist()
+        assert "bomana/data/visible_trajectory_references.json" not in archive.namelist()
         checksum = archive.read("bomana/bin/BomanaHotkeyBroker.sha256").decode("ascii")
         assert checksum == f"{build_portable.sha256_file(broker)}  BomanaHotkeyBroker.exe\n"
 
 
-def test_enhanced_app_package_bundles_weapon_catalog_and_shared_schema(tmp_path: Path) -> None:
+def test_enhanced_app_package_bundles_weapon_assets_but_not_terrain(tmp_path: Path) -> None:
     build_portable = load_tool_module("build_portable_weapon_data", "tools/build_portable.py")
     root = tmp_path / "repo"
     output = tmp_path / "dist"
@@ -122,16 +179,26 @@ def test_enhanced_app_package_bundles_weapon_catalog_and_shared_schema(tmp_path:
     (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
     (data_dir / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
+    (data_dir / "visible_trajectory_references.json").write_text("{}\n", encoding="utf-8")
     (schema_dir / "weapon-fire-control.schema.json").write_text("{}\n", encoding="utf-8")
     write_shared_app_runtime_assets(root)
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
-    package = build_portable.build_app_zip(root, "Enhanced", "1.2.3", output, broker)
+    package = build_portable.build_app_zip(
+        root,
+        "Enhanced",
+        "1.2.3",
+        output,
+        broker,
+        source_closure(root),
+    )
 
     with zipfile.ZipFile(package) as archive:
         assert "bomana/data/weapon_fire_control.json" in archive.namelist()
+        assert "bomana/data/visible_trajectory_references.json" in archive.namelist()
         assert "docs/specs/schemas/weapon-fire-control.schema.json" in archive.namelist()
+        assert not any(name.startswith("bomana/data/terrain-") for name in archive.namelist())
 
 
 WEB_COCKPIT_PACKAGE_PATHS = {
@@ -164,6 +231,7 @@ def _seed_web_cockpit_package_tree(root: Path) -> None:
     for name in ("index.html", "dashboard.css", "dashboard.js", "qrcode.js", "favicon.svg"):
         (web_asset_dir / name).write_text(name, encoding="utf-8")
     (data_dir / "weapon_fire_control.json").write_text("{}\n", encoding="utf-8")
+    (data_dir / "visible_trajectory_references.json").write_text("{}\n", encoding="utf-8")
     (schema_dir / "weapon-fire-control.schema.json").write_text("{}\n", encoding="utf-8")
     write_shared_app_runtime_assets(root)
 
@@ -180,7 +248,14 @@ def test_enhanced_app_package_bundles_web_cockpit(tmp_path: Path) -> None:
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
-    package = build_portable.build_app_zip(root, "Enhanced", "1.2.3", output, broker)
+    package = build_portable.build_app_zip(
+        root,
+        "Enhanced",
+        "1.2.3",
+        output,
+        broker,
+        source_closure(root),
+    )
 
     with zipfile.ZipFile(package) as archive:
         names = set(archive.namelist())
@@ -201,7 +276,14 @@ def test_standard_and_lite_app_packages_omit_web_cockpit(tmp_path: Path, variant
     broker = tmp_path / "BomanaHotkeyBroker.exe"
     broker.write_bytes(b"native broker payload")
 
-    package = build_portable.build_app_zip(root, variant, "1.2.3", output, broker)
+    package = build_portable.build_app_zip(
+        root,
+        variant,
+        "1.2.3",
+        output,
+        broker,
+        source_closure(root),
+    )
 
     with zipfile.ZipFile(package) as archive:
         names = set(archive.namelist())
@@ -209,6 +291,32 @@ def test_standard_and_lite_app_packages_omit_web_cockpit(tmp_path: Path, variant
         assert not (WEB_COCKPIT_PACKAGE_PATHS & names)
         assert not any(name.startswith("bomana/web/") for name in names)
         assert not any(name.startswith("bomana/assets/web/") for name in names)
+        assert not any(name.startswith("bomana/data/terrain-") for name in names)
+
+
+def test_enhanced_app_package_does_not_require_local_terrain_pack(tmp_path: Path) -> None:
+    build_portable = load_tool_module(
+        "build_portable_missing_terrain",
+        "tools/build_portable.py",
+    )
+    root = tmp_path / "repo"
+    output = tmp_path / "dist"
+    output.mkdir()
+    _seed_web_cockpit_package_tree(root)
+    broker = tmp_path / "BomanaHotkeyBroker.exe"
+    broker.write_bytes(b"native broker payload")
+
+    package = build_portable.build_app_zip(
+        root,
+        "Enhanced",
+        "1.2.3",
+        output,
+        broker,
+        source_closure(root),
+    )
+
+    with zipfile.ZipFile(package) as archive:
+        assert not any(name.startswith("bomana/data/terrain-") for name in archive.namelist())
 
 
 def test_enhanced_app_package_rejects_missing_weapon_assets(tmp_path: Path) -> None:
@@ -226,7 +334,14 @@ def test_enhanced_app_package_rejects_missing_weapon_assets(tmp_path: Path) -> N
     broker.write_bytes(b"native broker payload")
 
     with pytest.raises(RuntimeError, match="missing Enhanced weapon fire-control assets"):
-        build_portable.build_app_zip(root, "Enhanced", "1.2.3", output, broker)
+        build_portable.build_app_zip(
+            root,
+            "Enhanced",
+            "1.2.3",
+            output,
+            broker,
+            source_closure(root),
+        )
 
 
 def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:

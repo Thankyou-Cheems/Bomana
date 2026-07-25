@@ -585,8 +585,9 @@ def test_all_packaging_paths_include_web_assets_and_runtime_modules() -> None:
     build_bat = (ROOT / "tools/scripts/build.bat").read_text(encoding="utf-8")
     build_sh = (ROOT / "tools/scripts/build.sh").read_text(encoding="utf-8")
 
-    assert "app_root = root / APP_DIR" in portable
-    assert 'app_root.rglob("*")' in portable
+    assert "resolve_release_source_closure" in portable
+    assert "_stage_launcher_assets" in portable
+    assert "release_source_paths" in portable
     for name in (
         "web-dashboard-command.schema.json",
         "web-dashboard-command-response.schema.json",
@@ -596,5 +597,7 @@ def test_all_packaging_paths_include_web_assets_and_runtime_modules() -> None:
     assert '"http.server"' in portable
     assert '"http.cookies"' in portable
     assert '"ipaddress"' in portable
-    assert '--add-data "bomana/assets;bomana/assets"' in build_bat
-    assert '"--add-data" "bomana/assets:bomana/assets"' in build_sh
+    assert "tools\\build_portable.py" in build_bat
+    assert "tools/build_portable.py" in build_sh
+    assert "--add-data" not in build_bat
+    assert "--add-data" not in build_sh

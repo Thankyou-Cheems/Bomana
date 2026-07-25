@@ -1,6 +1,6 @@
 # ADR 0001: Spec-Anchored Repository Rules
 
-Status: Accepted
+Status: Amended (2026-07-22)
 Date: 2026-07-02
 
 ## Context
@@ -20,9 +20,10 @@ without committing the external workorder itself.
   changelog entries. Temporary phase proposals, deltas, and evidence notes are
   not retained after the refactor is consolidated.
 - Keep durable architecture decisions under `docs/adr/`.
-- Keep `AGENTS.md`, `README.md`, `docs/CONTRIBUTING.md`,
-  `docs/QUICKSTART.md`, and `docs/ARCHITECTURE.md` as routing documents and
-  concise summaries instead of full duplicate rulebooks.
+- Keep `README.md`, `docs/CONTRIBUTING.md`, `docs/QUICKSTART.md`, and
+  `docs/ARCHITECTURE.md` as routing documents and concise summaries instead of
+  full duplicate rulebooks. The current branch does not track a root
+  `AGENTS.md` router.
 - Keep task state in `bd`; docs must not become a parallel issue tracker.
 - SDD refactor work is committed and merged locally until the user explicitly
   authorizes a remote push. This temporarily overrides the default

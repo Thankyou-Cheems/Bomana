@@ -1,0 +1,86 @@
+name: Build and Release Bomana Terrain
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+  PYTHONNOUSERSITE: "1"
+  PYTHONPATH: ""
+  PYTHONHOME: ""
+
+jobs:
+  terrain:
+    name: 构建独立地形差量资源
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          clean: true
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: 安装依赖
+        shell: pwsh
+        run: |
+          uv sync --extra build --frozen
+
+      - name: 准备固定地形源包
+        shell: pwsh
+        env:
+          BOMANA_TERRAIN_ARCHIVE_URL: ${{ vars.BOMANA_TERRAIN_ARCHIVE_URL }}
+        run: |
+          uv run --frozen python tools/prepare_builtin_terrain.py
+
+      - name: 构建签名内容寻址资源
+        shell: pwsh
+        env:
+          BOMANA_RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}
+          BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
+          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
+        run: |
+          uv run --frozen python tools/build_terrain_release.py
+
+      - name: 生成地形资源来源证明
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: |
+            dist/terrain-release/terrain_manifest.json
+            dist/terrain-release/checksums_terrain.txt
+            dist/terrain-release/objects/*
+
+      - name: 发布到独立 terrain-v1 Release
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
+        with:
+          tag_name: terrain-v1
+          name: Bomana terrain-v1
+          make_latest: false
+          body: |
+            超级爆弹版使用的独立地形数据。
+
+            启动器按 Ed25519 签名清单与 SHA-256 内容地址维护本资源；
+            地形版本未变化时零下载，变化时只下载新增或改变的对象。
+          files: |
+            dist/terrain-release/terrain_manifest.json
+            dist/terrain-release/checksums_terrain.txt
+            dist/terrain-release/objects/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

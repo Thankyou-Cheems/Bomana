@@ -100,7 +100,7 @@
           <div class="stat-block dim">
             <span class="stat-label">CHANNELS</span>
             <strong class="stat-value">3</strong>
-            <span class="stat-hint">Enhanced · Standard · Lite</span>
+            <span class="stat-hint">超级爆弹版 · Standard · Lite</span>
           </div>
         </aside>
       </section>
@@ -136,7 +136,7 @@
           <li>
             <span class="step-index">02</span>
             <h3>选择功能通道</h3>
-            <p>完整功能选 Enhanced；不需要投弹估算选 Standard；只计时选 Lite。</p>
+            <p>深度学习的高精度打击模型与地形数据选超级爆弹版；常规功能选 Standard；只计时选 Lite。</p>
           </li>
           <li>
             <span class="step-index">03</span>
@@ -176,7 +176,7 @@
           <div class="release-files">
             <p class="release-files-label">CDN 分发文件</p>
             <div id="releaseAssets" class="release-assets" aria-live="polite">
-              <span>Launcher</span><span>Enhanced / Standard / Lite</span><span>Signed manifests</span>
+              <span>Launcher</span><span>超级爆弹版 / Standard / Lite</span><span>Signed manifests</span>
             </div>
           </div>
         </div>
@@ -190,12 +190,12 @@
         </div>
         <div class="channel-grid">
           <article class="channel featured">
-            <span class="channel-tag">RECOMMENDED</span>
-            <h3>Enhanced</h3>
-            <p class="channel-blurb">计时 · 导航 · 燃油 · 超速 · 检查清单 · 武器估算</p>
+            <span class="channel-tag">ENHANCED STRIKE</span>
+            <h3>超级爆弹版</h3>
+            <p class="channel-blurb">深度学习的高精度打击模型与地形数据</p>
             <ul>
-              <li>完整飞行信息</li>
-              <li>适合全真常用玩家</li>
+              <li>深度学习的高精度打击模型</li>
+              <li>启动器独立维护地形数据</li>
             </ul>
           </article>
           <article class="channel">
@@ -248,7 +248,7 @@
                 <p>地图 · 计时 · 武器 / 导航</p>
               </div>
             </div>
-            <figcaption>桌面浏览器 · Enhanced 网页驾驶舱（完整地图与侧栏）</figcaption>
+            <figcaption>桌面浏览器 · 超级爆弹版网页驾驶舱（完整地图与侧栏）</figcaption>
           </figure>
 
           <!-- Portrait pair: phone + main window -->
@@ -371,11 +371,6 @@
             <p>自由落体 CCRP、条件包线与可选滑翔参考，共用一张紧凑卡片。均为估算，不是游戏内部算法。</p>
           </article>
           <article class="feat feat-plain">
-            <span class="feat-code">HUD</span>
-            <h3>可选飞行叠层</h3>
-            <p>自身导航参考；默认关闭。不显示玩家不可见的敌方情报。</p>
-          </article>
-          <article class="feat feat-plain">
             <span class="feat-code">WEB</span>
             <h3>网页驾驶舱</h3>
             <p>本机或局域网手机查看计时与地图，可操作 Bomana 固定功能，不模拟游戏按键。</p>
@@ -390,17 +385,17 @@
         </div>
         <div class="hotkey-copy">
           <p class="section-label">05 · PERMISSION</p>
-          <h2 id="hotkey-title">提权只给热键，不给整个应用</h2>
+          <h2 id="hotkey-title">系统热键只控制 Bomana</h2>
           <p>
-            Bomana 先启用普通热键；如果确认游戏也以普通权限运行，就完全不提权。
-            游戏未启动、权限未知或以管理员运行时，才显示可选授权按钮。
+            Bomana 以普通权限直接注册系统热键，不探测游戏进程，不会因为游戏状态自动请求 UAC。
+            若前台权限边界阻止热键，投弹栏、主窗与托盘仍提供等价按钮。
           </p>
           <ul class="boundary-list">
-            <li>只注册当前启用的 F1–F12 固定动作</li>
+            <li>默认 F6–F11，只触发 Bomana 固定动作</li>
             <li>不使用键盘钩子、轮询或 Raw Input</li>
-            <li>只查询可见游戏窗口的进程名与管理员状态，不读内存</li>
-            <li>组件随 App 包携带，不安装服务、计划任务或额外程序</li>
-            <li>拒绝授权时 App 继续运行，并恢复普通热键</li>
+            <li>不枚举或打开游戏进程，不查询游戏权限</li>
+            <li>不向游戏合成按键，也不自动操作投放</li>
+            <li>热键失效时不影响按钮、托盘与 8111 功能</li>
           </ul>
           <div class="hotkey-actions">
             <a class="button secondary" href="https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations">
@@ -413,15 +408,15 @@
         </div>
         <div class="permission-flow" aria-label="权限分离流程">
           <div class="flow-node game">
-            <small>HIGH INTEGRITY</small>
-            <strong>War Thunder</strong>
-            <span>游戏获得焦点</span>
+            <small>WINDOWS</small>
+            <strong>RegisterHotKey</strong>
+            <span>普通系统热键</span>
           </div>
           <div class="flow-join" aria-hidden="true"></div>
           <div class="flow-node broker">
-            <small>OPTIONAL · ZERO INSTALL</small>
-            <strong>Hotkey Broker</strong>
-            <span>手动 UAC · 固定动作</span>
+            <small>ALLOWLIST</small>
+            <strong>F6–F11</strong>
+            <span>固定 Bomana 动作</span>
           </div>
           <div class="flow-join" aria-hidden="true"></div>
           <div class="flow-node app">
@@ -443,8 +438,8 @@
             <span class="trust-num">01</span>
             <h3>官方数据边界</h3>
             <p>
-              运行时只访问 <code>/indicators</code>、<code>/state</code>、
-              <code>/map_obj.json</code> 与 <code>/map_info.json</code>，
+              游戏状态运行时只访问本机 8111 的 <code>/indicators</code>、<code>/state</code>、
+              <code>/map_obj.json</code>、<code>/map_info.json</code>、<code>/map.img</code> 与 <code>/icons.ttf</code>，
               不读内存、不注入、不改游戏文件。
             </p>
           </article>

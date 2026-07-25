@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from bomana_version import (
+    APP_REQUIRED_LAUNCHER_VERSION,
     MIN_SUPPORTED_APP_VERSION,
     MIN_SUPPORTED_LAUNCHER_VERSION,
     VersionCompatibilityError,
@@ -23,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_shared_version_boundary_accepts_only_strict_ascii_identity() -> None:
     assert MIN_SUPPORTED_APP_VERSION == "8.0.0"
     assert MIN_SUPPORTED_LAUNCHER_VERSION == "3.0.0"
+    assert APP_REQUIRED_LAUNCHER_VERSION == "3.3.0"
     assert parse_strict_version("8.0.0") == (8, 0, 0)
     assert require_minimum_version("8.0.1", "8.0.0") == "8.0.1"
     assert require_exact_version("8.0.0", "8.0.0") == "8.0.0"
@@ -52,6 +54,16 @@ def test_app_launcher_identity_has_one_narrow_source_exception() -> None:
         validate_app_launcher_identity("", source_development="1", frozen=False)
     with pytest.raises(VersionCompatibilityError, match="过旧"):
         validate_app_launcher_identity("2.99.99", source_development="1", frozen=False)
+    with pytest.raises(VersionCompatibilityError, match="过旧"):
+        validate_app_launcher_identity("3.2.2", source_development="1", frozen=False)
+    assert (
+        validate_app_launcher_identity(
+            "3.3.0",
+            source_development="0",
+            frozen=True,
+        )
+        == "3.3.0"
+    )
 
 
 def test_app_entry_rejects_missing_identity_before_runtime_initialization(tmp_path: Path) -> None:
@@ -72,4 +84,26 @@ def test_app_entry_rejects_missing_identity_before_runtime_initialization(tmp_pa
 
     assert result.returncode != 0
     assert "启动器身份缺失" in (result.stdout + result.stderr)
+    assert not (tmp_path / ".wttimer_diagnostics.log").exists()
+
+
+def test_app_entry_rejects_old_launcher_before_runtime_initialization(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["BOMANA_LAUNCHER_VERSION"] = "3.2.2"
+    env["BOMANA_SOURCE_DEVELOPMENT"] = "1"
+    env["HOME"] = str(tmp_path)
+    env["USERPROFILE"] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "Bomana.pyw")],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "启动器版本过旧" in (result.stdout + result.stderr)
+    assert "要求 >= v3.3.0" in (result.stdout + result.stderr)
     assert not (tmp_path / ".wttimer_diagnostics.log").exists()

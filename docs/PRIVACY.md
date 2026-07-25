@@ -34,7 +34,7 @@ Bomana（以下简称"本应用"）致力于保护用户隐私。本应用仅收
 - 系统敏感信息（文件列表、进程列表等）
 - 任何剪贴板或输入法数据
 
-可选的高权限热键 Broker 不进行网络访问或事件上报；它只向当前 Bomana App 发送固定动作 ID，不记录按键内容，不读取游戏进程、账号、文件或 8111 数据。普通 App 启动时只会对可见 War Thunder 窗口查询进程文件名和管理员状态，用于决定是否显示可选授权按钮；不会读取进程内存或模块。
+可选的高权限热键 Broker 不进行网络访问或事件上报；它只向当前 Bomana App 发送固定动作 ID，不记录按键内容，不读取游戏进程、账号、文件或 8111 数据。普通 App 不枚举游戏窗口或进程，不查询游戏进程文件名、令牌、模块或内存，也不会根据游戏状态自动请求 UAC。
 
 ### 网页驾驶舱 | Web Cockpit
 
@@ -43,16 +43,16 @@ Bomana 可在本机浏览器或同一局域网的手机上提供网页驾驶舱�
 - 本机 Web 服务默认随 App 启动，也可由用户在 Launcher 中关闭；Launcher 还可保存“启动成功后自动打开本机页面”和“启动时开启局域网访问与控制”。这三个严格布尔偏好是 Launcher 唯一保存的网页设置。
 - 监听器默认仅绑定 `127.0.0.1`，优先使用端口 `8777`；端口占用时只会在有限的相邻端口中回退。监听器、所选端口、配对 URL 和浏览器打开时机都由 App 管理。
 - 局域网访问与控制可由用户从 App/托盘显式开启，或通过 Launcher 保存的启动偏好请求；App 每次都重新自动发现接口，只在每个成功绑定的 RFC1918 私有 IPv4 上建立精确监听而不使用 `0.0.0.0`。Bomana 不会保存地址、端口或实时授权，也不会修改 Windows 防火墙/UPnP 或请求管理员权限。
-- 网页只读取 App 发布的筛选 `UISnapshot` 与有界地图图片内存快照，不代理 8111。战术地图会显示原始 `/map_obj.json` 当前样本明确返回的敌方单位，但不发布原始 JSON、诊断数据，不保留或推断历史位置，也不投射到桌面 HUD/航向带。
+- 网页只读取 App 发布的筛选 `UISnapshot` 与有界地图图片内存快照，不代理 8111。战术地图会显示原始 `/map_obj.json` 当前样本明确返回的敌方单位，但不发布原始 JSON、诊断数据，不保留或推断历史位置，也不投射到独立导航栏或 CCRP 提示栏。
 - 每次启动都会生成新的配对材料；每次成功配对又会创建独立的会话令牌、授权记录、CSRF 证明和有界幂等记录。浏览器通过 HttpOnly、`SameSite=Strict` Cookie 读取快照与控制状态。
 - 本机会话可获得控制权限；开启 LAN 时会同时开启 LAN 控制并轮换配对码，只有之后成功配对的设备才可控制。关闭 LAN 会立即撤销全部已有 LAN 会话并再次轮换配对码。
 - 写入只允许重置计时、设置 1–180 分钟周期、切换窗口角落、设置窗口锁定/提示音/面板显示，以及在功能可用时选择当前武器与弹道模型。请求必须同源并带当前会话的 CSRF 与幂等证明；App 主线程会再次检查权限、功能开关和目标有效性。
-- 网页控制不会合成 F7-F11、控制 War Thunder、调用任意回调或配置路径，也不会增加热键 Broker 或网络能力。
+- 网页控制不会合成 F6-F11、控制 War Thunder、调用任意回调或配置路径，也不会增加热键 Broker 或网络能力。
 - 页面资源全部随 Bomana 打包。网页服务不使用外部资源、CORS、上传或分析脚本，也不记录客户端地址、请求路径、配对信息或飞行快照。
 
 局域网页面使用普通 HTTP，请只在可信的家庭或个人网络中开启。Launcher 最多保存 LAN 启动布尔偏好；地址、端口、配对、会话、CSRF 与实时授权状态都不会持久化。关闭局域网访问或退出 Bomana 后，该入口立即失效。此功能不会改变启动器匿名统计的范围。
 
-Bomana's Web Cockpit is loopback-only by default. Each successful pairing creates a distinct session. Enabling LAN also enables control for later pairings; disabling LAN immediately invalidates all LAN sessions. Writes remain limited to allowlisted Bomana semantics with same-origin, CSRF, idempotency, and Tk-owner rechecks. Launcher may persist only the LAN-startup boolean; no address, port, pairing, session, or live authorization is persisted. The tactical map mirrors hostile units present in the current raw `/map_obj.json` sample, without publishing raw JSON, retaining or inferring their history, or projecting them into the desktop HUD/heading tape. The Web Cockpit does not proxy 8111, synthesize keys, control the game, upload snapshots, load remote assets, or keep HTTP request logs.
+Bomana's Web Cockpit is loopback-only by default. Each successful pairing creates a distinct session. Enabling LAN also enables control for later pairings; disabling LAN immediately invalidates all LAN sessions. Writes remain limited to allowlisted Bomana semantics with same-origin, CSRF, idempotency, and Tk-owner rechecks. Launcher may persist only the LAN-startup boolean; no address, port, pairing, session, or live authorization is persisted. The tactical map mirrors hostile units present in the current raw `/map_obj.json` sample, without publishing raw JSON, retaining or inferring their history, or projecting them into standalone navigation or CCRP bars. The Web Cockpit does not proxy 8111, synthesize keys, control the game, upload snapshots, load remote assets, or keep HTTP request logs.
 
 ---
 

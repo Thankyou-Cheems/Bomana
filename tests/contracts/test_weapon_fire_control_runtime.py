@@ -113,8 +113,8 @@ def test_ui_reuses_core_catalog_failure_and_disables_selector(monkeypatch) -> No
         "武器目录缺失或校验失败，已停用武器选择与解算。",
     )
     main_window_source = (ROOT / "bomana/ui/main_window.py").read_text(encoding="utf-8")
-    assert "weapon_catalog = app._get_weapon_catalog()" in main_window_source
-    assert "weapon_catalog = get_weapon_catalog()" not in main_window_source
+    assert "get_weapon_catalog" not in main_window_source
+    assert "BombingBar(" in main_window_source
     app_source = (ROOT / "bomana/ui/app.py").read_text(encoding="utf-8")
     assert "catalog=weapon_catalog" in app_source
 
@@ -170,12 +170,12 @@ def test_hostile_disappearance_bypasses_calculation_throttle() -> None:
     assert not state.weapon_solution_valid
 
 
-def test_ccrp_datamine_source_id_alias_resolves_without_generic_fallback() -> None:
-    source_id = "uk_1000lbs_mc_mk1_mk2_bomb"
+def test_ccrp_catalog_alias_resolves_without_generic_fallback() -> None:
+    alias = "uk_1000lbs_mc_mk1_mk2_bomb"
 
-    params = BombConfig.get_bomb_data(source_id)
+    params = BombConfig.get_bomb_data(alias)
 
     assert params is not None
     assert params["mass"] == 463.1
-    assert params["source_file"] == f"{source_id}.blkx"
+    assert BombConfig.get_bomb_catalog_id(alias) == "uk_1000lbs_mc_mk1_mk2"
     assert BombConfig.get_bomb_data("missing_catalog_weapon") is None

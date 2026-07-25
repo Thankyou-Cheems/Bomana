@@ -17,7 +17,7 @@ suite is not evidence that any scenario below was performed.
 - 准备两个相互隔离的桌面浏览器 profile，以及连接到同一可信局域网的真实
   手机。不要在记录中保存配对码、Cookie、CSRF 或幂等键。
 - 打包检查使用真实 Launcher `3.1.0` 与
-  `Bomana_app_<Variant>_v8.5.0.zip`，不要用源码目录代替。
+  `Bomana_app_<Variant>_v8.6.2.zip`，不要用源码目录代替。
 - 如需源码对照，使用当前 PowerShell 进程内的显式开发标记：
 
   ```powershell
@@ -125,7 +125,7 @@ Bomana 本身不新增规则、不触发 UAC，也不开放公用网络规则。
 
 ### WDB-M08 三通道打包资源 | Packaged variants and offline assets
 
-分别从 Enhanced、Standard、Lite 的真实 App 8.5.0 包启动；断开外网后打开
+分别从 Enhanced、Standard、Lite 的真实 App 8.6.2 包启动；断开外网后打开
 页面并查看浏览器 Network 面板。
 
 预期：HTML/CSS/JS/SVG、项目 PNG 标识与字体均从 Bomana 自身地址加载，无 CDN、远程字体、
@@ -146,7 +146,7 @@ Boat、Destroyer 等当前官方 `icon` 使用 8111 `/icons.ttf` 与官方 glyph
 地图标记和图例样本必须一致且不得退回自绘敌军矢量；蓝方/己方
 单位与地图要素不被误判。逐项点击地图角落的图例后，只隐藏/恢复对应类别，
 刷新配对状态不应把过滤变成 App 配置或 Web 写命令。单位从下一原始样本消失
-或采样失败时立即移除，桌面 HUD/航向带不出现这些标记；
+或采样失败时立即移除，独立导航栏与 CCRP 提示栏不出现这些标记；
 浏览器只请求 App 的配对后图片路由，不直接请求 8111。
 当前机型不兼容的武器在 Tk 执行前被拒绝。8111 断开时页面诚实进入不可用/
 待机状态，不显示伪造数据，也不扩大 Web 控制权限。
@@ -180,9 +180,10 @@ auto-open 在 autostart 关闭时不单独启动服务。退出后本机和 LAN 
 
 在隔离副本中运行 packaged-launcher smoke，并人工核对以下结果：
 
-- Launcher 3.2.2 + App 8.5.0 正常交接，App 在运行时初始化前拿到严格
+- Launcher 3.3.0 + App 8.6.2 正常交接，App 在运行时初始化前拿到严格
   `BOMANA_LAUNCHER_VERSION`；
-- 缺失、畸形或 `2.9.9` 的 Launcher 身份被打包 App 拒绝，即使设置
+- 缺失、畸形、`2.9.9` 或仍在使用 `3.2.2` 的 Launcher 身份被 App
+  8.6.2 拒绝，即使设置
   `BOMANA_SOURCE_DEVELOPMENT=1` 也不能绕过；
 - 非冻结源码仅在身份缺失且显式设置开发标记时允许启动，旧或畸形身份仍失败；
 - 版本畸形或低于 8.0.0 的本地导入、`app_previous/` 与恢复候选在任何目录

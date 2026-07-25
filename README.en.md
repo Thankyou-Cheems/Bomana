@@ -52,7 +52,7 @@ War Thunder 是一款载具对战电子游戏；Bomana 是面向全真模式的�
 - [Project layout](#project-layout)
 - [Advanced configuration](#advanced-configuration)
 - [Technical details](#technical-details)
-- [Runtime isolation and security boundary](#runtime-isolation-and-security-boundary)
+- [Windows integration and hotkey broker](#windows-integration-and-hotkey-broker)
 - [Build and release](#build-and-release)
 - [References](#references)
 - [Update service repository](#update-service-repository)
@@ -63,14 +63,12 @@ War Thunder 是一款载具对战电子游戏；Bomana 是面向全真模式的�
 
 Everyday use: download, features, and common questions—with as little jargon as possible.
 
-## Compliance statement
+## Current implementation and usage notes
 
-> Older builds published before this statement were removed. Downloading and using a current build means you have read and accept this statement.
+### Current implementation
 
-### Boundary in one sentence
-
-Bomana does **not** read game memory, inject code, edit game files, or press keys / automate the match for you.  
-It only reads data the game **already exposes on your machine**, and shows timing and cues in **its own** windows or web page.
+The current Bomana build does **not** read game memory, inject code, edit game files, or press keys / automate the match for you.
+It reads locally available game data and bundled versioned static data, then shows timing and cues in **its own** windows or web page.
 
 ### What the studio has said
 
@@ -87,26 +85,24 @@ In a [forum reply](https://forum.warthunder.com/t/tools-using-data-provided-on-p
 | Local public data for navigation, fuel, overspeed cues | Studio-leaning **allowed** (same class as tools like WTRTI) |
 | Drawing enemies into a **game-like** compass / HUD overlay in markerless modes | **Not approved** |
 | Mirroring hostiles that the official local map sample already returns, on a **separate web map only** | **Not explicitly ruled on**—you decide |
-| Memory reads, injection, client-file edits, macros, driving the game for you | **Forbidden**; Bomana does not ship this |
+| Memory reads, injection, client-file edits, macros, driving the game for you | Not present in the current Bomana build |
 
 ### What Bomana actually does (player wording)
 
 | Topic | Behavior |
 |-------|----------|
-| Data source | Only the game’s local info pages (you can open `http://localhost:8111` in a browser). **No** process memory reads. |
+| Data source | The current build reads the game’s local info pages (you can open `http://localhost:8111` in a browser) and bundled versioned static data. |
 | Process relationship | Separate program and windows; not embedded in the game, no DLL injection, no game-file edits. |
-| Hotkeys | F7–F11 control **Bomana only** (timer, lock, corner, sound). They do **not** synthesize keys into the game. |
-| Optional elevated hotkeys | Shown only when the game may be elevated and global hotkeys can fail; **you** confirm before any system UAC. Decline → timer / nav / window buttons still work. |
-| Optional desktop overlay | Off by default; Bomana’s own transparent window for **ownship navigation**. Hostiles never go on the desktop HUD or heading tape. |
+| Hotkeys | F6–F11 control **Bomana only** (target source, timer, lock, corner, sound). They do **not** synthesize keys into the game. |
+| Game-foreground hotkeys | Use Windows `RegisterHotKey`; Bomana does not enumerate or open the game process to infer integrity and never auto-prompts UAC. Use the bombing bar, main window, or tray equivalents if an integrity boundary blocks a hotkey. |
+| Desktop surfaces | Main window, standalone navigation bar, and standalone CCRP bar; no fullscreen in-game HUD. |
 | Hostiles on the web map | If shown, only from the **current** official local map sample; cleared on failure or absence. No history tracks, no invented targets. |
 | Web buttons | Change Bomana only (timer, corner, sound, panels, optional weapon settings)—**not** the game client. |
 
 ### What you should know
 
 1. A **clean technical design is not a written guarantee** of never being sanctioned. Follow the EULA and your own risk judgment.  
-2. More conservative use: keep LAN off, leave the overlay off, avoid web-map hostile display if you prefer.  
-3. Endpoint lists, process-query scope, and contract tests: [Runtime isolation and security boundary](#runtime-isolation-and-security-boundary).
-
+2. More conservative use: keep LAN off and avoid web-map hostile display if you prefer.
 **You are responsible for how you use the tool.**
 
 ---
@@ -124,13 +120,15 @@ In simulator battles, each spawn has about a 15-minute reward window. Bomana can
 
 ### Weapon delivery reference
 
-Supported builds can show **estimated** release distance and timing windows (free-fall bombs, some missiles and guided weapons).
+超级爆弹版 provides delivery references for free-fall bombs and other supported weapons. Free-fall solving combines only official 8111 flight data, user-selected offline weapon parameters, and the launcher-managed offline terrain pack.
 
 Notes:
 
-- Estimates only—not the game’s internal solution
-- You must pick the weapon by hand; the app does not guess loadouts
-- Free-fall paths can be lightly calibrated under settings
+- The bombing bar can stay integrated or detach; when navigation is also detached, it mounts directly below the navigation bar
+- Arrow buttons cycle bombs verified for the current airframe; Bomana never reads or guesses the in-game loadout
+- `F6` or the bar button explicitly selects Zone versus POI targeting, so overlapping targets are never resolved by an implicit guess
+- The summary identifies offline terrain elevation; symmetric brackets converge smoothly toward release, pulse green at the cue, and show a red overrun line after it
+- All results remain external references, not the game’s internal solution or release authority
 
 ### Zone and airfield navigation
 
@@ -138,12 +136,6 @@ Notes:
 - Optional auto-lock after holding aim on a target
 - Home airfield direction; enemy airfields optional
 - After respawning in the same match, direction to the last confirmed loss
-
-### On-screen navigation overlay (optional)
-
-- Bomana’s own transparent window **above** the game for a main-target cue (off by default; enable in settings)
-- Not a game render change and not process injection; opacity, scale, and display options available
-- Hostile units never appear on this overlay
 
 ### Fuel and overspeed cues
 
@@ -161,7 +153,7 @@ Custom pre-takeoff items (engine, gear, and so on).
 | Transparent, always on top | Stay visible without blocking the view |
 | Lock | Click-through when locked |
 | Drag and edge snap | Free placement |
-| Themes and hotkeys | Light/dark; F7–F11 remappable |
+| Themes and hotkeys | Light/dark; F6–F11 remappable |
 | Tray | Minimize to the system tray |
 | Text scale | Larger text without forcing the whole layout |
 | Custom sounds | Import local audio by category |
@@ -195,17 +187,18 @@ More step-by-step help: [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
 | Channel | Includes | Best for |
 |---------|----------|----------|
-| **Enhanced** | Timer + navigation + fuel + weapon reference + web cockpit | Full toolkit (recommended) |
+| **超级爆弹版** (internal channel: `Enhanced`) | Deep-learning high-precision strike model and terrain data | Maximum bombing-prediction accuracy with offline terrain |
 | **Standard** | Timer + navigation + fuel (no weapon reference, no web cockpit) | No weapon reference or web panel |
 | **Lite** | Timer only (no web cockpit) | Minimal UI |
 
-Standard / Lite packages **omit** web-cockpit code. If Launcher web options are checked, launch shows a degradation notice and forces those options off for that run (saved prefs remain for a later Enhanced channel).
+Standard / Lite packages **omit** web-cockpit code. If Launcher web options are checked, launch shows a degradation notice and forces those options off for that run (saved prefs remain for 超级爆弹版).
 
 Notes:
 
 - First run usually needs the network; later runs can start offline from a local package  
 - Newer launchers keep one previous app version for rollback  
-- App 8.0.0+ requires Launcher 3.0.0+  
+- Current App 8.6.2 requires Launcher 3.3.0+
+- Launcher shows the current offline-pack state, map count, and revision; unchanged revisions download nothing, while updates fetch only changed map objects
 - Display name: `Bomana香焦`  
 - Site entry: [China site / CDN](https://ruikang.wang/bomana/) or [GitHub Pages](https://thankyou-cheems.github.io/Bomana/)
 
@@ -219,20 +212,20 @@ If you already have Python / uv, you can run from source—see [Run from source]
 
 | Key | Action |
 |-----|--------|
+| `F6` | Toggle bombing target source: Zone / POI |
 | `F7` | Manual timer reset (double-tap quickly) |
 | `F8` | Lock / unlock window (click-through when locked) |
 | `F9` | Cycle screen corners |
 | `F10` | Master sound toggle |
 | `F11` | Zone-destroyed sound toggle |
 
-Hotkeys are remappable. The HUD overlay is settings-only (off by default).
+Hotkeys are remappable.
 
 **About optional elevated hotkeys:**
 
-- Bomana and the launcher always run at ordinary integrity; **startup never auto-prompts UAC**.
-- An optional grant appears only when the game may be elevated (or elevation cannot be determined).
-- After you confirm, Windows may ask to allow a **hotkey-only** helper that notifies Bomana of reset / lock / corner / sound—**no** game injection and **no** game key synthesis.
-- If you decline: timer, navigation, window buttons, and local data reads keep working; only global F7–F11 while the game is focused may fail.
+- Bomana and the launcher always run at ordinary integrity. Startup registers only Windows system hotkeys and **never auto-prompts UAC**.
+- The current App does not enumerate game windows, open the game process, or inspect its integrity to decide whether to show a hotkey prompt.
+- If foreground integrity prevents F6–F11 delivery, use the equivalent bombing-bar, main-window, or tray buttons; timer, navigation, and official 8111 data remain available.
 
 ---
 
@@ -240,7 +233,7 @@ Hotkeys are remappable. The HUD overlay is settings-only (off by default).
 
 ### Does it read memory, inject, or play the game for me?
 
-No. Runtime data is only the game’s local info pages; UI is separate windows; hotkeys and web buttons only change Bomana. No memory reads, injection, game-file edits, macros, or synthesized game keys. Details and contract tests: [Runtime isolation and security boundary](#runtime-isolation-and-security-boundary).
+The current build does not. Its UI is separate windows, and hotkeys and web buttons only change Bomana. The current implementation has no memory reads, injection, game-file edits, macros, or synthesized game keys.
 
 ### Is this treated as cheating?
 
@@ -351,7 +344,6 @@ Contributors, packaging, and maintenance.
 | [docs/guides/8111-session-recording.md](docs/guides/8111-session-recording.md) | Record 8111 sessions for offline replay |
 | [docs/guides/web-cockpit-smoke.md](docs/guides/web-cockpit-smoke.md) | Web cockpit manual smoke |
 | [tests/README.md](tests/README.md) | Test layout and spec mapping |
-| [Agents.md](Agents.md) | Agent / contributor router and quality gates |
 
 ---
 
@@ -371,7 +363,7 @@ $env:BOMANA_SOURCE_DEVELOPMENT = "1"
 uv run python Bomana.pyw
 ```
 
-`BOMANA_SOURCE_DEVELOPMENT=1` only skips launcher identity for **explicit non-frozen source development**. Packaged apps never accept that exception. App 8.0.0+ requires Launcher 3.0.0+ identity at runtime.
+`BOMANA_SOURCE_DEVELOPMENT=1` only skips launcher identity for **explicit non-frozen source development**. Packaged apps never accept that exception. The protocol floor remains Launcher 3.0.0+, while the current App 8.6.2 requires Launcher 3.3.0+ before importing runtime modules; an older Launcher also blocks this App update before downloading package bytes from its signed manifest.
 
 Optional elevated hotkey broker for source debugging:
 
@@ -391,7 +383,7 @@ uv run python tools/build_hotkey_broker.py --mode dev --output bomana/bin
 ├─ bomana/
 │  ├─ config/                 # Feature flags, settings, static config
 │  ├─ core/                   # State, telemetry, ballistics, navigation
-│  ├─ data/                   # Static JSON (CCRP / weapons / speed limits)
+│  ├─ data/                   # Static assets (CCRP / weapons / speed limits)
 │  ├─ assets/web/             # Web cockpit front-end
 │  ├─ ui/                     # Tk UI and presenters
 │  ├─ web/                    # Dedicated HTTP service and semantic control
@@ -407,7 +399,7 @@ Notes:
 
 - Logic lives under `bomana/`; `Bomana.pyw` is the boot boundary  
 - Launcher and Python App run at ordinary integrity; only a user-confirmed fixed-action native broker may elevate  
-- Speed limits: `bomana/data/fm_speed_limits.json`; bomb params: `bomana/data/ccrp_bomb_params.json`  
+- Speed limits: `bomana/data/fm_speed_limits.json`; offline rigid-body catalog: `bomana/data/offline_rigidbody_catalog.bin`
 
 ---
 
@@ -430,10 +422,14 @@ ENABLE_ADVANCED_SETTINGS = True
 
 One entry updates:
 
-- `bomana/data/ccrp_bomb_params.json`  
+- `bomana/data/offline_rigidbody_catalog.bin`
 - `bomana/data/weapon_fire_control.json`  
 - `bomana/data/fm_speed_limits.json`  
-- datamine source version / commit in each JSON `meta`  
+- datamine source version / commit in the weapon and speed JSON metadata
+
+The rigid-body catalog uses a deterministic compressed container with a
+SHA-256 integrity check and carries no per-record file paths, mesh names, or
+source-commit metadata.
 
 ```bash
 git clone https://github.com/gszabi99/War-Thunder-Datamine.git
@@ -464,18 +460,17 @@ Overspeed grading is cross-checked against [KaerMorh/WTSpeeder](https://github.c
 | `/icons.ttf` | Official tactical icon font (bounded, low-cadence, signature-checked) |
 
 - Fixed base: `http://127.0.0.1:8111` (or equivalent localhost)  
-- JSON access is centralized in `bomana/core/telemetry.py`; runtime must not scatter raw `requests` / `urlopen`  
-- Spec: [docs/specs/runtime-8111-boundary.md](docs/specs/runtime-8111-boundary.md)
+- JSON access is currently centralized in `bomana/core/telemetry.py`
 
 ### Bundled static data
 
 | File | Role |
 |------|------|
-| `ccrp_bomb_params.json` | Free-fall / high-drag bomb params |
+| `offline_rigidbody_catalog.bin` | Integrity-checked offline CCRP rigid-body catalog |
 | `weapon_fire_control.json` | Weapon catalog, loadouts, condition tables |
 | `fm_speed_limits.json` | Airframe IAS / Mach limits |
 
-Static libraries are **build-time** extracts from public datamine sources. Runtime only reads the JSON; it does not open the game install tree or decrypt client packs mid-sortie.
+Static libraries are **build-time** extracts from public datamine sources. Runtime only reads bundled static assets; it does not open the game install tree or decrypt client packs mid-sortie.
 
 ### Polling
 
@@ -486,7 +481,7 @@ Static libraries are **build-time** extracts from public datamine sources. Runti
 
 - Bomana is the only 8111 reader; the web stack never proxies or forwards 8111 routes  
 - App publishes filtered snapshots, bounded map bitmaps, and Tk-owned control state  
-- Hostiles mirror the current `/map_obj.json` sample only; never desktop HUD / heading tape  
+- Hostiles mirror the current `/map_obj.json` sample only; never standalone navigation or CCRP bars
 - Writes require session CSRF, idempotency keys, and main-thread re-authorization; fixed semantic actions only (`bomana/web/control.py` allowlist)  
 - Default `127.0.0.1:8777`; LAN binds concrete RFC1918 addresses, not `0.0.0.0`  
 - Spec: [docs/specs/web-dashboard.md](docs/specs/web-dashboard.md)  
@@ -502,15 +497,15 @@ Static libraries are **build-time** extracts from public datamine sources. Runti
 
 ---
 
-## Runtime isolation and security boundary
+## Windows integration and hotkey broker
 
-Implementation detail for “official 8111 only, process isolation, no game automation.” Player summary: [Compliance statement](#compliance-statement).
+This section records the current window and optional-hotkey implementation. It no longer defines an 8111-only data-source security boundary.
 
 ### Isolation sketch
 
 ```text
-War Thunder  ──official loopback HTTP :8111 only──►  Bomana App (ordinary integrity)
-                                                       ├─ Own Tk / HUD windows (not game children)
+War Thunder  ──loopback HTTP :8111──►  Bomana App (ordinary integrity)
+                                                       ├─ Own Tk panel windows (not game children)
                                                        ├─ Optional web cockpit (separate port; no 8111 proxy)
                                                        └─ Optional hotkey broker (after user UAC confirm)
                                                             └─ Named pipe: Bomana action IDs only
@@ -518,22 +513,12 @@ War Thunder  ──official loopback HTTP :8111 only──►  Bomana App (ordin
 
 | Boundary | Implementation notes |
 |----------|----------------------|
-| No memory / injection | Runtime must not contain `ReadProcessMemory`, `WriteProcessMemory`, `CreateRemoteThread`, `pymem`, `frida`, etc. |
-| No game input synthesis | Runtime must not use `SendInput` / `keybd_event` into the game; web contracts ban the same |
-| No client edits | Runtime does not use `game.log`, client packs, or install trees as live data sources |
 | Windows | Independent topmost layered windows; no `SetParent` onto the game HWND |
 | Hotkeys | `RegisterHotKey` → callbacks mutate Bomana only; broker also only registers hotkeys (no hooks / polling) |
 
-### Sole optional touch of the game process (read-only)
+### No game-process probing
 
-To decide whether to **show** the elevated-hotkey affordance, the App may:
-
-1. Enumerate **visible** top-level windows whose title contains `War Thunder`  
-2. Open candidates with `PROCESS_QUERY_LIMITED_INFORMATION`  
-3. Confirm image name `aces.exe` / `aces64.exe` / `aces_BE.exe`  
-4. `TOKEN_QUERY` for elevation  
-
-It must **not** snapshot all processes, enumerate modules, read memory, or reuse a game handle for other purposes. Spec: `docs/specs/startup-elevation.md` (`ELEV-03`, …).
+The App registers ordinary Windows system hotkeys directly. It does not enumerate game windows or processes, query game executable names or tokens, inspect modules or memory, or auto-request UAC from game state. See `docs/specs/startup-elevation.md`.
 
 ### Optional hotkey broker
 
@@ -541,23 +526,21 @@ It must **not** snapshot all processes, enumerate modules, read memory, or reuse
 |------|------------|
 | When | Only after explicit user confirm; never auto-UAC on startup |
 | Path | Packaged `bomana/bin/BomanaHotkeyBroker.exe` + adjacent SHA256 only |
-| Actions | Fixed: `reset` / `lock` / `corner` / `beep` / optional `zones`; keys F1–F12 |
+| Actions | Fixed: `bomb_target` / `reset` / `lock` / `corner` / `beep` / optional `zones`; keys F1–F12 |
 | IPC | Local named pipe; frames carry status / action IDs only |
 | App process | May open Bomana with `SYNCHRONIZE \| PROCESS_QUERY_LIMITED_INFORMATION` to wait for exit—target is **Bomana**, not the game |
 | Forbidden | No keyboard hooks, no game inspection, no network, no service / task / autostart install |
 
-### Contract tests (run when touching boundaries)
+### Related contract tests
 
 ```bash
 uv run --extra dev python -m pytest ^
-  tests/contracts/test_runtime_8111_boundary.py ^
   tests/contracts/test_startup_elevation_contract.py ^
   tests/contracts/test_web_dashboard_contract.py -q
 ```
 
 | Test | Covers |
 |------|--------|
-| `test_runtime_8111_boundary` | API base, endpoint allowlist, dangerous API tokens, centralized HTTP, recorder/replay |
 | `test_startup_elevation_contract` | Ordinary integrity, narrow probe, broker path/hash/forbiddens |
 | `test_web_dashboard_contract` | No 8111 proxy, semantic command matrix, no input synthesis |
 
@@ -577,6 +560,8 @@ tools\scripts\build_launcher.bat [version]
 
 - `version` is a consistency check against source; for `all`, omit a single `version`  
 - App ZIPs embed the minimal hotkey broker and its SHA256  
+- No App ZIP embeds terrain. Launcher installs, verifies, and maintains `terrain-v1` only for `Enhanced`
+- Terrain objects are content-addressed by SHA256; unchanged maps are reused and ordinary App releases neither include nor upload the roughly 118 MB dataset
 - Release builds need `BOMANA_RELEASE_ED25519_PRIVATE_KEY`, `BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID` (default `bomana-release-2026-06`)  
 - Unsigned or mismatched key material is rejected  
 
@@ -588,6 +573,7 @@ tools\scripts\build_launcher.bat [version]
 | Tag `vX.Y.Z-app` | Three app channels only |
 | Tag `vX.Y.Z-launcher` | Launcher only |
 | `workflow_dispatch` | `all` / `app` / `launcher` |
+| Manual `build-terrain.yml` run | Independent signed terrain manifest and content-addressed objects |
 
 Builds use GitHub Artifact Attestations; no Authenticode PFX required. Signing trust boundary: [docs/specs/release-signing.md](docs/specs/release-signing.md).
 
@@ -599,6 +585,8 @@ Builds use GitHub Artifact Attestations; no Authenticode PFX required. Signing t
 gh secret list --repo Thankyou-Cheems/Bomana
 gh release download vX.Y.Z --dir dist
 uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
+# Only when terrain data actually changes:
+uv run python tools/deploy_update_assets.py --target terrain
 ```
 
 Public endpoints must be checked with `verify_release_manifest_signature`.
@@ -611,6 +599,8 @@ Public endpoints must be checked with `verify_release_manifest_signature`.
 | `launcher_manifest.json` | Launcher version, name, SHA256, Ed25519 signature |
 | `Bomana_app_<Variant>_vX.Y.Z.zip` | Runnable package |
 | `manifest_<Variant>.json` | App version, `min_launcher_version`, SHA256, signature |
+| `terrain-release/terrain_manifest.json` | Independent terrain revision, per-file hashes/sizes, Ed25519 signature |
+| `terrain-release/objects/*` | Content-addressed map/metadata objects; clients fetch only changed objects |
 | `checksums_*.txt` | Integrity lists |
 
 ---

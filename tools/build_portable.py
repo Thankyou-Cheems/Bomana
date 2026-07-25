@@ -58,6 +58,7 @@ WEB_DASHBOARD_PACKAGE_PREFIXES = (
     "bomana/web/",
     "bomana/assets/web/",
 )
+TERRAIN_SOURCE_PREFIX = "bomana/data/terrain-"
 
 APP_ENTRY = "Bomana.pyw"
 APP_DIR = "bomana"
@@ -70,7 +71,7 @@ SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
 SIGNING_PUBLIC_KEY_ENV = "BOMANA_RELEASE_ED25519_PUBLIC_KEY"
 SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
 PACKAGED_LAUNCHER_REQUIRES_PYTHON = ">=3.14"
-PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.2.0"
+PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.3.0"
 WEB_CONTROL_SCHEMA_PATHS = (
     Path("docs/specs/schemas/web-dashboard-command.schema.json"),
     Path("docs/specs/schemas/web-dashboard-command-response.schema.json"),
@@ -99,6 +100,19 @@ PACKAGED_LAUNCHER_COLLECT_SUBMODULES = (
 PACKAGED_LAUNCHER_COLLECT_ALL = (
     "requests",
     "certifi",
+)
+APP_RELEASE_SOURCE_SCOPES = (
+    APP_ENTRY,
+    "bomana_version.py",
+    APP_DIR,
+    "docs/CHANGELOG.md",
+    *(path.as_posix() for path in WEB_CONTROL_SCHEMA_PATHS),
+    "docs/specs/schemas/weapon-fire-control.schema.json",
+)
+LAUNCHER_RELEASE_SOURCE_SCOPES = (
+    "launcher.pyw",
+    LAUNCHER_DIR,
+    f"{APP_DIR}/assets",
 )
 
 
@@ -241,6 +255,27 @@ def read_min_launcher_version(metadata_text: str) -> str:
     return read_metadata_value(metadata_text, "PORTABLE_MIN_LAUNCHER_VERSION")
 
 
+def read_app_required_launcher_version(boundary_text: str) -> str:
+    match = re.search(
+        r'APP_REQUIRED_LAUNCHER_VERSION(?:\s*:\s*Final)?\s*=\s*["\']([^"\']+)["\']',
+        boundary_text,
+    )
+    if not match:
+        raise RuntimeError("Failed to find APP_REQUIRED_LAUNCHER_VERSION in bomana_version.py")
+    return match.group(1).strip()
+
+
+def validate_app_launcher_floor(metadata_text: str, boundary_text: str) -> str:
+    metadata_floor = read_min_launcher_version(metadata_text)
+    boundary_floor = read_app_required_launcher_version(boundary_text)
+    if boundary_floor != metadata_floor:
+        raise RuntimeError(
+            "App Launcher floor mismatch: "
+            f"bomana/metadata.py={metadata_floor!r}, bomana_version.py={boundary_floor!r}"
+        )
+    return metadata_floor
+
+
 def read_launcher_version(launcher_text: str, source: str = "launcher/metadata.py") -> str:
     m = re.search(r'LAUNCHER_VERSION\s*=\s*["\']([^"\']+)["\']', launcher_text)
     if not m:
@@ -284,6 +319,167 @@ def add_file_to_zip(zf: zipfile.ZipFile, root: Path, path: Path) -> None:
     zf.write(path, rel)
 
 
+def _release_source_scopes(target: str) -> tuple[str, ...]:
+    scopes: list[str] = []
+    if target in ("all", "app"):
+        scopes.extend(APP_RELEASE_SOURCE_SCOPES)
+    if target in ("all", "launcher"):
+        scopes.extend(LAUNCHER_RELEASE_SOURCE_SCOPES)
+    return tuple(dict.fromkeys(scopes))
+
+
+def _app_source_files(
+    root: Path,
+    variant: str,
+    release_source_paths: frozenset[str] | None = None,
+) -> tuple[Path, ...]:
+    package_web = VARIANT_SWITCHES[variant].get("ENABLE_WEB_DASHBOARD") == "True"
+    if release_source_paths is None:
+        candidates = tuple((root / APP_DIR).rglob("*"))
+    else:
+        candidates = tuple(
+            root / Path(rel_path)
+            for rel_path in sorted(release_source_paths)
+            if rel_path.startswith(f"{APP_DIR}/")
+        )
+    selected: list[Path] = []
+    for path in candidates:
+        if release_source_paths is not None and (path.is_symlink() or not path.is_file()):
+            rel_path = path.relative_to(root).as_posix()
+            raise RuntimeError(f"invalid tracked App package file: {rel_path}")
+        if path.is_dir():
+            continue
+        if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
+            continue
+        rel_path = path.relative_to(root).as_posix()
+        if rel_path.startswith(f"{APP_DIR}/bin/"):
+            continue
+        if rel_path.startswith(TERRAIN_SOURCE_PREFIX):
+            continue
+        if variant != "Enhanced" and rel_path in {
+            "bomana/data/offline_rigidbody_catalog.bin",
+            "bomana/data/weapon_fire_control.json",
+            "bomana/data/visible_trajectory_references.json",
+        }:
+            continue
+        if not package_web and any(
+            rel_path == prefix.rstrip("/") or rel_path.startswith(prefix)
+            for prefix in WEB_DASHBOARD_PACKAGE_PREFIXES
+        ):
+            continue
+        selected.append(path)
+    return tuple(selected)
+
+
+def _unexpected_release_files(
+    root: Path,
+    target: str,
+    variant: str,
+    tracked_paths: frozenset[str],
+) -> tuple[str, ...]:
+    unexpected: set[str] = set()
+    if target in ("all", "app"):
+        for path in _app_source_files(root, variant):
+            rel_path = path.relative_to(root).as_posix()
+            if rel_path not in tracked_paths:
+                unexpected.add(rel_path)
+    if target in ("all", "launcher"):
+        assets_dir = root / APP_DIR / "assets"
+        if assets_dir.exists():
+            for path in assets_dir.rglob("*"):
+                if path.is_dir() or "__pycache__" in path.parts:
+                    continue
+                if path.suffix in {".pyc", ".pyo"}:
+                    continue
+                rel_path = path.relative_to(root).as_posix()
+                if rel_path not in tracked_paths:
+                    unexpected.add(rel_path)
+    return tuple(sorted(unexpected))
+
+
+def resolve_release_source_closure(
+    root: Path,
+    target: str,
+    variant: str,
+) -> frozenset[str]:
+    """Resolve a clean, Git-tracked source inventory before signing a release."""
+    scopes = _release_source_scopes(target)
+    tracked_result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z", "--", *scopes],
+        check=False,
+        capture_output=True,
+    )
+    if tracked_result.returncode != 0:
+        detail = tracked_result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"unable to resolve release source closure: {detail}")
+    tracked_paths = frozenset(
+        value
+        for value in tracked_result.stdout.decode("utf-8", errors="strict").split("\0")
+        if value
+    )
+    if not tracked_paths:
+        raise RuntimeError("release source closure is empty")
+
+    dirty_result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--",
+            *scopes,
+        ],
+        check=False,
+        capture_output=True,
+    )
+    if dirty_result.returncode != 0:
+        detail = dirty_result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"unable to verify release source closure: {detail}")
+    dirty_entries = tuple(
+        value
+        for value in dirty_result.stdout.decode("utf-8", errors="replace").split("\0")
+        if value
+    )
+    if dirty_entries:
+        raise RuntimeError(
+            "release source tree is not clean: " + ", ".join(dirty_entries[:8])
+        )
+
+    unexpected = _unexpected_release_files(root, target, variant, tracked_paths)
+    if unexpected:
+        raise RuntimeError(
+            "release source tree contains unexpected package files: "
+            + ", ".join(unexpected[:8])
+        )
+    return tracked_paths
+
+
+def _stage_launcher_assets(
+    root: Path,
+    work_dir: Path,
+    release_source_paths: frozenset[str] | None,
+) -> Path:
+    assets_dir = root / APP_DIR / "assets"
+    if release_source_paths is None:
+        return assets_dir
+    staged_assets = work_dir / "release-assets"
+    staged_assets.mkdir(parents=True, exist_ok=False)
+    asset_prefix = f"{APP_DIR}/assets/"
+    for rel_path in sorted(release_source_paths):
+        if not rel_path.startswith(asset_prefix):
+            continue
+        source = root / Path(rel_path)
+        if source.is_symlink() or not source.is_file():
+            raise RuntimeError(f"invalid tracked Launcher asset: {rel_path}")
+        destination = staged_assets / Path(rel_path).relative_to(Path(APP_DIR) / "assets")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    return staged_assets
+
+
 def resolve_hotkey_broker(root: Path, configured_path: str) -> Path:
     if configured_path.strip():
         broker = Path(configured_path).resolve()
@@ -313,30 +509,31 @@ def build_app_zip(
     version: str,
     out_dir: Path,
     hotkey_broker: Path,
+    release_source_paths: frozenset[str],
 ) -> Path:
     name = f"Bomana_app_{variant}_v{version}.zip"
     out_zip = out_dir / name
     if out_zip.exists():
         out_zip.unlink()
 
-    ccrp_json_rel = Path("bomana/data/ccrp_bomb_params.json")
-    ccrp_json = root / ccrp_json_rel
     weapon_catalog_rel = Path("bomana/data/weapon_fire_control.json")
+    visible_trajectory_references_rel = Path("bomana/data/visible_trajectory_references.json")
     weapon_schema_rel = Path("docs/specs/schemas/weapon-fire-control.schema.json")
     version_boundary = root / "bomana_version.py"
-    legacy_ccrp_json = root / "ccrp_bomb_params.json"
-    legacy_ccrp_py = root / "ccrp_bomb_params.py"
 
     if variant == "Enhanced":
         missing_weapon_assets = [
             rel_path
-            for rel_path in (weapon_catalog_rel, weapon_schema_rel)
+            for rel_path in (
+                weapon_catalog_rel,
+                visible_trajectory_references_rel,
+                weapon_schema_rel,
+            )
             if not (root / rel_path).is_file()
         ]
         if missing_weapon_assets:
             missing = ", ".join(path.as_posix() for path in missing_weapon_assets)
             raise RuntimeError(f"missing Enhanced weapon fire-control assets: {missing}")
-
     package_web = VARIANT_SWITCHES[variant].get("ENABLE_WEB_DASHBOARD") == "True"
     required_runtime_paths = [version_boundary]
     if package_web:
@@ -354,31 +551,24 @@ def build_app_zip(
             "missing shared App runtime assets: " + ", ".join(missing_runtime_assets)
         )
 
+    app_source_files = _app_source_files(root, variant, release_source_paths)
+    expected_entries = {
+        APP_ENTRY,
+        "bomana_version.py",
+        *(path.relative_to(root).as_posix() for path in app_source_files),
+        f"{APP_DIR}/bin/{HOTKEY_BROKER_NAME}",
+        f"{APP_DIR}/bin/{HOTKEY_BROKER_CHECKSUM_NAME}",
+    }
+    if variant == "Enhanced":
+        expected_entries.add(weapon_schema_rel.as_posix())
+    if package_web:
+        expected_entries.update(path.as_posix() for path in WEB_CONTROL_SCHEMA_PATHS)
+
     with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         add_file_to_zip(zf, root, root / APP_ENTRY)
         add_file_to_zip(zf, root, version_boundary)
 
-        app_root = root / APP_DIR
-        for path in app_root.rglob("*"):
-            if path.is_dir():
-                continue
-            if "__pycache__" in path.parts:
-                continue
-            if path.suffix in {".pyc", ".pyo"}:
-                continue
-            rel_path = path.relative_to(root).as_posix()
-            if rel_path.startswith(f"{APP_DIR}/bin/"):
-                continue
-            if variant != "Enhanced" and rel_path in {
-                ccrp_json_rel.as_posix(),
-                weapon_catalog_rel.as_posix(),
-            }:
-                continue
-            if not package_web and any(
-                rel_path == prefix.rstrip("/") or rel_path.startswith(prefix)
-                for prefix in WEB_DASHBOARD_PACKAGE_PREFIXES
-            ):
-                continue
+        for path in app_source_files:
             add_file_to_zip(zf, root, path)
 
         if variant == "Enhanced":
@@ -386,7 +576,6 @@ def build_app_zip(
         if package_web:
             for schema_path in WEB_CONTROL_SCHEMA_PATHS:
                 add_file_to_zip(zf, root, root / schema_path)
-
         broker_sha256 = sha256_file(hotkey_broker)
         zf.write(
             hotkey_broker,
@@ -397,12 +586,11 @@ def build_app_zip(
             f"{broker_sha256}  {HOTKEY_BROKER_NAME}\n",
         )
 
-        # Backward compatibility: legacy root-level CCRP file.
-        if variant == "Enhanced" and not ccrp_json.exists():
-            if legacy_ccrp_json.exists():
-                add_file_to_zip(zf, root, legacy_ccrp_json)
-            elif legacy_ccrp_py.exists():
-                add_file_to_zip(zf, root, legacy_ccrp_py)
+    with zipfile.ZipFile(out_zip, "r") as archive:
+        names = archive.namelist()
+    if len(names) != len(expected_entries) or set(names) != expected_entries:
+        out_zip.unlink(missing_ok=True)
+        raise RuntimeError("App package contents do not match the release source closure")
 
     return out_zip
 
@@ -451,12 +639,18 @@ VSVersionInfo(
     return path
 
 
-def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
+def build_launcher(
+    root: Path,
+    version: str,
+    out_dir: Path,
+    release_source_paths: frozenset[str],
+) -> Path:
     name = f"{UNIVERSAL_LAUNCHER_NAME}_v{version}"
     work_dir = root / "build" / "pyinstaller" / "UniversalLauncher"
     if work_dir.exists():
         shutil.rmtree(work_dir, ignore_errors=True)
     work_dir.mkdir(parents=True, exist_ok=True)
+    assets_dir = _stage_launcher_assets(root, work_dir, release_source_paths)
 
     cmd = [
         sys.executable,
@@ -467,7 +661,7 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
         "--name",
         name,
         "--icon",
-        str(root / BRANDING_ICON),
+        str(assets_dir / BRANDING_ICON.relative_to(Path(APP_DIR) / "assets")),
         *pyinstaller_launcher_runtime_args(),
         "--distpath",
         str(out_dir),
@@ -483,7 +677,6 @@ def build_launcher(root: Path, version: str, out_dir: Path) -> Path:
     cmd.extend(["--version-file", str(version_file)])
 
     # Launcher runtime resources (window icon + details dialog assets)
-    assets_dir = root / APP_DIR / "assets"
     if assets_dir.exists():
         cmd.extend(["--add-data", f"{assets_dir};{APP_DIR}/assets"])
 
@@ -604,10 +797,13 @@ def main() -> int:
 
     feature_profile_path = root / "bomana" / "config" / "feature_profile.py"
     metadata_path = root / "bomana" / "metadata.py"
+    version_boundary_path = root / "bomana_version.py"
     launcher_metadata_path = root / "launcher" / "metadata.py"
     feature_profile_stat = feature_profile_path.stat()
-    original_feature_profile = feature_profile_path.read_text(encoding="utf-8")
+    original_feature_profile_bytes = feature_profile_path.read_bytes()
+    original_feature_profile = original_feature_profile_bytes.decode("utf-8")
     metadata_text = metadata_path.read_text(encoding="utf-8")
+    version_boundary_text = version_boundary_path.read_text(encoding="utf-8")
     launcher_metadata_text = launcher_metadata_path.read_text(encoding="utf-8")
     feature_profile_patched = False
 
@@ -622,7 +818,10 @@ def main() -> int:
 
     try:
         source_app_version = read_version(metadata_text)
-        min_launcher_version = read_min_launcher_version(metadata_text)
+        min_launcher_version = validate_app_launcher_floor(
+            metadata_text,
+            version_boundary_text,
+        )
         source_launcher_version = read_launcher_version(
             launcher_metadata_text,
             "launcher/metadata.py",
@@ -633,13 +832,18 @@ def main() -> int:
             source_app_version,
             source_launcher_version,
         )
+        release_source_paths = resolve_release_source_closure(
+            root,
+            args.target,
+            args.variant,
+        )
 
         if args.target in ("all", "app"):
             app_version = source_app_version
             hotkey_broker = resolve_hotkey_broker(root, args.hotkey_broker)
             patched = replace_switches(original_feature_profile, VARIANT_SWITCHES[args.variant])
             if patched != original_feature_profile:
-                feature_profile_path.write_text(patched, encoding="utf-8")
+                feature_profile_path.write_bytes(patched.encode("utf-8"))
                 feature_profile_patched = True
             app_zip = build_app_zip(
                 root,
@@ -647,6 +851,7 @@ def main() -> int:
                 app_version,
                 out_dir,
                 hotkey_broker,
+                release_source_paths,
             )
             app_sha = sha256_file(app_zip)
             changelog = write_changelog_asset(root, out_dir, args.variant, app_version)
@@ -663,7 +868,12 @@ def main() -> int:
 
         if args.target in ("all", "launcher"):
             launcher_version = source_launcher_version
-            launcher = build_launcher(root, launcher_version, out_dir)
+            launcher = build_launcher(
+                root,
+                launcher_version,
+                out_dir,
+                release_source_paths,
+            )
             launcher_sha = sha256_file(launcher)
             launcher_manifest = write_launcher_manifest(
                 out_dir,
@@ -719,7 +929,7 @@ def main() -> int:
         return 0
     finally:
         if feature_profile_patched:
-            feature_profile_path.write_text(original_feature_profile, encoding="utf-8")
+            feature_profile_path.write_bytes(original_feature_profile_bytes)
             os.utime(
                 feature_profile_path,
                 ns=(feature_profile_stat.st_atime_ns, feature_profile_stat.st_mtime_ns),

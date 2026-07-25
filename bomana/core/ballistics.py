@@ -1,39 +1,114 @@
-"""Ballistics calculations (CCRP)."""
+"""Versioned offline ballistic calculations used by CCRP.
+
+This module is deliberately self-contained.  Runtime inputs are ordinary
+numbers already obtained from official 8111 endpoints, selected-weapon static
+metadata, and an optional local terrain-height callback.
+"""
+
+from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
-from bomana.config.settings import (
-    BallisticPhysicsParams,
-    BombConfig,
+from bomana.config.settings import BallisticPhysicsParams
+from bomana.core.atmosphere import (
+    DAGOR_STANDARD_DENSITY_KG_M3,
+    dagor_speed_of_sound,
+)
+from bomana.core.offline_ballistics_model import (
+    OFFLINE_STEP_SECONDS,
+    resolve_offline_ballistics_model,
+)
+from bomana.core.offline_rigidbody_solver import (
+    OfflineRigidbodyEnvironment,
+    OfflineRigidbodySolverProperties,
+    axial_drag_curve,
+    integrate_pitch_projection_to_terrain,
 )
 
-# ============================================================================
-# 弹道物理计算辅助函数
-# ============================================================================
+TerrainAltitudeAtRange = Callable[[float], float | None]
 
 
-def _wt_get_air_density(altitude_m: float, temp_k: float | None = None) -> float:
-    """计算War Thunder指数衰减大气密度
+def offline_speed_of_sound(world_altitude_m: float) -> float:
+    """Compatibility name for the centralized complete Dagor atmosphere."""
 
-    公式：ρ(h) = 1.225 × exp(-h/14426) × (288.15/T)
-    """
-    if altitude_m < 0:
-        altitude_m = 0
-
-    rho_sea = BallisticPhysicsParams.AIR_DENSITY_SEA
-    scale_h = BallisticPhysicsParams.AIR_DENSITY_SCALE_HEIGHT
-
-    density = rho_sea * math.exp(-altitude_m / scale_h)
-
-    if temp_k is not None and temp_k > 0 and BallisticPhysicsParams.USE_TEMPERATURE_CORRECTION:
-        density *= BallisticPhysicsParams.TEMP_REFERENCE_K / temp_k
-
-    return density
+    return dagor_speed_of_sound(world_altitude_m)
 
 
-# ============================================================================
-# 弹道计算模块（CCRP v3.0）
-# ============================================================================
+def _positive_finite(value: object, default: float) -> float:
+    try:
+        parsed = float(value)
+    except TypeError, ValueError:
+        return default
+    return parsed if math.isfinite(parsed) and parsed > 0.0 else default
+
+
+def _finite(value: object, default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+    except TypeError, ValueError:
+        return default
+    return parsed if math.isfinite(parsed) else default
+
+
+def _resolved_sea_level_density(value: float | None) -> float:
+    return _positive_finite(value, DAGOR_STANDARD_DENSITY_KG_M3)
+
+
+def _calculate_rigidbody_projection_trajectory(
+    *,
+    release_altitude_m: float,
+    velocity_x_ms: float,
+    velocity_y_ms: float,
+    initial_aoa_deg: float,
+    fixed_target_altitude_m: float,
+    altitude_datum_m: float,
+    sea_level_density: float,
+    terrain_altitude_at_range: TerrainAltitudeAtRange | None,
+    properties: OfflineRigidbodySolverProperties,
+) -> tuple[float, float, float]:
+    """Project 8111 release observables into the offline rigid-body kernel."""
+
+    body_angle = math.atan2(velocity_y_ms, velocity_x_ms) + math.radians(
+        initial_aoa_deg
+    )
+    def world_terrain_altitude(horizontal_range_m: float) -> float | None:
+        if terrain_altitude_at_range is None:
+            altitude = fixed_target_altitude_m
+        else:
+            try:
+                raw = terrain_altitude_at_range(horizontal_range_m)
+            except (ArithmeticError, TypeError, ValueError):
+                return None
+            if raw is None:
+                return None
+            altitude = _finite(raw, default=math.nan)
+        return (
+            altitude + altitude_datum_m
+            if math.isfinite(altitude)
+            else None
+        )
+
+    impact = integrate_pitch_projection_to_terrain(
+        release_world_altitude_m=release_altitude_m + altitude_datum_m,
+        velocity_x_ms=velocity_x_ms,
+        velocity_y_ms=velocity_y_ms,
+        initial_body_angle_rad=body_angle,
+        properties=properties,
+        terrain_altitude_at_range=world_terrain_altitude,
+        environment=OfflineRigidbodyEnvironment(
+            sea_level_density_kg_m3=sea_level_density,
+        ),
+        max_time_seconds=float(BallisticPhysicsParams.MAX_FLIGHT_TIME),
+        step_seconds=OFFLINE_STEP_SECONDS,
+    )
+    if impact is None:
+        return 0.0, 0.0, 0.0
+    return (
+        impact.elapsed_seconds,
+        max(0.0, impact.position_world_m.x),
+        impact.linear_velocity_world_ms.magnitude(),
+    )
 
 
 def calculate_bomb_trajectory(
@@ -43,203 +118,70 @@ def calculate_bomb_trajectory(
     bomb_bc: float = 0.0,
     target_alt_m: float = 0.0,
     dive_angle_deg: float = 0.0,
-    initial_vz_ms=None,
+    initial_vz_ms: float | None = None,
+    initial_aoa_deg: float | None = None,
     bomb_params: dict | None = None,
-) -> tuple:
-    """计算炸弹弹道（支持多种阻力模型）
+    atmosphere_altitude_datum_m: float = 0.0,
+    air_density_sea_level: float | None = None,
+    terrain_altitude_at_range: TerrainAltitudeAtRange | None = None,
+) -> tuple[float, float, float]:
+    """Integrate the offline rigid-body projection to terrain.
 
-    Args:
-        release_alt_m: 投弹高度（米）
-        release_speed_ms: 投弹时水平速度（m/s）
-        target_alt_m: 目标高度（米）
-        dive_angle_deg: 俯冲角度（度）
-        initial_vz_ms: 初始垂直速度（m/s）
-        bomb_params: 炸弹物理参数字典
-
-    Returns:
-        (飞行时间秒, 水平飞行距离米, 落地速度m/s)
+    The active reference solver is six-degree-of-freedom.  8111 does not expose
+    a released store's quaternion or angular velocity, so every supported
+    free-fall store uses the observable along-track plane reconstructed from
+    8111 AoA and its own bundled static lift, inertia, stabilizer, and damping
+    properties. The force/moment equations are shared with the general
+    three-dimensional kernel. The atmosphere, Mach curve, constants, and
+    constant-acceleration ``1/48 s`` state step are versioned together.  No
+    coefficient is fitted at runtime.
     """
-    g = BallisticPhysicsParams.GRAVITY
-    drag_model = BallisticPhysicsParams.DRAG_MODEL
 
-    alt_offset = BallisticPhysicsParams.ALTITUDE_CORRECTION_OFFSET
-    range_mult = BallisticPhysicsParams.RANGE_CORRECTION_MULT
-    time_mult = BallisticPhysicsParams.TIME_CORRECTION_MULT
-
-    h = (release_alt_m + alt_offset) - target_alt_m
-    if h <= 0:
+    del bomb_bc
+    params = bomb_params if isinstance(bomb_params, dict) else {}
+    model = resolve_offline_ballistics_model(params)
+    if not model.supported or not model.rigidbody_projection_enabled:
+        return 0.0, 0.0, 0.0
+    mass = _positive_finite(params.get("mass"), _positive_finite(bomb_mass_kg, 100.0))
+    caliber = _positive_finite(params.get("caliber"), 0.2)
+    release_altitude = _finite(release_alt_m, default=math.nan)
+    horizontal_release_speed = _finite(release_speed_ms, default=math.nan)
+    fixed_target_altitude = _finite(target_alt_m, default=math.nan)
+    altitude_datum = _finite(atmosphere_altitude_datum_m)
+    if not all(
+        math.isfinite(value)
+        for value in (
+            release_altitude,
+            horizontal_release_speed,
+            fixed_target_altitude,
+        )
+    ):
+        return 0.0, 0.0, 0.0
+    if mass <= 0.0 or caliber <= 0.0 or horizontal_release_speed <= 0.0:
         return 0.0, 0.0, 0.0
 
-    dive_rad = math.radians(dive_angle_deg)
-    vx = release_speed_ms * math.cos(dive_rad)
-    vz0 = (
-        float(initial_vz_ms)
+    dive_radians = math.radians(_finite(dive_angle_deg))
+    velocity_x = horizontal_release_speed * math.cos(dive_radians)
+    velocity_y = (
+        _finite(initial_vz_ms)
         if initial_vz_ms is not None
-        else -release_speed_ms * math.sin(dive_rad)
+        else -horizontal_release_speed * math.sin(dive_radians)
     )
-
-    if drag_model == "none":
-        discriminant = vz0 * vz0 + 2.0 * g * h
-        if discriminant < 0:
-            return 0.0, 0.0, 0.0
-        t = (vz0 + math.sqrt(discriminant)) / g
-        x = vx * t
-        vz_final = vz0 - g * t
-        impact_speed = math.sqrt(vx * vx + vz_final * vz_final)
-        return t * time_mult, x * range_mult, impact_speed
-
-    elif drag_model == "simple":
-        return _calculate_trajectory_with_drag(h, vx, vz0, g, bomb_params, range_mult, time_mult)
-
-    elif drag_model == "advanced":
-        return _calculate_trajectory_advanced(h, vx, vz0, g, bomb_params, range_mult, time_mult)
-
-    else:
-        discriminant = vz0 * vz0 + 2.0 * g * h
-        if discriminant < 0:
-            return 0.0, 0.0, 0.0
-        t = (vz0 + math.sqrt(discriminant)) / g
-        x = vx * t
-        vz_final = vz0 - g * t
-        impact_speed = math.sqrt(vx * vx + vz_final * vz_final)
-        return t * time_mult, x * range_mult, impact_speed
-
-
-def _calculate_trajectory_with_drag(h, vx, vz0, g, bomb_params, range_mult, time_mult):
-    """简化阻力模型"""
-    if bomb_params is None:
-        bomb_params = BombConfig.get_bomb_physics_params()
-
-    mass = bomb_params.get("mass", 100.0)
-    drag_cx = bomb_params.get("drag_cx", 0.04)
-    caliber = bomb_params.get("caliber", 0.2)
-
-    area = math.pi * (caliber / 2) ** 2 * BallisticPhysicsParams.DRAG_REFERENCE_AREA_MULT
-    drag_cx *= BallisticPhysicsParams.DRAG_COEFFICIENT_MULT
-
-    dt = BallisticPhysicsParams.TIME_STEP
-    max_time = BallisticPhysicsParams.MAX_FLIGHT_TIME
-    temp_k = BallisticPhysicsParams.MAP_TEMPERATURE_K
-    temp_factor = BallisticPhysicsParams.TEMP_REFERENCE_K / temp_k if temp_k > 0 else 1.0
-
-    x, z = 0.0, h
-    vx_curr, vz_curr = vx, vz0
-    t = 0.0
-
-    while t < max_time and z > 0:
-        current_altitude = max(0, z + BallisticPhysicsParams.DEFAULT_TARGET_ALT)
-        rho = _wt_get_air_density(current_altitude) * temp_factor
-
-        v = max(0.1, math.sqrt(vx_curr**2 + vz_curr**2))
-        drag_coeff = 0.5 * rho * drag_cx * area / mass
-        ax = -drag_coeff * vx_curr * v
-        az = -g - drag_coeff * vz_curr * v
-
-        vx_curr += ax * dt
-        vz_curr += az * dt
-        x += vx_curr * dt
-        z += vz_curr * dt
-        t += dt
-
-    impact_speed = math.sqrt(vx_curr**2 + vz_curr**2)
-    return t * time_mult, x * range_mult, impact_speed
-
-
-def _calculate_trajectory_advanced(h, vx, vz0, g, bomb_params, range_mult, time_mult):
-    """完整物理模型弹道计算 v3.0（使用RK4积分）"""
-    if bomb_params is None:
-        bomb_params = BombConfig.get_bomb_physics_params()
-
-    mass = bomb_params.get("mass", 100.0)
-    drag_cx = bomb_params.get("dragCx", bomb_params.get("drag_cx", 0.04))
-    caliber = bomb_params.get("caliber", 0.2)
-    brake_time = bomb_params.get("brakeTime", [0.0, 0.0])
-    brake_cx_k = bomb_params.get("brakeCxK", 0.0)
-    stab_enabled = bomb_params.get("stab_enabled", False)
-
-    area = math.pi * (caliber / 2) ** 2 * BallisticPhysicsParams.DRAG_REFERENCE_AREA_MULT
-    drag_cx *= BallisticPhysicsParams.DRAG_COEFFICIENT_MULT
-
-    dt = BallisticPhysicsParams.TIME_STEP
-    max_time = BallisticPhysicsParams.MAX_FLIGHT_TIME
-    temp_k = BallisticPhysicsParams.MAP_TEMPERATURE_K
-    temp_factor = BallisticPhysicsParams.TEMP_REFERENCE_K / temp_k if temp_k > 0 else 1.0
-
-    x, z = 0.0, h
-    vx_curr, vz_curr = vx, vz0
-    t = 0.0
-    prev_z, prev_vz, prev_vx, prev_x = h, vz0, vx, 0.0
-
-    while t < max_time and z > BallisticPhysicsParams.GROUND_MARGIN:
-        prev_z, prev_vz, prev_vx, prev_x = z, vz_curr, vx_curr, x
-
-        current_altitude = max(0, z + BallisticPhysicsParams.DEFAULT_TARGET_ALT)
-        rho = _wt_get_air_density(current_altitude) * temp_factor
-
-        current_drag_cx = drag_cx
-        if stab_enabled and len(brake_time) >= 2:
-            brake_start = brake_time[0] + BallisticPhysicsParams.BRAKE_DEPLOY_DELAY
-            brake_end = max(brake_start, brake_time[1] + BallisticPhysicsParams.BRAKE_DEPLOY_DELAY)
-            if t >= brake_start and brake_cx_k > 0:
-                open_time = max(
-                    BallisticPhysicsParams.HIGH_DRAG_OPEN_TIME_SEC,
-                    brake_end - brake_start,
-                )
-                deploy_ratio = min(1.0, max(0.0, (t - brake_start) / open_time))
-                deploy_factor = deploy_ratio * deploy_ratio * (3.0 - 2.0 * deploy_ratio)
-                brake_drag = brake_cx_k / (caliber**2) * BallisticPhysicsParams.BRAKE_DRAG_MULT
-                current_drag_cx += brake_drag * deploy_factor
-
-        v = max(0.1, math.sqrt(vx_curr**2 + vz_curr**2))
-        drag_factor = 0.5 * rho * current_drag_cx * area / mass
-
-        # RK4积分
-        ax1 = -drag_factor * vx_curr * v
-        az1 = -g - drag_factor * vz_curr * v
-
-        vx2, vz2 = vx_curr + ax1 * dt / 2, vz_curr + az1 * dt / 2
-        v2 = max(0.1, math.sqrt(vx2**2 + vz2**2))
-        ax2 = -drag_factor * vx2 * v2
-        az2 = -g - drag_factor * vz2 * v2
-
-        vx3, vz3 = vx_curr + ax2 * dt / 2, vz_curr + az2 * dt / 2
-        v3 = max(0.1, math.sqrt(vx3**2 + vz3**2))
-        ax3 = -drag_factor * vx3 * v3
-        az3 = -g - drag_factor * vz3 * v3
-
-        vx4, vz4 = vx_curr + ax3 * dt, vz_curr + az3 * dt
-        v4 = max(0.1, math.sqrt(vx4**2 + vz4**2))
-        ax4 = -drag_factor * vx4 * v4
-        az4 = -g - drag_factor * vz4 * v4
-
-        vx_curr += (ax1 + 2 * ax2 + 2 * ax3 + ax4) * dt / 6
-        vz_curr += (az1 + 2 * az2 + 2 * az3 + az4) * dt / 6
-        x += vx_curr * dt
-        z += vz_curr * dt
-        t += dt
-
-    # 线性插值精确落地点
-    if z < BallisticPhysicsParams.GROUND_MARGIN and prev_vz < 0:
-        dz = prev_z - z
-        if dz > 0.01:
-            ratio = max(0.0, min(1.0, (prev_z - BallisticPhysicsParams.GROUND_MARGIN) / dz))
-            t -= dt * (1 - ratio)
-            x = prev_x + (x - prev_x) * ratio
-            vx_curr = prev_vx + (vx_curr - prev_vx) * ratio
-            vz_curr = prev_vz + (vz_curr - prev_vz) * ratio
-
-    if str(bomb_params.get("prediction_kind", "") or "") == "high_drag" or (
-        stab_enabled and brake_cx_k >= BallisticPhysicsParams.HIGH_DRAG_BRAKE_CXK_MIN
-    ):
-        lead_sec = min(
-            BallisticPhysicsParams.HIGH_DRAG_RELEASE_LEAD_MAX_SEC,
-            BallisticPhysicsParams.HIGH_DRAG_RELEASE_LEAD_BASE_SEC
-            + max(0.0, h) * BallisticPhysicsParams.HIGH_DRAG_RELEASE_LEAD_PER_ALT_M,
-        )
-        x += max(0.0, vx) * lead_sec
-
-    impact_speed = math.sqrt(vx_curr**2 + vz_curr**2)
-    return t * time_mult, x * range_mult, impact_speed
+    aoa = _finite(initial_aoa_deg, default=math.nan)
+    properties = OfflineRigidbodySolverProperties.from_static(params)
+    if not math.isfinite(aoa) or properties is None:
+        return 0.0, 0.0, 0.0
+    return _calculate_rigidbody_projection_trajectory(
+        release_altitude_m=release_altitude,
+        velocity_x_ms=velocity_x,
+        velocity_y_ms=velocity_y,
+        initial_aoa_deg=aoa,
+        fixed_target_altitude_m=fixed_target_altitude,
+        altitude_datum_m=altitude_datum,
+        sea_level_density=_resolved_sea_level_density(air_density_sea_level),
+        terrain_altitude_at_range=terrain_altitude_at_range,
+        properties=properties,
+    )
 
 
 def calculate_release_timing(
@@ -251,17 +193,16 @@ def calculate_release_timing(
     target_alt_m: float = 0.0,
     dive_angle_deg: float = 0.0,
     initial_vz_ms: float | None = None,
+    initial_aoa_deg: float | None = None,
+    bomb_params: dict | None = None,
+    atmosphere_altitude_datum_m: float = 0.0,
+    air_density_sea_level: float | None = None,
 ) -> tuple[float, float, str]:
-    """计算投弹时机
+    """Compatibility wrapper for callers that already have along-track range."""
 
-    Returns:
-        (距离投弹距离米, 距离投弹时间秒, 状态字符串)
-        状态: "ready" / "approaching" / "too_far" / "passed" / "invalid"
-    """
     if ground_speed_ms < 10.0 or current_alt_m <= target_alt_m:
         return 0.0, 0.0, "invalid"
-
-    _flight_time, bomb_range_m, _ = calculate_bomb_trajectory(
+    _flight_time, bomb_range_m, _impact_speed = calculate_bomb_trajectory(
         release_alt_m=current_alt_m,
         release_speed_ms=ground_speed_ms,
         bomb_mass_kg=bomb_mass_kg,
@@ -269,12 +210,18 @@ def calculate_release_timing(
         target_alt_m=target_alt_m,
         dive_angle_deg=dive_angle_deg,
         initial_vz_ms=initial_vz_ms,
+        initial_aoa_deg=initial_aoa_deg,
+        bomb_params=bomb_params,
+        atmosphere_altitude_datum_m=atmosphere_altitude_datum_m,
+        air_density_sea_level=air_density_sea_level,
     )
-
-    if bomb_range_m <= 0:
+    if bomb_range_m <= 0.0:
         return 0.0, 0.0, "invalid"
-
-    return calculate_release_timing_from_range(current_distance_m, ground_speed_ms, bomb_range_m)
+    return calculate_release_timing_from_range(
+        current_distance_m,
+        ground_speed_ms,
+        bomb_range_m,
+    )
 
 
 def calculate_release_timing_from_range(
@@ -282,20 +229,31 @@ def calculate_release_timing_from_range(
     ground_speed_ms: float,
     bomb_range_m: float,
 ) -> tuple[float, float, str]:
-    """计算已知弹道距离下的投弹时机，避免重复执行弹道积分。"""
-    if ground_speed_ms < 10.0 or bomb_range_m <= 0:
+    """Calculate cue timing from an along-track target distance."""
+
+    along_track_distance = _finite(current_distance_m)
+    closing_speed = _finite(ground_speed_ms)
+    ballistic_range = _finite(bomb_range_m)
+    if closing_speed < 10.0 or ballistic_range <= 0.0:
         return 0.0, 0.0, "invalid"
 
-    release_distance_m = current_distance_m - bomb_range_m
-
-    if release_distance_m < 0:
+    release_distance_m = along_track_distance - ballistic_range
+    if release_distance_m < 0.0:
         return abs(release_distance_m), 0.0, "passed"
 
-    time_to_release = release_distance_m / ground_speed_ms
-
+    time_to_release = release_distance_m / closing_speed
     if time_to_release <= BallisticPhysicsParams.RELEASE_READY_SEC:
         return release_distance_m, time_to_release, "ready"
-    elif time_to_release <= BallisticPhysicsParams.RELEASE_WARNING_SEC:
+    if time_to_release <= BallisticPhysicsParams.RELEASE_WARNING_SEC:
         return release_distance_m, time_to_release, "approaching"
-    else:
-        return release_distance_m, time_to_release, "too_far"
+    return release_distance_m, time_to_release, "too_far"
+
+
+__all__ = [
+    "TerrainAltitudeAtRange",
+    "calculate_bomb_trajectory",
+    "calculate_release_timing",
+    "calculate_release_timing_from_range",
+    "axial_drag_curve",
+    "offline_speed_of_sound",
+]

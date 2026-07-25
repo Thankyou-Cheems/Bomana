@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from bomana.core.offline_rigidbody_catalog import load_catalog
 from tools.datamine_utils import (
     SchemaValidationError,
     load_json_schema,
@@ -18,7 +19,7 @@ from tools.datamine_utils import (
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "docs/specs/schemas/weapon-fire-control.schema.json"
 CATALOG_PATH = ROOT / "bomana/data/weapon_fire_control.json"
-CCRP_PATH = ROOT / "bomana/data/ccrp_bomb_params.json"
+RIGIDBODY_CATALOG_PATH = ROOT / "bomana/data/offline_rigidbody_catalog.bin"
 EXPECTED_COMMIT = "d5575f185021a950ac34e3854f17a34bafdc73e8"
 
 
@@ -167,10 +168,12 @@ def test_every_generated_solver_route_has_required_physics(catalog: dict[str, An
 def test_every_ccrp_routed_catalog_weapon_resolves_fresh_bomb_physics(
     catalog: dict[str, Any],
 ) -> None:
-    ccrp = json.loads(CCRP_PATH.read_text(encoding="utf-8"))["ballistic_params"]
+    ccrp = load_catalog(RIGIDBODY_CATALOG_PATH)["records"]
     ccrp_ids = set(ccrp)
-    ccrp_source_ids = {
-        Path(str(record.get("source_file") or "")).stem.casefold() for record in ccrp.values()
+    ccrp_aliases = {
+        alias.casefold()
+        for record in ccrp.values()
+        for alias in record.get("aliases", ())
     }
 
     missing = [
@@ -181,7 +184,7 @@ def test_every_ccrp_routed_catalog_weapon_resolves_fresh_bomb_physics(
         and weapon["control"] == "unguided"
         and weapon["planform"] in {"normal", "high_drag"}
         and weapon_id not in ccrp_ids
-        and weapon_id not in ccrp_source_ids
+        and weapon_id not in ccrp_aliases
     ]
     assert not missing
 

@@ -1,4 +1,4 @@
-# enforces: docs/specs/version-compatibility.md COMPAT-01..COMPAT-04 COMPAT-07..COMPAT-13 COMPAT-17 COMPAT-20
+# enforces: docs/specs/version-compatibility.md COMPAT-01..COMPAT-04 COMPAT-07..COMPAT-13 COMPAT-17 COMPAT-20 COMPAT-22
 
 from __future__ import annotations
 
@@ -74,6 +74,7 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
 
     assert boundary.MIN_SUPPORTED_APP_VERSION == "8.0.0"
     assert boundary.MIN_SUPPORTED_LAUNCHER_VERSION == "3.0.0"
+    assert boundary.APP_REQUIRED_LAUNCHER_VERSION == "3.3.0"
     app_version_match = re.search(
         r'^__version__ = "([0-9]+[.][0-9]+[.][0-9]+)"$', app_metadata, re.M
     )
@@ -81,9 +82,17 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
     assert boundary.parse_strict_version(
         app_version_match.group(1)
     ) >= boundary.parse_strict_version(boundary.MIN_SUPPORTED_APP_VERSION)
-    assert 'PORTABLE_MIN_LAUNCHER_VERSION = "3.2.0"' in app_metadata
-    assert 'LAUNCHER_VERSION = "3.2.2"' in launcher_metadata
-    assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.2.0"' in build
+    assert 'PORTABLE_MIN_LAUNCHER_VERSION = "3.3.0"' in app_metadata
+    assert (
+        re.search(
+            r'^PORTABLE_MIN_LAUNCHER_VERSION = "([^"]+)"$',
+            app_metadata,
+            re.M,
+        ).group(1)
+        == boundary.APP_REQUIRED_LAUNCHER_VERSION
+    )
+    assert 'LAUNCHER_VERSION = "3.3.0"' in launcher_metadata
+    assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.3.0"' in build
 
 
 def test_all_compatibility_entry_paths_use_the_shared_boundary() -> None:
@@ -133,6 +142,8 @@ def test_staged_version_is_read_as_data_without_importing_candidate_code() -> No
     transactions = (ROOT / "launcher/install_txn.py").read_text(encoding="utf-8")
 
     assert "_read_literal_version" in transactions
+    assert "_read_optional_literal_version" in transactions
+    assert "read_app_min_launcher_version_identity" in transactions
     assert ".read_text(" in transactions
     assert "importlib" not in transactions
     assert "runpy" not in transactions

@@ -36,7 +36,7 @@ Terms like “bomb / bombing / CCRP” here mean **in-game virtual concepts only
 
 ### 普通用户
 
-- [合规性声明](#合规性声明)
+- [当前实现与使用提醒](#当前实现与使用提醒)
 - [功能介绍](#功能介绍)
 - [下载与使用](#下载与使用)
 - [快捷键](#快捷键)
@@ -52,7 +52,7 @@ Terms like “bomb / bombing / CCRP” here mean **in-game virtual concepts only
 - [项目目录结构](#项目目录结构)
 - [高级配置](#高级配置)
 - [技术原理](#技术原理)
-- [运行时隔离与安全边界](#运行时隔离与安全边界)
+- [Windows 集成与热键 Broker](#windows-集成与热键-broker)
 - [构建与发布](#构建与发布)
 - [参考资料](#参考资料)
 - [更新服务仓库](#更新服务仓库)
@@ -63,14 +63,12 @@ Terms like “bomb / bombing / CCRP” here mean **in-game virtual concepts only
 
 面向日常游玩：如何下载、怎么用、有哪些功能。尽量少用术语。
 
-## 合规性声明
+## 当前实现与使用提醒
 
-> 本声明发布前的旧版本已下架。下载并使用新版，即视为知悉并同意本声明。
+### 当前实现
 
-### 一句话边界
-
-Bomana **不会**读游戏内存、注入代码、改游戏文件，也**不会**替你按游戏里的键或自动操作对局。  
-它只在自己的窗口 / 网页里，读取游戏**主动提供**在本机的公开数据，帮你计时和做参考。
+当前版本的 Bomana **不会**读游戏内存、注入代码、改游戏文件，也**不会**替你按游戏里的键或自动操作对局。
+它在自己的窗口 / 网页里读取游戏当前提供的本机数据，帮你计时和做参考。
 
 ### 官方怎么说
 
@@ -87,26 +85,24 @@ Bomana **不会**读游戏内存、注入代码、改游戏文件，也**不会*
 | 用本机公开数据做导航、燃油、超速等参考 | 官方表态偏允许（同类工具如 WTRTI 亦属此类） |
 | 在无标记模式把敌人画进**游戏画面式**罗盘 / HUD 叠层 | **不认可** |
 | 在**独立网页地图**里，仅镜像当前官方本机数据里已经返回的敌方单位 | **官方未明确表态**，请自行判断是否使用 |
-| 读内存、注入、改客户端文件、宏连点、替你操作游戏 | **禁止**；Bomana 不提供 |
+| 读内存、注入、改客户端文件、宏连点、替你操作游戏 | 当前 Bomana 版本未提供 |
 
 ### Bomana 实际怎么做（玩家可读版）
 
 | 项目 | 说明 |
 |------|------|
-| 数据从哪来 | 只读游戏在本机开放的信息页（浏览器也可打开 `http://localhost:8111` 核对）。**不**读进程内存。 |
+| 数据从哪来 | 当前版本读取游戏在本机开放的信息页（浏览器也可打开 `http://localhost:8111` 核对），并使用随包的版本化静态数据。 |
 | 和游戏进程的关系 | Bomana 是**独立程序**、独立窗口；不嵌进游戏、不注入 DLL、不改游戏文件。 |
-| 热键做什么 | F7–F11 等只控制 **Bomana 自己**（重置计时、锁窗、角落、声音）。**不会**往游戏里模拟按键。 |
-| 可选「管理员热键」 | 仅当游戏以管理员运行、导致全局热键可能失效时，**你手动确认**后才会弹出系统授权。拒绝后计时 / 导航 / 窗口按钮仍可用。 |
-| 桌面叠加层（可选） | 默认关闭；打开后是 Bomana 自己的透明窗，给**己方导航**参考。敌方单位**不会**画进桌面 HUD 或航向带。 |
+| 热键做什么 | F6–F11 只控制 **Bomana 自己**（目标来源、重置计时、锁窗、角落、声音）。**不会**往游戏里模拟按键。 |
+| 游戏前台热键 | 使用 Windows `RegisterHotKey`；不会为判断权限而枚举或打开游戏进程，也不会自动弹 UAC。若权限边界导致热键失效，可直接使用投弹栏、主窗或托盘按钮。 |
+| 桌面显示 | 主窗、独立导航栏与独立 CCRP 提示栏；不提供全屏游戏画面 HUD。 |
 | 网页地图上的敌方 | 若出现，只来自当前这一帧官方本机地图数据；断线或下一帧没有就去掉。**不**根据历史推轨迹，也**不**补齐未见过的目标。 |
 | 网页按钮 | 只改 Bomana（计时、角落、声音、面板、可选武器设置等），**不**遥控游戏客户端。 |
 
 ### 你需要知道的
 
 1. **“技术上安全的实现”≠“官方书面担保永不处罚”**。请自行遵守用户协议与对局规则。  
-2. 若你希望更保守：可不开启网页局域网、可不打开画面叠加层、不使用网页地图上的敌方显示相关能力。  
-3. 更细的端点列表、进程查询范围与合同测试见下方 [运行时隔离与安全边界](#运行时隔离与安全边界)。
-
+2. 若你希望更保守：可不开启网页局域网，也可不使用网页地图上的敌方显示相关能力。
 **请你自行了解规则，并为自己的使用方式负责。**
 
 ---
@@ -124,13 +120,15 @@ Bomana **不会**读游戏内存、注入代码、改游戏文件，也**不会*
 
 ### 武器投放参考
 
-在支持的版本里提供投放距离、时间窗口等**估算**提示（自由落体炸弹、部分导弹与制导武器等）。
+超级爆弹版提供自由落体炸弹与其他受支持武器的投放参考。自由落体解算只组合官方 8111 飞行数据、用户手选武器的离线参数和启动器维护的离线高程图。
 
 请注意：
 
-- 这些都是参考值，不是游戏内部真实算法
-- 需要你手动选择当前武器，程序不会自动猜挂载
-- 可在设置里对自由落体路径做简单距离/时间修正
+- 投弹栏可在主窗中集成显示，也可单独分离；若导航栏也处于独立模式，投弹栏会挂在导航栏下方
+- 左右切换按钮可快速选择当前机型已确认兼容的炸弹；程序不会读取或猜测游戏挂载
+- `F6` 或栏内按钮显式切换“战区 / 兴趣点”目标来源，重合时不会再由程序自动猜目标类型
+- 目标摘要会标注离线地形高程；对称收束指示器随预计释放时间平滑内收，到点闪绿，越点后显示红色越界线
+- 所有结果仍是外部参考，不代表游戏内部投弹计算或投放许可
 
 ### 战区与机场导航
 
@@ -138,12 +136,6 @@ Bomana **不会**读游戏内存、注入代码、改游戏文件，也**不会*
 - 对准目标一段时间后可自动锁定
 - 返航机场方向与距离；敌方机场可按需显示
 - 同一战局复活后，可提示上次损失位置方向
-
-### 画面叠加导航（可选）
-
-- 在游戏画面**之上**用 Bomana 自己的透明窗给出主目标方位提示（默认关闭，在设置里打开）
-- 这不是改游戏画面，也不注入游戏进程；可调透明度、大小、显示器等
-- 敌方单位不会出现在该叠加层
 
 ### 燃油与超速提醒
 
@@ -161,7 +153,7 @@ Bomana **不会**读游戏内存、注入代码、改游戏文件，也**不会*
 | 透明、置顶 | 少挡视线，始终可见 |
 | 锁定 | 锁定后鼠标点穿，不影响操作游戏 |
 | 拖动与贴边 | 自由摆放，可贴屏幕边缘 |
-| 主题与热键 | 明暗主题；F7–F11 可改 |
+| 主题与热键 | 明暗主题；F6–F11 可改 |
 | 系统托盘 | 可最小化到托盘 |
 | 独立文字大小 | 只放大字，不硬撑整窗 |
 | 自定义提示音 | 可按类别导入本地音频 |
@@ -195,17 +187,18 @@ Bomana **不会**读游戏内存、注入代码、改游戏文件，也**不会*
 
 | 通道 | 包含什么 | 适合谁 |
 |------|----------|--------|
-| **Enhanced** | 计时 + 导航 + 燃油 + 武器参考 + 网页驾驶舱 | 想要完整功能（推荐） |
+| **超级爆弹版**（内部通道 `Enhanced`） | 深度学习的高精度打击模型与地形数据 | 需要最高投弹预测精度与离线地形参考 |
 | **Standard** | 计时 + 导航 + 燃油（无武器参考、无网页驾驶舱） | 不需要武器参考与网页控制台 |
 | **Lite** | 仅计时（无网页驾驶舱） | 只要极简界面 |
 
-Standard / Lite **不会打包**网页驾驶舱代码；若启动器勾选了网页相关选项，启动时会提示并忽略这些选项（偏好仍可保存，切回 Enhanced 后生效）。
+Standard / Lite **不会打包**网页驾驶舱代码；若启动器勾选了网页相关选项，启动时会提示并忽略这些选项（偏好仍可保存，切回超级爆弹版后生效）。
 
 补充说明：
 
 - 首次通常需要联网下载程序包；之后可离线启动已下载版本
 - 新版启动器会保留一个上一版本，出问题时可一键回退
-- App 8.0.0 及以上需要启动器 3.0.0 及以上
+- 当前 App 8.6.2 需要启动器 3.3.0 及以上
+- 超级爆弹版的地形数据由启动器单独维护；启动器直接显示当前地图包状态、地图数量与修订号，版本未变化时零下载，变化时只下载改变的地图对象
 - 程序显示名：`Bomana香焦`
 - 也可从 [官网镜像](https://ruikang.wang/bomana/)（国内 CDN）或 [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) 进入下载
 
@@ -219,20 +212,20 @@ Standard / Lite **不会打包**网页驾驶舱代码；若启动器勾选了网
 
 | 按键 | 作用 |
 |------|------|
+| `F6` | 切换投弹目标来源：战区 / 兴趣点 |
 | `F7` | 手动重置计时（需短时间连按两次） |
 | `F8` | 锁定 / 解锁窗口（锁定后点击穿透） |
 | `F9` | 在四个屏幕角落间切换位置 |
 | `F10` | 总提示音开关 |
 | `F11` | 战区被摧毁提示音开关 |
 
-快捷键可在设置中修改。画面叠加导航只能在设置里开关（默认关）。
+快捷键可在设置中修改。
 
 **关于「管理员热键」：**
 
-- Bomana 与启动器始终以普通权限运行，**启动时不会自动弹 UAC**。
-- 仅当游戏以管理员运行（或权限暂时无法判断）时，才可能出现可选授权入口。
-- 你确认后，系统才可能要求批准一个**仅负责全局热键**的小组件；它只把「重置 / 锁定 / 角落 / 声音」等动作通知 Bomana，**不会**注入游戏、也不会替你按游戏键。
-- 拒绝授权：计时、导航、窗口按钮、本机数据读取照常；只是游戏前台时全局 F7–F11 可能失效。
+- Bomana 与启动器始终以普通权限运行，启动时只注册 Windows 系统热键，**不会自动弹 UAC**。
+- 当前 App 不枚举游戏窗口、不打开游戏进程，也不查询游戏进程权限来决定是否显示热键提示。
+- 若游戏以前台高权限运行导致 F6–F11 失效，请使用投弹栏、主窗或托盘里的等价按钮；计时、导航与官方 8111 数据不受影响。
 
 ---
 
@@ -240,7 +233,7 @@ Standard / Lite **不会打包**网页驾驶舱代码；若启动器勾选了网
 
 ### 会不会读内存、注入或替我操作游戏？
 
-不会。运行时只读游戏本机开放的数据页；独立窗口显示；热键与网页按钮只改 Bomana。没有读内存、注入、改游戏文件、宏连点或模拟游戏按键。细节与自检测试见 [运行时隔离与安全边界](#运行时隔离与安全边界)。
+当前版本不会。界面是独立窗口；快捷键和网页按钮只改 Bomana 自己。当前实现不读内存、不注入、不改游戏文件、不做宏、不模拟游戏按键。
 
 ### 会不会被当成作弊？
 
@@ -269,11 +262,11 @@ Standard / Lite **不会打包**网页驾驶舱代码；若启动器勾选了网
 3. 用主窗口显示的配对码 / 链接在手机浏览器打开
 4. 若连不上，在 Windows 防火墙提示中允许 Bomana 的专用网络访问（程序不会自动改防火墙）
 
-### 武器 / 投弹提示不准？
+### 武器 / CCRP 提示不准？
 
-1. 在武器卡片上手动选对当前挂载
-2. 提示仅为估算，受地图、风速、姿态等影响
-3. 自由落体路径可在 `设置 → 投弹` 微调距离/时间倍率（只影响该路径）
+1. 点击 CCRP 内的蓝色弹药框，手动选对当前挂载
+2. 提示仅为估算；大坡度侧飞或明显转弯时会暂时停止，陡俯冲或拉起仍会继续计算
+3. 若显示“等待目标高程”，请确认超级爆弹版的独立地形数据已经安装完成
 
 ### 和 WTRTI 有什么区别？
 
@@ -351,7 +344,6 @@ Standard / Lite **不会打包**网页驾驶舱代码；若启动器勾选了网
 | [docs/guides/8111-session-recording.md](docs/guides/8111-session-recording.md) | 录制 8111 对局用于离线回放 |
 | [docs/guides/web-cockpit-smoke.md](docs/guides/web-cockpit-smoke.md) | 网页驾驶舱人工冒烟 |
 | [tests/README.md](tests/README.md) | 测试分层与规范映射 |
-| [Agents.md](Agents.md) | Agent / 贡献者路由与质量门禁 |
 
 ---
 
@@ -371,7 +363,7 @@ $env:BOMANA_SOURCE_DEVELOPMENT = "1"
 uv run python Bomana.pyw
 ```
 
-`BOMANA_SOURCE_DEVELOPMENT=1` 仅允许**非冻结源码开发**跳过启动器身份校验；打包 App 不接受该例外。App 8.0.0+ 运行时要求 Launcher 3.0.0+ 身份。
+`BOMANA_SOURCE_DEVELOPMENT=1` 仅允许**非冻结源码开发**跳过启动器身份校验；打包 App 不接受该例外。协议基线仍为 Launcher 3.0.0+，当前 App 8.6.2 会在加载业务模块前强制要求 Launcher 3.3.0+；旧启动器也会依据签名清单在下载前阻止本次 App 更新。
 
 调试可选管理员热键时，可先构建开发用 Broker（产物在仓库内且通常被忽略）：
 
@@ -391,7 +383,7 @@ uv run python tools/build_hotkey_broker.py --mode dev --output bomana/bin
 ├─ bomana/
 │  ├─ config/                 # 功能开关、设置、静态配置
 │  ├─ core/                   # 状态、遥测、弹道、导航逻辑
-│  ├─ data/                   # CCRP / 武器 / 限速等静态 JSON
+│  ├─ data/                   # CCRP / 武器 / 限速等静态资产
 │  ├─ assets/web/             # 网页驾驶舱前端
 │  ├─ ui/                     # Tk 界面与 presenter
 │  ├─ web/                    # 独立 HTTP 服务与语义控制
@@ -407,7 +399,7 @@ uv run python tools/build_hotkey_broker.py --mode dev --output bomana/bin
 
 - 业务逻辑在 `bomana/`；`Bomana.pyw` 负责启动边界
 - Launcher 与 Python App 以普通完整性运行；仅用户确认后，包内固定动作原生 Broker 才可提权
-- 限速库：`bomana/data/fm_speed_limits.json`；炸弹参数：`bomana/data/ccrp_bomb_params.json`
+- 限速库：`bomana/data/fm_speed_limits.json`；离线刚体目录：`bomana/data/offline_rigidbody_catalog.bin`；公开曲线窄域参考：`bomana/data/visible_trajectory_references.json`
 
 ---
 
@@ -430,10 +422,13 @@ ENABLE_ADVANCED_SETTINGS = True # 高级设置
 
 统一入口会刷新：
 
-- `bomana/data/ccrp_bomb_params.json`
+- `bomana/data/offline_rigidbody_catalog.bin`
 - `bomana/data/weapon_fire_control.json`
 - `bomana/data/fm_speed_limits.json`
-- 各 JSON `meta` 中的 datamine 来源版本 / commit
+- 武器与限速 JSON `meta` 中的 datamine 来源版本 / commit
+
+`visible_trajectory_references.json` 不由 datamine 更新器生成；它只保存带游戏版本、输入条件和显示精度的玩家可见 UI 数值转录。
+离线刚体目录采用确定性压缩容器和 SHA-256 完整性校验，不携带逐条文件路径、网格名或生成提交元数据。
 
 ```bash
 git clone https://github.com/gszabi99/War-Thunder-Datamine.git
@@ -464,18 +459,18 @@ uv run python tools/update_datamine_assets.py ^
 | `/icons.ttf` | 官方战术图标字体（有界、一次性/低频，签名校验） |
 
 - 基址固定：`http://127.0.0.1:8111`（或等价 localhost）
-- JSON 拉取集中在 `bomana/core/telemetry.py`；运行时禁止散落的任意 `requests` / `urlopen`
-- 规范：[docs/specs/runtime-8111-boundary.md](docs/specs/runtime-8111-boundary.md)
+- JSON 拉取当前集中在 `bomana/core/telemetry.py`
 
 ### 随包静态数据
 
 | 文件 | 用途 |
 |------|------|
-| `ccrp_bomb_params.json` | 自由落体 / 高阻炸弹参数 |
+| `offline_rigidbody_catalog.bin` | CCRP 离线刚体目录（压缩且完整性校验） |
 | `weapon_fire_control.json` | 武器目录、挂载与条件表 |
+| `visible_trajectory_references.json` | 带条件的玩家可见曲线参考（非最大包线） |
 | `fm_speed_limits.json` | 机型 IAS / Mach 限速 |
 
-静态库来自公开 datamine 的**构建期**提取；运行时只读 JSON，不在对局中打开游戏安装目录或解密客户端包。
+武器、炸弹与限速库来自公开 datamine 的**构建期**提取；可见曲线文件是公开 UI 数值的本地转录。运行时只读随包静态资产，不在对局中打开游戏安装目录或解密客户端包。
 
 ### 轮询
 
@@ -486,7 +481,7 @@ uv run python tools/update_datamine_assets.py ^
 
 - Bomana 是唯一的 8111 读取方；网页**不**代理、不转发任何 8111 路由
 - App 发布筛选后的快照、有界地图位图与 Tk 拥有的控制状态
-- 敌方单位仅镜像当前 `/map_obj.json` 样本；不进桌面 HUD / 航向带
+- 敌方单位仅镜像当前 `/map_obj.json` 样本；不进入独立导航栏或 CCRP 提示栏
 - 写入经会话 CSRF、幂等键与主线程再授权，仅固定语义动作（见 `bomana/web/control.py` 白名单）
 - 默认 `127.0.0.1:8777`；LAN 时绑定可用 RFC1918 地址，不用 `0.0.0.0`
 - 完整规格：[docs/specs/web-dashboard.md](docs/specs/web-dashboard.md)
@@ -502,15 +497,15 @@ uv run python tools/update_datamine_assets.py ^
 
 ---
 
-## 运行时隔离与安全边界
+## Windows 集成与热键 Broker
 
-本节对应「只读 8111、与游戏进程隔离、无脚本操控游戏」的实现与自检。玩家向摘要见 [合规性声明](#合规性声明)。
+本节记录当前版本的窗口与可选热键实现；它不再定义 8111-only 数据源安全边界。
 
 ### 架构隔离
 
 ```text
-War Thunder  ──仅官方本机 HTTP :8111──►  Bomana App（普通完整性）
-                                            ├─ 独立 Tk / HUD 窗口（非游戏子窗口）
+War Thunder  ──本机 HTTP :8111──►  Bomana App（普通完整性）
+                                            ├─ 独立 Tk 面板窗口（非游戏子窗口）
                                             ├─ 可选 Web 驾驶舱（独立端口，不代理 8111）
                                             └─ 可选 Hotkey Broker（用户确认 UAC 后）
                                                  └─ 命名管道：仅 Bomana 动作 ID
@@ -518,22 +513,12 @@ War Thunder  ──仅官方本机 HTTP :8111──►  Bomana App（普通完�
 
 | 边界 | 实现要点 |
 |------|----------|
-| 无内存 / 注入 | 运行时不含 `ReadProcessMemory`、`WriteProcessMemory`、`CreateRemoteThread`、`pymem`、`frida` 等路径 |
-| 无游戏输入合成 | 运行时不含 `SendInput` / `keybd_event` 向游戏灌键；Web 合同测试同样禁止 |
-| 无改客户端 | 不读/写 `game.log`、客户端包体、安装目录作为运行时数据源 |
 | 窗口 | 独立置顶分层窗；不 `SetParent` 进游戏 HWND |
 | 热键 | `RegisterHotKey` → 回调只改 Bomana；Broker 同样只 `RegisterHotKey`，无键盘钩子 / 轮询 |
 
-### 与游戏进程的唯一「触点」（可选、只读）
+### 不探测游戏进程
 
-为判断是否**显示**「授权管理员热键」入口，App 可以：
-
-1. 枚举**可见**顶层窗口，标题含 `War Thunder` 的候选  
-2. 对候选进程使用 `PROCESS_QUERY_LIMITED_INFORMATION`  
-3. 确认映像名为 `aces.exe` / `aces64.exe` / `aces_BE.exe`  
-4. 再 `TOKEN_QUERY` 查看是否提升完整性  
-
-**不会**：进程全表快照、枚举模块、读内存、保留游戏进程句柄作其他用途。规范：`docs/specs/startup-elevation.md`（`ELEV-03` 等）。
+App 直接注册普通权限的 Windows 系统热键，不枚举游戏窗口或进程，不查询游戏可执行文件名、令牌、模块或内存，也不会因为游戏状态自动请求 UAC。规范：`docs/specs/startup-elevation.md`。
 
 ### 可选热键 Broker
 
@@ -541,23 +526,21 @@ War Thunder  ──仅官方本机 HTTP :8111──►  Bomana App（普通完�
 |----|------|
 | 何时出现 | 用户点击并确认后才可能 `runas`；启动从不自动 UAC |
 | 路径 | 仅包内 `bomana/bin/BomanaHotkeyBroker.exe` + 旁路 SHA256 |
-| 动作 | 固定：`reset` / `lock` / `corner` / `beep` / 可选 `zones`；键位限 F1–F12 |
+| 动作 | 固定：`bomb_target` / `reset` / `lock` / `corner` / `beep` / 可选 `zones`；键位限 F1–F12 |
 | IPC | 本机命名管道，帧内仅状态与动作 ID |
 | 对 App 进程 | 可用 `SYNCHRONIZE \| PROCESS_QUERY_LIMITED_INFORMATION` 等待退出——目标是 **Bomana**，不是游戏 |
 | 不做的事 | 不钩键盘、不查游戏、不联网、不装服务/计划任务/开机项 |
 
-### 合同测试（请在改边界时跑）
+### 相关合同测试
 
 ```bash
 uv run --extra dev python -m pytest ^
-  tests/contracts/test_runtime_8111_boundary.py ^
   tests/contracts/test_startup_elevation_contract.py ^
   tests/contracts/test_web_dashboard_contract.py -q
 ```
 
 | 测试 | 覆盖 |
 |------|------|
-| `test_runtime_8111_boundary` | API 基址、端点白名单、危险 API 字符串、HTTP 集中化、录制/回放边界 |
 | `test_startup_elevation_contract` | 普通完整性、探测收窄、Broker 路径/哈希/禁止项 |
 | `test_web_dashboard_contract` | 不代理 8111、语义命令矩阵、禁止输入合成 |
 
@@ -577,6 +560,8 @@ tools\scripts\build_launcher.bat [version]
 
 - `version` 为一致性校验，须匹配源码版本；`all` 通常省略单一 `version`
 - App 包内嵌最小热键 Broker 与 SHA256，无需单独安装器
+- 三种 App ZIP 都不再携带地形包；启动器只为 `Enhanced` 单独安装、校验并维护 `terrain-v1`
+- 地形对象按 SHA256 内容寻址；更新时复用未变化地图并原子切换，普通 App 发布不包含也不上传这约 118 MB 数据
 - 发布构建须设置 `BOMANA_RELEASE_ED25519_PRIVATE_KEY`、`BOMANA_RELEASE_ED25519_PUBLIC_KEY`、`BOMANA_RELEASE_SIGNING_KEY_ID`（默认 `bomana-release-2026-06`）
 - 未签名清单或不匹配公私钥会被拒绝
 
@@ -588,6 +573,7 @@ tools\scripts\build_launcher.bat [version]
 | 标签 `vX.Y.Z-app` | 仅三通道 App |
 | 标签 `vX.Y.Z-launcher` | 仅启动器 |
 | `workflow_dispatch` | 可选 `all` / `app` / `launcher` |
+| 手动运行 `build-terrain.yml` | 独立签名地形清单与内容寻址对象（不设自动触发） |
 
 构建使用 GitHub Artifact Attestations 记录来源；无需 Authenticode PFX。签名字段与信任边界见 [docs/specs/release-signing.md](docs/specs/release-signing.md)。
 
@@ -599,6 +585,8 @@ tools\scripts\build_launcher.bat [version]
 gh secret list --repo Thankyou-Cheems/Bomana
 gh release download vX.Y.Z --dir dist
 uv run python tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z
+# 仅当地形数据确实变化时：
+uv run python tools/deploy_update_assets.py --target terrain
 ```
 
 公开端点验证必须走 `verify_release_manifest_signature`。
@@ -611,6 +599,8 @@ uv run python tools/deploy_update_assets.py --target app|launcher|all --version 
 | `launcher_manifest.json` | 启动器版本、文件名、SHA256、Ed25519 签名 |
 | `Bomana_app_<Variant>_vX.Y.Z.zip` | 实际运行包 |
 | `manifest_<Variant>.json` | App 版本、`min_launcher_version`、SHA256、签名 |
+| `terrain-release/terrain_manifest.json` | 独立地形版本、逐文件 SHA256、大小与 Ed25519 签名 |
+| `terrain-release/objects/*` | 按内容哈希命名的地图/元数据对象，只下载变化部分 |
 | `checksums_*.txt` | 完整性校验清单 |
 
 ---

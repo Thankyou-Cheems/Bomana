@@ -6,7 +6,6 @@ implementation plans belong in git history, not here.
 
 ## Current Rules
 
-- Treat the official `localhost:8111` API as the only runtime data source.
 - Keep update/apply flows transactional: stage first, verify, then swap.
 - Keep packaged resource lookup rooted in the app runtime, not the launcher temp directory.
 - Use `bd where`, `bd status`, `bd list`, and `bd backup status` for current beads health checks.
@@ -187,7 +186,7 @@ Pin: `tests/test_quality_ccrp_data.py` and `tests/test_weapon_data_extractor.py`
 
 Symptom: a weapon helper can appear to auto-detect the selected store from `weapon2`, while navigation can silently replace the player's position when a blue squad aircraft also uses the `Player` icon.
 Root cause: the real 4,281-frame JAS 39C fixture exposes `weapon2`/`weapon4` only as button/release pulses and contains both a yellow own-aircraft marker and a blue squad marker with `type=aircraft, icon=Player`; neither field name is a sufficient identity contract by itself.
-Spec: `docs/specs/weapon-fire-control.md` `WFC-03..WFC-04`, `WFC-08`; `docs/specs/runtime-8111-boundary.md` `R8111-03..R8111-05` (Amended 2026-07).
+Spec: `docs/specs/weapon-fire-control.md` `WFC-03..WFC-04`, `WFC-08` (Draft 2026-07).
 Pin: `tests/test_8111_replay.py`, `tests/test_map_objects_contract.py`, and `tests/test_weapon_catalog.py` keep selection manual without a verified named field, prefer the explicit/yellow own marker, and expose only current hostile contacts to the two-dimensional estimate.
 
 ### 2026-07-10 — Legacy command-guided weapons may not have a modern seeker block
@@ -208,7 +207,7 @@ Pin: `tests/contracts/test_weapon_fire_control_runtime.py` keeps App/builders on
 
 Symptom: a hostile aircraft removed from the latest `/map_obj.json` response could retain a valid launch-range cue for the remainder of the 200 ms solver interval.
 Root cause: target state was updated before the generic calculation throttle, so a present-to-missing transition could return early without applying a `no_target` result.
-Spec: `docs/specs/weapon-fire-control.md` `WFC-08`, `WFC-10..WFC-11`; `docs/specs/runtime-8111-boundary.md` `R8111-03` (Draft/Amended 2026-07).
+Spec: `docs/specs/weapon-fire-control.md` `WFC-08`, `WFC-10..WFC-11` (Draft 2026-07).
 Pin: `tests/contracts/test_weapon_fire_control_runtime.py` and `tests/test_weapon_scheduler.py` require the disappearance transition to bypass throttling and clear the valid cue in the current calculation cycle.
 
 ### 2026-07-10 — CCRP keys and Datamine source IDs are not always identical
@@ -234,10 +233,10 @@ Pin: `tests/contracts/test_startup_elevation_contract.py`, `tests/test_hotkey_br
 
 ### 2026-07-10 — Separate the Windows integrity boundary from the Tk hotkey bug
 
-Symptom: F7-F11 registered successfully but were silent only while a higher-integrity War Thunder window had focus; Explorer focus restored delivery.
+Symptom: F6-F11 registered successfully but were silent only while a higher-integrity War Thunder window had focus; Explorer focus restored delivery.
 Root cause: same-session tests of current HEAD and an exact `fa1899cf^` worktree both failed in the game, and the relevant pre/post-spec hotkey sources were identical. `RegisterHotKey`, raw input, and a low-level probe all stopped receiving physical keys at the same higher-integrity foreground boundary, so the spec migration was not the cause. Separately, the old worker listener really did call `root.after(...)` across threads and could die with `RuntimeError`; the Tk-owned message-only window remains a valid lifecycle fix even though it cannot cross Windows integrity levels.
-Spec: `docs/specs/startup-elevation.md` `ELEV-01..ELEV-12`; `docs/specs/threading-ui-contract.md` `THREAD-02`, `THREAD-04`, `THREAD-08`, `THREAD-09`, `HOTKEY-01..HOTKEY-04`; `docs/specs/runtime-8111-boundary.md` `R8111-08`.
-Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, with Tk-owned local delivery or fixed-action broker delivery through `TkEventDispatcher`. Do not add hooks, raw-input fallback, key polling, automatic re-registration, broad process scans, or memory access. The only game query is the visible-window executable/elevation allowlist used to decide whether an optional UAC action is useful.
+Spec: `docs/specs/startup-elevation.md` `ELEV-01..ELEV-12`; `docs/specs/threading-ui-contract.md` `THREAD-02`, `THREAD-04`, `THREAD-08`, `THREAD-09`, `HOTKEY-01..HOTKEY-04`.
+Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, with Tk-owned local delivery or fixed-action broker delivery through `TkEventDispatcher`. Do not add hooks, raw-input fallback, key polling, automatic re-registration, process scans, token queries, or memory access. The production App no longer queries the game to decide whether an optional UAC action is useful.
 
 ### Launcher Update Safety
 
@@ -337,17 +336,7 @@ Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, wi
   Cause: timer restore used only persisted remaining time and did not verify whether the next observed battle context matched the saved one
   Fix/Workaround: persist a battle signature derived from current 8111 map metadata/object layout, hold restore in a pending state on startup, and apply it only after the next live battle context matches; otherwise discard the stale timer state
 
-### HUD And Navigation Geometry
-
-- Context: transparent HUD overlay on Windows
-  Symptom: HUD became an opaque black window on some systems
-  Cause: Tk `-transparentcolor` plus alpha alone is not reliable; if color-key transparency is not applied, the canvas background renders as black
-  Fix/Workaround: set the Win32 color key explicitly with `SetLayeredWindowAttributes(..., LWA_COLORKEY | LWA_ALPHA)` and keep HUD background/canvas colors identical to that key
-
-- Context: HUD target projection
-  Symptom: target marker was too close to screen center at larger angles, went above the horizon during dives, or drifted heavily at long range
-  Cause: projection mixed linear angle mapping, separate pitch/lookdown scales, Y-only roll approximation, and normalized map-distance assumptions
-  Fix/Workaround: use perspective `tan(angle) / tan(fov/2)` projection, merge lookdown and pitch into one vertical angle with distance-adaptive pitch gain, rotate offsets with a full 2D matrix, and use `map_info` axis scaling for bearing/distance/ground-speed
+### Navigation Geometry
 
 - Context: integrated or standalone heading tape on maps where no zone enters the heading gate
   Symptom: zone rows populated, but the tape looked blank or stayed near `无目标`
@@ -394,9 +383,9 @@ Pin: Keep one `RegisterHotKey` registration per enabled action per lifecycle, wi
 ### Data Files
 
 - Context: CCRP bomb selector in packaged/runtime environments
-  Symptom: bomb selector showed `0/0` bombs with no clear reason even though `ccrp_bomb_params.json` was shipped
+  Symptom: bomb selector showed `0/0` bombs with no clear reason even though `offline_rigidbody_catalog.bin` was shipped
   Cause: bomb database loading used separate path resolution and swallowed load failures into an empty in-memory database
-  Fix/Workaround: resolve bomb JSON through the shared runtime-aware resource search, preserve a visible `load_error`, and surface it in the selector/settings UI
+  Fix/Workaround: resolve the catalog through the shared runtime-aware resource search, verify its integrity header, preserve a visible `load_error`, and surface it in the selector/settings UI
 
 ### Beads Maintenance
 

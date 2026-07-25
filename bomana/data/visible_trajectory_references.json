@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "meta": {
+    "source_kind": "player_visible_war_thunder_ui",
+    "capture_date": "2026-07-22",
+    "game_version": "2.57.1.33",
+    "ui_path": "F-15E loadout detail > GBU-31 JDAM > Flight trajectory",
+    "transcription_precision": {
+      "flight_time_s": 0.01,
+      "other_numeric_fields": 1.0
+    },
+    "limitations": [
+      "These are manually transcribed player-visible tooltip values, not native callback output.",
+      "A requested target reached by one curve is a verified reach threshold, not a maximum envelope.",
+      "Only observations explicitly marked runtime_reference may affect runtime estimates."
+    ]
+  },
+  "observations": [
+    {
+      "id": "wt-2.57.1.33-f15e-gbu31-level-target-10km",
+      "weapon_id": "us_2000lb_gbu31_usaf",
+      "conditions": {
+        "launch_altitude_m": 3000.0,
+        "launch_speed_mps": 250.0,
+        "target_altitude_m": 3000.0,
+        "target_speed_mps": 0.0,
+        "requested_horizontal_distance_m": 10000.0
+      },
+      "target_reached_observed": false,
+      "runtime_reference": false,
+      "verified_reach_m": 0.0,
+      "points": [
+        {
+          "flight_time_s": 0.0,
+          "speed_mps": 250.0,
+          "flight_distance_m": 0.0,
+          "x_m": 0.0,
+          "y_m": 3000.0
+        },
+        {
+          "flight_time_s": 21.27,
+          "speed_mps": 186.0,
+          "flight_distance_m": 4670.0,
+          "x_m": 4668.0,
+          "y_m": 2864.0
+        },
+        {
+          "flight_time_s": 27.65,
+          "speed_mps": 168.0,
+          "flight_distance_m": 5796.0,
+          "x_m": 5793.0,
+          "y_m": 2817.0
+        },
+        {
+          "flight_time_s": 36.15,
+          "speed_mps": 156.0,
+          "flight_distance_m": 7163.0,
+          "x_m": 7148.0,
+          "y_m": 2642.0
+        },
+        {
+          "flight_time_s": 52.1,
+          "speed_mps": 161.0,
+          "flight_distance_m": 9655.0,
+          "x_m": 9510.0,
+          "y_m": 1865.0
+        }
+      ]
+    },
+    {
+      "id": "wt-2.57.1.33-f15e-gbu31-ground-target-10km",
+      "weapon_id": "us_2000lb_gbu31_usaf",
+      "conditions": {
+        "launch_altitude_m": 3000.0,
+        "launch_speed_mps": 250.0,
+        "target_altitude_m": 100.0,
+        "target_speed_mps": 0.0,
+        "requested_horizontal_distance_m": 10000.0
+      },
+      "target_reached_observed": true,
+      "runtime_reference": true,
+      "verified_reach_m": 10000.0,
+      "points": [
+        {
+          "flight_time_s": 0.0,
+          "speed_mps": 250.0,
+          "flight_distance_m": 0.0,
+          "x_m": 0.0,
+          "y_m": 3000.0
+        },
+        {
+          "flight_time_s": 8.14,
+          "speed_mps": 232.0,
+          "flight_distance_m": 1958.0,
+          "x_m": 1953.0,
+          "y_m": 2861.0
+        },
+        {
+          "flight_time_s": 22.38,
+          "speed_mps": 205.0,
+          "flight_distance_m": 5059.0,
+          "x_m": 5034.0,
+          "y_m": 2516.0
+        },
+        {
+          "flight_time_s": 36.63,
+          "speed_mps": 194.0,
+          "flight_distance_m": 7834.0,
+          "x_m": 7750.0,
+          "y_m": 1988.0
+        },
+        {
+          "flight_time_s": 49.85,
+          "speed_mps": 252.0,
+          "flight_distance_m": 10769.0,
+          "x_m": 9986.0,
+          "y_m": 113.0
+        }
+      ]
+    }
+  ]
+}

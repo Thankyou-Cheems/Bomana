@@ -53,6 +53,9 @@ class AppNavigationServices:
         else:
             window.hide()
 
+        bombing_services = getattr(self.app, "bombing_services", None)
+        if bombing_services is not None:
+            bombing_services.refresh_host()
         self.app._update_nav_mode_button()
         self.app._save_config()
         self.app._update_ui()

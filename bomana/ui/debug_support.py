@@ -195,6 +195,14 @@ class AppDebugSupport:
                 enemy_airfields=enemies,
                 has_airfield_target=True,
                 has_target=True,
+                has_bombing_target=True,
+                bombing_target_mode=BombConfig.normalize_target_mode(BombConfig.target_mode),
+                bombing_target_kind=BombConfig.normalize_target_mode(BombConfig.target_mode),
+                bombing_target_name=(
+                    "战区 #1"
+                    if BombConfig.normalize_target_mode(BombConfig.target_mode) == "zone"
+                    else "兴趣点 #1"
+                ),
                 is_deviating=False,
                 deviation_angle=-2.4,
                 zone_destroyed_alert=False,
@@ -223,8 +231,6 @@ class AppDebugSupport:
                 attitude_roll_deg=-1.1,
                 attitude_bank_deg=-1.1,
                 attitude_reliable=True,
-                hud_attitude_fallback=False,
-                hud_attitude_fallback_reason="",
                 **overspeed_defaults,
                 **weapon_defaults,
             )
@@ -283,8 +289,6 @@ class AppDebugSupport:
                 attitude_roll_deg=6.4,
                 attitude_bank_deg=6.4,
                 attitude_reliable=True,
-                hud_attitude_fallback=False,
-                hud_attitude_fallback_reason="",
                 **overspeed_defaults,
                 **weapon_defaults,
             )
@@ -342,8 +346,6 @@ class AppDebugSupport:
                 attitude_roll_deg=1.0,
                 attitude_bank_deg=1.0,
                 attitude_reliable=True,
-                hud_attitude_fallback=False,
-                hud_attitude_fallback_reason="",
                 **overspeed_defaults,
                 **weapon_defaults,
             )
@@ -423,13 +425,13 @@ class AppDebugSupport:
                 time_to_release=time_to_release,
                 release_status=release_status,
                 target_zone_distance_m=release_distance,
+                target_altitude_m=315.0,
+                target_altitude_source="terrain",
                 ground_speed_kmh=420.0,
                 attitude_pitch_deg=-0.8,
                 attitude_roll_deg=0.6,
                 attitude_bank_deg=0.6,
                 attitude_reliable=True,
-                hud_attitude_fallback=False,
-                hud_attitude_fallback_reason="",
                 **overspeed_defaults,
                 **weapon_defaults,
             )
@@ -485,8 +487,6 @@ class AppDebugSupport:
                 attitude_roll_deg=0.0,
                 attitude_bank_deg=0.0,
                 attitude_reliable=True,
-                hud_attitude_fallback=False,
-                hud_attitude_fallback_reason="",
                 **overspeed_defaults,
                 **weapon_defaults,
             )
@@ -555,8 +555,6 @@ class AppDebugSupport:
             attitude_roll_deg=2.8,
             attitude_bank_deg=2.8,
             attitude_reliable=True,
-            hud_attitude_fallback=False,
-            hud_attitude_fallback_reason="",
             overspeed_level=os_level,
             overspeed_ratio=os_ratio,
             overspeed_current_ias_kmh=980.0 * os_ratio,

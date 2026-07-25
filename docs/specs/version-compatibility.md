@@ -34,7 +34,9 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 - `COMPAT-04`: The App compatibility floor MUST be exactly `8.0.0`, and the
   Launcher compatibility floor MUST be exactly `3.0.0`.
 - `COMPAT-05`: App `8.0.0` and newer MUST reject a launcher identity below
-  `3.0.0`.
+  the shared `3.0.0` protocol floor. Each packaged App release MUST additionally
+  carry and enforce its own release-specific Launcher floor before runtime
+  imports; App `8.6.2` requires Launcher `3.3.0`.
 - `COMPAT-06`: Launcher `3.0.0` and newer MUST reject an App identity below
   `8.0.0` on every Launcher-owned candidate path.
 - `COMPAT-07`: Launcher bootstrap MUST supply its own strict version through
@@ -59,15 +61,17 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
   App package to equal the already-verified signed manifest `app_version`
   exactly before replacement.
 - `COMPAT-15`: Local ZIP import MUST validate the staged package's strict App
-  version and `8.0.0` floor before replacement without treating ZIP filenames
-  as version identity.
+  version, `8.0.0` floor, and literal `PORTABLE_MIN_LAUNCHER_VERSION` before
+  replacement without treating ZIP filenames as version identity or executing
+  candidate code.
 - `COMPAT-16`: Rollback MUST validate the previous slot's strict App version and
   `8.0.0` floor before any current/previous slot swap.
 - `COMPAT-17`: Incomplete-install recovery MUST validate every candidate slot's
   strict App version and `8.0.0` floor before promoting it into the current App
   slot.
 - `COMPAT-18`: Installed-App launch MUST validate the selected installation's
-  strict App version and `8.0.0` floor before Launcher bootstrap enters it.
+  strict App version, `8.0.0` floor, and release-specific Launcher floor before
+  Launcher bootstrap enters it.
 - `COMPAT-19`: A compatibility rejection MUST preserve every pre-existing valid
   App slot and surface a stable user-visible reason naming malformed identity,
   below-floor App, below-floor Launcher, or signed/staged version mismatch. The
@@ -78,14 +82,26 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
   the exact App signed field set from the release-signing contract, including
   its signed changelog asset and SHA256. It MUST NOT add a compatibility field
   beyond `min_launcher_version` to either signed payload or manifest schema.
+- `COMPAT-21`: A Launcher below the signed `min_launcher_version` MUST disable
+  the App update action and MUST reject a direct download request before any App
+  package bytes are fetched.
+- `COMPAT-22`: `bomana/metadata.py` and the App-carried
+  `bomana_version.py` boundary MUST declare the same release-specific Launcher
+  floor. This redundancy is intentional: candidate inspection reads metadata
+  as data, while an App copied around Launcher-owned installation paths still
+  rejects an old `BOMANA_LAUNCHER_VERSION` before runtime initialization.
+- `COMPAT-23`: Missing per-release metadata MAY use the shared `3.0.0` floor
+  only for compatibility with older App 8 packages. A present malformed,
+  below-protocol, or above-current Launcher requirement MUST fail closed.
 
 ## Contract Coverage
 
 - [behavioral] `tests/contracts/test_version_compatibility.py` enforces
-  `COMPAT-01..COMPAT-04`, `COMPAT-07..COMPAT-13`, `COMPAT-17`, and `COMPAT-20`
-  with strict-parser adversarial cases, early App identity order,
+  `COMPAT-01..COMPAT-04`, `COMPAT-07..COMPAT-13`, `COMPAT-17`, `COMPAT-20`, and
+  `COMPAT-22` with strict-parser adversarial cases, early App identity order,
   shared-call-site scans, data-only candidate inspection, all-slot recovery
-  prevalidation, and unchanged manifest schema/signed-field assertions.
+  prevalidation, release-floor agreement, and unchanged manifest
+  schema/signed-field assertions.
 - [behavioral] `tests/test_launcher_launch_flow.py` enforces `COMPAT-03..COMPAT-08`,
   `COMPAT-10..COMPAT-12`, `COMPAT-18`, and `COMPAT-19` with installed launch and
   bootstrap identity cases plus initial and final-handoff user-visible recovery
@@ -93,7 +109,8 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 - [behavioral] `tests/test_launcher_update_service.py` enforces
   `COMPAT-03..COMPAT-06` and `COMPAT-11..COMPAT-19` with verified-online,
   signed/staged mismatch, local import, rollback, recovery, and valid-slot
-  preservation cases.
+  preservation cases, plus `COMPAT-21..COMPAT-23` with pre-network and local ZIP
+  rejection.
 - [behavioral] `tests/test_launcher_core.py` enforces `COMPAT-02`, `COMPAT-03`,
   `COMPAT-11..COMPAT-17`, and `COMPAT-19` with package metadata extraction and
   install-transaction preflight failures.

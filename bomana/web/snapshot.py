@@ -473,8 +473,58 @@ def build_dashboard_payload(published: PublishedDashboardSnapshot) -> dict[str, 
             "enabled": weapon_enabled,
             "valid": bool(snap.bombing_valid) if weapon_enabled else False,
             "bomb_name": str(snap.bomb_name or "") if weapon_enabled else "",
+            "model_id": (str(snap.bomb_trajectory_model_id or "") if weapon_enabled else ""),
+            "model_category": (
+                str(snap.bomb_trajectory_model_category or "") if weapon_enabled else ""
+            ),
+            "model_quality": (
+                str(snap.bomb_trajectory_model_quality or "") if weapon_enabled else ""
+            ),
+            "target_altitude_m": (_number(snap.target_altitude_m) if weapon_enabled else 0.0),
+            "target_altitude_source": (
+                str(snap.target_altitude_source or "") if weapon_enabled else ""
+            ),
+            "atmosphere_model_id": (str(snap.atmosphere_model_id or "") if weapon_enabled else ""),
+            "atmosphere_altitude_datum_m": (
+                _number(snap.atmosphere_altitude_datum_m) if weapon_enabled else 0.0
+            ),
+            "altitude_datum_source": (
+                str(snap.altitude_datum_source or "") if weapon_enabled else ""
+            ),
+            "air_density_sea_level_kg_m3": (
+                _number(snap.air_density_sea_level, minimum=0) if weapon_enabled else 0.0
+            ),
+            "air_density_source": (str(snap.air_density_source or "") if weapon_enabled else ""),
+            "state_age_ms": (
+                _number(snap.bombing_state_age_s, minimum=0) * 1000 if weapon_enabled else 0.0
+            ),
+            "map_age_ms": (
+                _number(snap.bombing_map_age_s, minimum=0) * 1000 if weapon_enabled else 0.0
+            ),
+            "endpoint_skew_ms": (
+                _number(snap.bombing_endpoint_skew_s, minimum=0) * 1000 if weapon_enabled else 0.0
+            ),
+            "altitude_projection_m": (
+                _number(snap.bombing_altitude_projection_m) if weapon_enabled else 0.0
+            ),
+            "tas_projection_ms": (
+                _number(snap.bombing_tas_projection_ms) if weapon_enabled else 0.0
+            ),
+            "vertical_acceleration_ms2": (
+                _number(snap.bombing_vertical_acceleration_ms2) if weapon_enabled else 0.0
+            ),
+            "release_state_source": (
+                str(snap.bombing_release_state_source or "") if weapon_enabled else ""
+            ),
+            "maneuver_score": (
+                _number(snap.bombing_maneuver_score, minimum=0) if weapon_enabled else 0.0
+            ),
+            "precision_gate_available": (
+                bool(snap.bombing_precision_gate_available) if weapon_enabled else False
+            ),
             "target_kind": str(snap.bombing_target_kind or "") if weapon_enabled else "",
             "target_name": str(snap.bombing_target_name or "") if weapon_enabled else "",
+            "target_mode": str(snap.bombing_target_mode or "zone") if weapon_enabled else "",
             "release_status": str(snap.release_status or "") if weapon_enabled else "unavailable",
             "release_distance_km": (
                 _number(snap.release_distance_m, minimum=0) / 1000 if weapon_enabled else 0.0

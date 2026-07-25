@@ -22,6 +22,11 @@ const ctaDownloadGithub = document.querySelector("#ctaDownloadGithub");
 const allReleasesLink = document.querySelector("#allReleasesLink");
 
 const CHANNELS = ["Enhanced", "Standard", "Lite"];
+const CHANNEL_LABELS = {
+  Enhanced: "超级爆弹版",
+  Standard: "Standard",
+  Lite: "Lite",
+};
 
 function isLauncher(name) {
   return /launcher.*[.]exe$/i.test(String(name || ""));
@@ -82,7 +87,7 @@ function renderCdnAssets(catalog) {
     appendAssetLink(
       releaseAssets,
       entry.package_url,
-      `${channel} v${entry.app_version || ""}`.trim(),
+      `${CHANNEL_LABELS[channel] || channel} v${entry.app_version || ""}`.trim(),
       entry.asset || entry.package_url,
     );
   }
@@ -157,7 +162,7 @@ function applyCatalog(catalog, sourceLabel) {
     const parts = [];
     if (version) parts.push(`启动器 v${version}`);
     const enhanced = catalog?.channels?.Enhanced?.app_version;
-    if (enhanced) parts.push(`App Enhanced v${enhanced}`);
+    if (enhanced) parts.push(`超级爆弹版 v${enhanced}`);
     const summary = parts.length ? parts.join(" · ") : "版本信息已就绪";
     statusEl.textContent = `${summary}。主下载：腾讯云 EdgeOne CDN（${sourceLabel}）；GitHub 为备用。`;
   }

@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import os
@@ -10,8 +11,13 @@ import pytest
 
 from bomana import metadata
 from launcher import core as launcher_core
+from launcher.terrain_store import TERRAIN_OBJECT_ASSET_PREFIX, TerrainFile, terrain_revision
 
 ROOT = Path(__file__).resolve().parents[1]
+TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+TEST_SIGNING_PUBLIC_KEY = launcher_core.ed25519_public_key_from_private_key(
+    TEST_SIGNING_PRIVATE_KEY
+)
 
 
 def build_workflow_source() -> str:
@@ -34,25 +40,88 @@ def load_tool_module(name: str, relative_path: str):
     return module
 
 
+def write_test_terrain_release(dist: Path) -> tuple[Path, Path, dict[str, bytes], dict]:
+    release_dir = dist / "terrain-release"
+    objects_dir = release_dir / "objects"
+    objects_dir.mkdir(parents=True)
+    contents = {
+        "index.json": b"index",
+        "manifest.json": b"manifest",
+        "map.bth": b"terrain-grid",
+    }
+    files = tuple(
+        TerrainFile(
+            path=name,
+            asset=(
+                f"{TERRAIN_OBJECT_ASSET_PREFIX}{hashlib.sha256(data).hexdigest()}"
+                f"{Path(name).suffix}"
+            ),
+            sha256=hashlib.sha256(data).hexdigest(),
+            size_bytes=len(data),
+        )
+        for name, data in sorted(contents.items())
+    )
+    unsigned = {
+        "schema_version": 1,
+        "terrain_pack_id": "terrain-v1",
+        "terrain_revision": terrain_revision("terrain-v1", 1, files),
+        "map_count": 1,
+        "total_size_bytes": sum(map(len, contents.values())),
+        "files": [
+            {
+                "path": item.path,
+                "asset": item.asset,
+                "sha256": item.sha256,
+                "size_bytes": item.size_bytes,
+            }
+            for item in files
+        ],
+    }
+    signed = launcher_core.sign_release_manifest(
+        unsigned,
+        TEST_SIGNING_PRIVATE_KEY,
+        key_id="test-key",
+    )
+    manifest_path = release_dir / "terrain_manifest.json"
+    manifest_path.write_text(
+        json.dumps(signed, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    by_asset: dict[str, bytes] = {}
+    for item in files:
+        data = contents[item.path]
+        (objects_dir / item.asset).write_bytes(data)
+        by_asset[item.asset] = data
+    checksum = release_dir / "checksums_terrain.txt"
+    checksum.write_text(
+        "\n".join(
+            [
+                f"{hashlib.sha256(manifest_path.read_bytes()).hexdigest()}  terrain_manifest.json",
+                *(
+                    f"{item.sha256}  objects/{item.asset}"
+                    for item in sorted(files, key=lambda entry: entry.asset)
+                ),
+                "",
+            ]
+        ),
+        encoding="ascii",
+    )
+    return manifest_path, checksum, by_asset, signed
+
+
 def test_tencent_deploy_is_local_only() -> None:
     deploy_workflow = ROOT / ".github/workflows/deploy-manifests-to-server.yml"
-    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     release_spec = (ROOT / "docs/specs/release-signing.md").read_text(encoding="utf-8")
 
     assert not deploy_workflow.exists()
-    assert "docs/specs/release-signing.md" in agents
-    assert "SIGN-03" in agents
-    assert "SIGN-05" in agents
-    assert "SIGN-07" in agents
-    for clause_id in re.findall(r"`?(SIGN-\d{2})`?", agents):
+    for clause_id in ("SIGN-03", "SIGN-05", "SIGN-07"):
         assert f"`{clause_id}`" in release_spec
-    assert "tools/deploy_update_assets.py --target app|launcher|all --version X.Y.Z" in agents
+    assert "tools/deploy_update_assets.py" in release_spec
 
 
 def test_docs_do_not_restore_github_to_tencent_deploy_fallback() -> None:
     checked_docs = (
         ROOT / "README.md",
-        ROOT / "AGENTS.md",
         ROOT / "docs/ARCHITECTURE.md",
         ROOT / "docs/CONTRIBUTING.md",
         ROOT / "docs/QUICKSTART.md",
@@ -76,6 +145,10 @@ def test_local_deploy_script_validates_signed_manifests_and_public_endpoints() -
     assert "public asset sha256 mismatch" in source
     assert "versioned_manifest" in source
     assert "launcher_manifest_v{launcher_version}.json" in source
+    assert 'if target == "terrain":' in source
+    assert "refusing to overwrite mismatched immutable terrain object" in source
+    assert "terrain public object sha256 mismatch" in source
+    assert "hashlib.sha256(asset_src.read_bytes())" not in source
 
 
 def test_build_release_workflow_reads_version_from_metadata_without_dev_fallback() -> None:
@@ -94,6 +167,20 @@ def test_build_release_workflow_passes_manifest_signing_secret() -> None:
     assert "BOMANA_RELEASE_ED25519_PUBLIC_KEY" in workflow
     assert "${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}" in workflow
     assert "BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06" in workflow
+
+
+def test_terrain_release_is_manual_and_independent_from_app_builds() -> None:
+    workflow = build_workflow_source()
+    terrain_workflow = (ROOT / ".github/workflows/build-terrain.yml").read_text(encoding="utf-8")
+
+    assert '- { name: "超级爆弹版", slug: "Enhanced"' in workflow
+    assert "tools/prepare_builtin_terrain.py" not in workflow
+    assert "tools/build_terrain_release.py" not in workflow
+    assert "workflow_dispatch:" in terrain_workflow
+    assert "push:" not in terrain_workflow
+    assert "tools/prepare_builtin_terrain.py" in terrain_workflow
+    assert "tools/build_terrain_release.py" in terrain_workflow
+    assert "tag_name: terrain-v1" in terrain_workflow
 
 
 def test_hotkey_broker_is_zero_install_and_release_assets_are_attested() -> None:
@@ -259,6 +346,84 @@ def test_local_deploy_script_accepts_build_portable_all_checksum_names(tmp_path:
 
     assert tmp_path / "checksums_app_Enhanced.txt" in assets
     assert tmp_path / "checksums_launcher.txt" in assets
+    assert not any("terrain" in path.name.lower() for path in assets)
+
+
+def test_terrain_deploy_uses_signed_manifest_and_content_objects(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    deploy = load_tool_module("deploy_update_assets_terrain", "tools/deploy_update_assets.py")
+    manifest, checksum, by_asset, _signed = write_test_terrain_release(tmp_path)
+    monkeypatch.setenv(
+        "BOMANA_RELEASE_ED25519_PUBLIC_KEY",
+        TEST_SIGNING_PUBLIC_KEY,
+    )
+    monkeypatch.setenv("BOMANA_RELEASE_SIGNING_KEY_ID", "test-key")
+
+    assets = deploy.required_assets(tmp_path, "terrain", "unused", "unused")
+    deploy.validate_local_release_assets(tmp_path, "terrain", "unused", "unused")
+
+    assert manifest in assets
+    assert checksum in assets
+    assert {path.name for path in assets if path.parent.name == "objects"} == set(by_asset)
+
+
+def test_public_terrain_verify_checks_signed_manifest_and_every_object(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    deploy = load_tool_module(
+        "deploy_update_assets_public_terrain",
+        "tools/deploy_update_assets.py",
+    )
+    manifest_path, _checksum, by_asset, _signed = write_test_terrain_release(tmp_path)
+    monkeypatch.setenv(
+        "BOMANA_RELEASE_ED25519_PUBLIC_KEY",
+        TEST_SIGNING_PUBLIC_KEY,
+    )
+    monkeypatch.setenv("BOMANA_RELEASE_SIGNING_KEY_ID", "test-key")
+
+    class Response:
+        def __init__(self, body: bytes) -> None:
+            self.body = body
+            self.offset = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb) -> None:
+            return None
+
+        def read(self, size: int = -1) -> bytes:
+            if size < 0:
+                size = len(self.body) - self.offset
+            chunk = self.body[self.offset : self.offset + size]
+            self.offset += len(chunk)
+            return chunk
+
+    requested = []
+
+    def fake_urlopen(url: str, timeout: int):
+        requested.append((url, timeout))
+        if url.endswith("/terrain_manifest.json"):
+            return Response(manifest_path.read_bytes())
+        return Response(by_asset[url.rsplit("/", 1)[-1]])
+
+    monkeypatch.setattr(deploy, "urlopen", fake_urlopen)
+
+    deploy.verify_public(
+        host="unused",
+        public_base_url="https://updates.example.test",
+        target="terrain",
+        app_version="unused",
+        launcher_version="unused",
+    )
+
+    assert [url for url, _timeout in requested][0] == (
+        "https://updates.example.test/downloads/terrain/terrain_manifest.json"
+    )
+    assert {url.rsplit("/", 1)[-1] for url, _timeout in requested[1:]} == set(by_asset)
 
 
 def test_local_deploy_script_quotes_remote_env_values() -> None:
@@ -408,19 +573,17 @@ def test_public_verify_downloads_launcher_asset_and_checks_signed_sha(monkeypatc
     assert "https://updates.example.test/downloads/Bomana_launcher_v2.0.0.exe" in requested
 
 
-def test_legacy_build_fails_when_version_info_generation_fails() -> None:
+def test_legacy_build_delegates_version_info_to_secure_builder() -> None:
     script = (ROOT / "tools/scripts/build.bat").read_text(encoding="utf-8")
-    generate_index = script.index(
-        "%UV_CMD% run python tools\\create_version_info.py "
-        "--config bomana\\metadata.py --output file_version_info.txt"
-    )
-    delete_index = script.index("if exist file_version_info.txt del file_version_info.txt")
-    errorlevel_index = script.index("if %errorlevel% neq 0 (", generate_index)
-    missing_file_index = script.index("echo [错误] 未生成版本信息文件", generate_index)
+    portable = (ROOT / "tools/build_portable.py").read_text(encoding="utf-8")
 
-    assert delete_index < generate_index
-    assert errorlevel_index > generate_index
-    assert missing_file_index > generate_index
+    assert "tools\\build_portable.py" in script
+    assert "--target app" in script
+    assert "create_version_info.py" not in script
+    assert "file_version_info.txt" not in script
+    assert "def generate_version_info(" in portable
+    assert "version_file = generate_version_info(work_dir, version)" in portable
+    assert 'cmd.extend(["--version-file", str(version_file)])' in portable
 
 
 def test_build_portable_rejects_app_version_mismatch() -> None:

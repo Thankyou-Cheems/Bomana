@@ -3,7 +3,7 @@
 Refresh Bomana static datamine assets from one War-Thunder-Datamine checkout.
 
 This is the preferred maintainer entrypoint. It updates:
-- bomana/data/ccrp_bomb_params.json
+- bomana/data/offline_rigidbody_catalog.bin
 - bomana/data/fm_speed_limits.json
 - bomana/data/weapon_fire_control.json
 """
@@ -27,6 +27,11 @@ from datamine_utils import (
 from fm_speed_extractor import extract_from_root
 from weapon_fire_control_extractor import extract_catalog, write_catalog
 
+from bomana.core.offline_rigidbody_catalog import (
+    OfflineRigidbodyCatalogError,
+    load_catalog,
+)
+
 _JSON_READ_ERRORS = (OSError, json.JSONDecodeError)
 
 
@@ -37,10 +42,10 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _count_existing_bombs(path: Path) -> int | None:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except _JSON_READ_ERRORS:
+        payload = load_catalog(path)
+    except OfflineRigidbodyCatalogError:
         return None
-    params = payload.get("ballistic_params", {})
+    params = payload.get("records", {})
     return len(params) if isinstance(params, dict) else None
 
 
@@ -96,11 +101,7 @@ def update_assets(
         raise RuntimeError("no bomb parameters extracted")
     if show_bomb_report:
         extractor.generate_report()
-    bombs = extractor.export_ccrp_params(
-        str(bomb_output),
-        source_root=datamine_root,
-        source_subdir=BOMBGUNS_SUBDIR,
-    )
+    bombs = extractor.export_offline_catalog(str(bomb_output))
 
     speed_meta: dict[str, Any] | None = None
     if refresh_speed:
@@ -161,13 +162,13 @@ def update_assets(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Refresh Bomana datamine-backed bomb, speed, and weapon JSON assets."
+        description="Refresh Bomana bomb catalog, speed, and weapon assets."
     )
     parser.add_argument("datamine_root", help="War-Thunder-Datamine repo root path")
     parser.add_argument(
         "--bomb-output",
-        default="bomana/data/ccrp_bomb_params.json",
-        help="bomb JSON output path",
+        default="bomana/data/offline_rigidbody_catalog.bin",
+        help="offline rigid-body catalog output path",
     )
     parser.add_argument(
         "--speed-output",

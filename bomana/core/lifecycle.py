@@ -1,6 +1,7 @@
 """Game lifecycle state transitions extracted from GameLogic."""
 
 from bomana.config.settings import GameConfig
+from bomana.core.release_state import reset_release_track
 from bomana.core.state import (
     AttitudeConfidenceState,
     GameState,
@@ -19,6 +20,7 @@ def start_new_life(state: GameState, now: float) -> None:
     state.last_refit_ts = now
     state.last_player_present_ts = now
     state.attitude = AttitudeConfidenceState()
+    reset_release_track(state.zone_nav)
     state.traceback.last_confirmed_pos = None
     state.traceback.last_confirmed_ts = 0.0
     state.traceback.valid_absence_since = None
@@ -30,6 +32,7 @@ def prepare_new_battle_context(state: GameState) -> None:
     state.zone_nav = ZoneNavigationState()
     state.traceback = TracebackState()
     state.map_info = None
+    state.atmosphere_density_samples.clear()
 
 
 def reset_life_state(state: GameState) -> None:
@@ -46,6 +49,7 @@ def reset_life_state(state: GameState) -> None:
     state.traceback = TracebackState()
     state.attitude = AttitudeConfidenceState()
     state.map_info = None
+    state.atmosphere_density_samples.clear()
     state.fuel_state.reset()
 
 

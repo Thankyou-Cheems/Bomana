@@ -108,10 +108,12 @@ class MapImagePoller:
         *,
         fetcher_factory=MapImageFetcher,
         interval_sec: float = MAP_IMAGE_POLL_INTERVAL_SEC,
+        on_image: Callable[[bytes], Any] | None = None,
     ) -> None:
         self.store = store
         self.fetcher_factory = fetcher_factory
         self.interval_sec = max(0.1, float(interval_sec))
+        self.on_image = on_image
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._fetcher: MapImageFetcher | None = None
@@ -142,6 +144,12 @@ class MapImagePoller:
             result = fetcher.fetch()
             if result.ok:
                 self.store.publish_map_image(result.body, result.content_type)
+                callback = self.on_image
+                if callback is not None:
+                    try:
+                        callback(result.body)
+                    except Exception as exc:
+                        log_exception("terrain_map_image_callback_failed", exc)
             if self._stop_event.wait(self.interval_sec):
                 return
 

@@ -20,6 +20,14 @@ def _bindings(calls: list[str] | None = None) -> tuple[hotkey_broker.BrokerBindi
     )
 
 
+def _all_bindings(calls: list[str] | None = None) -> tuple[hotkey_broker.BrokerBinding, ...]:
+    calls = calls if calls is not None else []
+    return (
+        hotkey_broker.BrokerBinding("bomb_target", "F6", lambda: calls.append("bomb_target")),
+        *_bindings(calls),
+    )
+
+
 def test_bundled_broker_path_is_fixed_inside_app_package(tmp_path: Path) -> None:
     path = hotkey_broker.bundled_broker_path(package_directory=tmp_path)
 
@@ -56,6 +64,8 @@ def test_broker_arguments_allow_only_fixed_actions_and_function_keys() -> None:
         duplicate[-1] = hotkey_broker.BrokerBinding("zones", "F10", lambda: None)
         hotkey_broker.normalize_bindings(duplicate)
 
+    assert len(hotkey_broker.normalize_bindings(_all_bindings())) == 6
+
 
 def test_decode_frame_accepts_only_fixed_eight_byte_protocol() -> None:
     assert hotkey_broker.decode_frame(b"BHK1\x01\x05\x10\x00") == hotkey_broker.BrokerFrame(
@@ -67,6 +77,11 @@ def test_decode_frame_accepts_only_fixed_eight_byte_protocol() -> None:
         hotkey_broker.FRAME_ACTION,
         hotkey_broker.ACTION_IDS["lock"],
         0,
+    )
+    assert hotkey_broker.decode_frame(b"BHK1\x01\x06\x20\x00") == hotkey_broker.BrokerFrame(
+        hotkey_broker.FRAME_READY,
+        6,
+        0x20,
     )
 
     for invalid in (
@@ -95,44 +110,6 @@ def test_find_bundled_broker_rejects_tampered_binary(monkeypatch, tmp_path: Path
 
     assert isinstance(result, hotkey_broker.BrokerStartResult)
     assert result.status is hotkey_broker.BrokerStartStatus.UNTRUSTED
-
-
-def test_war_thunder_integrity_probe_uses_visible_allowlisted_processes(monkeypatch) -> None:
-    monkeypatch.setattr(hotkey_broker, "_is_windows", lambda: True)
-    monkeypatch.setattr(hotkey_broker, "_visible_window_process_ids", lambda: (11, 22))
-    monkeypatch.setattr(
-        hotkey_broker,
-        "_process_image_name",
-        lambda process_id: "notepad.exe" if process_id == 11 else "aces.exe",
-    )
-    monkeypatch.setattr(hotkey_broker, "_process_is_elevated", lambda process_id: process_id == 22)
-
-    result = hotkey_broker.detect_war_thunder_integrity()
-
-    assert result.status is hotkey_broker.GameIntegrityStatus.ELEVATED
-    assert result.process_id == 22
-    assert result.image_name == "aces.exe"
-
-
-def test_war_thunder_integrity_probe_distinguishes_absent_and_unknown(monkeypatch) -> None:
-    monkeypatch.setattr(hotkey_broker, "_is_windows", lambda: True)
-    monkeypatch.setattr(hotkey_broker, "_visible_window_process_ids", lambda: (31,))
-    monkeypatch.setattr(hotkey_broker, "_process_image_name", lambda _pid: "explorer.exe")
-    assert (
-        hotkey_broker.detect_war_thunder_integrity().status
-        is hotkey_broker.GameIntegrityStatus.NOT_RUNNING
-    )
-
-    monkeypatch.setattr(hotkey_broker, "_process_image_name", lambda _pid: "aces_be.exe")
-    monkeypatch.setattr(
-        hotkey_broker,
-        "_process_is_elevated",
-        lambda _pid: (_ for _ in ()).throw(OSError("access denied")),
-    )
-    assert (
-        hotkey_broker.detect_war_thunder_integrity().status
-        is hotkey_broker.GameIntegrityStatus.UNKNOWN
-    )
 
 
 def test_uac_cancellation_cleans_ipc_without_starting_reader(monkeypatch, tmp_path: Path) -> None:

@@ -12,10 +12,6 @@ access, packaging, threading, privacy, and tray lifecycle.
 
 ## Non-goals
 
-- This spec authorizes only the bounded App-owned official `/map.img` path in
-  `runtime-8111-boundary.md`; it does not authorize any other new War Thunder
-  endpoint, browser-side terrain fetch, browser/game injection, game-file
-  change, or direct game input.
 - It does not make Bomana a general reverse proxy or remote administration API.
 - It does not authorize arbitrary config paths, keyboard synthesis, reflection,
   arbitrary callbacks, elevated-broker changes, or new network capabilities.
@@ -188,7 +184,7 @@ access, packaging, threading, privacy, and tray lifecycle.
   `hostile_unit`. Map features and friendly/self units MUST remain excluded from
   this projection. A failed raw sample or the next successful sample without a
   unit MUST remove it; Bomana MUST NOT persist, reconstruct, infer, or project
-  these positions into the desktop HUD or heading tape. This projection MUST be
+  these positions into standalone navigation or CCRP bars. This projection MUST be
   available in every App variant independently of navigation and weapon feature
   flags.
 - `WDB-52`: Each hostile map point MUST carry its bounded current-sample 8111

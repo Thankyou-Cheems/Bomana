@@ -89,6 +89,22 @@ def test_packaged_launcher_smoke_stages_hostile_path_and_app_layout() -> None:
     assert "Remove-Item -LiteralPath $workRoot -Recurse -Force" in source
 
 
+def test_packaged_launcher_smoke_stages_enhanced_terrain_outside_app() -> None:
+    source = read_script()
+
+    assert "[string]$TerrainArtifactDir" in source
+    assert "Resolve-TerrainReleaseArtifacts" in source
+    assert "Install-TerrainRelease" in source
+    assert '"terrain_manifest.json"' in source
+    assert '"Bomana_terrain_object_$sha256"' in source
+    assert 'Join-Path $LauncherDataRoot "terrain"' in source
+    assert 'Join-Path $terrainRoot "objects"' in source
+    assert 'Join-Path $terrainRoot "packs"' in source
+    assert 'Join-Path $terrainRoot "current.json"' in source
+    assert '$Variant -eq "Enhanced"' in source
+    assert '-LauncherDataRoot $smokeEnv["BOMANA_LAUNCHER_DATA_DIR"]' in source
+
+
 def test_packaged_launcher_smoke_poisons_python_for_packaged_launch() -> None:
     source = read_script()
 

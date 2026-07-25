@@ -7,7 +7,7 @@ import time
 import unittest
 from pathlib import Path
 
-from bomana.config.settings import ZoneConfig
+from bomana.config.settings import BombConfig, ZoneConfig
 from bomana.core import navigation
 from bomana.core.logic import GameLogic
 from bomana.core.state import (
@@ -32,6 +32,13 @@ class FakeHttp:
 
 
 class MapObjectsContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._previous_bomb_target_mode = BombConfig.target_mode
+        BombConfig.target_mode = "zone"
+
+    def tearDown(self) -> None:
+        BombConfig.target_mode = self._previous_bomb_target_mode
+
     def test_fetch_prefers_yellow_ownship_and_classifies_all_hostile_units(self):
         fetcher = MapObjectsFetcher(
             FakeHttp(
@@ -442,6 +449,7 @@ class MapObjectsContractTests(unittest.TestCase):
         self.assertTrue(point.cdi_color)
 
     def test_zone_navigation_uses_forward_poi_as_bombing_target(self):
+        BombConfig.target_mode = "poi"
         logic = GameLogic()
         tel = TelemetryData(
             ind_ok=True,
@@ -517,6 +525,41 @@ class MapObjectsContractTests(unittest.TestCase):
         assert target is not None
         self.assertEqual(target.kind, "zone")
         self.assertEqual(target.id, "zone-a")
+
+    def test_poi_mode_never_falls_back_to_overlapping_zone(self):
+        BombConfig.target_mode = "poi"
+        logic = GameLogic()
+        tel = TelemetryData(
+            ind_ok=True,
+            state_resp_ok=True,
+            valid=True,
+            type_name="test_plane",
+            ias_kmh=300.0,
+            compass=0.0,
+            compass_present=True,
+        )
+        mp = MapObjData(
+            ok=True,
+            player_aircraft_present=True,
+            player_pos=(0.5, 0.5),
+            zones=[Zone(id="zone-a", index=1, x=0.5, y=0.2)],
+            interest_points=[],
+        )
+
+        with logic._lock:
+            logic.state.phase = Phase.ALIVE
+            logic.state.map_info = MapInfo(
+                valid=True,
+                map_min=[0.0, 0.0],
+                map_max=[1000.0, 1000.0],
+            )
+            logic._update_zone_navigation_locked(mp, tel, time.time())
+
+        self.assertIsNotNone(logic.state.zone_nav.target_zone)
+        self.assertIsNone(logic.state.zone_nav.bombing_target)
+        snapshot = logic.snapshot()
+        self.assertEqual(snapshot.bombing_target_mode, "poi")
+        self.assertFalse(snapshot.has_bombing_target)
 
     def test_aam_target_prefers_smallest_forward_relative_angle_then_distance(self):
         logic = GameLogic()

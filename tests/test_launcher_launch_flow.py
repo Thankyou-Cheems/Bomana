@@ -237,6 +237,7 @@ def test_launcher_handoff_passes_initial_recovery_warning_in_memory(
         "launch_app",
         lambda *args, **kwargs: captured.update({"args": args, "kwargs": kwargs}),
     )
+    (tmp_path / launcher.APP_DIR_NAME / "bomana" / "data" / "terrain-v1").mkdir(parents=True)
 
     launcher._launch_app(tmp_path, "Enhanced")
 
@@ -317,6 +318,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
         "}), encoding='utf-8')\n"
     )
     app_dir = _write_app_package(tmp_path, "8.0.0", entry)
+    (app_dir / "bomana" / "data" / "terrain-v1").mkdir(parents=True)
     (app_dir / "bomana_version.py").write_text(
         'BOUNDARY_SOURCE = "installed"\n',
         encoding="utf-8",
@@ -368,7 +370,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
 
     assert json.loads(result_path.read_text(encoding="utf-8")) == {
         "boundary": "installed",
-        "launcher": "3.2.2",
+        "launcher": "3.3.0",
         "autostart": "1",
         "auto_open": "1",
         "lan_enabled": "1",

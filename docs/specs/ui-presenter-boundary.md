@@ -14,9 +14,6 @@ modules, Tk renderers, and runtime side effects.
 - This spec does not replace the Tk threading contract.
 - This spec does not require presenter modules for every small formatting
   helper.
-- This spec does not allow UI modules to weaken the official 8111-only runtime
-  boundary.
-
 ## Normative Clauses
 
 - `UI-PRES-01`: Core modules must not import `bomana.ui` modules. Core snapshots
@@ -71,8 +68,8 @@ modules, Tk renderers, and runtime side effects.
 
 - [static] `tests/contracts/test_ui_presenter_boundaries.py` enforces
   `UI-PRES-01` and `UI-PRES-02`.
-- [behavioral] `tests/test_dialog_presenter.py`, `tests/test_hud_presenter.py`,
-  `tests/test_navigation_presenter.py`, `tests/test_panel_presenter.py`, and
+- [behavioral] `tests/test_dialog_presenter.py`, `tests/test_navigation_presenter.py`,
+  `tests/test_panel_presenter.py`, and
   `tests/test_snapshot_presenter.py` enforce headless view-model behavior in
   `UI-PRES-03..UI-PRES-06` and `UI-PRES-09`.
 - [behavioral] `tests/test_panel_renderer.py` and

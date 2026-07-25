@@ -70,6 +70,7 @@ from launcher import bootstrap as _launcher_bootstrap
 from launcher import download_cache as _launcher_download_cache
 from launcher import install_txn
 from launcher import manifest_sources as _launcher_manifest_sources
+from launcher import terrain_store as _launcher_terrain_store
 from launcher.metadata import LAUNCHER_VERSION
 
 try:
@@ -118,6 +119,12 @@ PRIMARY_UPDATE_BASE_URL = (
 PRIMARY_VERSION_API_PATH = "/api/v1/version"
 PRIMARY_LAUNCHER_API_PATH = "/api/v1/launcher"
 PRIMARY_EVENT_API_PATH = "/api/v1/event"
+PRIMARY_TERRAIN_MANIFEST_PATH = "/downloads/terrain/terrain_manifest.json"
+PRIMARY_TERRAIN_OBJECTS_PATH = "/downloads/terrain/objects/"
+GITHUB_TERRAIN_RELEASE_TAG = os.environ.get(
+    "BOMANA_TERRAIN_RELEASE_TAG",
+    "terrain-v1",
+).strip()
 # 默认优先使用国内服务分发下载包；只有显式关闭时才回退为“仅版本检查”。
 PRIMARY_ALLOW_PACKAGE_DOWNLOAD = os.environ.get(
     "BOMANA_PRIMARY_ALLOW_PACKAGE_DOWNLOAD", "1"
@@ -143,8 +150,16 @@ _FAKE_IP_NETWORKS = (
 
 _CHANNEL_MAP = {
     "enhanced": "Enhanced",
+    "增强版": "Enhanced",
+    "超级爆弹版": "Enhanced",
     "standard": "Standard",
     "lite": "Lite",
+}
+
+CHANNEL_DISPLAY_NAMES = {
+    "Enhanced": "超级爆弹版",
+    "Standard": "Standard",
+    "Lite": "Lite",
 }
 
 _THEME = {
@@ -168,9 +183,9 @@ _LAUNCHER_SPINNER_FRAMES = ("|", "/", "-", "\\")
 
 CHANNEL_DETAILS = {
     "Enhanced": {
-        "title": "增强版 (推荐大多数玩家)",
-        "desc": "包含计时器 + 战区/机场导航 + 燃油管理 + CCRP投弹预测 + 网页驾驶舱。",
-        "who": "适合：轰炸、导航、编队协同与手机/本机网页面板。",
+        "title": "超级爆弹版",
+        "desc": "拥有深度学习的高精度打击模型与启动器独立维护的地形数据。",
+        "who": "适合：需要最高精度投弹预测与离线地形参考。",
     },
     "Standard": {
         "title": "标准版 (稳定轻量)",
@@ -228,10 +243,10 @@ def _effective_web_preferences_for_channel(
 def _web_cockpit_degradation_message(channel: object) -> str:
     ch = _normalize_channel(channel) or str(channel or "")
     return (
-        f"当前通道（{ch}）的应用包不包含网页驾驶舱。\n\n"
+        f"当前通道（{_channel_display_name(ch)}）的应用包不包含网页驾驶舱。\n\n"
         "启动器中已勾选的「随 App 启动网页 / 启动后打开本机页面 / 局域网」"
-        "仅在 Enhanced（增强版）生效；本次启动将忽略这些选项。\n\n"
-        "偏好设置仍会保留，切换回 Enhanced 后可继续使用。"
+        "仅在超级爆弹版生效；本次启动将忽略这些选项。\n\n"
+        "偏好设置仍会保留，切换回超级爆弹版后可继续使用。"
     )
 
 
@@ -306,6 +321,23 @@ def _strict_signed_launcher_version(manifest: Dict[str, Any], *, label: str) -> 
         MIN_SUPPORTED_LAUNCHER_VERSION,
         identity_name="已验证签名清单启动器版本",
     )
+
+
+def _strict_signed_terrain_manifest(
+    manifest: Dict[str, Any],
+    *,
+    label: str,
+) -> _launcher_terrain_store.TerrainManifest:
+    _verify_release_manifest_signature(
+        manifest,
+        manifest_label=label,
+        expected_kind="terrain",
+    )
+    trusted = _launcher_manifest_sources.verified_terrain_manifest_fields(
+        manifest,
+        label=label,
+    )
+    return _launcher_terrain_store.parse_terrain_manifest(trusted)
 
 
 def _base_dir() -> Path:
@@ -763,7 +795,10 @@ def _download_to_file(
     headers: Optional[Dict[str, str]] = None,
     timeout_sec: Optional[float] = None,
     resume: bool = True,
+    max_bytes: Optional[int] = None,
 ) -> Path:
+    if max_bytes is not None and max_bytes < 0:
+        raise ValueError("max_bytes must not be negative")
     req_headers = {
         "User-Agent": UA,
         "Accept": "application/json, application/vnd.github+json, */*",
@@ -779,6 +814,9 @@ def _download_to_file(
             resume_from = max(0, part_path.stat().st_size)
         except Exception:
             resume_from = 0
+    if max_bytes is not None and resume_from > max_bytes:
+        part_path.unlink(missing_ok=True)
+        raise RuntimeError("下载内容超过允许大小")
     if resume_from > 0:
         req_headers["Range"] = f"bytes={resume_from}-"
 
@@ -807,6 +845,8 @@ def _download_to_file(
                 total = int(header) + resume_from if header else None
         except Exception:
             total = None
+        if max_bytes is not None and total is not None and total > max_bytes:
+            raise RuntimeError("下载内容超过允许大小")
 
         downloaded = resume_from
         mode = "ab" if append_existing else "wb"
@@ -818,6 +858,8 @@ def _download_to_file(
                     chunk = resp.read(64 * 1024)
                     if not chunk:
                         break
+                    if max_bytes is not None and downloaded + len(chunk) > max_bytes:
+                        raise RuntimeError("下载内容超过允许大小")
                     f.write(chunk)
                     downloaded += len(chunk)
                     if progress_cb:
@@ -967,6 +1009,11 @@ def _normalize_channel(value: Any) -> str:
         return text
     mapped = _CHANNEL_MAP.get(text.lower())
     return mapped or ""
+
+
+def _channel_display_name(value: Any) -> str:
+    canonical = _normalize_channel(value)
+    return CHANNEL_DISPLAY_NAMES.get(canonical, str(value or "").strip())
 
 
 def _validate_app_manifest_channel(
@@ -1467,6 +1514,77 @@ def _fetch_launcher_manifest_from_github() -> Dict[str, Any]:
     raise RuntimeError(f"未找到可用启动器发布（err={first_err or 'unknown'}）")
 
 
+def _github_terrain_release_base_url() -> str:
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", GITHUB_TERRAIN_RELEASE_TAG):
+        raise RuntimeError("GitHub 地形发布标签配置无效")
+    return (
+        f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/download/"
+        f"{GITHUB_TERRAIN_RELEASE_TAG}/"
+    )
+
+
+def _terrain_manifest_result(
+    manifest: Dict[str, Any],
+    *,
+    label: str,
+    source_name: str,
+    object_base_urls: Tuple[str, ...],
+) -> Dict[str, Any]:
+    parsed = _strict_signed_terrain_manifest(manifest, label=label)
+    result = dict(manifest)
+    result.update(
+        {
+            "terrain_pack_id": parsed.pack_id,
+            "terrain_revision": parsed.revision,
+            "map_count": parsed.map_count,
+            "total_size_bytes": parsed.total_size_bytes,
+            "source_name": source_name,
+            "object_base_urls": object_base_urls,
+        }
+    )
+    return result
+
+
+def _fetch_terrain_manifest_from_github() -> Dict[str, Any]:
+    release_base = _github_terrain_release_base_url()
+    manifest_url = urljoin(release_base, _launcher_terrain_store.TERRAIN_MANIFEST_ASSET)
+    manifest = _fetch_json(manifest_url)
+    return _terrain_manifest_result(
+        manifest,
+        label="GitHub 地形更新清单 ",
+        source_name=f"GitHub ({GITHUB_TERRAIN_RELEASE_TAG})",
+        object_base_urls=(release_base,),
+    )
+
+
+def _fetch_terrain_manifest_from_primary(
+    timeout_sec: float = PRIMARY_TIMEOUT_SEC,
+) -> Dict[str, Any]:
+    if not PRIMARY_UPDATE_BASE_URL:
+        raise RuntimeError("未配置国内更新服务")
+    manifest_url = _join_base_url_path(
+        PRIMARY_UPDATE_BASE_URL,
+        PRIMARY_TERRAIN_MANIFEST_PATH,
+    )
+    raw = _fetch_bytes(manifest_url, timeout_sec=timeout_sec)
+    try:
+        manifest = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("国内地形更新清单不是有效 JSON") from exc
+    if not isinstance(manifest, dict):
+        raise RuntimeError("国内地形更新清单格式无效")
+    object_base = _join_base_url_path(
+        PRIMARY_UPDATE_BASE_URL,
+        PRIMARY_TERRAIN_OBJECTS_PATH,
+    )
+    return _terrain_manifest_result(
+        manifest,
+        label="国内地形更新清单 ",
+        source_name="腾讯云地形更新服务",
+        object_base_urls=(object_base,),
+    )
+
+
 def _fetch_manifest_from_primary(
     channel: str,
     local_version: str,
@@ -1777,6 +1895,260 @@ def _resolve_launcher_update_manifest(
     return manifest
 
 
+def _resolve_terrain_update_manifest(
+    base: Path,
+    download_source_mode: str = DOWNLOAD_SOURCE_MODE_AUTO,
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+) -> Dict[str, Any]:
+    def notify(
+        title: str,
+        detail: str = "",
+        progress: Optional[float] = None,
+        level: str = "info",
+    ) -> None:
+        if status_cb:
+            status_cb(title, detail, progress, level)
+
+    source_mode = _normalize_download_source_mode(download_source_mode)
+    primary_error: Optional[Exception] = None
+    if source_mode != DOWNLOAD_SOURCE_MODE_GITHUB and PRIMARY_UPDATE_BASE_URL:
+        try:
+            result = _attempt_primary_request(
+                base,
+                "腾讯云地形版本检查",
+                "正在检查独立地形数据...",
+                _fetch_terrain_manifest_from_primary,
+                status_cb=notify,
+            )
+            if source_mode == DOWNLOAD_SOURCE_MODE_AUTO:
+                github_base = _github_terrain_release_base_url()
+                bases = tuple(result.get("object_base_urls", ()))
+                if github_base not in bases:
+                    result["object_base_urls"] = (*bases, github_base)
+            return result
+        except Exception as exc:
+            primary_error = exc
+            _log(base, f"腾讯云地形更新服务不可用：{exc}")
+            if source_mode == DOWNLOAD_SOURCE_MODE_PRIMARY:
+                raise
+            notify("国内地形服务暂不可用", "正在切换 GitHub 回退...", None, "warning")
+
+    if source_mode == DOWNLOAD_SOURCE_MODE_PRIMARY:
+        raise RuntimeError("腾讯云地形更新服务未返回可用清单")
+    try:
+        return _fetch_terrain_manifest_from_github()
+    except Exception as exc:
+        if primary_error is not None:
+            raise RuntimeError(
+                f"国内地形更新服务不可用({primary_error})，GitHub 回退失败({exc})"
+            ) from exc
+        raise
+
+
+def _terrain_store_for_base(base: Path) -> _launcher_terrain_store.TerrainStore:
+    return _launcher_terrain_store.TerrainStore(_launcher_data_root(base))
+
+
+def _terrain_index_summary(pack_dir: Path) -> tuple[int, int]:
+    """Read a bounded, file-backed summary for a legacy/source terrain pack."""
+
+    index_path = pack_dir / "index.json"
+    try:
+        if not index_path.is_file() or not 0 < index_path.stat().st_size <= 2 * 1024 * 1024:
+            return 0, 0
+        payload = json.loads(index_path.read_text(encoding="utf-8"))
+        maps = payload.get("maps") if isinstance(payload, dict) else None
+        if not isinstance(maps, list) or not 0 < len(maps) <= 1024:
+            return 0, 0
+        files: list[Path] = []
+        for item in maps:
+            filename = str(item.get("file", "")).strip() if isinstance(item, dict) else ""
+            candidate = Path(filename)
+            if (
+                not filename
+                or candidate.is_absolute()
+                or len(candidate.parts) != 1
+                or candidate.name != filename
+            ):
+                return 0, 0
+            file_path = pack_dir / filename
+            if not file_path.is_file():
+                return 0, 0
+            files.append(file_path)
+        metadata = [path for path in (index_path, pack_dir / "manifest.json") if path.is_file()]
+        total_size = sum(path.stat().st_size for path in [*files, *metadata])
+        return len(maps), total_size
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return 0, 0
+
+
+def _terrain_status_copy(
+    channel: object,
+    *,
+    local_state: str,
+    local_revision: str = "",
+    remote_revision: str = "",
+    map_count: int = 0,
+    total_size_bytes: int = 0,
+    update_available: bool = False,
+    download_size: int = 0,
+    check_warning: str = "",
+    check_blocking: bool = False,
+    running: bool = False,
+    current_task: str = "",
+) -> tuple[str, str, str]:
+    """Return the compact badge, detail, and color level for the terrain card."""
+
+    if _normalize_channel(channel) != "Enhanced":
+        return "未使用", "Standard / Lite 不安装离线地图包。", "muted"
+
+    revision = str(local_revision or "").strip()
+    target_revision = str(remote_revision or "").strip()
+    count = max(0, int(map_count or 0))
+    total_size = max(0, int(total_size_bytes or 0))
+    download_bytes = max(0, int(download_size or 0))
+
+    facts: list[str] = []
+    if count:
+        facts.append(f"{count} 张地图")
+    if total_size:
+        facts.append(_format_size_text(total_size))
+
+    if running and current_task == "download" and update_available:
+        target = f"rev {target_revision[:12]}" if target_revision else "新版本"
+        detail = " · ".join([*facts, f"正在同步到 {target}"])
+        return "正在更新", detail or "正在校验并切换离线地图包。", "info"
+
+    if check_blocking:
+        detail = str(check_warning or "").strip() or "当前地图包缺失或校验失败。"
+        return "需修复", detail, "error"
+
+    if local_state == "invalid":
+        if update_available:
+            detail = "当前地图包校验失败；点击更新可重新组装已验证版本。"
+            if download_bytes:
+                detail += f" 需下载 {_format_size_text(download_bytes)}。"
+            return "需修复", detail, "error"
+        return "需修复", "当前地图包指针或文件完整性校验失败。", "error"
+
+    if local_state == "legacy" and update_available:
+        target = f"rev {target_revision[:12]}" if target_revision else "已验证版本"
+        detail = " · ".join(
+            [*facts, f"可迁移到 {target}", f"需下载 {_format_size_text(download_bytes)}"]
+        )
+        return "旧包可迁移", detail, "warning"
+
+    if update_available:
+        if revision:
+            transition = (
+                f"rev {revision[:12]} → {target_revision[:12]}"
+                if target_revision
+                else f"当前 rev {revision[:12]}"
+            )
+            delta = f"差量 {_format_size_text(download_bytes)}"
+            detail = " · ".join([*facts, transition, delta])
+            return "可更新", detail, "warning"
+        target = f"rev {target_revision[:12]}" if target_revision else "等待下载"
+        detail = " · ".join([*facts, target, f"需下载 {_format_size_text(download_bytes)}"])
+        return "待安装", detail, "warning"
+
+    if local_state == "ready" and revision:
+        current = f"rev {revision[:12]}"
+        detail = " · ".join([*facts, current])
+        if check_warning:
+            return "已安装", f"{detail} · 在线更新检查暂不可用", "warning"
+        if target_revision and target_revision == revision:
+            return "已是最新", detail, "success"
+        return "已安装", detail, "success"
+
+    if local_state == "legacy":
+        detail = " · ".join([*facts, "启动器将在更新时迁移并校验"])
+        return "旧包可迁移", detail, "warning"
+
+    if local_state == "source":
+        detail = " · ".join([*facts, "App 默认离线目录"])
+        return "源码数据可用", detail, "success"
+
+    if running and current_task == "check":
+        return "正在检查", "本地尚未安装；正在查询可用地图包。", "info"
+
+    return "未安装", "选择超级爆弹版后可单独下载，不会重复下载 App。", "warning"
+
+
+def _terrain_seed_dirs(base: Path, pack_id: str) -> Tuple[Path, ...]:
+    candidates: list[Path] = []
+    override = os.environ.get("BOMANA_TERRAIN_DIR", "").strip()
+    if override:
+        candidates.append(Path(override).expanduser())
+    for app_dir in (_app_runtime_dir(base), _previous_app_dir(base)):
+        candidates.append(app_dir / "bomana" / "data" / pack_id)
+    candidates.append(Path.home() / ".bomana" / pack_id)
+    return _unique_paths(tuple(candidates))
+
+
+def _download_terrain_update_from_manifest(
+    base: Path,
+    manifest: Dict[str, Any],
+    status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
+    cancel_cb: Optional[Callable[[], bool]] = None,
+) -> _launcher_terrain_store.TerrainSyncResult:
+    parsed = _strict_signed_terrain_manifest(
+        manifest,
+        label="地形更新清单 ",
+    )
+    raw_bases = manifest.get("object_base_urls")
+    if not isinstance(raw_bases, (tuple, list)):
+        raise RuntimeError("地形更新清单缺少对象下载源")
+    object_bases = tuple(str(value).strip() for value in raw_bases if str(value).strip())
+    if not object_bases:
+        raise RuntimeError("地形更新清单缺少对象下载源")
+
+    source_name = str(manifest.get("source_name", "地形更新服务")).strip() or "地形更新服务"
+
+    def fetch_object(
+        item: _launcher_terrain_store.TerrainFile,
+        destination: Path,
+        progress_cb: Callable[[int, Optional[int]], None],
+    ) -> str:
+        errors: list[str] = []
+        for object_base in object_bases:
+            object_url = urljoin(
+                object_base if object_base.endswith("/") else f"{object_base}/",
+                item.asset,
+            )
+            try:
+                _download_to_file(
+                    object_url,
+                    destination,
+                    progress_cb=progress_cb,
+                    cancel_cb=cancel_cb,
+                    headers={"Accept": "application/octet-stream, */*"},
+                    max_bytes=item.size_bytes,
+                )
+                if (
+                    destination.stat().st_size != item.size_bytes
+                    or _launcher_terrain_store.sha256_file(destination) != item.sha256
+                ):
+                    raise RuntimeError("SHA256 校验失败")
+                host = str(urlparse(object_url).hostname or "").strip()
+                return host or source_name
+            except Exception as exc:
+                errors.append(f"{object_url}: {exc}")
+                destination.unlink(missing_ok=True)
+                destination.with_name(f"{destination.name}.part").unlink(missing_ok=True)
+                if cancel_cb and cancel_cb():
+                    raise RuntimeError("已取消当前操作") from exc
+        raise RuntimeError("所有地形对象下载源均失败:\n" + "\n".join(errors))
+
+    return _terrain_store_for_base(base).sync(
+        parsed,
+        fetch_object=fetch_object,
+        seed_dirs=_terrain_seed_dirs(base, parsed.pack_id),
+        status_cb=status_cb,
+        cancel_cb=cancel_cb,
+    )
+
+
 class UpdateService:
     """Coordinates manifest resolution, update checks, and download operations."""
 
@@ -1823,6 +2195,13 @@ class UpdateService:
             status_cb=self.notify,
         )
 
+    def resolve_terrain_manifest(self) -> Dict[str, Any]:
+        return _resolve_terrain_update_manifest(
+            self.base,
+            download_source_mode=self.download_source_mode,
+            status_cb=self.notify,
+        )
+
     def check(self) -> Dict[str, Any]:
         local_version, manifest = self.resolve_app_manifest()
         remote_version = require_minimum_version(
@@ -1849,6 +2228,46 @@ class UpdateService:
         package_size = self._manifest_package_size(manifest)
         if update_available and package_size is None and package_url:
             package_size = _fetch_content_length(package_url, timeout_sec=NET_TIMEOUT_SEC)
+
+        terrain_manifest: Dict[str, Any] = {}
+        terrain_local_revision = ""
+        terrain_remote_revision = ""
+        terrain_source_name = ""
+        terrain_update_available = False
+        terrain_download_size = 0
+        terrain_reuse_size = 0
+        terrain_remote_map_count = 0
+        terrain_remote_total_size = 0
+        terrain_check_warning = ""
+        terrain_check_blocking = False
+        if _normalize_channel(self.channel) == "Enhanced":
+            terrain_store = _terrain_store_for_base(self.base)
+            try:
+                terrain_manifest = self.resolve_terrain_manifest()
+                terrain_model = _strict_signed_terrain_manifest(
+                    terrain_manifest,
+                    label="地形更新清单 ",
+                )
+                terrain_remote_revision = terrain_model.revision
+                terrain_remote_map_count = terrain_model.map_count
+                terrain_remote_total_size = terrain_model.total_size_bytes
+                terrain_source_name = (
+                    str(terrain_manifest.get("source_name", "地形更新服务")).strip()
+                    or "地形更新服务"
+                )
+                terrain_plan = terrain_store.plan(
+                    terrain_model,
+                    seed_dirs=_terrain_seed_dirs(self.base, terrain_model.pack_id),
+                )
+                terrain_local_revision = terrain_plan.local_revision
+                terrain_update_available = not terrain_plan.current
+                terrain_download_size = terrain_plan.bytes_to_download
+                terrain_reuse_size = terrain_plan.bytes_to_reuse
+            except Exception as exc:
+                terrain_check_warning = str(exc)
+                terrain_local_revision = terrain_store.current_revision()
+                terrain_check_blocking = not terrain_local_revision
+                _log(self.base, f"地形数据更新检查失败：{exc}")
 
         launcher_manifest: Dict[str, Any] = {}
         launcher_remote_version = LAUNCHER_VERSION
@@ -1887,6 +2306,17 @@ class UpdateService:
             "app_requires_launcher_update": app_requires_launcher_update,
             "package_size": package_size,
             "manifest": manifest,
+            "terrain_manifest": terrain_manifest,
+            "terrain_local_revision": terrain_local_revision,
+            "terrain_remote_revision": terrain_remote_revision,
+            "terrain_source_name": terrain_source_name,
+            "terrain_update_available": terrain_update_available,
+            "terrain_download_size": terrain_download_size,
+            "terrain_reuse_size": terrain_reuse_size,
+            "terrain_remote_map_count": terrain_remote_map_count,
+            "terrain_remote_total_size": terrain_remote_total_size,
+            "terrain_check_warning": terrain_check_warning,
+            "terrain_check_blocking": terrain_check_blocking,
             "launcher_manifest": launcher_manifest,
             "launcher_remote_version": launcher_remote_version,
             "launcher_source_name": launcher_source_name,
@@ -1897,6 +2327,17 @@ class UpdateService:
 
     def download_app_update(self, manifest: Dict[str, Any]) -> Tuple[str, str]:
         return _download_update_from_manifest(
+            self.base,
+            manifest,
+            status_cb=self.notify,
+            cancel_cb=self.cancel_cb,
+        )
+
+    def download_terrain_update(
+        self,
+        manifest: Dict[str, Any],
+    ) -> _launcher_terrain_store.TerrainSyncResult:
+        return _download_terrain_update_from_manifest(
             self.base,
             manifest,
             status_cb=self.notify,
@@ -2457,6 +2898,16 @@ _AppPackageBomanaFinder = _launcher_bootstrap.AppPackageBomanaFinder
 
 
 def _launch_app(base: Path, channel: str) -> None:
+    terrain_dir: Optional[Path] = None
+    normalized_channel = _normalize_channel(channel)
+    if normalized_channel == "Enhanced":
+        terrain_dir = _terrain_store_for_base(base).current_pack_dir()
+        if terrain_dir is None and not _is_source_test_run(base):
+            legacy_bundled = _app_runtime_dir(base) / "bomana" / "data" / "terrain-v1"
+            if not legacy_bundled.is_dir():
+                raise RuntimeError(
+                    "超级爆弹版缺少已验证的独立地形数据，请先在启动器中更新地形数据。"
+                )
     return _launcher_bootstrap.launch_app(
         base,
         channel,
@@ -2469,6 +2920,7 @@ def _launch_app(base: Path, channel: str) -> None:
         web_dashboard_autostart=_PENDING_WEB_DASHBOARD_AUTOSTART,
         web_dashboard_auto_open=_PENDING_WEB_DASHBOARD_AUTO_OPEN,
         web_dashboard_lan_enabled=_PENDING_WEB_DASHBOARD_LAN_ENABLED,
+        terrain_dir=terrain_dir,
         displayed_recovery_warning=_PENDING_DISPLAYED_RECOVERY_WARNING,
         recovery_warning_callback=_show_handoff_recovery_warning,
     )
@@ -2479,7 +2931,9 @@ def _friendly_error_text(err: Exception, channel: str) -> str:
     if "已取消" in msg:
         return "已取消当前操作。"
     if "要求先更新启动器" in msg:
-        return f"{msg}。请先更新启动器后再安装 {channel} 通道的新版本。"
+        return f"{msg}。请先更新启动器后再安装 {_channel_display_name(channel)}的新版本。"
+    if "地形" in msg and ("缺少" in msg or "不可用" in msg or "下载源均失败" in msg):
+        return f"{msg} 请在启动器中重新检查并差量更新地形数据。"
     if isinstance(err, (URLError, TimeoutError)):
         return "网络连接失败。请确认网络可用后点击“重试”。"
     if isinstance(err, HTTPError):
@@ -2546,6 +3000,8 @@ class LauncherDetailsDialog(tk.Toplevel):
         launcher_version: str,
         install_dir: Path,
         download_dir: Path,
+        terrain_dir: Optional[Path] = None,
+        terrain_revision: str = "",
     ):
         super().__init__(parent)
         self.title("关于 Bomana")
@@ -2556,7 +3012,15 @@ class LauncherDetailsDialog(tk.Toplevel):
         _apply_window_icon(self)
         self._images: list = []
 
-        self._build_ui(channel, local_version, launcher_version, install_dir, download_dir)
+        self._build_ui(
+            channel,
+            local_version,
+            launcher_version,
+            install_dir,
+            download_dir,
+            terrain_dir,
+            terrain_revision,
+        )
         self._fit_window_to_parent(parent)
         self._center_on_parent(parent)
 
@@ -2567,6 +3031,8 @@ class LauncherDetailsDialog(tk.Toplevel):
         launcher_version: str,
         install_dir: Path,
         download_dir: Path,
+        terrain_dir: Optional[Path],
+        terrain_revision: str,
     ) -> None:
         wrap_w = 760
 
@@ -2657,13 +3123,18 @@ class LauncherDetailsDialog(tk.Toplevel):
             wraplength=wrap_w,
         ).pack(anchor="w")
 
-        info_text = (
-            f"当前通道：{channel}\n"
-            f"本地版本：v{local_version}\n"
-            f"安装目录：{install_dir}\n"
-            f"下载目录：{download_dir}\n"
-            f"启动器版本：v{launcher_version}"
-        )
+        info_lines = [
+            f"当前通道：{channel}",
+            f"本地版本：v{local_version}",
+            f"安装目录：{install_dir}",
+            f"下载目录：{download_dir}",
+        ]
+        if _normalize_channel(channel) == "Enhanced":
+            info_lines.append(f"高程数据目录：{terrain_dir or '尚未安装'}")
+            if terrain_revision:
+                info_lines.append(f"高程数据修订：{terrain_revision[:12]}")
+        info_lines.append(f"启动器版本：v{launcher_version}")
+        info_text = "\n".join(info_lines)
         tk.Label(
             content,
             text=info_text,
@@ -2987,6 +3458,20 @@ class LauncherWindow:
         self.latest_package_size: Optional[int] = None
         self.update_available = False
         self.app_requires_launcher_update = False
+        self.latest_terrain_manifest: Optional[Dict[str, Any]] = None
+        self.terrain_local_state = "missing"
+        self.terrain_local_revision = ""
+        self.terrain_local_map_count = 0
+        self.terrain_local_total_size = 0
+        self.terrain_remote_revision = ""
+        self.terrain_remote_map_count = 0
+        self.terrain_remote_total_size = 0
+        self.terrain_source_name = ""
+        self.terrain_update_available = False
+        self.terrain_download_size = 0
+        self.terrain_reuse_size = 0
+        self.terrain_check_warning = ""
+        self.terrain_check_blocking = False
         self.latest_launcher_manifest: Optional[Dict[str, Any]] = None
         self.latest_launcher_version = LAUNCHER_VERSION
         self.latest_launcher_source_name = ""
@@ -3018,6 +3503,7 @@ class LauncherWindow:
         self._max_h = self._base_min_h
         self._min_w = self._base_min_w
         self._min_h = self._base_min_h
+        self._refresh_local_terrain_snapshot()
 
         self.root = tk.Tk()
         self.root.title(DISPLAY_NAME)
@@ -3027,7 +3513,10 @@ class LauncherWindow:
         self.root.resizable(True, True)
         self.root.configure(bg=_THEME["BG"])
         self.root.protocol("WM_DELETE_WINDOW", self._on_exit)
-        self.channel_var = tk.StringVar(master=self.root, value=self.channel)
+        self.channel_var = tk.StringVar(
+            master=self.root,
+            value=_channel_display_name(self.channel),
+        )
         self.proxy_var = tk.BooleanVar(master=self.root, value=self.use_system_proxy)
         self.web_dashboard_autostart_var = tk.BooleanVar(
             master=self.root,
@@ -3100,6 +3589,85 @@ class LauncherWindow:
     def _font(self, size: int, weight: str = "normal") -> Tuple[str, int, str]:
         return (self.font_family, max(8, self._px(size)), weight)
 
+    def _refresh_local_terrain_snapshot(self) -> None:
+        self.terrain_local_revision = ""
+        self.terrain_local_map_count = 0
+        self.terrain_local_total_size = 0
+        if _normalize_channel(self.channel) != "Enhanced":
+            self.terrain_local_state = "not_applicable"
+            return
+
+        store = _terrain_store_for_base(self.base)
+        manifest = store.current_manifest()
+        if manifest is not None:
+            self.terrain_local_state = "ready"
+            self.terrain_local_revision = manifest.revision
+            self.terrain_local_map_count = manifest.map_count
+            self.terrain_local_total_size = manifest.total_size_bytes
+            return
+        if store.current_path.exists():
+            self.terrain_local_state = "invalid"
+            return
+
+        candidates: list[tuple[str, Path]] = []
+        if self.source_test_mode:
+            override = os.environ.get("BOMANA_TERRAIN_DIR", "").strip()
+            if override:
+                candidates.append(("source", Path(override).expanduser()))
+            candidates.append(("source", Path.home() / ".bomana" / "terrain-v1"))
+        else:
+            candidates.extend(
+                (
+                    (
+                        "legacy",
+                        _app_runtime_dir(self.base) / "bomana" / "data" / "terrain-v1",
+                    ),
+                    ("legacy", Path.home() / ".bomana" / "terrain-v1"),
+                )
+            )
+        for state, pack_dir in candidates:
+            map_count, total_size = _terrain_index_summary(pack_dir)
+            if map_count:
+                self.terrain_local_state = state
+                self.terrain_local_map_count = map_count
+                self.terrain_local_total_size = total_size
+                return
+        self.terrain_local_state = "missing"
+
+    def _render_terrain_status(self) -> None:
+        if not hasattr(self, "terrain_status_lbl"):
+            return
+        use_remote = bool(self.terrain_update_available and self.terrain_remote_map_count)
+        map_count = (
+            self.terrain_remote_map_count if use_remote else self.terrain_local_map_count
+        )
+        total_size = (
+            self.terrain_remote_total_size if use_remote else self.terrain_local_total_size
+        )
+        badge, detail, level = _terrain_status_copy(
+            self.channel,
+            local_state=self.terrain_local_state,
+            local_revision=self.terrain_local_revision,
+            remote_revision=self.terrain_remote_revision,
+            map_count=map_count,
+            total_size_bytes=total_size,
+            update_available=self.terrain_update_available,
+            download_size=self.terrain_download_size,
+            check_warning=self.terrain_check_warning,
+            check_blocking=self.terrain_check_blocking,
+            running=self.running,
+            current_task=self.current_task,
+        )
+        colors = {
+            "success": _THEME["GREEN"],
+            "warning": _THEME["YELLOW"],
+            "error": _THEME["RED"],
+            "info": _THEME["BLUE"],
+            "muted": _THEME["TEXT_MUTED"],
+        }
+        self.terrain_status_lbl.config(text=badge, fg=colors.get(level, _THEME["TEXT_DIM"]))
+        self.terrain_detail_lbl.config(text=detail)
+
     def _style_action_button(self, btn: tk.Button, variant: str) -> None:
         style_action_button(btn, variant, palette=_THEME, bd=1)
 
@@ -3167,11 +3735,36 @@ class LauncherWindow:
             win_w = self.root.winfo_width()
             if win_w <= 1:
                 win_w = max(self._base_min_w, self.root.winfo_reqwidth())
-            content_w = max(self._px(300), win_w - self._px(354))
+            left_w = (
+                self.controls_card.winfo_width()
+                if hasattr(self, "controls_card")
+                else int(win_w * 0.4)
+            )
+            if left_w <= 1:
+                left_w = max(self._px(290), int(win_w * 0.4))
+            right_w = (
+                self.status_card.winfo_width()
+                if hasattr(self, "status_card")
+                else int(win_w * 0.6)
+            )
+            if right_w <= 1:
+                right_w = max(self._px(360), int(win_w * 0.6))
+            left_wrap = max(self._px(190), left_w - self._px(48))
+            content_w = max(self._px(280), right_w - self._px(34))
             if hasattr(self, "selection_summary_lbl"):
-                self.selection_summary_lbl.config(wraplength=max(self._px(220), win_w // 3))
+                self.selection_summary_lbl.config(wraplength=left_wrap)
             if hasattr(self, "rollback_status_lbl"):
-                self.rollback_status_lbl.config(wraplength=max(self._px(190), win_w // 3))
+                self.rollback_status_lbl.config(wraplength=left_wrap)
+            if hasattr(self, "terrain_detail_lbl"):
+                self.terrain_detail_lbl.config(wraplength=left_wrap)
+            for name in (
+                "web_dashboard_autostart_chk",
+                "web_dashboard_auto_open_chk",
+                "web_dashboard_lan_enabled_chk",
+            ):
+                widget = getattr(self, name, None)
+                if widget is not None:
+                    widget.config(wraplength=left_wrap)
             if hasattr(self, "detail_lbl"):
                 self.detail_lbl.config(wraplength=content_w)
             if hasattr(self, "hint_lbl"):
@@ -3298,26 +3891,34 @@ class LauncherWindow:
         )
         self.sub_lbl.pack(fill="x", padx=self._px(18), pady=(0, self._px(12)))
 
-        content_row = tk.Frame(top, bg=_THEME["BG"])
-        content_row.pack(
+        self.content_row = tk.Frame(top, bg=_THEME["BG"])
+        self.content_row.pack(
             fill="both",
             expand=True,
             padx=self._px(18),
             pady=(0, self._px(12)),
         )
-        content_row.grid_columnconfigure(0, weight=0, minsize=self._px(310))
-        content_row.grid_columnconfigure(1, weight=1)
-        content_row.grid_rowconfigure(0, weight=1)
+        self.content_row.grid_columnconfigure(
+            0,
+            weight=4,
+            minsize=self._px(290),
+        )
+        self.content_row.grid_columnconfigure(
+            1,
+            weight=6,
+            minsize=self._px(360),
+        )
+        self.content_row.grid_rowconfigure(0, weight=1)
 
-        controls_card = tk.Frame(
-            content_row,
+        self.controls_card = tk.Frame(
+            self.content_row,
             bg=_THEME["CARD_ALT"],
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
         )
-        controls_card.grid(row=0, column=0, sticky="nsew", padx=(0, self._px(12)))
+        self.controls_card.grid(row=0, column=0, sticky="nsew", padx=(0, self._px(12)))
 
-        controls_head = tk.Frame(controls_card, bg=_THEME["CARD_ALT"])
+        controls_head = tk.Frame(self.controls_card, bg=_THEME["CARD_ALT"])
         controls_head.pack(fill="x", padx=self._px(12), pady=(self._px(12), self._px(8)))
         tk.Label(
             controls_head,
@@ -3336,10 +3937,10 @@ class LauncherWindow:
             anchor="w",
         ).pack(anchor="w", pady=(self._px(2), 0))
 
-        picker_row = tk.Frame(controls_card, bg=_THEME["CARD_ALT"])
+        picker_row = tk.Frame(self.controls_card, bg=_THEME["CARD_ALT"])
         picker_row.pack(fill="x", padx=self._px(12), pady=(0, self._px(10)))
-        picker_row.grid_columnconfigure(0, weight=1)
-        picker_row.grid_columnconfigure(1, weight=1)
+        picker_row.grid_columnconfigure(0, weight=2)
+        picker_row.grid_columnconfigure(1, weight=3)
 
         channel_cluster = tk.Frame(picker_row, bg=_THEME["CARD_ALT"])
         channel_cluster.grid(row=0, column=0, sticky="ew", padx=(0, self._px(5)))
@@ -3352,7 +3953,9 @@ class LauncherWindow:
         ).pack(anchor="w")
 
         self.channel_menu = tk.OptionMenu(
-            channel_cluster, self.channel_var, "Enhanced", "Standard", "Lite"
+            channel_cluster,
+            self.channel_var,
+            *(CHANNEL_DISPLAY_NAMES[channel] for channel in CHANNEL_DETAILS),
         )
         self.channel_menu.config(
             bg=_THEME["CARD"],
@@ -3362,7 +3965,7 @@ class LauncherWindow:
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
             bd=0,
-            width=12,
+            width=18,
             anchor="w",
             cursor="hand2",
             font=self._font(10),
@@ -3375,7 +3978,7 @@ class LauncherWindow:
             bd=0,
             font=self._font(10),
         )
-        self.channel_menu.pack(anchor="w", pady=(self._px(5), 0))
+        self.channel_menu.pack(fill="x", anchor="w", pady=(self._px(5), 0))
 
         source_cluster = tk.Frame(picker_row, bg=_THEME["CARD_ALT"])
         source_cluster.grid(row=0, column=1, sticky="ew", padx=(self._px(5), 0))
@@ -3416,7 +4019,7 @@ class LauncherWindow:
             bd=0,
             font=self._font(9),
         )
-        self.download_source_menu.pack(anchor="w", pady=(self._px(5), 0))
+        self.download_source_menu.pack(fill="x", anchor="w", pady=(self._px(5), 0))
 
         self.proxy_chk = tk.Checkbutton(
             picker_row,
@@ -3442,7 +4045,7 @@ class LauncherWindow:
         )
 
         web_card = tk.Frame(
-            controls_card,
+            self.controls_card,
             bg=_THEME["CARD"],
             highlightthickness=1,
             highlightbackground=_THEME["SEPARATOR"],
@@ -3495,7 +4098,7 @@ class LauncherWindow:
         self.web_dashboard_lan_enabled_chk.pack(fill="x", padx=self._px(10), pady=(0, self._px(6)))
 
         self.selection_summary_lbl = tk.Label(
-            controls_card,
+            self.controls_card,
             text="",
             font=self._font(9),
             fg=_THEME["TEXT_DIM"],
@@ -3507,11 +4110,61 @@ class LauncherWindow:
         self.selection_summary_lbl.pack(
             fill="x",
             padx=self._px(12),
-            pady=(self._px(2), self._px(12)),
+            pady=(self._px(2), self._px(10)),
+        )
+
+        self.terrain_card = tk.Frame(
+            self.controls_card,
+            bg=_THEME["CARD"],
+            highlightthickness=1,
+            highlightbackground=_THEME["SEPARATOR"],
+        )
+        self.terrain_card.pack(
+            fill="x",
+            padx=self._px(12),
+            pady=(0, self._px(10)),
+        )
+        terrain_head = tk.Frame(self.terrain_card, bg=_THEME["CARD"])
+        terrain_head.pack(
+            fill="x",
+            padx=self._px(10),
+            pady=(self._px(8), self._px(2)),
+        )
+        tk.Label(
+            terrain_head,
+            text="离线地图包",
+            font=self._font(10, "bold"),
+            fg=_THEME["TEXT"],
+            bg=_THEME["CARD"],
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True)
+        self.terrain_status_lbl = tk.Label(
+            terrain_head,
+            text="正在检查",
+            font=self._font(9, "bold"),
+            fg=_THEME["BLUE"],
+            bg=_THEME["CARD"],
+            anchor="e",
+        )
+        self.terrain_status_lbl.pack(side="right", padx=(self._px(8), 0))
+        self.terrain_detail_lbl = tk.Label(
+            self.terrain_card,
+            text="",
+            font=self._font(8),
+            fg=_THEME["TEXT_DIM"],
+            bg=_THEME["CARD"],
+            anchor="w",
+            justify="left",
+            wraplength=self._px(260),
+        )
+        self.terrain_detail_lbl.pack(
+            fill="x",
+            padx=self._px(10),
+            pady=(0, self._px(8)),
         )
 
         rollback_card = tk.Frame(
-            controls_card,
+            self.controls_card,
             bg=_THEME["CARD"],
             highlightthickness=1,
             highlightbackground=_THEME["SEPARATOR"],
@@ -3563,15 +4216,15 @@ class LauncherWindow:
         self._refresh_channel_details()
         self._refresh_download_source_details()
 
-        card = tk.Frame(
-            content_row,
+        self.status_card = tk.Frame(
+            self.content_row,
             bg=_THEME["CARD"],
             highlightthickness=1,
             highlightbackground=_THEME["BORDER"],
         )
-        card.grid(row=0, column=1, sticky="nsew")
+        self.status_card.grid(row=0, column=1, sticky="nsew")
 
-        status_header = tk.Frame(card, bg=_THEME["CARD"])
+        status_header = tk.Frame(self.status_card, bg=_THEME["CARD"])
         status_header.pack(
             fill="x", padx=(self._px(16), self._px(6)), pady=(self._px(12), self._px(6))
         )
@@ -3600,7 +4253,7 @@ class LauncherWindow:
         self._style_action_button(self.launch_btn, "secondary")
 
         self.detail_lbl = tk.Label(
-            card,
+            self.status_card,
             text="",
             font=self._font(10),
             fg=_THEME["TEXT_DIM"],
@@ -3612,7 +4265,7 @@ class LauncherWindow:
         self.detail_lbl.pack(fill="x", padx=self._px(16))
 
         self.progress_canvas = tk.Canvas(
-            card,
+            self.status_card,
             width=self.progress_width,
             height=self.progress_height,
             bg=_THEME["CARD"],
@@ -3625,7 +4278,7 @@ class LauncherWindow:
         )
 
         self.hint_lbl = tk.Label(
-            card,
+            self.status_card,
             text="首次使用请先安装应用包；每次更新会保留一个可验证的上一版本。",
             font=self._font(9),
             fg=_THEME["TEXT_MUTED"],
@@ -3758,6 +4411,13 @@ class LauncherWindow:
             self.latest_launcher_manifest = None
             self.update_available = False
             self.app_requires_launcher_update = False
+            self.latest_terrain_manifest = None
+            self.terrain_remote_revision = ""
+            self.terrain_remote_map_count = 0
+            self.terrain_remote_total_size = 0
+            self.terrain_update_available = False
+            self.terrain_check_warning = ""
+            self.terrain_check_blocking = False
             self.launcher_update_available = False
             self._set_status(
                 "源码测试模式",
@@ -3775,23 +4435,38 @@ class LauncherWindow:
         self.latest_package_size = None
         self.update_available = False
         self.app_requires_launcher_update = False
+        self.latest_terrain_manifest = None
+        self.terrain_remote_revision = ""
+        self.terrain_remote_map_count = 0
+        self.terrain_remote_total_size = 0
+        self.terrain_source_name = ""
+        self.terrain_update_available = False
+        self.terrain_download_size = 0
+        self.terrain_reuse_size = 0
+        self.terrain_check_warning = ""
+        self.terrain_check_blocking = False
         self.latest_launcher_manifest = None
         self.latest_launcher_package_size = None
         self.latest_launcher_check_warning = ""
         self.launcher_update_available = False
         self.last_check_ok = False
         self.last_check_error = ""
-        self.channel = self.channel_var.get().strip() or self.detected_channel
+        self.channel = _normalize_channel(self.channel_var.get()) or self.detected_channel
         self._refresh_installed_versions()
         if automatic:
             self._set_status(
                 "自动检查更新",
-                f"正在检查 {self.channel} 通道，并同步检查启动器版本...",
+                f"正在检查 {_channel_display_name(self.channel)}，并同步检查启动器版本...",
                 None,
                 "info",
             )
         else:
-            self._set_status("正在检查更新", f"正在重新检查 {self.channel} 通道...", None, "info")
+            self._set_status(
+                "正在检查更新",
+                f"正在重新检查 {_channel_display_name(self.channel)}...",
+                None,
+                "info",
+            )
         self._set_running(True)
         self._start_worker("check")
 
@@ -3900,10 +4575,9 @@ class LauncherWindow:
                 if not zip_file.exists():
                     raise RuntimeError("ZIP 包不存在")
                 self._emit_status("开始安装", f"正在导入本地包：{zip_file.name}", 0.2, "info")
-                package_bytes = zip_file.read_bytes()
-                install_txn.install_zip_package(
+                install_txn.install_zip_package_from_file(
                     self.base,
-                    package_bytes,
+                    zip_file,
                     expected_sha256="",
                     entrypoint=DEFAULT_ENTRYPOINT,
                     status_cb=self._emit_status,
@@ -3964,17 +4638,36 @@ class LauncherWindow:
         whats_new_warning = ""
         local_ready = _is_local_app_ready(self.base)
         manifest = dict(self.latest_manifest or {})
+        terrain_manifest = dict(self.latest_terrain_manifest or {})
+        app_update_needed = bool(self.update_available)
+        terrain_update_needed = bool(self.terrain_update_available)
+        terrain_result: Optional[_launcher_terrain_store.TerrainSyncResult] = None
         try:
-            if not manifest:
-                raise RuntimeError("请先完成更新检查")
-            final_version, update_source = service.download_app_update(manifest)
+            if not (app_update_needed or terrain_update_needed):
+                raise RuntimeError("当前没有需要下载的更新")
+            update_sources: list[str] = []
+            if terrain_update_needed:
+                if not terrain_manifest:
+                    raise RuntimeError("缺少已验证的地形更新清单")
+                terrain_result = service.download_terrain_update(terrain_manifest)
+                terrain_source = (
+                    "、".join(terrain_result.source_names)
+                    or str(terrain_manifest.get("source_name", "本地复用"))
+                )
+                update_sources.append(f"地形：{terrain_source}")
+            if app_update_needed:
+                if not manifest:
+                    raise RuntimeError("请先完成应用更新检查")
+                final_version, app_source = service.download_app_update(manifest)
+                update_sources.append(f"应用：{app_source}")
+                try:
+                    whats_new = service.fetch_whats_new(manifest)
+                except Exception as exc:
+                    whats_new_warning = f"更新日志获取失败：{exc}"
+                    _log(self.base, whats_new_warning)
+            update_source = "；".join(update_sources)
             update_ok = True
             local_ready = _is_local_app_ready(self.base)
-            try:
-                whats_new = service.fetch_whats_new(manifest)
-            except Exception as exc:
-                whats_new_warning = f"更新日志获取失败：{exc}"
-                _log(self.base, whats_new_warning)
         except Exception as e:
             update_error = _friendly_error_text(e, self.channel)
             _log(self.base, f"下载更新失败：{e}")
@@ -3989,6 +4682,12 @@ class LauncherWindow:
                 "update_ok": update_ok,
                 "update_source": update_source,
                 "update_error": update_error,
+                "terrain_revision": (
+                    terrain_result.revision if terrain_result is not None else ""
+                ),
+                "terrain_downloaded_bytes": (
+                    terrain_result.downloaded_bytes if terrain_result is not None else 0
+                ),
             },
         )
 
@@ -4000,12 +4699,43 @@ class LauncherWindow:
                 "update_ok": update_ok,
                 "update_source": update_source,
                 "update_error": update_error,
+                "terrain_revision": (
+                    terrain_result.revision if terrain_result is not None else ""
+                ),
                 "device_id": self.client_identity.get("device_id", ""),
                 "install_id": self.client_identity.get("install_id", ""),
             }
         )
 
         if update_ok:
+            completed_lines: list[str] = []
+            if app_update_needed:
+                completed_lines.append(f"应用已更新到 v{final_version}。")
+            if terrain_result is not None:
+                if terrain_result.already_current:
+                    completed_lines.append("地形数据经校验已是最新，未发生下载。")
+                else:
+                    completed_lines.append(
+                        (
+                            f"地形数据已切换到 {terrain_result.revision[:12]}，"
+                            f"下载 {_format_size_text(terrain_result.downloaded_bytes)}，"
+                            f"复用 {terrain_result.reused_objects} 个未变化对象。"
+                        )
+                    )
+            completed_lines.append(f"安装位置：{self.install_dir}")
+            if _normalize_channel(self.channel) == "Enhanced":
+                terrain_dir = _terrain_store_for_base(self.base).current_pack_dir()
+                if terrain_dir is not None:
+                    completed_lines.append(f"地形位置：{terrain_dir}")
+            completed_lines.append(f"下载目录：{_launcher_download_dir(self.base)}")
+            if app_update_needed and _is_previous_app_ready(self.base):
+                completed_lines.append(
+                    (
+                        f"已保留上一版本 "
+                        f"v{install_txn.read_local_app_version(_previous_app_dir(self.base))}，"
+                        "可随时回退。"
+                    )
+                )
             self.events.put(
                 (
                     "download_done",
@@ -4016,17 +4746,11 @@ class LauncherWindow:
                         "whats_new": whats_new,
                         "whats_new_warning": whats_new_warning,
                         "source_name": update_source,
-                        "status": "下载完成",
-                        "detail": (
-                            f"已更新到 v{final_version}（来源：{update_source}）。现在可点击“启动应用”。\n"
-                            f"安装位置：{self.install_dir}\n"
-                            f"下载目录：{_launcher_download_dir(self.base)}"
-                            + (
-                                f"\n已保留上一版本 v{install_txn.read_local_app_version(_previous_app_dir(self.base))}，可随时回退。"
-                                if _is_previous_app_ready(self.base)
-                                else ""
-                            )
+                        "terrain_revision": (
+                            terrain_result.revision if terrain_result is not None else ""
                         ),
+                        "status": "更新完成",
+                        "detail": "\n".join(completed_lines),
                         "level": "success",
                     },
                 )
@@ -4097,6 +4821,50 @@ class LauncherWindow:
                         self.app_requires_launcher_update = bool(
                             payload.get("app_requires_launcher_update", False)
                         )
+                        self.latest_terrain_manifest = payload.get("terrain_manifest", None)
+                        reported_local_revision = str(
+                            payload.get("terrain_local_revision", "")
+                        ).strip()
+                        self.terrain_local_revision = reported_local_revision
+                        self.terrain_remote_revision = str(
+                            payload.get("terrain_remote_revision", "")
+                        ).strip()
+                        self.terrain_remote_map_count = int(
+                            payload.get("terrain_remote_map_count", 0) or 0
+                        )
+                        self.terrain_remote_total_size = int(
+                            payload.get("terrain_remote_total_size", 0) or 0
+                        )
+                        self.terrain_source_name = str(
+                            payload.get("terrain_source_name", "")
+                        ).strip()
+                        self.terrain_update_available = bool(
+                            payload.get("terrain_update_available", False)
+                        )
+                        self.terrain_download_size = int(
+                            payload.get("terrain_download_size", 0) or 0
+                        )
+                        self.terrain_reuse_size = int(
+                            payload.get("terrain_reuse_size", 0) or 0
+                        )
+                        self.terrain_check_warning = str(
+                            payload.get("terrain_check_warning", "")
+                        ).strip()
+                        self.terrain_check_blocking = bool(
+                            payload.get("terrain_check_blocking", False)
+                        )
+                        if reported_local_revision:
+                            self.terrain_local_state = "ready"
+                            if reported_local_revision == self.terrain_remote_revision:
+                                self.terrain_local_map_count = self.terrain_remote_map_count
+                                self.terrain_local_total_size = (
+                                    self.terrain_remote_total_size
+                                )
+                        elif self.terrain_check_blocking:
+                            store = _terrain_store_for_base(self.base)
+                            self.terrain_local_state = (
+                                "invalid" if store.current_path.exists() else "missing"
+                            )
                         self.latest_launcher_manifest = payload.get("launcher_manifest", None)
                         self.latest_launcher_version = str(
                             payload.get("launcher_remote_version", LAUNCHER_VERSION)
@@ -4114,12 +4882,18 @@ class LauncherWindow:
                             payload.get("launcher_update_available", False)
                         )
 
-                        if self.app_requires_launcher_update:
+                        if self.terrain_check_blocking and self.update_available:
+                            detail = self._compose_check_detail()
+                            self._set_status("地形数据检查失败", detail, 0.0, "warning")
+                        elif self.app_requires_launcher_update:
                             detail = self._compose_check_detail()
                             self._set_status("需要先更新启动器", detail, 0.0, "warning")
                         elif self.update_available:
                             detail = self._compose_check_detail()
                             self._set_status("发现新版本", detail, 0.0, "success")
+                        elif self.terrain_update_available:
+                            detail = self._compose_check_detail()
+                            self._set_status("发现地形数据更新", detail, 0.0, "success")
                         elif self.launcher_update_available:
                             detail = self._compose_check_detail()
                             self._set_status("检测到启动器更新", detail, 0.0, "success")
@@ -4134,6 +4908,16 @@ class LauncherWindow:
                         self.latest_min_launcher_version = ""
                         self.latest_package_size = None
                         self.latest_source_name = ""
+                        self.latest_terrain_manifest = None
+                        self.terrain_remote_revision = ""
+                        self.terrain_remote_map_count = 0
+                        self.terrain_remote_total_size = 0
+                        self.terrain_source_name = ""
+                        self.terrain_update_available = False
+                        self.terrain_download_size = 0
+                        self.terrain_reuse_size = 0
+                        self.terrain_check_warning = ""
+                        self.terrain_check_blocking = False
                         self.latest_launcher_manifest = None
                         self.latest_launcher_package_size = None
                         self.latest_launcher_source_name = ""
@@ -4183,10 +4967,20 @@ class LauncherWindow:
                         if update_ok:
                             self.update_available = False
                             self.app_requires_launcher_update = False
+                            terrain_revision = str(payload.get("terrain_revision", "")).strip()
+                            if terrain_revision:
+                                self.terrain_local_revision = terrain_revision
+                                self.terrain_remote_revision = terrain_revision
+                            self.terrain_update_available = False
+                            self.terrain_download_size = 0
+                            self.terrain_reuse_size = 0
+                            self.terrain_check_warning = ""
+                            self.terrain_check_blocking = False
                             self.latest_min_launcher_version = ""
                             self.latest_package_size = None
                             self.last_check_ok = True
                             self.last_download_success = True
+                            self._refresh_local_terrain_snapshot()
                         else:
                             self.last_download_success = False
                     finally:
@@ -4343,6 +5137,21 @@ class LauncherWindow:
             lines.append(
                 f"应用当前版本 v{self.local_version}（来源：{self.latest_source_name or '本地/腾讯云'}）"
             )
+        if _normalize_channel(self.channel) == "Enhanced":
+            if self.terrain_update_available:
+                lines.append(
+                    (
+                        f"地形数据 -> {self.terrain_remote_revision[:12]} "
+                        f"（来源：{self.terrain_source_name or '地形更新服务'}，"
+                        f"差量下载：{_format_size_text(self.terrain_download_size)}，"
+                        f"本地复用：{_format_size_text(self.terrain_reuse_size)}）"
+                    )
+                )
+            elif self.terrain_local_revision:
+                lines.append(f"地形数据当前版本 {self.terrain_local_revision[:12]}（无需下载）")
+            if self.terrain_check_warning:
+                prefix = "地形数据不可用" if self.terrain_check_blocking else "地形更新检查暂不可用"
+                lines.append(f"{prefix}：{self.terrain_check_warning}")
         if self.launcher_update_available:
             launcher_size_text = _format_size_text(self.latest_launcher_package_size)
             lines.append(
@@ -4361,7 +5170,10 @@ class LauncherWindow:
         return "\n".join(lines)
 
     def _subline_text(self) -> str:
-        base = f"通道：{self.channel}  |  本地版本：v{self.local_version}"
+        base = (
+            f"通道：{_channel_display_name(self.channel)}"
+            f"  |  本地版本：v{self.local_version}"
+        )
         if self.previous_version != "0.0.0":
             if not _is_previous_app_ready(self.base):
                 return f"{base}  |  上一版不兼容：v{self.previous_version}"
@@ -4398,11 +5210,15 @@ class LauncherWindow:
             self.launch_btn.config(text="启动（已下载更新）")
             self._style_action_button(self.launch_btn, "success")
             return
-        if self.last_check_ok and not self.update_available:
+        if self.last_check_ok and not (
+            self.update_available or self.terrain_update_available
+        ):
             self.launch_btn.config(text="启动应用")
             self._style_action_button(self.launch_btn, "primary")
             return
-        if self.last_check_ok and self.update_available:
+        if self.last_check_ok and (
+            self.update_available or self.terrain_update_available
+        ):
             self.launch_btn.config(text="启动本地（跳过更新）")
             self._style_action_button(self.launch_btn, "secondary")
             return
@@ -4418,10 +5234,24 @@ class LauncherWindow:
             self.start_btn.config(text="需先更新启动器")
             self._style_action_button(self.start_btn, "secondary")
             return
-        self.start_btn.config(text="下载更新")
+        if self.terrain_check_blocking and self.update_available:
+            self.start_btn.config(text="地形清单不可用")
+            self._style_action_button(self.start_btn, "secondary")
+            return
+        if self.terrain_update_available and not self.update_available:
+            self.start_btn.config(text="更新地形数据")
+        else:
+            self.start_btn.config(text="下载更新")
         self._style_action_button(
             self.start_btn,
-            "primary" if (self.last_check_ok and self.update_available) else "secondary",
+            (
+                "primary"
+                if (
+                    self.last_check_ok
+                    and (self.update_available or self.terrain_update_available)
+                )
+                else "secondary"
+            ),
         )
 
     def _update_launcher_button_state(self) -> None:
@@ -4515,8 +5345,9 @@ class LauncherWindow:
             if (
                 (not self.source_test_mode)
                 and self.last_check_ok
-                and self.update_available
+                and (self.update_available or self.terrain_update_available)
                 and (not self.app_requires_launcher_update)
+                and not (self.terrain_check_blocking and self.update_available)
             ):
                 self.start_btn.config(state="normal")
             else:
@@ -4547,14 +5378,33 @@ class LauncherWindow:
                             "当前启动器过旧。\n请先获取最新版启动器，再安装这次更新。"
                         )
                     )
-            elif self.last_check_ok and self.update_available:
-                size_text = _format_size_text(self.latest_package_size)
+            elif self.last_check_ok and self.update_available and self.terrain_check_blocking:
                 self.hint_lbl.config(
                     text=(
-                        f"可下载 v{self.latest_remote_version}（总大小：{size_text}）。点击“下载更新”会再次确认。\n"
+                        "新的超级爆弹版应用包不再重复携带地形数据；"
+                        "当前地形签名清单不可用，因此已阻止单独安装 App。\n"
+                        "请检查网络后重新检查。"
+                    )
+                )
+            elif self.last_check_ok and self.update_available:
+                total_bytes = int(self.latest_package_size or 0)
+                if self.terrain_update_available:
+                    total_bytes += self.terrain_download_size
+                size_text = _format_size_text(total_bytes)
+                self.hint_lbl.config(
+                    text=(
+                        f"可下载 v{self.latest_remote_version}（本次实际下载：{size_text}）。点击“下载更新”会再次确认。\n"
                         f"安装位置：{self.install_dir}"
                     )
                 )
+                if self.terrain_update_available:
+                    self.hint_lbl.config(
+                        text=(
+                            f"{self.hint_lbl.cget('text')}\n"
+                            f"地形只下载变化对象 {_format_size_text(self.terrain_download_size)}，"
+                            f"复用 {_format_size_text(self.terrain_reuse_size)}。"
+                        )
+                    )
                 if self.launcher_update_available:
                     self.hint_lbl.config(
                         text=(
@@ -4562,6 +5412,15 @@ class LauncherWindow:
                             f"同时检测到启动器 v{self.latest_launcher_version} 可更新，可单独点击“更新启动器”。"
                         )
                     )
+            elif self.last_check_ok and self.terrain_update_available:
+                self.hint_lbl.config(
+                    text=(
+                        f"应用当前已是最新版本；地形数据有差量更新 "
+                        f"{_format_size_text(self.terrain_download_size)}，"
+                        f"将复用 {_format_size_text(self.terrain_reuse_size)}。\n"
+                        "点击“更新地形数据”只维护独立资源，不会重复下载或替换 App。"
+                    )
+                )
             elif self.last_check_ok and self.launcher_update_available:
                 launcher_size_text = _format_size_text(self.latest_launcher_package_size)
                 self.hint_lbl.config(
@@ -4570,7 +5429,9 @@ class LauncherWindow:
                         "点击“更新启动器”后会先下载一个临时的新启动器文件，再自动替换当前 exe 并重启。"
                     )
                 )
-            elif self.last_check_ok and not self.update_available:
+            elif self.last_check_ok and not (
+                self.update_available or self.terrain_update_available
+            ):
                 if _is_local_app_ready(self.base):
                     self.hint_lbl.config(
                         text=f"当前已是最新版本，可直接点击“启动应用”。\n安装位置：{self.install_dir}"
@@ -4592,6 +5453,7 @@ class LauncherWindow:
                 self.hint_lbl.config(
                     text=f"{self.hint_lbl.cget('text')}\n可通过“回退 v{self.previous_version}”快速切回上一版。"
                 )
+        self._render_terrain_status()
         self._schedule_layout_reflow()
 
     def _show_error_actions(self) -> None:
@@ -4768,18 +5630,51 @@ class LauncherWindow:
                     ),
                 )
             return
-        if not self.update_available:
+        if self.terrain_check_blocking and self.update_available:
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                (
+                    "超级爆弹版的新应用包不再内置地形数据，"
+                    "当前未能取得已签名的独立地形清单。\n"
+                    "请先重新检查网络，不能只安装应用包。"
+                ),
+            )
+            return
+        if not (self.update_available or self.terrain_update_available):
             messagebox.showinfo(DISPLAY_NAME, "当前已是最新版本，无需下载。")
             return
-        if not self.latest_manifest:
+        if self.update_available and not self.latest_manifest:
             messagebox.showwarning(DISPLAY_NAME, "缺少下载清单，请先点击“重新检查”。")
             return
-        size_text = _format_size_text(self.latest_package_size)
+        if self.terrain_update_available and not self.latest_terrain_manifest:
+            messagebox.showwarning(DISPLAY_NAME, "缺少地形下载清单，请先点击“重新检查”。")
+            return
+        app_bytes = int(self.latest_package_size or 0) if self.update_available else 0
+        total_bytes = app_bytes + (
+            self.terrain_download_size if self.terrain_update_available else 0
+        )
+        size_text = _format_size_text(total_bytes)
+        action_text = (
+            f"下载并安装应用 v{self.latest_remote_version}，同时维护独立地形数据"
+            if self.update_available and _normalize_channel(self.channel) == "Enhanced"
+            else (
+                f"下载并安装应用 v{self.latest_remote_version}"
+                if self.update_available
+                else "差量更新独立地形数据"
+            )
+        )
+        terrain_detail = (
+            f"其中地形差量：{_format_size_text(self.terrain_download_size)}；"
+            f"复用：{_format_size_text(self.terrain_reuse_size)}\n"
+            if self.terrain_update_available
+            else ""
+        )
         ok = messagebox.askyesno(
             DISPLAY_NAME,
             (
-                f"将下载并安装 v{self.latest_remote_version}。\n"
-                f"下载总大小：{size_text}\n"
+                f"将{action_text}。\n"
+                f"本次实际下载总大小：{size_text}\n"
+                f"{terrain_detail}"
                 f"安装位置：{self.install_dir}\n"
                 "是否现在开始下载？"
             ),
@@ -4791,7 +5686,7 @@ class LauncherWindow:
         self.has_attempted_update = True
         self._set_status(
             "准备下载",
-            f"即将下载 v{self.latest_remote_version}，总大小：{size_text}\n安装位置：{self.install_dir}",
+            f"{action_text}，实际下载：{size_text}\n安装位置：{self.install_dir}",
             0.0,
             "info",
         )
@@ -4925,12 +5820,13 @@ class LauncherWindow:
 
     def _on_channel_changed(self, *_args) -> None:
         if self.running and self.current_task != "check":
-            self.channel_var.set(self.channel)
+            self.channel_var.set(_channel_display_name(self.channel))
             return
         previous_channel = self.channel
-        self.channel = self.channel_var.get().strip() or self.detected_channel
+        self.channel = _normalize_channel(self.channel_var.get()) or self.detected_channel
         self._save_launcher_state()
         self._refresh_installed_versions()
+        self._refresh_local_terrain_snapshot()
         self._refresh_channel_details()
         _a, _o, _l, degraded = _effective_web_preferences_for_channel(
             self.channel,
@@ -4950,13 +5846,14 @@ class LauncherWindow:
             )
         if self.running and self.current_task == "check":
             self._queue_recheck_after_check(
-                f"通道已切换到 {self.channel}，当前检查结束后将自动重查。"
+                f"通道已切换到 {_channel_display_name(self.channel)}，"
+                "当前检查结束后将自动重查。"
             )
             return
         self._begin_check(automatic=True)
 
     def _refresh_channel_details(self) -> None:
-        ch = self.channel_var.get().strip() or self.detected_channel
+        ch = _normalize_channel(self.channel_var.get()) or self.detected_channel
         info = CHANNEL_DETAILS.get(ch, CHANNEL_DETAILS["Enhanced"])
         label = _download_source_label(self.download_source_mode)
         source_detail = DOWNLOAD_SOURCE_DETAILS.get(
@@ -4965,10 +5862,12 @@ class LauncherWindow:
         )
         self.selection_summary_lbl.config(
             text=(
-                f"{info['title']}  |  推荐：{self.detected_channel}  |  来源：{label}\n"
+                f"{info['title']}  |  推荐：{_channel_display_name(self.detected_channel)}"
+                f"  |  来源：{label}\n"
                 f"{info['desc']} {source_detail}"
             )
         )
+        self._render_terrain_status()
         self._refresh_wraplengths()
 
     def _refresh_download_source_details(self) -> None:
@@ -4984,13 +5883,25 @@ class LauncherWindow:
             self._set_status("无法启动", detail, None, "error")
             return None
         try:
-            return install_txn.require_compatible_app_version(
+            version = install_txn.require_compatible_app_version(
                 _app_runtime_dir(self.base),
                 identity_name="启动应用版本",
             )
         except Exception as exc:
             self._set_status("无法启动", str(exc), None, "error")
             return None
+        if _normalize_channel(self.channel) == "Enhanced" and not self.source_test_mode:
+            managed = _terrain_store_for_base(self.base).current_pack_dir()
+            bundled = _app_runtime_dir(self.base) / "bomana" / "data" / "terrain-v1"
+            if managed is None and not bundled.is_dir():
+                self._set_status(
+                    "无法启动",
+                    "超级爆弹版缺少独立地形数据，请先重新检查并点击“更新地形数据”。",
+                    None,
+                    "error",
+                )
+                return None
+        return version
 
     def _prepare_ordinary_launch(self, final_version: str) -> None:
         self.decision = LaunchDecision(action="launch", final_version=final_version, warning="")
@@ -5028,6 +5939,12 @@ class LauncherWindow:
 
     def _open_details(self) -> None:
         try:
+            terrain_dir: Optional[Path] = None
+            terrain_revision = ""
+            if _normalize_channel(self.channel) == "Enhanced":
+                terrain_store = _terrain_store_for_base(self.base)
+                terrain_dir = terrain_store.current_pack_dir()
+                terrain_revision = terrain_store.current_revision()
             LauncherDetailsDialog(
                 self.root,
                 channel=self.channel,
@@ -5035,6 +5952,8 @@ class LauncherWindow:
                 launcher_version=LAUNCHER_VERSION,
                 install_dir=self.install_dir,
                 download_dir=_launcher_download_dir(self.base),
+                terrain_dir=terrain_dir,
+                terrain_revision=terrain_revision,
             )
         except Exception as e:
             _log(self.base, f"打开详情弹窗失败：{e}")

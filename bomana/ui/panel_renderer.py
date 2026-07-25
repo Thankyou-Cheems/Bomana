@@ -453,6 +453,7 @@ class AppPanelRenderer:
         airfields_enabled = ENABLE_AIRFIELDS and PanelConfig.is_effectively_enabled("airfields")
         fuel_enabled = ENABLE_FUEL and PanelConfig.is_effectively_enabled("fuel")
         bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
+        bombing_integrated = bombing_enabled and PanelConfig.bombing_mode == "integrated"
 
         if (
             (zones_enabled or airfields_enabled)
@@ -711,34 +712,26 @@ class AppPanelRenderer:
             self._grid_remove_if_needed(app.fuel_info_frame)
 
         if ENABLE_CCRP:
-            if bombing_enabled:
+            if bombing_integrated:
                 self._grid_if_needed(
-                    app.bombing_header_frame,
+                    app.bombing_frame,
                     row=9,
                     column=0,
                     sticky="ew",
-                    padx=pad_x,
-                    pady=(0, int(2 * s)),
-                )
-                self._grid_if_needed(
-                    app.bombing_info_frame,
-                    row=10,
-                    column=0,
-                    sticky="ew",
-                    padx=pad_x,
+                    padx=0,
                     pady=(0, int(6 * s)),
                 )
                 self.update_bombing_display(snap)
             else:
-                self._grid_remove_if_needed(app.bombing_header_frame)
-                self._grid_remove_if_needed(app.bombing_info_frame)
+                self._grid_remove_if_needed(app.bombing_frame)
+                app.bombing_bar.cue.stop()
 
         layout_signature = (
             PanelConfig.navigation_mode,
             bool(zones_enabled),
             bool(airfields_enabled),
             bool(fuel_enabled),
-            bool(bombing_enabled),
+            bool(bombing_integrated),
             bool(app.heading_tape is not None and PanelConfig.navigation_mode == "integrated"),
         )
         if layout_signature != app._last_layout_signature:
@@ -786,6 +779,12 @@ class AppPanelRenderer:
     def update_bombing_display(self, snap: UISnapshot) -> None:
         """更新武器解算信息显示（自由落体炸弹仍复用 CCRP 文案）。"""
         app = self.app
+        bar = getattr(app, "bombing_bar", None)
+        if bar is not None:
+            bar.update_snapshot(snap)
+            return
+
+        # Compatibility path for headless embedders that expose the legacy labels.
         model = build_bombing_display_model(snap)
         app.bomb_select_lbl.config(text=model.bomb_label_text)
         app.bomb_trajectory_lbl.config(text=model.trajectory_text, fg=model.trajectory_fg)

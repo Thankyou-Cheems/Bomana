@@ -43,12 +43,6 @@ def _dialog_for_save() -> SettingsDialog:
     dialog.scale_var = FakeVar(UIConfig.DEFAULT_UI_SCALE_MULT)
     dialog.text_scale_var = FakeVar(1.0)
     dialog.theme_var = FakeVar("fluent_dark")
-    dialog.hud_enabled_var = FakeVar(False)
-    dialog.hud_alpha_var = FakeVar(255)
-    dialog.hud_scale_var = FakeVar(1.0)
-    dialog.hud_smoothing_var = FakeVar(0.35)
-    dialog.hud_follow_main_monitor_var = FakeVar(True)
-    dialog.hud_color_style_var = FakeVar("auto")
     dialog.hotkeys_enabled_var = FakeVar(HotkeyConfig.GLOBAL_HOTKEYS)
     dialog.hotkey_vars = {
         "reset": FakeVar("F7"),
@@ -66,7 +60,6 @@ def _dialog_for_save() -> SettingsDialog:
     dialog.overspeed_vars = {}
     dialog.overspeed_override_map = {}
     dialog._persist_sound_overrides = lambda: ({}, [], [])
-    dialog._refresh_runtime_hud_after_settings = lambda _previous: None
     dialog.destroy = lambda: None
     runtime_services = SimpleNamespace(refresh_local_hotkey_bindings=lambda: None)
     dialog.app = SimpleNamespace(
@@ -99,7 +92,11 @@ def test_settings_save_persists_nav_width_and_merges_panels(monkeypatch) -> None
     monkeypatch.setattr(
         dialogs.ConfigManager,
         "load",
-        lambda: {"panels": {"show_bombing": False, "show_zones": True}},
+        lambda: {
+            "panels": {"show_bombing": False, "show_zones": True},
+            "hud_enabled": True,
+            "hud": {"alpha": 220},
+        },
     )
 
     def save_config(config: dict[str, object]) -> bool:
@@ -116,6 +113,8 @@ def test_settings_save_persists_nav_width_and_merges_panels(monkeypatch) -> None
     assert saved["navigation_bar_width"] == 1.35
     assert saved["navigation_bar_scale"] == 1.2
     assert saved["panels"] == {"show_bombing": False, "show_zones": False}
+    assert "hud_enabled" not in saved
+    assert "hud" not in saved
 
 
 def test_settings_save_validates_overspeed_before_sound_persistence(monkeypatch) -> None:
@@ -143,31 +142,30 @@ def test_settings_save_validates_overspeed_before_sound_persistence(monkeypatch)
     assert warnings == [("数值无效", "IAS 提示线 必须输入有效数字。")]
 
 
-def test_settings_save_validates_ccrp_before_sound_persistence(monkeypatch) -> None:
+def test_settings_save_ignores_removed_ccrp_tuning_controls(monkeypatch) -> None:
     dialog = _dialog_for_save()
-    warnings = []
     dialog.ccrp_range_mult_var = InvalidNumberVar()
     dialog.ccrp_time_mult_var = FakeVar(1.0)
+    saved: dict[str, object] = {}
 
     monkeypatch.setattr(dialogs, "ENABLE_CCRP", True)
-    monkeypatch.setattr(dialogs.ConfigManager, "load", lambda: {})
+    monkeypatch.setattr(
+        dialogs.ConfigManager,
+        "load",
+        lambda: {"ccrp_tuning": {"range_correction_mult": 1.2}},
+    )
     monkeypatch.setattr(
         dialogs.ConfigManager,
         "save",
-        lambda _config: (_ for _ in ()).throw(AssertionError("save should not run")),
+        lambda config: saved.update(config) or True,
     )
-    dialog._persist_sound_overrides = lambda: (_ for _ in ()).throw(
-        AssertionError("sound persistence should not run")
-    )
-    monkeypatch.setattr(
-        dialogs.messagebox,
-        "showwarning",
-        lambda title, message, **_kwargs: warnings.append((title, message)),
-    )
+    monkeypatch.setattr(dialogs.Win32, "setup_window", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(dialogs.Theme, "apply", lambda _theme: None)
+    monkeypatch.setattr(dialogs.messagebox, "showinfo", lambda *_args, **_kwargs: None)
 
     dialog._save()
 
-    assert warnings == [("数值无效", "CCRP 距离修正倍率 必须输入有效数字。")]
+    assert "ccrp_tuning" not in saved
 
 
 def test_aircraft_overspeed_override_invalid_number_warns_without_mutating(

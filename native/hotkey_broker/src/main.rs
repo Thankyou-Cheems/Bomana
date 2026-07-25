@@ -109,6 +109,7 @@ mod broker {
         Corner = 3,
         Beep = 4,
         Zones = 5,
+        BombTarget = 6,
     }
 
     impl Action {
@@ -119,6 +120,7 @@ mod broker {
                 "corner" => Some(Self::Corner),
                 "beep" => Some(Self::Beep),
                 "zones" => Some(Self::Zones),
+                "bomb_target" => Some(Self::BombTarget),
                 _ => None,
             }
         }
@@ -258,8 +260,8 @@ mod broker {
 
         let token = token.ok_or_else(|| "missing --session".to_owned())?;
         let app_process_id = parse_session_token(&token)?;
-        if !(4..=5).contains(&bindings.len()) {
-            return Err("broker requires four or five fixed actions".to_owned());
+        if !(4..=6).contains(&bindings.len()) {
+            return Err("broker requires four to six fixed actions".to_owned());
         }
 
         for required in [Action::Reset, Action::Lock, Action::Corner, Action::Beep] {
@@ -475,6 +477,8 @@ mod broker {
                 "beep=F10",
                 "--binding",
                 "zones=F11",
+                "--binding",
+                "bomb_target=F6",
             ]
             .into_iter()
             .map(str::to_owned)
@@ -485,9 +489,9 @@ mod broker {
         fn accepts_only_fixed_actions_and_function_keys() {
             let parsed = parse_args(valid_args()).expect("valid broker args");
             assert_eq!(parsed.app_process_id, 1234);
-            assert_eq!(parsed.bindings.len(), 5);
+            assert_eq!(parsed.bindings.len(), 6);
             assert_eq!(parsed.bindings[0].action, Action::Reset);
-            assert_eq!(parsed.bindings[4].virtual_key, 0x7a);
+            assert_eq!(parsed.bindings[5].virtual_key, 0x75);
         }
 
         #[test]

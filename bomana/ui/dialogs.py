@@ -21,12 +21,10 @@ from bomana.config.feature_profile import (
 )
 from bomana.config.settings import (
     AboutConfig,
-    BallisticPhysicsParams,
     BombConfig,
     ChecklistConfig,
     FileConfig,
     HotkeyConfig,
-    HUDConfig,
     OverspeedConfig,
     PanelConfig,
     SnapConfig,
@@ -429,8 +427,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
 
         self.tabs = ["显示", "面板"]
         if ENABLE_CCRP:
-            self.tabs.append("投弹")
-        self.tabs.extend(["空速", "音效", "快捷键", "实验性", "其他"])
+            self.tabs.append("CCRP")
+        self.tabs.extend(["空速", "音效", "快捷键", "其他"])
         self.tab_frames = {}
         self.tab_btns = {}
         self.current_tab = "显示"
@@ -515,7 +513,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         self._build_overspeed_tab()
         self._build_sound_tab()
         self._build_hotkey_tab()
-        self._build_experimental_tab()
         self._build_other_tab()
 
         # 按钮行
@@ -699,7 +696,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         # 主题提示
         tk.Label(
             frame,
-            text="* 主题与UI缩放保存后立即生效\n* HUD 等实验性功能请在“实验性”页配置",
+            text="* 主题与UI缩放保存后立即生效",
             bg=Theme.BG,
             fg=Theme.TEXT_MUTED,
             font=("Segoe UI", 8),
@@ -1230,6 +1227,11 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             ("beep", "声音开关", HotkeyConfig.KEY_BEEP),
             ("zones", "战区提示音", HotkeyConfig.KEY_ZONES),
         ]
+        if ENABLE_CCRP:
+            hotkeys.insert(
+                0,
+                ("bomb_target", "CCRP 目标模式", HotkeyConfig.KEY_BOMB_TARGET),
+            )
 
         for key, label, current in hotkeys:
             row_frame = tk.Frame(frame, bg=Theme.BG)
@@ -1267,8 +1269,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             frame,
             text=(
                 "* 避免与游戏快捷键冲突\n"
-                "* 不允许多个功能绑定同一个按键\n"
-                "* HUD 仅能在“实验性”页中启用/关闭，默认关闭且不提供全局热键"
+                "* 不允许多个功能绑定同一个按键"
             ),
             bg=Theme.BG,
             fg=Theme.TEXT_MUTED,
@@ -1276,185 +1277,10 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             justify="left",
         ).pack(anchor="w", pady=(15, 0))
 
-    def _build_experimental_tab(self):
-        """构建实验性功能页（HUD 等尚未稳定能力）。"""
-        frame = tk.Frame(self.content_frame, bg=Theme.BG)
-        self.tab_frames["实验性"] = frame
-
-        row = 0
-        warn_bg = Theme.GRAYPILL
-        warn_frame = tk.Frame(
-            frame,
-            bg=warn_bg,
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=Theme.SEPARATOR,
-        )
-        warn_frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-        tk.Label(
-            warn_frame,
-            text="实验性功能可能出现偏差、性能抖动或显示异常，建议仅在测试场景启用。",
-            bg=warn_bg,
-            fg=Theme.YELLOW,
-            justify="left",
-            anchor="w",
-            padx=8,
-            pady=6,
-            wraplength=460,
-        ).pack(fill="x")
-        row += 1
-
-        tk.Label(frame, text="HUD叠加层:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3
-        )
-        self.hud_enabled_var = tk.BooleanVar(value=HUDConfig.enabled)
-        tk.Checkbutton(
-            frame,
-            text="启用实验性HUD",
-            variable=self.hud_enabled_var,
-            bg=Theme.BG,
-            fg=Theme.TEXT,
-            selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG,
-            activeforeground=Theme.TEXT,
-            highlightthickness=0,
-        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
-        row += 1
-
-        tk.Label(frame, text="HUD透明度:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3
-        )
-        self.hud_alpha_var = tk.IntVar(value=int(HUDConfig.alpha))
-        tk.Scale(
-            frame,
-            from_=30,
-            to=255,
-            orient="horizontal",
-            length=200,
-            variable=self.hud_alpha_var,
-            bg=Theme.BG,
-            fg=Theme.TEXT,
-            highlightthickness=0,
-            troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE,
-        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
-        row += 1
-
-        tk.Label(frame, text="HUD缩放:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3
-        )
-        self.hud_scale_var = tk.DoubleVar(value=float(HUDConfig.scale))
-        tk.Scale(
-            frame,
-            from_=0.5,
-            to=2.0,
-            resolution=0.05,
-            orient="horizontal",
-            length=200,
-            variable=self.hud_scale_var,
-            bg=Theme.BG,
-            fg=Theme.TEXT,
-            highlightthickness=0,
-            troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE,
-        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
-        row += 1
-
-        tk.Label(frame, text="HUD平滑:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3
-        )
-        self.hud_smoothing_var = tk.DoubleVar(value=float(HUDConfig.smoothing))
-        tk.Scale(
-            frame,
-            from_=0.0,
-            to=1.0,
-            resolution=0.05,
-            orient="horizontal",
-            length=200,
-            variable=self.hud_smoothing_var,
-            bg=Theme.BG,
-            fg=Theme.TEXT,
-            highlightthickness=0,
-            troughcolor=Theme.BORDER,
-            activebackground=Theme.BLUE,
-        ).grid(row=row, column=1, padx=10, pady=3, sticky="w")
-        row += 1
-
-        tk.Label(frame, text="HUD显示器策略:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3
-        )
-        self.hud_follow_main_monitor_var = tk.BooleanVar(
-            value=bool(HUDConfig.follow_main_window_monitor)
-        )
-        tk.Checkbutton(
-            frame,
-            text="跟随主窗口显示器（关闭=跟随鼠标）",
-            variable=self.hud_follow_main_monitor_var,
-            bg=Theme.BG,
-            fg=Theme.TEXT,
-            selectcolor=Theme.GRAYPILL,
-            activebackground=Theme.BG,
-            activeforeground=Theme.TEXT,
-            highlightthickness=0,
-        ).grid(row=row, column=1, sticky="w", padx=10, pady=3)
-        row += 1
-
-        tk.Label(frame, text="HUD配色:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=3
-        )
-        self.hud_color_style_var = tk.StringVar(
-            value=str(getattr(HUDConfig, "color_style", "auto"))
-        )
-        self._hud_color_style_labels = {
-            "auto": "自动(可靠绿/降级琥珀)",
-            "green": "绿色",
-            "amber": "琥珀",
-            "cyan": "青色",
-            "white": "白色",
-        }
-        color_btn_text = tk.StringVar(
-            value=self._hud_color_style_labels.get(
-                self.hud_color_style_var.get(), "自动(可靠绿/降级琥珀)"
-            )
-        )
-        self._hud_color_btn_text = color_btn_text
-        menu_btn = tk.Menubutton(
-            frame,
-            textvariable=self._hud_color_btn_text,
-            bg=Theme.GRAYPILL,
-            fg=Theme.TEXT,
-            bd=0,
-            padx=10,
-            pady=2,
-            highlightthickness=1,
-            highlightbackground=Theme.BORDER,
-            relief="flat",
-        )
-        menu_btn.grid(row=row, column=1, sticky="w", padx=10, pady=3)
-        menu = tk.Menu(menu_btn, tearoff=0, bg=Theme.GRAYPILL, fg=Theme.TEXT)
-        for style, label in self._hud_color_style_labels.items():
-            menu.add_command(
-                label=label,
-                command=lambda s=style, label_text=label: (
-                    self.hud_color_style_var.set(s),
-                    self._hud_color_btn_text.set(label_text),
-                ),
-            )
-        menu_btn["menu"] = menu
-        row += 1
-
-        tk.Label(
-            frame,
-            text="* 建议先在无战斗风险场景测试，再决定是否常驻启用",
-            bg=Theme.BG,
-            fg=Theme.TEXT_MUTED,
-            font=("Segoe UI", 8),
-        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
-
     def _build_ccrp_tab(self):
         """构建投弹预测设置页"""
         frame = tk.Frame(self.content_frame, bg=Theme.BG)
-        self.tab_frames["投弹"] = frame
+        self.tab_frames["CCRP"] = frame
 
         self.selected_bomb_id = BombConfig.selected_bomb
         self.ccrp_selected_bomb_var = tk.StringVar()
@@ -1482,7 +1308,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
 
         tk.Label(
             frame,
-            text="这里只设置自由落体/高阻 CCRP 的默认炸弹；作战武器请点击主卡片选择。",
+            text="这里只设置高精度自由落体模型的默认炸弹；作战武器请点击主卡片选择。",
             bg=Theme.BG,
             fg=Theme.TEXT_MUTED,
             font=("Segoe UI", 8),
@@ -1499,76 +1325,15 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
                 wraplength=640,
             ).pack(fill="x", pady=(0, 10))
 
-        tk.Label(frame, text="CCRP校准参数（全局生效）:", bg=Theme.BG, fg=Theme.TEXT).pack(
-            anchor="w", pady=(0, 10)
-        )
-
-        defaults = BallisticPhysicsParams.get_default_tuning()
-
-        grid = tk.Frame(frame, bg=Theme.BG)
-        grid.pack(anchor="w")
-
-        self.ccrp_range_mult_var = tk.DoubleVar(value=BallisticPhysicsParams.RANGE_CORRECTION_MULT)
-        self.ccrp_time_mult_var = tk.DoubleVar(value=BallisticPhysicsParams.TIME_CORRECTION_MULT)
-
-        row = 0
-
-        tk.Label(grid, text="距离修正倍率:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5
-        )
-        tk.Spinbox(
-            grid,
-            from_=0.6,
-            to=1.6,
-            increment=0.01,
-            width=8,
-            textvariable=self.ccrp_range_mult_var,
-            bg=Theme.GRAYPILL,
-            fg=Theme.TEXT,
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=Theme.BORDER,
-        ).grid(row=row, column=1, padx=10, pady=5, sticky="w")
-        tk.Label(
-            grid,
-            text=f"默认 {defaults['range_correction_mult']:.2f}",
-            bg=Theme.BG,
-            fg=Theme.TEXT_DIM,
-            font=("Segoe UI", 8),
-        ).grid(row=row, column=2, sticky="w")
-        row += 1
-
-        tk.Label(grid, text="时间修正倍率:", bg=Theme.BG, fg=Theme.TEXT).grid(
-            row=row, column=0, sticky="w", pady=5
-        )
-        tk.Spinbox(
-            grid,
-            from_=0.6,
-            to=1.6,
-            increment=0.01,
-            width=8,
-            textvariable=self.ccrp_time_mult_var,
-            bg=Theme.GRAYPILL,
-            fg=Theme.TEXT,
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=Theme.BORDER,
-        ).grid(row=row, column=1, padx=10, pady=5, sticky="w")
-        tk.Label(
-            grid,
-            text=f"默认 {defaults['time_correction_mult']:.2f}",
-            bg=Theme.BG,
-            fg=Theme.TEXT_DIM,
-            font=("Segoe UI", 8),
-        ).grid(row=row, column=2, sticky="w")
-
         tk.Label(
             frame,
-            text="说明：倍率 > 1 代表提前投弹（预测更远/更久），< 1 代表延后投弹。",
+            text=("预测使用高精度打击模型与内置地形数据；旧距离/时间经验倍率已移除。"),
             bg=Theme.BG,
             fg=Theme.TEXT_MUTED,
             font=("Segoe UI", 8),
-        ).pack(anchor="w", pady=(10, 0))
+            wraplength=640,
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
 
     def _refresh_ccrp_selected_bomb_text(self):
         bomb_id = getattr(self, "selected_bomb_id", BombConfig.selected_bomb)
@@ -1684,14 +1449,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             self.scale_var.set(UIConfig.DEFAULT_UI_SCALE_MULT)
             self.text_scale_var.set(1.0)
             self.theme_var.set("fluent_dark")
-            self.hud_enabled_var.set(False)
-            self.hud_alpha_var.set(255)
-            self.hud_scale_var.set(1.0)
-            self.hud_smoothing_var.set(0.35)
-            self.hud_follow_main_monitor_var.set(True)
-            self.hud_color_style_var.set("auto")
-            if hasattr(self, "_hud_color_btn_text"):
-                self._hud_color_btn_text.set("自动(可靠绿/降级琥珀)")
 
             # 重置面板设置
             for key in self.panel_vars:
@@ -1699,6 +1456,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
 
             # 重置快捷键
             defaults = {
+                "bomb_target": "F6",
                 "reset": "F7",
                 "lock": "F8",
                 "corner": "F9",
@@ -1706,7 +1464,8 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
                 "zones": "F11",
             }
             for key, val in defaults.items():
-                self.hotkey_vars[key].set(val)
+                if key in self.hotkey_vars:
+                    self.hotkey_vars[key].set(val)
 
             # 重置其他设置
             self.hotkeys_enabled_var.set(True)
@@ -1719,11 +1478,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             self.overspeed_override_map = {}
             if hasattr(self, "overspeed_override_summary_var"):
                 self._refresh_overspeed_override_summary()
-
-            if ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var"):
-                defaults = BallisticPhysicsParams.get_default_tuning()
-                self.ccrp_range_mult_var.set(defaults["range_correction_mult"])
-                self.ccrp_time_mult_var.set(defaults["time_correction_mult"])
 
             if hasattr(self, "sound_enabled_var"):
                 self.sound_enabled_var.set(False)
@@ -1743,9 +1497,13 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
         if runtime_services is None:
             return
 
-        runtime_services.stop_global_hotkeys()
+        stop_hotkeys = getattr(runtime_services, "stop_global_hotkeys", None)
+        init_hotkeys = getattr(runtime_services, "init_global_hotkeys", None)
+        if not (callable(stop_hotkeys) and callable(init_hotkeys)):
+            return
+        stop_hotkeys()
         if HotkeyConfig.GLOBAL_HOTKEYS:
-            runtime_services.init_global_hotkeys()
+            init_hotkeys()
 
     def _save(self):
         """保存所有设置"""
@@ -1766,12 +1524,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
                 scale_var=self.scale_var,
                 text_scale_var=self.text_scale_var,
                 theme_var=self.theme_var,
-                hud_enabled_var=self.hud_enabled_var,
-                hud_alpha_var=self.hud_alpha_var,
-                hud_scale_var=self.hud_scale_var,
-                hud_smoothing_var=self.hud_smoothing_var,
-                hud_follow_main_monitor_var=self.hud_follow_main_monitor_var,
-                hud_color_style_var=self.hud_color_style_var,
                 hotkeys_enabled_var=self.hotkeys_enabled_var,
                 hotkey_bindings=hotkey_bindings,
                 panel_vars=self.panel_vars,
@@ -1782,9 +1534,7 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
                 overspeed_vars=getattr(self, "overspeed_vars", {}),
                 overspeed_override_map=getattr(self, "overspeed_override_map", None),
                 existing_config=config,
-                enable_ccrp=bool(ENABLE_CCRP and hasattr(self, "ccrp_range_mult_var")),
-                ccrp_range_mult_var=getattr(self, "ccrp_range_mult_var", None),
-                ccrp_time_mult_var=getattr(self, "ccrp_time_mult_var", None),
+                enable_ccrp=bool(ENABLE_CCRP),
                 selected_bomb_id=getattr(self, "selected_bomb_id", None),
             )
         except ValueError as exc:
@@ -1828,8 +1578,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             new_nav_scale=payload.nav_scale,
             new_ui_scale=payload.ui_scale,
             new_text_scale=payload.text_scale,
-            new_hud_enabled=payload.hud_enabled,
-            pending_hud_config=payload.hud_config,
             panel_config=payload.panel_config,
             new_hotkeys_enabled=payload.hotkeys_enabled,
             hotkey_bindings=hotkey_bindings,
@@ -1840,7 +1588,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
             normalized_sound_overrides=normalized_sound_overrides,
             normalized_overspeed_thresholds=payload.overspeed_thresholds,
             normalized_overspeed_overrides=payload.overspeed_overrides,
-            pending_ccrp_tuning=payload.ccrp_tuning,
             pending_selected_bomb=payload.selected_bomb,
         )
 
@@ -1891,8 +1638,6 @@ class SettingsDialog(tk.Toplevel, _ScalableDialogMixin, SettingsRuntimeMixin):
                 nav_width_changed=nav_width_changed,
                 nav_scale_changed=nav_scale_changed,
             )
-
-        self._refresh_runtime_hud_after_settings(previous)
 
         messagebox.showinfo("设置", "设置已保存", parent=self)
 
@@ -3234,7 +2979,7 @@ class AboutDialog(tk.Toplevel, _ScalableDialogMixin):
         description = (
             "本软件用于战雷全真模式辅助计时，聚焦复活周期管理与基础导航信息。\n\n"
             "核心特性：\n"
-            "• 仅使用官方 8111 接口，遵循合规边界\n"
+            "• 使用 8111 遥测与版本化静态数据\n"
             "• 自动检测出生/死亡/着陆状态\n"
             "• 战区导航、燃油管理、检查清单等辅助能力\n"
             "• 开源维护，可审查与持续迭代"

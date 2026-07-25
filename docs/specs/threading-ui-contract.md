@@ -14,7 +14,7 @@ runtime app.
 
 - This spec does not try to statically prove every Tk call is on the main thread.
 - This spec does not govern PyInstaller internals or OS message-loop internals.
-- This spec does not replace manual smoke for HUD, tray, hotkeys, DPI, monitor,
+- This spec does not replace manual smoke for tray, hotkeys, DPI, monitor,
   or window lifecycle changes.
 
 ## Normative Clauses
@@ -91,4 +91,4 @@ runtime app.
   `THREAD-08`, `HOTKEY-02`, and `HOTKEY-03` with registration lifecycle tests
   plus a real Windows message-window dispatch test.
 - [manual] Runtime review and Windows smoke cover the whole-app Tk ownership
-  invariant in `THREAD-01` and real HUD/tray/hotkey lifecycle behavior.
+  invariant in `THREAD-01` and real tray/hotkey/window lifecycle behavior.

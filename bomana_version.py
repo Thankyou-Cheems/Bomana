@@ -9,6 +9,10 @@ from typing import Final
 
 MIN_SUPPORTED_APP_VERSION: Final = "8.0.0"
 MIN_SUPPORTED_LAUNCHER_VERSION: Final = "3.0.0"
+# Current packaged App release floor. This copy travels inside every App ZIP,
+# so an older Launcher cannot bypass a newer release requirement by importing
+# or copying the package outside the signed online-update flow.
+APP_REQUIRED_LAUNCHER_VERSION: Final = "3.3.0"
 
 _STRICT_VERSION_RE = re.compile(
     r"^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$",
@@ -78,6 +82,7 @@ def require_exact_version(
 def validate_app_launcher_identity(
     launcher_version: object | None = None,
     *,
+    required_version: object = APP_REQUIRED_LAUNCHER_VERSION,
     source_development: object | None = None,
     frozen: bool | None = None,
 ) -> str | None:
@@ -101,6 +106,6 @@ def validate_app_launcher_identity(
 
     return require_minimum_version(
         launcher_version,
-        MIN_SUPPORTED_LAUNCHER_VERSION,
+        required_version,
         identity_name="启动器版本",
     )

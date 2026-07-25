@@ -1,5 +1,3 @@
-# enforces: docs/specs/runtime-8111-boundary.md R8111-11, R8111-12
-
 from __future__ import annotations
 
 import copy
@@ -13,7 +11,7 @@ import pytest
 from tools import record_8111_session as recorder
 from tools import session_8111
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = session_8111.SESSION_RECORD_SCHEMA_PATH
 SCHEMA = session_8111.SESSION_RECORD_SCHEMA
 

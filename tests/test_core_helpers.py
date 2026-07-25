@@ -80,21 +80,37 @@ def test_ccrp_scheduler_applies_and_rejects_results() -> None:
             "time_to_release": 0.8,
             "release_status": "ready",
             "target_distance_m": 570.0,
+            "trajectory_model_id": "offline_rigidbody_projection_v2",
+            "trajectory_model_category": "freefall",
+            "trajectory_model_quality": "offline_rigidbody_8111_projection",
+            "solution_time": 1234.5,
         },
     )
 
     assert state.bombing_calc_valid is True
     assert state.cached_bomb_flight_time == 3.2
     assert state.cached_release_status == "ready"
+    assert state.cached_bombing_model_id == "offline_rigidbody_projection_v2"
+    assert state.cached_bombing_model_category == "freefall"
+    assert (
+        state.cached_bombing_model_quality
+        == "offline_rigidbody_8111_projection"
+    )
+    assert state.cached_bombing_solution_time == 1234.5
 
     state.cached_bombing_unavailable_reason = ""
+    state.cached_target_altitude_m = 123.0
+    state.cached_target_altitude_source = "terrain"
     ccrp_scheduler.apply_bombing_calculation(state, None)
 
     assert state.bombing_calc_valid is False
     assert state.cached_bombing_unavailable_reason == "calc_failed"
-    assert (
-        ccrp_scheduler.estimate_release_mach(TelemetryData(mach=None, tas_kmh=1225.0), 0.0) == 1.0
-    )
+    assert state.cached_bombing_model_id == ""
+    assert state.cached_bombing_model_category == ""
+    assert state.cached_bombing_model_quality == ""
+    assert state.cached_bombing_solution_time == 0.0
+    assert state.cached_target_altitude_m == 123.0
+    assert state.cached_target_altitude_source == "terrain"
 
 
 def test_diagnostics_helpers_count_and_throttle_endpoint_events() -> None:

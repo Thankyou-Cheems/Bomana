@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from bomana.config.settings import (
-    HUDConfig,
-    UIConfig,
-)
+from bomana.config.settings import UIConfig
 from bomana.ui import settings_form
 
 
@@ -30,12 +27,6 @@ def make_payload_kwargs(**overrides):
         "scale_var": FakeVar(UIConfig.DEFAULT_UI_SCALE_MULT),
         "text_scale_var": FakeVar(1.0),
         "theme_var": FakeVar("fluent_dark"),
-        "hud_enabled_var": FakeVar(False),
-        "hud_alpha_var": FakeVar(500),
-        "hud_scale_var": FakeVar(9.0),
-        "hud_smoothing_var": FakeVar(-1.0),
-        "hud_follow_main_monitor_var": FakeVar(True),
-        "hud_color_style_var": FakeVar("invalid"),
         "hotkeys_enabled_var": FakeVar(True),
         "hotkey_bindings": {"reset": "F7"},
         "panel_vars": {"show_zones": FakeVar(False)},
@@ -62,18 +53,13 @@ def test_collect_hotkey_bindings_rejects_duplicates() -> None:
         )
 
 
-def test_build_settings_save_payload_clamps_hud_and_merges_panels() -> None:
+def test_build_settings_save_payload_clamps_navigation_scale_and_merges_panels() -> None:
     payload = settings_form.build_settings_save_payload(
         **make_payload_kwargs(nav_scale_var=FakeVar(9.0))
     )
 
     assert payload.panel_config == {"show_bombing": False, "show_zones": False}
-    assert payload.hud_config["alpha"] == 255
-    assert payload.hud_config["scale"] == 2.0
-    assert payload.hud_config["smoothing"] == 0.0
-    assert payload.hud_config["color_style"] == "auto"
     assert payload.nav_scale == 2.0
-    assert payload.hud_config["horizontal_fov_deg"] == float(HUDConfig.horizontal_fov_deg)
 
 
 def test_build_settings_save_payload_validates_overspeed_before_config_mutation() -> None:
@@ -83,27 +69,18 @@ def test_build_settings_save_payload_validates_overspeed_before_config_mutation(
         )
 
 
-def test_build_settings_save_payload_validates_ccrp_tuning() -> None:
-    with pytest.raises(ValueError, match="CCRP 距离修正倍率 必须输入有效数字"):
-        settings_form.build_settings_save_payload(
-            **make_payload_kwargs(
-                enable_ccrp=True,
-                ccrp_range_mult_var=InvalidNumberVar(),
-                ccrp_time_mult_var=FakeVar(1.0),
-            )
-        )
-
-
 def test_apply_settings_payload_to_config_writes_expected_sections() -> None:
     payload = settings_form.build_settings_save_payload(
         **make_payload_kwargs(
             enable_ccrp=True,
-            ccrp_range_mult_var=FakeVar(1.1),
-            ccrp_time_mult_var=FakeVar(0.9),
             selected_bomb_id="fab_500",
         )
     )
-    config: dict[str, object] = {}
+    config: dict[str, object] = {
+        "ccrp_tuning": {"range_correction_mult": 1.1, "time_correction_mult": 0.9},
+        "hud_enabled": True,
+        "hud": {"alpha": 220},
+    }
 
     settings_form.apply_settings_payload_to_config(
         config,
@@ -114,5 +91,7 @@ def test_apply_settings_payload_to_config_writes_expected_sections() -> None:
     assert config["navigation_bar_width"] == 1.35
     assert config["navigation_bar_scale"] == 1.2
     assert config["sound_settings"] == {"alert": "custom.wav"}
-    assert config["ccrp_tuning"] == {"range_correction_mult": 1.1, "time_correction_mult": 0.9}
+    assert "ccrp_tuning" not in config
+    assert "hud_enabled" not in config
+    assert "hud" not in config
     assert config["selected_bomb"] == "fab_500"

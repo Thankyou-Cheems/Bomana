@@ -8,12 +8,14 @@ import math
 import tkinter as tk
 from typing import TYPE_CHECKING, Any
 
+from bomana.config.feature_profile import ENABLE_CCRP
 from bomana.config.settings import (
     HotkeyConfig,
     PanelConfig,
     UIConfig,
     ZoneConfig,
 )
+from bomana.ui.bombing_bar import BombingBar
 from bomana.ui.navigation_presenter import build_navigation_tape_model
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_clickable_surface
@@ -368,6 +370,16 @@ class NavigationWindow:
             info_label=self.friendly_info,
         )
 
+        self.bombing_bar = None
+        if ENABLE_CCRP:
+            self.bombing_bar = BombingBar(
+                self.content_frame,
+                self.app,
+                scale=self.scale,
+                standalone=True,
+                embedded=True,
+            )
+
     def _init_bindings(self):
         """初始化事件绑定"""
         # 全窗口拖动
@@ -388,7 +400,7 @@ class NavigationWindow:
 
     def _on_drag_start(self, event):
         """开始拖动（仅在主窗口解锁时允许）"""
-        if self.app._locked:
+        if self.app._locked or bool(getattr(event.widget, "_bomana_no_drag", False)):
             return
         self._drag_data["x"] = event.x_root
         self._drag_data["y"] = event.y_root
@@ -543,6 +555,27 @@ class NavigationWindow:
         self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
         self.friendly_info.config(text="", fg=Theme.TEXT_DIM)
 
+    def set_bombing_visible(self, visible: bool) -> None:
+        """Mount or remove the shared bombing cue directly below standalone navigation."""
+        bar = self.bombing_bar
+        if bar is None:
+            return
+        manager = bar.frame.winfo_manager()
+        if visible and not manager:
+            bar.frame.pack(
+                fill="x",
+                padx=max(3, int(4 * self.scale)),
+                pady=(0, max(3, int(4 * self.scale))),
+            )
+        elif not visible and manager:
+            bar.cue.stop()
+            bar.frame.pack_forget()
+
+    def update_bombing_display(self, snap: UISnapshot) -> None:
+        bar = self.bombing_bar
+        if bar is not None and bar.frame.winfo_manager():
+            bar.update_snapshot(snap)
+
     def is_visible(self):
         """返回窗口是否可见"""
         return self._visible
@@ -555,6 +588,8 @@ class NavigationWindow:
     def destroy(self):
         """销毁窗口实例（用于主题/缩放热重载）"""
         self._visible = False
+        if self.bombing_bar is not None:
+            self.bombing_bar.destroy()
         with contextlib.suppress(tk.TclError):
             self.window.destroy()
 

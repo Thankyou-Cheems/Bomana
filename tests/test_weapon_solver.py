@@ -262,7 +262,7 @@ def test_aam_unknown_target_motion_uses_more_conservative_post_burn_floor() -> N
     assert aam.quality == "two_dimensional"
 
 
-def test_guided_normal_reuses_ballistic_integration_conservatively() -> None:
+def test_guided_normal_fallback_is_explicitly_uncalibrated_and_never_green() -> None:
     calls = []
 
     def trajectory(**kwargs):
@@ -296,8 +296,9 @@ def test_guided_normal_reuses_ballistic_integration_conservatively() -> None:
     assert len(calls) == 1
     assert calls[0]["target_alt_m"] == 500.0
     assert result.max_range_m == pytest.approx(3400.0)
-    assert result.quality == "conservative"
-    assert result.status == "in_envelope"
+    assert result.quality == "experimental"
+    assert result.status == "within_experimental_reference"
+    assert result.reason == "guided_ballistic_uncalibrated"
 
     weak_control = dict(
         weapon,
@@ -314,6 +315,49 @@ def test_guided_normal_reuses_ballistic_integration_conservatively() -> None:
         target_distance_m=2000.0,
     )
     assert weak_result.max_range_m < result.max_range_m
+
+
+def test_gbu31_visible_ground_curve_replaces_falsified_ballistic_fallback_near_anchor() -> None:
+    def must_not_run(**_kwargs):
+        raise AssertionError("matched visible curve must bypass the free-fall fallback")
+
+    weapon = {
+        "id": "us_2000lb_gbu31_usaf",
+        "role": "bomb",
+        "propulsion": "unpowered",
+        "control": "guided",
+        "planform": "normal",
+        "min_distance_m": 0.0,
+    }
+    solver = WeaponSolver(trajectory_func=must_not_run)
+
+    within = solver.solve(
+        weapon,
+        launch_altitude_m=3000.0,
+        launch_speed_mps=250.0,
+        target_altitude_m=None,
+        target_distance_m=5000.0,
+        target_kind="zone",
+    )
+    beyond = solver.solve(
+        weapon,
+        launch_altitude_m=3000.0,
+        launch_speed_mps=250.0,
+        target_altitude_m=100.0,
+        target_distance_m=12000.0,
+        target_kind="ground",
+        ground_closing_speed_mps=100.0,
+    )
+
+    assert within.status == "within_experimental_reference"
+    assert within.reason == "player_visible_trajectory_reference"
+    assert within.quality == "experimental"
+    assert within.max_range_m == 10000.0
+    assert within.time_to_target_s == pytest.approx(22.2229, abs=0.001)
+    assert beyond.status == "beyond_experimental_reference"
+    assert beyond.reason == "player_visible_trajectory_reference"
+    assert beyond.max_range_m == 10000.0
+    assert beyond.time_to_window_s == pytest.approx(20.0)
 
 
 def test_glide_does_not_reuse_the_iron_bomb_trajectory_as_an_envelope() -> None:

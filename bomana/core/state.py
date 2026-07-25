@@ -39,6 +39,23 @@ class TelemetryData:
     throttle_pct: float = 0  # 油门百分比 (%)
     mach: float | None = None  # 马赫数
     wing_sweep: float | None = None  # 后掠翼位置 (0~1, 可为空)
+    aoa_deg: float | None = None  # 迎角（/state AoA）
+    aos_deg: float | None = None  # 侧滑角（/state AoS）
+    normal_load_factor: float | None = None  # 法向过载（/state Ny）
+    angular_velocity_x: float | None = None  # /state Wx, deg/s
+    aileron_pct: float | None = None  # /state aileron, %
+    elevator_pct: float | None = None  # /state elevator, %
+    rudder_pct: float | None = None  # /state rudder, %
+    flaps_pct: float | None = None  # /state flaps, %
+    airbrake_pct: float | None = None  # /state airbrake, %
+
+    # 相邻 /state 中点样本的因果一阶差分。仅用于机动可信度门控。
+    tas_acceleration_ms2: float | None = None
+    vertical_acceleration_ms2: float | None = None
+    aoa_rate_deg_s: float | None = None
+    aos_rate_deg_s: float | None = None
+    mach_rate_per_s: float | None = None
+    dynamics_sample_span_s: float = 0.0
 
     # v5.9.6 新增：起落架状态
     gear_down: bool = False  # 起落架是否放下 (True=放下, False=收起)
@@ -46,7 +63,7 @@ class TelemetryData:
     # v6.6.0 新增：起落架百分比（用于进度指示器）
     gear_pct: float = 0.0  # 起落架位置百分比 (0=收起, 100=放下)
 
-    # v6.8.0 新增：HUD姿态字段（来自 aviahorizon_* / bank）
+    # 公开姿态读数（来自 aviahorizon_* / bank）
     attitude_pitch_deg: float = 0.0
     attitude_roll_deg: float = 0.0
     attitude_bank_deg: float = 0.0
@@ -56,8 +73,10 @@ class TelemetryData:
     attitude_available: bool = False
     ind_error_kind: str = ""
     ind_elapsed_ms: float = 0.0
+    ind_sample_time: float = 0.0
     state_error_kind: str = ""
     state_elapsed_ms: float = 0.0
+    state_sample_time: float = 0.0
 
     @property
     def entity_like(self) -> bool:
@@ -140,6 +159,8 @@ class BombingTarget:
     name: str
     distance: float  # 归一化距离
     relative: float = 0.0
+    x: float | None = None  # 8111 归一化地图 X
+    y: float | None = None  # 8111 归一化地图 Y
 
 
 @dataclass(frozen=True)
@@ -204,6 +225,7 @@ class MapObjData:
     obj_count: int = 0  # 对象总数
     error_kind: str = ""
     elapsed_ms: float = 0.0
+    sample_time: float = 0.0
     zones: list[Zone] = field(default_factory=list)  # 战区列表
     airfields: list[Airfield] = field(default_factory=list)  # 机场列表
     interest_points: list[InterestPoint] = field(default_factory=list)  # 兴趣点列表
@@ -474,10 +496,29 @@ class ZoneNavigationState:
     player_heading: float = 0.0  # 玩家航向
     should_play_destroyed_sound: bool = False  # 是否应该播放摧毁音效（v5.5新增）
 
-    # 地速计算相关（v5.2新增）
-    last_pos: tuple[float, float] | None = None  # 上次位置
-    last_pos_ts: float = 0.0  # 上次位置时间戳
-    ground_speed: float = 0.0  # 地速（归一化单位/秒）
+    # 8111 因果航迹回归。生产投弹链路只消费这些地图样本，不访问游戏进程。
+    release_track_samples: deque[tuple[float, float, float]] = field(
+        default_factory=lambda: deque(maxlen=24)
+    )
+    release_track_valid: bool = False
+    release_world_x_m: float = 0.0
+    release_world_z_m: float = 0.0
+    release_velocity_x_ms: float = 0.0
+    release_velocity_z_ms: float = 0.0
+    release_ground_speed_ms: float = 0.0
+    release_track_heading_deg: float = 0.0
+    release_track_residual_m: float = 0.0
+    release_track_sample_span_s: float = 0.0
+    release_track_sample_time: float = 0.0
+    release_track_solution_time: float = 0.0
+    release_track_sample_age_s: float = 0.0
+    # /map_obj.json 的机体 dx/dy 只用于检测高动态；不会替代因果地面航迹方向。
+    release_body_heading_samples: deque[tuple[float, float]] = field(
+        default_factory=lambda: deque(maxlen=12)
+    )
+    release_body_heading_rate_deg_s: float = 0.0
+    release_body_heading_rate_available: bool = False
+    ground_speed: float = 0.0  # 兼容 UI 的归一化地速（实际 m/s / 100000）
 
     # v5.7: 目标锁定相关（智能目标切换）
     locked_target_id: str | None = None  # 当前锁定的目标ID（粘性）
@@ -487,16 +528,13 @@ class ZoneNavigationState:
 
 @dataclass
 class AttitudeConfidenceState:
-    """HUD姿态可信度状态。"""
+    """公开姿态读数的可信度状态。"""
 
     pitch_deg: float = 0.0
     roll_deg: float = 0.0
     bank_deg: float = 0.0
     available: bool = False
     reliable: bool = False
-    fallback: bool = True
-    fallback_reason: str = "missing"
-    missing_since: float | None = None
     zero_since: float | None = None
     jitter_score: float = 0.0
     last_pitch_deg: float | None = None
@@ -521,7 +559,28 @@ class GameState:
     cached_target_distance_m: float = 0.0
     cached_bombing_target_kind: str = ""
     cached_bombing_target_name: str = ""
+    cached_bombing_model_id: str = ""
+    cached_bombing_model_category: str = ""
+    cached_bombing_model_quality: str = ""
+    cached_target_altitude_m: float = 0.0
+    cached_target_altitude_source: str = ""
+    cached_atmosphere_model_id: str = ""
+    cached_atmosphere_altitude_datum_m: float = 0.0
+    cached_altitude_datum_source: str = ""
+    cached_air_density_sea_level: float = 0.0
+    cached_air_density_source: str = ""
+    cached_bombing_state_age_s: float = 0.0
+    cached_bombing_map_age_s: float = 0.0
+    cached_bombing_endpoint_skew_s: float = 0.0
+    cached_bombing_altitude_projection_m: float = 0.0
+    cached_bombing_tas_projection_ms: float = 0.0
+    cached_bombing_vertical_acceleration_ms2: float = 0.0
+    cached_bombing_release_state_source: str = ""
+    cached_bombing_maneuver_score: float = 0.0
+    cached_bombing_precision_gate_available: bool = False
+    atmosphere_density_samples: deque[float] = field(default_factory=lambda: deque(maxlen=240))
     cached_bombing_unavailable_reason: str = ""
+    cached_bombing_solution_time: float = 0.0
     bombing_calc_valid: bool = False
     last_bombing_calc_time: float = 0.0
     weapon_id: str = ""
@@ -574,7 +633,7 @@ class GameState:
     zone_nav: ZoneNavigationState = field(default_factory=ZoneNavigationState)
     traceback: TracebackState = field(default_factory=TracebackState)
 
-    # v6.8.0 新增：姿态可信度（HUD 2.5D/2D 降级决策）
+    # 姿态可信度（供 Web Cockpit 等仪表展示使用）
     attitude: AttitudeConfidenceState = field(default_factory=AttitudeConfidenceState)
 
     # v5.8 新增：燃油状态
@@ -750,6 +809,7 @@ class UISnapshot:
     has_airfield_target: bool = False
     has_target: bool = False
     has_bombing_target: bool = False
+    bombing_target_mode: str = "zone"  # 用户显式选择的 "zone" / "poi"
     bombing_target_kind: str = ""  # "zone" / "poi"
     bombing_target_name: str = ""
     is_deviating: bool = False
@@ -795,17 +855,35 @@ class UISnapshot:
     time_to_release: float = 0.0  # 到投弹点时间 (秒)
     release_status: str = "invalid"  # ready/approaching/too_far/passed/invalid
     target_zone_distance_m: float = 0.0  # 目标战区距离 (米)
-    bombing_unavailable_reason: str = ""  # guided_glide/release_mach_limit/unstable/calc_failed
+    bomb_trajectory_model_id: str = ""
+    bomb_trajectory_model_category: str = ""
+    bomb_trajectory_model_quality: str = ""
+    target_altitude_m: float = 0.0
+    target_altitude_source: str = ""
+    atmosphere_model_id: str = ""
+    atmosphere_altitude_datum_m: float = 0.0
+    altitude_datum_source: str = ""
+    air_density_sea_level: float = 0.0
+    air_density_source: str = ""
+    bombing_state_age_s: float = 0.0
+    bombing_map_age_s: float = 0.0
+    bombing_endpoint_skew_s: float = 0.0
+    bombing_altitude_projection_m: float = 0.0
+    bombing_tas_projection_ms: float = 0.0
+    bombing_vertical_acceleration_ms2: float = 0.0
+    bombing_release_state_source: str = ""
+    bombing_maneuver_score: float = 0.0
+    bombing_precision_gate_available: bool = False
+    bombing_unavailable_reason: str = ""  # terrain/release-state/model/calc failures
+    bombing_solution_age_s: float = 0.0  # 有效解算到当前 UI 快照的因果年龄
     ground_speed_kmh: float = 0.0  # 地速 (km/h)
     aircraft_type_name: str = ""  # 当前机型标识（来自 /indicators.type）
 
-    # v6.8.0 新增：HUD姿态链路输出
+    # 公开姿态链路输出
     attitude_pitch_deg: float = 0.0
     attitude_roll_deg: float = 0.0
     attitude_bank_deg: float = 0.0
     attitude_reliable: bool = False
-    hud_attitude_fallback: bool = True
-    hud_attitude_fallback_reason: str = "missing"
 
     # v6.9.0 新增：超速提醒链路
     overspeed_level: str = "unknown"  # unknown/safe/caution/warning/critical

@@ -1,65 +1,56 @@
-import json
 import math
 import re
 from pathlib import Path
 
-CCRP_DATA_PATH = Path("bomana/data/ccrp_bomb_params.json")
+from bomana.core.offline_rigidbody_catalog import load_catalog
+
+CATALOG_PATH = Path("bomana/data/offline_rigidbody_catalog.bin")
 SMALL_CALIBER_MM_RE = re.compile(r"(?<!\d)(\d{2,3})\s*_?mm(?![a-z])", re.IGNORECASE)
 
 
-def _small_caliber_mm_markers(bomb_id: str, params: dict) -> list[tuple[str, int]]:
-    fields = {
-        "id": bomb_id,
-        "source_file": str(params.get("source_file", "")),
-        "mesh": str(params.get("mesh", "")),
-    }
-
-    markers: list[tuple[str, int]] = []
-    for field, text in fields.items():
-        for match in SMALL_CALIBER_MM_RE.finditer(text):
-            mm = int(match.group(1))
-            if mm < 200:
-                markers.append((field, mm))
-    return markers
-
-
-def test_small_mm_ccrp_calibers_are_stored_as_meters() -> None:
-    payload = json.loads(CCRP_DATA_PATH.read_text(encoding="utf-8"))
-
+def test_small_mm_catalog_diameters_are_stored_as_meters() -> None:
+    records = load_catalog(CATALOG_PATH)["records"]
     failures: list[str] = []
-    for bomb_id, params in payload["ballistic_params"].items():
-        markers = _small_caliber_mm_markers(bomb_id, params)
+
+    for record_id, record in records.items():
+        labels = (record_id, *record["aliases"])
+        markers = {
+            int(match.group(1))
+            for label in labels
+            for match in SMALL_CALIBER_MM_RE.finditer(label)
+            if int(match.group(1)) < 200
+        }
         if not markers:
             continue
 
-        caliber = float(params["caliber"])
-        expected_calibers = {mm / 1000 for _, mm in markers}
+        diameter = float(record["diameter_m"])
         if any(
-            math.isclose(caliber, expected_caliber, rel_tol=0.0, abs_tol=1e-9)
-            for expected_caliber in expected_calibers
+            math.isclose(diameter, millimeters / 1000, rel_tol=0.0, abs_tol=1e-9)
+            for millimeters in markers
         ):
             continue
-
-        marker_text = ", ".join(f"{field}={mm}mm" for field, mm in markers)
-        expected_text = ", ".join(str(value) for value in sorted(expected_calibers))
         failures.append(
-            f"{bomb_id}: caliber={caliber}, expected one of {expected_text} from {marker_text}"
+            f"{record_id}: diameter={diameter}, markers={sorted(markers)}"
         )
 
     assert not failures, "\n".join(failures)
 
 
-def test_normalized_ccrp_caliber_retains_raw_datamine_evidence() -> None:
-    payload = json.loads(CCRP_DATA_PATH.read_text(encoding="utf-8"))
-    mortar = payload["ballistic_params"]["bomb_ussr_82mm_o_832"]
+def test_mortar_diameter_is_normalized_without_raw_source_metadata() -> None:
+    record = load_catalog(CATALOG_PATH)["records"]["bomb_ussr_82mm_o_832"]
 
-    assert mortar["caliber"] == 0.082
-    assert mortar["raw_caliber"] == 0.82
-    assert mortar["caliber_source_pointer"] == "/bomb/caliber"
-    assert mortar["caliber_normalization"] == {
-        "field": "caliber_m",
-        "rule": "datamine_mm_identity_decimal_shift",
-        "raw_value": 0.82,
-        "normalized_value": 0.082,
-        "evidence": ["bomb_82mm_mortar", "bomb_ussr_82mm_o_832.blkx"],
+    assert record["diameter_m"] == 0.082
+    assert set(record) == {
+        "mass_kg",
+        "diameter_m",
+        "length_m",
+        "display_drag_reference",
+        "prediction_kind",
+        "lift_area_scale",
+        "stabilizer_lever_m",
+        "axial_coefficient",
+        "normal_coefficient",
+        "normal_aoa_limit",
+        "aoa_drag_coefficient",
+        "aliases",
     }

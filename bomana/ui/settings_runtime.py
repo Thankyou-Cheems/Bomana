@@ -7,10 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from bomana.config.settings import (
-    BallisticPhysicsParams,
     BombConfig,
     HotkeyConfig,
-    HUDConfig,
     OverspeedConfig,
     PanelConfig,
     SnapConfig,
@@ -29,11 +27,6 @@ class SettingsRuntimeMixin:
             "text_scale": float(UIConfig.TEXT_SCALE_MULT),
             "nav_width": float(PanelConfig.navigation_bar_width),
             "nav_scale": float(PanelConfig.navigation_bar_scale),
-            "hud_enabled": bool(HUDConfig.enabled),
-            "hud_alpha": int(HUDConfig.alpha),
-            "hud_scale": float(HUDConfig.scale),
-            "hud_follow_main": bool(HUDConfig.follow_main_window_monitor),
-            "hud_color_style": str(getattr(HUDConfig, "color_style", "auto")),
             "sound_enabled": bool(self.app.sound.is_enabled()),
             "zone_sound_enabled": bool(getattr(self.app, "_zone_sound_enabled", True)),
             "hotkeys_enabled": HotkeyConfig.GLOBAL_HOTKEYS,
@@ -54,8 +47,6 @@ class SettingsRuntimeMixin:
         new_nav_scale: float,
         new_ui_scale: float,
         new_text_scale: float,
-        new_hud_enabled: bool,
-        pending_hud_config: dict[str, object],
         panel_config: dict[str, object],
         new_hotkeys_enabled: bool,
         hotkey_bindings: dict[str, str],
@@ -66,7 +57,6 @@ class SettingsRuntimeMixin:
         normalized_sound_overrides: dict[str, str],
         normalized_overspeed_thresholds: dict[str, float],
         normalized_overspeed_overrides: dict[str, dict[str, float]],
-        pending_ccrp_tuning: dict[str, float] | None,
         pending_selected_bomb: str | None,
     ) -> None:
         UIConfig.WINDOW_ALPHA = new_window_alpha
@@ -74,8 +64,6 @@ class SettingsRuntimeMixin:
         PanelConfig.navigation_bar_scale = new_nav_scale
         UIConfig.UI_SCALE_MULT = new_ui_scale
         UIConfig.TEXT_SCALE_MULT = new_text_scale
-        HUDConfig.enabled = new_hud_enabled
-        HUDConfig.apply_dict(pending_hud_config)
         for key, value in panel_config.items():
             setattr(PanelConfig, key, value)
         HotkeyConfig.GLOBAL_HOTKEYS = new_hotkeys_enabled
@@ -92,37 +80,5 @@ class SettingsRuntimeMixin:
         )
         if hasattr(self.app, "_refresh_overspeed_threshold_ui"):
             self.app._refresh_overspeed_threshold_ui()
-        if pending_ccrp_tuning is not None:
-            BallisticPhysicsParams.apply_user_tuning(pending_ccrp_tuning)
         if pending_selected_bomb:
             BombConfig.selected_bomb = pending_selected_bomb
-
-    def _refresh_runtime_hud_after_settings(self, previous: dict[str, object]) -> None:
-        hud_enabled_changed = bool(previous["hud_enabled"]) != bool(HUDConfig.enabled)
-        hud_alpha_changed = int(previous["hud_alpha"]) != int(HUDConfig.alpha)
-        hud_scale_changed = abs(float(HUDConfig.scale) - float(previous["hud_scale"])) > 1e-6
-        hud_follow_changed = bool(previous["hud_follow_main"]) != bool(
-            HUDConfig.follow_main_window_monitor
-        )
-        hud_color_changed = str(previous["hud_color_style"]) != str(HUDConfig.color_style)
-
-        if HUDConfig.enabled:
-            if hasattr(self.app, "_show_hud_overlay"):
-                self.app._show_hud_overlay()
-            if getattr(self.app, "hud_overlay", None):
-                if hud_follow_changed:
-                    self.app.hud_overlay.refresh_monitor_geometry()
-                if hud_scale_changed and hasattr(self.app.hud_overlay, "refresh_text_scale"):
-                    self.app.hud_overlay.refresh_text_scale()
-                self.app.hud_overlay.update_transparency()
-        else:
-            if getattr(self.app, "hud_overlay", None) and self.app.hud_overlay.is_visible():
-                self.app.hud_overlay.hide()
-            if hasattr(self.app, "_hud_last_target"):
-                self.app._hud_last_target = None
-
-        if hud_enabled_changed or hud_alpha_changed or hud_color_changed:
-            if hasattr(self.app, "_update_hint"):
-                self.app._update_hint()
-            if hasattr(self.app, "_refresh_tray"):
-                self.app._refresh_tray()

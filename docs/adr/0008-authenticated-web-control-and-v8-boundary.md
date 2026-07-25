@@ -55,7 +55,7 @@ exactly with staged App metadata before any valid installation is replaced.
 ## Consequences
 
 - Phones receive explicit buttons and target-state controls instead of emulated
-  F7-F11 input, while desktop hotkeys retain their existing behavior.
+  F6-F11 input, while desktop hotkeys retain their existing behavior.
 - Browser acceptance is asynchronous: HTTP 202 means queued, not completed;
   completion is read from the session's bounded control-state history.
 - LAN control is deliberately more cumbersome than LAN viewing and must be

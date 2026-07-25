@@ -219,7 +219,7 @@ class ConfigManager:
         """配置版本迁移
 
         处理旧版本配置的兼容性问题，自动升级配置结构
-        v6.1.1: 添加编译开关状态记简版/完整版配置冲突
+        v6.1.1: 添加编译开关状态记录，避免精简版/完整版配置冲突
         """
         version = config.get("config_version", 1)
         changed = False
@@ -245,6 +245,15 @@ class ConfigManager:
         if version < 3:
             config["config_version"] = 3
             changed = True
+
+        # v3 -> v4: 桌面全屏 HUD 已移除，清理旧版本遗留配置。
+        if version < 4:
+            config["config_version"] = 4
+            changed = True
+        for retired_key in ("hud_enabled", "hud"):
+            if retired_key in config:
+                config.pop(retired_key, None)
+                changed = True
 
         # 检查编译开关是否变化（精简版 <-> 完整版切换）
         saved_switches_raw = config.get("compile_switches")

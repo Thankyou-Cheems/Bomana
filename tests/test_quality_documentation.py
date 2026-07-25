@@ -17,7 +17,6 @@ TOP_LEVEL_MARKDOWN = {
 MARKDOWN_FILES = (
     ROOT / "README.md",
     ROOT / "README.en.md",
-    ROOT / "AGENTS.md",
     ROOT / "tests" / "README.md",
     *sorted(DOCS.rglob("*.md")),
 )

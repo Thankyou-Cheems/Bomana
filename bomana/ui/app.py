@@ -20,13 +20,11 @@ from bomana.config.feature_profile import (
 )
 from bomana.config.settings import (
     AboutConfig,
-    BallisticPhysicsParams,
     BombConfig,
     ChecklistConfig,
     FileConfig,
     GameConfig,
     HotkeyConfig,
-    HUDConfig,
     OverspeedConfig,
     PanelConfig,
     SnapConfig,
@@ -37,6 +35,7 @@ from bomana.config.settings import (
 from bomana.core.logic import GameLogic
 from bomana.core.state import Phase, UISnapshot
 from bomana.core.weapon_catalog import get_weapon_catalog
+from bomana.ui.bombing_runtime import AppBombingServices
 from bomana.ui.debug_support import AppDebugSupport
 from bomana.ui.dialogs import (
     AboutDialog,
@@ -144,6 +143,7 @@ class App:
         self.icons = IconManager(root)
         self.logic_poller = LogicPoller(self.game, lambda: self._stop)
         self.navigation_services = AppNavigationServices(self)
+        self.bombing_services = AppBombingServices(self)
         self.runtime_services = AppRuntimeServices(self)
 
         # 控制标志
@@ -160,7 +160,7 @@ class App:
             "巡航导航",
             "偏航修正",
             "低油返航",
-            "投弹窗口",
+            "CCRP",
             "地面检查",
             "超速压测",
         ]
@@ -231,14 +231,12 @@ class App:
 
         # v6.2.1: 初始化独立导航窗口（仅在战区功能启用时）
         self.navigation_services.init_window()
-
-        # v6.8.0: 初始化 HUD 叠加层（按配置决定是否显示）
-        if HUDConfig.enabled and not self._show_hud_overlay():
-            HUDConfig.enabled = False
+        self.bombing_services.init_window()
 
         # 恢复状态并启动
         self._restored_state = self.game.restore_timer_state()
         self.logic_poller.start()
+        self.runtime_services.start_terrain_map_tracking()
         if ENABLE_WEB_DASHBOARD:
             self._publish_web_control_state(force_revision=True)
             if self.runtime_services.dashboard_autostart_enabled():
@@ -426,11 +424,6 @@ class App:
         return self._web_control_revision
 
     @property
-    def hud_overlay(self):
-        """Compatibility view for dialog code that inspects the active HUD surface."""
-        return self.runtime_services.hud_overlay
-
-    @property
     def nav_window(self):
         """Compatibility view for dialog code that inspects the standalone nav surface."""
         return self.navigation_services.window
@@ -439,7 +432,7 @@ class App:
         """加载用户配置
 
         加载顺序: 主题必须在UI创建前应用
-        配置项: alpha/scale/theme/panels/hud/hotkey_bindings/snap/window_position
+        配置项: alpha/scale/theme/panels/hotkey_bindings/snap/window_position
         """
         config = ConfigManager.load()
 
@@ -489,6 +482,14 @@ class App:
         PanelConfig.speed_history_mode = panels.get("speed_history_mode", False)
         PanelConfig.show_checklist = panels.get("show_checklist", True)
         PanelConfig.show_bombing = panels.get("show_bombing", True)  # v6.0 新增
+        bombing_mode = str(config.get("bombing_mode", "integrated") or "").strip().lower()
+        PanelConfig.bombing_mode = (
+            bombing_mode if bombing_mode in {"integrated", "standalone"} else "integrated"
+        )
+        PanelConfig.bombing_window_pos = None
+        bombing_pos = config.get("bombing_window_pos")
+        if isinstance(bombing_pos, list) and len(bombing_pos) == 2:
+            PanelConfig.bombing_window_pos = tuple(bombing_pos)
 
         timer_minutes = GameConfig.normalize_cycle_minutes(config.get("timer_cycle_minutes"))
         GameConfig.set_cycle_minutes(
@@ -514,6 +515,9 @@ class App:
 
         # 武器解算沿用 CCRP 编译开关；精简构建不会触发目录懒加载。
         if ENABLE_CCRP:
+            BombConfig.set_target_mode(
+                BombConfig.normalize_target_mode(config.get("bombing_target_mode", "zone"))
+            )
             requested_model = config.get(
                 "weapon_ballistic_model",
                 WeaponBallisticModelConfig.DEFAULT_MODEL,
@@ -535,9 +539,9 @@ class App:
                 selected_weapon = str(selected_weapon).strip()
                 selection_candidates = (
                     selected_weapon,
-                    BombConfig.get_bomb_source_id(selected_weapon),
+                    BombConfig.get_bomb_catalog_id(selected_weapon),
                     str(selected_bomb or "").strip(),
-                    BombConfig.get_bomb_source_id(str(selected_bomb or "")),
+                    BombConfig.get_bomb_catalog_id(str(selected_bomb or "")),
                 )
                 for candidate in dict.fromkeys(selection_candidates):
                     if candidate and weapon_catalog.set_selected(candidate, source="manual"):
@@ -547,17 +551,9 @@ class App:
                 weapon_id = str(weapon.get("id") or weapon_catalog.selected_weapon_id or "")
                 if weapon.get("role") == "bomb" and BombConfig.get_bomb_data(weapon_id):
                     BombConfig.selected_bomb = weapon_id
-            tuning = config.get("ccrp_tuning", {})
-            BallisticPhysicsParams.apply_user_tuning(tuning)
 
         # 根据编译开关初始化面板状态
         PanelConfig.init_from_compile_switches()
-
-        # HUD 设置（缺省字段自动回退，兼容旧配置）
-        hud_enabled = config.get("hud_enabled", HUDConfig.enabled)
-        if isinstance(hud_enabled, (bool, int)):
-            HUDConfig.enabled = bool(hud_enabled)
-        HUDConfig.apply_dict(config.get("hud", {}))
 
         # 快捷键设置
         HotkeyConfig.GLOBAL_HOTKEYS = config.get("global_hotkeys", HotkeyConfig.GLOBAL_HOTKEYS)
@@ -633,6 +629,15 @@ class App:
             config["navigation_window_pos"] = list(PanelConfig.navigation_window_pos)
         config["navigation_bar_width"] = PanelConfig.navigation_bar_width
         config["navigation_bar_scale"] = PanelConfig.navigation_bar_scale
+        if ENABLE_CCRP:
+            config["bombing_mode"] = PanelConfig.bombing_mode
+            config["bombing_target_mode"] = BombConfig.normalize_target_mode(
+                BombConfig.target_mode
+            )
+            if PanelConfig.bombing_window_pos:
+                config["bombing_window_pos"] = list(PanelConfig.bombing_window_pos)
+            else:
+                config.pop("bombing_window_pos", None)
 
         # 武器选择与兼容的 CCRP 炸弹选择同时持久化。
         if ENABLE_CCRP:
@@ -648,11 +653,11 @@ class App:
                 if selected_weapon_id:
                     config["selected_weapon"] = selected_weapon_id
             config["selected_bomb"] = BombConfig.selected_bomb
-            config["ccrp_tuning"] = BallisticPhysicsParams.get_user_tuning()
+            config.pop("ccrp_tuning", None)
 
-        # HUD 设置
-        config["hud_enabled"] = HUDConfig.enabled
-        config["hud"] = HUDConfig.to_dict()
+        # 清理旧版本实验性桌面 HUD 的遗留配置。
+        config.pop("hud_enabled", None)
+        config.pop("hud", None)
 
         # 快捷键设置
         config["global_hotkeys"] = HotkeyConfig.GLOBAL_HOTKEYS
@@ -1191,16 +1196,104 @@ class App:
             warn_on_failure=True,
         )
 
-    def _show_hud_overlay(self) -> bool:
-        """显示 HUD 叠加层。"""
-        return self.runtime_services.show_hud_overlay()
-
     def _toggle_navigation_mode(self):
         """切换导航条模式（集成/独立）
 
         仅在战区功能启用时可用。
         """
         self.navigation_services.toggle_mode()
+
+    def _toggle_bombing_mode(self):
+        """切换 CCRP 的主窗集成/独立显示。"""
+        self.bombing_services.toggle_mode()
+
+    def _set_bomb_target_mode(
+        self,
+        mode: str,
+        *,
+        warn_on_failure: bool = False,
+    ) -> bool:
+        """Persist one explicit target source and invalidate the old target solution."""
+        normalized = str(mode or "").strip().lower()
+        if not ENABLE_CCRP or normalized not in BombConfig.TARGET_MODES:
+            return False
+        previous = BombConfig.normalize_target_mode(BombConfig.target_mode)
+        if previous == normalized:
+            return True
+        setter = getattr(self.game, "set_bombing_target_mode", None)
+        applied = (
+            bool(setter(normalized))
+            if callable(setter)
+            else BombConfig.set_target_mode(normalized)
+        )
+        if not applied:
+            return False
+        if not self._save_config(warn_on_failure=warn_on_failure):
+            if callable(setter):
+                setter(previous)
+            else:
+                BombConfig.set_target_mode(previous)
+            return False
+        self._update_hint()
+        self._update_ui()
+        self._refresh_tray()
+        log_event("bombing_target_mode_toggle", mode=normalized)
+        return True
+
+    def _toggle_bomb_target_mode(self):
+        """专用按钮/热键：只在战区与兴趣点目标来源之间切换。"""
+        current = BombConfig.normalize_target_mode(BombConfig.target_mode)
+        target = "poi" if current == "zone" else "zone"
+        self._set_bomb_target_mode(target, warn_on_failure=True)
+
+    def _cycle_bomb_weapon(self, direction: int) -> bool:
+        """Cycle compatible bomb records without opening the full weapon catalog."""
+        if not ENABLE_CCRP:
+            return False
+        catalog = self._get_weapon_catalog()
+        if catalog is None:
+            return False
+        snap = self.game.snapshot()
+        aircraft = str(getattr(snap, "aircraft_type_name", "") or "").strip()
+        airborne = snap.phase == Phase.ALIVE and not snap.on_ground
+        records = catalog.for_aircraft(aircraft) if aircraft else []
+        records = [
+            record
+            for record in records
+            if record.get("role") == "bomb"
+            and BombConfig.get_bomb_data(str(record.get("id") or ""))
+        ]
+        if not records and not airborne:
+            records = [
+                record
+                for record in catalog.search(role="bomb")
+                if BombConfig.get_bomb_data(str(record.get("id") or ""))
+            ]
+        if not records:
+            return False
+
+        weapon_ids = [str(record["id"]) for record in records]
+        current = str(catalog.selected_weapon_id or "")
+        try:
+            index = weapon_ids.index(current)
+        except ValueError:
+            index = -1 if direction >= 0 else 0
+        step = 1 if direction >= 0 else -1
+        target_id = weapon_ids[(index + step) % len(weapon_ids)]
+        if not persist_weapon_selection(
+            catalog,
+            target_id,
+            WeaponBallisticModelConfig.selected_model,
+        ):
+            messagebox.showwarning(
+                "切换投弹弹药失败",
+                "无法保存新的投弹弹药选择，请检查配置文件是否可写。",
+                parent=self.root,
+            )
+            return False
+        self._update_ui()
+        log_event("bomb_weapon_cycle", weapon_id=target_id, direction=int(direction))
+        return True
 
     def _recalc_size(self, keep_pos: bool = True, force_shrink: bool = False):
         """重新计算窗口尺寸
@@ -1453,7 +1546,7 @@ class App:
         alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
         self.navigation_services.apply_lock_state(locked=self._locked, alpha=alpha)
-        self.runtime_services.apply_hud_lock_state(self._locked)
+        self.bombing_services.apply_lock_state(locked=self._locked, alpha=alpha)
         self._update_hint()
         self._refresh_tray()
         return True
@@ -1518,6 +1611,9 @@ class App:
                 zone_sound = "开" if self._zone_sound_enabled else "关"
                 k_zones = HotkeyConfig.KEY_ZONES
                 parts.append(f"[{k_zones}]战区音:{zone_sound}")
+            if ENABLE_CCRP:
+                target_label = "战区" if BombConfig.target_mode == "zone" else "兴趣点"
+                parts.append(f"[{HotkeyConfig.KEY_BOMB_TARGET}]CCRP:{target_label}")
             base_text = "  ·  ".join(parts)
         else:
             parts = [
@@ -1529,6 +1625,9 @@ class App:
                 zone_sound = "开" if self._zone_sound_enabled else "关"
                 k_zones = HotkeyConfig.KEY_ZONES
                 parts.append(f"[{k_zones}]战区音:{zone_sound}")
+            if ENABLE_CCRP:
+                target_label = "战区" if BombConfig.target_mode == "zone" else "兴趣点"
+                parts.append(f"[{HotkeyConfig.KEY_BOMB_TARGET}]CCRP:{target_label}")
             base_text = "  ·  ".join(parts)
 
         prefix_parts = [text for text in (self._manual_reset_confirm_text(),) if text]
@@ -1851,16 +1950,14 @@ class App:
                 preserve_text_only_geometry=preserve_text_only_geometry,
                 reset_position=bool(nav_width_changed or nav_scale_changed),
             )
+        if ENABLE_CCRP and need_nav_rebuild:
+            self.bombing_services.rebuild_after_display_change()
 
         # 重新应用窗口样式（锁定态穿透 + 透明度）
         alpha = UIConfig.WINDOW_ALPHA if self._locked else min(240, UIConfig.WINDOW_ALPHA + 30)
         Win32.setup_window(self.hwnd, click_through=self._locked, alpha=alpha)
         self.navigation_services.apply_lock_state(locked=self._locked, alpha=alpha)
-        self.runtime_services.refresh_hud_after_display_change(
-            ui_scale_changed=ui_scale_changed,
-            text_scale_changed=text_scale_changed,
-            locked=self._locked,
-        )
+        self.bombing_services.apply_lock_state(locked=self._locked, alpha=alpha)
         self._refresh_tray()
 
     def _edit_checklist(self):
@@ -2021,7 +2118,7 @@ class App:
         if not ENABLE_WEB_DASHBOARD:
             messagebox.showinfo(
                 "网页驾驶舱",
-                "当前通道未包含网页驾驶舱。\n请使用 Enhanced（增强版）通道以获得该功能。",
+                "当前通道未包含网页驾驶舱。\n请使用超级爆弹版以获得该功能。",
                 parent=self.root,
             )
             return
@@ -2156,6 +2253,7 @@ class App:
         self._save_config()
 
         self.runtime_services.stop()
+        self.bombing_services.stop()
         self.navigation_services.stop()
 
         with contextlib.suppress(Exception):
@@ -2278,6 +2376,7 @@ class App:
             snap = live_snap
             self._debug_effective_mock = False
             self._debug_live_available = False
+        self._last_snapshot = snap
 
         debug_mock_mode = bool(self._debug and self._debug_effective_mock)
         self.runtime_services.publish_dashboard(snap, list(self.chk_items))
@@ -2331,12 +2430,13 @@ class App:
         speed_enabled = PanelConfig.is_effectively_enabled("speed")
         checklist_enabled = ENABLE_CHECKLIST and PanelConfig.is_effectively_enabled("checklist")
         bombing_enabled = ENABLE_CCRP and PanelConfig.is_effectively_enabled("bombing")
+        bombing_integrated = bombing_enabled and PanelConfig.bombing_mode == "integrated"
         history_mode_active = PanelConfig.speed_history_mode
 
         # 控制面板可见性（结合PanelConfig设置和编译开关）
         # 战区/机场/燃油/投弹面板需要任一相关面板启用
         show_zone_panel = (snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)) and (
-            zones_enabled or airfields_enabled or fuel_enabled or bombing_enabled
+            zones_enabled or airfields_enabled or fuel_enabled or bombing_integrated
         )
         self.panel_renderer.set_zone_panel_visible(show_zone_panel)
         if show_zone_panel:
@@ -2350,6 +2450,15 @@ class App:
                     self._recalc_size()
         else:
             self._refresh_standalone_navigation_if_visible(snap)
+        bombing_services = getattr(self, "bombing_services", None)
+        if bombing_services is not None:
+            bombing_services.update(
+                snap,
+                active=(
+                    not history_mode_active
+                    and snap.phase in (Phase.ALIVE, Phase.LOSS_PENDING)
+                ),
+            )
 
         # 检查清单面板（受编译开关控制）
         show_chk = (
@@ -2488,6 +2597,3 @@ class App:
         # 调试信息
         if self._debug:
             self.diag_lbl.config(text=self.debug_support.build_debug_text(live_snap, snap))
-
-        # HUD 叠加层更新（v6.8.0）
-        self.runtime_services.update_hud_overlay(snap)

@@ -155,8 +155,9 @@ def test_portable_build_patches_feature_profile_not_config_facade() -> None:
 
     assert '"config" / "feature_profile.py"' in source
     assert 'root / "bomana" / "config.py"' not in source
-    assert "original_feature_profile = feature_profile_path.read_text" in source
-    assert "feature_profile_path.write_text(original_feature_profile" in source
+    assert "original_feature_profile_bytes = feature_profile_path.read_bytes" in source
+    assert "original_feature_profile = original_feature_profile_bytes.decode" in source
+    assert "feature_profile_path.write_bytes(original_feature_profile_bytes)" in source
 
 
 def test_variants_share_one_config_file() -> None:
@@ -175,7 +176,7 @@ def test_disabled_zones_force_integrated_navigation_mode() -> None:
     assert 'PanelConfig.navigation_mode = "integrated"' in source
 
 
-def test_weapon_solution_uses_legacy_bombing_gate_and_enhanced_packaging() -> None:
+def test_weapon_solution_uses_enhanced_packaging_through_secure_builder() -> None:
     # enforces: docs/specs/config-variants.md CFG-02, CFG-03, CFG-09
     portable = (ROOT / "tools/build_portable.py").read_text(encoding="utf-8")
     batch = (ROOT / "tools/scripts/build.bat").read_text(encoding="utf-8")
@@ -184,11 +185,15 @@ def test_weapon_solution_uses_legacy_bombing_gate_and_enhanced_packaging() -> No
     assert "weapon_catalog_rel" in portable
     assert "weapon_schema_rel" in portable
     assert 'variant != "Enhanced"' in portable
-    assert "WEAPON_DATA_ARG" in batch
-    assert "WEAPON_SCHEMA_ARG" in batch
-    assert "weapon_fire_control.json" in batch
-    assert 'if [ "$VARIANT" = "Enhanced" ]' in shell
-    assert "weapon_fire_control.json" in shell
+    assert "tools\\build_portable.py" in batch
+    assert "--variant" in batch
+    assert "--target app" in batch
+    assert "WEAPON_DATA_ARG" not in batch
+    assert "weapon_fire_control.json" not in batch
+    assert "tools/build_portable.py" in shell
+    assert '--variant "$VARIANT"' in shell
+    assert "--target app" in shell
+    assert "weapon_fire_control.json" not in shell
 
 
 def test_launcher_web_preferences_are_an_exact_three_boolean_allowlist() -> None:

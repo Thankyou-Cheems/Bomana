@@ -1,3 +1,4 @@
+import time
 import tkinter as tk
 import unittest
 from pathlib import Path
@@ -6,6 +7,7 @@ from types import SimpleNamespace
 from bomana.config.settings import PanelConfig, UIConfig
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui.app import App
+from bomana.ui.bombing_bar import BombingBar
 from bomana.ui.dialogs import _ScalableDialogMixin, _ScopedMousewheelBinding
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
@@ -86,23 +88,42 @@ def test_scoped_mousewheel_binding_unbinds_only_owned_callback() -> None:
 
 
 def test_main_window_actions_have_persistent_button_affordances() -> None:
-    source = (Path(__file__).resolve().parents[1] / "bomana" / "ui" / "main_window.py").read_text(
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "bomana" / "ui" / "main_window.py").read_text(encoding="utf-8")
+    renderer_source = (root / "bomana" / "ui" / "panel_renderer.py").read_text(
+        encoding="utf-8"
+    )
+    bombing_source = (root / "bomana" / "ui" / "bombing_bar.py").read_text(
         encoding="utf-8"
     )
 
     assert "app.star_lbl = tk.Button(" in source
     assert "app.standalone_btn = tk.Button(" in source
-    assert "app.weapon_select_btn = tk.Button(" in source
     assert "close_btn = tk.Button(" in source
     assert 'style_action_button(close_btn, "danger")' in source
-    assert "app.weapon_select_btn.grid(row=0, column=2" in source
-    assert "app.bombing_close_btn.grid(row=0, column=3" in source
+    assert "self.weapon_btn = tk.Label(" in bombing_source
+    assert "style_clickable_surface(self.weapon_btn)" in bombing_source
+    assert "self.weapon_prev_btn = None" in bombing_source
+    assert "self.weapon_next_btn = None" in bombing_source
+    assert '"切换独立显示"' in bombing_source
+    assert "self.close_btn = tk.Label(" in bombing_source
+    assert '"关闭"' in bombing_source
+    assert 'variant="danger"' in bombing_source
+    assert "self.close_btn.bind(\"<Button-1>\", self._return_to_integrated)" in bombing_source
+    assert "self.target_mode_btn = self._button(" in bombing_source
+    assert "self.trajectory_lbl.pack" not in bombing_source
+    assert "self.release_detail_lbl.pack" not in bombing_source
+    assert "app.bombing_bar.cue.stop()" in renderer_source
+    assert "app.bombing_frame,\n                    row=9," in renderer_source
+    assert "row=9,\n                    column=0,\n                    sticky=\"ew\",\n                    padx=0," in (
+        renderer_source
+    )
     assert "POI四角标记" in source
     assert "上次坠毁点" in source
     assert "◇" not in source
     assert "style_clickable_surface(app.web_access_lbl" in source
     assert "style_clickable_surface(app.speed_threshold_btn" in source
-    assert "style_clickable_surface(app.bombing_info_frame" in source
+    assert "style_action_button(button, variant)" in bombing_source
     assert "app.web_control_btn" not in source
 
 
@@ -166,6 +187,59 @@ class TkGeometryTests(unittest.TestCase):
         self.assertLess(heights[0], heights[1])
         self.assertLess(heights[1], heights[2])
 
+    def test_ccrp_integrated_alignment_and_standalone_close_contract(self) -> None:
+        integrated_requests: list[str] = []
+        app = SimpleNamespace(
+            root=self.root,
+            scale=1.0,
+            icons=FakeIcons(),
+            bombing_services=SimpleNamespace(
+                set_mode=lambda mode: integrated_requests.append(mode)
+            ),
+            _scaled_font=lambda font, *, size_mult=1.0, min_size=1: (
+                font[0],
+                max(min_size, round(font[1] * size_mult)),
+            ),
+            _toggle_bombing_mode=lambda: None,
+            _toggle_panel=lambda _panel: None,
+            _show_bomb_selector=lambda: None,
+            _toggle_bomb_target_mode=lambda: None,
+        )
+        host = tk.Frame(self.root, bg=Theme.GRAYPILL)
+        host.pack(fill="x")
+        baseline_header = tk.Frame(host, bg=Theme.GRAYPILL)
+        baseline_header.grid(row=0, column=0, sticky="ew", padx=8)
+        baseline_title = tk.Label(
+            baseline_header,
+            text="燃油管理",
+            bg=Theme.GRAYPILL,
+        )
+        baseline_title.grid(row=0, column=0, sticky="w")
+        integrated = BombingBar(host, app, scale=1.0, standalone=False)
+        integrated.frame.grid(row=1, column=0, sticky="ew", padx=0)
+        standalone = BombingBar(host, app, scale=1.0, standalone=True)
+        standalone.frame.grid(row=2, column=0, sticky="ew", padx=0)
+        self.root.update_idletasks()
+
+        self.assertEqual(integrated.title_lbl.winfo_rootx(), baseline_title.winfo_rootx())
+        self.assertEqual(integrated.title_lbl.cget("text"), "CCRP")
+        self.assertEqual(integrated.close_btn.cget("text"), "关闭")
+        self.assertIsNotNone(integrated.mode_btn)
+        self.assertIsInstance(integrated.weapon_btn, tk.Label)
+        self.assertIsNone(integrated.weapon_prev_btn)
+        self.assertIsNone(integrated.weapon_next_btn)
+        self.assertEqual(integrated.trajectory_lbl.winfo_manager(), "")
+        self.assertEqual(integrated.flight_lbl.winfo_manager(), "")
+        self.assertEqual(integrated.release_detail_lbl.winfo_manager(), "")
+
+        self.assertIsNone(standalone.mode_btn)
+        self.assertEqual(standalone.close_btn.cget("text"), "✕")
+        standalone._return_to_integrated()
+        self.assertEqual(integrated_requests, ["integrated"])
+
+        integrated.destroy()
+        standalone.destroy()
+
     def test_standalone_navigation_scale_includes_heading_tape(self) -> None:
         old_scale = PanelConfig.navigation_bar_scale
         old_width = PanelConfig.navigation_bar_width
@@ -174,6 +248,11 @@ class TkGeometryTests(unittest.TestCase):
             scale=1.0,
             _locked=False,
             navigation_services=SimpleNamespace(switch_to_integrated=lambda: None),
+            _toggle_bombing_mode=lambda: None,
+            _toggle_panel=lambda _panel: None,
+            _cycle_bomb_weapon=lambda _direction: None,
+            _show_bomb_selector=lambda: None,
+            _toggle_bomb_target_mode=lambda: None,
             _scaled_font=lambda font, *, size_mult=1.0, min_size=1: (
                 font[0],
                 max(min_size, round(font[1] * size_mult)),
@@ -283,8 +362,10 @@ class TkGeometryTests(unittest.TestCase):
         label.config(text="settled", wraplength=280)
         self.root.update_idletasks()
         settled_requested_height = frame.winfo_reqheight() + 8
-        self.root.after(80, self.root.quit)
-        self.root.mainloop()
+        deadline = time.monotonic() + 0.25
+        while time.monotonic() < deadline and self.root.winfo_height() >= inflated_height:
+            self.root.update()
+            time.sleep(0.005)
 
         self.assertGreater(inflated_height, settled_requested_height)
         self.assertLess(self.root.winfo_height(), inflated_height)
@@ -689,12 +770,15 @@ class TkGeometryTests(unittest.TestCase):
         self.assertEqual(app.bomb_release_detail_lbl.winfo_manager(), "pack")
         self.assertNotIn("│", " ".join(fuel_texts + bomb_texts))
 
-    def test_main_window_reuses_bombing_card_as_weapon_solution_card(self) -> None:
+    def test_main_window_reuses_shared_bombing_bar_without_tactical_map(self) -> None:
         source = Path("bomana/ui/main_window.py").read_text(encoding="utf-8")
+        bombing_source = Path("bomana/ui/bombing_bar.py").read_text(encoding="utf-8")
 
-        self.assertIn('text="武器解算"', source)
-        self.assertNotIn("tactical_map", source)
-        self.assertNotIn("weapon_map", source)
+        self.assertIn("app.bombing_bar = BombingBar(", source)
+        self.assertIn('text="CCRP"', bombing_source)
+        self.assertIn("padx=0,", source)
+        self.assertNotIn("tactical_map", source + bombing_source)
+        self.assertNotIn("weapon_map", source + bombing_source)
 
 
 if __name__ == "__main__":

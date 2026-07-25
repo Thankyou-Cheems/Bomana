@@ -13,19 +13,19 @@
 - Utilities: `bomana/utils/` (system, math, file, sound helpers)
 - Privileged hotkeys: `bomana/utils/hotkey_broker.py` (ordinary-first game-elevation probe plus IPC/UAC client) and `native/hotkey_broker/` (bundled zero-install fixed-action native broker)
 - Bundled UI assets: `bomana/assets/` (private UI font subsets + PNG icon assets)
-- External data: `bomana/data/ccrp_bomb_params.json` (CCRP bomb parameters)
+- External data: `bomana/data/offline_rigidbody_catalog.bin` (compact CCRP rigid-body catalog)
 - External data: `bomana/data/weapon_fire_control.json` (Datamine-backed aircraft weapon catalog, compatibility, and solver inputs)
+- External data: `bomana/data/visible_trajectory_references.json` (versioned player-visible trajectory tooltip transcriptions and narrow runtime gates)
 - External data: `bomana/data/fm_speed_limits.json` (机型 IAS/Mach 限速库)
 - Tools: `tools/update_datamine_assets.py` (refresh generated datamine assets)
 - Tools: `tools/blkx_extractor.py` / `tools/weapon_fire_control_extractor.py` / `tools/fm_speed_extractor.py` (single-asset extractors)
 - Tools: `tools/datamine_utils.py` (shared datamine source-dir and metadata helpers)
-- Tools: `tools/create_version_info.py`, `tools/sample_8111_attitude.py`, and
-  `tools/record_8111_session.py` / `tools/replay_8111_session.py` (build
-  metadata, diagnostics, and official 8111 session capture/replay)
+- Tools: `tools/create_version_info.py` and `tools/record_8111_session.py` /
+  `tools/replay_8111_session.py` (build metadata, diagnostics, and official
+  8111 session capture/replay)
 - Branding assets: `bomana/assets/branding/` (`app.ico`, `app.png`, sponsor images)
 
 ## Spec Anchors
-- Runtime 8111 boundary: `docs/specs/runtime-8111-boundary.md`
 - Release signing and Tencent/EdgeOne deployment: `docs/specs/release-signing.md`
 - Tk threading and UI dispatch: `docs/specs/threading-ui-contract.md`
 - Privileged hotkey broker: `docs/specs/startup-elevation.md`
@@ -55,8 +55,9 @@
 │  ├─ config/                # Package marker plus explicit feature/settings/static-data submodules
 │  ├─ metadata.py            # Project metadata and version constants
 │  ├─ data/
-│  │  ├─ ccrp_bomb_params.json # Bomb parameters (CCRP)
+│  │  ├─ offline_rigidbody_catalog.bin # Compact integrity-checked CCRP catalog
 │  │  ├─ weapon_fire_control.json # Aircraft weapon catalog + compatibility + solver inputs
+│  │  ├─ visible_trajectory_references.json # Player-visible curve references
 │  │  └─ fm_speed_limits.json # Aircraft speed limits (IAS/Mach)
 │  ├─ assets/
 │  │  ├─ branding/             # App icon, promo image, sponsor image
@@ -64,18 +65,24 @@
 │  │  ├─ icons/                # PNG icon assets used instead of emoji glyphs
 │  │  └─ web/                  # Self-hosted Web Cockpit HTML/CSS/JS/SVG assets
 │  ├─ core/
-│  │  ├─ ballistics.py        # Bombing ballistics
+│  │  ├─ ballistics.py        # 8111 release projection and terrain integration
+│  │  ├─ offline_rigidbody_catalog.py # Bounded catalog decoding and validation
+│  │  ├─ offline_rigidbody_properties.py # Runtime property derivation
+│  │  ├─ offline_rigidbody_solver.py # Pure-offline versioned rigid-body kernel
+│  │  ├─ offline_ballistics_model.py # Versioned offline model identity/constants
 │  │  ├─ ccrp_scheduler.py    # CCRP input gating, calculation, and result storage helpers
 │  │  ├─ diagnostics.py       # Endpoint diagnostic counters and log throttling
 │  │  ├─ lifecycle.py         # Life/reset/landing state transitions
 │  │  ├─ logic.py             # GameLogic core loop
 │  │  ├─ navigation.py        # Navigation scale, bearing, and distance helpers
+│  │  ├─ release_state.py     # Causal 8111 map-track release-state regression
 │  │  ├─ overspeed.py         # Aircraft speed-limit matching + alert grading
 │  │  ├─ state.py             # Dataclasses/enums
 │  │  ├─ timing_store.py      # Battle-scoped timer signature helpers
 │  │  ├─ weapon_catalog.py    # Schema-backed weapon catalog and manual selection
 │  │  ├─ weapon_scheduler.py  # Lock-safe weapon-solution scheduling
 │  │  ├─ weapon_envelope.py   # Pure Datamine condition-table interpolation
+│  │  ├─ visible_trajectory_reference.py # Narrow visible-curve loading/matching
 │  │  ├─ weapon_solver.py     # Conditional AAM/AGM references + powered/guided fallbacks
 │  │  └─ telemetry.py         # 8111 fetchers
 │  ├─ ui/
@@ -83,18 +90,16 @@
 │  │  ├─ debug_support.py     # Debug mock snapshot + debug panel helpers
 │  │  ├─ dialogs.py           # Settings/About/etc dialogs
 │  │  ├─ settings_form.py     # Headless settings dialog value collection/validation/payload helpers
-│  │  ├─ hud_overlay.py       # Fullscreen HUD overlay runtime
 │  │  ├─ icon_assets.py       # Bundled PNG icon loader/cache
 │  │  ├─ main_window.py       # Stable main-window skeleton/card layout builder
 │  │  ├─ nav_window.py        # Standalone navigation window
 │  │  ├─ navigation_runtime.py # Standalone nav lifecycle + display rebuild service
 │  │  ├─ dialog_presenter.py # Headless settings dialog option/summary view models
-│  │  ├─ hud_presenter.py    # Headless HUD target/standby view models
 │  │  ├─ navigation_presenter.py # Shared heading-tape target selection/model helpers
 │  │  ├─ panel_presenter.py  # Headless fuel/bombing/speed panel view models
 │  │  ├─ panel_renderer.py    # Zone/fuel/bombing/speed panel rendering helpers
 │  │  ├─ runtime.py           # Tk dispatch + runtime worker thread helpers
-│  │  ├─ runtime_services.py  # Global hotkeys, tray, and HUD runtime integrations
+│  │  ├─ runtime_services.py  # Global hotkeys, tray, and Web Cockpit runtime integrations
 │  │  ├─ settings_runtime.py  # SettingsDialog persistence-success runtime side effects
 │  │  ├─ snapshot_presenter.py # Headless lifecycle/status presentation model helpers
 │  │  ├─ text_utils.py        # Shared Tk text measurement, wrapping, and elision helpers
@@ -119,13 +124,12 @@
 ├─ tools/
 │  ├─ build_portable.py      # Build launcher/app package/manifest
 │  ├─ create_version_info.py # Windows version-info helper for packaging
-│  ├─ blkx_extractor.py      # .blkx -> bomana/data/ccrp_bomb_params.json generator
+│  ├─ blkx_extractor.py      # .blkx -> compact offline rigid-body catalog generator
 │  ├─ datamine_utils.py      # Shared datamine directory + source metadata helpers
 │  ├─ fm_speed_extractor.py  # .blkx -> fm_speed_limits.json generator
 │  ├─ weapon_fire_control_extractor.py # Datamine reference graph -> weapon catalog
 │  ├─ generate_ui_assets.py  # Noto Sans SC subset + PNG icon asset generator
 │  ├─ update_datamine_assets.py # One command to refresh generated data assets
-│  ├─ sample_8111_attitude.py # HUD baseline sampler
 │  ├─ record_8111_session.py  # Gzip JSONL capture of official 8111 session payloads
 │  ├─ replay_8111_session.py  # Validated virtual-time replay through production GameLogic
 │  ├─ session_8111.py         # Shared schema validation and completed-session loader
@@ -140,11 +144,73 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 2. State judgement using config classes (Game/Zone/Fuel/etc.).
    - `GameLogic` remains the polling/orchestration boundary.
    - `navigation.py`, `timing_store.py`, `lifecycle.py`, `diagnostics.py`,
-     `ccrp_scheduler.py`, `weapon_catalog.py`, `weapon_scheduler.py`, and
-     `weapon_solver.py` own focused helper responsibilities extracted from the
-     former monolithic logic module.
-   - Free-fall/high-drag stores keep the existing CCRP path. AAMs and AGMs with valid
-     Datamine `guidance/tableN` data use those conditional launch-envelope
+     `ccrp_scheduler.py`, `offline_ballistics_model.py`, `release_state.py`,
+     `weapon_catalog.py`,
+     `weapon_scheduler.py`, and `weapon_solver.py` own focused helper
+     responsibilities extracted from the former monolithic logic module.
+   - Free-fall stores use the versioned offline rigid-body projection. The manually
+     selected static record supplies weapon identity, mass, geometry,
+     aerodynamic coefficients, inertia, stabilizer arm, and damping.
+     `release_state.py` performs a
+     causal least-squares fit over at most the latest 0.20 s and four
+     observations of official 8111 map positions, providing ground-track
+     direction, closing speed, and
+     along/cross-track target geometry. `/state` and `/map_obj.json` are fetched
+     adjacently and timestamped at their request midpoints on the same clock.
+     The fitted map position and `H, m` are projected to one solution time
+     (map velocity for X/Z, 8111 Vy for altitude); frames older than 150 ms,
+     skewed by more than 150 ms, or materially future-dated fail closed.
+     TAS/IAS/Vy are zero-order held, without inferred wind or AoS/body-vector
+     substitution. The solver uses horizontal TAS and 8111 Vy as initial
+     air-relative components and 8111 AoA for the initial observable
+     orientation. `offline_rigidbody_solver.py` contains the shared three-dimensional
+     body-to-world quaternion kernel and a mathematically equivalent optimized
+     along-track specialization for production. Both apply the bundled axial
+     Mach curve, AoA drag, lift, the total aerodynamic force transformed into
+     body coordinates, its signed stabilizer-arm cross product, the
+     no-single-step-reversal rotational-damping clamp, the `1/48 s`
+     constant-acceleration state step, and gravity.
+     `offline_rigidbody_catalog.bin` contains compact, normalized primitives
+     for every static bomb record. The loader validates the container digest
+     before deriving areas, inertia and damping. All supported free-fall records use their own
+     property block through one solver with no per-weapon moment scale. There
+     is no runtime fit, user drag override, range/time correction, or RK4
+     compatibility branch.
+     Because 8111 does not expose the release quaternion and store
+     angular state, the production initializer is explicitly an observable
+     8111 projection even though the offline kernel itself is three-dimensional.
+     `atmosphere.py` reproduces the Dagor `gamePhys` density polynomial/tail,
+     temperature ratio, and sound speed used by the Mach curve. Official 8111
+     IAS/TAS infers the mission sea-level density scale; a battle-scoped median
+     filters integer telemetry quantization, with 1.225 kg/m3 as the explicit
+     no-sample fallback.
+     `terrain_elevation.py` identifies that pack's active map from `/map.img`
+     and `/map_info.json`, then queries either a native-spacing HM2 grid with
+     game-equivalent diamond interpolation or an adaptively sampled 64/32/16/8 m
+     LTdump grid. Each descriptor also carries the extracted
+     `levels/<map>.blk:water_level` origin, so Dagor world Y is converted to the
+     same datum as 8111 `H, m`; the solver samples that grid along the predicted
+     ground path and stops at the first terrain-segment intersection. An
+     explicit value also clamps underwater
+     seabed to the physical water surface, while the absent-field zero default
+     does not synthesize water. Config `mapCoord0/mapCoord1` identify the 8111
+     map independently of the possibly smaller collision-grid bounds. Missing
+     or unidentified terrain fails closed; there is no sea-level target-height
+     fallback. The runtime dependency set is limited to official 8111
+     telemetry, the signed terrain pack, and bundled static model data.
+     Launcher 3.3 manages this pack as a third signed release kind, separate
+     from App and Launcher binaries. `launcher/terrain_store.py` keeps immutable
+     objects by SHA-256, imports matching files from a legacy embedded pack,
+     downloads only missing hashes, assembles a closed revision directory, and
+     atomically replaces `terrain/current.json` after complete validation.
+     Only canonical `Enhanced` receives the resulting
+     `BOMANA_TERRAIN_DIR`; Standard/Lite do not query the terrain manifest.
+     App package rotation therefore never carries or invalidates unchanged
+     terrain data.
+     High-drag stores are hidden from normal CCRP selection until a separately
+     validated offline native deployment model exists; the old high-drag
+     estimate is not retained.
+     AAMs and AGMs with valid Datamine `guidance/tableN` data use those conditional launch-envelope
      tables before the one-dimensional powered fallback; a table reference is
      independent of whether the fallback can model complex propulsion.
      Supported powered weapons and guided bombs use the same separate
@@ -161,12 +227,12 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
 3. UI render with `tkinter` (timer, panels, hints, debug text).
    - `App` keeps window lifecycle and the main refresh loop.
    - `AppNavigationServices` owns standalone navigation window lifecycle, mode switching, history-mode suspension, and display-change rebuilds.
-   - `AppRuntimeServices` owns global hotkey, tray, and HUD overlay lifecycle while preserving the existing `App` callback surface for dialogs and tray actions.
+   - `AppRuntimeServices` owns global hotkey, tray, and Web Cockpit lifecycle while preserving the existing `App` callback surface for dialogs and tray actions.
    - `MainWindowBuilder` owns the static card/grid skeleton and pre-allocates fixed label pools for the main window.
    - `AppDebugSupport` owns debug-mode mock snapshots and debug text generation.
    - `AppPanelRenderer` owns zone/airport/fuel/weapon-solution/speed strip rendering and mid-panel layout updates.
    - `navigation_presenter.py` owns UI-only navigation target selection and heading-tape model construction shared by the integrated and standalone navigation surfaces.
-   - `panel_presenter.py`, `hud_presenter.py`, `dialog_presenter.py`, and `snapshot_presenter.py` own headless view models for strings, colors, target selection, and option summaries. Tk modules apply those models while retaining widget layout and runtime side effects.
+   - `panel_presenter.py`, `dialog_presenter.py`, and `snapshot_presenter.py` own headless view models for strings, colors, target selection, and option summaries. Tk modules apply those models while retaining widget layout and runtime side effects.
    - `runtime.py` owns small runtime thread helpers: background logic polling, daemon thread startup, and safe Tk main-thread callback dispatch.
    - `settings_runtime.py` owns SettingsDialog side effects that run only after config persistence succeeds.
    - `settings_form.py` owns headless settings value collection, validation, hotkey conflict checks, and save-payload construction; `dialogs.py` remains the Tk modal entrypoint and applies messagebox/file/runtime side effects.
@@ -180,7 +246,7 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - `Bomana.pyw` initializes `bomana/utils/diagnostics.py` at startup.
    - Runtime diagnostics are JSONL records written to `.wttimer_diagnostics.log` next to the user config file.
    - UI and 8111 polling threads enqueue structured events through `QueueHandler`; the background listener owns disk I/O.
-   - Initial coverage includes app start/exit, config migration/persistence errors, endpoint failures/recovery, navigation target changes, and HUD lifecycle/toggle failures.
+   - Initial coverage includes app start/exit, config migration/persistence errors, endpoint failures/recovery, and navigation target changes.
 6. Overspeed flow:
    - `TelemetryFetcher` reads `type` + IAS/TAS/Mach + `wing_sweep_indicator`.
    - `OverspeedAnalyzer` resolves `/indicators.type` -> `unit_to_fm` -> FM limits.
@@ -203,17 +269,17 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - Download only starts after explicit user confirmation.
    - Streams package with progress and transfer speed updates.
    - Verifies SHA256 after signed-manifest validation; `launcher/install_txn.py` owns the update lock, staging directory, `app/` replacement, rollback cleanup, and incomplete-install recovery.
-   - Launch, verified online install, local ZIP import, rollback, and incomplete-install recovery all read `bomana/metadata.py` as data and reject malformed or below-8.0.0 candidates before any valid slot is renamed, replaced, deleted, or swapped. Online staging additionally requires the package version to equal the already-verified signed manifest version exactly.
+   - Launch, verified online install, local ZIP import, rollback, and incomplete-install recovery all read `bomana/metadata.py` as data and reject malformed or below-8.0.0 candidates before any valid slot is renamed, replaced, deleted, or swapped. They also parse the candidate's literal `PORTABLE_MIN_LAUNCHER_VERSION` without executing package code and reject a release that requires a newer Launcher. Online staging additionally requires the package version to equal the already-verified signed manifest version exactly.
    - Successful app installs promote the previous app into `app_previous/` and update local version metadata.
    - Launcher rollback swaps `app/` and `app_previous/`, so exactly one previous app version is retained at a time.
    - Launcher self-update downloads a new `Bomana_launcher_v*.exe`, stages it in an isolated OS temp workspace, runs a detached replacement script with literal-path file operations, exits, swaps the executable, and restarts.
    - Launch action stays available for offline local app start while background checks are still running.
    - Launcher download/update/install and App launch all remain at ordinary user integrity. `BOMANA_RUNTIME_ROOT`, `cwd`, `sys.path`, and the `launcher.bootstrap` app-package import finder force installed `app/bomana` modules and resources to win over launcher-bundled modules without crossing UAC.
-   - Immediately before App entry, bootstrap supplies its own `BOMANA_LAUNCHER_VERSION` plus strict `0`/`1` values for Web autostart, local-page auto-open, and LAN access/control startup. `Bomana.pyw` validates Launcher 3.0.0+ before importing diagnostics, Tk, `GameLogic`, runtime services, or Web listeners. Only `BOMANA_SOURCE_DEVELOPMENT=1` in an explicitly non-frozen source process may bypass a missing identity; malformed or old identities still fail.
+   - Immediately before App entry, bootstrap supplies its own `BOMANA_LAUNCHER_VERSION` plus strict `0`/`1` values for Web autostart, local-page auto-open, and LAN access/control startup. `Bomana.pyw` enforces the App-carried release floor before importing diagnostics, Tk, `GameLogic`, runtime services, or Web listeners; App 8.6.1 requires Launcher 3.3.0 even if the package was imported or copied outside the online updater. Only `BOMANA_SOURCE_DEVELOPMENT=1` in an explicitly non-frozen source process may bypass a missing identity; malformed or old identities still fail.
    - Launcher persists only `web_dashboard_autostart` (default `true`), `web_dashboard_auto_open` (default `false`), and `web_dashboard_lan_enabled` (default `false`). Selecting LAN forces Web autostart, while clearing autostart clears LAN. The App still owns interface discovery, exact listeners, selected port, pairing URLs, browser-open timing, and live authorization.
 9. Privileged hotkey flow:
-   - The App registers ordinary `RegisterHotKey` bindings first and never opens UAC automatically. It then enumerates visible top-level windows and queries only the image name and elevation token for exact War Thunder executable names.
-   - Confirmed ordinary War Thunder keeps the default path without a privilege notice. Elevated, absent, or unknown game state exposes an optional action; after explicit confirmation, the App resolves `bomana/bin/BomanaHotkeyBroker.exe`, validates its adjacent SHA-256, locks it against write/delete replacement, and requests UAC. No installer or persistent component is used; without Authenticode Windows shows Unknown publisher.
+   - The App registers ordinary `RegisterHotKey` bindings and never opens UAC automatically. It does not enumerate game windows or processes, query executable identities or tokens, or derive hotkey behavior from game state.
+   - The package-verifiable broker remains an optional compatibility boundary that may be reached only through an explicit user action, never through game-process detection. After explicit confirmation, the App resolves `bomana/bin/BomanaHotkeyBroker.exe`, validates its adjacent SHA-256, locks it against write/delete replacement, and requests UAC. No installer or persistent component is used; without Authenticode Windows shows Unknown publisher.
    - The ordinary App creates one local message pipe and stop event per privileged launch with a random nonce, explicit current-user/SYSTEM/Administrators DACL, and remote-client rejection.
    - The native broker validates the App PID/session and pipe server PID, registers only the configured fixed actions once with `RegisterHotKey | MOD_NOREPEAT`, and sends fixed eight-byte action frames back to the App.
    - The pipe reader posts callbacks through `TkEventDispatcher`; UAC denial, missing/tampered broker, or IPC failure restores local `RegisterHotKey`, buttons, tray actions, and 8111 features.
@@ -238,14 +304,13 @@ Note: the self-hosted update/statistics service was moved out of this repo; see 
    - HTTP workers enqueue an immutable envelope through `TkEventDispatcher` and never wait for execution. The Tk owner thread rechecks session epoch/scope, current-run LAN authority, feature flags, catalog/aircraft compatibility, enums, and target validity before applying the existing App semantic path and publishing one bounded completion.
    - All browser resources are packaged under `bomana/assets/web/`; the dashboard has no CDN, remote font, analytics, upload, permissive CORS, synthesized keyboard input, arbitrary callback/config/command path, or new broker/network capability.
 
-Important constraint: runtime data path is official 8111 API only; no memory reads, injection, log decryption, packet inspection, or game file modifications.
-
 ## Static Data Provenance
-- `bomana/data/ccrp_bomb_params.json`
+- `bomana/data/offline_rigidbody_catalog.bin`
   - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/weapons/bombguns/*.blkx`
   - Recommended updater: `tools/update_datamine_assets.py`
   - Dedicated generator: `tools/blkx_extractor.py`
-  - Shared helper: `tools/datamine_utils.py`
+  - Container: deterministic zlib payload with a SHA-256 integrity header
+  - Privacy boundary: no per-record source path, mesh name, timestamp, or source commit
   - Runtime consumer: `BombConfig` / CCRP ballistics path
 - `bomana/data/fm_speed_limits.json`
   - Raw source: War Thunder datamine `aces.vromfs.bin_u/gamedata/flightmodels/**`
@@ -268,7 +333,17 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
     outputs. Top-level metadata retains the Datamine version and full commit.
   - The game's native `buildMissileTrajectoryData` implementation and reusable
     static comparison curves are not present in the current Datamine source, so
-    there is no active official-trajectory provider for glide weapons.
+    there is no generalized official-trajectory provider for glide weapons.
+- `bomana/data/visible_trajectory_references.json`
+  - Authored source: numeric tooltips manually transcribed from the public War
+    Thunder hangar trajectory window; no screenshots, extracted assets, or
+    native callback output are bundled.
+  - Provenance: capture date, game version, public UI path, input conditions,
+    display precision, reached-target flag, and every recorded point.
+  - Runtime consumers: `visible_trajectory_reference` and `weapon_solver`.
+  - Only explicitly runtime-enabled reached-target observations can supply a
+    narrow experimental lower-bound reference. The first such observation is
+    GBU-31 at 3 km/250 m/s against a static 0.1 km target requested at 10 km.
 - Generated JSON metadata records the datamine source version and git commit when available.
 
 ## Offline Session Capture and Replay
@@ -300,8 +375,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
   never collected them. The fixture manifest shape is governed by
   `docs/specs/schemas/8111-replay-fixture-manifest.schema.json`.
 - Usage and capture privacy are documented in
-  `docs/guides/8111-session-recording.md`; the collection boundary is governed
-  by `R8111-09..R8111-16`.
+  `docs/guides/8111-session-recording.md`.
 
 ## Configuration & Persistence
 - Runtime configuration lives in `bomana/config/`.
@@ -327,7 +401,7 @@ Important constraint: runtime data path is official 8111 API only; no memory rea
 - CCRP bombing predictor + estimated AGM/guided ranges, conditional-table AAM
   references, and selectable experimental/strict handling for uncalibrated
   glide envelopes
-- UI overlays & global hotkeys
+- UI panels & global hotkeys
 
 ## Runtime Thread Boundary
 - Tk widgets are owned by the Tk main thread. Background callbacks use `TkEventDispatcher.post()` or a Tk-owned queue/poller bridge before touching UI state; background threads do not call `root.after(...)` directly.
@@ -393,11 +467,13 @@ Portable release uses:
 - `manifest_<Variant>.json` (channel/version/package metadata + SHA256 + `min_launcher_version` + Ed25519 manifest signature)
 - `checksums_app_<Variant>.txt` and `checksums_launcher.txt` (SHA256 checksum info consumed by deployment tooling)
 
-The current compatibility boundary is App `8.0.0` / Launcher `3.0.0`:
-Launcher 3 rejects App candidates below 8.0.0 on every candidate path, while a
-packaged App 8 validates Launcher 3.0.0+ before runtime initialization. Release
-manifest schema version 1 and the established signed field sets remain
-unchanged.
+The protocol compatibility boundary is App `8.0.0` / Launcher `3.0.0`, while
+each App release carries a stricter release floor when needed. App `8.6.1`
+requires Launcher `3.3.0`: the signed manifest blocks an old Launcher before
+download, candidate metadata blocks local import/rollback/recovery, and the
+App-carried guard blocks direct-copy bypasses before runtime initialization.
+App manifests use schema version 2; Launcher and terrain manifests use schema
+version 1 with their established signed field sets.
 
 Bundled assets:
 - App packages include most of `bomana/` via `build_app_zip()`, with variant exclusions:

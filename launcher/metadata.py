@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-LAUNCHER_VERSION = "3.2.2"
+LAUNCHER_VERSION = "3.3.0"

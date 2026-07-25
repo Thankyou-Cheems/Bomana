@@ -7,8 +7,7 @@ and `bd`. 中文和 English 共用同一套命令与规范，避免两套说明�
 
 | Topic | Canonical source |
 | --- | --- |
-| Repository routing and closeout | [`AGENTS.md`](../AGENTS.md) |
-| Runtime, security, threading, config, and quality contracts | [`docs/specs/`](./specs/) |
+| Runtime, threading, config, and quality contracts | [`docs/specs/`](./specs/) |
 | Current module and data flow | [`ARCHITECTURE.md`](./ARCHITECTURE.md) |
 | Test placement | [`tests/README.md`](../tests/README.md) |
 | Known failure modes | [`PITFALLS.md`](./PITFALLS.md) |
@@ -19,8 +18,6 @@ summary and link to the owning spec. 不要在入口文档复制长期规则；�
 
 Project-wide boundaries:
 
-- Use only the official War Thunder `localhost:8111` API. No memory reads,
-  injection, packet inspection, or game-file edits.
 - Respect `ENABLE_*` flags in `bomana/config/feature_profile.py`.
 - Track repository work in `bd`; do not add Markdown TODO/task systems.
 - Keep launcher and Python App at ordinary integrity. Privileged hotkeys follow
@@ -56,8 +53,8 @@ uv sync --python 3.14.5 --extra build
 2. Check or create the `bd` issue, then mark it `in_progress`.
 3. Make the smallest coherent change and update its owning docs/tests.
 4. Run the relevant focused checks and required full gates.
-5. Close the issue only after verification; commit and push according to
-   [`AGENTS.md`](../AGENTS.md).
+5. Close the issue only after verification; follow the active branch, ADR, and
+   `bd` publication decision for commit and push scope.
 
 常用 `bd` 命令：
 
@@ -94,7 +91,7 @@ Additional gates by area:
 | --- | --- |
 | `native/hotkey_broker/`, `tools/build_hotkey_broker.py` | `cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml`; `cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml`; `uv run python tools/build_hotkey_broker.py --mode dev` |
 | Release/build/launcher assets | relevant build tests and packaged-launcher smoke |
-| 8111, HUD, hotkeys, tray, navigation | focused automated tests plus clearly reported real War Thunder smoke |
+| 8111, hotkeys, tray, navigation | focused automated tests plus clearly reported real War Thunder smoke |
 | Web Cockpit/control | protocol/server/runtime tests plus separate desktop browser, phone/LAN control/revoke, Firewall, multi-NIC, and packaged-resource smoke from [`web-cockpit-smoke.md`](./guides/web-cockpit-smoke.md) |
 | Launcher UI or App/Launcher boundary | packaged-launcher smoke plus manual DPI, keyboard navigation, App 8 / Launcher 3 rejection, and source-marker checks |
 | Unicode ambiguity investigation | `uv run --extra dev ruff check --select RUF001,RUF002,RUF003 <path>` |
@@ -105,7 +102,7 @@ broker checks. Automated tests never count as real War Thunder / 8111 evidence.
 For packaged launcher changes, use:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\scripts\packaged_launcher_smoke.ps1 -Variant Enhanced
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\scripts\packaged_launcher_smoke.ps1 -Variant Enhanced -TerrainArtifactDir dist\terrain-release
 ```
 
 The smoke builds or reuses release-shaped assets, moves them through paths with
@@ -152,8 +149,10 @@ not a competing policy.
    `bomana/metadata.py` and/or `launcher/metadata.py`. If an App package now
    needs newer launcher behavior, update `PORTABLE_MIN_LAUNCHER_VERSION` too.
    App 8.0.0 and Launcher 3.0.0 establish a deliberate mutual floor; every
-   Launcher-owned candidate path and the early App handoff must continue to use
-   `bomana_version.py` rather than a local version parser.
+   release-specific floor must also match `APP_REQUIRED_LAUNCHER_VERSION` in
+   the App-carried `bomana_version.py`. Every Launcher-owned candidate path and
+   the early App handoff must continue to use that shared strict parser rather
+   than a local version parser.
 2. Confirm the matching Ed25519 manifest-signing secrets; never generate,
    rotate, print, upload, or replace private keys without an approved retention
    plan.

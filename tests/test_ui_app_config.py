@@ -476,6 +476,83 @@ def test_web_weapon_select_rejects_unverified_airborne_compatibility(monkeypatch
     assert persisted == []
 
 
+def test_quick_bomb_cycle_does_not_fall_back_to_full_catalog_in_flight(monkeypatch) -> None:
+    app = _make_config_only_app()
+    persisted: list[str] = []
+    searches: list[str] = []
+
+    class Catalog:
+        selected_weapon_id = "su_fab100"
+
+        @staticmethod
+        def for_aircraft(_aircraft: str):
+            return []
+
+        @staticmethod
+        def search(*, role: str):
+            searches.append(role)
+            return [{"id": "su_fab100", "role": "bomb"}]
+
+    app.game = SimpleNamespace(
+        snapshot=lambda: SimpleNamespace(
+            phase=Phase.ALIVE,
+            on_ground=False,
+            aircraft_type_name="unknown_aircraft",
+        )
+    )
+    app._get_weapon_catalog = lambda: Catalog()
+    app._update_ui = lambda: None
+    monkeypatch.setattr(app_module, "ENABLE_CCRP", True)
+    monkeypatch.setattr(
+        app_module,
+        "persist_weapon_selection",
+        lambda _catalog, weapon_id, _model: persisted.append(weapon_id) or True,
+    )
+
+    assert app._cycle_bomb_weapon(1) is False
+    assert searches == []
+    assert persisted == []
+
+
+def test_quick_bomb_cycle_allows_full_catalog_fallback_on_ground(monkeypatch) -> None:
+    app = _make_config_only_app()
+    persisted: list[str] = []
+
+    class Catalog:
+        selected_weapon_id = "su_fab100"
+
+        @staticmethod
+        def for_aircraft(_aircraft: str):
+            return []
+
+        @staticmethod
+        def search(*, role: str):
+            assert role == "bomb"
+            return [
+                {"id": "su_fab100", "role": "bomb"},
+                {"id": "us_500lb_mk_82_ldgp", "role": "bomb"},
+            ]
+
+    app.game = SimpleNamespace(
+        snapshot=lambda: SimpleNamespace(
+            phase=Phase.ALIVE,
+            on_ground=True,
+            aircraft_type_name="unknown_aircraft",
+        )
+    )
+    app._get_weapon_catalog = lambda: Catalog()
+    app._update_ui = lambda: None
+    monkeypatch.setattr(app_module, "ENABLE_CCRP", True)
+    monkeypatch.setattr(
+        app_module,
+        "persist_weapon_selection",
+        lambda _catalog, weapon_id, _model: persisted.append(weapon_id) or True,
+    )
+
+    assert app._cycle_bomb_weapon(1) is True
+    assert persisted == ["us_500lb_mk_82_ldgp"]
+
+
 def test_web_timer_command_rechecks_exact_target_and_persistence(monkeypatch) -> None:
     app = _make_config_only_app()
     targets: list[int] = []
@@ -731,7 +808,7 @@ def test_load_config_migrates_legacy_ccrp_key_to_datamine_source_id(monkeypatch)
     )
     monkeypatch.setattr(
         app_module.BombConfig,
-        "get_bomb_source_id",
+        "get_bomb_catalog_id",
         lambda value: "legacy_bomb_source" if value == "legacy_ccrp_key" else "",
     )
 
@@ -892,6 +969,7 @@ def test_app_keeps_only_external_callback_wrappers() -> None:
         "_format_aircraft_type_label",
         "_update_speed_strip",
         "_ensure_hud_overlay",
+        "_show_hud_overlay",
         "_update_hud_overlay",
         "_toggle_hud",
         "_update_mid_panel_layout",
@@ -911,7 +989,6 @@ def test_app_keeps_only_external_callback_wrappers() -> None:
 
     assert not (removed_internal_wrappers & app_methods)
     assert "_toggle_debug" in app_methods
-    assert "_show_hud_overlay" in app_methods
 
 
 def test_hotkey_config_rejects_invalid_saved_bindings() -> None:
@@ -928,6 +1005,7 @@ def test_hotkey_config_rejects_invalid_saved_bindings() -> None:
         )
 
         assert app_module.HotkeyConfig.get_bindings() == {
+            "bomb_target": app_module.HotkeyConfig.DEFAULT_BINDINGS["bomb_target"],
             "reset": "F1",
             "lock": app_module.HotkeyConfig.DEFAULT_BINDINGS["lock"],
             "corner": "F2",
@@ -1005,10 +1083,7 @@ def test_update_ui_frame_refreshes_visible_standalone_navigation_when_phase_exit
         grid_remove=lambda: None,
     )
     app.status_txt = SimpleNamespace(config=lambda **_kwargs: None)
-    app.runtime_services = SimpleNamespace(
-        publish_dashboard=lambda _snap, _items: None,
-        update_hud_overlay=lambda _snap: None,
-    )
+    app.runtime_services = SimpleNamespace(publish_dashboard=lambda _snap, _items: None)
     monkeypatch.setattr(app_module.PanelConfig, "is_effectively_enabled", lambda _feature: False)
     monkeypatch.setattr(app_module.PanelConfig, "speed_history_mode", False)
 

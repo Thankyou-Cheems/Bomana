@@ -179,6 +179,28 @@ class RuntimeThreadingTests(unittest.TestCase):
         self.assertTrue(fetcher.closed)
         self.assertIsNone(poller._thread)
 
+    def test_map_image_poller_forwards_image_to_terrain_callback(self) -> None:
+        store = DashboardSnapshotStore()
+        fetcher = FakeMapImageFetcher()
+        received: list[bytes] = []
+        callback_done = threading.Event()
+
+        def on_image(body: bytes) -> None:
+            received.append(body)
+            callback_done.set()
+
+        poller = MapImagePoller(
+            store,
+            fetcher_factory=lambda: fetcher,
+            interval_sec=60.0,
+            on_image=on_image,
+        )
+        poller.start()
+        self.assertTrue(callback_done.wait(1.0))
+        poller.stop()
+
+        self.assertEqual(received, [b"\x89PNG\r\n\x1a\nmap"])
+
     def test_map_icon_font_poller_fetches_once_off_tk_and_stops_bounded(self) -> None:
         store = DashboardSnapshotStore()
         fetcher = FakeMapIconFontFetcher()

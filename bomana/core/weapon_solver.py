@@ -9,6 +9,10 @@ from typing import Any
 
 from bomana.config.settings import WeaponBallisticModelConfig
 from bomana.core.ballistics import calculate_bomb_trajectory
+from bomana.core.visible_trajectory_reference import (
+    VisibleTrajectoryReference,
+    find_visible_trajectory_reference,
+)
 from bomana.core.weapon_envelope import (
     FIELD_RANGE_MAX_M,
     FIELD_RANGE_MIN_M,
@@ -22,6 +26,9 @@ QUALITY_NONE = "none"
 QUALITY_TWO_DIMENSIONAL = "two_dimensional"
 QUALITY_CONSERVATIVE = "conservative"
 QUALITY_EXPERIMENTAL = "experimental"
+
+REASON_PLAYER_VISIBLE_TRAJECTORY_REFERENCE = "player_visible_trajectory_reference"
+REASON_GUIDED_BALLISTIC_UNCALIBRATED = "guided_ballistic_uncalibrated"
 
 STATUS_CCRP = "ccrp"
 STATUS_UNKNOWN_WEAPON = "unknown_weapon"
@@ -520,6 +527,26 @@ def _guided_normal_envelope(
     return _EnvelopeEstimate(range_m, effective_time, time_to_target, hard_limited)
 
 
+def _visible_trajectory_reference_envelope(
+    reference: VisibleTrajectoryReference,
+    *,
+    target_distance_m: float,
+) -> _EnvelopeEstimate:
+    """Project one source-backed visible curve without calling it a maximum."""
+
+    verified_reach_m = max(0.0, reference.verified_reach_m)
+    time_to_target_s = (
+        reference.time_at_horizontal_distance(target_distance_m)
+        if 0.0 < target_distance_m <= verified_reach_m
+        else 0.0
+    )
+    return _EnvelopeEstimate(
+        range_m=verified_reach_m,
+        duration_s=reference.duration_s,
+        time_to_target_s=time_to_target_s,
+    )
+
+
 def _foxthree_compatible_glide_envelope(
     weapon: Mapping[str, Any],
     *,
@@ -788,21 +815,32 @@ class WeaponSolver:
                 quality = QUALITY_TWO_DIMENSIONAL
                 model_reason = "powered_point_mass_2d"
             elif propulsion == "unpowered" and weapon.get("control") == "guided":
-                estimate = _guided_normal_envelope(
-                    weapon,
+                visible_reference = find_visible_trajectory_reference(
+                    str(weapon.get("id") or ""),
                     launch_altitude_m=altitude_m,
                     launch_speed_mps=speed_mps,
                     target_altitude_m=target_altitude_m,
-                    target_distance_m=distance_m,
-                    trajectory_func=self._trajectory_func,
+                    target_kind=target_kind,
                 )
-                quality = (
-                    QUALITY_CONSERVATIVE
-                    if target_altitude_m is not None
-                    else QUALITY_TWO_DIMENSIONAL
-                )
-                model_reason = "guided_ballistic_conservative"
-                within_status = STATUS_IN_ENVELOPE
+                if visible_reference is not None:
+                    estimate = _visible_trajectory_reference_envelope(
+                        visible_reference,
+                        target_distance_m=distance_m,
+                    )
+                    model_reason = REASON_PLAYER_VISIBLE_TRAJECTORY_REFERENCE
+                else:
+                    estimate = _guided_normal_envelope(
+                        weapon,
+                        launch_altitude_m=altitude_m,
+                        launch_speed_mps=speed_mps,
+                        target_altitude_m=target_altitude_m,
+                        target_distance_m=distance_m,
+                        trajectory_func=self._trajectory_func,
+                    )
+                    model_reason = REASON_GUIDED_BALLISTIC_UNCALIBRATED
+                quality = QUALITY_EXPERIMENTAL
+                within_status = STATUS_WITHIN_EXPERIMENTAL_REFERENCE
+                beyond_status = STATUS_BEYOND_EXPERIMENTAL_REFERENCE
             else:
                 return WeaponSolution(
                     status=STATUS_INSUFFICIENT_DATA,

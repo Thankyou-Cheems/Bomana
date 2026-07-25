@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from launcher import core as launcher_core
+from launcher.terrain_store import TerrainFile, terrain_revision
 
 # enforces: docs/specs/schemas/app-manifest.schema.json
 # enforces: docs/specs/schemas/launcher-manifest.schema.json
@@ -27,7 +28,11 @@ SUPPORTED_SCHEMA_KEYWORDS = {
     "additionalProperties",
     "const",
     "enum",
+    "items",
+    "maxItems",
     "minLength",
+    "minItems",
+    "maximum",
     "minimum",
     "pattern",
     "properties",
@@ -90,6 +95,18 @@ def assert_value_matches_rules(field: str, value: Any, rules: dict[str, Any]) ->
             item_rules = rules.get("properties", {}).get(key)
             if item_rules:
                 assert_value_matches_rules(f"{field}.{key}", item, item_rules)
+        if rules.get("additionalProperties") is False:
+            assert not (set(value) - set(rules.get("properties", {}))), field
+        return
+    if expected_type == "array":
+        assert isinstance(value, list), field
+        if "minItems" in rules:
+            assert len(value) >= rules["minItems"], field
+        if "maxItems" in rules:
+            assert len(value) <= rules["maxItems"], field
+        if "items" in rules:
+            for index, item in enumerate(value):
+                assert_value_matches_rules(f"{field}[{index}]", item, rules["items"])
         return
     if expected_type == "integer":
         assert isinstance(value, int) and not isinstance(value, bool), field
@@ -103,6 +120,8 @@ def assert_value_matches_rules(field: str, value: Any, rules: dict[str, Any]) ->
         assert len(value) >= rules["minLength"], field
     if "minimum" in rules:
         assert value >= rules["minimum"], field
+    if "maximum" in rules:
+        assert value <= rules["maximum"], field
     if "pattern" in rules:
         assert re.fullmatch(rules["pattern"], value), field
 
@@ -188,8 +207,76 @@ def test_launcher_manifest_schema_matches_signed_payload_fields() -> None:
         )
 
 
+def test_terrain_manifest_schema_matches_signed_nested_file_set() -> None:
+    schema = load_schema("terrain-manifest.schema.json")
+    signed_fields = tuple(schema["x-signed-fields"])
+
+    assert signed_fields == launcher_core._TERRAIN_MANIFEST_SIGNATURE_FIELDS
+
+    files = (
+        TerrainFile(
+            path="index.json",
+            asset=f"Bomana_terrain_object_{'a' * 64}.json",
+            sha256="a" * 64,
+            size_bytes=10,
+        ),
+        TerrainFile(
+            path="manifest.json",
+            asset=f"Bomana_terrain_object_{'b' * 64}.json",
+            sha256="b" * 64,
+            size_bytes=20,
+        ),
+        TerrainFile(
+            path="map.bth",
+            asset=f"Bomana_terrain_object_{'c' * 64}.bth",
+            sha256="c" * 64,
+            size_bytes=30,
+        ),
+    )
+    manifest = {
+        "schema_version": 1,
+        "terrain_pack_id": "terrain-v1",
+        "terrain_revision": terrain_revision("terrain-v1", 1, files),
+        "map_count": 1,
+        "total_size_bytes": 60,
+        "files": [
+            {
+                "path": item.path,
+                "asset": item.asset,
+                "sha256": item.sha256,
+                "size_bytes": item.size_bytes,
+            }
+            for item in files
+        ],
+    }
+
+    signed_manifest = sign_and_roundtrip(manifest)
+    assert_schema_accepts(schema, signed_manifest)
+    launcher_core.verify_release_manifest_signature(
+        signed_manifest,
+        public_keys={"test-key": PUBLIC_KEY},
+        expected_kind="terrain",
+    )
+    signed_payload = json.loads(
+        launcher_core.manifest_signature_payload(signed_manifest, expected_kind="terrain")
+    )
+    assert set(signed_payload) == set(signed_fields)
+
+    signed_manifest["files"][2]["sha256"] = "d" * 64
+    with pytest.raises(RuntimeError, match="发布签名校验失败"):
+        launcher_core.verify_release_manifest_signature(
+            signed_manifest,
+            public_keys={"test-key": PUBLIC_KEY},
+            expected_kind="terrain",
+        )
+
+
 def test_manifest_signature_schema_requires_ed25519_identity() -> None:
-    for schema_name in ("app-manifest.schema.json", "launcher-manifest.schema.json"):
+    for schema_name in (
+        "app-manifest.schema.json",
+        "launcher-manifest.schema.json",
+        "terrain-manifest.schema.json",
+    ):
         schema = load_schema(schema_name)
         signature_schema = schema["$defs"]["manifest_signature"]
 

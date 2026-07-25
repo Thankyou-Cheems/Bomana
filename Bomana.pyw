@@ -6,11 +6,6 @@ This file intentionally stays thin. It wires startup diagnostics, runtime
 compatibility checks, single-instance protection, Windows DPI setup, and the
 top-level `App` object. Feature logic belongs under `bomana/`.
 
-Compliance boundary:
-- Use only the official localhost:8111 API.
-- Do not read game memory, inject code, or modify game files.
-- Do not surface enemy-only or otherwise player-invisible information.
-
 Runtime inputs:
 - `/indicators`
 - `/state`
@@ -21,8 +16,7 @@ Maintenance notes:
 - Respect `ENABLE_*` feature flags and shared variant behavior in
   `bomana/config/`.
 - Bump `__version__` in `bomana/metadata.py` for user-visible releases.
-- Project-wide workflow and documentation rules live in `AGENTS.md` and
-  `docs/`.
+- Project documentation and maintained contracts live in `docs/`.
 """
 
 from bomana_version import validate_app_launcher_identity
