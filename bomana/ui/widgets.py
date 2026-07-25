@@ -1,5 +1,7 @@
 """Reusable UI widgets."""
 
+import contextlib
+import math
 import tkinter as tk
 import tkinter.font as tkfont
 from typing import Any
@@ -12,6 +14,7 @@ from bomana.ui.theme import Theme
 from bomana.utils.math_utils import (
     calculate_heading_tape_scale,
     format_distance_dynamic,
+    format_distance_ete,
     get_cdi_tolerance,
     get_deviation_color,
 )
@@ -150,7 +153,8 @@ class HeadingTape(tk.Canvas):
 
     特性:
     - 同时显示多个不同类型的目标
-    - 主目标（战区）有偏航提示
+    - 主目标（战区）使用带内非线性精确航线指示
+    - 机场方向和距离直接保留在主航向刻度中
     - 被摧毁的战区用特殊标记显示
     """
 
@@ -190,6 +194,11 @@ class HeadingTape(tk.Canvas):
         self._last_render_signature = None
         self._last_targets = []
         self._last_primary_distance_km = 0.0
+        self._last_mode_notice = ""
+        self._guidance_target_ratio = 0.0
+        self._guidance_display_ratio = 0.0
+        self._guidance_target_key: tuple[str, str] | None = None
+        self._guidance_animation_id: str | None = None
         self.bind("<Configure>", self._on_configure, add="+")
 
         # 目标类型颜色配置
@@ -248,6 +257,7 @@ class HeadingTape(tk.Canvas):
         distance_small_font_size = self._scaled_text_size(7, min_size=6)
         overflow_font_size = self._scaled_text_size(7, min_size=6)
         arrow_font_size = self._scaled_text_size(10, min_size=8)
+        guidance_font_size = self._scaled_text_size(9, min_size=7)
 
         degree_font = self._font(degree_font_size)
         distance_font = self._font(distance_font_size)
@@ -255,16 +265,27 @@ class HeadingTape(tk.Canvas):
         distance_small_font = self._font(distance_small_font_size)
         overflow_font = self._font(overflow_font_size, weight="bold")
         arrow_font = self._font(arrow_font_size, weight="bold", family="Arial")
+        guidance_font = self._font(guidance_font_size, weight="bold", family="Segoe UI")
 
         distance_linespace = max(
             self._font_linespace(distance_font),
             self._font_linespace(distance_bold_font),
             self._font_linespace(distance_small_font),
         )
+        guidance_linespace = self._font_linespace(guidance_font)
 
         top_pad = max(2, int(2 * scale))
         bottom_pad = max(2, int(2 * scale))
         row_gap = max(2, int(2 * scale))
+        guidance_pad = max(3, int(3 * scale))
+        guidance_track_height = max(10, int(11 * scale))
+        guidance_band_height = (
+            guidance_pad
+            + guidance_linespace
+            + row_gap
+            + guidance_track_height
+            + guidance_pad
+        )
         marker_scale = max(0.85, scale)
         marker_half = max(8, int(9 * marker_scale))
         tick_major = max(12, int(12 * scale))
@@ -274,7 +295,15 @@ class HeadingTape(tk.Canvas):
         tick_top = top_pad
         tick_major_bottom = tick_top + tick_major
         degree_text_y = tick_major_bottom + row_gap
-        distance_y = self.tape_height - bottom_pad
+        guidance_top = self.tape_height - bottom_pad - guidance_band_height
+        guidance_text_y = guidance_top + guidance_pad
+        guidance_track_y = (
+            guidance_text_y
+            + guidance_linespace
+            + row_gap
+            + guidance_track_height / 2
+        )
+        distance_y = guidance_top - row_gap
         distance_top = distance_y - distance_linespace
         marker_top_limit = top_pad + marker_half
         marker_bottom_limit = distance_top - row_gap - marker_half
@@ -300,6 +329,12 @@ class HeadingTape(tk.Canvas):
             "distance_small_font": distance_small_font,
             "overflow_font": overflow_font,
             "arrow_font": arrow_font,
+            "guidance_font": guidance_font,
+            "guidance_linespace": guidance_linespace,
+            "guidance_top": guidance_top,
+            "guidance_text_y": guidance_text_y,
+            "guidance_track_y": guidance_track_y,
+            "guidance_track_height": guidance_track_height,
             "marker_scale": marker_scale,
             "marker_center_y": marker_center_y,
             "marker_half": marker_half,
@@ -311,22 +346,48 @@ class HeadingTape(tk.Canvas):
     def _required_tape_height(self) -> int:
         degree_font_size = self._scaled_text_size(8, min_size=7)
         distance_font_size = self._scaled_text_size(9, min_size=7)
+        guidance_font_size = self._scaled_text_size(9, min_size=7)
         scale = float(self.text_scale)
         top_pad = max(2, int(2 * scale))
         bottom_pad = max(2, int(2 * scale))
         row_gap = max(2, int(2 * scale))
+        guidance_pad = max(3, int(3 * scale))
         tick_major = max(12, int(12 * scale))
         marker_half = max(8, int(9 * max(0.85, scale)))
         degree_linespace = self._font_linespace(self._font(degree_font_size))
         distance_linespace = self._font_linespace(self._font(distance_font_size))
+        guidance_linespace = self._font_linespace(
+            self._font(guidance_font_size, weight="bold", family="Segoe UI")
+        )
+        guidance_track_height = max(10, int(11 * scale))
+        guidance_band_height = (
+            guidance_pad
+            + guidance_linespace
+            + row_gap
+            + guidance_track_height
+            + guidance_pad
+        )
         top_band_height = max(
             tick_major + row_gap + degree_linespace,
             marker_half * 2,
         )
-        return top_pad + top_band_height + row_gap + distance_linespace + bottom_pad
+        return (
+            top_pad
+            + top_band_height
+            + row_gap
+            + distance_linespace
+            + row_gap
+            + guidance_band_height
+            + bottom_pad
+        )
 
     def update_tape_multi(
-        self, current_hdg: float, targets: list | None = None, primary_distance_km: float = 0.0
+        self,
+        current_hdg: float,
+        targets: list | None = None,
+        primary_distance_km: float = 0.0,
+        *,
+        mode_notice: str = "",
     ):
         """更新航向带显示（多目标版本）
 
@@ -341,16 +402,25 @@ class HeadingTape(tk.Canvas):
                     'name': 目标名称(可选)
                 }
             primary_distance_km: 主目标距离(用于计算缩放)
+            mode_notice: 无主目标时显示在带内的简短模式提示
         """
         if targets is None:
             targets = []
         self._last_targets = [dict(t) for t in targets]
         self._last_primary_distance_km = float(primary_distance_km or 0.0)
+        self._last_mode_notice = str(mode_notice or "")
+
+        # Guidance is updated at the full input precision even when the coarser
+        # heading-tape frame can be reused.
+        primary = next((dict(t) for t in targets if t.get("is_primary")), None)
+        self._primary_target = primary
+        self._set_guidance_target(primary)
 
         # 高频刷新场景下跳过等效帧重绘，降低Canvas CPU/GDI开销
         render_signature = (
             round(float(current_hdg) * 5),  # 0.2°精度
             round(float(primary_distance_km) * 10),  # 0.1km精度
+            self._last_mode_notice,
             tuple(
                 (
                     t.get("type", "zone"),
@@ -363,6 +433,7 @@ class HeadingTape(tk.Canvas):
             ),
         )
         if render_signature == self._last_render_signature:
+            self._draw_alignment_cue()
             return
         self._last_render_signature = render_signature
 
@@ -382,10 +453,6 @@ class HeadingTape(tk.Canvas):
             outline=Theme.SEPARATOR,
             width=1,
         )
-
-        # 找出主目标（用于偏航提示和缩放计算）
-        primary = next((t for t in targets if t.get("is_primary")), None)
-        self._primary_target = primary
 
         # 1. 动态计算缩放系数（基于主目标距离）
         dist_for_scale = (
@@ -410,14 +477,20 @@ class HeadingTape(tk.Canvas):
             if not primary_in_view:
                 if primary_diff < 0:
                     self.create_rectangle(
-                        0, 0, 50, self.tape_height, fill=Theme.RED, stipple="gray50", outline=""
+                        0,
+                        0,
+                        50,
+                        layout["guidance_top"],
+                        fill=Theme.RED,
+                        stipple="gray50",
+                        outline="",
                     )
                 else:
                     self.create_rectangle(
                         self.tape_width - 50,
                         0,
                         self.tape_width,
-                        self.tape_height,
+                        layout["guidance_top"],
                         fill=Theme.RED,
                         stipple="gray50",
                         outline="",
@@ -536,7 +609,13 @@ class HeadingTape(tk.Canvas):
 
         # 7. 绘制中心基准线（机头指向）
         self.create_line(
-            center_x, 0, center_x, self.tape_height, fill=Theme.GREEN, width=2, dash=(3, 2)
+            center_x,
+            0,
+            center_x,
+            layout["guidance_top"],
+            fill=Theme.GREEN,
+            width=2,
+            dash=(3, 2),
         )
         tri_size = 5
         self.create_polygon(
@@ -549,6 +628,244 @@ class HeadingTape(tk.Canvas):
             fill=Theme.GREEN,
             outline="",
         )
+        self._draw_alignment_cue(layout)
+
+    @staticmethod
+    def _project_guidance_ratio(relative: float, tolerance: float) -> float:
+        """Expand small angular errors while keeping the full CDI range visible."""
+        try:
+            rel = float(relative)
+            tol = max(0.1, float(tolerance))
+        except (TypeError, ValueError):
+            return 0.0
+        if not (math.isfinite(rel) and math.isfinite(tol)):
+            return 0.0
+        magnitude = min(1.0, abs(rel) / tol) ** 0.62
+        return math.copysign(magnitude, rel) if magnitude else 0.0
+
+    def _set_guidance_target(self, primary: dict[str, Any] | None) -> None:
+        if primary is None:
+            self._guidance_target_key = None
+            self._guidance_target_ratio = 0.0
+            self._guidance_display_ratio = 0.0
+            if self._guidance_animation_id is not None:
+                with contextlib.suppress(tk.TclError):
+                    self.after_cancel(self._guidance_animation_id)
+                self._guidance_animation_id = None
+            return
+
+        relative = float(primary.get("relative", 0.0) or 0.0)
+        distance = float(primary.get("distance_km", 0.0) or 0.0)
+        tolerance = get_cdi_tolerance(distance)
+        projected = self._project_guidance_ratio(relative, tolerance)
+        target_key = (
+            str(primary.get("type", "zone") or "zone"),
+            str(primary.get("name", "") or ""),
+        )
+        changed_target = target_key != self._guidance_target_key
+        self._guidance_target_key = target_key
+        self._guidance_target_ratio = projected
+
+        # A target switch or a discontinuous bearing jump should be truthful
+        # immediately. Normal frame-to-frame motion is eased over ~100 ms.
+        if changed_target or abs(projected - self._guidance_display_ratio) > 1.25:
+            self._guidance_display_ratio = projected
+            return
+        if abs(projected - self._guidance_display_ratio) <= 0.002:
+            self._guidance_display_ratio = projected
+            return
+        if self._guidance_animation_id is None:
+            self._guidance_animation_id = self.after(16, self._animate_guidance)
+
+    def _animate_guidance(self) -> None:
+        self._guidance_animation_id = None
+        delta = self._guidance_target_ratio - self._guidance_display_ratio
+        if abs(delta) <= 0.002:
+            self._guidance_display_ratio = self._guidance_target_ratio
+        else:
+            gain = 0.42 if abs(delta) > 0.08 else 0.30
+            self._guidance_display_ratio += delta * gain
+        self._draw_alignment_cue()
+        if abs(self._guidance_target_ratio - self._guidance_display_ratio) > 0.002:
+            self._guidance_animation_id = self.after(16, self._animate_guidance)
+
+    def _guidance_text(
+        self,
+        primary: dict[str, Any],
+        *,
+        compact: bool = False,
+    ) -> tuple[str, str]:
+        relative = float(primary.get("relative", 0.0) or 0.0)
+        distance = float(primary.get("distance_km", 0.0) or 0.0)
+        tolerance = get_cdi_tolerance(distance)
+        abs_rel = abs(relative)
+        distance_text = format_distance_ete(distance, primary.get("ete_str")) if distance > 0 else ""
+        suffix = f" · {distance_text}" if distance_text else ""
+
+        if abs_rel < 0.05:
+            return f"已对准{suffix}", Theme.GREEN
+
+        direction = "左" if relative < 0 else "右"
+        angle_text = f"{abs_rel:.2f}°" if abs_rel < 1.0 else f"{abs_rel:.1f}°"
+        if compact:
+            return f"{direction}{angle_text}{suffix}", get_deviation_color(relative, distance)
+        if abs_rel < 0.30:
+            precise_suffix = f"·{distance_text}" if distance_text else ""
+            text = f"精确·{direction}{angle_text}{precise_suffix}"
+            color = Theme.GREEN
+        elif abs_rel <= tolerance:
+            text = f"{direction}修{angle_text}{suffix}"
+            color = get_deviation_color(relative, distance)
+        else:
+            text = f"{direction}转{angle_text}{suffix}"
+            color = get_deviation_color(relative, distance)
+        return text, color
+
+    def _draw_alignment_cue(self, layout: dict[str, Any] | None = None) -> None:
+        """Draw the fine CDI lane inside the tape instead of in status rows."""
+        with contextlib.suppress(tk.TclError):
+            self.delete("heading_guidance")
+            layout = layout or self._layout_metrics()
+            width = max(1, int(self.tape_width))
+            center_x = width / 2.0
+            track_left = max(18.0, width * 0.075)
+            track_right = min(width - 18.0, width * 0.925)
+            half_track = max(1.0, (track_right - track_left) / 2.0)
+            track_y = float(layout["guidance_track_y"])
+            track_half_h = max(4.0, float(layout["guidance_track_height"]) * 0.42)
+            tags = ("heading_guidance",)
+
+            self.create_line(
+                0,
+                layout["guidance_top"],
+                width,
+                layout["guidance_top"],
+                fill=Theme.SEPARATOR,
+                width=1,
+                tags=tags,
+            )
+            self.create_line(
+                track_left,
+                track_y,
+                track_right,
+                track_y,
+                fill=Theme.TEXT_MUTED,
+                width=1,
+                tags=("heading_guidance", "guidance_track"),
+            )
+
+            primary = self._primary_target
+            if primary is None:
+                notice = "空空导航 · 战区解算暂停" if self._last_mode_notice else "等待导航目标"
+                color = Theme.YELLOW if self._last_mode_notice else Theme.TEXT_MUTED
+                self.create_text(
+                    center_x,
+                    layout["guidance_text_y"],
+                    text=notice,
+                    fill=color,
+                    font=layout["guidance_font"],
+                    anchor="n",
+                    tags=("heading_guidance", "guidance_text"),
+                )
+                self.create_line(
+                    center_x,
+                    track_y - track_half_h,
+                    center_x,
+                    track_y + track_half_h,
+                    fill=Theme.TEXT_DIM,
+                    width=2,
+                    tags=("heading_guidance", "guidance_gate"),
+                )
+                return
+
+            relative = float(primary.get("relative", 0.0) or 0.0)
+            distance = float(primary.get("distance_km", 0.0) or 0.0)
+            tolerance = get_cdi_tolerance(distance)
+            cue_text, cue_color = self._guidance_text(primary)
+            if self._measure_text(cue_text, layout["guidance_font"]) > width - 12:
+                cue_text, cue_color = self._guidance_text(primary, compact=True)
+            self.create_text(
+                center_x,
+                layout["guidance_text_y"],
+                text=cue_text,
+                fill=cue_color,
+                font=layout["guidance_font"],
+                anchor="n",
+                tags=("heading_guidance", "guidance_text"),
+            )
+
+            # The nonlinear scale expands the centre. These ticks retain the
+            # familiar 30/60/100% CDI landmarks without adding more text.
+            for fraction in (0.30, 0.60, 1.0):
+                ratio = fraction**0.62
+                tick_h = track_half_h * (1.0 if fraction == 1.0 else 0.62)
+                for sign in (-1.0, 1.0):
+                    x = center_x + sign * ratio * half_track
+                    self.create_line(
+                        x,
+                        track_y - tick_h,
+                        x,
+                        track_y + tick_h,
+                        fill=Theme.SEPARATOR,
+                        width=1,
+                        tags=("heading_guidance", "guidance_scale_tick"),
+                    )
+
+            lock_ratio = abs(self._project_guidance_ratio(0.10, tolerance))
+            gate_half_w = max(5.0, lock_ratio * half_track)
+            self.create_line(
+                center_x - gate_half_w,
+                track_y - track_half_h,
+                center_x - gate_half_w,
+                track_y + track_half_h,
+                center_x + gate_half_w,
+                track_y + track_half_h,
+                center_x + gate_half_w,
+                track_y - track_half_h,
+                fill=Theme.GREEN,
+                width=2,
+                tags=("heading_guidance", "guidance_gate"),
+            )
+            self.create_line(
+                center_x,
+                track_y - track_half_h - 2,
+                center_x,
+                track_y + track_half_h + 2,
+                fill=Theme.GREEN,
+                width=2,
+                tags=("heading_guidance", "guidance_center"),
+            )
+
+            pipper_x = center_x + self._guidance_display_ratio * half_track
+            pipper_half = max(3.0, track_half_h * 0.72)
+            self.create_polygon(
+                pipper_x,
+                track_y - pipper_half,
+                pipper_x + pipper_half,
+                track_y,
+                pipper_x,
+                track_y + pipper_half,
+                pipper_x - pipper_half,
+                track_y,
+                fill=cue_color,
+                outline=Theme.BG,
+                width=1,
+                tags=("heading_guidance", "guidance_pipper"),
+            )
+            if abs(relative) > tolerance:
+                direction = -1.0 if relative < 0 else 1.0
+                edge_x = track_left if direction < 0 else track_right
+                self.create_polygon(
+                    edge_x,
+                    track_y,
+                    edge_x - direction * 7,
+                    track_y - 5,
+                    edge_x - direction * 7,
+                    track_y + 5,
+                    fill=cue_color,
+                    outline="",
+                    tags=("heading_guidance", "guidance_overflow"),
+                )
 
     def _on_configure(self, event) -> None:
         """Redraw when the widget gets resized by layout."""
@@ -564,7 +881,10 @@ class HeadingTape(tk.Canvas):
         self.tape_height = new_height
         self._last_render_signature = None
         self.update_tape_multi(
-            self._current_hdg, self._last_targets, self._last_primary_distance_km
+            self._current_hdg,
+            self._last_targets,
+            self._last_primary_distance_km,
+            mode_notice=self._last_mode_notice,
         )
 
     def _draw_target_marker(
@@ -1250,6 +1570,23 @@ class HeadingTape(tk.Canvas):
 
     def clear(self):
         """清除航向带"""
+        if self._guidance_animation_id is not None:
+            with contextlib.suppress(tk.TclError):
+                self.after_cancel(self._guidance_animation_id)
+            self._guidance_animation_id = None
         self.delete("all")
         self._primary_target = None
         self._last_render_signature = None
+        self._last_targets = []
+        self._last_primary_distance_km = 0.0
+        self._last_mode_notice = ""
+        self._guidance_target_key = None
+        self._guidance_target_ratio = 0.0
+        self._guidance_display_ratio = 0.0
+
+    def destroy(self) -> None:
+        if self._guidance_animation_id is not None:
+            with contextlib.suppress(tk.TclError):
+                self.after_cancel(self._guidance_animation_id)
+            self._guidance_animation_id = None
+        super().destroy()

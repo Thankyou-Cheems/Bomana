@@ -18,12 +18,22 @@ class FakeLabel:
 class FakeHeadingTape:
     def __init__(self) -> None:
         self.targets: list[dict[str, object]] = []
+        self.mode_notice = ""
 
     def clear(self) -> None:
         self.targets = []
+        self.mode_notice = ""
 
-    def update_tape_multi(self, _heading: float, targets, _primary_distance: float) -> None:
+    def update_tape_multi(
+        self,
+        _heading: float,
+        targets,
+        _primary_distance: float,
+        *,
+        mode_notice: str = "",
+    ) -> None:
         self.targets = list(targets)
+        self.mode_notice = mode_notice
 
 
 def test_standalone_aam_navigation_shows_notice_and_all_candidates() -> None:
@@ -32,13 +42,6 @@ def test_standalone_aam_navigation_shows_notice_and_all_candidates() -> None:
     nav.heading_lbl = FakeLabel()
     nav.tolerance_lbl = FakeLabel()
     nav.heading_tape = FakeHeadingTape()
-    nav.zone_label = FakeLabel()
-    nav.zone_turn = FakeLabel()
-    nav.zone_status = FakeLabel()
-    nav.zone_info = FakeLabel()
-    nav.friendly_turn = FakeLabel()
-    nav.friendly_status = FakeLabel()
-    nav.friendly_info = FakeLabel()
     snap = SimpleNamespace(
         phase=Phase.ALIVE,
         api_down=False,
@@ -68,9 +71,8 @@ def test_standalone_aam_navigation_shows_notice_and_all_candidates() -> None:
 
     nav.update_display(snap)
 
-    assert nav.zone_label.cget("text") == "空空导航"
-    assert nav.zone_status.cget("text") == "战区解算已暂停，仅进行导航"
     assert nav.tolerance_lbl.cget("text") == "敌机 / POI"
+    assert nav.heading_tape.mode_notice == "战区解算已暂停，仅进行导航"
     assert {target["type"] for target in nav.heading_tape.targets} == {
         "hostile_aircraft",
         "poi",

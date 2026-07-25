@@ -2,13 +2,13 @@ const repository = "Thankyou-Cheems/Bomana";
 const githubReleasesUrl = `https://github.com/${repository}/releases`;
 const githubReleasesApi = `https://api.github.com/repos/${repository}/releases?per_page=20`;
 
-/** EdgeOne-accelerated update CDN (Tencent). Primary for China and site mirror. */
+/** Stable EdgeOne download origin. It is intentionally separate from the site host. */
 const cdnBase = "https://bomanaupdate.ruikang.wang";
-const cdnLauncherApi = `${cdnBase}/api/v1/launcher`;
-const cdnVersionApi = (channel) =>
-  `${cdnBase}/api/v1/version?channel=${encodeURIComponent(channel)}`;
 
-/** Same-origin static catalog — no GitHub required for the page to work. */
+/**
+ * Same-origin catalog refreshed by deploy_pages_mirror.py on the maintainer
+ * workstation. The browser does not require cross-origin API permission.
+ */
 const catalogUrl = "download-catalog.json";
 
 const statusEl = document.querySelector("#releaseStatus");
@@ -109,43 +109,6 @@ async function loadStaticCatalog() {
   return fetchJson(catalogUrl, { cache: "no-cache" });
 }
 
-async function loadCdnCatalog() {
-  const launcher = await fetchJson(cdnLauncherApi, { cache: "no-cache" });
-  const channels = {};
-  await Promise.all(
-    CHANNELS.map(async (channel) => {
-      try {
-        channels[channel] = await fetchJson(cdnVersionApi(channel), { cache: "no-cache" });
-      } catch (error) {
-        console.warn(`CDN channel ${channel} unavailable`, error);
-      }
-    }),
-  );
-  return {
-    schema_version: 1,
-    primary_source: "TencentCloud",
-    cdn_base: cdnBase,
-    launcher: {
-      version: launcher.launcher_version || launcher.version || "",
-      package_url: launcher.package_url || "",
-      asset: launcher.launcher_asset || launcher.package_asset || "",
-      sha256: launcher.launcher_sha256 || launcher.package_sha256 || "",
-    },
-    channels: Object.fromEntries(
-      Object.entries(channels).map(([channel, body]) => [
-        channel,
-        {
-          app_version: body.app_version || "",
-          package_url: body.package_url || "",
-          asset: body.package_asset || "",
-          sha256: body.package_sha256 || "",
-        },
-      ]),
-    ),
-    github_releases_url: githubReleasesUrl,
-  };
-}
-
 function applyCatalog(catalog, sourceLabel) {
   const launcherUrl = catalog?.launcher?.package_url || "";
   const version = catalog?.launcher?.version || "";
@@ -164,7 +127,8 @@ function applyCatalog(catalog, sourceLabel) {
     const enhanced = catalog?.channels?.Enhanced?.app_version;
     if (enhanced) parts.push(`超级爆弹版 v${enhanced}`);
     const summary = parts.length ? parts.join(" · ") : "版本信息已就绪";
-    statusEl.textContent = `${summary}。主下载：腾讯云 EdgeOne CDN（${sourceLabel}）；GitHub 为备用。`;
+    statusEl.textContent =
+      `${summary}。主下载：腾讯云 EdgeOne CDN（${sourceLabel}；${cdnBase}）；GitHub 为备用。`;
   }
 }
 
@@ -192,24 +156,13 @@ async function loadRelease() {
   setGithubFallback(githubReleasesUrl);
 
   let catalog = null;
-  let sourceLabel = "catalog";
+  const sourceLabel = "部署时版本目录";
 
-  // 1) Prefer live CDN API (EdgeOne). Works from China and from the Tencent mirror.
+  // Same-origin catalog: domain cutovers do not require update-API CORS.
   try {
-    catalog = await loadCdnCatalog();
-    sourceLabel = "live API";
+    catalog = await loadStaticCatalog();
   } catch (error) {
-    console.warn("CDN API unavailable, falling back to static catalog", error);
-  }
-
-  // 2) Same-origin static catalog (baked at deploy time; no GitHub on server).
-  if (!catalog?.launcher?.package_url) {
-    try {
-      catalog = await loadStaticCatalog();
-      sourceLabel = "static catalog";
-    } catch (error) {
-      console.warn("Static download catalog unavailable", error);
-    }
+    console.warn("Static download catalog unavailable", error);
   }
 
   if (catalog?.launcher?.package_url) {
@@ -220,7 +173,7 @@ async function loadRelease() {
     setPrimaryDownload(githubReleasesUrl, "打开 GitHub Releases（临时）");
   }
 
-  // 3) Best-effort GitHub metadata for backup deep-link only (may fail in CN).
+  // Best-effort GitHub metadata for backup deep-link only (may fail in CN).
   loadGithubBackupLinksOnly();
 }
 

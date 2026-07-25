@@ -1,0 +1,35 @@
+# Canonical Bomana public-site blocks. The shared host Caddyfile already
+# defines the `compression` snippet used below.
+
+(bomana_public_static) {
+  import compression
+  header {
+    X-Frame-Options "SAMEORIGIN"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    -Server
+  }
+
+  @mutable path / /index.html /site.js /styles.css /download-catalog.json
+  header @mutable Cache-Control "public, max-age=60, must-revalidate"
+
+  # Asset names are stable rather than content-addressed. Keep this cache
+  # bounded so a later site update cannot leave year-long stale screenshots.
+  @site_assets path /assets/*
+  header @site_assets Cache-Control "public, max-age=3600, must-revalidate"
+
+  root * /opt/Website/bomana
+  file_server
+}
+
+http://bomana.ruikang.wang {
+  import bomana_public_static
+}
+
+# EdgeOne pulls this explicit acceleration domain over HTTPS. The EdgeOne
+# domain configuration does not validate the origin certificate, so an
+# internal Caddy certificate avoids coupling the origin to public ACME.
+https://bomana.ruikang.wang {
+  tls internal
+  import bomana_public_static
+}

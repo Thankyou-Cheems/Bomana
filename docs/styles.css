@@ -788,6 +788,10 @@ h3 {
   width: 100%;
 }
 
+.gallery-row--instruments {
+  grid-template-columns: minmax(18rem, 0.75fr) minmax(0, 1.25fr);
+}
+
 .shot {
   margin: 0;
   display: flex;
@@ -807,6 +811,18 @@ h3 {
 
 .shot--strip {
   width: 100%;
+}
+
+.shot--instrument .shot-frame,
+.shot--instrument-wide .shot-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shot--instrument .shot-img,
+.shot--instrument-wide .shot-img {
+  width: auto;
 }
 
 .shot-frame {
@@ -1365,6 +1381,10 @@ h3 {
     transform: none;
   }
 
+  .gallery-row--instruments {
+    grid-template-columns: 1fr;
+  }
+
   .download-panel,
   .hotkey-section {
     grid-template-columns: 1fr;
@@ -1403,6 +1423,7 @@ h3 {
   }
 
   .gallery-row--pair,
+  .gallery-row--instruments,
   .feature-bento,
   .docs-grid {
     grid-template-columns: 1fr;

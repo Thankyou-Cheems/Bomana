@@ -18,6 +18,7 @@ from bomana.config.settings import (
     UIConfig,
 )
 from bomana.ui.panel_presenter import build_bombing_display_model
+from bomana.ui.text_utils import set_elided_text
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_action_button, style_clickable_surface
 from bomana.utils.system import Win32
@@ -311,15 +312,16 @@ class CCRPConvergenceCue(tk.Canvas):
         with contextlib.suppress(tk.TclError):
             self.delete("all")
             width = max(180, int(self.winfo_width() or self.winfo_reqwidth() or 320))
-            height = max(38, int(self.winfo_height() or self.winfo_reqheight() or 48))
+            height = max(34, int(self.winfo_height() or self.winfo_reqheight() or 42))
             center_x = width / 2.0
-            center_y = height * 0.56
+            center_y = height * 0.63
             color = self._projection.color
             gap_px = self._display_gap * width
             left_x = center_x - gap_px
             right_x = center_x + gap_px
-            bracket_h = max(13.0, height * 0.34)
-            foot = max(7.0, width * 0.024)
+            bracket_h = max(8.0, height * 0.24)
+            foot = max(6.0, width * 0.020)
+            line_width = max(2, round(height * 0.05))
 
             self.create_line(
                 width * 0.035,
@@ -344,7 +346,7 @@ class CCRPConvergenceCue(tk.Canvas):
                     x,
                     center_y + bracket_h,
                     fill=color,
-                    width=3,
+                    width=line_width,
                 )
                 self.create_line(
                     x,
@@ -352,7 +354,7 @@ class CCRPConvergenceCue(tk.Canvas):
                     x + direction * foot,
                     center_y - bracket_h,
                     fill=color,
-                    width=3,
+                    width=line_width,
                 )
                 self.create_line(
                     x,
@@ -360,11 +362,11 @@ class CCRPConvergenceCue(tk.Canvas):
                     x + direction * foot,
                     center_y + bracket_h,
                     fill=color,
-                    width=3,
+                    width=line_width,
                 )
 
             if self._projection.pulse:
-                radius = 5.5 + 2.5 * (0.5 + 0.5 * math.sin(self._pulse_phase))
+                radius = 4.5 + 2.0 * (0.5 + 0.5 * math.sin(self._pulse_phase))
                 self.create_oval(
                     center_x - radius,
                     center_y - radius,
@@ -375,10 +377,10 @@ class CCRPConvergenceCue(tk.Canvas):
                 )
             self.create_text(
                 center_x,
-                max(8, height * 0.16),
+                max(7, height * 0.16),
                 text=self._projection.status_text,
                 fill=color,
-                font=("Segoe UI Semibold", max(8, int(height * 0.19))),
+                font=("Segoe UI Semibold", max(8, int(height * 0.18))),
                 anchor="center",
             )
 
@@ -441,10 +443,10 @@ class BombingBar:
     def _build(self) -> None:
         s = self.scale
         pad_x = max(5, int(8 * s))
-        pad_y = max(3, int(4 * s))
+        pad_y = max(2, int(2 * s))
 
         self.header_frame = tk.Frame(self.frame, bg=Theme.GRAYPILL)
-        self.header_frame.pack(fill="x", padx=pad_x, pady=(pad_y, max(2, int(2 * s))))
+        self.header_frame.pack(fill="x", padx=pad_x, pady=(pad_y, max(1, int(1 * s))))
         self.header_frame.grid_columnconfigure(1, weight=1)
         self.title_lbl = tk.Label(
             self.header_frame,
@@ -456,21 +458,22 @@ class BombingBar:
         )
         self.title_lbl.grid(row=0, column=0, sticky="w")
         self.drag_hint_lbl = None
-        if self.standalone:
-            self.drag_hint_lbl = tk.Label(
-                self.header_frame,
-                text=f"[{HotkeyConfig.KEY_LOCK}] 解锁后拖动",
-                font=self._font("hint", size_mult=0.86),
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-            )
-            self.drag_hint_lbl.grid(
-                row=0,
-                column=1,
-                sticky="w",
-                padx=(int(10 * s), 0),
-            )
+        self._target_summary_full_text = "等待目标 · 高程 --"
+        self.target_summary_lbl = tk.Label(
+            self.header_frame,
+            text=self._target_summary_full_text,
+            font=self._font("hint", size_mult=0.90),
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+            anchor="w",
+            width=1,
+        )
+        self.target_summary_lbl.grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=(int(9 * s), int(4 * s)),
+        )
         self.release_lbl = tk.Label(
             self.header_frame,
             text="等待目标",
@@ -524,9 +527,15 @@ class BombingBar:
         self.close_btn._bomana_no_drag = True
         if self.mode_btn is not None:
             self.mode_btn._bomana_no_drag = True
+        self.header_frame.bind(
+            "<Configure>",
+            lambda _event: self._refresh_target_summary(),
+            add="+",
+        )
+        self.target_summary_lbl.after_idle(self._refresh_target_summary)
 
         self.controls_frame = tk.Frame(self.frame, bg=Theme.GRAYPILL)
-        self.controls_frame.pack(fill="x", padx=pad_x, pady=(0, max(2, int(3 * s))))
+        self.controls_frame.pack(fill="x", padx=pad_x, pady=(0, max(1, int(2 * s))))
         self.controls_frame.grid_columnconfigure(0, weight=1)
         self.weapon_prev_btn = None
         self.weapon_next_btn = None
@@ -559,19 +568,9 @@ class BombingBar:
         self.target_mode_btn._bomana_no_drag = True
         self.target_mode_btn.grid(row=0, column=1, sticky="e", padx=(int(6 * s), 0))
 
+        # Compatibility host retained but deliberately unmanaged. The target
+        # summary now uses otherwise-empty space in the title row.
         self.info_frame = tk.Frame(self.frame, bg=Theme.GRAYPILL)
-        self.info_frame.pack(fill="x", padx=pad_x)
-        self.info_frame.grid_columnconfigure(0, weight=1)
-        self.info_frame.grid_columnconfigure(1, weight=1)
-        self.target_summary_lbl = tk.Label(
-            self.info_frame,
-            text="战区 · 等待目标",
-            font=self._font("item"),
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-        )
-        self.target_summary_lbl.grid(row=0, column=0, sticky="ew")
         self.target_altitude_lbl = tk.Label(
             self.info_frame,
             text="目标高程 --",
@@ -589,12 +588,12 @@ class BombingBar:
 
         self.cue = CCRPConvergenceCue(
             self.frame,
-            height=max(46, int(52 * s)),
+            height=max(38, int(42 * s)),
         )
         self.cue.pack(
             fill="x",
             padx=pad_x,
-            pady=(max(3, int(4 * s)), max(4, int(5 * s))),
+            pady=(max(2, int(2 * s)), max(3, int(3 * s))),
         )
 
         # Compatibility-only labels retained for embedders that still inspect
@@ -631,18 +630,55 @@ class BombingBar:
     @staticmethod
     def _compact_weapon_label(text: str) -> str:
         value = str(text or "").strip()
-        if len(value) <= 46:
-            return value or "选择投弹弹药"
-        return value[:43].rstrip() + "…"
+        if not value:
+            return "选择投弹弹药"
+        parts = [part.strip() for part in value.split(" · ") if part.strip()]
+        if parts and parts[-1] == "点击切换":
+            parts.pop()
+        if parts and parts[-1] == "炸弹":
+            parts.pop()
+        value = " · ".join(parts) or value
+        if len(value) <= 30:
+            return value
+        return value[:27].rstrip() + "…"
+
+    @staticmethod
+    def _target_context_text(summary: str, altitude: str) -> str:
+        summary_text = " ".join(str(summary or "").strip().split())
+        if summary_text in {"", "--", "等待目标"}:
+            summary_text = "等待目标"
+        summary_text = summary_text.replace("战区 #", "战区#")
+        altitude_text = " ".join(str(altitude or "").strip().split())
+        altitude_text = altitude_text.replace("目标高程", "", 1).strip()
+        altitude_text = altitude_text.replace(" · 等待目标", "")
+        if not altitude_text:
+            altitude_text = "--"
+        altitude_text = f"高{altitude_text.replace(' ', '')}"
+        if altitude_text != "高--" and summary_text != "等待目标":
+            return f"{altitude_text}·{summary_text}"
+        return f"{summary_text}·{altitude_text}"
+
+    def _refresh_target_summary(self) -> None:
+        with contextlib.suppress(tk.TclError):
+            width = int(self.target_summary_lbl.winfo_width() or 0)
+            if width <= 1:
+                return
+            set_elided_text(
+                self.target_summary_lbl,
+                self._target_summary_full_text,
+                max(1, width - max(2, int(3 * self.scale))),
+            )
 
     def update_snapshot(self, snapshot: Any) -> None:
         model = build_bombing_display_model(snapshot)
         self.weapon_btn.configure(text=self._compact_weapon_label(model.bomb_label_text))
         self.trajectory_lbl.configure(text=model.trajectory_text, fg=model.trajectory_fg)
-        self.target_summary_lbl.configure(
-            text=model.target_summary_text or "等待目标",
-            fg=model.trajectory_fg,
+        self._target_summary_full_text = self._target_context_text(
+            model.target_summary_text,
+            model.target_altitude_text,
         )
+        self.target_summary_lbl.configure(fg=model.trajectory_fg)
+        self._refresh_target_summary()
         self.target_altitude_lbl.configure(text=model.target_altitude_text or "目标高程 --")
         self.app.icons.configure_label(
             self.release_lbl,

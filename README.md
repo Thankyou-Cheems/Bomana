@@ -13,14 +13,14 @@ War Thunder is a vehicle-combat video game; Bomana is a multifunction timer for 
 Terms like “bomb / bombing / CCRP” here mean **in-game virtual concepts only**, not anything in the real world. Have fun!
 
 <!-- Versions from EdgeOne CDN (what players actually get). GitHub "latest" is often a launcher-only tag. -->
-[![App](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fversion%3Fchannel%3DEnhanced&query=%24.app_version&label=app&prefix=v&color=0ea5e9)](https://ruikang.wang/bomana/)
-[![Launcher](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Flauncher&query=%24.launcher_version&label=launcher&prefix=v&color=6366f1)](https://ruikang.wang/bomana/)
+[![App](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fversion%3Fchannel%3DEnhanced&query=%24.app_version&label=app&prefix=v&color=0ea5e9)](https://bomana.ruikang.wang/)
+[![Launcher](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Flauncher&query=%24.launcher_version&label=launcher&prefix=v&color=6366f1)](https://bomana.ruikang.wang/)
 [![License](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.14%2B-eab308)](https://www.python.org/)
 [![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=22c55e)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 [![Launches](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.launcher_start_total&label=launches&color=3b82f6)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 
-**[官网 / CDN 下载](https://ruikang.wang/bomana/)** ·
+**[官网 / CDN 下载](https://bomana.ruikang.wang/)** ·
 [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) ·
 [Releases 备用](https://github.com/Thankyou-Cheems/Bomana/releases)
 
@@ -125,16 +125,17 @@ Terms like “bomb / bombing / CCRP” here mean **in-game virtual concepts only
 请注意：
 
 - 投弹栏可在主窗中集成显示，也可单独分离；若导航栏也处于独立模式，投弹栏会挂在导航栏下方
-- 左右切换按钮可快速选择当前机型已确认兼容的炸弹；程序不会读取或猜测游戏挂载
+- 点击蓝色弹药文本框即可选择当前机型已确认兼容的炸弹；程序不会读取或猜测游戏挂载
 - `F6` 或栏内按钮显式切换“战区 / 兴趣点”目标来源，重合时不会再由程序自动猜目标类型
-- 目标摘要会标注离线地形高程；对称收束指示器随预计释放时间平滑内收，到点闪绿，越点后显示红色越界线
+- 目标、高程和释放状态合并在标题区，默认 CCRP 卡片更紧凑；对称收束指示器随预计释放时间平滑内收，到点闪绿，越点后显示红色越界线
 - 所有结果仍是外部参考，不代表游戏内部投弹计算或投放许可
 
 ### 战区与机场导航
 
 - 图形化航向、距离、预计到达时间
+- 航向带内置非线性精确对准区：接近目标时直接显示左右偏差、捕获门与平滑游标，不再占用两行额外提示
 - 对准目标一段时间后可自动锁定
-- 返航机场方向与距离；敌方机场可按需显示
+- 返航机场方向与距离；友方 / 敌方机场继续保留在主刻度上，避免精确对准时丢失全局方位
 - 同一战局复活后，可提示上次损失位置方向
 
 ### 燃油与超速提醒
@@ -200,7 +201,7 @@ Standard / Lite **不会打包**网页驾驶舱代码；若启动器勾选了网
 - 当前 App 8.6.2 需要启动器 3.3.0 及以上
 - 超级爆弹版的地形数据由启动器单独维护；启动器直接显示当前地图包状态、地图数量与修订号，版本未变化时零下载，变化时只下载改变的地图对象
 - 程序显示名：`Bomana香焦`
-- 也可从 [官网镜像](https://ruikang.wang/bomana/)（国内 CDN）或 [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) 进入下载
+- 也可从 [Bomana 官网](https://bomana.ruikang.wang/)（国内 CDN）或 [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) 进入下载；旧的 `/bomana` 地址只作为兼容重定向保留
 
 ### 源码运行（可选）
 

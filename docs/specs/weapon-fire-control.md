@@ -345,8 +345,12 @@ those results.
   section titles, use the shared red `关闭` action, and retain a separate
   detach action. In standalone or navigation-mounted mode the header MUST match
   the standalone-navigation style: its `✕` returns to integrated mode and no
-  second return button is rendered. The target row MUST keep the selected
-  target and numeric target elevation but omit terrain-provenance suffixes.
+  second return button is rendered. The selected target and numeric target
+  elevation MUST use otherwise-free space in the title row, prioritize a known
+  elevation when width is constrained, and omit terrain-provenance suffixes;
+  no separate target/elevation row is rendered. At default scale the release
+  cue MUST use a 42 px base height, while its brackets and status text remain
+  within the canvas at supported text scales.
   Legacy trajectory/source and separate stability/detail rows MUST remain
   unmanaged; transient failure guidance belongs inside the cue.
   The symmetric CCRP convergence cue MUST be a render-only projection of

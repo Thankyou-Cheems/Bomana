@@ -13,14 +13,14 @@ War Thunder 是一款载具对战电子游戏；Bomana 是面向全真模式的�
 文中的「炸弹 / 投弹 / CCRP」等均指**游戏内虚拟概念**，与现实无关。祝你玩得开心！
 
 <!-- Versions from EdgeOne CDN (what players actually get). GitHub "latest" is often a launcher-only tag. -->
-[![App](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fversion%3Fchannel%3DEnhanced&query=%24.app_version&label=app&prefix=v&color=0ea5e9)](https://ruikang.wang/bomana/)
-[![Launcher](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Flauncher&query=%24.launcher_version&label=launcher&prefix=v&color=6366f1)](https://ruikang.wang/bomana/)
+[![App](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fversion%3Fchannel%3DEnhanced&query=%24.app_version&label=app&prefix=v&color=0ea5e9)](https://bomana.ruikang.wang/)
+[![Launcher](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Flauncher&query=%24.launcher_version&label=launcher&prefix=v&color=6366f1)](https://bomana.ruikang.wang/)
 [![License](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.14%2B-eab308)](https://www.python.org/)
 [![DAU](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.dau_unique_device&label=DAU&color=22c55e)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 [![Launches](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fstats%2Fdaily&query=%24.metrics.launcher_start_total&label=launches&color=3b82f6)](https://bomanaupdate.ruikang.wang/api/v1/stats/daily)
 
-**[Site / CDN download](https://ruikang.wang/bomana/)** ·
+**[Site / CDN download](https://bomana.ruikang.wang/)** ·
 [GitHub Pages](https://thankyou-cheems.github.io/Bomana/) ·
 [Releases (backup)](https://github.com/Thankyou-Cheems/Bomana/releases)
 
@@ -125,16 +125,17 @@ In simulator battles, each spawn has about a 15-minute reward window. Bomana can
 Notes:
 
 - The bombing bar can stay integrated or detach; when navigation is also detached, it mounts directly below the navigation bar
-- Arrow buttons cycle bombs verified for the current airframe; Bomana never reads or guesses the in-game loadout
+- Click the blue weapon field to select a bomb verified for the current airframe; Bomana never reads or guesses the in-game loadout
 - `F6` or the bar button explicitly selects Zone versus POI targeting, so overlapping targets are never resolved by an implicit guess
-- The summary identifies offline terrain elevation; symmetric brackets converge smoothly toward release, pulse green at the cue, and show a red overrun line after it
+- Target, elevation, and release state share the header so the default CCRP card stays compact; symmetric brackets converge smoothly toward release, pulse green at the cue, and show a red overrun line after it
 - All results remain external references, not the game’s internal solution or release authority
 
 ### Zone and airfield navigation
 
 - Heading, distance, and time-to-target cues
+- A nonlinear precision lane is built into the heading tape: near the target it shows left/right error, a capture gate, and a smoothed pipper without two extra status rows
 - Optional auto-lock after holding aim on a target
-- Home airfield direction; enemy airfields optional
+- Friendly and optional enemy airfields remain on the main scale while the precision lane is active
 - After respawning in the same match, direction to the last confirmed loss
 
 ### Fuel and overspeed cues
@@ -200,7 +201,7 @@ Notes:
 - Current App 8.6.2 requires Launcher 3.3.0+
 - Launcher shows the current offline-pack state, map count, and revision; unchanged revisions download nothing, while updates fetch only changed map objects
 - Display name: `Bomana香焦`  
-- Site entry: [China site / CDN](https://ruikang.wang/bomana/) or [GitHub Pages](https://thankyou-cheems.github.io/Bomana/)
+- Site entry: [Bomana site / China CDN](https://bomana.ruikang.wang/) or [GitHub Pages](https://thankyou-cheems.github.io/Bomana/); the former `/bomana` path is retained only as a compatibility redirect
 
 ### Optional: source run
 
@@ -264,9 +265,9 @@ The current build does not. Its UI is separate windows, and hotkeys and web butt
 
 ### Weapon / bombing cues feel wrong?
 
-1. Manually select the correct weapon on the weapon card  
-2. Values are estimates; map, wind, and attitude all matter  
-3. Free-fall calibration under `Settings → Bombing` only affects that path  
+1. Click the blue CCRP weapon field and select the actual store
+2. The cue pauses only for strong lateral manoeuvring such as steep bank, sideslip, roll, or turn; a laterally stable dive or pull-up remains eligible
+3. If it says the target elevation is unavailable, confirm that Launcher has installed the Enhanced terrain pack
 
 ### How is this different from WTRTI?
 

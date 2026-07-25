@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
@@ -12,7 +13,7 @@ ALLOWED_EXTERNAL_NETLOCS = {
     "github.com",
     "thankyou-cheems.github.io",
     "bomanaupdate.ruikang.wang",
-    "ruikang.wang",
+    "bomana.ruikang.wang",
 }
 
 
@@ -64,6 +65,9 @@ def test_github_pages_site_has_new_user_and_permission_paths() -> None:
     assert "Artifact Attestations" in html
     assert "国内 CDN" in html
     assert "GitHub 备用" in html
+    assert '<link rel="canonical" href="https://bomana.ruikang.wang/">' in html
+    assert 'property="og:url" content="https://bomana.ruikang.wang/"' in html
+    assert "https://ruikang.wang/bomana/" not in html
     assert parser.inline_scripts == 0
 
 
@@ -81,8 +85,6 @@ def test_github_pages_local_assets_exist_and_no_external_runtime_assets() -> Non
 
 
 def test_download_catalog_points_at_tencent_cdn() -> None:
-    import json
-
     catalog = json.loads((DOCS / "download-catalog.json").read_text(encoding="utf-8"))
     assert catalog["primary_source"] == "TencentCloud"
     assert catalog["cdn_base"].startswith("https://bomanaupdate.ruikang.wang")
@@ -107,6 +109,9 @@ def test_site_styles_are_responsive_and_accessible() -> None:
     assert "height: auto" in css
     assert "bomanaupdate.ruikang.wang" in javascript
     assert "download-catalog.json" in javascript
+    assert "loadStaticCatalog()" in javascript
+    assert "/api/v1/launcher" not in javascript
+    assert "/api/v1/version" not in javascript
     assert "api.github.com" in javascript  # backup metadata only
     assert "BomanaHotkeyBrokerSetup" not in javascript
     assert "textContent" in javascript
@@ -118,7 +123,48 @@ def test_deploy_pages_mirror_tool_is_local_push_only() -> None:
     assert "never pull from GitHub" in source or "never fetches GitHub" in source
     assert "TencentCloudPublic" in source
     assert "/opt/Website/bomana" in source
+    assert 'DEFAULT_PUBLIC_BASE_URL = "https://bomana.ruikang.wang"' in source
+    assert 'DEFAULT_CDN_BASE = "https://bomanaupdate.ruikang.wang"' in source
     assert "scp" in source
     # Must not instruct the remote to clone or curl GitHub.
     assert "git clone" not in source
     assert "api.github.com" not in source
+
+
+def test_public_site_cutover_keeps_launcher_update_origin_independent() -> None:
+    launcher = (ROOT / "launcher.pyw").read_text(encoding="utf-8")
+    guide = (DOCS / "guides" / "public-site-cutover.md").read_text(encoding="utf-8")
+
+    assert '"https://bomanaupdate.ruikang.wang"' in launcher
+    assert "bomana.ruikang.wang" in guide
+    assert "bomanaupdate.ruikang.wang" in guide
+    assert "逐路径 `308`" in guide
+    assert "download-catalog.json" in guide
+
+
+def test_public_site_edgeone_configuration_is_host_scoped() -> None:
+    deploy = ROOT / "deploy" / "bomana-pages"
+    domain = json.loads(
+        (deploy / "edgeone-domain.template.json").read_text(encoding="utf-8")
+    )
+    rule = json.loads(
+        (deploy / "edgeone-rule.template.json").read_text(encoding="utf-8")
+    )
+    caddy = (deploy / "Caddyfile.snippet").read_text(encoding="utf-8")
+    redirect = (deploy / "legacy-redirect.caddy").read_text(encoding="utf-8")
+
+    assert domain["DomainName"] == "bomana.ruikang.wang"
+    assert domain["OriginProtocol"] == "HTTPS"
+    assert domain["OriginInfo"]["HostHeader"] == "bomana.ruikang.wang"
+    assert rule["Branches"][0]["Condition"] == (
+        "${http.request.host} in ['bomana.ruikang.wang']"
+    )
+    action_names = {
+        action["Name"] for action in rule["Branches"][0]["Actions"]
+    }
+    assert {"OriginPullProtocol", "ForceRedirectHTTPS", "OfflineCache"} <= action_names
+    assert "https://bomana.ruikang.wang{uri}" in redirect
+    assert "https://bomana.ruikang.wang" in caddy
+
+    scoped_config = caddy + redirect + json.dumps(domain) + json.dumps(rule)
+    assert "bomanaupdate.ruikang.wang" not in scoped_config

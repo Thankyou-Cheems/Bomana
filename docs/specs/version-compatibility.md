@@ -93,6 +93,16 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 - `COMPAT-23`: Missing per-release metadata MAY use the shared `3.0.0` floor
   only for compatibility with older App 8 packages. A present malformed,
   below-protocol, or above-current Launcher requirement MUST fail closed.
+- `COMPAT-24`: The public introduction-site hostname MUST NOT be part of the
+  Launcher update contract. App, Launcher, and terrain discovery/downloads
+  MUST continue to use the dedicated `bomanaupdate.ruikang.wang` origin when
+  the introduction site moves from `ruikang.wang/bomana` to
+  `bomana.ruikang.wang`.
+- `COMPAT-25`: The introduction site MUST obtain normal browser-visible
+  release metadata from its same-origin deployed `download-catalog.json` and
+  MUST remain usable without cross-origin API permission. The former
+  `/bomana` page and asset paths SHOULD remain as path-preserving permanent
+  redirects to the canonical hostname.
 
 ## Contract Coverage
 
@@ -120,3 +130,8 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 - [manual] Packaged Launcher smoke confirms `COMPAT-07..COMPAT-10`,
   `COMPAT-18`, and `COMPAT-19` before release without claiming that source-mode
   tests prove the frozen initialization boundary.
+- [static] `tests/test_docs_site.py` enforces `COMPAT-24` and `COMPAT-25` by
+  pinning the independent update origin, canonical site hostname, same-origin
+  catalog loading, and deployment default. The path-preserving redirect itself
+  remains an infrastructure smoke check documented in
+  `docs/guides/public-site-cutover.md`.

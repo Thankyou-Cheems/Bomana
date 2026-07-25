@@ -109,30 +109,6 @@ class MainWindowBuilder:
             add="+",
         )
 
-    def _configure_heading_status_row(
-        self,
-        row: tk.Frame,
-        *,
-        turn_label: tk.Label,
-        status_label: tk.Label,
-        info_label: tk.Label,
-    ) -> None:
-        """Give heading status rows elastic columns and live wrapping."""
-        row.grid_columnconfigure(0, weight=0)
-        row.grid_columnconfigure(1, weight=1, uniform="heading_status")
-        row.grid_columnconfigure(2, weight=1, uniform="heading_status")
-        row.grid_columnconfigure(3, weight=2)
-
-        def update_wrap(event=None) -> None:
-            width = int(getattr(event, "width", 0) or row.winfo_width() or 0)
-            if width <= 1:
-                return
-            turn_label.configure(wraplength=max(44, int(width * 0.22)))
-            status_label.configure(wraplength=max(44, int(width * 0.22)))
-            info_label.configure(wraplength=max(74, int(width * 0.34)))
-
-        row.bind("<Configure>", update_wrap, add="+")
-
     def _build_bottom_card(self) -> None:
         app = self.app
         s = app.scale
@@ -753,7 +729,6 @@ class MainWindowBuilder:
         font_item = app._get_font("zone_item")
         font_heading = font_item
         legend_font = app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.85, min_size=7)
-        status_font = app._scaled_font(UIConfig.FONT_ZONE_ITEM, size_mult=0.95, min_size=7)
 
         app.zone_header_frame = tk.Frame(app.zone_frame, bg=Theme.GRAYPILL)
         app.zone_header_frame.grid(
@@ -809,7 +784,7 @@ class MainWindowBuilder:
             app.tape_legend_row.pack(fill="x", pady=(int(1 * s), 0))
             legend_left = tk.Label(
                 app.tape_legend_row,
-                text="POI四角标记  上次坠毁点  ⊚战区  ✈友方机场  ✈敌方机场  ✕摧毁目标",
+                text="POI四角标记  上次坠毁点  ⊚战区  ⌂友方机场  ✖敌方机场  ✕摧毁目标",
                 font=legend_font,
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.GRAYPILL,
@@ -825,130 +800,10 @@ class MainWindowBuilder:
                 anchor="e",
             )
             app.tape_tolerance_legend.pack(side="right", padx=(0, int(4 * s)))
-
-            app.tape_zone_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
-            app.tape_zone_row.pack(fill="x", pady=(int(1 * s), 0))
-            app.tape_zone_label = tk.Label(
-                app.tape_zone_row,
-                text="⊚战区:",
-                font=status_font,
-                fg=Theme.RED,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-            )
-            app.tape_zone_label.grid(row=0, column=0, sticky="w")
-            app.tape_zone_turn = tk.Label(
-                app.tape_zone_row,
-                text="",
-                font=status_font,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-                justify="left",
-            )
-            app.tape_zone_turn.grid(row=0, column=1, sticky="ew", padx=(int(6 * s), 0))
-            app.tape_zone_status = tk.Label(
-                app.tape_zone_row,
-                text="",
-                font=status_font,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-                justify="left",
-            )
-            app.tape_zone_status.grid(row=0, column=2, sticky="ew", padx=(int(8 * s), 0))
-            app.tape_zone_info = tk.Label(
-                app.tape_zone_row,
-                text="",
-                font=status_font,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="e",
-                justify="right",
-            )
-            app.tape_zone_info.grid(row=0, column=3, sticky="ew", padx=(int(8 * s), 0))
-            self._configure_heading_status_row(
-                app.tape_zone_row,
-                turn_label=app.tape_zone_turn,
-                status_label=app.tape_zone_status,
-                info_label=app.tape_zone_info,
-            )
-            app.tape_zone_tolerance = tk.Label(
-                app.tape_zone_row,
-                text="",
-                font=status_font,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="e",
-            )
-
-            app.tape_friendly_row = tk.Frame(app.heading_tape_frame, bg=Theme.GRAYPILL)
-            app.tape_friendly_row.pack(fill="x", pady=(0, 0))
-            app.tape_friendly_label = tk.Label(
-                app.tape_friendly_row,
-                text="✈友方:",
-                font=status_font,
-                fg=Theme.BLUE,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-            )
-            app.tape_friendly_label.grid(row=0, column=0, sticky="w")
-            app.tape_friendly_turn = tk.Label(
-                app.tape_friendly_row,
-                text="",
-                font=status_font,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-                justify="left",
-            )
-            app.tape_friendly_turn.grid(row=0, column=1, sticky="ew", padx=(int(6 * s), 0))
-            app.tape_friendly_status = tk.Label(
-                app.tape_friendly_row,
-                text="",
-                font=status_font,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="w",
-                justify="left",
-            )
-            app.tape_friendly_status.grid(row=0, column=2, sticky="ew", padx=(int(8 * s), 0))
-            app.tape_friendly_info = tk.Label(
-                app.tape_friendly_row,
-                text="",
-                font=status_font,
-                fg=Theme.TEXT_MUTED,
-                bg=Theme.GRAYPILL,
-                anchor="e",
-                justify="right",
-            )
-            app.tape_friendly_info.grid(row=0, column=3, sticky="ew", padx=(int(8 * s), 0))
-            self._configure_heading_status_row(
-                app.tape_friendly_row,
-                turn_label=app.tape_friendly_turn,
-                status_label=app.tape_friendly_status,
-                info_label=app.tape_friendly_info,
-            )
-
-            app.tape_turn_lbl = app.tape_zone_turn
-            app.tape_deviation_lbl = app.tape_zone_status
-            app.tape_tolerance_lbl = app.tape_zone_tolerance
-            app.tape_info_container = None
-            app._tape_info_labels = []
         else:
             app.heading_tape_frame = None
             app.heading_tape = None
-            app.tape_info_container = None
-            app._tape_info_labels = []
-            app.tape_turn_lbl = None
-            app.tape_deviation_lbl = None
-            app.tape_tolerance_lbl = None
-            app.tape_zone_row = None
-            app.tape_friendly_row = None
-            app.tape_friendly_turn = None
-            app.tape_friendly_info = None
-            app.tape_friendly_status = None
-            app.tape_zone_info = None
+            app.tape_tolerance_legend = None
 
         font_alert = app._get_font("zone_title")
         app.zone_alert_lbl = tk.Label(

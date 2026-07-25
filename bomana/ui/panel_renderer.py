@@ -27,15 +27,7 @@ from bomana.ui.panel_presenter import (
     format_aircraft_type_label,
 )
 from bomana.ui.theme import Theme
-from bomana.utils.math_utils import (
-    calculate_airfield_status,
-    calculate_airfield_turn_indicator,
-    calculate_heading_tape_scale,
-    calculate_zone_status,
-    calculate_zone_turn_indicator,
-    format_distance_ete,
-    get_cdi_tolerance,
-)
+from bomana.utils.math_utils import get_cdi_tolerance
 
 _NUMERIC_PARSE_ERRORS = (TypeError, ValueError)
 
@@ -224,110 +216,24 @@ class AppPanelRenderer:
             return default
         return number if math.isfinite(number) else default
 
-    @classmethod
-    def _format_active_info_text(cls, info: dict[str, Any]) -> str:
-        distance = cls._safe_float(info.get("distance_km", 0.0))
-        return format_distance_ete(distance, info.get("ete_str"))
-
-    @classmethod
-    def _target_info_from_legacy_zone(cls, zone: Any) -> dict[str, Any] | None:
-        if zone is None:
-            return None
-        return {
-            "type": "zone",
-            "name": "战区",
-            "icon": "⊚",
-            "relative": getattr(zone, "relative", 0.0),
-            "distance_km": getattr(zone, "distance_km", 0.0),
-            "ete_str": getattr(zone, "ete_str", ""),
-            "color": Theme.RED,
-        }
-
-    @classmethod
-    def _primary_target_info(
-        cls, targets_info: list[dict[str, Any]], primary_target_info: Any = None
-    ) -> dict[str, Any] | None:
-        if isinstance(primary_target_info, dict):
-            return primary_target_info
-        if primary_target_info is not None:
-            return cls._target_info_from_legacy_zone(primary_target_info)
-        return next(
-            (info for info in targets_info if info.get("type") == "zone"),
-            None,
-        )
-
-    def update_tape_info_labels(
+    def update_heading_tape_legend(
         self,
-        targets_info: list[dict[str, Any]],
-        primary_target_info: Any = None,
+        primary_target_info: dict[str, Any] | None = None,
         mode_notice: str = "",
     ) -> None:
-        """更新航向带下方的主导航目标和友方机场状态提示。"""
-        app = self.app
-        target_info = self._primary_target_info(targets_info, primary_target_info)
-        has_primary_labels = app.tape_turn_lbl and app.tape_deviation_lbl and app.tape_tolerance_lbl
-        if mode_notice and has_primary_labels:
-            if hasattr(app, "tape_zone_label") and app.tape_zone_label:
-                app.tape_zone_label.config(text="空空导航:", fg=Theme.YELLOW)
-            app.tape_turn_lbl.config(text="", fg=Theme.TEXT_MUTED)
-            app.tape_deviation_lbl.config(text=mode_notice, fg=Theme.YELLOW)
-            if hasattr(app, "tape_zone_info") and app.tape_zone_info:
-                app.tape_zone_info.config(text="")
-            if hasattr(app, "tape_tolerance_legend") and app.tape_tolerance_legend:
-                app.tape_tolerance_legend.config(text="敌机 / POI")
-            app.tape_tolerance_lbl.config(text="")
-        elif target_info and has_primary_labels:
-            rel = self._safe_float(target_info.get("relative", 0.0))
-            distance = self._safe_float(target_info.get("distance_km", 0.0))
-            info_text = self._format_active_info_text(target_info)
-
+        """Keep only a compact scale hint outside the self-contained tape."""
+        label = getattr(self.app, "tape_tolerance_legend", None)
+        if label is None:
+            return
+        if mode_notice:
+            label.config(text="敌机 / POI", fg=Theme.YELLOW)
+            return
+        if primary_target_info:
+            distance = self._safe_float(primary_target_info.get("distance_km", 0.0))
             tolerance = get_cdi_tolerance(distance)
-            scale = calculate_heading_tape_scale(distance)
-            turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
-            dev_text, dev_color = calculate_zone_status(abs(rel), tolerance)
-            label_text = "⊚战区:"
-            label_color = Theme.RED
-            tol_text = f"±{tolerance:.1f}° {scale:.1f}x"
-
-            if hasattr(app, "tape_zone_label") and app.tape_zone_label:
-                app.tape_zone_label.config(text=label_text, fg=label_color)
-            app.tape_turn_lbl.config(text=turn_text, fg=turn_color)
-            app.tape_deviation_lbl.config(text=dev_text, fg=dev_color)
-            if hasattr(app, "tape_zone_info") and app.tape_zone_info:
-                app.tape_zone_info.config(text=info_text, fg=label_color)
-            if hasattr(app, "tape_tolerance_legend") and app.tape_tolerance_legend:
-                app.tape_tolerance_legend.config(text=tol_text)
-            app.tape_tolerance_lbl.config(text="")
-        elif has_primary_labels:
-            if hasattr(app, "tape_zone_label") and app.tape_zone_label:
-                app.tape_zone_label.config(text="⊚战区:", fg=Theme.RED)
-            app.tape_turn_lbl.config(text="", fg=Theme.TEXT_MUTED)
-            app.tape_deviation_lbl.config(text="无目标", fg=Theme.TEXT_MUTED)
-            if hasattr(app, "tape_zone_info") and app.tape_zone_info:
-                app.tape_zone_info.config(text="")
-            if hasattr(app, "tape_tolerance_legend") and app.tape_tolerance_legend:
-                app.tape_tolerance_legend.config(text="")
-            app.tape_tolerance_lbl.config(text="")
-
-        friendly_info = next((t for t in targets_info if t.get("type") == "friendly"), None)
-        if friendly_info and app.tape_friendly_turn and app.tape_friendly_info:
-            rel = self._safe_float(friendly_info.get("relative", 0.0))
-            abs_rel = abs(rel)
-            dist = self._safe_float(friendly_info.get("distance_km", 0.0))
-
-            turn_text, turn_color = calculate_airfield_turn_indicator(rel)
-            status_text, status_color = calculate_airfield_status(abs_rel)
-            info_text = format_distance_ete(dist, friendly_info.get("ete_str"))
-
-            app.tape_friendly_turn.config(text=turn_text, fg=turn_color)
-            if hasattr(app, "tape_friendly_status") and app.tape_friendly_status:
-                app.tape_friendly_status.config(text=status_text, fg=status_color)
-            app.tape_friendly_info.config(text=info_text, fg=Theme.BLUE)
-        elif app.tape_friendly_turn and app.tape_friendly_info:
-            app.tape_friendly_turn.config(text="", fg=Theme.TEXT_MUTED)
-            if hasattr(app, "tape_friendly_status") and app.tape_friendly_status:
-                app.tape_friendly_status.config(text="", fg=Theme.TEXT_MUTED)
-            app.tape_friendly_info.config(text="", fg=Theme.TEXT_MUTED)
+            label.config(text=f"精细航线 ±{tolerance:.1f}°", fg=Theme.TEXT_MUTED)
+            return
+        label.config(text="", fg=Theme.TEXT_MUTED)
 
     def set_checklist_visible(self, visible: bool) -> None:
         """设置检查清单可见性。"""
@@ -419,8 +325,8 @@ class AppPanelRenderer:
 
     def _build_heading_targets(
         self, snap: UISnapshot
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Any, str]:
-        """Build integrated heading-tape targets and status items."""
+    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None, str]:
+        """Build the self-contained integrated heading-tape presentation."""
         destroyed_zones = (
             getattr(snap, "destroyed_zones", [])
             if getattr(snap, "zone_destroyed_alert", False)
@@ -429,7 +335,6 @@ class AppPanelRenderer:
         model = build_navigation_tape_model(snap, destroyed_zones=destroyed_zones)
         return (
             model.targets,
-            model.active_targets_info,
             model.primary_target_info,
             model.mode_notice,
         )
@@ -477,18 +382,17 @@ class AppPanelRenderer:
             nav_in_main = PanelConfig.navigation_mode == "integrated"
             if app.heading_tape is not None:
                 if nav_in_main and heading_available:
-                    targets, active_targets_info, primary_info, mode_notice = (
-                        self._build_heading_targets(snap)
-                    )
+                    targets, primary_info, mode_notice = self._build_heading_targets(snap)
                     primary_dist = (
                         self._safe_float(primary_info.get("distance_km")) if primary_info else 10.0
                     )
-                    app.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
-                    self.update_tape_info_labels(
-                        active_targets_info,
-                        primary_info,
-                        mode_notice,
+                    app.heading_tape.update_tape_multi(
+                        heading_deg,
+                        targets,
+                        primary_dist,
+                        mode_notice=mode_notice,
                     )
+                    self.update_heading_tape_legend(primary_info, mode_notice)
                     self._grid_if_needed(
                         app.heading_tape_frame,
                         row=1,
@@ -499,7 +403,7 @@ class AppPanelRenderer:
                     )
                 elif nav_in_main:
                     app.heading_tape.clear()
-                    self.update_tape_info_labels([], None)
+                    self.update_heading_tape_legend()
                     self._grid_if_needed(
                         app.heading_tape_frame,
                         row=1,
@@ -510,7 +414,7 @@ class AppPanelRenderer:
                     )
                 else:
                     app.heading_tape.clear()
-                    self.update_tape_info_labels([], None)
+                    self.update_heading_tape_legend()
                     self._grid_remove_if_needed(app.heading_tape_frame)
 
             if snap.zone_destroyed_alert:

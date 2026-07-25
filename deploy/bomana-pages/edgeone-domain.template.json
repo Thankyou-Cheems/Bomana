@@ -1,0 +1,12 @@
+{
+  "ZoneId": "__ZONE_ID__",
+  "DomainName": "bomana.ruikang.wang",
+  "OriginInfo": {
+    "OriginType": "IP_DOMAIN",
+    "Origin": "__ORIGIN_IP__",
+    "HostHeader": "bomana.ruikang.wang"
+  },
+  "OriginProtocol": "HTTPS",
+  "HttpOriginPort": 80,
+  "HttpsOriginPort": 443
+}

@@ -157,70 +157,30 @@ class PanelRendererNavListTests(unittest.TestCase):
         self.assertEqual(item.relative, "-4.90°")
         self.assertEqual(item.fg, Theme.GREEN)
 
-    def test_tape_status_row_keeps_zone_primary_when_poi_marker_exists(self) -> None:
-        app = SimpleNamespace(
-            tape_zone_label=FakeLabel(),
-            tape_turn_lbl=FakeLabel(),
-            tape_deviation_lbl=FakeLabel(),
-            tape_tolerance_lbl=FakeLabel(),
-            tape_zone_info=FakeLabel(),
-            tape_tolerance_legend=FakeLabel(),
-            tape_friendly_turn=None,
-            tape_friendly_status=None,
-            tape_friendly_info=None,
-        )
-        renderer = AppPanelRenderer(app)
-        poi_info = {
-            "type": "poi",
-            "name": "补给点",
-            "relative": 12.0,
-            "distance_km": 4.25,
-            "color": Theme.YELLOW,
-        }
-        zone_info = {
-            "type": "zone",
-            "name": "战区",
-            "relative": -3.0,
-            "distance_km": 7.0,
-            "ete_str": "01:10",
-            "color": Theme.RED,
-        }
+    def test_heading_tape_legend_only_keeps_compact_precision_scale(self) -> None:
+        app = SimpleNamespace(tape_tolerance_legend=FakeLabel())
 
-        renderer.update_tape_info_labels([poi_info, zone_info])
-
-        self.assertEqual(app.tape_zone_label.cget("text"), "⊚战区:")
-        self.assertEqual(app.tape_zone_label.cget("fg"), Theme.RED)
-        self.assertNotIn("补给点", app.tape_zone_info.cget("text"))
-        self.assertIn("7.0km", app.tape_zone_info.cget("text"))
-        self.assertIn("01:10", app.tape_zone_info.cget("text"))
-        self.assertEqual(app.tape_zone_info.cget("fg"), Theme.RED)
-        self.assertTrue(app.tape_turn_lbl.cget("text"))
-        self.assertTrue(app.tape_deviation_lbl.cget("text"))
-        self.assertIn("°", app.tape_tolerance_legend.cget("text"))
-
-    def test_aam_tape_status_explicitly_pauses_zone_solving(self) -> None:
-        app = SimpleNamespace(
-            tape_zone_label=FakeLabel(),
-            tape_turn_lbl=FakeLabel(),
-            tape_deviation_lbl=FakeLabel(),
-            tape_tolerance_lbl=FakeLabel(),
-            tape_zone_info=FakeLabel(),
-            tape_tolerance_legend=FakeLabel(),
-            tape_friendly_turn=None,
-            tape_friendly_status=None,
-            tape_friendly_info=None,
+        AppPanelRenderer(app).update_heading_tape_legend(
+            {
+                "type": "zone",
+                "relative": -3.0,
+                "distance_km": 7.0,
+            }
         )
 
-        AppPanelRenderer(app).update_tape_info_labels(
-            [],
+        self.assertEqual(app.tape_tolerance_legend.cget("text"), "精细航线 ±2.0°")
+        self.assertEqual(app.tape_tolerance_legend.cget("fg"), Theme.TEXT_MUTED)
+
+    def test_aam_heading_tape_legend_identifies_candidate_markers(self) -> None:
+        app = SimpleNamespace(tape_tolerance_legend=FakeLabel())
+
+        AppPanelRenderer(app).update_heading_tape_legend(
             None,
             "战区解算已暂停，仅进行导航",
         )
 
-        self.assertEqual(app.tape_zone_label.cget("text"), "空空导航:")
-        self.assertEqual(app.tape_deviation_lbl.cget("text"), "战区解算已暂停，仅进行导航")
         self.assertEqual(app.tape_tolerance_legend.cget("text"), "敌机 / POI")
-        self.assertEqual(app.tape_zone_info.cget("text"), "")
+        self.assertEqual(app.tape_tolerance_legend.cget("fg"), Theme.YELLOW)
 
     def test_standalone_heading_tape_does_not_hide_persisted_navigation_lists(self) -> None:
         self.assertTrue(AppPanelRenderer._main_navigation_lists_visible(True))

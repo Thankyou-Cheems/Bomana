@@ -20,15 +20,7 @@ from bomana.ui.navigation_presenter import build_navigation_tape_model
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_clickable_surface
 from bomana.ui.widgets import HeadingTape
-from bomana.utils.math_utils import (
-    calculate_airfield_status,
-    calculate_airfield_turn_indicator,
-    calculate_heading_tape_scale,
-    calculate_zone_status,
-    calculate_zone_turn_indicator,
-    format_distance_ete,
-    get_cdi_tolerance,
-)
+from bomana.utils.math_utils import get_cdi_tolerance
 from bomana.utils.system import Win32
 
 _WIN32_ACCESS_ERRORS = (OSError, AttributeError)
@@ -148,32 +140,8 @@ class NavigationWindow:
         """更新窗口透明度（响应透明度配置变化）"""
         self.apply_window_styles(click_through=self.app._locked, alpha=UIConfig.WINDOW_ALPHA)
 
-    @staticmethod
-    def _configure_status_row(
-        row: tk.Frame,
-        *,
-        turn_label: tk.Label,
-        status_label: tk.Label,
-        info_label: tk.Label,
-    ) -> None:
-        """Use elastic columns for standalone navigation status rows."""
-        row.grid_columnconfigure(0, weight=0)
-        row.grid_columnconfigure(1, weight=1, uniform="standalone_status")
-        row.grid_columnconfigure(2, weight=1, uniform="standalone_status")
-        row.grid_columnconfigure(3, weight=2)
-
-        def update_wrap(event=None) -> None:
-            width = int(getattr(event, "width", 0) or row.winfo_width() or 0)
-            if width <= 1:
-                return
-            turn_label.configure(wraplength=max(42, int(width * 0.22)))
-            status_label.configure(wraplength=max(42, int(width * 0.22)))
-            info_label.configure(wraplength=max(72, int(width * 0.34)))
-
-        row.bind("<Configure>", update_wrap, add="+")
-
     def _init_ui(self):
-        """初始化独立导航窗 UI（简洁版：标题 + 航向带 + 两条状态）。"""
+        """初始化独立导航窗 UI（标题 + 自包含航向带）。"""
         s = self.scale
         pad = int(4 * s)
 
@@ -262,7 +230,7 @@ class NavigationWindow:
         tape_width = int(ZoneConfig.HEADING_TAPE_WIDTH * s * 1.2 * width_mult)
         tape_height = int(ZoneConfig.HEADING_TAPE_HEIGHT * s)
         self.tape_frame = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        self.tape_frame.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
+        self.tape_frame.pack(fill="x", padx=pad, pady=(int(2 * s), int(4 * s)))
         self.heading_tape = HeadingTape(
             self.tape_frame,
             width=tape_width,
@@ -270,105 +238,6 @@ class NavigationWindow:
             text_scale=UIConfig.TEXT_SCALE_MULT * nav_scale,
         )
         self.heading_tape.pack(fill="x", expand=True)
-
-        status_font = self.app._scaled_font(
-            UIConfig.FONT_ZONE_ITEM, size_mult=0.9 * nav_scale, min_size=7
-        )
-        self.zone_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        self.zone_row.pack(fill="x", padx=pad, pady=(int(2 * s), 0))
-        self.zone_label = tk.Label(
-            self.zone_row,
-            text="⊚战区",
-            font=status_font,
-            fg=Theme.RED,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-        )
-        self.zone_label.grid(row=0, column=0, sticky="w")
-        self.zone_turn = tk.Label(
-            self.zone_row,
-            text="",
-            font=status_font,
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-            justify="left",
-        )
-        self.zone_turn.grid(row=0, column=1, sticky="ew", padx=(int(6 * s), 0))
-        self.zone_status = tk.Label(
-            self.zone_row,
-            text="",
-            font=status_font,
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-            justify="left",
-        )
-        self.zone_status.grid(row=0, column=2, sticky="ew", padx=(int(8 * s), 0))
-        self.zone_info = tk.Label(
-            self.zone_row,
-            text="",
-            font=status_font,
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="e",
-            justify="right",
-        )
-        self.zone_info.grid(row=0, column=3, sticky="ew", padx=(int(8 * s), 0))
-        self._configure_status_row(
-            self.zone_row,
-            turn_label=self.zone_turn,
-            status_label=self.zone_status,
-            info_label=self.zone_info,
-        )
-
-        self.friendly_row = tk.Frame(self.content_frame, bg=Theme.GRAYPILL)
-        self.friendly_row.pack(fill="x", padx=pad, pady=(int(1 * s), int(4 * s)))
-        self.friendly_label = tk.Label(
-            self.friendly_row,
-            text="✈友方",
-            font=status_font,
-            fg=Theme.BLUE,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-        )
-        self.friendly_label.grid(row=0, column=0, sticky="w")
-        self.friendly_turn = tk.Label(
-            self.friendly_row,
-            text="",
-            font=status_font,
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-            justify="left",
-        )
-        self.friendly_turn.grid(row=0, column=1, sticky="ew", padx=(int(6 * s), 0))
-        self.friendly_status = tk.Label(
-            self.friendly_row,
-            text="",
-            font=status_font,
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="w",
-            justify="left",
-        )
-        self.friendly_status.grid(row=0, column=2, sticky="ew", padx=(int(8 * s), 0))
-        self.friendly_info = tk.Label(
-            self.friendly_row,
-            text="",
-            font=status_font,
-            fg=Theme.TEXT_DIM,
-            bg=Theme.GRAYPILL,
-            anchor="e",
-            justify="right",
-        )
-        self.friendly_info.grid(row=0, column=3, sticky="ew", padx=(int(8 * s), 0))
-        self._configure_status_row(
-            self.friendly_row,
-            turn_label=self.friendly_turn,
-            status_label=self.friendly_status,
-            info_label=self.friendly_info,
-        )
 
         self.bombing_bar = None
         if ENABLE_CCRP:
@@ -547,13 +416,6 @@ class NavigationWindow:
         self.heading_lbl.config(text="航向 ---°")
         self.tolerance_lbl.config(text="")
         self.heading_tape.clear()
-        self.zone_label.config(text="⊚战区", fg=Theme.RED)
-        self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
-        self.zone_status.config(text="", fg=Theme.TEXT_DIM)
-        self.zone_info.config(text="", fg=Theme.TEXT_DIM)
-        self.friendly_turn.config(text="", fg=Theme.TEXT_DIM)
-        self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
-        self.friendly_info.config(text="", fg=Theme.TEXT_DIM)
 
     def set_bombing_visible(self, visible: bool) -> None:
         """Mount or remove the shared bombing cue directly below standalone navigation."""
@@ -607,11 +469,6 @@ class NavigationWindow:
             return default
         return number if math.isfinite(number) else default
 
-    @classmethod
-    def _format_active_info_text(cls, info: dict[str, Any]) -> str:
-        distance = cls._safe_float(info.get("distance_km", 0.0))
-        return format_distance_ete(distance, info.get("ete_str"))
-
     def update_display(self, snap: UISnapshot):
         """更新独立导航窗显示（简洁航向带版）。"""
         if not self._visible:
@@ -632,13 +489,6 @@ class NavigationWindow:
         if not heading_available:
             self.heading_tape.clear()
             self.tolerance_lbl.config(text="")
-            self.zone_label.config(text="⊚战区", fg=Theme.RED)
-            self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
-            self.zone_status.config(text="无目标", fg=Theme.TEXT_MUTED)
-            self.zone_info.config(text="", fg=Theme.TEXT_DIM)
-            self.friendly_turn.config(text="", fg=Theme.TEXT_DIM)
-            self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
-            self.friendly_info.config(text="", fg=Theme.TEXT_DIM)
             return
 
         destroyed_zones = (
@@ -651,46 +501,18 @@ class NavigationWindow:
         primary_info = model.primary_target_info
 
         primary_dist = self._safe_float(primary_info.get("distance_km")) if primary_info else 10.0
-        self.heading_tape.update_tape_multi(heading_deg, targets, primary_dist)
+        self.heading_tape.update_tape_multi(
+            heading_deg,
+            targets,
+            primary_dist,
+            mode_notice=model.mode_notice,
+        )
 
         if model.mode_notice:
-            self.zone_label.config(text="空空导航", fg=Theme.YELLOW)
             self.tolerance_lbl.config(text="敌机 / POI")
-            self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
-            self.zone_status.config(text=model.mode_notice, fg=Theme.YELLOW)
-            self.zone_info.config(text="", fg=Theme.TEXT_DIM)
         elif primary_info:
-            rel = self._safe_float(primary_info.get("relative", 0.0))
             distance = self._safe_float(primary_info.get("distance_km", 0.0))
-            info_text = self._format_active_info_text(primary_info)
-            self.zone_label.config(text="⊚战区", fg=Theme.RED)
             tolerance = get_cdi_tolerance(distance)
-            scale = calculate_heading_tape_scale(distance)
-            turn_text, turn_color = calculate_zone_turn_indicator(rel, tolerance)
-            status_text, status_color = calculate_zone_status(abs(rel), tolerance)
-            self.tolerance_lbl.config(text=f"±{tolerance:.1f}° {scale:.1f}x")
-            info_color = Theme.RED
-            self.zone_turn.config(text=turn_text, fg=turn_color)
-            self.zone_status.config(text=status_text, fg=status_color)
-            self.zone_info.config(text=info_text, fg=info_color)
+            self.tolerance_lbl.config(text=f"精细航线 ±{tolerance:.1f}°")
         else:
-            self.zone_label.config(text="⊚战区", fg=Theme.RED)
             self.tolerance_lbl.config(text="")
-            self.zone_turn.config(text="", fg=Theme.TEXT_DIM)
-            self.zone_status.config(text="无目标", fg=Theme.TEXT_MUTED)
-            self.zone_info.config(text="", fg=Theme.TEXT_DIM)
-
-        friendly = getattr(snap, "friendly_airfield", None)
-        if friendly:
-            friendly_rel = self._safe_float(getattr(friendly, "relative", 0.0))
-            friendly_distance = self._safe_float(getattr(friendly, "distance_km", 0.0))
-            turn_text, turn_color = calculate_airfield_turn_indicator(friendly_rel)
-            status_text, status_color = calculate_airfield_status(abs(friendly_rel))
-            info_text = format_distance_ete(friendly_distance, getattr(friendly, "ete_str", ""))
-            self.friendly_turn.config(text=turn_text, fg=turn_color)
-            self.friendly_status.config(text=status_text, fg=status_color)
-            self.friendly_info.config(text=info_text, fg=Theme.BLUE)
-        else:
-            self.friendly_turn.config(text="", fg=Theme.TEXT_DIM)
-            self.friendly_status.config(text="", fg=Theme.TEXT_DIM)
-            self.friendly_info.config(text="", fg=Theme.TEXT_DIM)

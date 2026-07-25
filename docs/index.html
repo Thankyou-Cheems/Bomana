@@ -6,7 +6,7 @@
     <title>Bomana · War Thunder 全真飞行计时与导航</title>
     <meta
       name="description"
-      content="Bomana 是面向 War Thunder 全真模式的开源 Windows 工具：15 分钟计时、导航、燃油、超速提醒与 CCRP 估算，只使用官方 localhost:8111 数据。"
+      content="Bomana 是面向 War Thunder 全真模式的开源 Windows 工具：15 分钟计时、带内精确导航、燃油、超速提醒与紧凑 CCRP 参考，只使用官方 localhost:8111 数据。"
     >
     <meta name="theme-color" content="#03080d">
     <meta property="og:title" content="Bomana · 全真飞行信息，安静地放在手边">
@@ -15,9 +15,9 @@
       content="开源、便携、只读官方 8111 数据。下载启动器，选择通道，进入战斗即可使用。"
     >
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://thankyou-cheems.github.io/Bomana/">
-    <meta property="og:image" content="https://thankyou-cheems.github.io/Bomana/assets/bomana-app.png">
-    <link rel="canonical" href="https://thankyou-cheems.github.io/Bomana/">
+    <meta property="og:url" content="https://bomana.ruikang.wang/">
+    <meta property="og:image" content="https://bomana.ruikang.wang/assets/bomana-app.png">
+    <link rel="canonical" href="https://bomana.ruikang.wang/">
     <link rel="icon" href="assets/favicon.ico">
     <link rel="stylesheet" href="styles.css">
   </head>
@@ -59,7 +59,7 @@
           </h1>
           <p class="hero-lede">
             Bomana 是面向 War Thunder 全真模式的多功能计时器。自动跟踪 15 分钟收益周期，
-            并把导航、燃油、超速与投弹估算收进一个可置顶的轻量窗口。
+            并把带内精确导航、燃油、超速与紧凑 CCRP 收进一个可置顶的轻量窗口。
           </p>
           <div class="hero-actions">
             <a
@@ -227,7 +227,7 @@
             <h2 id="gallery-title">实机界面</h2>
           </div>
           <p class="section-aside-text">
-            桌面主窗、独立导航、启动器与网页驾驶舱（桌面 / 手机）均为实机截图。
+            桌面主窗、带内精确导航、紧凑 CCRP、启动器与网页驾驶舱（桌面 / 手机）均为实机截图。
           </p>
         </div>
 
@@ -309,23 +309,61 @@
             <figcaption>启动器 3.2.2 · 签名更新与通道选择</figcaption>
           </figure>
 
+          <div class="gallery-row gallery-row--instruments" id="instrument-shots">
+            <figure class="shot shot--instrument" data-shot="assets/shots/nav-precision.png">
+              <div class="shot-frame">
+                <img
+                  class="shot-img"
+                  alt="Bomana 航向带内精确对准区实机：偏差、捕获门与平滑游标"
+                  width="340"
+                  height="138"
+                  hidden
+                >
+                <div class="shot-empty" data-ar="340/138">
+                  <span class="shot-meta">NAV · PRECISION</span>
+                  <strong>带内精确对准</strong>
+                  <p>偏差 · 捕获门 · 平滑游标</p>
+                </div>
+              </div>
+              <figcaption>航向带精确区 · 小偏差非线性放大，机场仍留在主刻度</figcaption>
+            </figure>
+
+            <figure class="shot shot--instrument-wide" data-shot="assets/shots/ccrp-compact.png">
+              <div class="shot-frame">
+                <img
+                  class="shot-img"
+                  alt="Bomana 紧凑 CCRP 实机：目标高程、弹药选择与对称收束提示"
+                  width="720"
+                  height="134"
+                  hidden
+                >
+                <div class="shot-empty" data-ar="720/134">
+                  <span class="shot-meta">CCRP · COMPACT</span>
+                  <strong>紧凑投放提示</strong>
+                  <p>目标高程 · 弹药 · 对称收束</p>
+                </div>
+              </div>
+              <figcaption>紧凑 CCRP · 标题摘要与 42 px 平滑释放条</figcaption>
+            </figure>
+          </div>
+
           <!-- Wide strip: full length visible -->
           <figure class="shot shot--strip" data-shot="assets/shots/nav-hud.png">
             <div class="shot-frame">
               <img
                 class="shot-img"
                 alt="Bomana 独立导航航向带实机"
-                width="1588"
-                height="296"
+                width="1188"
+                height="188"
                 hidden
               >
-              <div class="shot-empty" data-ar="1588/296">
+              <div class="shot-empty" data-ar="1188/188">
                 <span class="shot-meta">NAV · TAPE</span>
                 <strong>独立导航</strong>
                 <p>航向带 · 战区 / 机场</p>
               </div>
             </div>
-            <figcaption>独立导航窗 · 完整航向带与偏差提示</figcaption>
+            <figcaption>独立导航窗 · 主刻度保留全局目标，精确提示收进航向带</figcaption>
           </figure>
         </div>
       </section>
@@ -354,7 +392,7 @@
             <div class="feat-body">
               <span class="feat-code">037°</span>
               <h3>战区与机场导航</h3>
-              <p>方位、距离、POI 与坠毁点回溯；集成或独立导航窗口。</p>
+              <p>主刻度保留战区、机场与 POI；接近目标时，非线性精确区在带内放大偏差并平滑捕获。</p>
             </div>
           </article>
           <article class="feat">
@@ -368,7 +406,7 @@
           <article class="feat feat-plain">
             <span class="feat-code">WPN</span>
             <h3>武器解算</h3>
-            <p>自由落体 CCRP、条件包线与可选滑翔参考，共用一张紧凑卡片。均为估算，不是游戏内部算法。</p>
+            <p>自由落体 CCRP 把目标高程、弹药选择和对称释放条压进紧凑卡片；也支持条件包线与可选滑翔参考。</p>
           </article>
           <article class="feat feat-plain">
             <span class="feat-code">WEB</span>
@@ -515,7 +553,7 @@
           </details>
           <details>
             <summary>CCRP 是游戏内部真实弹道吗？</summary>
-            <p>不是。它是基于公开静态参数和飞行状态的工程估算，适用弹型与误差会在界面中明确提示。</p>
+            <p>不是。它只组合官方 8111 飞行状态、用户手选武器的离线参数和启动器维护的离线地形；界面会明确提示适用条件与不可用状态。</p>
           </details>
           <details>
             <summary>可以和其他 8111 工具一起使用吗？</summary>

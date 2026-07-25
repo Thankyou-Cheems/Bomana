@@ -6,7 +6,9 @@ Design constraints
 - Push only files that already exist on the maintainer workstation.
 - The remote host must never pull from GitHub (outbound GitHub is blocked).
 - Download links target bomanaupdate.ruikang.wang so EdgeOne CDN can accelerate
-  binary distribution; the site HTML/CSS/JS/images are static under /bomana/.
+  binary distribution; the canonical static site is bomana.ruikang.wang.
+- The browser reads the same-origin download-catalog.json generated here, so a
+  site-host migration does not require update-API CORS or change Launcher URLs.
 
 Typical usage::
 
@@ -33,7 +35,7 @@ DOCS = ROOT / "docs"
 
 DEFAULT_HOST = "TencentCloudPublic"
 DEFAULT_REMOTE_DIR = "/opt/Website/bomana"
-DEFAULT_PUBLIC_BASE_URL = "https://ruikang.wang/bomana"
+DEFAULT_PUBLIC_BASE_URL = "https://bomana.ruikang.wang"
 DEFAULT_CDN_BASE = "https://bomanaupdate.ruikang.wang"
 CHANNELS = ("Enhanced", "Standard", "Lite")
 
@@ -182,6 +184,8 @@ def stage_site(docs: Path, stage: Path) -> None:
         stage / "site.js",
         stage / "download-catalog.json",
         stage / "assets" / "shots" / "nav-hud.png",
+        stage / "assets" / "shots" / "nav-precision.png",
+        stage / "assets" / "shots" / "ccrp-compact.png",
         stage / "assets" / "shots" / "web-cockpit-desktop.png",
     ]
     missing = [str(path.relative_to(stage)) for path in required if not path.is_file()]
@@ -218,6 +222,8 @@ def deploy_stage(host: str, remote_dir: str, stage: Path) -> None:
             'test -f "$REMOTE_DIR/index.html"',
             'test -f "$REMOTE_DIR/download-catalog.json"',
             'test -f "$REMOTE_DIR/assets/shots/nav-hud.png"',
+            'test -f "$REMOTE_DIR/assets/shots/nav-precision.png"',
+            'test -f "$REMOTE_DIR/assets/shots/ccrp-compact.png"',
             "",
         ]
     )
@@ -239,6 +245,8 @@ def verify_public(public_base: str, cdn_base: str) -> None:
         f"{base}/download-catalog.json",
         f"{base}/assets/shots/web-cockpit-desktop.png",
         f"{base}/assets/shots/nav-hud.png",
+        f"{base}/assets/shots/nav-precision.png",
+        f"{base}/assets/shots/ccrp-compact.png",
         f"{cdn_base.rstrip('/')}/api/v1/launcher",
     ]
     for url in checks:

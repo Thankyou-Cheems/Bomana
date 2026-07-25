@@ -54,6 +54,14 @@ and the tray fallback for optional administrator hotkeys.
   active-target emphasis from every zone, and MUST visibly state
   `战区解算已暂停，仅进行导航`. These cues and any selected AAM calculation
   target MUST NOT imply a game lock, launch authorization, or verified target.
+- `NAVCUE-10`: Integrated and standalone heading tapes MUST render primary
+  alignment inside the tape instead of reserving separate zone and airfield
+  status rows. The main scale MUST retain all in-range and overflow target
+  markers, including friendly/enemy airfields. A centered precision lane MUST
+  combine adaptive target text, a capture gate, and a smoothed pipper whose
+  nonlinear projection magnifies small signed heading errors while remaining
+  bounded at large errors. Render smoothing MUST NOT feed back into navigation
+  target selection, heading, distance, or tolerance state.
 
 ## Contract Coverage
 
@@ -75,3 +83,7 @@ and the tray fallback for optional administrator hotkeys.
   `tests/test_panel_renderer.py`, and `tests/test_navigation_window.py` enforce
   `NAVCUE-09` with all-current-hostile/POI projection, neutral zones, and the
   shared navigation-only notice.
+- [behavioral] `tests/test_ui_geometry.py`, `tests/test_panel_renderer.py`, and
+  `tests/test_navigation_window.py` enforce `NAVCUE-10` with in-tape guidance
+  geometry, adaptive centered wording, retained airfield/overflow markers, and
+  removal of the former external status rows.

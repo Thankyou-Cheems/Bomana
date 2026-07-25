@@ -170,6 +170,17 @@ GitHub Actions must not SSH, rsync, or scp release assets to Tencent. Artifact
 Attestations prove GitHub build provenance; they do not create an Authenticode
 publisher identity for Windows UAC.
 
+The public introduction site is deployed separately from `docs/`:
+
+```powershell
+uv run python tools/deploy_pages_mirror.py
+```
+
+Its canonical URL is `https://bomana.ruikang.wang/`; App/Launcher/terrain
+updates must remain on `https://bomanaupdate.ruikang.wang`. Follow the
+[public-site cutover guide](./guides/public-site-cutover.md) before replacing
+the former `/bomana` route.
+
 ## 获取帮助 | Getting Help
 
 Start with [`README.md`](../README.md), then the relevant spec,

@@ -23,6 +23,12 @@
 3. 启动器会优先从腾讯云/EdgeOne 获取对应通道的 app 包，失败时自动回退 GitHub；启动器本体也支持独立自更新
 4. 新版启动器会保留一个上一版本应用，可在出现坏版本时直接回退
 
+介绍站入口为 <https://bomana.ruikang.wang/>。介绍站域名和启动器更新源彼此独立：
+启动器仍固定从 `bomanaupdate.ruikang.wang` 检查 App、Launcher 与地形包，
+因此从旧的 `https://ruikang.wang/bomana/` 迁站不会改变已安装客户端的更新链路。
+旧网页路径应继续保留逐路径 `308` 跳转；维护者切换步骤见
+[介绍站域名迁移指南](./guides/public-site-cutover.md)。
+
 App 8 / Launcher 3 的协议基线是 `8.0.0` / `3.0.0`，但每个 App 发布还会声明自己的最低 Launcher 版本；当前 App 8.6.2 要求 Launcher 3.3.0+。旧启动器会根据签名清单在下载前阻止更新；Launcher 在启动、在线安装、本地导入、回退和异常恢复前也会读取包内最低版本，并在替换现有有效目录前核对签名清单版本与包内版本完全一致。
 
 可选通道：
@@ -96,9 +102,15 @@ uv run python Bomana.pyw
 | 网页驾驶舱 | 本机/手机响应式地图与关键信息面板 |
 | 界面个性化 | 独立文字缩放、主题切换、自定义提示音 |
 
+导航显示说明：
+
+- 航向带主刻度继续显示战区、POI、坠毁点与友/敌机场，不再用两行左对齐文字重复列出主要目标和机场。
+- 接近主要目标时，航向带底部的精确区用非线性刻度放大小偏差，并在同一条带内显示左右误差、捕获门和平滑游标；远离目标时仍保留清晰的方向提示。
+
 武器解算说明：
 
 - 该功能是工程化估计，不是游戏内部真实投弹算法，存在误差是正常现象。
+- CCRP 默认使用紧凑三段布局：标题行合并目标与数字高程，蓝色弹药框负责选择挂载，42 px 对称收束条负责释放时机；独立模式仍可挂在独立导航栏下方。
 - 普通自由落体炸弹使用 CCRP；高阻炸弹在缺少已验证离线模型时会停用预测；AAM/AGM 优先使用 Datamine 条件表。
 - 无官方包线的滑翔武器可选择使用明确标记的推测替代，或不应用替代模型；官方数据在两种策略下始终优先。
 - 当前 Mach >= 1.0 时按多数炸弹无法投放处理，面板会提示超出投放限制。
@@ -125,7 +137,7 @@ A: 检查当前通道（Lite 不含这些面板），并确认在多人全真战
 A: 需要匹配到机型 FM 限速库；若当前机型未匹配，会保持 `unknown/safe`。
 
 **Q: CCRP 预测有偏差？**  
-A: 这是基于 8111 与离线地形/刚体数据的工程化投影。请先核对弹药选择、战区/兴趣点目标模式和地图包状态；运行时不会套用用户阻力或距离修正。
+A: 这是基于 8111 与离线地形/刚体数据的工程化投影。请先点击蓝色弹药框核对挂载，再核对战区/兴趣点目标模式和地图包状态；大坡度侧飞或明显转弯会暂停提示，横向稳定的俯冲或拉起仍会继续计算。运行时不会套用用户阻力或距离修正。
 
 **Q: 计时器不准？**  
 A: 使用当前配置的重置热键连续按两次，手动重置周期；默认是 `F7`。
@@ -186,6 +198,14 @@ uv run python tools/update_datamine_assets.py ^
 2. Download `Bomana_launcher_vX.X.X.exe`
 3. Let launcher fetch and verify the app package for your channel
 4. New launcher builds retain one previous app version so you can roll back quickly if a bad app package ships
+
+The public site is <https://bomana.ruikang.wang/>. Its hostname is independent
+from the Launcher update origin: installed clients continue to check
+`bomanaupdate.ruikang.wang` for App, Launcher, and terrain releases. Moving the
+landing page away from `https://ruikang.wang/bomana/` therefore does not change
+the updater contract. Keep a path-preserving `308` redirect at the former URL;
+maintainers should follow the
+[public-site cutover guide](./guides/public-site-cutover.md).
 
 The App 8 / Launcher 3 protocol floor is `8.0.0` / `3.0.0`, but each App release also declares its own Launcher requirement; App 8.6.2 requires Launcher 3.3.0+. An older Launcher blocks the update before downloading package bytes from the signed manifest. Launcher also validates the package-declared floor before launch, online install, local import, rollback, or incomplete-install recovery.
 
@@ -260,9 +280,15 @@ The responsive page uses the official tactical-map thumbnail at reduced opacity 
 | Web Cockpit | Responsive local/mobile map and key information panels |
 | UI personalization | Independent text scale, theme switching, custom alert sounds |
 
+Navigation display:
+
+- The main heading scale continues to carry zones, POIs, traceback, and friendly/enemy airfields instead of repeating the primary target and airfield in two left-aligned rows.
+- Near the primary target, an in-tape nonlinear precision lane magnifies small errors and combines left/right deviation, a capture gate, and a smoothed pipper without losing the wider heading context.
+
 Weapon-solution note:
 
 - This feature is an engineering estimate and not War Thunder's internal bombing algorithm.
+- CCRP uses a compact three-part layout by default: the header combines target and numeric elevation, the blue weapon field selects the store, and a 42 px symmetric convergence cue carries release timing. Detached CCRP can still mount below detached navigation.
 - Free-fall bombs use CCRP; high-drag prediction stays disabled without a validated offline model. AAM/AGM references prefer Datamine condition tables.
 - Glide stores without an official table may use an explicitly marked estimated substitute or no substitute; official data always takes priority.
 - Mach >= 1.0 is treated as above the release limit for normal bomb prediction.
@@ -288,7 +314,7 @@ A: Check your channel (Lite does not include them) and battle mode.
 A: Aircraft FM may not be matched in the current speed-limit database.
 
 **Q: CCRP prediction is off?**  
-A: Expected for an estimate-based model. Tune `range correction` and `time correction` in `Settings -> Bombing`.
+A: First click the blue weapon field and confirm the actual store, then check Zone/POI mode and the Enhanced terrain-pack state. Strong bank, sideslip, roll, or turning pauses the cue; a laterally stable dive or pull-up remains eligible. Runtime range, time, or drag corrections are not applied.
 
 **Q: The phone cannot open Web Cockpit?**
 

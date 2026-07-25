@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from bomana.config.settings import PanelConfig, UIConfig
 from bomana.core.state import Phase, UISnapshot
 from bomana.ui.app import App
-from bomana.ui.bombing_bar import BombingBar
+from bomana.ui.bombing_bar import BombingBar, CCRPCueProjection
 from bomana.ui.dialogs import _ScalableDialogMixin, _ScopedMousewheelBinding
 from bomana.ui.main_window import MainWindowBuilder
 from bomana.ui.nav_window import NavigationWindow
@@ -228,11 +228,44 @@ class TkGeometryTests(unittest.TestCase):
         self.assertIsInstance(integrated.weapon_btn, tk.Label)
         self.assertIsNone(integrated.weapon_prev_btn)
         self.assertIsNone(integrated.weapon_next_btn)
+        self.assertIs(integrated.target_summary_lbl.master, integrated.header_frame)
+        self.assertEqual(integrated.info_frame.winfo_manager(), "")
+        self.assertEqual(int(float(integrated.cue.cget("height"))), 42)
+        managed_height = (
+            integrated.header_frame.winfo_reqheight()
+            + integrated.controls_frame.winfo_reqheight()
+            + integrated.cue.winfo_reqheight()
+        )
+        self.assertLessEqual(integrated.frame.winfo_reqheight(), managed_height + 16)
         self.assertEqual(integrated.trajectory_lbl.winfo_manager(), "")
         self.assertEqual(integrated.flight_lbl.winfo_manager(), "")
         self.assertEqual(integrated.release_detail_lbl.winfo_manager(), "")
+        self.assertEqual(
+            BombingBar._target_context_text(
+                "战区 #2 3.12km",
+                "目标高程 186m",
+            ),
+            "高186m·战区#2 3.12km",
+        )
+        self.assertEqual(
+            BombingBar._compact_weapon_label("MK82 500磅 · 炸弹 · 点击切换"),
+            "MK82 500磅",
+        )
+        integrated.cue.set_projection(
+            CCRPCueProjection(0.18, Theme.YELLOW, "T−2.4s")
+        )
+        integrated.cue._draw()
+        cue_bbox = integrated.cue.bbox("all")
+        self.assertIsNotNone(cue_bbox)
+        assert cue_bbox is not None
+        self.assertGreaterEqual(cue_bbox[1], 0)
+        self.assertLessEqual(
+            cue_bbox[3],
+            max(integrated.cue.winfo_height(), integrated.cue.winfo_reqheight()),
+        )
 
         self.assertIsNone(standalone.mode_btn)
+        self.assertIsNone(standalone.drag_hint_lbl)
         self.assertEqual(standalone.close_btn.cget("text"), "✕")
         standalone._return_to_integrated()
         self.assertEqual(integrated_requests, ["integrated"])
@@ -511,38 +544,85 @@ class TkGeometryTests(unittest.TestCase):
         finally:
             tape.destroy()
 
-    def test_integrated_navigation_status_row_uses_elastic_columns(self) -> None:
-        row = tk.Frame(self.root)
-        row.pack(fill="x")
-        labels = [
-            tk.Label(row, text=""),
-            tk.Label(row, text=""),
-            tk.Label(row, text=""),
-            tk.Label(row, text=""),
-        ]
-        labels[0].grid(row=0, column=0)
-        labels[1].grid(row=0, column=1, sticky="ew")
-        labels[2].grid(row=0, column=2, sticky="ew")
-        labels[3].grid(row=0, column=3, sticky="ew")
+    def test_heading_tape_integrates_centered_precision_guidance(self) -> None:
+        tape = HeadingTape(self.root, width=320, height=36, text_scale=1.0)
+        try:
+            tape.update_tape_multi(
+                90.0,
+                [
+                    {
+                        "type": "zone",
+                        "relative": 0.24,
+                        "distance_km": 7.0,
+                        "is_primary": True,
+                    },
+                    {
+                        "type": "friendly",
+                        "relative": -18.0,
+                        "distance_km": 12.0,
+                        "is_primary": False,
+                    },
+                ],
+                7.0,
+            )
+            self.root.update_idletasks()
 
-        MainWindowBuilder(app=object())._configure_heading_status_row(
-            row,
-            turn_label=labels[1],
-            status_label=labels[2],
-            info_label=labels[3],
-        )
-        self.root.deiconify()
-        self.root.geometry("320x80")
-        self.root.update()
+            guidance_text = tape.find_withtag("guidance_text")
+            gate = tape.find_withtag("guidance_gate")
+            pipper = tape.find_withtag("guidance_pipper")
+            self.assertEqual(len(guidance_text), 1)
+            self.assertTrue(gate)
+            self.assertEqual(len(pipper), 1)
+            self.assertTrue(tape.find_withtag("friendly_overflow"))
+            self.assertIn("精确", tape.itemcget(guidance_text[0], "text"))
+            self.assertIn("精确·右0.24°", tape.itemcget(guidance_text[0], "text"))
+            self.assertIn("7.0km", tape.itemcget(guidance_text[0], "text"))
 
-        self.assertEqual(labels[1].cget("width"), 0)
-        self.assertEqual(labels[2].cget("width"), 0)
-        self.assertEqual(labels[3].cget("width"), 0)
-        self.assertEqual(row.grid_columnconfigure(1)["weight"], 1)
-        self.assertEqual(row.grid_columnconfigure(2)["weight"], 1)
-        self.assertEqual(row.grid_columnconfigure(3)["weight"], 2)
-        self.assertGreaterEqual(labels[1].cget("wraplength"), 44)
-        self.assertGreaterEqual(labels[3].cget("wraplength"), 74)
+            text_bbox = tape.bbox(guidance_text[0])
+            gate_bbox = tape.bbox("guidance_gate")
+            pipper_bbox = tape.bbox(pipper[0])
+            self.assertIsNotNone(text_bbox)
+            self.assertIsNotNone(gate_bbox)
+            self.assertIsNotNone(pipper_bbox)
+            assert text_bbox is not None and gate_bbox is not None and pipper_bbox is not None
+            center_x = tape.tape_width / 2
+            self.assertLessEqual(gate_bbox[0], center_x)
+            self.assertGreaterEqual(gate_bbox[2], center_x)
+            self.assertGreater((pipper_bbox[0] + pipper_bbox[2]) / 2, center_x)
+            self.assertGreater(text_bbox[1], tape._layout_metrics()["guidance_top"])
+        finally:
+            tape.destroy()
+
+    def test_heading_guidance_expands_small_errors_without_losing_full_scale(self) -> None:
+        tolerance = 3.0
+        fine = HeadingTape._project_guidance_ratio(0.1, tolerance)
+        edge = HeadingTape._project_guidance_ratio(tolerance, tolerance)
+        overflow = HeadingTape._project_guidance_ratio(20.0, tolerance)
+
+        self.assertGreater(fine, 0.1 / tolerance)
+        self.assertAlmostEqual(edge, 1.0)
+        self.assertAlmostEqual(overflow, 1.0)
+
+    def test_heading_tape_places_aam_notice_inside_guidance_lane(self) -> None:
+        tape = HeadingTape(self.root, width=280, height=36, text_scale=1.0)
+        try:
+            tape.update_tape_multi(
+                90.0,
+                [],
+                10.0,
+                mode_notice="战区解算已暂停，仅进行导航",
+            )
+            self.root.update_idletasks()
+
+            guidance_text = tape.find_withtag("guidance_text")
+            self.assertEqual(len(guidance_text), 1)
+            self.assertEqual(
+                tape.itemcget(guidance_text[0], "text"),
+                "空空导航 · 战区解算暂停",
+            )
+            self.assertFalse(tape.find_withtag("guidance_pipper"))
+        finally:
+            tape.destroy()
 
     def test_main_navigation_list_columns_use_font_metrics_not_fixed_widths(self) -> None:
         parent = tk.Frame(self.root)
@@ -645,38 +725,14 @@ class TkGeometryTests(unittest.TestCase):
         finally:
             dialog.destroy()
 
-    def test_standalone_navigation_status_row_uses_elastic_columns(self) -> None:
-        row = tk.Frame(self.root)
-        row.pack(fill="x")
-        labels = [
-            tk.Label(row, text=""),
-            tk.Label(row, text=""),
-            tk.Label(row, text=""),
-            tk.Label(row, text=""),
-        ]
-        labels[0].grid(row=0, column=0)
-        labels[1].grid(row=0, column=1, sticky="ew")
-        labels[2].grid(row=0, column=2, sticky="ew")
-        labels[3].grid(row=0, column=3, sticky="ew")
+    def test_navigation_surfaces_do_not_build_external_status_rows(self) -> None:
+        main_source = Path("bomana/ui/main_window.py").read_text(encoding="utf-8")
+        standalone_source = Path("bomana/ui/nav_window.py").read_text(encoding="utf-8")
 
-        NavigationWindow._configure_status_row(
-            row,
-            turn_label=labels[1],
-            status_label=labels[2],
-            info_label=labels[3],
-        )
-        self.root.deiconify()
-        self.root.geometry("320x80")
-        self.root.update()
-
-        self.assertEqual(labels[1].cget("width"), 0)
-        self.assertEqual(labels[2].cget("width"), 0)
-        self.assertEqual(labels[3].cget("width"), 0)
-        self.assertEqual(row.grid_columnconfigure(1)["weight"], 1)
-        self.assertEqual(row.grid_columnconfigure(2)["weight"], 1)
-        self.assertEqual(row.grid_columnconfigure(3)["weight"], 2)
-        self.assertGreaterEqual(labels[1].cget("wraplength"), 42)
-        self.assertGreaterEqual(labels[3].cget("wraplength"), 72)
+        self.assertNotIn("tape_zone_row", main_source)
+        self.assertNotIn("tape_friendly_row", main_source)
+        self.assertNotIn("self.zone_row =", standalone_source)
+        self.assertNotIn("self.friendly_row =", standalone_source)
 
     def test_renderer_compacts_fuel_to_one_line_and_keeps_bombing_details(self) -> None:
         app = SimpleNamespace(
