@@ -112,6 +112,22 @@ def test_public_channels_bypass_subscription_authority() -> None:
     assert decision.reason is SubscriptionAccessReason.ALLOWED
 
 
+def test_subscription_store_opens_the_real_cheemspay_store(monkeypatch) -> None:
+    launcher = load_launcher_module()
+    window = object.__new__(launcher.LauncherWindow)
+    window.running = False
+    opened: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        launcher.webbrowser,
+        "open",
+        lambda url, new=0: opened.append((url, new)) or True,
+    )
+
+    window._open_subscription_store()
+
+    assert opened == [("https://pay.ruikang.wang/", 2)]
+
+
 def test_enhanced_uses_cached_receipt_without_network_refresh() -> None:
     allowed = SubscriptionAccessDecision(True, SubscriptionAccessReason.ALLOWED)
     workflow = FakeWorkflow(cached=allowed, refreshed=allowed)

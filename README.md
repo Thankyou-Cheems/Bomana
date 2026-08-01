@@ -40,10 +40,14 @@ CheemsPay 设备授权流程，不收集用户密码；本机只保存 Windows D
 
 1. 从 [Bomana 官网](https://bomana.ruikang.wang/) 下载 Windows Launcher。
 2. 选择 Standard 或 Lite 可直接下载公开版本。
-3. 选择超级爆弹版时，按 Launcher 提示在浏览器中完成 CheemsPay 登录与授权。
+3. 选择超级爆弹版时，先在 Launcher 的「购买 / 试用」按钮打开 CheemsPay
+   商品页（现有 1 年授权或 3 天试用），完成支付后再按提示登录并刷新订阅。
 4. 启动 War Thunder 并进入战斗；机库通常没有完整的 8111 飞行数据。
 
 Launcher 验证签名清单、SHA-256 与版本兼容性，并保留一个上一版本用于回退。
+
+CheemsPay 商品、付款和权益状态始终以
+<https://pay.ruikang.wang/> 的实际账户中心为准；Launcher 不保存密码或支付信息。
 
 不想使用 Launcher 时，可从 GitHub Release 下载 `Bomana_Green_Lite_v8.7.0.zip`。
 绿色版只包含 Lite 功能及完整 Python 运行库，解压后直接运行 `Bomana.exe`。

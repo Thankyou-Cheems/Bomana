@@ -73,6 +73,7 @@ from launcher.core import (
 )
 from launcher.subscription_access import (
     AuthorizedArtifactRequest,
+    CHEEMSPAY_BASE_URL,
     CHEEMSPAY_LICENSE_PUBLIC_KEYS,
     CheemsPaySubscriptionAuthority,
     DeviceAuthorizationState,
@@ -144,6 +145,7 @@ PRIMARY_LAUNCHER_API_PATH = "/api/v1/launcher"
 PRIMARY_EVENT_API_PATH = "/api/v1/event"
 PRIMARY_TERRAIN_MANIFEST_PATH = "/downloads/terrain/terrain_manifest.json"
 PRIMARY_TERRAIN_OBJECTS_PATH = "/downloads/terrain/objects/"
+CHEEMSPAY_STORE_URL = f"{CHEEMSPAY_BASE_URL.rstrip('/')}/"
 GITHUB_TERRAIN_RELEASE_TAG = os.environ.get(
     "BOMANA_TERRAIN_RELEASE_TAG",
     "terrain-v1",
@@ -4459,6 +4461,21 @@ class LauncherWindow:
             pady=self._px(8),
         )
         self._style_action_button(self.subscription_btn, "secondary")
+        self.subscription_store_btn = tk.Button(
+            self.subscription_card,
+            text="购买 / 试用",
+            command=self._open_subscription_store,
+            cursor="hand2",
+            font=self._font(9),
+            padx=self._px(7),
+            pady=self._px(3),
+        )
+        self.subscription_store_btn.pack(
+            side="right",
+            padx=(self._px(2), self._px(4)),
+            pady=self._px(8),
+        )
+        self._style_action_button(self.subscription_store_btn, "secondary")
         self._refresh_subscription_ui()
 
         self.web_card = tk.Frame(
@@ -4820,6 +4837,7 @@ class LauncherWindow:
             )
             self.subscription_btn.config(text="测试模式", state="disabled")
             self._style_action_button(self.subscription_btn, "secondary")
+            self.subscription_store_btn.config(state="disabled")
             return
         if self.subscription_workflow is None:
             self.subscription_status_lbl.config(
@@ -4828,6 +4846,7 @@ class LauncherWindow:
             )
             self.subscription_btn.config(text="订阅不可用", state="disabled")
             self._style_action_button(self.subscription_btn, "warning")
+            self.subscription_store_btn.config(state="disabled")
             return
         self.subscription_decision = self.subscription_workflow.cached_access()
         allowed = bool(self.subscription_decision.allowed)
@@ -4844,12 +4863,17 @@ class LauncherWindow:
                 if not current_is_enhanced
                 else _subscription_access_copy(self.subscription_decision)
             )
+            if not current_is_enhanced:
+                status_text += "；可在 CheemsPay 购买 1 年授权或 3 天试用"
         self.subscription_status_lbl.config(
             text=status_text,
             fg=_THEME["GREEN"] if allowed else _THEME["YELLOW"],
         )
         self.subscription_btn.config(
             text=("刷新订阅" if allowed else "登录 Super Bomb"),
+            state=("disabled" if self.running else "normal"),
+        )
+        self.subscription_store_btn.config(
             state=("disabled" if self.running else "normal"),
         )
         self._style_action_button(
@@ -4864,6 +4888,25 @@ class LauncherWindow:
             if hasattr(self, "selection_summary_lbl"):
                 self._refresh_channel_details()
         self._refresh_feature_visibility()
+
+    def _open_subscription_store(self) -> None:
+        if self.running:
+            return
+        try:
+            opened = webbrowser.open(CHEEMSPAY_STORE_URL, new=2)
+        except Exception as exc:
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                f"无法打开 CheemsPay 商品页：{exc}",
+                parent=self.root,
+            )
+            return
+        if not opened:
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                "无法打开 CheemsPay 商品页，请手动访问 pay.ruikang.wang。",
+                parent=self.root,
+            )
 
     def _begin_subscription_login(self) -> None:
         if self.running:

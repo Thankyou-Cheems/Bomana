@@ -4,6 +4,15 @@ User-visible release notes are published with each signed release. This file
 tracks the public/private architecture transition without reproducing private
 implementation history.
 
+## Launcher 3.3.2
+
+### Changed
+
+- Added a direct `购买 / 试用` action to the public Launcher. It opens the
+  production CheemsPay storefront where the current one-year authorization and
+  three-day trial are managed, then lets the user refresh the device-bound
+  receipt after payment.
+
 ## [8.7.0]
 
 ### Added
