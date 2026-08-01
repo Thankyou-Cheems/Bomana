@@ -2,27 +2,27 @@
   "schema_version": 1,
   "primary_source": "TencentCloud",
   "cdn_base": "https://bomanaupdate.ruikang.wang",
-  "updated_at": "2026-07-12T10:23:43Z",
+  "updated_at": "2026-08-01T11:45:49Z",
   "launcher": {
-    "version": "3.2.2",
-    "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.2.2.exe",
-    "asset": "Bomana_launcher_v3.2.2.exe",
-    "sha256": "216b42b2e120a222bec6c9995331b88f804a78218168b45c67daa6c64cf6494b"
+    "version": "3.3.1",
+    "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.3.1.exe",
+    "asset": "Bomana_launcher_v3.3.1.exe",
+    "sha256": "e3d75826ef5aefc937790d9be7d830a03b3bc4de6cb1ad01d41e558e0ce7c2d5"
   },
   "channels": {
     "Standard": {
-      "app_version": "8.5.0",
-      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Standard_v8.5.0.zip",
-      "asset": "Bomana_app_Standard_v8.5.0.zip",
-      "sha256": "d8bbdbe364ca55a238e693fb54f744855d88f6ca42eafaa5c12a46d7fcb808a8"
+      "app_version": "8.7.0",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Standard_v8.7.0.zip",
+      "asset": "Bomana_app_Standard_v8.7.0.zip",
+      "sha256": "018b67bf7ecc95ea6f666e48d2cf55c55ed1d375fd1ed67468a3c7c74163819a"
     },
     "Lite": {
-      "app_version": "8.5.0",
-      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Lite_v8.5.0.zip",
-      "asset": "Bomana_app_Lite_v8.5.0.zip",
-      "sha256": "72f28f6d544780de9510d833ff236cb57e9fe305aac060d21e50104f768c6c53"
+      "app_version": "8.7.0",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Lite_v8.7.0.zip",
+      "asset": "Bomana_app_Lite_v8.7.0.zip",
+      "sha256": "50518eaae717b40d3ad3c6a16a8bfea8e3e59cb523ddd7e8cde0419ecc35b3f7"
     }
   },
   "github_releases_url": "https://github.com/Thankyou-Cheems/Bomana/releases",
-  "notes": "Public catalog: Launcher, Standard, and Lite only. Super Bomb delivery requires CheemsPay authorization and is never listed here."
+  "notes": "Primary downloads use EdgeOne CDN. Refreshed on the maintainer workstation; the mirror host never fetches GitHub."
 }
