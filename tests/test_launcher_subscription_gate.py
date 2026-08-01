@@ -52,6 +52,57 @@ def window_with(workflow: FakeWorkflow | None, channel: str = "Enhanced"):
     return window
 
 
+def test_unsubscribed_projection_hides_super_bomb_channel_and_features() -> None:
+    load_launcher_module()
+    window = window_with(None, channel="Standard")
+    window.subscription_decision = SubscriptionAccessDecision(
+        allowed=False,
+        reason=SubscriptionAccessReason.MISSING_RECEIPT,
+    )
+
+    assert window._available_channel_ids() == ("Standard", "Lite")
+    assert not window._super_bomb_access_allowed()
+    assert not window._super_bomb_features_visible()
+
+
+def test_subscribed_projection_restores_super_bomb_channel_and_features() -> None:
+    load_launcher_module()
+    window = window_with(None, channel="Enhanced")
+    window.subscription_decision = SubscriptionAccessDecision(
+        allowed=True,
+        reason=SubscriptionAccessReason.ALLOWED,
+    )
+
+    assert window._available_channel_ids() == ("Enhanced", "Standard", "Lite")
+    assert window._super_bomb_access_allowed()
+    assert window._super_bomb_features_visible()
+
+
+def test_source_test_mode_keeps_enhanced_projection_without_subscription() -> None:
+    load_launcher_module()
+    window = window_with(None, channel="Enhanced")
+    window.source_test_mode = True
+    window.subscription_decision = SubscriptionAccessDecision(
+        allowed=False,
+        reason=SubscriptionAccessReason.MISSING_RECEIPT,
+    )
+
+    assert window._available_channel_ids() == ("Enhanced", "Standard", "Lite")
+    assert window._super_bomb_features_visible()
+
+
+def test_installed_app_channel_reads_profile_without_importing_app_code(tmp_path) -> None:
+    launcher = load_launcher_module()
+    profile = tmp_path / "app" / "bomana" / "config" / "feature_profile.py"
+    profile.parent.mkdir(parents=True)
+    profile.write_text('EDITION_CHANNEL = "Enhanced"\n', encoding="utf-8")
+
+    assert launcher._installed_app_channel(tmp_path) == "Enhanced"
+
+    profile.write_text("EDITION_CHANNEL = 'Standard'\n", encoding="utf-8")
+    assert launcher._installed_app_channel(tmp_path) == "Standard"
+
+
 def test_public_channels_bypass_subscription_authority() -> None:
     window = window_with(None, channel="Standard")
 
