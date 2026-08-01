@@ -1,4 +1,4 @@
-# enforces: docs/specs/version-compatibility.md COMPAT-01..COMPAT-04 COMPAT-07..COMPAT-13 COMPAT-17 COMPAT-20 COMPAT-22
+# enforces: docs/specs/version-compatibility.md COMPAT-01..COMPAT-04 COMPAT-07..COMPAT-13 COMPAT-17 COMPAT-20 COMPAT-22 COMPAT-26
 
 from __future__ import annotations
 
@@ -136,6 +136,32 @@ def test_packaged_app_guard_precedes_runtime_imports() -> None:
     assert "BOMANA_SOURCE_DEVELOPMENT" in entry or "BOMANA_SOURCE_DEVELOPMENT" in (
         ROOT / "bomana_version.py"
     ).read_text(encoding="utf-8")
+
+
+def test_only_frozen_green_distribution_can_bypass_launcher_identity() -> None:
+    boundary = _load_version_boundary()
+
+    assert (
+        boundary.validate_app_launcher_identity(
+            launcher_version=None,
+            source_development=None,
+            distribution_mode="green",
+            frozen=True,
+        )
+        is None
+    )
+    for distribution_mode, frozen in (
+        ("green", False),
+        ("managed", True),
+        ("", True),
+    ):
+        with pytest.raises(boundary.VersionCompatibilityError, match="启动器身份缺失"):
+            boundary.validate_app_launcher_identity(
+                launcher_version=None,
+                source_development=None,
+                distribution_mode=distribution_mode,
+                frozen=frozen,
+            )
 
 
 def test_staged_version_is_read_as_data_without_importing_candidate_code() -> None:

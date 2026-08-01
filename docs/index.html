@@ -55,7 +55,8 @@
             </h1>
             <p class="hero-lede">
               Bomana 是面向 War Thunder 全真模式的多功能计时器。Lite / Standard 提供
-              15 分钟收益周期、带内精确导航、燃油与超速提示；超级爆弹版通过 CheemsPay 订阅。
+              15 分钟收益周期、带内精确导航、燃油与超速提示；Lite 另有免启动器绿色版，
+              超级爆弹版通过 CheemsPay 订阅。
             </p>
             <div class="hero-actions">
               <a
@@ -77,7 +78,7 @@
             </div>
             <ul class="hero-trust" aria-label="产品边界">
               <li>只读官方 localhost:8111</li>
-              <li>绿色版 · 可回退</li>
+              <li>Lite 绿色版 · 解压即用</li>
               <li>Lite / Standard · MIT</li>
             </ul>
           </div>
@@ -115,15 +116,16 @@
             <h2 id="start-title">三步开始，不需要额外游戏插件</h2>
           </div>
           <p class="section-aside-text">
-            启动器负责下载、签名校验和版本回退。Bomana 只读取游戏已经提供的本地数据。
+            可使用启动器完成签名校验和版本回退，也可直接下载内置 Python 的 Lite 绿色版。
+            Bomana 只读取游戏已经提供的本地数据。
           </p>
         </div>
 
         <ol class="steps">
           <li>
             <span class="step-index">01</span>
-            <h3>下载启动器</h3>
-            <p>优先走国内 CDN（腾讯云 / EdgeOne）；GitHub Release 作为备用，无需安装 Python。</p>
+            <h3>选择下载方式</h3>
+            <p>使用国内 CDN 启动器，或从 GitHub Release 下载 Lite 绿色版；两者都无需安装 Python。</p>
           </li>
           <li>
             <span class="step-index">02</span>
@@ -140,7 +142,7 @@
         <div class="download-panel" aria-labelledby="download-title">
           <div class="download-copy">
             <p class="section-label">LATEST RELEASE</p>
-            <h3 id="download-title">先下载启动器，其余交给它</h3>
+            <h3 id="download-title">启动器管理版本，绿色版解压即用</h3>
             <p id="releaseStatus" role="status" aria-live="polite">正在读取国内 CDN 版本信息…</p>
             <div class="download-actions">
               <a
@@ -157,6 +159,13 @@
               >
                 GitHub 备用
               </a>
+              <a
+                class="button secondary"
+                id="greenDownload"
+                href="https://github.com/Thankyou-Cheems/Bomana/releases/latest/download/Bomana_Green_Lite_v8.7.0.zip"
+              >
+                Lite 绿色版（无需启动器）
+              </a>
               <a class="text-link" id="allReleasesLink" href="https://github.com/Thankyou-Cheems/Bomana/releases">
                 查看所有版本
               </a>
@@ -166,9 +175,9 @@
             </p>
           </div>
           <div class="release-files">
-            <p class="release-files-label">CDN 分发文件</p>
+            <p class="release-files-label">公开分发文件</p>
             <div id="releaseAssets" class="release-assets" aria-live="polite">
-              <span>Launcher</span><span>Standard / Lite</span><span>Signed manifests</span>
+              <span>Launcher</span><span>Standard / Lite</span><span>Lite Green</span><span>Signed manifests</span>
             </div>
           </div>
         </div>

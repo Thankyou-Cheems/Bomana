@@ -58,6 +58,7 @@ def test_github_pages_site_has_new_user_and_permission_paths() -> None:
         "heroDownload",
         "launcherDownload",
         "launcherDownloadGithub",
+        "greenDownload",
         "releaseStatus",
         "releaseAssets",
     } <= parser.ids
@@ -118,6 +119,8 @@ def test_site_styles_are_responsive_and_accessible() -> None:
     assert "/api/v1/launcher" not in javascript
     assert "/api/v1/version" not in javascript
     assert "api.github.com" in javascript  # backup metadata only
+    assert "Bomana_Green_Lite" in javascript
+    assert "setGreenDownload(greenAsset)" in javascript
     assert "BomanaHotkeyBrokerSetup" not in javascript
     assert "textContent" in javascript
     assert "innerHTML" not in javascript

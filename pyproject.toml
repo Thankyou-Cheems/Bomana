@@ -1,6 +1,6 @@
 [project]
 name = "bomana"
-version = "8.6.2"
+version = "8.7.0"
 description = "War Thunder SB timer and navigation assistant"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -33,6 +33,7 @@ addopts = "-q --capture=sys"
 [tool.ruff]
 line-length = 100
 respect-gitignore = false
+extend-exclude = ["build", "dist"]
 
 [tool.ruff.lint]
 select = [

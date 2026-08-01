@@ -36,7 +36,7 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 - `COMPAT-05`: App `8.0.0` and newer MUST reject a launcher identity below
   the shared `3.0.0` protocol floor. Each packaged App release MUST additionally
   carry and enforce its own release-specific Launcher floor before runtime
-  imports; App `8.6.2` requires Launcher `3.3.0`.
+  imports; managed App `8.7.0` requires Launcher `3.3.0`.
 - `COMPAT-06`: Launcher `3.0.0` and newer MUST reject an App identity below
   `8.0.0` on every Launcher-owned candidate path.
 - `COMPAT-07`: Launcher bootstrap MUST supply its own strict version through
@@ -103,12 +103,17 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
   MUST remain usable without cross-origin API permission. The former
   `/bomana` page and asset paths SHOULD remain as path-preserving permanent
   redirects to the canonical hostname.
+- `COMPAT-26`: The missing-Launcher exception for the standalone green
+  distribution MUST require both the exact build-injected `green` distribution
+  identity and a frozen process. A non-frozen source run or managed frozen App
+  MUST NOT use this exception. Public CI MUST assemble this distribution from
+  the Lite feature profile only.
 
 ## Contract Coverage
 
 - [behavioral] `tests/contracts/test_version_compatibility.py` enforces
   `COMPAT-01..COMPAT-04`, `COMPAT-07..COMPAT-13`, `COMPAT-17`, `COMPAT-20`, and
-  `COMPAT-22` with strict-parser adversarial cases, early App identity order,
+  `COMPAT-22`, and `COMPAT-26` with strict-parser adversarial cases, early App identity order,
   shared-call-site scans, data-only candidate inspection, all-slot recovery
   prevalidation, release-floor agreement, and unchanged manifest
   schema/signed-field assertions.
@@ -130,6 +135,9 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 - [manual] Packaged Launcher smoke confirms `COMPAT-07..COMPAT-10`,
   `COMPAT-18`, and `COMPAT-19` before release without claiming that source-mode
   tests prove the frozen initialization boundary.
+- [behavioral] Packaged Lite green smoke confirms `COMPAT-26` by checking the
+  bundled Python/native runtime and keeping the frozen executable alive through
+  startup without a Launcher identity.
 - [static] `tests/test_docs_site.py` enforces `COMPAT-24` and `COMPAT-25` by
   pinning the independent update origin, canonical site hostname, same-origin
   catalog loading, and deployment default. The path-preserving redirect itself

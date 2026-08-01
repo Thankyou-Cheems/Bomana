@@ -4,6 +4,25 @@ User-visible release notes are published with each signed release. This file
 tracks the public/private architecture transition without reproducing private
 implementation history.
 
+## [8.7.0]
+
+### Added
+
+- Added a Lite-only green ZIP that bundles Python 3.14 and all runtime
+  dependencies. It runs directly after extraction and does not require the
+  Bomana Launcher.
+- Added a green-build daily-active report using the existing anonymous
+  `version_check` event. It succeeds at most once per UTC day and can be
+  disabled with `BOMANA_DISABLE_DAU=1` or `~/.bomana_disable_dau`.
+
+### Changed
+
+- Moved all green-build filesystem and network reporting work onto a daemon
+  thread. Reporting timeout, endpoint failure, state corruption, and thread
+  startup failure cannot reject or delay the main UI startup path.
+- Extended public release CI, checksums, artifact attestations, documentation,
+  and package closure tests to cover Standard, managed Lite, and green Lite.
+
 ## [8.6.2]
 
 ### Changed

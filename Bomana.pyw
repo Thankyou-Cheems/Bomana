@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 Bomana app entrypoint for the War Thunder SB timer and navigation UI.
 
@@ -23,51 +24,43 @@ from bomana_version import validate_app_launcher_identity
 
 validate_app_launcher_identity()
 
-import sys
 import tkinter as tk
-from tkinter import messagebox
 
 from bomana.config.settings import FileConfig
+from bomana.dau import start_green_dau_report
 from bomana.metadata import __version__
 from bomana.ui.app import App
-from bomana.utils.diagnostics import app_context, configure_diagnostics, log_event, shutdown_diagnostics
+from bomana.utils.diagnostics import (
+    app_context,
+    configure_diagnostics,
+    log_event,
+    shutdown_diagnostics,
+)
 from bomana.utils.system import SingleInstanceManager, Win32
 
 # ============================================================================
 # 程序入口
 # ============================================================================
 
+
 def main():
     """主函数"""
     log_path = configure_diagnostics(FileConfig.CONFIG_FILE.with_name(".wttimer_diagnostics.log"))
     log_event("app_start", version=__version__, log_path=str(log_path or ""), **app_context())
 
-    if sys.version_info < (3, 14):
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror(
-                "Bomana",
-                (
-                    f"当前运行时过旧，Bomana {__version__} 需要 Python 3.14+。\n"
-                    "如果你是通过绿色版启动器启动，请先更新启动器到 3.0.0 或更高版本。"
-                ),
-                parent=root,
-            )
-            root.destroy()
-        except Exception:
-            pass
-        raise SystemExit(f"Bomana {__version__} requires Python 3.14+.")
-
     # 确保单实例运行
     SingleInstanceManager.ensure_single_instance_or_exit()
-    
+
+    # 绿色版绕过 Launcher，因此在后台补充每日活跃上报。线程中的任何
+    # 文件或网络失败都只记诊断日志，不参与 GUI 启动控制流。
+    start_green_dau_report(app_version=__version__)
+
     # 启用DPI感知
     Win32.enable_dpi()
-    
+
     # 隐藏控制台窗口
     Win32.hide_console()
-    
+
     # 创建主窗口和应用
     root = tk.Tk()
     App(root)

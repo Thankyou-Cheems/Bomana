@@ -1,7 +1,9 @@
 # Privacy and Data Boundary
 
 Bomana is designed as a local desktop tool. Lite and Standard do not require a
-Bomana account and do not send gameplay telemetry to Bomana or CheemsPay.
+Bomana account and do not send gameplay telemetry to Bomana or CheemsPay. The
+standalone Lite green distribution sends the bounded anonymous daily-active
+event described below.
 
 ## Public App data
 
@@ -15,6 +17,29 @@ The public App reads only War Thunder's official loopback HTTP endpoints:
 It stores user preferences and local runtime state on the current Windows user
 profile. It does not read game-process memory, inject code, modify game files,
 or control the game.
+
+## Lite green daily-active event
+
+The green distribution bypasses the Launcher, so it reports one successful
+`version_check` event per UTC day directly to
+`https://bomanaupdate.ruikang.wang/api/v1/event`. The event contains:
+
+- UTC event time;
+- the fixed `Lite` channel and `green` distribution identity;
+- the public App version;
+- a one-way hashed Windows machine identifier and a random local install ID;
+- ordinary HTTP metadata visible to the hosting infrastructure.
+
+It does not include War Thunder telemetry, map state, aircraft, weapons, user
+configuration, CheemsPay identity, file paths, or game-process data. All local
+state and network work runs on a daemon thread with a bounded timeout. Failure
+does not block, reject, or delay the Bomana UI startup path, and a failed event
+is retried on a later launch rather than marked successful.
+
+Set `BOMANA_DISABLE_DAU=1` or create an empty `.bomana_disable_dau` file in the
+current Windows user profile to disable this event. Managed Lite and Standard
+continue to rely on the Launcher update flow and do not start this App-side
+reporter.
 
 ## Updates
 

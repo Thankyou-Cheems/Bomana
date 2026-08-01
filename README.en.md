@@ -24,6 +24,7 @@ modify game files, or operate the game for the player.
 |---|---|---|
 | **Standard** | Public, MIT | Timer, navigation, fuel, checklist, speed and overspeed cues |
 | **Lite** | Public, MIT | Core timer and minimal UI |
+| **Lite Green** | Public, MIT, launcher-free | Lite features with an embedded Python runtime |
 | **Super Bomb** (`Enhanced` channel) | Paid CheemsPay subscription | Strike Prediction, offline terrain, and Web Cockpit |
 
 This repository is the complete public release closure for Lite and Standard.
@@ -44,6 +45,11 @@ DPAPI. Lite and Standard never contact CheemsPay.
 
 Launcher verifies signed manifests, SHA-256 hashes, compatibility, atomic
 installation, and one-version rollback.
+
+For a launcher-free install, download `Bomana_Green_Lite_v8.7.0.zip` from the
+GitHub Release, extract it, and run `Bomana.exe`. It contains the complete Python
+runtime and only the Lite feature set. An anonymous daily-active event is sent
+asynchronously; network failures never block startup or disable features.
 
 ## Public capabilities
 
@@ -99,6 +105,7 @@ The public builder accepts only Standard and Lite:
 ```powershell
 uv run --frozen python tools/build_portable.py --variant Standard --target app
 uv run --frozen python tools/build_portable.py --variant Lite --target app
+uv run --frozen python tools/build_portable.py --variant Lite --target green
 uv run --frozen python tools/build_portable.py --target launcher
 ```
 

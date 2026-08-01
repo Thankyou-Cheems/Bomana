@@ -23,6 +23,12 @@ The public repository owns four bounded responsibilities:
 4. **Release Closure** -- a fail-closed classification that prevents subscriber
    implementation and data from entering public artifacts.
 
+The public App has two distribution shapes. Managed Standard/Lite ZIPs are
+installed and verified by the Universal Launcher. The Lite green ZIP is a
+PyInstaller `onedir` bundle containing Python 3.14, dependencies, resources,
+and the native hotkey broker; it has no Launcher dependency and cannot select a
+non-Lite feature profile.
+
 ## Module map
 
 ```text
@@ -126,6 +132,11 @@ known-good version is retained for rollback.
 Private signing keys and CheemsPay issuer keys are deployment inputs, never
 tracked files. Public CI builds only Lite and Standard. Private CI alone may
 assemble `Enhanced` after its repository and delivery boundary are configured.
+
+Because green Lite bypasses the Launcher, `bomana.dau` emits its anonymous
+daily-active `version_check` from a daemon thread. Success is deduplicated per
+UTC day; all disk/network errors are diagnostic-only and cannot enter the UI
+startup decision path.
 
 ## Change rules
 

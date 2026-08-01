@@ -26,6 +26,7 @@ Bomana 是独立桌面程序，只读取 War Thunder 官方提供的本机
 |---|---|---|
 | **Standard** | 公开、MIT | 计时、导航、燃油、检查单、速度/超速提示 |
 | **Lite** | 公开、MIT | 核心计时与最小界面 |
+| **Lite 绿色版** | 公开、MIT、免启动器 | Lite 功能 + 内置 Python 运行库，解压即用 |
 | **超级爆弹版**（通道 `Enhanced`） | CheemsPay 付费订阅 | Strike Prediction、离线地形与 Web Cockpit |
 
 本仓库是完整的 Lite / Standard 公开发布闭包。超级爆弹版的差异化实现、
@@ -43,6 +44,10 @@ CheemsPay 设备授权流程，不收集用户密码；本机只保存 Windows D
 4. 启动 War Thunder 并进入战斗；机库通常没有完整的 8111 飞行数据。
 
 Launcher 验证签名清单、SHA-256 与版本兼容性，并保留一个上一版本用于回退。
+
+不想使用 Launcher 时，可从 GitHub Release 下载 `Bomana_Green_Lite_v8.7.0.zip`。
+绿色版只包含 Lite 功能及完整 Python 运行库，解压后直接运行 `Bomana.exe`。
+它会异步上报每日一次的匿名活跃事件；网络失败不会阻塞启动，也不会影响功能。
 
 ## 公开功能
 
@@ -104,6 +109,7 @@ uv run --extra dev ruff format --check .
 ```powershell
 uv run --frozen python tools/build_portable.py --variant Standard --target app
 uv run --frozen python tools/build_portable.py --variant Lite --target app
+uv run --frozen python tools/build_portable.py --variant Lite --target green
 uv run --frozen python tools/build_portable.py --target launcher
 ```
 

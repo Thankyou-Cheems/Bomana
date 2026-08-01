@@ -329,6 +329,109 @@ def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:
         "--collect-all",
         "certifi",
     ]
+    assert build_portable.pyinstaller_green_runtime_args() == [
+        "--hidden-import",
+        "pystray._win32",
+        "--hidden-import",
+        "winsound",
+        "--collect-submodules",
+        "PIL",
+        "--collect-submodules",
+        "pystray",
+        "--collect-all",
+        "requests",
+        "--collect-all",
+        "certifi",
+    ]
+
+
+def test_green_stage_is_lite_only_and_does_not_mutate_source(tmp_path: Path) -> None:
+    build_portable = load_tool_module("build_portable_green_stage", "tools/build_portable.py")
+    root = tmp_path / "repo"
+    work = tmp_path / "work"
+    profile = root / "bomana" / "config" / "feature_profile.py"
+    profile.parent.mkdir(parents=True)
+    (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
+    (root / "bomana_version.py").write_text("# boundary\n", encoding="utf-8")
+    (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
+    source_profile = 'EDITION_CHANNEL = "Standard"\n'
+    profile.write_text(source_profile, encoding="utf-8")
+    broker = tmp_path / "BomanaHotkeyBroker.exe"
+    broker.write_bytes(b"broker")
+
+    staged = build_portable.stage_green_app(
+        root,
+        work,
+        broker,
+        source_closure(root),
+    )
+
+    assert (staged / "bomana/config/feature_profile.py").read_text(
+        encoding="utf-8"
+    ) == 'EDITION_CHANNEL = "Lite"\n'
+    assert profile.read_text(encoding="utf-8") == source_profile
+    staged_broker = staged / "bomana/bin/BomanaHotkeyBroker.exe"
+    assert staged_broker.read_bytes() == b"broker"
+    assert build_portable.sha256_file(staged_broker) in (
+        staged / "bomana/bin/BomanaHotkeyBroker.sha256"
+    ).read_text(encoding="ascii")
+
+
+def test_green_builder_rejects_non_lite_variant_before_packaging(tmp_path: Path) -> None:
+    build_portable = load_tool_module("build_portable_green_only", "tools/build_portable.py")
+
+    with pytest.raises(RuntimeError, match="Lite-only"):
+        build_portable.build_green_bundle(
+            tmp_path,
+            "Standard",
+            "8.7.0",
+            tmp_path,
+            tmp_path / "BomanaHotkeyBroker.exe",
+            frozenset(),
+        )
+
+
+def test_green_cli_rejects_non_lite_variant(monkeypatch) -> None:
+    build_portable = load_tool_module("build_portable_green_cli", "tools/build_portable.py")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["build_portable.py", "--target", "green", "--variant", "Standard"],
+    )
+
+    with pytest.raises(ValueError, match="requires --variant Lite"):
+        build_portable.main()
+
+
+def test_green_bundle_layout_requires_executable_python_and_broker(tmp_path: Path) -> None:
+    build_portable = load_tool_module("build_portable_green_layout", "tools/build_portable.py")
+    stem = "Bomana_Green_Lite_v8.7.0"
+    bundle = tmp_path / f"{stem}.zip"
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr(f"{stem}/{stem}.exe", b"exe")
+        archive.writestr(f"{stem}/_internal/python314.dll", b"python")
+        archive.writestr(f"{stem}/_internal/bomana/bin/BomanaHotkeyBroker.exe", b"broker")
+        archive.writestr(
+            f"{stem}/_internal/bomana/bin/BomanaHotkeyBroker.sha256",
+            b"checksum",
+        )
+
+    build_portable.verify_green_bundle_layout(bundle, stem)
+
+
+def test_green_checksum_declares_zero_launcher_runtime(tmp_path: Path) -> None:
+    build_portable = load_tool_module("build_portable_green_checksum", "tools/build_portable.py")
+    bundle = tmp_path / "Bomana_Green_Lite_v8.7.0.zip"
+    bundle.write_bytes(b"green")
+
+    checksum = build_portable.write_green_checksum_info(tmp_path, "8.7.0", bundle)
+    text = checksum.read_text(encoding="utf-8")
+
+    assert checksum.name == "checksums_green_Lite.txt"
+    assert "channel: Lite" in text
+    assert "requires_launcher: false" in text
+    assert "python_runtime_bundled: true" in text
+    assert build_portable.sha256_file(bundle) in text
 
 
 TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"

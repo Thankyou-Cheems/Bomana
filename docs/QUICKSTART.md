@@ -14,6 +14,12 @@ Launcher but requires a CheemsPay subscription and a separately delivered
 4. Start Bomana. If Windows asks about network access, Lite and Standard need
    only loopback access to `localhost:8111`.
 
+Alternatively, download `Bomana_Green_Lite_v8.7.0.zip` from the GitHub Release,
+extract the complete directory, and run `Bomana.exe`. This launcher-free package
+contains the Python runtime and only Lite features. Its anonymous daily-active
+report runs in a background daemon thread, so an unavailable reporting endpoint
+never delays application startup.
+
 For Super Bomb, select the stable `Enhanced` channel and follow the browser
 authorization prompt. The Launcher never asks for a CheemsPay password.
 
@@ -33,6 +39,7 @@ The public checkout defaults to Standard.
 ```powershell
 uv run --frozen python tools/build_portable.py --variant Standard --target app
 uv run --frozen python tools/build_portable.py --variant Lite --target app
+uv run --frozen python tools/build_portable.py --variant Lite --target green
 uv run --frozen python tools/build_portable.py --target launcher
 ```
 

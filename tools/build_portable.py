@@ -40,6 +40,10 @@ APP_ENTRY = "Bomana.pyw"
 APP_DIR = "bomana"
 LAUNCHER_DIR = "launcher"
 UNIVERSAL_LAUNCHER_NAME = "Bomana_launcher"
+GREEN_VARIANT = "Lite"
+GREEN_BUNDLE_NAME = "Bomana_Green_Lite"
+GREEN_DISTRIBUTION_ENV = "BOMANA_DISTRIBUTION_MODE"
+GREEN_DISTRIBUTION_VALUE = "green"
 HOTKEY_BROKER_NAME = "BomanaHotkeyBroker.exe"
 HOTKEY_BROKER_CHECKSUM_NAME = "BomanaHotkeyBroker.sha256"
 BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
@@ -72,6 +76,18 @@ PACKAGED_LAUNCHER_COLLECT_SUBMODULES = (
     "pystray",
 )
 PACKAGED_LAUNCHER_COLLECT_ALL = (
+    "requests",
+    "certifi",
+)
+PACKAGED_GREEN_HIDDEN_IMPORTS = (
+    "pystray._win32",
+    "winsound",
+)
+PACKAGED_GREEN_COLLECT_SUBMODULES = (
+    "PIL",
+    "pystray",
+)
+PACKAGED_GREEN_COLLECT_ALL = (
     "requests",
     "certifi",
 )
@@ -109,9 +125,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--target",
-        choices=("all", "app", "launcher"),
+        choices=("all", "app", "green", "launcher"),
         default="all",
-        help="Build target: all / app package only / launcher only",
+        help="Build target: all / app package / Lite green bundle / launcher",
     )
     parser.add_argument(
         "--version",
@@ -160,6 +176,17 @@ def pyinstaller_launcher_runtime_args() -> list[str]:
     for module in PACKAGED_LAUNCHER_COLLECT_SUBMODULES:
         args.extend(["--collect-submodules", module])
     for module in PACKAGED_LAUNCHER_COLLECT_ALL:
+        args.extend(["--collect-all", module])
+    return args
+
+
+def pyinstaller_green_runtime_args() -> list[str]:
+    args: list[str] = []
+    for module in PACKAGED_GREEN_HIDDEN_IMPORTS:
+        args.extend(["--hidden-import", module])
+    for module in PACKAGED_GREEN_COLLECT_SUBMODULES:
+        args.extend(["--collect-submodules", module])
+    for module in PACKAGED_GREEN_COLLECT_ALL:
         args.extend(["--collect-all", module])
     return args
 
@@ -297,7 +324,7 @@ def validate_requested_version(
         return
 
     expected_versions: list[tuple[str, str, str]] = []
-    if target in ("all", "app"):
+    if target in ("all", "app", "green"):
         expected_versions.append(("app", app_version, "bomana/metadata.py __version__"))
     if target in ("all", "launcher"):
         expected_versions.append(
@@ -343,7 +370,7 @@ def add_app_file_to_zip(
 
 def _release_source_scopes(target: str) -> tuple[str, ...]:
     scopes: list[str] = []
-    if target in ("all", "app"):
+    if target in ("all", "app", "green"):
         scopes.extend(APP_RELEASE_SOURCE_SCOPES)
     if target in ("all", "launcher"):
         scopes.extend(LAUNCHER_RELEASE_SOURCE_SCOPES)
@@ -389,7 +416,7 @@ def _unexpected_release_files(
     tracked_paths: frozenset[str],
 ) -> tuple[str, ...]:
     unexpected: set[str] = set()
-    if target in ("all", "app"):
+    if target in ("all", "app", "green"):
         for path in _app_source_files(root, variant):
             rel_path = path.relative_to(root).as_posix()
             if rel_path not in tracked_paths:
@@ -578,6 +605,196 @@ def build_app_zip(
         raise RuntimeError("App package contents do not match the release source closure")
 
     return out_zip
+
+
+def stage_green_app(
+    root: Path,
+    work_dir: Path,
+    hotkey_broker: Path,
+    release_source_paths: frozenset[str],
+) -> Path:
+    """Stage an immutable Lite-only source tree for the frozen green build."""
+
+    staged_root = work_dir / "source"
+    staged_root.mkdir(parents=True, exist_ok=False)
+    for rel_path in (APP_ENTRY, "bomana_version.py"):
+        if rel_path not in release_source_paths:
+            raise RuntimeError(f"green source closure is missing {rel_path}")
+        source = root / rel_path
+        destination = staged_root / rel_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+    for source in _app_source_files(root, GREEN_VARIANT, release_source_paths):
+        rel_path = source.relative_to(root)
+        destination = staged_root / rel_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if rel_path == FEATURE_PROFILE_PATH:
+            destination.write_text(
+                render_feature_profile(source.read_text(encoding="utf-8"), GREEN_VARIANT),
+                encoding="utf-8",
+            )
+        else:
+            shutil.copy2(source, destination)
+
+    broker_dir = staged_root / APP_DIR / "bin"
+    broker_dir.mkdir(parents=True, exist_ok=True)
+    staged_broker = broker_dir / HOTKEY_BROKER_NAME
+    shutil.copy2(hotkey_broker, staged_broker)
+    (broker_dir / HOTKEY_BROKER_CHECKSUM_NAME).write_text(
+        f"{sha256_file(staged_broker)}  {HOTKEY_BROKER_NAME}\n",
+        encoding="ascii",
+    )
+    return staged_root
+
+
+def generate_green_runtime_hook(work_dir: Path) -> Path:
+    path = work_dir / "green_runtime_hook.py"
+    path.write_text(
+        f"import os\nos.environ[{GREEN_DISTRIBUTION_ENV!r}] = {GREEN_DISTRIBUTION_VALUE!r}\n",
+        encoding="ascii",
+    )
+    return path
+
+
+def generate_green_version_info(work_dir: Path, version: str) -> Path:
+    nums = re.findall(r"\d+", version)
+    parts = [int(value) for value in nums]
+    while len(parts) < 4:
+        parts.append(0)
+    ver_tuple = tuple(parts[:4])
+    content = f"""# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers={ver_tuple},
+    prodvers={ver_tuple},
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [StringTable(
+        u'080404b0',
+        [StringStruct(u'CompanyName', u'Bomana Team'),
+        StringStruct(u'FileDescription', u'Bomana Lite Green Edition'),
+        StringStruct(u'FileVersion', u'{version}'),
+        StringStruct(u'InternalName', u'BomanaGreenLite'),
+        StringStruct(u'LegalCopyright', u'Copyright (c) 2024-2026 Bomana Team'),
+        StringStruct(u'OriginalFilename', u'Bomana_Green_Lite.exe'),
+        StringStruct(u'ProductName', u'Bomana Lite Green Edition'),
+        StringStruct(u'ProductVersion', u'{version}')])
+      ]),
+    VarFileInfo([VarStruct(u'Translation', [2052, 1200])])
+  ]
+)
+"""
+    path = work_dir / "green_file_version_info.txt"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _write_green_readme(bundle_dir: Path, version: str) -> None:
+    (bundle_dir / "README_GREEN.txt").write_text(
+        (
+            f"Bomana Lite Green v{version}\n"
+            "============================\n\n"
+            "解压整个目录后运行同目录内的 Bomana_Green_Lite 可执行文件。\n"
+            "无需安装 Python，也不需要 Bomana Launcher。请勿只复制 EXE。\n\n"
+            "该版本仅包含 Lite 功能。启动时会在后台按 UTC 日期上报一次匿名日活；\n"
+            "网络失败不会阻止或延迟主界面。创建用户目录下的 .bomana_disable_dau\n"
+            "空文件，或设置 BOMANA_DISABLE_DAU=1，可禁用该上报。\n"
+        ),
+        encoding="utf-8",
+    )
+
+
+def verify_green_bundle_layout(bundle: Path, executable_stem: str) -> None:
+    prefix = f"{executable_stem}/"
+    executable = f"{prefix}{executable_stem}.exe"
+    broker = f"{prefix}_internal/{APP_DIR}/bin/{HOTKEY_BROKER_NAME}"
+    broker_checksum = f"{prefix}_internal/{APP_DIR}/bin/{HOTKEY_BROKER_CHECKSUM_NAME}"
+    with zipfile.ZipFile(bundle, "r") as archive:
+        names = set(archive.namelist())
+    if executable not in names:
+        raise RuntimeError("green bundle is missing its standalone executable")
+    if broker not in names or broker_checksum not in names:
+        raise RuntimeError("green bundle is missing the zero-install hotkey broker")
+    if not any(
+        name.startswith(f"{prefix}_internal/python3") and name.endswith(".dll") for name in names
+    ):
+        raise RuntimeError("green bundle is missing the bundled Python runtime")
+    if any("launcher" in name.lower() for name in names):
+        raise RuntimeError("green bundle unexpectedly contains Launcher files")
+
+
+def build_green_bundle(
+    root: Path,
+    variant: str,
+    version: str,
+    out_dir: Path,
+    hotkey_broker: Path,
+    release_source_paths: frozenset[str],
+) -> Path:
+    if variant != GREEN_VARIANT:
+        raise RuntimeError("green distribution is Lite-only")
+
+    executable_stem = f"{GREEN_BUNDLE_NAME}_v{version}"
+    work_dir = root / "build" / "pyinstaller" / "GreenLite"
+    if work_dir.exists():
+        shutil.rmtree(work_dir, ignore_errors=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    staged_root = stage_green_app(root, work_dir, hotkey_broker, release_source_paths)
+    runtime_hook = generate_green_runtime_hook(work_dir)
+    version_file = generate_green_version_info(work_dir, version)
+    pyinstaller_dist = work_dir / "dist"
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconsole",
+        "--onedir",
+        "--name",
+        executable_stem,
+        "--icon",
+        str(staged_root / BRANDING_ICON),
+        "--paths",
+        str(staged_root),
+        "--runtime-hook",
+        str(runtime_hook),
+        "--version-file",
+        str(version_file),
+        *pyinstaller_green_runtime_args(),
+        "--distpath",
+        str(pyinstaller_dist),
+        "--workpath",
+        str(work_dir / "work"),
+        "--specpath",
+        str(work_dir / "spec"),
+        "--clean",
+    ]
+    for rel_path in (Path(APP_DIR) / "assets", Path(APP_DIR) / "data", Path(APP_DIR) / "bin"):
+        source = staged_root / rel_path
+        if source.exists():
+            cmd.extend(["--add-data", f"{source};{rel_path.as_posix()}"])
+    cmd.append(str(staged_root / APP_ENTRY))
+    subprocess.run(cmd, check=True, cwd=staged_root)
+
+    bundle_dir = pyinstaller_dist / executable_stem
+    _write_green_readme(bundle_dir, version)
+    out_bundle = out_dir / f"{executable_stem}.zip"
+    out_bundle.unlink(missing_ok=True)
+    with zipfile.ZipFile(out_bundle, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+        for path in sorted(bundle_dir.rglob("*")):
+            if path.is_file():
+                rel_path = path.relative_to(bundle_dir).as_posix()
+                zf.write(path, f"{executable_stem}/{rel_path}")
+    verify_green_bundle_layout(out_bundle, executable_stem)
+    return out_bundle
 
 
 def generate_version_info(work_dir: Path, version: str) -> Path:
@@ -777,8 +994,33 @@ def write_checksum_info(
     return path
 
 
+def write_green_checksum_info(out_dir: Path, version: str, bundle: Path) -> Path:
+    path = out_dir / "checksums_green_Lite.txt"
+    path.write_text(
+        "\n".join(
+            (
+                "Bomana Lite Green Build",
+                "=======================",
+                "",
+                f"app_version: {version}",
+                "channel: Lite",
+                "distribution: green",
+                "requires_launcher: false",
+                "python_runtime_bundled: true",
+                "",
+                f"{bundle.name}  SHA256  {sha256_file(bundle)}",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def main() -> int:
     args = parse_args()
+    if args.target == "green" and args.variant != GREEN_VARIANT:
+        raise ValueError("green target requires --variant Lite")
     root = Path(__file__).resolve().parent.parent
     out_dir = (root / args.output).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -796,6 +1038,7 @@ def main() -> int:
     manifest: Path | None = None
     launcher: Path | None = None
     launcher_manifest: Path | None = None
+    green_bundle: Path | None = None
     app_version: str | None = None
     launcher_version: str | None = None
     checksums: list[Path] = []
@@ -823,9 +1066,13 @@ def main() -> int:
             args.variant,
         )
 
+        hotkey_broker: Path | None = None
+        if args.target in ("all", "app", "green"):
+            hotkey_broker = resolve_hotkey_broker(root, args.hotkey_broker)
+
         if args.target in ("all", "app"):
             app_version = source_app_version
-            hotkey_broker = resolve_hotkey_broker(root, args.hotkey_broker)
+            assert hotkey_broker is not None
             app_zip = build_app_zip(
                 root,
                 args.variant,
@@ -846,6 +1093,19 @@ def main() -> int:
                 changelog.name,
                 sha256_file(changelog),
             )
+
+        if args.target in ("all", "green"):
+            app_version = source_app_version
+            assert hotkey_broker is not None
+            green_bundle = build_green_bundle(
+                root,
+                GREEN_VARIANT,
+                app_version,
+                out_dir,
+                hotkey_broker,
+                release_source_paths,
+            )
+            checksums.append(write_green_checksum_info(out_dir, app_version, green_bundle))
 
         if args.target in ("all", "launcher"):
             launcher_version = source_launcher_version
@@ -889,7 +1149,12 @@ def main() -> int:
                 )
             )
 
-        checksum_variant = "Universal" if args.target == "launcher" else args.variant
+        if args.target == "launcher":
+            checksum_variant = "Universal"
+        elif args.target == "green":
+            checksum_variant = "Green Lite"
+        else:
+            checksum_variant = args.variant
         safe_print(
             f"[OK] variant={checksum_variant} app_version={app_version or '-'} "
             f"launcher_version={launcher_version or '-'} "
@@ -901,6 +1166,8 @@ def main() -> int:
             safe_print(f"  - manifest:    {manifest}")
         if changelog and changelog.exists():
             safe_print(f"  - changelog:   {changelog}")
+        if green_bundle and green_bundle.exists():
+            safe_print(f"  - green bundle: {green_bundle}")
         if launcher and launcher.exists():
             safe_print(f"  - launcher:    {launcher}")
         if launcher_manifest and launcher_manifest.exists():

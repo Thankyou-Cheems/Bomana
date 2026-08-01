@@ -101,11 +101,21 @@ def test_production_has_no_second_outbound_game_data_client() -> None:
         for token in forbidden_client_tokens:
             assert token not in source, f"{relative} contains alternate client token {token}"
 
-    assert request_imports == [
-        Path("bomana/core/logic.py"),
-        Path("bomana/core/telemetry.py"),
-    ]
-    logic_source = (ROOT / request_imports[0]).read_text(encoding="utf-8")
+    assert sorted(request_imports) == sorted(
+        [
+            Path("bomana/dau.py"),
+            Path("bomana/core/logic.py"),
+            Path("bomana/core/telemetry.py"),
+        ]
+    )
+    logic_source = (ROOT / "bomana/core/logic.py").read_text(encoding="utf-8")
     assert "requests.get(" not in logic_source
     assert "self.session.get(" not in logic_source
+
+    dau_source = (ROOT / "bomana/dau.py").read_text(encoding="utf-8")
+    assert 'DAU_ENDPOINT = "https://bomanaupdate.ruikang.wang/api/v1/event"' in dau_source
+    assert "requests.post" in dau_source
+    assert "NetworkConfig" not in dau_source
+    assert "localhost:8111" not in dau_source
+    assert "127.0.0.1:8111" not in dau_source
     assert socket_imports == []

@@ -131,14 +131,14 @@ jobs:
 
           case "$BUILD_TARGET" in
             all)
-              BUILD_DESC="公开发布（启动器 + Standard/Lite 应用包）"
+              BUILD_DESC="公开发布（启动器 + Standard/Lite 应用包 + Lite 绿色版）"
               RELEASE_NAME="Bomana v$VERSION"
-              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 公共应用包：`Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 公共清单：`manifest_Standard.json` / `manifest_Lite.json`\n- 超级爆弹版（`Enhanced`）由 CheemsPay 订阅发布闭包独立交付\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt`'
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 公共应用包：`Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- Lite 绿色版：`Bomana_Green_Lite_v*.zip`（内含 Python 运行时，无需启动器）\n- 公共清单：`manifest_Standard.json` / `manifest_Lite.json`\n- 超级爆弹版（`Enhanced`）由 CheemsPay 订阅发布闭包独立交付\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt` + `checksums_green_Lite.txt`'
               ;;
             app)
-              BUILD_DESC="公共应用包发布（Standard/Lite）"
+              BUILD_DESC="公共应用包发布（Standard/Lite + Lite 绿色版）"
               RELEASE_NAME="Bomana v$VERSION · Public App Packages"
-              ASSET_DESC=$'- 公共应用包：`Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- 公共清单：`manifest_Standard.json` / `manifest_Lite.json`\n- 超级爆弹版（`Enhanced`）不会进入公开 Release\n- 校验：`checksums_app_*.txt`'
+              ASSET_DESC=$'- 公共应用包：`Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- Lite 绿色版：`Bomana_Green_Lite_v*.zip`（内含 Python 运行时，无需启动器）\n- 公共清单：`manifest_Standard.json` / `manifest_Lite.json`\n- 超级爆弹版（`Enhanced`）不会进入公开 Release\n- 校验：`checksums_app_*.txt` + `checksums_green_Lite.txt`'
               ;;
             launcher)
               BUILD_DESC="启动器发布（通用启动器）"
@@ -315,6 +315,83 @@ jobs:
             dist/CHANGELOG_${{ matrix.variant.slug }}_v${{ needs.prepare.outputs.version }}.md
             dist/checksums_app_${{ matrix.variant.slug }}.txt
 
+  build_green:
+    name: 构建 Lite 绿色版
+    needs: [prepare, quality]
+    if: needs.prepare.outputs.build_target == 'all' || needs.prepare.outputs.build_target == 'app'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          clean: true
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: 安装构建依赖
+        shell: pwsh
+        run: |
+          uv sync --extra build --frozen
+
+      - name: 准备 native 热键组件工具链
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal
+          rustup default 1.94.0
+          rustc -V
+
+      - name: 构建 Lite 绿色版
+        shell: pwsh
+        env:
+          BUILD_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $greenBuildArgs = @(
+            "run", "--frozen", "python", "tools/build_portable.py",
+            "--variant", "Lite",
+            "--target", "green",
+            "--version", $env:BUILD_VERSION,
+            "--output", "dist"
+          )
+          uv @greenBuildArgs
+          if ($LASTEXITCODE -ne 0) {
+            throw "Lite green build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: 验证绿色版可独立启动
+        shell: pwsh
+        env:
+          BUILD_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          ./tools/scripts/packaged_green_smoke.ps1 "dist/Bomana_Green_Lite_v${env:BUILD_VERSION}.zip"
+
+      - name: 生成绿色版来源证明
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: |
+            dist/Bomana_Green_Lite_v${{ needs.prepare.outputs.version }}.zip
+            dist/checksums_green_Lite.txt
+
+      - name: 上传绿色版产物
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Bomana-Green-Lite
+          path: |
+            dist/Bomana_Green_Lite_v${{ needs.prepare.outputs.version }}.zip
+            dist/checksums_green_Lite.txt
+
   build_launcher:
     name: 构建通用启动器
     needs: [prepare, quality]
@@ -380,11 +457,11 @@ jobs:
 
   release:
     name: 发布正式版本
-    needs: [prepare, quality, build_app, build_launcher]
+    needs: [prepare, quality, build_app, build_green, build_launcher]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release == true)) && always() && needs.quality.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.build_app.result) && contains(fromJSON('["success","skipped"]'), needs.build_launcher.result)
+    if: (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release == true)) && always() && needs.quality.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.build_app.result) && contains(fromJSON('["success","skipped"]'), needs.build_green.result) && contains(fromJSON('["success","skipped"]'), needs.build_launcher.result)
 
     steps:
       - name: 下载产物
@@ -414,7 +491,9 @@ jobs:
 
             ## 🔐 安全验证
             启动器会校验发布清单内置的 Ed25519 签名，并使用 SHA256 校验下载文件完整性。
-            手动下载时也可使用对应的 `checksums_*.txt` 文件复核文件完整性。
+            Lite 绿色版无需启动器，解压完整目录即可运行；其 Python 运行时与依赖已打包，
+            可使用 `checksums_green_Lite.txt` 和 GitHub Artifact Attestation 验证完整性与来源。
+            其他手动下载也可使用对应的 `checksums_*.txt` 文件复核文件完整性。
             GitHub Actions 同时为产物生成来源证明，可运行 `gh attestation verify <文件> --repo Thankyou-Cheems/Bomana` 验证。
             来源证明不等同于 Windows Authenticode；可选管理员热键的 UAC 发布者会显示为“未知”。
 

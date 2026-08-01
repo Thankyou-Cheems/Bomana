@@ -17,6 +17,7 @@ const launcherDownload = document.querySelector("#launcherDownload");
 const heroDownload = document.querySelector("#heroDownload");
 const ctaDownload = document.querySelector("#ctaDownload");
 const launcherDownloadGithub = document.querySelector("#launcherDownloadGithub");
+const greenDownload = document.querySelector("#greenDownload");
 const heroDownloadGithub = document.querySelector("#heroDownloadGithub");
 const ctaDownloadGithub = document.querySelector("#ctaDownloadGithub");
 const allReleasesLink = document.querySelector("#allReleasesLink");
@@ -29,6 +30,16 @@ const CHANNEL_LABELS = {
 
 function isLauncher(name) {
   return /launcher.*[.]exe$/i.test(String(name || ""));
+}
+
+function isGreenLite(name) {
+  return /^Bomana_Green_Lite_v.+[.]zip$/i.test(String(name || ""));
+}
+
+function setGreenDownload(asset) {
+  if (!asset?.browser_download_url || !greenDownload) return;
+  greenDownload.href = asset.browser_download_url;
+  greenDownload.title = asset.name || "Bomana Lite Green";
 }
 
 function setGithubFallback(href) {
@@ -142,6 +153,11 @@ async function loadGithubBackupLinksOnly() {
     const withLauncher = releases.find((release) =>
       (release.assets || []).some((asset) => isLauncher(asset.name)),
     );
+    const withGreen = releases.find((release) =>
+      (release.assets || []).some((asset) => isGreenLite(asset.name)),
+    );
+    const greenAsset = (withGreen?.assets || []).find((asset) => isGreenLite(asset.name));
+    setGreenDownload(greenAsset);
     const release = withLauncher || releases[0];
     if (release?.html_url) {
       setGithubFallback(release.html_url);

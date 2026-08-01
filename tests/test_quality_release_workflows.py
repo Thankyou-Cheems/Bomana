@@ -113,6 +113,19 @@ def test_public_release_has_no_subscriber_terrain_builder() -> None:
     assert not (ROOT / "tools/build_terrain_release.py").exists()
 
 
+def test_public_release_builds_lite_green_bundle_without_launcher() -> None:
+    workflow = build_workflow_source()
+
+    assert "  build_green:" in workflow
+    assert '"--variant", "Lite"' in workflow
+    assert '"--target", "green"' in workflow
+    assert "Bomana_Green_Lite_v${{ needs.prepare.outputs.version }}.zip" in workflow
+    assert "checksums_green_Lite.txt" in workflow
+    assert "内含 Python 运行时，无需启动器" in workflow
+    assert "needs: [prepare, quality, build_app, build_green, build_launcher]" in workflow
+    assert "needs.build_green.result" in workflow
+
+
 def test_hotkey_broker_is_zero_install_and_release_assets_are_attested() -> None:
     workflow = build_workflow_source()
     quality_workflow = (ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8")
@@ -129,10 +142,10 @@ def test_hotkey_broker_is_zero_install_and_release_assets_are_attested() -> None
     assert "cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml" in quality_workflow
     assert "cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml" in quality_workflow
     assert "tools/build_hotkey_broker.py --mode dev" in quality_workflow
-    assert workflow.count("actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1") == 2
-    assert workflow.count("id-token: write") == 2
-    assert workflow.count("attestations: write") == 2
-    assert workflow.count("artifact-metadata: write") == 2
+    assert workflow.count("actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1") == 3
+    assert workflow.count("id-token: write") == 3
+    assert workflow.count("attestations: write") == 3
+    assert workflow.count("artifact-metadata: write") == 3
     assert "gh attestation verify <文件> --repo Thankyou-Cheems/Bomana" in workflow
     combined = f"{workflow}\n{quality_workflow}\n{tool}\n{portable}"
     for forbidden in (

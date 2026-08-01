@@ -13,6 +13,8 @@ MIN_SUPPORTED_LAUNCHER_VERSION: Final = "3.0.0"
 # so an older Launcher cannot bypass a newer release requirement by importing
 # or copying the package outside the signed online-update flow.
 APP_REQUIRED_LAUNCHER_VERSION: Final = "3.3.0"
+GREEN_DISTRIBUTION_MODE: Final = "green"
+GREEN_DISTRIBUTION_MODE_ENV: Final = "BOMANA_DISTRIBUTION_MODE"
 
 _STRICT_VERSION_RE = re.compile(
     r"^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$",
@@ -84,6 +86,7 @@ def validate_app_launcher_identity(
     *,
     required_version: object = APP_REQUIRED_LAUNCHER_VERSION,
     source_development: object | None = None,
+    distribution_mode: object | None = None,
     frozen: bool | None = None,
 ) -> str | None:
     """Validate the launcher identity before the App imports runtime components.
@@ -96,10 +99,14 @@ def validate_app_launcher_identity(
         launcher_version = os.environ.get("BOMANA_LAUNCHER_VERSION")
     if source_development is None:
         source_development = os.environ.get("BOMANA_SOURCE_DEVELOPMENT")
+    if distribution_mode is None:
+        distribution_mode = os.environ.get(GREEN_DISTRIBUTION_MODE_ENV)
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
 
     if launcher_version is None:
+        if distribution_mode == GREEN_DISTRIBUTION_MODE and frozen:
+            return None
         if source_development == "1" and not frozen:
             return None
         raise VersionCompatibilityError("启动器身份缺失")
