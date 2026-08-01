@@ -25,6 +25,8 @@ implementation history.
 - Bumped the Launcher artifact to 3.3.1 so the current binary uses a new,
   immutable download URL instead of replacing the previously published 3.3.0
   bytes. App 8.7.0 keeps 3.3.0 as its minimum compatible Launcher floor.
+- Launcher-only tags no longer replace the latest application Release, keeping
+  the stable `releases/latest` green-download URL on the full public release.
 
 ## [8.6.2]
 

@@ -475,6 +475,7 @@ jobs:
         with:
           tag_name: ${{ needs.prepare.outputs.tag_name }}
           name: ${{ needs.prepare.outputs.release_name }}
+          make_latest: ${{ needs.prepare.outputs.build_target != 'launcher' }}
           body: |
             ## 🚀 本次发布类型
             **${{ needs.prepare.outputs.build_desc }}**

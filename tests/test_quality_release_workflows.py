@@ -124,6 +124,7 @@ def test_public_release_builds_lite_green_bundle_without_launcher() -> None:
     assert "内含 Python 运行时，无需启动器" in workflow
     assert "needs: [prepare, quality, build_app, build_green, build_launcher]" in workflow
     assert "needs.build_green.result" in workflow
+    assert "make_latest: ${{ needs.prepare.outputs.build_target != 'launcher' }}" in workflow
 
 
 def test_hotkey_broker_is_zero_install_and_release_assets_are_attested() -> None:
