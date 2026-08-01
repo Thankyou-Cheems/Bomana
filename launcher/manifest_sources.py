@@ -39,12 +39,14 @@ def verified_app_manifest_fields(
     channel: str,
     label: str,
     default_entrypoint: str,
+    public_keys: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     fields = project_verified_manifest_fields(
         manifest,
         _APP_MANIFEST_SIGNATURE_FIELDS,
         manifest_label=label,
         expected_kind="app",
+        public_keys=public_keys,
     )
     validate_app_manifest_channel(fields, channel, label)
     remote_version = str(fields.get("app_version", "")).strip()
@@ -73,12 +75,18 @@ def verified_app_manifest_fields(
     }
 
 
-def verified_launcher_manifest_fields(manifest: dict[str, Any], *, label: str) -> dict[str, Any]:
+def verified_launcher_manifest_fields(
+    manifest: dict[str, Any],
+    *,
+    label: str,
+    public_keys: dict[str, str] | None = None,
+) -> dict[str, Any]:
     fields = project_verified_manifest_fields(
         manifest,
         _LAUNCHER_MANIFEST_SIGNATURE_FIELDS,
         manifest_label=label,
         expected_kind="launcher",
+        public_keys=public_keys,
     )
     remote_version = str(fields.get("launcher_version", "")).strip()
     asset_name = str(fields.get("launcher_asset", "")).strip()
@@ -101,12 +109,14 @@ def verified_terrain_manifest_fields(
     manifest: dict[str, Any],
     *,
     label: str,
+    public_keys: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     fields = project_verified_manifest_fields(
         manifest,
         _TERRAIN_MANIFEST_SIGNATURE_FIELDS,
         manifest_label=label,
         expected_kind="terrain",
+        public_keys=public_keys,
     )
     parsed = parse_terrain_manifest(fields)
     return {

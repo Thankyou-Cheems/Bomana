@@ -4,6 +4,8 @@ This runbook moves Bomana from one public MIT release closure to two product
 closures:
 
 - the public repository builds Lite and Standard;
+- the public repository is the sole owner of the Universal Launcher source,
+  executable, self-update, and Launcher Release workflow;
 - the private repository builds the Super Bomb Edition on the stable
   `Enhanced` Release Channel.
 
@@ -24,7 +26,9 @@ assets.
 7. Move the Super Bomb release closure using
    `docs/migration/super-bomb-closure.md`; do not rely on ZIP exclusions.
 8. Build and launch Lite and Standard from a clean public candidate.
-9. Build and launch Enhanced from a clean private checkout.
+9. Build and launch Enhanced from a clean private checkout using the public
+   Launcher; do not copy a second Launcher release pipeline into the private
+   repository.
 10. Require a short-lived CheemsPay-derived grant at the Enhanced manifest and
     artifact server; a Launcher-only check is not sufficient.
 11. Create an isolated public-history candidate whose root tree contains only
@@ -70,6 +74,9 @@ tree at the gateway.
 - The public Launcher may retain the `Enhanced` channel identity and the
   CheemsPay client adapter, but it cannot resolve Enhanced bytes without a
   server-issued artifact grant.
+- Public Launcher files are the canonical implementation. Private parity
+  copies are protocol fixtures only; private Releases contain Enhanced App and
+  terrain artifacts, never another Launcher executable or manifest.
 - Lite and Standard neither contact CheemsPay nor require a subscription
   receipt.
 - A clean clone reproduces public artifacts without reading process memory or
