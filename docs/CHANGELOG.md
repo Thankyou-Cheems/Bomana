@@ -22,6 +22,9 @@ implementation history.
   startup failure cannot reject or delay the main UI startup path.
 - Extended public release CI, checksums, artifact attestations, documentation,
   and package closure tests to cover Standard, managed Lite, and green Lite.
+- Bumped the Launcher artifact to 3.3.1 so the current binary uses a new,
+  immutable download URL instead of replacing the previously published 3.3.0
+  bytes. App 8.7.0 keeps 3.3.0 as its minimum compatible Launcher floor.
 
 ## [8.6.2]
 
