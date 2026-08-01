@@ -73,6 +73,7 @@ from launcher.core import (
 )
 from launcher.subscription_access import (
     AuthorizedArtifactRequest,
+    CHEEMSPAY_BASE_URL,
     CHEEMSPAY_LICENSE_PUBLIC_KEYS,
     CheemsPaySubscriptionAuthority,
     DeviceAuthorizationState,
@@ -105,6 +106,7 @@ REPO_OWNER = "Thankyou-Cheems"
 REPO_NAME = "Bomana"
 PROJECT_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
 DEFAULT_CHANNEL = "Standard"
+PUBLIC_FALLBACK_CHANNEL = "Standard"
 APP_DIR_NAME = install_txn.APP_DIR_NAME
 APP_PREVIOUS_DIR_NAME = install_txn.APP_PREVIOUS_DIR_NAME
 APP_BACKUP_DIR_NAME = install_txn.APP_BACKUP_DIR_NAME
@@ -126,6 +128,9 @@ LEGACY_LAUNCHER_SELF_UPDATE_FILES = (
     "bomana_update_launcher_apply.ps1",
 )
 DEFAULT_ENTRYPOINT = "Bomana.pyw"
+_FEATURE_PROFILE_CHANNEL_RE = re.compile(
+    r"(?m)^EDITION_CHANNEL\s*=\s*[\"']([^\"'\r\n]+)[\"']\s*$"
+)
 NET_TIMEOUT_SEC = 8.0
 PRIMARY_TIMEOUT_SEC = 4.0
 PRIMARY_RETRY_TIMEOUT_SEC = 8.0
@@ -140,6 +145,7 @@ PRIMARY_LAUNCHER_API_PATH = "/api/v1/launcher"
 PRIMARY_EVENT_API_PATH = "/api/v1/event"
 PRIMARY_TERRAIN_MANIFEST_PATH = "/downloads/terrain/terrain_manifest.json"
 PRIMARY_TERRAIN_OBJECTS_PATH = "/downloads/terrain/objects/"
+CHEEMSPAY_STORE_URL = f"{CHEEMSPAY_BASE_URL.rstrip('/')}/"
 GITHUB_TERRAIN_RELEASE_TAG = os.environ.get(
     "BOMANA_TERRAIN_RELEASE_TAG",
     "terrain-v1",
@@ -1050,6 +1056,20 @@ def _normalize_channel(value: Any) -> str:
         return text
     mapped = _CHANNEL_MAP.get(text.lower())
     return mapped or ""
+
+
+def _installed_app_channel(base: Path) -> str:
+    """Read the packaged edition marker without importing untrusted app code."""
+
+    profile = _app_runtime_dir(base) / "bomana" / "config" / "feature_profile.py"
+    try:
+        if profile.stat().st_size > 16 * 1024:
+            return ""
+        source = profile.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ""
+    match = _FEATURE_PROFILE_CHANNEL_RE.search(source)
+    return _normalize_channel(match.group(1)) if match else ""
 
 
 def _channel_display_name(value: Any) -> str:
@@ -3628,8 +3648,12 @@ class LauncherWindow:
         self.recovery_warning = str(recovery_warning or "").strip()[:1000]
         self.source_test_mode = _is_source_test_run(base)
         self.saved_state = _read_state(base)
-        self.detected_channel = channel
-        self.channel = _normalize_channel(self.saved_state.get("channel", "")) or channel
+        self.detected_channel = _normalize_channel(channel) or PUBLIC_FALLBACK_CHANNEL
+        self.channel = (
+            _normalize_channel(self.saved_state.get("channel", ""))
+            or self.detected_channel
+        )
+        self._channel_menu_refreshing = False
         self.download_source_mode = _normalize_download_source_mode(
             self.saved_state.get("download_source_mode", "")
         )
@@ -3680,6 +3704,11 @@ class LauncherWindow:
                 self.subscription_decision = self.subscription_workflow.cached_access()
             except Exception as exc:
                 self.subscription_setup_error = str(exc) or "CheemsPay 订阅组件初始化失败"
+        if not self.source_test_mode and not self.subscription_decision.allowed:
+            if self.channel == "Enhanced":
+                self.channel = PUBLIC_FALLBACK_CHANNEL
+            if self.detected_channel == "Enhanced":
+                self.detected_channel = PUBLIC_FALLBACK_CHANNEL
         self.local_version = install_txn.read_local_app_version(_app_runtime_dir(base))
         self.previous_version = install_txn.read_local_app_version(_previous_app_dir(base))
         self.events: "queue.Queue[Tuple[str, Dict[str, Any]]]" = queue.Queue()
@@ -3831,7 +3860,7 @@ class LauncherWindow:
         self.terrain_local_revision = ""
         self.terrain_local_map_count = 0
         self.terrain_local_total_size = 0
-        if _normalize_channel(self.channel) != "Enhanced":
+        if not self._super_bomb_features_visible():
             self.terrain_local_state = "not_applicable"
             return
 
@@ -3873,7 +3902,10 @@ class LauncherWindow:
         self.terrain_local_state = "missing"
 
     def _render_terrain_status(self) -> None:
-        if not hasattr(self, "terrain_status_lbl"):
+        if (
+            not hasattr(self, "terrain_status_lbl")
+            or not self._super_bomb_features_visible()
+        ):
             return
         use_remote = bool(self.terrain_update_available and self.terrain_remote_map_count)
         map_count = (
@@ -3905,6 +3937,99 @@ class LauncherWindow:
         }
         self.terrain_status_lbl.config(text=badge, fg=colors.get(level, _THEME["TEXT_DIM"]))
         self.terrain_detail_lbl.config(text=detail)
+
+    def _super_bomb_access_allowed(self) -> bool:
+        """Return the one entitlement result used by all Super Bomb UI gates."""
+
+        if self.source_test_mode:
+            return True
+        decision = getattr(self, "subscription_decision", None)
+        return bool(decision is not None and decision.allowed)
+
+    def _super_bomb_features_visible(self) -> bool:
+        return (
+            _normalize_channel(getattr(self, "channel", "")) == "Enhanced"
+            and self._super_bomb_access_allowed()
+        )
+
+    def _available_channel_ids(self) -> tuple[str, ...]:
+        public_channels = tuple(
+            channel for channel in CHANNEL_DETAILS if channel != "Enhanced"
+        )
+        if self._super_bomb_access_allowed():
+            return ("Enhanced", *public_channels)
+        return public_channels
+
+    def _set_channel_var_silently(self, channel: str) -> None:
+        if not hasattr(self, "channel_var"):
+            return
+        self._channel_menu_refreshing = True
+        try:
+            self.channel_var.set(_channel_display_name(channel))
+        finally:
+            self._channel_menu_refreshing = False
+
+    def _refresh_channel_menu(self) -> bool:
+        if not hasattr(self, "channel_menu"):
+            return False
+        available = self._available_channel_ids()
+        changed = False
+        if self.channel not in available:
+            self.channel = PUBLIC_FALLBACK_CHANNEL
+            self._set_channel_var_silently(self.channel)
+            changed = True
+        menu = self.channel_menu["menu"]
+        menu.delete(0, "end")
+        for channel in available:
+            menu.add_command(
+                label=CHANNEL_DISPLAY_NAMES[channel],
+                command=tk._setit(
+                    self.channel_var,
+                    CHANNEL_DISPLAY_NAMES[channel],
+                ),
+            )
+        return changed
+
+    def _set_optional_card_visible(
+        self,
+        widget: tk.Widget,
+        visible: bool,
+        *,
+        before: tk.Widget | None = None,
+        pady: tuple[int, int] = (0, 0),
+    ) -> None:
+        if visible:
+            if widget.winfo_manager():
+                return
+            options: dict[str, Any] = {
+                "fill": "x",
+                "padx": self._px(12),
+                "pady": pady,
+            }
+            if before is not None:
+                options["before"] = before
+            widget.pack(**options)
+        else:
+            widget.pack_forget()
+
+    def _refresh_feature_visibility(self) -> None:
+        visible = self._super_bomb_features_visible()
+        if hasattr(self, "web_card"):
+            self._set_optional_card_visible(
+                self.web_card,
+                visible,
+                before=getattr(self, "selection_summary_lbl", None),
+                pady=(0, self._px(10)),
+            )
+        if hasattr(self, "terrain_card"):
+            self._set_optional_card_visible(
+                self.terrain_card,
+                visible,
+                before=getattr(self, "rollback_card", None),
+                pady=(0, self._px(10)),
+            )
+        if visible:
+            self._render_terrain_status()
 
     def _style_action_button(self, btn: tk.Button, variant: str) -> None:
         style_action_button(btn, variant, palette=_THEME, bd=1)
@@ -4168,7 +4293,7 @@ class LauncherWindow:
         ).pack(anchor="w")
         tk.Label(
             controls_head,
-            text="选择应用版本，并配置本机 Web 控制台",
+            text="选择应用版本与启动选项",
             font=self._font(8),
             fg=_THEME["TEXT_MUTED"],
             bg=_THEME["CARD_ALT"],
@@ -4193,7 +4318,10 @@ class LauncherWindow:
         self.channel_menu = tk.OptionMenu(
             channel_cluster,
             self.channel_var,
-            *(CHANNEL_DISPLAY_NAMES[channel] for channel in CHANNEL_DETAILS),
+            *(
+                CHANNEL_DISPLAY_NAMES[channel]
+                for channel in self._available_channel_ids()
+            ),
         )
         self.channel_menu.config(
             bg=_THEME["CARD"],
@@ -4333,17 +4461,32 @@ class LauncherWindow:
             pady=self._px(8),
         )
         self._style_action_button(self.subscription_btn, "secondary")
+        self.subscription_store_btn = tk.Button(
+            self.subscription_card,
+            text="购买 / 试用",
+            command=self._open_subscription_store,
+            cursor="hand2",
+            font=self._font(9),
+            padx=self._px(7),
+            pady=self._px(3),
+        )
+        self.subscription_store_btn.pack(
+            side="right",
+            padx=(self._px(2), self._px(4)),
+            pady=self._px(8),
+        )
+        self._style_action_button(self.subscription_store_btn, "secondary")
         self._refresh_subscription_ui()
 
-        web_card = tk.Frame(
+        self.web_card = tk.Frame(
             self.controls_card,
             bg=_THEME["CARD"],
             highlightthickness=1,
             highlightbackground=_THEME["SEPARATOR"],
         )
-        web_card.pack(fill="x", padx=self._px(12), pady=(0, self._px(10)))
+        self.web_card.pack(fill="x", padx=self._px(12), pady=(0, self._px(10)))
         tk.Label(
-            web_card,
+            self.web_card,
             text="Web 控制台 · 端口与配对由 App 管理",
             font=self._font(9, "bold"),
             fg=_THEME["TEXT"],
@@ -4364,7 +4507,7 @@ class LauncherWindow:
             "anchor": "w",
         }
         self.web_dashboard_autostart_chk = tk.Checkbutton(
-            web_card,
+            self.web_card,
             text="随 App 启动本机 Web 服务",
             variable=self.web_dashboard_autostart_var,
             command=self._on_web_preferences_changed,
@@ -4372,7 +4515,7 @@ class LauncherWindow:
         )
         self.web_dashboard_autostart_chk.pack(fill="x", padx=self._px(10), pady=(0, self._px(1)))
         self.web_dashboard_auto_open_chk = tk.Checkbutton(
-            web_card,
+            self.web_card,
             text="启动成功后自动打开本机页面",
             variable=self.web_dashboard_auto_open_var,
             command=self._on_web_preferences_changed,
@@ -4380,7 +4523,7 @@ class LauncherWindow:
         )
         self.web_dashboard_auto_open_chk.pack(fill="x", padx=self._px(10), pady=(0, self._px(1)))
         self.web_dashboard_lan_enabled_chk = tk.Checkbutton(
-            web_card,
+            self.web_card,
             text="启动时开启局域网访问与控制（自动识别专用网络）",
             variable=self.web_dashboard_lan_enabled_var,
             command=self._on_web_preferences_changed,
@@ -4454,19 +4597,19 @@ class LauncherWindow:
             pady=(0, self._px(8)),
         )
 
-        rollback_card = tk.Frame(
+        self.rollback_card = tk.Frame(
             self.controls_card,
             bg=_THEME["CARD"],
             highlightthickness=1,
             highlightbackground=_THEME["SEPARATOR"],
         )
-        rollback_card.pack(
+        self.rollback_card.pack(
             fill="x",
             padx=self._px(12),
             pady=(0, self._px(12)),
         )
         tk.Label(
-            rollback_card,
+            self.rollback_card,
             text="版本回退",
             font=self._font(10, "bold"),
             fg=_THEME["TEXT"],
@@ -4475,7 +4618,7 @@ class LauncherWindow:
         ).pack(fill="x", padx=self._px(10), pady=(self._px(9), self._px(2)))
 
         self.rollback_status_lbl = tk.Label(
-            rollback_card,
+            self.rollback_card,
             text="",
             font=self._font(8),
             fg=_THEME["TEXT_DIM"],
@@ -4487,7 +4630,7 @@ class LauncherWindow:
         self.rollback_status_lbl.pack(fill="x", padx=self._px(10), pady=(0, self._px(8)))
 
         self.rollback_btn = tk.Button(
-            rollback_card,
+            self.rollback_card,
             text="无回退版本",
             width=18,
             command=self._on_rollback,
@@ -4504,6 +4647,8 @@ class LauncherWindow:
         self._style_action_button(self.rollback_btn, "secondary")
 
         self.channel_var.trace_add("write", self._on_channel_changed)
+        self._refresh_channel_menu()
+        self._refresh_feature_visibility()
         self._refresh_channel_details()
         self._refresh_download_source_details()
 
@@ -4685,14 +4830,6 @@ class LauncherWindow:
     def _refresh_subscription_ui(self) -> None:
         if not hasattr(self, "subscription_status_lbl"):
             return
-        if _normalize_channel(self.channel) != "Enhanced":
-            self.subscription_status_lbl.config(
-                text="Lite / Standard 为公共版，无需订阅",
-                fg=_THEME["TEXT_MUTED"],
-            )
-            self.subscription_btn.config(text="无需登录", state="disabled")
-            self._style_action_button(self.subscription_btn, "secondary")
-            return
         if self.source_test_mode:
             self.subscription_status_lbl.config(
                 text="源码测试模式不执行在线订阅门禁",
@@ -4700,6 +4837,7 @@ class LauncherWindow:
             )
             self.subscription_btn.config(text="测试模式", state="disabled")
             self._style_action_button(self.subscription_btn, "secondary")
+            self.subscription_store_btn.config(state="disabled")
             return
         if self.subscription_workflow is None:
             self.subscription_status_lbl.config(
@@ -4708,24 +4846,67 @@ class LauncherWindow:
             )
             self.subscription_btn.config(text="订阅不可用", state="disabled")
             self._style_action_button(self.subscription_btn, "warning")
+            self.subscription_store_btn.config(state="disabled")
             return
         self.subscription_decision = self.subscription_workflow.cached_access()
+        allowed = bool(self.subscription_decision.allowed)
+        current_is_enhanced = _normalize_channel(self.channel) == "Enhanced"
+        if allowed:
+            status_text = (
+                _subscription_access_copy(self.subscription_decision)
+                if current_is_enhanced
+                else "已订阅超级爆弹版；切换到该通道后显示高级配置"
+            )
+        else:
+            status_text = (
+                "未订阅超级爆弹版；当前仅显示 Lite / Standard 公共版"
+                if not current_is_enhanced
+                else _subscription_access_copy(self.subscription_decision)
+            )
+            if not current_is_enhanced:
+                status_text += "；可在 CheemsPay 购买 1 年授权或 3 天试用"
         self.subscription_status_lbl.config(
-            text=_subscription_access_copy(self.subscription_decision),
-            fg=(
-                _THEME["GREEN"]
-                if self.subscription_decision.allowed
-                else _THEME["YELLOW"]
-            ),
+            text=status_text,
+            fg=_THEME["GREEN"] if allowed else _THEME["YELLOW"],
         )
         self.subscription_btn.config(
-            text=("刷新订阅" if self.subscription_decision.allowed else "登录 / 刷新"),
+            text=("刷新订阅" if allowed else "登录 Super Bomb"),
+            state=("disabled" if self.running else "normal"),
+        )
+        self.subscription_store_btn.config(
             state=("disabled" if self.running else "normal"),
         )
         self._style_action_button(
             self.subscription_btn,
-            "secondary" if self.subscription_decision.allowed else "warning",
+            "secondary" if allowed else "warning",
         )
+        changed = self._refresh_channel_menu()
+        if changed:
+            self._save_launcher_state()
+            self._refresh_installed_versions()
+            self._refresh_local_terrain_snapshot()
+            if hasattr(self, "selection_summary_lbl"):
+                self._refresh_channel_details()
+        self._refresh_feature_visibility()
+
+    def _open_subscription_store(self) -> None:
+        if self.running:
+            return
+        try:
+            opened = webbrowser.open(CHEEMSPAY_STORE_URL, new=2)
+        except Exception as exc:
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                f"无法打开 CheemsPay 商品页：{exc}",
+                parent=self.root,
+            )
+            return
+        if not opened:
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                "无法打开 CheemsPay 商品页，请手动访问 pay.ruikang.wang。",
+                parent=self.root,
+            )
 
     def _begin_subscription_login(self) -> None:
         if self.running:
@@ -6306,16 +6487,38 @@ class LauncherWindow:
         self._start_worker("import_zip")
 
     def _on_channel_changed(self, *_args) -> None:
+        if getattr(self, "_channel_menu_refreshing", False):
+            return
         if self.running and self.current_task != "check":
             self.channel_var.set(_channel_display_name(self.channel))
             return
         previous_channel = self.channel
-        self.channel = _normalize_channel(self.channel_var.get()) or self.detected_channel
+        requested_channel = (
+            _normalize_channel(self.channel_var.get()) or self.detected_channel
+        )
+        if requested_channel == "Enhanced" and not self._super_bomb_access_allowed():
+            self.channel = PUBLIC_FALLBACK_CHANNEL
+            self._set_channel_var_silently(self.channel)
+            self._save_launcher_state()
+            self._refresh_installed_versions()
+            self._refresh_local_terrain_snapshot()
+            self._refresh_channel_details()
+            self._refresh_subscription_ui()
+            self._refresh_feature_visibility()
+            self._set_status(
+                "超级爆弹版未解锁",
+                "当前仅显示 Lite / Standard 公共版；登录 Super Bomb 后可恢复高级配置。",
+                0.0,
+                "info",
+            )
+            return
+        self.channel = requested_channel
         self._save_launcher_state()
         self._refresh_installed_versions()
         self._refresh_local_terrain_snapshot()
         self._refresh_channel_details()
         self._refresh_subscription_ui()
+        self._refresh_feature_visibility()
         _a, _o, _l, degraded = _effective_web_preferences_for_channel(
             self.channel,
             self.web_dashboard_autostart,
@@ -6378,6 +6581,18 @@ class LauncherWindow:
         except Exception as exc:
             self._set_status("无法启动", str(exc), None, "error")
             return None
+        if (
+            not self.source_test_mode
+            and not self._super_bomb_access_allowed()
+            and _installed_app_channel(self.base) == "Enhanced"
+        ):
+            self._set_status(
+                "订阅已过期",
+                "本地已安装超级爆弹版，但当前设备没有有效订阅；登录 Super Bomb 后才能启动该版本。",
+                None,
+                "warning",
+            )
+            return None
         if _normalize_channel(self.channel) == "Enhanced" and not self.source_test_mode:
             managed = _terrain_store_for_base(self.base).current_pack_dir()
             bundled = _app_runtime_dir(self.base) / "bomana" / "data" / "terrain-v1"
@@ -6402,7 +6617,12 @@ class LauncherWindow:
         self.root.after(300, self._commit_launch)
 
     def _on_launch(self) -> None:
-        if _normalize_channel(self.channel) == "Enhanced" and not self.source_test_mode:
+        installed_channel = _installed_app_channel(self.base)
+        needs_super_bomb_access = (
+            _normalize_channel(self.channel) == "Enhanced"
+            or installed_channel == "Enhanced"
+        )
+        if needs_super_bomb_access and not self.source_test_mode:
             if self.subscription_workflow is None:
                 messagebox.showwarning(
                     DISPLAY_NAME,

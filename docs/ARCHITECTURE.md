@@ -23,6 +23,11 @@ The public repository owns four bounded responsibilities:
 4. **Release Closure** -- a fail-closed classification that prevents subscriber
    implementation and data from entering public artifacts.
 
+The Universal Launcher is a single shared product surface owned by this public
+repository. The private Super Bomb repository consumes its signed artifact
+protocol and may keep a parity fixture for development, but it does not build,
+publish, or self-update a second Launcher.
+
 The public App has two distribution shapes. Managed Standard/Lite ZIPs are
 installed and verified by the Universal Launcher. The Lite green ZIP is a
 PyInstaller `onedir` bundle containing Python 3.14, dependencies, resources,

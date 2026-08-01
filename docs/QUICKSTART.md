@@ -20,8 +20,11 @@ contains the Python runtime and only Lite features. Its anonymous daily-active
 report runs in a background daemon thread, so an unavailable reporting endpoint
 never delays application startup.
 
-For Super Bomb, select the stable `Enhanced` channel and follow the browser
-authorization prompt. The Launcher never asks for a CheemsPay password.
+For Super Bomb, use the Launcher's `购买 / 试用` button to open the real
+CheemsPay storefront. It currently exposes the one-year authorization and the
+three-day trial. After payment, select `Enhanced`, follow the browser device
+authorization prompt, and press `刷新订阅`. The Launcher never asks for a
+CheemsPay password.
 
 ## Run public source
 
