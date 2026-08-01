@@ -1,0 +1,6285 @@
+{
+  "meta": {
+    "generated_at": "2026-06-27 23:38:50",
+    "source_root_name": "War-Thunder-Datamine",
+    "source_subdir": "aces.vromfs.bin_u/gamedata/flightmodels",
+    "source_version": "2.57.0.24",
+    "source_commit": "ad87bddda260495fd9cf73095737dd5917989183",
+    "fm_records": 1207,
+    "unit_records": 1442
+  },
+  "unit_to_fm": {
+    "a-20g": "a-20g",
+    "a-26b": "a-26b",
+    "a-26b_10": "a-26b_10",
+    "a-26c-45-dt": "a-26c",
+    "a-26c": "a-26c",
+    "a-35b": "a_35b",
+    "a2d": "a2d",
+    "a5m4_hagiri": "a5m4",
+    "a6m2_mod11": "a6m2_mod11",
+    "a6m2_n_zero": "a6m2_n_zero",
+    "a6m2_zero": "a6m2_zero",
+    "a6m2_zero_china": "a6m2_zero",
+    "a6m2_zero_usa": "a6m2_zero",
+    "a6m3_mod22_zero": "a6m3_mod22_zero",
+    "a6m3_mod22ko_zero": "a6m3_mod22_zero",
+    "a6m3_zero": "a6m3_zero",
+    "a6m5_zero": "a6m5_zero",
+    "a6m5_zero_china": "a6m5_zero",
+    "a6m5hei": "a6m5_Hei",
+    "a6m5ko": "a6m5_Ko_Otsu",
+    "a6m5otsu": "a6m5_Ko_Otsu",
+    "a6m6c": "a6m6c",
+    "a7he1": "a7he1",
+    "a7m1": "a7m1",
+    "a7m2": "a7m2",
+    "a_109_eoa2": "a_109_eoa2",
+    "a_10a_early": "a-10a_early",
+    "a_10a_late": "a-10a_late",
+    "a_10c": "a-10c",
+    "a_129_a": "a_129_int",
+    "a_129_cbt": "a_129_cbt",
+    "a_129_d": "a_129_d",
+    "a_20g_30_ussr": "a-20g",
+    "a_29_hudson": "a_29_hudson",
+    "a_4b": "a_4b",
+    "a_4e_early": "a_4e_early",
+    "a_4e_early_iaf": "a_4e_early_iaf",
+    "a_4e_late_iaf": "a_4e_late_iaf",
+    "a_4h": "a_4h",
+    "a_4n": "a_4n",
+    "a_5c": "a_5c",
+    "a_6e_tram": "a_6e_tram",
+    "a_7d": "a_7d",
+    "a_7e": "a_7e",
+    "a_7e_thailand": "a_7e",
+    "a_7k": "a_7k",
+    "ab_205a_1": "ab_205a_1",
+    "ah_1f": "ah_1f",
+    "ah_1f_event": "ah_1f",
+    "ah_1f_iaf": "ah_1f_iaf",
+    "ah_1g": "ah_1g",
+    "ah_1g_iaf": "ah_1g_iaf",
+    "ah_1q_iaf": "ah_1q_iaf",
+    "ah_1s": "ah_1s",
+    "ah_1s_early": "ah_1s",
+    "ah_1s_late": "ah_1s",
+    "ah_1w": "ah_1w",
+    "ah_1w_china": "ah_1w",
+    "ah_1z": "ah_1z",
+    "ah_2_rooivalk": "ah_2_rooivalk",
+    "ah_56a": "ah_56a",
+    "ah_60_iaf": "ah_60_iaf",
+    "ah_64a": "ah_64a",
+    "ah_64a_greece_usa": "ah_64a",
+    "ah_64a_iaf": "ah_64a_iaf",
+    "ah_64a_killstreak": "ah_64a",
+    "ah_64a_peten": "ah_64a",
+    "ah_64a_peten_iaf": "ah_64a",
+    "ah_64d": "ah_64d",
+    "ah_64d_i_saraph": "ah_64d_i_saraph",
+    "ah_64d_japan": "ah_64d_japan",
+    "ah_64d_lightweight_japan": "ah_64d_japan",
+    "ah_64d_netherlands": "ah_64d_netherlands",
+    "ah_64e": "ah_64e",
+    "ah_64e_britain": "ah_64e",
+    "ah_64e_china": "ah_64e",
+    "ah_64e_indonesia": "ah_64e",
+    "ah_64e_netherlands": "ah_64e",
+    "ah_6m": "ah_6m",
+    "ah_mk1": "ah_mk1",
+    "ahs": "ahs",
+    "aichi_e13a": "aichi_e13a",
+    "alpha_jet_a": "alpha_jet_a",
+    "alpha_jet_a_jabog41": "alpha_jet_a",
+    "alpha_jet_a_thailand": "alpha_jet_th_phase_1",
+    "alpha_jet_e": "alpha_jet_e",
+    "alpha_jet_th_phase_1": "alpha_jet_th_phase_1",
+    "am_1_mauler": "am-1_mauler",
+    "amx": "amx_italy",
+    "amx_a_1a_brazil": "amx_a_1a_brazil",
+    "ar_2": "ar_2",
+    "arado-196a-3": "arado-196a-3",
+    "arado-196a-5": "arado-196a-3",
+    "arado-234c-3": "arado-234c-3",
+    "ariete": "ariete",
+    "attaker_fb1": "attaker_fb1",
+    "attaker_fb2": "attaker_fb1",
+    "av_8a": "av_8a",
+    "av_8b_na": "av_8b_na",
+    "av_8b_plus": "av_8b_plus",
+    "av_8b_plus_italy": "av_8b_plus",
+    "av_8c": "av_8c",
+    "av_8s_late_thailand": "av_8s",
+    "av_8s_thailand": "av_8s",
+    "avenger_mk1": "tbf-1c",
+    "b-17e": "b-17e",
+    "b-17e_japan": "b-17e",
+    "b-17e_late": "b-17e_late",
+    "b-17g": "b-17g",
+    "b-17g_china_rocaf": "b-17g",
+    "b-17g_iaf": "b-17g",
+    "b-17g_luftwaffe": "b-17g",
+    "b-29": "b-29",
+    "b-29_france_killstreak": "b-29",
+    "b-29_germany_killstreak": "b-29",
+    "b-29_iaf_killstreak": "b-29",
+    "b-29_italy_killstreak": "b-29",
+    "b-29_japan_killstreak": "b-29",
+    "b-29_killstreak": "b-29",
+    "b-29_sweden_killstreak": "b-29",
+    "b-29_uk_killstreak": "washington_b1",
+    "b-57": "b-57",
+    "b-57b": "b-57b",
+    "b7a2": "b7a2",
+    "b7a2_homare_23": "b7a2_homare_23",
+    "b_10b": "b_10b",
+    "b_18a": "b_18a",
+    "b_18a_skeleton_turrets": "b_18a",
+    "b_18a_test": "b_18a",
+    "b_239_finland": "b_239_finland",
+    "b_24d": "b_24d",
+    "b_24d_luftwaffe": "b_24d",
+    "b_24m_china_plaaf": "b_24d",
+    "b_25j_1": "b_25j_20",
+    "b_25j_20": "b_25j_20",
+    "b_25j_30": "b_25j_20",
+    "b_25j_30_china": "b_25j_20",
+    "b_25j_30_france": "b_25j_20",
+    "b_25j_30_vvs_ussr": "b_25j_20",
+    "b_26b_c": "b_26b_c",
+    "b_26c_france": "b_26b_c",
+    "b_34": "b_34",
+    "b_48_firecrest": "b_48_firecrest",
+    "b_52h": "nt_b_52h",
+    "b_66b": "b_66b",
+    "ba_65_a80": "ba_65_a80",
+    "ba_65_k14_l": "ba_65_k14_l",
+    "be_6": "be_6",
+    "beaufighter_mk1_40mm": "beaufighter_mk1_40mm",
+    "beaufighter_mk6c": "beaufighter_mk6c",
+    "bf-109a_1": "bf-109a_1",
+    "bf-109b_2": "bf-109b_2",
+    "bf-109c_1": "bf-109c_1",
+    "bf-109c_1_promo": "bf-109c_1",
+    "bf-109e-1": "bf-109e-1",
+    "bf-109e-3": "bf-109e-1",
+    "bf-109e-3_japan": "bf-109e-4",
+    "bf-109e-4": "bf-109e-4",
+    "bf-109e-7": "bf-109e-4",
+    "bf-109f-1": "bf-109f-1",
+    "bf-109f-2": "bf-109f-1",
+    "bf-109f-4": "bf-109f-4",
+    "bf-109f-4_hungary": "bf-109f-4",
+    "bf-109f-4_trop": "bf-109f-4_trop",
+    "bf-109f-4_usa": "bf-109f-4",
+    "bf-109g-10": "bf-109g-10",
+    "bf-109g-14": "bf-109g-14",
+    "bf-109g-14as": "bf-109g-14as",
+    "bf-109g-2": "bf-109g-2",
+    "bf-109g-2_finland": "bf-109g-2_romania",
+    "bf-109g-2_hungary": "bf-109g-2_romania",
+    "bf-109g-2_romania": "bf-109g-2_romania",
+    "bf-109g-6": "bf-109g-6",
+    "bf-109g-6_erla_finland": "bf-109g-6",
+    "bf-109g-6_finland": "bf-109g-6",
+    "bf-109k-4": "bf-109k-4",
+    "bf-110c-4": "bf-110c-7",
+    "bf-110c-6": "bf-110c-6",
+    "bf-110f-2": "bf-110f-2",
+    "bf-110g-2": "bf-110g-2",
+    "bf_109t_2": "bf_109t_2",
+    "bf_110g_4": "bf-110g-4",
+    "bf_110g_4_hungary": "bf-110g-4",
+    "bo_105cb2": "bo_105cb2",
+    "bo_105pah1": "bo_105pah1",
+    "bo_105pah1_a1": "bo_105pah1_a1",
+    "boston_mk_1": "boston_mk_1",
+    "br_20_dr": "br_20_dr",
+    "br_20m_m1": "br_20_dr",
+    "br_693_ab2": "br_693_ab2",
+    "breda_88": "breda_88",
+    "brigand_b1": "brigand_b1",
+    "btd-1": "btd-1",
+    "buccaneer_s1": "buccaneer_s1",
+    "buccaneer_s2": "buccaneer_s2",
+    "buccaneer_s2b": "buccaneer_s2b",
+    "bv-138c-1": "bv-138c-1",
+    "bv-155b-1": "bv-155b-1",
+    "bv-238": "bv-238",
+    "c_3604": "c_3604",
+    "canberra_bimk6": "canberra_bimk6",
+    "canberra_bimk6_france_killstreak": "canberra_bmk2",
+    "canberra_bimk6_germany_killstreak": "canberra_bmk2",
+    "canberra_bimk6_iaf_killstreak": "canberra_bmk2",
+    "canberra_bimk6_italy_killstreak": "canberra_bmk2",
+    "canberra_bimk6_japan_killstreak": "canberra_bmk2",
+    "canberra_bimk6_killstreak": "canberra_bmk2",
+    "canberra_bimk6_sweden_killstreak": "canberra_bmk2",
+    "canberra_bimk6_usa_killstreak": "canberra_bmk2",
+    "canberra_bmk2": "canberra_bmk2",
+    "caudron_cr714": "caudron_cr714",
+    "cf_188a_canada": "fa_18a",
+    "corsair_fmk2": "corsair_fmk2",
+    "cr_32": "cr_32",
+    "cr_32_bis": "cr_32_bis",
+    "cr_32_quater": "cr_32_quater",
+    "d3a1": "d3a1",
+    "d_371": "d_371",
+    "d_371_hs9": "d_371_hs9",
+    "d_373": "d_373",
+    "d_500": "d_500",
+    "d_501": "d_501",
+    "d_510": "d_510",
+    "d_510c": "d_510",
+    "d_520": "d_520",
+    "d_520_france": "d_520_france",
+    "d_521": "d_521",
+    "db_3a": "db_3a",
+    "db_3a_china": "db_3a",
+    "db_3b": "db_3b",
+    "db_lk": "db_lk",
+    "dh_110_sea_vixen": "dh_110",
+    "dji_mavic_2": "dji_mavic_2",
+    "do_17e_1": "do_17e_1",
+    "do_17z_2": "do_17z_2",
+    "do_17z_7": "do_17z_7",
+    "do_217j_1": "do_217j_1",
+    "do_217j_2": "do_217j_2",
+    "do_217k_1": "do_217k_1",
+    "do_217m_1": "do_217m_1",
+    "do_217n_1": "do_217n_1",
+    "do_217n_2": "do_217n_2",
+    "do_335a_0": "do_335a_0",
+    "do_335a_1": "do_335a_1",
+    "do_335b_2": "do_335b_2",
+    "douglas_a_1h": "douglas_a_1h",
+    "douglas_ad_2": "douglas_ad_2",
+    "douglas_ad_4": "douglas_ad_4",
+    "douglas_ad_4_france": "douglas_ad_4_france",
+    "douglas_ad_4na_france": "douglas_ad_4na_france",
+    "e8n2": "e8n2",
+    "ef_2000_aesa": "ef_2000_aesa",
+    "ef_2000_block_10": "ef_2000_block_10",
+    "ef_2000_fgr4": "typhoon_fgr4",
+    "ef_2000_typhoon_aesa": "ef_2000_typhoon_aesa",
+    "ef_2000a": "f_2000a",
+    "ef_2000a_aesa": "ef_2000a_aesa",
+    "er-2_ach30b_early": "er-2_ach30b_early",
+    "er-2_ach30b_late": "er-2_ach30b_early",
+    "er-2_m105_mv3": "er-2_m105_mv3",
+    "er-2_m105_tat": "er-2_m105_mv3",
+    "er-2_m105r_lu2b": "er-2_m105_mv3",
+    "er-2_m105r_tat": "er-2_m105_mv3",
+    "etndard_4m": "etendard_4m",
+    "f-100a_china": "f-100a_china",
+    "f-100d": "f_100d",
+    "f-100d_france": "f_100d",
+    "f-104a": "f_104a",
+    "f-104a_china": "f_104a",
+    "f-104c": "f_104c",
+    "f-104g": "f_104g",
+    "f-104g_belgium": "f_104g",
+    "f-104g_china": "f_104g_italy",
+    "f-104g_italy": "f_104g_italy",
+    "f-104j": "f_104j",
+    "f-104s": "f_104s",
+    "f-104s_asa": "f_104s_asa",
+    "f-104s_cb": "f_104s_cb",
+    "f-105d": "f_105d",
+    "f-4ej": "f-4ej",
+    "f-4ej_adtw": "f-4ej",
+    "f-4ej_kai": "f-4ej",
+    "f-4j": "f-4j",
+    "f-4jk": "f-4j",
+    "f-4k": "f-4k",
+    "f-4m_fgr2": "f-4m_fgr2",
+    "f-4s": "f-4s",
+    "f-5a": "f_5a",
+    "f-5a_china": "f_5a",
+    "f-5a_thailand": "f_5a",
+    "f-5ag_norway": "f_5ag",
+    "f-5c": "f_5a",
+    "f-5e": "f_5e",
+    "f-5e_aidc": "f_5e_aidc",
+    "f-5e_fcu_thailand": "f_5e_fcu_thailand",
+    "f-5e_switzerland": "f-5e_switzerland",
+    "f-5t_thailand": "f_5t_thailand",
+    "f-5th_thailand": "f_5t_thailand",
+    "f-80": "f-80",
+    "f-80a": "f-80a",
+    "f-84b": "f-84b",
+    "f-84f": "f-84f",
+    "f-84f_france": "f-84f",
+    "f-84f_germany": "f-84f",
+    "f-84f_iaf": "f-84f",
+    "f-84f_israel_iaf": "f-84f",
+    "f-84f_italy": "f-84f",
+    "f-84g-31-re_china": "f-84g",
+    "f-84g": "f-84g",
+    "f-84g_china": "f-84g",
+    "f-84g_france": "f-84g_france",
+    "f-84g_italy": "f-84g",
+    "f-84g_thailand": "f-84g",
+    "f-86_canadair_german": "f-86_canadair_german",
+    "f-86_cl_13_mk4_italy": "f-86e",
+    "f-86_cl_13b_mk6": "f-86_cl_13b_mk6",
+    "f-86a-5": "f-86a-5",
+    "f-86f-2": "f-86f-25",
+    "f-86f-25": "f-86f-25",
+    "f-86f-30_china": "f-86f-25",
+    "f-86f-30_japan": "f-86f-25",
+    "f-86f-35": "f-86f-25",
+    "f-86f-40_china": "f-86f-40_japan",
+    "f-86f-40_japan": "f-86f-40_japan",
+    "f-86f-40_japan_blue_impulse": "f-86f-40_japan",
+    "f-86k_late": "f-86k",
+    "f-86k_late_german": "f-86k",
+    "f-86k_late_italy": "f-86k",
+    "f-89b": "f-89b",
+    "f-89c_30mm": "f-89b",
+    "f-89c_rocket": "f-89b",
+    "f-89d": "f-89d",
+    "f-8e": "f-8e",
+    "f-8e_fn": "f-8e_fn",
+    "f1": "f1",
+    "f11f_1_late": "f11f_1_late",
+    "f1m2": "f1m2",
+    "f2a-1_thach": "f2a-1",
+    "f2g-1": "f2g-1",
+    "f2h-2": "f2h-2",
+    "f3d_1": "f3d_1",
+    "f3f-2_galer": "f3f-2",
+    "f3h-2": "f3h-2",
+    "f4d_1": "f4d-1",
+    "f4u-1a": "f4u-1a",
+    "f4u-1a_japan": "f4u-1a",
+    "f4u-1a_usmc": "f4u-1a_usmc",
+    "f4u-1c": "f4u-1c",
+    "f4u-1d": "f4u-1d",
+    "f4u-4": "f4u-4",
+    "f4u-4b": "f4u-4b",
+    "f4u-4b_vmf_214": "f4u-4b",
+    "f4u-6_au-1": "f4u-6_au-1",
+    "f4u-7": "f4u-7",
+    "f6f-3": "f6f-5",
+    "f6f-5_france": "f6f-5_france",
+    "f6f-5n": "f6f-5n",
+    "f6f-5n_france": "f6f-5n_france",
+    "f7f1": "f7f1",
+    "f7f3": "f7f3",
+    "f8f1": "f8f1",
+    "f8f1b": "f8f1b",
+    "f8f1b_france": "f8f1b_france",
+    "f8u-2": "f8u-2",
+    "f9f-2": "f9f-2",
+    "f9f-5": "f9f-5",
+    "f9f-8": "f9f-8",
+    "f_100f_china": "f_100f",
+    "f_101c": "f_101c",
+    "f_106a_1972": "f_106a_1972",
+    "f_111a": "f_111a",
+    "f_111c_raaf": "f_111c",
+    "f_111f": "f_111f",
+    "f_111f_iaf_killstreak": "f_111f",
+    "f_111f_japan_killstreak": "f_111f",
+    "f_111f_killstreak": "f_111f",
+    "f_117": "f_117",
+    "f_14a_early": "f_14a_early",
+    "f_14a_iriaf": "f_14a_iriaf",
+    "f_14b": "f_14b",
+    "f_14d": "f_14d",
+    "f_15a": "f_15a",
+    "f_15a_iaf": "f_15a",
+    "f_15c_baz_msip": "f_15c_baz_msip",
+    "f_15c_golden_eagle": "f_15c_golden_eagle",
+    "f_15c_msip2": "f_15c_msip2",
+    "f_15e": "f_15e",
+    "f_15i_raam": "f_15i_raam",
+    "f_15j": "f_15j",
+    "f_15j_kai": "f_15j_kai",
+    "f_16a_block_10": "f_16a_block_10",
+    "f_16a_block_10_iaf": "f_16a_block_10",
+    "f_16a_block_10_netz_mod": "f_16a_block_10_mod",
+    "f_16a_block_10_norway": "f_16a_block_10_norway",
+    "f_16a_block_15_adf": "f_16a_block_15_adf",
+    "f_16a_block_15_adf_italy": "f_16a_block_15_adf_italy",
+    "f_16a_block_15_belgium": "f_16a_block_15_belgium",
+    "f_16a_block_15_ocu_belgium": "f_16a_block_15_ocu_belgium",
+    "f_16a_block_15_ocu_thailand": "f_16a_block_15_ocu_thailand",
+    "f_16a_block_20_mlu": "f_16a_block_20_mlu",
+    "f_16a_block_5_netherlands": "f_16a_block_5_netherlands",
+    "f_16a_block_72v_china": "f_16a_block_72v_china",
+    "f_16aj": "f_16aj",
+    "f_16am_block_15_mlu_belgium": "f_16am_block_15_mlu_belgium",
+    "f_16am_block_20_mlu_netherlands": "f_16a_block_20_mlu",
+    "f_16am_block_20_mlu_norway": "f_16a_block_20_mlu",
+    "f_16c_block_40_barak_2": "f_16c_block_40_barak_2",
+    "f_16c_block_50": "f_16c_block_50",
+    "f_16c_block_50_missile_test": "f_16c_block_50",
+    "f_16c_block_52_aesa": "f_16c_block_52_aesa",
+    "f_16d_block_40_barak_2": "f_16d_block_40_barak_2",
+    "f_16d_block_40_barak_2_missile_test": "f_16d_block_40_barak_2",
+    "f_16i_sufa": "f_16i_sufa",
+    "f_20a": "f_20a",
+    "f_222_2": "f_222_2",
+    "f_2a": "f_2a",
+    "f_2a_adtw": "f_2a_adtw",
+    "f_47n_25_re_china": "f_47n_25_re_china",
+    "f_4e_event": "f-4e",
+    "f_6c_pakistan": "f_6c_pakistan",
+    "fa_18a": "fa_18a",
+    "fa_18a_hug_2_raaf": "fa_18a_hug_2_raaf",
+    "fa_18a_raaf": "fa_18a",
+    "fa_18c_early": "fa_18c_early",
+    "fa_18c_finland": "fa_18c_finland",
+    "fa_18c_late": "fa_18c_late",
+    "fa_18c_late_switzerland": "fa_18c_late_switzerland",
+    "fa_18c_mlu_2_finland": "fa_18c_mlu_2_finland",
+    "fa_18c_switzerland": "fa_18c_late_switzerland",
+    "fa_18d_late_malaysia": "fa_18d_late_malaysia",
+    "fa_18e_block_2": "fa_18e_block_2",
+    "fa_18f_block_2_raaf": "fa_18f_block_2_raaf",
+    "fairey_3f_mk3b": "fairey_3f_mk3b",
+    "fc_20_bis": "fc_20_bis",
+    "ffa_p16": "ffa_p16",
+    "fiat_cr42_italy": "fiat_cr42",
+    "fiat_cr42_j11": "fiat_cr42",
+    "fiat_cr42_marcolin": "fiat_cr42",
+    "fiat_cr42_marcolin_italy": "fiat_cr42",
+    "fiat_g50_seria2_italy": "fiat_g50_seria2",
+    "fiat_g50_seria7as_italy": "fiat_g50_seria7as",
+    "fiat_g91_ps": "fiat_g91_ps",
+    "fiat_g91_r1": "fiat_g91_r1",
+    "fiat_g91_r3": "fiat_g91_r3",
+    "fiat_g91_r4": "fiat_g91_r4",
+    "fiat_g91_r4_german": "fiat_g91_r4",
+    "fiat_g91_y": "fiat_g91_y",
+    "fiat_g91_ys": "fiat_g91_ys",
+    "firebrand_tf4": "firebrand_tf4",
+    "firefly_mk1": "firefly_mk1",
+    "firefly_mk4_netherlands": "firefly_mk5",
+    "firefly_mk5": "firefly_mk5",
+    "fj_4b": "fj_4b",
+    "fj_4b_agm_12b": "fj_4b",
+    "fokker_d21_mod20": "fokker_d21_mod20",
+    "fokker_d21_netherlands": "fokker_d21_netherlands",
+    "fokker_d21_serie3_finland": "fokker_d21_serie3_finland",
+    "fokker_d23": "fokker_d23",
+    "fokker_d7": "fokker_d7",
+    "fokker_g1a": "fokker_g1a",
+    "fr_1_fireball": "fr_1_fireball",
+    "fury_mk1": "fury_mk1",
+    "fury_mk2": "fury_mk2",
+    "fw-189a-1": "fw_189a_1",
+    "fw-190a-1": "fw-190a-1",
+    "fw-190a-4": "fw-190a-4",
+    "fw-190a-5": "fw-190a-5",
+    "fw-190a-5_cannons": "fw-190a-5_cannons",
+    "fw-190a-5_cannons_tutorial": "fw-190a-5_cannons",
+    "fw-190a-5_japan": "fw-190a-5_cannons",
+    "fw-190a-5_u2": "fw-190a-5_u2",
+    "fw-190a-8": "fw-190a-8",
+    "fw-190a-8_france": "fw-190a-8",
+    "fw-190a-8_usa": "fw-190a-8",
+    "fw-190c": "fw-190c",
+    "fw-190d-12": "fw-190d-12",
+    "fw-190d-13": "fw-190d-13",
+    "fw-190d-9": "fw-190d-9",
+    "fw-190d-9_ussr": "fw-190d-9",
+    "fw-190f-8": "fw-190f-8",
+    "fw_189c_0": "fw_189c_0",
+    "fw_190a_5_u14": "fw-190a-5_u14",
+    "fw_190f_8_hungary": "fw-190f-8",
+    "fw_200c_1": "fw_200c_1",
+    "g5n2": "g5n1",
+    "g8n2": "g8n1",
+    "g_55_serie1": "g_55_serie1",
+    "g_55_serie1_ss0": "g_55_serie1_ss0",
+    "g_55s": "g_55s",
+    "g_lynx": "g_lynx",
+    "gl_832": "gl_832",
+    "gladiator_j8a_iacobi": "gladiator_j8a",
+    "gladiator_mk1_china": "gladiator_mk1_china",
+    "gladiator_mk2_france": "gladiator_mk2",
+    "gladiator_mk2_navy": "gladiator_mk2_navy",
+    "gladiator_mk2_silver": "gladiator_mk2",
+    "gladiator_mk2_tuck": "gladiator_mk2_tuck",
+    "go229_v3": "go229_v3",
+    "h-75a-1_finland": "p-36a",
+    "h-75a-1_france": "h_75a_1_france",
+    "h-75a-1_france39": "p-36a",
+    "h-75a-2_finland": "h_75a_2_finland",
+    "h-75a-2_france": "p-36a",
+    "h-75a-2_luftwaffe": "p-36a",
+    "h-75a-3_finland": "p-36a",
+    "h-75a-3_france": "p-36a",
+    "h-75a-3_france_vishy": "p-36a",
+    "h-75a-4_finland": "p-36a",
+    "h-75a-4_france": "h_75a_4_france",
+    "h-75a-4_luftwaffe": "p-36a",
+    "h-75a-4_raf": "p-36a",
+    "h-75a-5": "p-36a",
+    "h-75a-6": "p-36a",
+    "h-75a-7": "p-36a",
+    "h-75m": "h_75m_china",
+    "h-75m_china": "h_75m_china",
+    "h-75n": "p-36a",
+    "h8k2": "h8k2",
+    "h8k3": "h8k3",
+    "h_34": "h_34",
+    "h_34_france": "h_34_france",
+    "halifax_mk3": "halifax_mk3",
+    "harrier_frs1": "harrier_frs1",
+    "harrier_frs1_early": "harrier_frs1",
+    "harrier_gr1": "harrier_gr1",
+    "harrier_gr3": "harrier_gr3",
+    "harrier_gr7": "harrier_gr7",
+    "harrier_t10": "harrier_t10",
+    "hawk_200": "hawk_200",
+    "hawk_200_rda": "hawk_200_rda",
+    "hawk_209_indonesia": "hawk_209_indonesia",
+    "he-111h-16_winter": "he-111h-16_winter",
+    "he-162a-1": "he-162a-2",
+    "he-177a-3": "he-177a-5",
+    "he-177a-5": "he-177a-5",
+    "he51a1": "he51a1",
+    "he51b1": "he51b1",
+    "he51c1": "he51c1",
+    "he51c1_late": "he51c1_late",
+    "he_100d_1": "he_100d_1",
+    "he_112a_0": "he_112a_0",
+    "he_112b_0": "he_112b_0",
+    "he_112b_1": "he_112b_1",
+    "he_112b_1_italy": "he_112b_1",
+    "he_112b_2": "he_112b_2",
+    "he_112v_5": "he_112v_5",
+    "he_115a_2_sweden": "he_115a_2_sweden",
+    "he_115c_1": "he_115c_1",
+    "hellcat_fmk1": "f6f-5",
+    "hkp2": "hkp2",
+    "hkp3c": "hkp3c",
+    "hkp9a_cb2": "hkp9a_cb2",
+    "hkp9a_cb3_fc": "hkp9a_cb3_fc",
+    "hornet_mk1": "hornet_mk1",
+    "hornet_mk3": "hornet_mk3",
+    "hp52_hampden_mk1_late": "hp52_hampden_mk1_late",
+    "hp52_hampden_tbmk1": "hp52_hampden_tbmk1",
+    "hp52_hampden_tbmk1_ussr_utk1": "hp52_hampden_tbmk1_ussr_utk1",
+    "hp_12": "hp_12",
+    "hs-123a-1": "hs_123a_1",
+    "hs-123a-1_china": "hs_123a_1",
+    "hs-129b-2": "hs-129b-2",
+    "hs-129b-2_romania": "hs-129b-2",
+    "hs-129b-2_romania_italy": "hs-129b-2",
+    "hs-129b-3": "hs-129b-3",
+    "hudson_mk_v": "hudson_mk_v",
+    "hudson_mk_v_gear_test": "hudson_mk_v",
+    "hunter_f1": "hunter_f1",
+    "hunter_f50_sweden": "hunter_f4_mk50",
+    "hunter_f58_switzerland": "hunter_f58a",
+    "hunter_f58a_1971_switzerland": "hunter_f58a",
+    "hunter_f6": "hunter_f6",
+    "hunter_f6_holland": "hunter_f6_holland",
+    "hunter_f9": "hunter_f9",
+    "hunter_f9_rhodesia": "hunter_f9",
+    "hurricane_mk1": "hurricane_mk1",
+    "hurricane_mk1_late": "hurricane_mk1",
+    "hurricane_mk1_late_ep": "hurricane_mk1",
+    "hurricane_mk1_late_finland": "hurricane_mk1",
+    "hurricane_mk1b": "hurricane_mk1b",
+    "hurricane_mk1c": "hurricane_mk1c",
+    "hurricane_mk4": "hurricane_mk4",
+    "hurricanemkii": "hurricanemkii",
+    "hurricanemkii_ussr": "hurricanemkii_ussr",
+    "i-153_m62": "i-153_m62",
+    "i-153_m62_china": "i-153_m62",
+    "i-153_m62_zhukovskiy": "i-153_m62",
+    "i-153p": "i-153p",
+    "i-15_1934": "i-15_1934",
+    "i-15_1935": "i-15_1935",
+    "i-15_1935_moscow": "i-15_1935_moscow",
+    "i-15bis": "i-15bis",
+    "i-15bis_china": "i-15bis",
+    "i-15bis_krasnolutsky": "i-15bis_krasnolutsky",
+    "i-16_chung_28": "i-16_chung_28",
+    "i-16_type10": "i-16_type10",
+    "i-16_type10_china": "i-16_type10",
+    "i-16_type17": "i-16_type17",
+    "i-16_type17_china": "i-16_type17",
+    "i-16_type18": "i-16_type18",
+    "i-16_type24": "i-16_type24",
+    "i-16_type27": "i-16_type27",
+    "i-16_type28": "i-16_type28",
+    "i-16_type5": "i-16_type5",
+    "i-16_type5_1935_china": "i-16_type5",
+    "i_185_m71": "i_185_m82",
+    "i_185_m71_standard": "i_185_m71_standard",
+    "i_185_m82": "i_185_m82",
+    "i_225": "i-225",
+    "i_29": "i_29",
+    "ia_58a_pucara": "ia_58a_pucara",
+    "iar_316b": "iar_316b",
+    "iar_81c": "iar-81c",
+    "iar_93b": "iar_93b",
+    "il-10_1946": "il-10_1946",
+    "il-10_1946_china": "il-10_1946",
+    "il-10_1946_hungary": "il-10_1946",
+    "il-2i": "il-2i",
+    "il-2m": "il-2m",
+    "il-2m_mstitel": "il-2m_mstitel",
+    "il_28": "il_28",
+    "il_28_china": "il_28",
+    "il_28_china_killstreak": "il_28",
+    "il_28_german": "il_28",
+    "il_28_hungary": "il_28",
+    "il_28_killstreak": "il_28",
+    "il_2_1941": "il_2_1941",
+    "il_2_1942": "il_2_1941",
+    "il_2_1942_luftwaffe": "il-2i",
+    "il_2_37_1943": "il_2_37_1943",
+    "il_2_m82": "il_2_m82",
+    "il_2m_1943": "il_2m_1943",
+    "il_8_1944": "il_8",
+    "intruder_mk_1": "intruder_mk_1",
+    "itp_m1": "itp-m1",
+    "j1n1_mod11_early": "j1n1_mod11_early",
+    "j2m2": "j2m2",
+    "j2m3": "j2m3",
+    "j2m4_kai": "j2m4_kai",
+    "j2m5": "j2m5",
+    "j2m5_30mm": "j2m5_30mm",
+    "j5n1": "j5n1",
+    "j6k1": "j6k1",
+    "j7w1": "j7w1",
+    "j9_early": "j9_early",
+    "j_10a": "j_10a",
+    "j_10c": "j_10c",
+    "j_11": "j_11",
+    "j_11a": "j_11a",
+    "j_11b": "j_11b",
+    "j_15t": "j_15t",
+    "j_22m1a": "iar_93b",
+    "j_7_mk2": "j_7_mk2",
+    "j_7d": "j_7d",
+    "j_7e": "j_7e",
+    "j_8b": "j_8b",
+    "j_8f": "j_8f",
+    "j_8f_missile_test": "j_8f",
+    "jaguar_a": "jaguar_a",
+    "jaguar_a_germany_killstreak": "jaguar_a",
+    "jaguar_a_iaf_killstreak": "jaguar_a",
+    "jaguar_a_italy_killstreak": "jaguar_a",
+    "jaguar_a_japan_killstreak": "jaguar_a",
+    "jaguar_a_killstreak": "jaguar_a",
+    "jaguar_a_sweden_killstreak": "jaguar_a",
+    "jaguar_a_uk_killstreak": "jaguar_a",
+    "jaguar_a_usa_killstreak": "jaguar_a",
+    "jaguar_e": "jaguar_e",
+    "jaguar_gr1": "jaguar_gr1",
+    "jaguar_gr1a": "jaguar_gr1a",
+    "jaguar_is": "jaguar_is",
+    "javelin_fmk9": "javelin_fmk9",
+    "jf_17": "jf_17",
+    "jh_7": "jh_7",
+    "jh_7a": "jh_7a",
+    "jh_7a2": "jh_7a2",
+    "jh_7a_killstreak": "jh_7a",
+    "jh_7a_prototype": "jh_7a",
+    "ju-188a-2": "ju-188a-2",
+    "ju-288c": "ju-288c",
+    "ju-388j": "ju-388j",
+    "ju-87d-3_italy": "ju-87d-3",
+    "ju-87r-2_italy": "ju-87r-2",
+    "ju-87r-2_snake": "ju-87r-2",
+    "ju-88a-1": "ju-88a-1",
+    "ju-88a-4": "ju-88a-4",
+    "ju-88a-4_finland": "ju-88a-4",
+    "ju-88c-6": "ju-88c-6",
+    "ka_29": "ka_29",
+    "ka_50": "ka_50",
+    "ka_52": "ka_52",
+    "kfir_c10_colombia": "kfir_c10_colombia",
+    "kfir_c2": "kfir_c2",
+    "kfir_c7": "kfir_c7",
+    "kfir_canard": "kfir_canard",
+    "ki-27_otsu_china": "ki-27_otsu",
+    "ki-27_otsu_ep": "ki-27_otsu",
+    "ki-45_hei": "ki-45_ko",
+    "ki-45_hei_tei": "ki-45_ko",
+    "ki-45_hei_tei_china": "ki-45_ko",
+    "ki-45_ko": "ki-45_ko",
+    "ki-45_ko_tei": "ki-45_ko",
+    "ki-45_otsu": "ki-45_ko",
+    "ki-45_tei": "ki-45_tei",
+    "ki-49_2b_late": "ki-49_2b",
+    "ki-83": "ki-83",
+    "ki-96": "ki-96",
+    "ki_100_2": "ki_100_2",
+    "ki_100_early": "ki_100_early",
+    "ki_102_otsu": "ki_102_otsu",
+    "ki_108": "ki_108",
+    "ki_10_1": "ki_10_1",
+    "ki_10_1_commander": "ki_10_1",
+    "ki_10_2": "ki_10_2",
+    "ki_10_2_commander": "ki_10_2",
+    "ki_21_1hei": "ki_21_1hei",
+    "ki_43_1": "ki_43_1",
+    "ki_43_2": "ki_43_2",
+    "ki_43_2_late": "ki_43_2",
+    "ki_43_3_ko": "ki_43_3_ko",
+    "ki_43_3_otsu": "ki_43_3_otsu",
+    "ki_44_1": "ki_44_1",
+    "ki_44_1_ep": "ki_44_1",
+    "ki_44_2_hei": "ki_44_2_hei",
+    "ki_44_2_hei_china": "ki_44_2_hei",
+    "ki_44_2_otsu": "ki_44_2_otsu",
+    "ki_48_2_otsu": "ki_48_2_otsu",
+    "ki_48_2_otsu_event": "ki_48_2_otsu",
+    "ki_61_1a_hei": "ki_61_1a_hei",
+    "ki_61_1a_hei_ep": "ki_61_1a_hei",
+    "ki_61_1a_ko": "ki_61_1a_ko",
+    "ki_61_1a_otsu": "ki_61_1a_otsu",
+    "ki_61_1a_otsu_china": "ki_61_1a_otsu",
+    "ki_61_1a_otsu_usa": "ki_61_1a_otsu",
+    "ki_61_1a_tei": "ki_61_1a_tei",
+    "ki_61_2_early": "ki_61_2_early",
+    "ki_84_hei": "ki_84_hei",
+    "ki_84_ko": "ki_84_ko",
+    "ki_84_ko_china": "ki_84_ko",
+    "ki_84_otsu": "ki_84_otsu",
+    "ki_87": "ki_87",
+    "ki_94_2": "ki_94_2",
+    "kitsuka": "kitsuka",
+    "l_39za": "l_39za",
+    "l_39za_art_thailand": "l_39za_art_thailand",
+    "la-11": "la-11",
+    "la-11_china": "la-11",
+    "la-15": "la-15",
+    "la-5_type37_early": "la-5_type37_early",
+    "la-5_type39": "la-5f_type_39",
+    "la-5fn": "la-5fn",
+    "la-5fn_luftwaffe": "la-5fn",
+    "la-7": "la-7",
+    "la-7_3_china_plaaf": "la-7",
+    "la-7_dolgushin": "la-7",
+    "la-7b-20": "la-7b-20",
+    "la-9": "la-9",
+    "la-9_china": "la-9",
+    "la_174": "la_174",
+    "la_200_toriy": "la_200_toriy",
+    "lagg-3-11": "lagg-3-11",
+    "lagg-3-23": "lagg-3-23",
+    "lagg-3-8": "lagg-3-8",
+    "lagg-i-301": "lagg-i-301",
+    "late_298d": "late_298d",
+    "leo_451_early": "leo_451_early",
+    "leo_451_late": "leo_451_late",
+    "li_2_1938": "li-2_1938",
+    "lightning_f53": "lightning_f6",
+    "lightning_f6": "lightning_f6",
+    "lincoln_b1": "lincoln_b2",
+    "lincoln_b2": "lincoln_b2",
+    "loire_130": "loire_130",
+    "lynx_ah_mk1": "lynx_ah_mk1",
+    "m_346fa": "m_346fa",
+    "martin_139wc": "martin_139wc",
+    "marut_mk1": "marut_mk1",
+    "maryland_mk1": "maryland_mk1",
+    "maryland_mk1_france": "maryland_mk1",
+    "mb_151c1": "mb_151c1",
+    "mb_152c1": "mb_152c1",
+    "mb_157": "mb_157",
+    "mb_162": "mb_162",
+    "mb_174_a3": "mb_174_a3",
+    "mb_175t": "mb_175t",
+    "mb_326b": "mb_326b",
+    "mb_326k": "mb_326k",
+    "mb_5": "mb_5",
+    "mbr-2": "mbr-2",
+    "mc-202_d": "mc-202_d",
+    "mc-202_ec": "mc-202_ec",
+    "mc-202_italy": "mc-202",
+    "mc-205_n2": "mc-205_n2",
+    "mc-205_serie1": "mc-205_serie1",
+    "mc-205_serie3": "mc-205_serie3",
+    "mc200_serie3_italy": "mc200_serie3",
+    "mc200_serie7_italy": "mc200_serie7",
+    "md_450b_barougan": "md_450b_barougan",
+    "md_450b_ouragan": "md_450b_ouragan",
+    "md_450b_ouragan_iaf": "md_450b_ouragan",
+    "md_450b_ouragan_iaf_29": "md_450b_ouragan",
+    "md_452_mystere_2a": "md_452_mystere_2a",
+    "md_454_mystere_4a": "md_454_mystere_4a",
+    "md_454_mystere_4a_iaf": "md_454_mystere_4a",
+    "md_460": "md_460",
+    "md_460_saar": "md_460_saar",
+    "md_460_sambad": "md_460_sambad",
+    "md_460_usa": "md_460",
+    "md_460_yt_cup_2019": "md_460",
+    "md_500_tow_late": "md_500_tow_late",
+    "me-262a-1a": "me-262a-1a",
+    "me-262a-1a_early": "me-262a-1a_early",
+    "me-262a-1a_u4": "me-262a-1a_u4",
+    "me-262a-2a": "me-262a-2a",
+    "me-262a1_u1": "me-262a_1_u1",
+    "me-262c-2b": "me-262c-2b",
+    "me-410a-1_u2": "me-410a-1",
+    "me-410a-1_u4": "me-410a-1_u4",
+    "me-410b-1": "me-410b-1",
+    "me-410b-1_u2": "me-410b-1",
+    "me-410b-2_u4": "me-410b-2_u4",
+    "me-410b-6_r3": "me-410b-6_r3",
+    "me_264": "me_264",
+    "meteor_fmk3": "meteor_fmk3",
+    "meteor_fmk3_navy": "meteor_fmk3_navy",
+    "meteor_fmk4_lw": "meteor_fmk4_lw",
+    "meteor_fmk4_sw": "meteor_fmk4_sw",
+    "meteor_fmk8": "meteor_fmk8",
+    "meteor_fmk8_belgium": "meteor_fmk8_belgium",
+    "meteor_fmk8_iaf": "meteor_fmk8",
+    "meteor_fmk8_reaper": "meteor_fmk8_reaper",
+    "meteor_frmk9_iaf": "meteor_frmk9_iaf",
+    "meteor_nfmk13": "meteor_nfmk13",
+    "mh_60l_dap": "mh_60l_dap",
+    "mi_24a": "mi_24a",
+    "mi_24d": "mi_24v",
+    "mi_24d_german": "mi_24v",
+    "mi_24d_hungary": "mi_24v",
+    "mi_24p": "mi_24p",
+    "mi_24p_german": "mi_24p_german",
+    "mi_24p_german_hfs80": "mi_24p_german",
+    "mi_24p_hungary": "mi_24p",
+    "mi_24v": "mi_24v",
+    "mi_24v_hungary": "mi_24v",
+    "mi_28a_sweden": "mi_28a_sweden",
+    "mi_28n": "mi_28n",
+    "mi_28n_killstreak": "mi_28n",
+    "mi_28nm": "mi_28nm",
+    "mi_35m": "mi_35m",
+    "mi_35m_killstreak": "mi_35m",
+    "mi_35m_pakistan": "mi_35m",
+    "mi_35p": "mi_35p",
+    "mi_35p_indonesia": "mi_35p",
+    "mi_4av": "mi_4av",
+    "mi_8amtsh": "mi_8amtsh",
+    "mi_8amtsh_vn": "mi_8amtsh_vn",
+    "mi_8tb": "mi_8tb",
+    "mi_8tv": "mi_8tv",
+    "mig-15": "mig-15",
+    "mig-15_ns23": "mig-15_ns23",
+    "mig-15bis_ish": "mig-15bis_ish",
+    "mig-15bis_nr23_china": "mig-15",
+    "mig-15bis_nr23_german": "mig-15",
+    "mig-15bis_nr23_hungary": "mig-15",
+    "mig-15bis_ns23": "mig-15",
+    "mig-15bis_ns23_china": "mig-15",
+    "mig-17": "mig-17",
+    "mig-17_china": "mig-17",
+    "mig-17_cuba": "mig-17",
+    "mig-17_f5": "mig-17f",
+    "mig-17p_lim_5p": "mig-17p_lim_5p",
+    "mig-17pf_hungary": "mig-17p_lim_5p",
+    "mig-19j_6a": "mig-19j_6a",
+    "mig-19pt": "mig-19",
+    "mig-19s": "mig-19s",
+    "mig-21_bis": "mig-21_bis",
+    "mig-21_bis_event": "mig-21_bis",
+    "mig-21_bis_lazur": "mig-21_bis_lazur",
+    "mig-21_bis_sau": "mig-21_bis",
+    "mig-21_bis_sau_hungary": "mig-21_bis",
+    "mig-21_bison": "mig-21_bison",
+    "mig-21_f13": "mig-21_f13",
+    "mig-21_mf": "mig-21_mf",
+    "mig-21_mf_hungary": "mig-21_mf",
+    "mig-21_pfm": "mig-21_pfm",
+    "mig-21_s": "mig-21_s",
+    "mig-21_smt": "mig-21_smt",
+    "mig-21_sps_k": "mig-21_pfm",
+    "mig-9": "mig-9",
+    "mig-9_china": "mig-9",
+    "mig-9_late_china": "mig-9_ussr",
+    "mig-9_ussr": "mig-9_ussr",
+    "mig_21_2000_iaf": "mig_21_2000_iaf",
+    "mig_21_bis_finland": "mig_21_bis_finland",
+    "mig_23bn": "mig_23bn",
+    "mig_23m": "mig_23m",
+    "mig_23mf_germany": "mig_23mf",
+    "mig_23mf_hungary": "mig_23mf",
+    "mig_23ml": "mig_23ml",
+    "mig_23mla": "mig_23mla",
+    "mig_23mld": "mig_23mld",
+    "mig_25pd": "mig_25pd",
+    "mig_27k": "mig_27k",
+    "mig_27m": "mig_27m",
+    "mig_29_9_12": "mig_29_9_12_germany",
+    "mig_29_9_12_germany": "mig_29_9_12_germany",
+    "mig_29_9_12_sniper": "mig_29_9_12_germany",
+    "mig_29_9_12b_hungary": "mig_29_9_12_germany",
+    "mig_29_9_12g": "mig_29_9_12g",
+    "mig_29_9_13": "mig_29_9_13",
+    "mig_29kr_9_41r": "mig_29kr_9_41r",
+    "mig_29m_9_15": "mig_29m_9_15",
+    "mig_29n": "mig_29_9_12g",
+    "mig_29smt_9_19": "mig_29smt_9_19",
+    "mig_29smt_9_19_missile_test": "mig_29smt_9_19",
+    "mig_3_series_1_15": "mig_3_series_1_15",
+    "mig_3_series_1_15_bk_pod": "mig_3_series_1_15_bk_pod",
+    "mig_3_series_1_15_no_radio": "mig_3_series_1_15",
+    "mig_3_series_1_15_romania": "mig_3_series_1_15",
+    "mig_3_series_34": "mig_3_series_34",
+    "mig_3u": "mig_3_series_1_15",
+    "mirage_2000_5ei": "mirage_2000_5ei",
+    "mirage_2000_5f": "mirage_2000_5f",
+    "mirage_2000_5f_missile_test": "mirage_2000_5f",
+    "mirage_2000c_s4": "mirage_2000c_s5",
+    "mirage_2000c_s5": "mirage_2000c_s5",
+    "mirage_2000d_r1": "mirage_2000d_r1",
+    "mirage_2000d_rmv": "mirage_2000d_rmv",
+    "mirage_3c": "mirage_3c",
+    "mirage_3cj": "mirage_3cj",
+    "mirage_3e": "mirage_3e",
+    "mirage_3s_c70_switzerland": "mirage_3s_c70_switzerland",
+    "mirage_4000": "mirage_4000",
+    "mirage_5ba": "mirage_5ba",
+    "mirage_5f": "mirage_5f",
+    "mirage_f1c": "mirage_f1c",
+    "mirage_f1c_200": "mirage_f1c_200",
+    "mirage_f1ct": "mirage_f1c",
+    "mirage_milan": "mirage_milan",
+    "morko_morane": "morko_morane",
+    "mosquito_b_mk16": "mosquito_b_mk16",
+    "mosquito_f_mk2_norway": "mosquito_f_mk2_norway",
+    "mosquito_fb_mk18": "mosquito_fb_mk18",
+    "mosquito_fb_mk26_china": "mosquito_fb_mk6",
+    "mosquito_fb_mk6": "mosquito_fb_mk6",
+    "mosquito_fb_mk6_ash_norway": "mosquito_fb_mk6_ash_norway",
+    "mosquito_fb_mk6_norway": "mosquito_fb_mk6",
+    "mosquito_j30_sweden": "mosquito_j30_sweden",
+    "mosquito_nf_mk2": "mosquito_nf_mk2",
+    "mosquito_tr_mk33": "mosquito_tr_mk33",
+    "ms_405c1": "ms_405",
+    "ms_406c1": "ms_406c1",
+    "ms_410c1": "ms_410c1",
+    "n1k1_ja": "n1k1_ja",
+    "n1k1_kyuofu": "n1k1_kyuofu",
+    "n1k2_j": "n1k2_j",
+    "n1k2_jko": "n1k2_j",
+    "nc_223_3": "nc_223_3",
+    "nesher": "mirage_5_nesher",
+    "nf_5a_netherlands": "nf_5a_netherlands",
+    "night_fighter_mk_2": "boston_mk_1",
+    "nimrod_mk1": "nimrod_mk1",
+    "nimrod_mk2": "nimrod_mk2",
+    "nt_a_10a_early": "a-10a_early",
+    "nt_a_6e_tram": "a_6e_tram",
+    "nt_a_7e": "a_7e",
+    "nt_b_52h": "nt_b_52h",
+    "nt_f_4e": "f-4e",
+    "nt_mig_23mld": "mig_23mld",
+    "nt_su_24m": "su_24m",
+    "nt_su_25t": "su_25t",
+    "nt_tu_95m": "nt_tu_95m",
+    "o3u_1": "o3u_1",
+    "oh_58d": "oh_58d",
+    "oh_58d_china": "oh_58d",
+    "os2u_1_naval": "os2u_1",
+    "os2u_3": "os2u_3",
+    "osprey_mk4": "osprey_mk4",
+    "p-26a_33": "p-26a_33",
+    "p-26a_34": "p-26a_34",
+    "p-26a_34_m2": "p-26a_34_m2",
+    "p-26a_35": "p-26a_35",
+    "p-26b_35": "p-26b_35",
+    "p-36a": "p-36a",
+    "p-36a_brown": "p-36a",
+    "p-36a_rasmussen": "p-36a",
+    "p-36c": "p-36c",
+    "p-36c_rb": "p-36c",
+    "p-36g": "p-36g",
+    "p-38e": "p-38e",
+    "p-38g": "p-38g",
+    "p-38g_metal": "p-38g",
+    "p-38j": "p-38j",
+    "p-38j_marge": "p-38j",
+    "p-38k": "p-38k",
+    "p-38l": "p-38l",
+    "p-38l_1_china_rocaf": "p-38l",
+    "p-39k_1": "p-39k_1",
+    "p-39n": "p-39n",
+    "p-39n_su": "p-39n_su",
+    "p-39q_15": "p-39q_15",
+    "p-39q_25": "p-39q_25",
+    "p-39q_25_france": "p-39q_25",
+    "p-39q_5": "p-39q_5",
+    "p-400": "p-400",
+    "p-40e_china": "p-40e",
+    "p-40e_td": "p-40e",
+    "p-40e_ussr": "p-40e",
+    "p-40f-5_france_ep": "p-40f",
+    "p-40f_10": "p-40f",
+    "p-43a-1": "p_43a_1",
+    "p-43a-1_china": "p_43a_1",
+    "p-47d-28": "p-47d-28",
+    "p-47d": "p-47d",
+    "p-47d_16_re": "p-47d_16_re",
+    "p-47d_16_re_germany": "p-47d_16_re",
+    "p-47d_22_re": "p-47d_22_re",
+    "p-47d_22_re_france": "p-47d_22_re",
+    "p-47d_23_ra_china_rocaf": "p-47d_23_re",
+    "p-47d_23_re": "p-47d_23_re",
+    "p-47d_30_china": "p-47d-30",
+    "p-47d_30_italy": "p-47d-30",
+    "p-47d_luftwaffe": "p-47d",
+    "p-47d_ussr": "p-47d_ussr",
+    "p-47m-1-re": "p-47m-1-re",
+    "p-47m-1-re_boxted": "p-47m-1-re",
+    "p-47n-15": "p-47n-15",
+    "p-51_a-36": "p-51_a-36",
+    "p-51_mk1": "p-51b",
+    "p-51_mk1a_usaaf": "p-51_mk1a_usaaf",
+    "p-51a_tl": "p-51a_tl",
+    "p-51b_7_sweden": "p_51b_7_sweden",
+    "p-51c-10-nt": "p-51c-10-nt",
+    "p-51c-10_france": "p-51c-10_france",
+    "p-51c-11-nt_china": "p-51c-11-nt_china",
+    "p-51c-11-nt_japan": "p-51c-10-nt",
+    "p-51d-10": "p-51d-10",
+    "p-51d-20-na": "p-51d-20-na",
+    "p-51d-20-na_iaf": "p-51d-20-na",
+    "p-51d-20-na_j26": "p-51d-20-na",
+    "p-51d-20_china": "p-51d-20-na",
+    "p-51d-30_usaaf_korea": "p-51d-30_usaaf_korea",
+    "p-51d-5": "p-51d-5",
+    "p-51k": "p-51d-30_usaaf_korea",
+    "p-59a": "p_59a",
+    "p-61a_1": "p-61a_1",
+    "p-61c_1": "p-61c_1",
+    "p-63a-10": "p-63a-10",
+    "p-63a-10_ussr": "p-63a-10",
+    "p-63a-5": "p-63a-5",
+    "p-63a-5_ussr": "p-63a-5",
+    "p-63c-5": "p-63c-5",
+    "p-63c-5_france": "p-63c-5_france",
+    "p-63c-5_kingcobra_animal_version": "p-63c-5",
+    "p-63c-5_ussr": "p-63c-5",
+    "p1y1_mod11": "p1y1_mod11",
+    "p1y1_mod11_china": "p1y1_mod11",
+    "pandora_mk_1": "boston_mk_1",
+    "pb4y-2_france": "pb4y-2_france",
+    "pbj_1h": "pbj_1h",
+    "pbj_1j": "pbj_1j",
+    "pbj_1j_1": "pbj_1j",
+    "pby-5": "pby-5",
+    "pby-5a": "pby-5a",
+    "pby-5a_late_france": "pby-5a_late_france",
+    "pby-5a_raf": "pby-5a",
+    "pby-5a_ussr": "pby-5a",
+    "pe-2-31": "pe-2-31",
+    "pe-2-359_china": "pe-2-359",
+    "pe-8_m82": "pe-8_m82",
+    "po-2_nw": "po-2_nw",
+    "po-2_test": "po-2",
+    "po-2m": "po-2m",
+    "po_2op_event": "po_2op_event",
+    "potez_630": "potez_630",
+    "potez_631": "potez_631",
+    "potez_633": "potez_633",
+    "pv_2": "pv_2",
+    "pv_2d": "pv_2d",
+    "pyorremyrsky": "pyorremyrsky",
+    "q_5_early": "q_5_early",
+    "q_5a": "q_5a",
+    "q_5l": "q_5l",
+    "quing_6": "quing_6",
+    "r2y2_kai": "r2y2_kai",
+    "r2y2_v1": "r2y2_v1",
+    "r2y2_v2": "r2y2_v2",
+    "rafale_c_f3": "rafale_c_f3",
+    "rafale_m_f3r": "rafale_m_f3r",
+    "rah_66": "rah_66",
+    "re_2000_ga": "re_2000_ga",
+    "re_2000_ga_ep": "re_2000_ga",
+    "re_2000_heja_1": "re_2000_heja_1",
+    "re_2000_heja_2": "re_2000_heja_2",
+    "re_2000_int": "re_2000_int",
+    "re_2000_j20": "re_2000_int",
+    "re_2001_cb": "re_2001_cb",
+    "re_2001_cn": "re_2001_cn",
+    "re_2001_serie1": "re_2001_serie1",
+    "re_2001_serie1_ep": "re_2001_serie1",
+    "re_2002_early": "re_2002_early",
+    "re_2005_serie0": "re_2005_serie0",
+    "re_2005_vdm": "re_2005_vdm",
+    "ro_43": "ro_43",
+    "ro_44": "ro_44",
+    "ro_57_quadriarma": "ro_57_quadriarma",
+    "s_199": "s_199",
+    "sa_313b": "sa_313b",
+    "sa_313b_france": "sa_313b",
+    "sa_316b": "sa_316b",
+    "sa_341f": "sa_341f",
+    "sa_342l_china": "sa_342l_china",
+    "sa_342m": "sa_342m",
+    "saab_105g": "saab_105g",
+    "saab_105oe": "saab_105oe",
+    "saab_a21a_3": "saab_a21a_3",
+    "saab_a21rb": "saab_a21rb",
+    "saab_a32a": "saab_a32a",
+    "saab_a32a_red_adam": "saab_a32a",
+    "saab_aj37": "saab_aj37",
+    "saab_ajs37": "saab_ajs37",
+    "saab_ajs37_early": "saab_ajs37",
+    "saab_b17a": "saab_b17a",
+    "saab_b17b": "saab_b17b",
+    "saab_b17bs": "saab_b17bs",
+    "saab_b18a": "saab_b18a",
+    "saab_b18b": "saab_b18b",
+    "saab_b3c": "saab_b3c",
+    "saab_f35_wdns": "saab_f35_wdns",
+    "saab_j21a_1": "saab_j21a_1",
+    "saab_j21a_2": "saab_j21a_1",
+    "saab_j21ra": "saab_j21ra",
+    "saab_j29a": "saab_j29a",
+    "saab_j29b": "saab_j29b",
+    "saab_j29d": "saab_j29d",
+    "saab_j29f": "saab_j29f",
+    "saab_j32b": "saab_j32b",
+    "saab_j35a": "saab_j35a",
+    "saab_j35d": "saab_j35d",
+    "saab_j35xs": "saab_j35xs",
+    "saab_ja37": "saab_ja37",
+    "saab_ja37d": "saab_ja37",
+    "saab_ja37di": "saab_ja37",
+    "saab_ja37di_f21": "saab_ja37",
+    "saab_jas39a": "saab_jas39a",
+    "saab_jas39c": "saab_jas39c",
+    "saab_jas39c_hungary": "saab_jas39c",
+    "saab_jas39c_south_africa": "saab_jas39c",
+    "saab_jas39c_south_africa_missile_test": "saab_jas39c",
+    "saab_jas39c_thailand": "saab_jas39c",
+    "saab_jas39d": "saab_jas39d",
+    "saab_jas39e": "saab_jas39e",
+    "saab_sk60b": "saab_sk60b",
+    "saab_t18b_1": "saab_t18b_1",
+    "saab_t18b_2": "saab_t18b_2",
+    "sagittario_2": "sagittario_2",
+    "sb2c_1c": "sb2c_1c",
+    "sb2c_4": "sb2c_4",
+    "sb2c_5": "sb2c_5",
+    "sb2c_5_france": "sb2c_5",
+    "sb2c_5_thailand": "sb2c_5",
+    "sb2u-2": "sb2u-2",
+    "sb2u-3": "sb2u-3",
+    "sb_25j_netherlands": "sb_25j_netherlands",
+    "sb_2m_100": "sb_2m_100",
+    "sb_2m_100a": "sb_2m_100",
+    "sb_2m_100a_spain": "sb_2m_100",
+    "sb_2m_103_mv3": "sb_2m_103c",
+    "sb_2m_103c": "sb_2m_103c",
+    "sb_2m_103u": "sb_2m_103u_mv3",
+    "sb_2m_103u_china": "sb_2m_103u_mv3",
+    "sb_2m_103u_mv3": "sb_2m_103u_mv3",
+    "sb_2m_105": "sb_2m_105",
+    "sbd-3": "sbd-3",
+    "sc_1": "sc_1",
+    "scimitar_f1": "scimitar_f1",
+    "scout_ah_mk1": "scout_ah_mk1",
+    "sea_fury_fb11": "sea_fury_fb11",
+    "sea_fury_fb51": "sea_fury_fb11",
+    "sea_harrier_fa2": "sea_harrier_fa2",
+    "sea_hawk_fga50_netherlands": "sea_hawk_fga6",
+    "sea_hawk_fga6": "sea_hawk_fga6",
+    "sea_hawk_mk100": "sea_hawk_fga6",
+    "sea_venom_faw20": "sea_venom_faw20",
+    "seafire_fr47": "seafire_fr47",
+    "seafire_mk17": "seafire_mk17",
+    "seafire_mk3": "seafire_mk3",
+    "seafire_mk3_france": "seafire_mk3",
+    "shackleton_mr_mk_2": "shackleton_mr_mk_2",
+    "sm_79_1936_italy": "sm_79_1936",
+    "sm_79_1937": "sm_79_1937",
+    "sm_79_1937_italy": "sm_79_1937",
+    "sm_79_1939": "sm_79_1939",
+    "sm_79_1939_italy": "sm_79_1939",
+    "sm_79_1941": "sm_79_1941",
+    "sm_79_1941_italy": "sm_79_1941",
+    "sm_79_1942": "sm_79_1942",
+    "sm_79_1942_italy": "sm_79_1942",
+    "sm_79_1943": "sm_79_1943",
+    "sm_79_1943_italy": "sm_79_1943",
+    "sm_79_iar": "sm_79_iar",
+    "sm_79_iar_italy": "sm_79_iar",
+    "sm_91": "sm_91",
+    "sm_92": "sm_92",
+    "so_4050_vautour_2a": "so_4050_vautour_2a",
+    "so_4050_vautour_2a_iaf": "so_4050_vautour_2a",
+    "so_4050_vautour_2a_israel_iaf": "so_4050_vautour_2a",
+    "so_4050_vautour_2b": "so_4050_vautour_2b",
+    "so_4050_vautour_2n": "so_4050_vautour_2n",
+    "so_4050_vautour_2n_iaf": "so_4050_vautour_2n",
+    "so_4050_vautour_2n_late": "so_4050_vautour_2n_late",
+    "so_8000_narval": "so_8000_narval",
+    "soc_1": "soc_1",
+    "spad_13": "spad_13",
+    "spitfire_f22": "spitfire_f22",
+    "spitfire_f22_test": "spitfire_f22",
+    "spitfire_f24": "spitfire_f24",
+    "spitfire_fr_mk14e": "spitfire_fr_mk14e",
+    "spitfire_fr_mk14e_belgium": "spitfire_fr_mk14e",
+    "spitfire_ix": "spitfire_ix",
+    "spitfire_ix_early": "spitfire_ix_early",
+    "spitfire_ix_plagis": "spitfire_ix",
+    "spitfire_ix_tutorial": "spitfire_ix",
+    "spitfire_ix_usa": "spitfire_ix",
+    "spitfire_ix_ussr": "spitfire_ix",
+    "spitfire_lf_mk9c_cw_greece": "spitfire_lf_mk9c_cw_greece",
+    "spitfire_lf_mk9e_iaf": "spitfire_ix_cw",
+    "spitfire_lf_mk9e_weisman": "spitfire_ix",
+    "spitfire_mk14c": "spitfire_mk14c",
+    "spitfire_mk14e": "spitfire_mk14e",
+    "spitfire_mk18e": "spitfire_mk18e",
+    "spitfire_mk5b_float": "spitfire_mk5b_float",
+    "spitfire_mk5b_italy": "spitfire_mk5b",
+    "spitfire_mk5b_notrop": "spitfire_mk5b_notrop",
+    "spitfire_mk5c": "spitfire_mk5c",
+    "spitfire_mk5c_notrop": "spitfire_mk5c_notrop",
+    "spitfire_mk9b": "spitfire_ix_early",
+    "spitfire_mk9c": "spitfire_ix_early",
+    "spitfire_mk9c_4cannons": "spitfire_mk9c_4cannons",
+    "spitfire_mk9c_iaf": "spitfire_ix_early",
+    "spitfire_xvi": "spitfire_xvi",
+    "spitfiremkiia_ep": "spitfiremkiia",
+    "stirling_mk1": "stirling_mk1",
+    "stirling_mk3": "stirling_mk3",
+    "strikemaster_mk88": "strikemaster_mk88",
+    "su-11": "su-11",
+    "su-7b": "su-7b",
+    "su-7bkl": "su-7bkl",
+    "su-7bkl_china_killstreak": "su-7bkl",
+    "su-7bkl_killstreak": "su-7bkl",
+    "su-7bmk": "su-7bmk",
+    "su-8": "su-8",
+    "su-9": "su-9",
+    "su_17m2": "su_17m2",
+    "su_17m4": "su_17m4",
+    "su_22m3": "su_22m3",
+    "su_22m3_hungary": "su_22m3",
+    "su_22m4": "su_22m4",
+    "su_22m4_de_wtd61": "su_22m4",
+    "su_22um3k": "su_22um3k",
+    "su_24m": "su_24m",
+    "su_24m_china_killstreak": "su_24m",
+    "su_24m_killstreak": "su_24m",
+    "su_25": "su_25",
+    "su_25_558arz": "su_25_558arz",
+    "su_25k": "su_25k",
+    "su_25sm3": "su_25sm3",
+    "su_25t": "su_25t",
+    "su_25tm": "su_25tm",
+    "su_27": "su_27",
+    "su_27sm": "su_27sm",
+    "su_30mk2v_venezuela": "su_30mk2v_venezuela",
+    "su_30mkk": "su_30mkk",
+    "su_30mkm": "su_30mkm",
+    "su_30sm": "su_30sm",
+    "su_30sm2": "su_30sm2",
+    "su_33": "su_33",
+    "su_34": "su_34",
+    "sunderland_mk3a": "sunderland_mk3a",
+    "sunderland_mk5": "sunderland_mk5",
+    "super_etendard_97": "super_etendard_97",
+    "super_hind_mk3": "super_hind_mk3",
+    "swift_f1": "swift_f1",
+    "swift_f7": "swift_f7",
+    "swordfish_mk1": "swordfish_mk1",
+    "swordfish_mk2": "swordfish_mk2",
+    "t2": "t2",
+    "t2_early": "t2_early",
+    "t_129_atak": "t_129_atak",
+    "tandem_mai": "tandem_mai",
+    "tb_3_m17_32": "tb_3_m17_32",
+    "tbd-1_1937": "tbd-1",
+    "tbd-1_1938": "tbd-1",
+    "tbf-1c": "tbf-1c",
+    "tempest_mk2": "tempest_mk2",
+    "tempest_mkv": "tempest_mkv",
+    "tempest_mkv_luftwaffe": "tempest_mkv_luftwaffe",
+    "tempest_mkv_vikkers": "tempest_mkv_vikkers",
+    "thunderbolt_mk1": "thunderbolt_mk1",
+    "tiger_hac_france": "tiger_hac_france",
+    "tiger_had_block2_france": "tiger_had_block2_france",
+    "tiger_had_france": "tiger_had_france",
+    "tiger_had_spain": "tiger_had_block2_france",
+    "tiger_hap_france": "tiger_hap_france",
+    "tiger_uht": "tiger_uht",
+    "tornado_adv": "/fm/tornado_adv",
+    "tornado_f3": "/fm/tornado_f3",
+    "tornado_f3_late": "/fm/tornado_f3_late",
+    "tornado_gr1": "/fm/tornado_gr1",
+    "tornado_gr4": "/fm/tornado_gr4",
+    "tornado_ids_de_assta1": "/fm/tornado_ids_de_assta1",
+    "tornado_ids_de_assta1_britain_killstreak": "/fm/tornado_ids_de_assta1",
+    "tornado_ids_de_assta1_france_killstreak": "/fm/tornado_ids_de_assta1",
+    "tornado_ids_de_assta1_italy_killstreak": "/fm/tornado_ids_de_assta1",
+    "tornado_ids_de_assta1_killstreak": "/fm/tornado_ids_de_assta1",
+    "tornado_ids_de_assta1_sweden_killstreak": "/fm/tornado_ids_de_assta1",
+    "tornado_ids_de_assta3_sle": "/fm/tornado_ids_de_assta3_sle",
+    "tornado_ids_de_mfg": "/fm/tornado_ids_de_mfg",
+    "tornado_ids_de_wtd61": "/fm/tornado_ids_de_wtd61",
+    "tornado_ids_it": "/fm/tornado_ids_it",
+    "tornado_ids_it_mod95": "/fm/tornado_ids_it_mod95",
+    "tornado_ids_it_ret8": "/fm/tornado_ids_it_ret8",
+    "tu-1": "tu-1",
+    "tu-2": "tu-2",
+    "tu-2_early": "tu-2_early",
+    "tu-2_postwar": "tu-2_postwar",
+    "tu-2_postwar_china": "tu-2_postwar",
+    "tu-2_postwar_late": "tu-2_postwar_late",
+    "tu-2_postwar_late_hungary": "tu-2_postwar_late",
+    "tu_14t": "tu_14t",
+    "tu_4": "tu_4",
+    "tu_4_china": "tu_4",
+    "tu_4_china_killstreak": "tu_4",
+    "tu_4_killstreak": "tu_4",
+    "tu_95m": "nt_tu_95m",
+    "typhoon_mk1a": "typhoon_mk1a",
+    "typhoon_mk1b": "typhoon_mk1b",
+    "typhoon_mk1b_late": "typhoon_mk1b_late",
+    "uav_inf_fpv_strike_drone": "uav_inf_fpv_strike_drone",
+    "uav_inf_recon_drone": "uav_inf_recon_drone",
+    "uav_inf_strike_drone": "uav_inf_strike_drone",
+    "uav_quadcopter": "uav_quadcopter",
+    "uav_recon_drone": "uav_quadcopter",
+    "ucav_mq_1_predator": "ucav_mq_1_predator",
+    "ucav_mq_1_predator_france_killstreak": "ucav_mq_1_predator",
+    "ucav_mq_1_predator_germany_killstreak": "ucav_mq_1_predator",
+    "ucav_mq_1_predator_iaf_killstreak": "ucav_mq_1_predator",
+    "ucav_mq_1_predator_italy_killstreak": "ucav_mq_1_predator",
+    "ucav_mq_1_predator_japan_killstreak": "ucav_mq_1_predator",
+    "ucav_mq_1_predator_sweden_killstreak": "ucav_mq_1_predator",
+    "ucav_mq_1_predator_uk_killstreak": "ucav_mq_1_predator",
+    "ucav_mq_1_predator_usa_killstreak": "ucav_mq_1_predator",
+    "ucav_orion": "ucav_mq_1_predator",
+    "ucav_orion_killstreak": "ucav_mq_1_predator",
+    "ucav_recon_micro": "ucav_recon_micro",
+    "ucav_recon_micro_360": "ucav_recon_micro",
+    "ucav_recon_micro_flir": "ucav_recon_micro",
+    "ucav_wing_loong_i": "ucav_mq_1_predator",
+    "ucav_wing_loong_i_killstreak": "ucav_mq_1_predator",
+    "uh_1b": "uh_1b",
+    "uh_1b_japan": "uh_1b",
+    "uh_1c": "uh_1c",
+    "uh_1c_xm_30": "uh_1b",
+    "uh_1d": "uh_1d",
+    "v_11g": "v_11g",
+    "v_12d": "v_12d",
+    "v_156_b1": "sb2u-3",
+    "v_156_f": "v_156_f",
+    "vampire_fb5": "vampire_fb5",
+    "vampire_fb52_finland": "vampire_fb52a",
+    "vampire_fb52a_italy": "vampire_fb52a",
+    "vampire_fb5_j28b": "vampire_fb52a",
+    "vb_10_02": "vb_10_02",
+    "vb_10c1": "vb_10c_1",
+    "venom_fb4": "venom_fb4",
+    "vg_33": "vg_33",
+    "vl_myrsky_2_late": "vl_myrsky_2_late",
+    "walrus_mk1": "walrus_mk1",
+    "washington_b1": "washington_b1",
+    "wasp_has_mk1": "wasp_has_mk1",
+    "welkin_fmk1": "welkin_fmk1",
+    "wellington_mk10": "wellington_mk10",
+    "wellington_mk1c_late": "wellington_mk1c",
+    "wellington_mk1c_luftwaffe": "wellington_mk1c",
+    "wellington_mk3": "wellington_mk3",
+    "wessex_mk5": "wessex_mk5",
+    "whirlwind_mk1": "whirlwind_mk1",
+    "whirlwind_p9": "whirlwind_p9",
+    "wm_21": "wm_21",
+    "wm_23": "wm_23",
+    "wyvern_s4": "wyvern_s4",
+    "xa_38": "xa_38",
+    "xf5f": "xf5f",
+    "xf5u_1": "xf5u_1",
+    "xp-50": "xp-50",
+    "xp-55": "xp-55",
+    "yah_64": "yah_64",
+    "yak-15_early": "yak-15",
+    "yak-1_early": "yak-1_early",
+    "yak-1b": "yak-1b",
+    "yak-1b_luftwaffe": "yak-1b",
+    "yak-23": "yak-23",
+    "yak-28b": "yak-28b",
+    "yak-3": "yak-3",
+    "yak-30d": "yak-30d",
+    "yak-38": "yak-38",
+    "yak-38m": "yak-38m",
+    "yak-3_eremin": "yak-3_early",
+    "yak-3_france": "yak-3_france",
+    "yak-3_test": "yak-3",
+    "yak-3_vk107": "yak-3_vk107",
+    "yak-3p": "yak-3p",
+    "yak-3t": "yak-3t",
+    "yak-3u": "yak_3u",
+    "yak-4": "yak-4",
+    "yak-7b": "yak-7b",
+    "yak-9": "yak-9",
+    "yak-9b": "yak-9b",
+    "yak-9k": "yak-9k",
+    "yak-9m": "yak-9m",
+    "yak-9p": "yak-9p",
+    "yak-9p_hungary": "yak-9p",
+    "yak-9t": "yak-9t",
+    "yak-9t_france": "yak-9t",
+    "yak-9u": "yak-9u",
+    "yak-9ut": "yak-9ut",
+    "yak_130_early": "yak_130_early",
+    "yak_141": "yak_141",
+    "yak_1_litvyak": "yak_1_pf",
+    "yak_2_kabb": "yak-2_kabb",
+    "yp-38": "yp-38",
+    "z_10": "z_10",
+    "z_1007_bis_serie3": "z_1007_bis_serie3",
+    "z_1007_bis_serie5": "z_1007_bis_serie5",
+    "z_10a": "z_10a",
+    "z_10me": "z_10me",
+    "z_11wa": "z_11wa",
+    "z_19": "z_19",
+    "z_19e": "z_19e",
+    "z_9w": "z_9w",
+    "z_9wa": "z_9wa",
+    "zeppelin": "zeppelin"
+  },
+  "fm_speed_limits": {
+    "a-10a_early": {
+      "ias": 874.0,
+      "mach": 0.8
+    },
+    "a-10a_late": {
+      "ias": 874.0,
+      "mach": 0.8
+    },
+    "a-10c": {
+      "ias": 874.0,
+      "mach": 0.8
+    },
+    "a-20g": {
+      "ias": 696.0,
+      "mach": 0.703
+    },
+    "a-26b": {
+      "ias": 718.0,
+      "mach": 0.71
+    },
+    "a-26b_10": {
+      "ias": 718.0,
+      "mach": 0.71
+    },
+    "a-26c": {
+      "ias": 718.0,
+      "mach": 0.71
+    },
+    "a2d": {
+      "ias": 875.0,
+      "mach": 0.82
+    },
+    "a5m4": {
+      "ias": 558.0,
+      "mach": 0.7
+    },
+    "a6m2_mod11": {
+      "ias": 660.0,
+      "mach": 0.83
+    },
+    "a6m2_n_zero": {
+      "ias": 650.0,
+      "mach": 0.83
+    },
+    "a6m2_zero": {
+      "ias": 660.0,
+      "mach": 0.83
+    },
+    "a6m3_mod22_zero": {
+      "ias": 660.0,
+      "mach": 0.79
+    },
+    "a6m3_zero": {
+      "ias": 703.0,
+      "mach": 0.83
+    },
+    "a6m5_hei": {
+      "ias": 777.0,
+      "mach": 0.83
+    },
+    "a6m5_ko_otsu": {
+      "ias": 777.0,
+      "mach": 0.83
+    },
+    "a6m5_zero": {
+      "ias": 703.0,
+      "mach": 0.83
+    },
+    "a6m6c": {
+      "ias": 777.0,
+      "mach": 0.83
+    },
+    "a7he1": {
+      "ias": 730.0,
+      "mach": 0.8
+    },
+    "a7m1": {
+      "ias": 826.0,
+      "mach": 0.83
+    },
+    "a7m2": {
+      "ias": 826.0,
+      "mach": 0.87
+    },
+    "a_109_eoa2": {
+      "ias": 420.0,
+      "mach": 0.79
+    },
+    "a_129_a": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "a_129_cbt": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "a_129_d": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "a_129_int": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "a_29_hudson": {
+      "ias": 564.0,
+      "mach": 0.65
+    },
+    "a_35b": {
+      "ias": 702.0,
+      "mach": 0.69
+    },
+    "a_4b": {
+      "ias": 1167.0,
+      "mach": 1.281
+    },
+    "a_4e_early": {
+      "ias": 1167.0,
+      "mach": 1.281
+    },
+    "a_4e_early_iaf": {
+      "ias": 1167.0,
+      "mach": 1.281
+    },
+    "a_4e_late_iaf": {
+      "ias": 1167.0,
+      "mach": 1.281
+    },
+    "a_4h": {
+      "ias": 1167.0,
+      "mach": 1.281
+    },
+    "a_4n": {
+      "ias": 1167.0,
+      "mach": 1.281
+    },
+    "a_5c": {
+      "ias": 1260.0,
+      "mach": 1.65
+    },
+    "a_6e_tram": {
+      "ias": 1322.0,
+      "mach": 1.07
+    },
+    "a_7d": {
+      "ias": 1254.0,
+      "mach": 1.124
+    },
+    "a_7e": {
+      "ias": 1254.0,
+      "mach": 1.124
+    },
+    "a_7k": {
+      "ias": 1254.0,
+      "mach": 1.124
+    },
+    "ab_205a_1": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "ah-64d": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_1f": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "ah_1f_iaf": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "ah_1g": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "ah_1g_iaf": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "ah_1q_iaf": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "ah_1s": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "ah_1w": {
+      "ias": 460.0,
+      "mach": 0.8
+    },
+    "ah_1z": {
+      "ias": 460.0,
+      "mach": 0.8
+    },
+    "ah_2_rooivalk": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_56a": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "ah_60_iaf": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_64a": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_64a_iaf": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_64d": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_64d_i_saraph": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_64d_japan": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_64d_netherlands": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_64e": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ah_6m": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "ah_mk1": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ahs": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "aichi_e13a": {
+      "ias": 450.0,
+      "mach": 0.83
+    },
+    "alpha_jet_a": {
+      "ias": 1127.0,
+      "mach": 1.05
+    },
+    "alpha_jet_e": {
+      "ias": 1127.0,
+      "mach": 1.05
+    },
+    "alpha_jet_th_phase_1": {
+      "ias": 1127.0,
+      "mach": 1.05
+    },
+    "am-1_mauler": {
+      "ias": 805.0,
+      "mach": 0.8
+    },
+    "amx_a_1a_brazil": {
+      "ias": 1180.0,
+      "mach": 1.05
+    },
+    "amx_italy": {
+      "ias": 1180.0,
+      "mach": 1.05
+    },
+    "ar_2": {
+      "ias": 650.0,
+      "mach": 0.75
+    },
+    "arado-196a-3": {
+      "ias": 570.0,
+      "mach": 0.6
+    },
+    "arado-234": {
+      "ias": 1000.0,
+      "mach": 0.82
+    },
+    "arado-234_hockey": {
+      "ias": 1000.0,
+      "mach": 0.82
+    },
+    "arado-234c-3": {
+      "ias": 1000.0,
+      "mach": 0.82
+    },
+    "ariete": {
+      "ias": 1125.0,
+      "mach": 1.21
+    },
+    "attaker_fb1": {
+      "ias": 985.0,
+      "mach": 0.84
+    },
+    "av_8a": {
+      "ias": 1463.0,
+      "mach": 1.25
+    },
+    "av_8b_na": {
+      "ias": 1137.0,
+      "mach": 1.1
+    },
+    "av_8b_plus": {
+      "ias": 1137.0,
+      "mach": 1.1
+    },
+    "av_8c": {
+      "ias": 1463.0,
+      "mach": 1.25
+    },
+    "av_8s": {
+      "ias": 1463.0,
+      "mach": 1.25
+    },
+    "avenger_mk1": {
+      "ias": 612.0,
+      "mach": 0.63
+    },
+    "b-17e": {
+      "ias": 516.0,
+      "mach": 0.63
+    },
+    "b-17e_late": {
+      "ias": 516.0,
+      "mach": 0.63
+    },
+    "b-17g": {
+      "ias": 516.0,
+      "mach": 0.63
+    },
+    "b-29": {
+      "ias": 507.0,
+      "mach": 0.64
+    },
+    "b-57": {
+      "ias": 990.0,
+      "mach": 0.85
+    },
+    "b-57b": {
+      "ias": 990.0,
+      "mach": 0.85
+    },
+    "b5n2": {
+      "ias": 555.0,
+      "mach": 0.5
+    },
+    "b6n1": {
+      "ias": 650.0,
+      "mach": 0.7
+    },
+    "b6n2": {
+      "ias": 650.0,
+      "mach": 0.7
+    },
+    "b6n2a": {
+      "ias": 650.0,
+      "mach": 0.7
+    },
+    "b7a2": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "b7a2_homare_23": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "b_10b": {
+      "ias": 564.0,
+      "mach": 0.65
+    },
+    "b_18a": {
+      "ias": 580.0,
+      "mach": 0.65
+    },
+    "b_239_finland": {
+      "ias": 761.0,
+      "mach": 0.75
+    },
+    "b_24d": {
+      "ias": 600.0,
+      "mach": 0.62
+    },
+    "b_25j_20": {
+      "ias": 591.0,
+      "mach": 0.65
+    },
+    "b_26b_c": {
+      "ias": 596.5,
+      "mach": 0.75
+    },
+    "b_34": {
+      "ias": 633.0,
+      "mach": 0.66
+    },
+    "b_48_firecrest": {
+      "ias": 750.0,
+      "mach": 0.76
+    },
+    "b_52h": {
+      "ias": 910.0,
+      "mach": 0.95
+    },
+    "b_66b": {
+      "ias": 1098.0,
+      "mach": 0.99
+    },
+    "ba_65_a80": {
+      "ias": 590.0,
+      "mach": 0.65
+    },
+    "ba_65_k14_l": {
+      "ias": 590.0,
+      "mach": 0.65
+    },
+    "bb-1": {
+      "ias": 541.0,
+      "mach": 0.8
+    },
+    "be_6": {
+      "ias": 500.0,
+      "mach": 0.65
+    },
+    "beaufighter_mk1_40mm": {
+      "ias": 676.0,
+      "mach": 0.75
+    },
+    "beaufighter_mk21": {
+      "ias": 676.0,
+      "mach": 0.75
+    },
+    "beaufighter_mk6c": {
+      "ias": 676.0,
+      "mach": 0.75
+    },
+    "beaufighter_mkx": {
+      "ias": 676.0,
+      "mach": 0.75
+    },
+    "beaufort_mkviii": {
+      "ias": 523.0,
+      "mach": 0.62
+    },
+    "bf-109a_1": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109b_2": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109c_1": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109e-1": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109e-4": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109f-1": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109f-4": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109f-4_trop": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109g-10": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109g-14": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109g-14as": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109g-2": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109g-2_romania": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109g-6": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109k-4": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-109z": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bf-110c-4": {
+      "ias": 715.0,
+      "mach": 0.72
+    },
+    "bf-110c-6": {
+      "ias": 715.0,
+      "mach": 0.85
+    },
+    "bf-110c-7": {
+      "ias": 715.0,
+      "mach": 0.85
+    },
+    "bf-110f-2": {
+      "ias": 745.0,
+      "mach": 0.85
+    },
+    "bf-110g-2": {
+      "ias": 745.0,
+      "mach": 0.85
+    },
+    "bf-110g-4": {
+      "ias": 745.0,
+      "mach": 0.85
+    },
+    "bf2c_1": {
+      "ias": 600.0,
+      "mach": 0.7
+    },
+    "bf_109t_2": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "bi": {
+      "ias": 920.0,
+      "mach": 0.81
+    },
+    "blenheim_mkiv": {
+      "ias": 482.0,
+      "mach": 0.62
+    },
+    "bo_105cb2": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "bo_105pah1": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "bo_105pah1_a1": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "boomerang_mki": {
+      "ias": 693.0,
+      "mach": 0.77
+    },
+    "boomerang_mkii": {
+      "ias": 693.0,
+      "mach": 0.77
+    },
+    "boston_mk_1": {
+      "ias": 665.0,
+      "mach": 0.703
+    },
+    "br_20_dr": {
+      "ias": 675.0,
+      "mach": 0.73
+    },
+    "br_693_ab2": {
+      "ias": 591.0,
+      "mach": 0.65
+    },
+    "breda_88": {
+      "ias": 712.5,
+      "mach": 0.73
+    },
+    "brigand_b1": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "btd-1": {
+      "ias": 885.0,
+      "mach": 0.78
+    },
+    "buccaneer_s1": {
+      "ias": 1181.0,
+      "mach": 1.0
+    },
+    "buccaneer_s2": {
+      "ias": 1181.0,
+      "mach": 1.0
+    },
+    "buccaneer_s2b": {
+      "ias": 1181.0,
+      "mach": 1.0
+    },
+    "bv-138c-1": {
+      "ias": 405.0,
+      "mach": 0.75
+    },
+    "bv-155b-1": {
+      "ias": 730.0,
+      "mach": 0.82
+    },
+    "bv-238": {
+      "ias": 546.0,
+      "mach": 0.65
+    },
+    "c-47": {
+      "ias": 700.0,
+      "mach": 0.73
+    },
+    "c_3604": {
+      "ias": 682.0,
+      "mach": 0.6065
+    },
+    "canberra_bimk6": {
+      "ias": 990.0,
+      "mach": 0.82
+    },
+    "canberra_bmk2": {
+      "ias": 990.0,
+      "mach": 0.82
+    },
+    "caudron_cr714": {
+      "ias": 735.0,
+      "mach": 0.78
+    },
+    "corsair_fmk2": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "cr_32": {
+      "ias": 590.0,
+      "mach": 0.7
+    },
+    "cr_32_bis": {
+      "ias": 590.0,
+      "mach": 0.7
+    },
+    "cr_32_quater": {
+      "ias": 590.0,
+      "mach": 0.7
+    },
+    "cw_21": {
+      "ias": 735.0,
+      "mach": 0.78
+    },
+    "d3a1": {
+      "ias": 600.0,
+      "mach": 0.65
+    },
+    "d4y1": {
+      "ias": 750.0,
+      "mach": 0.75
+    },
+    "d4y2": {
+      "ias": 750.0,
+      "mach": 0.75
+    },
+    "d4y3": {
+      "ias": 750.0,
+      "mach": 0.75
+    },
+    "d_371": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "d_371_hs9": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "d_373": {
+      "ias": 630.0,
+      "mach": 0.75
+    },
+    "d_500": {
+      "ias": 576.0,
+      "mach": 0.67
+    },
+    "d_501": {
+      "ias": 576.0,
+      "mach": 0.67
+    },
+    "d_510": {
+      "ias": 576.0,
+      "mach": 0.67
+    },
+    "d_520": {
+      "ias": 800.0,
+      "mach": 0.82
+    },
+    "d_520_france": {
+      "ias": 800.0,
+      "mach": 0.82
+    },
+    "d_521": {
+      "ias": 800.0,
+      "mach": 0.75
+    },
+    "db_3a": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "db_3a_china": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "db_3b": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "db_7": {
+      "ias": 665.0,
+      "mach": 0.703
+    },
+    "db_lk": {
+      "ias": 580.0,
+      "mach": 0.65
+    },
+    "dh_110": {
+      "ias": 1185.0,
+      "mach": 1.1
+    },
+    "do_17e_1": {
+      "ias": 640.0,
+      "mach": 0.7
+    },
+    "do_17z_2": {
+      "ias": 620.0,
+      "mach": 0.7
+    },
+    "do_17z_7": {
+      "ias": 620.0,
+      "mach": 0.7
+    },
+    "do_217e_2": {
+      "ias": 700.0,
+      "mach": 0.65
+    },
+    "do_217e_4": {
+      "ias": 700.0,
+      "mach": 0.65
+    },
+    "do_217j_1": {
+      "ias": 700.0,
+      "mach": 0.65
+    },
+    "do_217j_2": {
+      "ias": 700.0,
+      "mach": 0.65
+    },
+    "do_217k_1": {
+      "ias": 700.0,
+      "mach": 0.65
+    },
+    "do_217m_1": {
+      "ias": 700.0,
+      "mach": 0.65
+    },
+    "do_217n_1": {
+      "ias": 700.0,
+      "mach": 0.65
+    },
+    "do_217n_2": {
+      "ias": 700.0,
+      "mach": 0.65
+    },
+    "do_335a_0": {
+      "ias": 945.0,
+      "mach": 0.85
+    },
+    "do_335a_1": {
+      "ias": 945.0,
+      "mach": 0.85
+    },
+    "do_335b_2": {
+      "ias": 945.0,
+      "mach": 0.85
+    },
+    "douglas_a_1h": {
+      "ias": 797.0,
+      "mach": 0.78
+    },
+    "douglas_ad_2": {
+      "ias": 797.0,
+      "mach": 0.77
+    },
+    "douglas_ad_4": {
+      "ias": 797.0,
+      "mach": 0.77
+    },
+    "douglas_ad_4_france": {
+      "ias": 797.0,
+      "mach": 0.77
+    },
+    "douglas_ad_4na_france": {
+      "ias": 797.0,
+      "mach": 0.77
+    },
+    "dummy_plane": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "e7k2": {
+      "ias": 400.0,
+      "mach": 0.6
+    },
+    "e8n2": {
+      "ias": 500.0,
+      "mach": 0.63
+    },
+    "ef_2000_aesa": {
+      "ias": 1607.0,
+      "mach": 2.46
+    },
+    "ef_2000_block_10": {
+      "ias": 1607.0,
+      "mach": 2.46
+    },
+    "ef_2000_typhoon_aesa": {
+      "ias": 1607.0,
+      "mach": 2.46
+    },
+    "ef_2000a_aesa": {
+      "ias": 1607.0,
+      "mach": 2.46
+    },
+    "er-2_ach30b_early": {
+      "ias": 551.0,
+      "mach": 0.67
+    },
+    "er-2_m105_mv3": {
+      "ias": 556.0,
+      "mach": 0.68
+    },
+    "er-2_m105_tat": {
+      "ias": 556.0,
+      "mach": 0.68
+    },
+    "er-2_m105r_lu2b": {
+      "ias": 556.0,
+      "mach": 0.68
+    },
+    "er-2_m105r_tat": {
+      "ias": 556.0,
+      "mach": 0.68
+    },
+    "etendard_4m": {
+      "ias": 1263.0,
+      "mach": 1.35
+    },
+    "f-100a_china": {
+      "ias": 1361.0,
+      "mach": 1.65
+    },
+    "f-4c": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4e": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4e_iaf": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4ej": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4ej_kai": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4f": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4f_kws_lv": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4j": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4jk": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4k": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4m_fgr2": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-4s": {
+      "ias": 1458.0,
+      "mach": 2.45
+    },
+    "f-5e_switzerland": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f-80": {
+      "ias": 990.0,
+      "mach": 0.9
+    },
+    "f-80a": {
+      "ias": 990.0,
+      "mach": 0.85
+    },
+    "f-82e": {
+      "ias": 854.0,
+      "mach": 0.82
+    },
+    "f-84b": {
+      "ias": 1044.75,
+      "mach": 0.87
+    },
+    "f-84f": {
+      "ias": 1187.0,
+      "mach": 1.23
+    },
+    "f-84g": {
+      "ias": 1044.75,
+      "mach": 0.87
+    },
+    "f-84g_france": {
+      "ias": 1044.75,
+      "mach": 0.87
+    },
+    "f-86_canadair_german": {
+      "ias": 1170.0,
+      "mach": 1.2
+    },
+    "f-86_cl_13b_mk6": {
+      "ias": 1170.0,
+      "mach": 1.2
+    },
+    "f-86a-5": {
+      "ias": 1118.0,
+      "mach": 1.1
+    },
+    "f-86e": {
+      "ias": 1118.0,
+      "mach": 1.1
+    },
+    "f-86f-2": {
+      "ias": 1170.0,
+      "mach": 1.2
+    },
+    "f-86f-25": {
+      "ias": 1170.0,
+      "mach": 1.2
+    },
+    "f-86f-40_japan": {
+      "ias": 1170.0,
+      "mach": 1.2
+    },
+    "f-86k": {
+      "ias": 1187.0,
+      "mach": 1.25
+    },
+    "f-89b": {
+      "ias": 920.0,
+      "mach": 1.0
+    },
+    "f-89d": {
+      "ias": 920.0,
+      "mach": 1.0
+    },
+    "f-8e": {
+      "ias": 1555.0,
+      "mach": 2.1
+    },
+    "f-8e_fn": {
+      "ias": 1555.0,
+      "mach": 2.1
+    },
+    "f1": {
+      "ias": 1365.0,
+      "mach": 1.85
+    },
+    "f11f_1_late": {
+      "ias": 1458.0,
+      "mach": 1.6
+    },
+    "f13t_2s": {
+      "ias": 1000.0,
+      "mach": 1.0
+    },
+    "f1m2": {
+      "ias": 550.0,
+      "mach": 0.45
+    },
+    "f2a-1": {
+      "ias": 761.0,
+      "mach": 0.8
+    },
+    "f2a-3": {
+      "ias": 761.0,
+      "mach": 0.8
+    },
+    "f2g-1": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f2h-2": {
+      "ias": 994.0,
+      "mach": 0.91
+    },
+    "f3d_1": {
+      "ias": 932.0,
+      "mach": 0.91
+    },
+    "f3f-2": {
+      "ias": 810.0,
+      "mach": 0.75
+    },
+    "f3h-2": {
+      "ias": 1360.0,
+      "mach": 1.65
+    },
+    "f4d-1": {
+      "ias": 1283.0,
+      "mach": 1.55
+    },
+    "f4f-3": {
+      "ias": 826.0,
+      "mach": 0.75
+    },
+    "f4f-4": {
+      "ias": 826.0,
+      "mach": 0.75
+    },
+    "f4f-4_martlet_mk4": {
+      "ias": 826.0,
+      "mach": 0.7
+    },
+    "f4u-1a": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f4u-1a_usmc": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f4u-1c": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f4u-1d": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f4u-4": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f4u-4b": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f4u-6_au-1": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f4u-7": {
+      "ias": 885.0,
+      "mach": 0.82
+    },
+    "f6f-3": {
+      "ias": 839.0,
+      "mach": 0.85
+    },
+    "f6f-5": {
+      "ias": 803.0,
+      "mach": 0.81
+    },
+    "f6f-5_france": {
+      "ias": 803.0,
+      "mach": 0.81
+    },
+    "f6f-5n": {
+      "ias": 803.0,
+      "mach": 0.81
+    },
+    "f6f-5n_france": {
+      "ias": 803.0,
+      "mach": 0.81
+    },
+    "f7f1": {
+      "ias": 835.14,
+      "mach": 0.82
+    },
+    "f7f3": {
+      "ias": 835.14,
+      "mach": 0.82
+    },
+    "f8f1": {
+      "ias": 827.0,
+      "mach": 0.85
+    },
+    "f8f1b": {
+      "ias": 827.0,
+      "mach": 0.85
+    },
+    "f8f1b_france": {
+      "ias": 827.0,
+      "mach": 0.85
+    },
+    "f8u-2": {
+      "ias": 1555.0,
+      "mach": 2.1
+    },
+    "f9f-2": {
+      "ias": 1000.0,
+      "mach": 0.94
+    },
+    "f9f-5": {
+      "ias": 1000.0,
+      "mach": 0.94
+    },
+    "f9f-8": {
+      "ias": 1127.0,
+      "mach": 1.1
+    },
+    "f_100d": {
+      "ias": 1361.0,
+      "mach": 1.65
+    },
+    "f_100f": {
+      "ias": 1361.0,
+      "mach": 1.65
+    },
+    "f_101c": {
+      "ias": 1540.0,
+      "mach": 1.8
+    },
+    "f_104a": {
+      "ias": 1555.0,
+      "mach": 2.3
+    },
+    "f_104c": {
+      "ias": 1555.0,
+      "mach": 2.3
+    },
+    "f_104g": {
+      "ias": 1555.0,
+      "mach": 2.3
+    },
+    "f_104g_italy": {
+      "ias": 1555.0,
+      "mach": 2.3
+    },
+    "f_104j": {
+      "ias": 1555.0,
+      "mach": 2.3
+    },
+    "f_104s": {
+      "ias": 1555.0,
+      "mach": 2.3
+    },
+    "f_104s_asa": {
+      "ias": 1555.0,
+      "mach": 2.3
+    },
+    "f_104s_cb": {
+      "ias": 1555.0,
+      "mach": 2.3
+    },
+    "f_105d": {
+      "ias": 1575.0,
+      "mach": 2.3
+    },
+    "f_106a_1972": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "f_111a": {
+      "ias": 1467.0,
+      "mach": null
+    },
+    "f_111c": {
+      "ias": 1467.0,
+      "mach": null
+    },
+    "f_111f": {
+      "ias": 1467.0,
+      "mach": null
+    },
+    "f_117": {
+      "ias": 1021.0,
+      "mach": 0.96
+    },
+    "f_14a_early": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "f_14a_iriaf": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "f_14b": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "f_14d": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "f_15a": {
+      "ias": 1629.0,
+      "mach": 2.4
+    },
+    "f_15c_baz_msip": {
+      "ias": 1629.0,
+      "mach": 2.4
+    },
+    "f_15c_golden_eagle": {
+      "ias": 1629.0,
+      "mach": 2.4
+    },
+    "f_15c_msip2": {
+      "ias": 1629.0,
+      "mach": 2.4
+    },
+    "f_15e": {
+      "ias": 1629.0,
+      "mach": 2.55
+    },
+    "f_15i_raam": {
+      "ias": 1629.0,
+      "mach": 2.55
+    },
+    "f_15j": {
+      "ias": 1629.0,
+      "mach": 2.4
+    },
+    "f_15j_kai": {
+      "ias": 1629.0,
+      "mach": 2.4
+    },
+    "f_16a_block_10": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_10_mod": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_10_norway": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_15_adf": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_15_adf_italy": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_15_belgium": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_15_ocu_belgium": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_15_ocu_thailand": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_20_mlu": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_5_netherlands": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16a_block_72v_china": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16aj": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16am_block_15_mlu_belgium": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16c_block_40_barak_2": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16c_block_50": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16c_block_52_aesa": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16d_block_40_barak_2": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_16i_sufa": {
+      "ias": 1555.0,
+      "mach": 2.2
+    },
+    "f_2000a": {
+      "ias": 1607.0,
+      "mach": 2.46
+    },
+    "f_20a": {
+      "ias": 1527.0,
+      "mach": 2.0
+    },
+    "f_222_2": {
+      "ias": 450.0,
+      "mach": 0.75
+    },
+    "f_2a": {
+      "ias": 1555.0,
+      "mach": 2.1
+    },
+    "f_2a_adtw": {
+      "ias": 1555.0,
+      "mach": 2.1
+    },
+    "f_47n_25_re_china": {
+      "ias": 950.0,
+      "mach": 0.95
+    },
+    "f_5a": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_5ag": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_5c_turkey": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_5e": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_5e_aidc": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_5e_fcu_thailand": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_5t_thailand": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_5th_thailand": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "f_6c_pakistan": {
+      "ias": 1260.0,
+      "mach": 1.68
+    },
+    "fa_18a": {
+      "ias": 1477.0,
+      "mach": 2.1
+    },
+    "fa_18a_hug_2_raaf": {
+      "ias": 1477.0,
+      "mach": 2.1
+    },
+    "fa_18c_early": {
+      "ias": 1477.0,
+      "mach": 2.1
+    },
+    "fa_18c_finland": {
+      "ias": 1477.0,
+      "mach": 2.1
+    },
+    "fa_18c_late": {
+      "ias": 1477.0,
+      "mach": 2.1
+    },
+    "fa_18c_late_switzerland": {
+      "ias": 1477.0,
+      "mach": 2.1
+    },
+    "fa_18c_mlu_2_finland": {
+      "ias": 1477.0,
+      "mach": 2.1
+    },
+    "fa_18d_late_malaysia": {
+      "ias": 1477.0,
+      "mach": 2.1
+    },
+    "fa_18e_block_2": {
+      "ias": 1497.0,
+      "mach": 2.1
+    },
+    "fa_18f_block_2_raaf": {
+      "ias": 1497.0,
+      "mach": 2.1
+    },
+    "fairey_3f_mk3b": {
+      "ias": 400.0,
+      "mach": 0.6
+    },
+    "fau-1": {
+      "ias": 800.0,
+      "mach": 1.1
+    },
+    "fc_20_bis": {
+      "ias": 720.0,
+      "mach": 0.78
+    },
+    "ffa_p16": {
+      "ias": 1212.0,
+      "mach": 1.0
+    },
+    "ffvs_j22_a": {
+      "ias": 670.0,
+      "mach": 0.77
+    },
+    "ffvs_j22_b": {
+      "ias": 670.0,
+      "mach": 0.77
+    },
+    "fiat_cr42": {
+      "ias": 578.0,
+      "mach": 0.7
+    },
+    "fiat_cr42_j11": {
+      "ias": 578.0,
+      "mach": 0.7
+    },
+    "fiat_g50_seria2": {
+      "ias": 870.0,
+      "mach": 0.81
+    },
+    "fiat_g50_seria7as": {
+      "ias": 870.0,
+      "mach": 0.81
+    },
+    "fiat_g91_ps": {
+      "ias": 1011.0,
+      "mach": 0.97
+    },
+    "fiat_g91_r1": {
+      "ias": 1128.0,
+      "mach": 0.97
+    },
+    "fiat_g91_r3": {
+      "ias": 1128.0,
+      "mach": 0.97
+    },
+    "fiat_g91_r4": {
+      "ias": 1128.0,
+      "mach": 0.97
+    },
+    "fiat_g91_y": {
+      "ias": 1128.0,
+      "mach": 1.0
+    },
+    "fiat_g91_ys": {
+      "ias": 1128.0,
+      "mach": 1.0
+    },
+    "firebrand_tf4": {
+      "ias": 750.0,
+      "mach": 0.76
+    },
+    "firefly_mk1": {
+      "ias": 720.0,
+      "mach": 0.8
+    },
+    "firefly_mk5": {
+      "ias": 720.0,
+      "mach": 0.8
+    },
+    "fj_4b": {
+      "ias": 1166.0,
+      "mach": 1.4
+    },
+    "fokker_d21_mod20": {
+      "ias": 735.0,
+      "mach": 0.78
+    },
+    "fokker_d21_netherlands": {
+      "ias": 735.0,
+      "mach": 0.78
+    },
+    "fokker_d21_serie3_finland": {
+      "ias": 735.0,
+      "mach": 0.78
+    },
+    "fokker_d23": {
+      "ias": 645.0,
+      "mach": 0.85
+    },
+    "fokker_d7": {
+      "ias": 500.0,
+      "mach": 0.7
+    },
+    "fokker_g1a": {
+      "ias": 610.0,
+      "mach": 0.65
+    },
+    "fr_1_fireball": {
+      "ias": 778.0,
+      "mach": 0.8
+    },
+    "fury_mk1": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "fury_mk2": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "fw-190a-1": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190a-4": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190a-5": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190a-5_cannons": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190a-5_u14": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190a-5_u2": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190a-8": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190a-8_france": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190c": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190d-12": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190d-13": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190d-9": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw-190f-8": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "fw_189a_1": {
+      "ias": 525.0,
+      "mach": 0.65
+    },
+    "fw_189c_0": {
+      "ias": 525.0,
+      "mach": 0.65
+    },
+    "fw_200c_1": {
+      "ias": 450.0,
+      "mach": 0.7
+    },
+    "g4m1": {
+      "ias": 540.0,
+      "mach": 0.8
+    },
+    "g5n1": {
+      "ias": 520.0,
+      "mach": 0.65
+    },
+    "g8n1": {
+      "ias": 680.0,
+      "mach": 0.645
+    },
+    "g_55_serie1": {
+      "ias": 840.0,
+      "mach": 0.82
+    },
+    "g_55_serie1_ss0": {
+      "ias": 840.0,
+      "mach": 0.82
+    },
+    "g_55s": {
+      "ias": 840.0,
+      "mach": 0.82
+    },
+    "g_56": {
+      "ias": 840.0,
+      "mach": 0.82
+    },
+    "g_lynx": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "gl_832": {
+      "ias": 450.0,
+      "mach": 0.83
+    },
+    "gladiator_j8a": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "gladiator_mk1_belgium": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "gladiator_mk1_china": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "gladiator_mk2": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "gladiator_mk2_navy": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "gladiator_mk2_tuck": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "go229_v3": {
+      "ias": 980.0,
+      "mach": 0.92
+    },
+    "h6k4": {
+      "ias": 437.0,
+      "mach": 0.7
+    },
+    "h8k2": {
+      "ias": 560.0,
+      "mach": 0.7
+    },
+    "h8k3": {
+      "ias": 560.0,
+      "mach": 0.7
+    },
+    "h_34": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "h_34_france": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "h_75a_1_france": {
+      "ias": 681.0,
+      "mach": 0.78
+    },
+    "h_75a_2_finland": {
+      "ias": 770.0,
+      "mach": 0.78
+    },
+    "h_75a_4_france": {
+      "ias": 770.0,
+      "mach": 0.78
+    },
+    "h_75m_china": {
+      "ias": 710.0,
+      "mach": 0.68
+    },
+    "halifax_mk3": {
+      "ias": 541.0,
+      "mach": 0.7
+    },
+    "harrier_frs1": {
+      "ias": 1463.0,
+      "mach": 1.25
+    },
+    "harrier_gr1": {
+      "ias": 1463.0,
+      "mach": 1.25
+    },
+    "harrier_gr3": {
+      "ias": 1463.0,
+      "mach": 1.25
+    },
+    "harrier_gr7": {
+      "ias": 1137.0,
+      "mach": 1.1
+    },
+    "harrier_t10": {
+      "ias": 1137.0,
+      "mach": 1.1
+    },
+    "hawk_200": {
+      "ias": 1115.0,
+      "mach": 1.26
+    },
+    "hawk_200_rda": {
+      "ias": 1115.0,
+      "mach": 1.26
+    },
+    "hawk_209_indonesia": {
+      "ias": 1115.0,
+      "mach": 1.26
+    },
+    "hawk_iii": {
+      "ias": 600.0,
+      "mach": 0.7
+    },
+    "he-111h-16_winter": {
+      "ias": 480.0,
+      "mach": 0.6
+    },
+    "he-111h-2": {
+      "ias": 480.0,
+      "mach": 0.6
+    },
+    "he-111h-6": {
+      "ias": 480.0,
+      "mach": 0.6
+    },
+    "he-162a-2": {
+      "ias": 1040.0,
+      "mach": 0.9
+    },
+    "he-177a-5": {
+      "ias": 682.5,
+      "mach": 0.7
+    },
+    "he51a1": {
+      "ias": 500.0,
+      "mach": 0.7
+    },
+    "he51b1": {
+      "ias": 550.0,
+      "mach": 0.7
+    },
+    "he51b_2w": {
+      "ias": 500.0,
+      "mach": 0.7
+    },
+    "he51c1": {
+      "ias": 550.0,
+      "mach": 0.7
+    },
+    "he51c1_late": {
+      "ias": 550.0,
+      "mach": 0.7
+    },
+    "he_100d_1": {
+      "ias": 820.0,
+      "mach": 0.8
+    },
+    "he_112a_0": {
+      "ias": 680.0,
+      "mach": 0.7
+    },
+    "he_112b_0": {
+      "ias": 730.0,
+      "mach": 0.8
+    },
+    "he_112b_1": {
+      "ias": 730.0,
+      "mach": 0.8
+    },
+    "he_112b_2": {
+      "ias": 730.0,
+      "mach": 0.8
+    },
+    "he_112v_5": {
+      "ias": 680.0,
+      "mach": 0.7
+    },
+    "he_115a_2_sweden": {
+      "ias": 480.0,
+      "mach": 0.6
+    },
+    "he_115c_1": {
+      "ias": 480.0,
+      "mach": 0.6
+    },
+    "he_219a_7": {
+      "ias": 787.0,
+      "mach": 0.75
+    },
+    "hkp2": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "hkp3c": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "hkp9a_cb2": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "hkp9a_cb3_fc": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "hornet_mk1": {
+      "ias": 826.0,
+      "mach": 0.8
+    },
+    "hornet_mk3": {
+      "ias": 826.0,
+      "mach": 0.8
+    },
+    "hp52_hampden": {
+      "ias": 550.0,
+      "mach": 0.65
+    },
+    "hp52_hampden_mk1_late": {
+      "ias": 506.0,
+      "mach": 0.75
+    },
+    "hp52_hampden_tbmk1": {
+      "ias": 506.0,
+      "mach": 0.75
+    },
+    "hp52_hampden_tbmk1_ussr_utk1": {
+      "ias": 506.0,
+      "mach": 0.75
+    },
+    "hp_12": {
+      "ias": 640.0,
+      "mach": 0.7
+    },
+    "hs-129b-2": {
+      "ias": 630.0,
+      "mach": 0.69
+    },
+    "hs-129b-3": {
+      "ias": 630.0,
+      "mach": 0.69
+    },
+    "hs_123a_1": {
+      "ias": 577.0,
+      "mach": 0.7
+    },
+    "hudson_mk_v": {
+      "ias": 564.0,
+      "mach": 0.65
+    },
+    "hunter_f1": {
+      "ias": 1193.0,
+      "mach": 1.6
+    },
+    "hunter_f4_mk50": {
+      "ias": 1193.0,
+      "mach": 1.6
+    },
+    "hunter_f58a": {
+      "ias": 1225.0,
+      "mach": 1.6
+    },
+    "hunter_f6": {
+      "ias": 1193.0,
+      "mach": 1.6
+    },
+    "hunter_f6_holland": {
+      "ias": 1193.0,
+      "mach": 1.6
+    },
+    "hunter_f9": {
+      "ias": 1225.0,
+      "mach": 1.6
+    },
+    "hurricane_mk1": {
+      "ias": 660.0,
+      "mach": 0.79
+    },
+    "hurricane_mk1b": {
+      "ias": 660.0,
+      "mach": 0.79
+    },
+    "hurricane_mk1c": {
+      "ias": 660.0,
+      "mach": 0.79
+    },
+    "hurricane_mk4": {
+      "ias": 660.0,
+      "mach": 0.79
+    },
+    "hurricanemkii": {
+      "ias": 660.0,
+      "mach": 0.79
+    },
+    "hurricanemkii_ussr": {
+      "ias": 660.0,
+      "mach": 0.79
+    },
+    "i-153_m62": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
+    "i-153p": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
+    "i-15_1934": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "i-15_1935": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "i-15_1935_moscow": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "i-15bis": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
+    "i-15bis_krasnolutsky": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
+    "i-16_chung_28": {
+      "ias": 660.0,
+      "mach": 0.75
+    },
+    "i-16_type10": {
+      "ias": 700.0,
+      "mach": 0.75
+    },
+    "i-16_type17": {
+      "ias": 700.0,
+      "mach": 0.75
+    },
+    "i-16_type18": {
+      "ias": 700.0,
+      "mach": 0.75
+    },
+    "i-16_type24": {
+      "ias": 700.0,
+      "mach": 0.75
+    },
+    "i-16_type27": {
+      "ias": 700.0,
+      "mach": 0.75
+    },
+    "i-16_type28": {
+      "ias": 700.0,
+      "mach": 0.75
+    },
+    "i-16_type5": {
+      "ias": 700.0,
+      "mach": 0.75
+    },
+    "i-225": {
+      "ias": 820.0,
+      "mach": 0.82
+    },
+    "i_180": {
+      "ias": 670.0,
+      "mach": 0.8
+    },
+    "i_180_event01": {
+      "ias": 670.0,
+      "mach": 0.8
+    },
+    "i_180_event02": {
+      "ias": 670.0,
+      "mach": 0.8
+    },
+    "i_180_event04": {
+      "ias": 670.0,
+      "mach": 0.8
+    },
+    "i_185_m71_standard": {
+      "ias": 800.0,
+      "mach": 0.81
+    },
+    "i_185_m82": {
+      "ias": 800.0,
+      "mach": 0.81
+    },
+    "i_29": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "ia_58a_pucara": {
+      "ias": 788.0,
+      "mach": 0.62
+    },
+    "iar-81c": {
+      "ias": 680.0,
+      "mach": 0.72
+    },
+    "iar_316b": {
+      "ias": 310.0,
+      "mach": 0.6
+    },
+    "iar_93b": {
+      "ias": 1186.0,
+      "mach": 1.09
+    },
+    "il-10": {
+      "ias": 720.0,
+      "mach": 0.7
+    },
+    "il-10_1946": {
+      "ias": 720.0,
+      "mach": 0.7
+    },
+    "il-2i": {
+      "ias": 620.0,
+      "mach": 0.6065
+    },
+    "il-2m": {
+      "ias": 620.0,
+      "mach": 0.6065
+    },
+    "il-2m_mstitel": {
+      "ias": 620.0,
+      "mach": 0.6065
+    },
+    "il-4": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "il_28": {
+      "ias": 850.0,
+      "mach": 0.82
+    },
+    "il_28sh": {
+      "ias": 850.0,
+      "mach": 0.82
+    },
+    "il_2_1941": {
+      "ias": 620.0,
+      "mach": 0.6065
+    },
+    "il_2_37_1943": {
+      "ias": 620.0,
+      "mach": 0.6065
+    },
+    "il_2_m82": {
+      "ias": 620.0,
+      "mach": 0.6065
+    },
+    "il_2m_1943": {
+      "ias": 620.0,
+      "mach": 0.6065
+    },
+    "il_8": {
+      "ias": 620.0,
+      "mach": 0.6065
+    },
+    "intruder_mk_1": {
+      "ias": 665.0,
+      "mach": 0.703
+    },
+    "itp-m1": {
+      "ias": 800.0,
+      "mach": 0.8
+    },
+    "j1n1_mod11_early": {
+      "ias": 712.5,
+      "mach": 0.73
+    },
+    "j2m2": {
+      "ias": 820.0,
+      "mach": 0.81
+    },
+    "j2m3": {
+      "ias": 820.0,
+      "mach": 0.81
+    },
+    "j2m4": {
+      "ias": 820.0,
+      "mach": 0.81
+    },
+    "j2m4_kai": {
+      "ias": 820.0,
+      "mach": 0.81
+    },
+    "j2m5": {
+      "ias": 820.0,
+      "mach": 0.81
+    },
+    "j2m5_30mm": {
+      "ias": 820.0,
+      "mach": 0.81
+    },
+    "j5n1": {
+      "ias": 810.0,
+      "mach": 0.73
+    },
+    "j6b": {
+      "ias": 560.0,
+      "mach": 0.6
+    },
+    "j6k1": {
+      "ias": 780.0,
+      "mach": 0.85
+    },
+    "j7w1": {
+      "ias": 900.0,
+      "mach": 0.8
+    },
+    "j8m1": {
+      "ias": 1040.0,
+      "mach": 1.05
+    },
+    "j9_early": {
+      "ias": 770.0,
+      "mach": 0.78
+    },
+    "j_10a": {
+      "ias": 1543.0,
+      "mach": 2.1
+    },
+    "j_10c": {
+      "ias": 1543.0,
+      "mach": 2.1
+    },
+    "j_11": {
+      "ias": 1540.0,
+      "mach": 2.35
+    },
+    "j_11a": {
+      "ias": 1540.0,
+      "mach": 2.35
+    },
+    "j_11b": {
+      "ias": 1540.0,
+      "mach": 2.35
+    },
+    "j_15t": {
+      "ias": 1540.0,
+      "mach": 2.4
+    },
+    "j_7_mk2": {
+      "ias": 1365.0,
+      "mach": 2.2
+    },
+    "j_7d": {
+      "ias": 1365.0,
+      "mach": 2.205
+    },
+    "j_7e": {
+      "ias": 1365.0,
+      "mach": 2.2
+    },
+    "j_8b": {
+      "ias": 1365.0,
+      "mach": 2.2
+    },
+    "j_8f": {
+      "ias": 1365.0,
+      "mach": 2.2
+    },
+    "jaguar_a": {
+      "ias": 1273.0,
+      "mach": 1.5
+    },
+    "jaguar_e": {
+      "ias": 1273.0,
+      "mach": 1.5
+    },
+    "jaguar_gr1": {
+      "ias": 1273.0,
+      "mach": 1.5
+    },
+    "jaguar_gr1a": {
+      "ias": 1273.0,
+      "mach": 1.5
+    },
+    "jaguar_is": {
+      "ias": 1273.0,
+      "mach": 1.5
+    },
+    "javelin_fmk9": {
+      "ias": 1041.0,
+      "mach": 1.1
+    },
+    "jf_17": {
+      "ias": 1430.0,
+      "mach": 1.76
+    },
+    "jh_7": {
+      "ias": 1331.0,
+      "mach": 1.95
+    },
+    "jh_7a": {
+      "ias": 1331.0,
+      "mach": 1.95
+    },
+    "jh_7a2": {
+      "ias": 1331.0,
+      "mach": 1.95
+    },
+    "ju-188a-2": {
+      "ias": 675.0,
+      "mach": 0.75
+    },
+    "ju-288c": {
+      "ias": 675.0,
+      "mach": 0.8
+    },
+    "ju-388j": {
+      "ias": 675.0,
+      "mach": 0.73
+    },
+    "ju-52": {
+      "ias": 530.0,
+      "mach": 0.61
+    },
+    "ju-87b-2": {
+      "ias": 680.0,
+      "mach": 0.65
+    },
+    "ju-87d-3": {
+      "ias": 730.0,
+      "mach": 0.65
+    },
+    "ju-87d-5": {
+      "ias": 730.0,
+      "mach": 0.65
+    },
+    "ju-87g_1": {
+      "ias": 730.0,
+      "mach": 0.65
+    },
+    "ju-87g_2": {
+      "ias": 730.0,
+      "mach": 0.65
+    },
+    "ju-87r-2": {
+      "ias": 680.0,
+      "mach": 0.65
+    },
+    "ju-88a-1": {
+      "ias": 675.0,
+      "mach": 0.68
+    },
+    "ju-88a-4": {
+      "ias": 675.0,
+      "mach": 0.68
+    },
+    "ju-88c-6": {
+      "ias": 675.0,
+      "mach": 0.68
+    },
+    "ka_29": {
+      "ias": 540.0,
+      "mach": 0.79
+    },
+    "ka_50": {
+      "ias": 540.0,
+      "mach": 0.79
+    },
+    "ka_52": {
+      "ias": 540.0,
+      "mach": 0.79
+    },
+    "kfir_c10_colombia": {
+      "ias": 1460.0,
+      "mach": 2.5
+    },
+    "kfir_c2": {
+      "ias": 1460.0,
+      "mach": 2.5
+    },
+    "kfir_c7": {
+      "ias": 1460.0,
+      "mach": 2.5
+    },
+    "kfir_canard": {
+      "ias": 1460.0,
+      "mach": 2.5
+    },
+    "ki-27_otsu": {
+      "ias": 554.0,
+      "mach": 0.55
+    },
+    "ki-45_ko": {
+      "ias": 712.5,
+      "mach": 0.73
+    },
+    "ki-45_tei": {
+      "ias": 712.5,
+      "mach": 0.73
+    },
+    "ki-49_1": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
+    "ki-49_2a": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
+    "ki-49_2b": {
+      "ias": 580.0,
+      "mach": 0.7
+    },
+    "ki-83": {
+      "ias": 870.0,
+      "mach": 0.85
+    },
+    "ki-96": {
+      "ias": 762.0,
+      "mach": 0.79
+    },
+    "ki_100_2": {
+      "ias": 850.0,
+      "mach": 0.75
+    },
+    "ki_100_early": {
+      "ias": 850.0,
+      "mach": 0.75
+    },
+    "ki_102_otsu": {
+      "ias": 762.0,
+      "mach": 0.79
+    },
+    "ki_108": {
+      "ias": 762.0,
+      "mach": 0.79
+    },
+    "ki_109": {
+      "ias": 650.0,
+      "mach": 0.67
+    },
+    "ki_10_1": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "ki_10_2": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "ki_21_1hei": {
+      "ias": 540.0,
+      "mach": 0.58
+    },
+    "ki_21_1ko": {
+      "ias": 540.0,
+      "mach": 0.58
+    },
+    "ki_32": {
+      "ias": 600.0,
+      "mach": 0.7
+    },
+    "ki_43_1": {
+      "ias": 630.0,
+      "mach": 0.65
+    },
+    "ki_43_2": {
+      "ias": 661.0,
+      "mach": 0.65
+    },
+    "ki_43_3_ko": {
+      "ias": 661.0,
+      "mach": 0.65
+    },
+    "ki_43_3_otsu": {
+      "ias": 661.0,
+      "mach": 0.65
+    },
+    "ki_44_1": {
+      "ias": 850.0,
+      "mach": 0.81
+    },
+    "ki_44_2_hei": {
+      "ias": 850.0,
+      "mach": 0.81
+    },
+    "ki_44_2_otsu": {
+      "ias": 850.0,
+      "mach": 0.81
+    },
+    "ki_48_2_otsu": {
+      "ias": 650.0,
+      "mach": 0.67
+    },
+    "ki_61_1a_hei": {
+      "ias": 850.0,
+      "mach": 0.75
+    },
+    "ki_61_1a_ko": {
+      "ias": 850.0,
+      "mach": 0.75
+    },
+    "ki_61_1a_otsu": {
+      "ias": 850.0,
+      "mach": 0.75
+    },
+    "ki_61_1a_tei": {
+      "ias": 850.0,
+      "mach": 0.75
+    },
+    "ki_61_2_early": {
+      "ias": 850.0,
+      "mach": 0.75
+    },
+    "ki_67_1_ko": {
+      "ias": 650.0,
+      "mach": 0.67
+    },
+    "ki_67_1_otsu": {
+      "ias": 650.0,
+      "mach": 0.67
+    },
+    "ki_84_hei": {
+      "ias": 837.0,
+      "mach": 0.82
+    },
+    "ki_84_ko": {
+      "ias": 837.0,
+      "mach": 0.82
+    },
+    "ki_84_otsu": {
+      "ias": 837.0,
+      "mach": 0.82
+    },
+    "ki_87": {
+      "ias": 880.0,
+      "mach": 0.85
+    },
+    "ki_94_2": {
+      "ias": 850.0,
+      "mach": 0.81
+    },
+    "kitsuka": {
+      "ias": 980.0,
+      "mach": 0.88
+    },
+    "kor_1": {
+      "ias": 400.0,
+      "mach": 0.6
+    },
+    "kor_2": {
+      "ias": 505.0,
+      "mach": 0.6
+    },
+    "l_39za": {
+      "ias": 955.0,
+      "mach": 0.85
+    },
+    "l_39za_art_thailand": {
+      "ias": 955.0,
+      "mach": 0.85
+    },
+    "la-11": {
+      "ias": 850.0,
+      "mach": 0.8
+    },
+    "la-15": {
+      "ias": 945.0,
+      "mach": 0.94
+    },
+    "la-5_type37_early": {
+      "ias": 735.0,
+      "mach": 0.77
+    },
+    "la-5f_type_39": {
+      "ias": 735.0,
+      "mach": 0.77
+    },
+    "la-5fn": {
+      "ias": 735.0,
+      "mach": 0.77
+    },
+    "la-7": {
+      "ias": 735.0,
+      "mach": 0.77
+    },
+    "la-7b-20": {
+      "ias": 735.0,
+      "mach": 0.77
+    },
+    "la-9": {
+      "ias": 850.0,
+      "mach": 0.8
+    },
+    "la_174": {
+      "ias": 945.0,
+      "mach": 0.94
+    },
+    "la_200_toriy": {
+      "ias": 1123.0,
+      "mach": 1.1
+    },
+    "lagg-3-1": {
+      "ias": 640.0,
+      "mach": 0.8
+    },
+    "lagg-3-11": {
+      "ias": 700.0,
+      "mach": 0.8
+    },
+    "lagg-3-23": {
+      "ias": 700.0,
+      "mach": 0.8
+    },
+    "lagg-3-29": {
+      "ias": 640.0,
+      "mach": 0.8
+    },
+    "lagg-3-34": {
+      "ias": 700.0,
+      "mach": 0.8
+    },
+    "lagg-3-35": {
+      "ias": 700.0,
+      "mach": 0.8
+    },
+    "lagg-3-4": {
+      "ias": 700.0,
+      "mach": 0.8
+    },
+    "lagg-3-66": {
+      "ias": 700.0,
+      "mach": 0.8
+    },
+    "lagg-3-8": {
+      "ias": 700.0,
+      "mach": 0.8
+    },
+    "lagg-i-301": {
+      "ias": 700.0,
+      "mach": 0.8
+    },
+    "lagg_3_8": {
+      "ias": 680.0,
+      "mach": 0.8
+    },
+    "lagg_gu-37": {
+      "ias": 640.0,
+      "mach": 0.8
+    },
+    "lancaster_mk1": {
+      "ias": 608.0,
+      "mach": 0.63
+    },
+    "lancaster_mk3": {
+      "ias": 608.0,
+      "mach": 0.63
+    },
+    "lancaster_mr7_france": {
+      "ias": 608.0,
+      "mach": 0.63
+    },
+    "late_298d": {
+      "ias": 450.0,
+      "mach": 0.63
+    },
+    "leo_451_early": {
+      "ias": 550.0,
+      "mach": 0.52
+    },
+    "leo_451_late": {
+      "ias": 550.0,
+      "mach": 0.52
+    },
+    "li-2": {
+      "ias": 600.0,
+      "mach": 0.73
+    },
+    "li-2_1938": {
+      "ias": 600.0,
+      "mach": 0.73
+    },
+    "lightning_f6": {
+      "ias": 1361.0,
+      "mach": 2.2
+    },
+    "lincoln_b2": {
+      "ias": 612.5,
+      "mach": 0.63
+    },
+    "loire_130": {
+      "ias": 400.0,
+      "mach": 0.63
+    },
+    "lynx_ah_mk1": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "m_346fa": {
+      "ias": 1120.0,
+      "mach": 1.05
+    },
+    "martin_139wc": {
+      "ias": 564.0,
+      "mach": 0.65
+    },
+    "marut_mk1": {
+      "ias": 1296.0,
+      "mach": 1.8
+    },
+    "maryland_mk1": {
+      "ias": 574.0,
+      "mach": 0.72
+    },
+    "mb_151c1": {
+      "ias": 830.0,
+      "mach": 0.81
+    },
+    "mb_152c1": {
+      "ias": 830.0,
+      "mach": 0.81
+    },
+    "mb_157": {
+      "ias": 810.0,
+      "mach": 0.81
+    },
+    "mb_162": {
+      "ias": 560.0,
+      "mach": 0.65
+    },
+    "mb_174_a3": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "mb_175t": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "mb_3": {
+      "ias": 950.0,
+      "mach": 0.8
+    },
+    "mb_326b": {
+      "ias": 865.0,
+      "mach": 0.84
+    },
+    "mb_326k": {
+      "ias": 952.0,
+      "mach": 0.85
+    },
+    "mb_5": {
+      "ias": 890.0,
+      "mach": 0.87
+    },
+    "mbr-2": {
+      "ias": 405.0,
+      "mach": 0.6
+    },
+    "mc-202": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "mc-202_d": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "mc-202_ec": {
+      "ias": 820.0,
+      "mach": 0.81
+    },
+    "mc-205_n2": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "mc-205_serie1": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "mc-205_serie3": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "mc200_serie3": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "mc200_serie7": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "md_450b_barougan": {
+      "ias": 1030.0,
+      "mach": 0.87
+    },
+    "md_450b_ouragan": {
+      "ias": 1030.0,
+      "mach": 0.87
+    },
+    "md_452_mystere_2a": {
+      "ias": 1108.0,
+      "mach": 0.98
+    },
+    "md_452_mystere_2c_preproduction": {
+      "ias": 1108.0,
+      "mach": 0.98
+    },
+    "md_454_mystere_4a": {
+      "ias": 1166.0,
+      "mach": 1.05
+    },
+    "md_460": {
+      "ias": 1265.0,
+      "mach": 1.47
+    },
+    "md_460_saar": {
+      "ias": 1265.0,
+      "mach": 1.47
+    },
+    "md_460_sambad": {
+      "ias": 1265.0,
+      "mach": 1.47
+    },
+    "md_500_tow_late": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "me-163b-0": {
+      "ias": 1040.0,
+      "mach": 1.05
+    },
+    "me-163b-1": {
+      "ias": 1040.0,
+      "mach": 1.05
+    },
+    "me-163b": {
+      "ias": 1040.0,
+      "mach": 1.05
+    },
+    "me-262a-1a": {
+      "ias": 1050.0,
+      "mach": 0.95
+    },
+    "me-262a-1a_early": {
+      "ias": 1050.0,
+      "mach": 0.95
+    },
+    "me-262a-1a_u4": {
+      "ias": 1050.0,
+      "mach": 0.95
+    },
+    "me-262a-1b": {
+      "ias": 1050.0,
+      "mach": 0.95
+    },
+    "me-262a-2a": {
+      "ias": 1050.0,
+      "mach": 0.95
+    },
+    "me-262a_1_u1": {
+      "ias": 1050.0,
+      "mach": 0.95
+    },
+    "me-262c-1a": {
+      "ias": 1050.0,
+      "mach": 0.95
+    },
+    "me-262c-2b": {
+      "ias": 1050.0,
+      "mach": 0.95
+    },
+    "me-410a-1": {
+      "ias": 750.0,
+      "mach": 0.75
+    },
+    "me-410a-1_u4": {
+      "ias": 750.0,
+      "mach": 0.75
+    },
+    "me-410b-1": {
+      "ias": 750.0,
+      "mach": 0.75
+    },
+    "me-410b-2_u4": {
+      "ias": 750.0,
+      "mach": 0.75
+    },
+    "me-410b-6_r3": {
+      "ias": 750.0,
+      "mach": 0.75
+    },
+    "me_210_v22_japan": {
+      "ias": 650.0,
+      "mach": 0.65
+    },
+    "me_210a_1": {
+      "ias": 650.0,
+      "mach": 0.65
+    },
+    "me_210ca_1_40_mm_hungary": {
+      "ias": 650.0,
+      "mach": 0.65
+    },
+    "me_210ca_1_hungary": {
+      "ias": 650.0,
+      "mach": 0.65
+    },
+    "me_264": {
+      "ias": 609.0,
+      "mach": 0.64
+    },
+    "meteor_fmk3": {
+      "ias": 850.0,
+      "mach": 0.83
+    },
+    "meteor_fmk3_navy": {
+      "ias": 850.0,
+      "mach": 0.83
+    },
+    "meteor_fmk4_lw": {
+      "ias": 999.0,
+      "mach": 0.86
+    },
+    "meteor_fmk4_sw": {
+      "ias": 999.0,
+      "mach": 0.86
+    },
+    "meteor_fmk8": {
+      "ias": 999.0,
+      "mach": 0.89
+    },
+    "meteor_fmk8_belgium": {
+      "ias": 999.0,
+      "mach": 0.89
+    },
+    "meteor_fmk8_reaper": {
+      "ias": 999.0,
+      "mach": 0.89
+    },
+    "meteor_frmk9_iaf": {
+      "ias": 999.0,
+      "mach": 0.89
+    },
+    "meteor_nfmk13": {
+      "ias": 999.0,
+      "mach": 0.89
+    },
+    "mh_60l_dap": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "mi-35": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_24a": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_24p": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_24p_german": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_24v": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_28a_sweden": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_28n": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_28nm": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_35m": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_35m_pakistan": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_35p": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_4av": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "mi_8amtsh": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_8amtsh_vn": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_8tb": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mi_8tv": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "mig-15": {
+      "ias": 1132.0,
+      "mach": 1.1
+    },
+    "mig-15_ns23": {
+      "ias": 1132.0,
+      "mach": 1.1
+    },
+    "mig-15bis_ish": {
+      "ias": 1132.0,
+      "mach": 1.1
+    },
+    "mig-17": {
+      "ias": 1150.0,
+      "mach": 1.1
+    },
+    "mig-17f": {
+      "ias": 1150.0,
+      "mach": 1.1
+    },
+    "mig-17p_lim_5p": {
+      "ias": 1150.0,
+      "mach": 1.1
+    },
+    "mig-19": {
+      "ias": 1260.0,
+      "mach": 1.68
+    },
+    "mig-19j_6a": {
+      "ias": 1260.0,
+      "mach": 1.68
+    },
+    "mig-19s": {
+      "ias": 1260.0,
+      "mach": 1.68
+    },
+    "mig-21_bis": {
+      "ias": 1365.0,
+      "mach": 2.21
+    },
+    "mig-21_bis_lazur": {
+      "ias": 1365.0,
+      "mach": 2.21
+    },
+    "mig-21_bison": {
+      "ias": 1365.0,
+      "mach": 2.21
+    },
+    "mig-21_f13": {
+      "ias": 1312.0,
+      "mach": 2.2
+    },
+    "mig-21_mf": {
+      "ias": 1365.0,
+      "mach": 2.205
+    },
+    "mig-21_pfm": {
+      "ias": 1365.0,
+      "mach": 2.2
+    },
+    "mig-21_s": {
+      "ias": 1365.0,
+      "mach": 2.205
+    },
+    "mig-21_smt": {
+      "ias": 1365.0,
+      "mach": 2.205
+    },
+    "mig-9": {
+      "ias": 1020.0,
+      "mach": 0.89
+    },
+    "mig-9_ussr": {
+      "ias": 1020.0,
+      "mach": 0.89
+    },
+    "mig_21_2000_iaf": {
+      "ias": 1365.0,
+      "mach": 2.21
+    },
+    "mig_21_bis_finland": {
+      "ias": 1365.0,
+      "mach": 2.21
+    },
+    "mig_23bn": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "mig_23m": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "mig_23mf": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "mig_23ml": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "mig_23mla": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "mig_23mld": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "mig_25pd": {
+      "ias": 1320.0,
+      "mach": 3.04225
+    },
+    "mig_27k": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "mig_27m": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "mig_29_9_12_germany": {
+      "ias": 1575.0,
+      "mach": 2.35
+    },
+    "mig_29_9_12b_hungary": {
+      "ias": 1575.0,
+      "mach": 2.35
+    },
+    "mig_29_9_12g": {
+      "ias": 1575.0,
+      "mach": 2.35
+    },
+    "mig_29_9_13": {
+      "ias": 1575.0,
+      "mach": 2.35
+    },
+    "mig_29kr_9_41r": {
+      "ias": 1470.0,
+      "mach": 2.15
+    },
+    "mig_29m_9_15": {
+      "ias": 1575.0,
+      "mach": 2.35
+    },
+    "mig_29smt_9_19": {
+      "ias": 1575.0,
+      "mach": 2.35
+    },
+    "mig_3_series_1_15": {
+      "ias": 677.0,
+      "mach": 0.75
+    },
+    "mig_3_series_1_15_bk_pod": {
+      "ias": 677.0,
+      "mach": 0.75
+    },
+    "mig_3_series_34": {
+      "ias": 700.0,
+      "mach": 0.77
+    },
+    "mig_3_series_pod": {
+      "ias": 645.0,
+      "mach": 0.75
+    },
+    "mirage_2000_5ei": {
+      "ias": 1545.0,
+      "mach": 2.35
+    },
+    "mirage_2000_5f": {
+      "ias": 1545.0,
+      "mach": 2.35
+    },
+    "mirage_2000c_s5": {
+      "ias": 1545.0,
+      "mach": 2.35
+    },
+    "mirage_2000d_r1": {
+      "ias": 1545.0,
+      "mach": 2.35
+    },
+    "mirage_2000d_rmv": {
+      "ias": 1545.0,
+      "mach": 2.35
+    },
+    "mirage_3c": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "mirage_3cj": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "mirage_3e": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "mirage_3s_c70_switzerland": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "mirage_4000": {
+      "ias": 1555.0,
+      "mach": 2.35
+    },
+    "mirage_5_nesher": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "mirage_5ba": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "mirage_5f": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "mirage_f1c": {
+      "ias": 1457.0,
+      "mach": 2.2
+    },
+    "mirage_f1c_200": {
+      "ias": 1457.0,
+      "mach": 2.2
+    },
+    "mirage_milan": {
+      "ias": 1460.0,
+      "mach": 2.1
+    },
+    "morko_morane": {
+      "ias": 756.0,
+      "mach": 0.76
+    },
+    "mosquito_b_mk16": {
+      "ias": 720.0,
+      "mach": 0.715
+    },
+    "mosquito_f_mk2_norway": {
+      "ias": 720.0,
+      "mach": 0.715
+    },
+    "mosquito_fb_mk18": {
+      "ias": 720.0,
+      "mach": 0.715
+    },
+    "mosquito_fb_mk6": {
+      "ias": 720.0,
+      "mach": 0.715
+    },
+    "mosquito_fb_mk6_ash_norway": {
+      "ias": 720.0,
+      "mach": 0.715
+    },
+    "mosquito_j30_sweden": {
+      "ias": 720.0,
+      "mach": 0.715
+    },
+    "mosquito_nf_mk2": {
+      "ias": 720.0,
+      "mach": 0.715
+    },
+    "mosquito_tr_mk33": {
+      "ias": 720.0,
+      "mach": 0.715
+    },
+    "ms_405": {
+      "ias": 756.0,
+      "mach": 0.76
+    },
+    "ms_406c1": {
+      "ias": 756.0,
+      "mach": 0.76
+    },
+    "ms_410c1": {
+      "ias": 756.0,
+      "mach": 0.76
+    },
+    "n1k1_ja": {
+      "ias": 780.0,
+      "mach": 0.8
+    },
+    "n1k1_kyuofu": {
+      "ias": 600.0,
+      "mach": 0.7
+    },
+    "n1k2_j": {
+      "ias": 780.0,
+      "mach": 0.8
+    },
+    "nc_223_3": {
+      "ias": 450.0,
+      "mach": 0.75
+    },
+    "nf_5a_netherlands": {
+      "ias": 1458.0,
+      "mach": 1.75
+    },
+    "night_fighter_mk_2": {
+      "ias": 720.0,
+      "mach": 0.75
+    },
+    "nimrod_mk1": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "nimrod_mk2": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "nt_b_52h": {
+      "ias": 910.0,
+      "mach": 0.95
+    },
+    "nt_tu_95m": {
+      "ias": 690.0,
+      "mach": 0.86
+    },
+    "o3u_1": {
+      "ias": 450.0,
+      "mach": 0.45
+    },
+    "oh_58d": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "os2u_1": {
+      "ias": 405.0,
+      "mach": 0.55
+    },
+    "os2u_3": {
+      "ias": 405.0,
+      "mach": 0.55
+    },
+    "osprey_mk4": {
+      "ias": 450.0,
+      "mach": 0.75
+    },
+    "p-26a_33": {
+      "ias": 508.0,
+      "mach": 0.7
+    },
+    "p-26a_34": {
+      "ias": 508.0,
+      "mach": 0.7
+    },
+    "p-26a_34_m2": {
+      "ias": 508.0,
+      "mach": 0.7
+    },
+    "p-26a_35": {
+      "ias": 508.0,
+      "mach": 0.7
+    },
+    "p-26b_35": {
+      "ias": 508.0,
+      "mach": 0.7
+    },
+    "p-36a": {
+      "ias": 681.0,
+      "mach": 0.78
+    },
+    "p-36a_rasmussen": {
+      "ias": 681.0,
+      "mach": 0.78
+    },
+    "p-36c": {
+      "ias": 770.0,
+      "mach": 0.78
+    },
+    "p-36g": {
+      "ias": 770.0,
+      "mach": 0.78
+    },
+    "p-38e": {
+      "ias": 790.0,
+      "mach": 0.74
+    },
+    "p-38g": {
+      "ias": 790.0,
+      "mach": 0.74
+    },
+    "p-38j": {
+      "ias": 790.0,
+      "mach": 0.74
+    },
+    "p-38k": {
+      "ias": 790.0,
+      "mach": 0.74
+    },
+    "p-38l": {
+      "ias": 790.0,
+      "mach": 0.74
+    },
+    "p-39k_1": {
+      "ias": 886.0,
+      "mach": 0.81
+    },
+    "p-39n": {
+      "ias": 886.0,
+      "mach": 0.81
+    },
+    "p-39n_su": {
+      "ias": 886.0,
+      "mach": 0.81
+    },
+    "p-39q_15": {
+      "ias": 886.0,
+      "mach": 0.81
+    },
+    "p-39q_25": {
+      "ias": 886.0,
+      "mach": 0.81
+    },
+    "p-39q_5": {
+      "ias": 886.0,
+      "mach": 0.81
+    },
+    "p-400": {
+      "ias": 886.0,
+      "mach": 0.81
+    },
+    "p-40c": {
+      "ias": 795.0,
+      "mach": 0.78
+    },
+    "p-40c_china": {
+      "ias": 795.0,
+      "mach": 0.78
+    },
+    "p-40e": {
+      "ias": 819.0,
+      "mach": 0.78
+    },
+    "p-40f": {
+      "ias": 819.0,
+      "mach": 0.81
+    },
+    "p-47d-28": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "p-47d-30": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "p-47d": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "p-47d_16_re": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "p-47d_22_re": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "p-47d_23_re": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "p-47d_ussr": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "p-47m-1-re": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "p-47n-15": {
+      "ias": 950.0,
+      "mach": 0.95
+    },
+    "p-51_a-36": {
+      "ias": 855.0,
+      "mach": 0.85
+    },
+    "p-51_mk1a_usaaf": {
+      "ias": 855.0,
+      "mach": 0.85
+    },
+    "p-51a_tl": {
+      "ias": 855.0,
+      "mach": 0.85
+    },
+    "p-51b": {
+      "ias": 855.0,
+      "mach": 0.85
+    },
+    "p-51c-10-nt": {
+      "ias": 853.0,
+      "mach": 0.84
+    },
+    "p-51c-10_france": {
+      "ias": 853.0,
+      "mach": 0.84
+    },
+    "p-51c-11-nt_china": {
+      "ias": 853.0,
+      "mach": 0.84
+    },
+    "p-51d-10": {
+      "ias": 901.0,
+      "mach": 0.84
+    },
+    "p-51d-20-na": {
+      "ias": 901.0,
+      "mach": 0.84
+    },
+    "p-51d-30_usaaf_korea": {
+      "ias": 910.0,
+      "mach": 0.85
+    },
+    "p-51d-5": {
+      "ias": 855.0,
+      "mach": 0.81
+    },
+    "p-51h-5_na": {
+      "ias": 887.0,
+      "mach": 0.85
+    },
+    "p-61a_1": {
+      "ias": 642.0,
+      "mach": 0.8
+    },
+    "p-61c_1": {
+      "ias": 726.0,
+      "mach": 0.8
+    },
+    "p-63a-10": {
+      "ias": 887.0,
+      "mach": 0.81
+    },
+    "p-63a-5": {
+      "ias": 887.0,
+      "mach": 0.81
+    },
+    "p-63c-5": {
+      "ias": 887.0,
+      "mach": 0.81
+    },
+    "p-63c-5_france": {
+      "ias": 887.0,
+      "mach": 0.81
+    },
+    "p-66": {
+      "ias": 720.0,
+      "mach": 0.78
+    },
+    "p1y1_mod11": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "p_108a_serie2": {
+      "ias": 515.0,
+      "mach": 0.65
+    },
+    "p_108b_serie1": {
+      "ias": 515.0,
+      "mach": 0.65
+    },
+    "p_108b_serie2": {
+      "ias": 515.0,
+      "mach": 0.65
+    },
+    "p_43a_1": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "p_51b_7_sweden": {
+      "ias": 853.0,
+      "mach": 0.84
+    },
+    "p_59a": {
+      "ias": 845.0,
+      "mach": 0.83
+    },
+    "pandora_mk_1": {
+      "ias": 720.0,
+      "mach": 0.71
+    },
+    "pb4y-2": {
+      "ias": 599.0,
+      "mach": 0.61
+    },
+    "pb4y-2_china": {
+      "ias": 599.0,
+      "mach": 0.61
+    },
+    "pb4y-2_france": {
+      "ias": 599.0,
+      "mach": 0.61
+    },
+    "pbj_1h": {
+      "ias": 591.0,
+      "mach": 0.65
+    },
+    "pbj_1j": {
+      "ias": 591.0,
+      "mach": 0.65
+    },
+    "pbm_1": {
+      "ias": 388.88,
+      "mach": 0.75
+    },
+    "pbm_3": {
+      "ias": 405.0,
+      "mach": 0.75
+    },
+    "pbm_5a": {
+      "ias": 405.0,
+      "mach": 0.75
+    },
+    "pby-5": {
+      "ias": 405.0,
+      "mach": 0.75
+    },
+    "pby-5a": {
+      "ias": 405.0,
+      "mach": 0.75
+    },
+    "pby-5a_late": {
+      "ias": 405.0,
+      "mach": 0.75
+    },
+    "pby-5a_late_france": {
+      "ias": 405.0,
+      "mach": 0.75
+    },
+    "pe-2-1": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-2-110": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-2-205": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-2-31": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-2-359": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-2-83": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-3": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-3_bis": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-3_early": {
+      "ias": 760.0,
+      "mach": 0.75
+    },
+    "pe-8_m82": {
+      "ias": 535.0,
+      "mach": 0.65
+    },
+    "po-2": {
+      "ias": 190.0,
+      "mach": 0.68
+    },
+    "po-2_nw": {
+      "ias": 600.0,
+      "mach": 0.68
+    },
+    "po-2m": {
+      "ias": 190.0,
+      "mach": 0.68
+    },
+    "po_2op_event": {
+      "ias": 560.0,
+      "mach": 0.75
+    },
+    "potez_630": {
+      "ias": 462.0,
+      "mach": 0.72
+    },
+    "potez_631": {
+      "ias": 462.0,
+      "mach": 0.72
+    },
+    "potez_633": {
+      "ias": 462.0,
+      "mach": 0.72
+    },
+    "pv_2": {
+      "ias": 600.6,
+      "mach": 0.66
+    },
+    "pv_2d": {
+      "ias": 600.6,
+      "mach": 0.66
+    },
+    "pyorremyrsky": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "q_5_early": {
+      "ias": 1260.0,
+      "mach": 1.65
+    },
+    "q_5a": {
+      "ias": 1260.0,
+      "mach": 1.65
+    },
+    "q_5l": {
+      "ias": 1260.0,
+      "mach": 1.65
+    },
+    "quing_6": {
+      "ias": 500.0,
+      "mach": 0.65
+    },
+    "r2y2_kai": {
+      "ias": 960.0,
+      "mach": 0.93
+    },
+    "r2y2_v1": {
+      "ias": 960.0,
+      "mach": 0.93
+    },
+    "r2y2_v2": {
+      "ias": 960.0,
+      "mach": 0.93
+    },
+    "rafale_c_f3": {
+      "ias": 1458.0,
+      "mach": 2.0
+    },
+    "rafale_m_f3r": {
+      "ias": 1458.0,
+      "mach": 2.0
+    },
+    "rah_66": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "re_2000_ga": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2000_heja_1": {
+      "ias": 740.0,
+      "mach": 0.7
+    },
+    "re_2000_heja_2": {
+      "ias": 740.0,
+      "mach": 0.7
+    },
+    "re_2000_int": {
+      "ias": 740.0,
+      "mach": 0.7
+    },
+    "re_2001_cb": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2001_cn": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2001_serie1": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2002_early": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "re_2005_serie0": {
+      "ias": 800.0,
+      "mach": 0.85
+    },
+    "re_2005_vdm": {
+      "ias": 800.0,
+      "mach": 0.85
+    },
+    "ro_43": {
+      "ias": 400.0,
+      "mach": 0.6
+    },
+    "ro_44": {
+      "ias": 400.0,
+      "mach": 0.6
+    },
+    "ro_57_quadriarma": {
+      "ias": 800.0,
+      "mach": 0.78
+    },
+    "s_199": {
+      "ias": 790.0,
+      "mach": 0.82
+    },
+    "s_81_ar125": {
+      "ias": 530.0,
+      "mach": 0.61
+    },
+    "sa_313b": {
+      "ias": 300.0,
+      "mach": 0.6
+    },
+    "sa_316b": {
+      "ias": 310.0,
+      "mach": 0.6
+    },
+    "sa_341f": {
+      "ias": 310.0,
+      "mach": 0.6
+    },
+    "sa_342l_china": {
+      "ias": 310.0,
+      "mach": 0.6
+    },
+    "sa_342m": {
+      "ias": 310.0,
+      "mach": 0.6
+    },
+    "saab_105g": {
+      "ias": 1050.0,
+      "mach": 0.93
+    },
+    "saab_105oe": {
+      "ias": 1050.0,
+      "mach": 0.93
+    },
+    "saab_a21a_3": {
+      "ias": 683.0,
+      "mach": 0.76
+    },
+    "saab_a21rb": {
+      "ias": 787.0,
+      "mach": 0.76
+    },
+    "saab_a32a": {
+      "ias": 1160.0,
+      "mach": 1.2
+    },
+    "saab_aj37": {
+      "ias": 1485.0,
+      "mach": 2.1
+    },
+    "saab_ajs37": {
+      "ias": 1485.0,
+      "mach": 2.1
+    },
+    "saab_b17a": {
+      "ias": 620.0,
+      "mach": 0.8
+    },
+    "saab_b17b": {
+      "ias": 620.0,
+      "mach": 0.8
+    },
+    "saab_b17bs": {
+      "ias": 500.0,
+      "mach": 0.65
+    },
+    "saab_b18a": {
+      "ias": 735.0,
+      "mach": 0.84
+    },
+    "saab_b18b": {
+      "ias": 735.0,
+      "mach": 0.84
+    },
+    "saab_b3c": {
+      "ias": 430.0,
+      "mach": 0.65
+    },
+    "saab_f35_wdns": {
+      "ias": 1417.0,
+      "mach": 2.3
+    },
+    "saab_j21a_1": {
+      "ias": 683.0,
+      "mach": 0.76
+    },
+    "saab_j21ra": {
+      "ias": 787.0,
+      "mach": 0.76
+    },
+    "saab_j29a": {
+      "ias": 1102.0,
+      "mach": 0.97
+    },
+    "saab_j29b": {
+      "ias": 1102.0,
+      "mach": 0.97
+    },
+    "saab_j29d": {
+      "ias": 1102.0,
+      "mach": 0.97
+    },
+    "saab_j29f": {
+      "ias": 1102.0,
+      "mach": 0.97
+    },
+    "saab_j32b": {
+      "ias": 1160.0,
+      "mach": 1.2
+    },
+    "saab_j35a": {
+      "ias": 1417.0,
+      "mach": 2.3
+    },
+    "saab_j35d": {
+      "ias": 1417.0,
+      "mach": 2.3
+    },
+    "saab_j35xs": {
+      "ias": 1417.0,
+      "mach": 2.3
+    },
+    "saab_ja37": {
+      "ias": 1536.0,
+      "mach": 2.1
+    },
+    "saab_jas39a": {
+      "ias": 1543.0,
+      "mach": 2.0
+    },
+    "saab_jas39c": {
+      "ias": 1543.0,
+      "mach": 2.0
+    },
+    "saab_jas39d": {
+      "ias": 1543.0,
+      "mach": 2.0
+    },
+    "saab_jas39e": {
+      "ias": 1543.0,
+      "mach": 2.0
+    },
+    "saab_sk60b": {
+      "ias": 934.0,
+      "mach": 0.91
+    },
+    "saab_t18b_1": {
+      "ias": 735.0,
+      "mach": 0.84
+    },
+    "saab_t18b_2": {
+      "ias": 735.0,
+      "mach": 0.84
+    },
+    "sagittario_2": {
+      "ias": 1125.0,
+      "mach": 1.21
+    },
+    "sb2c_1c": {
+      "ias": 656.0,
+      "mach": 0.7
+    },
+    "sb2c_4": {
+      "ias": 656.0,
+      "mach": 0.7
+    },
+    "sb2c_5": {
+      "ias": 656.0,
+      "mach": 0.7
+    },
+    "sb2u-2": {
+      "ias": 740.0,
+      "mach": 0.62
+    },
+    "sb2u-3": {
+      "ias": 740.0,
+      "mach": 0.62
+    },
+    "sb_25j_netherlands": {
+      "ias": 591.0,
+      "mach": 0.65
+    },
+    "sb_2m_100": {
+      "ias": 550.0,
+      "mach": 0.75
+    },
+    "sb_2m_103c": {
+      "ias": 580.0,
+      "mach": 0.75
+    },
+    "sb_2m_103u_mv3": {
+      "ias": 580.0,
+      "mach": 0.75
+    },
+    "sb_2m_105": {
+      "ias": 600.0,
+      "mach": 0.75
+    },
+    "sbd-3": {
+      "ias": 740.0,
+      "mach": 0.8
+    },
+    "sc_1": {
+      "ias": 510.0,
+      "mach": 0.6
+    },
+    "scimitar_f1": {
+      "ias": 1322.0,
+      "mach": 1.14
+    },
+    "scout_ah_mk1": {
+      "ias": 330.0,
+      "mach": 0.6
+    },
+    "sea_fury_fb11": {
+      "ias": 826.0,
+      "mach": 0.83
+    },
+    "sea_harrier_fa2": {
+      "ias": 1463.0,
+      "mach": 1.25
+    },
+    "sea_hawk_fga6": {
+      "ias": 1012.0,
+      "mach": 0.95
+    },
+    "sea_venom_faw20": {
+      "ias": 1045.0,
+      "mach": 0.92
+    },
+    "seafire_fr47": {
+      "ias": 890.0,
+      "mach": 0.87
+    },
+    "seafire_mk17": {
+      "ias": 787.5,
+      "mach": 0.87
+    },
+    "seafire_mk3": {
+      "ias": 760.0,
+      "mach": 0.82
+    },
+    "shackleton_mr_mk_2": {
+      "ias": 583.0,
+      "mach": 0.8
+    },
+    "sm_79_1936": {
+      "ias": 530.0,
+      "mach": 0.61
+    },
+    "sm_79_1937": {
+      "ias": 530.0,
+      "mach": 0.61
+    },
+    "sm_79_1939": {
+      "ias": 530.0,
+      "mach": 0.61
+    },
+    "sm_79_1941": {
+      "ias": 530.0,
+      "mach": 0.61
+    },
+    "sm_79_1942": {
+      "ias": 530.0,
+      "mach": 0.61
+    },
+    "sm_79_1943": {
+      "ias": 530.0,
+      "mach": 0.61
+    },
+    "sm_79_iar": {
+      "ias": 540.0,
+      "mach": 0.61
+    },
+    "sm_91": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "sm_92": {
+      "ias": 845.0,
+      "mach": 0.81
+    },
+    "so_4050_vautour_2a": {
+      "ias": 1166.0,
+      "mach": 1.1
+    },
+    "so_4050_vautour_2b": {
+      "ias": 1166.0,
+      "mach": 1.1
+    },
+    "so_4050_vautour_2n": {
+      "ias": 1166.0,
+      "mach": 1.1
+    },
+    "so_4050_vautour_2n_late": {
+      "ias": 1166.0,
+      "mach": 1.1
+    },
+    "so_8000_narval": {
+      "ias": 900.0,
+      "mach": 0.91
+    },
+    "soc_1": {
+      "ias": 500.0,
+      "mach": 0.63
+    },
+    "spad_13": {
+      "ias": 500.0,
+      "mach": 0.7
+    },
+    "spitfire_f22": {
+      "ias": 875.0,
+      "mach": 0.87
+    },
+    "spitfire_f24": {
+      "ias": 875.0,
+      "mach": 0.87
+    },
+    "spitfire_fr_mk14e": {
+      "ias": 794.0,
+      "mach": 0.87
+    },
+    "spitfire_ix": {
+      "ias": 774.0,
+      "mach": 0.87
+    },
+    "spitfire_ix_cw": {
+      "ias": 774.0,
+      "mach": 0.87
+    },
+    "spitfire_ix_early": {
+      "ias": 774.0,
+      "mach": 0.87
+    },
+    "spitfire_ix_lf_c": {
+      "ias": 774.0,
+      "mach": 0.87
+    },
+    "spitfire_lf_mk9c_cw_greece": {
+      "ias": 774.0,
+      "mach": 0.87
+    },
+    "spitfire_mk1": {
+      "ias": 760.0,
+      "mach": 0.82
+    },
+    "spitfire_mk14c": {
+      "ias": 794.0,
+      "mach": 0.87
+    },
+    "spitfire_mk14e": {
+      "ias": 794.0,
+      "mach": 0.87
+    },
+    "spitfire_mk18e": {
+      "ias": 798.0,
+      "mach": 0.87
+    },
+    "spitfire_mk5b": {
+      "ias": 760.0,
+      "mach": 0.82
+    },
+    "spitfire_mk5b_float": {
+      "ias": 724.0,
+      "mach": 0.82
+    },
+    "spitfire_mk5b_notrop": {
+      "ias": 760.0,
+      "mach": 0.82
+    },
+    "spitfire_mk5c": {
+      "ias": 760.0,
+      "mach": 0.82
+    },
+    "spitfire_mk5c_notrop": {
+      "ias": 760.0,
+      "mach": 0.82
+    },
+    "spitfire_mk9c_4cannons": {
+      "ias": 774.0,
+      "mach": 0.87
+    },
+    "spitfire_xvi": {
+      "ias": 774.0,
+      "mach": 0.87
+    },
+    "spitfiremkii": {
+      "ias": 760.0,
+      "mach": 0.82
+    },
+    "spitfiremkiia": {
+      "ias": 760.0,
+      "mach": 0.82
+    },
+    "stirling_mk1": {
+      "ias": 498.0,
+      "mach": 0.7
+    },
+    "stirling_mk3": {
+      "ias": 498.0,
+      "mach": 0.7
+    },
+    "strikemaster_mk88": {
+      "ias": 875.0,
+      "mach": 0.85
+    },
+    "su-11": {
+      "ias": 1025.0,
+      "mach": 0.84
+    },
+    "su-2_m82": {
+      "ias": 541.0,
+      "mach": 0.67
+    },
+    "su-2_mv5": {
+      "ias": 541.0,
+      "mach": 0.65
+    },
+    "su-2_tss1": {
+      "ias": 541.0,
+      "mach": 0.67
+    },
+    "su-6_am42": {
+      "ias": 680.0,
+      "mach": 0.65
+    },
+    "su-6_am42_23": {
+      "ias": 680.0,
+      "mach": 0.65
+    },
+    "su-6_m71": {
+      "ias": 680.0,
+      "mach": 0.8
+    },
+    "su-7b": {
+      "ias": 1260.0,
+      "mach": 2.2
+    },
+    "su-7bkl": {
+      "ias": 1260.0,
+      "mach": 2.2
+    },
+    "su-7bmk": {
+      "ias": 1260.0,
+      "mach": 2.2
+    },
+    "su-8": {
+      "ias": 720.0,
+      "mach": 0.81
+    },
+    "su-9": {
+      "ias": 1025.0,
+      "mach": 0.84
+    },
+    "su_17m2": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "su_17m4": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "su_22m3": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "su_22m4": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "su_22um3k": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "su_24m": {
+      "ias": 1400.0,
+      "mach": null
+    },
+    "su_25": {
+      "ias": 1100.0,
+      "mach": 0.87
+    },
+    "su_25_558arz": {
+      "ias": 1100.0,
+      "mach": 0.87
+    },
+    "su_25k": {
+      "ias": 1100.0,
+      "mach": 0.87
+    },
+    "su_25sm3": {
+      "ias": 1100.0,
+      "mach": 0.87
+    },
+    "su_25t": {
+      "ias": 1100.0,
+      "mach": 0.87
+    },
+    "su_25tm": {
+      "ias": 1100.0,
+      "mach": 0.87
+    },
+    "su_27": {
+      "ias": 1540.0,
+      "mach": 2.35
+    },
+    "su_27sm": {
+      "ias": 1540.0,
+      "mach": 2.35
+    },
+    "su_30mk2v_venezuela": {
+      "ias": 1540.0,
+      "mach": 2.1
+    },
+    "su_30mkk": {
+      "ias": 1540.0,
+      "mach": 2.1
+    },
+    "su_30mkm": {
+      "ias": 1540.0,
+      "mach": 2.1
+    },
+    "su_30sm": {
+      "ias": 1540.0,
+      "mach": 2.1
+    },
+    "su_30sm2": {
+      "ias": 1540.0,
+      "mach": 2.1
+    },
+    "su_33": {
+      "ias": 1540.0,
+      "mach": 2.35
+    },
+    "su_34": {
+      "ias": 1520.0,
+      "mach": 2.1
+    },
+    "su_6_single": {
+      "ias": 680.0,
+      "mach": 0.8
+    },
+    "sunderland_mk3a": {
+      "ias": 414.0,
+      "mach": 0.65
+    },
+    "sunderland_mk5": {
+      "ias": 414.0,
+      "mach": 0.65
+    },
+    "super_etendard_97": {
+      "ias": 1263.0,
+      "mach": 1.35
+    },
+    "super_hind_mk3": {
+      "ias": 520.0,
+      "mach": 0.79
+    },
+    "swift_f1": {
+      "ias": 1186.0,
+      "mach": 1.05
+    },
+    "swift_f7": {
+      "ias": 1167.0,
+      "mach": 1.05
+    },
+    "swordfish_mk1": {
+      "ias": 390.0,
+      "mach": 0.7
+    },
+    "swordfish_mk2": {
+      "ias": 390.0,
+      "mach": 0.7
+    },
+    "t2": {
+      "ias": 1365.0,
+      "mach": 1.85
+    },
+    "t2_early": {
+      "ias": 1365.0,
+      "mach": 1.85
+    },
+    "t_129_atak": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "ta-152c": {
+      "ias": 912.0,
+      "mach": 0.83
+    },
+    "ta-152h-1": {
+      "ias": 870.0,
+      "mach": 0.81
+    },
+    "ta_154a_1": {
+      "ias": 787.0,
+      "mach": 0.78
+    },
+    "tandem_mai": {
+      "ias": 650.0,
+      "mach": 0.72
+    },
+    "tb_3_m17_32": {
+      "ias": 450.0,
+      "mach": 0.75
+    },
+    "tbd-1": {
+      "ias": 431.0,
+      "mach": 0.6
+    },
+    "tbf-1c": {
+      "ias": 612.0,
+      "mach": 0.63
+    },
+    "tempest_mk2": {
+      "ias": 879.0,
+      "mach": 0.81
+    },
+    "tempest_mkv": {
+      "ias": 880.0,
+      "mach": 0.865
+    },
+    "tempest_mkv_luftwaffe": {
+      "ias": 880.0,
+      "mach": 0.865
+    },
+    "tempest_mkv_vikkers": {
+      "ias": 880.0,
+      "mach": 0.865
+    },
+    "thunderbolt_mk1": {
+      "ias": 885.0,
+      "mach": 0.9
+    },
+    "tiger_hac_france": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "tiger_had_block2_france": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "tiger_had_france": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "tiger_had_spain": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "tiger_hap_france": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "tiger_uht": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "tis_ma": {
+      "ias": 740.0,
+      "mach": 0.85
+    },
+    "tornado_adv": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_f3": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_f3_late": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_gr1": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "tornado_gr4": {
+      "ias": 1370.0,
+      "mach": null
+    },
+    "tornado_ids_de_assta1": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_ids_de_assta3_sle": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_ids_de_mfg": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_ids_de_wtd61": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_ids_it": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_ids_it_mod95": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tornado_ids_it_ret8": {
+      "ias": 1450.0,
+      "mach": null
+    },
+    "tu-1": {
+      "ias": 900.0,
+      "mach": 0.81
+    },
+    "tu-2": {
+      "ias": 900.0,
+      "mach": 0.81
+    },
+    "tu-2_early": {
+      "ias": 900.0,
+      "mach": 0.81
+    },
+    "tu-2_postwar": {
+      "ias": 900.0,
+      "mach": 0.81
+    },
+    "tu-2_postwar_late": {
+      "ias": 900.0,
+      "mach": 0.81
+    },
+    "tu_14t": {
+      "ias": 892.0,
+      "mach": 0.82
+    },
+    "tu_4": {
+      "ias": 507.0,
+      "mach": 0.64
+    },
+    "typhoon_fgr4": {
+      "ias": 1607.0,
+      "mach": 2.46
+    },
+    "typhoon_mk1a": {
+      "ias": 845.0,
+      "mach": 0.805
+    },
+    "typhoon_mk1b": {
+      "ias": 845.0,
+      "mach": 0.805
+    },
+    "typhoon_mk1b_late": {
+      "ias": 845.0,
+      "mach": 0.805
+    },
+    "uav_inf_fpv_strike_drone": {
+      "ias": 700.0,
+      "mach": 0.73
+    },
+    "uav_inf_recon_drone": {
+      "ias": 700.0,
+      "mach": 0.73
+    },
+    "uav_inf_strike_drone": {
+      "ias": 700.0,
+      "mach": 0.73
+    },
+    "uav_quadcopter": {
+      "ias": 700.0,
+      "mach": 0.73
+    },
+    "ucav_mq_1_predator": {
+      "ias": 390.0,
+      "mach": 0.71
+    },
+    "ucav_recon_micro": {
+      "ias": 700.0,
+      "mach": 0.73
+    },
+    "uh_1b": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "uh_1c": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "uh_1d": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "v_11g": {
+      "ias": 620.0,
+      "mach": 0.75
+    },
+    "v_12d": {
+      "ias": 680.0,
+      "mach": 0.77
+    },
+    "v_156_f": {
+      "ias": 740.0,
+      "mach": 0.62
+    },
+    "vampire_fb5": {
+      "ias": 888.0,
+      "mach": 0.82
+    },
+    "vampire_fb52a": {
+      "ias": 888.0,
+      "mach": 0.82
+    },
+    "vb_10_02": {
+      "ias": 820.0,
+      "mach": 0.9
+    },
+    "vb_10c_1": {
+      "ias": 820.0,
+      "mach": 0.9
+    },
+    "venom_fb4": {
+      "ias": 1045.0,
+      "mach": 0.92
+    },
+    "vg_33": {
+      "ias": 800.0,
+      "mach": 0.83
+    },
+    "vl_myrsky_2_late": {
+      "ias": 650.0,
+      "mach": 0.78
+    },
+    "walrus_mk1": {
+      "ias": 300.0,
+      "mach": 0.75
+    },
+    "washington_b1": {
+      "ias": 507.0,
+      "mach": 0.64
+    },
+    "wasp_has_mk1": {
+      "ias": 330.0,
+      "mach": 0.6
+    },
+    "welkin_fmk1": {
+      "ias": 675.0,
+      "mach": 0.8
+    },
+    "wellington_mk10": {
+      "ias": 530.0,
+      "mach": 0.62
+    },
+    "wellington_mk1c": {
+      "ias": 530.0,
+      "mach": 0.62
+    },
+    "wellington_mk3": {
+      "ias": 530.0,
+      "mach": 0.62
+    },
+    "wessex_mk5": {
+      "ias": 450.0,
+      "mach": 0.79
+    },
+    "whirlwind_mk1": {
+      "ias": 676.0,
+      "mach": 0.75
+    },
+    "whirlwind_p9": {
+      "ias": 676.0,
+      "mach": 0.75
+    },
+    "wirraway": {
+      "ias": 580.0,
+      "mach": 0.8
+    },
+    "wm_21": {
+      "ias": 550.0,
+      "mach": 0.7
+    },
+    "wm_23": {
+      "ias": 650.0,
+      "mach": 0.8
+    },
+    "wyvern_s4": {
+      "ias": 844.0,
+      "mach": 0.79
+    },
+    "xa_38": {
+      "ias": 714.0,
+      "mach": 0.67
+    },
+    "xf5f": {
+      "ias": 722.0,
+      "mach": 0.71
+    },
+    "xf5u_1": {
+      "ias": 790.0,
+      "mach": 0.74
+    },
+    "xp-50": {
+      "ias": 745.0,
+      "mach": 0.73
+    },
+    "xp-55": {
+      "ias": 900.0,
+      "mach": 0.8
+    },
+    "yah_64": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "yak-15": {
+      "ias": 750.0,
+      "mach": 0.73
+    },
+    "yak-17": {
+      "ias": 765.0,
+      "mach": 0.75
+    },
+    "yak-1_early": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "yak-1b": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "yak-23": {
+      "ias": 1000.0,
+      "mach": 0.85
+    },
+    "yak-28b": {
+      "ias": 1124.0,
+      "mach": 2.1
+    },
+    "yak-2_kabb": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "yak-3": {
+      "ias": 685.0,
+      "mach": 0.73
+    },
+    "yak-30d": {
+      "ias": 1081.0,
+      "mach": 0.96
+    },
+    "yak-38": {
+      "ias": 1265.0,
+      "mach": 1.5
+    },
+    "yak-38m": {
+      "ias": 1265.0,
+      "mach": 1.5
+    },
+    "yak-3_early": {
+      "ias": 685.0,
+      "mach": 0.73
+    },
+    "yak-3_france": {
+      "ias": 685.0,
+      "mach": 0.73
+    },
+    "yak-3_vk107": {
+      "ias": 720.0,
+      "mach": 0.73
+    },
+    "yak-3p": {
+      "ias": 685.0,
+      "mach": 0.73
+    },
+    "yak-3t": {
+      "ias": 685.0,
+      "mach": 0.73
+    },
+    "yak-4": {
+      "ias": 680.0,
+      "mach": 0.75
+    },
+    "yak-7b": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "yak-9": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "yak-9b": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "yak-9k": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "yak-9m": {
+      "ias": 720.0,
+      "mach": 0.78
+    },
+    "yak-9p": {
+      "ias": 756.0,
+      "mach": 0.78
+    },
+    "yak-9t": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "yak-9u": {
+      "ias": 720.0,
+      "mach": 0.78
+    },
+    "yak-9ut": {
+      "ias": 720.0,
+      "mach": 0.78
+    },
+    "yak_130_early": {
+      "ias": 1120.0,
+      "mach": 1.05
+    },
+    "yak_141": {
+      "ias": 1450.0,
+      "mach": 2.2
+    },
+    "yak_1_pf": {
+      "ias": 682.5,
+      "mach": 0.78
+    },
+    "yak_3u": {
+      "ias": 700.0,
+      "mach": 0.73
+    },
+    "yp-38": {
+      "ias": 790.0,
+      "mach": 0.74
+    },
+    "z_10": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "z_1007_bis_serie3": {
+      "ias": 530.0,
+      "mach": 0.64
+    },
+    "z_1007_bis_serie5": {
+      "ias": 530.0,
+      "mach": 0.64
+    },
+    "z_10a": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "z_10me": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "z_11wa": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "z_19": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "z_19e": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "z_9w": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "z_9wa": {
+      "ias": 460.0,
+      "mach": 0.79
+    },
+    "zeppelin": {
+      "ias": 180.0,
+      "mach": 0.45
+    }
+  }
+}

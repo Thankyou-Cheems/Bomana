@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bomana · War Thunder 全真飞行计时与导航</title>
+    <meta
+      name="description"
+      content="Bomana 是面向 War Thunder 全真模式的 Windows 工具：Lite / Standard 开源，超级爆弹版通过 CheemsPay 订阅，只使用官方 localhost:8111 数据。"
+    >
+    <meta name="theme-color" content="#dcecf8">
+    <meta property="og:title" content="Bomana · 全真飞行信息，安静地放在手边">
+    <meta
+      property="og:description"
+      content="开源、便携、只读官方 8111 数据。下载启动器，选择通道，进入战斗即可使用。"
+    >
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://bomana.ruikang.wang/">
+    <meta property="og:image" content="https://bomana.ruikang.wang/assets/bomana-app.png">
+    <link rel="canonical" href="https://bomana.ruikang.wang/">
+    <link rel="icon" href="assets/favicon.ico">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#content">跳到主要内容</a>
+
+    <header class="site-header" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="Bomana 首页">
+        <img src="assets/bomana-app.png" alt="" width="36" height="36">
+        <span class="brand-mark">BOMANA</span>
+      </a>
+      <nav class="nav-links" aria-label="页面章节">
+        <a href="#start">开始</a>
+        <a href="#gallery">界面</a>
+        <a href="#features">功能</a>
+        <a href="#hotkeys">权限</a>
+        <a href="#docs">文档</a>
+        <a class="nav-github" href="https://github.com/Thankyou-Cheems/Bomana">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="content">
+      <!-- HERO -->
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="kicker">
+              <span class="kicker-dot"></span>
+              WINDOWS · OPEN SOURCE · OFFICIAL 8111
+            </p>
+            <h1 id="hero-title">
+              <span class="hero-line">全真飞行</span>
+              <span class="hero-line hero-line-em">需要的信息</span>
+              <span class="hero-line hero-line-soft">安静地放在手边</span>
+            </h1>
+            <p class="hero-lede">
+              Bomana 是面向 War Thunder 全真模式的多功能计时器。Lite / Standard 提供
+              15 分钟收益周期、带内精确导航、燃油与超速提示；超级爆弹版通过 CheemsPay 订阅。
+            </p>
+            <div class="hero-actions">
+              <a
+                class="button primary"
+                id="heroDownload"
+                href="https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.2.2.exe"
+              >
+                下载 Windows 启动器
+                <span class="button-arrow" aria-hidden="true">→</span>
+              </a>
+              <a class="button ghost" href="#start">三步开始</a>
+              <a
+                class="text-link"
+                id="heroDownloadGithub"
+                href="https://github.com/Thankyou-Cheems/Bomana/releases"
+              >
+                GitHub 备用下载
+              </a>
+            </div>
+            <ul class="hero-trust" aria-label="产品边界">
+              <li>只读官方 localhost:8111</li>
+              <li>绿色版 · 可回退</li>
+              <li>Lite / Standard · MIT</li>
+            </ul>
+          </div>
+
+          <aside class="hero-aside" aria-label="关键数字">
+            <div class="hero-icon-card">
+              <img src="assets/bomana-app.png" alt="Bomana 应用图标" width="96" height="96">
+            </div>
+            <div class="stat-block">
+              <span class="stat-label">REWARD CYCLE</span>
+              <strong class="stat-value led">15:00</strong>
+              <span class="stat-hint">每条命的收益窗口</span>
+            </div>
+            <div class="stat-row">
+              <div class="stat-block dim">
+                <span class="stat-label">DATA SOURCE</span>
+                <strong class="stat-value mono">:8111</strong>
+                <span class="stat-hint">官方本机接口</span>
+              </div>
+              <div class="stat-block dim">
+                <span class="stat-label">CHANNELS</span>
+                <strong class="stat-value">3</strong>
+                <span class="stat-hint">超级爆弹版订阅 · Standard · Lite</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- START -->
+      <section class="start-section" id="start" aria-labelledby="start-title">
+        <div class="section-head split">
+          <div>
+            <p class="section-label">01 · GET STARTED</p>
+            <h2 id="start-title">三步开始，不需要额外游戏插件</h2>
+          </div>
+          <p class="section-aside-text">
+            启动器负责下载、签名校验和版本回退。Bomana 只读取游戏已经提供的本地数据。
+          </p>
+        </div>
+
+        <ol class="steps">
+          <li>
+            <span class="step-index">01</span>
+            <h3>下载启动器</h3>
+            <p>优先走国内 CDN（腾讯云 / EdgeOne）；GitHub Release 作为备用，无需安装 Python。</p>
+          </li>
+          <li>
+            <span class="step-index">02</span>
+            <h3>选择功能通道</h3>
+            <p>Standard / Lite 可直接使用；超级爆弹版会打开浏览器，通过 CheemsPay 完成订阅授权。</p>
+          </li>
+          <li>
+            <span class="step-index">03</span>
+            <h3>进入战斗</h3>
+            <p>启动 War Thunder 并进入战斗，Bomana 会自动连接 localhost:8111。</p>
+          </li>
+        </ol>
+
+        <div class="download-panel" aria-labelledby="download-title">
+          <div class="download-copy">
+            <p class="section-label">LATEST RELEASE</p>
+            <h3 id="download-title">先下载启动器，其余交给它</h3>
+            <p id="releaseStatus" role="status" aria-live="polite">正在读取国内 CDN 版本信息…</p>
+            <div class="download-actions">
+              <a
+                class="button primary"
+                id="launcherDownload"
+                href="https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.2.2.exe"
+              >
+                下载启动器（国内 CDN）
+              </a>
+              <a
+                class="button secondary"
+                id="launcherDownloadGithub"
+                href="https://github.com/Thankyou-Cheems/Bomana/releases"
+              >
+                GitHub 备用
+              </a>
+              <a class="text-link" id="allReleasesLink" href="https://github.com/Thankyou-Cheems/Bomana/releases">
+                查看所有版本
+              </a>
+            </div>
+            <p class="download-cdn-note">
+              主下载走 <strong>bomanaupdate.ruikang.wang</strong>（腾讯云 + EdgeOne）。站点镜像不依赖 GitHub 资源。
+            </p>
+          </div>
+          <div class="release-files">
+            <p class="release-files-label">CDN 分发文件</p>
+            <div id="releaseAssets" class="release-assets" aria-live="polite">
+              <span>Launcher</span><span>Standard / Lite</span><span>Signed manifests</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHANNELS -->
+      <section class="channels-section" id="channels" aria-labelledby="channels-title">
+        <div class="section-head">
+          <p class="section-label">02 · CHANNELS</p>
+          <h2 id="channels-title">只带上你需要的功能</h2>
+        </div>
+        <div class="channel-grid">
+          <article class="channel featured">
+            <span class="channel-tag">SUBSCRIBER · CHEEMSPAY</span>
+            <h3>超级爆弹版</h3>
+            <p class="channel-blurb">深度学习的高精度打击模型与地形数据</p>
+            <ul>
+              <li>深度学习的高精度打击模型</li>
+              <li>启动器独立维护地形数据</li>
+            </ul>
+          </article>
+          <article class="channel">
+            <span class="channel-tag">BALANCED</span>
+            <h3>Standard</h3>
+            <p class="channel-blurb">计时 · 导航 · 燃油 · 超速，不含投弹估算</p>
+            <ul>
+              <li>更少投弹设置</li>
+              <li>适合空战与常规飞行</li>
+            </ul>
+          </article>
+          <article class="channel">
+            <span class="channel-tag">MINIMAL</span>
+            <h3>Lite</h3>
+            <p class="channel-blurb">只保留核心周期计时与基本窗口控制</p>
+            <ul>
+              <li>最低信息密度</li>
+              <li>适合只看收益周期</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- GALLERY: real UI (web + mobile live; other slots optional) -->
+      <section class="gallery-section" id="gallery" aria-labelledby="gallery-title">
+        <div class="section-head split">
+          <div>
+            <p class="section-label">03 · REAL UI</p>
+            <h2 id="gallery-title">实机界面</h2>
+          </div>
+          <p class="section-aside-text">
+            这里展示 Lite / Standard 与通用启动器的公开实机界面。
+          </p>
+        </div>
+
+        <div class="gallery-stack">
+          <!-- Public desktop UI -->
+          <div class="gallery-row gallery-row--pair">
+            <figure
+              class="shot shot--portrait shot--desktop-main"
+              data-shot="assets/shots/desktop-main.png"
+            >
+              <div class="shot-frame">
+                <img
+                  class="shot-img"
+                  alt="Bomana Standard 桌面主窗口实机：计时与导航"
+                  width="944"
+                  height="957"
+                  hidden
+                >
+                <div class="shot-empty" data-ar="944/957">
+                  <span class="shot-meta">DESKTOP · MAIN</span>
+                  <strong>主窗口</strong>
+                  <p>计时 · 导航 · 飞行提示</p>
+                </div>
+              </div>
+              <figcaption>桌面主窗 · Glacier 浅色主题 · 可置顶 / 点击穿透</figcaption>
+            </figure>
+          </div>
+
+          <!-- Square-ish launcher, capped width -->
+          <figure class="shot shot--launcher" data-shot="assets/shots/launcher.png">
+            <div class="shot-frame">
+              <img
+                class="shot-img"
+                alt="Bomana 启动器实机：通道、更新与启动"
+                width="1182"
+                height="1179"
+                hidden
+              >
+              <div class="shot-empty" data-ar="1/1">
+                <span class="shot-meta">LAUNCHER</span>
+                <strong>启动器</strong>
+                <p>通道 · 更新 · 回退</p>
+              </div>
+            </div>
+            <figcaption>启动器 3.2.2 · 签名更新与通道选择</figcaption>
+          </figure>
+
+          <div class="gallery-row gallery-row--instruments" id="instrument-shots">
+            <figure class="shot shot--instrument" data-shot="assets/shots/nav-precision.png">
+              <div class="shot-frame">
+                <img
+                  class="shot-img"
+                  alt="Bomana 航向带内精确对准区实机：偏差、捕获门与平滑游标"
+                  width="340"
+                  height="138"
+                  hidden
+                >
+                <div class="shot-empty" data-ar="340/138">
+                  <span class="shot-meta">NAV · PRECISION</span>
+                  <strong>带内精确对准</strong>
+                  <p>偏差 · 捕获门 · 平滑游标</p>
+                </div>
+              </div>
+              <figcaption>航向带精确区 · 小偏差非线性放大，机场仍留在主刻度</figcaption>
+            </figure>
+
+          </div>
+
+          <!-- Wide strip: full length visible -->
+          <figure class="shot shot--strip" data-shot="assets/shots/nav-hud.png">
+            <div class="shot-frame">
+              <img
+                class="shot-img"
+                alt="Bomana 独立导航航向带实机"
+                width="1188"
+                height="188"
+                hidden
+              >
+              <div class="shot-empty" data-ar="1188/188">
+                <span class="shot-meta">NAV · TAPE</span>
+                <strong>独立导航</strong>
+                <p>航向带 · 战区 / 机场</p>
+              </div>
+            </div>
+            <figcaption>独立导航窗 · 主刻度保留全局目标，精确提示收进航向带</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- FEATURES -->
+      <section class="features-section" id="features" aria-labelledby="features-title">
+        <div class="section-head">
+          <p class="section-label">04 · FLIGHT TOOLS</p>
+          <h2 id="features-title">一眼看懂，而不是再开一块仪表盘</h2>
+          <p class="section-lede">
+            功能围绕全真飞行中的时间、方向、余量和风险组织；没有需要学习的复杂工作区。
+          </p>
+        </div>
+
+        <div class="feature-bento">
+          <article class="feat feat-hero">
+            <span class="feat-code led-chip">15:00</span>
+            <h3>收益周期计时</h3>
+            <p>识别出生、着陆和离场状态，自动维护 15 分钟周期，临近结束时提醒。</p>
+          </article>
+          <article class="feat">
+            <span class="feat-code">037°</span>
+            <h3>战区与机场导航</h3>
+            <p>主刻度保留战区、机场与 POI；接近目标时，非线性精确区在带内放大偏差并平滑捕获。</p>
+          </article>
+          <article class="feat">
+            <span class="feat-code">FUEL / IAS</span>
+            <h3>燃油与超速</h3>
+            <p>油量、消耗、返航估算；IAS 与 Mach 分级提示。</p>
+          </article>
+          <article class="feat">
+            <span class="feat-code">WPN</span>
+            <h3>武器解算</h3>
+            <p>超级爆弹版的订阅能力；实现与模型不在公开仓库，通过 CheemsPay 授权后由私有发布服务交付。</p>
+          </article>
+          <article class="feat">
+            <span class="feat-code">WEB</span>
+            <h3>网页驾驶舱</h3>
+            <p>本机或局域网手机查看计时与地图，可操作 Bomana 固定功能，不模拟游戏按键。</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- HOTKEYS -->
+      <section class="hotkey-section" id="hotkeys" aria-labelledby="hotkey-title">
+        <div class="hotkey-copy">
+          <p class="section-label">05 · PERMISSION</p>
+          <h2 id="hotkey-title">系统热键只控制 Bomana</h2>
+          <p>
+            Bomana 以普通权限直接注册系统热键，不探测游戏进程，不会因为游戏状态自动请求 UAC。
+            若前台权限边界阻止热键，投弹栏、主窗与托盘仍提供等价按钮。
+          </p>
+          <ul class="boundary-list">
+            <li>默认 F6–F11，只触发 Bomana 固定动作</li>
+            <li>不使用键盘钩子、轮询或 Raw Input</li>
+            <li>不枚举或打开游戏进程，不查询游戏权限</li>
+            <li>不向游戏合成按键，也不自动操作投放</li>
+            <li>热键失效时不影响按钮、托盘与 8111 功能</li>
+          </ul>
+          <div class="hotkey-actions">
+            <a class="button secondary" href="https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations">
+              验证 Artifact Attestations
+            </a>
+            <a class="text-link" href="https://github.com/Thankyou-Cheems/Bomana/blob/main/docs/specs/startup-elevation.md">
+              查看安全契约
+            </a>
+          </div>
+        </div>
+        <div class="permission-flow" aria-label="权限分离流程">
+          <div class="flow-node game">
+            <small>WINDOWS</small>
+            <strong>RegisterHotKey</strong>
+            <span>普通系统热键</span>
+          </div>
+          <div class="flow-join" aria-hidden="true"></div>
+          <div class="flow-node broker">
+            <small>ALLOWLIST</small>
+            <strong>F6–F11</strong>
+            <span>固定 Bomana 动作</span>
+          </div>
+          <div class="flow-join" aria-hidden="true"></div>
+          <div class="flow-node app">
+            <small>ORDINARY INTEGRITY</small>
+            <strong>Bomana App</strong>
+            <span>按钮 · 托盘 · 8111 功能</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- TRUST -->
+      <section class="trust-section" aria-labelledby="trust-title">
+        <div class="section-head">
+          <p class="section-label">06 · BOUNDARIES</p>
+          <h2 id="trust-title">能做什么，也明确不做什么</h2>
+        </div>
+        <div class="trust-grid">
+          <article>
+            <span class="trust-num">01</span>
+            <h3>官方数据边界</h3>
+            <p>
+              游戏状态运行时只访问本机 8111 的 <code>/indicators</code>、<code>/state</code>、
+              <code>/map_obj.json</code>、<code>/map_info.json</code>、<code>/map.img</code> 与 <code>/icons.ttf</code>，
+              不读内存、不注入、不改游戏文件。
+            </p>
+          </article>
+          <article>
+            <span class="trust-num">02</span>
+            <h3>可验证的更新</h3>
+            <p>
+              启动器先验证 Ed25519 清单与 SHA256；GitHub Actions 还为发布文件生成可独立验证的
+              Artifact Attestations。
+            </p>
+          </article>
+          <article>
+            <span class="trust-num">03</span>
+            <h3>透明的隐私说明</h3>
+            <p>
+              匿名统计字段、用途和禁用方式公开；热键 Broker 不联网、不记录按键内容，也不参与统计。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- DOCS -->
+      <section class="docs-section" id="docs" aria-labelledby="docs-title">
+        <div class="section-head">
+          <p class="section-label">07 · READ MORE</p>
+          <h2 id="docs-title">需要细节时，再往下看</h2>
+        </div>
+        <div class="docs-grid">
+          <a href="https://github.com/Thankyou-Cheems/Bomana/blob/main/docs/QUICKSTART.md">
+            <span class="docs-k">GUIDE</span>
+            <strong>快速上手</strong>
+            <span>安装、权限与常见问题</span>
+          </a>
+          <a href="https://github.com/Thankyou-Cheems/Bomana/blob/main/docs/PRIVACY.md">
+            <span class="docs-k">LEGAL</span>
+            <strong>隐私政策</strong>
+            <span>匿名统计与数据边界</span>
+          </a>
+          <a href="https://github.com/Thankyou-Cheems/Bomana/blob/main/docs/CHANGELOG.md">
+            <span class="docs-k">LOG</span>
+            <strong>更新日志</strong>
+            <span>版本变化与修复记录</span>
+          </a>
+          <a href="https://github.com/Thankyou-Cheems/Bomana">
+            <span class="docs-k">CODE</span>
+            <strong>源码仓库</strong>
+            <span>代码、Issues 与 Releases</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="faq-section" aria-labelledby="faq-title">
+        <div class="section-head">
+          <p class="section-label">08 · FAQ</p>
+          <h2 id="faq-title">第一次使用常见的问题</h2>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>为什么显示 8111 不可用？</summary>
+            <p>
+              机库通常没有完整飞行数据。进入战斗后再试；也可在浏览器访问
+              <code>http://localhost:8111</code> 确认游戏本地数据页可用。
+            </p>
+          </details>
+          <details>
+            <summary>一定要授予管理员权限吗？</summary>
+            <p>
+              不需要。Bomana 默认使用普通热键，确认游戏普通运行时不会提示。
+              只有高权限或无法判断时才提供可选按钮；项目没有商业证书，因此 UAC 会显示“未知发布者”，
+              拒绝不会影响其他功能。
+            </p>
+          </details>
+          <details>
+            <summary>CCRP 是游戏内部真实弹道吗？</summary>
+            <p>不是。超级爆弹版是独立订阅功能，只使用官方 8111 观测、用户配置和经审查的离线静态数据，并明确提示不可用状态。</p>
+          </details>
+          <details>
+            <summary>可以和其他 8111 工具一起使用吗？</summary>
+            <p>
+              通常可以。Bomana 只读游戏本地 HTTP 数据，不占用独占连接；
+              全局热键请避免与游戏或其他工具重复。
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <!-- CTA BAND -->
+      <section class="cta-band" aria-label="下载召唤">
+        <div class="cta-inner">
+          <p class="section-label">READY</p>
+          <h2>进战斗前，把计时器打开。</h2>
+          <div class="cta-actions">
+            <a
+              class="button primary large"
+              id="ctaDownload"
+              href="https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.2.2.exe"
+            >
+              下载启动器（国内 CDN）
+              <span class="button-arrow" aria-hidden="true">→</span>
+            </a>
+            <a
+              class="button ghost large"
+              id="ctaDownloadGithub"
+              href="https://github.com/Thankyou-Cheems/Bomana/releases"
+            >
+              GitHub 备用
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <img src="assets/bomana-app.png" alt="" width="40" height="40">
+        <p>
+          <strong>Bomana</strong>
+          <span>Made for the Space Monkeys community.</span>
+        </p>
+      </div>
+      <p class="footer-note">
+        Lite / Standard 公开闭包采用 MIT License；超级爆弹版为私有付费订阅。
+        War Thunder 及相关商标归 Gaijin Entertainment 所有；Bomana 与其无隶属或赞助关系。
+      </p>
+    </footer>
+
+    <script src="site.js" defer></script>
+  </body>
+</html>

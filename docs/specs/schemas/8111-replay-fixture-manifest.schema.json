@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Thankyou-Cheems/Bomana/docs/specs/schemas/8111-replay-fixture-manifest.schema.json",
+  "title": "Bomana Raw 8111 Replay Fixture Manifest",
+  "type": "object",
+  "required": [
+    "fixture_version",
+    "fixture_id",
+    "session_file",
+    "session_sha256",
+    "source",
+    "privacy",
+    "expected"
+  ],
+  "properties": {
+    "fixture_version": {
+      "const": 1
+    },
+    "fixture_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"
+    },
+    "session_file": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+\\.jsonl\\.gz$"
+    },
+    "session_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "privacy": {
+      "$ref": "#/$defs/privacy"
+    },
+    "expected": {
+      "$ref": "#/$defs/expected"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": [
+        "recording_sha256",
+        "started_at_utc",
+        "samples",
+        "duration_sec"
+      ],
+      "properties": {
+        "recording_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "started_at_utc": {
+          "type": "string"
+        },
+        "samples": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "duration_sec": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "privacy": {
+      "type": "object",
+      "required": [
+        "profile",
+        "coordinates_preserved",
+        "recorder_identity_fields_omitted"
+      ],
+      "properties": {
+        "profile": {
+          "const": "raw-official-8111-v1"
+        },
+        "coordinates_preserved": {
+          "const": true
+        },
+        "recorder_identity_fields_omitted": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "expected": {
+      "type": "object",
+      "required": [
+        "checks",
+        "takeoffs_sec",
+        "landings_sec",
+        "refits_sec",
+        "weapon2_pulse_count",
+        "player_losses_sec",
+        "max_cycle",
+        "max_sortie_id",
+        "lobby_endpoint_failures"
+      ],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "takeoffs_sec": {
+          "$ref": "#/$defs/times"
+        },
+        "landings_sec": {
+          "$ref": "#/$defs/times"
+        },
+        "refits_sec": {
+          "$ref": "#/$defs/times"
+        },
+        "weapon2_pulse_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "player_losses_sec": {
+          "$ref": "#/$defs/times"
+        },
+        "max_cycle": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_sortie_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lobby_endpoint_failures": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "times": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0
+      }
+    }
+  }
+}

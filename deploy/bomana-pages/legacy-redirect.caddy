@@ -1,0 +1,8 @@
+# Insert this route near the top of the existing http://ruikang.wang site
+# block. `route` preserves the operation order: strip the legacy prefix, then
+# redirect the remaining path and query string to the canonical host.
+@bomana_legacy path /bomana /bomana/*
+route @bomana_legacy {
+  uri strip_prefix /bomana
+  redir https://bomana.ruikang.wang{uri} 308
+}
