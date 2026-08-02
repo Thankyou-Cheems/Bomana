@@ -27,6 +27,12 @@ implementation history.
   `python314.dll` 无法加载的问题。
 - 重启子进程前显式重置 PyInstaller 解包环境，保留手动启动时相同的干净加载路径。
 
+## Launcher 3.4.6
+
+- 修复切换 CheemsPay 账户或在网页端删除设备后重新授权时复用失效设备
+  `device_id`，导致本地提示没有可用 entitlement 的问题。
+- 交互式授权现在会幂等重注册设备；若旧设备 key 已停用，则自动轮换本机设备身份。
+
 ## Launcher 3.4.3
 
 ### Changed
