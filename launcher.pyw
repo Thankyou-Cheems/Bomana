@@ -227,6 +227,7 @@ def _effective_web_preferences_for_channel(
 
     The fourth element is True when the user requested Web on a channel that
     does not ship the cockpit (prefs stay saved, but launch handoff forces off).
+    It is an internal degradation flag; public-channel startup remains silent.
     """
     if not all(isinstance(value, bool) for value in (autostart, auto_open, lan_enabled)):
         raise TypeError("Web launch preferences must be bools")
@@ -6268,18 +6269,13 @@ class LauncherWindow:
             autostart = True
         elif not autostart:
             lan_enabled = False
-        previous = (
-            self.web_dashboard_autostart,
-            self.web_dashboard_auto_open,
-            self.web_dashboard_lan_enabled,
-        )
         self.web_dashboard_autostart = autostart
         self.web_dashboard_auto_open = auto_open
         self.web_dashboard_lan_enabled = lan_enabled
         self.web_dashboard_autostart_var.set(autostart)
         self.web_dashboard_lan_enabled_var.set(lan_enabled)
         self._save_launcher_state()
-        effective_autostart, effective_auto_open, effective_lan, degraded = (
+        effective_autostart, effective_auto_open, effective_lan, _degraded = (
             _effective_web_preferences_for_channel(
                 self.channel,
                 self.web_dashboard_autostart,
@@ -6292,17 +6288,10 @@ class LauncherWindow:
             effective_auto_open,
             effective_lan,
         )
-        newly_requested = (
-            (autostart and not previous[0])
-            or (auto_open and not previous[1])
-            or (lan_enabled and not previous[2])
-        )
-        if degraded and newly_requested:
-            messagebox.showwarning(
-                DISPLAY_NAME,
-                _web_cockpit_degradation_message(self.channel),
-                parent=self.root,
-            )
+        # Standard/Lite intentionally keep subscriber-only preferences in the
+        # saved state but silently disable them for the public app package.
+        # Selecting or launching a public channel must never interrupt startup
+        # with a Super Bomb-only configuration warning.
 
     def _on_download_source_changed(self, *_args) -> None:
         new_mode = _DOWNLOAD_SOURCE_LABEL_TO_MODE.get(
@@ -6566,7 +6555,6 @@ class LauncherWindow:
         if self.running and self.current_task != "check":
             self.channel_var.set(_channel_display_name(self.channel))
             return
-        previous_channel = self.channel
         requested_channel = (
             _normalize_channel(self.channel_var.get()) or self.detected_channel
         )
@@ -6593,22 +6581,6 @@ class LauncherWindow:
         self._refresh_channel_details()
         self._refresh_subscription_ui()
         self._refresh_feature_visibility()
-        _a, _o, _l, degraded = _effective_web_preferences_for_channel(
-            self.channel,
-            self.web_dashboard_autostart,
-            self.web_dashboard_auto_open,
-            self.web_dashboard_lan_enabled,
-        )
-        if (
-            degraded
-            and _normalize_channel(previous_channel) != _normalize_channel(self.channel)
-            and _channel_supports_web_cockpit(previous_channel)
-        ):
-            messagebox.showwarning(
-                DISPLAY_NAME,
-                _web_cockpit_degradation_message(self.channel),
-                parent=self.root,
-            )
         if self.running and self.current_task == "check":
             self._queue_recheck_after_check(
                 f"通道已切换到 {_channel_display_name(self.channel)}，"
@@ -6772,18 +6744,12 @@ class LauncherWindow:
 
     def _commit_launch(self) -> None:
         if self.decision.action == "launch":
-            autostart, auto_open, lan_enabled, degraded = _effective_web_preferences_for_channel(
+            autostart, auto_open, lan_enabled, _degraded = _effective_web_preferences_for_channel(
                 self.channel,
                 self.web_dashboard_autostart,
                 self.web_dashboard_auto_open,
                 self.web_dashboard_lan_enabled,
             )
-            if degraded:
-                messagebox.showwarning(
-                    DISPLAY_NAME,
-                    _web_cockpit_degradation_message(self.channel),
-                    parent=self.root,
-                )
             _set_pending_web_preferences(autostart, auto_open, lan_enabled)
             self.root.destroy()
 
