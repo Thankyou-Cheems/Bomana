@@ -16,6 +16,16 @@ implementation history.
 - Kept the public closure limited to `fm_speed_limits.json`; the offline bomb
   catalog remains subscriber-only.
 
+## Launcher 3.4.3
+
+### Changed
+
+- Rotated the release manifest signing key after the previous private key was
+  unavailable. New launchers trust both the active key and the previous public
+  key so already-installed public App packages remain updateable.
+- Because the old private key cannot sign the migration package, installing
+  Launcher 3.4.3 once is required; later Launcher updates resume normally.
+
 ## Launcher 3.4.2
 
 ### Fixed

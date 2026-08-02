@@ -436,6 +436,7 @@ def test_green_checksum_declares_zero_launcher_runtime(tmp_path: Path) -> None:
 
 TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 TEST_SIGNING_PUBLIC_KEY = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+TEST_LEGACY_PUBLIC_KEY = "LybrOYzTnUJEub+ZPKyHRYjXNrOCF+46kCjfhNZ72OY="
 
 
 def test_launcher_manifest_records_size(tmp_path: Path, monkeypatch) -> None:
@@ -525,6 +526,10 @@ def test_build_portable_generates_and_restores_launcher_public_key(
     monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
     monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, TEST_SIGNING_PUBLIC_KEY)
     monkeypatch.setenv(build_portable.SIGNING_KEY_ID_ENV, "test-key")
+    monkeypatch.setenv(
+        build_portable.LEGACY_PUBLIC_KEYS_ENV,
+        json.dumps({"legacy-key": TEST_LEGACY_PUBLIC_KEY}),
+    )
     (tmp_path / "launcher").mkdir()
 
     path, original = build_portable.write_release_public_keys_module(tmp_path)
@@ -532,6 +537,7 @@ def test_build_portable_generates_and_restores_launcher_public_key(
     assert original is None
     assert path.name == "release_public_keys.py"
     assert "test-key" in path.read_text(encoding="utf-8")
+    assert "legacy-key" in path.read_text(encoding="utf-8")
     assert launcher_core.ed25519_public_key_from_private_key(TEST_SIGNING_PRIVATE_KEY) in (
         path.read_text(encoding="utf-8")
     )

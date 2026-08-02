@@ -29,11 +29,16 @@ subscriber delivery.
 - `SIGN-12`: Downgrades below the active compatibility or security floor MUST be
   rejected unless an explicit signed recovery policy permits them.
 - `SIGN-13`: Private signing keys MUST enter only through protected deployment
-  configuration and MUST never be printed or committed.
-- `SIGN-14`: Public CI MUST build App artifacts only for Lite and Standard.
-- `SIGN-15`: The JSON schemas under `docs/specs/schemas/` are the authoritative
+  configuration and MUST never be printed or committed. An approved key
+  rotation MUST retain the previous public key in the next Launcher trust set
+  so already-published artifacts remain verifiable.
+- `SIGN-14`: A signing-key rotation MUST publish a migration note when the old
+  private key is unavailable. The old Launcher cannot self-update across the
+  rotation; users MUST install the first rotated Launcher manually.
+- `SIGN-15`: Public CI MUST build App artifacts only for Lite and Standard.
+- `SIGN-16`: The JSON schemas under `docs/specs/schemas/` are the authoritative
   manifest shape definitions used by tests and release tooling.
-- `SIGN-16`: Enhanced manifest and artifact endpoints MUST require a short-lived
+- `SIGN-17`: Enhanced manifest and artifact endpoints MUST require a short-lived
   CheemsPay-derived grant in addition to the Launcher's valid local receipt.
 
 GitHub build provenance, when present, is additional evidence; it does not
