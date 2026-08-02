@@ -49,7 +49,7 @@ Launcher 验证签名清单、SHA-256 与版本兼容性，并保留一个上一
 CheemsPay 商品、付款和权益状态始终以
 <https://pay.ruikang.wang/> 的实际账户中心为准；Launcher 不保存密码或支付信息。
 
-不想使用 Launcher 时，可从 GitHub Release 下载 `Bomana_Green_Lite_v8.7.0.zip`。
+不想使用 Launcher 时，可从 GitHub Release 下载 `Bomana_Green_Lite_v8.7.1.zip`。
 绿色版只包含 Lite 功能及完整 Python 运行库，解压后直接运行 `Bomana.exe`。
 它会异步上报每日一次的匿名活跃事件；网络失败不会阻塞启动，也不会影响功能。
 
