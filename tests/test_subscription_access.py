@@ -14,6 +14,7 @@ from launcher.core import ed25519_public_key_from_private_key, ed25519_sign, ed2
 from launcher.subscription_access import (
     ArtifactGrant,
     AuthorizationPoll,
+    CheemsPayApiError,
     CheemsPaySubscriptionAuthority,
     DeviceAuthorization,
     DeviceAuthorizationState,
@@ -494,3 +495,112 @@ def test_subscription_workflow_preserves_device_identity_and_caches_verified_rec
         "refresh:device-id",
         "grant:device-id:releases/enhanced/manifest_Enhanced.json",
     ]
+
+
+def test_subscription_workflow_re_registers_cached_device_on_interactive_login() -> None:
+    credential = DeviceCredential.from_seed(DEVICE_SEED)
+    receipt_token, _claims = issue_receipt(credential)
+    store = InMemorySubscriptionSessionStore(
+        StoredSubscriptionSession(
+            private_seed=DEVICE_SEED,
+            access_token="old-access-token",
+            device_id="cached-device",
+            receipt_token="old-receipt",
+        )
+    )
+    authority = InMemorySubscriptionAuthority(
+        authorization=DeviceAuthorization(
+            device_code="code",
+            user_code="USER-CODE",
+            verification_uri="https://example.test/device",
+            verification_uri_complete="https://example.test/device?user_code=USER-CODE",
+            expires_at=NOW + timedelta(minutes=30),
+            interval_seconds=5,
+        ),
+        poll_results=[],
+        registered_device=RegisteredDevice("fresh-device", credential.key_thumbprint),
+        receipt_token=receipt_token,
+    )
+    workflow = SubscriptionWorkflow(
+        authority=authority,
+        verifier=verifier(),
+        store=store,
+    )
+
+    decision = workflow.activate_authorized_session(
+        "new-access-token",
+        device_name="Test PC",
+        now=NOW,
+    )
+
+    assert decision.allowed
+    assert store.session is not None
+    assert store.session.device_id == "fresh-device"
+    assert store.session.receipt_token == receipt_token
+    assert authority.calls == ["register:Test PC", "refresh:fresh-device"]
+
+
+class RebindingAuthority:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.fail_next_registration = True
+        self.credential: DeviceCredential | None = None
+
+    def register_device(
+        self,
+        access_token: str,
+        credential: DeviceCredential,
+        device_name: str,
+    ) -> RegisteredDevice:
+        del access_token
+        self.calls.append(f"register:{device_name}")
+        if self.fail_next_registration:
+            self.fail_next_registration = False
+            raise CheemsPayApiError(
+                409,
+                "DEVICE_KEY_UNAVAILABLE",
+                "cached device key is unavailable",
+            )
+        self.credential = credential
+        return RegisteredDevice("rotated-device", credential.key_thumbprint)
+
+    def refresh_receipt(
+        self,
+        access_token: str,
+        credential: DeviceCredential,
+        device_id: str,
+    ) -> str:
+        del access_token, device_id
+        self.calls.append(f"refresh:{credential.key_thumbprint}")
+        assert self.credential is credential
+        return issue_receipt(credential)[0]
+
+
+def test_subscription_workflow_rotates_disabled_device_key() -> None:
+    store = InMemorySubscriptionSessionStore(
+        StoredSubscriptionSession(
+            private_seed=DEVICE_SEED,
+            device_id="disabled-device",
+            receipt_token="old-receipt",
+        )
+    )
+    authority = RebindingAuthority()
+    workflow = SubscriptionWorkflow(
+        authority=authority,
+        verifier=verifier(),
+        store=store,
+    )
+
+    decision = workflow.activate_authorized_session(
+        "new-access-token",
+        device_name="Test PC",
+        now=NOW,
+    )
+
+    assert decision.allowed
+    assert store.session is not None
+    assert store.session.device_id == "rotated-device"
+    assert store.session.private_seed != DEVICE_SEED
+    assert authority.calls[0] == "register:Test PC"
+    assert authority.calls[1].startswith("register:Test PC")
+    assert authority.calls[2].startswith("refresh:")

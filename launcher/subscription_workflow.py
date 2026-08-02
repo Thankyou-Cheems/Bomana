@@ -8,6 +8,7 @@ from datetime import datetime
 from launcher.subscription_access import (
     AuthorizationPoll,
     AuthorizedArtifactRequest,
+    CheemsPayApiError,
     DeviceAuthorization,
     DeviceCredential,
     ReceiptValidationError,
@@ -78,17 +79,35 @@ class SubscriptionWorkflow:
             )
         else:
             credential = DeviceCredential.from_seed(session.private_seed)
-            session = replace(session, access_token=access_token)
-        self.store.save(session)
+            session = replace(session, access_token=access_token, receipt_token="")
 
-        if not session.device_id:
+        # Re-register on every interactive login.  This is idempotent for an
+        # active device, while allowing account switches and recovery after a
+        # user deleted the cached device from CheemsPay.
+        try:
             registered = self.authority.register_device(
                 access_token,
                 credential,
                 device_name,
             )
-            session = replace(session, device_id=registered.device_id)
-            self.store.save(session)
+        except CheemsPayApiError as exc:
+            if exc.code != "DEVICE_KEY_UNAVAILABLE":
+                raise
+            # A disabled device key cannot be resurrected.  Start a fresh
+            # device identity and register it under the newly authorized user.
+            credential = DeviceCredential.generate()
+            session = StoredSubscriptionSession(
+                private_seed=credential.private_seed,
+                access_token=access_token,
+            )
+            registered = self.authority.register_device(
+                access_token,
+                credential,
+                device_name,
+            )
+
+        session = replace(session, device_id=registered.device_id)
+        self.store.save(session)
 
         return self._refresh(session, credential=credential, now=now)
 
