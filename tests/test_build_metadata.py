@@ -1,4 +1,3 @@
-import base64
 import importlib.util
 import json
 import os
@@ -14,6 +13,11 @@ import pytest
 from bomana import metadata
 from bomana_version import APP_REQUIRED_LAUNCHER_VERSION
 from launcher import core as launcher_core
+from launcher.subscription_key_contract import (
+    CHEEMSPAY_LICENSE_KEY_ID,
+    CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL,
+    CHEEMSPAY_LICENSE_PUBLIC_KEYS,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPENDENCY_NAME_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)")
@@ -555,14 +559,11 @@ def test_build_portable_generates_subscription_key_outside_source_tree(
         "build_portable_subscription_keys",
         "tools/build_portable.py",
     )
-    raw_public_key = base64.b64decode(TEST_SIGNING_PUBLIC_KEY, validate=True)
-    public_key_spki = (
-        base64.urlsafe_b64encode(bytes.fromhex("302a300506032b6570032100") + raw_public_key)
-        .decode("ascii")
-        .rstrip("=")
+    monkeypatch.setenv(
+        build_portable.SUBSCRIPTION_PUBLIC_KEY_ENV,
+        CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL,
     )
-    monkeypatch.setenv(build_portable.SUBSCRIPTION_PUBLIC_KEY_ENV, public_key_spki)
-    monkeypatch.setenv(build_portable.SUBSCRIPTION_KEY_ID_ENV, "cheemspay-test")
+    monkeypatch.setenv(build_portable.SUBSCRIPTION_KEY_ID_ENV, CHEEMSPAY_LICENSE_KEY_ID)
     work_dir = tmp_path / "build"
     work_dir.mkdir()
 
@@ -570,8 +571,74 @@ def test_build_portable_generates_subscription_key_outside_source_tree(
 
     assert path.parent == generated_dir
     assert tmp_path / "launcher" not in path.parents
-    assert "cheemspay-test" in path.read_text(encoding="utf-8")
-    assert public_key_spki in path.read_text(encoding="utf-8")
+    generated = path.read_text(encoding="utf-8")
+    assert repr(dict(CHEEMSPAY_LICENSE_PUBLIC_KEYS)) in generated
+
+
+def test_build_portable_keeps_primary_key_when_adding_a_future_trust_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    build_portable = load_tool_module(
+        "build_portable_subscription_keys_with_future_root",
+        "tools/build_portable.py",
+    )
+    future_key_id = "prod-2026-02"
+    future_public_key = (
+        "MCowBQYDK2VwAyEA11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+    )
+    monkeypatch.setattr(
+        build_portable,
+        "CHEEMSPAY_LICENSE_PUBLIC_KEYS",
+        {
+            CHEEMSPAY_LICENSE_KEY_ID: CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL,
+            future_key_id: future_public_key,
+        },
+    )
+    monkeypatch.setenv(build_portable.SUBSCRIPTION_PUBLIC_KEY_ENV, future_public_key)
+    monkeypatch.setenv(build_portable.SUBSCRIPTION_KEY_ID_ENV, future_key_id)
+    work_dir = tmp_path / "build"
+    work_dir.mkdir()
+
+    _generated_dir, path = build_portable.write_subscription_public_keys_module(work_dir)
+
+    generated = path.read_text(encoding="utf-8")
+    assert repr(
+        {
+            CHEEMSPAY_LICENSE_KEY_ID: CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL,
+            future_key_id: future_public_key,
+        }
+    ) in generated
+
+
+@pytest.mark.parametrize(
+    ("environment_name", "value"),
+    [
+        ("SUBSCRIPTION_PUBLIC_KEY_ENV", "not-the-production-key"),
+        ("SUBSCRIPTION_KEY_ID_ENV", "future-license-key"),
+    ],
+)
+def test_build_portable_rejects_subscription_trust_root_replacement(
+    tmp_path: Path,
+    monkeypatch,
+    environment_name: str,
+    value: str,
+) -> None:
+    build_portable = load_tool_module(
+        f"build_portable_subscription_key_mismatch_{environment_name}",
+        "tools/build_portable.py",
+    )
+    monkeypatch.setenv(
+        build_portable.SUBSCRIPTION_PUBLIC_KEY_ENV,
+        CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL,
+    )
+    monkeypatch.setenv(build_portable.SUBSCRIPTION_KEY_ID_ENV, CHEEMSPAY_LICENSE_KEY_ID)
+    monkeypatch.setenv(getattr(build_portable, environment_name), value)
+    work_dir = tmp_path / "build"
+    work_dir.mkdir()
+
+    with pytest.raises(RuntimeError, match="repository CheemsPay trust root"):
+        build_portable.write_subscription_public_keys_module(work_dir)
 
 
 def test_version_info_falls_back_from_config_to_metadata() -> None:
