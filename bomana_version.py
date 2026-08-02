@@ -12,7 +12,7 @@ MIN_SUPPORTED_LAUNCHER_VERSION: Final = "3.0.0"
 # Current packaged App release floor. This copy travels inside every App ZIP,
 # so an older Launcher cannot bypass a newer release requirement by importing
 # or copying the package outside the signed online-update flow.
-APP_REQUIRED_LAUNCHER_VERSION: Final = "3.3.0"
+APP_REQUIRED_LAUNCHER_VERSION: Final = "3.4.0"
 GREEN_DISTRIBUTION_MODE: Final = "green"
 GREEN_DISTRIBUTION_MODE_ENV: Final = "BOMANA_DISTRIBUTION_MODE"
 

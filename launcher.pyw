@@ -110,6 +110,7 @@ PUBLIC_FALLBACK_CHANNEL = "Standard"
 APP_DIR_NAME = install_txn.APP_DIR_NAME
 APP_PREVIOUS_DIR_NAME = install_txn.APP_PREVIOUS_DIR_NAME
 APP_BACKUP_DIR_NAME = install_txn.APP_BACKUP_DIR_NAME
+APP_CHANNELS_DIR_NAME = install_txn.APP_CHANNELS_DIR_NAME
 STATE_FILE_NAME = "launcher_state.json"
 LOG_FILE_NAME = "launcher.log"
 INSTALL_ID_FILE_NAME = ".bomana_install_id"
@@ -128,9 +129,6 @@ LEGACY_LAUNCHER_SELF_UPDATE_FILES = (
     "bomana_update_launcher_apply.ps1",
 )
 DEFAULT_ENTRYPOINT = "Bomana.pyw"
-_FEATURE_PROFILE_CHANNEL_RE = re.compile(
-    r"(?m)^EDITION_CHANNEL\s*=\s*[\"']([^\"'\r\n]+)[\"']\s*$"
-)
 NET_TIMEOUT_SEC = 8.0
 PRIMARY_TIMEOUT_SEC = 4.0
 PRIMARY_RETRY_TIMEOUT_SEC = 8.0
@@ -158,6 +156,7 @@ BRANDING_ICON_FILE = "bomana/assets/branding/app.ico"
 BRANDING_SPONSOR_FILE = "bomana/assets/branding/sponsor_wechat.png"
 
 RELEASES_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
+OFFICIAL_SITE_URL = "https://bomana.ruikang.wang/"
 _USE_SYSTEM_PROXY = True
 _URL_OPENERS: Dict[str, Any] = {}
 _PROXY_MODE_LOCAL = threading.local()
@@ -391,14 +390,30 @@ def _is_source_test_run(base: Path) -> bool:
     return (base / DEFAULT_ENTRYPOINT).exists() and _has_config_marker(base)
 
 
-def _app_runtime_dir(base: Path) -> Path:
+def _app_runtime_dir(base: Path, channel: object | None = None) -> Path:
     if _is_source_test_run(base):
         return base
-    return base / APP_DIR_NAME
+    target = install_txn.app_slot_dir(base, channel)
+    if channel is None or target.exists():
+        return target
+    legacy = install_txn.app_slot_dir(base)
+    if legacy.exists():
+        legacy_channel = install_txn.read_app_channel_identity(legacy)
+        if not legacy_channel or legacy_channel == _normalize_channel(channel):
+            return legacy
+    return target
 
 
-def _previous_app_dir(base: Path) -> Path:
-    return base / APP_PREVIOUS_DIR_NAME
+def _previous_app_dir(base: Path, channel: object | None = None) -> Path:
+    target = install_txn.previous_app_slot_dir(base, channel)
+    if channel is None or target.exists():
+        return target
+    legacy = install_txn.previous_app_slot_dir(base)
+    if legacy.exists():
+        legacy_channel = install_txn.read_app_channel_identity(legacy)
+        if not legacy_channel or legacy_channel == _normalize_channel(channel):
+            return legacy
+    return target
 
 
 def _apply_window_icon(window: tk.Misc) -> None:
@@ -1058,18 +1073,18 @@ def _normalize_channel(value: Any) -> str:
     return mapped or ""
 
 
-def _installed_app_channel(base: Path) -> str:
+def _installed_app_channel(base: Path, channel: object | None = None) -> str:
     """Read the packaged edition marker without importing untrusted app code."""
 
-    profile = _app_runtime_dir(base) / "bomana" / "config" / "feature_profile.py"
-    try:
-        if profile.stat().st_size > 16 * 1024:
-            return ""
-        source = profile.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return ""
-    match = _FEATURE_PROFILE_CHANNEL_RE.search(source)
-    return _normalize_channel(match.group(1)) if match else ""
+    if channel is not None:
+        return install_txn.read_app_channel_identity(
+            _app_runtime_dir(base, _normalize_channel(channel) or channel)
+        )
+    for candidate in CHANNEL_DETAILS:
+        found = install_txn.read_app_channel_identity(_app_runtime_dir(base, candidate))
+        if found:
+            return found
+    return install_txn.read_app_channel_identity(_app_runtime_dir(base))
 
 
 def _channel_display_name(value: Any) -> str:
@@ -1106,19 +1121,23 @@ def _select_startup_channel(base: Path, detected_channel: str) -> str:
     return saved_channel or detected_channel
 
 
-def _is_local_app_ready(base: Path) -> bool:
+def _is_local_app_ready(base: Path, channel: object | None = None) -> bool:
     try:
-        install_txn.validate_app_package_root(_app_runtime_dir(base), DEFAULT_ENTRYPOINT)
+        install_txn.validate_app_package_root(
+            _app_runtime_dir(base, channel),
+            DEFAULT_ENTRYPOINT,
+        )
     except Exception:
         return False
     return True
 
 
-def _is_previous_app_ready(base: Path) -> bool:
+def _is_previous_app_ready(base: Path, channel: object | None = None) -> bool:
     try:
-        install_txn.validate_app_package_root(_previous_app_dir(base), DEFAULT_ENTRYPOINT)
+        previous_dir = _previous_app_dir(base, channel)
+        install_txn.validate_app_package_root(previous_dir, DEFAULT_ENTRYPOINT)
         install_txn.require_compatible_app_version(
-            _previous_app_dir(base),
+            previous_dir,
             identity_name="回退应用版本",
         )
     except Exception:
@@ -1133,10 +1152,14 @@ def _recover_incomplete_install(base: Path) -> str:
         _log(target, message)
         recovery_errors.append(str(message).strip())
 
-    steps = install_txn.InstallTransaction.recover_incomplete(
+    steps = install_txn.InstallTransaction.recover_incomplete_all(
         base,
         log_cb=record_recovery_error,
     )
+    if recovery_errors:
+        # Keep the user-facing warning focused on the failed recovery slot;
+        # a safe legacy migration can be retried on the next launch.
+        steps = [step for step in steps if not step.startswith("migrate_")]
     if steps:
         _log(base, f"检测到上次安装未完成，已恢复：{', '.join(steps)}")
     return recovery_errors[-1] if recovery_errors else ""
@@ -1904,7 +1927,7 @@ def _resolve_update_manifest(
         if status_cb:
             status_cb(title, detail, progress, level)
 
-    local_version = install_txn.read_local_app_version(_app_runtime_dir(base))
+    local_version = install_txn.read_local_app_version(_app_runtime_dir(base, channel))
     source_mode = _normalize_download_source_mode(download_source_mode)
 
     manifest: Optional[Dict[str, Any]] = None
@@ -2219,12 +2242,15 @@ def _terrain_status_copy(
     return "未安装", "选择超级爆弹版后可单独下载，不会重复下载 App。", "warning"
 
 
-def _terrain_seed_dirs(base: Path, pack_id: str) -> Tuple[Path, ...]:
+def _terrain_seed_dirs(base: Path, pack_id: str, channel: object = "Enhanced") -> Tuple[Path, ...]:
     candidates: list[Path] = []
     override = os.environ.get("BOMANA_TERRAIN_DIR", "").strip()
     if override:
         candidates.append(Path(override).expanduser())
-    for app_dir in (_app_runtime_dir(base), _previous_app_dir(base)):
+    for app_dir in (
+        _app_runtime_dir(base, channel),
+        _previous_app_dir(base, channel),
+    ):
         candidates.append(app_dir / "bomana" / "data" / pack_id)
     candidates.append(Path.home() / ".bomana" / pack_id)
     return _unique_paths(tuple(candidates))
@@ -2235,6 +2261,7 @@ def _download_terrain_update_from_manifest(
     manifest: Dict[str, Any],
     status_cb: Optional[Callable[[str, str, Optional[float], str], None]] = None,
     cancel_cb: Optional[Callable[[], bool]] = None,
+    channel: object = "Enhanced",
     subscriber_artifact_provider: Optional[
         Callable[[str], AuthorizedArtifactRequest]
     ] = None,
@@ -2318,7 +2345,7 @@ def _download_terrain_update_from_manifest(
     return _terrain_store_for_base(base).sync(
         parsed,
         fetch_object=fetch_object,
-        seed_dirs=_terrain_seed_dirs(base, parsed.pack_id),
+        seed_dirs=_terrain_seed_dirs(base, parsed.pack_id, channel),
         status_cb=status_cb,
         cancel_cb=cancel_cb,
     )
@@ -2362,7 +2389,7 @@ class UpdateService:
             if self.subscriber_artifact_provider is None:
                 raise RuntimeError("超级爆弹版必须通过 CheemsPay 获取私有清单")
             return (
-                install_txn.read_local_app_version(_app_runtime_dir(self.base)),
+                install_txn.read_local_app_version(_app_runtime_dir(self.base, self.channel)),
                 _fetch_manifest_from_subscriber(self.subscriber_artifact_provider),
             )
         return _resolve_update_manifest(
@@ -2450,7 +2477,7 @@ class UpdateService:
                 )
                 terrain_plan = terrain_store.plan(
                     terrain_model,
-                    seed_dirs=_terrain_seed_dirs(self.base, terrain_model.pack_id),
+                    seed_dirs=_terrain_seed_dirs(self.base, terrain_model.pack_id, self.channel),
                 )
                 terrain_local_revision = terrain_plan.local_revision
                 terrain_update_available = not terrain_plan.current
@@ -2540,6 +2567,7 @@ class UpdateService:
             cancel_cb=self.cancel_cb,
             download_headers=download_headers,
             allow_redirects=(_normalize_channel(self.channel) != "Enhanced"),
+            channel=self.channel,
         )
 
     def download_terrain_update(
@@ -2551,6 +2579,7 @@ class UpdateService:
             manifest,
             status_cb=self.notify,
             cancel_cb=self.cancel_cb,
+            channel=self.channel,
             subscriber_artifact_provider=(
                 self.subscriber_artifact_provider
                 if _normalize_channel(self.channel) == "Enhanced"
@@ -2652,6 +2681,7 @@ def _download_update_from_manifest(
     cancel_cb: Optional[Callable[[], bool]] = None,
     download_headers: Optional[Dict[str, str]] = None,
     allow_redirects: bool = True,
+    channel: object | None = None,
 ) -> Tuple[str, str]:
     def notify(
         title: str,
@@ -2770,6 +2800,7 @@ def _download_update_from_manifest(
             status_cb=notify,
             cancel_cb=cancel_cb,
             expected_version=remote_version,
+            channel=channel,
         )
     finally:
         try:
@@ -3143,7 +3174,7 @@ def _launch_app(base: Path, channel: str) -> None:
     if normalized_channel == "Enhanced":
         terrain_dir = _terrain_store_for_base(base).current_pack_dir()
         if terrain_dir is None and not _is_source_test_run(base):
-            legacy_bundled = _app_runtime_dir(base) / "bomana" / "data" / "terrain-v1"
+            legacy_bundled = _app_runtime_dir(base, normalized_channel) / "bomana" / "data" / "terrain-v1"
             if not legacy_bundled.is_dir():
                 raise RuntimeError(
                     "超级爆弹版缺少已验证的独立地形数据，请先在启动器中更新地形数据。"
@@ -3152,8 +3183,8 @@ def _launch_app(base: Path, channel: str) -> None:
         base,
         channel,
         recover_incomplete_install=_recover_incomplete_install,
-        app_runtime_dir=_app_runtime_dir,
-        is_local_app_ready=_is_local_app_ready,
+        app_runtime_dir=lambda path: _app_runtime_dir(path, normalized_channel),
+        is_local_app_ready=lambda path: _is_local_app_ready(path, normalized_channel),
         is_source_test_run=_is_source_test_run,
         read_app_version=install_txn.read_app_version_identity,
         default_entrypoint=DEFAULT_ENTRYPOINT,
@@ -3709,8 +3740,10 @@ class LauncherWindow:
                 self.channel = PUBLIC_FALLBACK_CHANNEL
             if self.detected_channel == "Enhanced":
                 self.detected_channel = PUBLIC_FALLBACK_CHANNEL
-        self.local_version = install_txn.read_local_app_version(_app_runtime_dir(base))
-        self.previous_version = install_txn.read_local_app_version(_previous_app_dir(base))
+        self.local_version = install_txn.read_local_app_version(_app_runtime_dir(base, self.channel))
+        self.previous_version = install_txn.read_local_app_version(
+            _previous_app_dir(base, self.channel)
+        )
         self.events: "queue.Queue[Tuple[str, Dict[str, Any]]]" = queue.Queue()
         self.running = False
         self.has_attempted_update = False
@@ -3747,7 +3780,7 @@ class LauncherWindow:
         self.launcher_update_available = False
         self.last_check_ok = False
         self.last_check_error = ""
-        self.install_dir = _app_runtime_dir(self.base)
+        self.install_dir = _app_runtime_dir(self.base, self.channel)
         self.last_download_success = False
         self.decision = LaunchDecision(action="exit", final_version=self.local_version)
         self._worker: Optional[threading.Thread] = None
@@ -3887,7 +3920,10 @@ class LauncherWindow:
                 (
                     (
                         "legacy",
-                        _app_runtime_dir(self.base) / "bomana" / "data" / "terrain-v1",
+                        _app_runtime_dir(self.base, self.channel)
+                        / "bomana"
+                        / "data"
+                        / "terrain-v1",
                     ),
                     ("legacy", Path.home() / ".bomana" / "terrain-v1"),
                 )
@@ -4243,6 +4279,19 @@ class LauncherWindow:
         )
         self.details_btn.pack(side="right", padx=(self._px(8), 0))
         self._style_action_button(self.details_btn, "secondary")
+
+        self.site_btn = tk.Button(
+            title_row,
+            text="官网预览",
+            width=10,
+            command=self._open_official_site,
+            cursor="hand2",
+            font=self._font(10),
+            padx=self._px(8),
+            pady=self._px(4),
+        )
+        self.site_btn.pack(side="right", padx=(self._px(8), 0))
+        self._style_action_button(self.site_btn, "primary")
 
         self.sub_lbl = tk.Label(
             top,
@@ -5169,14 +5218,19 @@ class LauncherWindow:
             )
             return
         if task == "rollback":
-            final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
-            preserved_version = install_txn.read_local_app_version(_previous_app_dir(self.base))
+            final_version = install_txn.read_local_app_version(
+                _app_runtime_dir(self.base, self.channel)
+            )
+            preserved_version = install_txn.read_local_app_version(
+                _previous_app_dir(self.base, self.channel)
+            )
             update_ok = False
             detail = ""
             try:
                 final_version, preserved_version = install_txn.rollback_to_previous_app(
                     self.base,
                     status_cb=self._emit_status,
+                    channel=self.channel,
                 )
                 update_ok = True
                 detail = f"已回退到 v{final_version}。当前保留的上一版本为 v{preserved_version}。"
@@ -5198,7 +5252,9 @@ class LauncherWindow:
             )
             return
         if task == "import_zip":
-            final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
+            final_version = install_txn.read_local_app_version(
+                _app_runtime_dir(self.base, self.channel)
+            )
             update_ok = False
             update_error = ""
             package_path = str(getattr(self, "pending_import_zip_path", "")).strip()
@@ -5216,8 +5272,11 @@ class LauncherWindow:
                     entrypoint=DEFAULT_ENTRYPOINT,
                     status_cb=self._emit_status,
                     cancel_cb=lambda: self._cancel_requested.is_set(),
+                    channel=self.channel,
                 )
-                final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
+                final_version = install_txn.read_local_app_version(
+                    _app_runtime_dir(self.base, self.channel)
+                )
                 update_ok = True
             except Exception as e:
                 update_error = str(e)
@@ -5235,8 +5294,8 @@ class LauncherWindow:
                             "detail": (
                                 f"已导入本地应用包，当前版本 v{final_version}"
                                 + (
-                                    f"；已保留上一版本 v{install_txn.read_local_app_version(_previous_app_dir(self.base))}"
-                                    if _is_previous_app_ready(self.base)
+                                    f"；已保留上一版本 v{install_txn.read_local_app_version(_previous_app_dir(self.base, self.channel))}"
+                                    if _is_previous_app_ready(self.base, self.channel)
                                     else ""
                                 )
                             ),
@@ -5264,13 +5323,15 @@ class LauncherWindow:
                 )
             return
 
-        final_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
+        final_version = install_txn.read_local_app_version(
+            _app_runtime_dir(self.base, self.channel)
+        )
         update_ok = False
         update_source = ""
         update_error = ""
         whats_new = ""
         whats_new_warning = ""
-        local_ready = _is_local_app_ready(self.base)
+        local_ready = _is_local_app_ready(self.base, self.channel)
         manifest = dict(self.latest_manifest or {})
         terrain_manifest = dict(self.latest_terrain_manifest or {})
         app_update_needed = bool(self.update_available)
@@ -5302,7 +5363,7 @@ class LauncherWindow:
                     _log(self.base, whats_new_warning)
             update_source = "；".join(update_sources)
             update_ok = True
-            local_ready = _is_local_app_ready(self.base)
+            local_ready = _is_local_app_ready(self.base, self.channel)
         except Exception as e:
             update_error = _friendly_error_text(e, self.channel)
             _log(self.base, f"下载更新失败：{e}")
@@ -5363,11 +5424,11 @@ class LauncherWindow:
                 if terrain_dir is not None:
                     completed_lines.append(f"地形位置：{terrain_dir}")
             completed_lines.append(f"下载目录：{_launcher_download_dir(self.base)}")
-            if app_update_needed and _is_previous_app_ready(self.base):
+            if app_update_needed and _is_previous_app_ready(self.base, self.channel):
                 completed_lines.append(
                     (
                         f"已保留上一版本 "
-                        f"v{install_txn.read_local_app_version(_previous_app_dir(self.base))}，"
+                        f"v{install_txn.read_local_app_version(_previous_app_dir(self.base, self.channel))}，"
                         "可随时回退。"
                     )
                 )
@@ -5838,7 +5899,7 @@ class LauncherWindow:
             f"  |  本地版本：v{self.local_version}"
         )
         if self.previous_version != "0.0.0":
-            if not _is_previous_app_ready(self.base):
+            if not _is_previous_app_ready(self.base, self.channel):
                 return f"{base}  |  上一版不兼容：v{self.previous_version}"
             return f"{base}  |  可回退：v{self.previous_version}"
         return base
@@ -5847,14 +5908,19 @@ class LauncherWindow:
         if self.source_test_mode:
             return "源码模式不写入安装槽，因此不提供回退。"
         if self.previous_version != "0.0.0":
-            if not _is_previous_app_ready(self.base):
+            if not _is_previous_app_ready(self.base, self.channel):
                 return f"上一版 v{self.previous_version} 与 Launcher 3 不兼容，无法回退。"
             return f"上一版 v{self.previous_version}；回退后仍保留当前 v{self.local_version}。"
         return "成功更新或导入后，会自动保留一个上一版本。"
 
     def _refresh_installed_versions(self) -> None:
-        self.local_version = install_txn.read_local_app_version(_app_runtime_dir(self.base))
-        self.previous_version = install_txn.read_local_app_version(_previous_app_dir(self.base))
+        self.install_dir = _app_runtime_dir(self.base, self.channel)
+        self.local_version = install_txn.read_local_app_version(
+            _app_runtime_dir(self.base, self.channel)
+        )
+        self.previous_version = install_txn.read_local_app_version(
+            _previous_app_dir(self.base, self.channel)
+        )
         self.sub_lbl.config(text=self._subline_text())
         if hasattr(self, "rollback_status_lbl"):
             self.rollback_status_lbl.config(text=self._rollback_status_text())
@@ -5936,7 +6002,9 @@ class LauncherWindow:
                 self.rollback_status_lbl.config(text=self._rollback_status_text())
             self._style_action_button(self.rollback_btn, "secondary")
             return
-        if self.previous_version != "0.0.0" and _is_previous_app_ready(self.base):
+        if self.previous_version != "0.0.0" and _is_previous_app_ready(
+            self.base, self.channel
+        ):
             self.rollback_btn.config(text=f"回退 v{self.previous_version}", state="normal")
             if hasattr(self, "rollback_status_lbl"):
                 self.rollback_status_lbl.config(text=self._rollback_status_text())
@@ -5960,7 +6028,9 @@ class LauncherWindow:
         self.start_btn.config(state=update_controls_state)
         self.launcher_btn.config(state=("disabled" if running else self.launcher_btn.cget("state")))
         self.retry_btn.config(state=update_controls_state)
-        if running and self.current_task == "check" and _is_local_app_ready(self.base):
+        if running and self.current_task == "check" and _is_local_app_ready(
+            self.base, self.channel
+        ):
             # Allow launching local app immediately while background check continues.
             self.launch_btn.config(state="normal")
         else:
@@ -6020,7 +6090,7 @@ class LauncherWindow:
                 self.start_btn.config(state="normal")
             else:
                 self.start_btn.config(state="disabled")
-            if _is_local_app_ready(self.base):
+            if _is_local_app_ready(self.base, self.channel):
                 self.launch_btn.config(state="normal")
             else:
                 self.launch_btn.config(state="disabled")
@@ -6100,14 +6170,14 @@ class LauncherWindow:
             elif self.last_check_ok and not (
                 self.update_available or self.terrain_update_available
             ):
-                if _is_local_app_ready(self.base):
+                if _is_local_app_ready(self.base, self.channel):
                     self.hint_lbl.config(
                         text=f"当前已是最新版本，可直接点击“启动应用”。\n安装位置：{self.install_dir}"
                     )
                 else:
                     self.hint_lbl.config(text="当前设备没有本地版本，请等待在线更新可用后下载。")
             elif self.last_check_error:
-                if _is_local_app_ready(self.base):
+                if _is_local_app_ready(self.base, self.channel):
                     self.hint_lbl.config(
                         text="自动检查失败，可点击“重新检查”，或先点击“启动应用”使用本地版本。"
                     )
@@ -6117,7 +6187,9 @@ class LauncherWindow:
                     )
             else:
                 self.hint_lbl.config(text="启动后会自动检查更新。")
-            if (not self.source_test_mode) and _is_previous_app_ready(self.base):
+            if (not self.source_test_mode) and _is_previous_app_ready(
+                self.base, self.channel
+            ):
                 self.hint_lbl.config(
                     text=f"{self.hint_lbl.cget('text')}\n可通过“回退 v{self.previous_version}”快速切回上一版。"
                 )
@@ -6125,9 +6197,9 @@ class LauncherWindow:
         self._schedule_layout_reflow()
 
     def _show_error_actions(self) -> None:
-        if _is_local_app_ready(self.base):
+        if _is_local_app_ready(self.base, self.channel):
             text = "可点击“重新检查”或“打开下载页”。也可点“下载目录”查看已缓存文件，或直接点击“启动应用”。"
-            if _is_previous_app_ready(self.base):
+            if _is_previous_app_ready(self.base, self.channel):
                 text += f"\n如果新版异常，也可以点击“回退 v{self.previous_version}”。"
             self.hint_lbl.config(text=text)
         else:
@@ -6419,7 +6491,9 @@ class LauncherWindow:
                 "当前处于源码测试模式，不使用应用包安装目录，因此不提供版本回退。",
             )
             return
-        if self.previous_version == "0.0.0" or not _is_previous_app_ready(self.base):
+        if self.previous_version == "0.0.0" or not _is_previous_app_ready(
+            self.base, self.channel
+        ):
             messagebox.showinfo(DISPLAY_NAME, "当前没有兼容 Launcher 3 的可回退版本。")
             return
         ok = messagebox.askyesno(
@@ -6565,7 +6639,7 @@ class LauncherWindow:
         self._refresh_channel_details()
 
     def _local_app_launch_version(self) -> str | None:
-        if not _is_local_app_ready(self.base):
+        if not _is_local_app_ready(self.base, self.channel):
             detail = (
                 "同目录源码入口缺失，请确认 Bomana.pyw 存在。"
                 if self.source_test_mode
@@ -6575,7 +6649,7 @@ class LauncherWindow:
             return None
         try:
             version = install_txn.require_compatible_app_version(
-                _app_runtime_dir(self.base),
+                _app_runtime_dir(self.base, self.channel),
                 identity_name="启动应用版本",
             )
         except Exception as exc:
@@ -6584,7 +6658,7 @@ class LauncherWindow:
         if (
             not self.source_test_mode
             and not self._super_bomb_access_allowed()
-            and _installed_app_channel(self.base) == "Enhanced"
+            and _installed_app_channel(self.base, self.channel) == "Enhanced"
         ):
             self._set_status(
                 "订阅已过期",
@@ -6595,7 +6669,12 @@ class LauncherWindow:
             return None
         if _normalize_channel(self.channel) == "Enhanced" and not self.source_test_mode:
             managed = _terrain_store_for_base(self.base).current_pack_dir()
-            bundled = _app_runtime_dir(self.base) / "bomana" / "data" / "terrain-v1"
+            bundled = (
+                _app_runtime_dir(self.base, self.channel)
+                / "bomana"
+                / "data"
+                / "terrain-v1"
+            )
             if managed is None and not bundled.is_dir():
                 self._set_status(
                     "无法启动",
@@ -6657,6 +6736,12 @@ class LauncherWindow:
         except Exception:
             pass
 
+    def _open_official_site(self) -> None:
+        try:
+            webbrowser.open(OFFICIAL_SITE_URL)
+        except Exception:
+            pass
+
     def _open_download_dir(self) -> None:
         try:
             _open_folder(_launcher_download_dir(self.base))
@@ -6706,7 +6791,9 @@ class LauncherWindow:
         self._exit_after_task = False
         self.decision = LaunchDecision(
             action="exit",
-            final_version=install_txn.read_local_app_version(_app_runtime_dir(self.base)),
+            final_version=install_txn.read_local_app_version(
+                _app_runtime_dir(self.base, self.channel)
+            ),
             warning=self.decision.warning,
         )
         self.root.destroy()

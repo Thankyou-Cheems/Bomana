@@ -35,6 +35,7 @@ def make_app_zip(
     version: str = "8.1.0",
     *,
     min_launcher_version: str | None = None,
+    channel: str | None = None,
 ) -> bytes:
     buffer = io.BytesIO()
     min_launcher_line = (
@@ -46,7 +47,10 @@ def make_app_zip(
         zf.writestr("Bomana.pyw", "# app entry\n")
         zf.writestr("bomana_version.py", "# shared compatibility boundary\n")
         zf.writestr("bomana/config/__init__.py", f'__version__ = "{version}"\n')
-        zf.writestr("bomana/config/feature_profile.py", "ENABLE_CCRP = True\n")
+        feature_profile = "ENABLE_CCRP = True\n"
+        if channel is not None:
+            feature_profile = f'EDITION_CHANNEL = "{channel}"\n' + feature_profile
+        zf.writestr("bomana/config/feature_profile.py", feature_profile)
         zf.writestr(
             "bomana/metadata.py",
             f'__version__ = "{version}"\n{min_launcher_line}',
@@ -54,7 +58,13 @@ def make_app_zip(
     return buffer.getvalue()
 
 
-def write_config_package(package_dir: Path, version: str, *, sentinel: str | None = None) -> None:
+def write_config_package(
+    package_dir: Path,
+    version: str,
+    *,
+    sentinel: str | None = None,
+    channel: str | None = None,
+) -> None:
     config_dir = package_dir / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     sentinel_line = f'SENTINEL = "{sentinel}"\n' if sentinel is not None else ""
@@ -62,7 +72,10 @@ def write_config_package(package_dir: Path, version: str, *, sentinel: str | Non
         f'__version__ = "{version}"\n',
         encoding="utf-8",
     )
-    (config_dir / "feature_profile.py").write_text("ENABLE_CCRP = True\n", encoding="utf-8")
+    feature_profile = "ENABLE_CCRP = True\n"
+    if channel is not None:
+        feature_profile = f'EDITION_CHANNEL = "{channel}"\n' + feature_profile
+    (config_dir / "feature_profile.py").write_text(feature_profile, encoding="utf-8")
     (config_dir / "settings.py").write_text(sentinel_line, encoding="utf-8")
     (package_dir / "metadata.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
     (package_dir.parent / "bomana_version.py").write_text(
@@ -738,7 +751,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "source_name": "GitHub",
         }
         launcher_manifest = {
-            "remote_version": "3.4.0",
+            "remote_version": "3.5.0",
             "package_url": "https://example.invalid/launcher.exe",
             "package_sha256": "def",
             "package_size": "",
@@ -770,7 +783,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
     def test_old_launcher_blocks_new_app_before_package_download(self) -> None:
         manifest = {
             "remote_version": "8.5.0",
-            "min_launcher_version": "3.3.0",
+            "min_launcher_version": "3.4.0",
             "package_url": "https://example.invalid/app.zip",
             "package_asset": "Bomana_app_Enhanced_v8.5.0.zip",
             "package_sha256": "a" * 64,
@@ -778,9 +791,9 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         }
 
         with (
-            patch.object(self.launcher, "LAUNCHER_VERSION", "3.2.2"),
+            patch.object(self.launcher, "LAUNCHER_VERSION", "3.3.2"),
             patch.object(self.launcher, "_download_to_file") as download,
-            self.assertRaisesRegex(RuntimeError, "要求 >= v3.3.0"),
+            self.assertRaisesRegex(RuntimeError, "要求 >= v3.4.0"),
         ):
             self.launcher._download_update_from_manifest(self.base, manifest)
 
@@ -1555,7 +1568,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
     def test_local_zip_rejects_app_requiring_newer_launcher(self) -> None:
         self.write_current_app("8.0.0")
-        package_bytes = make_app_zip("8.5.0", min_launcher_version="3.4.0")
+        package_bytes = make_app_zip("8.5.0", min_launcher_version="3.5.0")
 
         with self.assertRaisesRegex(RuntimeError, "当前启动器版本过旧"):
             launcher_install.install_zip_package(
@@ -1568,6 +1581,95 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertEqual(
             launcher_install.read_local_app_version(self.base / self.launcher.APP_DIR_NAME),
             "8.0.0",
+        )
+
+    def test_channel_slots_keep_app_versions_and_rollbacks_independent(self) -> None:
+        standard_zip = make_app_zip("8.1.0", channel="Standard")
+        standard_new_zip = make_app_zip("8.2.0", channel="Standard")
+        lite_zip = make_app_zip("8.7.0", channel="Lite")
+
+        launcher_install.install_zip_package(
+            self.base,
+            standard_zip,
+            self.launcher._sha256_bytes(standard_zip),
+            self.launcher.DEFAULT_ENTRYPOINT,
+            channel="Standard",
+        )
+        launcher_install.install_zip_package(
+            self.base,
+            lite_zip,
+            self.launcher._sha256_bytes(lite_zip),
+            self.launcher.DEFAULT_ENTRYPOINT,
+            channel="Lite",
+        )
+        launcher_install.install_zip_package(
+            self.base,
+            standard_new_zip,
+            self.launcher._sha256_bytes(standard_new_zip),
+            self.launcher.DEFAULT_ENTRYPOINT,
+            channel="Standard",
+        )
+
+        self.assertEqual(
+            launcher_install.read_local_app_version(
+                launcher_install.app_slot_dir(self.base, "Standard")
+            ),
+            "8.2.0",
+        )
+        self.assertEqual(
+            launcher_install.read_local_app_version(
+                launcher_install.previous_app_slot_dir(self.base, "Standard")
+            ),
+            "8.1.0",
+        )
+        self.assertEqual(
+            launcher_install.read_local_app_version(
+                launcher_install.app_slot_dir(self.base, "Lite")
+            ),
+            "8.7.0",
+        )
+        self.assertFalse(launcher_install.app_slot_dir(self.base, "Enhanced").exists())
+
+        final_version, preserved = launcher_install.rollback_to_previous_app(
+            self.base,
+            channel="Standard",
+        )
+        self.assertEqual((final_version, preserved), ("8.1.0", "8.2.0"))
+        self.assertEqual(
+            launcher_install.read_local_app_version(
+                launcher_install.app_slot_dir(self.base, "Lite")
+            ),
+            "8.7.0",
+        )
+
+    def test_channel_slot_rejects_package_from_another_edition(self) -> None:
+        package_bytes = make_app_zip("8.7.0", channel="Lite")
+
+        with self.assertRaisesRegex(RuntimeError, "应用包通道不匹配"):
+            launcher_install.install_zip_package(
+                self.base,
+                package_bytes,
+                self.launcher._sha256_bytes(package_bytes),
+                self.launcher.DEFAULT_ENTRYPOINT,
+                channel="Standard",
+            )
+
+        self.assertFalse(launcher_install.app_slot_dir(self.base, "Standard").exists())
+
+    def test_legacy_channel_marker_is_migrated_to_its_slot(self) -> None:
+        legacy = self.base / launcher_install.APP_DIR_NAME
+        write_config_package(legacy / "bomana", "8.7.0", channel="Lite")
+        (legacy / "Bomana.pyw").write_text("# legacy\n", encoding="utf-8")
+
+        steps = launcher_install.migrate_legacy_slots(self.base)
+
+        self.assertEqual(steps, ["migrate_current_Lite"])
+        self.assertFalse(legacy.exists())
+        self.assertEqual(
+            launcher_install.read_local_app_version(
+                launcher_install.app_slot_dir(self.base, "Lite")
+            ),
+            "8.7.0",
         )
 
     def test_fresh_lock_blocks_install_and_preserves_existing_app(self) -> None:

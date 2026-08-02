@@ -74,7 +74,7 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
 
     assert boundary.MIN_SUPPORTED_APP_VERSION == "8.0.0"
     assert boundary.MIN_SUPPORTED_LAUNCHER_VERSION == "3.0.0"
-    assert boundary.APP_REQUIRED_LAUNCHER_VERSION == "3.3.0"
+    assert boundary.APP_REQUIRED_LAUNCHER_VERSION == "3.4.0"
     app_version_match = re.search(
         r'^__version__ = "([0-9]+[.][0-9]+[.][0-9]+)"$', app_metadata, re.M
     )
@@ -82,7 +82,7 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
     assert boundary.parse_strict_version(
         app_version_match.group(1)
     ) >= boundary.parse_strict_version(boundary.MIN_SUPPORTED_APP_VERSION)
-    assert 'PORTABLE_MIN_LAUNCHER_VERSION = "3.3.0"' in app_metadata
+    assert 'PORTABLE_MIN_LAUNCHER_VERSION = "3.4.0"' in app_metadata
     assert (
         re.search(
             r'^PORTABLE_MIN_LAUNCHER_VERSION = "([^"]+)"$',
@@ -91,8 +91,8 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
         ).group(1)
         == boundary.APP_REQUIRED_LAUNCHER_VERSION
     )
-    assert 'LAUNCHER_VERSION = "3.3.2"' in launcher_metadata
-    assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.3.0"' in build
+    assert 'LAUNCHER_VERSION = "3.4.0"' in launcher_metadata
+    assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.4.0"' in build
 
 
 def test_all_compatibility_entry_paths_use_the_shared_boundary() -> None:

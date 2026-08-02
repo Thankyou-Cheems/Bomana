@@ -45,6 +45,14 @@ def make_window(tmp_path: Path):
     return launcher, window
 
 
+def test_launcher_exposes_official_paid_preview_action() -> None:
+    launcher = load_launcher_module()
+
+    assert launcher.OFFICIAL_SITE_URL == "https://bomana.ruikang.wang/"
+    assert 'text="官网预览"' in Path("launcher.pyw").read_text(encoding="utf-8")
+    assert "command=self._open_official_site" in Path("launcher.pyw").read_text(encoding="utf-8")
+
+
 def test_default_launch_keeps_python_app_at_ordinary_integrity(tmp_path: Path) -> None:
     _launcher, window = make_window(tmp_path)
     window._local_app_launch_version = lambda: "8.0.0"
@@ -370,7 +378,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
 
     assert json.loads(result_path.read_text(encoding="utf-8")) == {
         "boundary": "installed",
-        "launcher": "3.3.2",
+        "launcher": "3.4.0",
         "autostart": "1",
         "auto_open": "1",
         "lan_enabled": "1",

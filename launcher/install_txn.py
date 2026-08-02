@@ -25,6 +25,8 @@ from launcher.metadata import LAUNCHER_VERSION
 APP_DIR_NAME = "app"
 APP_PREVIOUS_DIR_NAME = "app_previous"
 APP_BACKUP_DIR_NAME = f"{APP_DIR_NAME}_backup"
+APP_CHANNELS_DIR_NAME = "app_channels"
+APP_CHANNELS = ("Enhanced", "Standard", "Lite")
 UPDATE_LOCK_FILE_NAME = ".bomana_update.lock"
 UPDATE_LOCK_STALE_SEC = 30 * 60
 APP_REQUIRED_FILES = (
@@ -37,6 +39,49 @@ APP_CONFIG_MARKERS = (Path("bomana") / "config" / "__init__.py",)
 StatusCallback = Callable[[str, str, float | None, str], None]
 CancelCallback = Callable[[], bool]
 LogCallback = Callable[[Path, str], None]
+
+
+def normalize_app_channel(value: object | None) -> str | None:
+    """Return one canonical slot name, or ``None`` for the legacy slot."""
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    for channel in APP_CHANNELS:
+        if text.casefold() == channel.casefold():
+            return channel
+    raise ValueError(f"未知应用通道：{value}")
+
+
+def _slot_root(base: Path, channel: object | None) -> Path:
+    canonical = normalize_app_channel(channel)
+    if canonical is None:
+        return base
+    return base / APP_CHANNELS_DIR_NAME / canonical
+
+
+def app_slot_dir(base: Path, channel: object | None = None) -> Path:
+    """Return the active App directory for one channel.
+
+    ``channel=None`` deliberately preserves the pre-3.4 legacy layout for
+    local compatibility tests and one-time migration.
+    """
+
+    return _slot_root(base, channel) / APP_DIR_NAME
+
+
+def previous_app_slot_dir(base: Path, channel: object | None = None) -> Path:
+    return _slot_root(base, channel) / APP_PREVIOUS_DIR_NAME
+
+
+def backup_app_slot_dir(base: Path, channel: object | None = None) -> Path:
+    return _slot_root(base, channel) / APP_BACKUP_DIR_NAME
+
+
+def new_app_slot_dir(base: Path, channel: object | None = None) -> Path:
+    return _slot_root(base, channel) / f"{APP_DIR_NAME}_new"
 
 
 def _now_utc_iso() -> str:
@@ -111,8 +156,51 @@ def read_app_min_launcher_version_identity(app_dir: Path) -> str:
     return value if found else MIN_SUPPORTED_LAUNCHER_VERSION
 
 
+def read_app_channel_identity(app_dir: Path) -> str:
+    """Read the packaged edition marker without importing candidate code."""
+
+    path = app_dir / "bomana" / "config" / "feature_profile.py"
+    try:
+        if path.stat().st_size > 16 * 1024:
+            return ""
+        module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except Exception:
+        return ""
+    values: list[str] = []
+    for statement in module.body:
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+        if not any(
+            isinstance(target, ast.Name) and target.id == "EDITION_CHANNEL" for target in targets
+        ):
+            continue
+        value = statement.value
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            return ""
+        values.append(value.value)
+    if len(values) != 1:
+        return ""
+    try:
+        return normalize_app_channel(values[0]) or ""
+    except ValueError:
+        return ""
+
+
 def read_local_app_version(app_dir: Path) -> str:
     return read_app_version_identity(app_dir) or "0.0.0"
+
+
+def require_app_channel(app_dir: Path, expected_channel: object) -> str:
+    """Require a staged package's feature profile to match its selected slot."""
+
+    expected = normalize_app_channel(expected_channel)
+    if expected is None:
+        raise ValueError("应用通道不能为空")
+    actual = read_app_channel_identity(app_dir)
+    if actual != expected:
+        raise RuntimeError(f"应用包通道不匹配：包内 {actual or '未知'}，目标 {expected}")
+    return actual
 
 
 def slot_entry_exists(path: Path) -> bool:
@@ -211,14 +299,15 @@ def sha256_file(path: Path) -> str:
 
 
 class InstallTransaction:
-    """Owns update lock, staging paths, replacement, and rollback cleanup."""
+    """Own update lock and atomic replacement for one channel slot."""
 
-    def __init__(self, base: Path) -> None:
+    def __init__(self, base: Path, channel: object | None = None) -> None:
         self.base = base
-        self.app_dir = base / APP_DIR_NAME
-        self.backup_dir = base / APP_BACKUP_DIR_NAME
-        self.previous_dir = base / APP_PREVIOUS_DIR_NAME
-        self.new_dir = base / f"{APP_DIR_NAME}_new"
+        self.channel = normalize_app_channel(channel)
+        self.app_dir = app_slot_dir(base, self.channel)
+        self.backup_dir = backup_app_slot_dir(base, self.channel)
+        self.previous_dir = previous_app_slot_dir(base, self.channel)
+        self.new_dir = new_app_slot_dir(base, self.channel)
         self.lock_path: Path | None = None
         self.work_dir: Path | None = None
         self.zip_path: Path | None = None
@@ -248,6 +337,7 @@ class InstallTransaction:
         entrypoint: str,
         *,
         expected_version: str | None = None,
+        expected_channel: object | None = None,
     ) -> Path:
         if self.zip_path is None or self.stage_dir is None:
             raise RuntimeError("安装事务未启动")
@@ -256,6 +346,7 @@ class InstallTransaction:
             self.zip_path,
             entrypoint,
             expected_version=expected_version,
+            expected_channel=expected_channel,
         )
 
     def extract_package_file(
@@ -264,6 +355,7 @@ class InstallTransaction:
         entrypoint: str,
         *,
         expected_version: str | None = None,
+        expected_channel: object | None = None,
     ) -> Path:
         if self.zip_path is None or self.stage_dir is None:
             raise RuntimeError("安装事务未启动")
@@ -277,9 +369,17 @@ class InstallTransaction:
             expected_version=expected_version,
             identity_name="暂存应用版本",
         )
+        if expected_channel is not None:
+            require_app_channel(src_root, expected_channel)
         return src_root
 
-    def stage_new_app(self, src_root: Path, *, expected_version: str | None = None) -> None:
+    def stage_new_app(
+        self,
+        src_root: Path,
+        *,
+        expected_version: str | None = None,
+        expected_channel: object | None = None,
+    ) -> None:
         version = require_compatible_app_version(
             src_root,
             expected_version=expected_version,
@@ -287,12 +387,15 @@ class InstallTransaction:
         )
         if self.new_dir.exists():
             shutil.rmtree(self.new_dir, ignore_errors=True)
+        self.new_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(src_root, self.new_dir)
         self.validated_new_version = require_compatible_app_version(
             self.new_dir,
             expected_version=version,
             identity_name="暂存应用版本",
         )
+        if expected_channel is not None:
+            require_app_channel(self.new_dir, expected_channel)
 
     def replace_app(self) -> None:
         if self.validated_new_version is None:
@@ -302,6 +405,9 @@ class InstallTransaction:
             expected_version=self.validated_new_version,
             identity_name="暂存应用版本",
         )
+        self.app_dir.parent.mkdir(parents=True, exist_ok=True)
+        self.backup_dir.parent.mkdir(parents=True, exist_ok=True)
+        self.previous_dir.parent.mkdir(parents=True, exist_ok=True)
         if self.backup_dir.exists():
             shutil.rmtree(self.backup_dir, ignore_errors=True)
         if self.app_dir.exists():
@@ -329,8 +435,13 @@ class InstallTransaction:
             pass
 
     @classmethod
-    def recover_incomplete(cls, base: Path, log_cb: LogCallback | None = None) -> list[str]:
-        transaction = cls(base)
+    def recover_incomplete(
+        cls,
+        base: Path,
+        log_cb: LogCallback | None = None,
+        channel: object | None = None,
+    ) -> list[str]:
+        transaction = cls(base, channel)
         steps: list[str] = []
         try:
             candidates = (
@@ -376,6 +487,70 @@ class InstallTransaction:
             return []
         return steps
 
+    @classmethod
+    def recover_incomplete_all(
+        cls,
+        base: Path,
+        log_cb: LogCallback | None = None,
+    ) -> list[str]:
+        """Recover legacy and every channel slot before launcher handoff."""
+
+        steps: list[str] = []
+        steps.extend(cls.recover_incomplete(base, log_cb=log_cb))
+        for channel in APP_CHANNELS:
+            steps.extend(cls.recover_incomplete(base, log_cb=log_cb, channel=channel))
+        steps.extend(migrate_legacy_slots(base, log_cb=log_cb))
+        return steps
+
+
+def migrate_legacy_slots(
+    base: Path,
+    *,
+    log_cb: LogCallback | None = None,
+) -> list[str]:
+    """Move pre-3.4 global slots into their channel-specific locations.
+
+    Both legacy candidates are validated before the first rename. If a package
+    has no channel marker (old test/source packages), it remains in the legacy
+    slot and is resolved by the launcher compatibility fallback; real release
+    packages always carry the marker.
+    """
+
+    candidates = (
+        (base / APP_DIR_NAME, "current", "当前应用版本"),
+        (base / APP_PREVIOUS_DIR_NAME, "previous", "保留应用版本"),
+    )
+    pending: list[tuple[Path, Path, str, str]] = []
+    try:
+        for source, slot_name, identity_name in candidates:
+            if not slot_entry_exists(source):
+                continue
+            require_compatible_app_version(source, identity_name=identity_name)
+            channel = read_app_channel_identity(source)
+            if not channel:
+                continue
+            target = (
+                app_slot_dir(base, channel)
+                if slot_name == "current"
+                else previous_app_slot_dir(base, channel)
+            )
+            pending.append((source, target, channel, slot_name))
+    except Exception as exc:
+        if log_cb is not None:
+            log_cb(base, f"旧版应用槽位迁移已安全停止：{exc}")
+        return []
+
+    steps: list[str] = []
+    for source, target, channel, slot_name in pending:
+        if slot_entry_exists(target):
+            if log_cb is not None:
+                log_cb(base, f"通道 {channel} 已存在新槽位，保留旧版 {slot_name} 槽位：{source}")
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(str(source), str(target))
+        steps.append(f"migrate_{slot_name}_{channel}")
+    return steps
+
 
 def install_zip_package(
     base: Path,
@@ -385,6 +560,7 @@ def install_zip_package(
     status_cb: StatusCallback | None = None,
     cancel_cb: CancelCallback | None = None,
     expected_version: str | None = None,
+    channel: object | None = None,
 ) -> None:
     if expected_version is not None:
         require_minimum_version(
@@ -399,7 +575,7 @@ def install_zip_package(
     if cancel_cb and cancel_cb():
         raise RuntimeError("已取消当前操作")
 
-    with InstallTransaction(base) as transaction:
+    with InstallTransaction(base, channel) as transaction:
         if status_cb:
             status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
         if cancel_cb and cancel_cb():
@@ -408,12 +584,17 @@ def install_zip_package(
             package_bytes,
             entrypoint,
             expected_version=expected_version,
+            expected_channel=channel,
         )
 
         if status_cb:
             status_cb("正在安装更新", "正在替换旧版本文件...", 0.94, "info")
 
-        transaction.stage_new_app(src_root, expected_version=expected_version)
+        transaction.stage_new_app(
+            src_root,
+            expected_version=expected_version,
+            expected_channel=channel,
+        )
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
         transaction.replace_app()
@@ -427,6 +608,7 @@ def install_zip_package_from_file(
     status_cb: StatusCallback | None = None,
     cancel_cb: CancelCallback | None = None,
     expected_version: str | None = None,
+    channel: object | None = None,
 ) -> None:
     if expected_version is not None:
         require_minimum_version(
@@ -441,7 +623,7 @@ def install_zip_package_from_file(
     if cancel_cb and cancel_cb():
         raise RuntimeError("已取消当前操作")
 
-    with InstallTransaction(base) as transaction:
+    with InstallTransaction(base, channel) as transaction:
         if status_cb:
             status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
         if cancel_cb and cancel_cb():
@@ -450,12 +632,17 @@ def install_zip_package_from_file(
             package_path,
             entrypoint,
             expected_version=expected_version,
+            expected_channel=channel,
         )
 
         if status_cb:
             status_cb("正在安装更新", "正在替换旧版本文件...", 0.94, "info")
 
-        transaction.stage_new_app(src_root, expected_version=expected_version)
+        transaction.stage_new_app(
+            src_root,
+            expected_version=expected_version,
+            expected_channel=channel,
+        )
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
         transaction.replace_app()
@@ -464,9 +651,10 @@ def install_zip_package_from_file(
 def rollback_to_previous_app(
     base: Path,
     status_cb: StatusCallback | None = None,
+    channel: object | None = None,
 ) -> tuple[str, str]:
-    app_dir = base / APP_DIR_NAME
-    previous_dir = base / APP_PREVIOUS_DIR_NAME
+    app_dir = app_slot_dir(base, channel)
+    previous_dir = previous_app_slot_dir(base, channel)
     if not app_dir.exists():
         raise RuntimeError("当前没有可用应用，无法执行回退。")
     if not previous_dir.exists():
