@@ -1,80 +1,179 @@
 <div align="center">
 
-<img src="bomana/assets/branding/app.png" width="180" alt="Bomana">
+<img src="bomana/assets/branding/app.png" width="200" alt="Bomana">
 
 # Bomana
 
-**Timer and flight assistance for War Thunder simulator battles**
+**War Thunder SB Timer** · 战雷全真模式收益计时器
+
+War Thunder is a vehicle-combat video game. Bomana is an independent desktop
+tool for simulator battles, helping players manage reward timers, navigation
+information, and sortie preparation. Terms such as “bomb” and “bombing” here
+refer to in-game virtual content only.
 
 [![App](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Fversion%3Fchannel%3DStandard&query=%24.app_version&label=Standard&prefix=v&color=0ea5e9)](https://bomana.ruikang.wang/)
 [![Launcher](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomanaupdate.ruikang.wang%2Fapi%2Fv1%2Flauncher&query=%24.launcher_version&label=launcher&prefix=v&color=6366f1)](https://bomana.ruikang.wang/)
 [![Public License](https://img.shields.io/badge/public%20editions-MIT-22c55e)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.14%2B-eab308)](https://www.python.org/)
 
-**[Download](https://bomana.ruikang.wang/)** · **[中文](README.md)**
+**[Site / download](https://bomana.ruikang.wang/)** ·
+[GitHub Releases](https://github.com/Thankyou-Cheems/Bomana/releases) ·
+[中文](README.md)
 
 </div>
 
-Bomana is a standalone desktop application. It reads only War Thunder's official
-local `localhost:8111` data. It does not read game-process memory, inject code,
-modify game files, or operate the game for the player.
+---
 
-## Editions
+## Compliance statement
 
-| Edition | Access | Features |
+Bomana is an independent application, not a game modification. At runtime it
+reads only the information that War Thunder exposes locally through
+`localhost:8111`, then shows timers and reference information in its own
+windows. It does not read game-process memory, inject code, modify game files,
+press keys for the player, or automate a match.
+
+This describes the implementation boundary, not an official endorsement or a
+promise that any third-party tool is risk-free. Follow the
+[Gaijin Terms of Service](https://legal.gaijin.net/termsofservice) and the rules
+of the server you play on.
+
+## Features
+
+### Standard
+
+- Configurable 15-minute reward-cycle timer
+- Zone, airfield, and point-of-interest navigation
+- Fuel, return-margin, and speed cues
+- Sortie checklist, tray controls, window locking, and global hotkeys
+- Local settings and state recovery
+
+### Lite
+
+- Core reward timer
+- Minimal window and basic tray controls
+- A simple choice for players who only need the timer
+
+### Super Bomb
+
+Super Bomb is a separate subscription edition for additional advanced features
+and subscriber-only content beyond the public editions. It is delivered through
+the Launcher and the official site according to subscription status. Exact
+capabilities follow the site and the current release notes; its implementation,
+data, and release packages are not published in this public repository.
+
+## Download and use
+
+### Before you start
+
+1. Windows is required.
+2. Start War Thunder and enter a battle; the hangar normally has no complete
+   flight data.
+3. No separate game installer is required. Once in battle, Bomana reads the
+   local information exposed by the game.
+
+### Recommended: Launcher
+
+1. Download the Windows Launcher from the [Bomana site](https://bomana.ruikang.wang/)
+   or [GitHub Releases](https://github.com/Thankyou-Cheems/Bomana/releases).
+2. The Launcher checks versions, verifies downloads, and installs the selected
+   channel.
+3. Pick the edition that fits your use:
+
+| Channel | Access | Best for |
 |---|---|---|
-| **Standard** | Public, MIT | Timer, navigation, fuel, checklist, speed and overspeed cues |
-| **Lite** | Public, MIT | Core timer and minimal UI |
-| **Lite Green** | Public, MIT, launcher-free | Lite features with an embedded Python runtime |
-| **Super Bomb** (`Enhanced` channel) | Paid CheemsPay subscription | Strike Prediction, offline terrain, and Web Cockpit |
+| **Standard** | Public, MIT | Timer, navigation, and fuel information |
+| **Lite** | Public, MIT | A minimal timer |
+| **Lite Green** | Public, launcher-free | Extract and run without a separate Python install |
+| **Super Bomb** | Paid subscription | Subscriber features beyond the public editions |
 
-This repository is the complete public release closure for Lite and Standard.
-The differentiated Super Bomb implementation, model data, private tests, and
-release definition live in a separate private closure and are not built here.
+For Super Bomb, follow the Launcher prompt to open the official site, complete
+the purchase or trial flow, and refresh the subscription status. The public
+repository publishes only Lite, Standard, and Lite Green; it does not expose a
+subscriber download URL.
 
-The universal Launcher preserves the stable `Enhanced` channel identity. It uses
-CheemsPay device authorization and never collects a CheemsPay password. Local
-device identity, session state, and signed receipts are protected with Windows
-DPAPI. Lite and Standard never contact CheemsPay.
+The Launcher keeps one previous version for rollback. Lite Green includes the
+Python runtime and runs directly as `Bomana.exe`; it sends one anonymous daily
+activity event asynchronously. Network failures never block startup or disable
+the app.
 
-## Install
+## Hotkeys
 
-1. Download the Windows Launcher from the [Bomana site](https://bomana.ruikang.wang/).
-2. Standard and Lite are anonymous public downloads.
-3. Super Bomb opens a browser for CheemsPay authorization.
-4. Start War Thunder and enter a battle so official 8111 data is available.
+| Key | Action |
+|---|---|
+| `F7` | Manual timer reset (double-tap quickly) |
+| `F8` | Lock / unlock the window |
+| `F9` | Cycle through the four screen corners |
+| `F10` | Master sound toggle |
+| `F11` | Zone notification sound toggle |
 
-Launcher verifies signed manifests, SHA-256 hashes, compatibility, atomic
-installation, and one-version rollback.
+Hotkeys are remappable. They control Bomana only and never send keys to the game.
 
-For a launcher-free install, download `Bomana_Green_Lite_v8.7.0.zip` from the
-GitHub Release, extract it, and run `Bomana.exe`. It contains the complete Python
-runtime and only the Lite feature set. An anonymous daily-active event is sent
-asynchronously; network failures never block startup or disable features.
+## FAQ
 
-## Public capabilities
+### The window is empty. What should I check?
 
-Standard includes configurable mission timing, zone/airfield/POI navigation,
-fuel and return estimates, speed/overspeed cues, checklists, tray controls,
-window locking, and global hotkeys.
+Confirm that the game is in a battle, then open `http://localhost:8111` in a
+browser. If it has no useful data, re-enter the battle or wait briefly; the
+hangar normally does not expose flight information.
 
-Lite keeps the mission timer and minimal window/tray controls. It does not include
-navigation, fuel, Strike Prediction, or Web Cockpit.
+### Does Bomana read memory, inject, or play the game for me?
 
-## Data and security boundary
+No. Public editions use separate windows and the official local HTTP data. They
+do not read process memory, inject, edit client files, or synthesize game keys.
+No third-party tool can take responsibility for account or match risk.
 
-The public App uses only these official 8111 endpoints:
+### Which edition should I choose?
 
-- `/indicators`
-- `/state`
-- `/map_obj.json`
-- `/map_info.json`
+Standard is for players who want navigation, fuel, and more desktop assistance.
+Lite keeps only the timer and the minimal UI. Lite Green has the same Lite
+features but includes Python and does not require the Launcher. Super Bomb is a
+separate paid subscription edition; see the official site for its current scope.
 
-Production releases never read process memory. Offline research workspaces and
-experimental captures are not release inputs.
+### How is this different from WTRTI?
 
-The subscription client is only an access decision. Enhanced manifest and
-artifact delivery must also validate a short-lived CheemsPay-derived artifact
-grant; public URLs or a client-only gate are not compliant paid delivery.
+Bomana focuses on the simulator-battle reward timer and simple navigation
+references. WTRTI focuses on general flight telemetry. They can be used together;
+follow each project's own rules and documentation.
+
+## Privacy
+
+The Launcher and Lite Green may send anonymous usage statistics (device hash,
+install identifier, version, channel, and event type) for update service and
+activity metrics. They do not collect names, email addresses, game accounts,
+match results, or payment information. See the full [privacy policy](docs/PRIVACY.md).
+Reporting fails silently when the network is unavailable and never blocks startup.
+
+## License and disclaimer
+
+The public Lite, Standard, and Lite Green source closure is licensed under the
+[MIT License](LICENSE). New Super Bomb implementation, data, and release packages
+belong to a separate subscriber closure and are not distributed here.
+
+War Thunder® and related marks belong to Gaijin Entertainment AG. Bomana is an
+independent project and is not affiliated with, authorized by, or sponsored by
+Gaijin. The software is provided “AS IS”; use it at your own risk.
+
+## Sponsor
+
+If Bomana helps you, WeChat sponsorship is welcome:
+
+<img src="bomana/assets/branding/sponsor_wechat.png" width="200" alt="WeChat sponsor QR">
+
+---
+
+# For developers
+
+## Documentation map
+
+| Document | Contents |
+|---|---|
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Player-oriented quick start |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Structure, data flow, and build chain |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Collaboration, commits, and release norms |
+| [docs/PRIVACY.md](docs/PRIVACY.md) | Anonymous telemetry and privacy boundaries |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Changelog |
+| [docs/PITFALLS.md](docs/PITFALLS.md) | Known issues and troubleshooting |
+| [tests/README.md](tests/README.md) | Test layout and spec mapping |
 
 ## Run from source
 
@@ -85,22 +184,25 @@ uv sync --extra dev --frozen
 uv run python Bomana.pyw
 ```
 
-Public source defaults to Standard.
+Public source defaults to Standard. See [CONTRIBUTING.md](docs/CONTRIBUTING.md)
+for development and test commands.
 
-## Test
+## Project layout
 
-```powershell
-uv run --extra dev pytest
-uv run --extra dev ruff check .
-uv run --extra dev ruff format --check .
+```text
+.
+├─ Bomana.pyw                 # App entry
+├─ launcher.pyw               # Portable launcher
+├─ bomana/                    # Timer, navigation, state, and UI
+├─ launcher/                  # Manifests, cache, and install transactions
+├─ tools/                     # Build and release tools
+├─ tests/                     # Public behavior and release-contract tests
+└─ docs/                      # Player documentation and maintenance rules
 ```
 
-Tests target public module interfaces, Launcher installation/rollback, signed
-manifests, and final artifact closure.
+## Build and release
 
-## Build
-
-The public builder accepts only Standard and Lite:
+The public builder accepts Lite, Standard, and Lite Green only:
 
 ```powershell
 uv run --frozen python tools/build_portable.py --variant Standard --target app
@@ -109,33 +211,17 @@ uv run --frozen python tools/build_portable.py --variant Lite --target green
 uv run --frozen python tools/build_portable.py --target launcher
 ```
 
-Signed App manifests require the `BOMANA_RELEASE_ED25519_PRIVATE_KEY`,
-`BOMANA_RELEASE_ED25519_PUBLIC_KEY`, and `BOMANA_RELEASE_SIGNING_KEY_ID`
-environment variables. Launcher builds additionally require the public
-`CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL` and `CHEEMSPAY_LICENSE_KEY_ID`.
-Private keys must never enter the repository or logs. This builder rejects
-`Enhanced`.
+Release manifests use Ed25519 signatures; private keys must never enter the
+repository or logs. Super Bomb is maintained by a separate private release
+closure, so public CI neither builds nor uploads it.
 
-## Architecture
+## Update service repository
 
-- `bomana/editions.py` is the single Edition Policy module.
-- `bomana/release_closure.py` classifies public versus subscriber source paths.
-- `launcher/subscription_access.py` provides the CheemsPay HTTP adapter, an
-  in-memory adapter, device proof, and pinned receipt verification.
-- `launcher/subscription_store.py` owns DPAPI persistence.
-- `launcher/subscription_workflow.py` owns login-to-receipt orchestration.
+The standalone update and statistics service (Docker / FastAPI) lives in
+[Thankyou-Cheems/bomana-worker](https://github.com/Thankyou-Cheems/bomana-worker).
+This repository maintains the application and Launcher; deployment details live
+with the update service.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the
-[migration runbook](docs/guides/public-private-edition-migration.md).
+---
 
-## License
-
-The Lite/Standard public closure in this repository is licensed under the
-[MIT License](LICENSE). Future private Super Bomb additions are outside this
-repository's MIT grant. Earlier revisions obtained under MIT retain the rights
-granted at that time; rewriting official Git history does not revoke those rights
-or remove external copies.
-
-War Thunder® and related marks belong to Gaijin Entertainment AG. Bomana is an
-independent project and is not affiliated with, authorized by, or sponsored by
-Gaijin.
+*Made by 猹Cheems for the Space Monkeys community*
