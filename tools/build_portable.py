@@ -28,6 +28,11 @@ from launcher.core import (  # noqa: E402
     sign_release_manifest,
 )
 from launcher.subscription_access import validate_license_public_key  # noqa: E402
+from launcher.subscription_key_contract import (  # noqa: E402
+    CHEEMSPAY_LICENSE_KEY_ID,
+    CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL,
+    CHEEMSPAY_LICENSE_PUBLIC_KEYS,
+)
 
 VARIANT_SWITCHES = {channel: variant_switch_matrix()[channel] for channel in PUBLIC_CHANNELS}
 
@@ -237,21 +242,39 @@ def restore_release_public_keys_module(path: Path, original: str | None) -> None
 def write_subscription_public_keys_module(work_dir: Path) -> tuple[Path, Path]:
     """Generate the public CheemsPay key outside the source tree for PyInstaller."""
 
-    public_key = os.environ.get(SUBSCRIPTION_PUBLIC_KEY_ENV, "").strip()
-    if not public_key:
+    configured_public_key = os.environ.get(SUBSCRIPTION_PUBLIC_KEY_ENV, "").strip()
+    if not configured_public_key:
         raise RuntimeError(
-            f"{SUBSCRIPTION_PUBLIC_KEY_ENV} is required to pin CheemsPay receipt verification"
+            f"{SUBSCRIPTION_PUBLIC_KEY_ENV} is required and must match the repository trust contract"
         )
-    validate_license_public_key(public_key)
-    key_id = os.environ.get(SUBSCRIPTION_KEY_ID_ENV, "").strip()
-    if not key_id:
-        raise RuntimeError(f"{SUBSCRIPTION_KEY_ID_ENV} must not be empty")
+    configured_key_id = os.environ.get(SUBSCRIPTION_KEY_ID_ENV, "").strip()
+    if not configured_key_id:
+        raise RuntimeError(
+            f"{SUBSCRIPTION_KEY_ID_ENV} is required and must match the repository trust contract"
+        )
+    if CHEEMSPAY_LICENSE_PUBLIC_KEYS.get(CHEEMSPAY_LICENSE_KEY_ID) != (
+        CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL
+    ):
+        raise RuntimeError(
+            "repository CheemsPay trust contract no longer contains its primary key"
+        )
+    for public_key in CHEEMSPAY_LICENSE_PUBLIC_KEYS.values():
+        validate_license_public_key(public_key)
+    expected_public_key = CHEEMSPAY_LICENSE_PUBLIC_KEYS.get(configured_key_id)
+    if expected_public_key is None:
+        raise RuntimeError(
+            f"{SUBSCRIPTION_KEY_ID_ENV} is not present in the repository CheemsPay trust root contract"
+        )
+    if configured_public_key != expected_public_key:
+        raise RuntimeError(
+            f"{SUBSCRIPTION_PUBLIC_KEY_ENV} does not match the repository CheemsPay trust root contract"
+        )
     generated_dir = work_dir / "generated-runtime"
     generated_dir.mkdir(parents=True, exist_ok=False)
     path = generated_dir / "bomana_subscription_public_keys.py"
     path.write_text(
         '"""Generated CheemsPay receipt verification keys for packaged launchers."""\n\n'
-        f"CHEEMSPAY_LICENSE_PUBLIC_KEYS = {{{key_id!r}: {public_key!r}}}\n",
+        f"CHEEMSPAY_LICENSE_PUBLIC_KEYS = {dict(CHEEMSPAY_LICENSE_PUBLIC_KEYS)!r}\n",
         encoding="utf-8",
     )
     return generated_dir, path

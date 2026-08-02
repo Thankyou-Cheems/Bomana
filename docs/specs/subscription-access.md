@@ -34,6 +34,10 @@ refund, or device-allowance policy into Bomana.
   replacement. They MUST NOT be written to Launcher logs.
 - `SUB-08`: The packaged Launcher MUST pin the CheemsPay license public key at
   build time; missing key material MUST fail the Launcher build.
+- `SUB-08A`: The CheemsPay key id and public key MUST come from the repository-owned
+  `docs/specs/subscription-key-contract.md` and
+  `launcher/subscription_key_contract.py`; CI-provided copies MUST match exactly.
+  A replacement or removal of the primary trust root MUST fail the build.
 - `SUB-09`: The Launcher MUST re-check subscriber access before resolving or
   downloading Enhanced updates and before launching a locally selected
   Enhanced installation. A cached valid receipt may authorize offline launch.
@@ -65,8 +69,10 @@ refund, or device-allowance policy into Bomana.
 - [behavioral] `SUB-01..SUB-02` and `SUB-09` are covered by
   `tests/test_launcher_subscription_gate.py`: public-channel bypass and
   Enhanced fail-closed refresh behavior.
-- [behavioral] `SUB-08` is also covered by `tests/test_build_metadata.py` and
-  `tests/test_quality_release_workflows.py` through build-time key pinning.
+- [behavioral] `SUB-08` and `SUB-08A` are covered by
+  `tests/test_build_metadata.py`, `tests/test_subscription_key_contract.py`, and
+  `tests/test_quality_release_workflows.py` through source/runtime parity and
+  build-time trust-root pinning.
 - [behavioral] `SUB-10..SUB-10B` client behavior is covered by
   `tests/test_launcher_update_service.py`: Enhanced has no public fallback,
   every private resource obtains a fresh grant, protected requests reject

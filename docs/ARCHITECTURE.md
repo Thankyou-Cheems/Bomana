@@ -94,6 +94,13 @@ authenticates in a browser controlled by CheemsPay; Bomana does not collect an
 account password. A local Ed25519 device identity proves possession, and the
 Launcher verifies a pinned, device-bound EdDSA subscription receipt.
 
+The receipt trust root is a versioned public contract in
+`launcher/subscription_key_contract.py`. The CI copies of the CheemsPay key id
+and public key are checked against that contract before a Launcher is packaged;
+they cannot silently replace it. The primary key remains in the key map for
+the lifetime of distributed Launchers, so cached subscription sessions do not
+need a key-migration step.
+
 Receipt validation is fail closed and covers issuer, audience, application,
 feature, device thumbprint, service expiry, receipt expiry, entitlement version,
 and a bounded offline-validity window. Secrets and receipts are stored with

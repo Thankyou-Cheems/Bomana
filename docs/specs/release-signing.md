@@ -35,6 +35,9 @@ subscriber delivery.
   manifest shape definitions used by tests and release tooling.
 - `SIGN-16`: Enhanced manifest and artifact endpoints MUST require a short-lived
   CheemsPay-derived grant in addition to the Launcher's valid local receipt.
+- `SIGN-17`: The Launcher release build MUST compare the CheemsPay receipt key
+  id and public key supplied by CI with the repository-owned subscription key
+  contract and MUST fail before packaging on any mismatch.
 
 GitHub build provenance, when present, is additional evidence; it does not
 replace manifest signatures or create a Windows Authenticode publisher identity.
