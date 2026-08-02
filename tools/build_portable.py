@@ -303,9 +303,7 @@ def write_subscription_public_keys_module(work_dir: Path) -> tuple[Path, Path]:
     if CHEEMSPAY_LICENSE_PUBLIC_KEYS.get(CHEEMSPAY_LICENSE_KEY_ID) != (
         CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL
     ):
-        raise RuntimeError(
-            "repository CheemsPay trust contract no longer contains its primary key"
-        )
+        raise RuntimeError("repository CheemsPay trust contract no longer contains its primary key")
     for public_key in CHEEMSPAY_LICENSE_PUBLIC_KEYS.values():
         validate_license_public_key(public_key)
     expected_public_key = CHEEMSPAY_LICENSE_PUBLIC_KEYS.get(configured_key_id)
