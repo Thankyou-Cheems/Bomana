@@ -4,6 +4,19 @@ User-visible release notes are published with each signed release. This file
 tracks the public/private architecture transition without reproducing private
 implementation history.
 
+## Launcher 3.4.1
+
+### Fixed
+
+- Standard and Lite startup now silently ignore saved Super Bomb-only Web
+  cockpit preferences instead of interrupting launch with a warning.
+- Updated the pinned CheemsPay production receipt key used by the packaged
+  launcher so approved device authorizations are accepted again.
+
+### Changed
+
+- Regenerated the bundled CJK UI font subset from the current launcher text.
+
 ## Launcher 3.4.0
 
 ### Changed

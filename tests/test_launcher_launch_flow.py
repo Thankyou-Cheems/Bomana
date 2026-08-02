@@ -378,7 +378,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
 
     assert json.loads(result_path.read_text(encoding="utf-8")) == {
         "boundary": "installed",
-        "launcher": "3.4.0",
+        "launcher": "3.4.1",
         "autostart": "1",
         "auto_open": "1",
         "lan_enabled": "1",
@@ -428,11 +428,15 @@ def test_enhanced_channel_keeps_web_preferences() -> None:
     assert degraded is False
 
 
-def test_commit_launch_degrades_web_prefs_for_standard_channel(tmp_path: Path) -> None:
+@pytest.mark.parametrize("channel", ["Standard", "Lite"])
+def test_commit_launch_silently_disables_web_prefs_for_public_channel(
+    tmp_path: Path,
+    channel: str,
+) -> None:
     launcher, window = make_window(tmp_path)
     warnings: list[str] = []
     destroyed: list[bool] = []
-    window.channel = "Standard"
+    window.channel = channel
     window.web_dashboard_autostart = True
     window.web_dashboard_auto_open = True
     window.web_dashboard_lan_enabled = False
@@ -457,7 +461,7 @@ def test_commit_launch_degrades_web_prefs_for_standard_channel(tmp_path: Path) -
         launcher.messagebox.showwarning = original
 
     assert destroyed == [True]
-    assert warnings and "Standard" in warnings[0]
+    assert warnings == []
     assert launcher._PENDING_WEB_DASHBOARD_AUTOSTART is False
     assert launcher._PENDING_WEB_DASHBOARD_AUTO_OPEN is False
     assert launcher._PENDING_WEB_DASHBOARD_LAN_ENABLED is False
