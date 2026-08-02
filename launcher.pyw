@@ -2982,7 +2982,19 @@ try {{
         throw "launcher target missing after replace"
     }}
     $replaceSucceeded = $true
-    $startedProcess = Start-Process -FilePath $target -WorkingDirectory (Split-Path -Parent $target) -PassThru
+    $previousResetEnvironment = [Environment]::GetEnvironmentVariable("PYINSTALLER_RESET_ENVIRONMENT", "Process")
+    $env:PYINSTALLER_RESET_ENVIRONMENT = "1"
+    try {{
+        $startedProcess = Start-Process -FilePath $target -WorkingDirectory (Split-Path -Parent $target) -PassThru
+    }}
+    finally {{
+        if ($null -eq $previousResetEnvironment) {{
+            Remove-Item Env:PYINSTALLER_RESET_ENVIRONMENT -ErrorAction SilentlyContinue
+        }}
+        else {{
+            $env:PYINSTALLER_RESET_ENVIRONMENT = $previousResetEnvironment
+        }}
+    }}
     if (-not $startedProcess) {{
         throw "launcher restart did not return a process"
     }}

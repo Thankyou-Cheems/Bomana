@@ -1370,6 +1370,8 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertIn("新版启动器文件保留在", script)
         self.assertIn("Start-Process -FilePath $target -WorkingDirectory", script)
         self.assertIn("-PassThru", script)
+        self.assertIn("PYINSTALLER_RESET_ENVIRONMENT", script)
+        self.assertIn("$previousResetEnvironment", script)
         self.assertIn("$restartSucceeded", script)
         self.assertIn("if ($replaceSucceeded -and $restartSucceeded)", script)
 
