@@ -941,8 +941,18 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
         self.assertEqual(result.downloaded_objects, 3)
         self.assertEqual(len(urls), 6)
-        self.assertTrue(all("primary.invalid" in url for url in urls[0::2]))
-        self.assertTrue(all("github.invalid" in url for url in urls[1::2]))
+        attempts_by_asset: dict[str, list[str]] = {}
+        for url in urls:
+            attempts_by_asset.setdefault(url.rsplit("/", 1)[-1], []).append(url)
+        self.assertEqual(len(attempts_by_asset), 3)
+        self.assertTrue(
+            all(
+                len(attempts) == 2
+                and "primary.invalid" in attempts[0]
+                and "github.invalid" in attempts[1]
+                for attempts in attempts_by_asset.values()
+            )
+        )
 
         with (
             self.trusted_release_key_patch(),

@@ -10,9 +10,11 @@ import shutil
 import time
 import uuid
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from threading import Lock
 from typing import Any, Final
 
 TERRAIN_SCHEMA_VERSION: Final = 1
@@ -22,6 +24,7 @@ TERRAIN_OBJECT_ASSET_PREFIX: Final = "Bomana_terrain_object_"
 TERRAIN_CURRENT_FILE_NAME: Final = "current.json"
 TERRAIN_LOCK_FILE_NAME: Final = ".terrain_update.lock"
 TERRAIN_LOCK_STALE_SEC: Final = 30 * 60
+TERRAIN_DOWNLOAD_WORKERS: Final = 4
 MAX_TERRAIN_FILES: Final = 1024
 MAX_TERRAIN_FILE_BYTES: Final = 128 * 1024 * 1024
 MAX_TERRAIN_TOTAL_BYTES: Final = 512 * 1024 * 1024
@@ -535,37 +538,63 @@ class TerrainStore:
             bytes_to_download = sum(item.size_bytes for item in download_files)
             completed_download_bytes = 0
             source_names: list[str] = []
-            for index, item in enumerate(download_files, start=1):
+            progress_lock = Lock()
+
+            def download_one(index: int, item: TerrainFile) -> tuple[TerrainFile, str]:
+                nonlocal completed_download_bytes
                 if cancel_cb and cancel_cb():
                     raise TerrainStoreError("已取消当前操作")
 
-                def object_progress(
-                    downloaded: int,
-                    _total: int | None,
-                    *,
-                    _item: TerrainFile = item,
-                    _index: int = index,
-                    _completed: int = completed_download_bytes,
-                ) -> None:
+                def object_progress(downloaded: int, _total: int | None) -> None:
+                    nonlocal completed_download_bytes
                     if not status_cb:
                         return
-                    bounded = min(max(int(downloaded), 0), _item.size_bytes)
+                    bounded = min(max(int(downloaded), 0), item.size_bytes)
                     denominator = max(bytes_to_download, 1)
-                    progress = (_completed + bounded) / denominator
-                    status_cb(
-                        "正在差量更新地形",
-                        (
-                            f"{_index}/{len(download_files)}：{_item.path}\n"
-                            f"本次只需下载 {bytes_to_download} 字节变化对象。"
-                        ),
-                        min(max(progress, 0.0), 0.92),
-                        "info",
-                    )
+                    with progress_lock:
+                        progress = (completed_download_bytes + bounded) / denominator
+                        status_cb(
+                            "正在并行更新地形",
+                            (
+                                f"{index}/{len(download_files)}：{item.path}\n"
+                                f"本次只需下载 {bytes_to_download} 字节变化对象。"
+                            ),
+                            min(max(progress, 0.0), 0.92),
+                            "info",
+                        )
 
                 source = self._download_object(item, fetch_object, object_progress)
+                with progress_lock:
+                    completed_download_bytes += item.size_bytes
+                return item, source
+
+            worker_count = min(TERRAIN_DOWNLOAD_WORKERS, len(download_files))
+            if worker_count <= 1:
+                completed = (download_one(1, download_files[0]),) if download_files else ()
+            else:
+                executor = ThreadPoolExecutor(
+                    max_workers=worker_count,
+                    thread_name_prefix="bomana-terrain",
+                )
+                futures = {
+                    executor.submit(download_one, index, item): item
+                    for index, item in enumerate(download_files, start=1)
+                }
+                completed_items: list[tuple[TerrainFile, str]] = []
+                try:
+                    for future in as_completed(futures):
+                        completed_items.append(future.result())
+                except Exception:
+                    for future in futures:
+                        future.cancel()
+                    raise
+                finally:
+                    executor.shutdown(wait=True, cancel_futures=True)
+                completed = tuple(completed_items)
+
+            for _item, source in completed:
                 if source and source not in source_names:
                     source_names.append(source)
-                completed_download_bytes += item.size_bytes
 
             if cancel_cb and cancel_cb():
                 raise TerrainStoreError("已取消当前操作")
@@ -596,6 +625,7 @@ __all__ = [
     "MAX_TERRAIN_TOTAL_BYTES",
     "TERRAIN_MANIFEST_ASSET",
     "TERRAIN_OBJECT_ASSET_PREFIX",
+    "TERRAIN_DOWNLOAD_WORKERS",
     "TERRAIN_SCHEMA_VERSION",
     "TerrainFile",
     "TerrainManifest",
