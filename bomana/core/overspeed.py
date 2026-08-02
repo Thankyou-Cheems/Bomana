@@ -54,6 +54,22 @@ class SpeedLimitDatabase:
     def _normalize_name(name: str) -> str:
         return str(name or "").strip().lower()
 
+    @staticmethod
+    def _normalize_fm_reference(value: object) -> str:
+        """Normalize Datamine ``fmFile`` references, including legacy /fm paths."""
+
+        text = str(value or "").strip().replace("\\", "/")
+        while text.startswith("/"):
+            text = text[1:]
+        if text.lower().startswith("fm/"):
+            text = text[3:]
+        lower_text = text.lower()
+        if lower_text.endswith(".blkx"):
+            text = text[:-5]
+        elif lower_text.endswith(".blk"):
+            text = text[:-4]
+        return text.strip()
+
     @classmethod
     def _name_variants(cls, name: str) -> list[str]:
         raw = str(name or "").strip()
@@ -179,7 +195,7 @@ class SpeedLimitDatabase:
 
         for unit_name, fm_name in unit_map.items():
             u = self._normalize_name(unit_name)
-            f = str(fm_name or "").strip()
+            f = self._normalize_fm_reference(fm_name)
             if u and f:
                 self.unit_to_fm[u] = f
 

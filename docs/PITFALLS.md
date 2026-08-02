@@ -48,6 +48,13 @@ War Thunder's official 8111 endpoints may be absent or incomplete outside a
 battle. Model this as unavailable data, not as zero, and do not add an alternate
 memory-reading path.
 
+## Treating Datamine `fmFile` paths as canonical names
+
+Datamine contains both `fm/name.blk` and `/fm/name.blk` references. Normalize
+the path prefix and extension before joining `unit_to_fm` to the extracted
+flight-model table; otherwise variants such as the French Tornado killstreak
+can silently report an unknown speed limit.
+
 ## Coupling tests to source layout
 
 Source-text assertions make refactoring expensive without protecting users.
