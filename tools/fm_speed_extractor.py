@@ -16,11 +16,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from datamine_utils import (
-    FLIGHTMODELS_SUBDIR,
-    build_source_metadata,
-    require_datamine_dir,
-)
+try:
+    from .datamine_utils import (
+        FLIGHTMODELS_SUBDIR,
+        build_source_metadata,
+        require_datamine_dir,
+    )
+except ImportError:  # pragma: no cover - direct ``python tools/...`` execution
+    from datamine_utils import (  # type: ignore[no-redef]
+        FLIGHTMODELS_SUBDIR,
+        build_source_metadata,
+        require_datamine_dir,
+    )
 
 Number = int | float
 
@@ -153,12 +160,18 @@ def _extract_unit_mapping(path: Path) -> tuple[str, str] | None:
     if not isinstance(fm_file, str) or not fm_file:
         return None
 
+    # Datamine uses both ``fm/foo.blk`` and ``/fm/foo.blk`` depending on the
+    # unit family.  Normalize both forms so the unit mapping resolves to the
+    # same key as the flight-model file, including French killstreak variants.
     fm_name = fm_file.replace("\\", "/").strip()
-    if fm_name.startswith("fm/"):
+    while fm_name.startswith("/"):
+        fm_name = fm_name[1:]
+    if fm_name.lower().startswith("fm/"):
         fm_name = fm_name[3:]
-    if fm_name.endswith(".blk"):
+    lower_name = fm_name.lower()
+    if lower_name.endswith(".blk"):
         fm_name = fm_name[:-4]
-    elif fm_name.endswith(".blkx"):
+    elif lower_name.endswith(".blkx"):
         fm_name = fm_name[:-5]
     fm_name = fm_name.strip()
     if not fm_name:

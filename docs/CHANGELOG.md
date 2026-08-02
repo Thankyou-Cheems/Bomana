@@ -4,6 +4,18 @@ User-visible release notes are published with each signed release. This file
 tracks the public/private architecture transition without reproducing private
 implementation history.
 
+## Datamine refresh (unreleased)
+
+### Changed
+
+- Refreshed the public IAS/Mach speed-limit asset from
+  `War-Thunder-Datamine` `2.57.1.65` (`f05f050e0631`), adding newly present
+  aircraft mappings and limits.
+- Normalized both `fm/...` and legacy `/fm/...` references in the extractor and
+  runtime, so French F-16/Tornado variants resolve their shared flight model.
+- Kept the public closure limited to `fm_speed_limits.json`; the offline bomb
+  catalog remains subscriber-only.
+
 ## Launcher 3.4.2
 
 ### Fixed
