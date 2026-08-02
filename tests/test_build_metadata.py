@@ -578,9 +578,7 @@ def test_build_portable_keeps_primary_key_when_adding_a_future_trust_root(
         "tools/build_portable.py",
     )
     future_key_id = "prod-2026-02"
-    future_public_key = (
-        "MCowBQYDK2VwAyEA11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
-    )
+    future_public_key = "MCowBQYDK2VwAyEA11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
     monkeypatch.setattr(
         build_portable,
         "CHEEMSPAY_LICENSE_PUBLIC_KEYS",
@@ -597,12 +595,15 @@ def test_build_portable_keeps_primary_key_when_adding_a_future_trust_root(
     _generated_dir, path = build_portable.write_subscription_public_keys_module(work_dir)
 
     generated = path.read_text(encoding="utf-8")
-    assert repr(
-        {
-            CHEEMSPAY_LICENSE_KEY_ID: CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL,
-            future_key_id: future_public_key,
-        }
-    ) in generated
+    assert (
+        repr(
+            {
+                CHEEMSPAY_LICENSE_KEY_ID: CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL,
+                future_key_id: future_public_key,
+            }
+        )
+        in generated
+    )
 
 
 @pytest.mark.parametrize(

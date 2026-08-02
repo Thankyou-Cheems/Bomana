@@ -52,6 +52,7 @@ _ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
 _MAX_JSON_BYTES = 1024 * 1024
 _MAX_JWT_BYTES = 64 * 1024
 
+
 def _load_pinned_license_keys() -> dict[str, str]:
     try:
         keys_module = importlib.import_module("bomana_subscription_public_keys")
