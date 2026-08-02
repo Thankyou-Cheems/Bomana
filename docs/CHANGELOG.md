@@ -16,6 +16,11 @@ implementation history.
 - Kept the public closure limited to `fm_speed_limits.json`; the offline bomb
   catalog remains subscriber-only.
 
+## Launcher 3.4.4
+
+- 并行下载订阅地形对象，减少 67 张地图首次安装时的串行等待。
+- 保留逐对象断点续传、SHA256 校验和失败回滚边界。
+
 ## Launcher 3.4.3
 
 ### Changed
