@@ -36,7 +36,7 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 - `COMPAT-05`: App `8.0.0` and newer MUST reject a launcher identity below
   the shared `3.0.0` protocol floor. Each packaged App release MUST additionally
   carry and enforce its own release-specific Launcher floor before runtime
-  imports; managed App `8.7.0` requires Launcher `3.3.0`.
+  imports; managed App `8.7.0` requires Launcher `3.4.0`.
 - `COMPAT-06`: Launcher `3.0.0` and newer MUST reject an App identity below
   `8.0.0` on every Launcher-owned candidate path.
 - `COMPAT-07`: Launcher bootstrap MUST supply its own strict version through
@@ -108,6 +108,19 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
   identity and a frozen process. A non-frozen source run or managed frozen App
   MUST NOT use this exception. Public CI MUST assemble this distribution from
   the Lite feature profile only.
+- `COMPAT-27`: Managed App current, previous, backup, and staging directories
+  MUST be isolated under `app_channels/<channel>/` for each of `Lite`,
+  `Standard`, and `Enhanced`. Launcher startup MUST recover every channel and
+  safely migrate a legacy marked slot before selecting the requested channel;
+  an unmarked legacy slot MAY remain available only through the compatibility
+  fallback and MUST NOT be copied into a named channel.
+- `COMPAT-28`: The first public App manifest that uses the channel-slot layout
+  MUST set `min_launcher_version` to the released Launcher `3.4.0` (or a newer
+  strict version). A Launcher below that floor MUST be able to resolve and
+  install the signed Launcher update, but MUST disable App download and reject
+  direct App installation before fetching package bytes. The public update
+  service continues to serve the signed manifest; the client-side floor is the
+  compatibility gate.
 
 ## Contract Coverage
 
@@ -125,7 +138,8 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
   `COMPAT-03..COMPAT-06` and `COMPAT-11..COMPAT-19` with verified-online,
   signed/staged mismatch, local import, rollback, recovery, and valid-slot
   preservation cases, plus `COMPAT-21..COMPAT-23` with pre-network and local ZIP
-  rejection.
+  rejection, and `COMPAT-27..COMPAT-28` with independent channel slots,
+  marked legacy migration, and cross-channel package rejection.
 - [behavioral] `tests/test_launcher_core.py` enforces `COMPAT-02`, `COMPAT-03`,
   `COMPAT-11..COMPAT-17`, and `COMPAT-19` with package metadata extraction and
   install-transaction preflight failures.

@@ -4,6 +4,20 @@ User-visible release notes are published with each signed release. This file
 tracks the public/private architecture transition without reproducing private
 implementation history.
 
+## Launcher 3.4.0
+
+### Changed
+
+- Isolated managed App current/previous/backup/staging slots per `Lite`,
+  `Standard`, and `Enhanced` channel, with safe migration of marked legacy
+  installs. Updating one channel no longer overwrites another channel's
+  rollback point.
+- Raised the public App download floor to Launcher 3.4.0. Older Launchers can
+  still self-update, but cannot download or install an App package until that
+  self-update completes.
+- Added a `官网预览` action that opens `https://bomana.ruikang.wang/` for a
+  browser preview of the paid edition.
+
 ## Launcher 3.3.2
 
 ### Changed
@@ -33,7 +47,8 @@ implementation history.
   and package closure tests to cover Standard, managed Lite, and green Lite.
 - Bumped the Launcher artifact to 3.3.1 so the current binary uses a new,
   immutable download URL instead of replacing the previously published 3.3.0
-  bytes. App 8.7.0 keeps 3.3.0 as its minimum compatible Launcher floor.
+  bytes. App 8.7.0 originally kept 3.3.0 as its minimum compatible Launcher
+  floor; the 3.4.0 release raises that floor for the channel-slot migration.
 - Launcher-only tags no longer replace the latest application Release, keeping
   the stable `releases/latest` green-download URL on the full public release.
 
