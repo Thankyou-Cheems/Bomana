@@ -1320,6 +1320,12 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertNotEqual(args[0], "powershell.exe")
         self.assertEqual(kwargs["cwd"], str(system_powershell.parent))
         self.assertNotEqual(kwargs["cwd"], str(script_path.parent))
+        expected_flags = getattr(self.launcher.subprocess, "CREATE_NO_WINDOW", 0)
+        self.assertEqual(kwargs["creationflags"], expected_flags)
+        self.assertEqual(
+            kwargs["creationflags"] & getattr(self.launcher.subprocess, "DETACHED_PROCESS", 0),
+            0,
+        )
         self.assertIn("-File", args)
         self.assertIn(str(script_path), args)
 

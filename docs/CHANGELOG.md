@@ -4,6 +4,13 @@ User-visible release notes are published with each signed release. This file
 tracks the public/private architecture transition without reproducing private
 implementation history.
 
+## Launcher 3.4.2
+
+### Fixed
+
+- Fixed the Windows self-update handoff so the PowerShell replacement script
+  actually executes after the current launcher exits.
+
 ## Launcher 3.4.1
 
 ### Fixed

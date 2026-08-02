@@ -2823,8 +2823,9 @@ def _launch_updater_script(script_path: Path) -> None:
     creation_flags = 0
     if hasattr(subprocess, "CREATE_NO_WINDOW"):
         creation_flags |= subprocess.CREATE_NO_WINDOW
-    if hasattr(subprocess, "DETACHED_PROCESS"):
-        creation_flags |= subprocess.DETACHED_PROCESS
+    # CREATE_NO_WINDOW is sufficient for a GUI launcher. DETACHED_PROCESS
+    # makes Windows PowerShell 5.1 return without executing the -File script
+    # when the two creation flags are combined.
     subprocess.Popen(
         [
             str(powershell),
