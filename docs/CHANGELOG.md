@@ -21,6 +21,12 @@ implementation history.
 - 并行下载订阅地形对象，减少 67 张地图首次安装时的串行等待。
 - 保留逐对象断点续传、SHA256 校验和失败回滚边界。
 
+## Launcher 3.4.5
+
+- 修复 Windows 单文件启动器自更新后重启时复用旧 PyInstaller 临时环境，导致
+  `python314.dll` 无法加载的问题。
+- 重启子进程前显式重置 PyInstaller 解包环境，保留手动启动时相同的干净加载路径。
+
 ## Launcher 3.4.3
 
 ### Changed
