@@ -27,6 +27,14 @@ implementation history.
   three-day trial are managed, then lets the user refresh the device-bound
   receipt after payment.
 
+## [8.7.1]
+
+### Changed
+
+- Republished the public Lite and Standard packages after the Launcher 3.4.0
+  channel-slot migration. This patch release keeps the package URL immutable
+  while raising the signed App download floor to Launcher 3.4.0.
+
 ## [8.7.0]
 
 ### Added
