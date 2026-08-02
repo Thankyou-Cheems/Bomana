@@ -89,7 +89,7 @@ def test_build_release_workflow_passes_manifest_signing_secret() -> None:
     assert "${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}" in workflow
     assert "BOMANA_RELEASE_ED25519_PUBLIC_KEY" in workflow
     assert "${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}" in workflow
-    assert "BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06" in workflow
+    assert "BOMANA_RELEASE_SIGNING_KEY_ID: ${{ secrets.BOMANA_RELEASE_SIGNING_KEY_ID }}" in workflow
 
 
 def test_launcher_build_pins_cheemspay_receipt_public_key() -> None:

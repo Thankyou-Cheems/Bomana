@@ -2,6 +2,8 @@
 """Build Bomana portable release assets (launcher + updatable app package)."""
 
 import argparse
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -50,6 +52,7 @@ BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
 SIGNING_PRIVATE_KEY_ENV = "BOMANA_RELEASE_ED25519_PRIVATE_KEY"
 SIGNING_PUBLIC_KEY_ENV = "BOMANA_RELEASE_ED25519_PUBLIC_KEY"
 SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
+LEGACY_PUBLIC_KEYS_ENV = "BOMANA_RELEASE_LEGACY_PUBLIC_KEYS_JSON"
 SUBSCRIPTION_PUBLIC_KEY_ENV = "CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL"
 SUBSCRIPTION_KEY_ID_ENV = "CHEEMSPAY_LICENSE_KEY_ID"
 PACKAGED_LAUNCHER_REQUIRES_PYTHON = ">=3.14"
@@ -214,14 +217,59 @@ def release_signing_key_context() -> tuple[str, str]:
     return private_key, key_id
 
 
-def write_release_public_keys_module(root: Path) -> tuple[Path, str | None]:
+def _validate_release_public_key(
+    key_id: object, public_key: object, *, source: str
+) -> tuple[str, str]:
+    if not isinstance(key_id, str) or not key_id.strip():
+        raise RuntimeError(f"{source} contains an empty signing key id")
+    if not isinstance(public_key, str) or not public_key.strip():
+        raise RuntimeError(f"{source} contains an empty public key for {key_id!r}")
+    normalized_id = key_id.strip()
+    normalized_key = public_key.strip()
+    try:
+        raw_key = base64.b64decode(normalized_key, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise RuntimeError(
+            f"{source} contains an invalid public key for {normalized_id!r}"
+        ) from exc
+    if len(raw_key) != 32:
+        raise RuntimeError(f"{source} public key for {normalized_id!r} must decode to 32 bytes")
+    return normalized_id, normalized_key
+
+
+def release_public_key_map() -> dict[str, str]:
     private_key, key_id = release_signing_key_context()
-    public_key = ed25519_public_key_from_private_key(private_key)
+    current_public_key = ed25519_public_key_from_private_key(private_key)
+    keys = {key_id: current_public_key}
+    raw_legacy = os.environ.get(LEGACY_PUBLIC_KEYS_ENV, "").strip()
+    if not raw_legacy:
+        return keys
+    try:
+        legacy = json.loads(raw_legacy)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{LEGACY_PUBLIC_KEYS_ENV} must contain a JSON object") from exc
+    if not isinstance(legacy, dict):
+        raise RuntimeError(f"{LEGACY_PUBLIC_KEYS_ENV} must contain a JSON object")
+    for legacy_id, legacy_key in sorted(legacy.items(), key=lambda item: str(item[0])):
+        normalized_id, normalized_key = _validate_release_public_key(
+            legacy_id,
+            legacy_key,
+            source=LEGACY_PUBLIC_KEYS_ENV,
+        )
+        if normalized_id == key_id:
+            raise RuntimeError(
+                f"{LEGACY_PUBLIC_KEYS_ENV} must not replace the active signing key id"
+            )
+        keys[normalized_id] = normalized_key
+    return keys
+
+
+def write_release_public_keys_module(root: Path) -> tuple[Path, str | None]:
     path = root / LAUNCHER_DIR / "release_public_keys.py"
     original = path.read_text(encoding="utf-8") if path.exists() else None
     content = (
         '"""Generated release manifest verification keys for packaged launchers."""\n\n'
-        f"RELEASE_MANIFEST_PUBLIC_KEYS = {{{key_id!r}: {public_key!r}}}\n"
+        f"RELEASE_MANIFEST_PUBLIC_KEYS = {release_public_key_map()!r}\n"
     )
     path.write_text(content, encoding="utf-8")
     return path, original

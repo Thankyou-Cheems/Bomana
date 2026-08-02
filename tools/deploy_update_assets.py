@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -124,7 +126,45 @@ def public_key_config() -> tuple[str, dict[str, str]]:
         raise RuntimeError("BOMANA_RELEASE_ED25519_PUBLIC_KEY is required for release verify")
     if not key_id:
         raise RuntimeError("BOMANA_RELEASE_SIGNING_KEY_ID must not be empty")
-    return key_id, {key_id: public_key}
+    try:
+        if len(base64.b64decode(public_key, validate=True)) != 32:
+            raise ValueError
+    except (ValueError, binascii.Error) as exc:
+        raise RuntimeError("BOMANA_RELEASE_ED25519_PUBLIC_KEY must decode to 32 bytes") from exc
+    public_keys = {key_id: public_key}
+    raw_legacy = os.environ.get("BOMANA_RELEASE_LEGACY_PUBLIC_KEYS_JSON", "").strip()
+    if not raw_legacy:
+        return key_id, public_keys
+    try:
+        legacy = json.loads(raw_legacy)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "BOMANA_RELEASE_LEGACY_PUBLIC_KEYS_JSON must contain a JSON object"
+        ) from exc
+    if not isinstance(legacy, dict):
+        raise RuntimeError("BOMANA_RELEASE_LEGACY_PUBLIC_KEYS_JSON must contain a JSON object")
+    for legacy_id, legacy_key in sorted(legacy.items(), key=lambda item: str(item[0])):
+        if not isinstance(legacy_id, str) or not legacy_id.strip():
+            raise RuntimeError("BOMANA_RELEASE_LEGACY_PUBLIC_KEYS_JSON contains an empty key id")
+        if not isinstance(legacy_key, str) or not legacy_key.strip():
+            raise RuntimeError(
+                f"BOMANA_RELEASE_LEGACY_PUBLIC_KEYS_JSON contains an empty public key for {legacy_id!r}"
+            )
+        normalized_id = legacy_id.strip()
+        normalized_key = legacy_key.strip()
+        if normalized_id == key_id:
+            raise RuntimeError(
+                "BOMANA_RELEASE_LEGACY_PUBLIC_KEYS_JSON must not replace the active signing key id"
+            )
+        try:
+            if len(base64.b64decode(normalized_key, validate=True)) != 32:
+                raise ValueError
+        except (ValueError, binascii.Error) as exc:
+            raise RuntimeError(
+                f"BOMANA_RELEASE_LEGACY_PUBLIC_KEYS_JSON contains an invalid public key for {normalized_id!r}"
+            ) from exc
+        public_keys[normalized_id] = normalized_key
+    return key_id, public_keys
 
 
 def local_asset_path(dist: Path, asset_name: object, field_name: str) -> Path:
