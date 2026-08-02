@@ -13,6 +13,9 @@ DOCS = ROOT / "docs"
 ALLOWED_EXTERNAL_NETLOCS = {
     "docs.github.com",
     "github.com",
+    "forum.warthunder.com",
+    "legal.gaijin.net",
+    "pay.ruikang.wang",
     "thankyou-cheems.github.io",
     "bomanaupdate.ruikang.wang",
     "bomana.ruikang.wang",
@@ -68,6 +71,12 @@ def test_github_pages_site_has_new_user_and_permission_paths() -> None:
     assert "Artifact Attestations" in html
     assert "国内 CDN" in html
     assert "GitHub 备用" in html
+    assert "没有“绝对安全”或“绝不封号”保证" in html
+    assert "只读取游戏提供的 localhost:8111 信息" in html
+    assert "WTRTI" in html
+    assert "第三方辅助" not in html
+    assert "立即购买 / 试用" in html
+    assert "https://pay.ruikang.wang/" in html
     assert '<link rel="canonical" href="https://bomana.ruikang.wang/">' in html
     assert 'property="og:url" content="https://bomana.ruikang.wang/"' in html
     assert "https://ruikang.wang/bomana/" not in html
