@@ -4,7 +4,7 @@ User-visible release notes are published with each signed release. This file
 tracks the public/private architecture transition without reproducing private
 implementation history.
 
-## Datamine refresh (unreleased)
+## [8.7.2]
 
 ### Changed
 

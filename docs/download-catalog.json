@@ -11,15 +11,15 @@
   },
   "channels": {
     "Standard": {
-      "app_version": "8.7.1",
-      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Standard_v8.7.1.zip",
-      "asset": "Bomana_app_Standard_v8.7.1.zip",
+      "app_version": "8.7.2",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Standard_v8.7.2.zip",
+      "asset": "Bomana_app_Standard_v8.7.2.zip",
       "sha256": "a615a338c9e900e7b12916c9dfa1093dcf52c67b2b96c5c8c4e6ec42b961d06b"
     },
     "Lite": {
-      "app_version": "8.7.1",
-      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Lite_v8.7.1.zip",
-      "asset": "Bomana_app_Lite_v8.7.1.zip",
+      "app_version": "8.7.2",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Lite_v8.7.2.zip",
+      "asset": "Bomana_app_Lite_v8.7.2.zip",
       "sha256": "abc7186ba6373989e2a1dc70a43d823f130018763f469f7f31093256944dc80c"
     }
   },
