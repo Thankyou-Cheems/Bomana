@@ -4,6 +4,15 @@ User-visible release notes are published with each signed release. This file
 tracks the public/private architecture transition without reproducing private
 implementation history.
 
+## Unreleased
+
+### Fixed
+
+- Versioned the CheemsPay receipt public key as a repository-owned trust root.
+  Launcher builds now fail if CI supplies a different key id or public key, and
+  packaged runtime keys are checked against the same contract so existing
+  subscription sessions are not blocked by an accidental key replacement.
+
 ## [8.7.2]
 
 ### Changed

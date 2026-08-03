@@ -34,6 +34,9 @@ from launcher.core import (
     ed25519_sign,
     ed25519_verify,
 )
+from launcher.subscription_key_contract import (
+    CHEEMSPAY_LICENSE_PUBLIC_KEYS as _CONTRACT_LICENSE_KEYS,
+)
 
 CHEEMSPAY_BASE_URL = "https://pay.ruikang.wang"
 CHEEMSPAY_LICENSE_ISSUER = f"{CHEEMSPAY_BASE_URL}/api/licenses"
@@ -49,15 +52,26 @@ _ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
 _MAX_JSON_BYTES = 1024 * 1024
 _MAX_JWT_BYTES = 64 * 1024
 
-try:
-    _LICENSE_KEYS_MODULE = importlib.import_module("bomana_subscription_public_keys")
-    _PINNED_LICENSE_KEYS = getattr(
-        _LICENSE_KEYS_MODULE,
-        "CHEEMSPAY_LICENSE_PUBLIC_KEYS",
-        {},
-    )
-except ImportError:
-    _PINNED_LICENSE_KEYS = {}
+
+def _load_pinned_license_keys() -> dict[str, str]:
+    try:
+        keys_module = importlib.import_module("bomana_subscription_public_keys")
+    except ModuleNotFoundError as exc:
+        if exc.name != "bomana_subscription_public_keys":
+            raise
+        return dict(_CONTRACT_LICENSE_KEYS)
+    try:
+        pinned_keys = dict(getattr(keys_module, "CHEEMSPAY_LICENSE_PUBLIC_KEYS", {}))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("packaged CheemsPay receipt keys are invalid") from exc
+    if pinned_keys != dict(_CONTRACT_LICENSE_KEYS):
+        raise RuntimeError(
+            "packaged CheemsPay receipt keys do not match the repository trust contract"
+        )
+    return pinned_keys
+
+
+_PINNED_LICENSE_KEYS = _load_pinned_license_keys()
 
 CHEEMSPAY_LICENSE_PUBLIC_KEYS: dict[str, str] = dict(_PINNED_LICENSE_KEYS)
 
