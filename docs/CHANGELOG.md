@@ -13,6 +13,13 @@ implementation history.
   packaged runtime keys are checked against the same contract so existing
   subscription sessions are not blocked by an accidental key replacement.
 
+## Launcher 3.5.2
+
+### Fixed
+
+- Refresh the persisted CheemsPay receipt when authorization completes so the
+  Enhanced channel becomes available immediately without restarting Launcher.
+
 ## Launcher 3.5.1
 
 ### Fixed

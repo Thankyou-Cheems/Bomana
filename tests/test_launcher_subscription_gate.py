@@ -241,6 +241,41 @@ def test_subscription_login_lazily_initializes_workflow_from_public_channel() ->
     assert started == ["subscription_login"]
 
 
+def test_successful_subscription_event_refreshes_receipt_before_menu_projection() -> None:
+    launcher = load_launcher_module()
+    window = object.__new__(launcher.LauncherWindow)
+    window.events = queue.Queue()
+    window.events.put(("subscription_done", {"ok": True, "detail": "授权成功"}))
+    window.root = type("FakeRoot", (), {"after": lambda self, delay, callback: None})()
+    window.current_task = "subscription_login"
+    window.running = True
+    window.subscription_decision = SubscriptionAccessDecision(
+        allowed=False,
+        reason=SubscriptionAccessReason.MISSING_RECEIPT,
+    )
+    calls: list[str] = []
+
+    def refresh_cached_access() -> None:
+        calls.append("refresh")
+        window.subscription_decision = SubscriptionAccessDecision(
+            allowed=True,
+            reason=SubscriptionAccessReason.ALLOWED,
+        )
+
+    window._set_running = lambda running: setattr(window, "running", running)
+    window._refresh_cached_subscription_access = refresh_cached_access
+    window._refresh_subscription_ui = lambda: calls.append(
+        "ui:" + str(window.subscription_decision.allowed)
+    )
+    window._set_status = lambda *_args: None
+    window._begin_check = lambda **_kwargs: None
+
+    window._poll_events()
+
+    assert calls == ["refresh", "ui:True"]
+    assert window.subscription_decision.allowed
+
+
 def test_public_channel_change_never_reads_subscriber_access() -> None:
     launcher = load_launcher_module()
     workflow = ExplodingWorkflow()

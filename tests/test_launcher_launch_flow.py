@@ -398,7 +398,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
 
     assert json.loads(result_path.read_text(encoding="utf-8")) == {
         "boundary": "installed",
-        "launcher": "3.5.1",
+        "launcher": "3.5.2",
         "autostart": "1",
         "auto_open": "1",
         "lan_enabled": "1",

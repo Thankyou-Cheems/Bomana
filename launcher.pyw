@@ -6507,6 +6507,13 @@ class LauncherWindow:
                     detail = str(payload.get("detail", "")).strip()
                     self.current_task = ""
                     self._set_running(False)
+                    if ok:
+                        # The worker has persisted the receipt before emitting
+                        # this event. Re-read it on the UI thread so the same
+                        # session immediately exposes Enhanced; otherwise the
+                        # menu keeps the pre-login missing-receipt decision
+                        # until the next Launcher restart.
+                        self._refresh_cached_subscription_access()
                     self._refresh_subscription_ui()
                     self._set_status(
                         "订阅授权完成" if ok else "订阅授权失败",
