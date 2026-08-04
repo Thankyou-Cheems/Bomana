@@ -14,11 +14,21 @@ from pathlib import Path, PurePosixPath
 from typing import Final, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 DEFAULT_TIMEOUT_SECONDS: Final = 30.0
 DOWNLOAD_CHUNK_BYTES: Final = 256 * 1024
 CONTENT_RANGE_RE: Final = re.compile(r"^bytes ([0-9]+)-([0-9]+)/([0-9]+)$")
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Keep a terrain object request on the CheemsPay-approved CDN origin."""
+
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+_NO_REDIRECT_OPENER = build_opener(_NoRedirectHandler())
 
 
 class TerrainTransportError(RuntimeError):
@@ -76,7 +86,7 @@ def urllib_terrain_request(
 
     request = Request(url, headers=dict(headers), method="GET")
     try:
-        return _UrllibResponse(urlopen(request, timeout=timeout))
+        return _UrllibResponse(_NO_REDIRECT_OPENER.open(request, timeout=timeout))
     except HTTPError as exc:
         return _UrllibResponse(exc)
     except URLError as exc:

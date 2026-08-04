@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import importlib
 import json
+import os
 import re
 import secrets
 import ssl
@@ -34,6 +35,7 @@ from launcher.core import (
     ed25519_sign,
     ed25519_verify,
 )
+from launcher.distribution_build import current_build_metadata
 from launcher.subscription_key_contract import (
     CHEEMSPAY_LICENSE_PUBLIC_KEYS as _CONTRACT_LICENSE_KEYS,
 )
@@ -48,6 +50,7 @@ MAX_OFFLINE_RECEIPT_AGE = timedelta(days=14)
 ARTIFACT_GRANT_MAX_AGE = timedelta(minutes=5)
 JWT_CLOCK_SKEW = timedelta(seconds=60)
 TERRAIN_MANIFEST_RESOURCE = "terrain/terrain_manifest.json"
+TERRAIN_OBJECTS_PATH = "/downloads/terrain/objects/"
 
 _ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
 _MAX_JSON_BYTES = 1024 * 1024
@@ -871,9 +874,10 @@ def _optional_terrain_object_base_url(value: object, *, resource: str) -> str:
     """Validate the CDN locator carried by a terrain-manifest grant response.
 
     The locator is control-plane metadata, not a bearer credential.  It must
-    therefore be an absolute HTTPS directory without URL decoration.  An
-    omitted locator is accepted for older CheemsPay servers; callers retain
-    the private grant gateway as the compatibility path.
+    therefore stay on the build's configured CDN origin and immutable terrain
+    object path, without URL decoration.  An omitted locator is accepted for
+    older CheemsPay servers; callers retain the private grant gateway as the
+    compatibility path.
     """
 
     if value is None or value == "":
@@ -891,19 +895,37 @@ def _optional_terrain_object_base_url(value: object, *, resource: str) -> str:
             "CheemsPay terrain CDN locator is invalid",
         )
     parsed = urlparse(value)
+    configured_host = urlparse(current_build_metadata().base_url).hostname
+    configured_hosts = {configured_host.casefold()} if configured_host else set()
+    extra_hosts = {
+        part.strip().casefold()
+        for part in os.environ.get("BOMANA_TERRAIN_CDN_ALLOWED_HOSTS", "").split(",")
+        if part.strip()
+    }
+    try:
+        parsed_port = parsed.port
+    except ValueError as exc:
+        raise CheemsPayApiError(
+            0,
+            "INVALID_RESPONSE",
+            "CheemsPay terrain CDN locator is outside the configured CDN path",
+        ) from exc
     if (
         parsed.scheme != "https"
         or not parsed.hostname
+        or parsed.hostname.casefold() not in configured_hosts | extra_hosts
+        or parsed_port is not None
         or parsed.username is not None
         or parsed.password is not None
         or parsed.query
         or parsed.fragment
+        or not parsed.path.endswith(TERRAIN_OBJECTS_PATH)
         or not value.endswith("/")
     ):
         raise CheemsPayApiError(
             0,
             "INVALID_RESPONSE",
-            "CheemsPay terrain CDN locator must be an HTTPS directory",
+            "CheemsPay terrain CDN locator is outside the configured CDN path",
         )
     return value
 

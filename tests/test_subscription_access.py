@@ -14,6 +14,7 @@ from launcher.core import ed25519_public_key_from_private_key, ed25519_sign, ed2
 from launcher.subscription_access import (
     ArtifactGrant,
     AuthorizationPoll,
+    CheemsPayApiError,
     CheemsPaySubscriptionAuthority,
     DeviceAuthorization,
     DeviceAuthorizationState,
@@ -349,6 +350,49 @@ def test_cheemspay_terrain_manifest_grant_carries_optional_cdn_locator() -> None
     assert grant.terrain_object_base_url == (
         "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/"
     )
+
+
+@pytest.mark.parametrize(
+    "locator",
+    [
+        "https://evil.example.test/downloads/terrain/objects/",
+        "https://bomanaupdate.ruikang.wang/downloads/other/",
+        "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/?redirect=evil",
+        "https://bomanaupdate.ruikang.wang:8443/downloads/terrain/objects/",
+    ],
+)
+def test_cheemspay_terrain_manifest_grant_rejects_unconfigured_cdn_locator(
+    locator: str,
+) -> None:
+    credential = DeviceCredential.from_seed(DEVICE_SEED)
+    resource = "terrain/terrain_manifest.json"
+    transport = FakeTransport(
+        responses=[
+            JsonHttpResponse(
+                200,
+                {
+                    "token": "header.payload.signature",
+                    "resource": resource,
+                    "downloadUrl": f"https://pay.ruikang.wang/subscriber-artifacts/{resource}",
+                    "terrainObjectBaseUrl": locator,
+                    "expiresAt": (NOW + timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
+                },
+            )
+        ]
+    )
+    authority = CheemsPaySubscriptionAuthority(
+        base_url="https://pay.ruikang.wang",
+        transport=transport,
+        now=lambda: NOW,
+    )
+
+    with pytest.raises(CheemsPayApiError, match="configured CDN path"):
+        authority.issue_artifact_grant(
+            "access-token",
+            credential,
+            "device-1",
+            resource,
+        )
 
 
 @pytest.mark.parametrize(

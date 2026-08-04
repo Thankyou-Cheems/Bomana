@@ -13,6 +13,14 @@ implementation history.
   packaged runtime keys are checked against the same contract so existing
   subscription sessions are not blocked by an accidental key replacement.
 
+## Launcher 3.5.5
+
+### Fixed
+
+- Restrict CheemsPay terrain CDN locators to the configured immutable object
+  path, reject redirects to other origins, and keep Standard terrain entry
+  points fail-closed.
+
 ## Launcher 3.5.4
 
 ### Fixed

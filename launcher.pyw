@@ -2942,6 +2942,8 @@ class UpdateService:
         )
 
     def resolve_terrain_manifest(self) -> Dict[str, Any]:
+        if _normalize_channel(self.channel) != "Enhanced":
+            raise RuntimeError("Standard 不负责地形数据")
         if _DISTRIBUTION_BUILD_METADATA.isolated_test:
             return _attempt_primary_request(
                 self.base,
@@ -3185,6 +3187,8 @@ class UpdateService:
         _launcher_terrain_store.TerrainSyncResult
         | _launcher_terrain_store.TerrainCatalogSyncResult
     ):
+        if _normalize_channel(self.channel) != "Enhanced":
+            raise RuntimeError("Standard 不负责地形数据")
         if _terrain_catalog_document(manifest) is not None:
             return _download_terrain_catalog_from_manifest(
                 self.base,

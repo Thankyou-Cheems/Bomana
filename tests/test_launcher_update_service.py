@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from launcher import core as launcher_core
 from launcher import install_txn as launcher_install
+from launcher import terrain_transport as launcher_terrain_transport
 from launcher.terrain_store import TERRAIN_OBJECT_ASSET_PREFIX, TerrainFile, terrain_revision
 
 TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
@@ -942,6 +943,247 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         resolve_terrain.assert_not_called()
         self.assertFalse(info["terrain_update_available"])
         self.assertEqual(info["terrain_download_size"], 0)
+
+    def test_standard_terrain_entry_points_fail_closed(self) -> None:
+        service = self.launcher.UpdateService(self.base, "Standard", {})
+
+        with self.assertRaisesRegex(RuntimeError, "Standard 不负责地形数据"):
+            service.resolve_terrain_manifest()
+        with self.assertRaisesRegex(RuntimeError, "Standard 不负责地形数据"):
+            service.download_terrain_update({})
+
+    def test_terrain_transport_rejects_redirects_without_following_them(self) -> None:
+        class RedirectResponse:
+            status = 302
+
+            @property
+            def headers(self) -> dict[str, str]:
+                return {"Location": "https://evil.example.test/object"}
+
+            def read(self, _size: int = -1) -> bytes:
+                return b""
+
+            def close(self) -> None:
+                return None
+
+        calls: list[str] = []
+
+        class NoRedirectOpener:
+            def open(self, request, *, timeout: float):
+                calls.append(request.full_url)
+                return RedirectResponse()
+
+        with patch.object(
+            launcher_terrain_transport,
+            "_NO_REDIRECT_OPENER",
+            NoRedirectOpener(),
+        ):
+            response = launcher_terrain_transport.urllib_terrain_request(
+                "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/object.bin",
+                {},
+                1.0,
+            )
+
+        self.assertEqual(
+            calls, ["https://bomanaupdate.ruikang.wang/downloads/terrain/objects/object.bin"]
+        )
+        self.assertEqual(response.status, 302)
+        response.close()
+
+    def test_cdn_terrain_transport_sends_no_subscriber_grant_headers(self) -> None:
+        payload = b"cdn-terrain"
+        digest = hashlib.sha256(payload).hexdigest()
+        item = TerrainFile(
+            path="map.bth",
+            asset=f"{TERRAIN_OBJECT_ASSET_PREFIX}{digest}.bth",
+            sha256=digest,
+            size_bytes=len(payload),
+        )
+        seen_headers: list[dict[str, str]] = []
+
+        class CdnResponse:
+            status = 200
+
+            @property
+            def headers(self) -> dict[str, str]:
+                return {"Content-Length": str(len(payload))}
+
+            def iter_bytes(self, _chunk_size: int):
+                return iter((payload,))
+
+            def close(self) -> None:
+                return None
+
+        def request(_url: str, headers, _timeout: float) -> CdnResponse:
+            seen_headers.append(dict(headers))
+            return CdnResponse()
+
+        transport = launcher_terrain_transport.TerrainObjectTransport(
+            "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/",
+            request=request,
+        )
+        destination = self.base / "terrain.part"
+        transport(item, destination, lambda _received, _total: None)
+
+        self.assertEqual(seen_headers, [{}])
+
+    def test_subscriber_catalog_prefers_cdn_and_falls_back_per_object(self) -> None:
+        payload = b"catalog-object"
+        digest = hashlib.sha256(payload).hexdigest()
+        item = TerrainFile(
+            path="map.bth",
+            asset=f"{TERRAIN_OBJECT_ASSET_PREFIX}{digest}.bth",
+            sha256=digest,
+            size_bytes=len(payload),
+        )
+        test_base = self.base
+        launcher_module = self.launcher
+
+        for cdn_fails in (False, True):
+            with self.subTest(cdn_fails=cdn_fails):
+                provider_calls: list[str] = []
+                statuses: list[tuple[str, str, str]] = []
+
+                class GatewayResponse:
+                    status = 200
+
+                    @property
+                    def headers(self) -> dict[str, str]:
+                        return {"Content-Length": str(len(payload))}
+
+                    def __init__(self) -> None:
+                        self._stream = io.BytesIO(payload)
+
+                    def read(self, size: int = -1) -> bytes:
+                        return self._stream.read(size)
+
+                    def close(self) -> None:
+                        return None
+
+                class FakeStore:
+                    def selected_map_ids(self, _catalog) -> tuple[str, ...]:
+                        return ()
+
+                    def sync_catalog(
+                        self,
+                        _catalog,
+                        *,
+                        fetch_object,
+                        _cdn_fails=cdn_fails,
+                        **_kwargs,
+                    ):
+                        destination = test_base / ("fallback" if _cdn_fails else "cdn")
+                        source = fetch_object(item, destination, lambda *_progress: None)
+                        return launcher_module._launcher_terrain_store.TerrainCatalogSyncResult(
+                            status="activated",
+                            pack_dir=destination.parent,
+                            revision="r" * 64,
+                            selected_map_ids=(),
+                            downloaded_bytes=len(payload),
+                            downloaded_objects=1,
+                            reused_objects=0,
+                            source_names=(source,),
+                            message="ok",
+                        )
+
+                class FakeTransport:
+                    def __init__(
+                        self,
+                        _object_base_url: str,
+                        *,
+                        request,
+                        timeout_seconds: float,
+                        source_name: str,
+                    ) -> None:
+                        self.request = request
+                        self.source_name = source_name
+                        self.timeout_seconds = timeout_seconds
+
+                    def fetch(
+                        self,
+                        _item,
+                        destination: Path,
+                        progress_cb,
+                        _cdn_fails=cdn_fails,
+                    ) -> str:
+                        if self.source_name != "CheemsPay 订阅制品网关":
+                            if _cdn_fails:
+                                raise launcher_module._launcher_terrain_transport.TerrainTransportError(
+                                    "simulated CDN hash failure"
+                                )
+                            destination.write_bytes(payload)
+                            progress_cb(len(payload), len(payload))
+                            return "CDN"
+                        response = self.request(
+                            "https://subscriber-artifacts.invalid/terrain/" + item.asset,
+                            {},
+                            self.timeout_seconds,
+                        )
+                        try:
+                            destination.write_bytes(b"".join(response.iter_bytes(1024)))
+                        finally:
+                            response.close()
+                        progress_cb(len(payload), len(payload))
+                        return self.source_name
+
+                def provider(
+                    resource: str,
+                    _provider_calls=provider_calls,
+                ) -> FakeArtifactAccess:
+                    _provider_calls.append(resource)
+                    return FakeArtifactAccess(resource)
+
+                def status(
+                    title: str,
+                    detail: str,
+                    _progress,
+                    level: str,
+                    _statuses=statuses,
+                ) -> None:
+                    _statuses.append((title, detail, level))
+
+                with (
+                    patch.object(self.launcher, "_terrain_catalog_document", return_value={}),
+                    patch.object(
+                        self.launcher, "_strict_signed_terrain_catalog", return_value=object()
+                    ),
+                    patch.object(
+                        self.launcher, "_terrain_store_for_base", return_value=FakeStore()
+                    ),
+                    patch.object(
+                        self.launcher._launcher_terrain_transport,
+                        "TerrainObjectTransport",
+                        FakeTransport,
+                    ),
+                    patch.object(
+                        self.launcher,
+                        "_open_url",
+                        return_value=GatewayResponse(),
+                    ),
+                ):
+                    result = self.launcher._download_terrain_catalog_from_manifest(
+                        self.base,
+                        {
+                            "kind": "terrain_catalog",
+                            "object_base_url": (
+                                "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/"
+                            ),
+                            "source_name": "CDN",
+                        },
+                        status_cb=status,
+                        subscriber_artifact_provider=provider,
+                        app_host_active=lambda: False,
+                    )
+
+                self.assertEqual(result.status, "activated")
+                if cdn_fails:
+                    self.assertEqual(
+                        provider_calls,
+                        [f"terrain/objects/{item.asset}"],
+                    )
+                    self.assertTrue(any(level == "warning" for _, _, level in statuses))
+                else:
+                    self.assertEqual(provider_calls, [])
 
     def test_terrain_download_falls_back_per_object_and_then_stays_zero_download(
         self,
