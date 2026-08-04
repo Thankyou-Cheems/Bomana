@@ -214,7 +214,7 @@ def test_public_ui_exposes_purchase_and_authorization_actions() -> None:
     source = Path("launcher.pyw").read_text(encoding="utf-8")
 
     assert "self.subscription_store_btn = tk.Button" in source
-    assert "text=\"购买 / 试用\"" in source
+    assert 'text="购买 / 试用"' in source
     assert "self.subscription_login_btn = tk.Button" in source
     assert "command=self._begin_subscription_login" in source
 
