@@ -13,6 +13,43 @@ implementation history.
   packaged runtime keys are checked against the same contract so existing
   subscription sessions are not blocked by an accidental key replacement.
 
+## Launcher 3.5.1
+
+### Fixed
+
+- Added visible purchase/trial and authorization actions to the default public
+  channel so users can complete CheemsPay device authorization before switching
+  to Enhanced.
+
+## [8.7.3]
+
+### Changed
+
+- Reissued the public App packages under the Launcher 3.5.0 compatibility
+  floor and the new vNext artifact signing root.
+- Kept Enhanced and terrain delivery outside the public App package boundary.
+
+## Launcher 3.5.0
+
+### Changed
+
+- Started the vNext release boundary with the Grill-approved signing root
+  `bomana-release-2026-08-v2`; the retired `bomana-release-2026-08` and
+  `bomana-release-2026-06` roots are no
+  longer trusted or carried into new Launcher packages.
+- Retired the legacy cross-root self-update path. Users install Launcher 3.5.0
+  manually once, after which normal self-update remains available within the
+  vNext signing root.
+
+## Launcher 3.4.2
+
+### Changed
+
+- Terrain Catalog map entries now carry signed Chinese display names. The
+  Launcher reads the catalog name first and keeps the bundled table only as a
+  fallback for legacy catalogs, so later map renames and additions do not
+  require another Launcher upgrade.
+
 ## Launcher 3.4.1
 
 ### Fixed

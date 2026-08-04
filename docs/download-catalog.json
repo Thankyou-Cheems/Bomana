@@ -2,12 +2,12 @@
   "schema_version": 1,
   "primary_source": "TencentCloud",
   "cdn_base": "https://bomanaupdate.ruikang.wang",
-  "updated_at": "2026-08-04T07:17:48Z",
+  "updated_at": "2026-08-04T07:41:27Z",
   "launcher": {
-    "version": "3.5.0",
-    "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.5.0.exe",
-    "asset": "Bomana_launcher_v3.5.0.exe",
-    "sha256": "88bf9675ffc78b545920473d5d62bd1d506383ad00f6c1d90dbcac8e589c98e4"
+    "version": "3.5.1",
+    "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.5.1.exe",
+    "asset": "Bomana_launcher_v3.5.1.exe",
+    "sha256": "3a99fe298fa986713ca5d96f18064ba0dd696083473df53c323c3376ed3d78eb"
   },
   "channels": {
     "Standard": {

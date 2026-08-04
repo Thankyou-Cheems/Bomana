@@ -5,6 +5,7 @@ import importlib.util
 import queue
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -151,3 +152,158 @@ def test_enhanced_refreshes_then_fails_closed_without_entitlement() -> None:
     event_type, payload = window.events.get_nowait()
     assert event_type == "subscription_state"
     assert payload == {"allowed": False, "reason": "missing_receipt"}
+
+
+class ExplodingWorkflow:
+    """Fail the test if a public UI refresh tries to read subscriber access."""
+
+    calls = 0
+
+    def cached_access(self) -> SubscriptionAccessDecision:
+        self.calls += 1
+        raise AssertionError("public UI must not read subscriber access")
+
+
+class FakeWidget:
+    def __init__(self) -> None:
+        self.configured: dict[str, object] = {}
+
+    def config(self, **kwargs: object) -> None:
+        self.configured.update(kwargs)
+
+
+class FakeStringVar:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+    def get(self) -> str:
+        return self.value
+
+    def set(self, value: str) -> None:
+        self.value = value
+
+
+def test_public_ui_refresh_is_static_and_never_renders_subscriber_failure_copy() -> None:
+    launcher = load_launcher_module()
+    workflow = ExplodingWorkflow()
+    window = object.__new__(launcher.LauncherWindow)
+    window.channel = "Standard"
+    window.source_test_mode = False
+    window.running = False
+    window.subscription_workflow = workflow
+    window.subscription_setup_error = "receipt protocol failed"
+    window.subscription_decision = SubscriptionAccessDecision(
+        allowed=False,
+        reason=SubscriptionAccessReason.WRONG_DEVICE,
+    )
+    window.subscription_status_lbl = FakeWidget()
+    window._refresh_channel_menu = lambda: False
+    window._refresh_feature_visibility = lambda: None
+
+    window._refresh_subscription_ui()
+
+    assert workflow.calls == 0
+    copy = str(window.subscription_status_lbl.configured["text"])
+    assert "超级爆弹版" in copy
+    assert "设备" not in copy
+    assert "协议" not in copy
+    assert "CheemsPay" not in copy
+
+
+def test_public_ui_exposes_purchase_and_authorization_actions() -> None:
+    source = Path("launcher.pyw").read_text(encoding="utf-8")
+
+    assert "self.subscription_store_btn = tk.Button" in source
+    assert "text=\"购买 / 试用\"" in source
+    assert "self.subscription_login_btn = tk.Button" in source
+    assert "command=self._begin_subscription_login" in source
+
+
+def test_subscription_login_lazily_initializes_workflow_from_public_channel() -> None:
+    launcher = load_launcher_module()
+    window = object.__new__(launcher.LauncherWindow)
+    window.running = False
+    window.source_test_mode = False
+    window.subscription_workflow = None
+    window.subscription_setup_error = ""
+    window.current_task = ""
+    started: list[str] = []
+    initialized: list[bool] = []
+    window._ensure_subscription_workflow = lambda: initialized.append(True) or True
+    window._set_status = lambda *_args: None
+    window._set_running = lambda running: setattr(window, "running", running)
+    window._start_worker = lambda task: started.append(task)
+
+    window._begin_subscription_login()
+
+    assert initialized == [True]
+    assert window.current_task == "subscription_login"
+    assert started == ["subscription_login"]
+
+
+def test_public_channel_change_never_reads_subscriber_access() -> None:
+    launcher = load_launcher_module()
+    workflow = ExplodingWorkflow()
+    window = object.__new__(launcher.LauncherWindow)
+    window.channel = "Standard"
+    window.channel_var = FakeStringVar(launcher.CHANNEL_DISPLAY_NAMES["Lite"])
+    window.detected_channel = "Standard"
+    window.source_test_mode = False
+    window.running = False
+    window.current_task = ""
+    window.subscription_workflow = workflow
+    window.subscription_setup_error = "receipt protocol failed"
+    window.subscription_decision = SubscriptionAccessDecision(
+        allowed=False,
+        reason=SubscriptionAccessReason.WRONG_DEVICE,
+    )
+    window.subscription_status_lbl = FakeWidget()
+    window._channel_menu_refreshing = False
+    window._save_launcher_state = lambda: None
+    window._refresh_installed_versions = lambda: None
+    window._refresh_local_terrain_snapshot = lambda: None
+    window._refresh_channel_details = lambda: None
+    window._refresh_channel_menu = lambda: False
+    window._refresh_feature_visibility = lambda: None
+    window._set_status = lambda *_args: None
+    automatic_checks: list[bool] = []
+    window._begin_check = lambda *, automatic: automatic_checks.append(automatic)
+
+    window._on_channel_changed()
+
+    assert window.channel == "Lite"
+    assert automatic_checks == [True]
+    assert workflow.calls == 0
+
+
+def test_public_launch_does_not_read_access_for_mismatched_local_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    launcher = load_launcher_module()
+    workflow = ExplodingWorkflow()
+    window = object.__new__(launcher.LauncherWindow)
+    window.base = tmp_path
+    window.channel = "Lite"
+    window.source_test_mode = False
+    window.subscription_workflow = workflow
+    window._local_app_launch_version = lambda: "8.7.1"
+    prepared: list[str] = []
+    window._prepare_ordinary_launch = lambda version: prepared.append(version)
+    monkeypatch.setattr(
+        launcher,
+        "_installed_app_channel",
+        lambda _base, _channel: "Enhanced",
+    )
+
+    window._on_launch()
+
+    assert prepared == ["8.7.1"]
+    assert workflow.calls == 0
+
+
+def test_public_launcher_surface_omits_local_import_and_download_cache_actions() -> None:
+    source = Path("launcher.pyw").read_text(encoding="utf-8")
+
+    assert "self.import_btn = tk.Button" not in source
+    assert "self.download_dir_btn = tk.Button" not in source

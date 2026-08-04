@@ -83,7 +83,7 @@ def test_launcher_shortcut_only_activates_enabled_launch_button(tmp_path: Path) 
 def test_launcher_main_runs_only_ordinary_launch_decision(monkeypatch, tmp_path: Path) -> None:
     launcher = load_launcher_module()
     launched: list[tuple[Path, str]] = []
-    reported: list[str] = []
+    startup_events: list[str] = []
     recovery_warnings: list[str] = []
     pending_recovery_warnings: list[str] = []
 
@@ -102,15 +102,6 @@ def test_launcher_main_runs_only_ordinary_launch_decision(monkeypatch, tmp_path:
         def run(self):
             return launcher.LaunchDecision(action="launch", final_version="8.0.0")
 
-    class ImmediateThread:
-        def __init__(self, *, target, args, daemon) -> None:
-            assert daemon is True
-            self.target = target
-            self.args = args
-
-        def start(self) -> None:
-            reported.append("report")
-
     monkeypatch.setattr(launcher, "_base_dir", lambda: tmp_path)
     monkeypatch.setattr(
         launcher,
@@ -125,22 +116,29 @@ def test_launcher_main_runs_only_ordinary_launch_decision(monkeypatch, tmp_path:
     monkeypatch.setattr(launcher, "_cleanup_temp_files_on_launcher_upgrade", lambda _base: None)
     monkeypatch.setattr(launcher, "_cleanup_stale_launcher_self_update_temp", lambda _base: None)
     monkeypatch.setattr(launcher, "_cleanup_legacy_launcher_self_update_files", lambda _base: None)
-    monkeypatch.setattr(launcher, "_consume_launcher_update_result", lambda _base: None)
+    monkeypatch.setattr(
+        launcher,
+        "_consume_launcher_update_result",
+        lambda _base: "启动器已更新到 v3.4.7。",
+    )
     monkeypatch.setattr(launcher.Win32, "enable_dpi", lambda: None)
     monkeypatch.setattr(launcher, "_detect_channel", lambda: "Enhanced")
-    monkeypatch.setattr(launcher, "_build_client_identity", lambda _base: object())
     monkeypatch.setattr(launcher, "LauncherWindow", FakeWindow)
-    monkeypatch.setattr(launcher.threading, "Thread", ImmediateThread)
+    monkeypatch.setattr(
+        launcher._launcher_telemetry,
+        "start_daily_active_report",
+        lambda *, channel: startup_events.append(f"dau:{channel}"),
+    )
     monkeypatch.setattr(
         launcher,
         "_launch_app",
-        lambda base, channel: launched.append((base, channel)),
+        lambda base, channel: launched.append((base, channel)) or startup_events.append("launch"),
     )
 
     launcher.main()
 
     assert launched == [(tmp_path, "Lite")]
-    assert reported == ["report"]
+    assert startup_events == ["dau:Lite", "launch"]
     assert recovery_warnings == ["安装恢复失败：恢复备份应用版本格式无效"]
     assert pending_recovery_warnings == ["安装恢复失败：恢复备份应用版本格式无效"]
 
@@ -254,6 +252,28 @@ def test_launcher_handoff_passes_initial_recovery_warning_in_memory(
     assert isinstance(kwargs, dict)
     assert kwargs["displayed_recovery_warning"] == "initial visible warning"
     assert kwargs["recovery_warning_callback"] is launcher._show_handoff_recovery_warning
+
+
+def test_enhanced_launch_without_selected_terrain_is_degraded_not_blocked(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    launcher = load_launcher_module()
+    captured: dict[str, object] = {}
+    launcher._set_pending_recovery_warning("")
+    monkeypatch.setattr(
+        launcher._launcher_bootstrap,
+        "launch_app",
+        lambda *args, **kwargs: captured.update({"args": args, "kwargs": kwargs}),
+    )
+
+    launcher._launch_app(tmp_path, "Enhanced")
+
+    assert captured["args"] == (tmp_path, "Enhanced")
+    kwargs = captured["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs["terrain_dir"] is None
+    assert "投弹引导" in str(kwargs["displayed_recovery_warning"])
 
 
 def test_installed_launch_rejects_below_floor_before_decision(tmp_path: Path) -> None:
@@ -378,7 +398,7 @@ def test_bootstrap_handoff_uses_launcher_identity_and_in_memory_web_preferences(
 
     assert json.loads(result_path.read_text(encoding="utf-8")) == {
         "boundary": "installed",
-        "launcher": "3.4.1",
+        "launcher": "3.5.1",
         "autostart": "1",
         "auto_open": "1",
         "lan_enabled": "1",

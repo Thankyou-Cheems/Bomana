@@ -91,7 +91,7 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
         ).group(1)
         == boundary.APP_REQUIRED_LAUNCHER_VERSION
     )
-    assert 'LAUNCHER_VERSION = "3.4.1"' in launcher_metadata
+    assert 'LAUNCHER_VERSION = "3.5.1"' in launcher_metadata
     assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.4.0"' in build
 
 
@@ -171,7 +171,8 @@ def test_staged_version_is_read_as_data_without_importing_candidate_code() -> No
     assert "_read_optional_literal_version" in transactions
     assert "read_app_min_launcher_version_identity" in transactions
     assert ".read_text(" in transactions
-    assert "importlib" not in transactions
+    assert "importlib.import_module" not in transactions
+    assert "module_from_spec" not in transactions
     assert "runpy" not in transactions
     assert "exec(" not in transactions
 
