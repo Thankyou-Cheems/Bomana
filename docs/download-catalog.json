@@ -2,25 +2,25 @@
   "schema_version": 1,
   "primary_source": "TencentCloud",
   "cdn_base": "https://bomanaupdate.ruikang.wang",
-  "updated_at": "2026-08-02T01:35:34Z",
+  "updated_at": "2026-08-04T07:17:48Z",
   "launcher": {
-    "version": "3.4.0",
-    "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.4.0.exe",
-    "asset": "Bomana_launcher_v3.4.0.exe",
-    "sha256": "a1bdfc6b41d154d4e7380b43eb193700f71cc93e47cfe18d0bae8230e3a8eddf"
+    "version": "3.5.0",
+    "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.5.0.exe",
+    "asset": "Bomana_launcher_v3.5.0.exe",
+    "sha256": "88bf9675ffc78b545920473d5d62bd1d506383ad00f6c1d90dbcac8e589c98e4"
   },
   "channels": {
     "Standard": {
-      "app_version": "8.7.1",
-      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Standard_v8.7.1.zip",
-      "asset": "Bomana_app_Standard_v8.7.1.zip",
-      "sha256": "a615a338c9e900e7b12916c9dfa1093dcf52c67b2b96c5c8c4e6ec42b961d06b"
+      "app_version": "8.7.3",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Standard_v8.7.3.zip",
+      "asset": "Bomana_app_Standard_v8.7.3.zip",
+      "sha256": "f96ce1aca094a3cc264d5c11c1db93469e71ed4f090855b677db85ae38eeff0f"
     },
     "Lite": {
-      "app_version": "8.7.1",
-      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Lite_v8.7.1.zip",
-      "asset": "Bomana_app_Lite_v8.7.1.zip",
-      "sha256": "abc7186ba6373989e2a1dc70a43d823f130018763f469f7f31093256944dc80c"
+      "app_version": "8.7.3",
+      "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_app_Lite_v8.7.3.zip",
+      "asset": "Bomana_app_Lite_v8.7.3.zip",
+      "sha256": "6345e2784134b5bb46beda52563cddd6c4d3bfc54301dd8029fc5b6a6ae9435d"
     }
   },
   "github_releases_url": "https://github.com/Thankyou-Cheems/Bomana/releases",

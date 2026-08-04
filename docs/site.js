@@ -23,6 +23,7 @@ const ctaDownloadGithub = document.querySelector("#ctaDownloadGithub");
 const allReleasesLink = document.querySelector("#allReleasesLink");
 
 const CHANNELS = ["Standard", "Lite"];
+let currentLauncherVersion = "";
 const CHANNEL_LABELS = {
   Standard: "Standard",
   Lite: "Lite",
@@ -49,7 +50,7 @@ function setGithubFallback(href) {
   }
 }
 
-function setPrimaryDownload(url, label) {
+function setPrimaryDownload(url, label, version) {
   if (!url) return;
   for (const el of [launcherDownload, heroDownload, ctaDownload]) {
     if (!el) continue;
@@ -59,10 +60,14 @@ function setPrimaryDownload(url, label) {
     launcherDownload.textContent = label;
   }
   if (heroDownload) {
-    heroDownload.textContent = "下载 Windows 启动器";
+    heroDownload.textContent = version
+      ? `下载 Windows 启动器 v${version}`
+      : "下载 Windows 启动器";
   }
   if (ctaDownload) {
-    ctaDownload.textContent = "下载启动器（国内 CDN）";
+    ctaDownload.textContent = version
+      ? `下载启动器 v${version}（国内 CDN）`
+      : "下载启动器（国内 CDN）";
   }
 }
 
@@ -122,11 +127,12 @@ async function loadStaticCatalog() {
 function applyCatalog(catalog, sourceLabel) {
   const launcherUrl = catalog?.launcher?.package_url || "";
   const version = catalog?.launcher?.version || "";
+  currentLauncherVersion = version;
   if (launcherUrl) {
     const label = version
       ? `下载启动器 v${version}（国内 CDN）`
       : "下载启动器（国内 CDN）";
-    setPrimaryDownload(launcherUrl, label);
+    setPrimaryDownload(launcherUrl, label, version);
   }
   setGithubFallback(catalog?.github_releases_url || githubReleasesUrl);
   renderCdnAssets(catalog || {});
@@ -151,16 +157,19 @@ async function loadGithubBackupLinksOnly() {
     if (!response.ok) return;
     const releases = await response.json();
     const withLauncher = releases.find((release) =>
-      (release.assets || []).some((asset) => isLauncher(asset.name)),
+      (release.assets || []).some((asset) => {
+        if (!isLauncher(asset.name)) return false;
+        if (!currentLauncherVersion) return false;
+        return String(asset.name).includes(`v${currentLauncherVersion}`);
+      }),
     );
     const withGreen = releases.find((release) =>
       (release.assets || []).some((asset) => isGreenLite(asset.name)),
     );
     const greenAsset = (withGreen?.assets || []).find((asset) => isGreenLite(asset.name));
     setGreenDownload(greenAsset);
-    const release = withLauncher || releases[0];
-    if (release?.html_url) {
-      setGithubFallback(release.html_url);
+    if (withLauncher?.html_url) {
+      setGithubFallback(withLauncher.html_url);
     }
   } catch (error) {
     console.warn("GitHub backup metadata unavailable (expected in some regions)", error);
