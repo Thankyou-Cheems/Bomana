@@ -383,9 +383,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         requested: list[str] = []
 
         class CdnArtifactAccess(FakeArtifactAccess):
-            terrain_object_base_url = (
-                "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/"
-            )
+            terrain_object_base_url = "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/"
 
         def provider(resource: str) -> CdnArtifactAccess:
             requested.append(resource)
