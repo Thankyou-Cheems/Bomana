@@ -1592,6 +1592,20 @@ def _fetch_subscriber_json(
     *,
     label: str,
 ) -> Dict[str, Any]:
+    payload, _access = _fetch_subscriber_json_with_access(
+        provider,
+        resource,
+        label=label,
+    )
+    return payload
+
+
+def _fetch_subscriber_json_with_access(
+    provider: Callable[[str], AuthorizedArtifactRequest],
+    resource: str,
+    *,
+    label: str,
+) -> tuple[Dict[str, Any], AuthorizedArtifactRequest]:
     access = _authorized_subscriber_artifact(provider, resource)
     raw = _fetch_bytes(
         access.download_url,
@@ -1605,7 +1619,7 @@ def _fetch_subscriber_json(
         raise RuntimeError(f"{label}不是有效 JSON") from exc
     if not isinstance(payload, dict):
         raise RuntimeError(f"{label}格式无效")
-    return payload
+    return payload, access
 
 
 def _fetch_manifest_from_subscriber(
@@ -1647,23 +1661,37 @@ def _fetch_manifest_from_subscriber(
 def _fetch_terrain_manifest_from_subscriber(
     provider: Callable[[str], AuthorizedArtifactRequest],
 ) -> Dict[str, Any]:
-    manifest = _fetch_subscriber_json(
+    manifest, access = _fetch_subscriber_json_with_access(
         provider,
         _subscriber_artifacts.TERRAIN_MANIFEST_RESOURCE,
         label="CheemsPay 订阅地形清单",
     )
+    object_base_url = str(getattr(access, "terrain_object_base_url", "") or "").strip()
+    if not object_base_url:
+        grant = getattr(access, "grant", None)
+        object_base_url = str(
+            getattr(grant, "terrain_object_base_url", "") or ""
+        ).strip()
     if manifest.get("kind") == _launcher_launch_contract.TERRAIN_CATALOG_CONTRACT_KIND:
         return _terrain_catalog_result(
             manifest,
             label="CheemsPay 订阅地形目录 ",
-            source_name="CheemsPay 订阅制品网关",
-            object_base_url="",
+            source_name=(
+                "CheemsPay 下发的 CDN 地形目录"
+                if object_base_url
+                else "CheemsPay 订阅制品网关"
+            ),
+            object_base_url=object_base_url,
         )
     return _terrain_manifest_result(
         manifest,
         label="CheemsPay 订阅地形清单 ",
-        source_name="CheemsPay 订阅制品网关",
-        object_base_urls=(),
+        source_name=(
+            "CheemsPay 下发的 CDN 地形清单"
+            if object_base_url
+            else "CheemsPay 订阅制品网关"
+        ),
+        object_base_urls=((object_base_url,) if object_base_url else ()),
     )
 
 
@@ -2750,11 +2778,15 @@ def _download_terrain_catalog_from_manifest(
             "info",
         )
 
-    request = _launcher_terrain_transport.urllib_terrain_request
-    transport_base_url = object_base_url
-    if subscriber_artifact_provider is not None:
-        transport_base_url = "https://subscriber-artifacts.invalid/terrain/"
-
+    if subscriber_artifact_provider is None:
+        transport = _launcher_terrain_transport.TerrainObjectTransport(
+            object_base_url,
+            request=_launcher_terrain_transport.urllib_terrain_request,
+            timeout_seconds=NET_TIMEOUT_SEC,
+            source_name=source_name,
+        )
+        fetch_object: Callable[..., str] = transport
+    else:
         def authorized_request(
             url: str,
             headers: Dict[str, str],
@@ -2778,17 +2810,50 @@ def _download_terrain_catalog_from_manifest(
                 response = exc
             return _launcher_terrain_transport._UrllibResponse(response)
 
-        request = authorized_request
+        gateway_transport = _launcher_terrain_transport.TerrainObjectTransport(
+            "https://subscriber-artifacts.invalid/terrain/",
+            request=authorized_request,
+            timeout_seconds=NET_TIMEOUT_SEC,
+            source_name="CheemsPay 订阅制品网关",
+        )
+        if object_base_url:
+            cdn_transport = _launcher_terrain_transport.TerrainObjectTransport(
+                object_base_url,
+                request=_launcher_terrain_transport.urllib_terrain_request,
+                timeout_seconds=NET_TIMEOUT_SEC,
+                source_name=source_name,
+            )
 
-    transport = _launcher_terrain_transport.TerrainObjectTransport(
-        transport_base_url,
-        request=request,
-        timeout_seconds=NET_TIMEOUT_SEC,
-        source_name=source_name,
-    )
+            def fetch_object(
+                item: Any,
+                destination: Path,
+                progress_cb: Callable[[int, Optional[int]], None],
+            ) -> str:
+                try:
+                    return cdn_transport.fetch(item, destination, progress_cb)
+                except _launcher_terrain_transport.TerrainTransportError as cdn_error:
+                    if cancel_cb and cancel_cb():
+                        raise RuntimeError("已取消当前操作") from cdn_error
+                    if status_cb:
+                        status_cb(
+                            "CDN 地形对象不可用",
+                            f"{item.path} 将改用 CheemsPay 授权网关：{cdn_error}",
+                            None,
+                            "warning",
+                        )
+                    try:
+                        return gateway_transport.fetch(item, destination, progress_cb)
+                    except Exception as gateway_error:
+                        raise _launcher_terrain_transport.TerrainTransportError(
+                            f"CDN 与 CheemsPay 网关均无法下载 {item.path}: "
+                            f"CDN={cdn_error}; gateway={gateway_error}"
+                        ) from gateway_error
+        else:
+            fetch_object = gateway_transport
+
     result = _terrain_store_for_base(base).sync_catalog(
         catalog,
-        fetch_object=transport,
+        fetch_object=fetch_object,
         app_host_active=app_host_active or _APP_HOST_ACTIVE.is_set,
         map_progress_cb=map_progress_cb,
     )

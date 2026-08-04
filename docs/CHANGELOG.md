@@ -13,6 +13,15 @@ implementation history.
   packaged runtime keys are checked against the same contract so existing
   subscription sessions are not blocked by an accidental key replacement.
 
+## Launcher 3.5.4
+
+### Fixed
+
+- Enhanced terrain objects now use the current CDN locator returned by
+  CheemsPay for shared caching, with per-object authorized-gateway fallback
+  when the CDN is unavailable or fails integrity verification. Standard keeps
+  terrain downloads out of its startup path.
+
 ## Launcher 3.5.3
 
 ### Fixed

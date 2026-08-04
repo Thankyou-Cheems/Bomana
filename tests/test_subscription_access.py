@@ -316,6 +316,41 @@ def test_cheemspay_adapter_issues_exact_device_bound_artifact_grant() -> None:
     assert ed25519_verify(canonical.encode("utf-8"), signature, spki[len(SPKI_PREFIX) :])
 
 
+def test_cheemspay_terrain_manifest_grant_carries_optional_cdn_locator() -> None:
+    credential = DeviceCredential.from_seed(DEVICE_SEED)
+    resource = "terrain/terrain_manifest.json"
+    transport = FakeTransport(
+        responses=[
+            JsonHttpResponse(
+                200,
+                {
+                    "token": "header.payload.signature",
+                    "resource": resource,
+                    "downloadUrl": f"https://pay.ruikang.wang/subscriber-artifacts/{resource}",
+                    "terrainObjectBaseUrl": "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/",
+                    "expiresAt": (NOW + timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
+                },
+            )
+        ]
+    )
+    authority = CheemsPaySubscriptionAuthority(
+        base_url="https://pay.ruikang.wang",
+        transport=transport,
+        now=lambda: NOW,
+    )
+
+    grant = authority.issue_artifact_grant(
+        "access-token",
+        credential,
+        "device-1",
+        resource,
+    )
+
+    assert grant.terrain_object_base_url == (
+        "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/"
+    )
+
+
 @pytest.mark.parametrize(
     "resource",
     [

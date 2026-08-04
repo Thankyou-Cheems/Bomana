@@ -47,6 +47,7 @@ DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 MAX_OFFLINE_RECEIPT_AGE = timedelta(days=14)
 ARTIFACT_GRANT_MAX_AGE = timedelta(minutes=5)
 JWT_CLOCK_SKEW = timedelta(seconds=60)
+TERRAIN_MANIFEST_RESOURCE = "terrain/terrain_manifest.json"
 
 _ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
 _MAX_JSON_BYTES = 1024 * 1024
@@ -174,6 +175,10 @@ class ArtifactGrant:
     resource: str
     download_url: str
     expires_at: datetime
+    # CheemsPay may return the current public CDN locator when the granted
+    # resource is the Enhanced terrain manifest.  The grant URL itself stays
+    # the private gateway URL so it remains available as a per-object fallback.
+    terrain_object_base_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -190,6 +195,10 @@ class AuthorizedArtifactRequest:
     @property
     def download_url(self) -> str:
         return self.grant.download_url
+
+    @property
+    def terrain_object_base_url(self) -> str:
+        return self.grant.terrain_object_base_url
 
     def headers(self, *, now: datetime | None = None) -> dict[str, str]:
         current = _as_utc(now or datetime.now(UTC))
@@ -523,11 +532,16 @@ class CheemsPaySubscriptionAuthority:
                 "INVALID_RESPONSE",
                 "CheemsPay artifact grant expiry is invalid",
             )
+        terrain_object_base_url = _optional_terrain_object_base_url(
+            payload.get("terrainObjectBaseUrl"),
+            resource=normalized_resource,
+        )
         return ArtifactGrant(
             token=token,
             resource=returned_resource,
             download_url=download_url,
             expires_at=expires_at,
+            terrain_object_base_url=terrain_object_base_url,
         )
 
     def _device_headers(
@@ -851,6 +865,47 @@ def _require_secure_url(url: str) -> None:
         parsed.scheme != "https" and not (parsed.scheme == "http" and loopback)
     ):
         raise ValueError("CheemsPay URL must use HTTPS (HTTP is allowed only on loopback)")
+
+
+def _optional_terrain_object_base_url(value: object, *, resource: str) -> str:
+    """Validate the CDN locator carried by a terrain-manifest grant response.
+
+    The locator is control-plane metadata, not a bearer credential.  It must
+    therefore be an absolute HTTPS directory without URL decoration.  An
+    omitted locator is accepted for older CheemsPay servers; callers retain
+    the private grant gateway as the compatibility path.
+    """
+
+    if value is None or value == "":
+        return ""
+    if resource != TERRAIN_MANIFEST_RESOURCE:
+        raise CheemsPayApiError(
+            0,
+            "INVALID_RESPONSE",
+            "CheemsPay returned a terrain CDN locator for a non-terrain resource",
+        )
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise CheemsPayApiError(
+            0,
+            "INVALID_RESPONSE",
+            "CheemsPay terrain CDN locator is invalid",
+        )
+    parsed = urlparse(value)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or not value.endswith("/")
+    ):
+        raise CheemsPayApiError(
+            0,
+            "INVALID_RESPONSE",
+            "CheemsPay terrain CDN locator must be an HTTPS directory",
+        )
+    return value
 
 
 def _json_body(payload: Mapping[str, Any]) -> bytes:

@@ -372,6 +372,42 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertEqual(fetch.call_args.kwargs["max_bytes"], 1024 * 1024)
         self.assertFalse(fetch.call_args.kwargs["allow_redirects"])
 
+    def test_subscriber_terrain_manifest_uses_cheemspay_cdn_locator(self) -> None:
+        signed = self.signed_terrain_manifest(
+            {
+                "index.json": b"index",
+                "manifest.json": b"manifest",
+                "map.bth": b"terrain-grid",
+            }
+        )
+        requested: list[str] = []
+
+        class CdnArtifactAccess(FakeArtifactAccess):
+            terrain_object_base_url = (
+                "https://bomanaupdate.ruikang.wang/downloads/terrain/objects/"
+            )
+
+        def provider(resource: str) -> CdnArtifactAccess:
+            requested.append(resource)
+            return CdnArtifactAccess(resource)
+
+        with (
+            self.trusted_release_key_patch(),
+            patch.object(
+                self.launcher,
+                "_fetch_bytes",
+                return_value=json.dumps(signed).encode("utf-8"),
+            ),
+        ):
+            parsed = self.launcher._fetch_terrain_manifest_from_subscriber(provider)
+
+        self.assertEqual(requested, ["terrain/terrain_manifest.json"])
+        self.assertEqual(
+            parsed["object_base_urls"],
+            ("https://bomanaupdate.ruikang.wang/downloads/terrain/objects/",),
+        )
+        self.assertEqual(parsed["source_name"], "CheemsPay 下发的 CDN 地形清单")
+
     def test_enhanced_manifest_resolution_fails_without_subscriber_provider(self) -> None:
         service = self.launcher.UpdateService(self.base, "Enhanced", {})
 
