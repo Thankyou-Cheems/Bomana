@@ -751,7 +751,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
             "source_name": "GitHub",
         }
         launcher_manifest = {
-            "remote_version": "3.5.0",
+            "remote_version": "3.6.0",
             "package_url": "https://example.invalid/launcher.exe",
             "package_sha256": "def",
             "package_size": "",
@@ -941,8 +941,11 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
         self.assertEqual(result.downloaded_objects, 3)
         self.assertEqual(len(urls), 6)
-        self.assertTrue(all("primary.invalid" in url for url in urls[0::2]))
-        self.assertTrue(all("github.invalid" in url for url in urls[1::2]))
+        for asset in by_asset:
+            asset_urls = [url for url in urls if url.rsplit("/", 1)[-1] == asset]
+            self.assertEqual(len(asset_urls), 2)
+            self.assertTrue(any("primary.invalid" in url for url in asset_urls))
+            self.assertTrue(any("github.invalid" in url for url in asset_urls))
 
         with (
             self.trusted_release_key_patch(),
@@ -1344,13 +1347,15 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         self.assertEqual(len(launched), 1)
         script = launched[0].read_text(encoding="utf-8")
         result_path = data_root / self.launcher.LAUNCHER_UPDATE_RESULT_FILE_NAME
-        self.assertIn(json.dumps(str(result_path)), script)
+        self.assertIn(str(result_path), script)
         self.assertIn("$replacement", script)
         self.assertIn("$expectedSha256", script)
         self.assertIn("Assert-FileSha256 $staged $expectedSha256", script)
         self.assertIn("Assert-FileSha256 $replacement $expectedSha256", script)
+        self.assertIn("Assert-FileSha256 $target $expectedSha256", script)
         self.assertIn("Copy-Item -LiteralPath $staged -Destination $replacement -Force", script)
-        self.assertIn("Move-Item -LiteralPath $backup -Destination $target", script)
+        self.assertIn("Restore-PreviousLauncher", script)
+        self.assertIn("Bomana_launcher.exe", script)
         self.assertIn("新版启动器文件保留在", script)
         self.assertIn("Start-Process -FilePath $target -WorkingDirectory", script)
         self.assertIn("-PassThru", script)
@@ -1568,7 +1573,7 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
     def test_local_zip_rejects_app_requiring_newer_launcher(self) -> None:
         self.write_current_app("8.0.0")
-        package_bytes = make_app_zip("8.5.0", min_launcher_version="3.5.0")
+        package_bytes = make_app_zip("8.5.0", min_launcher_version="3.6.0")
 
         with self.assertRaisesRegex(RuntimeError, "当前启动器版本过旧"):
             launcher_install.install_zip_package(
@@ -1587,28 +1592,62 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         standard_zip = make_app_zip("8.1.0", channel="Standard")
         standard_new_zip = make_app_zip("8.2.0", channel="Standard")
         lite_zip = make_app_zip("8.7.0", channel="Lite")
+        standard_manifest = self.signed_manifest(
+            {
+                "channel": "Standard",
+                "app_version": "8.1.0",
+                "min_launcher_version": "3.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "package_asset": "Bomana_app_Standard_v8.1.0.zip",
+                "package_sha256": self.launcher._sha256_bytes(standard_zip),
+            }
+        )
+        standard_new_manifest = self.signed_manifest(
+            {
+                "channel": "Standard",
+                "app_version": "8.2.0",
+                "min_launcher_version": "3.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "package_asset": "Bomana_app_Standard_v8.2.0.zip",
+                "package_sha256": self.launcher._sha256_bytes(standard_new_zip),
+            }
+        )
+        lite_manifest = self.signed_manifest(
+            {
+                "channel": "Lite",
+                "app_version": "8.7.0",
+                "min_launcher_version": "3.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "package_asset": "Bomana_app_Lite_v8.7.0.zip",
+                "package_sha256": self.launcher._sha256_bytes(lite_zip),
+            }
+        )
 
-        launcher_install.install_zip_package(
-            self.base,
-            standard_zip,
-            self.launcher._sha256_bytes(standard_zip),
-            self.launcher.DEFAULT_ENTRYPOINT,
-            channel="Standard",
-        )
-        launcher_install.install_zip_package(
-            self.base,
-            lite_zip,
-            self.launcher._sha256_bytes(lite_zip),
-            self.launcher.DEFAULT_ENTRYPOINT,
-            channel="Lite",
-        )
-        launcher_install.install_zip_package(
-            self.base,
-            standard_new_zip,
-            self.launcher._sha256_bytes(standard_new_zip),
-            self.launcher.DEFAULT_ENTRYPOINT,
-            channel="Standard",
-        )
+        with self.trusted_release_key_patch():
+            launcher_install.install_zip_package(
+                self.base,
+                standard_zip,
+                self.launcher._sha256_bytes(standard_zip),
+                self.launcher.DEFAULT_ENTRYPOINT,
+                channel="Standard",
+                signed_manifest=standard_manifest,
+            )
+            launcher_install.install_zip_package(
+                self.base,
+                lite_zip,
+                self.launcher._sha256_bytes(lite_zip),
+                self.launcher.DEFAULT_ENTRYPOINT,
+                channel="Lite",
+                signed_manifest=lite_manifest,
+            )
+            launcher_install.install_zip_package(
+                self.base,
+                standard_new_zip,
+                self.launcher._sha256_bytes(standard_new_zip),
+                self.launcher.DEFAULT_ENTRYPOINT,
+                channel="Standard",
+                signed_manifest=standard_new_manifest,
+            )
 
         self.assertEqual(
             launcher_install.read_local_app_version(
@@ -1630,10 +1669,11 @@ class LauncherUpdateServiceTests(unittest.TestCase):
         )
         self.assertFalse(launcher_install.app_slot_dir(self.base, "Enhanced").exists())
 
-        final_version, preserved = launcher_install.rollback_to_previous_app(
-            self.base,
-            channel="Standard",
-        )
+        with self.trusted_release_key_patch():
+            final_version, preserved = launcher_install.rollback_to_previous_app(
+                self.base,
+                channel="Standard",
+            )
         self.assertEqual((final_version, preserved), ("8.1.0", "8.2.0"))
         self.assertEqual(
             launcher_install.read_local_app_version(
@@ -1644,14 +1684,28 @@ class LauncherUpdateServiceTests(unittest.TestCase):
 
     def test_channel_slot_rejects_package_from_another_edition(self) -> None:
         package_bytes = make_app_zip("8.7.0", channel="Lite")
+        manifest = self.signed_manifest(
+            {
+                "channel": "Standard",
+                "app_version": "8.7.0",
+                "min_launcher_version": "3.0.0",
+                "entrypoint": self.launcher.DEFAULT_ENTRYPOINT,
+                "package_asset": "Bomana_app_Standard_v8.7.0.zip",
+                "package_sha256": self.launcher._sha256_bytes(package_bytes),
+            }
+        )
 
-        with self.assertRaisesRegex(RuntimeError, "应用包通道不匹配"):
+        with (
+            self.trusted_release_key_patch(),
+            self.assertRaisesRegex(RuntimeError, "应用包通道不匹配"),
+        ):
             launcher_install.install_zip_package(
                 self.base,
                 package_bytes,
                 self.launcher._sha256_bytes(package_bytes),
                 self.launcher.DEFAULT_ENTRYPOINT,
                 channel="Standard",
+                signed_manifest=manifest,
             )
 
         self.assertFalse(launcher_install.app_slot_dir(self.base, "Standard").exists())

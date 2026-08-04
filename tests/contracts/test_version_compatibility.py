@@ -91,7 +91,7 @@ def test_app_and_launcher_floors_are_exactly_8_and_3() -> None:
         ).group(1)
         == boundary.APP_REQUIRED_LAUNCHER_VERSION
     )
-    assert 'LAUNCHER_VERSION = "3.5.2"' in launcher_metadata
+    assert 'LAUNCHER_VERSION = "3.5.3"' in launcher_metadata
     assert 'PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.4.0"' in build
 
 

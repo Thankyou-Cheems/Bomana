@@ -169,9 +169,11 @@ def test_deploy_pages_mirror_tool_is_local_push_only() -> None:
 
 def test_public_site_cutover_keeps_launcher_update_origin_independent() -> None:
     launcher = (ROOT / "launcher.pyw").read_text(encoding="utf-8")
+    distribution = (ROOT / "launcher" / "distribution_build.py").read_text(encoding="utf-8")
     guide = (DOCS / "guides" / "public-site-cutover.md").read_text(encoding="utf-8")
 
-    assert '"https://bomanaupdate.ruikang.wang"' in launcher
+    assert '"https://bomanaupdate.ruikang.wang"' in distribution
+    assert "distribution_build" in launcher
     assert "bomana.ruikang.wang" in guide
     assert "bomanaupdate.ruikang.wang" in guide
     assert "short-lived CheemsPay-derived grant" not in guide

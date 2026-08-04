@@ -13,6 +13,15 @@ implementation history.
   packaged runtime keys are checked against the same contract so existing
   subscription sessions are not blocked by an accidental key replacement.
 
+## Launcher 3.5.3
+
+### Fixed
+
+- Terrain map downloads now run through an independent background entry point.
+  Starting the local App or updating another App version is no longer blocked,
+  and the map picker keeps each map's progress visible while the terrain task
+  continues.
+
 ## Launcher 3.5.2
 
 ### Fixed

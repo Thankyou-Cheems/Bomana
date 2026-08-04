@@ -24,10 +24,11 @@ from bomana_version import validate_app_launcher_identity
 
 validate_app_launcher_identity()
 
+import os
 import tkinter as tk
 
+from bomana.anonymous_dau import start_daily_active_report
 from bomana.config.settings import FileConfig
-from bomana.dau import start_green_dau_report
 from bomana.metadata import __version__
 from bomana.ui.app import App
 from bomana.utils.diagnostics import (
@@ -51,9 +52,11 @@ def main():
     # 确保单实例运行
     SingleInstanceManager.ensure_single_instance_or_exit()
 
-    # 绿色版绕过 Launcher，因此在后台补充每日活跃上报。线程中的任何
-    # 文件或网络失败都只记诊断日志，不参与 GUI 启动控制流。
-    start_green_dau_report(app_version=__version__)
+    # Green Lite bypasses the Launcher, so it schedules the shared anonymous
+    # daily-active contract after local startup is ready.  The daemon reporter
+    # swallows every storage, serialization, and transport failure.
+    if os.environ.get("BOMANA_DISTRIBUTION_MODE", "").strip().lower() == "green":
+        start_daily_active_report(channel="Lite", installation_scope="green")
 
     # 启用DPI感知
     Win32.enable_dpi()

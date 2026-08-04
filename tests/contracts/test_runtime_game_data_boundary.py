@@ -99,11 +99,12 @@ def test_production_has_no_second_outbound_game_data_client() -> None:
         if "\nimport socket" in f"\n{source}" or "\nfrom socket" in f"\n{source}":
             socket_imports.append(relative)
         for token in forbidden_client_tokens:
+            if relative == Path("bomana/anonymous_dau.py") and token == "urllib.request":
+                continue
             assert token not in source, f"{relative} contains alternate client token {token}"
 
     assert sorted(request_imports) == sorted(
         [
-            Path("bomana/dau.py"),
             Path("bomana/core/logic.py"),
             Path("bomana/core/telemetry.py"),
         ]
@@ -112,10 +113,13 @@ def test_production_has_no_second_outbound_game_data_client() -> None:
     assert "requests.get(" not in logic_source
     assert "self.session.get(" not in logic_source
 
-    dau_source = (ROOT / "bomana/dau.py").read_text(encoding="utf-8")
-    assert 'DAU_ENDPOINT = "https://bomanaupdate.ruikang.wang/api/v1/event"' in dau_source
-    assert "requests.post" in dau_source
+    dau_source = (ROOT / "bomana/anonymous_dau.py").read_text(encoding="utf-8")
+    assert 'DAU_PATH = "/api/v1/telemetry/dau"' in dau_source
+    assert "from urllib.request import Request, urlopen" in dau_source
+    assert "requests.post" not in dau_source
     assert "NetworkConfig" not in dau_source
     assert "localhost:8111" not in dau_source
     assert "127.0.0.1:8111" not in dau_source
+    assert "winreg" not in dau_source
+    assert "COMPUTERNAME" not in dau_source
     assert socket_imports == []

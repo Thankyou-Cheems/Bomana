@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
+import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -12,6 +15,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from bomana_version import (
     MIN_SUPPORTED_APP_VERSION,
@@ -19,7 +23,13 @@ from bomana_version import (
     require_exact_version,
     require_minimum_version,
 )
-from launcher.core import normalize_package_root, safe_extract_zip, sha256_bytes
+from launcher.core import (
+    RELEASE_MANIFEST_SIGNATURE_FIELD,
+    normalize_package_root,
+    safe_extract_zip,
+    sha256_bytes,
+    verify_release_manifest_signature,
+)
 from launcher.metadata import LAUNCHER_VERSION
 
 APP_DIR_NAME = "app"
@@ -29,12 +39,39 @@ APP_CHANNELS_DIR_NAME = "app_channels"
 APP_CHANNELS = ("Enhanced", "Standard", "Lite")
 UPDATE_LOCK_FILE_NAME = ".bomana_update.lock"
 UPDATE_LOCK_STALE_SEC = 30 * 60
-APP_REQUIRED_FILES = (
-    Path("Bomana.pyw"),
-    Path("bomana_version.py"),
-    Path("bomana") / "metadata.py",
+APP_RUNTIME_FILE_GROUPS = (
+    (Path("bomana_version.py"), Path("bomana_version.pyc")),
+    (Path("bomana") / "metadata.py", Path("bomana") / "metadata.pyc"),
+    (
+        Path("bomana") / "config" / "__init__.py",
+        Path("bomana") / "config" / "__init__.pyc",
+    ),
 )
-APP_CONFIG_MARKERS = (Path("bomana") / "config" / "__init__.py",)
+APP_PACKAGE_IDENTITY_PATH = Path("bomana") / "app_identity.json"
+APP_PACKAGE_IDENTITY_SCHEMA_VERSION = 1
+APP_PACKAGE_IDENTITY_FIELDS = {
+    "schema_version",
+    "channel",
+    "app_version",
+    "min_launcher_version",
+    "entrypoint",
+    "pyc_magic_hex",
+}
+INSTALLATION_IDENTITY_FILE_NAME = ".bomana_installation_identity.json"
+INSTALLATION_IDENTITY_SCHEMA_VERSION = 1
+INSTALLATION_IDENTITY_KIND = "managed_app_install"
+APP_MANIFEST_IDENTITY_FIELDS = (
+    "schema_version",
+    "channel",
+    "app_version",
+    "min_launcher_version",
+    "entrypoint",
+    "package_asset",
+    "package_sha256",
+    "changelog_asset",
+    "changelog_sha256",
+)
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 StatusCallback = Callable[[str, str, float | None, str], None]
 CancelCallback = Callable[[], bool]
@@ -140,15 +177,57 @@ def _read_optional_literal_version(path: Path, name: str) -> tuple[bool, str]:
     return False, ""
 
 
+def read_app_package_identity(app_dir: Path) -> dict[str, Any] | None:
+    """Read the non-executable identity embedded in a sourceless App package."""
+
+    path = app_dir / APP_PACKAGE_IDENTITY_PATH
+    try:
+        if not path.exists():
+            return None
+        if path.stat().st_size > 16 * 1024:
+            raise RuntimeError("应用包身份文件过大")
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except RuntimeError:
+        raise
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("应用包身份文件无效") from exc
+    if not isinstance(value, dict) or set(value) != APP_PACKAGE_IDENTITY_FIELDS:
+        raise RuntimeError("应用包身份字段无效")
+    if value.get("schema_version") != APP_PACKAGE_IDENTITY_SCHEMA_VERSION:
+        raise RuntimeError("应用包身份版本不支持")
+    for field in (
+        "channel",
+        "app_version",
+        "min_launcher_version",
+        "entrypoint",
+        "pyc_magic_hex",
+    ):
+        if not isinstance(value.get(field), str) or not str(value[field]).strip():
+            raise RuntimeError(f"应用包身份字段无效: {field}")
+    return value
+
+
 def read_app_version_identity(app_dir: Path) -> str:
     """Read the candidate's canonical version literal without importing it."""
 
+    try:
+        identity = read_app_package_identity(app_dir)
+    except RuntimeError:
+        return ""
+    if identity is not None:
+        return str(identity["app_version"]).strip()
     return _read_literal_version(app_dir / "bomana" / "metadata.py")
 
 
 def read_app_min_launcher_version_identity(app_dir: Path) -> str:
     """Read the candidate release floor, preserving legacy App compatibility."""
 
+    try:
+        identity = read_app_package_identity(app_dir)
+    except RuntimeError:
+        return ""
+    if identity is not None:
+        return str(identity["min_launcher_version"]).strip()
     found, value = _read_optional_literal_version(
         app_dir / "bomana" / "metadata.py",
         "PORTABLE_MIN_LAUNCHER_VERSION",
@@ -159,6 +238,15 @@ def read_app_min_launcher_version_identity(app_dir: Path) -> str:
 def read_app_channel_identity(app_dir: Path) -> str:
     """Read the packaged edition marker without importing candidate code."""
 
+    try:
+        identity = read_app_package_identity(app_dir)
+    except RuntimeError:
+        return ""
+    if identity is not None:
+        try:
+            return normalize_app_channel(identity["channel"]) or ""
+        except ValueError:
+            return ""
     path = app_dir / "bomana" / "config" / "feature_profile.py"
     try:
         if path.stat().st_size > 16 * 1024:
@@ -185,6 +273,16 @@ def read_app_channel_identity(app_dir: Path) -> str:
         return normalize_app_channel(values[0]) or ""
     except ValueError:
         return ""
+
+
+def read_app_entrypoint_identity(app_dir: Path) -> str:
+    """Return a sourceless package entrypoint, or empty for legacy source packages."""
+
+    try:
+        identity = read_app_package_identity(app_dir)
+    except RuntimeError:
+        return ""
+    return str(identity["entrypoint"]).strip() if identity is not None else ""
 
 
 def read_local_app_version(app_dir: Path) -> str:
@@ -245,14 +343,22 @@ def require_compatible_app_version(
 
 
 def validate_app_package_root(app_root: Path, entrypoint: str) -> None:
-    required = {Path(entrypoint), *APP_REQUIRED_FILES}
-    missing = [
-        path.as_posix()
-        for path in sorted(required, key=lambda item: item.as_posix())
-        if not (app_root / path).is_file()
-    ]
-    if not any((app_root / path).is_file() for path in APP_CONFIG_MARKERS):
-        missing.append("bomana/config/__init__.py")
+    entrypoint_path = Path(entrypoint)
+    missing = [] if (app_root / entrypoint_path).is_file() else [entrypoint_path.as_posix()]
+    for choices in APP_RUNTIME_FILE_GROUPS:
+        if not any((app_root / path).is_file() for path in choices):
+            missing.append(" or ".join(path.as_posix() for path in choices))
+    identity = read_app_package_identity(app_root)
+    if entrypoint_path.suffix == ".pyc" and identity is None:
+        missing.append(APP_PACKAGE_IDENTITY_PATH.as_posix())
+    if identity is not None and str(identity["entrypoint"]).strip() != entrypoint:
+        raise RuntimeError("应用包身份入口与清单不匹配")
+    if (
+        entrypoint_path.suffix == ".pyc"
+        and identity is not None
+        and str(identity["pyc_magic_hex"]).strip().lower() != importlib.util.MAGIC_NUMBER.hex()
+    ):
+        raise RuntimeError("应用包字节码运行时不兼容，请先更新启动器")
     if missing:
         raise RuntimeError(f"应用包缺少必要文件: {', '.join(missing)}")
 
@@ -298,6 +404,183 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest().lower()
 
 
+def _require_sha256(value: object, *, label: str) -> str:
+    digest = str(value or "").strip().lower()
+    if not _SHA256_RE.fullmatch(digest):
+        raise RuntimeError(f"{label}不是有效的 SHA256")
+    return digest
+
+
+def _signed_manifest_projection(signed_manifest: dict[str, Any]) -> dict[str, Any]:
+    """Verify and retain only App fields covered by the release signature."""
+
+    if not isinstance(signed_manifest, dict):
+        raise RuntimeError("安装身份缺少已签名应用清单")
+    verify_release_manifest_signature(
+        signed_manifest,
+        manifest_label="安装身份应用清单",
+        expected_kind="app",
+    )
+    missing = [field for field in APP_MANIFEST_IDENTITY_FIELDS if field not in signed_manifest]
+    if missing:
+        raise RuntimeError(f"安装身份应用清单缺少签名字段: {', '.join(missing)}")
+    signature = signed_manifest.get(RELEASE_MANIFEST_SIGNATURE_FIELD)
+    if not isinstance(signature, dict):
+        raise RuntimeError("安装身份应用清单缺少发布签名")
+    try:
+        projection = {field: signed_manifest[field] for field in APP_MANIFEST_IDENTITY_FIELDS}
+        projection[RELEASE_MANIFEST_SIGNATURE_FIELD] = dict(signature)
+        # JSON round-tripping rejects non-persistent / mutable values before a slot moves.
+        return json.loads(json.dumps(projection, ensure_ascii=False, sort_keys=True))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("安装身份应用清单无法持久化") from exc
+
+
+def build_signed_installation_identity(
+    signed_manifest: dict[str, Any],
+    *,
+    channel: object,
+    package_sha256: object,
+    entrypoint: object,
+    expected_version: str | None = None,
+) -> dict[str, Any]:
+    """Build local metadata anchored to one verified release manifest.
+
+    The local record deliberately carries the original signed manifest rather
+    than a Launcher-created signature.  Re-validating it later proves the
+    channel, version, entrypoint, package digest, and trusted key identifier.
+    """
+
+    expected_channel = normalize_app_channel(channel)
+    if expected_channel is None:
+        raise ValueError("托管应用安装必须指定通道")
+    expected_digest = _require_sha256(package_sha256, label="应用包 SHA256")
+    expected_entrypoint = str(entrypoint or "").strip()
+    if not expected_entrypoint:
+        raise RuntimeError("应用入口文件不能为空")
+
+    manifest = _signed_manifest_projection(signed_manifest)
+    manifest_channel = normalize_app_channel(manifest.get("channel"))
+    if manifest_channel != expected_channel:
+        raise RuntimeError(
+            f"签名安装身份通道不匹配：清单 {manifest_channel or '未知'}，目标 {expected_channel}"
+        )
+    manifest_version = require_minimum_version(
+        manifest.get("app_version"),
+        MIN_SUPPORTED_APP_VERSION,
+        identity_name="签名安装身份应用版本",
+    )
+    if expected_version is not None:
+        require_exact_version(
+            manifest_version,
+            expected_version,
+            identity_name="签名安装身份应用版本",
+        )
+    manifest_entrypoint = str(manifest.get("entrypoint") or "").strip()
+    if manifest_entrypoint != expected_entrypoint:
+        raise RuntimeError("签名安装身份入口文件与安装目标不匹配")
+    manifest_digest = _require_sha256(
+        manifest.get("package_sha256"),
+        label="签名安装身份应用包 SHA256",
+    )
+    if manifest_digest != expected_digest:
+        raise RuntimeError("签名安装身份应用包 SHA256 与下载包不匹配")
+    signature = manifest[RELEASE_MANIFEST_SIGNATURE_FIELD]
+    key_id = str(signature.get("key_id") if isinstance(signature, dict) else "").strip()
+    if not key_id:
+        raise RuntimeError("签名安装身份缺少 manifest key_id")
+    return {
+        "schema_version": INSTALLATION_IDENTITY_SCHEMA_VERSION,
+        "kind": INSTALLATION_IDENTITY_KIND,
+        "channel": expected_channel,
+        "app_version": manifest_version,
+        "package_sha256": manifest_digest,
+        "entrypoint": manifest_entrypoint,
+        "manifest_key_id": key_id,
+        "signed_manifest": manifest,
+    }
+
+
+def _write_installation_identity(app_dir: Path, identity: dict[str, Any]) -> None:
+    destination = app_dir / INSTALLATION_IDENTITY_FILE_NAME
+    temporary = destination.with_name(
+        f".{destination.name}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+    )
+    try:
+        temporary.write_text(
+            json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        os.replace(str(temporary), str(destination))
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def read_installation_identity(app_dir: Path) -> dict[str, Any]:
+    path = app_dir / INSTALLATION_IDENTITY_FILE_NAME
+    try:
+        if path.stat().st_size > 128 * 1024:
+            raise RuntimeError("安装身份文件过大")
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise RuntimeError("托管应用缺少签名安装身份") from exc
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("托管应用签名安装身份无效") from exc
+    if not isinstance(value, dict):
+        raise RuntimeError("托管应用签名安装身份格式无效")
+    return value
+
+
+def require_signed_installation_identity(
+    app_dir: Path,
+    expected_channel: object,
+    *,
+    expected_version: str | None = None,
+) -> dict[str, Any]:
+    """Require that a managed slot still matches its signed installation record."""
+
+    channel = normalize_app_channel(expected_channel)
+    if channel is None:
+        raise ValueError("托管应用身份校验必须指定通道")
+    identity = read_installation_identity(app_dir)
+    if identity.get("schema_version") != INSTALLATION_IDENTITY_SCHEMA_VERSION:
+        raise RuntimeError("托管应用签名安装身份版本不支持")
+    if identity.get("kind") != INSTALLATION_IDENTITY_KIND:
+        raise RuntimeError("托管应用签名安装身份类型无效")
+    record_digest = _require_sha256(
+        identity.get("package_sha256"),
+        label="托管应用签名安装身份 SHA256",
+    )
+    record_entrypoint = str(identity.get("entrypoint") or "").strip()
+    rebuilt = build_signed_installation_identity(
+        identity.get("signed_manifest"),
+        channel=channel,
+        package_sha256=record_digest,
+        entrypoint=record_entrypoint,
+        expected_version=expected_version,
+    )
+    for field in (
+        "schema_version",
+        "kind",
+        "channel",
+        "app_version",
+        "package_sha256",
+        "entrypoint",
+        "manifest_key_id",
+        "signed_manifest",
+    ):
+        if identity.get(field) != rebuilt[field]:
+            raise RuntimeError("托管应用签名安装身份与发布清单不一致")
+    validate_app_package_root(app_dir, rebuilt["entrypoint"])
+    require_app_channel(app_dir, channel)
+    require_compatible_app_version(
+        app_dir,
+        expected_version=rebuilt["app_version"],
+        identity_name="托管应用版本",
+    )
+    return rebuilt
+
+
 class InstallTransaction:
     """Own update lock and atomic replacement for one channel slot."""
 
@@ -313,6 +596,7 @@ class InstallTransaction:
         self.zip_path: Path | None = None
         self.stage_dir: Path | None = None
         self.validated_new_version: str | None = None
+        self.installation_identity: dict[str, Any] | None = None
         self.moved_to_backup = False
         self.replaced_app = False
 
@@ -379,6 +663,7 @@ class InstallTransaction:
         *,
         expected_version: str | None = None,
         expected_channel: object | None = None,
+        installation_identity: dict[str, Any] | None = None,
     ) -> None:
         version = require_compatible_app_version(
             src_root,
@@ -389,6 +674,8 @@ class InstallTransaction:
             shutil.rmtree(self.new_dir, ignore_errors=True)
         self.new_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(src_root, self.new_dir)
+        if installation_identity is not None:
+            _write_installation_identity(self.new_dir, installation_identity)
         self.validated_new_version = require_compatible_app_version(
             self.new_dir,
             expected_version=version,
@@ -396,6 +683,14 @@ class InstallTransaction:
         )
         if expected_channel is not None:
             require_app_channel(self.new_dir, expected_channel)
+            if installation_identity is None:
+                raise RuntimeError("托管应用暂存缺少签名安装身份")
+            require_signed_installation_identity(
+                self.new_dir,
+                expected_channel,
+                expected_version=self.validated_new_version,
+            )
+        self.installation_identity = installation_identity
 
     def replace_app(self) -> None:
         if self.validated_new_version is None:
@@ -405,6 +700,12 @@ class InstallTransaction:
             expected_version=self.validated_new_version,
             identity_name="暂存应用版本",
         )
+        if self.channel is not None:
+            require_signed_installation_identity(
+                self.new_dir,
+                self.channel,
+                expected_version=self.validated_new_version,
+            )
         self.app_dir.parent.mkdir(parents=True, exist_ok=True)
         self.backup_dir.parent.mkdir(parents=True, exist_ok=True)
         self.previous_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -456,6 +757,8 @@ class InstallTransaction:
                         candidate,
                         identity_name=identity_name,
                     )
+                    if transaction.channel is not None:
+                        require_signed_installation_identity(candidate, transaction.channel)
 
             if (not transaction.app_dir.exists()) and transaction.backup_dir.exists():
                 os.replace(str(transaction.backup_dir), str(transaction.app_dir))
@@ -561,6 +864,7 @@ def install_zip_package(
     cancel_cb: CancelCallback | None = None,
     expected_version: str | None = None,
     channel: object | None = None,
+    signed_manifest: dict[str, Any] | None = None,
 ) -> None:
     if expected_version is not None:
         require_minimum_version(
@@ -572,10 +876,22 @@ def install_zip_package(
     actual = sha256_bytes(package_bytes)
     if expected and actual != expected:
         raise RuntimeError("应用包 SHA256 校验失败")
+    canonical_channel = normalize_app_channel(channel)
+    installation_identity = None
+    if canonical_channel is not None:
+        if signed_manifest is None:
+            raise RuntimeError("托管应用安装缺少已签名发布清单")
+        installation_identity = build_signed_installation_identity(
+            signed_manifest,
+            channel=canonical_channel,
+            package_sha256=expected,
+            entrypoint=entrypoint,
+            expected_version=expected_version,
+        )
     if cancel_cb and cancel_cb():
         raise RuntimeError("已取消当前操作")
 
-    with InstallTransaction(base, channel) as transaction:
+    with InstallTransaction(base, canonical_channel) as transaction:
         if status_cb:
             status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
         if cancel_cb and cancel_cb():
@@ -584,7 +900,7 @@ def install_zip_package(
             package_bytes,
             entrypoint,
             expected_version=expected_version,
-            expected_channel=channel,
+            expected_channel=canonical_channel,
         )
 
         if status_cb:
@@ -593,7 +909,8 @@ def install_zip_package(
         transaction.stage_new_app(
             src_root,
             expected_version=expected_version,
-            expected_channel=channel,
+            expected_channel=canonical_channel,
+            installation_identity=installation_identity,
         )
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
@@ -609,6 +926,7 @@ def install_zip_package_from_file(
     cancel_cb: CancelCallback | None = None,
     expected_version: str | None = None,
     channel: object | None = None,
+    signed_manifest: dict[str, Any] | None = None,
 ) -> None:
     if expected_version is not None:
         require_minimum_version(
@@ -620,10 +938,22 @@ def install_zip_package_from_file(
     actual = sha256_file(package_path)
     if expected and actual != expected:
         raise RuntimeError("应用包 SHA256 校验失败")
+    canonical_channel = normalize_app_channel(channel)
+    installation_identity = None
+    if canonical_channel is not None:
+        if signed_manifest is None:
+            raise RuntimeError("托管应用安装缺少已签名发布清单")
+        installation_identity = build_signed_installation_identity(
+            signed_manifest,
+            channel=canonical_channel,
+            package_sha256=expected,
+            entrypoint=entrypoint,
+            expected_version=expected_version,
+        )
     if cancel_cb and cancel_cb():
         raise RuntimeError("已取消当前操作")
 
-    with InstallTransaction(base, channel) as transaction:
+    with InstallTransaction(base, canonical_channel) as transaction:
         if status_cb:
             status_cb("正在安装更新", "正在解压应用包...", 0.86, "info")
         if cancel_cb and cancel_cb():
@@ -632,7 +962,7 @@ def install_zip_package_from_file(
             package_path,
             entrypoint,
             expected_version=expected_version,
-            expected_channel=channel,
+            expected_channel=canonical_channel,
         )
 
         if status_cb:
@@ -641,7 +971,8 @@ def install_zip_package_from_file(
         transaction.stage_new_app(
             src_root,
             expected_version=expected_version,
-            expected_channel=channel,
+            expected_channel=canonical_channel,
+            installation_identity=installation_identity,
         )
         if cancel_cb and cancel_cb():
             raise RuntimeError("已取消当前操作")
@@ -668,6 +999,18 @@ def rollback_to_previous_app(
         previous_dir,
         identity_name="回退应用版本",
     )
+    canonical_channel = normalize_app_channel(channel)
+    if canonical_channel is not None:
+        require_signed_installation_identity(
+            app_dir,
+            canonical_channel,
+            expected_version=current_version,
+        )
+        require_signed_installation_identity(
+            previous_dir,
+            canonical_channel,
+            expected_version=previous_version,
+        )
     lock_path = acquire_update_lock(base)
     work_dir = Path(tempfile.mkdtemp(prefix="bomana_rollback_", dir=str(base)))
     swap_dir = work_dir / "app_swap"

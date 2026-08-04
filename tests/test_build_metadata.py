@@ -355,9 +355,15 @@ def test_green_stage_is_lite_only_and_does_not_mutate_source(tmp_path: Path) -> 
     work = tmp_path / "work"
     profile = root / "bomana" / "config" / "feature_profile.py"
     profile.parent.mkdir(parents=True)
-    (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
+    (root / "Bomana.pyw").write_text(
+        "from bomana_version import validate_app_launcher_identity\n\n"
+        "validate_app_launcher_identity()\n\n"
+        "print('green entry')\n",
+        encoding="utf-8",
+    )
     (root / "bomana_version.py").write_text("# boundary\n", encoding="utf-8")
     (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "bomana" / "editions.py").write_text("ENHANCED = True\n", encoding="utf-8")
     source_profile = 'EDITION_CHANNEL = "Standard"\n'
     profile.write_text(source_profile, encoding="utf-8")
     broker = tmp_path / "BomanaHotkeyBroker.exe"
@@ -370,10 +376,13 @@ def test_green_stage_is_lite_only_and_does_not_mutate_source(tmp_path: Path) -> 
         source_closure(root),
     )
 
-    assert (staged / "bomana/config/feature_profile.py").read_text(
-        encoding="utf-8"
-    ) == 'EDITION_CHANNEL = "Lite"\n'
+    staged_profile = (staged / "bomana/config/feature_profile.py").read_text(encoding="utf-8")
+    assert 'EDITION_CHANNEL = "Lite"' in staged_profile
+    assert "from bomana.editions" not in staged_profile
     assert profile.read_text(encoding="utf-8") == source_profile
+    assert not (staged / "bomana_version.py").exists()
+    assert not (staged / "bomana/editions.py").exists()
+    assert "bomana_version" not in (staged / "Bomana.pyw").read_text(encoding="utf-8")
     staged_broker = staged / "bomana/bin/BomanaHotkeyBroker.exe"
     assert staged_broker.read_bytes() == b"broker"
     assert build_portable.sha256_file(staged_broker) in (
@@ -419,6 +428,7 @@ def test_green_bundle_layout_requires_executable_python_and_broker(tmp_path: Pat
             f"{stem}/_internal/bomana/bin/BomanaHotkeyBroker.sha256",
             b"checksum",
         )
+        archive.writestr(f"{stem}/README_GREEN.txt", b"manual update")
 
     build_portable.verify_green_bundle_layout(bundle, stem)
 
@@ -435,7 +445,41 @@ def test_green_checksum_declares_zero_launcher_runtime(tmp_path: Path) -> None:
     assert "channel: Lite" in text
     assert "requires_launcher: false" in text
     assert "python_runtime_bundled: true" in text
+    assert "update_mode: manual" in text
     assert build_portable.sha256_file(bundle) in text
+
+
+def test_green_release_metadata_is_manual_and_hash_bound(tmp_path: Path) -> None:
+    build_portable = load_tool_module("build_portable_green_metadata", "tools/build_portable.py")
+    bundle = tmp_path / "Bomana_Green_Lite_v8.7.0.zip"
+    bundle.write_bytes(b"green")
+
+    metadata_path = build_portable.write_green_release_metadata(tmp_path, "8.7.0", bundle)
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    assert metadata == {
+        "schema_version": 1,
+        "channel": "Lite",
+        "distribution": "green",
+        "app_version": "8.7.0",
+        "package_asset": bundle.name,
+        "package_sha256": build_portable.sha256_file(bundle),
+        "requires_launcher": False,
+        "python_runtime_bundled": True,
+        "update_mode": "manual",
+    }
+
+
+def test_green_stage_rejects_private_secret_marker(tmp_path: Path) -> None:
+    build_portable = load_tool_module(
+        "build_portable_green_secret_closure", "tools/build_portable.py"
+    )
+    staged = tmp_path / "stage"
+    staged.mkdir()
+    (staged / "sentinel.py").write_bytes(b"BOMANA_RELEASE_ED25519_PRIVATE_KEY")
+
+    with pytest.raises(RuntimeError, match="forbidden secret marker"):
+        build_portable.verify_green_stage_layout(staged)
 
 
 TEST_SIGNING_PRIVATE_KEY = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
@@ -444,6 +488,11 @@ TEST_SIGNING_PUBLIC_KEY = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
 
 def test_launcher_manifest_records_size(tmp_path: Path, monkeypatch) -> None:
     build_portable = load_tool_module("build_portable_manifest", "tools/build_portable.py")
+    monkeypatch.setattr(
+        build_portable,
+        "RELEASE_MANIFEST_PUBLIC_KEYS",
+        {"test-key": TEST_SIGNING_PUBLIC_KEY},
+    )
     monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
     monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, TEST_SIGNING_PUBLIC_KEY)
     monkeypatch.setenv(build_portable.SIGNING_KEY_ID_ENV, "test-key")
@@ -526,6 +575,11 @@ def test_build_portable_generates_and_restores_launcher_public_key(
     monkeypatch,
 ) -> None:
     build_portable = load_tool_module("build_portable_release_keys", "tools/build_portable.py")
+    monkeypatch.setattr(
+        build_portable,
+        "RELEASE_MANIFEST_PUBLIC_KEYS",
+        {"test-key": TEST_SIGNING_PUBLIC_KEY},
+    )
     monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
     monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, TEST_SIGNING_PUBLIC_KEY)
     monkeypatch.setenv(build_portable.SIGNING_KEY_ID_ENV, "test-key")
@@ -543,6 +597,54 @@ def test_build_portable_generates_and_restores_launcher_public_key(
     build_portable.restore_release_public_keys_module(path, original)
 
     assert not path.exists()
+
+
+def test_build_portable_keeps_supported_release_roots_when_rotating_signer(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    build_portable = load_tool_module(
+        "build_portable_release_key_rotation", "tools/build_portable.py"
+    )
+    expected_keys = {
+        "bomana-release-2026-08-v2": "zSMo0z0dAKYP2j0pV68vJ0NvtonEV1CVyMWz/f5Rd6s=",
+        "test-key": TEST_SIGNING_PUBLIC_KEY,
+    }
+    monkeypatch.setattr(build_portable, "RELEASE_MANIFEST_PUBLIC_KEYS", expected_keys)
+    monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
+    monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, TEST_SIGNING_PUBLIC_KEY)
+    monkeypatch.setenv(build_portable.SIGNING_KEY_ID_ENV, "test-key")
+    (tmp_path / "launcher").mkdir()
+
+    path, _original = build_portable.write_release_public_keys_module(tmp_path)
+
+    assert repr(expected_keys) in path.read_text(encoding="utf-8")
+
+
+def test_build_portable_rejects_uncontracted_release_signing_key(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    build_portable = load_tool_module(
+        "build_portable_uncontracted_release_key", "tools/build_portable.py"
+    )
+    monkeypatch.setattr(
+        build_portable,
+        "RELEASE_MANIFEST_PUBLIC_KEYS",
+        {"bomana-release-2026-08-v2": "zSMo0z0dAKYP2j0pV68vJ0NvtonEV1CVyMWz/f5Rd6s="},
+    )
+    monkeypatch.setenv(build_portable.SIGNING_PRIVATE_KEY_ENV, TEST_SIGNING_PRIVATE_KEY)
+    monkeypatch.setenv(build_portable.SIGNING_PUBLIC_KEY_ENV, TEST_SIGNING_PUBLIC_KEY)
+    monkeypatch.setenv(build_portable.SIGNING_KEY_ID_ENV, "uncontracted-key")
+
+    with pytest.raises(RuntimeError, match="release trust contract"):
+        build_portable.write_launcher_manifest(
+            tmp_path,
+            "2.0.0",
+            "Bomana_launcher_v2.0.0.exe",
+            "a" * 64,
+            123,
+        )
 
 
 def test_build_portable_generates_subscription_key_outside_source_tree(

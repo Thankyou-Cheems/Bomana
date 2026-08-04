@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from launcher.release_key_contract import RELEASE_MANIFEST_PUBLIC_KEYS as _CONTRACT_RELEASE_KEYS
+
 DOWNLOAD_SOURCE_MODE_AUTO = ""
 DOWNLOAD_SOURCE_MODE_PRIMARY = "primary"
 DOWNLOAD_SOURCE_MODE_GITHUB = "github"
@@ -29,15 +31,27 @@ DOWNLOAD_SOURCE_DETAILS = {
 DOWNLOAD_SOURCE_LABEL_TO_MODE = {label: mode for mode, label in DOWNLOAD_SOURCE_CHOICES}
 DOWNLOAD_SOURCE_MODE_TO_LABEL = dict(DOWNLOAD_SOURCE_CHOICES)
 LAUNCHER_ASSET_PREFIX = "Bomana_launcher_v"
+_LAUNCHER_ASSET_RE = re.compile(
+    r"^Bomana_launcher_v(?P<version>[0-9]+[.][0-9]+[.][0-9]+)"
+    r"(?:_test-[A-Za-z0-9][A-Za-z0-9._-]*)?[.]exe$",
+    re.IGNORECASE,
+)
 RELEASE_MANIFEST_SIGNATURE_FIELD = "manifest_signature"
 RELEASE_MANIFEST_SIGNATURE_ALGORITHM = "ed25519"
-RELEASE_MANIFEST_DEFAULT_KEY_ID = "bomana-release-2026-06"
+RELEASE_MANIFEST_DEFAULT_KEY_ID = "bomana-release-2026-08-v2"
 try:
     _RELEASE_KEYS_MODULE = importlib.import_module("launcher.release_public_keys")
-    _PINNED_RELEASE_KEYS = getattr(_RELEASE_KEYS_MODULE, "RELEASE_MANIFEST_PUBLIC_KEYS", {})
-except ImportError:
-    _PINNED_RELEASE_KEYS = {}
-RELEASE_MANIFEST_PUBLIC_KEYS: dict[str, str] = dict(_PINNED_RELEASE_KEYS)
+except ImportError as exc:
+    if exc.name != "launcher.release_public_keys":
+        raise
+    _PACKAGED_RELEASE_KEYS: dict[str, str] = {}
+else:
+    _PACKAGED_RELEASE_KEYS = dict(getattr(_RELEASE_KEYS_MODULE, "RELEASE_MANIFEST_PUBLIC_KEYS", {}))
+
+if _PACKAGED_RELEASE_KEYS and _PACKAGED_RELEASE_KEYS != _CONTRACT_RELEASE_KEYS:
+    raise RuntimeError("打包的发布签名信任根与启动器信任合同不一致")
+
+RELEASE_MANIFEST_PUBLIC_KEYS: dict[str, str] = dict(_CONTRACT_RELEASE_KEYS)
 
 _ED25519_Q = 2**255 - 19
 _ED25519_L = 2**252 + 27742317777372353535851937790883648493
@@ -480,12 +494,8 @@ def join_base_url_path(base_url: str, path: str) -> str:
 
 def parse_launcher_version_from_asset_name(asset_name: str) -> str:
     name = asset_name.strip()
-    suffix = ".exe"
-    if not name.lower().startswith(LAUNCHER_ASSET_PREFIX.lower()):
-        return ""
-    if not name.lower().endswith(suffix):
-        return ""
-    return name[len(LAUNCHER_ASSET_PREFIX) : -len(suffix)].strip()
+    match = _LAUNCHER_ASSET_RE.fullmatch(name)
+    return match.group("version") if match else ""
 
 
 def find_launcher_asset(assets: list) -> dict[str, Any] | None:

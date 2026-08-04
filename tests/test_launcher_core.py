@@ -34,6 +34,16 @@ def test_launcher_core_finds_assets_and_package_root(tmp_path: Path) -> None:
         launcher_core.parse_launcher_version_from_asset_name("Bomana_launcher_v1.6.0.exe")
         == "1.6.0"
     )
+    assert (
+        launcher_core.parse_launcher_version_from_asset_name(
+            "Bomana_launcher_v1.6.0_test-test-20260804T041413Z.exe"
+        )
+        == "1.6.0"
+    )
+    assert (
+        launcher_core.parse_launcher_version_from_asset_name("Bomana_launcher_v1.6.0_candidate.exe")
+        == ""
+    )
 
     nested = tmp_path / "pkg"
     nested.mkdir()

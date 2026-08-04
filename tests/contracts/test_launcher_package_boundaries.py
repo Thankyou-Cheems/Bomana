@@ -118,6 +118,32 @@ def test_verified_app_manifest_projection_exposes_only_trusted_runtime_fields() 
     }
 
 
+def test_only_enhanced_may_use_the_sourceless_bytecode_entrypoint() -> None:
+    assert (
+        manifest_sources.validate_app_manifest_entrypoint(
+            "Bomana.pyc",
+            "Enhanced manifest ",
+            "Bomana.pyw",
+            channel="Enhanced",
+        )
+        == "Bomana.pyc"
+    )
+    with pytest.raises(RuntimeError, match="入口文件不受支持"):
+        manifest_sources.validate_app_manifest_entrypoint(
+            "Bomana.pyc",
+            "Standard manifest ",
+            "Bomana.pyw",
+            channel="Standard",
+        )
+    with pytest.raises(RuntimeError, match="入口文件不受支持"):
+        manifest_sources.validate_app_manifest_entrypoint(
+            "../Bomana.pyc",
+            "Enhanced manifest ",
+            "Bomana.pyw",
+            channel="Enhanced",
+        )
+
+
 def test_launcher_entry_uses_package_metadata_version_source() -> None:
     launcher_entry = (ROOT / "launcher.pyw").read_text(encoding="utf-8")
 

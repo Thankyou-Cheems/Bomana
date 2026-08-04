@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,6 +29,16 @@ from launcher.core import (  # noqa: E402
     ed25519_public_key_from_private_key,
     sign_release_manifest,
 )
+from launcher.distribution_build import (  # noqa: E402
+    ISOLATED_TEST_BASE_URL,
+    ISOLATED_TEST_PROFILE,
+    PRODUCTION_BASE_URL,
+    PRODUCTION_PROFILE,
+    TEST_BUILD_MARKER,
+    DistributionBuildMetadata,
+    render_embedded_distribution_build_module,
+)
+from launcher.release_key_contract import RELEASE_MANIFEST_PUBLIC_KEYS  # noqa: E402
 from launcher.subscription_access import validate_license_public_key  # noqa: E402
 from launcher.subscription_key_contract import (  # noqa: E402
     CHEEMSPAY_LICENSE_KEY_ID,
@@ -49,6 +61,44 @@ GREEN_VARIANT = "Lite"
 GREEN_BUNDLE_NAME = "Bomana_Green_Lite"
 GREEN_DISTRIBUTION_ENV = "BOMANA_DISTRIBUTION_MODE"
 GREEN_DISTRIBUTION_VALUE = "green"
+GREEN_OMITTED_STAGE_FILES = frozenset(
+    {
+        "bomana_version.py",
+        "bomana/editions.py",
+    }
+)
+GREEN_FORBIDDEN_STAGE_PREFIXES = (
+    "launcher/",
+    "bomana/web/",
+    "bomana/assets/web/",
+    "bomana/data/terrain-",
+)
+GREEN_FORBIDDEN_STAGE_FILES = frozenset(
+    {
+        "bomana/core/atmosphere.py",
+        "bomana/core/ballistics.py",
+        "bomana/core/ccrp_scheduler.py",
+        "bomana/core/offline_ballistics_model.py",
+        "bomana/core/offline_rigidbody_catalog.py",
+        "bomana/core/offline_rigidbody_properties.py",
+        "bomana/core/offline_rigidbody_solver.py",
+        "bomana/core/release_observation.py",
+        "bomana/core/terrain_elevation.py",
+        "bomana/core/visible_trajectory_reference.py",
+        "bomana/core/weapon_catalog.py",
+        "bomana/core/weapon_envelope.py",
+        "bomana/core/weapon_scheduler.py",
+        "bomana/core/weapon_solver.py",
+        "bomana/ui/bombing_bar.py",
+        "bomana/ui/bombing_runtime.py",
+    }
+)
+GREEN_FORBIDDEN_CONTENT_MARKERS = (
+    b"BOMANA_RELEASE_ED25519_PRIVATE_KEY",
+    b"CHEEMSPAY_LICENSE_",
+    b"-----BEGIN PRIVATE KEY-----",
+    b"-----BEGIN EC PRIVATE KEY-----",
+)
 HOTKEY_BROKER_NAME = "BomanaHotkeyBroker.exe"
 HOTKEY_BROKER_CHECKSUM_NAME = "BomanaHotkeyBroker.sha256"
 BRANDING_ICON = Path(APP_DIR) / "assets" / "branding" / "app.ico"
@@ -58,6 +108,7 @@ SIGNING_KEY_ID_ENV = "BOMANA_RELEASE_SIGNING_KEY_ID"
 SUBSCRIPTION_PUBLIC_KEY_ENV = "CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL"
 SUBSCRIPTION_KEY_ID_ENV = "CHEEMSPAY_LICENSE_KEY_ID"
 PACKAGED_LAUNCHER_REQUIRES_PYTHON = ">=3.14"
+DISTRIBUTION_PROFILES = (PRODUCTION_PROFILE, ISOLATED_TEST_PROFILE)
 PACKAGED_LAUNCHER_RUNTIME_MIN_LAUNCHER_VERSION = "3.4.0"
 PACKAGED_LAUNCHER_RUNTIME_MODULES_BY_DEPENDENCY = {
     "requests": "requests",
@@ -135,6 +186,23 @@ def parse_args() -> argparse.Namespace:
         help="Build target: all / app package / Lite green bundle / launcher",
     )
     parser.add_argument(
+        "--distribution-profile",
+        choices=DISTRIBUTION_PROFILES,
+        default=None,
+        help=(
+            "Explicit artifact-distribution identity. production uses the production "
+            "trust contract; isolated-test embeds only the temp route and test key."
+        ),
+    )
+    parser.add_argument(
+        "--allow-dirty-isolated-test-source",
+        action="store_true",
+        help=(
+            "Permit an isolated-test candidate to package the current working tree. "
+            "This override is rejected for production builds."
+        ),
+    )
+    parser.add_argument(
         "--version",
         default="",
         help=(
@@ -196,12 +264,11 @@ def pyinstaller_green_runtime_args() -> list[str]:
     return args
 
 
-def sign_manifest(manifest: dict[str, object]) -> dict[str, object]:
-    private_key, key_id = release_signing_key_context()
-    return sign_release_manifest(manifest, private_key, key_id=key_id)
+def release_signing_build_context(
+    distribution_profile: str = PRODUCTION_PROFILE,
+) -> tuple[str, DistributionBuildMetadata]:
+    """Read one signer and bind it to a deliberately selected build identity."""
 
-
-def release_signing_key_context() -> tuple[str, str]:
     private_key = os.environ.get(SIGNING_PRIVATE_KEY_ENV, "").strip()
     if not private_key:
         raise RuntimeError(f"{SIGNING_PRIVATE_KEY_ENV} is required to sign release manifests")
@@ -216,19 +283,91 @@ def release_signing_key_context() -> tuple[str, str]:
     key_id = os.environ.get(SIGNING_KEY_ID_ENV, RELEASE_MANIFEST_DEFAULT_KEY_ID).strip()
     if not key_id:
         raise RuntimeError(f"{SIGNING_KEY_ID_ENV} must not be empty")
-    return private_key, key_id
+    if (
+        key_id in CHEEMSPAY_LICENSE_PUBLIC_KEYS
+        or actual_public_key in CHEEMSPAY_LICENSE_PUBLIC_KEYS.values()
+    ):
+        raise RuntimeError("artifact signing key must not reuse CheemsPay receipt trust")
+
+    if distribution_profile == PRODUCTION_PROFILE:
+        if RELEASE_MANIFEST_PUBLIC_KEYS.get(key_id) != actual_public_key:
+            raise RuntimeError(
+                f"{SIGNING_KEY_ID_ENV} and {SIGNING_PUBLIC_KEY_ENV} must match the release trust contract"
+            )
+        metadata = DistributionBuildMetadata(
+            profile=PRODUCTION_PROFILE,
+            base_url=PRODUCTION_BASE_URL,
+            artifact_key_id=key_id,
+            artifact_public_keys=dict(RELEASE_MANIFEST_PUBLIC_KEYS),
+            test_marker="",
+            github_fallback_allowed=True,
+        )
+    elif distribution_profile == ISOLATED_TEST_PROFILE:
+        if (
+            key_id in RELEASE_MANIFEST_PUBLIC_KEYS
+            or actual_public_key in RELEASE_MANIFEST_PUBLIC_KEYS.values()
+        ):
+            raise RuntimeError(
+                "isolated test artifact key must not reuse the production release trust contract"
+            )
+        metadata = DistributionBuildMetadata(
+            profile=ISOLATED_TEST_PROFILE,
+            base_url=ISOLATED_TEST_BASE_URL,
+            artifact_key_id=key_id,
+            artifact_public_keys={key_id: actual_public_key},
+            test_marker=TEST_BUILD_MARKER,
+            github_fallback_allowed=False,
+        )
+    else:
+        raise RuntimeError("unsupported distribution build profile")
+    return private_key, metadata
 
 
-def write_release_public_keys_module(root: Path) -> tuple[Path, str | None]:
-    private_key, key_id = release_signing_key_context()
-    public_key = ed25519_public_key_from_private_key(private_key)
+def release_signing_key_context(
+    distribution_profile: str = PRODUCTION_PROFILE,
+) -> tuple[str, str]:
+    """Return only the private signing material and key identifier for a profile."""
+
+    private_key, metadata = release_signing_build_context(distribution_profile)
+    return private_key, metadata.artifact_key_id
+
+
+def sign_manifest(
+    manifest: dict[str, object],
+    distribution_profile: str = PRODUCTION_PROFILE,
+) -> dict[str, object]:
+    private_key, key_id = release_signing_key_context(distribution_profile)
+    return sign_release_manifest(manifest, private_key, key_id=key_id)
+
+
+def render_release_key_contract_module(metadata: DistributionBuildMetadata) -> str:
+    """Render the sole artifact trust map included in a packaged Launcher."""
+
+    return (
+        '"""Generated artifact verification keys for one packaged Launcher."""\n\n'
+        "from typing import Final\n\n"
+        f"RELEASE_MANIFEST_PUBLIC_KEYS: Final[dict[str, str]] = {dict(metadata.artifact_public_keys)!r}\n\n"
+        '__all__ = ["RELEASE_MANIFEST_PUBLIC_KEYS"]\n'
+    )
+
+
+def render_release_public_keys_module(metadata: DistributionBuildMetadata) -> str:
+    """Render the runtime verifier map matching the generated trust contract."""
+
+    return (
+        '"""Generated release manifest verification keys for packaged launchers."""\n\n'
+        f"RELEASE_MANIFEST_PUBLIC_KEYS = {dict(metadata.artifact_public_keys)!r}\n"
+    )
+
+
+def write_release_public_keys_module(
+    root: Path,
+    distribution_profile: str = PRODUCTION_PROFILE,
+) -> tuple[Path, str | None]:
+    _private_key, metadata = release_signing_build_context(distribution_profile)
     path = root / LAUNCHER_DIR / "release_public_keys.py"
     original = path.read_text(encoding="utf-8") if path.exists() else None
-    content = (
-        '"""Generated release manifest verification keys for packaged launchers."""\n\n'
-        f"RELEASE_MANIFEST_PUBLIC_KEYS = {{{key_id!r}: {public_key!r}}}\n"
-    )
-    path.write_text(content, encoding="utf-8")
+    path.write_text(render_release_public_keys_module(metadata), encoding="utf-8")
     return path, original
 
 
@@ -237,6 +376,48 @@ def restore_release_public_keys_module(path: Path, original: str | None) -> None
         path.unlink(missing_ok=True)
     else:
         path.write_text(original, encoding="utf-8")
+
+
+@contextmanager
+def temporary_launcher_distribution_build_sources(
+    root: Path,
+    metadata: DistributionBuildMetadata,
+) -> Iterator[None]:
+    """Temporarily render profile-specific verifier sources for PyInstaller.
+
+    The production source tree is restored even if PyInstaller, a signal, or a
+    packaging smoke fails after one of the generated modules has been written.
+    """
+
+    launcher_dir = root / LAUNCHER_DIR
+    distribution_path = launcher_dir / "distribution_build.py"
+    contract_path = launcher_dir / "release_key_contract.py"
+    public_keys_path = launcher_dir / "release_public_keys.py"
+    paths = (distribution_path, contract_path, public_keys_path)
+    originals = {
+        path: path.read_text(encoding="utf-8") if path.exists() else None for path in paths
+    }
+    source = originals[distribution_path]
+    if source is None:
+        raise RuntimeError(
+            "launcher/distribution_build.py is required for packaged Launcher builds"
+        )
+    generated = {
+        distribution_path: render_embedded_distribution_build_module(source, metadata),
+        contract_path: render_release_key_contract_module(metadata),
+        public_keys_path: render_release_public_keys_module(metadata),
+    }
+    try:
+        for path in paths:
+            path.write_text(generated[path], encoding="utf-8")
+        yield
+    finally:
+        for path in reversed(paths):
+            original = originals[path]
+            if original is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_text(original, encoding="utf-8")
 
 
 def write_subscription_public_keys_module(work_dir: Path) -> tuple[Path, Path]:
@@ -462,8 +643,10 @@ def resolve_release_source_closure(
     root: Path,
     target: str,
     variant: str,
+    *,
+    allow_dirty: bool = False,
 ) -> frozenset[str]:
-    """Resolve a clean, Git-tracked source inventory before signing a release."""
+    """Resolve the source inventory used by one signed release candidate."""
     scopes = _release_source_scopes(target)
     tracked_result = subprocess.run(
         ["git", "-C", str(root), "ls-files", "-z", "--", *scopes],
@@ -504,8 +687,32 @@ def resolve_release_source_closure(
         for value in dirty_result.stdout.decode("utf-8", errors="replace").split("\0")
         if value
     )
-    if dirty_entries:
+    if dirty_entries and not allow_dirty:
         raise RuntimeError("release source tree is not clean: " + ", ".join(dirty_entries[:8]))
+
+    if allow_dirty:
+        current_paths = {
+            rel_path
+            for rel_path in tracked_paths
+            if (root / Path(rel_path)).is_file() and not (root / Path(rel_path)).is_symlink()
+        }
+        if target in ("all", "app", "green"):
+            current_paths.update(
+                path.relative_to(root).as_posix() for path in _app_source_files(root, variant)
+            )
+        if target in ("all", "launcher"):
+            assets_dir = root / APP_DIR / "assets"
+            if assets_dir.exists():
+                current_paths.update(
+                    path.relative_to(root).as_posix()
+                    for path in assets_dir.rglob("*")
+                    if path.is_file()
+                    and not path.is_symlink()
+                    and "__pycache__" not in path.parts
+                    and path.suffix not in {".pyc", ".pyo"}
+                    and public_release_includes(path.relative_to(root).as_posix())
+                )
+        tracked_paths = frozenset(current_paths)
 
     unexpected = _unexpected_release_files(root, target, variant, tracked_paths)
     if unexpected:
@@ -513,6 +720,17 @@ def resolve_release_source_closure(
             "release source tree contains unexpected package files: " + ", ".join(unexpected[:8])
         )
     return tracked_paths
+
+
+def validate_dirty_source_override(
+    distribution_profile: str | None,
+    requested: bool,
+) -> bool:
+    if requested and distribution_profile != ISOLATED_TEST_PROFILE:
+        raise RuntimeError(
+            "--allow-dirty-isolated-test-source is restricted to isolated-test builds"
+        )
+    return requested
 
 
 def _stage_launcher_assets(
@@ -628,6 +846,46 @@ def build_app_zip(
     return out_zip
 
 
+def render_green_entrypoint(code: str) -> str:
+    """Remove the managed-Launcher identity gate from the green entrypoint."""
+
+    managed_gate = "from bomana_version import validate_app_launcher_identity\n\nvalidate_app_launcher_identity()\n\n"
+    if code.count(managed_gate) != 1:
+        raise RuntimeError("Green entrypoint must contain exactly one managed Launcher gate")
+    return code.replace(managed_gate, "", 1)
+
+
+def render_green_feature_profile() -> str:
+    """Return a self-contained Lite-only feature profile for the green package."""
+
+    return """\"\"\"Frozen Lite feature profile for Standalone Green Lite.\"\"\"\n\nEDITION_CHANNEL = \"Lite\"\nFEATURE_FLAG_NAMES = (\n    \"ENABLE_CCRP\",\n    \"ENABLE_ZONES\",\n    \"ENABLE_AIRFIELDS\",\n    \"ENABLE_FUEL\",\n    \"ENABLE_CHECKLIST\",\n    \"ENABLE_ADVANCED_SETTINGS\",\n    \"ENABLE_WEB_DASHBOARD\",\n)\n\nENABLE_CCRP = False\nENABLE_ZONES = False\nENABLE_AIRFIELDS = False\nENABLE_FUEL = False\nENABLE_CHECKLIST = False\nENABLE_ADVANCED_SETTINGS = True\nENABLE_WEB_DASHBOARD = False\n\n__all__ = [\n    \"ENABLE_ADVANCED_SETTINGS\",\n    \"ENABLE_AIRFIELDS\",\n    \"ENABLE_CCRP\",\n    \"ENABLE_CHECKLIST\",\n    \"ENABLE_FUEL\",\n    \"ENABLE_WEB_DASHBOARD\",\n    \"ENABLE_ZONES\",\n    \"EDITION_CHANNEL\",\n    \"FEATURE_FLAG_NAMES\",\n]\n"""
+
+
+def verify_green_stage_layout(staged_root: Path) -> None:
+    """Fail closed when a Green staging tree crosses its portable boundary."""
+
+    files = {
+        path.relative_to(staged_root).as_posix()
+        for path in staged_root.rglob("*")
+        if path.is_file()
+    }
+    forbidden = sorted(
+        path
+        for path in files
+        if path in GREEN_OMITTED_STAGE_FILES
+        or path in GREEN_FORBIDDEN_STAGE_FILES
+        or any(path.startswith(prefix) for prefix in GREEN_FORBIDDEN_STAGE_PREFIXES)
+    )
+    if forbidden:
+        raise RuntimeError("green stage contains forbidden paths: " + ", ".join(forbidden[:8]))
+
+    for path in sorted(files):
+        content = (staged_root / path).read_bytes()
+        for marker in GREEN_FORBIDDEN_CONTENT_MARKERS:
+            if marker in content:
+                raise RuntimeError(f"green stage contains forbidden secret marker: {path}")
+
+
 def stage_green_app(
     root: Path,
     work_dir: Path,
@@ -638,23 +896,22 @@ def stage_green_app(
 
     staged_root = work_dir / "source"
     staged_root.mkdir(parents=True, exist_ok=False)
-    for rel_path in (APP_ENTRY, "bomana_version.py"):
-        if rel_path not in release_source_paths:
-            raise RuntimeError(f"green source closure is missing {rel_path}")
-        source = root / rel_path
-        destination = staged_root / rel_path
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
+    if APP_ENTRY not in release_source_paths:
+        raise RuntimeError(f"green source closure is missing {APP_ENTRY}")
+    entrypoint = root / APP_ENTRY
+    (staged_root / APP_ENTRY).write_text(
+        render_green_entrypoint(entrypoint.read_text(encoding="utf-8")),
+        encoding="utf-8",
+    )
 
     for source in _app_source_files(root, GREEN_VARIANT, release_source_paths):
         rel_path = source.relative_to(root)
+        if rel_path.as_posix() == f"{APP_DIR}/editions.py":
+            continue
         destination = staged_root / rel_path
         destination.parent.mkdir(parents=True, exist_ok=True)
         if rel_path == FEATURE_PROFILE_PATH:
-            destination.write_text(
-                render_feature_profile(source.read_text(encoding="utf-8"), GREEN_VARIANT),
-                encoding="utf-8",
-            )
+            destination.write_text(render_green_feature_profile(), encoding="utf-8")
         else:
             shutil.copy2(source, destination)
 
@@ -666,6 +923,7 @@ def stage_green_app(
         f"{sha256_file(staged_broker)}  {HOTKEY_BROKER_NAME}\n",
         encoding="ascii",
     )
+    verify_green_stage_layout(staged_root)
     return staged_root
 
 
@@ -725,9 +983,12 @@ def _write_green_readme(bundle_dir: Path, version: str) -> None:
             "============================\n\n"
             "解压整个目录后运行同目录内的 Bomana_Green_Lite 可执行文件。\n"
             "无需安装 Python，也不需要 Bomana Launcher。请勿只复制 EXE。\n\n"
-            "该版本仅包含 Lite 功能。启动时会在后台按 UTC 日期上报一次匿名日活；\n"
-            "网络失败不会阻止或延迟主界面。创建用户目录下的 .bomana_disable_dau\n"
-            "空文件，或设置 BOMANA_DISABLE_DAU=1，可禁用该上报。\n"
+            "该版本仅包含 Lite 功能。启动时会在后台按 UTC 日期发送一次匿名日活；\n"
+            "网络失败不会阻止或延迟主界面。\n\n"
+            "更新方式：手动下载新版 Bomana_Green_Lite_v*.zip，完全退出旧版后，\n"
+            "用新解压出的完整目录替换旧目录。绿色版不会自行检查、下载或安装更新。\n"
+            "替换前请使用同一发布中的 checksums_green_Lite.txt 或\n"
+            "green_release_Lite.json 核对 ZIP 的 SHA-256。\n"
         ),
         encoding="utf-8",
     )
@@ -748,8 +1009,22 @@ def verify_green_bundle_layout(bundle: Path, executable_stem: str) -> None:
         name.startswith(f"{prefix}_internal/python3") and name.endswith(".dll") for name in names
     ):
         raise RuntimeError("green bundle is missing the bundled Python runtime")
-    if any("launcher" in name.lower() for name in names):
-        raise RuntimeError("green bundle unexpectedly contains Launcher files")
+    if f"{prefix}README_GREEN.txt" not in names:
+        raise RuntimeError("green bundle is missing manual update instructions")
+    forbidden = sorted(
+        name
+        for name in names
+        if any(
+            token in name.lower() for token in ("launcher", "cheemspay", "subscription", "receipt")
+        )
+        or f"{prefix}_internal/{APP_DIR}/web/" in name
+        or f"{prefix}_internal/{APP_DIR}/assets/web/" in name
+        or f"{prefix}_internal/{APP_DIR}/data/terrain-" in name
+    )
+    if forbidden:
+        raise RuntimeError(
+            "green bundle contains forbidden private files: " + ", ".join(forbidden[:8])
+        )
 
 
 def build_green_bundle(
@@ -867,6 +1142,7 @@ def build_launcher(
     version: str,
     out_dir: Path,
     release_source_paths: frozenset[str],
+    distribution_profile: str,
 ) -> Path:
     name = f"{UNIVERSAL_LAUNCHER_NAME}_v{version}"
     work_dir = root / "build" / "pyinstaller" / "UniversalLauncher"
@@ -907,11 +1183,9 @@ def build_launcher(
         cmd.extend(["--add-data", f"{assets_dir};{APP_DIR}/assets"])
 
     cmd.append(str(root / "launcher.pyw"))
-    keys_module, keys_module_original = write_release_public_keys_module(root)
-    try:
+    _private_key, build_metadata = release_signing_build_context(distribution_profile)
+    with temporary_launcher_distribution_build_sources(root, build_metadata):
         subprocess.run(cmd, check=True, cwd=root)
-    finally:
-        restore_release_public_keys_module(keys_module, keys_module_original)
     return out_dir / f"{name}.exe"
 
 
@@ -924,6 +1198,7 @@ def write_manifest(
     min_launcher_version: str,
     changelog_name: str,
     changelog_sha256: str,
+    distribution_profile: str = PRODUCTION_PROFILE,
 ) -> Path:
     manifest = {
         "schema_version": 2,
@@ -936,7 +1211,7 @@ def write_manifest(
         "changelog_asset": changelog_name,
         "changelog_sha256": changelog_sha256,
     }
-    manifest = sign_manifest(manifest)
+    manifest = sign_manifest(manifest, distribution_profile)
     path = out_dir / f"manifest_{variant}.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
@@ -961,6 +1236,7 @@ def write_launcher_manifest(
     launcher_name: str,
     launcher_sha256: str,
     launcher_size_bytes: int,
+    distribution_profile: str = PRODUCTION_PROFILE,
 ) -> Path:
     manifest = {
         "schema_version": 1,
@@ -969,7 +1245,7 @@ def write_launcher_manifest(
         "launcher_sha256": launcher_sha256,
         "launcher_size_bytes": launcher_size_bytes,
     }
-    manifest = sign_manifest(manifest)
+    manifest = sign_manifest(manifest, distribution_profile)
     path = out_dir / "launcher_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
@@ -1028,6 +1304,7 @@ def write_green_checksum_info(out_dir: Path, version: str, bundle: Path) -> Path
                 "distribution: green",
                 "requires_launcher: false",
                 "python_runtime_bundled: true",
+                "update_mode: manual",
                 "",
                 f"{bundle.name}  SHA256  {sha256_file(bundle)}",
                 "",
@@ -1038,10 +1315,35 @@ def write_green_checksum_info(out_dir: Path, version: str, bundle: Path) -> Path
     return path
 
 
+def write_green_release_metadata(out_dir: Path, version: str, bundle: Path) -> Path:
+    """Write user-facing verification metadata, not a Green update protocol."""
+
+    metadata = {
+        "schema_version": 1,
+        "channel": GREEN_VARIANT,
+        "distribution": GREEN_DISTRIBUTION_VALUE,
+        "app_version": version,
+        "package_asset": bundle.name,
+        "package_sha256": sha256_file(bundle),
+        "requires_launcher": False,
+        "python_runtime_bundled": True,
+        "update_mode": "manual",
+    }
+    path = out_dir / "green_release_Lite.json"
+    path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def main() -> int:
     args = parse_args()
     if args.target == "green" and args.variant != GREEN_VARIANT:
         raise ValueError("green target requires --variant Lite")
+    if args.target in ("all", "app", "launcher") and args.distribution_profile is None:
+        raise ValueError("--distribution-profile is required for signed Launcher or App builds")
+    allow_dirty_source = validate_dirty_source_override(
+        args.distribution_profile,
+        args.allow_dirty_isolated_test_source,
+    )
     root = Path(__file__).resolve().parent.parent
     out_dir = (root / args.output).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1060,6 +1362,7 @@ def main() -> int:
     launcher: Path | None = None
     launcher_manifest: Path | None = None
     green_bundle: Path | None = None
+    green_metadata: Path | None = None
     app_version: str | None = None
     launcher_version: str | None = None
     checksums: list[Path] = []
@@ -1085,6 +1388,7 @@ def main() -> int:
             root,
             args.target,
             args.variant,
+            allow_dirty=allow_dirty_source,
         )
 
         hotkey_broker: Path | None = None
@@ -1113,6 +1417,7 @@ def main() -> int:
                 min_launcher_version,
                 changelog.name,
                 sha256_file(changelog),
+                args.distribution_profile,
             )
 
         if args.target in ("all", "green"):
@@ -1127,6 +1432,7 @@ def main() -> int:
                 release_source_paths,
             )
             checksums.append(write_green_checksum_info(out_dir, app_version, green_bundle))
+            green_metadata = write_green_release_metadata(out_dir, app_version, green_bundle)
 
         if args.target in ("all", "launcher"):
             launcher_version = source_launcher_version
@@ -1135,6 +1441,7 @@ def main() -> int:
                 launcher_version,
                 out_dir,
                 release_source_paths,
+                args.distribution_profile,
             )
             launcher_sha = sha256_file(launcher)
             launcher_manifest = write_launcher_manifest(
@@ -1143,6 +1450,7 @@ def main() -> int:
                 launcher.name,
                 launcher_sha,
                 launcher.stat().st_size,
+                args.distribution_profile,
             )
 
         if args.target in ("all", "app"):
@@ -1189,6 +1497,8 @@ def main() -> int:
             safe_print(f"  - changelog:   {changelog}")
         if green_bundle and green_bundle.exists():
             safe_print(f"  - green bundle: {green_bundle}")
+        if green_metadata and green_metadata.exists():
+            safe_print(f"  - green metadata: {green_metadata}")
         if launcher and launcher.exists():
             safe_print(f"  - launcher:    {launcher}")
         if launcher_manifest and launcher_manifest.exists():

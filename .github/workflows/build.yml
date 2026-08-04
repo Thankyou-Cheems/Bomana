@@ -133,12 +133,12 @@ jobs:
             all)
               BUILD_DESC="公开发布（启动器 + Standard/Lite 应用包 + Lite 绿色版）"
               RELEASE_NAME="Bomana v$VERSION"
-              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 公共应用包：`Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- Lite 绿色版：`Bomana_Green_Lite_v*.zip`（内含 Python 运行时，无需启动器）\n- 公共清单：`manifest_Standard.json` / `manifest_Lite.json`\n- 超级爆弹版（`Enhanced`）由 CheemsPay 订阅发布闭包独立交付\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt` + `checksums_green_Lite.txt`'
+              ASSET_DESC=$'- 启动器：`Bomana_launcher_v*.exe`\n- 公共应用包：`Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- Lite 绿色版：`Bomana_Green_Lite_v*.zip`（内含 Python 运行时，无需启动器）\n- 绿色版手动更新元数据：`green_release_Lite.json`\n- 公共清单：`manifest_Standard.json` / `manifest_Lite.json`\n- 超级爆弹版（`Enhanced`）由 CheemsPay 订阅发布闭包独立交付\n- 校验：`checksums_launcher.txt` + `checksums_app_*.txt` + `checksums_green_Lite.txt`'
               ;;
             app)
               BUILD_DESC="公共应用包发布（Standard/Lite + Lite 绿色版）"
               RELEASE_NAME="Bomana v$VERSION · Public App Packages"
-              ASSET_DESC=$'- 公共应用包：`Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- Lite 绿色版：`Bomana_Green_Lite_v*.zip`（内含 Python 运行时，无需启动器）\n- 公共清单：`manifest_Standard.json` / `manifest_Lite.json`\n- 超级爆弹版（`Enhanced`）不会进入公开 Release\n- 校验：`checksums_app_*.txt` + `checksums_green_Lite.txt`'
+              ASSET_DESC=$'- 公共应用包：`Bomana_app_Standard_v*.zip` / `Bomana_app_Lite_v*.zip`\n- Lite 绿色版：`Bomana_Green_Lite_v*.zip`（内含 Python 运行时，无需启动器）\n- 绿色版手动更新元数据：`green_release_Lite.json`\n- 公共清单：`manifest_Standard.json` / `manifest_Lite.json`\n- 超级爆弹版（`Enhanced`）不会进入公开 Release\n- 校验：`checksums_app_*.txt` + `checksums_green_Lite.txt`'
               ;;
             launcher)
               BUILD_DESC="启动器发布（通用启动器）"
@@ -288,11 +288,12 @@ jobs:
           BUILD_VERSION: ${{ needs.prepare.outputs.version }}
           BOMANA_RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}
           BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
-          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
+          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-08-v2
         run: |
           uv run --frozen python tools/build_portable.py `
             --variant "$env:BUILD_VARIANT" `
             --target "app" `
+            --distribution-profile "production" `
             --version "$env:BUILD_VERSION" `
             --output "dist"
 
@@ -383,6 +384,7 @@ jobs:
           subject-path: |
             dist/Bomana_Green_Lite_v${{ needs.prepare.outputs.version }}.zip
             dist/checksums_green_Lite.txt
+            dist/green_release_Lite.json
 
       - name: 上传绿色版产物
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -391,6 +393,7 @@ jobs:
           path: |
             dist/Bomana_Green_Lite_v${{ needs.prepare.outputs.version }}.zip
             dist/checksums_green_Lite.txt
+            dist/green_release_Lite.json
 
   build_launcher:
     name: 构建通用启动器
@@ -429,12 +432,13 @@ jobs:
           BUILD_LAUNCHER_VERSION: ${{ needs.prepare.outputs.launcher_version }}
           BOMANA_RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PRIVATE_KEY }}
           BOMANA_RELEASE_ED25519_PUBLIC_KEY: ${{ secrets.BOMANA_RELEASE_ED25519_PUBLIC_KEY }}
-          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-06
+          BOMANA_RELEASE_SIGNING_KEY_ID: bomana-release-2026-08-v2
           CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL: ${{ secrets.CHEEMSPAY_LICENSE_PUBLIC_KEY_DER_BASE64URL }}
           CHEEMSPAY_LICENSE_KEY_ID: prod-2026-01
         run: |
           uv run --frozen python tools/build_portable.py `
             --target "launcher" `
+            --distribution-profile "production" `
             --version "$env:BUILD_LAUNCHER_VERSION" `
             --output "dist"
 

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlparse
 
 from launcher.core import (
     _APP_MANIFEST_SIGNATURE_FIELDS,
@@ -11,9 +14,74 @@ from launcher.core import (
     parse_launcher_version_from_asset_name,
     require_remote_checksum,
 )
+from launcher.launch_contract import PUBLIC_CHANNELS, DistributionDescriptor
 from launcher.terrain_store import parse_terrain_manifest
 
 from .verify import project_verified_manifest_fields
+
+
+class ManifestSourceError(RuntimeError):
+    """Raised when an external manifest source violates its trust boundary."""
+
+
+def validate_public_fallback_descriptor(
+    descriptor: DistributionDescriptor,
+    *,
+    url_is_owned: Callable[[str], bool],
+) -> None:
+    """Allow GitHub fallback metadata to name only public Launcher artifacts.
+
+    The descriptor is expected to have passed signature validation before it
+    reaches this policy projection.  The adapter owns the source-specific URL
+    allow-list, so the client cannot combine a GitHub descriptor with a URL
+    from another service.
+    """
+
+    if descriptor.source != "github":
+        raise ManifestSourceError("public fallback descriptor must be from GitHub")
+    for reference in descriptor.artifacts:
+        public_app = reference.kind == "app" and reference.channel in PUBLIC_CHANNELS
+        if reference.kind != "launcher" and not public_app:
+            raise ManifestSourceError(
+                "public fallback descriptor may contain only Launcher, Lite, and Standard"
+            )
+        validate_public_fallback_url(reference.manifest_url, url_is_owned=url_is_owned)
+
+
+def validate_public_fallback_url(
+    url: str,
+    *,
+    url_is_owned: Callable[[str], bool],
+) -> None:
+    """Require one public GitHub fallback URL to pass origin and ownership checks."""
+
+    _require_public_https_endpoint(url)
+    try:
+        owned = url_is_owned(url)
+    except Exception as exc:
+        raise ManifestSourceError("public fallback URL ownership validation failed") from exc
+    if owned is not True:
+        raise ManifestSourceError("public fallback URL does not belong to GitHub")
+
+
+def _require_public_https_endpoint(url: str) -> None:
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if parsed.scheme != "https" or not hostname:
+        raise ManifestSourceError("public fallback URL is not a public HTTPS endpoint")
+    host = hostname.rstrip(".").casefold()
+    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+        raise ManifestSourceError("public fallback URL is not a public HTTPS endpoint")
+    try:
+        address = ip_address(host)
+    except ValueError:
+        if ":" in host:
+            raise ManifestSourceError(
+                "public fallback URL is not a public HTTPS endpoint"
+            ) from None
+        return
+    if not address.is_global:
+        raise ManifestSourceError("public fallback URL is not a public HTTPS endpoint")
 
 
 def validate_app_manifest_channel(
@@ -26,9 +94,18 @@ def validate_app_manifest_channel(
         raise RuntimeError(f"{label}通道不匹配")
 
 
-def validate_app_manifest_entrypoint(entrypoint_value: Any, label: str, default: str) -> str:
+def validate_app_manifest_entrypoint(
+    entrypoint_value: Any,
+    label: str,
+    default: str,
+    *,
+    channel: str = "",
+) -> str:
     entrypoint = str(entrypoint_value or default).strip() or default
-    if entrypoint != default:
+    allowed = {default}
+    if str(channel).strip() == "Enhanced":
+        allowed.add("Bomana.pyc")
+    if entrypoint not in allowed:
         raise RuntimeError(f"{label}入口文件不受支持")
     return entrypoint
 
@@ -71,6 +148,7 @@ def verified_app_manifest_fields(
             fields.get("entrypoint", default_entrypoint),
             label,
             default_entrypoint,
+            channel=channel,
         ),
     }
 

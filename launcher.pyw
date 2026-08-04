@@ -4292,6 +4292,7 @@ class LauncherWindow:
         ] = {}
         self._terrain_map_row_renderers: Dict[str, Callable[[], None]] = {}
         self._terrain_map_dialog: Optional[tk.Toplevel] = None
+        self._terrain_map_dialog_refresh: Optional[Callable[[], None]] = None
         self.latest_launcher_manifest: Optional[Dict[str, Any]] = None
         self.latest_launcher_version = LAUNCHER_VERSION
         self.latest_launcher_source_name = ""
@@ -4305,6 +4306,14 @@ class LauncherWindow:
         self.decision = LaunchDecision(action="exit", final_version=self.local_version)
         self._worker: Optional[threading.Thread] = None
         self._cancel_requested = threading.Event()
+        self.terrain_running = False
+        self.terrain_download_channel = ""
+        self._terrain_worker: Optional[threading.Thread] = None
+        self._terrain_cancel_requested = threading.Event()
+        self.terrain_status_title = ""
+        self.terrain_status_detail = ""
+        self.terrain_status_progress: Optional[float] = None
+        self.terrain_status_level = "info"
         self._exit_after_task = False
         self._recheck_requested = False
         self._spin = _LAUNCHER_SPINNER_FRAMES
@@ -4474,6 +4483,21 @@ class LauncherWindow:
             or not self._terrain_features_visible()
         ):
             return
+        terrain_running = bool(getattr(self, "terrain_running", False))
+        terrain_channel = str(getattr(self, "terrain_download_channel", "")).strip()
+        terrain_running_here = bool(
+            terrain_running
+            and (
+                not terrain_channel
+                or _normalize_channel(terrain_channel) == _normalize_channel(self.channel)
+            )
+        )
+        status_running = bool(self.running or terrain_running_here)
+        status_task = (
+            self.current_task
+            if self.running
+            else ("download" if terrain_running_here else "")
+        )
         catalog_available = bool(getattr(self, "terrain_catalog_available", False))
         selected_count = int(getattr(self, "terrain_catalog_selected_count", 0) or 0)
         catalog_map_count = int(getattr(self, "terrain_catalog_map_count", 0) or 0)
@@ -4502,8 +4526,8 @@ class LauncherWindow:
             download_size=self.terrain_download_size,
             check_warning=self.terrain_check_warning,
             check_blocking=self.terrain_check_blocking,
-            running=self.running,
-            current_task=self.current_task,
+            running=status_running,
+            current_task=status_task,
         )
         if catalog_available:
             if selected_count == 0:
@@ -4538,13 +4562,57 @@ class LauncherWindow:
                 state=(
                     "normal"
                     if catalog_available
-                    and (not self.running or self.current_task == "download")
+                    and not terrain_running
+                    and not (self.running and self.current_task == "check")
                     else "disabled"
                 ),
             )
 
+    def _apply_terrain_catalog_selection(
+        self,
+        store: _launcher_terrain_store.TerrainStore,
+        catalog: _launcher_terrain_store.TerrainCatalog,
+        selected_map_ids: Iterable[str],
+    ) -> Dict[str, Any]:
+        """Persist a catalog selection and refresh the in-memory download plan."""
+
+        # Capture the active state before persisting the new desired state.  The
+        # active catalog must remain the authority until the selected objects
+        # have been downloaded and verified.
+        current_catalog = store.current_catalog()
+        current_selection = store.current_catalog_selection()
+        projection = _terrain_catalog_selection_projection(
+            catalog,
+            tuple(selected_map_ids),
+        )
+        chosen = tuple(projection["selected_map_ids"])
+        store.set_map_selection(catalog, chosen)
+
+        self.terrain_catalog_available = True
+        self.terrain_catalog_map_count = len(catalog.maps)
+        self.terrain_catalog_selected_map_ids = chosen
+        self.terrain_catalog_selected_count = int(projection["selected_count"])
+        self.terrain_selection_size_bytes = int(projection["selected_size_bytes"])
+        self.terrain_remote_revision = catalog.revision
+        self.terrain_remote_map_count = len(catalog.maps)
+        self.terrain_remote_total_size = self.terrain_selection_size_bytes
+        self.terrain_download_size, self.terrain_reuse_size = (
+            _terrain_catalog_transfer_projection(store, catalog, chosen)
+        )
+        active_matches = bool(
+            current_catalog is not None
+            and current_catalog.revision == catalog.revision
+            and current_selection == chosen
+        )
+        self.terrain_update_available = bool(
+            (chosen or current_catalog is not None) and not active_matches
+        )
+        for progress in store.catalog_map_progress(catalog, chosen):
+            self.terrain_map_progress[progress.map_id] = progress
+        return projection
+
     def _on_select_terrain_maps(self) -> None:
-        if self.running and self.current_task != "download":
+        if self.running and self.current_task == "check":
             return
         if self._terrain_map_dialog is not None:
             with contextlib.suppress(tk.TclError):
@@ -4594,7 +4662,7 @@ class LauncherWindow:
         )
         for progress in store.catalog_map_progress(catalog, selected_state):
             self.terrain_map_progress[progress.map_id] = progress
-        read_only = bool(self.running)
+        read_only = bool(self.terrain_running)
         dialog = tk.Toplevel(self.root)
         self._terrain_map_dialog = dialog
         dialog.title(f"{DISPLAY_NAME} · 选择地图")
@@ -4613,6 +4681,7 @@ class LauncherWindow:
 
         def close_dialog() -> None:
             self._terrain_map_row_renderers.clear()
+            self._terrain_map_dialog_refresh = None
             self._terrain_map_dialog = None
             with contextlib.suppress(tk.TclError):
                 dialog.grab_release()
@@ -4620,23 +4689,23 @@ class LauncherWindow:
 
         dialog.protocol("WM_DELETE_WINDOW", close_dialog)
 
-        tk.Label(
+        normal_hint = (
+            "首次使用（全真/空战推荐）优先选择“空战地图”和“空地联合”；"
+            "推荐只会预选；确认后点击“下载地形”即可开始，保存用于稍后维护。"
+            if not selection_initialized
+            else "点击分类可整组选中；地图整行背景显示该地图的下载进度。"
+        )
+        dialog_hint = tk.Label(
             dialog,
-            text=(
-                "下载进行中；每张地图整行的背景就是实时进度。"
-                if read_only
-                else (
-                    "首次使用（全真/空战推荐）优先选择“空战地图”和“空地联合”；"
-                    "推荐只会预选，点击“保存”后才会维护下载。"
-                    if not selection_initialized
-                    else "点击分类可整组选中；地图整行背景显示该地图的下载进度。"
-                )
-            ),
+            text="下载进行中；每张地图整行的背景就是实时进度。"
+            if read_only
+            else normal_hint,
             font=self._font(10),
             fg=_THEME["TEXT_DIM"],
             bg=_THEME["BG"],
             anchor="w",
-        ).pack(fill="x", padx=self._px(14), pady=(self._px(14), self._px(8)))
+        )
+        dialog_hint.pack(fill="x", padx=self._px(14), pady=(self._px(14), self._px(8)))
 
         list_frame = tk.Frame(dialog, bg=_THEME["CARD"])
         list_frame.pack(fill="both", expand=True, padx=self._px(14))
@@ -4682,6 +4751,7 @@ class LauncherWindow:
         summary.pack(fill="x", padx=self._px(14), pady=(self._px(8), self._px(4)))
 
         category_buttons: Dict[str, tk.Button] = {}
+        action_buttons: Dict[str, tk.Button] = {}
 
         def update_summary() -> None:
             projection = _terrain_catalog_selection_projection(
@@ -4712,9 +4782,12 @@ class LauncherWindow:
                 )
             update_summary()
             self._refresh_terrain_map_rows()
+            if self._terrain_map_dialog_refresh is not None:
+                with contextlib.suppress(tk.TclError):
+                    self._terrain_map_dialog_refresh()
 
         def toggle_map(map_id: str) -> None:
-            if read_only:
+            if self.terrain_running or (self.running and self.current_task == "check"):
                 return
             if map_id in selected_state:
                 selected_state.remove(map_id)
@@ -4723,7 +4796,7 @@ class LauncherWindow:
             refresh_selection()
 
         def toggle_category(category_id: str) -> None:
-            if read_only:
+            if self.terrain_running or (self.running and self.current_task == "check"):
                 return
             category = next(
                 value for value in categories if value.category_id == category_id
@@ -4845,29 +4918,58 @@ class LauncherWindow:
                 )
 
         def save_selection() -> None:
-            chosen = tuple(sorted(selected_state))
-            store.set_map_selection(catalog, chosen)
-            projection = _terrain_catalog_selection_projection(catalog, chosen)
-            self.terrain_catalog_selected_map_ids = tuple(projection["selected_map_ids"])
-            self.terrain_catalog_selected_count = int(projection["selected_count"])
-            self.terrain_selection_size_bytes = int(projection["selected_size_bytes"])
+            if self.terrain_running or (self.running and self.current_task == "check"):
+                return
+            self._apply_terrain_catalog_selection(store, catalog, selected_state)
             close_dialog()
             self._render_terrain_status()
             self._begin_check(automatic=True)
 
-        refresh_selection()
+        def download_selection() -> None:
+            if self.terrain_running or (self.running and self.current_task == "check"):
+                return
+            self._apply_terrain_catalog_selection(store, catalog, selected_state)
+            self._render_terrain_status()
+            refresh_dialog_controls()
+            if not self.terrain_update_available:
+                return
+            # The terrain worker is independent from application update and
+            # launch state, so this dialog remains useful while either runs.
+            self._on_start_terrain_download()
+
+        def select_all() -> None:
+            if self.terrain_running or (self.running and self.current_task == "check"):
+                return
+            selected_state.update(map_ids)
+            refresh_selection()
+
+        def clear_selection() -> None:
+            if self.terrain_running or (self.running and self.current_task == "check"):
+                return
+            selected_state.clear()
+            refresh_selection()
+
+        def pending_selection_needs_download() -> bool:
+            chosen = tuple(sorted(selected_state))
+            current_catalog = store.current_catalog()
+            current_selection = store.current_catalog_selection()
+            active_matches = bool(
+                current_catalog is not None
+                and current_catalog.revision == catalog.revision
+                and current_selection == chosen
+            )
+            return bool((chosen or current_catalog is not None) and not active_matches)
+
         button_row = tk.Frame(dialog, bg=_THEME["BG"])
         button_row.pack(fill="x", padx=self._px(14), pady=(self._px(6), self._px(14)))
         actions = (
-            (("关闭", close_dialog),)
-            if read_only
-            else (
-                ("全选", lambda: (selected_state.update(map_ids), refresh_selection())),
-                ("清空", lambda: (selected_state.clear(), refresh_selection())),
-                ("保存", save_selection),
-            )
+            ("all", "全选", select_all, "secondary"),
+            ("clear", "清空", clear_selection, "secondary"),
+            ("save", "保存", save_selection, "secondary"),
+            ("download", "下载地形", download_selection, "primary"),
+            ("close", "关闭", close_dialog, "secondary"),
         )
-        for text, command in actions:
+        for key, text, command, style in actions:
             button = tk.Button(
                 button_row,
                 text=text,
@@ -4878,7 +4980,56 @@ class LauncherWindow:
                 pady=self._px(4),
             )
             button.pack(side="left", fill="x", expand=True, padx=self._px(3))
-            self._style_action_button(button, "primary" if text == "保存" else "secondary")
+            self._style_action_button(button, style)
+            action_buttons[key] = button
+
+        def refresh_dialog_controls() -> None:
+            locked = bool(
+                self.terrain_running
+                or (self.running and self.current_task == "check")
+            )
+            editable_state = "disabled" if locked else "normal"
+            for button in category_buttons.values():
+                button.config(
+                    state=editable_state,
+                    cursor="arrow" if locked else "hand2",
+                )
+            action_buttons["all"].config(state=editable_state)
+            action_buttons["clear"].config(state=editable_state)
+            action_buttons["save"].config(state=editable_state)
+            pending_update = pending_selection_needs_download()
+            can_download = bool(
+                not locked
+                and self.last_check_ok
+                and self.latest_terrain_manifest
+                and self.terrain_catalog_available
+                and pending_update
+                and selected_state
+            )
+            download_text = "下载地形" if pending_update else "地形已是最新"
+            action_buttons["download"].config(
+                text=download_text,
+                state="normal" if can_download else "disabled",
+            )
+            action_buttons["close"].config(state="normal")
+            dialog_hint.config(
+                text=(
+                    (
+                        self.terrain_status_detail.strip()
+                        or "下载进行中；每张地图整行的背景就是实时进度。"
+                    )
+                    if self.terrain_running
+                    else (
+                        "正在检查最新地图目录，请稍候。"
+                        if self.running and self.current_task == "check"
+                        else normal_hint
+                    )
+                )
+            )
+
+        self._terrain_map_dialog_refresh = refresh_dialog_controls
+        refresh_selection()
+        refresh_dialog_controls()
         dialog.grab_set()
         map_canvas.focus_set()
 
@@ -5922,9 +6073,13 @@ class LauncherWindow:
         self._set_running(True)
         self._start_worker("subscription_login")
 
-    def _require_subscription_access(self) -> SubscriptionAccessDecision:
+    def _require_subscription_access(
+        self,
+        channel: object | None = None,
+    ) -> SubscriptionAccessDecision:
+        selected_channel = self.channel if channel is None else channel
         if (
-            _normalize_channel(self.channel) != "Enhanced"
+            _normalize_channel(selected_channel) != "Enhanced"
             or self.source_test_mode
             or _DISTRIBUTION_BUILD_METADATA.isolated_test
         ):
@@ -5956,6 +6111,114 @@ class LauncherWindow:
         self._exit_after_task = False
         self._worker = threading.Thread(target=self._worker_main, args=(task,), daemon=True)
         self._worker.start()
+
+    def _start_terrain_worker(
+        self,
+        manifest: Dict[str, Any],
+        channel: str,
+        download_source_mode: str,
+    ) -> None:
+        if self._terrain_worker and self._terrain_worker.is_alive():
+            return
+        self._terrain_cancel_requested.clear()
+        self._terrain_worker = threading.Thread(
+            target=self._terrain_worker_main,
+            args=(dict(manifest), str(channel), str(download_source_mode)),
+            daemon=True,
+        )
+        self._terrain_worker.start()
+
+    def _terrain_worker_main(
+        self,
+        manifest: Dict[str, Any],
+        channel: str,
+        download_source_mode: str,
+    ) -> None:
+        terrain_result: Optional[
+            _launcher_terrain_store.TerrainSyncResult
+            | _launcher_terrain_store.TerrainCatalogSyncResult
+        ] = None
+        update_ok = False
+        update_error = ""
+        try:
+            subscriber_artifact_provider = None
+            if (
+                _normalize_channel(channel) == "Enhanced"
+                and not self.source_test_mode
+                and not _DISTRIBUTION_BUILD_METADATA.isolated_test
+                and self.subscription_workflow is not None
+            ):
+                subscriber_artifact_provider = self.subscription_workflow.authorize_artifact
+            service = UpdateService(
+                self.base,
+                channel,
+                self.client_identity,
+                download_source_mode=download_source_mode,
+                status_cb=self._emit_terrain_status,
+                terrain_map_progress_cb=self._emit_terrain_map_progress,
+                cancel_cb=lambda: self._terrain_cancel_requested.is_set(),
+                subscriber_artifact_provider=subscriber_artifact_provider,
+            )
+            self._require_subscription_access(channel)
+            if not manifest:
+                raise RuntimeError("缺少已验证的地形更新清单")
+            terrain_result = service.download_terrain_update(manifest)
+            if getattr(terrain_result, "status", "") in {
+                "paused_app_host",
+                "paused_insufficient_disk",
+            }:
+                raise RuntimeError(
+                    str(getattr(terrain_result, "message", "地形维护已暂停"))
+                )
+            update_ok = True
+        except Exception as exc:
+            update_error = _friendly_error_text(exc, channel)
+            _log(self.base, f"独立地形下载失败：{exc}")
+
+        revision = terrain_result.revision if terrain_result is not None else ""
+        source_name = (
+            "、".join(terrain_result.source_names)
+            if terrain_result is not None
+            else ""
+        )
+        if update_ok and terrain_result is not None:
+            if bool(getattr(terrain_result, "already_current", False)) or (
+                getattr(terrain_result, "status", "") == "already_current"
+            ):
+                status = "地图已是最新"
+                detail = "所选地图经校验已是最新，没有阻塞应用启动或应用更新。"
+            else:
+                status = "地图下载完成"
+                detail = (
+                    f"地形数据已切换到 {revision[:12]}，"
+                    f"下载 {_format_size_text(terrain_result.downloaded_bytes)}，"
+                    f"复用 {terrain_result.reused_objects} 个未变化对象。"
+                )
+            level = "success"
+        else:
+            status = "地图下载失败"
+            detail = update_error or "地图下载未完成；已保留可续传的临时文件。"
+            level = "warning"
+        self.events.put(
+            (
+                "terrain_download_done",
+                {
+                    "update_ok": update_ok,
+                    "channel": channel,
+                    "terrain_revision": revision,
+                    "terrain_source": source_name,
+                    "downloaded_bytes": (
+                        terrain_result.downloaded_bytes if terrain_result is not None else 0
+                    ),
+                    "reused_objects": (
+                        terrain_result.reused_objects if terrain_result is not None else 0
+                    ),
+                    "status": status,
+                    "detail": detail,
+                    "level": level,
+                },
+            )
+        )
 
     def _begin_check(self, automatic: bool) -> None:
         if self.running:
@@ -6294,42 +6557,21 @@ class LauncherWindow:
         whats_new_warning = ""
         local_ready = _is_local_app_ready(self.base, self.channel)
         manifest = dict(self.latest_manifest or {})
-        terrain_manifest = dict(self.latest_terrain_manifest or {})
         app_update_needed = bool(self.update_available)
-        terrain_update_needed = bool(self.terrain_update_available)
-        terrain_result: Optional[
-            _launcher_terrain_store.TerrainSyncResult
-            | _launcher_terrain_store.TerrainCatalogSyncResult
-        ] = None
         try:
             self._require_subscription_access()
-            if not (app_update_needed or terrain_update_needed):
-                raise RuntimeError("当前没有需要下载的更新")
+            if not app_update_needed:
+                raise RuntimeError("当前没有需要下载的应用更新")
             update_sources: list[str] = []
-            if terrain_update_needed:
-                if not terrain_manifest:
-                    raise RuntimeError("缺少已验证的地形更新清单")
-                terrain_result = service.download_terrain_update(terrain_manifest)
-                if getattr(terrain_result, "status", "") in {
-                    "paused_app_host",
-                    "paused_insufficient_disk",
-                }:
-                    raise RuntimeError(str(getattr(terrain_result, "message", "地形维护已暂停")))
-                terrain_source = (
-                    "、".join(terrain_result.source_names)
-                    or str(terrain_manifest.get("source_name", "本地复用"))
-                )
-                update_sources.append(f"地形：{terrain_source}")
-            if app_update_needed:
-                if not manifest:
-                    raise RuntimeError("请先完成应用更新检查")
-                final_version, app_source = service.download_app_update(manifest)
-                update_sources.append(f"应用：{app_source}")
-                try:
-                    whats_new = service.fetch_whats_new(manifest)
-                except Exception as exc:
-                    whats_new_warning = f"更新日志获取失败：{exc}"
-                    _log(self.base, whats_new_warning)
+            if not manifest:
+                raise RuntimeError("请先完成应用更新检查")
+            final_version, app_source = service.download_app_update(manifest)
+            update_sources.append(f"应用：{app_source}")
+            try:
+                whats_new = service.fetch_whats_new(manifest)
+            except Exception as exc:
+                whats_new_warning = f"更新日志获取失败：{exc}"
+                _log(self.base, whats_new_warning)
             update_source = "；".join(update_sources)
             update_ok = True
             local_ready = _is_local_app_ready(self.base, self.channel)
@@ -6347,48 +6589,27 @@ class LauncherWindow:
                 "update_ok": update_ok,
                 "update_source": update_source,
                 "update_error": update_error,
-                "terrain_revision": (
-                    terrain_result.revision if terrain_result is not None else ""
-                ),
-                "terrain_downloaded_bytes": (
-                    terrain_result.downloaded_bytes if terrain_result is not None else 0
-                ),
+                "terrain_revision": "",
+                "terrain_downloaded_bytes": 0,
             },
         )
 
-        self._save_launcher_state(
-            {
-                "display_name": DISPLAY_NAME,
-                "last_check_utc": _now_utc_iso(),
-                "app_version": final_version,
-                "update_ok": update_ok,
-                "update_source": update_source,
-                "update_error": update_error,
-                "terrain_revision": (
-                    terrain_result.revision if terrain_result is not None else ""
-                ),
-                "device_id": self.client_identity.get("device_id", ""),
-                "install_id": self.client_identity.get("install_id", ""),
-            }
-        )
+        launcher_state_update: Dict[str, Any] = {
+            "display_name": DISPLAY_NAME,
+            "last_check_utc": _now_utc_iso(),
+            "app_version": final_version,
+            "update_ok": update_ok,
+            "update_source": update_source,
+            "update_error": update_error,
+            "device_id": self.client_identity.get("device_id", ""),
+            "install_id": self.client_identity.get("install_id", ""),
+        }
+        self._save_launcher_state(launcher_state_update)
 
         if update_ok:
             completed_lines: list[str] = []
             if app_update_needed:
                 completed_lines.append(f"应用已更新到 v{final_version}。")
-            if terrain_result is not None:
-                if bool(getattr(terrain_result, "already_current", False)) or (
-                    getattr(terrain_result, "status", "") == "already_current"
-                ):
-                    completed_lines.append("地形数据经校验已是最新，未发生下载。")
-                else:
-                    completed_lines.append(
-                        (
-                            f"地形数据已切换到 {terrain_result.revision[:12]}，"
-                            f"下载 {_format_size_text(terrain_result.downloaded_bytes)}，"
-                            f"复用 {terrain_result.reused_objects} 个未变化对象。"
-                        )
-                    )
             completed_lines.append(f"安装位置：{self.install_dir}")
             if _normalize_channel(self.channel) == "Enhanced":
                 terrain_store = _terrain_store_for_base(self.base)
@@ -6416,9 +6637,8 @@ class LauncherWindow:
                         "whats_new": whats_new,
                         "whats_new_warning": whats_new_warning,
                         "source_name": update_source,
-                        "terrain_revision": (
-                            terrain_result.revision if terrain_result is not None else ""
-                        ),
+                        "terrain_updated": False,
+                        "terrain_revision": "",
                         "status": "更新完成",
                         "detail": "\n".join(completed_lines),
                         "level": "success",
@@ -6461,6 +6681,25 @@ class LauncherWindow:
             )
         )
 
+    def _emit_terrain_status(
+        self,
+        title: str,
+        detail: str,
+        progress: Optional[float],
+        level: str,
+    ) -> None:
+        self.events.put(
+            (
+                "terrain_status",
+                {
+                    "title": title,
+                    "detail": detail,
+                    "progress": progress,
+                    "level": level,
+                },
+            )
+        )
+
     def _emit_terrain_map_progress(
         self,
         snapshot: tuple[_launcher_terrain_store.TerrainMapProgress, ...],
@@ -6483,11 +6722,65 @@ class LauncherWindow:
                         payload.get("progress", None),
                         payload.get("level", "info"),
                     )
+                elif typ == "terrain_status":
+                    self.terrain_status_title = str(payload.get("title", "")).strip()
+                    self.terrain_status_detail = str(payload.get("detail", "")).strip()
+                    self.terrain_status_progress = payload.get("progress", None)
+                    self.terrain_status_level = str(payload.get("level", "info"))
+                    self._render_terrain_status()
+                    if self._terrain_map_dialog_refresh is not None:
+                        with contextlib.suppress(tk.TclError):
+                            self._terrain_map_dialog_refresh()
                 elif typ == "terrain_map_progress":
                     for item in tuple(payload.get("items", ()) or ()):
                         if isinstance(item, _launcher_terrain_store.TerrainMapProgress):
                             self.terrain_map_progress[item.map_id] = item
                     self._refresh_terrain_map_rows()
+                elif typ == "terrain_download_done":
+                    terrain_channel = str(payload.get("channel", "")).strip()
+                    same_channel = bool(
+                        not terrain_channel
+                        or _normalize_channel(terrain_channel)
+                        == _normalize_channel(self.channel)
+                    )
+                    update_ok = bool(payload.get("update_ok", False))
+                    terrain_revision = str(
+                        payload.get("terrain_revision", "")
+                    ).strip()
+                    self.terrain_running = False
+                    self.terrain_download_channel = ""
+                    self.terrain_status_title = str(payload.get("status", "")).strip()
+                    self.terrain_status_detail = str(payload.get("detail", "")).strip()
+                    self.terrain_status_progress = 1.0 if update_ok else None
+                    self.terrain_status_level = str(payload.get("level", "info"))
+                    if same_channel and update_ok:
+                        self.terrain_update_available = False
+                        self.terrain_download_size = 0
+                        self.terrain_reuse_size = 0
+                        self.terrain_check_warning = ""
+                        self.terrain_check_blocking = False
+                        if terrain_revision:
+                            self.terrain_local_revision = terrain_revision
+                            self.terrain_remote_revision = terrain_revision
+                        self._refresh_local_terrain_snapshot()
+                        self._save_launcher_state(
+                            {
+                                "terrain_revision": terrain_revision,
+                                "terrain_update_ok": True,
+                                "terrain_downloaded_bytes": int(
+                                    payload.get("downloaded_bytes", 0) or 0
+                                ),
+                            }
+                        )
+                    self._update_launch_button_label()
+                    self._update_download_button_state()
+                    self._render_terrain_status()
+                    if self._terrain_map_dialog_refresh is not None:
+                        with contextlib.suppress(tk.TclError):
+                            self._terrain_map_dialog_refresh()
+                    if self._exit_after_task and not self.running and not self.terrain_running:
+                        self._finalize_exit()
+                        continue
                 elif typ == "subscription_browser":
                     user_code = str(payload.get("user_code", "")).strip()
                     url = str(payload.get("url", "")).strip()
@@ -6677,7 +6970,7 @@ class LauncherWindow:
                     self._refresh_installed_versions()
                     self.current_task = ""
                     self._set_running(False)
-                    if self._exit_after_task:
+                    if self._exit_after_task and not self.running and not self.terrain_running:
                         self._finalize_exit()
                         continue
                     if self._recheck_requested:
@@ -6711,15 +7004,18 @@ class LauncherWindow:
                         if update_ok:
                             self.update_available = False
                             self.app_requires_launcher_update = False
-                            terrain_revision = str(payload.get("terrain_revision", "")).strip()
-                            if terrain_revision:
-                                self.terrain_local_revision = terrain_revision
-                                self.terrain_remote_revision = terrain_revision
-                            self.terrain_update_available = False
-                            self.terrain_download_size = 0
-                            self.terrain_reuse_size = 0
-                            self.terrain_check_warning = ""
-                            self.terrain_check_blocking = False
+                            if bool(payload.get("terrain_updated", False)):
+                                terrain_revision = str(
+                                    payload.get("terrain_revision", "")
+                                ).strip()
+                                if terrain_revision:
+                                    self.terrain_local_revision = terrain_revision
+                                    self.terrain_remote_revision = terrain_revision
+                                self.terrain_update_available = False
+                                self.terrain_download_size = 0
+                                self.terrain_reuse_size = 0
+                                self.terrain_check_warning = ""
+                                self.terrain_check_blocking = False
                             self.latest_min_launcher_version = ""
                             self.latest_package_size = None
                             self.last_check_ok = True
@@ -6755,7 +7051,7 @@ class LauncherWindow:
                                     f"更新说明窗口显示失败，但应用已安装完成。\n{exc}",
                                     parent=self.root,
                                 )
-                    if self._exit_after_task:
+                    if self._exit_after_task and not self.running and not self.terrain_running:
                         self._finalize_exit()
                         continue
                     if not update_ok:
@@ -6955,6 +7251,10 @@ class LauncherWindow:
             self.launch_btn.config(text="启动源码应用")
             self._style_action_button(self.launch_btn, "primary")
             return
+        if getattr(self, "terrain_running", False) and not self.running:
+            self.launch_btn.config(text="启动应用（地图后台下载中）")
+            self._style_action_button(self.launch_btn, "primary")
+            return
         if self.last_download_success:
             self.launch_btn.config(text="启动（已下载更新）")
             self._style_action_button(self.launch_btn, "success")
@@ -6976,17 +7276,24 @@ class LauncherWindow:
 
     def _update_download_button_state(self) -> None:
         if self.source_test_mode:
-            self.start_btn.config(text="源码模式不下载")
+            self.start_btn.config(text="源码模式不下载", command=self._on_start)
             self._style_action_button(self.start_btn, "secondary")
             return
         if self.last_check_ok and self.update_available and self.app_requires_launcher_update:
-            self.start_btn.config(text="需先更新启动器")
+            self.start_btn.config(text="需先更新启动器", command=self._on_start)
             self._style_action_button(self.start_btn, "secondary")
             return
-        if self.terrain_update_available and not self.update_available:
-            self.start_btn.config(text="更新地形数据")
+        if (
+            self.terrain_update_available
+            and self.terrain_catalog_available
+            and not self.update_available
+        ):
+            self.start_btn.config(
+                text="选择地图并下载",
+                command=self._on_open_terrain_download,
+            )
         else:
-            self.start_btn.config(text="下载更新")
+            self.start_btn.config(text="下载更新", command=self._on_start)
         self._style_action_button(
             self.start_btn,
             (
@@ -6998,6 +7305,11 @@ class LauncherWindow:
                 else "secondary"
             ),
         )
+
+    def _on_open_terrain_download(self) -> None:
+        """Open the map picker so terrain transfer controls stay beside progress."""
+
+        self._on_select_terrain_maps()
 
     def _update_launcher_button_state(self) -> None:
         if self.source_test_mode:
@@ -7086,10 +7398,14 @@ class LauncherWindow:
                 state=(
                     "normal"
                     if self.terrain_catalog_available
-                    and (not running or self.current_task == "download")
+                    and not self.terrain_running
+                    and not (running and self.current_task == "check")
                     else "disabled"
                 )
             )
+        if self._terrain_map_dialog_refresh is not None:
+            with contextlib.suppress(tk.TclError):
+                self._terrain_map_dialog_refresh()
         self._refresh_subscription_ui()
 
         if running:
@@ -7150,8 +7466,6 @@ class LauncherWindow:
                     )
             elif self.last_check_ok and self.update_available:
                 total_bytes = int(self.latest_package_size or 0)
-                if self.terrain_update_available:
-                    total_bytes += self.terrain_download_size
                 size_text = _format_size_text(total_bytes)
                 self.hint_lbl.config(
                     text=(
@@ -7163,8 +7477,8 @@ class LauncherWindow:
                     self.hint_lbl.config(
                         text=(
                             f"{self.hint_lbl.cget('text')}\n"
-                            f"地形只下载变化对象 {_format_size_text(self.terrain_download_size)}，"
-                            f"复用 {_format_size_text(self.terrain_reuse_size)}。"
+                            f"地形另有差量数据 {_format_size_text(self.terrain_download_size)}，"
+                            "可从“选择地图”单独下载，不会阻塞应用更新或启动。"
                         )
                     )
                 if self.launcher_update_available:
@@ -7180,7 +7494,11 @@ class LauncherWindow:
                         f"应用当前已是最新版本；地形数据有差量更新 "
                         f"{_format_size_text(self.terrain_download_size)}，"
                         f"将复用 {_format_size_text(self.terrain_reuse_size)}。\n"
-                        "点击“更新地形数据”只维护独立资源，不会重复下载或替换 App。"
+                        + (
+                            "点击“选择地图并下载”进入地图选择；下载期间可直接查看每张地图的整行进度。"
+                            if self.terrain_catalog_available
+                            else "点击“下载更新”只维护独立资源，不会重复下载或替换 App。"
+                        )
                     )
                 )
             elif self.last_check_ok and self.launcher_update_available:
@@ -7382,41 +7700,26 @@ class LauncherWindow:
                     ),
                 )
             return
-        if not (self.update_available or self.terrain_update_available):
+        if not self.update_available:
+            if self.terrain_update_available:
+                if self.terrain_catalog_available:
+                    self._on_open_terrain_download()
+                else:
+                    self._on_start_terrain_download()
+                return
             messagebox.showinfo(DISPLAY_NAME, "当前已是最新版本，无需下载。")
             return
-        if self.update_available and not self.latest_manifest:
+        if not self.latest_manifest:
             messagebox.showwarning(DISPLAY_NAME, "缺少下载清单，请先点击“重新检查”。")
             return
-        if self.terrain_update_available and not self.latest_terrain_manifest:
-            messagebox.showwarning(DISPLAY_NAME, "缺少地形下载清单，请先点击“重新检查”。")
-            return
-        app_bytes = int(self.latest_package_size or 0) if self.update_available else 0
-        total_bytes = app_bytes + (
-            self.terrain_download_size if self.terrain_update_available else 0
-        )
+        total_bytes = int(self.latest_package_size or 0)
         size_text = _format_size_text(total_bytes)
-        action_text = (
-            f"下载并安装应用 v{self.latest_remote_version}，同时维护独立地形数据"
-            if self.update_available and _normalize_channel(self.channel) == "Enhanced"
-            else (
-                f"下载并安装应用 v{self.latest_remote_version}"
-                if self.update_available
-                else "差量更新独立地形数据"
-            )
-        )
-        terrain_detail = (
-            f"其中地形差量：{_format_size_text(self.terrain_download_size)}；"
-            f"复用：{_format_size_text(self.terrain_reuse_size)}\n"
-            if self.terrain_update_available
-            else ""
-        )
+        action_text = f"下载并安装应用 v{self.latest_remote_version}"
         ok = messagebox.askyesno(
             DISPLAY_NAME,
             (
                 f"将{action_text}。\n"
                 f"本次实际下载总大小：{size_text}\n"
-                f"{terrain_detail}"
                 f"安装位置：{self.install_dir}\n"
                 "是否现在开始下载？"
             ),
@@ -7434,6 +7737,71 @@ class LauncherWindow:
         )
         self._set_running(True)
         self._start_worker("download")
+
+    def _on_start_terrain_download(self) -> None:
+        """Start terrain maintenance without occupying the app task slot."""
+
+        if self.terrain_running:
+            return
+        if self.source_test_mode:
+            messagebox.showinfo(
+                DISPLAY_NAME,
+                "当前处于源码测试模式，已禁用在线地形下载。",
+                parent=self.root,
+            )
+            return
+        if not self.last_check_ok:
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                "尚未完成更新检查，请稍候或点击“重新检查”。",
+                parent=self.root,
+            )
+            return
+        if not self.terrain_update_available:
+            messagebox.showinfo(DISPLAY_NAME, "当前所选地图已是最新，无需下载。", parent=self.root)
+            return
+        manifest = dict(self.latest_terrain_manifest or {})
+        if not manifest:
+            messagebox.showwarning(
+                DISPLAY_NAME,
+                "缺少地形下载清单，请先点击“重新检查”。",
+                parent=self.root,
+            )
+            return
+        size_text = _format_size_text(self.terrain_download_size)
+        ok = messagebox.askyesno(
+            DISPLAY_NAME,
+            (
+                "将差量更新独立地形数据。\n"
+                f"本次实际下载总大小：{size_text}\n"
+                f"复用：{_format_size_text(self.terrain_reuse_size)}\n"
+                "地图下载不会阻塞启动本地应用或应用版本更新。\n"
+                "是否现在开始下载？"
+            ),
+            parent=self.root,
+        )
+        if not ok:
+            return
+        terrain_channel = _normalize_channel(self.channel) or str(self.channel)
+        self.terrain_running = True
+        self.terrain_download_channel = terrain_channel
+        self.terrain_status_title = "准备下载地图"
+        self.terrain_status_detail = (
+            f"正在后台维护所选地图；预计下载 {_format_size_text(self.terrain_download_size)}。"
+        )
+        self.terrain_status_progress = 0.0
+        self.terrain_status_level = "info"
+        self._update_launch_button_label()
+        self._update_download_button_state()
+        self._render_terrain_status()
+        if self._terrain_map_dialog_refresh is not None:
+            with contextlib.suppress(tk.TclError):
+                self._terrain_map_dialog_refresh()
+        self._start_terrain_worker(
+            manifest,
+            terrain_channel,
+            self.download_source_mode,
+        )
 
     def _on_update_launcher(self) -> None:
         if self.running:
@@ -7771,22 +8139,42 @@ class LauncherWindow:
         self.root.destroy()
 
     def _on_exit(self) -> None:
-        if self.running:
+        if self.running or self.terrain_running:
+            task_labels = []
+            if self.running:
+                task_labels.append("应用任务")
+            if self.terrain_running:
+                task_labels.append("地图后台下载")
             ok = messagebox.askyesno(
                 DISPLAY_NAME,
-                "当前任务正在进行中。\n取消当前任务并退出可能导致本次更新无效。\n是否继续退出？",
+                (
+                    f"当前有{'、'.join(task_labels)}正在进行。\n"
+                    "取消并退出会停止地图下载（已完成部分可继续续传），"
+                    "应用更新也可能需要重新检查。\n是否继续退出？"
+                ),
                 parent=self.root,
             )
             if not ok:
                 return
-            self._cancel_requested.set()
+            if self.running:
+                self._cancel_requested.set()
+            if self.terrain_running:
+                self._terrain_cancel_requested.set()
             self._exit_after_task = True
-            self._set_status(
-                "正在取消",
-                "正在取消当前任务并等待清理完成，请稍候...",
-                None,
-                "warning",
-            )
+            if self.running:
+                self._set_status(
+                    "正在取消",
+                    "正在取消当前任务并等待清理完成，请稍候...",
+                    None,
+                    "warning",
+                )
+            else:
+                self.terrain_status_title = "正在取消地图下载"
+                self.terrain_status_detail = "正在停止后台地图下载并保留可续传文件，请稍候..."
+                self.terrain_status_level = "warning"
+                if self._terrain_map_dialog_refresh is not None:
+                    with contextlib.suppress(tk.TclError):
+                        self._terrain_map_dialog_refresh()
             return
 
         self._finalize_exit()
