@@ -4,6 +4,7 @@ import importlib.machinery
 import importlib.util
 import queue
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from launcher.subscription_access import (
     SubscriptionAccessDecision,
     SubscriptionAccessReason,
 )
+from launcher.terrain_store import TerrainMapProgress
 
 
 def load_launcher_module():
@@ -274,6 +276,66 @@ def test_successful_subscription_event_refreshes_receipt_before_menu_projection(
 
     assert calls == ["refresh", "ui:True"]
     assert window.subscription_decision.allowed
+
+
+def test_authorized_user_has_one_click_switch_to_super_bomb() -> None:
+    launcher = load_launcher_module()
+    window = object.__new__(launcher.LauncherWindow)
+    window.channel = "Standard"
+    window.running = False
+    window.source_test_mode = False
+    window.subscription_decision = SubscriptionAccessDecision(
+        allowed=True,
+        reason=SubscriptionAccessReason.ALLOWED,
+    )
+    window.channel_var = FakeStringVar(launcher.CHANNEL_DISPLAY_NAMES["Standard"])
+    window._channel_menu_refreshing = False
+    calls: list[str] = []
+    window._save_launcher_state = lambda: calls.append("save")
+    window._refresh_installed_versions = lambda: calls.append("installed")
+    window._refresh_local_terrain_snapshot = lambda: calls.append("terrain")
+    window._refresh_subscription_ui = lambda: calls.append("subscription")
+    window._refresh_feature_visibility = lambda: calls.append("features")
+    window._refresh_channel_details = lambda: calls.append("details")
+    window._set_status = lambda *args: calls.append(str(args[0]))
+    window._begin_check = lambda *, automatic: calls.append(f"check:{automatic}")
+
+    window._switch_to_super_bomb()
+
+    assert window.channel == "Enhanced"
+    assert window.channel_var.get() == launcher.CHANNEL_DISPLAY_NAMES["Enhanced"]
+    assert calls[-2:] == ["已切换为超级爆弹版", "check:False"]
+
+
+def test_terrain_progress_callbacks_keep_only_the_newest_ui_snapshot() -> None:
+    launcher = load_launcher_module()
+    window = object.__new__(launcher.LauncherWindow)
+    window.events = queue.Queue()
+    window._terrain_progress_lock = threading.Lock()
+    window._terrain_progress_snapshot = ()
+    window._terrain_progress_event_pending = False
+    first = TerrainMapProgress("map_a", True, 1, 10, False)
+    latest = TerrainMapProgress("map_a", True, 10, 10, True)
+
+    window._emit_terrain_map_progress((first,))
+    window._emit_terrain_map_progress((latest,))
+
+    assert window.events.qsize() == 1
+    assert window._terrain_progress_snapshot == (latest,)
+
+
+def test_pause_terrain_download_requests_resumable_background_stop() -> None:
+    launcher = load_launcher_module()
+    window = object.__new__(launcher.LauncherWindow)
+    window.terrain_running = True
+    window._terrain_cancel_requested = threading.Event()
+    window._terrain_map_dialog_refresh = lambda: None
+    window._render_terrain_status = lambda: None
+
+    window._pause_terrain_download()
+
+    assert window._terrain_cancel_requested.is_set()
+    assert window.terrain_status_title == "正在暂停地图下载"
 
 
 def test_public_channel_change_never_reads_subscriber_access() -> None:

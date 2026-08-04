@@ -63,6 +63,10 @@ class _TerrainAppHostActivated(RuntimeError):
     """Internal control flow used to preserve a resumable partial download."""
 
 
+class _TerrainDownloadCancelled(RuntimeError):
+    """Internal control flow used to pause a user-requested terrain transfer."""
+
+
 @dataclass(frozen=True, slots=True)
 class TerrainFile:
     path: str
@@ -1365,6 +1369,7 @@ class TerrainStore:
         app_host_active: Callable[[], bool] | None = None,
         disk_free_bytes: Callable[[Path], int] | None = None,
         map_progress_cb: MapProgressCallback | None = None,
+        cancel_cb: CancelCallback | None = None,
         max_workers: int = TERRAIN_DOWNLOAD_WORKERS,
     ) -> TerrainCatalogSyncResult:
         """Stage selected-map objects and atomically point at the verified catalog."""
@@ -1400,9 +1405,18 @@ class TerrainStore:
                     size = 0
                 progress_bytes[item.sha256] = max(0, min(item.size_bytes, size))
             progress_lock = Lock()
+            last_progress_emit = 0.0
 
-            def emit_map_progress(selected_map_ids: tuple[str, ...]) -> None:
+            def emit_map_progress(
+                selected_map_ids: tuple[str, ...],
+                *,
+                force: bool = False,
+            ) -> None:
+                nonlocal last_progress_emit
                 if map_progress_cb is None:
+                    return
+                now = time.monotonic()
+                if not force and now - last_progress_emit < 0.08:
                     return
                 selected_set = frozenset(selected_map_ids)
                 with progress_lock:
@@ -1421,6 +1435,7 @@ class TerrainStore:
                         )
                         for map_id, items in map_dependencies.items()
                     )
+                    last_progress_emit = now
                     map_progress_cb(snapshot)
 
             def paused(
@@ -1442,7 +1457,13 @@ class TerrainStore:
 
             while True:
                 selected_map_ids = self.selected_map_ids(catalog)
-                emit_map_progress(selected_map_ids)
+                if cancel_cb is not None and cancel_cb():
+                    return paused(
+                        "paused_cancelled",
+                        selected_map_ids,
+                        "地图维护已暂停；已完成对象和断点会在下次下载时续传。",
+                    )
+                emit_map_progress(selected_map_ids, force=True)
                 if app_host_active is not None and app_host_active():
                     return paused(
                         "paused_app_host",
@@ -1561,9 +1582,14 @@ class TerrainStore:
                         item: TerrainFile,
                         selection: tuple[str, ...] = progress_selection,
                     ) -> tuple[TerrainFile, str]:
+                        if cancel_cb is not None and cancel_cb():
+                            raise _TerrainDownloadCancelled
+
                         def progress(done: int, _total: int | None) -> None:
                             if app_host_active is not None and app_host_active():
                                 raise _TerrainAppHostActivated
+                            if cancel_cb is not None and cancel_cb():
+                                raise _TerrainDownloadCancelled
                             with progress_lock:
                                 progress_bytes[item.sha256] = max(
                                     0,
@@ -1580,7 +1606,7 @@ class TerrainStore:
                         with progress_lock:
                             completed_hashes.add(item.sha256)
                             progress_bytes[item.sha256] = item.size_bytes
-                        emit_map_progress(selection)
+                        emit_map_progress(selection, force=True)
                         return item, source
 
                     if worker_count == 1:
@@ -1599,6 +1625,12 @@ class TerrainStore:
                                 for future in futures:
                                     future.cancel()
                                 raise
+                except _TerrainDownloadCancelled:
+                    return paused(
+                        "paused_cancelled",
+                        self.selected_map_ids(catalog),
+                        "地图维护已暂停；已完成对象和断点会在下次下载时续传。",
+                    )
                 except _TerrainAppHostActivated:
                     return paused(
                         "paused_app_host",

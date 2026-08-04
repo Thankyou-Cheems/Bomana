@@ -3,7 +3,7 @@ from __future__ import annotations
 import errno
 import hashlib
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 from time import sleep
 
 import pytest
@@ -623,6 +623,45 @@ def test_catalog_sync_reconciles_to_the_latest_persisted_selection(tmp_path: Pat
     assert store.current_catalog_selection() == ("map_b",)
     assert (result.pack_dir / "map_b.bth").read_bytes() == b"map-b"
     assert (result.pack_dir / "map_a.bth").exists() is False
+
+
+def test_catalog_sync_can_pause_and_resume_without_activating_partial_catalog(
+    tmp_path: Path,
+) -> None:
+    shared_contents = {
+        "index.json": b'{"schema_version":2}',
+        "manifest.json": b'{"schema_version":2,"type":"manifest"}',
+    }
+    map_contents = {"map_a": {"map_a.bth": b"map-a"}}
+    catalog = _terrain_catalog(shared_contents, map_contents)
+    all_contents = {**shared_contents, **map_contents["map_a"]}
+    store = TerrainStore(tmp_path / "launcher-data")
+    store.set_map_selection(catalog, ("map_a",))
+    cancelled = Event()
+
+    def pause_after_first_object(item, destination: Path, progress_cb):
+        result = _fetcher(all_contents, [])(item, destination, progress_cb)
+        cancelled.set()
+        return result
+
+    paused = store.sync_catalog(
+        catalog,
+        fetch_object=pause_after_first_object,
+        cancel_cb=cancelled.is_set,
+    )
+
+    assert paused.status == "paused_cancelled"
+    assert store.current_catalog() is None
+
+    cancelled.clear()
+    resumed = store.sync_catalog(
+        catalog,
+        fetch_object=_fetcher(all_contents, []),
+        cancel_cb=cancelled.is_set,
+    )
+
+    assert resumed.status == "activated"
+    assert store.current_catalog_selection() == ("map_a",)
 
 
 def test_catalog_handoff_reports_per_map_degradation_without_blocking_startup(
