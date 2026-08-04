@@ -2,7 +2,7 @@
   "schema_version": 1,
   "primary_source": "TencentCloud",
   "cdn_base": "https://bomanaupdate.ruikang.wang",
-  "updated_at": "2026-08-04T11:40:28Z",
+  "updated_at": "2026-08-04T11:42:09Z",
   "launcher": {
     "version": "3.5.5",
     "package_url": "https://bomanaupdate.ruikang.wang/downloads/Bomana_launcher_v3.5.5.exe",
