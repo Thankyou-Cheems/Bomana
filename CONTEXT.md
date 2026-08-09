@@ -40,6 +40,24 @@ _Avoid_: Session token, activation code
 The stable artifact identity used by Launcher manifests and installed state. `Lite`, `Standard`, and `Enhanced` are Release Channels; a Release Channel is not an access decision.
 _Avoid_: Edition access, subscription plan
 
+## Web Surfaces
+
+**Website Preview Entry**:
+A Launcher action that opens the public Bomana website in the user's external browser. It is promotional and account-facing, not an application runtime surface.
+_Avoid_: Embedded Web Cockpit, standalone web application
+
+**Web Surface Launch Control**:
+A discoverable Launcher action that hands off to an application-provided browser surface. The application owns its server, routes, ports, capabilities, and feature behavior.
+_Avoid_: Launcher-hosted web application, inferred channel feature
+
+**Signed Capability Metadata**:
+Verified artifact metadata that declares optional application surfaces such as `web_overlay` and `web_standalone`. Unknown or absent capabilities fail closed, so their Launcher actions remain hidden.
+_Avoid_: Channel-name inference, optimistic feature detection
+
+**Standalone Web Surface**:
+The planned Bomana browser surface that does not depend on an in-game overlay. It is research-only until a released artifact declares `web_standalone` through Signed Capability Metadata.
+_Avoid_: Current feature, public website preview
+
 ## Strike Prediction
 
 **Strike Prediction**:
