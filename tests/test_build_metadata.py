@@ -40,6 +40,17 @@ def normalized_dependency_name(requirement: str) -> str:
 
 def write_shared_app_runtime_assets(root: Path) -> None:
     (root / "bomana_version.py").write_text("# shared version boundary\n", encoding="utf-8")
+    for relative_path in (
+        Path("bomana/core/strike_encyclopedia.py"),
+        Path("bomana/ui/strike_encyclopedia.py"),
+    ):
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    data_dir = root / "bomana" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "ec_airfield_catalog.json").write_text("{}\n", encoding="utf-8")
+    (data_dir / "strike_encyclopedia.json").write_text("{}\n", encoding="utf-8")
 
 
 def source_closure(root: Path) -> frozenset[str]:
@@ -144,6 +155,10 @@ def test_app_package_bundles_zero_install_hotkey_broker_and_checksum(tmp_path: P
         assert "bomana/bin/BomanaHotkeyBroker.exe" in archive.namelist()
         assert "bomana/data/weapon_fire_control.json" not in archive.namelist()
         assert "bomana/data/visible_trajectory_references.json" not in archive.namelist()
+        assert "bomana/data/ec_airfield_catalog.json" in archive.namelist()
+        assert "bomana/data/strike_encyclopedia.json" in archive.namelist()
+        assert "bomana/core/strike_encyclopedia.py" in archive.namelist()
+        assert "bomana/ui/strike_encyclopedia.py" in archive.namelist()
         checksum = archive.read("bomana/bin/BomanaHotkeyBroker.sha256").decode("ascii")
         assert checksum == f"{build_portable.sha256_file(broker)}  BomanaHotkeyBroker.exe\n"
 
@@ -278,6 +293,40 @@ def test_public_app_packages_omit_subscriber_closure(tmp_path: Path, variant: st
         assert not any(name.startswith("bomana/web/") for name in names)
         assert not any(name.startswith("bomana/assets/web/") for name in names)
         assert not any(name.startswith("bomana/data/terrain-") for name in names)
+        assert "bomana/data/ec_airfield_catalog.json" in names
+        assert "bomana/data/strike_encyclopedia.json" in names
+        assert "bomana/core/strike_encyclopedia.py" in names
+        assert "bomana/ui/strike_encyclopedia.py" in names
+
+
+@pytest.mark.parametrize("missing_name", ["ec_airfield_catalog.json", "strike_encyclopedia.json"])
+def test_public_app_package_rejects_missing_encyclopedia_asset(
+    tmp_path: Path, missing_name: str
+) -> None:
+    build_portable = load_tool_module(
+        f"build_portable_missing_{missing_name.replace('.', '_')}",
+        "tools/build_portable.py",
+    )
+    root = tmp_path / "repo"
+    output = tmp_path / "dist"
+    (root / "bomana").mkdir(parents=True)
+    output.mkdir()
+    (root / "Bomana.pyw").write_text("pass\n", encoding="utf-8")
+    (root / "bomana" / "__init__.py").write_text("", encoding="utf-8")
+    write_shared_app_runtime_assets(root)
+    (root / "bomana" / "data" / missing_name).unlink()
+    broker = tmp_path / "BomanaHotkeyBroker.exe"
+    broker.write_bytes(b"native broker payload")
+
+    with pytest.raises(RuntimeError, match=missing_name):
+        build_portable.build_app_zip(
+            root,
+            "Standard",
+            "1.2.3",
+            output,
+            broker,
+            source_closure(root),
+        )
 
 
 def test_packaged_launcher_runtime_contract_matches_pyproject() -> None:

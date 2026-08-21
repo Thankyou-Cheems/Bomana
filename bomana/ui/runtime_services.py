@@ -587,6 +587,9 @@ class AppRuntimeServices:
         def do_about(icon, item):
             app.dispatcher.post(app._show_about)
 
+        def do_strike_encyclopedia(icon, item):
+            app.dispatcher.post(app._show_strike_encyclopedia)
+
         def do_open_dashboard(icon, item):
             app.dispatcher.post(app._open_web_dashboard)
 
@@ -811,6 +814,7 @@ class AppRuntimeServices:
             menu_items.append(pystray.MenuItem("设置", do_settings))
 
         menu_items.append(pystray.Menu.SEPARATOR)
+        menu_items.append(pystray.MenuItem("打击百科", do_strike_encyclopedia))
         menu_items.append(pystray.MenuItem("给作者点个Star", do_star))
         menu_items.append(pystray.MenuItem("Debug模式", do_debug, checked=is_debug_on))
         menu_items.append(pystray.MenuItem("关于", do_about))

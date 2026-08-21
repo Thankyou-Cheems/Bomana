@@ -38,6 +38,12 @@ from launcher.subscription_key_contract import (  # noqa: E402
 
 VARIANT_SWITCHES = {channel: variant_switch_matrix()[channel] for channel in PUBLIC_CHANNELS}
 
+EC_AIRFIELD_CATALOG_REL = Path("bomana/data/ec_airfield_catalog.json")
+STRIKE_ENCYCLOPEDIA_REL = Path("bomana/data/strike_encyclopedia.json")
+STRIKE_ENCYCLOPEDIA_MODULES = (
+    Path("bomana/core/strike_encyclopedia.py"),
+    Path("bomana/ui/strike_encyclopedia.py"),
+)
 FEATURE_PROFILE_PATH = Path("bomana/config/feature_profile.py")
 EDITION_CHANNEL_ASSIGNMENT = re.compile(
     r'(?m)^EDITION_CHANNEL[ \t]*=[ \t]*["\'][^"\'\r\n]+["\'][ \t]*$'
@@ -630,7 +636,15 @@ def build_app_zip(
         out_zip.unlink()
 
     version_boundary = root / "bomana_version.py"
-    required_runtime_paths = [version_boundary]
+    required_runtime_paths = [
+        version_boundary,
+        EC_AIRFIELD_CATALOG_REL,
+        STRIKE_ENCYCLOPEDIA_REL,
+        *STRIKE_ENCYCLOPEDIA_MODULES,
+    ]
+    required_runtime_paths = [
+        path if path.is_absolute() else root / path for path in required_runtime_paths
+    ]
     missing_runtime_assets = [
         path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
         for path in required_runtime_paths

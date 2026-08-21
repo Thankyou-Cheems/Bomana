@@ -237,6 +237,17 @@ class MainWindowBuilder:
             anchor="w",
         )
         app.hint_lbl.grid(row=0, column=0, sticky="ew")
+        app.encyclopedia_btn = tk.Button(
+            app.hint_row,
+            text="百科",
+            font=font_hint,
+            padx=int(7 * s),
+            pady=btn_pad_y,
+            command=app._show_strike_encyclopedia,
+            takefocus=False,
+        )
+        style_action_button(app.encyclopedia_btn, "secondary")
+        app.encyclopedia_btn.grid(row=0, column=1, sticky="e", padx=(int(6 * s), 0))
 
         app.debug_ctrl_row = tk.Frame(bottom_frame, bg=Theme.GRAYPILL)
         app.debug_ctrl_row.grid_columnconfigure(3, weight=1)

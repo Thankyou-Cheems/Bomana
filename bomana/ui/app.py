@@ -55,6 +55,7 @@ from bomana.ui.panel_renderer import AppPanelRenderer
 from bomana.ui.runtime import LogicPoller, TkEventDispatcher
 from bomana.ui.runtime_services import HAS_TRAY, AppRuntimeServices
 from bomana.ui.snapshot_presenter import build_status_presentation
+from bomana.ui.strike_encyclopedia import StrikeEncyclopediaDialog
 from bomana.ui.strike_prediction import create_strike_prediction_ui
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_action_button
@@ -1965,6 +1966,18 @@ class App:
     def _show_about(self):
         """显示关于对话框"""
         AboutDialog(self.root, self)
+
+    def _show_strike_encyclopedia(self):
+        """Open or focus the edition-neutral offline strike encyclopedia."""
+        current = getattr(self, "_strike_encyclopedia_dialog", None)
+        if current is not None:
+            with contextlib.suppress(tk.TclError):
+                if current.winfo_exists():
+                    current.deiconify()
+                    current.lift()
+                    current.focus_force()
+                    return
+        self._strike_encyclopedia_dialog = StrikeEncyclopediaDialog(self.root, self)
 
     def _complete_web_command(self, envelope: WebCommandEnvelope, reason: str) -> None:
         try:
