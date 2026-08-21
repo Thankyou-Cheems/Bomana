@@ -7,16 +7,16 @@ Launcher but requires a CheemsPay subscription and a separately delivered
 ## Install and run
 
 1. Download the Launcher from <https://bomana.ruikang.wang/>.
-2. Select Standard for the complete public feature set or Lite for the compact
-   timer.
+2. Select Standard for navigation and fuel tools or Lite for the compact timer;
+   both public editions include the on-demand strike encyclopedia.
 3. Launch War Thunder and enter a battle; the hangar often does not expose the
    full official 8111 data set.
 4. Start Bomana. If Windows asks about network access, Lite and Standard need
    only loopback access to `localhost:8111`.
 
-Alternatively, download `Bomana_Green_Lite_v8.7.2.zip` from the GitHub Release,
+Alternatively, download `Bomana_Green_Lite_v8.7.14.zip` from the GitHub Release,
 extract the complete directory, and run `Bomana.exe`. This launcher-free package
-contains the Python runtime and only Lite features. Its anonymous daily-active
+contains the Python runtime and the same Lite encyclopedia. Its anonymous daily-active
 report runs in a background daemon thread, so an unavailable reporting endpoint
 never delays application startup.
 

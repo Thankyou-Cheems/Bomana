@@ -13,6 +13,25 @@ implementation history.
   packaged runtime keys are checked against the same contract so existing
   subscription sessions are not blocked by an accidental key replacement.
 
+## [8.7.14]
+
+### Added
+
+- Added the source-backed strike encyclopedia to Standard, Lite, and the Lite
+  green bundle. Users can open it from the main window or system tray.
+- Generated four airport diagrams from bundled `start/end/width` geometry
+  instead of copying a community image. The diagrams are explicitly labeled
+  as offline planar module geometry, not server hitboxes.
+- Published six EC balance-level durability bands, raw explosive fields, and
+  separate official Wiki TNTe references without inventing an HP-to-TNT
+  conversion.
+
+### Boundaries
+
+- Public packages include only the read-only encyclopedia, its static airport
+  catalog, and UI. They still exclude CCRP, weapon solvers, rigid-body data,
+  terrain packs, and the Web cockpit.
+
 ## [8.7.2]
 
 ### Changed

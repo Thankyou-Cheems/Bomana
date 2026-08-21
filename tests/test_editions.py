@@ -69,6 +69,10 @@ def test_capabilities_drive_legacy_flags_and_web_packaging() -> None:
     }
     assert {"Enhanced"} == WEB_COCKPIT_CHANNELS
     assert SUPER_BOMB_EDITION.includes(EditionCapability.STRIKE_PREDICTION)
+    assert all(
+        edition.includes(EditionCapability.STRIKE_ENCYCLOPEDIA)
+        for edition in (SUPER_BOMB_EDITION, STANDARD_EDITION, LITE_EDITION)
+    )
 
 
 def test_build_matrix_is_a_projection_of_edition_policy() -> None:

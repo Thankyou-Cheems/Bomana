@@ -27,6 +27,7 @@ class EditionCapability(StrEnum):
     ADVANCED_SETTINGS = "advanced_settings"
     WEB_COCKPIT = "web_cockpit"
     STRIKE_PREDICTION = "strike_prediction"
+    STRIKE_ENCYCLOPEDIA = "strike_encyclopedia"
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +56,7 @@ _CORE_CAPABILITIES = frozenset(
         EditionCapability.TIMER,
         EditionCapability.SPEED,
         EditionCapability.ADVANCED_SETTINGS,
+        EditionCapability.STRIKE_ENCYCLOPEDIA,
     }
 )
 
@@ -81,8 +83,8 @@ STANDARD_EDITION: Final = Edition(
     channel="Standard",
     display_name="Standard",
     title="标准版 (稳定轻量)",
-    description="包含计时器 + 战区/机场导航 + 燃油管理；不含投弹预测与网页驾驶舱。",
-    audience="适合：不需要投弹预测与网页控制台，但需要导航和油量信息。",
+    description="包含计时器、导航、燃油与打击百科；不含投弹预测与网页驾驶舱。",
+    audience="适合：需要导航、油量和离线打击资料，但不需要投弹解算。",
     access=EditionAccess.PUBLIC,
     capabilities=_CORE_CAPABILITIES
     | {
@@ -98,8 +100,8 @@ LITE_EDITION: Final = Edition(
     channel="Lite",
     display_name="Lite",
     title="精简版 (极简模式)",
-    description="仅保留核心复活计时器，不含网页驾驶舱；资源占用最低。",
-    audience="适合：只想看计时、追求最小干扰和最低开销。",
+    description="保留核心复活计时器与可按需打开的打击百科，不含实时投弹功能。",
+    audience="适合：只想看计时并偶尔查阅离线资料，追求最低常驻开销。",
     access=EditionAccess.PUBLIC,
     capabilities=_CORE_CAPABILITIES,
     aliases=("lite", "精简版"),

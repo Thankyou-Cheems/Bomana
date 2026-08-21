@@ -45,13 +45,15 @@ of the server you play on.
 - Zone, airfield, and point-of-interest navigation
 - Fuel, return-margin, and speed cues
 - Sortie checklist, tray controls, window locking, and global hotkeys
+- On-demand strike encyclopedia with static airport geometry, EC mission durability, and weapon-field references
 - Local settings and state recovery
 
 ### Lite
 
 - Core reward timer
 - Minimal window and basic tray controls
-- A simple choice for players who only need the timer
+- The same on-demand, read-only strike encyclopedia
+- A simple choice for players who want a minimal live UI plus offline references
 
 ### Super Bomb
 
@@ -81,9 +83,9 @@ data, and release packages are not published in this public repository.
 
 | Channel | Access | Best for |
 |---|---|---|
-| **Standard** | Public, MIT | Timer, navigation, and fuel information |
-| **Lite** | Public, MIT | A minimal timer |
-| **Lite Green** | Public, launcher-free | Extract and run without a separate Python install |
+| **Standard** | Public, MIT | Timer, navigation, fuel, and the offline encyclopedia |
+| **Lite** | Public, MIT | A minimal timer with on-demand offline references |
+| **Lite Green** | Public, launcher-free | Extract and run with the same Lite encyclopedia |
 | **Super Bomb** | Paid subscription | Subscriber features beyond the public editions |
 
 For Super Bomb, follow the Launcher prompt to open the official site, complete
@@ -125,7 +127,7 @@ No third-party tool can take responsibility for account or match risk.
 ### Which edition should I choose?
 
 Standard is for players who want navigation, fuel, and more desktop assistance.
-Lite keeps only the timer and the minimal UI. Lite Green has the same Lite
+Lite keeps the timer, minimal UI, and on-demand encyclopedia. Lite Green has the same Lite
 features but includes Python and does not require the Launcher. Super Bomb is a
 separate paid subscription edition; see the official site for its current scope.
 

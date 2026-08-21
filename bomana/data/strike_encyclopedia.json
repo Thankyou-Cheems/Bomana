@@ -1,0 +1,48 @@
+{
+  "schema": "bomana_strike_encyclopedia/v1",
+  "provenance": {
+    "datamine_version": "2.57.1.89",
+    "datamine_commit": "9f8cdbc99342ccc7aeb8d0e684eb1a409384053e",
+    "airfield_catalog_schema": "wt_ec_airfield_template/v1",
+    "airfield_catalog_sha256": "1582B8D60EBAFEE84291D7DE666D814C542DF035382353FA4EA86D767FE009EA",
+    "airport_hp_source": "mis.vromfs.bin_u/gamedata/missions/templates/enduring_confrontation/ft_fields_template.blkx",
+    "airport_hp_source_sha256": "6A60D0E438D50A8F1DCCE4123C92FDA740481A5082709960C8B6E86B68BB631E",
+    "bombing_point_hp_source": "mis.vromfs.bin_u/gamedata/missions/templates/enduring_confrontation/bdt_bases_destroy_template.blkx",
+    "bombing_point_hp_source_sha256": "D378921C875C7EF37BE78BD00B542C8DF352E7CCC14386EC3798B65B9F18B8E0"
+  },
+  "bombing_point_tiers": [
+    {"balance_level": [0, 3], "planes_mission_hp": 4000, "heli_mission_hp": 400},
+    {"balance_level": [4, 7], "planes_mission_hp": 6000, "heli_mission_hp": 600},
+    {"balance_level": [8, 11], "planes_mission_hp": 10000, "heli_mission_hp": 1000},
+    {"balance_level": [12, 16], "planes_mission_hp": 16000, "heli_mission_hp": 1600},
+    {"balance_level": [17, 20], "planes_mission_hp": 22000, "heli_mission_hp": 2200},
+    {"balance_level": [21, 50], "planes_mission_hp": 25900, "heli_mission_hp": 2590}
+  ],
+  "airport_tiers": [
+    {"balance_level": [0, 3], "auxiliary_module_mission_hp": 12000, "runway_mission_hp": 24000, "repair_base_hp": 300},
+    {"balance_level": [4, 7], "auxiliary_module_mission_hp": 34000, "runway_mission_hp": 68000, "repair_base_hp": 850},
+    {"balance_level": [8, 11], "auxiliary_module_mission_hp": 48000, "runway_mission_hp": 96000, "repair_base_hp": 1200},
+    {"balance_level": [12, 16], "auxiliary_module_mission_hp": 100000, "runway_mission_hp": 200000, "repair_base_hp": 2500},
+    {"balance_level": [17, 20], "auxiliary_module_mission_hp": 120000, "runway_mission_hp": 240000, "repair_base_hp": 3000},
+    {"balance_level": [21, 50], "auxiliary_module_mission_hp": 160000, "runway_mission_hp": 280000, "repair_base_hp": 4000}
+  ],
+  "weapon_references": [
+    {"weapon_id": "us_500lb_mk_82_ldgp", "display_name": "Mk 82", "mass_kg": 240.9, "explosive_type": "comp_h6", "raw_explosive_mass_kg": 87.1, "tnte_reference_kg": 117.6},
+    {"weapon_id": "us_1000lb_mk_83_ldgp", "display_name": "Mk 83", "mass_kg": 446.8, "explosive_type": "comp_h6", "raw_explosive_mass_kg": 201.8, "tnte_reference_kg": 272.4},
+    {"weapon_id": "su_fab_500m_62t", "display_name": "FAB-500M-62", "mass_kg": 508.3, "explosive_type": "tgaf_5", "raw_explosive_mass_kg": 213.0, "tnte_reference_kg": 340.8},
+    {"weapon_id": "us_500lb_mk77_mod4", "display_name": "Mk 77 Mod 4", "mass_kg": 235.9, "explosive_type": "napalm", "raw_explosive_mass_kg": 207.3, "tnte_reference_kg": null}
+  ],
+  "practical_references": [
+    {
+      "reference_id": "sim_ec_high_tier_base_mk83",
+      "scope": "高权重空战 EC 战区基地",
+      "weapon_id": "us_1000lb_mk_83_ldgp",
+      "weapon_count": 6,
+      "total_tnte_reference_kg": 1634.4,
+      "evidence_kind": "official_wiki_reference",
+      "is_mission_damage_formula": false,
+      "source_url": "https://wiki.warthunder.com/mechanics/1067-use-of-ccrp-in-sim-battles-sim-ec"
+    }
+  ],
+  "disclaimer": "任务 mission_hp、客户端原始装药质量与官方 Wiki TNTe 参考是三种不同数据；当前没有可验证的 mission_hp→TNT 换算公式。"
+}
