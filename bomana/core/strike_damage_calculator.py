@@ -226,11 +226,7 @@ class StrikeDamageCalculator:
             fire_trigger_weapon_count=fire_count,
             quantity_evidence_kind="native_unknown" if quantity is None else quantity[1],
             quantity_is_exact=quantity is not None,
-            quantity_message=(
-                "Mk 77 / napalm 不走 HP↔TNT 当量公式，无法给出精确枚数。"
-                if quantity is None
-                else "按桌面 gameparams 的 HP↔TNT 当量、满额命中计算；燃烧阈值为参数推断。"
-            ),
+            quantity_message=_quantity_message(weapon, quantity is not None, airport=False),
         )
 
     def _quantity_for_weapon(self, weapon: WeaponReference) -> tuple[float, str] | None:
@@ -288,15 +284,23 @@ class StrikeDamageCalculator:
             fire_trigger_weapon_count=None,
             quantity_evidence_kind="native_unknown" if quantity is None else quantity[1],
             quantity_is_exact=quantity is not None,
-            quantity_message=(
-                "Mk 77 / napalm 不走 HP↔TNT 当量公式，无法给出精确枚数。"
-                if quantity is None
-                else (
-                    "按桌面 gameparams 的 HP↔TNT 当量、满额命中计算；"
-                    "机场模块没有 90% 燃烧尾段，连续投弹时生活区仍可能回血。"
-                )
-            ),
+            quantity_message=_quantity_message(weapon, quantity is not None, airport=True),
         )
+
+
+def _quantity_message(weapon: WeaponReference, exact: bool, *, airport: bool) -> str:
+    if weapon.mission_damage_model == "unsupported_napalm":
+        return "燃烧弹 / napalm 不走 HP↔TNT 当量公式，无法给出精确枚数。"
+    if not exact:
+        return (
+            "该武器没有可用的 explosiveMass 与 strengthEquivalent，无法按 HP↔TNT 当量给出精确枚数。"
+        )
+    if airport:
+        return (
+            "按桌面 gameparams 的 HP↔TNT 当量、满额命中计算；"
+            "机场模块没有 90% 燃烧尾段，连续投弹时生活区仍可能回血。"
+        )
+    return "按桌面 gameparams 的 HP↔TNT 当量、满额命中计算；燃烧阈值为参数推断。"
 
 
 __all__ = [

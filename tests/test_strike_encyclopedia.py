@@ -5,6 +5,7 @@ import pytest
 from bomana.core.strike_encyclopedia import (
     load_strike_encyclopedia,
     project_airfield_scene,
+    search_weapon_references,
 )
 
 
@@ -68,6 +69,18 @@ def test_default_encyclopedia_exposes_source_backed_zone_tiers_and_four_layouts(
         if weapon.weapon_id == "us_500lb_mk77_mod4"
     )
     assert mk77.mission_damage_model == "unsupported_napalm"
+    weapon_ids = {weapon.weapon_id for weapon in encyclopedia.weapon_references}
+    assert len(encyclopedia.weapon_references) == 643
+    assert "us_hydra_70_m247" in weapon_ids
+    assert "su_s_24_rocket" in weapon_ids
+    assert "us_agm_65d" in weapon_ids
+    assert not any("aim_9" in weapon_id or "aim9" in weapon_id for weapon_id in weapon_ids)
+    hydras = search_weapon_references(
+        encyclopedia.weapon_references,
+        "hydra",
+        kind="rocket",
+    )
+    assert any(weapon.weapon_id == "us_hydra_70_m247" for weapon in hydras)
     assert [layout.layout_id for layout in encyclopedia.airfield_layouts] == [
         "long_3200",
         "layout_a_1670",

@@ -132,6 +132,40 @@ def test_other_he_bombs_use_the_same_static_tnt_conversion(
     assert result.quantity_is_exact is True
 
 
+def test_air_to_ground_rockets_and_missiles_use_the_same_static_tnt_conversion() -> None:
+    calculator = StrikeDamageCalculator(load_strike_encyclopedia())
+    hydra = calculator.calculate(
+        room_max_br=14.7,
+        target_kind="bombing_point",
+        mission_mode="planes",
+        weapon_id="us_hydra_70_m247",
+    )
+    maverick = calculator.calculate(
+        room_max_br=14.7,
+        target_kind="bombing_point",
+        mission_mode="planes",
+        weapon_id="us_agm_65d",
+    )
+
+    assert hydra.quantity_is_exact is True
+    assert hydra.weapon_count == 2716
+    assert maverick.quantity_is_exact is True
+    assert maverick.weapon_count == 64
+
+
+def test_weapons_without_explosive_mass_stay_native_unknown() -> None:
+    result = StrikeDamageCalculator(load_strike_encyclopedia()).calculate(
+        room_max_br=14.7,
+        target_kind="bombing_point",
+        mission_mode="planes",
+        weapon_id="us_b61_5kt",
+    )
+
+    assert result.weapon_count is None
+    assert result.quantity_is_exact is False
+    assert result.quantity_evidence_kind == "native_unknown"
+
+
 def test_napalm_does_not_use_the_tnt_equivalent_bombing_zone_formula() -> None:
     result = StrikeDamageCalculator(load_strike_encyclopedia()).calculate(
         room_max_br=14.7,
