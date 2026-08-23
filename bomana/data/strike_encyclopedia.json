@@ -8,7 +8,15 @@
     "airport_hp_source": "mis.vromfs.bin_u/gamedata/missions/templates/enduring_confrontation/ft_fields_template.blkx",
     "airport_hp_source_sha256": "6A60D0E438D50A8F1DCCE4123C92FDA740481A5082709960C8B6E86B68BB631E",
     "bombing_point_hp_source": "mis.vromfs.bin_u/gamedata/missions/templates/enduring_confrontation/bdt_bases_destroy_template.blkx",
-    "bombing_point_hp_source_sha256": "D378921C875C7EF37BE78BD00B542C8DF352E7CCC14386EC3798B65B9F18B8E0"
+    "bombing_point_hp_source_sha256": "D378921C875C7EF37BE78BD00B542C8DF352E7CCC14386EC3798B65B9F18B8E0",
+    "gameparams_source": "aces.vromfs.bin_u/config/gameparams.blkx",
+    "gameparams_sha256": "2F60725954AA25AD75196ADE8641CCFB00042CF573EB2870AF27DDD2AE028796",
+    "explosive_source": "aces.vromfs.bin_u/gamedata/damage_model/explosive.blkx",
+    "explosive_sha256": "93304039FB34EDD925A9F8F4DB6E9F0DD7F381C4B14E6C357A28D6764725E7C2"
+  },
+  "bombing_zone_tnt_conversion": {
+    "hp_to_tnt_equivalent_tons": 0.000125,
+    "evidence_kind": "exact_static_gameparams"
   },
   "bombing_point_tiers": [
     {"balance_level": [0, 3], "planes_mission_hp": 4000, "heli_mission_hp": 400},
@@ -26,11 +34,24 @@
     {"balance_level": [17, 20], "auxiliary_module_mission_hp": 120000, "runway_mission_hp": 240000, "repair_base_hp": 3000},
     {"balance_level": [21, 50], "auxiliary_module_mission_hp": 160000, "runway_mission_hp": 280000, "repair_base_hp": 4000}
   ],
+  "bombing_point_behavior": {
+    "hp_fire_mult": 0.1,
+    "fire_speed": 0.03,
+    "depletion_seconds_reference": 3.0,
+    "fire_tail_evidence_kind": "static_parameter_inference",
+    "respawn_seconds": 240,
+    "respawn_evidence_kind": "exact_static_hp"
+  },
+  "airport_behavior": {
+    "has_fire_tail": false,
+    "repair_timing_kind": "per_airfield_repair_visit",
+    "repair_evidence_kind": "exact_static_hp_per_repair_visit"
+  },
   "weapon_references": [
-    {"weapon_id": "us_500lb_mk_82_ldgp", "display_name": "Mk 82", "mass_kg": 240.9, "explosive_type": "comp_h6", "raw_explosive_mass_kg": 87.1, "tnte_reference_kg": 117.6},
-    {"weapon_id": "us_1000lb_mk_83_ldgp", "display_name": "Mk 83", "mass_kg": 446.8, "explosive_type": "comp_h6", "raw_explosive_mass_kg": 201.8, "tnte_reference_kg": 272.4},
-    {"weapon_id": "su_fab_500m_62t", "display_name": "FAB-500M-62", "mass_kg": 508.3, "explosive_type": "tgaf_5", "raw_explosive_mass_kg": 213.0, "tnte_reference_kg": 340.8},
-    {"weapon_id": "us_500lb_mk77_mod4", "display_name": "Mk 77 Mod 4", "mass_kg": 235.9, "explosive_type": "napalm", "raw_explosive_mass_kg": 207.3, "tnte_reference_kg": null}
+    {"weapon_id": "us_500lb_mk_82_ldgp", "display_name": "Mk 82", "mass_kg": 240.9, "explosive_type": "comp_h6", "raw_explosive_mass_kg": 87.1, "tnte_reference_kg": 117.6, "strength_equivalent": 1.35, "mission_damage_model": "tnt_equivalent"},
+    {"weapon_id": "us_1000lb_mk_83_ldgp", "display_name": "Mk 83", "mass_kg": 446.8, "explosive_type": "comp_h6", "raw_explosive_mass_kg": 201.8, "tnte_reference_kg": 272.4, "strength_equivalent": 1.35, "mission_damage_model": "tnt_equivalent"},
+    {"weapon_id": "su_fab_500m_62t", "display_name": "FAB-500M-62", "mass_kg": 508.3, "explosive_type": "tgaf_5", "raw_explosive_mass_kg": 213.0, "tnte_reference_kg": 340.8, "strength_equivalent": 1.6, "mission_damage_model": "tnt_equivalent"},
+    {"weapon_id": "us_500lb_mk77_mod4", "display_name": "Mk 77 Mod 4", "mass_kg": 235.9, "explosive_type": "napalm", "raw_explosive_mass_kg": 207.3, "tnte_reference_kg": null, "strength_equivalent": 0.002, "mission_damage_model": "unsupported_napalm"}
   ],
   "practical_references": [
     {
@@ -44,5 +65,5 @@
       "source_url": "https://wiki.warthunder.com/mechanics/1067-use-of-ccrp-in-sim-battles-sim-ec"
     }
   ],
-  "disclaimer": "任务 mission_hp、客户端原始装药质量与官方 Wiki TNTe 参考是三种不同数据；当前没有可验证的 mission_hp→TNT 换算公式。"
+  "disclaimer": "普通高爆炸弹的任务伤害按桌面 gameparams 的 HP↔TNT 当量换算；Mk 77 等 napalm 不走这条公式。官方 Wiki「约6枚 Mk 83」是旧攻略参考，不是当前静态换算。"
 }

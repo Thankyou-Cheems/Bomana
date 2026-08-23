@@ -1,7 +1,7 @@
 """Project metadata shared by the app, launcher, and packaging tools."""
 
 __title__ = "Bomana"
-__version__ = "8.7.14"
+__version__ = "8.7.15"
 PORTABLE_MIN_LAUNCHER_VERSION = "3.4.0"
 __author__ = "Thankyou-Cheems"
 __license__ = "MIT"

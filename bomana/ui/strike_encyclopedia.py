@@ -7,6 +7,12 @@ import tkinter as tk
 import webbrowser
 from typing import Any
 
+from bomana.core.strike_damage_calculator import (
+    StrikeDamageCalculator,
+    StrikeDamageCalculatorError,
+    room_max_br_from_balance_level,
+    valid_room_max_brs,
+)
 from bomana.core.strike_encyclopedia import (
     AirfieldLayout,
     StrikeEncyclopedia,
@@ -26,6 +32,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         super().__init__(parent)
         self.app = app
         self.encyclopedia: StrikeEncyclopedia = load_strike_encyclopedia()
+        self.damage_calculator = StrikeDamageCalculator(self.encyclopedia)
         self._selected_layout = self.encyclopedia.airfield_layouts[0]
         self._active_tab = "airport"
         self._redraw_after: str | None = None
@@ -45,6 +52,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
             "airport": self._build_airport_page(),
             "durability": self._build_durability_page(),
             "weapons": self._build_weapons_page(),
+            "calculator": self._build_calculator_page(),
         }
         self._show_tab("airport")
         self.after_idle(self._draw_airfield)
@@ -119,6 +127,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
             ("airport", "机场结构"),
             ("durability", "战区耐久"),
             ("weapons", "炸弹参考"),
+            ("calculator", "数量计算器"),
         ):
             button = self._button(tabs, label, lambda value=tab_id: self._show_tab(value))
             button.pack(side="left", padx=(6, 0))
@@ -222,7 +231,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         ).pack(anchor="w")
         self._label(
             heading,
-            "balance_level 由任务决定；以下数值不是 kg TNT，也不能直接推导必需弹量。",
+            "档位取房间允许的最高 BR（maxRank），不是当前载具 BR；数值不是 kg TNT。",
             size=9,
             fg=Theme.YELLOW,
             bg=Theme.GRAYPILL,
@@ -236,10 +245,10 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         airport.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
         self._table_rows(
             airport,
-            ("权重", "辅助模块", "跑道", "恢复基数"),
+            ("房间最高 BR", "辅助模块", "跑道", "恢复基数"),
             [
                 (
-                    self._range_text(tier.balance_level_range),
+                    self._tier_br_text(tier.balance_level_range),
                     self._integer(tier.auxiliary_module_mission_hp),
                     self._integer(tier.runway_mission_hp),
                     self._integer(tier.repair_base_hp),
@@ -251,24 +260,37 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         zone.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
         self._table_rows(
             zone,
-            ("权重", "空战", "直升机"),
+            ("房间最高 BR", "空战", "直升机"),
             [
                 (
-                    self._range_text(tier.balance_level_range),
+                    self._tier_br_text(tier.balance_level_range),
                     self._integer(tier.planes_mission_hp),
                     self._integer(tier.heli_mission_hp),
                 )
                 for tier in self.encyclopedia.bombing_point_tiers
             ],
         )
-        source = self._label(
+        behavior = self._label(
             page,
-            "来源锁：ft_fields_template.blkx / bdt_bases_destroy_template.blkx · Datamine 2.57.1.89",
+            (
+                "战区：90%直接伤害 / 约3秒燃尽为 hpFireMult=0.1、fireSpeed=0.03 的参数推断；"
+                "无回血，摧毁后240秒满血重生。\n"
+                "机场：未发现同类燃烧自毁；生活区存活时按脚本逐机场 repair visit 恢复，"
+                "不是每座机场固定每秒回血。"
+            ),
+            size=8,
+            fg=Theme.YELLOW,
+            bg=Theme.GRAYPILL,
+            justify="left",
+        )
+        behavior.pack(anchor="w", padx=16, pady=(0, 6))
+        self._label(
+            page,
+            "来源锁：当前桌面 2.57.1.103 任务模板（与 Datamine 2.57.1.89 同哈希）",
             size=8,
             fg=Theme.TEXT_MUTED,
             bg=Theme.GRAYPILL,
-        )
-        source.pack(anchor="w", padx=16, pady=(0, 14))
+        ).pack(anchor="w", padx=16, pady=(0, 12))
         return page
 
     def _build_weapons_page(self) -> tk.Frame:
@@ -328,7 +350,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         ).pack(anchor="w", padx=12)
         self._label(
             reference_card,
-            "这是攻略级参考，不是 mission_hp 换算公式；版本、任务与实际命中会影响结果。",
+            "这是旧攻略参考。数量计算器已改用当前桌面 gameparams 的 HP↔TNT 当量。",
             size=8,
             fg=Theme.TEXT_MUTED,
             bg=Theme.BG,
@@ -340,6 +362,226 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
             variant="secondary",
         ).pack(anchor="w", padx=16, pady=(0, 14))
         return page
+
+    def _build_calculator_page(self) -> tk.Frame:
+        page = self._new_page()
+        self._label(
+            page,
+            "EC 目标与武器数量计算器",
+            size=13,
+            weight="bold",
+            bg=Theme.GRAYPILL,
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+        self._label(
+            page,
+            "选择战局房间允许的最高 BR；不要填写当前出击载具的 BR。"
+            "普通高爆炸弹按桌面 HP↔TNT 当量给出精确枚数（满额命中）。",
+            size=9,
+            fg=Theme.YELLOW,
+            bg=Theme.GRAYPILL,
+        ).pack(anchor="w", padx=16, pady=(0, 10))
+
+        controls = tk.Frame(page, bg=Theme.GRAYPILL)
+        controls.pack(fill="x", padx=16)
+        self.calculator_br_var = tk.StringVar(value="14.7")
+        self.calculator_target_var = tk.StringVar(value="战区基地（空战）")
+        self.calculator_weapon_var = tk.StringVar(
+            value=self.encyclopedia.weapon_references[0].display_name
+        )
+        self.calculator_dwelling_hp_var = tk.StringVar()
+        fields = (
+            (
+                "房间最高 BR",
+                self.calculator_br_var,
+                tuple(f"{value:.1f}" for value in valid_room_max_brs()),
+            ),
+            (
+                "目标",
+                self.calculator_target_var,
+                (
+                    "战区基地（空战）",
+                    "战区基地（直升机）",
+                    "机场跑道",
+                    "机场油库 / 储存区",
+                    "机场停机 / 维修区",
+                    "机场生活区",
+                ),
+            ),
+            (
+                "武器",
+                self.calculator_weapon_var,
+                tuple(item.display_name for item in self.encyclopedia.weapon_references),
+            ),
+        )
+        for column, (label, variable, values) in enumerate(fields):
+            controls.grid_columnconfigure(column, weight=1)
+            field = tk.Frame(controls, bg=Theme.GRAYPILL)
+            field.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 6, 0))
+            self._label(
+                field,
+                label,
+                size=8,
+                weight="bold",
+                fg=Theme.TEXT_DIM,
+                bg=Theme.GRAYPILL,
+            ).pack(anchor="w")
+            menu = tk.OptionMenu(field, variable, *values)
+            menu.configure(
+                font=(_FONT, 9),
+                bg=Theme.BG,
+                fg=Theme.TEXT,
+                activebackground=Theme.BORDER,
+                activeforeground=Theme.TEXT,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+                bd=0,
+            )
+            menu["menu"].configure(font=(_FONT, 9), bg=Theme.BG, fg=Theme.TEXT)
+            menu.pack(fill="x", pady=(4, 0))
+
+        repair_input = tk.Frame(page, bg=Theme.GRAYPILL)
+        repair_input.pack(fill="x", padx=16, pady=(10, 0))
+        self._label(
+            repair_input,
+            "生活区当前剩余 HP（可选，仅用于计算机场单次 repair visit 回血）",
+            size=8,
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+        ).pack(side="left")
+        tk.Entry(
+            repair_input,
+            textvariable=self.calculator_dwelling_hp_var,
+            width=14,
+            font=(_FONT, 9),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            insertbackground=Theme.TEXT,
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+        ).pack(side="left", padx=(10, 0), ipady=5)
+        self._button(
+            repair_input,
+            "计算",
+            self._refresh_calculator,
+            variant="primary",
+        ).pack(side="left", padx=(10, 0))
+
+        result_card = tk.Frame(
+            page,
+            bg=Theme.BG,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+        )
+        result_card.pack(fill="both", expand=True, padx=16, pady=(12, 14))
+        self.calculator_result_title_var = tk.StringVar()
+        self.calculator_result_detail_var = tk.StringVar()
+        self._label(
+            result_card,
+            "",
+            size=15,
+            weight="bold",
+            fg=Theme.GREEN,
+            bg=Theme.BG,
+            textvariable=self.calculator_result_title_var,
+            anchor="w",
+        ).pack(fill="x", padx=14, pady=(12, 5))
+        self._label(
+            result_card,
+            "",
+            size=9,
+            bg=Theme.BG,
+            textvariable=self.calculator_result_detail_var,
+            justify="left",
+            anchor="nw",
+            wraplength=860,
+        ).pack(fill="both", expand=True, padx=14, pady=(0, 12))
+        self._refresh_calculator()
+        return page
+
+    def _refresh_calculator(self) -> None:
+        target_map = {
+            "战区基地（空战）": ("bombing_point", "planes", None),
+            "战区基地（直升机）": ("bombing_point", "heli", None),
+            "机场跑道": ("airport_module", "planes", "airfield"),
+            "机场油库 / 储存区": ("airport_module", "planes", "storage"),
+            "机场停机 / 维修区": ("airport_module", "planes", "parking"),
+            "机场生活区": ("airport_module", "planes", "dwelling"),
+        }
+        weapons = {
+            item.display_name: item.weapon_id for item in self.encyclopedia.weapon_references
+        }
+        target_kind, mission_mode, module = target_map[self.calculator_target_var.get()]
+        raw_dwelling_hp = self.calculator_dwelling_hp_var.get().strip()
+        try:
+            dwelling_hp = None if not raw_dwelling_hp else float(raw_dwelling_hp)
+            result = self.damage_calculator.calculate(
+                room_max_br=float(self.calculator_br_var.get()),
+                target_kind=target_kind,  # type: ignore[arg-type]
+                mission_mode=mission_mode,  # type: ignore[arg-type]
+                airport_module=module,  # type: ignore[arg-type]
+                weapon_id=weapons[self.calculator_weapon_var.get()],
+                dwelling_remaining_hp=dwelling_hp,
+            )
+        except KeyError, ValueError, StrikeDamageCalculatorError:
+            self.calculator_result_title_var.set("输入值无效")
+            self.calculator_result_detail_var.set(
+                "生活区剩余 HP 必须在当前档辅助模块的 0 到满血之间。"
+            )
+            return
+
+        if result.weapon_count is None:
+            title = "所需枚数：原生未知"
+        elif result.fire_trigger_weapon_count is not None:
+            title = (
+                f"摧毁：{result.weapon_count} 枚 · 触发燃烧：{result.fire_trigger_weapon_count} 枚"
+            )
+        else:
+            title = f"摧毁：{result.weapon_count} 枚"
+        details = [
+            (
+                f"房间最高 BR {result.room_max_br:.1f} → maxRank {result.balance_level} → "
+                f"任务档位 {self._range_text(result.balance_level_range)}"
+            ),
+            f"目标满血：{self._integer(result.target_mission_hp)} mission_hp（静态精确）",
+        ]
+        if result.direct_damage_to_fire_reference is not None:
+            details.extend(
+                (
+                    "战区燃烧参考：直接造成 "
+                    f"{self._integer(result.direct_damage_to_fire_reference)} HP（90%）后，"
+                    f"剩余 {self._integer(result.fire_remaining_hp_reference or 0)} HP；"
+                    "约3秒燃尽仅为参数与历史语义推断。",
+                    f"摧毁后 {result.respawn_seconds:.0f} 秒满血重生；战区没有脚本回血。",
+                )
+            )
+        else:
+            details.append("机场模块未发现 90% 后燃烧自毁逻辑；必须按满血直接伤害计算。")
+            repair_min = (result.repair_base_hp or 0.0) / 10.0
+            details.append(
+                "生活区 0 < D < 满血时，每次该机场 repair visit 恢复约 "
+                f"{self._integer(repair_min)}–{self._integer(result.repair_base_hp or 0)} HP；"
+                "D=0 或 D=满血时该脚本分支为0。"
+            )
+            if result.repair_per_visit is not None:
+                details.append(
+                    f"按输入的生活区剩余 HP，本次 visit 恢复 {result.repair_per_visit:,.1f} HP。"
+                )
+        if result.damage_per_hit_mission_hp is not None:
+            details.append(
+                f"满额命中每枚 {result.damage_per_hit_mission_hp:,.2f} mission_hp"
+                f"（{result.weapon.raw_explosive_mass_kg:g} kg × "
+                f"{result.weapon.strength_equivalent:g} TNT 当量，"
+                "gameparams 1 kg TNT = 8 HP）。"
+            )
+        details.extend(
+            (
+                result.quantity_message,
+                "官方 Wiki「约6枚 Mk 83」是旧攻略参考，计算器不再用它代替静态换算。",
+            )
+        )
+        self.calculator_result_title_var.set(title)
+        self.calculator_result_detail_var.set("\n".join(details))
 
     def _table_card(self, parent: tk.Misc, title: str) -> tk.Frame:
         card = tk.Frame(
@@ -392,6 +634,15 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
     @staticmethod
     def _range_text(value: tuple[int, int]) -> str:
         return f"{value[0]}–{value[1]}"
+
+    @staticmethod
+    def _tier_br_text(value: tuple[int, int]) -> str:
+        start, end = value
+        current_end = min(end, 41)
+        return (
+            f"{room_max_br_from_balance_level(start):.1f}–"
+            f"{room_max_br_from_balance_level(current_end):.1f}"
+        )
 
     def _show_tab(self, tab_id: str) -> None:
         if tab_id not in self.pages:

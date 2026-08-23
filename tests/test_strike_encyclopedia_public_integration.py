@@ -14,3 +14,8 @@ def test_public_editions_expose_desktop_and_tray_encyclopedia_entries() -> None:
     show_method = app_source[app_source.index("def _show_strike_encyclopedia") :]
     show_method = show_method[: show_method.index("\n    def ", 1)]
     assert "ENABLE_CCRP" not in show_method
+
+    ui_source = Path("bomana/ui/strike_encyclopedia.py").read_text(encoding="utf-8")
+    assert "EC 目标与武器数量计算器" in ui_source
+    assert "StrikeDamageCalculator" in ui_source
+    assert "ENABLE_CCRP" not in ui_source

@@ -47,6 +47,27 @@ def test_default_encyclopedia_exposes_source_backed_zone_tiers_and_four_layouts(
     assert encyclopedia.practical_references[0].weapon_count == 6
     assert encyclopedia.practical_references[0].total_tnte_reference_kg == pytest.approx(1634.4)
     assert encyclopedia.practical_references[0].is_mission_damage_formula is False
+    assert encyclopedia.bombing_point_behavior.hp_fire_mult == pytest.approx(0.1)
+    assert encyclopedia.bombing_point_behavior.fire_speed == pytest.approx(0.03)
+    assert encyclopedia.bombing_point_behavior.respawn_seconds == pytest.approx(240.0)
+    assert encyclopedia.airport_behavior.has_fire_tail is False
+    assert encyclopedia.airport_behavior.repair_timing_kind == "per_airfield_repair_visit"
+    assert encyclopedia.bombing_zone_tnt_conversion.hp_to_tnt_equivalent_tons == pytest.approx(
+        0.000125
+    )
+    mk83 = next(
+        weapon
+        for weapon in encyclopedia.weapon_references
+        if weapon.weapon_id == "us_1000lb_mk_83_ldgp"
+    )
+    assert mk83.strength_equivalent == pytest.approx(1.35)
+    assert mk83.mission_damage_model == "tnt_equivalent"
+    mk77 = next(
+        weapon
+        for weapon in encyclopedia.weapon_references
+        if weapon.weapon_id == "us_500lb_mk77_mod4"
+    )
+    assert mk77.mission_damage_model == "unsupported_napalm"
     assert [layout.layout_id for layout in encyclopedia.airfield_layouts] == [
         "long_3200",
         "layout_a_1670",
@@ -83,3 +104,28 @@ def test_long_runway_layout_and_scene_come_from_exact_module_rectangles() -> Non
         for x, y in shape.points
     )
     assert scene.disclaimer == "离线静态模块几何 · 非服务器命中框"
+
+
+def test_airfield_scene_uses_the_same_north_up_handedness_as_navigation() -> None:
+    layout = load_strike_encyclopedia().airfield_layouts[0]
+    scene = project_airfield_scene(layout, width=720, height=380)
+    shapes = {shape.module_id: shape for shape in scene.shapes}
+
+    def center(points: tuple[tuple[float, float], ...]) -> tuple[float, float]:
+        return (
+            sum(point[0] for point in points) / len(points),
+            sum(point[1] for point in points) / len(points),
+        )
+
+    runway = shapes["airfield"]
+    runway_start = center((runway.points[0], runway.points[3]))
+    runway_end = center((runway.points[1], runway.points[2]))
+    runway_center = center(runway.points)
+    storage_center = center(shapes["storage"].points)
+    side_sign = (runway_end[0] - runway_start[0]) * (storage_center[1] - runway_center[1]) - (
+        runway_end[1] - runway_start[1]
+    ) * (storage_center[0] - runway_center[0])
+
+    # Navigation maps world +Z toward smaller screen Y.  For the locked 3200 m
+    # template this places storage on the positive signed side of start -> end.
+    assert side_sign > 0.0
