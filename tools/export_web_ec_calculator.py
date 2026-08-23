@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from bomana.core.hangar_base_damage import evaluate_hangar_base_damage  # noqa: E402
 from bomana.core.strike_damage_calculator import valid_room_max_brs  # noqa: E402
 from bomana.core.strike_encyclopedia import load_strike_encyclopedia  # noqa: E402
 from bomana.metadata import __version__  # noqa: E402
@@ -65,14 +66,41 @@ _TARGETS = (
 )
 
 
+def _weapon_row(encyclopedia: Any, weapon: Any) -> dict[str, Any]:
+    breakdown = evaluate_hangar_base_damage(
+        encyclopedia.bombing_zone_splash,
+        weapon.hangar_inputs(),
+    )
+    return {
+        "id": weapon.weapon_id,
+        "kind": weapon.kind,
+        "name": weapon.display_name,
+        "name_zh": weapon.display_name_zh,
+        "mass_kg": weapon.mass_kg,
+        "explosive_type": weapon.explosive_type,
+        "explosive_mass_kg": weapon.raw_explosive_mass_kg,
+        "strength_equivalent": weapon.strength_equivalent,
+        "model": weapon.mission_damage_model,
+        "hangar_damage": None if breakdown is None else breakdown.damage,
+        "reduced_for_armor": None if breakdown is None else breakdown.reduced_for_armor,
+    }
+
+
 def build_web_catalog() -> dict[str, Any]:
     encyclopedia = load_strike_encyclopedia()
-    conversion = encyclopedia.bombing_zone_tnt_conversion
+    splash = encyclopedia.bombing_zone_splash
     return {
         "schema": _SCHEMA,
         "app_version": __version__,
-        "hp_to_tnt_equivalent_tons": conversion.hp_to_tnt_equivalent_tons,
         "hp_fire_mult": encyclopedia.bombing_point_behavior.hp_fire_mult,
+        "reward": {
+            "preset_dmg_min": splash.reward_preset_dmg_min,
+            "preset_dmg_max": splash.reward_preset_dmg_max,
+            "bombing_reward_modifier": splash.bombing_reward_modifier,
+            "fighter_bombing_reward_mul": splash.fighter_bombing_reward_mul,
+            "ui_decoration": splash.reward_ui_decoration,
+            "piecewise_linear": [list(point) for point in splash.reward_piecewise_linear],
+        },
         "disclaimer": encyclopedia.disclaimer,
         "br_values": [f"{value:.1f}" for value in valid_room_max_brs()],
         "targets": list(_TARGETS),
@@ -92,20 +120,7 @@ def build_web_catalog() -> dict[str, Any]:
             }
             for tier in encyclopedia.airport_tiers
         ],
-        "weapons": [
-            {
-                "id": weapon.weapon_id,
-                "kind": weapon.kind,
-                "name": weapon.display_name,
-                "name_zh": weapon.display_name_zh,
-                "mass_kg": weapon.mass_kg,
-                "explosive_type": weapon.explosive_type,
-                "explosive_mass_kg": weapon.raw_explosive_mass_kg,
-                "strength_equivalent": weapon.strength_equivalent,
-                "model": weapon.mission_damage_model,
-            }
-            for weapon in encyclopedia.weapon_references
-        ],
+        "weapons": [_weapon_row(encyclopedia, weapon) for weapon in encyclopedia.weapon_references],
     }
 
 

@@ -1,7 +1,8 @@
 """Truthful EC target durability and weapon-count calculations.
 
-Ordinary HE bombs convert TNT equivalent through the desktop gameparams
-HP-to-tons coefficient. Napalm and missing transfer functions stay unlabeled.
+Hangar estimated base damage is evaluated from bundled splash-curve
+parameters and per-weapon BLK inputs. The gameparams HP↔TNT coefficient
+is retained only as a labelled non-hangar reference.
 """
 
 from __future__ import annotations
@@ -10,6 +11,10 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
+from bomana.core.hangar_base_damage import (
+    evaluate_hangar_base_damage,
+    hangar_reward_ui_value,
+)
 from bomana.core.strike_encyclopedia import (
     AirportDurabilityTier,
     StrikeEncyclopedia,
@@ -21,10 +26,23 @@ MissionMode = Literal["planes", "heli"]
 AirportModule = Literal["airfield", "storage", "parking", "dwelling"]
 
 _ECONOMIC_RANK_MAX = 41
+_EVIDENCE_BY_MODEL = {
+    "splash_tnte_curve": "exact_static_splash_curve",
+    "napalm_splash_fire": "exact_static_napalm_splash_fire",
+    "nuclear_yield": "exact_static_nuclear_yield",
+}
 
 
 class StrikeDamageCalculatorError(ValueError):
     """Raised when a calculator request cannot describe a supported EC target."""
+
+
+@dataclass(frozen=True)
+class _WeaponQuantity:
+    damage: float
+    evidence_kind: str
+    reduced_for_armor: bool
+    tnte_kg: float
 
 
 @dataclass(frozen=True)
@@ -53,6 +71,8 @@ class StrikeDamageResult:
     quantity_evidence_kind: str
     quantity_is_exact: bool
     quantity_message: str
+    hangar_reward_ui_for_destroy: float | None
+    reduced_for_armor: bool | None
 
 
 def room_max_br_from_balance_level(balance_level: int) -> float:
@@ -200,8 +220,10 @@ class StrikeDamageCalculator:
         behavior = self._encyclopedia.bombing_point_behavior
         quantity = self._quantity_for_weapon(weapon)
         fire_hp = target_hp * (1.0 - behavior.hp_fire_mult)
-        fire_count = None if quantity is None else required_weapon_count(fire_hp, quantity[0])
-        destroy_count = None if quantity is None else required_weapon_count(target_hp, quantity[0])
+        fire_count = None if quantity is None else required_weapon_count(fire_hp, quantity.damage)
+        destroy_count = (
+            None if quantity is None else required_weapon_count(target_hp, quantity.damage)
+        )
         return StrikeDamageResult(
             room_max_br=room_max_br,
             balance_level=balance_level,
@@ -221,21 +243,31 @@ class StrikeDamageCalculator:
             repair_per_visit=None,
             repair_evidence_kind=None,
             weapon=weapon,
-            damage_per_hit_mission_hp=None if quantity is None else quantity[0],
+            damage_per_hit_mission_hp=None if quantity is None else quantity.damage,
             weapon_count=destroy_count,
             fire_trigger_weapon_count=fire_count,
-            quantity_evidence_kind="native_unknown" if quantity is None else quantity[1],
+            quantity_evidence_kind="native_unknown" if quantity is None else quantity.evidence_kind,
             quantity_is_exact=quantity is not None,
-            quantity_message=_quantity_message(weapon, quantity is not None, airport=False),
+            quantity_message=_quantity_message(weapon, quantity, airport=False),
+            hangar_reward_ui_for_destroy=_reward_for_destroy(
+                self._encyclopedia, quantity, destroy_count
+            ),
+            reduced_for_armor=None if quantity is None else quantity.reduced_for_armor,
         )
 
-    def _quantity_for_weapon(self, weapon: WeaponReference) -> tuple[float, str] | None:
-        if weapon.mission_damage_model != "tnt_equivalent":
+    def _quantity_for_weapon(self, weapon: WeaponReference) -> _WeaponQuantity | None:
+        breakdown = evaluate_hangar_base_damage(
+            self._encyclopedia.bombing_zone_splash,
+            weapon.hangar_inputs(),
+        )
+        if breakdown is None or breakdown.damage <= 0.0:
             return None
-        conversion = self._encyclopedia.bombing_zone_tnt_conversion
-        tnte_kg = weapon.raw_explosive_mass_kg * weapon.strength_equivalent
-        damage = mission_hp_from_tnte_kg(tnte_kg, conversion.hp_to_tnt_equivalent_tons)
-        return damage, conversion.evidence_kind
+        return _WeaponQuantity(
+            damage=breakdown.damage,
+            evidence_kind=_EVIDENCE_BY_MODEL[breakdown.model],
+            reduced_for_armor=breakdown.reduced_for_armor,
+            tnte_kg=breakdown.tnte_kg,
+        )
 
     def _airport_result(
         self,
@@ -259,7 +291,9 @@ class StrikeDamageCalculator:
             )
         )
         quantity = self._quantity_for_weapon(weapon)
-        destroy_count = None if quantity is None else required_weapon_count(target_hp, quantity[0])
+        destroy_count = (
+            None if quantity is None else required_weapon_count(target_hp, quantity.damage)
+        )
         return StrikeDamageResult(
             room_max_br=room_max_br,
             balance_level=balance_level,
@@ -279,28 +313,56 @@ class StrikeDamageCalculator:
             repair_per_visit=repair,
             repair_evidence_kind=self._encyclopedia.airport_behavior.repair_evidence_kind,
             weapon=weapon,
-            damage_per_hit_mission_hp=None if quantity is None else quantity[0],
+            damage_per_hit_mission_hp=None if quantity is None else quantity.damage,
             weapon_count=destroy_count,
             fire_trigger_weapon_count=None,
-            quantity_evidence_kind="native_unknown" if quantity is None else quantity[1],
+            quantity_evidence_kind="native_unknown" if quantity is None else quantity.evidence_kind,
             quantity_is_exact=quantity is not None,
-            quantity_message=_quantity_message(weapon, quantity is not None, airport=True),
+            quantity_message=_quantity_message(weapon, quantity, airport=True),
+            hangar_reward_ui_for_destroy=_reward_for_destroy(
+                self._encyclopedia, quantity, destroy_count
+            ),
+            reduced_for_armor=None if quantity is None else quantity.reduced_for_armor,
         )
 
 
-def _quantity_message(weapon: WeaponReference, exact: bool, *, airport: bool) -> str:
-    if weapon.mission_damage_model == "unsupported_napalm":
-        return "燃烧弹 / napalm 不走 HP↔TNT 当量公式，无法给出精确枚数。"
-    if not exact:
+def _reward_for_destroy(
+    encyclopedia: StrikeEncyclopedia,
+    quantity: _WeaponQuantity | None,
+    destroy_count: int | None,
+) -> float | None:
+    if quantity is None or destroy_count is None:
+        return None
+    return hangar_reward_ui_value(
+        encyclopedia.bombing_zone_splash,
+        quantity.damage * destroy_count,
+    )
+
+
+def _quantity_message(
+    weapon: WeaponReference,
+    quantity: _WeaponQuantity | None,
+    *,
+    airport: bool,
+) -> str:
+    if quantity is None:
         return (
-            "该武器没有可用的 explosiveMass 与 strengthEquivalent，无法按 HP↔TNT 当量给出精确枚数。"
+            "该武器缺少溅射公式所需的装药、燃烧弹 splash/fire 或核弹 yield 输入，无法给出精确枚数。"
         )
+    if weapon.mission_damage_model == "napalm_splash_fire":
+        core = (
+            "燃烧弹按 splash.damage 对 25 mm 战区装甲的欠穿抑制，再加上 "
+            "fireDamage×lifeTime×napalmDamageMult。"
+        )
+    elif weapon.mission_damage_model == "nuclear_yield":
+        core = "核弹按 explosive.blkx 的 yieldToExplosionParameters 查表。"
+    elif quantity.reduced_for_armor:
+        core = "按 TNT 当量查溅射曲线后，因穿深不足 25 mm 乘以 restrainExplosionDamage=0.6。"
+    else:
+        core = "按 explosiveMass×strengthEquivalent 在 explosive.blkx 溅射曲线上线性插值。"
     if airport:
-        return (
-            "按桌面 gameparams 的 HP↔TNT 当量、满额命中计算；"
-            "机场模块没有 90% 燃烧尾段，连续投弹时生活区仍可能回血。"
-        )
-    return "按桌面 gameparams 的 HP↔TNT 当量、满额命中计算；燃烧阈值为参数推断。"
+        return core + "大厅该数字标的是对战区；机场模块套用同一 splash HP，并计入生活区回血。"
+    return core + "满额命中；燃烧阈值为参数推断。"
 
 
 __all__ = [

@@ -115,6 +115,7 @@ def test_online_calculator_page_is_self_contained_and_matches_app_catalog() -> N
     assert catalog == expected
     assert catalog["app_version"] == __version__
     assert len(catalog["weapons"]) == 643
+    assert catalog["reward"]["ui_decoration"] == 10.0
     encyclopedia = load_strike_encyclopedia()
     result = StrikeDamageCalculator(encyclopedia).calculate(
         room_max_br=14.7,
@@ -122,8 +123,13 @@ def test_online_calculator_page_is_self_contained_and_matches_app_catalog() -> N
         mission_mode="planes",
         weapon_id="us_1000lb_mk_83_ldgp",
     )
-    assert result.weapon_count == 12
-    assert result.fire_trigger_weapon_count == 11
+    assert result.weapon_count == 6
+    assert result.fire_trigger_weapon_count == 5
+    assert 'class="hangar"' in html
+    assert "对战区计算器" in html
+    assert "maxRank" not in html
+    assert "restrain" not in html
+    assert "explosive.blkx" not in html
 
 
 def test_download_catalog_points_at_tencent_cdn() -> None:

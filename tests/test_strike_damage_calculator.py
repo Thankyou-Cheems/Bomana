@@ -33,11 +33,10 @@ def test_room_max_br_rejects_values_that_are_not_current_valid_ranks(
         balance_level_from_room_max_br(room_max_br)
 
 
-def test_gameparams_maps_one_kilogram_tnt_to_eight_mission_hp() -> None:
+def test_gameparams_linear_tnt_map_is_not_the_hangar_formula() -> None:
     assert mission_hp_from_tnte_kg(1.0, 0.000125) == pytest.approx(8.0)
     assert mission_hp_from_tnte_kg(272.43, 0.000125) == pytest.approx(2_179.44)
     assert required_weapon_count(25_900.0, 2_179.44) == 12
-    assert required_weapon_count(23_310.0, 2_179.44) == 11
 
 
 def test_bombing_point_exposes_exact_hp_and_inferred_fire_tail_separately() -> None:
@@ -56,11 +55,12 @@ def test_bombing_point_exposes_exact_hp_and_inferred_fire_tail_separately() -> N
     assert result.fire_tail_evidence_kind == "static_parameter_inference"
     assert result.respawn_seconds == pytest.approx(240.0)
     assert result.target_evidence_kind == "exact_static_hp"
-    assert result.damage_per_hit_mission_hp == pytest.approx(2_179.44)
-    assert result.weapon_count == 12
-    assert result.fire_trigger_weapon_count == 11
-    assert result.quantity_evidence_kind == "exact_static_gameparams"
+    assert result.damage_per_hit_mission_hp == pytest.approx(4_720.376)
+    assert result.weapon_count == 6
+    assert result.fire_trigger_weapon_count == 5
+    assert result.quantity_evidence_kind == "exact_static_splash_curve"
     assert result.quantity_is_exact is True
+    assert result.reduced_for_armor is False
 
 
 def test_helicopter_bombing_point_uses_one_tenth_hp_with_exact_count() -> None:
@@ -72,21 +72,21 @@ def test_helicopter_bombing_point_uses_one_tenth_hp_with_exact_count() -> None:
     )
 
     assert result.target_mission_hp == pytest.approx(2_590.0)
-    assert result.weapon_count == 2
-    assert result.fire_trigger_weapon_count == 2
-    assert result.quantity_evidence_kind == "exact_static_gameparams"
+    assert result.weapon_count == 1
+    assert result.fire_trigger_weapon_count == 1
+    assert result.quantity_evidence_kind == "exact_static_splash_curve"
 
 
 @pytest.mark.parametrize(
     ("module_id", "expected_hp", "expected_count"),
     [
-        ("airfield", 280_000.0, 129),
-        ("storage", 160_000.0, 74),
-        ("parking", 160_000.0, 74),
-        ("dwelling", 160_000.0, 74),
+        ("airfield", 280_000.0, 60),
+        ("storage", 160_000.0, 34),
+        ("parking", 160_000.0, 34),
+        ("dwelling", 160_000.0, 34),
     ],
 )
-def test_airport_modules_use_exact_tnt_counts_without_fire_tail(
+def test_airport_modules_use_splash_hp_without_fire_tail(
     module_id: str,
     expected_hp: float,
     expected_count: int,
@@ -104,18 +104,18 @@ def test_airport_modules_use_exact_tnt_counts_without_fire_tail(
     assert result.respawn_seconds is None
     assert result.weapon_count == expected_count
     assert result.fire_trigger_weapon_count is None
-    assert result.quantity_evidence_kind == "exact_static_gameparams"
+    assert result.quantity_evidence_kind == "exact_static_splash_curve"
     assert result.quantity_is_exact is True
 
 
 @pytest.mark.parametrize(
     ("weapon_id", "destroy_count", "fire_count"),
     [
-        ("us_500lb_mk_82_ldgp", 28, 25),
-        ("su_fab_500m_62t", 10, 9),
+        ("us_500lb_mk_82_ldgp", 11, 10),
+        ("su_fab_500m_62t", 5, 4),
     ],
 )
-def test_other_he_bombs_use_the_same_static_tnt_conversion(
+def test_other_he_bombs_use_the_same_splash_curve(
     weapon_id: str,
     destroy_count: int,
     fire_count: int,
@@ -130,9 +130,10 @@ def test_other_he_bombs_use_the_same_static_tnt_conversion(
     assert result.weapon_count == destroy_count
     assert result.fire_trigger_weapon_count == fire_count
     assert result.quantity_is_exact is True
+    assert result.quantity_evidence_kind == "exact_static_splash_curve"
 
 
-def test_air_to_ground_rockets_and_missiles_use_the_same_static_tnt_conversion() -> None:
+def test_air_to_ground_rockets_and_missiles_use_the_splash_curve() -> None:
     calculator = StrikeDamageCalculator(load_strike_encyclopedia())
     hydra = calculator.calculate(
         room_max_br=14.7,
@@ -148,12 +149,14 @@ def test_air_to_ground_rockets_and_missiles_use_the_same_static_tnt_conversion()
     )
 
     assert hydra.quantity_is_exact is True
-    assert hydra.weapon_count == 2716
+    assert hydra.reduced_for_armor is True
+    assert hydra.weapon_count == 246
     assert maverick.quantity_is_exact is True
-    assert maverick.weapon_count == 64
+    assert maverick.reduced_for_armor is False
+    assert maverick.weapon_count == 17
 
 
-def test_weapons_without_explosive_mass_stay_native_unknown() -> None:
+def test_nuclear_yield_destroys_high_tier_base_in_one_hit() -> None:
     result = StrikeDamageCalculator(load_strike_encyclopedia()).calculate(
         room_max_br=14.7,
         target_kind="bombing_point",
@@ -161,12 +164,14 @@ def test_weapons_without_explosive_mass_stay_native_unknown() -> None:
         weapon_id="us_b61_5kt",
     )
 
-    assert result.weapon_count is None
-    assert result.quantity_is_exact is False
-    assert result.quantity_evidence_kind == "native_unknown"
+    assert result.weapon_count == 1
+    assert result.fire_trigger_weapon_count == 1
+    assert result.quantity_is_exact is True
+    assert result.quantity_evidence_kind == "exact_static_nuclear_yield"
+    assert result.damage_per_hit_mission_hp == pytest.approx(200_000.0)
 
 
-def test_napalm_does_not_use_the_tnt_equivalent_bombing_zone_formula() -> None:
+def test_napalm_uses_splash_and_fire_inputs() -> None:
     result = StrikeDamageCalculator(load_strike_encyclopedia()).calculate(
         room_max_br=14.7,
         target_kind="bombing_point",
@@ -174,11 +179,11 @@ def test_napalm_does_not_use_the_tnt_equivalent_bombing_zone_formula() -> None:
         weapon_id="us_500lb_mk77_mod4",
     )
 
-    assert result.weapon_count is None
-    assert result.fire_trigger_weapon_count is None
-    assert result.damage_per_hit_mission_hp is None
-    assert result.quantity_evidence_kind == "native_unknown"
-    assert result.quantity_is_exact is False
+    assert result.damage_per_hit_mission_hp == pytest.approx(10_860.0)
+    assert result.weapon_count == 3
+    assert result.fire_trigger_weapon_count == 3
+    assert result.quantity_evidence_kind == "exact_static_napalm_splash_fire"
+    assert result.quantity_is_exact is True
 
 
 def test_airport_repair_formula_reports_hp_per_visit_and_stops_at_both_boundaries() -> None:
@@ -190,6 +195,19 @@ def test_airport_repair_formula_reports_hp_per_visit_and_stops_at_both_boundarie
     assert airport_repair_per_visit(tier, dwelling_remaining_hp=1.0) == pytest.approx(400.0)
     assert airport_repair_per_visit(tier, dwelling_remaining_hp=79_999.0) == pytest.approx(2_000.0)
     assert airport_repair_per_visit(tier, dwelling_remaining_hp=159_999.0) == pytest.approx(4_000.0)
+
+
+def test_warheads_without_splash_inputs_stay_native_unknown() -> None:
+    result = StrikeDamageCalculator(load_strike_encyclopedia()).calculate(
+        room_max_br=14.7,
+        target_kind="bombing_point",
+        mission_mode="planes",
+        weapon_id="jp_ki_148_i_go_1b_event_broken_warhead",
+    )
+
+    assert result.weapon_count is None
+    assert result.quantity_is_exact is False
+    assert result.quantity_evidence_kind == "native_unknown"
 
 
 def test_unknown_weapon_is_rejected_instead_of_fabricating_damage() -> None:

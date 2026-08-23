@@ -6,10 +6,13 @@ const brSelect = document.querySelector("#calcBr");
 const targetSelect = document.querySelector("#calcTarget");
 const kindSelect = document.querySelector("#calcKind");
 const searchInput = document.querySelector("#calcSearch");
-const weaponSelect = document.querySelector("#calcWeapon");
-const metaEl = document.querySelector("#calcMeta");
-const titleEl = document.querySelector("#calcTitle");
-const detailEl = document.querySelector("#calcDetail");
+const weaponList = document.querySelector("#calcWeaponList");
+const hudContext = document.querySelector("#calcHudContext");
+const destroyCountEl = document.querySelector("#calcDestroyCount");
+const destroyLabelEl = document.querySelector("#calcDestroyLabel");
+const fireLineEl = document.querySelector("#calcFireLine");
+const statsEl = document.querySelector("#calcStats");
+const hintEl = document.querySelector("#calcHint");
 
 const KIND_LABELS = {
   bomb: "炸弹",
@@ -19,13 +22,10 @@ const KIND_LABELS = {
 
 let catalog = null;
 let visibleWeapons = [];
+let selectedWeaponId = defaultWeaponId;
 
 function requiredCount(hp, damage) {
   return Math.max(1, Math.ceil(hp / damage - 1e-9));
-}
-
-function missionHpFromTnte(tnteKg, hpToTntTons) {
-  return tnteKg / (hpToTntTons * 1000);
 }
 
 function formatInt(value) {
@@ -69,7 +69,9 @@ function matchingWeapons() {
 }
 
 function selectedWeapon() {
-  return visibleWeapons.find((weapon) => weapon.id === weaponSelect.value) || visibleWeapons[0];
+  return (
+    visibleWeapons.find((weapon) => weapon.id === selectedWeaponId) || visibleWeapons[0] || null
+  );
 }
 
 function selectedTarget() {
@@ -94,20 +96,111 @@ function targetHp(target, rank) {
   return target.module === "airfield" ? tier.runway_mission_hp : tier.auxiliary_module_mission_hp;
 }
 
-function refreshWeapons() {
-  const previous = weaponSelect.value || defaultWeaponId;
-  visibleWeapons = matchingWeapons();
-  fillSelect(
-    weaponSelect,
-    visibleWeapons,
-    (weapon) => weapon.id,
-    (weapon) => `${weapon.name_zh}  ·  ${KIND_LABELS[weapon.kind]}  ·  ${weapon.id}`,
-    previous,
-  );
-  if (visibleWeapons.length && !visibleWeapons.some((weapon) => weapon.id === weaponSelect.value)) {
-    weaponSelect.value = visibleWeapons[0].id;
+function interpolate(points, value) {
+  if (!points || points.length < 2) {
+    return 0;
   }
+  if (value <= points[0][0]) {
+    return points[0][1];
+  }
+  if (value >= points[points.length - 1][0]) {
+    return points[points.length - 1][1];
+  }
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const [x0, y0] = points[index];
+    const [x1, y1] = points[index + 1];
+    if (value >= x0 && value <= x1) {
+      if (x1 === x0) {
+        return y1;
+      }
+      return y0 + ((value - x0) * (y1 - y0)) / (x1 - x0);
+    }
+  }
+  return points[points.length - 1][1];
+}
+
+function rewardUi(totalDamage) {
+  const reward = catalog.reward;
+  if (!reward || totalDamage <= 0) {
+    return null;
+  }
+  const floor = reward.piecewise_linear[0][0];
+  let multiplier;
+  if (totalDamage >= floor) {
+    multiplier = interpolate(reward.piecewise_linear, totalDamage);
+  } else {
+    const span = reward.preset_dmg_max - reward.preset_dmg_min;
+    const scale =
+      1 + ((reward.bombing_reward_modifier - 1) * (totalDamage - reward.preset_dmg_min)) / span;
+    multiplier = Math.min((scale * reward.preset_dmg_min) / totalDamage, 1);
+  }
+  return multiplier * reward.ui_decoration;
+}
+
+function appendStat(label, value) {
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const detail = document.createElement("dd");
+  detail.textContent = value;
+  statsEl.append(term, detail);
+}
+
+function renderWeaponList() {
+  weaponList.replaceChildren();
+  if (!visibleWeapons.length) {
+    const empty = document.createElement("p");
+    empty.className = "hangar-weapon-empty";
+    empty.textContent = "没有匹配的武器";
+    weaponList.append(empty);
+    return;
+  }
+  for (const weapon of visibleWeapons) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "hangar-weapon";
+    button.setAttribute("role", "option");
+    button.dataset.weaponId = weapon.id;
+    const selected = weapon.id === selectedWeaponId;
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+    if (selected) {
+      button.classList.add("is-selected");
+    }
+    const name = document.createElement("span");
+    name.className = "hangar-weapon-name";
+    name.textContent = weapon.name_zh || weapon.name;
+    const kind = document.createElement("span");
+    kind.className = "hangar-weapon-kind";
+    kind.textContent = KIND_LABELS[weapon.kind] || weapon.kind;
+    button.append(name, kind);
+    button.addEventListener("click", () => {
+      selectedWeaponId = weapon.id;
+      renderWeaponList();
+      refreshResult();
+    });
+    weaponList.append(button);
+  }
+  const active = weaponList.querySelector(".is-selected");
+  if (active && typeof active.scrollIntoView === "function") {
+    active.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function refreshWeapons() {
+  visibleWeapons = matchingWeapons();
+  if (visibleWeapons.length && !visibleWeapons.some((weapon) => weapon.id === selectedWeaponId)) {
+    selectedWeaponId = visibleWeapons[0].id;
+  }
+  renderWeaponList();
   refreshResult();
+}
+
+function setHudUnknown(context, hint) {
+  hudContext.textContent = context;
+  destroyCountEl.textContent = "—";
+  destroyLabelEl.textContent = "无法估算";
+  fireLineEl.textContent = "";
+  statsEl.replaceChildren();
+  hintEl.textContent = hint;
 }
 
 function refreshResult() {
@@ -117,60 +210,51 @@ function refreshResult() {
   const weapon = selectedWeapon();
   const target = selectedTarget();
   const br = brSelect.value;
-  const rank = balanceLevel(br);
   if (!weapon || !target) {
-    titleEl.textContent = "没有匹配的武器";
-    detailEl.textContent = "换一个搜索词，或把种类改回全部。";
+    setHudUnknown("没有匹配的武器", "换一个搜索词，或把种类改回全部。");
     return;
   }
+  const rank = balanceLevel(br);
   const hp = targetHp(target, rank);
-  metaEl.textContent = `${catalog.app_version} · ${visibleWeapons.length} / ${catalog.weapons.length} 种武器`;
-
-  if (weapon.model !== "tnt_equivalent") {
-    titleEl.textContent = "所需枚数：原生未知";
-    const reason =
-      weapon.model === "unsupported_napalm"
-        ? "燃烧弹 / napalm 不走 HP↔TNT 当量公式。"
-        : "该武器没有可用的 explosiveMass 与 strengthEquivalent。";
-    detailEl.textContent = [
-      `${weapon.name_zh} · ${weapon.id}`,
-      `房间最高 BR ${br} → maxRank ${rank}`,
-      `目标满血：${formatInt(hp)} mission_hp`,
-      reason,
-    ].join("\n");
+  const context = `${target.label}  ·  BR ${br}`;
+  if (!(weapon.hangar_damage > 0)) {
+    setHudUnknown(
+      context,
+      `${weapon.name_zh || weapon.name} 暂时算不出对战区伤害。`,
+    );
     return;
   }
 
-  const tnte = weapon.explosive_mass_kg * weapon.strength_equivalent;
-  const damage = missionHpFromTnte(tnte, catalog.hp_to_tnt_equivalent_tons);
+  const damage = weapon.hangar_damage;
   const destroyCount = requiredCount(hp, damage);
-  let title = `摧毁：${destroyCount} 枚`;
-  const lines = [
-    `${weapon.name_zh} · ${weapon.id}`,
-    `房间最高 BR ${br} → maxRank ${rank}`,
-    `目标满血：${formatInt(hp)} mission_hp（静态精确）`,
-    `满额命中每枚 ${damage.toFixed(2)} mission_hp（${weapon.explosive_mass_kg} kg × ${weapon.strength_equivalent} TNT 当量，1 kg TNT = 8 HP）`,
-  ];
+  hudContext.textContent = context;
+  destroyCountEl.textContent = String(destroyCount);
+  destroyLabelEl.textContent = "摧毁所需";
+  statsEl.replaceChildren();
+  appendStat("武器", weapon.name_zh || weapon.name);
+  appendStat("每枚伤害", formatInt(damage));
+  appendStat("目标耐久", formatInt(hp));
+  const total = damage * destroyCount;
+  const reward = rewardUi(total);
+  if (reward !== null) {
+    appendStat("收益系数", reward.toFixed(1));
+  }
+
   if (target.has_fire) {
     const fireHp = hp * (1 - catalog.hp_fire_mult);
     const fireCount = requiredCount(fireHp, damage);
-    title = `摧毁：${destroyCount} 枚 · 触发燃烧：${fireCount} 枚`;
-    lines.push(
-      `战区燃烧参考：直接造成 ${formatInt(fireHp)} HP（90%）后触发；约 3 秒燃尽仅为参数推断。`,
-    );
+    fireLineEl.textContent = `点燃 ${fireCount} 枚`;
+    hintEl.textContent = "打到大约九成会起火。数字是满额命中。";
   } else {
-    lines.push("机场模块未发现 90% 后燃烧自毁逻辑；必须按满血直接伤害计算。");
+    fireLineEl.textContent = "";
+    hintEl.textContent = "机场会回血，连续投弹时可能要多带几枚。";
   }
-  lines.push("这是满额命中当量，不是距离衰减的溅射曲线。");
-  titleEl.textContent = title;
-  detailEl.textContent = lines.join("\n");
 }
 
 async function boot() {
   const response = await fetch(catalogUrl, { headers: { Accept: "application/json" } });
   if (!response.ok) {
-    titleEl.textContent = "目录加载失败";
-    detailEl.textContent = "请稍后刷新页面。";
+    setHudUnknown("目录加载失败", "请稍后刷新页面。");
     return;
   }
   catalog = await response.json();
@@ -185,10 +269,30 @@ async function boot() {
   refreshWeapons();
 }
 
+weaponList.addEventListener("keydown", (event) => {
+  if (!visibleWeapons.length) {
+    return;
+  }
+  const index = Math.max(
+    0,
+    visibleWeapons.findIndex((weapon) => weapon.id === selectedWeaponId),
+  );
+  if (event.key === "ArrowDown" && index < visibleWeapons.length - 1) {
+    event.preventDefault();
+    selectedWeaponId = visibleWeapons[index + 1].id;
+    renderWeaponList();
+    refreshResult();
+  } else if (event.key === "ArrowUp" && index > 0) {
+    event.preventDefault();
+    selectedWeaponId = visibleWeapons[index - 1].id;
+    renderWeaponList();
+    refreshResult();
+  }
+});
+
 brSelect.addEventListener("change", refreshResult);
 targetSelect.addEventListener("change", refreshResult);
 kindSelect.addEventListener("change", refreshWeapons);
 searchInput.addEventListener("input", refreshWeapons);
-weaponSelect.addEventListener("change", refreshResult);
 
 boot();

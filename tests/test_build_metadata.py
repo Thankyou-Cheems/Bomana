@@ -43,6 +43,7 @@ def write_shared_app_runtime_assets(root: Path) -> None:
     for relative_path in (
         Path("bomana/core/strike_encyclopedia.py"),
         Path("bomana/core/strike_damage_calculator.py"),
+        Path("bomana/core/hangar_base_damage.py"),
         Path("bomana/ui/strike_encyclopedia.py"),
     ):
         path = root / relative_path
@@ -53,6 +54,7 @@ def write_shared_app_runtime_assets(root: Path) -> None:
     (data_dir / "ec_airfield_catalog.json").write_text("{}\n", encoding="utf-8")
     (data_dir / "strike_encyclopedia.json").write_text("{}\n", encoding="utf-8")
     (data_dir / "strike_weapon_damage.json").write_text("{}\n", encoding="utf-8")
+    (data_dir / "bombing_zone_splash.json").write_text("{}\n", encoding="utf-8")
 
 
 def source_closure(root: Path) -> frozenset[str]:
@@ -160,8 +162,10 @@ def test_app_package_bundles_zero_install_hotkey_broker_and_checksum(tmp_path: P
         assert "bomana/data/ec_airfield_catalog.json" in archive.namelist()
         assert "bomana/data/strike_encyclopedia.json" in archive.namelist()
         assert "bomana/data/strike_weapon_damage.json" in archive.namelist()
+        assert "bomana/data/bombing_zone_splash.json" in archive.namelist()
         assert "bomana/core/strike_encyclopedia.py" in archive.namelist()
         assert "bomana/core/strike_damage_calculator.py" in archive.namelist()
+        assert "bomana/core/hangar_base_damage.py" in archive.namelist()
         assert "bomana/ui/strike_encyclopedia.py" in archive.namelist()
         checksum = archive.read("bomana/bin/BomanaHotkeyBroker.sha256").decode("ascii")
         assert checksum == f"{build_portable.sha256_file(broker)}  BomanaHotkeyBroker.exe\n"
@@ -300,14 +304,21 @@ def test_public_app_packages_omit_subscriber_closure(tmp_path: Path, variant: st
         assert "bomana/data/ec_airfield_catalog.json" in names
         assert "bomana/data/strike_encyclopedia.json" in names
         assert "bomana/data/strike_weapon_damage.json" in names
+        assert "bomana/data/bombing_zone_splash.json" in names
         assert "bomana/core/strike_encyclopedia.py" in names
         assert "bomana/core/strike_damage_calculator.py" in names
+        assert "bomana/core/hangar_base_damage.py" in names
         assert "bomana/ui/strike_encyclopedia.py" in names
 
 
 @pytest.mark.parametrize(
     "missing_name",
-    ["ec_airfield_catalog.json", "strike_encyclopedia.json", "strike_weapon_damage.json"],
+    [
+        "ec_airfield_catalog.json",
+        "strike_encyclopedia.json",
+        "strike_weapon_damage.json",
+        "bombing_zone_splash.json",
+    ],
 )
 def test_public_app_package_rejects_missing_encyclopedia_asset(
     tmp_path: Path, missing_name: str

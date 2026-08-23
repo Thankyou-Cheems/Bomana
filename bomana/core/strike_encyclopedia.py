@@ -11,9 +11,16 @@ from pathlib import Path
 from typing import Any
 
 from bomana.config.static_data import (
+    BOMBING_ZONE_SPLASH_JSON,
     EC_AIRFIELD_CATALOG_JSON,
     STRIKE_ENCYCLOPEDIA_JSON,
     STRIKE_WEAPON_DAMAGE_JSON,
+)
+from bomana.core.hangar_base_damage import (
+    BombingZoneSplashModel,
+    HangarBaseDamageError,
+    HangarDamageInputs,
+    load_splash_model,
 )
 from bomana.utils.file_utils import resource_path
 
@@ -22,8 +29,9 @@ _WEAPON_CATALOG_SCHEMA = "bomana_strike_weapon_damage/v1"
 _CATALOG_SCHEMA = "wt_ec_airfield_template/v1"
 _WEAPON_KINDS = {"bomb", "rocket", "missile"}
 _WEAPON_DAMAGE_MODELS = {
-    "tnt_equivalent",
-    "unsupported_napalm",
+    "splash_tnte_curve",
+    "napalm_splash_fire",
+    "nuclear_yield",
     "native_unknown",
 }
 _KIND_LABELS = {
@@ -100,11 +108,30 @@ class WeaponReference:
     tnte_reference_kg: float | None
     strength_equivalent: float
     mission_damage_model: str
+    splash_damage: float | None
+    splash_penetration: float | None
+    splash_damage_type: str
+    fire_damage: float | None
+    fire_life_time: float | None
+    nuclear_yield_kt: float | None
 
     @property
     def calculator_label(self) -> str:
         name = self.display_name_zh or self.display_name
         return f"{name}  ·  {self.weapon_id}"
+
+    def hangar_inputs(self) -> HangarDamageInputs:
+        return HangarDamageInputs(
+            explosive_mass_kg=self.raw_explosive_mass_kg,
+            strength_equivalent=self.strength_equivalent,
+            splash_damage=self.splash_damage,
+            splash_penetration=self.splash_penetration,
+            splash_damage_type=self.splash_damage_type,
+            fire_damage=self.fire_damage,
+            fire_life_time=self.fire_life_time,
+            nuclear_yield_kt=self.nuclear_yield_kt,
+            mission_damage_model=self.mission_damage_model,
+        )
 
 
 @dataclass(frozen=True)
@@ -164,6 +191,7 @@ class StrikeEncyclopedia:
     bombing_point_behavior: BombingPointBehavior
     airport_behavior: AirportBehavior
     bombing_zone_tnt_conversion: BombingZoneTntConversion
+    bombing_zone_splash: BombingZoneSplashModel
     weapon_references: tuple[WeaponReference, ...]
     practical_references: tuple[PracticalReference, ...]
     airfield_layouts: tuple[AirfieldLayout, ...]
@@ -211,6 +239,12 @@ def _number(value: object, label: str, *, positive: bool = True) -> float:
     if not math.isfinite(result) or (positive and result <= 0.0):
         raise StrikeEncyclopediaError(f"invalid_{label}")
     return result
+
+
+def _optional_number(value: object, label: str) -> float | None:
+    if value is None:
+        return None
+    return _number(value, label, positive=False)
 
 
 def _boolean(value: object, label: str) -> bool:
@@ -348,6 +382,12 @@ def _load_weapon_reference(item: object) -> WeaponReference:
             positive=False,
         ),
         mission_damage_model=_text(raw.get("mission_damage_model"), "mission_damage_model"),
+        splash_damage=_optional_number(raw.get("splash_damage"), "splash_damage"),
+        splash_penetration=_optional_number(raw.get("splash_penetration"), "splash_penetration"),
+        splash_damage_type=_optional_text(raw.get("splash_damage_type"), "splash_damage_type"),
+        fire_damage=_optional_number(raw.get("fire_damage"), "fire_damage"),
+        fire_life_time=_optional_number(raw.get("fire_life_time"), "fire_life_time"),
+        nuclear_yield_kt=_optional_number(raw.get("nuclear_yield_kt"), "nuclear_yield_kt"),
     )
 
 
@@ -474,6 +514,18 @@ def load_strike_encyclopedia(
     actual_weapon_hash = _sha256_text(weapon_catalog_source)
     if actual_weapon_hash != expected_weapon_hash:
         raise StrikeEncyclopediaError("weapon_catalog_hash_mismatch")
+    splash_rel = _text(provenance.get("splash_model", ""), "splash_model")
+    if splash_rel != BOMBING_ZONE_SPLASH_JSON:
+        raise StrikeEncyclopediaError("invalid_splash_model")
+    splash_source = _source_path(BOMBING_ZONE_SPLASH_JSON, None)
+    expected_splash_hash = provenance.get("splash_model_sha256", "").upper()
+    actual_splash_hash = _sha256_text(splash_source)
+    if actual_splash_hash != expected_splash_hash:
+        raise StrikeEncyclopediaError("splash_model_hash_mismatch")
+    try:
+        bombing_zone_splash = load_splash_model(_load_json(splash_source, "splash_model"))
+    except HangarBaseDamageError as exc:
+        raise StrikeEncyclopediaError("invalid_splash_model") from exc
     weapon_catalog = _load_json(weapon_catalog_source, "weapon_catalog")
     if weapon_catalog.get("schema") != _WEAPON_CATALOG_SCHEMA:
         raise StrikeEncyclopediaError("unsupported_weapon_catalog_schema")
@@ -518,6 +570,7 @@ def load_strike_encyclopedia(
         bombing_point_behavior=bombing_point_behavior,
         airport_behavior=airport_behavior,
         bombing_zone_tnt_conversion=bombing_zone_tnt_conversion,
+        bombing_zone_splash=bombing_zone_splash,
         weapon_references=weapon_references,
         practical_references=practical_references,
         airfield_layouts=_load_airfield_layouts(catalog),

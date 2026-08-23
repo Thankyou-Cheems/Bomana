@@ -56,19 +56,24 @@ def test_default_encyclopedia_exposes_source_backed_zone_tiers_and_four_layouts(
     assert encyclopedia.bombing_zone_tnt_conversion.hp_to_tnt_equivalent_tons == pytest.approx(
         0.000125
     )
+    assert encyclopedia.bombing_zone_splash.armor_thickness_mm == pytest.approx(25.0)
+    assert encyclopedia.bombing_zone_splash.restrain_explosion_damage == pytest.approx(0.6)
+    assert encyclopedia.bombing_zone_splash.napalm_damage_mult == pytest.approx(13.0)
     mk83 = next(
         weapon
         for weapon in encyclopedia.weapon_references
         if weapon.weapon_id == "us_1000lb_mk_83_ldgp"
     )
     assert mk83.strength_equivalent == pytest.approx(1.35)
-    assert mk83.mission_damage_model == "tnt_equivalent"
+    assert mk83.mission_damage_model == "splash_tnte_curve"
     mk77 = next(
         weapon
         for weapon in encyclopedia.weapon_references
         if weapon.weapon_id == "us_500lb_mk77_mod4"
     )
-    assert mk77.mission_damage_model == "unsupported_napalm"
+    assert mk77.mission_damage_model == "napalm_splash_fire"
+    assert mk77.splash_damage == pytest.approx(14_500.0)
+    assert mk77.fire_life_time == pytest.approx(30.0)
     weapon_ids = {weapon.weapon_id for weapon in encyclopedia.weapon_references}
     assert len(encyclopedia.weapon_references) == 643
     assert "us_hydra_70_m247" in weapon_ids

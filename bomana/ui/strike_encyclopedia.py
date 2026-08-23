@@ -364,7 +364,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         ).pack(anchor="w", padx=12)
         self._label(
             reference_card,
-            "这是旧攻略参考。数量计算器已改用当前桌面 gameparams 的 HP↔TNT 当量。",
+            "这是旧攻略参考。当前溅射公式对高阶战区 Mk 83 满额摧毁也是 6 枚，但 Wiki 仍不是公式来源。",
             size=8,
             fg=Theme.TEXT_MUTED,
             bg=Theme.BG,
@@ -389,7 +389,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         self._label(
             page,
             "选择战局房间允许的最高 BR；不要填写当前出击载具的 BR。"
-            "可搜索全部空战对地武器。普通高爆装药按桌面 HP↔TNT 当量给出精确枚数（满额命中）。",
+            "可搜索全部空战对地武器。对战区伤害按大厅溅射公式自动计算，不是逐条手抄。",
             size=9,
             fg=Theme.YELLOW,
             bg=Theme.GRAYPILL,
@@ -626,7 +626,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
                 weapon_id=self.calculator_weapon_id,
                 dwelling_remaining_hp=dwelling_hp,
             )
-        except KeyError, ValueError, StrikeDamageCalculatorError:
+        except (KeyError, ValueError, StrikeDamageCalculatorError):
             self.calculator_result_title_var.set("输入值无效")
             self.calculator_result_detail_var.set(
                 "生活区剩余 HP 必须在当前档辅助模块的 0 到满血之间。"
@@ -672,15 +672,23 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
                 )
         if result.damage_per_hit_mission_hp is not None:
             details.append(
-                f"满额命中每枚 {result.damage_per_hit_mission_hp:,.2f} mission_hp"
-                f"（{result.weapon.raw_explosive_mass_kg:g} kg × "
-                f"{result.weapon.strength_equivalent:g} TNT 当量，"
-                "gameparams 1 kg TNT = 8 HP）。"
+                f"大厅对战区预估伤害：每枚 {result.damage_per_hit_mission_hp:,.2f}"
             )
+            if result.weapon.mission_damage_model == "splash_tnte_curve":
+                details.append(
+                    f"输入 TNT 当量 {result.weapon.raw_explosive_mass_kg:g} kg × "
+                    f"{result.weapon.strength_equivalent:g}"
+                    + ("；穿深不足 25 mm，已乘 restrain=0.6。" if result.reduced_for_armor else "。")
+                )
+            if result.hangar_reward_ui_for_destroy is not None and result.weapon_count:
+                details.append(
+                    f"若只用这一种武器凑满摧毁枚数，攻击机大厅收益系数约 "
+                    f"{result.hangar_reward_ui_for_destroy:.1f}（战斗机再 ×0.8）。"
+                )
         details.extend(
             (
                 result.quantity_message,
-                "官方 Wiki「约6枚 Mk 83」是旧攻略参考，计算器不再用它代替静态换算。",
+                "官方 Wiki「约6枚 Mk 83」与当前高阶战区满额摧毁枚数一致，仍不是公式来源。",
             )
         )
         self.calculator_result_title_var.set(title)
