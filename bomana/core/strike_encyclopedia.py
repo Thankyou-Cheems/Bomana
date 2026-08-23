@@ -50,6 +50,29 @@ class AirportDurabilityTier:
 
 
 @dataclass(frozen=True)
+class BombingPointBehavior:
+    hp_fire_mult: float
+    fire_speed: float
+    depletion_seconds_reference: float
+    fire_tail_evidence_kind: str
+    respawn_seconds: float
+    respawn_evidence_kind: str
+
+
+@dataclass(frozen=True)
+class AirportBehavior:
+    has_fire_tail: bool
+    repair_timing_kind: str
+    repair_evidence_kind: str
+
+
+@dataclass(frozen=True)
+class BombingZoneTntConversion:
+    hp_to_tnt_equivalent_tons: float
+    evidence_kind: str
+
+
+@dataclass(frozen=True)
 class WeaponReference:
     weapon_id: str
     display_name: str
@@ -57,6 +80,8 @@ class WeaponReference:
     explosive_type: str
     raw_explosive_mass_kg: float
     tnte_reference_kg: float | None
+    strength_equivalent: float
+    mission_damage_model: str
 
 
 @dataclass(frozen=True)
@@ -113,6 +138,9 @@ class StrikeEncyclopedia:
     provenance: Mapping[str, str]
     bombing_point_tiers: tuple[BombingPointDurabilityTier, ...]
     airport_tiers: tuple[AirportDurabilityTier, ...]
+    bombing_point_behavior: BombingPointBehavior
+    airport_behavior: AirportBehavior
+    bombing_zone_tnt_conversion: BombingZoneTntConversion
     weapon_references: tuple[WeaponReference, ...]
     practical_references: tuple[PracticalReference, ...]
     airfield_layouts: tuple[AirfieldLayout, ...]
@@ -146,6 +174,12 @@ def _number(value: object, label: str, *, positive: bool = True) -> float:
     if not math.isfinite(result) or (positive and result <= 0.0):
         raise StrikeEncyclopediaError(f"invalid_{label}")
     return result
+
+
+def _boolean(value: object, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise StrikeEncyclopediaError(f"invalid_{label}")
+    return value
 
 
 def _balance_range(value: object) -> tuple[int, int]:
@@ -287,6 +321,44 @@ def load_strike_encyclopedia(
         for item in _list(payload.get("airport_tiers"), "airport_tiers", exact=6)
         for raw in (_mapping(item, "airport_tier"),)
     )
+    bombing_behavior_raw = _mapping(payload.get("bombing_point_behavior"), "bombing_point_behavior")
+    bombing_point_behavior = BombingPointBehavior(
+        hp_fire_mult=_number(bombing_behavior_raw.get("hp_fire_mult"), "hp_fire_mult"),
+        fire_speed=_number(bombing_behavior_raw.get("fire_speed"), "fire_speed"),
+        depletion_seconds_reference=_number(
+            bombing_behavior_raw.get("depletion_seconds_reference"),
+            "depletion_seconds_reference",
+        ),
+        fire_tail_evidence_kind=_text(
+            bombing_behavior_raw.get("fire_tail_evidence_kind"),
+            "fire_tail_evidence_kind",
+        ),
+        respawn_seconds=_number(bombing_behavior_raw.get("respawn_seconds"), "respawn_seconds"),
+        respawn_evidence_kind=_text(
+            bombing_behavior_raw.get("respawn_evidence_kind"),
+            "respawn_evidence_kind",
+        ),
+    )
+    airport_behavior_raw = _mapping(payload.get("airport_behavior"), "airport_behavior")
+    airport_behavior = AirportBehavior(
+        has_fire_tail=_boolean(airport_behavior_raw.get("has_fire_tail"), "has_fire_tail"),
+        repair_timing_kind=_text(
+            airport_behavior_raw.get("repair_timing_kind"), "repair_timing_kind"
+        ),
+        repair_evidence_kind=_text(
+            airport_behavior_raw.get("repair_evidence_kind"), "repair_evidence_kind"
+        ),
+    )
+    conversion_raw = _mapping(
+        payload.get("bombing_zone_tnt_conversion"), "bombing_zone_tnt_conversion"
+    )
+    bombing_zone_tnt_conversion = BombingZoneTntConversion(
+        hp_to_tnt_equivalent_tons=_number(
+            conversion_raw.get("hp_to_tnt_equivalent_tons"),
+            "hp_to_tnt_equivalent_tons",
+        ),
+        evidence_kind=_text(conversion_raw.get("evidence_kind"), "conversion_evidence_kind"),
+    )
     weapon_references = tuple(
         WeaponReference(
             weapon_id=_text(raw.get("weapon_id"), "weapon_id"),
@@ -301,10 +373,17 @@ def load_strike_encyclopedia(
                 if raw.get("tnte_reference_kg") is None
                 else _number(raw.get("tnte_reference_kg"), "tnte_reference_kg")
             ),
+            strength_equivalent=_number(raw.get("strength_equivalent"), "strength_equivalent"),
+            mission_damage_model=_text(raw.get("mission_damage_model"), "mission_damage_model"),
         )
         for item in _list(payload.get("weapon_references"), "weapon_references")
         for raw in (_mapping(item, "weapon_reference"),)
     )
+    if any(
+        weapon.mission_damage_model not in {"tnt_equivalent", "unsupported_napalm"}
+        for weapon in weapon_references
+    ):
+        raise StrikeEncyclopediaError("invalid_mission_damage_model")
     practical_references = tuple(
         PracticalReference(
             reference_id=_text(raw.get("reference_id"), "reference_id"),
@@ -329,6 +408,9 @@ def load_strike_encyclopedia(
         provenance=provenance,
         bombing_point_tiers=bombing_point_tiers,
         airport_tiers=airport_tiers,
+        bombing_point_behavior=bombing_point_behavior,
+        airport_behavior=airport_behavior,
+        bombing_zone_tnt_conversion=bombing_zone_tnt_conversion,
         weapon_references=weapon_references,
         practical_references=practical_references,
         airfield_layouts=_load_airfield_layouts(catalog),
@@ -365,8 +447,9 @@ def project_airfield_scene(layout: AirfieldLayout, *, width: int, height: int) -
     cosine, sine = math.cos(angle), math.sin(angle)
 
     def rotate(point: tuple[float, float]) -> tuple[float, float]:
-        x, z = point[0] - center_x, point[1] - center_z
-        return x * cosine - z * sine, x * sine + z * cosine
+        x = point[0] - center_x
+        screen_y = center_z - point[1]
+        return x * cosine - screen_y * sine, x * sine + screen_y * cosine
 
     rotated = [(module, tuple(rotate(point) for point in points)) for module, points in raw_shapes]
     rotated_points = [point for _, points in rotated for point in points]
@@ -410,7 +493,9 @@ __all__ = [
     "AirfieldLayout",
     "AirfieldScene",
     "AirportDurabilityTier",
+    "AirportBehavior",
     "BombingPointDurabilityTier",
+    "BombingPointBehavior",
     "ModuleGeometry",
     "PracticalReference",
     "SceneShape",

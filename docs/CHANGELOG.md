@@ -13,6 +13,30 @@ implementation history.
   packaged runtime keys are checked against the same contract so existing
   subscription sessions are not blocked by an accidental key replacement.
 
+## [8.7.15]
+
+### Added
+
+- The strike encyclopedia now includes an exact weapon-count calculator for
+  ordinary HE bombs. Counts use the desktop `gameparams` HP-to-TNT coefficient
+  (`1 kg TNT = 8 mission HP`) and `explosive.blkx` strength equivalents.
+- High-tier air EC bases: Mk 83 needs 12 bombs to destroy and 11 to trigger
+  the 90% fire tail; Mk 82 is 28 / 25; FAB-500M-62 is 10 / 9.
+
+### Fixed
+
+- Corrected the north-up handedness of encyclopedia airport diagrams so module
+  left/right matches the navigation map.
+
+### Boundaries
+
+- Napalm weapons such as Mk 77 stay unlabeled; the calculator does not invent a
+  TNT count for them.
+- The official Wiki "about six Mk 83" note remains historical guidance and is
+  not the live formula.
+- Standard, Lite, and the Lite green bundle include the encyclopedia and
+  calculator. They still omit CCRP, strike solving, and Web Cockpit.
+
 ## [8.7.14]
 
 ### Added

@@ -36,7 +36,7 @@ rollback, and incomplete-install recovery for the App 8 / Launcher 3 boundary.
 - `COMPAT-05`: App `8.0.0` and newer MUST reject a launcher identity below
   the shared `3.0.0` protocol floor. Each packaged App release MUST additionally
   carry and enforce its own release-specific Launcher floor before runtime
-  imports; managed App `8.7.14` requires Launcher `3.4.0`.
+  imports; managed App `8.7.15` requires Launcher `3.4.0`.
 - `COMPAT-06`: Launcher `3.0.0` and newer MUST reject an App identity below
   `8.0.0` on every Launcher-owned candidate path.
 - `COMPAT-07`: Launcher bootstrap MUST supply its own strict version through

@@ -42,6 +42,7 @@ EC_AIRFIELD_CATALOG_REL = Path("bomana/data/ec_airfield_catalog.json")
 STRIKE_ENCYCLOPEDIA_REL = Path("bomana/data/strike_encyclopedia.json")
 STRIKE_ENCYCLOPEDIA_MODULES = (
     Path("bomana/core/strike_encyclopedia.py"),
+    Path("bomana/core/strike_damage_calculator.py"),
     Path("bomana/ui/strike_encyclopedia.py"),
 )
 FEATURE_PROFILE_PATH = Path("bomana/config/feature_profile.py")

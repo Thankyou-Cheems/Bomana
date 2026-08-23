@@ -33,6 +33,7 @@ def test_subscriber_source_never_enters_public_artifacts(path: str) -> None:
         "bomana/editions.py",
         "bomana/ui/strike_prediction.py",
         "bomana/core/strike_encyclopedia.py",
+        "bomana/core/strike_damage_calculator.py",
         "bomana/data/strike_encyclopedia.json",
         "bomana/ui/strike_encyclopedia.py",
         "bomana/assets/branding/app.ico",
