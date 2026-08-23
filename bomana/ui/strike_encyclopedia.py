@@ -626,7 +626,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
                 weapon_id=self.calculator_weapon_id,
                 dwelling_remaining_hp=dwelling_hp,
             )
-        except (KeyError, ValueError, StrikeDamageCalculatorError):
+        except KeyError, ValueError, StrikeDamageCalculatorError:
             self.calculator_result_title_var.set("输入值无效")
             self.calculator_result_detail_var.set(
                 "生活区剩余 HP 必须在当前档辅助模块的 0 到满血之间。"
@@ -671,14 +671,16 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
                     f"按输入的生活区剩余 HP，本次 visit 恢复 {result.repair_per_visit:,.1f} HP。"
                 )
         if result.damage_per_hit_mission_hp is not None:
-            details.append(
-                f"大厅对战区预估伤害：每枚 {result.damage_per_hit_mission_hp:,.2f}"
-            )
+            details.append(f"大厅对战区预估伤害：每枚 {result.damage_per_hit_mission_hp:,.2f}")
             if result.weapon.mission_damage_model == "splash_tnte_curve":
                 details.append(
                     f"输入 TNT 当量 {result.weapon.raw_explosive_mass_kg:g} kg × "
                     f"{result.weapon.strength_equivalent:g}"
-                    + ("；穿深不足 25 mm，已乘 restrain=0.6。" if result.reduced_for_armor else "。")
+                    + (
+                        "；穿深不足 25 mm，已乘 restrain=0.6。"
+                        if result.reduced_for_armor
+                        else "。"
+                    )
                 )
             if result.hangar_reward_ui_for_destroy is not None and result.weapon_count:
                 details.append(
