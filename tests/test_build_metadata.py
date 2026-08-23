@@ -52,6 +52,7 @@ def write_shared_app_runtime_assets(root: Path) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     (data_dir / "ec_airfield_catalog.json").write_text("{}\n", encoding="utf-8")
     (data_dir / "strike_encyclopedia.json").write_text("{}\n", encoding="utf-8")
+    (data_dir / "strike_weapon_damage.json").write_text("{}\n", encoding="utf-8")
 
 
 def source_closure(root: Path) -> frozenset[str]:
@@ -158,6 +159,7 @@ def test_app_package_bundles_zero_install_hotkey_broker_and_checksum(tmp_path: P
         assert "bomana/data/visible_trajectory_references.json" not in archive.namelist()
         assert "bomana/data/ec_airfield_catalog.json" in archive.namelist()
         assert "bomana/data/strike_encyclopedia.json" in archive.namelist()
+        assert "bomana/data/strike_weapon_damage.json" in archive.namelist()
         assert "bomana/core/strike_encyclopedia.py" in archive.namelist()
         assert "bomana/core/strike_damage_calculator.py" in archive.namelist()
         assert "bomana/ui/strike_encyclopedia.py" in archive.namelist()
@@ -297,12 +299,16 @@ def test_public_app_packages_omit_subscriber_closure(tmp_path: Path, variant: st
         assert not any(name.startswith("bomana/data/terrain-") for name in names)
         assert "bomana/data/ec_airfield_catalog.json" in names
         assert "bomana/data/strike_encyclopedia.json" in names
+        assert "bomana/data/strike_weapon_damage.json" in names
         assert "bomana/core/strike_encyclopedia.py" in names
         assert "bomana/core/strike_damage_calculator.py" in names
         assert "bomana/ui/strike_encyclopedia.py" in names
 
 
-@pytest.mark.parametrize("missing_name", ["ec_airfield_catalog.json", "strike_encyclopedia.json"])
+@pytest.mark.parametrize(
+    "missing_name",
+    ["ec_airfield_catalog.json", "strike_encyclopedia.json", "strike_weapon_damage.json"],
+)
 def test_public_app_package_rejects_missing_encyclopedia_asset(
     tmp_path: Path, missing_name: str
 ) -> None:

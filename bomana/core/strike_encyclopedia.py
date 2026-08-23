@@ -10,11 +10,27 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from bomana.config.static_data import EC_AIRFIELD_CATALOG_JSON, STRIKE_ENCYCLOPEDIA_JSON
+from bomana.config.static_data import (
+    EC_AIRFIELD_CATALOG_JSON,
+    STRIKE_ENCYCLOPEDIA_JSON,
+    STRIKE_WEAPON_DAMAGE_JSON,
+)
 from bomana.utils.file_utils import resource_path
 
 _SCHEMA = "bomana_strike_encyclopedia/v1"
+_WEAPON_CATALOG_SCHEMA = "bomana_strike_weapon_damage/v1"
 _CATALOG_SCHEMA = "wt_ec_airfield_template/v1"
+_WEAPON_KINDS = {"bomb", "rocket", "missile"}
+_WEAPON_DAMAGE_MODELS = {
+    "tnt_equivalent",
+    "unsupported_napalm",
+    "native_unknown",
+}
+_KIND_LABELS = {
+    "bomb": "炸弹",
+    "rocket": "火箭弹",
+    "missile": "导弹",
+}
 _MODULE_ORDER = ("airfield", "storage", "parking", "dwelling")
 _MODULE_LABELS = {
     "airfield": "跑道",
@@ -75,13 +91,20 @@ class BombingZoneTntConversion:
 @dataclass(frozen=True)
 class WeaponReference:
     weapon_id: str
+    kind: str
     display_name: str
+    display_name_zh: str
     mass_kg: float
     explosive_type: str
     raw_explosive_mass_kg: float
     tnte_reference_kg: float | None
     strength_equivalent: float
     mission_damage_model: str
+
+    @property
+    def calculator_label(self) -> str:
+        name = self.display_name_zh or self.display_name
+        return f"{name}  ·  {self.weapon_id}"
 
 
 @dataclass(frozen=True)
@@ -161,8 +184,22 @@ def _list(value: object, label: str, *, exact: int | None = None) -> list[Any]:
     return value
 
 
+def _weapon_list(value: object, label: str) -> list[Any]:
+    if not isinstance(value, list) or not value or len(value) > 2000:
+        raise StrikeEncyclopediaError(f"invalid_{label}")
+    return value
+
+
 def _text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
+        raise StrikeEncyclopediaError(f"invalid_{label}")
+    return value.strip()
+
+
+def _optional_text(value: object, label: str) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
         raise StrikeEncyclopediaError(f"invalid_{label}")
     return value.strip()
 
@@ -194,6 +231,12 @@ def _balance_range(value: object) -> tuple[int, int]:
 
 def _source_path(relative_path: str, override: str | Path | None) -> Path:
     return Path(override) if override is not None else Path(resource_path(relative_path))
+
+
+def _sha256_text(path: Path) -> str:
+    """Hash file bytes after normalizing Git-checked-out CRLF to LF."""
+
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest().upper()
 
 
 def _load_json(path: Path, label: str) -> Mapping[str, Any]:
@@ -280,6 +323,70 @@ def _load_airfield_layouts(catalog: Mapping[str, Any]) -> tuple[AirfieldLayout, 
     return tuple(layout for _, layout in layouts)
 
 
+def _load_weapon_reference(item: object) -> WeaponReference:
+    raw = _mapping(item, "weapon_reference")
+    return WeaponReference(
+        weapon_id=_text(raw.get("weapon_id"), "weapon_id"),
+        kind=_text(raw.get("kind"), "kind"),
+        display_name=_text(raw.get("display_name"), "display_name"),
+        display_name_zh=_text(raw.get("display_name_zh"), "display_name_zh"),
+        mass_kg=_number(raw.get("mass_kg"), "mass_kg", positive=False),
+        explosive_type=_optional_text(raw.get("explosive_type"), "explosive_type"),
+        raw_explosive_mass_kg=_number(
+            raw.get("raw_explosive_mass_kg"),
+            "raw_explosive_mass_kg",
+            positive=False,
+        ),
+        tnte_reference_kg=(
+            None
+            if raw.get("tnte_reference_kg") is None
+            else _number(raw.get("tnte_reference_kg"), "tnte_reference_kg")
+        ),
+        strength_equivalent=_number(
+            raw.get("strength_equivalent"),
+            "strength_equivalent",
+            positive=False,
+        ),
+        mission_damage_model=_text(raw.get("mission_damage_model"), "mission_damage_model"),
+    )
+
+
+def search_weapon_references(
+    weapons: tuple[WeaponReference, ...],
+    query: str,
+    *,
+    kind: str | None = None,
+) -> tuple[WeaponReference, ...]:
+    """Filter calculator weapons by kind and a case-insensitive name/id query."""
+
+    if kind is not None and kind not in _WEAPON_KINDS:
+        raise StrikeEncyclopediaError("invalid_weapon_kind")
+    needle = " ".join(str(query or "").casefold().split())
+    selected = []
+    for weapon in weapons:
+        if kind is not None and weapon.kind != kind:
+            continue
+        haystack = " ".join(
+            (
+                weapon.weapon_id,
+                weapon.display_name,
+                weapon.display_name_zh,
+                weapon.explosive_type,
+                _KIND_LABELS[weapon.kind],
+            )
+        ).casefold()
+        if needle and needle not in haystack:
+            continue
+        selected.append(weapon)
+    return tuple(selected)
+
+
+def wiki_weapon_samples(weapons: tuple[WeaponReference, ...]) -> tuple[WeaponReference, ...]:
+    """Return the few weapons that still carry an official Wiki TNTe column."""
+
+    return tuple(weapon for weapon in weapons if weapon.tnte_reference_kg is not None)
+
+
 def load_strike_encyclopedia(
     encyclopedia_path: str | Path | None = None,
     airfield_catalog_path: str | Path | None = None,
@@ -296,7 +403,7 @@ def load_strike_encyclopedia(
     provenance_raw = _mapping(payload.get("provenance"), "provenance")
     provenance = {str(key): _text(value, str(key)) for key, value in provenance_raw.items()}
     expected_catalog_hash = provenance.get("airfield_catalog_sha256", "").upper()
-    actual_catalog_hash = hashlib.sha256(catalog_source.read_bytes()).hexdigest().upper()
+    actual_catalog_hash = _sha256_text(catalog_source)
     if actual_catalog_hash != expected_catalog_hash:
         raise StrikeEncyclopediaError("airfield_catalog_hash_mismatch")
 
@@ -359,31 +466,31 @@ def load_strike_encyclopedia(
         ),
         evidence_kind=_text(conversion_raw.get("evidence_kind"), "conversion_evidence_kind"),
     )
+    weapon_catalog_rel = _text(provenance.get("weapon_catalog", ""), "weapon_catalog")
+    if weapon_catalog_rel != STRIKE_WEAPON_DAMAGE_JSON:
+        raise StrikeEncyclopediaError("invalid_weapon_catalog")
+    weapon_catalog_source = _source_path(STRIKE_WEAPON_DAMAGE_JSON, None)
+    expected_weapon_hash = provenance.get("weapon_catalog_sha256", "").upper()
+    actual_weapon_hash = _sha256_text(weapon_catalog_source)
+    if actual_weapon_hash != expected_weapon_hash:
+        raise StrikeEncyclopediaError("weapon_catalog_hash_mismatch")
+    weapon_catalog = _load_json(weapon_catalog_source, "weapon_catalog")
+    if weapon_catalog.get("schema") != _WEAPON_CATALOG_SCHEMA:
+        raise StrikeEncyclopediaError("unsupported_weapon_catalog_schema")
     weapon_references = tuple(
-        WeaponReference(
-            weapon_id=_text(raw.get("weapon_id"), "weapon_id"),
-            display_name=_text(raw.get("display_name"), "display_name"),
-            mass_kg=_number(raw.get("mass_kg"), "mass_kg"),
-            explosive_type=_text(raw.get("explosive_type"), "explosive_type"),
-            raw_explosive_mass_kg=_number(
-                raw.get("raw_explosive_mass_kg"), "raw_explosive_mass_kg"
-            ),
-            tnte_reference_kg=(
-                None
-                if raw.get("tnte_reference_kg") is None
-                else _number(raw.get("tnte_reference_kg"), "tnte_reference_kg")
-            ),
-            strength_equivalent=_number(raw.get("strength_equivalent"), "strength_equivalent"),
-            mission_damage_model=_text(raw.get("mission_damage_model"), "mission_damage_model"),
+        _load_weapon_reference(item)
+        for item in _weapon_list(
+            weapon_catalog.get("weapons"),
+            "weapons",
         )
-        for item in _list(payload.get("weapon_references"), "weapon_references")
-        for raw in (_mapping(item, "weapon_reference"),)
     )
+    if len({weapon.weapon_id for weapon in weapon_references}) != len(weapon_references):
+        raise StrikeEncyclopediaError("duplicate_weapon_id")
     if any(
-        weapon.mission_damage_model not in {"tnt_equivalent", "unsupported_napalm"}
+        weapon.kind not in _WEAPON_KINDS or weapon.mission_damage_model not in _WEAPON_DAMAGE_MODELS
         for weapon in weapon_references
     ):
-        raise StrikeEncyclopediaError("invalid_mission_damage_model")
+        raise StrikeEncyclopediaError("invalid_weapon_reference")
     practical_references = tuple(
         PracticalReference(
             reference_id=_text(raw.get("reference_id"), "reference_id"),
@@ -504,4 +611,6 @@ __all__ = [
     "WeaponReference",
     "load_strike_encyclopedia",
     "project_airfield_scene",
+    "search_weapon_references",
+    "wiki_weapon_samples",
 ]

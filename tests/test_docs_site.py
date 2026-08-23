@@ -7,6 +7,11 @@ from urllib.parse import urlparse
 
 from PIL import Image
 
+from bomana.core.strike_damage_calculator import StrikeDamageCalculator
+from bomana.core.strike_encyclopedia import load_strike_encyclopedia
+from bomana.metadata import __version__
+from tools.export_web_ec_calculator import build_web_catalog
+
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 
@@ -71,6 +76,7 @@ def test_github_pages_site_has_new_user_and_permission_paths() -> None:
     assert "Artifact Attestations" in html
     assert "国内 CDN" in html
     assert "GitHub 备用" in html
+    assert 'href="calculator.html"' in html
     assert "没有“绝对安全”或“绝不封号”保证" in html
     assert "只读取游戏提供的 localhost:8111 信息" in html
     assert "WTRTI" in html
@@ -94,6 +100,30 @@ def test_github_pages_local_assets_exist_and_no_external_runtime_assets() -> Non
         for asset in parser.external_assets
         if urlparse(asset).netloc not in ALLOWED_EXTERNAL_NETLOCS
     ]
+
+
+def test_online_calculator_page_is_self_contained_and_matches_app_catalog() -> None:
+    html = (DOCS / "calculator.html").read_text(encoding="utf-8")
+    parser = SiteParser()
+    parser.feed(html)
+    missing = sorted(asset for asset in parser.local_assets if not (DOCS / asset).is_file())
+    assert missing == []
+    assert parser.inline_scripts == 0
+    assert '<link rel="canonical" href="https://bomana.ruikang.wang/calculator.html">' in html
+    catalog = json.loads((DOCS / "ec-calculator.json").read_text(encoding="utf-8"))
+    expected = build_web_catalog()
+    assert catalog == expected
+    assert catalog["app_version"] == __version__
+    assert len(catalog["weapons"]) == 643
+    encyclopedia = load_strike_encyclopedia()
+    result = StrikeDamageCalculator(encyclopedia).calculate(
+        room_max_br=14.7,
+        target_kind="bombing_point",
+        mission_mode="planes",
+        weapon_id="us_1000lb_mk_83_ldgp",
+    )
+    assert result.weapon_count == 12
+    assert result.fire_trigger_weapon_count == 11
 
 
 def test_download_catalog_points_at_tencent_cdn() -> None:
@@ -133,6 +163,10 @@ def test_site_styles_are_responsive_and_accessible() -> None:
     assert "BomanaHotkeyBrokerSetup" not in javascript
     assert "textContent" in javascript
     assert "innerHTML" not in javascript
+    calculator = (DOCS / "calculator.js").read_text(encoding="utf-8")
+    assert "innerHTML" not in calculator
+    assert "ec-calculator.json" in calculator
+    assert "us_1000lb_mk_83_ldgp" in calculator
 
 
 def test_glacier_gallery_metadata_matches_image_dimensions() -> None:

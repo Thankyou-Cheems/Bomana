@@ -16,8 +16,11 @@ from bomana.core.strike_damage_calculator import (
 from bomana.core.strike_encyclopedia import (
     AirfieldLayout,
     StrikeEncyclopedia,
+    WeaponReference,
     load_strike_encyclopedia,
     project_airfield_scene,
+    search_weapon_references,
+    wiki_weapon_samples,
 )
 from bomana.ui.theme import Theme
 from bomana.ui.tk_style import style_action_button
@@ -115,7 +118,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         self._label(title, "打击百科", size=18, weight="bold").pack(anchor="w")
         self._label(
             title,
-            "EC 机场静态结构 · 战区任务耐久 · 炸弹字段参考",
+            "EC 机场静态结构 · 战区任务耐久 · 空战对地武器数量",
             size=9,
             fg=Theme.TEXT_DIM,
         ).pack(anchor="w", pady=(3, 0))
@@ -126,7 +129,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         for tab_id, label in (
             ("airport", "机场结构"),
             ("durability", "战区耐久"),
-            ("weapons", "炸弹参考"),
+            ("weapons", "武器参考"),
             ("calculator", "数量计算器"),
         ):
             button = self._button(tabs, label, lambda value=tab_id: self._show_tab(value))
@@ -297,35 +300,46 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         page = self._new_page()
         self._label(
             page,
-            "炸弹字段与实战参考",
+            "对地武器字段与实战参考",
             size=13,
             weight="bold",
             bg=Theme.GRAYPILL,
         ).pack(anchor="w", padx=16, pady=(14, 4))
         self._label(
             page,
-            "原始装药质量、官方 Wiki TNTe 与任务伤害是不同数据层。Mk 77 为 napalm，不伪造 TNTe。",
+            "计算器收录全部飞机可挂载的炸弹、火箭弹和空对地导弹。"
+            "下面只列出仍有官方 Wiki TNTe 的样例；Mk 77 等燃烧弹不伪造 TNTe。",
             size=9,
             fg=Theme.YELLOW,
             bg=Theme.GRAYPILL,
         ).pack(anchor="w", padx=16, pady=(0, 10))
 
-        table = self._table_card(page, "版本锁定样例")
+        table = self._table_card(page, "官方 Wiki TNTe 样例")
         table.pack(fill="x", padx=16, pady=(0, 12))
         self._table_rows(
             table,
             ("武器", "弹体 kg", "爆炸物类型", "原始装药 kg", "Wiki TNTe kg"),
             [
                 (
-                    item.display_name,
+                    item.display_name_zh or item.display_name,
                     f"{item.mass_kg:g}",
                     item.explosive_type,
                     f"{item.raw_explosive_mass_kg:g}",
                     "—" if item.tnte_reference_kg is None else f"{item.tnte_reference_kg:g}",
                 )
-                for item in self.encyclopedia.weapon_references
+                for item in wiki_weapon_samples(self.encyclopedia.weapon_references)
             ],
         )
+        self._label(
+            page,
+            (
+                f"数量计算器当前收录 {len(self.encyclopedia.weapon_references)} 种空战对地武器"
+                "（炸弹 / 火箭弹 / 导弹）。可用名称、ID 或种类搜索。"
+            ),
+            size=9,
+            fg=Theme.TEXT,
+            bg=Theme.GRAYPILL,
+        ).pack(anchor="w", padx=16, pady=(0, 10))
         practical = self.encyclopedia.practical_references[0]
         reference_card = tk.Frame(
             page,
@@ -375,7 +389,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         self._label(
             page,
             "选择战局房间允许的最高 BR；不要填写当前出击载具的 BR。"
-            "普通高爆炸弹按桌面 HP↔TNT 当量给出精确枚数（满额命中）。",
+            "可搜索全部空战对地武器。普通高爆装药按桌面 HP↔TNT 当量给出精确枚数（满额命中）。",
             size=9,
             fg=Theme.YELLOW,
             bg=Theme.GRAYPILL,
@@ -385,10 +399,13 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         controls.pack(fill="x", padx=16)
         self.calculator_br_var = tk.StringVar(value="14.7")
         self.calculator_target_var = tk.StringVar(value="战区基地（空战）")
-        self.calculator_weapon_var = tk.StringVar(
-            value=self.encyclopedia.weapon_references[0].display_name
-        )
+        self.calculator_kind_var = tk.StringVar(value="全部")
+        self.calculator_search_var = tk.StringVar()
+        self.calculator_weapon_id = "us_1000lb_mk_83_ldgp"
         self.calculator_dwelling_hp_var = tk.StringVar()
+        self.calculator_result_title_var = tk.StringVar()
+        self.calculator_result_detail_var = tk.StringVar()
+        self._calculator_visible_weapons: tuple[WeaponReference, ...] = ()
         fields = (
             (
                 "房间最高 BR",
@@ -408,9 +425,9 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
                 ),
             ),
             (
-                "武器",
-                self.calculator_weapon_var,
-                tuple(item.display_name for item in self.encyclopedia.weapon_references),
+                "武器种类",
+                self.calculator_kind_var,
+                ("全部", "炸弹", "火箭弹", "导弹"),
             ),
         )
         for column, (label, variable, values) in enumerate(fields):
@@ -438,6 +455,54 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
             )
             menu["menu"].configure(font=(_FONT, 9), bg=Theme.BG, fg=Theme.TEXT)
             menu.pack(fill="x", pady=(4, 0))
+            if variable is self.calculator_kind_var:
+                variable.trace_add("write", lambda *_args: self._refresh_weapon_list())
+
+        weapon_picker = tk.Frame(page, bg=Theme.GRAYPILL)
+        weapon_picker.pack(fill="both", expand=False, padx=16, pady=(10, 0))
+        self._label(
+            weapon_picker,
+            "武器（名称 / ID 搜索）",
+            size=8,
+            weight="bold",
+            fg=Theme.TEXT_DIM,
+            bg=Theme.GRAYPILL,
+        ).pack(anchor="w")
+        search_entry = tk.Entry(
+            weapon_picker,
+            textvariable=self.calculator_search_var,
+            font=(_FONT, 9),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            insertbackground=Theme.TEXT,
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+        )
+        search_entry.pack(fill="x", pady=(4, 6), ipady=5)
+        self.calculator_search_var.trace_add("write", lambda *_args: self._refresh_weapon_list())
+        list_frame = tk.Frame(weapon_picker, bg=Theme.BG)
+        list_frame.pack(fill="x")
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+        self.calculator_weapon_list = tk.Listbox(
+            list_frame,
+            height=8,
+            font=(_FONT, 9),
+            bg=Theme.BG,
+            fg=Theme.TEXT,
+            selectbackground=Theme.BORDER,
+            selectforeground=Theme.TEXT,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            relief="flat",
+            exportselection=False,
+            yscrollcommand=scrollbar.set,
+        )
+        self.calculator_weapon_list.pack(side="left", fill="both", expand=True)
+        scrollbar.configure(command=self.calculator_weapon_list.yview)
+        self.calculator_weapon_list.bind("<<ListboxSelect>>", self._on_weapon_list_select)
+        self._refresh_weapon_list()
 
         repair_input = tk.Frame(page, bg=Theme.GRAYPILL)
         repair_input.pack(fill="x", padx=16, pady=(10, 0))
@@ -474,8 +539,6 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
             highlightbackground=Theme.BORDER,
         )
         result_card.pack(fill="both", expand=True, padx=16, pady=(12, 14))
-        self.calculator_result_title_var = tk.StringVar()
-        self.calculator_result_detail_var = tk.StringVar()
         self._label(
             result_card,
             "",
@@ -499,6 +562,49 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
         self._refresh_calculator()
         return page
 
+    def _calculator_kind_filter(self) -> str | None:
+        labels = {"炸弹": "bomb", "火箭弹": "rocket", "导弹": "missile"}
+        return labels.get(self.calculator_kind_var.get())
+
+    def _refresh_weapon_list(self) -> None:
+        matches = search_weapon_references(
+            self.encyclopedia.weapon_references,
+            self.calculator_search_var.get(),
+            kind=self._calculator_kind_filter(),
+        )
+        self._calculator_visible_weapons = matches
+        self.calculator_weapon_list.delete(0, "end")
+        selected_index = 0
+        for index, weapon in enumerate(matches):
+            self.calculator_weapon_list.insert("end", weapon.calculator_label)
+            if weapon.weapon_id == self.calculator_weapon_id:
+                selected_index = index
+        if matches:
+            if self.calculator_weapon_id not in {weapon.weapon_id for weapon in matches}:
+                self.calculator_weapon_id = matches[0].weapon_id
+                selected_index = 0
+            self.calculator_weapon_list.selection_clear(0, "end")
+            self.calculator_weapon_list.selection_set(selected_index)
+            self.calculator_weapon_list.see(selected_index)
+        self._refresh_calculator()
+
+    def _select_calculator_weapon(self, weapon_id: str) -> None:
+        self.calculator_weapon_id = weapon_id
+        self._refresh_weapon_list()
+
+    def _on_weapon_list_select(self, _event: object | None = None) -> None:
+        selection = self.calculator_weapon_list.curselection()
+        if not selection:
+            return
+        index = int(selection[0])
+        if not 0 <= index < len(self._calculator_visible_weapons):
+            return
+        weapon_id = self._calculator_visible_weapons[index].weapon_id
+        if weapon_id == self.calculator_weapon_id:
+            return
+        self.calculator_weapon_id = weapon_id
+        self._refresh_calculator()
+
     def _refresh_calculator(self) -> None:
         target_map = {
             "战区基地（空战）": ("bombing_point", "planes", None),
@@ -507,9 +613,6 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
             "机场油库 / 储存区": ("airport_module", "planes", "storage"),
             "机场停机 / 维修区": ("airport_module", "planes", "parking"),
             "机场生活区": ("airport_module", "planes", "dwelling"),
-        }
-        weapons = {
-            item.display_name: item.weapon_id for item in self.encyclopedia.weapon_references
         }
         target_kind, mission_mode, module = target_map[self.calculator_target_var.get()]
         raw_dwelling_hp = self.calculator_dwelling_hp_var.get().strip()
@@ -520,7 +623,7 @@ class StrikeEncyclopediaDialog(tk.Toplevel):
                 target_kind=target_kind,  # type: ignore[arg-type]
                 mission_mode=mission_mode,  # type: ignore[arg-type]
                 airport_module=module,  # type: ignore[arg-type]
-                weapon_id=weapons[self.calculator_weapon_var.get()],
+                weapon_id=self.calculator_weapon_id,
                 dwelling_remaining_hp=dwelling_hp,
             )
         except KeyError, ValueError, StrikeDamageCalculatorError:

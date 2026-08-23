@@ -12,7 +12,9 @@
     "gameparams_source": "aces.vromfs.bin_u/config/gameparams.blkx",
     "gameparams_sha256": "2F60725954AA25AD75196ADE8641CCFB00042CF573EB2870AF27DDD2AE028796",
     "explosive_source": "aces.vromfs.bin_u/gamedata/damage_model/explosive.blkx",
-    "explosive_sha256": "93304039FB34EDD925A9F8F4DB6E9F0DD7F381C4B14E6C357A28D6764725E7C2"
+    "explosive_sha256": "93304039FB34EDD925A9F8F4DB6E9F0DD7F381C4B14E6C357A28D6764725E7C2",
+    "weapon_catalog": "bomana/data/strike_weapon_damage.json",
+    "weapon_catalog_sha256": "56B7B3847FFA35F87C2D63E24AF61EEE2B064965BB26F7DE5182FC74F0AD3D6B"
   },
   "bombing_zone_tnt_conversion": {
     "hp_to_tnt_equivalent_tons": 0.000125,
@@ -47,12 +49,6 @@
     "repair_timing_kind": "per_airfield_repair_visit",
     "repair_evidence_kind": "exact_static_hp_per_repair_visit"
   },
-  "weapon_references": [
-    {"weapon_id": "us_500lb_mk_82_ldgp", "display_name": "Mk 82", "mass_kg": 240.9, "explosive_type": "comp_h6", "raw_explosive_mass_kg": 87.1, "tnte_reference_kg": 117.6, "strength_equivalent": 1.35, "mission_damage_model": "tnt_equivalent"},
-    {"weapon_id": "us_1000lb_mk_83_ldgp", "display_name": "Mk 83", "mass_kg": 446.8, "explosive_type": "comp_h6", "raw_explosive_mass_kg": 201.8, "tnte_reference_kg": 272.4, "strength_equivalent": 1.35, "mission_damage_model": "tnt_equivalent"},
-    {"weapon_id": "su_fab_500m_62t", "display_name": "FAB-500M-62", "mass_kg": 508.3, "explosive_type": "tgaf_5", "raw_explosive_mass_kg": 213.0, "tnte_reference_kg": 340.8, "strength_equivalent": 1.6, "mission_damage_model": "tnt_equivalent"},
-    {"weapon_id": "us_500lb_mk77_mod4", "display_name": "Mk 77 Mod 4", "mass_kg": 235.9, "explosive_type": "napalm", "raw_explosive_mass_kg": 207.3, "tnte_reference_kg": null, "strength_equivalent": 0.002, "mission_damage_model": "unsupported_napalm"}
-  ],
   "practical_references": [
     {
       "reference_id": "sim_ec_high_tier_base_mk83",
@@ -65,5 +61,5 @@
       "source_url": "https://wiki.warthunder.com/mechanics/1067-use-of-ccrp-in-sim-battles-sim-ec"
     }
   ],
-  "disclaimer": "普通高爆炸弹的任务伤害按桌面 gameparams 的 HP↔TNT 当量换算；Mk 77 等 napalm 不走这条公式。官方 Wiki「约6枚 Mk 83」是旧攻略参考，不是当前静态换算。"
+  "disclaimer": "数量计算器收录当前飞机可挂载的炸弹、火箭弹和空对地导弹。普通高爆装药按桌面 gameparams 的 HP↔TNT 当量换算；napalm/燃烧弹、穿甲火箭和核弹等没有这条公式的标为原生未知。官方 Wiki「约6枚 Mk 83」是旧攻略参考，不是当前静态换算。"
 }

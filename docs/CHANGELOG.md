@@ -13,6 +13,22 @@ implementation history.
   packaged runtime keys are checked against the same contract so existing
   subscription sessions are not blocked by an accidental key replacement.
 
+## [8.7.17]
+
+### Added
+
+- The quantity calculator now covers 643 aircraft-mounted air-to-ground
+  weapons: bombs, rockets, and AGMs. Search by Chinese name, English name, or
+  ID.
+- The public site hosts the same calculator at
+  [bomana.ruikang.wang/calculator.html](https://bomana.ruikang.wang/calculator.html).
+
+### Boundaries
+
+- Napalm, AP rockets, and nuclear stores stay unlabeled.
+- Standard, Lite, and the Lite green bundle still omit CCRP, strike solving,
+  and Web Cockpit.
+
 ## [8.7.15]
 
 ### Added
