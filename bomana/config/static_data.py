@@ -10,6 +10,7 @@ VISIBLE_TRAJECTORY_REFERENCES_JSON = "bomana/data/visible_trajectory_references.
 SPONSOR_WECHAT_IMAGE = "bomana/assets/branding/sponsor_wechat.png"
 STRIKE_ENCYCLOPEDIA_JSON = "bomana/data/strike_encyclopedia.json"
 STRIKE_WEAPON_DAMAGE_JSON = "bomana/data/strike_weapon_damage.json"
+BOMBING_ZONE_SPLASH_JSON = "bomana/data/bombing_zone_splash.json"
 
 __all__ = [
     "APP_ICON_FILE",
@@ -17,6 +18,7 @@ __all__ = [
     "FM_SPEED_LIMITS_JSON",
     "OFFLINE_RIGIDBODY_CATALOG",
     "SPONSOR_WECHAT_IMAGE",
+    "BOMBING_ZONE_SPLASH_JSON",
     "STRIKE_ENCYCLOPEDIA_JSON",
     "STRIKE_WEAPON_DAMAGE_JSON",
     "VISIBLE_TRAJECTORY_REFERENCES_JSON",

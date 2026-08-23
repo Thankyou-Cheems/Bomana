@@ -41,9 +41,11 @@ VARIANT_SWITCHES = {channel: variant_switch_matrix()[channel] for channel in PUB
 EC_AIRFIELD_CATALOG_REL = Path("bomana/data/ec_airfield_catalog.json")
 STRIKE_ENCYCLOPEDIA_REL = Path("bomana/data/strike_encyclopedia.json")
 STRIKE_WEAPON_DAMAGE_REL = Path("bomana/data/strike_weapon_damage.json")
+BOMBING_ZONE_SPLASH_REL = Path("bomana/data/bombing_zone_splash.json")
 STRIKE_ENCYCLOPEDIA_MODULES = (
     Path("bomana/core/strike_encyclopedia.py"),
     Path("bomana/core/strike_damage_calculator.py"),
+    Path("bomana/core/hangar_base_damage.py"),
     Path("bomana/ui/strike_encyclopedia.py"),
 )
 FEATURE_PROFILE_PATH = Path("bomana/config/feature_profile.py")
@@ -643,6 +645,7 @@ def build_app_zip(
         EC_AIRFIELD_CATALOG_REL,
         STRIKE_ENCYCLOPEDIA_REL,
         STRIKE_WEAPON_DAMAGE_REL,
+        BOMBING_ZONE_SPLASH_REL,
         *STRIKE_ENCYCLOPEDIA_MODULES,
     ]
     required_runtime_paths = [

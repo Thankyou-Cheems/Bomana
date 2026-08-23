@@ -2,8 +2,9 @@
 """Extract aircraft-mounted air-to-ground warheads for the EC quantity calculator.
 
 The fire-control catalog skips unguided rockets because they are not CCRP
-targets. This extractor keeps bombs, rockets, and AGMs, and records only
-explosive mass / type / TNT strength for full-hit HP accounting.
+targets. This extractor keeps bombs, rockets, and AGMs, and records the
+weapon-BLK inputs the hangar splash formula consumes. It does not copy
+per-weapon hangar ``weaponDamage`` tables.
 """
 
 from __future__ import annotations
@@ -37,8 +38,12 @@ from weapon_fire_control_extractor import (
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = ROOT / "bomana/data/strike_weapon_damage.json"
+DEFAULT_SPLASH_OUTPUT = ROOT / "bomana/data/bombing_zone_splash.json"
 EXPLOSIVE_REL = Path("aces.vromfs.bin_u/gamedata/damage_model/explosive.blkx")
+ARMOR_REL = Path("aces.vromfs.bin_u/gamedata/flightmodels/dm/armorclasses.blkx")
+WARPOINTS_REL = Path("char.vromfs.bin_u/config/warpoints.blkx")
 _SCHEMA = "bomana_strike_weapon_damage/v1"
+_SPLASH_SCHEMA = "bomana_bombing_zone_splash/v1"
 _NAPALM_STRENGTH_LIMIT = 0.01
 _SMOKE_TYPES = {"smoke_composition"}
 _WIKI_TNTE_KG = {
@@ -85,16 +90,149 @@ def _kind_for(source_section: str, triggers: set[str], role: str) -> str | None:
     return None
 
 
-def _damage_model(explosive_type: str, explosive_mass: float, strength: float | None) -> str:
+def _git_json(datamine_root: Path, commit: str, relative: Path) -> tuple[dict[str, Any], bytes]:
+    path = datamine_root / relative
+    if path.is_file():
+        raw = path.read_bytes()
+    else:
+        raw = subprocess.check_output(
+            ["git", "-C", str(datamine_root), "show", f"{commit}:{relative.as_posix()}"]
+        )
+    payload = json.loads(raw.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{relative.as_posix()} is not a JSON object")
+    return payload, raw
+
+
+def _piecewise_points(curve: object) -> list[list[float]]:
+    if not isinstance(curve, dict):
+        raise RuntimeError("piecewise curve must be an object")
+    points: list[list[float]] = []
+    for value in curve.values():
+        if isinstance(value, list) and len(value) == 2:
+            x, y = value
+            if isinstance(x, bool) or isinstance(y, bool):
+                continue
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                points.append([float(x), float(y)])
+    if len(points) < 2:
+        raise RuntimeError("piecewise curve is too short")
+    points.sort(key=lambda pair: pair[0])
+    return points
+
+
+def extract_splash_model(datamine_root: Path, commit: str, version: str) -> dict[str, Any]:
+    """Export the hangar splash/reward input parameters, not per-weapon damage."""
+
+    explosive, explosive_bytes = _git_json(datamine_root, commit, EXPLOSIVE_REL)
+    armor, _armor_bytes = _git_json(datamine_root, commit, ARMOR_REL)
+    warpoints, _warpoints_bytes = _git_json(datamine_root, commit, WARPOINTS_REL)
+    splash = explosive.get("explosiveTypeToSplashParams")
+    if not isinstance(splash, dict):
+        raise RuntimeError("explosive.blkx is missing explosiveTypeToSplashParams")
+    bombing_zone = armor.get("bombing_zone")
+    if not isinstance(bombing_zone, dict):
+        raise RuntimeError("armorclasses.blkx is missing bombing_zone")
+    yields: list[list[float]] = []
+    yield_table = explosive.get("yieldToExplosionParameters")
+    if isinstance(yield_table, dict):
+        for body in yield_table.values():
+            if not isinstance(body, dict):
+                continue
+            listed_yield = body.get("yield")
+            damage = body.get("damage")
+            if isinstance(listed_yield, bool) or isinstance(damage, bool):
+                continue
+            if isinstance(listed_yield, (int, float)) and isinstance(damage, (int, float)):
+                yields.append([float(listed_yield), float(damage)])
+    yields.sort(key=lambda pair: pair[0])
+    muls = warpoints.get("BombingRewardMultipliers")
+    if not isinstance(muls, dict):
+        raise RuntimeError("warpoints.blkx is missing BombingRewardMultipliers")
+    piecewise = muls.get("piecewiseLinearTable")
+    piecewise_points: list[list[float]] = []
+    if isinstance(piecewise, dict):
+        raw_points = piecewise.get("v")
+        if isinstance(raw_points, list):
+            for item in raw_points:
+                if isinstance(item, list) and len(item) == 2:
+                    x, y = item
+                    if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                        piecewise_points.append([float(x), float(y)])
+    return {
+        "schema": _SPLASH_SCHEMA,
+        "provenance": {
+            "datamine_version": version,
+            "datamine_commit": commit,
+            "source_repo": read_git_remote(datamine_root) or "",
+            "explosive_source": EXPLOSIVE_REL.as_posix(),
+            "explosive_sha256": hashlib.sha256(explosive_bytes).hexdigest().upper(),
+            "armor_source": ARMOR_REL.as_posix(),
+            "warpoints_source": WARPOINTS_REL.as_posix(),
+            "gui_source": "gui.vromfs.bin_u/globals/econweaponutils.nut",
+        },
+        "armor": {
+            "class_name": "bombing_zone",
+            "armor_thickness_mm": float(bombing_zone["armorThickness"]),
+            "restrain_explosion_damage": float(bombing_zone["restrainExplosionDamage"]),
+            "napalm_damage_mult": float(bombing_zone["napalmDamageMult"]),
+        },
+        "explosive_mass_to_damage": _piecewise_points(splash["explosiveMassToDamage"]),
+        "explosive_mass_to_penetration": _piecewise_points(splash["explosiveMassToPenetration"]),
+        "nuclear_yield_to_damage": yields,
+        "reward": {
+            "preset_dmg_min": float(muls["presetDmgMin"]),
+            "preset_dmg_max": float(muls["presetDmgMax"]),
+            "bombing_reward_modifier": float(muls["bombingRewardModifier"]),
+            "fighter_bombing_reward_mul": float(muls["fighterBombingRewardMul"]),
+            "prem_bombing_reward_mul": float(muls["premBombingRewardMul"]),
+            "ui_decoration": 10.0,
+            "piecewise_linear": piecewise_points,
+        },
+    }
+
+
+def _optional_positive(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number <= 0.0:
+        return None
+    return number
+
+
+def _damage_model(
+    explosive_type: str,
+    explosive_mass: float,
+    strength: float | None,
+    *,
+    splash: dict[str, Any] | None,
+    fire: dict[str, Any] | None,
+    nuclear_yield_kt: float | None,
+) -> str:
+    if nuclear_yield_kt is not None:
+        return "nuclear_yield"
+    splash_type = _clean_text((splash or {}).get("damageType")).casefold()
+    if (
+        splash_type == "napalm"
+        or explosive_type.casefold() == "napalm"
+        or (strength is not None and strength <= _NAPALM_STRENGTH_LIMIT)
+    ):
+        if (
+            splash
+            and fire
+            and _optional_positive(splash.get("damage")) is not None
+            and splash.get("penetration") is not None
+            and _optional_positive(fire.get("damage")) is not None
+            and _optional_positive(fire.get("lifeTime")) is not None
+        ):
+            return "napalm_splash_fire"
+        return "native_unknown"
     if explosive_type.casefold() in _SMOKE_TYPES:
         return "native_unknown"
-    if explosive_type.casefold() == "napalm" or (
-        strength is not None and strength <= _NAPALM_STRENGTH_LIMIT
-    ):
-        return "unsupported_napalm"
     if not explosive_type or strength is None or explosive_mass <= 0.0:
         return "native_unknown"
-    return "tnt_equivalent"
+    return "splash_tnte_curve"
 
 
 def extract_catalog(datamine_root: Path, *, require_clean: bool = True) -> dict[str, Any]:
@@ -144,7 +282,17 @@ def extract_catalog(datamine_root: Path, *, require_clean: bool = True) -> dict[
         explosive_mass = _nominal_number(section.get("explosiveMass"))
         mass = _nominal_number(section.get("mass"))
         strength = strengths.get(explosive_type)
-        model = _damage_model(explosive_type, explosive_mass, strength)
+        splash = section.get("splash") if isinstance(section.get("splash"), dict) else None
+        fire = section.get("fireDamage") if isinstance(section.get("fireDamage"), dict) else None
+        nuclear_yield_kt = _optional_positive(section.get("yield"))
+        model = _damage_model(
+            explosive_type,
+            explosive_mass,
+            strength,
+            splash=splash,
+            fire=fire,
+            nuclear_yield_kt=nuclear_yield_kt,
+        )
         display_name, display_name_zh = _display_names(source_path, section, localization)
         weapons.append(
             {
@@ -158,6 +306,14 @@ def extract_catalog(datamine_root: Path, *, require_clean: bool = True) -> dict[
                 "tnte_reference_kg": _WIKI_TNTE_KG.get(weapon_id),
                 "strength_equivalent": 0.0 if strength is None else strength,
                 "mission_damage_model": model,
+                "splash_damage": None if splash is None else splash.get("damage"),
+                "splash_penetration": None if splash is None else splash.get("penetration"),
+                "splash_damage_type": ""
+                if splash is None
+                else _clean_text(splash.get("damageType")),
+                "fire_damage": None if fire is None else fire.get("damage"),
+                "fire_life_time": None if fire is None else fire.get("lifeTime"),
+                "nuclear_yield_kt": nuclear_yield_kt,
             }
         )
 
@@ -191,12 +347,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("datamine_root")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--splash-output", type=Path, default=DEFAULT_SPLASH_OUTPUT)
     parser.add_argument("--allow-dirty", action="store_true")
     args = parser.parse_args()
-    payload = extract_catalog(Path(args.datamine_root), require_clean=not args.allow_dirty)
+    datamine_root = Path(args.datamine_root)
+    payload = extract_catalog(datamine_root, require_clean=not args.allow_dirty)
+    commit = payload["provenance"]["datamine_commit"]
+    version = payload["provenance"]["datamine_version"]
+    splash = extract_splash_model(datamine_root.resolve(), commit, version)
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.splash_output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    args.splash_output.write_text(
+        json.dumps(splash, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     summary = payload["summary"]
@@ -212,6 +378,7 @@ def main() -> int:
         "missiles=",
         summary["missile_count"],
     )
+    print("wrote", args.splash_output)
     return 0
 
 

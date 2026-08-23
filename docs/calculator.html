@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>EC 数量计算器 · Bomana</title>
+    <title>对战区计算器 · Bomana</title>
     <meta
       name="description"
-      content="Bomana 在线 EC 数量计算器：按房间最高 BR 和空战对地武器，估算摧毁战区基地或机场模块所需枚数。"
+      content="Bomana 对战区计算器：选房间最高 BR 和挂载，看炸掉或点燃战区要带几枚。"
     >
-    <meta name="theme-color" content="#dcecf8">
-    <meta property="og:title" content="Bomana · EC 数量计算器">
+    <meta name="theme-color" content="#161712">
+    <meta property="og:title" content="Bomana · 对战区计算器">
     <meta
       property="og:description"
-      content="643 种空战对地武器，按桌面 HP↔TNT 当量估算满额命中枚数。"
+      content="按游戏大厅同一套对战区伤害估算摧毁和点燃枚数。"
     >
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://bomana.ruikang.wang/calculator.html">
@@ -21,7 +21,7 @@
     <link rel="icon" href="assets/favicon.ico">
     <link rel="stylesheet" href="styles.css">
   </head>
-  <body>
+  <body class="hangar">
     <a class="skip-link" href="#content">跳到主要内容</a>
 
     <header class="site-header" aria-label="主导航">
@@ -39,66 +39,73 @@
     </header>
 
     <main id="content">
-      <section class="calc-hero" aria-labelledby="calc-title">
-        <p class="kicker">
-          <span class="kicker-dot"></span>
-          EC · OFFLINE STATIC · FULL HIT
+      <section class="hangar-stage" aria-labelledby="calc-title">
+        <p class="hangar-kicker">空战挂载</p>
+        <h1 id="calc-title">对战区计算器</h1>
+        <p class="hangar-lede">
+          选房间允许的最高 BR，再选武器，直接看炸掉或点燃战区要带几枚。
         </p>
-        <h1 id="calc-title">空战对地武器数量计算器</h1>
-        <p class="hero-lede">
-          选择房间允许的最高 BR，而不是当前飞机的 BR。高爆装药按桌面 gameparams 的
-          HP↔TNT 当量估算满额命中枚数；燃烧弹、穿甲火箭和核弹会标明原生未知。
-        </p>
-      </section>
 
-      <section class="calc-shell" aria-label="计算器">
-        <form class="calc-form" id="calcForm">
-          <label class="calc-field">
-            <span>房间最高 BR</span>
-            <select id="calcBr"></select>
-          </label>
-          <label class="calc-field">
-            <span>目标</span>
-            <select id="calcTarget"></select>
-          </label>
-          <label class="calc-field">
-            <span>武器种类</span>
-            <select id="calcKind">
-              <option value="">全部</option>
-              <option value="bomb">炸弹</option>
-              <option value="rocket">火箭弹</option>
-              <option value="missile">导弹</option>
-            </select>
-          </label>
-          <label class="calc-field calc-field-wide">
-            <span>搜索武器（中文名 / 英文名 / ID）</span>
-            <input id="calcSearch" type="search" autocomplete="off" placeholder="例如 Mk 83、hydra、FAB-500">
-          </label>
-          <label class="calc-field calc-field-wide">
-            <span>武器</span>
-            <select id="calcWeapon" size="10"></select>
-          </label>
-        </form>
+        <div class="hangar-board">
+          <form class="hangar-loadout" id="calcForm">
+            <label class="hangar-field">
+              <span>房间最高 BR</span>
+              <select id="calcBr"></select>
+            </label>
+            <label class="hangar-field">
+              <span>目标</span>
+              <select id="calcTarget"></select>
+            </label>
+            <fieldset class="hangar-kinds">
+              <legend>武器种类</legend>
+              <select id="calcKind">
+                <option value="">全部</option>
+                <option value="bomb">炸弹</option>
+                <option value="rocket">火箭弹</option>
+                <option value="missile">导弹</option>
+              </select>
+            </fieldset>
+            <label class="hangar-field hangar-field-wide">
+              <span>搜索武器</span>
+              <input id="calcSearch" type="search" autocomplete="off" placeholder="Mk 83、hydra、FAB-500">
+            </label>
+            <div class="hangar-field hangar-field-wide">
+              <span id="calcWeaponLabel">武器</span>
+              <div
+                id="calcWeaponList"
+                class="hangar-weapon-list"
+                role="listbox"
+                aria-labelledby="calcWeaponLabel"
+                tabindex="0"
+              ></div>
+            </div>
+          </form>
 
-        <article class="calc-result" aria-live="polite">
-          <p class="calc-result-kicker" id="calcMeta">加载目录中…</p>
-          <h2 id="calcTitle">所需枚数</h2>
-          <p id="calcDetail"></p>
-        </article>
-      </section>
+          <article class="hangar-hud" aria-live="polite">
+            <p class="hangar-hud-context" id="calcHudContext">加载中…</p>
+            <div class="hangar-count">
+              <strong id="calcDestroyCount">—</strong>
+              <span id="calcDestroyLabel">摧毁</span>
+            </div>
+            <p class="hangar-fire" id="calcFireLine"></p>
+            <dl class="hangar-stats" id="calcStats"></dl>
+            <p class="hangar-hint" id="calcHint"></p>
+          </article>
+        </div>
 
-      <section class="calc-notes" aria-label="计算边界">
-        <h2>计算边界</h2>
-        <ul>
-          <li>收录当前飞机可挂载的炸弹、火箭弹和空对地导弹，不含空空弹。</li>
-          <li>1 kg TNT = 8 mission HP。这是满额命中当量，不是距离衰减的溅射曲线。</li>
-          <li>战区 90% 燃烧触发是参数推断；机场模块没有这条燃烧尾段。</li>
-          <li>官方 Wiki「约 6 枚 Mk 83」是旧攻略，计算器不再用它代替静态换算。</li>
-        </ul>
-        <p>
-          桌面 App 8.7.17 的打击百科使用同一套目录。
-          <a href="index.html">下载 Bomana</a>
-        </p>
+        <details class="hangar-help">
+          <summary>计算说明</summary>
+          <ul>
+            <li>按游戏大厅同一套对战区伤害估算，满额命中。</li>
+            <li>请填房间允许的最高 BR，不要填当前飞机的 BR。</li>
+            <li>战区打到大约九成会起火；机场没有这条，而且受损后会回血。</li>
+            <li>收益系数对应大厅右侧那一项，战斗机再打八折。</li>
+          </ul>
+          <p>
+            与桌面 App 使用同一套公式。
+            <a href="index.html">下载 Bomana</a>
+          </p>
+        </details>
       </section>
     </main>
 
