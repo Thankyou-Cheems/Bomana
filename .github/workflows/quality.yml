@@ -1,67 +1,40 @@
-name: Quality Gates
+name: Public browser quality
 
 on:
-  pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-env:
-  PYTHONUTF8: "1"
-  PYTHONIOENCODING: utf-8
-
-concurrency:
-  group: quality-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  windows-quality:
-    name: Windows Ruff and smoke
+  test:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
+          clean: true
           persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          python-version: "3.14"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-
-      - name: Install development dependencies
+          node-version: "22"
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.25.x"
+      - name: Test public Web
         shell: pwsh
         run: |
-          uv sync --extra dev --frozen
-
-      - name: Ruff check
+          npm install --global pnpm@11.3.0
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend check
+      - name: Test Bridge
         shell: pwsh
+        working-directory: native/telemetry_gateway
         run: |
-          uv run --extra dev ruff check .
-
-      - name: Ruff format check
+          go test -count=1 ./...
+          go vet ./...
+      - name: Check public boundary
         shell: pwsh
-        run: |
-          uv run --extra dev ruff format --check .
-
-      - name: Lightweight smoke
-        shell: cmd
-        run: |
-          tools\scripts\check_smoke.bat
-
-      - name: Native hotkey broker checks
-        shell: pwsh
-        run: |
-          rustup toolchain install 1.94.0 --profile minimal
-          rustup component add rustfmt --toolchain 1.94.0
-          rustup default 1.94.0
-          cargo fmt --check --manifest-path native/hotkey_broker/Cargo.toml
-          cargo test --locked --manifest-path native/hotkey_broker/Cargo.toml
-          uv run --frozen python tools/build_hotkey_broker.py --mode dev
+        run: ./tools/check_public_boundary.ps1

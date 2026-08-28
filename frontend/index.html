@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Bomana</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/launcher/">BOMANA</a>
+      <strong id="edition-name"></strong>
+      <span id="connection">正在连接 Bridge</span>
+      <a href="/launcher/">返回 Launcher</a>
+    </header>
+    <main>
+      <section class="timer-card">
+        <span>RESPAWN TIMER</span>
+        <strong id="timer">15:00</strong>
+        <div class="progress"><i id="timer-progress"></i></div>
+        <p id="timer-cycle">等待出击</p>
+        <div class="actions">
+          <button id="reset-timer" type="button">重置计时</button>
+          <label>周期 <input id="cycle-minutes" type="number" min="1" max="180" value="15"> 分钟</label>
+        </div>
+      </section>
+
+      <section class="standard-only flight-card" hidden>
+        <h2>飞行状态</h2>
+        <dl>
+          <div><dt>IAS</dt><dd id="ias">-- km/h</dd></div>
+          <div><dt>ALT</dt><dd id="altitude">-- m</dd></div>
+          <div><dt>HDG</dt><dd id="heading">--°</dd></div>
+          <div><dt>燃油</dt><dd id="fuel">-- kg</dd></div>
+        </dl>
+      </section>
+
+      <section class="standard-only navigation-card" hidden>
+        <div class="section-head">
+          <div><span>BASIC NAVIGATION</span><h2>官方战区 / 机场</h2></div>
+          <button id="cycle-target" type="button">切换目标</button>
+        </div>
+        <div class="target-readout">
+          <strong id="target-name">暂无目标</strong>
+          <span id="target-bearing">方位 ---</span>
+          <span id="target-distance">距离 ---</span>
+        </div>
+        <canvas id="map" width="900" height="540" aria-label="基础导航地图"></canvas>
+        <small>Standard 不提供格子坐标、聊天识别、战区倒计时、机场模块、Y66 或高程。</small>
+      </section>
+
+      <section class="boundary-card">
+        <strong>只读官方 8111</strong>
+        <p>Lite 只计时；Standard 只使用官方战区与机场几何做基础导航。公开 App 不包含 Enhanced 解算、地形或战术情报实现。</p>
+      </section>
+    </main>
+    <script type="module" src="/src/public-main.ts"></script>
+  </body>
+</html>

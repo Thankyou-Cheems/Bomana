@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#dcecf8" />
+    <meta name="description" content="Bomana Launcher：连接 Bridge、选择版本并进入 Bomana App。" />
+    <title>Bomana Launcher</title>
+  </head>
+  <body>
+    <main class="launcher-shell">
+      <header class="topbar">
+        <a class="brand" href="https://bomana.ruikang.wang/" target="_blank" rel="noopener noreferrer" aria-label="打开 Bomana 官网">
+          <img src="/src/generated/bomana-logo.svg" alt="Bomana" />
+          <span><strong>BOMANA</strong><small>LAUNCHER</small></span>
+        </a>
+        <div class="bridge-controls">
+          <div class="host-pill offline" id="launcher-host-state">
+            <span class="status-dot"></span>
+            <span><strong>正在连接 Bridge</strong><small>请稍候</small></span>
+          </div>
+          <div class="bridge-version-panel checking" id="bridge-version-panel">
+            <span>BRIDGE VERSION</span>
+            <strong id="bridge-version-value">本机 -- · 最新 --</strong>
+            <small id="bridge-version-message">正在读取版本信息</small>
+          </div>
+          <a class="compact-button update hidden" id="update-bridge" href="../downloads/BomanaBridge.exe">下载更新</a>
+          <a class="compact-button secondary hidden" id="open-bridge" rel="noreferrer" target="_blank">打开 Bridge</a>
+          <button class="compact-button" id="connect-bridge" type="button">连接 Bridge</button>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">BOMANA ONLINE</p>
+          <h1>选择版本，立即进入 Bomana</h1>
+        </div>
+        <div class="trust-line" aria-label="运行边界">
+          <span>只读 8111</span><span>本机长缓存</span><span>无游戏访存</span>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <section class="edition-area" aria-labelledby="edition-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">选择功能版本</p><h2 id="edition-title">你想使用哪个版本？</h2></div>
+            <button class="compact-button secondary" id="refresh-catalog" type="button">刷新状态</button>
+          </div>
+          <div class="channel-grid" id="channel-grid" aria-live="polite">
+            <article class="channel-skeleton"></article>
+            <article class="channel-skeleton"></article>
+            <article class="channel-skeleton"></article>
+          </div>
+        </section>
+
+        <aside class="readiness" aria-label="启动准备">
+          <article class="readiness-card activity-panel hidden" id="cache-panel">
+            <div class="card-title">
+              <span class="step-number">1</span>
+              <div><p class="eyebrow">本机数据</p><h2>地图缓存</h2></div>
+              <span class="mode-badge" id="mode-badge">检查中</span>
+            </div>
+            <p class="activity-message" id="activity-message">正在读取地图缓存…</p>
+            <div class="progress-track"><span id="activity-progress"></span></div>
+            <details class="cache-map-details" id="cache-map-details">
+              <summary id="cache-map-summary">查看地图状态</summary>
+              <div class="cache-map-list" id="cache-map-list"></div>
+            </details>
+          </article>
+
+          <article class="readiness-card account-panel" id="account-panel">
+            <div class="card-title">
+              <span class="step-number">2</span>
+              <div><p class="eyebrow">可选登录</p><h2>超级爆弹订阅</h2></div>
+            </div>
+            <div class="account-title">
+              <span class="cheemspay-mark"><img src="https://pay.ruikang.wang/brand/cheems-burger.webp" alt="CheemsPay" /></span>
+              <div><div class="cheemspay-name">Cheems<span>Pay</span></div><h3 id="account-label">检查账户状态</h3><p id="account-description">Lite 与 Standard 无需登录</p></div>
+            </div>
+            <div class="authorization-code hidden" id="authorization-code"><span>授权码</span><strong id="authorization-code-value">——</strong></div>
+            <div class="account-actions" id="account-actions"></div>
+          </article>
+
+          <article class="host-help hidden" id="host-help">
+            <strong id="host-help-title">还没有 Bomana Bridge？</strong>
+            <p id="host-help-description">下载并运行一次，之后 Launcher 会自动连接。</p>
+            <a class="primary-link" href="../downloads/BomanaBridge.exe">下载 Bomana Bridge</a>
+          </article>
+
+          <details class="technical-details">
+            <summary>技术详情</summary>
+            <dl>
+              <div><dt>Bridge</dt><dd id="bridge-technical">正在检测</dd></div>
+              <div><dt>本机缓存</dt><dd id="cache-technical">正在检测</dd></div>
+              <div><dt>运行边界</dt><dd>官方 8111 · 离线数据 · 无访存</dd></div>
+              <div><dt>匿名日活</dt><dd>默认匿名统计 · 每天最多一次 · 不含账号、游戏数据或 8111 内容</dd></div>
+            </dl>
+          </details>
+        </aside>
+      </section>
+
+      <footer>
+        <span class="footer-slogan"><strong>全真飞行</strong><em>需要的信息</em><span>安静地放在手边</span></span>
+        <span>有问题可从托盘退出 Bridge 后重新运行</span>
+      </footer>
+    </main>
+    <dialog class="authorization-fallback" id="authorization-fallback-dialog">
+      <div class="authorization-fallback-head">
+        <div><span>CHEEMSPAY ACCESS</span><h2>继续 Enhanced 授权</h2></div>
+        <button aria-label="关闭授权说明" id="authorization-fallback-close" type="button">×</button>
+      </div>
+      <p>浏览器阻止了新窗口。你可以在当前页面完成 CheemsPay 登录与批准，完成后会自动返回 Launcher。</p>
+      <div class="authorization-fallback-code"><span>授权码</span><strong id="authorization-fallback-code">——</strong></div>
+      <div class="authorization-fallback-actions">
+        <button class="button primary" id="authorization-current-tab" type="button">在当前页面继续</button>
+        <button class="button secondary" id="authorization-retry-popup" type="button">再次尝试弹窗</button>
+      </div>
+      <small>账号密码始终只输入在 pay.ruikang.wang，不会交给 Bomana 或 Bridge。</small>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/launcher/main.ts"></script>
+  </body>
+</html>

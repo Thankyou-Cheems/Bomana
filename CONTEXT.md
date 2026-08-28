@@ -1,47 +1,45 @@
-# Bomana Product Editions
+# Bomana Product Language
 
-Bomana provides public flight-assistance editions and a subscriber-only strike-prediction edition while preserving stable release identities for existing installations.
+Bomana is one App presented through Web and connected to official local game data by Bridge.
 
-## Editions
+## Language
 
-**Public Edition**:
-An edition whose complete implementation, data, and release definition are available from the public Bomana repository without an entitlement. Lite and Standard are Public Editions.
-_Avoid_: Free tier, community edition
+**Web**:
+The browser presentation of Bomana App.
+_Avoid_: Desktop App, Web Edition
+
+**Online Launcher**:
+The Web entry at `bomana.ruikang.wang/launcher/` that discovers Bridge and opens an Edition.
+_Avoid_: Desktop Launcher, installer
+
+**Bridge**:
+The local read-only companion that exposes fixed official 8111 routes and owns the Local Data Store.
+_Avoid_: backend, solver, authenticator
 
 **Lite**:
-The minimal Public Edition centered on the respawn timer and essential status display.
-_Avoid_: Trial, demo
+The timer-only public Edition.
+_Avoid_: trial, demo
 
 **Standard**:
-The basic Public Edition that adds navigation, fuel, and checklist capabilities without Strike Prediction or Web Cockpit.
-_Avoid_: Basic tier, free Enhanced
+The public Edition with Basic Navigation, fuel, checklist, and reference capabilities.
+_Avoid_: free Enhanced
 
-**Subscriber Edition**:
-An edition whose differentiated implementation and data are delivered only to a user with an active Entitlement. Super Bomb Edition is the Subscriber Edition.
-_Avoid_: Premium flag, paid build
+**Basic Navigation**:
+Official zone and airfield selection with bearing, distance, and heading cues. It excludes coordinates, chat recognition, countdowns, terrain, and inferred targets.
+_Avoid_: tactical intelligence
 
-**Super Bomb Edition**:
-The Subscriber Edition containing Strike Prediction, offline terrain support, and Web Cockpit. Its stable Release Channel is `Enhanced`.
-_Avoid_: Enhanced source edition, full public edition
+**Enhanced**:
+The subscriber Edition whose implementation and data remain in the private release closure.
+_Avoid_: public build, Standard Plus
 
-## Subscription
+**Local Data Store**:
+Bridge-owned persistent storage for user-selected, signed public objects.
+_Avoid_: App installation, cloud backup
 
-**Entitlement**:
-The time-bounded right, owned by CheemsPay, for a user and an allowed set of devices to use the Super Bomb Edition.
-_Avoid_: License key, purchase flag
+## Legacy
 
-**Subscription Receipt**:
-A device-bound, signed proof of an Entitlement that Bomana can evaluate without a live CheemsPay request.
-_Avoid_: Session token, activation code
+**Legacy Python App**:
+The retired packaged desktop application retained only in repository history and old Releases.
 
-## Release
-
-**Release Channel**:
-The stable artifact identity used by Launcher manifests and installed state. `Lite`, `Standard`, and `Enhanced` are Release Channels; a Release Channel is not an access decision.
-_Avoid_: Edition access, subscription plan
-
-## Strike Prediction
-
-**Strike Prediction**:
-The Super Bomb Edition capability that derives weapon guidance from official 8111 observations, user-selected configuration, bundled static data, and offline terrain.
-_Avoid_: Native game solution, memory-assisted prediction
+**Legacy Desktop Launcher**:
+The retired downloadable Launcher retained only in repository history and old Releases.
