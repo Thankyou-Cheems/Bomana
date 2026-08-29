@@ -67,7 +67,7 @@ describe("PersistentAssetStore", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
       calls.push({ url, method });
-      if (url.endsWith("/api/v1/capabilities")) return new Response(JSON.stringify({ schema_version: 1, bridge_protocol: 1, cache_protocol: 3, input: "official-8111-only", write_commands: false }));
+      if (url.endsWith("/api/v1/capabilities")) return new Response(JSON.stringify({ schema_version: 1, bridge_protocol: 1, cache_protocol: 4, input: "official-8111-only", write_commands: false }));
       if (url.endsWith("/api/v1/cache/status")) return new Response(JSON.stringify({
         schema_version: 1, state: "syncing", map_count: 2, cached_map_count: 1,
         selected_map_count: 1, selected_cached_map_count: 1,

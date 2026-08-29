@@ -16,6 +16,14 @@ _Avoid_: Desktop Launcher, installer
 The local read-only companion that exposes fixed official 8111 routes and owns the Local Data Store.
 _Avoid_: backend, solver, authenticator
 
+**Bridge Tray Pairing**:
+The account-blind local Bridge page that displays a temporary phone QR. Phone Web obtains its own signed lease when needed; Bridge verifies it without receiving an account access token.
+_Avoid_: Bridge login, bundled Enhanced App, cloud relay
+
+**Bridge Diagnostics**:
+The bounded single-file connectivity reporter for Bridge ports, browser policy, and official 8111 reachability. It records no account authorization, pairing secret, game value, map, chat, or raw 8111 body.
+_Avoid_: support bundle, telemetry upload, game logger
+
 **Lite**:
 The timer-only public Edition.
 _Avoid_: trial, demo

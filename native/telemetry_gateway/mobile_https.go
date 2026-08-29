@@ -213,6 +213,10 @@ func (gateway *relay) serveMobileAppAsset(response http.ResponseWriter, request 
 	} else if contentType != "" {
 		response.Header().Set("Content-Type", contentType)
 	}
+	resolvedType := strings.ToLower(strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0]))
+	if strings.EqualFold(path.Ext(request.URL.Path), ".js") || resolvedType == "text/javascript" || resolvedType == "application/javascript" {
+		response.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; base-uri 'none'; object-src 'none'")
+	}
 	response.Header().Set("Cache-Control", "no-store")
 	if strings.Contains(strings.ToLower(contentType), "text/html") {
 		response.Header().Set("Content-Security-Policy", pairingPageCSP)

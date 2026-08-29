@@ -9,7 +9,7 @@ describe("public telemetry", () => {
     const requests: string[] = [];
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input); requests.push(url);
-      if (url.endsWith("/api/v1/capabilities")) return Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 3, input: "official-8111-only", write_commands: false });
+      if (url.endsWith("/api/v1/capabilities")) return Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 4, input: "official-8111-only", write_commands: false });
       if (url.endsWith("/api/v1/8111/map-objects")) return Response.json([]);
       return Response.json({ valid: true, map_min: [0, 0], map_max: [1, 1] });
     });
@@ -22,7 +22,7 @@ describe("public telemetry", () => {
     const requests: string[] = [];
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input); requests.push(url);
-      if (url.endsWith("/api/v1/capabilities")) return Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 3, input: "official-8111-only", write_commands: false });
+      if (url.endsWith("/api/v1/capabilities")) return Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 4, input: "official-8111-only", write_commands: false });
       return Response.json({ valid: true, compass1: 0, "IAS, km/h": 500, "H, m": 3000 });
     });
     const source = new PublicTelemetry("http://127.0.0.1:8878/", fetcher, { includeNavigation: false });

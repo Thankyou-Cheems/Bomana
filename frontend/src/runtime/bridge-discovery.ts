@@ -74,7 +74,13 @@ export function fetchBridgeResource(
   input: URL | RequestInfo,
   init: RequestInit = {},
 ): Promise<Response> {
-  if (!mobileBridge) return fetcher(input, init);
+  if (!mobileBridge) {
+    const loopbackInit: RequestInit & { readonly targetAddressSpace: "loopback" } = {
+      ...init,
+      targetAddressSpace: "loopback",
+    };
+    return fetcher(input, loopbackInit);
+  }
   const headers = new Headers(init.headers);
   headers.set("X-Bomana-Mobile-Pairing", mobileBridge.pairingToken);
   const localInit: RequestInit & { readonly targetAddressSpace: "local" } = {
@@ -187,7 +193,7 @@ async function probeResult(candidate: URL, fetcher: Fetcher): Promise<"match" | 
     if (response.status === 401 || response.status === 403) return "unauthorized";
     if (!response.ok) return "mismatch";
     const value = await response.json() as Record<string, unknown>;
-    return value.schema_version === 1 && value.bridge_protocol === 1 && value.cache_protocol === 3
+    return value.schema_version === 1 && value.bridge_protocol === 1 && value.cache_protocol === 4
       && value.input === "official-8111-only" && value.write_commands === false
       ? "match"
       : "mismatch";

@@ -1,5 +1,12 @@
 # Changelog
 
+## Bridge 1.5.10 public source sync
+
+- Added the account-blind Bridge tray QR surface and Bridge-side verification for pairing-bound phone leases.
+- Added the bounded single-file Bridge diagnostics source and privacy contract.
+- Distinguished denied Edge loopback permission from a missing Bridge and added recovery guidance.
+- Kept production deployment, Enhanced App, terrain, models, and solvers outside the public repository.
+
 ## Browser public cutover
 
 - Retired the Python App, desktop Launcher, tkinter UI, PyInstaller packaging, and hotkey broker from the current public tree.

@@ -18,9 +18,10 @@ import (
 
 func TestLocalDataStoreDownloadsOnlyMapsSelectedByWeb(t *testing.T) {
 	objects := map[string][]byte{
-		"index.json":    []byte(`{"schema_version":1,"maps":[{"id":"air_alpha","file":"air_alpha.bth"},{"id":"air_bravo","file":"air_bravo.bth"}]}`),
-		"air_alpha.bth": []byte("alpha terrain"),
-		"air_bravo.bth": []byte("bravo terrain"),
+		"index.json":           []byte(`{"schema_version":1,"maps":[{"id":"air_alpha","file":"air_alpha.bth","detail_layers":[{"file":"air_alpha.detail.bth"}]},{"id":"air_bravo","file":"air_bravo.bth"}]}`),
+		"air_alpha.bth":        []byte("alpha terrain"),
+		"air_alpha.detail.bth": []byte("alpha detail terrain"),
+		"air_bravo.bth":        []byte("bravo terrain"),
 	}
 	manifest := terrainManifest{
 		SchemaVersion: 1, TerrainPackID: "terrain-v1", TerrainRevision: strings.Repeat("a", 64), MapCount: 2,
@@ -91,6 +92,10 @@ func TestLocalDataStoreDownloadsOnlyMapsSelectedByWeb(t *testing.T) {
 	if status.State != "ready" || status.SelectedMapCount != 1 || status.CachedMapCount != 1 {
 		t.Fatalf("selected terrain was not cached: %#v", status)
 	}
+	alphaStatus := status.Maps[0]
+	if alphaStatus.ID != "air_alpha" || alphaStatus.TotalBytes != int64(len(objects["air_alpha.bth"])+len(objects["air_alpha.detail.bth"])) || alphaStatus.CachedBytes != alphaStatus.TotalBytes {
+		t.Fatalf("primary/detail map status was not aggregated: %#v", alphaStatus)
+	}
 	firstRequests := objectRequests.Load()
 	store.syncOnce(context.Background())
 	if objectRequests.Load() != firstRequests {
@@ -99,7 +104,7 @@ func TestLocalDataStoreDownloadsOnlyMapsSelectedByWeb(t *testing.T) {
 	if rangeRequests.Load() != 1 {
 		t.Fatalf("partial object was not resumed: range requests=%d", rangeRequests.Load())
 	}
-	if requests := objectRequests.Load(); requests != 2 {
+	if requests := objectRequests.Load(); requests != 3 {
 		t.Fatalf("unselected terrain was downloaded: requests=%d", requests)
 	}
 	if _, err := os.Stat(store.objectPath(rogueDigest)); !os.IsNotExist(err) {
@@ -119,6 +124,12 @@ func TestLocalDataStoreDownloadsOnlyMapsSelectedByWeb(t *testing.T) {
 		t.Fatalf("verified cached terrain was unavailable offline: %v", err)
 	}
 	file.Close()
+	detail := manifestFile(manifest, "air_alpha.detail.bth")
+	detailFile, _, err := offline.ReadObject(detail.SHA256)
+	if err != nil {
+		t.Fatalf("verified cached terrain detail was unavailable offline: %v", err)
+	}
+	detailFile.Close()
 	offline.syncOnce(context.Background())
 	if offline.Status().State != "degraded" {
 		t.Fatalf("offline refresh did not report degraded state: %#v", offline.Status())
@@ -249,7 +260,7 @@ func TestLocalDataStoreKeepsInFlightUploadTempsWhilePruningUnknownObjects(t *tes
 	digest := digestBytes(payload)
 	allowed := terrainManifestFile{Path: "air_test.bth", Asset: "Bomana_terrain_object_" + digest + ".bth", SHA256: digest, SizeBytes: int64(len(payload))}
 	store.beginManifest(terrainManifest{TerrainRevision: strings.Repeat("a", 64), MapCount: 1}, []terrainManifestFile{allowed})
-	store.applyTerrainIndex(map[string]string{"air_test": "air_test.bth"})
+	store.applyTerrainIndex(map[string][]string{"air_test": {"air_test.bth"}})
 	if err := store.SetSelectedMaps([]string{"air_test"}); err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +291,7 @@ func TestLocalDataStoreAcceptsOnlyContentAddressedBrowserObjects(t *testing.T) {
 	digest := digestBytes(payload)
 	allowed := terrainManifestFile{Path: "air_test.bth", Asset: "Bomana_terrain_object_" + digest + ".bth", SHA256: digest, SizeBytes: int64(len(payload))}
 	store.beginManifest(terrainManifest{TerrainRevision: strings.Repeat("a", 64), MapCount: 1}, []terrainManifestFile{allowed})
-	store.applyTerrainIndex(map[string]string{"air_test": "air_test.bth"})
+	store.applyTerrainIndex(map[string][]string{"air_test": {"air_test.bth"}})
 	if err := store.SetSelectedMaps([]string{"air_test"}); err != nil {
 		t.Fatal(err)
 	}

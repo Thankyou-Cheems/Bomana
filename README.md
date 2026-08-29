@@ -34,6 +34,12 @@ Bomana 是面向 War Thunder 全真模式的独立第三方浏览器 App。War T
 2. 下载并运行 `BomanaBridge.exe`。
 3. 在线 Launcher 发现 Bridge 后，选择 Lite 或 Standard。
 
+如果 Edge 曾拒绝“设备上的应用 / 本地网络访问”，Launcher 会显示专门的恢复教程，
+不再误报 Bridge 未运行；也可运行
+[`BomanaBridgeDiagnostics.exe`](https://bomana.ruikang.wang/downloads/BomanaBridgeDiagnostics.exe)
+生成不含账号、配对凭据或 8111 原文的连接报告。右键 Bridge 的“连接手机…”属于公开
+配对传输协议；Enhanced App、地形与解算实现仍不在本仓库。
+
 旧 Python App、桌面 Launcher 与热键 Broker 已从当前源码树退役。它们仍保留在 Git 历史与既有 Release 中，不会被重写或删除。
 
 ## 匿名日活

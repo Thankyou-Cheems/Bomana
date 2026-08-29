@@ -17,6 +17,7 @@ const (
 type trayConfig struct {
 	launcherURL        string
 	webURL             string
+	mobilePairingURL   string
 	projectURL         string
 	sponsorURL         string
 	enhancedSupportURL string
@@ -41,6 +42,7 @@ type trayAboutDetails struct {
 
 const (
 	trayActionOpenWeb trayAction = iota + 1
+	trayActionMobilePairing
 	trayActionOpenLauncher
 	trayActionStarProject
 	trayActionSponsor
@@ -48,10 +50,11 @@ const (
 	trayActionExit
 )
 
-func defaultTrayConfig(requestExit func()) trayConfig {
+func defaultTrayConfig(mobilePairingURL string, requestExit func()) trayConfig {
 	return trayConfig{
 		launcherURL:        launcherURL,
 		webURL:             webURL,
+		mobilePairingURL:   mobilePairingURL,
 		projectURL:         projectURL,
 		sponsorURL:         sponsorURL,
 		enhancedSupportURL: enhancedSupportURL,
@@ -72,6 +75,8 @@ func performTrayAction(
 	switch action {
 	case trayActionOpenWeb:
 		openURL(config.webURL)
+	case trayActionMobilePairing:
+		openURL(config.mobilePairingURL)
 	case trayActionOpenLauncher:
 		openURL(config.launcherURL)
 	case trayActionStarProject:
@@ -113,7 +118,7 @@ func buildTrayAbout(config trayConfig) trayAboutDetails {
 				"• Bridge 仅连接官方 localhost:8111，并管理签名地形缓存。\n"+
 				"• 飞行状态、导航与武器解算在用户浏览器本地执行。\n"+
 				"• 不读取游戏进程、内存、模块或输入。\n\n"+
-				"版本与构建\nBridge：%s\nApp Web：%s\nBridge 协议：v1\n缓存协议：v3\n手机配对协议：v1\n构建来源：%s",
+				"版本与构建\nBridge：%s\nApp Web：%s\nBridge 协议：v1\n缓存协议：v4\n手机配对协议：v6\n构建来源：%s",
 			config.bridgeVersion,
 			config.appWebVersion,
 			provenance,

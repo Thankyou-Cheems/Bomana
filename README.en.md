@@ -31,6 +31,13 @@ refer only to in-game virtual mechanics, not real-world use.
 
 Open <https://bomana.ruikang.wang/launcher/>, run `BomanaBridge.exe`, and select Lite or Standard.
 
+If Edge previously denied “apps on your device / local network access”, Launcher now shows a
+dedicated recovery guide instead of reporting that Bridge is not running. The standalone
+[`BomanaBridgeDiagnostics.exe`](https://bomana.ruikang.wang/downloads/BomanaBridgeDiagnostics.exe)
+can produce a connection report without account data, pairing credentials, or raw 8111 bodies.
+Bridge's “Connect phone…” tray action is a public pairing transport protocol; Enhanced App,
+terrain, and solver implementation remain outside this repository.
+
 The retired Python App, desktop Launcher, and hotkey broker remain available in Git history and existing Releases. Their history is not rewritten or deleted.
 
 ## Anonymous daily active

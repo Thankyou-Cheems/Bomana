@@ -20,7 +20,7 @@ Online Launcher -> Lite or Standard Web
 
 Lite reads the public frame only to maintain the respawn-cycle timer. Standard additionally derives bearing and distance to official `bombing_point` and `airfield` objects. The public runtime does not request gamechat, terrain, mobile pairing, or any Enhanced endpoint.
 
-Enhanced is a stable integration identity in the public Launcher. Its implementation, models, data, tests, and release definition are not part of this repository. Bridge may expose public mobile-pairing and signed-object transport protocols because those protocols carry opaque authorization/artifacts and contain no Enhanced App implementation, terrain object, or solver.
+Enhanced is a stable integration identity in the public Launcher. Its implementation, models, data, tests, and release definition are not part of this repository. Bridge may expose public mobile-pairing and signed-object transport protocols because those protocols carry opaque authorization/artifacts and contain no Enhanced App implementation, terrain object, or solver. Tray pairing verifies a phone-only signed lease but never receives the account access token. Launcher separately distinguishes a denied browser loopback permission from a missing Bridge and links to recovery guidance.
 
 ## Retired code
 

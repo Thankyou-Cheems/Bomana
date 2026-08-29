@@ -1,4 +1,5 @@
 import { discoverBridgeEndpoint, fetchBridgeResource } from "../runtime/bridge-discovery";
+import { queryLocalNetworkPermission } from "../runtime/local-network-permission";
 import {
   clearBrowserAuthorization,
   readBrowserAuthorization,
@@ -11,7 +12,7 @@ export type Channel = "Lite" | "Standard" | "Enhanced";
 export interface BridgeCapabilities {
   readonly schema_version: 1;
   readonly bridge_protocol: 1;
-  readonly cache_protocol: 3;
+  readonly cache_protocol: 4;
   readonly bridge_version: string;
   readonly app_web_version?: string;
   readonly build_provenance: "github-actions-sigstore" | "local-unattested";
@@ -33,6 +34,7 @@ export interface BrowserAccess {
 
 export type BridgeProbe =
   | { readonly state: "connected"; readonly capabilities: BridgeCapabilities; readonly endpoint: string }
+  | { readonly state: "permission-denied"; readonly message: string }
   | { readonly state: "blocked"; readonly message: string }
   | { readonly state: "disconnected"; readonly message: string };
 
@@ -62,7 +64,7 @@ export class BridgeClient {
     }
     if (!response.ok) throw new Error(`Bridge HTTP ${response.status}`);
     const value = await response.json() as Partial<BridgeCapabilities>;
-    if (value.schema_version !== 1 || value.bridge_protocol !== 1 || value.cache_protocol !== 3 || value.input !== "official-8111-only" || value.write_commands !== false
+    if (value.schema_version !== 1 || value.bridge_protocol !== 1 || value.cache_protocol !== 4 || value.input !== "official-8111-only" || value.write_commands !== false
       || typeof value.bridge_version !== "string" || !value.bridge_version
       || value.authenticode !== false || !["github-actions-sigstore", "local-unattested"].includes(String(value.build_provenance))) {
       throw new Error("Bridge 协议不兼容");
@@ -76,6 +78,12 @@ export class BridgeClient {
       const endpoint = await discoverBridgeEndpoint(this.#fetcher, this.#configuredURL);
       return { state: "connected", capabilities, endpoint: endpoint.origin };
     } catch {
+      if (await queryLocalNetworkPermission("loopback") === "denied") {
+        return {
+          state: "permission-denied",
+          message: "浏览器已禁止 bomana.ruikang.wang 访问设备上的应用（本机 Bridge）。请在网站权限中改为允许。",
+        };
+      }
       if (!this.#configuredURL) return { state: "disconnected", message: "未发现正在运行的 Bomana Bridge" };
       const controller = new AbortController();
       const timeout = globalThis.setTimeout(() => controller.abort(), 1_500);

@@ -7,7 +7,7 @@ import (
 )
 
 func TestTrayUsesOnlyFixedBomanaHTTPSDestinations(t *testing.T) {
-	config := defaultTrayConfig(func() {})
+	config := defaultTrayConfig("http://127.0.0.1:8878/mobile-pairing", func() {})
 	for name, raw := range map[string]string{"Launcher": config.launcherURL, "Web": config.webURL, "Sponsor": config.sponsorURL} {
 		parsed, err := url.Parse(raw)
 		if err != nil || parsed.Scheme != "https" || parsed.Host != "bomana.ruikang.wang" || parsed.RawQuery != "" || parsed.Fragment != "" {
@@ -19,6 +19,9 @@ func TestTrayUsesOnlyFixedBomanaHTTPSDestinations(t *testing.T) {
 	}
 	if config.webURL != "https://bomana.ruikang.wang/app/Enhanced/" {
 		t.Fatalf("unexpected Web URL: %q", config.webURL)
+	}
+	if config.mobilePairingURL != "http://127.0.0.1:8878/mobile-pairing" {
+		t.Fatalf("unexpected mobile pairing URL: %q", config.mobilePairingURL)
 	}
 	if config.projectURL != "https://github.com/Thankyou-Cheems/Bomana" {
 		t.Fatalf("unexpected project URL: %q", config.projectURL)
@@ -38,16 +41,17 @@ func TestTrayActionsOpenOnlyFixedDestinationsAndExit(t *testing.T) {
 	exits := 0
 	opened := make([]string, 0, 4)
 	details := make([]trayAboutDetails, 0, 1)
-	config := defaultTrayConfig(func() { exits++ })
+	config := defaultTrayConfig("http://127.0.0.1:8878/mobile-pairing", func() { exits++ })
 	opener := func(raw string) { opened = append(opened, raw) }
 	showDetails := func(value trayAboutDetails) { details = append(details, value) }
 	performTrayAction(config, trayActionOpenWeb, opener, showDetails)
+	performTrayAction(config, trayActionMobilePairing, opener, showDetails)
 	performTrayAction(config, trayActionOpenLauncher, opener, showDetails)
 	performTrayAction(config, trayActionStarProject, opener, showDetails)
 	performTrayAction(config, trayActionSponsor, opener, showDetails)
 	performTrayAction(config, trayActionAbout, opener, showDetails)
 	performTrayAction(config, trayActionExit, opener, showDetails)
-	if len(opened) != 4 || opened[0] != webURL || opened[1] != launcherURL || opened[2] != projectURL || opened[3] != sponsorURL {
+	if len(opened) != 5 || opened[0] != webURL || opened[1] != config.mobilePairingURL || opened[2] != launcherURL || opened[3] != projectURL || opened[4] != sponsorURL {
 		t.Fatalf("unexpected tray destinations: %#v", opened)
 	}
 	if exits != 1 {
@@ -72,7 +76,7 @@ func TestTrayAboutRestoresAuthorSponsorAndBuildDetails(t *testing.T) {
 	}
 	details := buildTrayAbout(config)
 	allText := strings.Join([]string{details.windowTitle, details.mainInstruction, details.contentHTML, details.expandedHTML, details.footerHTML, formatTrayAboutPlain(details)}, "\n")
-	for _, expected := range []string{"作者：Thankyou-Cheems", "MIT License", "支持作者", "订阅超级爆弹版", "微信赞赏码", "Ctrl+C", enhancedSupportURL, projectURL, sponsorURL, privacyURL, "Bridge：1.2.8", "App Web：1.2.8", "缓存协议：v3", "手机配对协议：v1", "GitHub Actions · Sigstore", "不读取游戏进程、内存、模块或输入"} {
+	for _, expected := range []string{"作者：Thankyou-Cheems", "MIT License", "支持作者", "订阅超级爆弹版", "微信赞赏码", "Ctrl+C", enhancedSupportURL, projectURL, sponsorURL, privacyURL, "Bridge：1.2.8", "App Web：1.2.8", "缓存协议：v4", "手机配对协议：v6", "GitHub Actions · Sigstore", "不读取游戏进程、内存、模块或输入"} {
 		if !strings.Contains(allText, expected) {
 			t.Fatalf("About details missing %q: %s", expected, allText)
 		}

@@ -14,6 +14,11 @@
           <img src="/src/generated/bomana-logo.svg" alt="Bomana" />
           <span><strong>BOMANA</strong><small>LAUNCHER</small></span>
         </a>
+        <nav class="product-nav" aria-label="Bomana 全站导航">
+          <a href="https://bomana.ruikang.wang/">官网</a>
+          <a href="https://bomana.ruikang.wang/launcher/" aria-current="page">在线启动器</a>
+          <a href="https://bomana.ruikang.wang/calculator/">在线计算器</a>
+        </nav>
         <div class="bridge-controls">
           <div class="host-pill offline" id="launcher-host-state">
             <span class="status-dot"></span>
@@ -83,8 +88,22 @@
 
           <article class="host-help hidden" id="host-help">
             <strong id="host-help-title">还没有 Bomana Bridge？</strong>
-            <p id="host-help-description">下载并运行一次，之后 Launcher 会自动连接。</p>
-            <a class="primary-link" href="../downloads/BomanaBridge.exe">下载 Bomana Bridge</a>
+            <p id="host-help-description">请手动运行下载好的 BomanaBridge.exe，看到系统托盘图标则代表启动成功。</p>
+            <section class="bridge-permission-guide hidden" id="bridge-permission-guide" aria-live="polite">
+              <strong>在 Edge 中重新开放权限</strong>
+              <ol>
+                <li>点击地址栏左侧的网站信息图标，打开“此网站的权限”。</li>
+                <li>把“设备上的应用”（部分版本显示“本地网络访问”）改为“允许”。</li>
+                <li>回到本页，点击“权限已开放，重新连接”。</li>
+              </ol>
+              <p>如果站点权限中没有这一项：打开 Edge“设置 → 隐私、搜索和服务 → 网站权限 → 所有权限 → 本地网络访问”，开启“访问前询问”，再刷新本页。</p>
+              <a href="https://support.microsoft.com/zh-cn/edge/control-a-website-s-access-to-the-local-network-in-microsoft-edge" rel="noopener noreferrer" target="_blank">查看 Microsoft 官方图文教程</a>
+              <small>若权限显示“由组织管理”或无法修改，请让管理员允许 https://bomana.ruikang.wang 访问本机网络；重复下载 Bridge 无法绕过该策略。</small>
+            </section>
+            <div class="host-help-actions">
+              <a class="primary-link" id="download-bridge" href="../downloads/BomanaBridge.exe">下载 Bomana Bridge</a>
+              <a class="diagnostic-link" id="download-bridge-diagnostics" href="../downloads/BomanaBridgeDiagnostics.exe">运行连接诊断</a>
+            </div>
           </article>
 
           <details class="technical-details">

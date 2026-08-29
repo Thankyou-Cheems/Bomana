@@ -31,6 +31,7 @@ const appWebReleaseURL = new URL("../app/app-release.json", new URL("./", locati
 const offlineStore = await openBridgeAssetStore();
 let refreshing = false;
 let bridgeProbeBusy = false;
+let bridgeDownloadStarted = false;
 let currentState: LauncherViewState | null = null;
 let authorizationPopup: AuthorizationPopup | null = null;
 let pendingAuthorizationCode = "";
@@ -45,10 +46,12 @@ const activityMessage = required("activity-message");
 const activityProgress = required("activity-progress");
 const modeBadge = required("mode-badge");
 const hostHelp = required("host-help");
+const bridgePermissionGuide = required("bridge-permission-guide");
 const toast = required("toast");
 const authorizationCode = required("authorization-code");
 const authorizationCodeValue = required("authorization-code-value");
 const connectBridge = requiredButton("connect-bridge");
+const downloadBridge = requiredLink("download-bridge");
 const openBridge = requiredLink("open-bridge");
 const hostHelpTitle = required("host-help-title");
 const hostHelpDescription = required("host-help-description");
@@ -72,6 +75,8 @@ authorizationCode.classList.add("hidden");
 required("refresh-catalog").textContent = "刷新状态";
 required("refresh-catalog").addEventListener("click", () => void refresh());
 connectBridge.addEventListener("click", () => void refreshBridge(true));
+downloadBridge.addEventListener("click", markBridgeDownloadStarted);
+updateBridge.addEventListener("click", markBridgeDownloadStarted);
 authorizationCurrentTab.addEventListener("click", () => fallbackAccess && continueAuthorizationInCurrentPage(fallbackAccess));
 authorizationRetryPopup.addEventListener("click", () => {
   const access = fallbackAccess;
@@ -146,6 +151,10 @@ function render(state: LauncherViewState): void {
 
 function renderBridge(probe: BridgeProbe, release: BridgeRelease | null, appRelease: AppWebRelease | null): void {
   connectBridge.disabled = false;
+  const permissionDenied = probe.state === "permission-denied";
+  bridgePermissionGuide.classList.toggle("hidden", !permissionDenied);
+  hostHelp.classList.toggle("permission-denied", permissionDenied);
+  downloadBridge.classList.toggle("hidden", permissionDenied);
   renderBridgeVersion(probe, release, appRelease);
   if (probe.state === "connected") {
     const capabilities = probe.capabilities;
@@ -163,17 +172,22 @@ function renderBridge(probe: BridgeProbe, release: BridgeRelease | null, appRele
     connectBridge.textContent = "重新检测";
     return;
   }
-  hostState.className = `host-pill ${probe.state === "blocked" ? "blocked" : "offline"}`;
-  hostState.replaceChildren(statusDot(), labelled(probe.state === "blocked" ? "Bridge 版本不兼容" : "Bridge 未连接", "运行 Bridge 后点击重试"));
+  hostState.className = `host-pill ${permissionDenied ? "permission-denied" : probe.state === "blocked" ? "blocked" : "offline"}`;
+  hostState.replaceChildren(statusDot(), labelled(
+    permissionDenied ? "浏览器权限已关闭" : probe.state === "blocked" ? "Bridge 版本不兼容" : "Bridge 未连接",
+    permissionDenied ? "Bridge 可能正在运行，但网页访问被拒绝" : "运行 Bridge 后点击连接",
+  ));
   bridgeTechnical.textContent = probe.message;
-  hostHelpTitle.textContent = probe.state === "blocked" ? "检测到旧版 Bridge" : "还没有 Bomana Bridge？";
-  hostHelpDescription.textContent = probe.state === "blocked"
+  hostHelpTitle.textContent = permissionDenied ? "请允许访问“设备上的应用”" : probe.state === "blocked" ? "检测到旧版 Bridge" : "还没有 Bomana Bridge？";
+  hostHelpDescription.textContent = permissionDenied
+    ? "这不是 Bridge 未启动提示：Edge 已明确拒绝 Launcher 连接本机 Bridge。请按下面步骤恢复权限。"
+    : probe.state === "blocked"
     ? "请从托盘退出旧版 Bridge，再运行这里下载的最新版本。"
-    : "下载并运行 Bridge，然后点击“重试连接”。Launcher 会自动寻找可用端口。";
+    : "请手动运行下载好的 BomanaBridge.exe，看到系统托盘图标则代表启动成功。";
   hostHelp.classList.remove("hidden");
   openBridge.classList.add("hidden");
   openBridge.removeAttribute("href");
-  connectBridge.textContent = "重试连接";
+  connectBridge.textContent = permissionDenied ? "权限已开放，重新连接" : "连接 Bridge";
 }
 
 function renderBridgeVersion(probe: BridgeProbe, release: BridgeRelease | null, appRelease: AppWebRelease | null): void {
@@ -275,7 +289,7 @@ function channelCard(channel: Channel, state: LauncherViewState): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "channel-actions";
   if (state.bridge.state !== "connected") {
-    actions.append(linkButton("下载并运行 Bridge", bridgeDownloadURL(), channel === "Enhanced" ? "locked-button" : "primary"));
+    actions.append(bridgeDownloadAction(channel === "Enhanced" ? "locked-button" : "primary"));
   } else if (!enhancedAllowed) {
     actions.append(actionButton("登录后进入超级爆弹版", "locked-button", () => beginAccess()));
   } else {
@@ -290,10 +304,27 @@ function bridgeDownloadURL(): URL {
   return new URL("../downloads/BomanaBridge.exe", new URL("./", location.href));
 }
 
+function bridgeDownloadAction(style: string): HTMLElement {
+  if (bridgeDownloadStarted) return actionButton("连接 Bridge", style, () => { void refreshBridge(true); });
+  const link = linkButton("下载并运行 Bridge", bridgeDownloadURL(), style);
+  link.addEventListener("click", markBridgeDownloadStarted);
+  return link;
+}
+
+function markBridgeDownloadStarted(): void {
+  if (bridgeDownloadStarted) return;
+  bridgeDownloadStarted = true;
+  window.setTimeout(() => {
+    if (!currentState || currentState.bridge.state === "connected") return;
+    renderBridge(currentState.bridge, currentState.bridgeRelease, currentState.appWebRelease);
+    renderChannels(currentState);
+  }, 0);
+}
+
 function appWebURL(channel: Channel): URL {
   const base = import.meta.env.VITE_APP_WEB_BASE_URL
     ? new URL(import.meta.env.VITE_APP_WEB_BASE_URL)
-    : new URL("/app/", location.origin);
+    : new URL("./", location.href);
   return new URL(`${channel}/`, base);
 }
 

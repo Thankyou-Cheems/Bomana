@@ -25,6 +25,15 @@ describe("Launcher surface", () => {
     expect(html).toContain('id="open-bridge"');
     expect(html).toContain('id="bridge-version-panel"');
     expect(html).toContain('id="update-bridge"');
+    expect(html).toContain('id="download-bridge-diagnostics"');
+    expect(html).toContain('../downloads/BomanaBridgeDiagnostics.exe');
+    expect(html).toContain("运行连接诊断");
+    expect(html).toContain('id="bridge-permission-guide"');
+    expect(html).toContain("设备上的应用");
+    expect(html).toContain("本地网络访问");
+    expect(html).toContain("support.microsoft.com/zh-cn/edge/control-a-website-s-access-to-the-local-network-in-microsoft-edge");
+    expect(main).toContain('probe.state === "permission-denied"');
+    expect(main).toContain("权限已开放，重新连接");
     expect(html).not.toContain('id="anonymous-dau-enabled"');
     expect(html).toContain("默认匿名统计 · 每天最多一次 · 不含账号、游戏数据或 8111 内容");
     expect(main).not.toContain("setDailyActiveEnabled");
@@ -32,14 +41,12 @@ describe("Launcher surface", () => {
     expect(html).toContain('id="authorization-current-tab"');
     expect(main).not.toContain("scheduleBridgeProbe");
     expect(main).not.toContain("setInterval(() => void refreshBridge");
-    expect(main).toContain("运行 Bridge 后点击重试");
+    expect(main).toContain("运行 Bridge 后点击连接");
     expect(main).toContain("bridgeVersionState");
     expect(main).toContain('updateBridge.classList.toggle("hidden", state !== "outdated")');
     expect(main).toContain("openAuthorizationPopup");
     expect(main).toContain('cachePanel.classList.toggle("hidden", !state.access.enhanced)');
     expect(main).toContain("showAuthorizationFallback");
-    expect(main).toContain('new URL("/app/", location.origin)');
-    expect(main).not.toContain(': new URL("./", location.href)');
     expect(main).toContain('searchParams.get("authorization") !== "complete"');
     expect(main).toContain('searchParams.get("intent") !== "Enhanced"');
     expect(main).toContain('accountPanel.classList.add("intent-highlight")');
@@ -84,5 +91,16 @@ describe("Launcher surface", () => {
     expect(styles).toContain("grid-template-rows: auto minmax(68px, auto) 1fr auto");
     expect(styles).toContain("white-space: nowrap");
     expect(styles).toContain("min-height: 52px");
+  });
+
+  it("switches the missing-Bridge action after a download is triggered", async () => {
+    const [html, main] = await Promise.all([
+      readFile(new URL("../../launcher.html", import.meta.url), "utf8"),
+      readFile(new URL("./main.ts", import.meta.url), "utf8"),
+    ]);
+    expect(html).toContain('id="download-bridge"');
+    expect(main).toContain("markBridgeDownloadStarted");
+    expect(main).toContain('actionButton("连接 Bridge"');
+    expect(main).toContain("请手动运行下载好的 BomanaBridge.exe，看到系统托盘图标则代表启动成功");
   });
 });

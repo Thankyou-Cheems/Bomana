@@ -33,13 +33,14 @@ type mobileNetworkCandidate struct {
 }
 
 type mobilePairingDescriptor struct {
-	SchemaVersion    int                      `json:"schema_version"`
-	BridgePairingID  string                   `json:"bridge_pairing_id"`
-	PairingToken     string                   `json:"pairing_token"`
-	PairingCode      string                   `json:"pairing_code"`
-	PairingExpiresAt string                   `json:"pairing_expires_at"`
-	ExpiresAt        string                   `json:"expires_at"`
-	Networks         []mobileNetworkCandidate `json:"networks"`
+	SchemaVersion         int                      `json:"schema_version"`
+	MobilePairingProtocol int                      `json:"mobile_pairing_protocol"`
+	BridgePairingID       string                   `json:"bridge_pairing_id"`
+	PairingToken          string                   `json:"pairing_token"`
+	PairingCode           string                   `json:"pairing_code"`
+	PairingExpiresAt      string                   `json:"pairing_expires_at"`
+	ExpiresAt             string                   `json:"expires_at"`
+	Networks              []mobileNetworkCandidate `json:"networks"`
 }
 
 type mobilePairingSession struct {
@@ -84,16 +85,18 @@ type mobilePairingManager struct {
 	session     *mobilePairingSession
 	listen      func(network, address string) (net.Listener, error)
 	networks    func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error)
+	verifyLease mobileLeaseVerifier
 }
 
 func newMobilePairingManager() *mobilePairingManager {
 	return &mobilePairingManager{
-		listen:   net.Listen,
-		networks: privateIPv4Candidates,
+		listen:      net.Listen,
+		networks:    privateIPv4Candidates,
+		verifyLease: verifyMobileEnhancedLease,
 	}
 }
 
-func (manager *mobilePairingManager) Start(handler http.Handler, now time.Time) (mobilePairingDescriptor, error) {
+func (manager *mobilePairingManager) Start(handler http.Handler, now time.Time, forceNew ...bool) (mobilePairingDescriptor, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	if manager.listener == nil {
@@ -149,12 +152,17 @@ func (manager *mobilePairingManager) Start(handler http.Handler, now time.Time) 
 			IdleTimeout:       15 * time.Second,
 			MaxHeaderBytes:    16 * 1024,
 		}
-		go func() { _ = manager.server.Serve(listener) }()
-		go func() { _ = manager.server.Serve(tlsListener) }()
+		server := manager.server
+		go func() { _ = server.Serve(listener) }()
+		go func() { _ = server.Serve(tlsListener) }()
 	}
 	networks, err := manager.networks(manager.port, manager.tlsPort)
 	if err != nil || len(networks) == 0 {
 		return mobilePairingDescriptor{}, errors.New("no private IPv4 network is available")
+	}
+	rotate := len(forceNew) > 0 && forceNew[0]
+	if session := manager.session; !rotate && session != nil && !session.claimed && session.code != "" && now.Before(session.codeExpiresAt) && now.Before(session.expiresAt) {
+		return pairingDescriptor(session, networks), nil
 	}
 	id, err := randomBase64URL(24)
 	if err != nil {
@@ -175,22 +183,40 @@ func (manager *mobilePairingManager) Start(handler http.Handler, now time.Time) 
 		codeExpiresAt: codeExpiresAt, expiresAt: expiresAt,
 		failures: make(map[string][]time.Time),
 	}
+	return pairingDescriptor(manager.session, networks), nil
+}
+
+func pairingDescriptor(session *mobilePairingSession, networks []mobileNetworkCandidate) mobilePairingDescriptor {
 	return mobilePairingDescriptor{
-		SchemaVersion:    1,
-		BridgePairingID:  id,
-		PairingToken:     token,
-		PairingCode:      code,
-		PairingExpiresAt: codeExpiresAt.UTC().Format(time.RFC3339),
-		ExpiresAt:        expiresAt.UTC().Format(time.RFC3339),
-		Networks:         networks,
-	}, nil
+		SchemaVersion:         1,
+		MobilePairingProtocol: mobilePairingProtocol,
+		BridgePairingID:       session.id,
+		PairingToken:          session.token,
+		PairingCode:           formatPairingCode(session.code),
+		PairingExpiresAt:      session.codeExpiresAt.UTC().Format(time.RFC3339),
+		ExpiresAt:             session.expiresAt.UTC().Format(time.RFC3339),
+		Networks:              networks,
+	}
+}
+
+func (manager *mobilePairingManager) Current(now time.Time) (mobilePairingDescriptor, bool, bool) {
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+	if manager.session == nil || !now.Before(manager.session.expiresAt) || manager.port <= 0 || manager.tlsPort <= 0 {
+		return mobilePairingDescriptor{}, false, false
+	}
+	networks, err := manager.networks(manager.port, manager.tlsPort)
+	if err != nil || len(networks) == 0 {
+		return mobilePairingDescriptor{}, false, false
+	}
+	return pairingDescriptor(manager.session, networks), manager.session.claimed, true
 }
 
 func (manager *mobilePairingManager) Prepare(
 	id string,
 	token string,
 	mobileLease string,
-	mobileLeaseExpiry time.Time,
+	_ time.Time,
 	pairingExpiry time.Time,
 	now time.Time,
 ) error {
@@ -204,11 +230,18 @@ func (manager *mobilePairingManager) Prepare(
 		subtle.ConstantTimeCompare([]byte(token), []byte(session.token)) != 1 {
 		return errors.New("mobile pairing identity mismatch")
 	}
-	if mobileLease == "" || len(mobileLease) > 8192 || !now.Before(mobileLeaseExpiry) || !now.Before(pairingExpiry) {
+	if mobileLease == "" || len(mobileLease) > 8192 || !now.Before(pairingExpiry) {
 		return errors.New("mobile pairing authorization invalid")
 	}
-	if mobileLeaseExpiry.Before(session.expiresAt) {
-		session.expiresAt = mobileLeaseExpiry
+	if manager.verifyLease == nil {
+		return errors.New("mobile pairing authorization verifier unavailable")
+	}
+	verifiedLeaseExpiry, err := manager.verifyLease(mobileLease, id, now)
+	if err != nil {
+		return errors.New("mobile pairing authorization invalid")
+	}
+	if verifiedLeaseExpiry.Before(session.expiresAt) {
+		session.expiresAt = verifiedLeaseExpiry
 	}
 	if pairingExpiry.Before(session.codeExpiresAt) {
 		session.codeExpiresAt = pairingExpiry
@@ -217,7 +250,7 @@ func (manager *mobilePairingManager) Prepare(
 		return errors.New("mobile pairing authorization expired")
 	}
 	session.mobileLease = mobileLease
-	session.mobileLeaseExpiry = mobileLeaseExpiry
+	session.mobileLeaseExpiry = verifiedLeaseExpiry
 	session.prepared = true
 	return nil
 }
@@ -262,6 +295,33 @@ func (manager *mobilePairingManager) Complete(client string, candidate string, n
 	return completion, mobilePairingCompleteOK
 }
 
+func (manager *mobilePairingManager) Claim(candidate string, now time.Time) (mobilePairingCompletion, mobilePairingCompleteResult) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	session := manager.session
+	if session == nil || !now.Before(session.expiresAt) || !session.prepared || !now.Before(session.codeExpiresAt) {
+		return mobilePairingCompletion{}, mobilePairingCompleteUnavailable
+	}
+	if session.claimed {
+		return mobilePairingCompletion{}, mobilePairingCompleteGone
+	}
+	if subtle.ConstantTimeCompare([]byte(candidate), []byte(session.token)) != 1 {
+		return mobilePairingCompletion{}, mobilePairingCompleteInvalid
+	}
+	session.claimed = true
+	completion := mobilePairingCompletion{
+		SchemaVersion:        1,
+		BridgePairingID:      session.id,
+		PairingToken:         session.token,
+		MobileLease:          session.mobileLease,
+		MobileLeaseExpiresAt: session.mobileLeaseExpiry.UTC().Format(time.RFC3339),
+		ExpiresAt:            session.expiresAt.UTC().Format(time.RFC3339),
+	}
+	session.code = ""
+	session.mobileLease = ""
+	return completion, mobilePairingCompleteOK
+}
+
 func (manager *mobilePairingManager) Active(now time.Time) bool {
 	manager.mu.RLock()
 	defer manager.mu.RUnlock()
@@ -271,7 +331,7 @@ func (manager *mobilePairingManager) Active(now time.Time) bool {
 func (manager *mobilePairingManager) Authorize(token string, now time.Time) bool {
 	manager.mu.RLock()
 	defer manager.mu.RUnlock()
-	if manager.session == nil || !now.Before(manager.session.expiresAt) {
+	if manager.session == nil || !manager.session.prepared || !manager.session.claimed || !now.Before(manager.session.expiresAt) {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(token), []byte(manager.session.token)) == 1
@@ -402,4 +462,11 @@ func randomPairingCode() (string, error) {
 
 func normalizePairingCode(value string) string {
 	return strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(strings.TrimSpace(value)))
+}
+
+func formatPairingCode(value string) string {
+	if len(value) != 8 {
+		return value
+	}
+	return value[:4] + "-" + value[4:]
 }

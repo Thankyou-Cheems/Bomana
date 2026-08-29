@@ -44,11 +44,12 @@ const (
 	tpmReturnCmd   = 0x0100
 
 	menuOpenWeb       = 1001
-	menuOpenLauncher  = 1002
-	menuStarProject   = 1003
-	menuSponsor       = 1004
-	menuAbout         = 1005
-	menuExit          = 1006
+	menuMobilePairing = 1002
+	menuOpenLauncher  = 1003
+	menuStarProject   = 1004
+	menuSponsor       = 1005
+	menuAbout         = 1006
+	menuExit          = 1007
 	swShowNormal      = 1
 	idiApplication    = 32512
 	mbOK              = 0x00000000
@@ -344,6 +345,7 @@ func (tray *windowsTray) showMenu() {
 	appendMenu(menu, mfString|mfDisabled|mfGrayed, 0, fmt.Sprintf("Bomana Bridge v%s · 只读 8111", tray.config.bridgeVersion))
 	appendMenu(menu, mfSeparator, 0, "")
 	appendMenu(menu, mfString, menuOpenWeb, "打开 Web 控制台")
+	appendMenu(menu, mfString, menuMobilePairing, "连接手机…")
 	appendMenu(menu, mfString, menuOpenLauncher, "打开 Launcher")
 	appendMenu(menu, mfSeparator, 0, "")
 	appendMenu(menu, mfString, menuStarProject, "给作者点个 Star")
@@ -362,6 +364,8 @@ func (tray *windowsTray) showMenu() {
 	switch command {
 	case menuOpenWeb:
 		performTrayAction(tray.config, trayActionOpenWeb, tray.openURL, tray.showAbout)
+	case menuMobilePairing:
+		performTrayAction(tray.config, trayActionMobilePairing, tray.openURL, tray.showAbout)
 	case menuOpenLauncher:
 		performTrayAction(tray.config, trayActionOpenLauncher, tray.openURL, tray.showAbout)
 	case menuStarProject:

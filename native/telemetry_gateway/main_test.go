@@ -226,7 +226,7 @@ func TestBridgeCapabilitiesExposeOnlyStableReadOnlyContract(t *testing.T) {
 		t.Fatalf("capabilities status = %d", response.Code)
 	}
 	body := response.Body.String()
-	for _, expected := range []string{`"bridge_protocol":1`, `"cache_protocol":3`, `"mobile_pairing_protocol":2`, `"bridge_version":"development"`, `"app_web_version":"development"`, `"input":"official-8111-only"`, `"write_commands":false`, `"authenticode":false`} {
+	for _, expected := range []string{`"bridge_protocol":1`, `"cache_protocol":4`, `"mobile_pairing_protocol":6`, `"bridge_version":"development"`, `"app_web_version":"development"`, `"input":"official-8111-only"`, `"write_commands":false`, `"authenticode":false`} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("capabilities missing %s: %s", expected, body)
 		}
@@ -238,6 +238,44 @@ func TestBridgeCapabilitiesExposeOnlyStableReadOnlyContract(t *testing.T) {
 		if strings.Contains(strings.ToLower(body), forbidden) {
 			t.Fatalf("capabilities leaked native authority %q", forbidden)
 		}
+	}
+}
+
+func TestBridgeSynchronizesOnlyABoundedWeaponSelection(t *testing.T) {
+	upstream, _ := url.Parse("http://127.0.0.1:8111")
+	gateway := newRelay(upstream, testOrigin)
+
+	read := httptest.NewRequest(http.MethodGet, "/api/v1/presentation/weapon-selection", nil)
+	read.Header.Set("Origin", testOrigin)
+	readResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(readResponse, read)
+	if readResponse.Code != http.StatusOK || !strings.Contains(readResponse.Body.String(), `"revision":0`) {
+		t.Fatalf("initial weapon selection = %d %s", readResponse.Code, readResponse.Body.String())
+	}
+
+	write := httptest.NewRequest(http.MethodPut, "/api/v1/presentation/weapon-selection", strings.NewReader(`{"schema_version":1,"selected_weapon_id":"gbu_31_v_3_b"}`))
+	write.Header.Set("Origin", testOrigin)
+	write.Header.Set("Content-Type", "application/json")
+	writeResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(writeResponse, write)
+	if writeResponse.Code != http.StatusOK || !strings.Contains(writeResponse.Body.String(), `"revision":1`) {
+		t.Fatalf("weapon selection write = %d %s", writeResponse.Code, writeResponse.Body.String())
+	}
+
+	readAgain := httptest.NewRequest(http.MethodGet, "/api/v1/presentation/weapon-selection", nil)
+	readAgain.Header.Set("Origin", testOrigin)
+	readAgainResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(readAgainResponse, readAgain)
+	if readAgainResponse.Code != http.StatusOK || !strings.Contains(readAgainResponse.Body.String(), `"selected_weapon_id":"gbu_31_v_3_b"`) {
+		t.Fatalf("weapon selection readback = %d %s", readAgainResponse.Code, readAgainResponse.Body.String())
+	}
+
+	invalid := httptest.NewRequest(http.MethodPut, "/api/v1/presentation/weapon-selection", strings.NewReader(`{"schema_version":1,"selected_weapon_id":"../../arbitrary"}`))
+	invalid.Header.Set("Origin", testOrigin)
+	invalidResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(invalidResponse, invalid)
+	if invalidResponse.Code != http.StatusBadRequest {
+		t.Fatalf("invalid weapon selection status = %d", invalidResponse.Code)
 	}
 }
 
@@ -253,7 +291,7 @@ func TestBridgeCacheInterfaceStoresOnlyVerifiedContentAddressedObjects(t *testin
 	digest := digestBytes(payload)
 	allowed := terrainManifestFile{Path: "air_test.bth", Asset: "Bomana_terrain_object_" + digest + ".bth", SHA256: digest, SizeBytes: int64(len(payload))}
 	store.beginManifest(terrainManifest{TerrainRevision: strings.Repeat("a", 64), MapCount: 1}, []terrainManifestFile{allowed})
-	store.applyTerrainIndex(map[string]string{"air_test": "air_test.bth"})
+	store.applyTerrainIndex(map[string][]string{"air_test": {"air_test.bth"}})
 	if err := store.SetSelectedMaps([]string{"air_test"}); err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +348,7 @@ func TestBridgeCacheSelectionRequiresBrowserOriginAndKnownMaps(t *testing.T) {
 		{Path: "air_bravo.bth", Asset: "Bomana_terrain_object_" + strings.Repeat("b", 64) + ".bth", SHA256: strings.Repeat("b", 64), SizeBytes: 20},
 	}
 	store.beginManifest(terrainManifest{TerrainRevision: strings.Repeat("c", 64), MapCount: 2}, files)
-	store.applyTerrainIndex(map[string]string{"air_alpha": "air_alpha.bth", "air_bravo": "air_bravo.bth"})
+	store.applyTerrainIndex(map[string][]string{"air_alpha": {"air_alpha.bth"}, "air_bravo": {"air_bravo.bth"}})
 	upstream, _ := url.Parse("http://127.0.0.1:8111")
 	gateway := newRelayWithCache(upstream, testOrigin, store)
 

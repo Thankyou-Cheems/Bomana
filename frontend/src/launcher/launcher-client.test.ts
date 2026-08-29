@@ -8,14 +8,17 @@ class MemoryStorage {
   removeItem(key: string): void { this.values.delete(key); }
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("Launcher clients", () => {
   it("reads only the stable Bridge capability endpoint", async () => {
     const calls: string[] = [];
     const fetcher = async (input: RequestInfo | URL) => {
       calls.push(String(input));
-      return new Response(JSON.stringify({ schema_version: 1, bridge_protocol: 1, cache_protocol: 3, bridge_version: "1.0.0", build_provenance: "github-actions-sigstore", authenticode: false, input: "official-8111-only", write_commands: false, routes: [] }));
+      return new Response(JSON.stringify({ schema_version: 1, bridge_protocol: 1, cache_protocol: 4, bridge_version: "1.0.0", build_provenance: "github-actions-sigstore", authenticode: false, input: "official-8111-only", write_commands: false, routes: [] }));
     };
     const bridge = new BridgeClient("http://127.0.0.1:8878", fetcher as typeof fetch);
     const capabilities = await bridge.capabilities();
@@ -80,6 +83,33 @@ describe("Launcher clients", () => {
       return new Response(null, { status: 200 });
     }) as typeof fetch);
     await expect(bridge.probe()).resolves.toMatchObject({ state: "blocked" });
+  });
+
+  it("distinguishes denied Edge device access from a missing Bridge", async () => {
+    const query = vi.fn(async (descriptor: { readonly name: string }) => ({
+      state: descriptor.name === "loopback-network" ? "denied" : "prompt",
+    }));
+    vi.stubGlobal("navigator", { permissions: { query } });
+    const bridge = new BridgeClient("", (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch);
+
+    await expect(bridge.probe()).resolves.toMatchObject({
+      state: "permission-denied",
+      message: expect.stringMatching(/设备上的应用|本地网络访问/),
+    });
+    expect(query).toHaveBeenCalledWith({ name: "loopback-network" });
+  });
+
+  it("keeps the missing-Bridge fallback when local access was not denied", async () => {
+    vi.stubGlobal("navigator", { permissions: { query: async () => ({ state: "prompt" }) } });
+    const bridge = new BridgeClient("", (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch);
+    await expect(bridge.probe()).resolves.toMatchObject({
+      state: "disconnected",
+      message: "未发现正在运行的 Bomana Bridge",
+    });
   });
 
   it("keeps an authorized projection for 14 days and refreshes that window online", async () => {

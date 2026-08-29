@@ -43,7 +43,11 @@ func TestMobilePairingCodePreparesAndClaimsOnePhoneSession(t *testing.T) {
 	if pairingCode == "" {
 		t.Fatal("pairing start did not return a human pairing code")
 	}
+	if descriptor["mobile_pairing_protocol"] != float64(6) {
+		t.Fatalf("pairing protocol = %v", descriptor["mobile_pairing_protocol"])
+	}
 
+	trustMobileLeaseForTest(gateway.mobile, time.Date(2099, 8, 26, 8, 0, 0, 0, time.UTC))
 	prepareBody := []byte(`{"schema_version":1,"bridge_pairing_id":"` + descriptor["bridge_pairing_id"].(string) + `","pairing_token":"` + descriptor["pairing_token"].(string) + `","mobile_lease":"signed-mobile-lease","mobile_lease_expires_at":"2099-08-26T08:00:00Z","pairing_expires_at":"2099-08-26T00:05:00Z"}`)
 	prepare := httptest.NewRequest(http.MethodPost, "/api/v1/mobile/pairing/prepare", bytes.NewReader(prepareBody))
 	prepare.RemoteAddr = "127.0.0.1:50101"
@@ -101,6 +105,60 @@ func TestMobilePairingCodePreparesAndClaimsOnePhoneSession(t *testing.T) {
 	}
 }
 
+func TestMobilePairingQRCodeClaimsWhenSafariOmitsOrigin(t *testing.T) {
+	upstreamURL, _ := url.Parse("http://127.0.0.1:8111")
+	gateway := newRelay(upstreamURL, testOrigin)
+	gateway.mobile.listen = func(network, _ string) (net.Listener, error) {
+		return net.Listen(network, "127.0.0.1:0")
+	}
+	gateway.mobile.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+		return []mobileNetworkCandidate{{Interface: "Wi-Fi", Address: "192.168.1.20", Endpoint: "http://192.168.1.20:" + strconv.Itoa(httpPort) + "/", TLSEndpoint: "https://192.168.1.20:" + strconv.Itoa(tlsPort) + "/"}}, nil
+	}
+	t.Cleanup(func() { _ = gateway.mobile.Close() })
+
+	now := time.Now()
+	descriptor, err := gateway.mobile.Start(gateway, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseExpiresAt := now.Add(7 * time.Hour)
+	trustMobileLeaseForTest(gateway.mobile, leaseExpiresAt)
+	if err := gateway.mobile.Prepare(descriptor.BridgePairingID, descriptor.PairingToken, "signed-mobile-lease", leaseExpiresAt, now.Add(4*time.Minute), now); err != nil {
+		t.Fatal(err)
+	}
+	if gateway.mobile.Authorize(descriptor.PairingToken, now) {
+		t.Fatal("QR claim token authorized LAN APIs before one-time claim")
+	}
+
+	requestOnPairingListener := func(body []byte) *http.Request {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/mobile/pairing/complete", bytes.NewReader(body))
+		request = request.WithContext(context.WithValue(request.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("192.168.1.20"), Port: gateway.mobile.port}))
+		request.Host = strings.TrimPrefix(strings.TrimSuffix(descriptor.Networks[0].Endpoint, "/"), "http://")
+		request.RemoteAddr = "192.168.1.30:50102"
+		request.Header.Set("Content-Type", "application/json")
+		return request
+	}
+
+	codeWithoutOrigin := requestOnPairingListener([]byte(`{"schema_version":1,"pairing_code":"` + descriptor.PairingCode + `"}`))
+	codeWithoutOrigin.Header.Set("Origin", "null")
+	codeResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(codeResponse, codeWithoutOrigin)
+	if codeResponse.Code != http.StatusForbidden {
+		t.Fatalf("low-entropy code without trusted origin status = %d: %s", codeResponse.Code, codeResponse.Body.String())
+	}
+
+	claim := requestOnPairingListener([]byte(`{"schema_version":1,"pairing_token":"` + descriptor.PairingToken + `"}`))
+	claim.Header.Set("Origin", "null")
+	claimResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(claimResponse, claim)
+	if claimResponse.Code != http.StatusOK {
+		t.Fatalf("Safari QR claim status = %d: %s", claimResponse.Code, claimResponse.Body.String())
+	}
+	if !gateway.mobile.Authorize(descriptor.PairingToken, now.Add(time.Second)) {
+		t.Fatal("claimed QR token did not authorize the paired LAN session")
+	}
+}
+
 func TestMobilePairingCodeLimitsGuessesPerClient(t *testing.T) {
 	manager := newMobilePairingManager()
 	manager.listen = func(network, _ string) (net.Listener, error) {
@@ -115,7 +173,9 @@ func TestMobilePairingCodeLimitsGuessesPerClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.Prepare(descriptor.BridgePairingID, descriptor.PairingToken, "signed-mobile-lease", now.Add(7*time.Hour), now.Add(4*time.Minute), now); err != nil {
+	leaseExpiresAt := now.Add(7 * time.Hour)
+	trustMobileLeaseForTest(manager, leaseExpiresAt)
+	if err := manager.Prepare(descriptor.BridgePairingID, descriptor.PairingToken, "signed-mobile-lease", leaseExpiresAt, now.Add(4*time.Minute), now); err != nil {
 		t.Fatal(err)
 	}
 	for attempt := 0; attempt < mobilePairingAttemptLimit; attempt++ {
@@ -131,7 +191,115 @@ func TestMobilePairingCodeLimitsGuessesPerClient(t *testing.T) {
 	}
 }
 
-func TestMobilePairingRotatesOneTokenAcrossMultipleLANEndpoints(t *testing.T) {
+func TestMobilePairingPrepareIgnoresTheCallerDeclaredLeaseExpiry(t *testing.T) {
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	verifiedExpiry := now.Add(time.Hour)
+	manager := newMobilePairingManager()
+	manager.session = &mobilePairingSession{
+		id:            "bridge_pairing_1234567890",
+		token:         strings.Repeat("a", 43),
+		code:          "ABCD2345",
+		codeExpiresAt: now.Add(5 * time.Minute),
+		expiresAt:     now.Add(8 * time.Hour),
+		failures:      make(map[string][]time.Time),
+	}
+	trustMobileLeaseForTest(manager, verifiedExpiry)
+
+	err := manager.Prepare(
+		manager.session.id,
+		manager.session.token,
+		"signed-mobile-lease",
+		now.Add(2*time.Hour),
+		now.Add(4*time.Minute),
+		now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manager.session.expiresAt.Equal(verifiedExpiry) || !manager.session.mobileLeaseExpiry.Equal(verifiedExpiry) {
+		t.Fatal("paired session did not use the verified lease expiry")
+	}
+}
+
+func TestMobilePairingStartReusesTheVisibleUnclaimedCode(t *testing.T) {
+	manager := newMobilePairingManager()
+	manager.listen = func(network, _ string) (net.Listener, error) {
+		return net.Listen(network, "127.0.0.1:0")
+	}
+	manager.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+		return []mobileNetworkCandidate{{Interface: "Wi-Fi", Address: "192.168.1.20", Endpoint: "http://192.168.1.20:" + strconv.Itoa(httpPort) + "/", TLSEndpoint: "https://192.168.1.20:" + strconv.Itoa(tlsPort) + "/"}}, nil
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	now := time.Now()
+	first, err := manager.Start(http.NotFoundHandler(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := manager.Start(http.NotFoundHandler(), now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.BridgePairingID != first.BridgePairingID || second.PairingToken != first.PairingToken || second.PairingCode != first.PairingCode {
+		t.Fatalf("visible unclaimed pairing rotated: first=%+v second=%+v", first, second)
+	}
+}
+
+func TestMobilePairingExplicitRotationRevokesTheVisibleOffer(t *testing.T) {
+	manager := newMobilePairingManager()
+	manager.listen = func(network, _ string) (net.Listener, error) {
+		return net.Listen(network, "127.0.0.1:0")
+	}
+	manager.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+		return []mobileNetworkCandidate{{Interface: "Wi-Fi", Address: "192.168.1.20", Endpoint: "http://192.168.1.20:" + strconv.Itoa(httpPort) + "/", TLSEndpoint: "https://192.168.1.20:" + strconv.Itoa(tlsPort) + "/"}}, nil
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	now := time.Now()
+	first, err := manager.Start(http.NotFoundHandler(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, err := manager.Start(http.NotFoundHandler(), now.Add(time.Second), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rotated.BridgePairingID == first.BridgePairingID || rotated.PairingToken == first.PairingToken || rotated.PairingCode == first.PairingCode {
+		t.Fatalf("explicit rotation reused visible offer: first=%+v rotated=%+v", first, rotated)
+	}
+}
+
+func TestMobilePairingRotateRouteReturnsFreshMaterial(t *testing.T) {
+	upstreamURL, _ := url.Parse("http://127.0.0.1:8111")
+	gateway := newRelay(upstreamURL, testOrigin)
+	gateway.mobile.listen = func(network, _ string) (net.Listener, error) {
+		return net.Listen(network, "127.0.0.1:0")
+	}
+	gateway.mobile.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+		return []mobileNetworkCandidate{{Interface: "Wi-Fi", Address: "192.168.1.20", Endpoint: "http://192.168.1.20:" + strconv.Itoa(httpPort) + "/", TLSEndpoint: "https://192.168.1.20:" + strconv.Itoa(tlsPort) + "/"}}, nil
+	}
+	t.Cleanup(func() { _ = gateway.mobile.Close() })
+	request := func(path string) mobilePairingDescriptor {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.RemoteAddr = "127.0.0.1:50100"
+		req.Header.Set("Origin", testOrigin)
+		response := httptest.NewRecorder()
+		gateway.ServeHTTP(response, req)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("%s status = %d: %s", path, response.Code, response.Body.String())
+		}
+		var descriptor mobilePairingDescriptor
+		if err := json.Unmarshal(response.Body.Bytes(), &descriptor); err != nil {
+			t.Fatal(err)
+		}
+		return descriptor
+	}
+	first := request("/api/v1/mobile/pairing/start")
+	rotated := request("/api/v1/mobile/pairing/rotate")
+	if first.BridgePairingID == rotated.BridgePairingID || first.PairingCode == rotated.PairingCode {
+		t.Fatalf("rotate route reused material: first=%+v rotated=%+v", first, rotated)
+	}
+}
+
+func TestMobilePairingReusesOneTokenAcrossLANEndpointsUntilCodeExpiry(t *testing.T) {
 	manager := newMobilePairingManager()
 	manager.listen = func(network, _ string) (net.Listener, error) {
 		return net.Listen(network, "127.0.0.1:0")
@@ -148,7 +316,7 @@ func TestMobilePairingRotatesOneTokenAcrossMultipleLANEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first.Networks) != 2 || !manager.Authorize(first.PairingToken, now) {
+	if len(first.Networks) != 2 || manager.Authorize(first.PairingToken, now) {
 		t.Fatalf("invalid first pairing: %+v", first)
 	}
 	if !strings.HasPrefix(first.Networks[0].TLSEndpoint, "https://192.168.1.20:") {
@@ -158,13 +326,20 @@ func TestMobilePairingRotatesOneTokenAcrossMultipleLANEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.BridgePairingID == second.BridgePairingID || first.PairingToken == second.PairingToken {
-		t.Fatal("pairing rotation reused an identity or token")
+	if first.BridgePairingID != second.BridgePairingID || first.PairingToken != second.PairingToken || first.PairingCode != second.PairingCode {
+		t.Fatal("active visible pairing was unexpectedly rotated")
 	}
-	if manager.Authorize(first.PairingToken, now.Add(time.Minute)) || !manager.Authorize(second.PairingToken, now.Add(time.Minute)) {
-		t.Fatal("pairing rotation did not revoke the old token")
+	third, err := manager.Start(http.NotFoundHandler(), now.Add(mobilePairingCodeDuration))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if manager.Authorize(second.PairingToken, now.Add(time.Minute+mobilePairingSessionDuration)) {
+	if third.BridgePairingID == first.BridgePairingID || third.PairingToken == first.PairingToken {
+		t.Fatal("expired pairing identity or token was reused")
+	}
+	if manager.Authorize(first.PairingToken, now.Add(mobilePairingCodeDuration)) || manager.Authorize(third.PairingToken, now.Add(mobilePairingCodeDuration)) {
+		t.Fatal("expired pairing rotation did not revoke the old token")
+	}
+	if manager.Authorize(third.PairingToken, now.Add(mobilePairingCodeDuration+mobilePairingSessionDuration)) {
 		t.Fatal("pairing token remained valid at its absolute expiry")
 	}
 }
@@ -205,6 +380,15 @@ func TestRemoteBridgeRequestsRequireTheActiveMobilePairingToken(t *testing.T) {
 	if err := jsonDecode(startResponse.Body.Bytes(), &descriptor); err != nil {
 		t.Fatal(err)
 	}
+	now := time.Now()
+	leaseExpiresAt := now.Add(7 * time.Hour)
+	trustMobileLeaseForTest(gateway.mobile, leaseExpiresAt)
+	if err := gateway.mobile.Prepare(descriptor.BridgePairingID, descriptor.PairingToken, "signed-mobile-lease", leaseExpiresAt, now.Add(4*time.Minute), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, result := gateway.mobile.Claim(descriptor.PairingToken, now); result != mobilePairingCompleteOK {
+		t.Fatalf("pairing claim result = %v", result)
+	}
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/8111/state", nil)
 	request = request.WithContext(context.WithValue(request.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("192.168.1.20"), Port: 9000}))
@@ -215,6 +399,18 @@ func TestRemoteBridgeRequestsRequireTheActiveMobilePairingToken(t *testing.T) {
 	gateway.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("paired request status = %d: %s", response.Code, response.Body.String())
+	}
+
+	weaponWrite := httptest.NewRequest(http.MethodPut, "/api/v1/presentation/weapon-selection", strings.NewReader(`{"schema_version":1,"selected_weapon_id":"gbu_39"}`))
+	weaponWrite = weaponWrite.WithContext(context.WithValue(weaponWrite.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("192.168.1.20"), Port: 9000}))
+	weaponWrite.RemoteAddr = "192.168.1.30:50101"
+	weaponWrite.Header.Set("Origin", testOrigin)
+	weaponWrite.Header.Set("Content-Type", "application/json")
+	weaponWrite.Header.Set("X-Bomana-Mobile-Pairing", descriptor.PairingToken)
+	weaponWriteResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(weaponWriteResponse, weaponWrite)
+	if weaponWriteResponse.Code != http.StatusOK || !strings.Contains(weaponWriteResponse.Body.String(), `"selected_weapon_id":"gbu_39"`) {
+		t.Fatalf("paired weapon write status = %d: %s", weaponWriteResponse.Code, weaponWriteResponse.Body.String())
 	}
 
 	wrong := httptest.NewRequest(http.MethodGet, "/api/v1/8111/state", nil)
@@ -305,6 +501,21 @@ func TestMobilePairingHTTPSCockpitServesCurrentOfficialAssets(t *testing.T) {
 		case "/mobile/Enhanced/assets/app-1.5.9.js":
 			response.Header().Set("Content-Type", "text/javascript")
 			_, _ = io.WriteString(response, "window.BOMANA_MOBILE_BUILD='1.5.9';")
+		case "/mobile/Enhanced/assets/solver.worker-test.js":
+			response.Header().Set("Content-Type", "text/javascript")
+			_, _ = io.WriteString(response, "self.onmessage=()=>fetch('./guided-catalog-test.json');")
+		case "/mobile/Enhanced/assets/guided-catalog-test.json":
+			response.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(response, `{"catalog":"guided"}`)
+		case "/mobile/Enhanced/assets/powered-weapon-catalog-test.json":
+			response.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(response, `{"catalog":"powered"}`)
+		case "/mobile/Enhanced/assets/ballistic-bomb-catalog-test.json":
+			response.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(response, `{"catalog":"ballistic"}`)
+		case "/mobile/Enhanced/assets/solver-kernel-test.wasm":
+			response.Header().Set("Content-Type", "application/wasm")
+			_, _ = response.Write([]byte{0x00, 0x61, 0x73, 0x6d})
 		default:
 			http.NotFound(response, request)
 		}
@@ -326,9 +537,18 @@ func TestMobilePairingHTTPSCockpitServesCurrentOfficialAssets(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = gateway.mobile.Close() })
 
-	descriptor, err := gateway.mobile.Start(gateway, time.Now())
+	now := time.Now()
+	descriptor, err := gateway.mobile.Start(gateway, now)
 	if err != nil {
 		t.Fatal(err)
+	}
+	leaseExpiresAt := now.Add(7 * time.Hour)
+	trustMobileLeaseForTest(gateway.mobile, leaseExpiresAt)
+	if err := gateway.mobile.Prepare(descriptor.BridgePairingID, descriptor.PairingToken, "signed-mobile-lease", leaseExpiresAt, now.Add(4*time.Minute), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, result := gateway.mobile.Claim(descriptor.PairingToken, now); result != mobilePairingCompleteOK {
+		t.Fatalf("pairing claim result = %v", result)
 	}
 	if descriptor.Networks[0].TLSEndpoint == "" {
 		t.Fatal("TLS endpoint missing")
@@ -359,6 +579,33 @@ func TestMobilePairingHTTPSCockpitServesCurrentOfficialAssets(t *testing.T) {
 	scriptBody, _ := io.ReadAll(script.Body)
 	if script.StatusCode != http.StatusOK || !strings.Contains(string(scriptBody), "1.5.9") {
 		t.Fatalf("hashed asset = %d %s", script.StatusCode, scriptBody)
+	}
+	for _, asset := range []struct {
+		path        string
+		contentType string
+		contains    string
+	}{
+		{"solver.worker-test.js", "text/javascript", "guided-catalog-test"},
+		{"guided-catalog-test.json", "application/json", "guided"},
+		{"powered-weapon-catalog-test.json", "application/json", "powered"},
+		{"ballistic-bomb-catalog-test.json", "application/json", "ballistic"},
+		{"solver-kernel-test.wasm", "application/wasm", "asm"},
+	} {
+		response, assetErr := client.Get("https://127.0.0.1:" + tlsPort + "/mobile/Enhanced/assets/" + asset.path)
+		if assetErr != nil {
+			t.Fatal(assetErr)
+		}
+		assetBody, _ := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK || !strings.HasPrefix(response.Header.Get("Content-Type"), asset.contentType) || !strings.Contains(string(assetBody), asset.contains) {
+			t.Fatalf("solver asset %s = %d %q %q", asset.path, response.StatusCode, response.Header.Get("Content-Type"), assetBody)
+		}
+		if strings.Contains(asset.path, "worker") {
+			policy := response.Header.Get("Content-Security-Policy")
+			if !strings.Contains(policy, "connect-src 'self'") || !strings.Contains(policy, "script-src 'self'") || !strings.Contains(policy, "'wasm-unsafe-eval'") {
+				t.Fatalf("worker CSP blocks solver assets: %q", policy)
+			}
+		}
 	}
 
 	traversal, err := client.Get("https://127.0.0.1:" + tlsPort + "/mobile/Enhanced/../launcher/")
@@ -414,4 +661,10 @@ func TestMobilePairingHTTPSCockpitServesCurrentOfficialAssets(t *testing.T) {
 
 func jsonDecode(payload []byte, output any) error {
 	return json.Unmarshal(payload, output)
+}
+
+func trustMobileLeaseForTest(manager *mobilePairingManager, expiresAt time.Time) {
+	manager.verifyLease = func(_ string, _ string, _ time.Time) (time.Time, error) {
+		return expiresAt, nil
+	}
 }

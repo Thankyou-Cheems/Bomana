@@ -120,7 +120,12 @@ type terrainIndex struct {
 }
 
 type terrainIndexMap struct {
-	ID   string `json:"id"`
+	ID           string               `json:"id"`
+	File         string               `json:"file"`
+	DetailLayers []terrainIndexDetail `json:"detail_layers"`
+}
+
+type terrainIndexDetail struct {
 	File string `json:"file"`
 }
 
@@ -140,7 +145,7 @@ type localDataStore struct {
 	lastError     string
 	files         map[string]*cacheFileProgress
 	selectedMaps  map[string]struct{}
-	mapFiles      map[string]string
+	mapFiles      map[string][]string
 	syncRequests  chan struct{}
 }
 
@@ -149,7 +154,7 @@ type localCatalogSnapshot struct {
 	mapCount   int
 	totalBytes int64
 	files      map[string]*cacheFileProgress
-	mapFiles   map[string]string
+	mapFiles   map[string][]string
 }
 
 func openDefaultLocalDataStore() (*localDataStore, error) {
@@ -241,7 +246,7 @@ func newLocalDataStore(root string, manifestURL *url.URL, client *http.Client, v
 	store := &localDataStore{
 		root: resolvedRoot, manifestURL: manifestURL, client: client, verify: verify,
 		state: "checking", files: make(map[string]*cacheFileProgress),
-		selectedMaps: make(map[string]struct{}), mapFiles: make(map[string]string), syncRequests: make(chan struct{}, 1),
+		selectedMaps: make(map[string]struct{}), mapFiles: make(map[string][]string), syncRequests: make(chan struct{}, 1),
 	}
 	selected, err := loadTerrainSelection(filepath.Join(resolvedRoot, terrainSelectionFileName))
 	if err != nil {
@@ -275,9 +280,9 @@ func (store *localDataStore) SetSelectedMaps(mapIDs []string) error {
 	defer store.selectionMu.Unlock()
 	selected := make(map[string]struct{}, len(mapIDs))
 	store.mu.RLock()
-	known := make(map[string]string, len(store.mapFiles))
-	for mapID, path := range store.mapFiles {
-		known[mapID] = path
+	known := make(map[string]struct{}, len(store.mapFiles))
+	for mapID := range store.mapFiles {
+		known[mapID] = struct{}{}
 	}
 	store.mu.RUnlock()
 	if len(known) == 0 {
@@ -302,17 +307,20 @@ func (store *localDataStore) SetSelectedMaps(mapIDs []string) error {
 	}
 	store.mu.Lock()
 	store.selectedMaps = selected
-	for mapID, path := range store.mapFiles {
-		progress := store.files[path]
-		if progress == nil {
-			continue
-		}
-		_, progress.selected = selected[mapID]
-		if !progress.selected && progress.state != "cached" {
-			progress.state, progress.cachedBytes, progress.err = "not-selected", 0, ""
-		}
-		if progress.selected && progress.state == "not-selected" {
-			progress.state = "pending"
+	for mapID, paths := range store.mapFiles {
+		_, mapSelected := selected[mapID]
+		for _, path := range paths {
+			progress := store.files[path]
+			if progress == nil {
+				continue
+			}
+			progress.selected = mapSelected
+			if !progress.selected && progress.state != "cached" {
+				progress.state, progress.cachedBytes, progress.err = "not-selected", 0, ""
+			}
+			if progress.selected && progress.state == "not-selected" {
+				progress.state = "pending"
+			}
 		}
 	}
 	store.totalBytes = 0
@@ -420,28 +428,59 @@ func (store *localDataStore) Status() localCacheStatus {
 			status.CachedObjects++
 		}
 	}
-	for mapID, path := range store.mapFiles {
-		progress := store.files[path]
-		if progress == nil {
-			continue
-		}
-		mapStatus := mapCacheStatus{
-			ID: mapID, State: progress.state,
-			CachedBytes: min(progress.cachedBytes, progress.file.SizeBytes), TotalBytes: progress.file.SizeBytes, Error: progress.err,
-			Selected: progress.selected,
-		}
+	for mapID, paths := range store.mapFiles {
+		mapStatus := aggregateMapStatus(mapID, paths, store.files)
 		status.Maps = append(status.Maps, mapStatus)
-		if progress.state == "cached" {
+		if mapStatus.State == "cached" {
 			status.CachedMapCount++
 		}
-		if progress.selected {
+		if mapStatus.Selected {
 			status.SelectedMapCount++
-			if progress.state == "cached" {
+			if mapStatus.State == "cached" {
 				status.SelectedCachedMapCount++
 			}
 		}
 	}
 	sort.Slice(status.Maps, func(i, j int) bool { return status.Maps[i].ID < status.Maps[j].ID })
+	return status
+}
+
+func aggregateMapStatus(mapID string, paths []string, files map[string]*cacheFileProgress) mapCacheStatus {
+	status := mapCacheStatus{ID: mapID, State: "cached"}
+	allCached := len(paths) > 0
+	anyDownloading := false
+	anyPending := false
+	for _, path := range paths {
+		progress := files[path]
+		if progress == nil {
+			allCached = false
+			anyPending = true
+			continue
+		}
+		status.TotalBytes += progress.file.SizeBytes
+		status.CachedBytes += min(progress.cachedBytes, progress.file.SizeBytes)
+		status.Selected = status.Selected || progress.selected
+		allCached = allCached && progress.state == "cached"
+		if status.Error == "" && progress.err != "" {
+			status.Error = progress.err
+		}
+		anyDownloading = anyDownloading || progress.state == "downloading"
+		anyPending = anyPending || progress.state == "pending"
+	}
+	switch {
+	case allCached:
+		status.State = "cached"
+	case status.Error != "":
+		status.State = "error"
+	case !status.Selected:
+		status.State = "not-selected"
+	case anyDownloading:
+		status.State = "downloading"
+	case anyPending:
+		status.State = "pending"
+	default:
+		status.State = "pending"
+	}
 	return status
 }
 
@@ -689,7 +728,7 @@ func (store *localDataStore) beginManifest(manifest terrainManifest, files []ter
 	store.state, store.revision, store.mapCount = "syncing", manifest.TerrainRevision, manifest.MapCount
 	store.totalBytes = 0
 	store.files = make(map[string]*cacheFileProgress, len(files))
-	store.mapFiles = make(map[string]string)
+	store.mapFiles = make(map[string][]string)
 	for _, file := range files {
 		copy := file
 		selected := !strings.HasSuffix(file.Path, ".bth")
@@ -733,7 +772,7 @@ func (store *localDataStore) readVerifiedTerrainIndex(
 	indexFile terrainManifestFile,
 	mapCount int,
 	files []terrainManifestFile,
-) (map[string]string, error) {
+) (map[string][]string, error) {
 	path := store.objectPath(indexFile.SHA256)
 	if valid, err := verifyDiskObject(path, indexFile.SizeBytes, indexFile.SHA256); !valid {
 		return nil, errors.Join(errors.New("terrain index verification failed"), err)
@@ -752,8 +791,8 @@ func (store *localDataStore) readVerifiedTerrainIndex(
 			bthFiles[file.Path] = struct{}{}
 		}
 	}
-	mapFiles := make(map[string]string, mapCount)
-	usedFiles := make(map[string]struct{}, mapCount)
+	mapFiles := make(map[string][]string, mapCount)
+	usedFiles := make(map[string]struct{}, len(bthFiles))
 	for _, item := range index.Maps {
 		if !validTerrainMapID(item.ID) || filepath.Base(item.File) != item.File || !strings.HasSuffix(item.File, ".bth") {
 			return nil, errors.New("terrain index map entry is invalid")
@@ -764,11 +803,23 @@ func (store *localDataStore) readVerifiedTerrainIndex(
 		if _, duplicate := mapFiles[item.ID]; duplicate {
 			return nil, errors.New("terrain index contains a duplicate map id")
 		}
-		if _, duplicate := usedFiles[item.File]; duplicate {
-			return nil, errors.New("terrain index contains a duplicate map file")
+		paths := []string{item.File}
+		for _, detail := range item.DetailLayers {
+			if filepath.Base(detail.File) != detail.File || !strings.HasSuffix(detail.File, ".bth") {
+				return nil, errors.New("terrain index detail layer is invalid")
+			}
+			paths = append(paths, detail.File)
 		}
-		mapFiles[item.ID] = item.File
-		usedFiles[item.File] = struct{}{}
+		for _, path := range paths {
+			if _, exists := bthFiles[path]; !exists {
+				return nil, errors.New("terrain index references an unsigned map object")
+			}
+			if _, duplicate := usedFiles[path]; duplicate {
+				return nil, errors.New("terrain index contains a duplicate map file")
+			}
+			usedFiles[path] = struct{}{}
+		}
+		mapFiles[item.ID] = paths
 	}
 	if len(usedFiles) != len(bthFiles) {
 		return nil, errors.New("terrain index does not close over the signed map objects")
@@ -776,7 +827,7 @@ func (store *localDataStore) readVerifiedTerrainIndex(
 	return mapFiles, nil
 }
 
-func (store *localDataStore) applyTerrainIndex(mapFiles map[string]string) {
+func (store *localDataStore) applyTerrainIndex(mapFiles map[string][]string) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	store.mapFiles = mapFiles
@@ -793,16 +844,18 @@ func (store *localDataStore) applyTerrainIndex(mapFiles map[string]string) {
 			progress.state, progress.cachedBytes, progress.err = "not-selected", 0, ""
 		}
 	}
-	for mapID, path := range mapFiles {
-		progress := store.files[path]
-		if progress == nil {
-			continue
-		}
+	for mapID, paths := range mapFiles {
 		if _, selected := store.selectedMaps[mapID]; selected {
-			progress.selected = true
-			store.totalBytes += progress.file.SizeBytes
-			if progress.state == "not-selected" {
-				progress.state = "pending"
+			for _, path := range paths {
+				progress := store.files[path]
+				if progress == nil {
+					continue
+				}
+				progress.selected = true
+				store.totalBytes += progress.file.SizeBytes
+				if progress.state == "not-selected" {
+					progress.state = "pending"
+				}
 			}
 		}
 	}
@@ -830,7 +883,7 @@ func (store *localDataStore) restoreCachedCatalog() {
 	if err != nil {
 		store.mu.Lock()
 		store.files = make(map[string]*cacheFileProgress)
-		store.mapFiles = make(map[string]string)
+		store.mapFiles = make(map[string][]string)
 		store.mu.Unlock()
 		return
 	}
@@ -1016,7 +1069,7 @@ func validateTerrainManifest(manifest terrainManifest) error {
 		seen[file.Path] = struct{}{}
 		total += file.SizeBytes
 	}
-	if total != manifest.TotalSizeBytes || bthCount != manifest.MapCount || manifest.Signature.Algorithm != "ed25519" {
+	if total != manifest.TotalSizeBytes || bthCount < manifest.MapCount || manifest.Signature.Algorithm != "ed25519" {
 		return errors.New("terrain manifest totals or signature are invalid")
 	}
 	return nil

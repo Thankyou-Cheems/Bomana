@@ -30,7 +30,10 @@ const (
 	bridgePortEnd        = 8897
 )
 
-const mobilePairingProtocol = 2
+const (
+	cacheProtocol         = 4
+	mobilePairingProtocol = 6
+)
 
 var (
 	bridgeVersion    = "development"
@@ -65,6 +68,7 @@ type relay struct {
 	mobilePageClient *http.Client
 	cache            *localDataStore
 	mobile           *mobilePairingManager
+	presentation     *presentationState
 }
 
 func main() {
@@ -115,7 +119,8 @@ func main() {
 	shutdownSignals := make(chan os.Signal, 1)
 	trayExit := make(chan struct{}, 1)
 	signal.Notify(shutdownSignals, os.Interrupt, syscall.SIGTERM)
-	tray, trayErr := startTray(defaultTrayConfig(func() {
+	mobilePairingURL := "http://" + listener.Addr().String() + "/mobile-pairing"
+	tray, trayErr := startTray(defaultTrayConfig(mobilePairingURL, func() {
 		select {
 		case trayExit <- struct{}{}:
 		default:
@@ -172,6 +177,7 @@ func newRelayWithCache(upstream *url.URL, allowedOrigin string, cache *localData
 		allowedOrigin: allowedOrigin,
 		cache:         cache,
 		mobile:        newMobilePairingManager(),
+		presentation:  newPresentationState(),
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   1250 * time.Millisecond,
@@ -183,8 +189,12 @@ func newRelayWithCache(upstream *url.URL, allowedOrigin string, cache *localData
 }
 
 func (gateway *relay) ServeHTTP(response http.ResponseWriter, request *http.Request) {
-	if request.URL.RawQuery == "" && request.URL.Path == "/api/v1/mobile/pairing/start" {
-		gateway.serveMobilePairingStart(response, request)
+	if request.URL.RawQuery == "" && (request.URL.Path == "/api/v1/mobile/pairing/start" || request.URL.Path == "/api/v1/mobile/pairing/rotate") {
+		gateway.serveMobilePairingStart(response, request, request.URL.Path == "/api/v1/mobile/pairing/rotate")
+		return
+	}
+	if request.URL.Path == "/mobile-pairing" {
+		gateway.serveTrayMobilePairing(response, request)
 		return
 	}
 	if request.URL.RawQuery == "" && request.URL.Path == "/api/v1/mobile/pairing/prepare" {
@@ -215,6 +225,10 @@ func (gateway *relay) ServeHTTP(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	setSecurityHeaders(response)
+	if request.URL.RawQuery == "" && request.URL.Path == "/api/v1/presentation/weapon-selection" {
+		gateway.serveWeaponSelection(response, request)
+		return
+	}
 	if strings.HasPrefix(request.URL.Path, "/api/v1/cache/") {
 		gateway.serveCache(response, request)
 		return
@@ -295,6 +309,7 @@ type mobilePairingPrepareRequest struct {
 type mobilePairingCompleteRequest struct {
 	SchemaVersion int    `json:"schema_version"`
 	PairingCode   string `json:"pairing_code"`
+	PairingToken  string `json:"pairing_token"`
 }
 
 func requestUsesLANListener(request *http.Request) bool {
@@ -321,7 +336,7 @@ func (gateway *relay) usesPairingListener(request *http.Request) bool {
 	return gateway.mobile.isPairingPort(port)
 }
 
-func (gateway *relay) serveMobilePairingStart(response http.ResponseWriter, request *http.Request) {
+func (gateway *relay) serveMobilePairingStart(response http.ResponseWriter, request *http.Request, forceNew bool) {
 	setSecurityHeaders(response)
 	if request.RemoteAddr != "" && !isLoopbackRemote(request.RemoteAddr) {
 		http.Error(response, "loopback required", http.StatusForbidden)
@@ -347,7 +362,7 @@ func (gateway *relay) serveMobilePairingStart(response http.ResponseWriter, requ
 		http.Error(response, "origin forbidden", http.StatusForbidden)
 		return
 	}
-	descriptor, err := gateway.mobile.Start(gateway, time.Now())
+	descriptor, err := gateway.mobile.Start(gateway, time.Now(), forceNew)
 	if err != nil {
 		http.Error(response, "mobile pairing unavailable", http.StatusServiceUnavailable)
 		return
@@ -359,12 +374,8 @@ func (gateway *relay) serveMobilePairingStart(response http.ResponseWriter, requ
 
 func (gateway *relay) serveMobilePairingPrepare(response http.ResponseWriter, request *http.Request) {
 	setSecurityHeaders(response)
-	if request.RemoteAddr != "" && !isLoopbackRemote(request.RemoteAddr) {
-		http.Error(response, "loopback required", http.StatusForbidden)
-		return
-	}
 	if request.Method == http.MethodOptions {
-		if !gateway.allowOrigin(response, request) {
+		if !gateway.authorizeMobilePairingPrepareOrigin(response, request) {
 			http.Error(response, "origin forbidden", http.StatusForbidden)
 			return
 		}
@@ -379,7 +390,7 @@ func (gateway *relay) serveMobilePairingPrepare(response http.ResponseWriter, re
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !gateway.allowOrigin(response, request) {
+	if !gateway.authorizeMobilePairingPrepareOrigin(response, request) {
 		http.Error(response, "origin forbidden", http.StatusForbidden)
 		return
 	}
@@ -406,6 +417,16 @@ func (gateway *relay) serveMobilePairingPrepare(response http.ResponseWriter, re
 	response.WriteHeader(http.StatusNoContent)
 }
 
+func (gateway *relay) authorizeMobilePairingPrepareOrigin(response http.ResponseWriter, request *http.Request) bool {
+	if gateway.usesPairingListener(request) {
+		return gateway.requirePairingListenerOrigin(response, request)
+	}
+	if request.RemoteAddr == "" || isLoopbackRemote(request.RemoteAddr) {
+		return gateway.allowOrigin(response, request)
+	}
+	return false
+}
+
 func (gateway *relay) serveMobilePairingComplete(response http.ResponseWriter, request *http.Request) {
 	setSecurityHeaders(response)
 	if request.Method == http.MethodOptions {
@@ -423,10 +444,6 @@ func (gateway *relay) serveMobilePairingComplete(response http.ResponseWriter, r
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !gateway.requirePairingListenerOrigin(response, request) {
-		http.Error(response, "origin forbidden", http.StatusForbidden)
-		return
-	}
 	var payload mobilePairingCompleteRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(response, request.Body, 2<<10))
 	decoder.DisallowUnknownFields()
@@ -434,18 +451,38 @@ func (gateway *relay) serveMobilePairingComplete(response http.ResponseWriter, r
 		http.Error(response, "invalid pairing request", http.StatusBadRequest)
 		return
 	}
+	hasCode := payload.PairingCode != ""
+	hasToken := payload.PairingToken != ""
+	if hasCode == hasToken {
+		http.Error(response, "invalid pairing request", http.StatusBadRequest)
+		return
+	}
+	if hasCode && !gateway.requirePairingListenerOrigin(response, request) {
+		http.Error(response, "origin forbidden", http.StatusForbidden)
+		return
+	}
 	client, _, err := net.SplitHostPort(request.RemoteAddr)
 	if err != nil || client == "" {
 		client = request.RemoteAddr
 	}
-	completed, result := gateway.mobile.Complete(client, payload.PairingCode, time.Now())
+	var completed mobilePairingCompletion
+	var result mobilePairingCompleteResult
+	if hasToken {
+		completed, result = gateway.mobile.Claim(payload.PairingToken, time.Now())
+	} else {
+		completed, result = gateway.mobile.Complete(client, payload.PairingCode, time.Now())
+	}
 	switch result {
 	case mobilePairingCompleteOK:
 		response.Header().Set("Content-Type", "application/json")
 		response.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(response).Encode(completed)
 	case mobilePairingCompleteInvalid:
-		http.Error(response, "invalid pairing code", http.StatusForbidden)
+		if hasToken {
+			http.Error(response, "invalid pairing claim", http.StatusForbidden)
+		} else {
+			http.Error(response, "invalid pairing code", http.StatusForbidden)
+		}
 	case mobilePairingCompleteRateLimited:
 		response.Header().Set("Retry-After", strconv.Itoa(int(mobilePairingAttemptWindow/time.Second)))
 		http.Error(response, "too many pairing attempts", http.StatusTooManyRequests)
@@ -518,7 +555,57 @@ func (gateway *relay) serveLocalState(response http.ResponseWriter, request *htt
 		_, _ = io.WriteString(response, `{"status":"ok","input":"official-8111-only"}`)
 		return
 	}
-	_, _ = fmt.Fprintf(response, `{"schema_version":1,"bridge_protocol":1,"cache_protocol":3,"mobile_pairing_protocol":%d,"bridge_version":%q,"app_web_version":%q,"build_provenance":%q,"authenticode":false,"input":"official-8111-only","write_commands":false,"routes":["state","indicators","map-objects","map-info","map-image","icons-font","gamechat","cache-catalog","cache-status","cache-selection","cache-objects","mobile-pairing"]}`, mobilePairingProtocol, bridgeVersion, appWebVersion, bridgeProvenance)
+	_, _ = fmt.Fprintf(response, `{"schema_version":1,"bridge_protocol":1,"cache_protocol":%d,"mobile_pairing_protocol":%d,"bridge_version":%q,"app_web_version":%q,"build_provenance":%q,"authenticode":false,"input":"official-8111-only","write_commands":false,"routes":["state","indicators","map-objects","map-info","map-image","icons-font","gamechat","cache-catalog","cache-status","cache-selection","cache-objects","mobile-pairing","presentation-weapon-selection"]}`, cacheProtocol, mobilePairingProtocol, bridgeVersion, appWebVersion, bridgeProvenance)
+}
+
+func (gateway *relay) serveWeaponSelection(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Cache-Control", "no-store")
+	if request.Method == http.MethodOptions {
+		if !gateway.allowOrigin(response, request) {
+			http.Error(response, "origin forbidden", http.StatusForbidden)
+			return
+		}
+		response.Header().Set("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+		response.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, X-Bomana-Mobile-Pairing")
+		gateway.allowPrivateNetwork(response, request)
+		response.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if request.Method == http.MethodGet {
+		if !gateway.allowOrigin(response, request) {
+			http.Error(response, "origin forbidden", http.StatusForbidden)
+			return
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(gateway.presentation.WeaponSelection())
+		return
+	}
+	if request.Method != http.MethodPut {
+		response.Header().Set("Allow", "GET, PUT, OPTIONS")
+		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !gateway.requireBrowserOrigin(response, request) {
+		http.Error(response, "origin forbidden", http.StatusForbidden)
+		return
+	}
+	var payload struct {
+		SchemaVersion    int    `json:"schema_version"`
+		SelectedWeaponID string `json:"selected_weapon_id"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(response, request.Body, 1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil || payload.SchemaVersion != 1 {
+		http.Error(response, "weapon selection rejected", http.StatusBadRequest)
+		return
+	}
+	state, err := gateway.presentation.SelectWeapon(payload.SelectedWeaponID)
+	if err != nil {
+		http.Error(response, "weapon selection rejected", http.StatusBadRequest)
+		return
+	}
+	response.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(response).Encode(state)
 }
 
 func (gateway *relay) serveCache(response http.ResponseWriter, request *http.Request) {
