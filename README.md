@@ -1,4 +1,23 @@
+<div align="center">
+
+<img src="frontend/src/generated/bomana-logo.svg" width="176" alt="Bomana 品牌标志">
+
 # Bomana
+
+**War Thunder 全真模式浏览器伴侣** · Browser Companion for Simulator Battles
+
+[![App Web](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomana.ruikang.wang%2Fapp%2Fapp-release.json&query=%24.app_web_version&label=App%20Web&prefix=v&color=0ea5e9)](https://bomana.ruikang.wang/launcher/)
+[![Bridge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbomana.ruikang.wang%2Fdownloads%2Fbridge-release.json&query=%24.bridge_version&label=Bridge&prefix=v&color=6366f1)](https://bomana.ruikang.wang/launcher/)
+[![Public Editions](https://img.shields.io/badge/Lite%20%2B%20Standard-MIT-22c55e)](LICENSE)
+[![Runtime](https://img.shields.io/badge/runtime-Browser%20%2B%20Windows-eab308)](https://bomana.ruikang.wang/launcher/)
+
+**[在线 Launcher](https://bomana.ruikang.wang/launcher/)** ·
+[GitHub Releases](https://github.com/Thankyou-Cheems/Bomana/releases) ·
+[English](README.en.md)
+
+</div>
+
+---
 
 Bomana 是面向 War Thunder 全真模式的浏览器 App。
 
