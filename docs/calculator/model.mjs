@@ -6,24 +6,42 @@ export function requiredCount(hp, damage) {
 export function equivalentWeaponCount({ sourcePerItem, targetPerItem, sourceCount }) {
   if (![sourcePerItem, targetPerItem].every(value => Number.isFinite(value) && value > 0) ||
       !Number.isSafeInteger(sourceCount) || sourceCount < 0) return null;
-  const sourceTotal = sourcePerItem * sourceCount;
-  const exactCount = sourceTotal / targetPerItem;
-  if (![sourceTotal, exactCount].every(Number.isFinite) || (sourceCount > 0 && !(exactCount > 0))) return null;
-  // Correct only floating-point arithmetic noise, never round displayed values
-  // before choosing the minimum whole number of weapons.
-  const nearest = Math.round(exactCount);
-  const wholeCount = Math.abs(exactCount - nearest) <= Number.EPSILON * Math.max(1, exactCount) * 2
-    ? nearest : Math.ceil(exactCount);
-  const targetTotal = wholeCount * targetPerItem;
-  if (!Number.isSafeInteger(wholeCount) || (sourceCount > 0 && wholeCount === 0) || !Number.isFinite(targetTotal)) return null;
-  return { sourceTotal, exactCount, wholeCount, targetTotal, surplus: Math.max(0, targetTotal - sourceTotal) };
+  return convertFactors([sourcePerItem, sourceCount], [targetPerItem]);
 }
 
 export function explosiveConversion({ sourceMassKg, sourceFactor, sourceCount, targetMassKg, targetFactor }) {
-  if (![sourceMassKg, sourceFactor, targetMassKg, targetFactor].every(value => Number.isFinite(value) && value > 0)) return null;
+  if (![sourceMassKg, sourceFactor, targetMassKg, targetFactor].every(value => Number.isFinite(value) && value > 0) ||
+      !Number.isSafeInteger(sourceCount) || sourceCount < 0) return null;
   const sourceTntKg = sourceMassKg * sourceFactor, targetTntKg = targetMassKg * targetFactor;
-  const equivalent = equivalentWeaponCount({ sourcePerItem: sourceTntKg, targetPerItem: targetTntKg, sourceCount });
+  if (![sourceTntKg, targetTntKg].every(value => Number.isFinite(value) && value > 0)) return null;
+  const equivalent = convertFactors([sourceMassKg, sourceFactor, sourceCount], [targetMassKg, targetFactor]);
   return equivalent ? { sourceTntKg, targetTntKg, ...equivalent } : null;
+}
+
+function decimalProduct(factors) {
+  return factors.reduce(([coefficient, exponent], factor) => {
+    const [significand, power = "0"] = factor.toString().split("e");
+    const [integer, fraction = ""] = significand.split(".");
+    return [coefficient * BigInt(integer + fraction), exponent + Number(power) - fraction.length];
+  }, [1n, 0]);
+}
+
+function convertFactors(sourceFactors, targetFactors) {
+  const product = factors => factors.reduce((total, factor) => total * factor, 1);
+  const sourceTotal = product(sourceFactors), targetPerItem = product(targetFactors);
+  const exactCount = sourceTotal / targetPerItem;
+  if (![sourceTotal, exactCount].every(Number.isFinite) || (sourceTotal > 0 && !(exactCount > 0))) return null;
+  // Count complete weapons using the input decimals, before binary floating-
+  // point multiplication. A tolerance would erase real above-integer inputs.
+  let [numerator, sourceExponent] = decimalProduct(sourceFactors);
+  let [denominator, targetExponent] = decimalProduct(targetFactors);
+  const exponent = sourceExponent - targetExponent;
+  if (exponent > 0) numerator *= 10n ** BigInt(exponent);
+  else denominator *= 10n ** BigInt(-exponent);
+  const wholeCount = Number((numerator + denominator - 1n) / denominator);
+  const targetTotal = wholeCount * targetPerItem;
+  if (!Number.isSafeInteger(wholeCount) || !Number.isFinite(targetTotal)) return null;
+  return { sourceTotal, exactCount, wholeCount, targetTotal, surplus: Math.max(0, targetTotal - sourceTotal) };
 }
 
 // Each row is a separate maximum same-type loadout, never a combined preset.

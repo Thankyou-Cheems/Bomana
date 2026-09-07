@@ -32,8 +32,21 @@ test("conversion rejects missing, negative, non-finite and unsafe input without 
   assert.equal(explosiveConversion({ ...inputs, sourceCount: .5 }), null);
   assert.equal(explosiveConversion({ ...inputs, sourceFactor: 1e308 }), null);
   assert.equal(explosiveConversion({ ...inputs, targetMassKg: 1e-300 }), null);
-  assert.equal(equivalentWeaponCount({ sourcePerItem: .1 + .2, targetPerItem: .3, sourceCount: 1 }).wholeCount, 1);
-  assert.equal(equivalentWeaponCount({ sourcePerItem: 1 + 1e-10, targetPerItem: 1, sourceCount: 1 }).wholeCount, 2);
+});
+
+test("whole counts preserve decimal products and real above-integer inputs", () => {
+  for (const excess of [Number.EPSILON, 2 * Number.EPSILON, 3 * Number.EPSILON, 1e-10]) {
+    const result = equivalentWeaponCount({ sourcePerItem: 1 + excess, targetPerItem: 1, sourceCount: 1 });
+    assert.equal(result.wholeCount, 2);
+    assert.equal(result.targetTotal, 2);
+    assert.ok(result.surplus > .99);
+  }
+  const decimal = { sourceMassKg: .1, sourceFactor: 3, sourceCount: 1, targetMassKg: .3, targetFactor: 1 };
+  assert.equal(explosiveConversion(decimal).wholeCount, 1);
+  assert.equal(explosiveConversion({ ...decimal, sourceMassKg: .10000000000000002 }).wholeCount, 2);
+  assert.equal(explosiveConversion({ ...decimal, sourceMassKg: 1e-20, targetMassKg: 3e-20 }).wholeCount, 1);
+  assert.equal(equivalentWeaponCount({ sourcePerItem: Number.MIN_VALUE, targetPerItem: Number.MIN_VALUE, sourceCount: 1 }).wholeCount, 1);
+  assert.equal(equivalentWeaponCount({ sourcePerItem: .1 + .2, targetPerItem: .3, sourceCount: 1 }).wholeCount, 2);
 });
 
 const reward = Object.freeze({

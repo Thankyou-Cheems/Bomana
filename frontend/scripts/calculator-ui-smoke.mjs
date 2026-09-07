@@ -71,6 +71,16 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: horizontal overflow`);
     await page.locator("#explosiveConversion").screenshot({ path: `../.artifacts/calculator-ui/conversion-${width}.png` });
   }
+  await page.locator("#chargeMassA").fill("1.0000000000000002");
+  await page.locator("#chargeFactorA").fill("1");
+  await page.locator("#chargeMassB").fill("1");
+  await page.locator("#chargeFactorB").fill("1");
+  await page.locator("#chargeCount").fill("1");
+  assert.match(await page.locator("#chargeResult strong").innerText(), /2 枚 B/);
+  await page.locator("#chargeMassA").fill("0.1");
+  await page.locator("#chargeFactorA").fill("3");
+  await page.locator("#chargeMassB").fill("0.3");
+  assert.match(await page.locator("#chargeResult strong").innerText(), /1 枚 B/);
   if (!remote) {
     const unavailable = await browser.newPage();
     unavailable.on("pageerror", error => errors.push(error.message));
