@@ -1,27 +1,7 @@
 # Contributing
 
-Use PowerShell 7 on Windows. Do not require Python for the current source tree.
+Use Node.js 22, pnpm 11.3.0, Go 1.25 and PowerShell 7. Run `pnpm --dir frontend install --frozen-lockfile`, `pnpm --dir frontend check`, `go -C native/telemetry_gateway test ./...` and `go -C native/telemetry_gateway vet ./...`.
 
-## Web
+Report a bug or propose a patch in this public repository. Accepted changes are incorporated in the single maintained source, then exported here. Public `main` is generated; do not merge independent changes there or create a separate official release pipeline. Public CI has no production signing or server credentials.
 
-```powershell
-cd frontend
-pnpm install --frozen-lockfile
-pnpm check
-```
-
-`pnpm check` runs unit tests, builds Lite and Standard, and builds the Online Launcher.
-
-## Bridge
-
-```powershell
-cd native\telemetry_gateway
-go test ./...
-go vet ./...
-```
-
-## Public-boundary rule
-
-Do not add Enhanced algorithms, terrain data, chat recognition, tactical coordinates, Y66, airport-module inference, or weapon-solving implementation to this repository. The Launcher may retain the Enhanced label and public authorization client, but public builds cannot contain Enhanced assets.
-
-Run `tools/check_public_boundary.ps1` after building. This public repository contains no deployment workflow, production server path, SSH/Caddy operation, or release credential. Deployment belongs to the private release closure.
+Read the [edition boundary](specs/public-editions.md). Do not reintroduce the old Python App / desktop Launcher or Enhanced implementation. Historical releases remain accessible; current users should download through the [online Launcher](https://bomana.ruikang.wang/launcher/).

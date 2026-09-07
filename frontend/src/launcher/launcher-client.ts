@@ -1,4 +1,4 @@
-import { discoverBridgeEndpoint, fetchBridgeResource } from "../runtime/bridge-discovery";
+import { discoverBridgeEndpoint, fetchBridgeResource, IncompatibleBridgeError, MobileBridgeError } from "../runtime/bridge-discovery";
 import { queryLocalNetworkPermission } from "../runtime/local-network-permission";
 import {
   clearBrowserAuthorization,
@@ -35,6 +35,7 @@ export interface BrowserAccess {
 export type BridgeProbe =
   | { readonly state: "connected"; readonly capabilities: BridgeCapabilities; readonly endpoint: string }
   | { readonly state: "permission-denied"; readonly message: string }
+  | { readonly state: "incompatible"; readonly message: string }
   | { readonly state: "blocked"; readonly message: string }
   | { readonly state: "disconnected"; readonly message: string };
 
@@ -54,20 +55,20 @@ export class BridgeClient {
     const baseURL = await discoverBridgeEndpoint(this.#fetcher, this.#configuredURL);
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), 3_500);
-    let response: Response;
+    let value: Partial<BridgeCapabilities>;
     try {
-      response = await fetchBridgeResource(this.#fetcher, new URL("api/v1/capabilities", baseURL), {
+      const response = await fetchBridgeResource(this.#fetcher, new URL("api/v1/capabilities", baseURL), {
         method: "GET", cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", signal: controller.signal,
       });
+      if (!response.ok) throw new Error(`Bridge HTTP ${response.status}`);
+      value = await response.json() as Partial<BridgeCapabilities>;
     } finally {
       globalThis.clearTimeout(timeout);
     }
-    if (!response.ok) throw new Error(`Bridge HTTP ${response.status}`);
-    const value = await response.json() as Partial<BridgeCapabilities>;
     if (value.schema_version !== 1 || value.bridge_protocol !== 1 || value.cache_protocol !== 4 || value.input !== "official-8111-only" || value.write_commands !== false
       || typeof value.bridge_version !== "string" || !value.bridge_version
       || value.authenticode !== false || !["github-actions-sigstore", "local-unattested"].includes(String(value.build_provenance))) {
-      throw new Error("Bridge 协议不兼容");
+      throw new IncompatibleBridgeError(value.bridge_version ?? "");
     }
     return Object.freeze({ ...value }) as BridgeCapabilities;
   }
@@ -77,7 +78,9 @@ export class BridgeClient {
       const capabilities = await this.capabilities();
       const endpoint = await discoverBridgeEndpoint(this.#fetcher, this.#configuredURL);
       return { state: "connected", capabilities, endpoint: endpoint.origin };
-    } catch {
+    } catch (error) {
+      if (error instanceof IncompatibleBridgeError) return { state: "incompatible", message: error.message };
+      if (error instanceof MobileBridgeError && error.reason === "local-network-permission") return { state: "permission-denied", message: error.message };
       if (await queryLocalNetworkPermission("loopback") === "denied") {
         return {
           state: "permission-denied",
@@ -106,6 +109,7 @@ export class BrowserAccessClient {
   readonly #fetcher: Fetcher;
   readonly #storage: BrowserStorage;
   readonly #verifyLease: typeof verifyEnhancedLease;
+  #polling = false;
   constructor(
     baseURL: URL,
     fetcher: Fetcher = fetch,
@@ -193,34 +197,51 @@ export class BrowserAccessClient {
     const verificationURL = text(payload.verification_uri_complete) || text(payload.verification_uri);
     const expiresIn = Number(payload.expires_in);
     if (!deviceCode || !userCode || !verificationURL || !Number.isInteger(expiresIn) || expiresIn <= 0) throw new Error("CheemsPay device authorization is invalid");
-    this.#storage.setItem(PENDING_KEY, JSON.stringify({ deviceCode, userCode, verificationURL, expiresAt: Date.now() + expiresIn * 1_000 }));
+    const interval = Number(payload.interval);
+    const pollIntervalMs = Number.isFinite(interval) && interval > 0 ? interval * 1_000 : 5_000;
+    this.#storage.setItem(PENDING_KEY, JSON.stringify({ deviceCode, userCode, verificationURL, expiresAt: Date.now() + expiresIn * 1_000, pollIntervalMs, nextPollAt: 0 }));
     return this.snapshot();
   }
 
   async poll(): Promise<BrowserAccess> {
     const pending = this.#pending();
-    if (!pending) return this.snapshot();
-    const response = await this.#fetcher(new URL("/api/auth/device/token", this.#baseURL), {
-      method: "POST", cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ grant_type: "urn:ietf:params:oauth:grant-type:device_code", device_code: pending.deviceCode, client_id: "bomana-desktop" }),
-    });
-    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
-    if (!response.ok) {
-      const code = text(payload.error) || text((payload.error as Record<string, unknown> | undefined)?.code);
-      if (["authorization_pending", "slow_down"].includes(code)) return this.snapshot();
+    if (!pending || this.#polling || pending.nextPollAt > Date.now()) return this.snapshot();
+    this.#polling = true;
+    try {
+      const response = await this.#fetcher(new URL("/api/auth/device/token", this.#baseURL), {
+        method: "POST", cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer",
+        signal: AbortSignal.timeout(15_000),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grant_type: "urn:ietf:params:oauth:grant-type:device_code", device_code: pending.deviceCode, client_id: "bomana-desktop" }),
+      });
+      const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+      // A user can clear or restart authorization while a request is in flight.
+      if (this.#pending()?.deviceCode !== pending.deviceCode) return this.snapshot();
+      if (!response.ok) {
+        const code = text(payload.error) || text((payload.error as Record<string, unknown> | undefined)?.code);
+        if (response.status === 429 || ["authorization_pending", "slow_down"].includes(code)) {
+          const slowed = response.status === 429 || code === "slow_down";
+          const pollIntervalMs = pending.pollIntervalMs + (slowed ? 5_000 : 0);
+          const retryAfter = response.headers.get("Retry-After");
+          const seconds = retryAfter === null ? NaN : Number(retryAfter);
+          const retryAt = Number.isFinite(seconds) && seconds >= 0 ? Date.now() + seconds * 1_000 : Date.parse(retryAfter ?? "");
+          const nextPollAt = Math.max(Date.now() + pollIntervalMs, Number.isFinite(retryAt) ? retryAt : 0);
+          this.#storage.setItem(PENDING_KEY, JSON.stringify({ ...pending, pollIntervalMs, nextPollAt }));
+          return this.snapshot();
+        }
+        this.#storage.removeItem(PENDING_KEY);
+        throw new Error(`CheemsPay authorization failed: ${code || response.status}`);
+      }
+      const token = text(payload.access_token);
+      const expiresIn = Number(payload.expires_in);
+      if (!token || !Number.isInteger(expiresIn) || expiresIn <= 0) throw new Error("CheemsPay access token is invalid");
+      saveBrowserAuthorization({
+        schemaVersion: 3, accessToken: token, accountLabel: "", enhancedLease: null,
+        enhancedLeaseExpiresAt: 0, validatedAt: 0,
+      }, this.#storage);
       this.#storage.removeItem(PENDING_KEY);
-      throw new Error(`CheemsPay authorization failed: ${code || response.status}`);
-    }
-    const token = text(payload.access_token);
-    const expiresIn = Number(payload.expires_in);
-    if (!token || !Number.isInteger(expiresIn) || expiresIn <= 0) throw new Error("CheemsPay access token is invalid");
-    saveBrowserAuthorization({
-      schemaVersion: 3, accessToken: token, accountLabel: "", enhancedLease: null,
-      enhancedLeaseExpiresAt: 0, validatedAt: 0,
-    }, this.#storage);
-    this.#storage.removeItem(PENDING_KEY);
-    return this.snapshot();
+      return this.snapshot();
+    } finally { this.#polling = false; }
   }
 
   hasPending(): boolean { return this.#pending() !== null; }
@@ -230,12 +251,15 @@ export class BrowserAccessClient {
     this.#storage.removeItem(PENDING_KEY);
   }
 
-  #pending(): { deviceCode: string; userCode: string; verificationURL: string; expiresAt: number } | null {
+  #pending(): { deviceCode: string; userCode: string; verificationURL: string; expiresAt: number; pollIntervalMs: number; nextPollAt: number } | null {
     try {
       const raw = this.#storage.getItem(PENDING_KEY);
       if (!raw) return null;
       const value = JSON.parse(raw) as Record<string, unknown>;
-      const pending = { deviceCode: text(value.deviceCode), userCode: text(value.userCode), verificationURL: text(value.verificationURL), expiresAt: Number(value.expiresAt) };
+      const interval = Number(value.pollIntervalMs);
+      const next = Number(value.nextPollAt);
+      const pending = { deviceCode: text(value.deviceCode), userCode: text(value.userCode), verificationURL: text(value.verificationURL), expiresAt: Number(value.expiresAt),
+        pollIntervalMs: Number.isFinite(interval) && interval > 0 ? interval : 5_000, nextPollAt: Number.isFinite(next) && next > 0 ? next : 0 };
       if (!pending.deviceCode || !pending.userCode || !pending.verificationURL || !Number.isFinite(pending.expiresAt) || pending.expiresAt <= Date.now()) {
         this.#storage.removeItem(PENDING_KEY);
         return null;

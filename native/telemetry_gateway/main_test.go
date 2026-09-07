@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"bomana/native/telemetry_gateway/internal/extui"
 )
 
 const testOrigin = "https://bomana.example.test"
@@ -53,6 +56,120 @@ func TestRelayForwardsOnlyTheFixed8111Route(t *testing.T) {
 	if response.Header().Get("Access-Control-Allow-Origin") != testOrigin {
 		t.Fatal("exact browser origin was not returned")
 	}
+}
+
+func TestRelayDiscoversTheWarThunderExtUIFallback(t *testing.T) {
+	occupied := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(response, `{"not_extui":true}`)
+	}))
+	defer occupied.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/map_info.json", "/indicators":
+			response.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(response, `{"valid":false}`)
+		case "/icons.ttf":
+			response.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = response.Write(bridgeTestSFNT())
+		case "/state":
+			response.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(response, `{"valid":false,"army":"tank"}`)
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	defer fallback.Close()
+	occupiedURL, _ := url.Parse(occupied.URL)
+	fallbackURL, _ := url.Parse(fallback.URL)
+	resolver, err := extui.NewResolver(extui.Options{
+		Candidates: []*url.URL{occupiedURL, fallbackURL},
+		Client:     &http.Client{Timeout: time.Second},
+		RetryDelay: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := newRelayWithExtUI(resolver, testOrigin, nil)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/8111/state", nil)
+	request.Header.Set("Origin", testOrigin)
+	response := httptest.NewRecorder()
+	gateway.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"army":"tank"`) {
+		t.Fatalf("fallback relay = status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestRelayRecoversWhenWarThunderMovesToAnotherExtUIPort(t *testing.T) {
+	firstAvailable := true
+	first := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if !firstAvailable {
+			http.Error(response, "stopped", http.StatusServiceUnavailable)
+			return
+		}
+		serveBridgeExtUI(response, request, `{"valid":false,"source":"first"}`)
+	}))
+	defer first.Close()
+	second := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		serveBridgeExtUI(response, request, `{"valid":false,"source":"second"}`)
+	}))
+	defer second.Close()
+	firstURL, _ := url.Parse(first.URL)
+	secondURL, _ := url.Parse(second.URL)
+	resolver, err := extui.NewResolver(extui.Options{
+		Candidates: []*url.URL{firstURL, secondURL},
+		Client:     &http.Client{Timeout: time.Second},
+		RetryDelay: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := newRelayWithExtUI(resolver, testOrigin, nil)
+
+	firstResponse := relayState(t, gateway)
+	if firstResponse.Code != http.StatusOK || !strings.Contains(firstResponse.Body.String(), `"source":"first"`) {
+		t.Fatalf("initial relay = %d %s", firstResponse.Code, firstResponse.Body.String())
+	}
+	firstAvailable = false
+	recovered := relayState(t, gateway)
+	if recovered.Code != http.StatusOK || !strings.Contains(recovered.Body.String(), `"source":"second"`) {
+		t.Fatalf("recovered relay = %d %s", recovered.Code, recovered.Body.String())
+	}
+}
+
+func serveBridgeExtUI(response http.ResponseWriter, request *http.Request, state string) {
+	switch request.URL.Path {
+	case "/map_info.json", "/indicators":
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(response, `{"valid":false}`)
+	case "/icons.ttf":
+		response.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = response.Write(bridgeTestSFNT())
+	case "/state":
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(response, state)
+	default:
+		http.NotFound(response, request)
+	}
+}
+
+func bridgeTestSFNT() []byte {
+	return []byte{
+		0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+		'g', 'l', 'y', 'f', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c,
+		0x00, 0x00, 0x00, 0x01, 0x00,
+	}
+}
+
+func relayState(t *testing.T, gateway *relay) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/8111/state", nil)
+	request.Header.Set("Origin", testOrigin)
+	response := httptest.NewRecorder()
+	gateway.ServeHTTP(response, request)
+	return response
 }
 
 func TestRelayForwardsOfficialGameChatWithAFixedLastId(t *testing.T) {
@@ -226,7 +343,7 @@ func TestBridgeCapabilitiesExposeOnlyStableReadOnlyContract(t *testing.T) {
 		t.Fatalf("capabilities status = %d", response.Code)
 	}
 	body := response.Body.String()
-	for _, expected := range []string{`"bridge_protocol":1`, `"cache_protocol":4`, `"mobile_pairing_protocol":6`, `"bridge_version":"development"`, `"app_web_version":"development"`, `"input":"official-8111-only"`, `"write_commands":false`, `"authenticode":false`} {
+	for _, expected := range []string{`"bridge_protocol":1`, `"cache_protocol":4`, `"mobile_pairing_protocol":7`, `"bridge_version":"development"`, `"app_web_version":"development"`, `"input":"official-8111-only"`, `"write_commands":false`, `"authenticode":false`} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("capabilities missing %s: %s", expected, body)
 		}

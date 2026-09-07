@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BridgeClient, BrowserAccessClient } from "./launcher-client";
+import { clearBridgeDiscoveryForTest } from "../runtime/bridge-discovery";
 
 class MemoryStorage {
   readonly values = new Map<string, string>();
@@ -9,11 +10,81 @@ class MemoryStorage {
 }
 
 afterEach(() => {
+  clearBridgeDiscoveryForTest();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("Launcher clients", () => {
+  it("reports a running incompatible Bridge with its version instead of asking the user to start it", async () => {
+    const fetcher: typeof fetch = async () => Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 3, input: "official-8111-only", write_commands: false, bridge_version: "1.0.0" });
+    await expect(new BridgeClient("", fetcher).probe()).resolves.toMatchObject({ state: "incompatible", message: expect.stringMatching(/1\.0\.0.*更新/) });
+  });
+
+  it.each([429, 400])("retains device authorization and backs off transient polling response %s", async status => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-07T00:00:00Z"));
+    const storage = new MemoryStorage();
+    let tokenCalls = 0;
+    let codeCalls = 0;
+    const fetcher = async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith("/device/code")) {
+        codeCalls++;
+        return Response.json({ device_code: "pending-device", user_code: "ABCD1234", verification_uri: "https://pay.example.test/device", expires_in: 600, interval: 5 });
+      }
+      if (path.endsWith("/device/token")) {
+        tokenCalls++;
+        if (tokenCalls === 1) return Response.json({ error: status === 400 ? "slow_down" : "rate_limited" }, { status, headers: { "Retry-After": "60" } });
+        return Response.json({ access_token: "approved-token", expires_in: 3600 });
+      }
+      return Response.json({ schemaVersion: 2, enhanced: false, accountLabel: "pilot" });
+    };
+    const access = new BrowserAccessClient(new URL("https://pay.example.test"), fetcher as typeof fetch, storage);
+    await access.begin();
+    expect((await access.poll()).state).toBe("pending");
+    expect(access.hasPending()).toBe(true);
+    const reopened = new BrowserAccessClient(new URL("https://pay.example.test"), fetcher as typeof fetch, storage);
+    vi.advanceTimersByTime(5_000);
+    expect((await reopened.poll()).state).toBe("pending");
+    expect(tokenCalls).toBe(1);
+    vi.advanceTimersByTime(55_000);
+    expect((await access.poll()).state).toBe("authorized");
+    expect(tokenCalls).toBe(2);
+    expect(codeCalls).toBe(1);
+  });
+
+  it("coalesces polling and does not revive an authorization cleared in flight", async () => {
+    const storage = new MemoryStorage();
+    let complete!: (response: Response) => void;
+    let tokenCalls = 0;
+    const fetcher = async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/device/code")) return Response.json({ device_code: "pending-device", user_code: "ABCD1234", verification_uri: "https://pay.example.test/device", expires_in: 600 });
+      tokenCalls++;
+      return new Promise<Response>(resolve => { complete = resolve; });
+    };
+    const access = new BrowserAccessClient(new URL("https://pay.example.test"), fetcher as typeof fetch, storage);
+    await access.begin();
+    const pending = access.poll();
+    expect((await access.poll()).state).toBe("pending");
+    expect(tokenCalls).toBe(1);
+    access.clearAuthorization();
+    complete(Response.json({ access_token: "stale-token", expires_in: 3600 }));
+    expect((await pending).state).toBe("signed_out");
+    expect(storage.values.size).toBe(0);
+  });
+
+  it("still terminates a device request rejected by the account service", async () => {
+    const storage = new MemoryStorage();
+    const fetcher = async (input: RequestInfo | URL) => String(input).endsWith("/device/code")
+      ? Response.json({ device_code: "pending-device", user_code: "ABCD1234", verification_uri: "https://pay.example.test/device", expires_in: 600 })
+      : Response.json({ error: "access_denied" }, { status: 400 });
+    const access = new BrowserAccessClient(new URL("https://pay.example.test"), fetcher as typeof fetch, storage);
+    await access.begin();
+    await expect(access.poll()).rejects.toThrow("access_denied");
+    expect(access.hasPending()).toBe(false);
+  });
+
   it("reads only the stable Bridge capability endpoint", async () => {
     const calls: string[] = [];
     const fetcher = async (input: RequestInfo | URL) => {

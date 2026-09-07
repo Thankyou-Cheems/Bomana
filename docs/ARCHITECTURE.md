@@ -1,35 +1,7 @@
-# Public Browser Architecture
+# Public architecture
 
-Bomana's public closure contains three independently reviewable parts:
+The online Launcher opens an independently versioned App Web and distributes Bridge. Bridge forwards official 8111 observations and stores signed resource objects. Lite / Standard use the same `PublicRuntime` and `public-main.ts` as the maintained production build. Parameter assets come from the same validated parameter set as the flight toolbox.
 
-1. `frontend/` builds the Online Launcher, Lite, and Standard.
-2. `native/telemetry_gateway/` builds Bomana Bridge.
-3. `docs/` is the public site served at `bomana.ruikang.wang`.
+The runtime owns lifecycle, recovery, timer, fuel learning and official zone / airfield navigation. Presentation consumes snapshots and commands. The heading renderer is shared with the private extension through a guidance presentation callback; only navigation guidance is included here. Advanced release calculation remains private.
 
-## Runtime flow
-
-```text
-War Thunder localhost:8111
-          |
-          v
-Bomana Bridge (fixed read-only routes, loopback-first)
-          |
-          v
-Online Launcher -> Lite or Standard Web
-```
-
-Lite reads the public frame only to maintain the respawn-cycle timer. Standard additionally derives bearing and distance to official `bombing_point` and `airfield` objects. The public runtime does not request gamechat, terrain, mobile pairing, or any Enhanced endpoint.
-
-Enhanced is a stable integration identity in the public Launcher. Its implementation, models, data, tests, and release definition are not part of this repository. Bridge may expose public mobile-pairing and signed-object transport protocols because those protocols carry opaque authorization/artifacts and contain no Enhanced App implementation, terrain object, or solver. Tray pairing verifies a phone-only signed lease but never receives the account access token. Launcher separately distinguishes a denied browser loopback permission from a missing Bridge and links to recovery guidance.
-
-## Retired code
-
-The Python App, desktop Launcher, PyInstaller packaging, tkinter UI, and native hotkey broker are removed from the current tree. Their commits, tags, and Releases remain unchanged for historical recovery.
-
-## Release boundary
-
-- Public CI builds and tests Lite, Standard, Launcher, and Bridge only as reproducibility evidence.
-- Public CI must not publish, deploy, or hold credentials for production.
-- Public CI must not build or upload Enhanced or terrain artifacts.
-- Production composition, Sigstore publication, Caddy/SSH activation, rollback, and the private Enhanced/mobile subtrees remain owned by the private release pipeline.
-- The public promotional-site source is mirrored into the private release closure before production deployment.
+Public source updates are generated, tested in a clean directory and appended to public `main`. CI in this repository repeats the public checks. It does not sign official releases, store deployment credentials or deploy to Tencent Cloud. Existing tags / Releases are historical, not a second publication pipeline.

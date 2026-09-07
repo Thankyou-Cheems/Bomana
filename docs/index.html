@@ -3,20 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bomana · 在线全真飞行计时与导航</title>
+    <title>Bomana · 全真飞行计时、导航与战术地图</title>
     <meta
       name="description"
-      content="Bomana 是面向 War Thunder 全真模式的浏览器 App：在线 Launcher 连接本机只读 Bridge，Lite 纯计时，Standard 提供基础导航，Enhanced 提供战术情报与高程能力。"
+      content="运行 Bomana Bridge，再从浏览器使用全真飞行计时、基础导航或 Enhanced 战术地图与武器解算。"
     >
     <meta name="theme-color" content="#dcecf8">
-    <meta property="og:title" content="Bomana · 全真飞行信息，安静地放在手边">
+    <meta property="og:title" content="Bomana · 计时、导航、战术图，一个网页就够">
     <meta
       property="og:description"
-      content="打开在线 Launcher，运行本机只读 Bridge，即可使用 Lite、Standard 或 Enhanced。第三方工具不代表 Gaijin 官方背书。"
+      content="先运行本机只读 Bridge，再打开在线 Launcher。Lite 只计时，Standard 提供基础导航，Enhanced 提供完整战术与解算功能。"
     >
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://bomana.ruikang.wang/">
-    <meta property="og:image" content="https://bomana.ruikang.wang/assets/bomana-app.png">
+    <meta property="og:image" content="https://bomana.ruikang.wang/assets/bomana-app.webp">
     <link rel="canonical" href="https://bomana.ruikang.wang/">
     <link rel="icon" href="assets/favicon.ico">
     <link rel="stylesheet" href="styles.css">
@@ -26,7 +26,7 @@
 
     <header class="site-header" aria-label="主导航">
       <a class="brand" href="#top" aria-label="Bomana 首页">
-        <img src="assets/bomana-app.png" alt="" width="36" height="36">
+        <img src="assets/bomana-app.webp" alt="" width="36" height="36">
         <span class="brand-mark">BOMANA</span>
       </a>
       <nav class="nav-links" aria-label="页面章节">
@@ -35,7 +35,8 @@
         <a href="#features">功能</a>
         <a href="#hotkeys">Bridge</a>
         <a href="#docs">文档</a>
-        <a class="nav-launcher" href="/launcher/">在线启动</a>
+        <a class="nav-launcher" href="/launcher/">在线启动器</a>
+        <a class="nav-calculator" href="/calculator/">在线计算器</a>
         <a class="nav-github" href="https://github.com/Thankyou-Cheems/Bomana">GitHub</a>
       </nav>
     </header>
@@ -47,17 +48,15 @@
           <div class="hero-copy">
             <p class="kicker">
               <span class="kicker-dot"></span>
-              WEB APP · OPEN SOURCE · OFFICIAL 8111
+              WAR THUNDER SB · WEB APP · READ-ONLY 8111
             </p>
             <h1 id="hero-title">
-              <span class="hero-line">全真飞行</span>
-              <span class="hero-line hero-line-em">需要的信息</span>
-              <span class="hero-line hero-line-soft">安静地放在手边</span>
+              <span class="hero-line">计时、导航、战术图</span>
+              <span class="hero-line hero-line-em">一个网页就够</span>
             </h1>
             <p class="hero-lede">
-              Bomana 现在直接通过浏览器运行。在线 Launcher 自动发现本机 Bridge，
-              Lite 只保留复活周期计时，Standard 提供官方战区与机场的基础导航，
-              Enhanced 进一步解锁战术地图坐标、聊天识别、机场模块、Y66、高程与武器解算。
+              先运行 Bridge，再打开网页。Lite 只计时；Standard 加战区与机场导航；
+              Enhanced 再提供战术地图、高程、机场模块、Y66 和武器解算。
             </p>
             <div class="hero-actions">
               <a
@@ -77,30 +76,29 @@
               </a>
             </div>
             <ul class="hero-trust" aria-label="产品边界">
-              <li>只读官方 localhost:8111</li>
-              <li>在线 Launcher · 不再下载旧 App</li>
-              <li>Lite / Standard · MIT</li>
+              <li>Bridge 只读本机 War Thunder ExtUI</li>
+              <li>旧 Python App 已停用</li>
+              <li>Lite / Standard / Bridge 开源</li>
             </ul>
             <aside class="risk-notice" aria-label="使用风险提示">
               <div>
                 <p class="risk-label">使用前请先看 · RISK NOTICE</p>
                 <p>
-                  <strong>没有“绝对安全”或“绝不封号”保证。</strong>
-                  本软件只读取游戏提供的 localhost:8111 信息，在数据读取方式上与 WTRTI 等以 8111 为基础的知名工具一致；
-                  这不等于获得 Gaijin 的逐项授权。CCRP、目标提示、网页控制等功能是否被接受，仍取决于
-                  War Thunder 当前规则、游戏模式和具体使用方式。请先阅读
+                  <strong>Bomana 不是 Gaijin 官方工具，也不承诺“绝不封号”。</strong>
+                  Bridge 只读本机 War Thunder ExtUI，不读内存、不注入、不改游戏文件；但具体功能是否允许，
+                  仍以 War Thunder 当前规则、模式和使用方式为准。使用前请阅读
                   <a href="https://forum.warthunder.com/t/tools-using-data-provided-on-port-8111/106664/16" target="_blank" rel="noopener">官方 8111 说明</a>
                   与
                   <a href="https://legal.gaijin.net/en/termsofservice" target="_blank" rel="noopener">Gaijin 服务条款</a>，再决定是否使用。
                 </p>
               </div>
-              <span class="risk-badge">先试用 · 自行判断</span>
+              <span class="risk-badge">第三方工具 · 自行判断</span>
             </aside>
           </div>
 
           <aside class="hero-aside" aria-label="关键数字">
             <div class="hero-icon-card">
-              <img src="assets/bomana-app.png" alt="Bomana 应用图标" width="96" height="96">
+              <img src="assets/bomana-app.webp" alt="Bomana 应用图标" width="96" height="96">
             </div>
             <div class="stat-block">
               <span class="stat-label">REWARD CYCLE</span>
@@ -116,7 +114,7 @@
               <div class="stat-block dim">
                 <span class="stat-label">CHANNELS</span>
                 <strong class="stat-value">3</strong>
-                <span class="stat-hint">超级爆弹版订阅 · Standard · Lite</span>
+                <span class="stat-hint">Enhanced · Standard · Lite</span>
               </div>
             </div>
           </aside>
@@ -128,37 +126,37 @@
         <div class="section-head split">
           <div>
             <p class="section-label">01 · GET STARTED</p>
-            <h2 id="start-title">三步开始，不需要额外游戏插件</h2>
+            <h2 id="start-title">运行 Bridge，然后打开网页</h2>
           </div>
           <p class="section-aside-text">
-            不再下载旧 Python App 或桌面 Launcher。网页负责产品与计算，本机 Bridge 只转发
-            官方 8111 并保存用户选择的本地数据。
+            旧 Python App 和桌面 Launcher 已停用。Bridge 留在本机，负责读取官方 War Thunder ExtUI，
+            并自动兼容 8111 / 9222 / 10333；网页负责显示和计算。
           </p>
         </div>
 
         <ol class="steps">
           <li>
             <span class="step-index">01</span>
-            <h3>运行 Bridge</h3>
-            <p>下载并运行轻量 Bridge。它只监听本机、只读转发官方 8111，不包含 App 解算逻辑。</p>
+            <h3>下载并运行 Bridge</h3>
+            <p>看到系统托盘里的 Bomana 图标，就代表 Bridge 已经启动。</p>
           </li>
           <li>
             <span class="step-index">02</span>
             <h3>打开在线 Launcher</h3>
-            <p>进入本站在线 Launcher；它会发现 Bridge，并显示 Lite、Standard 与 Enhanced 的准确能力边界。</p>
+            <p>Launcher 会连接 Bridge，并让你选择 Lite、Standard 或 Enhanced。</p>
           </li>
           <li>
             <span class="step-index">03</span>
-            <h3>选择 Edition</h3>
-            <p>Lite 纯计时；Standard 基础导航；Enhanced 需要订阅并在浏览器本地加载扩展能力。</p>
+            <h3>选一个版本</h3>
+            <p>只计时选 Lite；需要导航选 Standard；需要战术图和解算选 Enhanced。</p>
           </li>
         </ol>
 
         <div class="download-panel" aria-labelledby="download-title">
           <div class="download-copy">
             <p class="section-label">LATEST RELEASE</p>
-            <h3 id="download-title">在线 Launcher 是唯一产品入口</h3>
-            <p id="releaseStatus" role="status" aria-live="polite">网页始终加载当前已激活版本；Bridge 可独立更新。</p>
+            <h3 id="download-title">以后都从在线 Launcher 进入</h3>
+            <p id="releaseStatus" role="status" aria-live="polite">网页使用当前已上线版本；Bridge 检测到更新时会提示。</p>
             <div class="download-actions">
               <a
                 class="button primary"
@@ -174,16 +172,17 @@
               >
                 下载 Bridge
               </a>
+              <a class="text-link" href="/downloads/BomanaBridgeDiagnostics.exe">Bridge 连接诊断</a>
               <a class="text-link" href="https://github.com/Thankyou-Cheems/Bomana">
                 查看 Lite / Standard / Bridge 源码
               </a>
             </div>
             <p class="download-cdn-note">
-              App Web 由本站原子激活并保留回滚版本；Bridge 下载包含版本清单、SHA-256 与 Sigstore 证明。
+              Bridge 下载页附带版本号、SHA-256 和 Sigstore 校验信息。
             </p>
           </div>
           <div class="release-files">
-            <p class="release-files-label">当前产品拓扑</p>
+            <p class="release-files-label">当前产品组成</p>
             <div id="releaseAssets" class="release-assets" aria-live="polite">
               <span>Online Launcher</span><span>Lite / Standard / Enhanced</span><span>Read-only Bridge</span>
             </div>
@@ -195,78 +194,61 @@
       <section class="channels-section" id="channels" aria-labelledby="channels-title">
         <div class="section-head">
           <p class="section-label">02 · CHANNELS</p>
-          <h2 id="channels-title">三种 Edition，一条清楚的能力边界</h2>
+          <h2 id="channels-title">选到合适的一档就行</h2>
           <p class="section-lede">
-            Lite 是纯计时；Standard 只做官方战区与机场的基础导航；Enhanced 才包含战术情报、高程与武器解算。
+            Lite 只计时，Standard 加基础导航。战术地图、高程和武器解算都在 Enhanced。
           </p>
         </div>
         <div class="channel-grid">
-          <article class="channel featured">
-            <div class="channel-featured-main">
-              <span class="channel-tag">SUBSCRIBER · CHEEMSPAY</span>
-              <h3>超级爆弹版</h3>
-              <p class="channel-blurb">战术情报、本机高程、机场模块与武器解算。</p>
-              <p class="channel-intro">在 Lite / Standard 的基础上，提供以下 Enhanced 专属能力：</p>
-              <ul class="channel-feature-list">
-                <li>
-                  <strong>战术地图情报</strong>
-                  <span>格子坐标、聊天自动识别、战区标点与倒计时。</span>
-                </li>
-                <li>
-                  <strong>机场与高程</strong>
-                  <span>机场模块标记、Y66 标定与用户选择的本机离线高程。</span>
-                </li>
-                <li>
-                  <strong>武器解算</strong>
-                  <span>结合官方 8111、离线静态数据与用户设置给出投放参考。</span>
-                </li>
-                <li>
-                  <strong>手机 Web</strong>
-                  <span>通过 Bridge 局域网配对，在手机自己的 Worker / WASM 中运行。</span>
-                </li>
-              </ul>
-            </div>
-            <div class="channel-featured-side">
-              <div class="channel-purchase">
-                <p class="channel-purchase-label">CHEEMSPAY · 先试用再决定</p>
-                <p class="channel-purchase-note">购买页实时展示当前试用、授权期限、设备数与退款说明；价格和权益以 CheemsPay 页面为准。</p>
-                <div class="channel-actions">
-                  <a class="button primary" href="https://pay.ruikang.wang/" target="_blank" rel="noopener">
-                    立即购买 / 试用
-                    <span class="button-arrow" aria-hidden="true">↗</span>
-                  </a>
-                  <a class="text-link" href="https://pay.ruikang.wang/" target="_blank" rel="noopener">打开 CheemsPay 商品页</a>
-                </div>
-              </div>
-              <aside class="channel-risk" aria-label="超级爆弹版风险提示">
-                <strong>风险提示</strong>
-                <p>
-                  本软件只读取游戏提供的 localhost:8111 信息；CCRP、目标提示、网页控制等功能，可能受到
-                  War Thunder 当前规则、模式和具体使用方式影响；
-                  Bomana 不承诺“绝不封号”。在禁止或有争议的模式中，请关闭相关功能并自行承担使用决定。
-                </p>
-              </aside>
+          <article class="channel" aria-labelledby="channel-lite-title">
+            <span class="channel-tag">FREE · TIMER</span>
+            <h3 id="channel-lite-title">Lite</h3>
+            <p class="channel-blurb">只提供复活周期计时，界面与能力保持最精简。</p>
+            <ul class="channel-feature-list">
+              <li>复活周期计时与自定义时长</li>
+              <li>当前出击周期、进度与手动重置</li>
+              <li>周期提示音</li>
+            </ul>
+            <div class="channel-actions">
+              <a class="button secondary" href="/launcher/">使用 Lite <span aria-hidden="true">→</span></a>
             </div>
           </article>
-          <article class="channel">
-            <span class="channel-tag">BALANCED</span>
-            <h3>Standard</h3>
-            <p class="channel-blurb">官方战区 / 机场基础导航</p>
-            <ul>
-              <li>方位、距离、航向提示、燃油与清单</li>
-              <li>不含格子坐标、聊天识别、倒计时与高程</li>
+          <article class="channel" aria-labelledby="channel-standard-title">
+            <span class="channel-tag">OPEN SOURCE · NAVIGATION</span>
+            <h3 id="channel-standard-title">Standard</h3>
+            <p class="channel-blurb">加入官方战区与机场的基础导航、燃油管理和检查单。</p>
+            <ul class="channel-feature-list">
+              <li>包含 Lite 的计时功能</li>
+              <li>官方战区与机场目标切换</li>
+              <li>方位、距离与基础航向提示</li>
+              <li>燃油消耗、续航、返航估算与检查单</li>
             </ul>
+            <div class="channel-actions">
+              <a class="button secondary" href="/launcher/">使用 Standard <span aria-hidden="true">→</span></a>
+            </div>
           </article>
-          <article class="channel">
-            <span class="channel-tag">MINIMAL</span>
-            <h3>Lite</h3>
-            <p class="channel-blurb">纯复活周期计时</p>
-            <ul>
-              <li>周期、进度、自定义时长与手动重置</li>
-              <li>无导航、飞行仪表与战术功能</li>
+          <article class="channel featured" aria-labelledby="channel-enhanced-title">
+            <span class="channel-tag">SUBSCRIPTION · FULL</span>
+            <h3 id="channel-enhanced-title">Enhanced</h3>
+            <p class="channel-blurb">在 Standard 之上解锁战术情报、离线高程、机场模块与武器解算。</p>
+            <ul class="channel-feature-list">
+              <li>包含 Standard 的全部功能</li>
+              <li>战术地图格子坐标、聊天识别与战区倒计时</li>
+              <li>机场模块、Y66 标定和本机离线高程</li>
+              <li>常规、高阻、卫星制导、滑翔武器与导弹解算</li>
+              <li>手机 Enhanced 配对与本地 Worker / WASM</li>
             </ul>
+            <div class="channel-actions">
+              <a class="button primary" href="https://pay.ruikang.wang/" target="_blank" rel="noopener">
+                查看 Enhanced <span class="button-arrow" aria-hidden="true">↗</span>
+              </a>
+            </div>
           </article>
         </div>
+        <aside class="channel-note" aria-label="Enhanced 购买与风险说明">
+          <p><strong>Enhanced 可以先试用。</strong>价格、期限、设备数和退款规则，以 CheemsPay 页面显示为准。</p>
+          <p>Bomana 仍是第三方工具，不承诺“绝不封号”；请按游戏当前规则使用。</p>
+        </aside>
       </section>
 
       <!-- GALLERY: real UI (web + mobile live; other slots optional) -->
@@ -277,92 +259,69 @@
             <h2 id="gallery-title">实机界面</h2>
           </div>
           <p class="section-aside-text">
-            这里展示 Lite / Standard 与通用启动器的公开实机界面。
+            以下都是当前版本实机截图：Web、置顶战术窗、手机页和在线 Launcher。
           </p>
         </div>
 
         <div class="gallery-stack">
-          <!-- Browser App UI -->
-          <div class="gallery-row gallery-row--pair">
-            <figure
-              class="shot shot--portrait shot--desktop-main"
-              data-shot="assets/shots/web-cockpit-desktop.png"
-            >
-              <div class="shot-frame">
-                <img
-                  class="shot-img"
-                  alt="Bomana 浏览器 App 实机：地图、计时与导航"
-                  width="1392"
-                  height="891"
-                  hidden
-                >
-                <div class="shot-empty" data-ar="1392/891">
-                  <span class="shot-meta">BROWSER · APP</span>
-                  <strong>在线 App</strong>
-                  <p>地图 · 计时 · 导航</p>
-                </div>
-              </div>
-              <figcaption>浏览器 App · 在线加载 · 本机 Bridge 只读连接</figcaption>
-            </figure>
-          </div>
-
-          <!-- Square-ish launcher, capped width -->
-          <figure class="shot shot--launcher" data-shot="assets/shots/launcher.png">
+          <figure class="shot shot--showcase-web" data-shot="assets/shots/web-app-current.webp">
             <div class="shot-frame">
               <img
                 class="shot-img"
-                alt="Bomana 启动器实机：通道、更新与启动"
-                width="1182"
-                height="1179"
+                alt="Bomana Web 实机：完整航向带、战术地图、武器解算与任务信息"
+                width="1280"
+                height="2089"
                 hidden
               >
-              <div class="shot-empty" data-ar="1/1">
-                <span class="shot-meta">LAUNCHER</span>
-                <strong>启动器</strong>
-                <p>通道 · 更新 · 回退</p>
+              <div class="shot-empty" data-ar="1280/2089">
+                <span class="shot-meta">WEB · APP</span>
+                <strong>完整战术 Web</strong>
+                <p>航向带 · 地图 · 解算</p>
               </div>
             </div>
-            <figcaption>在线 Launcher · Bridge 状态、Edition 选择与 Enhanced 授权入口</figcaption>
+            <figcaption>Web · 完整飞行信息与战术地图共用一套实时状态</figcaption>
           </figure>
 
-          <div class="gallery-row gallery-row--instruments" id="instrument-shots">
-            <figure class="shot shot--instrument" data-shot="assets/shots/nav-precision.png">
-              <div class="shot-frame">
-                <img
-                  class="shot-img"
-                  alt="Bomana 航向带内精确对准区实机：偏差、捕获门与平滑游标"
-                  width="340"
-                  height="138"
-                  hidden
-                >
-                <div class="shot-empty" data-ar="340/138">
-                  <span class="shot-meta">NAV · PRECISION</span>
-                  <strong>带内精确对准</strong>
-                  <p>偏差 · 捕获门 · 平滑游标</p>
-                </div>
-              </div>
-              <figcaption>航向带精确区 · 小偏差非线性放大，机场仍留在主刻度</figcaption>
-            </figure>
-
-          </div>
-
-          <!-- Wide strip: full length visible -->
-          <figure class="shot shot--strip" data-shot="assets/shots/nav-hud.png">
+          <figure class="shot shot--showcase-mobile" data-shot="assets/shots/mobile-app-current.webp">
             <div class="shot-frame">
               <img
                 class="shot-img"
-                alt="Bomana 独立导航航向带实机"
-                width="1188"
-                height="188"
+                alt="Bomana 手机 App 实机：满宽战术地图、航向带与底部目标武器控制"
+                width="720"
+                height="1565"
                 hidden
               >
-              <div class="shot-empty" data-ar="1188/188">
-                <span class="shot-meta">NAV · TAPE</span>
-                <strong>独立导航</strong>
-                <p>航向带 · 战区 / 机场</p>
+              <div class="shot-empty" data-ar="720/1565">
+                <span class="shot-meta">MOBILE · APP</span>
+                <strong>手机战术页</strong>
+                <p>地图 · 目标 · 武器</p>
               </div>
             </div>
-            <figcaption>独立导航窗 · 主刻度保留全局目标，精确提示收进航向带</figcaption>
+            <figcaption>手机 App · Bridge 局域网直连，优先保留航向、地图、目标与武器</figcaption>
+          </figure>
+
+          <figure class="shot shot--showcase-pip" data-shot="assets/shots/pip-window-current.webp">
+            <div class="shot-frame">
+              <img class="shot-img" alt="Bomana 置顶战术窗实机：航向带、CCRP、速度与战术缩略图" width="1400" height="307" hidden>
+              <div class="shot-empty" data-ar="1400/307">
+                <span class="shot-meta">PICTURE IN PICTURE</span>
+                <strong>置顶战术窗</strong>
+                <p>航向带 · CCRP · 缩略图</p>
+              </div>
+            </div>
+            <figcaption>置顶战术窗 · 紧凑显示关键航向、投放窗口与战术态势</figcaption>
+          </figure>
+
+          <figure class="shot shot--showcase-launcher" data-shot="assets/shots/launcher-current.webp">
+            <div class="shot-frame">
+              <img class="shot-img" alt="Bomana Online Launcher 实机：Bridge 状态、Edition 选择与 Enhanced 授权" width="1200" height="675" hidden>
+              <div class="shot-empty" data-ar="1200/675">
+                <span class="shot-meta">ONLINE · LAUNCHER</span>
+                <strong>在线启动入口</strong>
+                <p>Bridge · Edition · 授权</p>
+              </div>
+            </div>
+            <figcaption>Online Launcher · 检测 Bridge、选择 Edition，并进入当前 Web App</figcaption>
           </figure>
         </div>
       </section>
@@ -371,9 +330,9 @@
       <section class="features-section" id="features" aria-labelledby="features-title">
         <div class="section-head">
           <p class="section-label">04 · FLIGHT TOOLS</p>
-          <h2 id="features-title">一眼看懂，而不是再开一块仪表盘</h2>
+          <h2 id="features-title">飞行中常看的东西，放到一起</h2>
           <p class="section-lede">
-            功能围绕全真飞行中的时间、方向、余量和风险组织；没有需要学习的复杂工作区。
+            计时、方向、余量和投弹窗口都在同一套界面里。
           </p>
         </div>
 
@@ -381,27 +340,27 @@
           <article class="feat feat-hero">
             <span class="feat-code led-chip">15:00</span>
             <h3>收益周期计时</h3>
-            <p>识别出生、着陆和离场状态，自动维护 15 分钟周期，临近结束时提醒。</p>
+            <p>自动识别出生、着陆和离场，维护 15 分钟周期；需要时也能手动重置。</p>
           </article>
           <article class="feat">
             <span class="feat-code">037°</span>
             <h3>战区与机场导航</h3>
-            <p>主刻度保留战区、机场与 POI；接近目标时，非线性精确区在带内放大偏差并平滑捕获。</p>
+            <p>把战区、机场和 POI 放在航向带上，接近目标时放大细小航向偏差。</p>
           </article>
           <article class="feat">
             <span class="feat-code">FUEL / IAS</span>
             <h3>燃油与超速</h3>
-            <p>油量、消耗、返航估算；IAS 与 Mach 分级提示。</p>
+            <p>看油量、消耗和返航余量；接近极速时直接提示 IAS 与 Mach 风险。</p>
           </article>
           <article class="feat">
             <span class="feat-code">WPN</span>
             <h3>武器解算</h3>
-            <p>超级爆弹版的订阅能力；实现与模型不在公开仓库，通过 CheemsPay 授权后由私有发布服务交付。</p>
+            <p>Enhanced 根据当前机型、挂载和飞行状态给出投放参考；这部分不在公开仓库。</p>
           </article>
           <article class="feat">
             <span class="feat-code">WEB</span>
             <h3>网页驾驶舱</h3>
-            <p>本机或局域网手机查看计时与地图，可操作 Bomana 固定功能，不模拟游戏按键。</p>
+            <p>电脑和手机查看同一份计时、地图与目标状态；不会模拟游戏按键。</p>
           </article>
         </div>
       </section>
@@ -410,17 +369,17 @@
       <section class="hotkey-section" id="hotkeys" aria-labelledby="hotkey-title">
         <div class="hotkey-copy">
           <p class="section-label">05 · LOCAL BRIDGE</p>
-          <h2 id="hotkey-title">Bridge 只连接浏览器与官方 8111</h2>
+          <h2 id="hotkey-title">Bridge 只负责把 ExtUI 交给网页</h2>
           <p>
-            Bridge 是唯一需要在 Windows 本机运行的组件。它不拥有 Edition、界面或解算逻辑，
-            只提供固定的只读路由与用户选择的本地数据存储。
+            它是唯一需要在 Windows 本机运行的组件。Bridge 不负责 Edition 或武器解算，
+            只转发固定的只读数据，并保存你的本地设置。
           </p>
           <ul class="boundary-list">
             <li>默认只监听 <code>127.0.0.1</code> 的固定端口池</li>
-            <li>只转发枚举的官方 8111 GET 路由，不做代理</li>
+            <li>只检查 8111 / 9222 / 10333，并转发枚举的 ExtUI GET 路由</li>
             <li>不读游戏内存、不注入、不模拟按键</li>
             <li>手机访问仅在用户主动配对的临时局域网会话中开放</li>
-            <li>可从系统托盘查看版本、打开 Launcher 或退出</li>
+            <li>系统托盘可打开 Launcher、连接手机、查看版本或退出</li>
           </ul>
           <div class="hotkey-actions">
             <a class="button secondary" href="/downloads/BomanaBridge.exe">
@@ -434,7 +393,7 @@
         <div class="permission-flow" aria-label="Bridge 数据流程">
           <div class="flow-node game">
             <small>WAR THUNDER</small>
-            <strong>localhost:8111</strong>
+            <strong>8111 / 9222 / 10333</strong>
             <span>官方只读数据</span>
           </div>
           <div class="flow-join" aria-hidden="true"></div>
@@ -456,14 +415,14 @@
       <section class="trust-section" aria-labelledby="trust-title">
         <div class="section-head">
           <p class="section-label">06 · BOUNDARIES</p>
-          <h2 id="trust-title">能做什么，也明确不做什么</h2>
+          <h2 id="trust-title">它不读内存，也不替你操作游戏</h2>
         </div>
         <div class="trust-grid">
           <article>
             <span class="trust-num">01</span>
             <h3>官方数据边界</h3>
             <p>
-              游戏状态运行时只访问本机 8111 的 <code>/indicators</code>、<code>/state</code>、
+              运行时只访问本机 8111 的 <code>/indicators</code>、<code>/state</code>、
               <code>/map_obj.json</code>、<code>/map_info.json</code>、<code>/map.img</code> 与 <code>/icons.ttf</code>，
               不读内存、不注入、不改游戏文件。
             </p>
@@ -472,15 +431,14 @@
             <span class="trust-num">02</span>
             <h3>可验证的更新</h3>
             <p>
-              App Web 使用内容哈希资源和原子激活；Bridge 发布清单绑定 SHA-256，GitHub Actions
-              另外生成 Sigstore bundle。
+              网页按版本原子切换并保留回滚；Bridge 下载附带 SHA-256 和 Sigstore 校验信息。
             </p>
           </article>
           <article>
             <span class="trust-num">03</span>
             <h3>透明的隐私说明</h3>
             <p>
-              匿名统计字段、用途和禁用方式公开；Bridge 不接收账户凭据，也不上传 8111、目标或解算数据。
+              匿名统计写清字段、用途和关闭方法。Bridge 不接收账户密码，也不上传 8111、目标或解算数据。
             </p>
           </article>
         </div>
@@ -490,7 +448,7 @@
       <section class="docs-section" id="docs" aria-labelledby="docs-title">
         <div class="section-head">
           <p class="section-label">07 · READ MORE</p>
-          <h2 id="docs-title">需要细节时，再往下看</h2>
+          <h2 id="docs-title">想查细节，就看这些</h2>
         </div>
         <div class="docs-grid">
           <a href="https://github.com/Thankyou-Cheems/Bomana/blob/main/docs/specs/public-editions.md">
@@ -529,10 +487,10 @@
         </div>
         <div class="faq-list">
           <details>
-            <summary>为什么显示 8111 不可用？</summary>
+            <summary>为什么显示 ExtUI 不可用？</summary>
             <p>
-              机库通常没有完整飞行数据。进入战斗后再试；也可在浏览器访问
-              <code>http://localhost:8111</code> 确认游戏本地数据页可用。
+              机库通常没有完整飞行数据。进入战斗后再试，并运行 Bridge 诊断；
+              Bridge 会自动检查 <code>8111</code>、<code>9222</code>、<code>10333</code>。
             </p>
           </details>
           <details>
@@ -544,7 +502,7 @@
           </details>
           <details>
             <summary>CCRP 是游戏内部真实弹道吗？</summary>
-            <p>不是。超级爆弹版是独立订阅功能，只使用官方 8111 观测、用户配置和经审查的离线静态数据，并明确提示不可用状态。</p>
+            <p>不是。Enhanced 只使用官方 ExtUI 观测、用户配置和离线静态数据，并会在条件不足时明确提示不可用。</p>
           </details>
           <details>
             <summary>可以和其他 8111 工具一起使用吗？</summary>
@@ -559,7 +517,7 @@
       <section class="cta-band" aria-label="下载召唤">
         <div class="cta-inner">
           <p class="section-label">READY</p>
-          <h2>进战斗前，把计时器打开。</h2>
+          <h2>下载 Bridge，然后打开网页。</h2>
           <div class="cta-actions">
             <a
               class="button primary large"
@@ -581,14 +539,14 @@
 
     <footer class="site-footer">
       <div class="footer-brand">
-        <img src="assets/bomana-app.png" alt="" width="40" height="40">
+        <img src="assets/bomana-app.webp" alt="" width="40" height="40">
         <p>
           <strong>Bomana</strong>
           <span>Made for the Space Monkeys community.</span>
         </p>
       </div>
       <p class="footer-note">
-        Lite / Standard 公开闭包采用 MIT License；超级爆弹版为私有付费订阅。
+        Lite / Standard / Bridge 采用 MIT License；Enhanced 为私有付费订阅。
         War Thunder 及相关商标归 Gaijin Entertainment 所有；Bomana 与其无隶属或赞助关系。
       </p>
     </footer>

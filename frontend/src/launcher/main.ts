@@ -1,4 +1,6 @@
 import "./styles.css";
+import { downloadEnhancedDesktop } from "./desktop-download";
+import { readBrowserAuthorization } from "../runtime/enhanced-access";
 import { BridgeClient, BrowserAccessClient, type BridgeProbe, type BrowserAccess, type Channel } from "./launcher-client";
 import { openBridgeAssetStore, type OfflineCacheStatus } from "../runtime/persistent-asset-store";
 import {
@@ -36,6 +38,7 @@ let currentState: LauncherViewState | null = null;
 let authorizationPopup: AuthorizationPopup | null = null;
 let pendingAuthorizationCode = "";
 let fallbackAccess: BrowserAccess | null = null;
+let desktopDownloading = false;
 
 const hostState = required("launcher-host-state");
 const channelGrid = required("channel-grid");
@@ -70,6 +73,9 @@ const authorizationFallbackCode = required("authorization-fallback-code");
 const authorizationCurrentTab = requiredButton("authorization-current-tab");
 const authorizationRetryPopup = requiredButton("authorization-retry-popup");
 const authorizationFallbackClose = requiredButton("authorization-fallback-close");
+const desktopDownload = requiredButton("download-desktop");
+const desktopDownloadStatus = required("desktop-download-status");
+desktopDownload.addEventListener("click", () => void downloadDesktop());
 
 authorizationCode.classList.add("hidden");
 required("refresh-catalog").textContent = "刷新状态";
@@ -152,6 +158,7 @@ function render(state: LauncherViewState): void {
 function renderBridge(probe: BridgeProbe, release: BridgeRelease | null, appRelease: AppWebRelease | null): void {
   connectBridge.disabled = false;
   const permissionDenied = probe.state === "permission-denied";
+  const incompatible = probe.state === "incompatible";
   bridgePermissionGuide.classList.toggle("hidden", !permissionDenied);
   hostHelp.classList.toggle("permission-denied", permissionDenied);
   downloadBridge.classList.toggle("hidden", permissionDenied);
@@ -172,16 +179,16 @@ function renderBridge(probe: BridgeProbe, release: BridgeRelease | null, appRele
     connectBridge.textContent = "重新检测";
     return;
   }
-  hostState.className = `host-pill ${permissionDenied ? "permission-denied" : probe.state === "blocked" ? "blocked" : "offline"}`;
+  hostState.className = `host-pill ${permissionDenied ? "permission-denied" : incompatible || probe.state === "blocked" ? "blocked" : "offline"}`;
   hostState.replaceChildren(statusDot(), labelled(
-    permissionDenied ? "浏览器权限已关闭" : probe.state === "blocked" ? "Bridge 版本不兼容" : "Bridge 未连接",
-    permissionDenied ? "Bridge 可能正在运行，但网页访问被拒绝" : "运行 Bridge 后点击连接",
+    permissionDenied ? "浏览器权限已关闭" : incompatible ? "Bridge 版本不兼容" : probe.state === "blocked" ? "Bridge 访问受阻" : "Bridge 未连接",
+    permissionDenied ? "Bridge 可能正在运行，但网页访问被拒绝" : incompatible ? "请更新 Bridge 后重新检测" : "运行 Bridge 后点击连接",
   ));
   bridgeTechnical.textContent = probe.message;
-  hostHelpTitle.textContent = permissionDenied ? "请允许访问“设备上的应用”" : probe.state === "blocked" ? "检测到旧版 Bridge" : "还没有 Bomana Bridge？";
+  hostHelpTitle.textContent = permissionDenied ? "请允许访问“设备上的应用”" : incompatible ? "请更新 Bomana Bridge" : probe.state === "blocked" ? "请检查 Bridge 服务" : "还没有 Bomana Bridge？";
   hostHelpDescription.textContent = permissionDenied
     ? "这不是 Bridge 未启动提示：Edge 已明确拒绝 Launcher 连接本机 Bridge。请按下面步骤恢复权限。"
-    : probe.state === "blocked"
+    : incompatible
     ? "请从托盘退出旧版 Bridge，再运行这里下载的最新版本。"
     : "请手动运行下载好的 BomanaBridge.exe，看到系统托盘图标则代表启动成功。";
   hostHelp.classList.remove("hidden");
@@ -215,6 +222,8 @@ function renderBridgeVersion(probe: BridgeProbe, release: BridgeRelease | null, 
 }
 
 function renderAccess(access: BrowserAccess): void {
+  desktopDownload.disabled = desktopDownloading || !access.enhanced || Boolean(access.offline);
+  if (!desktopDownloading) desktopDownload.textContent = access.enhanced ? "下载 Enhanced Desktop 预览版" : "验证 Enhanced 后下载";
   accountActions.replaceChildren();
   accountLabel.textContent = access.accountLabel;
   authorizationCode.classList.toggle("hidden", access.state !== "pending");
@@ -494,6 +503,28 @@ function showToast(message: string): void {
   toast.textContent = message;
   toast.classList.add("visible");
   window.setTimeout(() => toast.classList.remove("visible"), 3600);
+}
+
+async function downloadDesktop(): Promise<void> {
+  if (desktopDownloading) return;
+  desktopDownloading = true;
+  desktopDownload.disabled = true;
+  desktopDownloadStatus.textContent = "正在验证订阅与私有安装包…";
+  try {
+    const token = readBrowserAuthorization()?.accessToken ?? "";
+    const result = await downloadEnhancedDesktop(cheemsPayBase, token, fetch, fraction => {
+      desktopDownloadStatus.textContent = `正在下载 ${Math.floor(fraction * 100)}%`;
+    });
+    const url = URL.createObjectURL(result.blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = result.filename; document.body.append(link); link.click(); link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    desktopDownloadStatus.textContent = "校验完成。请先解压，再运行 BomanaEnhanced.exe。";
+  } catch (error) { desktopDownloadStatus.textContent = messageOf(error); }
+  finally {
+    desktopDownloading = false;
+    if (currentState) renderAccess(currentState.access);
+  }
 }
 
 function formatSize(bytes: number): string {

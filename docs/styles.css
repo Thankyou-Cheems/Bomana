@@ -137,6 +137,17 @@ a:hover { text-decoration: underline; }
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55);
 }
 .nav-launcher:hover { filter: brightness(1.05); }
+.nav-calculator {
+  color: #0b527c !important;
+  border: 1px solid rgba(34, 136, 204, .34);
+  background: rgba(219, 241, 253, .82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .68);
+}
+.nav-calculator:hover { filter: brightness(1.03); }
+.nav-links a[aria-current="page"] {
+  outline: 2px solid rgba(246, 201, 69, .72);
+  outline-offset: 1px;
+}
 .nav-github {
   color: var(--ink) !important;
   border: 1px solid var(--line);
@@ -453,6 +464,9 @@ main > section {
   gap: 14px;
 }
 .channel {
+  display: flex;
+  flex-direction: column;
+  min-height: 330px;
   padding: 24px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -468,6 +482,7 @@ main > section {
 }
 .channel-tag {
   display: inline-block;
+  align-self: flex-start;
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -482,30 +497,63 @@ main > section {
   border-color: rgba(190, 138, 16, .55);
   background: linear-gradient(180deg, var(--banana), var(--banana-deep));
 }
-.channel h3 { margin: 14px 0 4px; font-size: 20px; }
-.channel-blurb { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.channel h3 { margin: 17px 0 3px; font-size: 24px; }
+.channel-blurb {
+  margin: 0 0 18px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
 .channel ul {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 6px;
+  gap: 10px;
   color: var(--muted);
   font-size: 13px;
 }
 .channel ul li::before {
-  content: "·";
-  margin-right: 8px;
+  content: "✓";
+  margin-right: 9px;
   color: var(--banana-deep);
   font-weight: 800;
 }
+.channel-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 22px;
+}
+.channel-actions .button {
+  width: 100%;
+  justify-content: space-between;
+}
+.channel-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 14px;
+  padding: 14px 18px;
+  border: 1px solid rgba(190, 138, 16, .38);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 248, 218, .7);
+  color: var(--muted);
+  font-size: 12px;
+}
+.channel-note p { margin: 0; }
+.channel-note strong { color: var(--banana-ink); }
 
 /* ——— Gallery ——— */
-.gallery-stack { display: grid; gap: 18px; }
-.gallery-row { display: grid; gap: 18px; }
-.gallery-row--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.gallery-row--instruments {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+.gallery-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "web mobile"
+    "web pip"
+    "launcher launcher";
+  gap: 20px;
   align-items: start;
 }
 .shot { margin: 0; }
@@ -535,14 +583,14 @@ main > section {
     radial-gradient(24rem 14rem at 70% 20%, rgba(246, 201, 69, .16), transparent 60%),
     rgba(255, 255, 255, 0.35);
 }
-.shot--hero .shot-empty { aspect-ratio: 1392 / 891; }
-.shot--portrait .shot-empty { aspect-ratio: 375 / 844; }
-.shot--desktop-main .shot-empty { aspect-ratio: 944 / 957; }
-.shot--launcher .shot-empty { aspect-ratio: 1 / 1; }
-.shot--instrument .shot-empty { aspect-ratio: 340 / 138; }
-.shot--instrument-wide .shot-empty { aspect-ratio: 720 / 134; }
-.shot--strip .shot-empty { aspect-ratio: 1188 / 188; }
-.shot--launcher { max-width: 620px; }
+.shot--showcase-web { grid-area: web; }
+.shot--showcase-mobile { grid-area: mobile; width: min(100%, 420px); justify-self: center; }
+.shot--showcase-pip { grid-area: pip; align-self: end; }
+.shot--showcase-launcher { grid-area: launcher; }
+.shot--showcase-web .shot-empty { aspect-ratio: 2142 / 3496; }
+.shot--showcase-mobile .shot-empty { aspect-ratio: 1206 / 2622; }
+.shot--showcase-pip .shot-empty { aspect-ratio: 1690 / 370; }
+.shot--showcase-launcher .shot-empty { aspect-ratio: 1265 / 712; }
 .shot-meta {
   color: var(--banana-deep);
   font-size: 10px;
@@ -1036,6 +1084,293 @@ body.hangar a { color: #d7b45c; }
 .hangar-help li { margin: 6px 0; }
 .hangar-help p { margin: 0; color: #9a917e; }
 
+/* ——— Calculator · Bomana Glacier ——— */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+body.calculator-page {
+  color-scheme: light;
+  color: var(--ink);
+  background:
+    radial-gradient(48rem 28rem at 92% -6rem, rgba(246, 201, 69, .22), transparent 62%),
+    radial-gradient(42rem 28rem at -8% 75%, rgba(255, 255, 255, .78), transparent 66%),
+    linear-gradient(180deg, var(--page-top), var(--page-mid) 52%, var(--page-deep));
+}
+body.calculator-page .site-header {
+  border-color: var(--line);
+  background: var(--glass);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 var(--edge);
+}
+body.calculator-page .brand,
+body.calculator-page .brand-mark { color: var(--ink); }
+body.calculator-page .nav-links a { color: var(--muted); }
+body.calculator-page .nav-links a:hover,
+body.calculator-page .nav-links a[aria-current="page"] {
+  color: var(--ink);
+  background: rgba(255, 255, 255, .68);
+}
+body.calculator-page .site-footer { color: var(--ink); border-top-color: var(--line-soft); }
+body.calculator-page .footer-brand span,
+body.calculator-page .footer-note { color: var(--muted); }
+body.calculator-page a { color: var(--blue); }
+
+.calculator-page .hangar-stage { padding-top: 52px; }
+.calculator-heading { max-width: 760px; }
+.calculator-page .hangar-kicker {
+  margin-bottom: 8px;
+  color: var(--banana-deep);
+  font-size: 11px;
+}
+.calculator-page .hangar-stage h1 {
+  margin-bottom: 10px;
+  color: var(--ink);
+  font-size: clamp(34px, 5vw, 52px);
+  letter-spacing: -.03em;
+}
+.calculator-page .hangar-lede {
+  max-width: 680px;
+  margin-bottom: 24px;
+  color: var(--muted);
+  font-size: 15px;
+}
+.calculator-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  background: var(--glass-hard);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 var(--edge);
+}
+.calculator-page .hangar-field,
+.calculator-page .hangar-kinds {
+  gap: 7px;
+  color: #3d6d88;
+  font-size: 10px;
+  letter-spacing: .1em;
+}
+.calculator-page .hangar-field small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
+}
+.calculator-page .hangar-field select,
+.calculator-page .hangar-field input,
+.calculator-page .hangar-kinds select,
+.calculator-page .hangar-search input {
+  width: 100%;
+  min-height: 46px;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .82);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+.calculator-page input::placeholder { color: #7892a2; }
+.hangar-repair {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(232, 169, 29, .42);
+  border-radius: 13px;
+  background: linear-gradient(135deg, rgba(255, 242, 184, .78), rgba(255, 255, 255, .78));
+}
+.hangar-repair[hidden] { display: none; }
+.hangar-repair strong { grid-row: 1 / 3; color: #725000; }
+.hangar-repair span { color: #284f65; font-size: 12px; font-weight: 750; }
+.hangar-repair small { color: #647f90; font-size: 10px; }
+
+.calculator-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(320px, .72fr);
+  gap: 18px;
+  align-items: start;
+}
+.calculator-pickers { display: grid; gap: 16px; }
+.hangar-picker,
+.calculator-page .hangar-hud,
+.calculator-page .hangar-help {
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  background: var(--glass-hard);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 var(--edge);
+}
+.hangar-picker { padding: 18px; }
+.hangar-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 12px;
+}
+.hangar-picker-head > div { min-width: 0; flex: 1; }
+.hangar-picker-head h2 { margin: 0; font-size: 17px; }
+.hangar-picker-head p { margin: 2px 0 0; color: var(--muted); font-size: 10px; }
+.picker-step {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  flex: none;
+  border-radius: 10px;
+  background: linear-gradient(160deg, var(--banana), var(--banana-deep));
+  color: var(--banana-ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+.hangar-clear {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .7);
+  color: var(--blue);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.hangar-clear:disabled { opacity: .48; cursor: default; }
+.hangar-search { display: block; }
+.hangar-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 47px;
+  margin: 9px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(34, 136, 204, .28);
+  border-radius: 12px;
+  background: rgba(220, 241, 252, .68);
+}
+.hangar-selection strong { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.hangar-selection span { flex: none; color: var(--muted); font-size: 10px; text-align: right; }
+.hangar-weapon-filters {
+  display: grid;
+  grid-template-columns: minmax(130px, .32fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.hangar-kind-field span { display: none; }
+.calculator-page .hangar-weapon-list {
+  max-height: 230px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(247, 252, 255, .82);
+}
+.calculator-page .hangar-weapon {
+  min-height: 44px;
+  padding: 9px 11px;
+  border-bottom-color: var(--line-soft);
+  color: var(--ink);
+}
+.calculator-page .hangar-weapon:hover { background: rgba(216, 237, 248, .72); }
+.calculator-page .hangar-weapon.is-selected {
+  background: linear-gradient(90deg, rgba(246, 201, 69, .3), rgba(216, 237, 248, .55));
+  color: var(--ink);
+  box-shadow: inset 4px 0 0 var(--banana-deep);
+}
+.calculator-page .hangar-weapon-kind {
+  flex: none;
+  color: #33799f;
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: none;
+}
+.calculator-page .hangar-weapon-empty { color: var(--muted); font-size: 12px; }
+
+.calculator-page .hangar-hud {
+  position: sticky;
+  top: 92px;
+  min-height: 500px;
+  padding: 22px;
+  gap: 16px;
+}
+.calculator-page .hangar-hud-context {
+  color: #39789a;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: none;
+}
+.hangar-result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(110px, .75fr);
+  gap: 10px;
+}
+.hangar-result-primary,
+.hangar-sorties {
+  display: grid;
+  align-content: center;
+  min-height: 130px;
+  padding: 15px;
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .72);
+}
+.hangar-result-primary strong,
+.hangar-sorties strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  line-height: .92;
+}
+.hangar-result-primary strong {
+  color: var(--led);
+  font-size: clamp(58px, 8vw, 84px);
+  text-shadow: 0 0 16px rgba(255, 65, 54, .24);
+}
+.hangar-sorties strong { color: var(--blue); font-size: clamp(42px, 6vw, 60px); }
+.hangar-result-primary span,
+.hangar-sorties span {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .06em;
+}
+.calculator-page .hangar-fire { color: #b97800; font-size: 13px; letter-spacing: 0; }
+.calculator-page .hangar-stats { gap: 8px 15px; }
+.calculator-page .hangar-stats dt { color: var(--muted); }
+.calculator-page .hangar-stats dd { color: var(--ink); }
+.calculator-page .hangar-hint {
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: rgba(216, 237, 248, .62);
+  color: #315f78;
+  font-size: 12px;
+}
+.calculator-page .hangar-help {
+  margin-top: 18px;
+  padding: 15px 18px;
+}
+.calculator-page .hangar-help summary {
+  color: #2b759d;
+  letter-spacing: .04em;
+  text-transform: none;
+}
+.calculator-page .hangar-help ul { color: var(--muted); font-size: 13px; }
+.hangar-aside { margin: 12px 2px 0; color: var(--muted); font-size: 11px; }
+
 /* ——— Responsive ——— */
 @media (max-width: 980px) {
   .hero-grid { grid-template-columns: 1fr; gap: 28px; }
@@ -1047,15 +1382,29 @@ body.hangar a { color: #d7b45c; }
   .stat-row { grid-column: 2; }
   .section-head.split { flex-direction: column; align-items: flex-start; gap: 10px; }
   .section-aside-text { max-width: none; }
-  .steps, .channel-grid, .trust-grid { grid-template-columns: 1fr 1fr; }
+  .steps, .trust-grid { grid-template-columns: 1fr 1fr; }
   .download-panel { grid-template-columns: 1fr; }
   .feature-bento { grid-template-columns: 1fr 1fr; }
   .feat, .feat-hero { grid-column: auto; }
   .hotkey-section { grid-template-columns: 1fr; }
   .docs-grid { grid-template-columns: 1fr 1fr; }
-  .gallery-row--instruments { grid-template-columns: 1fr; }
+  .gallery-stack {
+    grid-template-columns: 1fr;
+    grid-template-areas: "web" "pip" "mobile" "launcher";
+  }
+  .shot--showcase-mobile { width: min(100%, 440px); }
   .hangar-board { grid-template-columns: 1fr; }
   .hangar-loadout { grid-template-columns: 1fr; }
+  .calculator-workspace { grid-template-columns: 1fr; }
+  .calculator-page .hangar-hud {
+    position: static;
+    min-height: auto;
+  }
+}
+
+@media (max-width: 820px) {
+  .channel-grid { grid-template-columns: 1fr; }
+  .channel { min-height: 0; }
 }
 
 @media (max-width: 640px) {
@@ -1074,8 +1423,15 @@ body.hangar a { color: #d7b45c; }
   .hero-aside { grid-template-columns: 1fr; }
   .hero-icon-card { grid-row: auto; }
   .stat-row { grid-column: auto; grid-template-columns: 1fr 1fr; }
-  .steps, .channel-grid, .trust-grid, .feature-bento, .docs-grid,
-  .gallery-row--pair { grid-template-columns: 1fr; }
+  .steps, .channel-grid, .trust-grid, .feature-bento, .docs-grid { grid-template-columns: 1fr; }
+  .channel-note { flex-direction: column; gap: 6px; }
+  .calculator-context,
+  .hangar-weapon-filters { grid-template-columns: 1fr; }
+  .hangar-repair { grid-template-columns: 1fr; }
+  .hangar-repair strong { grid-row: auto; }
+  .hangar-selection { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .hangar-selection span { text-align: left; }
+  .hangar-result-grid { grid-template-columns: 1fr 1fr; }
   .site-footer { flex-direction: column; align-items: flex-start; }
   .footer-note { text-align: left; }
 }

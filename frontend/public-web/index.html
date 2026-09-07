@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#091b27"><meta name="referrer" content="no-referrer">
+  <title>Bomana · 飞行导航</title>
+  <script type="module" src="../src/public-bootstrap.ts"></script>
+</head>
+<body>
+  <main class="public-shell">
+    <header class="public-header">
+      <a class="brand" href="https://bomana.ruikang.wang/" target="_blank" rel="noopener noreferrer"><img class="brand-logo" src="../src/generated/bomana-logo.svg" alt="Bomana"><span>BOMANA <small id="edition-name"></small><small id="app-web-version"></small></span></a>
+      <nav aria-label="Bomana 全站导航"><a href="https://bomana.ruikang.wang/launcher/" target="_blank" rel="noopener noreferrer">在线启动器</a><a href="https://bomana.ruikang.wang/calculator/" target="_blank" rel="noopener noreferrer">飞行工具箱</a><a href="https://github.com/Thankyou-Cheems/Bomana" target="_blank" rel="noopener noreferrer">源码</a></nav>
+      <div class="actions"><button id="toggle-pip" class="standard-only">置顶导航窗</button><button id="open-mobile-pairing" class="standard-only">手机配对</button><button id="open-settings">设置</button></div>
+    </header>
+    <div class="connection" role="status"><span id="status">正在连接 Bridge</span><button id="connect">立即重试</button><a id="update-bridge" href="https://bomana.ruikang.wang/launcher/" hidden>更新 Bridge</a></div>
+    <section class="heading-tape-wrap standard-only" aria-label="航向和速度">
+      <canvas id="heading-tape" aria-label="航向带"></canvas>
+      <strong class="public-heading-value" id="heading-tape-value">HDG ---</strong>
+      <div class="instrument-badges"><span id="flight-phase-badge" hidden></span><span id="gear-status-badge" hidden></span></div>
+      <div class="speed-strip" id="speed-strip"><div class="speed-copy"><strong id="overspeed">等待限速</strong><span id="speed-limit-value">IAS --</span><small id="speed-limit-mach">阈值未匹配</small></div><div class="speed-track" id="speed-track"><i id="speed-fill"></i><b id="speed-caution-mark"></b><b id="speed-warning-mark"></b><b id="speed-critical-mark"></b></div></div>
+    </section>
+    <div class="flight-layout">
+      <section class="card timer-card"><span class="eyebrow">RESPAWN TIMER</span><strong id="timer">--:--</strong><div class="mission-progress"><i id="timer-progress"></i></div><span id="timer-cycle">等待出击</span><button id="reset-timer">重置计时</button><button id="undo-sortie-reset" hidden>撤销出击重置</button></section>
+      <section class="card flight-card standard-only"><h2 id="aircraft">等待飞机</h2><dl class="flight-readouts"><div><dt>IAS · km/h</dt><dd id="ias-value">---</dd></div><div><dt>TAS · km/h</dt><dd id="tas-value">---</dd></div><div><dt>高度 · m</dt><dd id="altitude">---</dd></div><div><dt>航向 · °</dt><dd id="heading-value">---</dd></div></dl><div id="fuel-panel"><strong id="fuel-current-total">等待燃油读数</strong><small id="fuel-source"></small><div class="fuel-level-track"><b id="fuel-level-fill"></b><i id="fuel-return-marker"></i></div><p><strong id="return-fuel"></strong><span id="fuel-balance"></span></p><p id="fuel-rate"></p><details><summary>返航依据与省油建议</summary><p id="fuel-detail"></p><p id="fuel-advice"></p></details></div></section>
+      <section class="card navigation-card standard-only"><h2>任务导航</h2><strong id="navigation-target">暂无目标</strong><p><span id="navigation-bearing">方位 ---</span> · <span id="navigation-distance">距离 ---</span></p><div class="actions"><button id="cycle-navigation-target">切换目标</button><button id="clear-navigation-target">恢复自动</button></div><canvas id="navigation-map" aria-label="官方战区和机场"></canvas><select id="navigation-select" aria-label="选择导航目标"></select></section>
+      <section class="card checklist-card standard-only"><h2>出击检查</h2><div id="checklist"></div><p id="alerts" role="status"></p></section>
+    </div>
+    <details class="card standard-only encyclopedia"><summary>打击百科与摧毁计算器</summary><div class="encyclopedia-fields"><label>权重<select id="room-br"></select></label><label>目标<select id="damage-target"><option value="bombing_point">战区</option><option value="airport_module">机场模块</option></select></label><label>模块<select id="airport-module"><option value="airfield">跑道</option><option value="storage">油库</option><option value="parking">维修</option><option value="dwelling">生活区</option></select></label><label>机型<select id="damage-aircraft"></select></label><label>武器<select id="damage-weapon"></select></label><button id="calculate-damage">计算枚数</button></div><p id="damage-result">选择参数后计算</p></details>
+    <p id="command-status" role="status"></p>
+  </main>
+  <dialog id="settings-dialog"><form method="dialog"><h2>飞行设置</h2><label class="standard-only"><input id="pip-map-visible" type="checkbox">置顶窗显示小地图</label><label>倒计时周期（分钟）<input id="cycle-minutes" type="number" min="1" max="180"></label><label>外观<select id="theme-select"><option value="glacier">浅色</option><option value="classic-dark">深色</option></select></label><label><input id="sound-enabled" type="checkbox">声音提示</label><label>倒计时音色<select id="sound-preset"><option value="classic">经典</option><option value="chime">铃声</option><option value="low">低音</option></select></label><label class="standard-only">检查项目（每行一项）<textarea id="checklist-items" rows="7"></textarea></label><button type="button" id="save-settings">保存设置</button><button id="close-settings">关闭</button></form></dialog>
+  <dialog id="mobile-pairing-dialog"><h2>手机配对 · Standard</h2><p id="mobile-pairing-status">正在检查 Bridge…</p><select id="mobile-pairing-networks" aria-label="手机所在局域网"></select><p id="mobile-pairing-code"></p><img id="mobile-pairing-qr" alt="手机配对二维码" hidden><div class="actions"><button id="generate-mobile-pairing">生成二维码</button><button id="regenerate-mobile-pairing">重新配对</button><button id="close-mobile-pairing">关闭</button></div></dialog>
+  <dialog id="pip-risk-dialog"><h2>打开置顶导航窗前请确认</h2><p>置顶窗通过浏览器读取 Bridge 转发的官方 8111 数据，不注入游戏、不读取游戏内存。该窗口没有 Gaijin 的明确兼容性保证；出现游戏或反作弊兼容警告时请关闭。</p><p><a href="https://legal.gaijin.net/codeofconduct" target="_blank" rel="noopener noreferrer">阅读 Gaijin 行为准则</a></p><label><input id="remember-pip-risk" type="checkbox">我已理解，以后不再提示</label><div class="actions"><button id="accept-pip-risk">我已理解并打开</button><button id="cancel-pip-risk">取消</button></div></dialog>
+</body></html>

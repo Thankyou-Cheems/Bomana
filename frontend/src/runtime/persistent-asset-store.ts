@@ -1,4 +1,5 @@
 import { discoverBridgeEndpoint, fetchBridgeResource } from "./bridge-discovery";
+import { sha256Digest } from "./crypto-compat";
 
 export type OfflineAssetKind = "terrain" | "weapon" | "airfield" | "reference" | "wasm";
 
@@ -61,12 +62,21 @@ const MAX_OBJECT_BYTES = 256 * 1024 * 1024;
 export class PersistentAssetStore {
   readonly #storage: AssetObjectStorage;
   readonly #fetcher: Fetcher;
+  readonly #documentOrigin: string;
   readonly #inFlight = new Map<string, Promise<ArrayBuffer>>();
   readonly #verified = new Set<string>();
 
-  constructor(storage: AssetObjectStorage, fetcher: Fetcher = fetch) {
+  constructor(
+    storage: AssetObjectStorage,
+    fetcher: Fetcher = fetch,
+    options: { readonly documentOrigin?: string; readonly moduleUrl?: string } = {},
+  ) {
     this.#storage = storage;
     this.#fetcher = (input, init) => fetcher(input, init);
+    this.#documentOrigin = trustedRuntimeOrigin(
+      options.documentOrigin ?? globalThis.location?.origin ?? "",
+      options.moduleUrl ?? import.meta.url,
+    );
   }
 
   static async openBridge(): Promise<PersistentAssetStore> {
@@ -78,7 +88,7 @@ export class PersistentAssetStore {
   }
 
   load(descriptor: OfflineAssetDescriptor, onProgress?: ProgressCallback): Promise<ArrayBuffer> {
-    validateDescriptor(descriptor);
+    validateDescriptor(descriptor, this.#documentOrigin);
     const pending = this.#inFlight.get(descriptor.sha256);
     if (pending) return pending.then(cloneBuffer);
     const request = this.#load(descriptor, onProgress).finally(() => this.#inFlight.delete(descriptor.sha256));
@@ -294,21 +304,58 @@ async function downloadExact(fetcher: Fetcher, descriptor: OfflineAssetDescripto
   return output.buffer;
 }
 
-function validateDescriptor(descriptor: OfflineAssetDescriptor): void {
+function validateDescriptor(descriptor: OfflineAssetDescriptor, documentOrigin: string): void {
   if (!/^[a-z][a-z0-9._-]{0,95}$/.test(descriptor.id)) throw new TypeError("offline asset id is invalid");
   if (!/^[a-f0-9]{64}$/.test(descriptor.sha256)) throw new TypeError("offline asset digest is invalid");
   if (!Number.isInteger(descriptor.sizeBytes) || descriptor.sizeBytes <= 0 || descriptor.sizeBytes > MAX_OBJECT_BYTES) {
     throw new TypeError("offline asset size is invalid");
   }
-  if (descriptor.url.protocol !== "https:" && !(descriptor.url.protocol === "http:" && isLoopback(descriptor.url.hostname))) {
+  if (descriptor.url.protocol !== "https:" && !allowedHttpAsset(descriptor.url, documentOrigin)) {
     throw new TypeError("offline asset URL must use HTTPS");
   }
 }
 
+function allowedHttpAsset(url: URL, documentOrigin: string): boolean {
+  if (url.protocol !== "http:" || url.username || url.password) return false;
+  if (isLoopback(url.hostname)) return true;
+  try {
+    const documentURL = new URL(documentOrigin);
+    return documentURL.protocol === "http:"
+      && Boolean(documentURL.port)
+      && !documentURL.username
+      && !documentURL.password
+      && isPrivateIPv4(documentURL.hostname)
+      && url.origin === documentURL.origin;
+  } catch {
+    return false;
+  }
+}
+
+function trustedRuntimeOrigin(documentOrigin: string, moduleUrl: string): string {
+  for (const candidate of [documentOrigin, moduleUrl]) {
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === "https:" || url.protocol === "http:" && (isLoopback(url.hostname) || isPrivateIPv4(url.hostname))) {
+        return url.origin;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return documentOrigin;
+}
+
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+  return [...await sha256Digest(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 function cloneBuffer(value: ArrayBuffer): ArrayBuffer { return value.slice(0); }
 function isLoopback(host: string): boolean { return host === "127.0.0.1" || host === "localhost" || host === "[::1]"; }
+function isPrivateIPv4(host: string): boolean {
+  const octets = host.split(".").map(Number);
+  return octets.length === 4
+    && octets.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)
+    && (octets[0] === 10
+      || octets[0] === 172 && octets[1]! >= 16 && octets[1]! <= 31
+      || octets[0] === 192 && octets[1] === 168);
+}

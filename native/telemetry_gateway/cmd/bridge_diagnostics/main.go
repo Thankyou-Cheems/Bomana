@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"bomana/native/telemetry_gateway/internal/extui"
 )
 
 const (
@@ -84,7 +86,8 @@ type diagnosticSnapshot struct {
 	EdgeVersion  string
 	EdgePolicies []string
 	Ports        []bridgePortCheck
-	Game8111     httpCheck
+	GameExtUI    httpCheck
+	ExtUI        extui.Snapshot
 	Latest       releaseCheck
 }
 
@@ -126,6 +129,30 @@ func collectDiagnostics() diagnosticSnapshot {
 			return http.ErrUseLastResponse
 		},
 	}
+	extUIClient := &http.Client{
+		Transport: transport,
+		Timeout:   750 * time.Millisecond,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resolver, resolverErr := extui.NewResolver(extui.Options{
+		Candidates: extui.DefaultCandidates(),
+		Client:     extUIClient,
+		RetryDelay: time.Second,
+	})
+	var gameCheck httpCheck
+	extUISnapshot := extui.Snapshot{State: extui.StateUnavailable}
+	if resolverErr != nil {
+		gameCheck.Error = compactError(resolverErr)
+	} else if base, err := resolver.Resolve(context.Background()); err != nil {
+		gameCheck.Error = compactError(err)
+	} else {
+		gameCheck = inspectJSON(client, base.JoinPath("state").String(), "")
+	}
+	if resolver != nil {
+		extUISnapshot = resolver.Snapshot()
+	}
 
 	ports := make([]bridgePortCheck, bridgePortEnd-bridgePortStart+1)
 	var wait sync.WaitGroup
@@ -147,7 +174,8 @@ func collectDiagnostics() diagnosticSnapshot {
 		EdgeVersion:  edgeVersion(),
 		EdgePolicies: edgePolicyFacts(),
 		Ports:        ports,
-		Game8111:     inspectJSON(client, "http://127.0.0.1:8111/state", ""),
+		GameExtUI:    gameCheck,
+		ExtUI:        extUISnapshot,
 		Latest:       inspectLatestRelease(client),
 	}
 }
@@ -308,23 +336,30 @@ func diagnose(snapshot diagnosticSnapshot) diagnosis {
 			Actions: []string{"将本报告发送给 Bomana 开发者。"},
 		}
 	}
-	if snapshot.Game8111.Status != http.StatusOK || snapshot.Game8111.Error != "" {
+	if snapshot.ExtUI.State != extui.StateReady {
 		return diagnosis{
 			Code:    "GAME_8111_UNAVAILABLE",
-			Summary: "Bridge 正常，但游戏原始 8111 当前不可访问。",
-			Actions: []string{"进入实际对局后重新运行诊断。", "检查是否有其他程序占用 8111 或安全软件阻止本机访问。"},
+			Summary: "Bridge 正常，但未在 8111、9222 或 10333 发现 War Thunder ExtUI。",
+			Actions: []string{"进入实际对局后重新运行诊断。", "检查安全软件是否阻止战雷本机 ExtUI。"},
+		}
+	}
+	if snapshot.GameExtUI.Status != http.StatusOK || snapshot.GameExtUI.Error != "" {
+		return diagnosis{
+			Code:    "GAME_EXTUI_STATE_UNAVAILABLE",
+			Summary: fmt.Sprintf("已在端口 %s 发现 War Thunder ExtUI，但 /state 当前不可用。", fallback(snapshot.ExtUI.Port, "--")),
+			Actions: []string{"进入实际对局后重新运行诊断。", "若其他 ExtUI 页面正常，请将本报告发送给 Bomana 开发者。"},
 		}
 	}
 	if bridge.Relay8111.Status != http.StatusOK || bridge.Relay8111.Error != "" {
 		return diagnosis{
 			Code:    "BRIDGE_8111_RELAY_FAILED",
-			Summary: "游戏原始 8111 正常，但 Bridge 转发失败。",
+			Summary: "战雷 ExtUI 正常，但 Bridge 固定转发路由失败。",
 			Actions: []string{"将 BomanaBridge.exe 加入安全软件允许列表。", "将本报告发送给 Bomana 开发者。"},
 		}
 	}
 	return diagnosis{
 		Code:    "LOCAL_CHAIN_OK",
-		Summary: "Bridge、本机 8111、转发与 Edge 预检均正常；故障位于 Edge 页面侧。",
+		Summary: "Bridge、战雷 ExtUI、转发与 Edge 预检均正常；故障位于 Edge 页面侧。",
 		Actions: []string{"检查 edge://policy 中的 LocalNetwork/Loopback 策略。", "暂时禁用会代理本机请求的 Edge 扩展或 VPN 后重试。", "将本报告发送给 Bomana 开发者。"},
 	}
 }
@@ -377,8 +412,8 @@ func formatReport(snapshot diagnosticSnapshot, result diagnosis) string {
 		fmt.Fprintf(&report, "  relay_8111=%s\n", describeHTTP(port.Relay8111))
 	}
 
-	fmt.Fprintln(&report, "\n8111 与线上版本")
-	fmt.Fprintf(&report, "- game_8111=%s\n", describeHTTP(snapshot.Game8111))
+	fmt.Fprintln(&report, "\nExtUI 与线上版本")
+	fmt.Fprintf(&report, "- game_extui_port=%s state=%s request=%s\n", fallback(snapshot.ExtUI.Port, "--"), snapshot.ExtUI.State, describeHTTP(snapshot.GameExtUI))
 	fmt.Fprintf(&report, "- latest_bridge=%s sha256=%s request=%s\n", fallback(snapshot.Latest.Version, "--"), shortHash(snapshot.Latest.SHA256), describeHTTP(snapshot.Latest.HTTPCheck))
 
 	fmt.Fprintln(&report, "\nEdge 策略（只报告是否存在，不记录 URL 列表）")

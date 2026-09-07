@@ -350,3 +350,10 @@ footer { min-height: 68px; display: flex; align-items: center; justify-content: 
   .edition-area { padding: 14px; }
   .section-heading { align-items: flex-start; }
 }
+/* Independent Enhanced Desktop is optional, not a prerequisite for Web. */
+.desktop-download-panel { margin-top: 18px; padding: 20px; border: 1px solid #d7ba71; border-radius: 20px; background: #fff9e9; }
+.desktop-download-panel h3 { margin: 4px 0 8px; }
+.desktop-download-panel p { line-height: 1.55; }
+.desktop-download-panel small { color: #536476; }
+.desktop-download-panel button { margin-top: 16px; }
+.desktop-download-panel [role="status"]:empty { display: none; }

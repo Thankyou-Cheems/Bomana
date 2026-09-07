@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-var mobileAppBase = "https://bomana.ruikang.wang/mobile/Enhanced/"
+var mobileAppBase = "https://bomana.ruikang.wang/mobile/"
 
 const (
 	mobileAppHTMLLimit  = 512 << 10
@@ -28,6 +28,7 @@ const (
 )
 
 const pairingPageCSP = "default-src 'none'; base-uri 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://pay.ruikang.wang https://bomana.ruikang.wang https://bomanaupdate.ruikang.wang; worker-src 'self' blob:; frame-ancestors 'none'; form-action 'none'"
+const standardPairingPageCSP = "default-src 'none'; base-uri 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://bomana.ruikang.wang https://bomanaupdate.ruikang.wang; worker-src 'self' blob:; frame-ancestors 'none'; form-action 'none'"
 
 func listenerPort(listener net.Listener) (int, error) {
 	_, rawPort, err := net.SplitHostPort(listener.Addr().String())
@@ -104,19 +105,25 @@ func pairingAssetUpstream(requestPath string) (string, bool) {
 		return "", false
 	}
 	cleaned := path.Clean(requestPath)
-	if cleaned != "/mobile/Enhanced" && !strings.HasPrefix(cleaned, "/mobile/Enhanced/") {
+	if cleaned != strings.TrimSuffix(requestPath, "/") {
+		return "", false
+	}
+	edition, valid := pairingAssetEdition(cleaned)
+	if !valid {
 		return "", false
 	}
 	base, err := url.Parse(mobileAppBase)
 	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" || base.User != nil {
 		return "", false
 	}
-	if !strings.HasPrefix(path.Clean(base.Path), "/mobile/Enhanced") {
+	basePath := path.Clean(base.Path)
+	editionRoot := "/mobile/" + string(edition)
+	if basePath != "/mobile" && basePath != editionRoot {
 		return "", false
 	}
 	resolved := &url.URL{Scheme: base.Scheme, Host: base.Host, Path: cleaned}
-	if cleaned == "/mobile/Enhanced" {
-		resolved.Path = "/mobile/Enhanced/"
+	if cleaned == editionRoot {
+		resolved.Path = editionRoot + "/"
 	}
 	if resolved.User != nil || resolved.RawQuery != "" || resolved.Fragment != "" {
 		return "", false
@@ -125,6 +132,16 @@ func pairingAssetUpstream(requestPath string) (string, bool) {
 		return "", false
 	}
 	return resolved.String(), true
+}
+
+func pairingAssetEdition(cleanedPath string) (mobileEdition, bool) {
+	for _, edition := range []mobileEdition{mobileEditionStandard, mobileEditionEnhanced} {
+		root := "/mobile/" + string(edition)
+		if cleanedPath == root || strings.HasPrefix(cleanedPath, root+"/") {
+			return edition, true
+		}
+	}
+	return "", false
 }
 
 func pairingAssetLimit(requestPath string) int64 {
@@ -158,7 +175,8 @@ func pairingAssetTypeAllowed(value string) bool {
 
 func (gateway *relay) serveMobileAppAsset(response http.ResponseWriter, request *http.Request) {
 	setSecurityHeaders(response)
-	if !gateway.mobile.Active(time.Now()) {
+	edition, valid := pairingAssetEdition(path.Clean(request.URL.Path))
+	if !valid || !gateway.mobile.AllowsEdition(edition, time.Now()) {
 		http.Error(response, "mobile pairing unavailable", http.StatusUnauthorized)
 		return
 	}
@@ -184,7 +202,7 @@ func (gateway *relay) serveMobileAppAsset(response http.ResponseWriter, request 
 		http.Error(response, "mobile app unavailable", http.StatusBadGateway)
 		return
 	}
-	if strings.HasSuffix(strings.TrimSuffix(request.URL.Path, "/"), "/mobile/Enhanced") {
+	if strings.HasSuffix(strings.TrimSuffix(request.URL.Path, "/"), "/mobile/"+string(edition)) {
 		upstream.Header.Set("Accept", "text/html")
 	}
 	upstreamResponse, err := client.Do(upstream)
@@ -219,7 +237,11 @@ func (gateway *relay) serveMobileAppAsset(response http.ResponseWriter, request 
 	}
 	response.Header().Set("Cache-Control", "no-store")
 	if strings.Contains(strings.ToLower(contentType), "text/html") {
-		response.Header().Set("Content-Security-Policy", pairingPageCSP)
+		if edition == mobileEditionStandard {
+			response.Header().Set("Content-Security-Policy", standardPairingPageCSP)
+		} else {
+			response.Header().Set("Content-Security-Policy", pairingPageCSP)
+		}
 	}
 	response.WriteHeader(http.StatusOK)
 	if request.Method != http.MethodHead {

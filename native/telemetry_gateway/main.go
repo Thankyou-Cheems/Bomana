@@ -1,5 +1,5 @@
 // BomanaBridge exposes a fixed, read-only loopback relay for the
-// official War Thunder 8111 HTTP interface. It performs no game-state
+// official War Thunder ExtUI HTTP interface. It performs no game-state
 // derivation and has no process or memory access capability.
 package main
 
@@ -20,11 +20,12 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"bomana/native/telemetry_gateway/internal/extui"
 )
 
 const (
 	defaultListenAddress = "auto"
-	defaultUpstream      = "http://127.0.0.1:8111"
 	maxResponseBytes     = 2 * 1024 * 1024
 	bridgePortStart      = 8878
 	bridgePortEnd        = 8897
@@ -32,7 +33,7 @@ const (
 
 const (
 	cacheProtocol         = 4
-	mobilePairingProtocol = 6
+	mobilePairingProtocol = 7
 )
 
 var (
@@ -41,7 +42,7 @@ var (
 	bridgeProvenance = "local-unattested"
 )
 
-const bridgeStatusHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bomana Bridge</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#07151c;color:#dcecf8;font:600 16px/1.6 "Microsoft YaHei",sans-serif}.card{width:min(520px,calc(100% - 48px));padding:32px;border:1px solid #45677a;background:#0c202b}.brand{display:flex;align-items:center;gap:14px}.mark{display:grid;place-items:center;width:48px;height:48px;background:#ffd65a;color:#10202a;font-size:24px}h1{margin:0;font-size:24px}.ok{color:#62dda5}p{color:#9eb8c7}nav{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}a{padding:10px 16px;border:1px solid #6c8fa3;color:#dcecf8;text-decoration:none}a.primary{background:#ffd65a;border-color:#ffd65a;color:#10202a}</style></head><body><main class="card"><div class="brand"><div class="mark" aria-hidden="true">B</div><div><h1>Bomana Bridge</h1><span class="ok">● 正在运行</span></div></div><p>只读转发官方 localhost:8111，并管理签名地形缓存。计算与 Enhanced 权益不保存在 Bridge 中。</p><nav><a class="primary" href="https://bomana.ruikang.wang/launcher/">返回 Launcher</a><a href="https://bomana.ruikang.wang/app/Enhanced/">打开 Bomana</a></nav></main></body></html>`
+const bridgeStatusHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bomana Bridge</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#07151c;color:#dcecf8;font:600 16px/1.6 "Microsoft YaHei",sans-serif}.card{width:min(520px,calc(100% - 48px));padding:32px;border:1px solid #45677a;background:#0c202b}.brand{display:flex;align-items:center;gap:14px}.mark{display:grid;place-items:center;width:48px;height:48px;background:#ffd65a;color:#10202a;font-size:24px}h1{margin:0;font-size:24px}.ok{color:#62dda5}p{color:#9eb8c7}nav{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}a{padding:10px 16px;border:1px solid #6c8fa3;color:#dcecf8;text-decoration:none}a.primary{background:#ffd65a;border-color:#ffd65a;color:#10202a}</style></head><body><main class="card"><div class="brand"><div class="mark" aria-hidden="true">B</div><div><h1>Bomana Bridge</h1><span class="ok">● 正在运行</span></div></div><p>自动发现并只读转发官方 War Thunder ExtUI，同时管理签名地形缓存。计算与 Enhanced 权益不保存在 Bridge 中。</p><nav><a class="primary" href="https://bomana.ruikang.wang/launcher/">返回 Launcher</a><a href="https://bomana.ruikang.wang/app/Enhanced/">打开 Bomana</a></nav></main></body></html>`
 
 type routeDefinition struct {
 	upstreamPath       string
@@ -62,7 +63,7 @@ var fixedRoutes = map[string]routeDefinition{
 }
 
 type relay struct {
-	upstream         *url.URL
+	upstream         gameUpstream
 	allowedOrigin    string
 	client           *http.Client
 	mobilePageClient *http.Client
@@ -70,6 +71,20 @@ type relay struct {
 	mobile           *mobilePairingManager
 	presentation     *presentationState
 }
+
+type gameUpstream interface {
+	Resolve(context.Context) (*url.URL, error)
+	Invalidate(*url.URL)
+}
+
+type fixedGameUpstream struct{ base *url.URL }
+
+func (upstream fixedGameUpstream) Resolve(context.Context) (*url.URL, error) {
+	copy := *upstream.base
+	return &copy, nil
+}
+
+func (fixedGameUpstream) Invalidate(*url.URL) {}
 
 func main() {
 	listenAddress := flag.String("listen", defaultListenAddress, "loopback listener address")
@@ -87,12 +102,28 @@ func main() {
 		slog.Error("invalid browser origin", "error", err)
 		os.Exit(2)
 	}
-	upstream, _ := url.Parse(defaultUpstream)
+	extUITransport := http.DefaultTransport.(*http.Transport).Clone()
+	extUITransport.Proxy = nil
+	extUIResolver, err := extui.NewResolver(extui.Options{
+		Candidates: extui.DefaultCandidates(),
+		Client: &http.Client{
+			Transport: extUITransport,
+			Timeout:   750 * time.Millisecond,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		RetryDelay: time.Second,
+	})
+	if err != nil {
+		slog.Error("invalid ExtUI resolver configuration", "error", err)
+		os.Exit(2)
+	}
 	cacheStore, cacheErr := openDefaultLocalDataStore()
 	if cacheErr != nil {
 		slog.Warn("local data store unavailable", "error", cacheErr)
 	}
-	handler := newRelayWithCache(upstream, origin, cacheStore)
+	handler := newRelayWithExtUI(extUIResolver, origin, cacheStore)
 	defer handler.mobile.Close()
 	server := &http.Server{
 		Addr:              *listenAddress,
@@ -170,6 +201,10 @@ func newRelay(upstream *url.URL, allowedOrigin string) *relay {
 }
 
 func newRelayWithCache(upstream *url.URL, allowedOrigin string, cache *localDataStore) *relay {
+	return newRelayWithExtUI(fixedGameUpstream{base: upstream}, allowedOrigin, cache)
+}
+
+func newRelayWithExtUI(upstream gameUpstream, allowedOrigin string, cache *localDataStore) *relay {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	return &relay{
@@ -263,38 +298,49 @@ func (gateway *relay) ServeHTTP(response http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	upstreamURL := *gateway.upstream
+	for attempt := 0; attempt < 2; attempt++ {
+		body, contentType, upstreamBase, err := gateway.fetchExtUI(request.Context(), definition)
+		if err == nil {
+			response.Header().Set("Content-Type", contentType)
+			response.WriteHeader(http.StatusOK)
+			_, _ = response.Write(body)
+			return
+		}
+		gateway.upstream.Invalidate(upstreamBase)
+	}
+	http.Error(response, "8111 unavailable", http.StatusBadGateway)
+}
+
+func (gateway *relay) fetchExtUI(ctx context.Context, definition routeDefinition) ([]byte, string, *url.URL, error) {
+	upstreamBase, err := gateway.upstream.Resolve(ctx)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	upstreamURL := *upstreamBase
 	upstreamURL.Path = definition.upstreamPath
 	upstreamURL.RawQuery = definition.upstreamQuery
-	upstreamRequest, err := http.NewRequestWithContext(request.Context(), http.MethodGet, upstreamURL.String(), nil)
+	upstreamRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, upstreamURL.String(), nil)
 	if err != nil {
-		http.Error(response, "relay unavailable", http.StatusBadGateway)
-		return
+		return nil, "", upstreamBase, err
 	}
 	upstreamRequest.Header.Set("Accept", definition.accept)
 	upstreamResponse, err := gateway.client.Do(upstreamRequest)
 	if err != nil {
-		http.Error(response, "8111 unavailable", http.StatusBadGateway)
-		return
+		return nil, "", upstreamBase, err
 	}
 	defer upstreamResponse.Body.Close()
 	if upstreamResponse.StatusCode != http.StatusOK {
-		http.Error(response, "8111 unavailable", http.StatusBadGateway)
-		return
+		return nil, "", upstreamBase, fmt.Errorf("ExtUI returned %d", upstreamResponse.StatusCode)
 	}
 	contentType := upstreamResponse.Header.Get("Content-Type")
 	if !contentTypeAllowed(contentType, definition.allowedContentType) {
-		http.Error(response, "8111 response type rejected", http.StatusBadGateway)
-		return
+		return nil, "", upstreamBase, errors.New("ExtUI response type rejected")
 	}
 	body, err := io.ReadAll(io.LimitReader(upstreamResponse.Body, definition.maxBytes+1))
 	if err != nil || int64(len(body)) > definition.maxBytes {
-		http.Error(response, "8111 response rejected", http.StatusBadGateway)
-		return
+		return nil, "", upstreamBase, errors.New("ExtUI response rejected")
 	}
-	response.Header().Set("Content-Type", contentType)
-	response.WriteHeader(http.StatusOK)
-	_, _ = response.Write(body)
+	return body, contentType, upstreamBase, nil
 }
 
 type mobilePairingPrepareRequest struct {
@@ -304,6 +350,11 @@ type mobilePairingPrepareRequest struct {
 	MobileLease          string `json:"mobile_lease"`
 	MobileLeaseExpiresAt string `json:"mobile_lease_expires_at"`
 	PairingExpiresAt     string `json:"pairing_expires_at"`
+}
+
+type mobilePairingStartRequest struct {
+	SchemaVersion int           `json:"schema_version"`
+	Edition       mobileEdition `json:"edition"`
 }
 
 type mobilePairingCompleteRequest struct {
@@ -362,7 +413,18 @@ func (gateway *relay) serveMobilePairingStart(response http.ResponseWriter, requ
 		http.Error(response, "origin forbidden", http.StatusForbidden)
 		return
 	}
-	descriptor, err := gateway.mobile.Start(gateway, time.Now(), forceNew)
+	edition := mobileEditionEnhanced
+	if request.Body != nil && request.Body != http.NoBody && request.ContentLength != 0 {
+		var payload mobilePairingStartRequest
+		decoder := json.NewDecoder(http.MaxBytesReader(response, request.Body, 2<<10))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&payload); err != nil || payload.SchemaVersion != 1 || !validMobileEdition(payload.Edition) {
+			http.Error(response, "invalid pairing edition", http.StatusBadRequest)
+			return
+		}
+		edition = payload.Edition
+	}
+	descriptor, err := gateway.mobile.StartEdition(gateway, time.Now(), edition, forceNew)
 	if err != nil {
 		http.Error(response, "mobile pairing unavailable", http.StatusServiceUnavailable)
 		return
@@ -390,7 +452,7 @@ func (gateway *relay) serveMobilePairingPrepare(response http.ResponseWriter, re
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !gateway.authorizeMobilePairingPrepareOrigin(response, request) {
+	if !gateway.authorizeMobilePairingPreparePost(response, request) {
 		http.Error(response, "origin forbidden", http.StatusForbidden)
 		return
 	}
@@ -425,6 +487,14 @@ func (gateway *relay) authorizeMobilePairingPrepareOrigin(response http.Response
 		return gateway.allowOrigin(response, request)
 	}
 	return false
+}
+
+func (gateway *relay) authorizeMobilePairingPreparePost(response http.ResponseWriter, request *http.Request) bool {
+	origin := request.Header.Get("Origin")
+	if gateway.usesPairingListener(request) && (origin == "" || origin == "null") {
+		return true
+	}
+	return gateway.authorizeMobilePairingPrepareOrigin(response, request)
 }
 
 func (gateway *relay) serveMobilePairingComplete(response http.ResponseWriter, request *http.Request) {

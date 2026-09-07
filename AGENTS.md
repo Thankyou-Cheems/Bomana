@@ -1,14 +1,9 @@
 # Repository Agent Instructions
 
-Use PowerShell 7 (`pwsh`) on Windows. The current tree is browser/Go only; do not reintroduce Python App or desktop Launcher code.
+Use PowerShell 7 (`pwsh`) and UTF-8 without BOM on Windows. Never use `powershell.exe`.
 
-Before changing Edition behavior, read `CONTEXT.md` and `docs/specs/public-editions.md`.
+This default tree is generated from the maintained source. Do not introduce a second independently maintained public implementation, release workflow or production credential. Contributions must be applied to the maintained source and exported after verification.
 
-Public-boundary rules:
+Read `CONTEXT.md` and `docs/specs/public-editions.md` before changing Edition behavior. Lite is timer-only. Standard navigation uses official zones and airfields; speed, fuel, checklist, PiP and account-free LAN mobile pairing are public. Enhanced algorithms, terrain objects, Y66 recognition, chat interpretation, tactical coordinates and weapon solving remain private. Public presentation contracts and transport interfaces may describe extension data without implementing those features.
 
-- Lite is timer-only.
-- Standard is limited to official zone/airfield Basic Navigation.
-- Enhanced App implementation, models, terrain data, tactical coordinates, chat recognition, countdowns, Y66, airport modules, and weapon solving remain outside this repository.
-- Public integration protocols may include mobile pairing transport and signed Local Data Store object transport; they must not embed Enhanced App code, terrain objects, or solvers.
-- Bridge is read-only and owns no Edition or solver.
-- Existing Git history, tags, and Releases are historical records; do not rewrite or delete them.
+Bridge is a read-only official telemetry and local resource / pairing transport. It owns no Edition entitlement or solver. Existing Git history, tags and Releases must not be rewritten or deleted.

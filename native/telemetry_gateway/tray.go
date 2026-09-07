@@ -115,7 +115,7 @@ func buildTrayAbout(config trayConfig) trayAboutDetails {
 		),
 		expandedHTML: fmt.Sprintf(
 			"运行边界\n"+
-				"• Bridge 仅连接官方 localhost:8111，并管理签名地形缓存。\n"+
+				"• Bridge 仅连接本机 War Thunder ExtUI（8111 / 9222 / 10333），并管理签名地形缓存。\n"+
 				"• 飞行状态、导航与武器解算在用户浏览器本地执行。\n"+
 				"• 不读取游戏进程、内存、模块或输入。\n\n"+
 				"版本与构建\nBridge：%s\nApp Web：%s\nBridge 协议：v1\n缓存协议：v4\n手机配对协议：v6\n构建来源：%s",

@@ -25,6 +25,17 @@ const (
 	mobilePairingCodeAlphabet    = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 )
 
+type mobileEdition string
+
+const (
+	mobileEditionStandard mobileEdition = "Standard"
+	mobileEditionEnhanced mobileEdition = "Enhanced"
+)
+
+func validMobileEdition(value mobileEdition) bool {
+	return value == mobileEditionStandard || value == mobileEditionEnhanced
+}
+
 type mobileNetworkCandidate struct {
 	Interface   string `json:"interface"`
 	Address     string `json:"address"`
@@ -35,6 +46,7 @@ type mobileNetworkCandidate struct {
 type mobilePairingDescriptor struct {
 	SchemaVersion         int                      `json:"schema_version"`
 	MobilePairingProtocol int                      `json:"mobile_pairing_protocol"`
+	Edition               mobileEdition            `json:"edition"`
 	BridgePairingID       string                   `json:"bridge_pairing_id"`
 	PairingToken          string                   `json:"pairing_token"`
 	PairingCode           string                   `json:"pairing_code"`
@@ -44,6 +56,7 @@ type mobilePairingDescriptor struct {
 }
 
 type mobilePairingSession struct {
+	edition           mobileEdition
 	id                string
 	token             string
 	code              string
@@ -57,12 +70,13 @@ type mobilePairingSession struct {
 }
 
 type mobilePairingCompletion struct {
-	SchemaVersion        int    `json:"schema_version"`
-	BridgePairingID      string `json:"bridge_pairing_id"`
-	PairingToken         string `json:"pairing_token"`
-	MobileLease          string `json:"mobile_lease"`
-	MobileLeaseExpiresAt string `json:"mobile_lease_expires_at"`
-	ExpiresAt            string `json:"expires_at"`
+	SchemaVersion        int           `json:"schema_version"`
+	Edition              mobileEdition `json:"edition"`
+	BridgePairingID      string        `json:"bridge_pairing_id"`
+	PairingToken         string        `json:"pairing_token"`
+	MobileLease          string        `json:"mobile_lease,omitempty"`
+	MobileLeaseExpiresAt string        `json:"mobile_lease_expires_at,omitempty"`
+	ExpiresAt            string        `json:"expires_at"`
 }
 
 type mobilePairingCompleteResult uint8
@@ -97,6 +111,14 @@ func newMobilePairingManager() *mobilePairingManager {
 }
 
 func (manager *mobilePairingManager) Start(handler http.Handler, now time.Time, forceNew ...bool) (mobilePairingDescriptor, error) {
+	rotate := len(forceNew) > 0 && forceNew[0]
+	return manager.StartEdition(handler, now, mobileEditionEnhanced, rotate)
+}
+
+func (manager *mobilePairingManager) StartEdition(handler http.Handler, now time.Time, edition mobileEdition, forceNew bool) (mobilePairingDescriptor, error) {
+	if !validMobileEdition(edition) {
+		return mobilePairingDescriptor{}, errors.New("invalid mobile edition")
+	}
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	if manager.listener == nil {
@@ -160,8 +182,7 @@ func (manager *mobilePairingManager) Start(handler http.Handler, now time.Time, 
 	if err != nil || len(networks) == 0 {
 		return mobilePairingDescriptor{}, errors.New("no private IPv4 network is available")
 	}
-	rotate := len(forceNew) > 0 && forceNew[0]
-	if session := manager.session; !rotate && session != nil && !session.claimed && session.code != "" && now.Before(session.codeExpiresAt) && now.Before(session.expiresAt) {
+	if session := manager.session; !forceNew && session != nil && session.edition == edition && !session.claimed && session.code != "" && now.Before(session.codeExpiresAt) && now.Before(session.expiresAt) {
 		return pairingDescriptor(session, networks), nil
 	}
 	id, err := randomBase64URL(24)
@@ -179,8 +200,9 @@ func (manager *mobilePairingManager) Start(handler http.Handler, now time.Time, 
 	expiresAt := now.Add(mobilePairingSessionDuration)
 	codeExpiresAt := now.Add(mobilePairingCodeDuration)
 	manager.session = &mobilePairingSession{
-		id: id, token: token, code: normalizePairingCode(code),
+		edition: edition, id: id, token: token, code: normalizePairingCode(code),
 		codeExpiresAt: codeExpiresAt, expiresAt: expiresAt,
+		prepared: edition == mobileEditionStandard,
 		failures: make(map[string][]time.Time),
 	}
 	return pairingDescriptor(manager.session, networks), nil
@@ -190,6 +212,7 @@ func pairingDescriptor(session *mobilePairingSession, networks []mobileNetworkCa
 	return mobilePairingDescriptor{
 		SchemaVersion:         1,
 		MobilePairingProtocol: mobilePairingProtocol,
+		Edition:               session.edition,
 		BridgePairingID:       session.id,
 		PairingToken:          session.token,
 		PairingCode:           formatPairingCode(session.code),
@@ -225,6 +248,9 @@ func (manager *mobilePairingManager) Prepare(
 	session := manager.session
 	if session == nil || !now.Before(session.expiresAt) || session.claimed {
 		return errors.New("mobile pairing unavailable")
+	}
+	if session.edition != mobileEditionEnhanced {
+		return errors.New("mobile pairing edition does not accept a lease")
 	}
 	if subtle.ConstantTimeCompare([]byte(id), []byte(session.id)) != 1 ||
 		subtle.ConstantTimeCompare([]byte(token), []byte(session.token)) != 1 {
@@ -282,14 +308,7 @@ func (manager *mobilePairingManager) Complete(client string, candidate string, n
 	session.claimed = true
 	delete(session.failures, client)
 	expiresAt := session.expiresAt
-	completion := mobilePairingCompletion{
-		SchemaVersion:        1,
-		BridgePairingID:      session.id,
-		PairingToken:         session.token,
-		MobileLease:          session.mobileLease,
-		MobileLeaseExpiresAt: session.mobileLeaseExpiry.UTC().Format(time.RFC3339),
-		ExpiresAt:            expiresAt.UTC().Format(time.RFC3339),
-	}
+	completion := pairingCompletion(session, expiresAt)
 	session.code = ""
 	session.mobileLease = ""
 	return completion, mobilePairingCompleteOK
@@ -309,23 +328,38 @@ func (manager *mobilePairingManager) Claim(candidate string, now time.Time) (mob
 		return mobilePairingCompletion{}, mobilePairingCompleteInvalid
 	}
 	session.claimed = true
-	completion := mobilePairingCompletion{
-		SchemaVersion:        1,
-		BridgePairingID:      session.id,
-		PairingToken:         session.token,
-		MobileLease:          session.mobileLease,
-		MobileLeaseExpiresAt: session.mobileLeaseExpiry.UTC().Format(time.RFC3339),
-		ExpiresAt:            session.expiresAt.UTC().Format(time.RFC3339),
-	}
+	completion := pairingCompletion(session, session.expiresAt)
 	session.code = ""
 	session.mobileLease = ""
 	return completion, mobilePairingCompleteOK
+}
+
+func pairingCompletion(session *mobilePairingSession, expiresAt time.Time) mobilePairingCompletion {
+	leaseExpiry := ""
+	if !session.mobileLeaseExpiry.IsZero() {
+		leaseExpiry = session.mobileLeaseExpiry.UTC().Format(time.RFC3339)
+	}
+	return mobilePairingCompletion{
+		SchemaVersion:        1,
+		Edition:              session.edition,
+		BridgePairingID:      session.id,
+		PairingToken:         session.token,
+		MobileLease:          session.mobileLease,
+		MobileLeaseExpiresAt: leaseExpiry,
+		ExpiresAt:            expiresAt.UTC().Format(time.RFC3339),
+	}
 }
 
 func (manager *mobilePairingManager) Active(now time.Time) bool {
 	manager.mu.RLock()
 	defer manager.mu.RUnlock()
 	return manager.session != nil && now.Before(manager.session.expiresAt)
+}
+
+func (manager *mobilePairingManager) AllowsEdition(edition mobileEdition, now time.Time) bool {
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+	return validMobileEdition(edition) && manager.session != nil && manager.session.edition == edition && now.Before(manager.session.expiresAt)
 }
 
 func (manager *mobilePairingManager) Authorize(token string, now time.Time) bool {

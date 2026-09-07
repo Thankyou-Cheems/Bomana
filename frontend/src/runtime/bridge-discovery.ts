@@ -1,7 +1,16 @@
+import { abortableTask } from "./abortable-task";
+
 export const BRIDGE_PORT_START = 8878;
 export const BRIDGE_PORT_END = 8897;
 
 type Fetcher = typeof fetch;
+
+export class IncompatibleBridgeError extends Error {
+  constructor(readonly version: string) {
+    super(`已找到 Bomana Bridge ${version || "（版本未知）"}，但与当前网页不兼容。请更新 Bridge 后重试。`);
+    this.name = "IncompatibleBridgeError";
+  }
+}
 
 export type MobileBridgeFailureReason =
   | "mixed-content"
@@ -47,7 +56,19 @@ export function configureMobileBridge(input: {
   discovery = null;
 }
 
-export async function discoverBridgeEndpoint(fetcher: Fetcher = fetch, configuredURL = ""): Promise<URL> {
+export async function discoverBridgeEndpoint(fetcher: Fetcher = fetch, configuredURL = "", signal?: AbortSignal): Promise<URL> {
+  signal?.throwIfAborted();
+  if (signal) {
+    const configured = configuredURL ? validateLoopbackBase(new URL(configuredURL)) : null;
+    if (selectedBridge && (mobileBridge
+      ? mobileBridge.endpoints.some(candidate => candidate.origin === selectedBridge?.origin)
+      : !configured || selectedBridge.origin === configured.origin)) return new URL(selectedBridge);
+    const found = mobileBridge ? await scanMobileBridgeEndpoints(fetcher, signal)
+      : configured ? await probeConfigured(configured, fetcher, signal) : await scanBridgePorts(fetcher, signal);
+    signal.throwIfAborted();
+    selectedBridge = found;
+    return new URL(found);
+  }
   if (mobileBridge) {
     if (selectedBridge && mobileBridge.endpoints.some((candidate) => candidate.origin === selectedBridge?.origin)) {
       return new URL(selectedBridge);
@@ -97,8 +118,8 @@ export function clearBridgeDiscoveryForTest(): void {
   mobileBridge = null;
 }
 
-export async function bridgeEndpointReachable(baseURL: URL, fetcher: Fetcher = fetch): Promise<boolean> {
-  return probe(baseURL, fetcher);
+export async function bridgeEndpointReachable(baseURL: URL, fetcher: Fetcher = fetch, signal?: AbortSignal): Promise<boolean> {
+  return probe(baseURL, fetcher, signal);
 }
 
 export function forgetBridgeEndpoint(baseURL?: URL): void {
@@ -136,20 +157,24 @@ export async function provePairedOfficialRoutes(baseURL: URL, fetcher: Fetcher =
   }
 }
 
-async function scanMobileBridgeEndpoints(fetcher: Fetcher): Promise<URL> {
+async function scanMobileBridgeEndpoints(fetcher: Fetcher, signal?: AbortSignal): Promise<URL> {
   if (!mobileBridge) throw new Error("手机 Bridge 配对不可用");
   let unauthorized = 0;
   let lastRetryable: MobileBridgeError | null = null;
+  let incompatible: IncompatibleBridgeError | null = null;
   for (const candidate of mobileBridge.endpoints) {
     try {
-      const result = await probeResult(candidate, fetcher);
+      const result = await probeResult(candidate, fetcher, signal);
       if (result === "match") return candidate;
       if (result === "unauthorized") unauthorized += 1;
     } catch (error) {
+      signal?.throwIfAborted();
+      if (error instanceof IncompatibleBridgeError) { incompatible = error; continue; }
       if (error instanceof MobileBridgeError && error.fatal) throw error;
       lastRetryable = error instanceof MobileBridgeError ? error : classifyBrowserNetworkError(error);
     }
   }
+  if (incompatible) throw incompatible;
   if (unauthorized > 0 && unauthorized === mobileBridge.endpoints.length) {
     throw new MobileBridgeError("unauthorized", "局域网配对口令已失效。请回到电脑重新生成二维码。", true);
   }
@@ -160,47 +185,63 @@ async function scanMobileBridgeEndpoints(fetcher: Fetcher): Promise<URL> {
   );
 }
 
-async function scanBridgePorts(fetcher: Fetcher): Promise<URL> {
+async function scanBridgePorts(fetcher: Fetcher, signal?: AbortSignal): Promise<URL> {
   const candidates = Array.from({ length: BRIDGE_PORT_END - BRIDGE_PORT_START + 1 }, (_, index) => new URL(`http://127.0.0.1:${BRIDGE_PORT_START + index}/`));
-  const results = await Promise.all(candidates.map(async (candidate) => await probe(candidate, fetcher) ? candidate : null));
-  const selected = results.find((candidate): candidate is URL => candidate !== null);
-  if (!selected) throw new Error("未发现 Bomana Bridge");
-  return selected;
+  const results = await Promise.allSettled(candidates.map(async (candidate) => await probeResult(candidate, fetcher, signal) === "match" ? candidate : null));
+  signal?.throwIfAborted();
+  for (const result of results) if (result.status === "fulfilled" && result.value) return result.value;
+  for (const result of results) if (result.status === "rejected" && result.reason instanceof IncompatibleBridgeError) throw result.reason;
+  for (const result of results) if (result.status === "rejected" && result.reason instanceof MobileBridgeError && result.reason.fatal) throw result.reason;
+  throw new Error("未发现 Bomana Bridge");
 }
 
-async function probeConfigured(candidate: URL, fetcher: Fetcher): Promise<URL> {
-  if (!await probe(candidate, fetcher)) throw new Error("配置的 Bomana Bridge 不可用");
+async function probeConfigured(candidate: URL, fetcher: Fetcher, signal?: AbortSignal): Promise<URL> {
+  if (await probeResult(candidate, fetcher, signal) !== "match") throw new Error("配置的 Bomana Bridge 不可用");
+  signal?.throwIfAborted();
   selectedBridge = candidate;
   return new URL(candidate);
 }
 
-async function probe(candidate: URL, fetcher: Fetcher): Promise<boolean> {
+async function probe(candidate: URL, fetcher: Fetcher, signal?: AbortSignal): Promise<boolean> {
   try {
-    return await probeResult(candidate, fetcher) === "match";
+    return await probeResult(candidate, fetcher, signal) === "match";
   } catch (error) {
+    signal?.throwIfAborted();
     if (error instanceof MobileBridgeError && error.fatal && mobileBridge) throw error;
     return false;
   }
 }
 
-async function probeResult(candidate: URL, fetcher: Fetcher): Promise<"match" | "mismatch" | "unauthorized"> {
+async function probeResult(candidate: URL, fetcher: Fetcher, signal?: AbortSignal): Promise<"match" | "mismatch" | "unauthorized"> {
   const controller = new AbortController();
+  const abort = (): void => controller.abort(signal?.reason);
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
+  const startedAtMs = Date.now();
   const timeout = globalThis.setTimeout(() => controller.abort(), 1_200);
   try {
-    const response = await fetchBridgeResource(fetcher, new URL("api/v1/capabilities", candidate), {
+    const response = await abortableTask(fetchBridgeResource(fetcher, new URL("api/v1/capabilities", candidate), {
       method: "GET", mode: "cors", cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", signal: controller.signal,
-    });
+    }), controller.signal);
     if (response.status === 401 || response.status === 403) return "unauthorized";
     if (!response.ok) return "mismatch";
-    const value = await response.json() as Record<string, unknown>;
+    const value = await abortableTask(response.json(), controller.signal) as Record<string, unknown>;
+    controller.signal.throwIfAborted();
+    if (Date.now() - startedAtMs > 1_200) throw new DOMException("Bridge probe expired", "AbortError");
+    if (value && value.input === "official-8111-only" && value.write_commands === false
+      && (value.schema_version !== 1 || value.bridge_protocol !== 1 || value.cache_protocol !== 4)) {
+      throw new IncompatibleBridgeError(typeof value.bridge_version === "string" ? value.bridge_version : "");
+    }
     return value.schema_version === 1 && value.bridge_protocol === 1 && value.cache_protocol === 4
       && value.input === "official-8111-only" && value.write_commands === false
       ? "match"
       : "mismatch";
   } catch (error) {
+    if (error instanceof IncompatibleBridgeError || (error instanceof DOMException && error.name === "AbortError")) throw error;
     throw classifyBrowserNetworkError(error);
   } finally {
     globalThis.clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
   }
 }
 

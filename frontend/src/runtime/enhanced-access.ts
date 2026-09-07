@@ -1,3 +1,5 @@
+import { verifyEd25519Signature as verifyRawEd25519Signature } from "./crypto-compat";
+
 export const BROWSER_AUTHORIZATION_KEY = "bomana:cheemspay:authorization:v3";
 export const ENHANCED_FEATURE = "bomana.super_bomber";
 
@@ -159,31 +161,11 @@ async function verifyEd25519Signature(
   signature: ArrayBuffer,
   message: Uint8Array,
 ): Promise<boolean> {
-  const subtle = globalThis.crypto?.subtle;
-  if (subtle) {
-    try {
-      const publicKey = await subtle.importKey("spki", spki, { name: "Ed25519" }, false, ["verify"]);
-      return await subtle.verify({ name: "Ed25519" }, publicKey, signature, Uint8Array.from(message));
-    } catch {
-      // RFC1918 HTTP pages are not secure contexts on iOS. The bundled verifier
-      // keeps Mobile Enhanced Lease verification on the phone in that context.
-    }
-  }
-  try {
-    const [ed25519, hashes] = await Promise.all([
-      import("@noble/ed25519"),
-      import("@noble/hashes/sha2.js"),
-    ]);
-    ed25519.hashes.sha512 = hashes.sha512;
-    return ed25519.verify(
-      new Uint8Array(signature),
-      message,
-      extractEd25519PublicKey(new Uint8Array(spki)),
-      { zip215: false },
-    );
-  } catch {
-    return false;
-  }
+  return verifyRawEd25519Signature(
+    extractEd25519PublicKey(new Uint8Array(spki)),
+    signature,
+    message,
+  );
 }
 
 function extractEd25519PublicKey(spki: Uint8Array): Uint8Array {

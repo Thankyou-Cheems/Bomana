@@ -59,6 +59,59 @@ describe("PersistentAssetStore", () => {
     expect(new Uint8Array(await store.load(descriptor(bytes)))).toEqual(bytes);
   });
 
+  it("validates offline objects without Web Crypto on an HTTP LAN page", async () => {
+    const bytes = new TextEncoder().encode("iPhone HTTP offline bytes");
+    const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: {} });
+    try {
+      const store = new PersistentAssetStore(
+        new MemoryAssetObjectStorage(),
+        (async () => new Response(bytes)) as typeof fetch,
+      );
+      await expect(store.load(descriptor(bytes))).resolves.toEqual(bytes.buffer);
+    } finally {
+      if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto);
+      else delete (globalThis as { crypto?: unknown }).crypto;
+    }
+  });
+
+  it("loads signed objects from the exact paired Bridge HTTP origin only", async () => {
+    const bytes = new TextEncoder().encode("paired Bridge asset");
+    const pairedDescriptor = {
+      ...descriptor(bytes),
+      url: new URL("http://192.168.1.20:43123/mobile/Enhanced/assets/catalog.json"),
+    };
+    const fetcher = vi.fn(async () => new Response(bytes));
+    const store = new PersistentAssetStore(
+      new MemoryAssetObjectStorage(),
+      fetcher as typeof fetch,
+      { documentOrigin: "http://192.168.1.20:43123" },
+    );
+    await expect(store.load(pairedDescriptor)).resolves.toEqual(bytes.buffer);
+    expect(() => store.load({
+      ...pairedDescriptor,
+      id: "wrong-bridge",
+      url: new URL("http://192.168.1.21:43123/mobile/Enhanced/assets/catalog.json"),
+    })).toThrow("offline asset URL must use HTTPS");
+  });
+
+  it("uses the trusted module origin when an iPhone Worker serializes its origin as null", async () => {
+    const bytes = new TextEncoder().encode("worker solver asset");
+    const workerDescriptor = {
+      ...descriptor(bytes),
+      url: new URL("http://192.168.1.20:43123/mobile/Enhanced/assets/solver-kernel.wasm"),
+    };
+    const store = new PersistentAssetStore(
+      new MemoryAssetObjectStorage(),
+      (async () => new Response(bytes)) as typeof fetch,
+      {
+        documentOrigin: "null",
+        moduleUrl: "http://192.168.1.20:43123/mobile/Enhanced/assets/solver.worker.js",
+      },
+    );
+    await expect(store.load(workerDescriptor)).resolves.toEqual(bytes.buffer);
+  });
+
   it("uses Bridge as the durable object store and projects every map status", async () => {
     const payload = new TextEncoder().encode("bridge object");
     const digest = createHash("sha256").update(payload).digest("hex");

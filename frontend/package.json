@@ -1,23 +1,29 @@
 {
-  "name": "@bomana/public-web",
-  "version": "1.0.0",
+  "name": "@bomana/app-web",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.3.0",
   "scripts": {
-    "build": "node scripts/build-public-editions.mjs",
-    "build:launcher": "vite build --config vite.launcher.config.ts",
-    "test": "vitest run",
-    "check": "pnpm test && pnpm build && pnpm build:launcher"
-  },
-  "dependencies": {
-    "@noble/ed25519": "3.1.0",
-    "@noble/hashes": "2.2.0"
+    "generate": "node scripts/build-public-assets.mjs",
+    "test": "pnpm generate && node --test scripts/calculator-model.test.mjs scripts/calculator-search.test.mjs && vitest run",
+    "build": "pnpm generate && tsc --noEmit && node scripts/build-public-editions.mjs",
+    "build:launcher": "pnpm generate && tsc --noEmit && vite build --config vite.launcher.config.ts",
+    "check": "pnpm test && pnpm build && pnpm build:launcher && node ../tools/check-boundary.mjs && pnpm test:public-ui && pnpm test:calculator-ui",
+    "test:public-ui": "node scripts/public-ui-smoke.mjs",
+    "test:calculator-ui": "node scripts/calculator-ui-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
+    "@types/qrcode": "1.5.6",
+    "playwright-core": "1.62.1",
     "typescript": "7.0.2",
     "vite": "8.2.2",
     "vitest": "4.1.11"
+  },
+  "dependencies": {
+    "@noble/ed25519": "3.1.0",
+    "@noble/hashes": "2.2.0",
+    "qrcode": "1.5.4"
   }
 }

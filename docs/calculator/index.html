@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>全真出击工具箱 · Bomana</title>
+    <meta name="description" content="全真 EC 战区与机场计算器、机型挂载对比、返航燃油规划与实用速查，数据随 Bomana 更新。">
+    <meta name="theme-color" content="#eef6fc">
+    <meta property="og:title" content="Bomana · 全真出击工具箱">
+    <meta property="og:description" content="计算投弹枚数、对比挂载、规划返航，查阅全真 EC 常见问题。">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://bomana.ruikang.wang/calculator">
+    <meta property="og:image" content="https://bomana.ruikang.wang/assets/bomana-app.webp">
+    <link rel="canonical" href="https://bomana.ruikang.wang/calculator">
+    <link rel="icon" href="/assets/favicon.ico">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/calculator/tools.css">
+  </head>
+  <body class="hangar calculator-page">
+    <a class="skip-link" href="#content">跳到主要内容</a>
+
+    <header class="site-header" aria-label="主导航">
+      <a class="brand" href="/" aria-label="Bomana 首页">
+        <img src="/assets/bomana-app.webp" alt="" width="36" height="36">
+        <span class="brand-mark">BOMANA</span>
+      </a>
+      <nav class="nav-links" aria-label="页面章节">
+        <a href="/#start">开始</a>
+        <a href="/#gallery">界面</a>
+        <a href="/#features">功能</a>
+        <a href="/#docs">文档</a>
+        <a class="nav-launcher" href="/launcher/">在线启动器</a>
+        <a class="nav-calculator" href="/calculator/" aria-current="page">在线计算器</a>
+        <a class="nav-github" href="https://github.com/Thankyou-Cheems/Bomana">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="content">
+      <section class="hangar-stage" aria-labelledby="calc-title">
+        <div class="calculator-heading">
+          <p class="hangar-kicker">SIM EC · FLIGHT DESK</p>
+          <h1 id="calc-title">全真出击工具箱</h1>
+          <p class="hangar-lede">出发前算清挂载，返航前留够燃油。</p>
+          <p class="tool-source" id="calcSource" role="status">正在核对参数版本…</p>
+          <nav class="tool-nav" aria-label="工具导航">
+            <a href="#calcForm">战区与机场计算器</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
+          </nav>
+        </div>
+
+        <form class="calculator-context" id="calcForm">
+          <label class="hangar-field">
+            <span>房间最高 BR / 耐久档</span>
+            <select id="calcBr">
+              <option value="14.7" selected>8.0–14.7 · 25,900 HP</option>
+            </select>
+            <small>相同耐久已合并；选择房间最高 BR 所在区间</small>
+          </label>
+          <label class="hangar-field">
+            <span>目标</span>
+            <select id="calcTarget">
+              <option value="bombing_point_planes" selected>战区基地（空战）</option>
+            </select>
+            <small>机场模块按满血且不计投弹间回血</small>
+          </label>
+          <aside class="hangar-repair" id="calcRepairNote" hidden>
+            <strong>机场回血</strong>
+            <span id="calcRepairSummary">生活区状态影响模块恢复；本页按不计回血估算，实战可能需要更多弹药。</span>
+            <small id="calcRepairDetail"></small>
+          </aside>
+        </form>
+
+        <div class="calculator-workspace">
+          <div class="calculator-pickers">
+            <section class="hangar-picker" aria-labelledby="aircraft-picker-title">
+              <header class="hangar-picker-head">
+                <span class="picker-step">1</span>
+                <div><h2 id="aircraft-picker-title">选择机型</h2><p>可选；选中后计算单次挂载和架次</p></div>
+                <button class="hangar-clear" id="calcAircraftClear" type="button">不限机型</button>
+              </header>
+              <label class="hangar-search">
+                <span class="sr-only">搜索机型</span>
+                <input id="calcAircraftSearch" type="search" autocomplete="off" placeholder="搜索 F-15E、A-10C、Su-27">
+              </label>
+              <div class="hangar-selection" id="calcAircraftSelection">
+                <strong>不限机型</strong><span>先按目标枚数计算</span>
+              </div>
+              <div id="calcAircraftList" class="hangar-weapon-list hangar-aircraft-list" role="listbox" aria-label="机型搜索结果" tabindex="0">
+                <p class="hangar-weapon-empty">输入名称开始搜索，支持简称和模糊匹配。</p>
+              </div>
+            </section>
+
+            <section class="hangar-picker" aria-labelledby="weapon-picker-title">
+              <header class="hangar-picker-head">
+                <span class="picker-step">2</span>
+                <div><h2 id="weapon-picker-title">选择武器</h2><p>机型选中后只显示可用挂载</p></div>
+              </header>
+              <div class="hangar-weapon-filters">
+                <label class="hangar-field hangar-kind-field">
+                  <span>种类</span>
+                  <select id="calcKind">
+                    <option value="">全部</option>
+                    <option value="bomb">炸弹</option>
+                    <option value="rocket">火箭弹</option>
+                    <option value="missile">导弹</option>
+                  </select>
+                </label>
+                <label class="hangar-search">
+                  <span class="sr-only">搜索武器</span>
+                  <input id="calcSearch" type="search" autocomplete="off" placeholder="搜索 Mk 83、Hydra、FAB-500">
+                </label>
+              </div>
+              <div class="hangar-selection" id="calcWeaponSelection">
+                <strong>正在读取武器目录…</strong>
+              </div>
+              <div id="calcWeaponList" class="hangar-weapon-list" role="listbox" aria-label="武器搜索结果" tabindex="0">
+                <p class="hangar-weapon-empty">正在加载武器…</p>
+              </div>
+            </section>
+          </div>
+
+          <article class="hangar-hud" aria-live="polite">
+            <p class="hangar-hud-context" id="calcHudContext">正在读取目录…</p>
+            <div class="hangar-result-grid">
+              <div class="hangar-result-primary">
+                <strong id="calcDestroyCount">—</strong>
+                <span id="calcDestroyLabel">所需枚数</span>
+              </div>
+              <div class="hangar-sorties" id="calcSortieCard">
+                <strong id="calcSortieCount">—</strong>
+                <span>预计出击</span>
+              </div>
+            </div>
+            <p class="hangar-fire" id="calcFireLine"></p>
+            <dl class="hangar-stats" id="calcStats"></dl>
+            <p class="hangar-hint" id="calcHint">选择武器后显示结果；再选机型可计算挂载上限与架次。</p>
+          </article>
+        </div>
+
+        <noscript><p class="hangar-noscript">需要启用 JavaScript。</p></noscript>
+
+        <details class="hangar-help">
+          <summary>怎么算</summary>
+          <ul>
+            <li>BR 使用房间允许的最高值。</li>
+            <li>枚数按武器全部命中计算；战区约九成伤害后进入燃烧自毁参考线。</li>
+            <li>选机型后，架次按该武器的最大同型挂载计算；满载收益系数按一架次满载伤害计算。</li>
+            <li>机场没有战区的燃烧自毁线，而且会在投弹间隙回血，所以实战可能多一架次。</li>
+          </ul>
+        </details>
+        <p class="hangar-aside">适用于 EC 任务参数；请勿套用为空战历史模式（Air RB）炸点表。所有伤害结果均假设全部命中。</p>
+
+        <section class="tool-panel" id="explosiveConversion" aria-labelledby="conversion-title">
+          <header class="tool-panel-head"><p class="hangar-kicker">WAR THUNDER · EXPLOSIVE EQUIVALENCE</p><h2 id="conversion-title">不同武器与装药换算</h2><p>先按实际装药质量和 TNT 系数换算，再看换成另一种武器需要多少枚。总弹重不参与当量计算。</p></header>
+          <form id="conversionForm">
+            <div class="conversion-sides">
+              <fieldset class="conversion-side"><legend>A · 已有武器 / 装药</legend>
+                <label class="hangar-field"><span>用武器目录预填</span><select id="chargeWeaponA"><option value="">自定义参数</option></select></label>
+                <button class="conversion-use" id="chargeUseA" type="button">载入上方选中的武器</button>
+                <label class="hangar-field"><span>装药类型 / 系数预设</span><select id="chargeTypeA"><option value="">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label>
+                <div class="conversion-fields"><label class="hangar-field"><span>每枚实际装药 · kg</span><input id="chargeMassA" type="number" min="0" step="any" inputmode="decimal" value="100"></label><label class="hangar-field"><span>TNT 系数 r</span><input id="chargeFactorA" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div>
+                <p class="conversion-source" id="chargeSourceA">手动示例参数；可直接修改。</p>
+              </fieldset>
+              <fieldset class="conversion-side"><legend>B · 要换成的武器 / 装药</legend>
+                <label class="hangar-field"><span>用武器目录预填</span><select id="chargeWeaponB"><option value="">自定义参数</option></select></label>
+                <button class="conversion-use" id="chargeUseB" type="button">载入上方选中的武器</button>
+                <label class="hangar-field"><span>装药类型 / 系数预设</span><select id="chargeTypeB"><option value="">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label>
+                <div class="conversion-fields"><label class="hangar-field"><span>每枚实际装药 · kg</span><input id="chargeMassB" type="number" min="0" step="any" inputmode="decimal" value="50"></label><label class="hangar-field"><span>TNT 系数 r</span><input id="chargeFactorB" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div>
+                <p class="conversion-source" id="chargeSourceB">手动示例参数；可直接修改。</p>
+              </fieldset>
+            </div>
+            <div class="conversion-quantity"><label class="hangar-field"><span>A 的数量 · 枚</span><input id="chargeCount" type="number" min="0" step="1" inputmode="numeric" value="1"></label><button class="conversion-use" id="chargeSwap" type="button">交换 A / B 参数</button><p>可先用上方的武器搜索，再载入到任一侧。交换只调换参数，A 的数量保持不变。</p></div>
+            <details class="tool-details"><summary>任务伤害换算参数（可选，独立于 TNT 当量）</summary><div class="conversion-fields"><label class="hangar-field"><span>A 单枚任务伤害 · HP</span><input id="chargeDamageA" type="number" min="0" step="any" inputmode="decimal" placeholder="目录预填，也可自定义"></label><label class="hangar-field"><span>B 单枚任务伤害 · HP</span><input id="chargeDamageB" type="number" min="0" step="any" inputmode="decimal" placeholder="目录预填，也可自定义"></label></div><p>修改装药量或 TNT 系数会清除对应的目录伤害，避免沿用旧武器的结果。若手填 HP，结果仅按你的假设换算。</p></details>
+          </form>
+          <div id="chargeResult" class="conversion-result" aria-live="polite"></div>
+          <div id="chargeDamageResult" class="conversion-damage" aria-live="polite"></div>
+          <p class="tool-note">TNT 当量是装药量与系数的乘积，不是通用基地伤害。战雷的伤害曲线、穿透与燃烧等机制会让两种换算得到不同枚数；燃烧弹、核弹等特殊模型尤其不能互相套用。这里不会推断命中率、投放窗口或实际毁伤。</p>
+        </section>
+
+        <section class="tool-panel" id="loadoutCompare" aria-labelledby="compare-title">
+          <header class="tool-panel-head"><p class="hangar-kicker">LOADOUTS</p><h2 id="compare-title">同机型挂载对比</h2><p id="compareContext">先在上方选择机型，即可对比它的全部可用挂载。</p></header>
+          <div class="tool-table-scroll" tabindex="0" role="region" aria-label="挂载对比，可横向滚动">
+            <table class="tool-table" id="compareTable" hidden>
+              <thead><tr><th scope="col">武器</th><th scope="col">每目标枚数</th><th scope="col">单次上限</th><th scope="col">目标 / 满载</th><th scope="col">打一个目标需出击</th><th scope="col">每目标弹重</th></tr></thead>
+              <tbody id="compareRows"></tbody>
+            </table>
+          </div>
+          <p class="tool-note">按最少架次、每次可完成的目标数排序。每行是独立的同型武器上限，不可把各行相加当作混挂；弹重不含挂架。基地采用点燃 / 自毁参考线，机场按满血且不计回血。不能据此判断飞行性能或实际命中率。</p>
+        </section>
+
+        <section class="tool-panel" id="returnFuel" aria-labelledby="fuel-title">
+          <header class="tool-panel-head"><p class="hangar-kicker">RETURN PLAN</p><h2 id="fuel-title">返航燃油规划</h2><p>用本次飞行的实测油耗和地速，估算到达机场后还能留多少油。</p></header>
+          <form id="fuelForm" class="tool-input-grid">
+            <label class="hangar-field"><span>当前燃油 · kg（可选）</span><input id="fuelKg" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
+            <label class="hangar-field"><span>实测油耗 · kg/min</span><input id="fuelBurn" type="number" min="0.01" step="any" inputmode="decimal" placeholder="例如 60"></label>
+            <label class="hangar-field"><span>返航地速 · km/h</span><input id="fuelSpeed" type="number" min="0.01" step="any" inputmode="decimal" placeholder="例如 720"></label>
+            <label class="hangar-field"><span>机场直线距离 · km</span><input id="fuelDistance" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 36"></label>
+            <label class="hangar-field"><span>绕行余量 · %</span><input id="fuelRoute" type="number" min="0" step="any" inputmode="decimal" value="20"></label>
+            <label class="hangar-field"><span>到达后储备 · min</span><input id="fuelReserve" type="number" min="0" step="any" inputmode="decimal" value="5"></label>
+          </form>
+          <div class="fuel-plan-result" id="fuelResult" aria-live="polite"><p>填入油耗、地速和距离后计算；缺少当前燃油时只显示所需油量。</p></div>
+          <details class="tool-details"><summary>怎样获得可用的实测油耗？</summary><p>在接近返航的高度、挂载与油门下保持稳定平飞，用前后燃油质量差除以间隔分钟数。排除加油、抛副油箱和大幅机动。改油门、爬升或开加力后应重新测量。地速反映实际行进速度，不能直接用 IAS 代替。</p><p>默认 20% 绕行和 5 分钟储备只是可调整的规划假设。这里不读取 8111，也不以静态发动机表冒充实测；结果不含空战、等待和机况变化。</p></details>
+        </section>
+
+        <section class="tool-panel" id="fieldGuide" aria-labelledby="guide-title">
+          <header class="tool-panel-head"><p class="hangar-kicker">FIELD NOTES</p><h2 id="guide-title">全真 EC 速查</h2><p>参数来自同批客户端数据；机制说明参考官方资料，社区疑问不直接作为公式。</p></header>
+          <details class="tool-details" open><summary>机场四个模块分别影响什么？</summary><dl class="module-guide"><dt>跑道</dt><dd>影响新飞机在该机场出生。</dd><dt>油库 / 储存区</dt><dd>影响补给与重新装填。</dd><dt>停机 / 维修区</dt><dd>影响飞机维修。</dd><dt>生活区</dt><dd>影响机场模块恢复；持续打击时需要考虑模块回血。</dd></dl><p>需要命中相应模块，不能把整个机场当成一个血池。上方选择具体模块可查看当前耐久档与伤害枚数；页面不知道战局中的剩余血量。<a href="https://warthunder.com/en/news/5973-development-modular-airfields-in-enduring-confrontation-en">官方模块机场介绍</a> · <a href="https://wiki.warthunder.com/gamemode/enduring_confrontation">EC Wiki</a></p></details>
+          <details class="tool-details"><summary>同样的 TNT 吨数，为什么投弹枚数不同？</summary><p>本页按具体武器的任务伤害与 EC 目标耐久计算；标称 TNT 当量不是通用枚数表。目标类型、房间最高 BR、弹种与是否按点燃线计算都会改变结果。社区中的 Air RB 表也不能直接用于 Sim EC。<a href="https://forum.warthunder.com/t/what-are-the-true-base-bombing-requirements-in-air-rb/7923">官方论坛中的模式与旧表讨论</a></p></details>
+          <details class="tool-details"><summary>有 CCRP 提示就能保证命中吗？</summary><p>先确认当前选择的武器、齐射枚数与目标点。地图标点、任务预选目标和座舱标记可能存在差异；以游戏里的目标确认与原生投放流程为准。<a href="https://wiki.warthunder.com/mechanics/1067-use-of-ccrp-in-sim-battles-sim-ec">官方 CCRP 全真指南</a></p><p>Bomana 的 8111 估算无法完整复现游戏制导、遮挡与末端命中过程。缺少 TAS 或目标地形时不能给出可靠投放判定；保留的范围只供参考。</p></details>
+          <details class="tool-details"><summary>这里的数据多久更新一次？</summary><p>每次维护者刷新 Bomana 参数后，机型、武器、耐久与本页目录一起生成和校验，并随 Web 发布。页首显示实际来源版本。游戏热更新不会立即自动反映到这里；资料中的静态伤害、油耗规划与实战结果仍需区分。</p></details>
+        </section>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <img src="/assets/bomana-app.webp" alt="" width="40" height="40">
+        <p><strong>Bomana</strong><span>Made for the Space Monkeys community.</span></p>
+      </div>
+      <p class="footer-note">独立开源项目，MIT License。War Thunder 及相关商标归 Gaijin Entertainment 所有；Bomana 与其无隶属或赞助关系。</p>
+    </footer>
+
+    <script type="module" src="/calculator/app.js"></script>
+  </body>
+</html>

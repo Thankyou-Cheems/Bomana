@@ -245,9 +245,9 @@ func runTray(config trayConfig, done <-chan struct{}, ready chan<- trayStartResu
 		icon:            icon,
 		infoFlags:       niifInfo,
 	}
-	copyUTF16(tray.data.tip[:], fmt.Sprintf("Bomana Bridge v%s · 只读 8111", config.bridgeVersion))
+	copyUTF16(tray.data.tip[:], fmt.Sprintf("Bomana Bridge v%s · 只读 ExtUI", config.bridgeVersion))
 	copyUTF16(tray.data.infoTitle[:], "Bomana Bridge 正在运行")
-	copyUTF16(tray.data.info[:], "仅连接官方 localhost:8111。右键图标可打开 Web、查看关于与支持作者或退出。")
+	copyUTF16(tray.data.info[:], "仅连接本机 War Thunder ExtUI（8111 / 9222 / 10333）。右键图标可打开 Web、查看关于与支持作者或退出。")
 
 	activeTrayMu.Lock()
 	activeTray = tray

@@ -43,8 +43,11 @@ func TestMobilePairingCodePreparesAndClaimsOnePhoneSession(t *testing.T) {
 	if pairingCode == "" {
 		t.Fatal("pairing start did not return a human pairing code")
 	}
-	if descriptor["mobile_pairing_protocol"] != float64(6) {
+	if descriptor["mobile_pairing_protocol"] != float64(7) {
 		t.Fatalf("pairing protocol = %v", descriptor["mobile_pairing_protocol"])
+	}
+	if descriptor["edition"] != string(mobileEditionEnhanced) {
+		t.Fatalf("pairing edition = %v", descriptor["edition"])
 	}
 
 	trustMobileLeaseForTest(gateway.mobile, time.Date(2099, 8, 26, 8, 0, 0, 0, time.UTC))
@@ -102,6 +105,72 @@ func TestMobilePairingCodePreparesAndClaimsOnePhoneSession(t *testing.T) {
 	gateway.ServeHTTP(replayResponse, replay)
 	if replayResponse.Code != http.StatusGone {
 		t.Fatalf("pairing code replay status = %d: %s", replayResponse.Code, replayResponse.Body.String())
+	}
+}
+
+func TestStandardMobilePairingClaimsWithoutEnhancedLease(t *testing.T) {
+	manager := newMobilePairingManager()
+	manager.listen = func(network, _ string) (net.Listener, error) {
+		return net.Listen(network, "127.0.0.1:0")
+	}
+	manager.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+		return []mobileNetworkCandidate{{Interface: "Wi-Fi", Address: "192.168.1.20", Endpoint: "http://192.168.1.20:" + strconv.Itoa(httpPort) + "/", TLSEndpoint: "https://192.168.1.20:" + strconv.Itoa(tlsPort) + "/"}}, nil
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	now := time.Now()
+	descriptor, err := manager.StartEdition(http.NotFoundHandler(), now, mobileEditionStandard, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if descriptor.Edition != mobileEditionStandard || descriptor.MobilePairingProtocol != 7 {
+		t.Fatalf("standard descriptor = %+v", descriptor)
+	}
+	if err := manager.Prepare(descriptor.BridgePairingID, descriptor.PairingToken, "signed-mobile-lease", now.Add(time.Hour), now.Add(time.Minute), now); err == nil {
+		t.Fatal("Standard pairing accepted an Enhanced lease preparation")
+	}
+	completion, result := manager.Claim(descriptor.PairingToken, now.Add(time.Second))
+	if result != mobilePairingCompleteOK {
+		t.Fatalf("standard pairing claim result = %v", result)
+	}
+	if completion.Edition != mobileEditionStandard || completion.MobileLease != "" || completion.MobileLeaseExpiresAt != "" {
+		t.Fatalf("standard completion leaked Enhanced lease state: %+v", completion)
+	}
+	encoded, err := json.Marshal(completion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, []byte("mobile_lease")) {
+		t.Fatalf("standard completion serialized Enhanced lease fields: %s", encoded)
+	}
+	if !manager.Authorize(descriptor.PairingToken, now.Add(2*time.Second)) {
+		t.Fatal("claimed Standard token did not authorize the LAN session")
+	}
+}
+
+func TestMobilePairingStartAcceptsAnEditionBoundRequest(t *testing.T) {
+	gateway := newRelay(mustURL("http://127.0.0.1:8111"), testOrigin)
+	gateway.mobile.listen = func(network, _ string) (net.Listener, error) {
+		return net.Listen(network, "127.0.0.1:0")
+	}
+	gateway.mobile.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+		return []mobileNetworkCandidate{{Interface: "Wi-Fi", Address: "192.168.1.20", Endpoint: "http://192.168.1.20:" + strconv.Itoa(httpPort) + "/", TLSEndpoint: "https://192.168.1.20:" + strconv.Itoa(tlsPort) + "/"}}, nil
+	}
+	t.Cleanup(func() { _ = gateway.mobile.Close() })
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/mobile/pairing/start", strings.NewReader(`{"schema_version":1,"edition":"Standard"}`))
+	request.RemoteAddr = "127.0.0.1:50100"
+	request.Header.Set("Origin", testOrigin)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	gateway.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("standard pairing start = %d: %s", response.Code, response.Body.String())
+	}
+	var descriptor mobilePairingDescriptor
+	if err := json.Unmarshal(response.Body.Bytes(), &descriptor); err != nil {
+		t.Fatal(err)
+	}
+	if descriptor.Edition != mobileEditionStandard {
+		t.Fatalf("pairing edition = %q", descriptor.Edition)
 	}
 }
 
@@ -196,6 +265,7 @@ func TestMobilePairingPrepareIgnoresTheCallerDeclaredLeaseExpiry(t *testing.T) {
 	verifiedExpiry := now.Add(time.Hour)
 	manager := newMobilePairingManager()
 	manager.session = &mobilePairingSession{
+		edition:       mobileEditionEnhanced,
 		id:            "bridge_pairing_1234567890",
 		token:         strings.Repeat("a", 43),
 		code:          "ABCD2345",
@@ -656,6 +726,38 @@ func TestMobilePairingHTTPSCockpitServesCurrentOfficialAssets(t *testing.T) {
 	}
 	if corsResponse.Header.Get("Access-Control-Allow-Origin") != "https://192.168.1.20:"+tlsPort {
 		t.Fatalf("pairing origin = %q", corsResponse.Header.Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestMobilePairingAssetRoutesAreEditionBound(t *testing.T) {
+	originalBase := mobileAppBase
+	t.Cleanup(func() { mobileAppBase = originalBase })
+	mobileAppBase = "https://bomana.ruikang.wang/mobile/"
+
+	for _, test := range []struct {
+		path string
+		want string
+	}{
+		{path: "/mobile/Standard/", want: "https://bomana.ruikang.wang/mobile/Standard/"},
+		{path: "/mobile/Standard/assets/app.js", want: "https://bomana.ruikang.wang/mobile/Standard/assets/app.js"},
+		{path: "/mobile/Enhanced/", want: "https://bomana.ruikang.wang/mobile/Enhanced/"},
+	} {
+		got, ok := pairingAssetUpstream(test.path)
+		if !ok || got != test.want {
+			t.Fatalf("pairingAssetUpstream(%q) = %q, %v; want %q", test.path, got, ok, test.want)
+		}
+	}
+	for _, rejected := range []string{"/mobile/Lite/", "/mobile/Standard/../Enhanced/", "/mobile/standard/"} {
+		if got, ok := pairingAssetUpstream(rejected); ok {
+			t.Fatalf("pairingAssetUpstream(%q) unexpectedly accepted %q", rejected, got)
+		}
+	}
+
+	manager := newMobilePairingManager()
+	now := time.Now()
+	manager.session = &mobilePairingSession{edition: mobileEditionStandard, expiresAt: now.Add(time.Minute)}
+	if !manager.AllowsEdition(mobileEditionStandard, now) || manager.AllowsEdition(mobileEditionEnhanced, now) {
+		t.Fatal("active Standard session did not isolate its asset edition")
 	}
 }
 
