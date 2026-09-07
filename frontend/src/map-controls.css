@@ -1,0 +1,4 @@
+.map-controls { position: absolute; right: 12px; bottom: 16px; z-index: 4; display: flex; gap: 3px; pointer-events: auto; }
+.map-controls button { min-width: 34px; min-height: 34px; padding: 4px 8px; border: 1px solid #54758a; border-radius: 6px; background: #102735ed; color: #d6e9f6; font: 700 13px "Microsoft YaHei", sans-serif; cursor: pointer; }
+.map-controls button:focus-visible { outline: 2px solid #f8d66f; outline-offset: 2px; }
+body[data-mobile-paired=true] .map-stage .map-controls { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }

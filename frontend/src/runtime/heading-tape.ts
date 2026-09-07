@@ -5,7 +5,8 @@ export interface HeadingGuidance {
   readonly window: NonNullable<EditionSnapshot["strike"]>["bombingWindow"];
   readonly relativeDeg: number;
   readonly toleranceDeg: number;
-  readonly greenHalfRatio: number;
+  readonly bandHalfRatio: number;
+  readonly windowMode?: "impact" | "approach" | "correction";
   readonly color: string;
   readonly text: string;
   readonly ratio: number;
@@ -15,7 +16,7 @@ export function headingGuidance(snapshot: EditionSnapshot): HeadingGuidance {
   const target = snapshot.navigation?.target;
   const relativeDeg = target?.relativeDeg ?? 0;
   const toleranceDeg = headingCdiTolerance(target?.distanceKm ?? 20);
-  return { target, window: null, relativeDeg, toleranceDeg, greenHalfRatio: 0,
+  return { target, window: null, relativeDeg, toleranceDeg, bandHalfRatio: 0,
     color: Math.abs(relativeDeg) <= toleranceDeg ? "#f8d66f" : "#ff8e86",
     text: target ? headingGuidanceText(relativeDeg, target.distanceKm) : snapshot.connected ? "选择目标" : "等待 8111",
     ratio: projectHeadingGuidanceRatio(relativeDeg, toleranceDeg) };

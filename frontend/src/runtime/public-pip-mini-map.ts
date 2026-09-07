@@ -2,6 +2,7 @@ import type { EditionSnapshot, NavigationItem } from "./runtime-types";
 import { discoverBridgeEndpoint, fetchBridgeResource } from "./bridge-discovery";
 import { normalizeOfficialMapInfo } from "./map-info";
 import { headingRayToMapEdge } from "./map-heading-ray";
+import { MapViewport } from "./map-viewport";
 
 /** Official map objects only. Both the page and its PiP window use this renderer. */
 export class PublicNavigationMap {
@@ -9,6 +10,8 @@ export class PublicNavigationMap {
   readonly #canvas: HTMLCanvasElement;
   readonly #select: (id: string) => void;
   readonly #basemap: PublicNavigationMap | undefined;
+  readonly #viewport: MapViewport | undefined;
+  readonly #resizeObserver: ResizeObserver;
   #mapInfo: Readonly<Record<string, unknown>> | null = null;
   #identity = "";
   #image: ImageBitmap | null = null;
@@ -19,8 +22,10 @@ export class PublicNavigationMap {
     this.#canvas = canvas;
     this.#select = select;
     this.#basemap = basemap;
-    canvas.addEventListener("click", this.#click);
-    canvas.ownerDocument.defaultView?.addEventListener("resize", this.#resize);
+    if (basemap) canvas.addEventListener("click", this.#click);
+    else this.#viewport = new MapViewport(canvas, () => this.#fitRect(), this.#resize, this.#click);
+    this.#resizeObserver = new ResizeObserver(this.#resize);
+    this.#resizeObserver.observe(canvas);
   }
   update(snapshot: EditionSnapshot, mapInfo: Readonly<Record<string, unknown>> | null = null): void {
     this.#snapshot = snapshot;
@@ -35,10 +40,7 @@ export class PublicNavigationMap {
     if (!ctx) return;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.fillStyle = "#0b202e"; ctx.fillRect(0, 0, width, height);
-    const aspect = (this.#basemap ?? this).aspectRatio;
-    const pairedPhone = canvas.ownerDocument.body.dataset.mobilePaired === "true";
-    const mapWidth = pairedPhone ? Math.max(width, height * aspect) : Math.min(width - 16, (height - 16) * aspect), mapHeight = mapWidth / aspect;
-    const rect = this.#rect = { x: (width - mapWidth) / 2, y: (height - mapHeight) / 2, width: mapWidth, height: mapHeight };
+    const rect = this.#rect = this.#viewport?.rect() ?? this.#fitRect();
     (this.#basemap ?? this).paintBasemap(ctx, rect);
     const xy = (p: { x: number; y: number }) => [rect.x + p.x * rect.width, rect.y + p.y * rect.height] as const;
     const nav = snapshot.navigation;
@@ -57,6 +59,7 @@ export class PublicNavigationMap {
     }
     for (const item of nav.items) {
       const [x, y] = xy(item);
+      if (x < -12 || y < -12 || x > width + 12 || y > height + 12) continue;
       ctx.strokeStyle = item.selected ? "#ffda7a" : item.friendly ? "#85ccff" : "#ff9397";
       ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = item.selected ? 3 : 1.5;
       ctx.beginPath();
@@ -73,6 +76,15 @@ export class PublicNavigationMap {
       ctx.fillStyle = "#ffda7a"; ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6, 7); ctx.lineTo(0, 3); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill(); ctx.restore();
     }
   }
+  #fitRect(): { x: number; y: number; width: number; height: number } {
+    const bounds = this.#canvas.getBoundingClientRect();
+    const width = Math.max(100, bounds.width), height = Math.max(100, bounds.height);
+    const aspect = (this.#basemap ?? this).aspectRatio;
+    const pairedPhone = this.#canvas.ownerDocument.body.dataset.mobilePaired === "true";
+    const mapWidth = pairedPhone ? Math.max(width, height * aspect) : Math.min(width - 16, (height - 16) * aspect);
+    const mapHeight = mapWidth / aspect;
+    return { x: (width - mapWidth) / 2, y: (height - mapHeight) / 2, width: mapWidth, height: mapHeight };
+  }
   get aspectRatio(): number {
     const scale = this.#snapshot?.navigation?.mapScaleM;
     return scale && scale[0] > 0 && scale[1] > 0 ? scale[0] / scale[1] : this.#image ? this.#image.width / this.#image.height : 1;
@@ -83,13 +95,14 @@ export class PublicNavigationMap {
   }
   close(): void {
     this.#snapshot = null; this.#loading?.abort(); this.#loading = null; this.#image?.close(); this.#image = null;
-    this.#canvas.removeEventListener("click", this.#click); this.#canvas.ownerDocument.defaultView?.removeEventListener("resize", this.#resize);
+    this.#canvas.removeEventListener("click", this.#click); this.#resizeObserver.disconnect(); this.#viewport?.close();
   }
   #updateImage(snapshot: EditionSnapshot, mapInfo: Readonly<Record<string, unknown>> | null): void {
     const bounds = normalizeOfficialMapInfo(mapInfo);
     const identity = snapshot.connected && bounds && snapshot.navigation?.player ? JSON.stringify(bounds) : "";
     if (identity !== this.#identity) {
       this.#identity = identity; this.#loading?.abort(); this.#loading = null; this.#image?.close(); this.#image = null; this.#lastFetchMs = 0;
+      this.#viewport?.reset(false);
     }
     const now = Date.now();
     if (!identity || this.#loading || now - this.#lastFetchMs < (this.#image ? 30_000 : 3_000)) return;

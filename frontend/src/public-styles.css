@@ -1,3 +1,4 @@
+@import "./map-controls.css";
 :root { color-scheme: dark; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; color: #d6e9f6; background: #07151f; --card: #102733; --line: #2b4654; --accent: #89d9ec; }
 * { box-sizing: border-box; } body { margin: 0; } [hidden] { display: none !important; }
 a { color: var(--accent); text-decoration: none; } button, input, select, textarea { font: inherit; color: inherit; }
@@ -58,3 +59,4 @@ body[data-mobile-paired=true] .timer-card :is(.eyebrow, .mission-progress, #rese
 body[data-mobile-paired=true] #timer { font-size: 24px; }
 body[data-mobile-paired=true] .public-shell { padding-bottom: 58px; }
 .public-pip .pip-header small { font-size: 9px; white-space: nowrap; }
+.navigation-card { position: relative; }

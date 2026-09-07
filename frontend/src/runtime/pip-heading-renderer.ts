@@ -100,7 +100,8 @@ export class PictureInPictureHeadingRenderer {
       ? this.#markerDisplay.get(target.id)?.step(nowMs) ?? target.relativeDeg
       : 0;
     const targetGuidance = guidance.window ? guidance.ratio : target
-      ? projectHeadingGuidanceRatio(snapshot.strike?.targetRelativeDeg ?? displayedTargetRelative, guidance.toleranceDeg) : 0;
+      ? projectHeadingGuidanceRatio(snapshot.strike?.status === "ready"
+        ? snapshot.strike.targetRelativeDeg ?? displayedTargetRelative : displayedTargetRelative, guidance.toleranceDeg) : 0;
     this.#displayGuidance = guidance.window ? targetGuidance
       : this.#displayGuidance + (targetGuidance - this.#displayGuidance) * (1 - Math.exp(-elapsed / 70));
     this.#render();
@@ -336,10 +337,14 @@ function drawGuidance(
     }
   }
   const tolerance = guidance.toleranceDeg;
-  const gateHalf = guidance.greenHalfRatio * halfTrack;
-  context.strokeStyle = gateHalf > 0 ? "#6de0a3" : "rgba(142,196,225,.38)";
+  const approach = guidance.windowMode === "approach" || guidance.windowMode === "correction";
+  // A minimum 12 CSS-pixel correction marker stays legible at long range.
+  // Never widen an actual impact window: that would imply a false release cue.
+  const gateHalf = approach ? Math.max(6, 6 * layout.visualScale, guidance.bandHalfRatio * halfTrack)
+    : guidance.bandHalfRatio * halfTrack;
+  context.strokeStyle = approach ? "#8ec4e1" : gateHalf > 0 ? "#6de0a3" : "rgba(142,196,225,.38)";
   if (gateHalf > 0) {
-    context.fillStyle = "rgba(109,224,163,.22)";
+    context.fillStyle = approach ? "rgba(142,196,225,.16)" : "rgba(109,224,163,.22)";
     context.fillRect(centerX - gateHalf, layout.guidanceTrackY - halfHeight, gateHalf * 2, halfHeight * 2);
   }
   context.lineWidth = 2 * layout.visualScale;
