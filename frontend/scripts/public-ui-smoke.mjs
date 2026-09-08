@@ -39,6 +39,12 @@ try {
   await page.waitForFunction(() => document.querySelector("#timer").textContent !== "--:--");
   assert.equal(await page.locator("#navigation-select option").count(), 2, "Standard must not expose POI navigation");
   assert.equal(await page.locator("#ias-value").innerText(), "700");
+  const speedStrip = await page.locator("#speed-track").evaluate(track => ({
+    markers: [...track.querySelectorAll("b")].map(marker => marker.style.left),
+    transition: getComputedStyle(track.querySelector("i")).transition,
+  }));
+  assert.deepEqual(speedStrip.markers, ["64%", "82%", "95.2%"], "Public speed strip shares the expanded warning scale");
+  assert.match(speedStrip.transition, /width 0\.08s linear/, "Public speed fill must finish before the next normal observation");
   await page.waitForFunction(() => {
     const canvas = document.querySelector("#navigation-map");
     const pixel = canvas.getContext("2d").getImageData(canvas.width / 4, canvas.height / 4, 1, 1).data;
