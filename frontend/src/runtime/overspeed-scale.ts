@@ -24,13 +24,14 @@ export function overspeedDynamicProjection(
 export function speedStripProgress(value: number): number {
   const ratio = clamp(finite(value), 0, 1);
   if (ratio >= 1) return 1;
-  // Fixed scale: 0–50% occupies 15%; 80–100% occupies 46% at a constant
-  // rate. Integrating smoothstep between them joins both slope and curvature,
-  // so acceleration through the transition cannot make the bar suddenly jump.
-  if (ratio <= .5) return .3 * ratio;
-  if (ratio >= .8) return .54 + 2.3 * (ratio - .8);
-  const t = (ratio - .5) / .3;
-  return .15 + .3 * (.3 * t + 2 * (t ** 3 - .5 * t ** 4));
+  // Fixed scale: 0–80% uses less than 10% of the strip; 90–100% uses 60%
+  // at a constant rate. Integrating smoothstep over 80–90% joins both slope
+  // and curvature, keeping movement smooth before the expanded warning bands.
+  const compressedSlope = 2 / 17; // Normalizes total area: .85 * slope + .15 * 6 = 1.
+  if (ratio <= .8) return compressedSlope * ratio;
+  if (ratio >= .9) return .4 + 6 * (ratio - .9);
+  const t = (ratio - .8) / .1;
+  return .8 * compressedSlope + .1 * (compressedSlope * t + (6 - compressedSlope) * (t ** 3 - .5 * t ** 4));
 }
 
 function finite(value: number): number { return Number.isFinite(value) ? value : 0; }
