@@ -46,10 +46,9 @@ export class LandingPanel {
     this.part("toggle").setAttribute("aria-pressed", String(enabled));
     this.part<HTMLInputElement>("automatic").checked = snapshot.settings.automatic === true;
     this.part<HTMLButtonElement>("toggle").disabled = !enabled && snapshot.runways.length === 0;
-    for (const name of ["message","lateral","vertical","speed","distance","verticalSpeed","configuration","gearLimit","gearAdvice","arrestor","touchdown"] as const) this.part(name).textContent = p[name];
+    for (const name of ["message","lateral","vertical","speed","distance","course","verticalSpeed","configuration","gearLimit","gearAdvice","arrestor","touchdown"] as const) this.part(name).textContent = p[name];
     this.part("gearAdvice").dataset.risk = snapshot.gearRisk ?? "unknown";
     const g = snapshot.geometry;
-    this.part("course").textContent = g ? `跑道方向 ${Math.round(g.courseDeg).toString().padStart(3,"0")}°` : "跑道方向 —";
     const optionsKey = JSON.stringify(snapshot.runways.map(r => [r.id,r.label]));
     if (optionsKey !== this.#runways) {
       this.#runways = optionsKey;
@@ -59,7 +58,9 @@ export class LandingPanel {
     for (const [part, value] of [["ias",snapshot.settings.targetIasKmh],["angle",snapshot.settings.glideAngleDeg],["elevation",snapshot.settings.runwayElevationM]] as const) {
       if (!previous || JSON.stringify(previous.settings) !== JSON.stringify(snapshot.settings)) this.part<HTMLInputElement>(part).value = value === null ? "" : String(value);
     }
-    for (const [part, value, extent] of [["lateral-dot",g?.crossTrackM ?? null, g ? Math.max(80,Math.abs(g.thresholdDistanceM)*.1) : 80],["vertical-dot",g?.glideDeviationM ?? null, g ? Math.max(20,Math.abs(g.thresholdDistanceM)*.02) : 20]] as const) {
+    const returning = g?.stage === "return";
+    const lateralOffset = returning ? g.airportTrackErrorDeg === null ? null : -g.airportTrackErrorDeg : g?.crossTrackM ?? null;
+    for (const [part, value, extent] of [["lateral-dot",lateralOffset, returning ? 25 : g ? Math.max(80,Math.abs(g.thresholdDistanceM)*.1) : 80],["vertical-dot",g?.glideDeviationM ?? null, g ? Math.max(20,Math.abs(g.thresholdDistanceM)*.02) : 20]] as const) {
       this.part(part).hidden = value === null;
       this.part(part).style.left = `${50 + Math.max(-1,Math.min(1,(value ?? 0)/extent))*46}%`;
     }

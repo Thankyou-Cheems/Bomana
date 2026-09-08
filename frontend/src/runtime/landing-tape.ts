@@ -7,6 +7,7 @@ const heading = (n: number) => Math.round((n % 360 + 360) % 360).toString().padS
 /** Compact flight references only; no learned-fuel diagnostics or landing safety claim. */
 export function landingTapePresentation(snapshot: EditionSnapshot) {
   const landing = snapshot.landing, g = landing?.geometry;
+  const returning = g?.stage === "return";
   const active = landing?.settings.enabled === true;
   const ias = landing?.iasKmh, targetIas = landing?.settings.targetIasKmh;
   const fuel = snapshot.fuel;
@@ -22,22 +23,26 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
     : gearRisk === "extension-too-fast" || gearRisk === "near-limit" || finite(ias) && finite(targetIas) && Math.abs(ias - targetIas) > targetIas * .1 ? "caution" : "reference";
   const fuelTone = fuelAvailable && (fuel!.currentKg <= 0 || minutes !== null && minutes < 3) ? "danger"
     : minutes !== null && minutes < 5 ? "caution" : "reference";
-  const lateral = !g ? null : clamp(-g.crossTrackM / Math.max(80, Math.abs(g.thresholdDistanceM) * .1));
+  const lateral = !g ? null : returning ? g.airportTrackErrorDeg === null ? null : clamp(-g.airportTrackErrorDeg / 25)
+    : clamp(-g.crossTrackM / Math.max(80, Math.abs(g.thresholdDistanceM) * .1));
   const glide = !g || g.glideDeviationM === null ? null : clamp(g.glideDeviationM / Math.max(20, Math.abs(g.thresholdDistanceM) * .02));
-  const lateralText = !g ? "引导待恢复" : Math.abs(g.crossTrackM) < 20 ? "轴线附近"
+  const lateralText = !g ? "引导待恢复" : returning ? g.airportTrackErrorDeg === null ? "航迹 —" : Math.abs(g.airportTrackErrorDeg) < 2 ? "正飞向机场"
+    : `${g.airportTrackErrorDeg > 0 ? "左" : "右"}修 ${Math.abs(g.airportTrackErrorDeg).toFixed(1)}°`
+    : Math.abs(g.crossTrackM) < 20 ? "轴线附近"
     : `${g.crossTrackM > 0 ? "左" : "右"}修 ${Math.round(Math.abs(g.crossTrackM))}m`;
-  const glideText = !g ? "" : g.stage === "runway" || g.stage === "past-runway" ? "下滑结束"
+  const glideText = !g ? "" : returning ? "返航中" : g.stage === "runway" || g.stage === "past-runway" ? "下滑结束"
     : g.heightM === null ? "高程未知" : g.glideDeviationM === null ? "先对准"
       : Math.abs(g.glideDeviationM) <= 10 ? "参考线附近" : `${g.glideDeviationM > 0 ? "高" : "低"} ${Math.round(Math.abs(g.glideDeviationM))}m`;
   const vy = finite(landing?.verticalSpeedMps) ? `${landing!.verticalSpeedMps! < 0 ? "↓" : "↑"}${Math.abs(landing!.verticalSpeedMps!).toFixed(1)}m/s` : "Vy —";
   const gear = landing?.aircraft?.gearControl === false ? "固定轮"
     : finite(landing?.gearPercent) ? `轮 ${Math.round(landing!.gearPercent!)}%` : "轮 —";
   const config = gearRisk === "over-limit" ? "起落架超限" : gearRisk === "extension-too-fast" ? "放轮前减速"
-    : gearRisk === "near-limit" ? "接近放轮限速" : g && g.thresholdDistanceM < 3000 && g.thresholdDistanceM > 0
+    : gearRisk === "near-limit" ? "接近放轮限速" : g && !returning && g.thresholdDistanceM < 3000 && g.thresholdDistanceM > 0
       && landing?.aircraft?.gearControl !== false && finite(landing?.gearPercent) && landing!.gearPercent! < 99 ? "检查放轮" : gear;
-  const course = g ? `RWY ${heading(g.courseDeg)}°` : "跑道 —";
-  const distance = g ? `${g.thresholdDistanceM < 0 ? "入口后 " : ""}${(Math.abs(g.thresholdDistanceM) / 1000).toFixed(1)}km` : "距离 —";
-  const mode = landing?.settings.automatic ? "自动进近" : "降落参考";
+  const course = returning ? g.airportBearingDeg === null ? "机场 —" : `机场 ${heading(g.airportBearingDeg)}°` : g ? `RWY ${heading(g.courseDeg)}°` : "跑道 —";
+  const distance = returning ? `距机场 ${(g.airportDistanceM / 1000).toFixed(1)}km`
+    : g ? `${g.thresholdDistanceM < 0 ? "入口后 " : ""}${(Math.abs(g.thresholdDistanceM) / 1000).toFixed(1)}km` : "距离 —";
+  const mode = landing?.settings.automatic ? returning ? "自动返航" : "自动进近" : returning ? "返航参考" : "降落参考";
   const speedText = finite(ias) ? `${Math.round(ias)}` : "—";
   const speedDetail = finite(targetIas) ? `参考 ${Math.round(targetIas)}` : "参考 IAS 未设";
   return { active, mode, course, distance, lateral, glide, lateralText, glideText, vy, config,

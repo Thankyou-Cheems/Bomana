@@ -23,7 +23,10 @@ export interface LandingGeometry {
   /** Positive on the right of the inbound runway course. */
   readonly crossTrackM: number;
   readonly trackErrorDeg: number | null;
-  readonly stage: "intercept" | "final" | "runway" | "past-runway";
+  readonly airportDistanceM: number;
+  readonly airportBearingDeg: number | null;
+  readonly airportTrackErrorDeg: number | null;
+  readonly stage: "return" | "intercept" | "final" | "runway" | "past-runway";
   readonly heightM: number | null;
   readonly glideDeviationM: number | null;
   readonly referenceDescentMps: number | null;
@@ -102,9 +105,16 @@ export function landingGeometry(input: {
   const velocity = input.velocity;
   const trackErrorDeg = velocity && Math.hypot(...velocity) >= 10
     ? ((Math.atan2(velocity[0], -velocity[1]) * 180 / Math.PI - courseDeg + 540) % 360) - 180 : null;
-  const aligned = along < -30 && Math.abs(crossTrackM) <= Math.max(80, -along * .1)
+  const toAirportX = dx * .5 - px, toAirportY = dy * .5 - py;
+  const airportDistanceM = Math.hypot(toAirportX, toAirportY);
+  const airportBearingDeg = airportDistanceM >= 1 ? (Math.atan2(toAirportX, -toAirportY) * 180 / Math.PI + 360) % 360 : null;
+  const airportTrackErrorDeg = trackErrorDeg !== null && airportBearingDeg !== null
+    ? ((courseDeg + trackErrorDeg - airportBearingDeg + 540) % 360) - 180 : null;
+  const nearApproach = along >= -15_000 && along <= lengthM + 1000
+    && Math.abs(crossTrackM) <= Math.max(750, -along * .5);
+  const aligned = nearApproach && along < -30 && Math.abs(crossTrackM) <= Math.max(80, -along * .1)
     && trackErrorDeg !== null && Math.abs(trackErrorDeg) <= 30;
-  const stage = along >= lengthM ? "past-runway" : along >= 0 ? "runway" : aligned ? "final" : "intercept";
+  const stage = !nearApproach ? "return" : along >= lengthM ? "past-runway" : along >= 0 ? "runway" : aligned ? "final" : "intercept";
   const heightM = input.altitudeM !== null && input.elevationM !== null ? input.altitudeM - input.elevationM : null;
   const slope = Math.tan(input.glideAngleDeg * Math.PI / 180);
   // 15 m threshold crossing height is an editable-angle planning reference,
@@ -112,11 +122,12 @@ export function landingGeometry(input: {
   const glideDeviationM = aligned && heightM !== null ? heightM - (15 - along * slope) : null;
   const referenceDescentMps = aligned && heightM !== null && velocity
     ? -(velocity[0] * ux + velocity[1] * uy) * slope : null;
-  return { courseDeg, lengthM, thresholdDistanceM: -along, crossTrackM, trackErrorDeg, stage,
+  return { courseDeg, lengthM, thresholdDistanceM: -along, crossTrackM, trackErrorDeg,
+    airportDistanceM, airportBearingDeg, airportTrackErrorDeg, stage,
     heightM, glideDeviationM, referenceDescentMps };
 }
 
-/** A sustained inbound approach or a manual lock; an acquired runway never chases targets. */
+/** Acquire an airport-bound return, then retain the same runway through its approach. */
 export class LandingAssist {
   #settings = DEFAULT_LANDING_SETTINGS;
   #context = "";
@@ -206,9 +217,10 @@ export class LandingAssist {
         this.#exitSince = 0; return;
       }
       const g = geometry(runway, this.#settings.reverse);
-      const leaving = Math.hypot(g.thresholdDistanceM, g.crossTrackM) > 20_000
-        || g.thresholdDistanceM < -g.lengthM - 1000 || Math.abs(g.trackErrorDeg ?? 0) > 90
-        || (input.verticalSpeedMps !== null && input.verticalSpeedMps > 3 && g.thresholdDistanceM < 2000 && input.gearPercent !== null && input.gearPercent < 5);
+      // A runway-relative course is irrelevant while returning from its side.
+      const leaving = g.airportDistanceM > g.lengthM * .5 + 1000 && Math.abs(g.airportTrackErrorDeg ?? 0) > 75
+        || (g.airportDistanceM < g.lengthM * .5 + 2000 && input.verticalSpeedMps !== null && input.verticalSpeedMps > 3
+          && input.gearPercent !== null && input.gearPercent < 5);
       if (!leaving) { this.#exitSince = 0; return; }
       if (!this.#exitSince) this.#exitSince = at;
       if (at - this.#exitSince >= 8000) {
@@ -219,21 +231,21 @@ export class LandingAssist {
     }
     if (at < this.#cooldownUntil) return;
     let best: { runway: NavigationItem; reverse: boolean; score: number } | null = null;
-    for (const runway of runways) for (const reverse of [false, true]) {
-      const g = geometry(runway, reverse), ias = input.iasKmh, vy = input.verticalSpeedMps;
-      const error = (g.trackErrorDeg ?? 180) * Math.PI / 180;
-      const towards = (g.thresholdDistanceM * Math.cos(error) - g.crossTrackM * Math.sin(error))
-        / Math.hypot(g.thresholdDistanceM, g.crossTrackM);
-      const inbound = ias !== null && ias >= 70 && ias <= 700 && vy !== null && vy <= 1
-        && track.groundSpeedMps >= 20 && g.thresholdDistanceM >= 600 && g.thresholdDistanceM <= 15_000
-        && g.trackErrorDeg !== null && Math.abs(g.trackErrorDeg) <= 45
-        && towards >= .82
-        && Math.abs(g.crossTrackM) <= Math.max(750, g.thresholdDistanceM * .5);
+    for (const runway of runways) {
+      const g = geometry(runway, false);
+      const departing = g.airportDistanceM < g.lengthM * .5 + 2000 && input.verticalSpeedMps !== null && input.verticalSpeedMps > 3
+        && input.gearPercent !== null && input.gearPercent < 5;
+      const inbound = Math.hypot(track.velocityX, track.velocityZ) >= 20 && !departing
+        && g.airportDistanceM >= g.lengthM * .5 + 600
+        && g.airportTrackErrorDeg !== null && Math.abs(g.airportTrackErrorDeg) <= 25;
       if (!inbound) continue;
-      const score = g.thresholdDistanceM + 4 * Math.abs(g.crossTrackM) + 100 * Math.abs(g.trackErrorDeg!);
+      // Airport choice follows the actual return track; runway direction is a separate nearest-end choice.
+      const reverse = Math.hypot(g.thresholdDistanceM + g.lengthM, g.crossTrackM) < Math.hypot(g.thresholdDistanceM, g.crossTrackM);
+      const score = g.airportDistanceM * (1 + Math.abs(g.airportTrackErrorDeg!) / 25);
       if (!best || score < best.score) best = { runway, reverse, score };
     }
-    const key = best ? `${best.runway.id}|${best.reverse}|${JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd])}` : "";
+    // Small position changes can swap the nearer end without changing the airport-bound return.
+    const key = best ? `${best.runway.id}|${JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd])}` : "";
     if (!key || key !== this.#candidateKey) { this.#candidateKey = key; this.#candidateSince = at; return; }
     if (best && at - this.#candidateSince >= 3000) {
       this.#settings = { ...this.#settings, enabled: true, runwayId: best.runway.id, reverse: best.reverse, runwayElevationM: null };

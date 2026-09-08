@@ -50,7 +50,9 @@ try {
   await landing.locator("[data-part='ias']").fill("250");
   await landing.locator("[data-part='elevation']").fill("100");
   await landing.getByRole("button", {name:"应用参考参数"}).click();
-  await page.waitForFunction(() => document.querySelector("[data-part='message']").textContent.includes("手动高程 100"));
+  await page.waitForFunction(() => document.querySelector("[data-part='speed']").textContent.includes("/ 250"));
+  assert.match(await landing.locator("[data-part='message']").innerText(), /返航机场/);
+  assert.equal(await landing.locator("[data-part='vertical-dot']").isVisible(), false, "Far return must not show a glide reference even with manual elevation");
   await landing.getByRole("button", {name:"反向进近"}).click();
   await page.waitForFunction(() => document.querySelector("[data-part='elevation']").value === "");
   await landing.locator("summary").click();

@@ -36,11 +36,12 @@ it("acquires a sustained inbound runway, holds it through dropouts, and exits af
 });
 
 it("does not enter on departure, lateral flybys, hostile runways or intermittent observations", () => {
-  for(const mode of ["departing","flyby","hostile","gap"]) {
+  for(const mode of ["departing","near-departure","flyby","hostile","gap"]) {
     const assist=new LandingAssist();
     for(let at=1000;at<=8000;at+=500) {
       const input=inboundSample(at);
-      const next=mode==="departing"?{...input,verticalSpeedMps:5}
+      const next=mode==="departing"?{...input,verticalSpeedMps:5,track:{...input.track!,velocityZ:-100}}
+        :mode==="near-departure"?{...input,verticalSpeedMps:5,navigation:{...input.navigation!,player:{x:.5,y:.54}}}
         :mode==="flyby"?{...input,track:{...input.track!,velocityX:100,velocityZ:0}}
         :mode==="hostile"?{...input,navigation:{...input.navigation!,items:input.navigation!.items.map(r=>({...r,hostile:true}))}}
         :{...input,fresh:at%1500!==0};
@@ -55,6 +56,76 @@ it("enters while flying level toward the runway before reducing speed or extendi
     const snapshot = assist.update({...inboundSample(at),iasKmh:500,verticalSpeedMps:0,gearPercent:0});
     expect(snapshot.settings.enabled).toBe(at===4000);
   }
+});
+
+it.each([30,80])("activates and stays active while returning toward a friendly airport %d km away", distanceKm => {
+  const assist = new LandingAssist();
+  for (let at=1000;at<=15000;at+=500) {
+    const input = inboundSample(at);
+    const snapshot = assist.update({...input,iasKmh:500,verticalSpeedMps:0,
+      navigation:{...input.navigation!,player:{x:.5,y:.5+distanceKm/200-(at-1000)*.0000005},mapScaleM:[20_000,200_000],
+        items:input.navigation!.items.map(r=>({...r,distanceKm,runwayEnd:[.5,.49]}))}});
+    expect(snapshot.settings.enabled,`return acquisition at ${at}`).toBe(at>=4000);
+    if (at>=4000) expect(snapshot.geometry).toMatchObject({stage:"return",airportBearingDeg:0,airportTrackErrorDeg:0,glideDeviationM:null,referenceDescentMps:null});
+  }
+});
+
+it.each(["side-on", "fast", "climbing", "optional-fields-missing"])("activates on an airport-bound %s return before final approach", variant => {
+  const assist = new LandingAssist();
+  for (let at=1000;at<=15000;at+=500) {
+    const input = {...inboundSample(at),iasKmh:500,verticalSpeedMps:0};
+    const snapshot = assist.update(variant === "side-on" ? {...input,
+      navigation:{...input.navigation!,player:{x:.1,y:.475}},
+      track:{...input.track!,velocityX:100,velocityZ:0,headingDeg:90}}
+      : variant === "fast" ? {...input,iasKmh:1000} : variant === "climbing" ? {...input,verticalSpeedMps:5}
+        : {...input,iasKmh:null,verticalSpeedMps:null,gearPercent:null});
+    expect(snapshot.settings.enabled,`${variant} return at ${at}`).toBe(at>=4000);
+  }
+});
+
+it("acquires a side-on airport despite small nearest-end changes during the return", () => {
+  const assist = new LandingAssist();
+  for (let at=1000;at<=4000;at+=500) {
+    const input = inboundSample(at);
+    const result = assist.update({...input,verticalSpeedMps:0,
+      navigation:{...input.navigation!,player:{x:.1,y:.475+(at%1000===0?.00002:-.00002)}},
+      track:{...input.track!,velocityX:100,velocityZ:0}});
+    expect(result.settings.enabled).toBe(at===4000);
+  }
+});
+
+it("transitions from airport return to the locked runway's final guidance", () => {
+  const assist = new LandingAssist();
+  for(let at=1000;at<=4000;at+=500) {
+    const input=inboundSample(at);
+    assist.update({...input,navigation:{...input.navigation!,player:{x:.1,y:.475}},
+      track:{...input.track!,velocityX:100,velocityZ:0}});
+  }
+  const selected = assist.settings().runwayId;
+  const input=inboundSample(4500);
+  assist.configure({...assist.settings(),runwayElevationM:100},input.navigation);
+  const result=assist.update({...input,navigation:{...input.navigation!,player:{x:.5,y:.55}},altitudeM:220});
+  expect(result.settings.runwayId).toBe(selected);
+  expect(result.geometry?.stage).toBe("final");
+  expect(result.geometry?.thresholdDistanceM).toBeCloseTo(2000,7);
+  expect(result.geometry?.glideDeviationM).toBeCloseTo(.1844414339,7);
+});
+
+it("shows airport bearing and direct distance on the return tape from actual 8111 motion", async () => {
+  const runtime=new PublicRuntime({edition:editionPolicy("Standard")});
+  for(let at=1000;at<=6500;at+=100) {
+    const f=publicFlight(at);
+    await runtime.ingest({...f,state:{...f.state,"IAS, km/h":1000,"Vy, m/s":5},
+      mapInfo:{valid:true,map_min:[-50000,-50000],map_max:[50000,50000]},
+      mapObjects:[{type:"player",x:.2+at*.000002,y:.5,dx:1,dy:0},{type:"airfield",side:"friendly",sx:.5,sy:.51,ex:.5,ey:.49}]});
+  }
+  const snapshot=runtime.snapshot();
+  expect(snapshot.landing?.settings.enabled).toBe(true);
+  expect(snapshot.landing?.geometry).toMatchObject({stage:"return",airportBearingDeg:90,airportTrackErrorDeg:0,glideDeviationM:null});
+  expect(landingTapePresentation(snapshot)).toMatchObject({active:true,mode:"自动返航",course:"机场 090°",distance:"距机场 28.7km",glide:null,lateralText:"正飞向机场",glideText:"返航中",speedText:"1000"});
+  expect(landingTapePresentation(snapshot).lateral).toBeCloseTo(0,7);
+  expect(landingPresentation(snapshot.landing)).toMatchObject({stage:"返航机场",distance:"距机场 28.7 km",course:"机场方位 090°"});
+  expect(landingTapePresentation(snapshot).aria).toContain("燃油");
 });
 
 it("switches the shared runtime automatically from actual 8111 ground-track samples", async () => {
