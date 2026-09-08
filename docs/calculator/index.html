@@ -150,55 +150,52 @@
         <p class="hangar-aside">适用于 EC 任务参数；请勿套用为空战历史模式（Air RB）炸点表。所有伤害结果均假设全部命中。</p>
 
         <section class="tool-panel" id="usefulActions" aria-labelledby="rewards-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">USEFUL ACTIONS</p><h2 id="rewards-title">周期收益与得分</h2><p>官方已知周期：全真空战 15 分钟，直升机 PvE 10 分钟。载具基准来自客户端；得分到实际收益的服务器曲线尚未核实。</p></header>
-          <form id="rewardsForm">
-            <div class="tool-input-grid">
-              <label class="hangar-field"><span>模式</span><select id="rewardMode"><option value="air_sim">空战全真 EC · 15 分钟</option><option value="heli_pve">直升机 PvE · 10 分钟</option></select></label>
-              <label class="hangar-field"><span>搜索收益机型</span><input id="rewardSearch" type="search" autocomplete="off" placeholder="例如 F-15E、Ka-52"></label>
-              <label class="hangar-field"><span>载具</span><select id="rewardVehicle"><option value="">等待数据…</option></select></label>
-            </div>
-            <p class="tool-note" id="rewardSource" role="status">正在读取收益参数…</p>
-            <div class="tool-input-grid">
-              <label class="hangar-field"><span>本周期任务得分</span><input id="rewardScore" type="number" min="0" step="any" value="600" inputmode="decimal"><small>填写本周期新增分数，不是全场累计分数</small></label>
-              <label class="hangar-field"><span>本周期时长 · 分钟</span><input id="rewardMinutes" type="number" min="0.01" max="15" step="any" value="15" inputmode="decimal"><small>不足整周期的死亡、退场折算尚未核实</small></label>
-              <label class="hangar-field"><span>最大收益基准 · SL/min</span><input id="rewardSlRate" type="number" min="0.01" step="any" inputmode="decimal"><small>可改填游戏卡片数值；确认是否已含加成</small></label>
-              <label class="hangar-field"><span>换算依据</span><select id="rewardMethod"><option value="manual">自填有效收益比例</option><option value="observed">从本次即时 SL 反算</option><option value="reference">历史得分实测参考（非原生公式）</option></select></label>
-              <label class="hangar-field"><span>有效收益比例 · %</span><input id="rewardFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="未知时留空"><small>综合活动率及隐藏系数，不等于战后总活跃度</small></label>
-              <label class="hangar-field"><span>本周期实际即时奖励 · SL</span><input id="rewardObserved" type="number" min="0" step="any" inputmode="decimal" placeholder="结算记录中的有用行动 SL"><small>用于反算，不含着陆奖励、战后奖励与费用</small></label>
-            </div>
-            <details class="tool-details" id="rewardCardDetails"><summary>按高级账号与加成器计算卡片基准</summary><div class="conversion-fields"><label class="hangar-field"><span>账号状态</span><select id="rewardAccount"><option value="regular">普通账号</option><option value="premium">高级账号</option></select></label><label class="hangar-field"><span>游戏显示的 SL 加成器总效果 · %</span><input id="rewardBooster" type="number" min="0" step="any" inputmode="decimal" value="0"></label></div><p id="rewardCardPreview"></p><button type="button" class="conversion-use" id="rewardUseCard">填入上方 SL/min</button><p>这里复现同版本客户端的卡片显示公式。高级载具倍率已包含在原始基准中；账号和加成器作为加法项进入。多个加成器请填写游戏显示的合并效果。卡片数值不代表周期实际到账，租用载具及加成器跨时段结算请按游戏记录核对。</p></details>
-            <details class="tool-details"><summary>RP 参考参数（独立填写）</summary><div class="conversion-fields"><label class="hangar-field"><span>RP/min 基准</span><input id="rewardRpRate" type="number" min="0.01" step="any" inputmode="decimal" placeholder="只有经过核验的数值才填写"></label><label class="hangar-field"><span>RP 有效收益比例 · %</span><input id="rewardRpFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="不沿用 SL 比例"></label></div><p>客户端 expMul 是载具研发倍率，不是 RP/min。缺少服务器基础研发率时不自动生成 RP；研究等级惩罚、护符和加成的最终结算也不包含在内。</p></details>
-          </form>
-          <div class="reward-result" id="rewardResult" aria-live="polite"><p>收益目录加载后可查看载具基准。</p></div>
-          <details class="tool-details"><summary>得分参考曲线与证据</summary><p id="rewardReferenceNote"></p><div class="reward-chart" id="rewardChart" role="img"></div><div class="tool-table-scroll"><table class="tool-table"><thead><tr><th scope="col">周期得分</th><th scope="col">观测比例</th><th scope="col">相比上一档</th></tr></thead><tbody id="rewardReferenceRows"></tbody></table></div><p>仅在样本得分范围内对完整周期做线性插值，不外推低分、封顶或提前死亡。直升机样本仅适用于原文 Ka-52 情景，其比例已包含即时发放部分；不能再扣一次 20%。</p></details>
-          <details class="tool-details"><summary>公式、结算规则与如何核对</summary><p><code>参考奖励 = 每分钟基准 × 周期分钟数 × 有效收益比例</code>。分数并非固定兑换率；未知函数是 <code>比例 = f(本周期得分、时间、模式、服务器参数…)</code>。客户端的最大收益基准不能证明实际能拿满。</p><p>空战全真：<code>即时 = 参考奖励 × 80%</code>，<code>成功机场着陆后 = 参考奖励 × 20%</code>。该拆分适用于 SL 和 RP。直升机 PvE 没有已闭合的着陆拆分，页面只计算即时部分。<a href="https://warthunder.com/en/game/changelog/current/1441">官方空战全真结算说明</a> · <a href="https://warthunder.com/en/game/changelog/current/1362">官方直升机 10 分钟周期</a></p><p>用游戏“消息 → 战斗”的详细结果核对每一条“有用行动”：记录机型、该周期新增任务分、时长、即时 SL/RP 和之后的着陆奖励。反算式为 <code>有效比例 = 即时 SL ÷ (基准 SL/min × 分钟 × 即时份额)</code>，空战份额取 0.8，直升机以即时奖励为口径取 1。超过 100% 通常表示基准未含加成或奖励口径不同，页面会提示核对。</p><p>本页不读取账号或 8111 结算记录。社区样本不是当前服务器承诺；死亡、J-out、跨周期存款、加成跨时段、胜利奖励和净收益仍以游戏流水为准。</p></details>
+          <header class="tool-panel-head"><p class="hangar-kicker">USEFUL ACTIONS</p><h2 id="rewards-title">这一周期，能拿多少收益？</h2><p>选好飞机，拖动得分看变化。周期和机型基准会自动填好。</p></header>
+          <div class="reward-workspace">
+            <form id="rewardsForm" class="reward-controls">
+              <div class="conversion-fields">
+                <label class="hangar-field"><span>游戏模式</span><select id="rewardMode"><option value="air_sim">空战全真</option><option value="heli_pve">直升机 PvE</option></select></label>
+                <label class="hangar-field"><span>账号</span><select id="rewardAccount"><option value="regular">普通账号</option><option value="premium">高级账号</option></select></label>
+              </div>
+              <div class="simple-picker"><label class="hangar-field"><span>你驾驶的机型</span><input id="rewardSearch" type="search" autocomplete="off" placeholder="搜索名称，如 F-15E、Ka-52" aria-label="搜索收益机型"></label><select id="rewardVehicle" aria-label="选择收益机型"><option value="">正在加载机型…</option></select></div>
+              <div class="score-control"><label for="rewardScore">本周期新增得分 <small id="rewardPeriod">15 分钟内</small></label><div class="score-value"><input id="rewardScore" type="number" min="0" step="any" value="600" inputmode="decimal"><span>分</span></div><input id="rewardScoreSlider" type="range" min="0" max="1200" step="25" value="600" aria-label="调整本周期得分"><div class="score-presets"><button type="button" data-score="200">200</button><button type="button" data-score="400">400</button><button type="button" data-score="600">600</button><button type="button" data-score="800">800</button><button type="button" data-score="1000">1000</button></div><small>填写这一个周期获得的分数，不是全场累计分数。</small></div>
+              <details class="tool-details" id="rewardAdvanced"><summary>加成器、游戏卡片与实战核对</summary>
+                <label class="hangar-field"><span>SL 加成器总效果 · %</span><input id="rewardBooster" type="number" min="0" step="any" inputmode="decimal" value="0"><small>没有加成器就保持 0；多个加成器填游戏显示的合并效果。</small></label>
+                <label class="simple-check"><input id="rewardManualRate" type="checkbox">改用我在游戏里看到的 SL/min</label>
+                <label class="hangar-field"><span>游戏卡片的最大 SL/min</span><input id="rewardSlRate" type="number" min="0.01" step="any" inputmode="decimal" disabled><small>自动模式已计入上方账号与加成器；手填值直接使用。</small></label>
+                <label class="hangar-field"><span>计算方式</span><select id="rewardMethod"><option value="reference">按历史得分样本估算</option><option value="observed">核对我的实际到账</option><option value="manual">自定义换算比例</option></select></label>
+                <label class="hangar-field" id="rewardMinutesField" hidden><span>这次周期持续了几分钟</span><input id="rewardMinutes" type="number" min="0.01" max="15" step="any" value="15" inputmode="decimal"></label>
+                <label class="hangar-field" id="rewardFractionField" hidden><span>有效收益比例 · %</span><input id="rewardFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="仅在已有核验数据时填写"><small>这是合并系数，不等于战后总活跃度。</small></label>
+                <label class="hangar-field" id="rewardObservedField" hidden><span>这次“有用行动”即时到账 · SL</span><input id="rewardObserved" type="number" min="0" step="any" inputmode="decimal" placeholder="从战斗消息中的记录填写"></label>
+                <details id="rewardRpDetails"><summary>独立 RP 参数</summary><div class="conversion-fields"><label class="hangar-field"><span>RP/min 基准</span><input id="rewardRpRate" type="number" min="0.01" step="any" inputmode="decimal" placeholder="未知时留空"></label><label class="hangar-field"><span>RP 有效比例 · %</span><input id="rewardRpFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="不沿用 SL 比例"></label></div><p>客户端研发倍率不是 RP/min。没有经过核验的独立参数时，不估算 RP。</p></details>
+              </details>
+            </form>
+            <div class="reward-visuals"><p class="reference-pill">历史实测参考 · 实际到账以游戏为准</p><div class="reward-result" id="rewardResult" aria-live="polite"><p>正在载入收益目录…</p></div><div class="chart-heading"><h3>得分 → 收益参考</h3><span id="rewardChartPeriod">每 15 分钟</span></div><div class="reward-chart" id="rewardChart" role="img"></div><p id="rewardChartHint" class="tool-note">曲线仅连接已有样本，不推断低分或封顶。</p></div>
+          </div>
+          <details class="tool-details" id="rewardEvidence"><summary>查看公式、数据来源与适用范围</summary><p id="rewardSource"></p><p id="rewardCardPreview"></p><div id="rewardFormula" class="conversion-formulas"></div><p id="rewardReferenceNote"></p><div class="tool-table-scroll"><table class="tool-table"><thead><tr><th scope="col">周期得分</th><th scope="col">样本比例</th><th scope="col">相比上一档</th></tr></thead><tbody id="rewardReferenceRows"></tbody></table></div><p><code>参考收益 = 每分钟基准 × 周期分钟数 × 样本比例</code>。样本比例不是当前服务器活动率公式。空战全真即时发放 80%，另外 20% 在成功机场着陆后发放；直升机参考只计算即时部分，不再扣 20%。</p><p>得分参考来自 2024 年实测，仅在完整周期和已观测得分内插值：空战 200–1050 分，直升机仅 Ka-52 的 200–800 分。它们不是当前版本的游戏内公式。加成器助手只复现客户端卡片显示，高级载具不重复乘倍数。死亡、J-out、跨周期着陆奖励、维修和胜负结算不在本页估算范围。<a href="https://warthunder.com/en/game/changelog/current/1441">官方空战说明</a> · <a href="https://warthunder.com/en/game/changelog/current/1362">官方直升机周期</a></p></details>
         </section>
 
         <section class="tool-panel" id="explosiveConversion" aria-labelledby="conversion-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">WAR THUNDER · EXPLOSIVE EQUIVALENCE</p><h2 id="conversion-title">不同武器与装药换算</h2><p>先按实际装药质量和 TNT 系数换算，再看换成另一种武器需要多少枚。总弹重不参与当量计算。</p></header>
+          <header class="tool-panel-head"><p class="hangar-kicker">EXPLOSIVE EQUIVALENCE</p><h2 id="conversion-title">换一种武器，需要多少枚？</h2><p>选两种武器，再填已有数量。装药和 TNT 系数会从目录自动读取。</p></header>
           <form id="conversionForm">
             <div class="conversion-sides">
-              <fieldset class="conversion-side"><legend>A · 已有武器 / 装药</legend>
-                <label class="hangar-field"><span>用武器目录预填</span><select id="chargeWeaponA"><option value="">自定义参数</option></select></label>
-                <button class="conversion-use" id="chargeUseA" type="button">载入上方选中的武器</button>
-                <label class="hangar-field"><span>装药类型 / 系数预设</span><select id="chargeTypeA"><option value="">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label>
-                <div class="conversion-fields"><label class="hangar-field"><span>每枚实际装药 · kg</span><input id="chargeMassA" type="number" min="0" step="any" inputmode="decimal" value="100"></label><label class="hangar-field"><span>TNT 系数 r</span><input id="chargeFactorA" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div>
-                <p class="conversion-source" id="chargeSourceA">手动示例参数；可直接修改。</p>
+              <fieldset class="conversion-side"><legend>A · 已有的武器</legend>
+                <div class="simple-picker"><input id="chargeSearchA" type="search" autocomplete="off" placeholder="搜索武器，如 Mk 83" aria-label="搜索 A 武器"><select id="chargeWeaponA" aria-label="选择 A 武器"><option value="">自定义装药</option></select></div>
+                <p class="conversion-source" id="chargeSourceA">自定义示例 · 100 kg TNT / 枚</p>
+                <details id="chargeCustomA" class="charge-custom"><summary>修改装药 / 自定义参数</summary><button class="conversion-use" id="chargeUseA" type="button">使用上方计算器的武器</button><label class="hangar-field"><span>装药类型</span><select id="chargeTypeA"><option value="">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label><div class="conversion-fields"><label class="hangar-field"><span>每枚实际装药 · kg</span><input id="chargeMassA" type="number" min="0" step="any" inputmode="decimal" value="100"></label><label class="hangar-field"><span>TNT 系数</span><input id="chargeFactorA" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div><p>填弹内装药质量，不是整枚武器重量。</p></details>
               </fieldset>
-              <fieldset class="conversion-side"><legend>B · 要换成的武器 / 装药</legend>
-                <label class="hangar-field"><span>用武器目录预填</span><select id="chargeWeaponB"><option value="">自定义参数</option></select></label>
-                <button class="conversion-use" id="chargeUseB" type="button">载入上方选中的武器</button>
-                <label class="hangar-field"><span>装药类型 / 系数预设</span><select id="chargeTypeB"><option value="">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label>
-                <div class="conversion-fields"><label class="hangar-field"><span>每枚实际装药 · kg</span><input id="chargeMassB" type="number" min="0" step="any" inputmode="decimal" value="50"></label><label class="hangar-field"><span>TNT 系数 r</span><input id="chargeFactorB" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div>
-                <p class="conversion-source" id="chargeSourceB">手动示例参数；可直接修改。</p>
+              <fieldset class="conversion-side"><legend>B · 想换成的武器</legend>
+                <div class="simple-picker"><input id="chargeSearchB" type="search" autocomplete="off" placeholder="搜索武器，如 Mk 82" aria-label="搜索 B 武器"><select id="chargeWeaponB" aria-label="选择 B 武器"><option value="">自定义装药</option></select></div>
+                <p class="conversion-source" id="chargeSourceB">自定义示例 · 50 kg TNT / 枚</p>
+                <details id="chargeCustomB" class="charge-custom"><summary>修改装药 / 自定义参数</summary><button class="conversion-use" id="chargeUseB" type="button">使用上方计算器的武器</button><label class="hangar-field"><span>装药类型</span><select id="chargeTypeB"><option value="">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label><div class="conversion-fields"><label class="hangar-field"><span>每枚实际装药 · kg</span><input id="chargeMassB" type="number" min="0" step="any" inputmode="decimal" value="50"></label><label class="hangar-field"><span>TNT 系数</span><input id="chargeFactorB" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div><p>填弹内装药质量，不是整枚武器重量。</p></details>
               </fieldset>
             </div>
-            <div class="conversion-quantity"><label class="hangar-field"><span>A 的数量 · 枚</span><input id="chargeCount" type="number" min="0" step="1" inputmode="numeric" value="1"></label><button class="conversion-use" id="chargeSwap" type="button">交换 A / B 参数</button><p>可先用上方的武器搜索，再载入到任一侧。交换只调换参数，A 的数量保持不变。</p></div>
-            <details class="tool-details"><summary>任务伤害换算参数（可选，独立于 TNT 当量）</summary><div class="conversion-fields"><label class="hangar-field"><span>A 单枚任务伤害 · HP</span><input id="chargeDamageA" type="number" min="0" step="any" inputmode="decimal" placeholder="目录预填，也可自定义"></label><label class="hangar-field"><span>B 单枚任务伤害 · HP</span><input id="chargeDamageB" type="number" min="0" step="any" inputmode="decimal" placeholder="目录预填，也可自定义"></label></div><p>修改装药量或 TNT 系数会清除对应的目录伤害，避免沿用旧武器的结果。若手填 HP，结果仅按你的假设换算。</p></details>
+            <div class="conversion-quantity"><div class="hangar-field"><label for="chargeCount">已有 A 的数量</label><div class="quantity-stepper"><button id="chargeLess" type="button" aria-label="减少一枚 A">−</button><input id="chargeCount" type="number" min="0" step="1" inputmode="numeric" value="1"><button id="chargeMore" type="button" aria-label="增加一枚 A">+</button></div></div><button class="conversion-use" id="chargeSwap" type="button">交换两种武器 ⇄</button><span class="tool-note">交换后保持已有数量。</span></div>
           </form>
           <div id="chargeResult" class="conversion-result" aria-live="polite"></div>
-          <div id="chargeDamageResult" class="conversion-damage" aria-live="polite"></div>
-          <p class="tool-note">TNT 当量是装药量与系数的乘积，不是通用基地伤害。战雷的伤害曲线、穿透与燃烧等机制会让两种换算得到不同枚数；燃烧弹、核弹等特殊模型尤其不能互相套用。这里不会推断命中率、投放窗口或实际毁伤。</p>
+          <p class="tool-note">这里比较 TNT 当量；要算摧毁战区的枚数，请使用上方战区计算器。</p>
+          <details class="tool-details" id="chargeFormulaDetails"><summary>查看换算公式</summary><div id="chargeFormula" class="conversion-formulas"></div><p>整枚数量向上取整，图中斜纹是取整后多出的当量。显示值会缩写，计算使用完整精度。</p></details>
+          <details class="tool-details" id="chargeDamageDetails"><summary>另外比较任务伤害（HP）</summary><div class="conversion-fields"><label class="hangar-field"><span>A 单枚任务伤害 · HP</span><input id="chargeDamageA" type="number" min="0" step="any" inputmode="decimal" placeholder="目录读取或自填"></label><label class="hangar-field"><span>B 单枚任务伤害 · HP</span><input id="chargeDamageB" type="number" min="0" step="any" inputmode="decimal" placeholder="目录读取或自填"></label></div><div id="chargeDamageResult" class="conversion-damage" aria-live="polite"></div><p>装药修改后会清除原目录伤害。TNT 当量相等不代表任务伤害相等，燃烧弹等特殊武器尤其不能套用；手填 HP 只按所填假设比较。</p></details>
         </section>
 
         <section class="tool-panel" id="loadoutCompare" aria-labelledby="compare-title">

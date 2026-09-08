@@ -48,24 +48,91 @@
 .conversion-formulas { display: grid; gap: 9px; margin: 16px 0; }
 .conversion-formulas p { margin: 0; border-left: 3px solid #a3cadc; padding: 8px 12px; background: #ffffffb3; line-height: 1.8; overflow-wrap: anywhere; }
 .conversion-formulas code { font: 14px/1.8 Consolas, "Microsoft YaHei", monospace; white-space: normal; }
-.conversion-bar { margin: 12px 0; font-size: 12px; font-variant-numeric: tabular-nums; }
-.conversion-bar span { display: block; margin-bottom: 5px; }
-.conversion-bar div { height: 12px; border-radius: 6px; background: #d5e6f0; overflow: hidden; }
-.conversion-bar i { display: block; height: 100%; background: #448faf; transition: width .12s linear; }
-.conversion-bar[data-side=B] i { background: #b28a43; }
 .conversion-damage { padding-top: 16px; color: #49657a; font-size: 13px; line-height: 1.9; overflow-wrap: anywhere; }
 .reward-result { padding: 20px; border-radius: 14px; background: #edf5fb; color: #254962; line-height: 1.8; overflow-wrap: anywhere; }
 .reward-result h3 { margin: 0 0 16px; font-size: 19px; }
 .reward-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 18px; margin: 0; }
 .reward-stats dt { font-size: 12px; color: #537086; }
 .reward-stats dd { margin: 5px 0 0; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.reward-chart { max-width: 700px; margin: 16px auto; border-radius: 12px; background: #edf5fb; }
-.reward-chart svg { display: block; width: 100%; }
-.reward-chart polyline { fill: none; stroke: #448faf; stroke-width: 2; stroke-dasharray: 5 4; }
-.reward-chart circle { fill: #276c8c; }
-.reward-chart text { fill: #426176; font: 13px sans-serif; text-anchor: middle; }
+.tool-panel [hidden] { display: none !important; }
+.reward-workspace { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(0, 1.3fr); gap: clamp(24px, 4vw, 48px); margin-top: 26px; }
+.reward-controls, .reward-visuals { min-width: 0; }
+.reward-controls { padding: 20px; border-radius: 16px; background: #f5faff; border: 1px solid #dce8f0; align-self: start; }
+.reward-controls .conversion-fields { gap: 12px; }
+.simple-picker { margin: 20px 0 12px; min-width: 0; }
+.simple-picker input, .simple-picker select { display: block; width: 100%; min-width: 0; box-sizing: border-box; padding: 12px; border: 1px solid #b7cede; border-radius: 8px; color: #254962; background: #fff; font: inherit; font-size: 14px; }
+.simple-picker input { border-radius: 8px 8px 0 0; }
+.simple-picker > select { border-radius: 0 0 8px 8px; border-top: 0; }
+.simple-picker .hangar-field { gap: 8px; }
+.simple-picker :focus-visible, .score-control input:focus-visible, .quantity-stepper :focus-visible { outline: 2px solid #337da4; outline-offset: 2px; }
+.score-control { margin-top: 24px; color: #31556e; }
+.score-control > label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; font-size: 13px; font-weight: 650; }
+.score-control small { font-size: 12px; font-weight: 400; line-height: 1.8; color: #607c90; }
+.score-value { display: flex; gap: 8px; align-items: baseline; margin: 10px 0 2px; }
+.score-value input { width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: #195476; font-family: inherit; font-size: 40px; line-height: 1.4; font-weight: 700; font-variant-numeric: tabular-nums; }
+.score-value span { font-size: 13px; }
+#rewardScoreSlider { width: 100%; margin: 10px 0; height: 24px; accent-color: #337fa0; cursor: pointer; }
+.score-presets { display: flex; gap: 5px; margin-bottom: 10px; }
+.score-presets button { flex: 1; min-width: 0; min-height: 34px; padding: 5px 2px; border: 1px solid #cadce7; border-radius: 6px; color: #476d85; background: #fff; cursor: pointer; font: inherit; font-size: 12px; }
+.score-presets button[aria-pressed=true] { color: #fff; border-color: #337fa0; background: #337fa0; }
+.reward-controls .tool-details { font-size: 12px; padding-bottom: 0; }
+.reward-controls .tool-details > .hangar-field, .reward-controls details details { margin-top: 18px; }
+.simple-check { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; line-height: 1.6; }
+.simple-check input { width: 17px; height: 17px; accent-color: #337fa0; }
+.reference-pill { display: inline-block; margin: 0 0 12px; padding: 5px 10px; border-radius: 6px; color: #806234; background: #fbf1df; font-size: 12px; line-height: 1.6; }
+.reward-context { margin: 0 0 12px; font-size: 13px; color: #54748a; }
+.reward-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.reward-stats dd { color: #1d6a8c; font-size: clamp(22px, 3vw, 32px); line-height: 1.4; }
+.reward-stats > div:nth-child(2) dd { color: #967136; }
+.reward-total { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid #d3e3ed; font-size: 13px; }
+.reward-result > .tool-note { margin: 8px 0 0; font-size: 12px; line-height: 1.7; }
+.chart-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 5px; margin-top: 22px; }
+.chart-heading h3 { margin: 0; color: #31566e; font-size: 15px; }
+.chart-heading > span { color: #688294; font-size: 12px; }
+.reward-chart { width: 100%; min-width: 0; margin: 12px 0 0; border-radius: 12px; background: #f6f9fc; }
+.reward-chart svg, .conversion-chart svg { display: block; width: 100%; }
+.reward-chart text, .conversion-chart text { fill: #4d6b80; font: 12px sans-serif; font-variant-numeric: tabular-nums; }
+.chart-grid { stroke: #d5e2eb; stroke-width: 1; }
+.chart-unknown { fill: #e9eef3; }
+.chart-immediate-area { fill: #448faf; fill-opacity: .14; }
+.chart-landing-area { fill: #deb96f; fill-opacity: .38; }
+.chart-immediate-line { fill: none; stroke: #337f9f; stroke-width: 2.5; }
+.chart-landing-line { fill: none; stroke: #b28a43; stroke-width: 2; }
+.chart-sample { fill: #337f9f; }
+.chart-current-line { stroke: #5b788c; stroke-dasharray: 3 4; }
+.chart-current { fill: #226d90; stroke: white; stroke-width: 2.5; }
+.chart-current-landing { fill: #a17b35; stroke: white; stroke-width: 2; }
+.chart-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 14px; padding: 0 8px 12px; color: #5b7589; font-size: 11px; }
+.chart-legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; background: #448faf; }
+.chart-legend .legend-landing::before { background: #d4b16d; }
+.chart-legend .legend-unknown::before { background: #d6dfe8; }
+.chart-legend .legend-surplus::before { background: repeating-linear-gradient(45deg, #e8cfa1 0 2px, #997131 2px 3px); }
+.chart-empty { display: flex; align-items: center; justify-content: center; min-height: 180px; margin: 0; padding: 22px; color: #647d91; font-size: 13px; line-height: 1.8; text-align: center; }
+.conversion-side .simple-picker { margin-top: 4px; }
+.charge-custom { margin-top: 16px; padding-top: 12px; border-top: 1px solid #dce7ee; color: #53758b; font-size: 12px; line-height: 1.8; }
+.charge-custom summary { cursor: pointer; }
+.charge-custom > .hangar-field, .charge-custom > .conversion-fields, .charge-custom > button { margin-top: 14px; }
+.quantity-stepper { display: flex; border: 1px solid #b7cede; border-radius: 8px; overflow: hidden; }
+.quantity-stepper input { width: 80px; border: 0; border-radius: 0; text-align: center; appearance: textfield; }
+.quantity-stepper input::-webkit-inner-spin-button { appearance: none; }
+.quantity-stepper button { min-width: 44px; min-height: 44px; border: 0; color: #225776; background: #edf5fb; cursor: pointer; font: inherit; font-size: 20px; }
+.quantity-stepper button:disabled { opacity: .35; cursor: default; }
+.conversion-quantity .conversion-use { min-height: 44px; margin: 0; font-size: 13px; }
+.conversion-headline { margin: 0 0 8px; font-size: 17px; }
+.conversion-headline strong { display: inline-block; font-size: 30px; }
+.conversion-equation { margin: 0 0 14px; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.conversion-chart { max-width: 650px; margin: 10px auto 0; }
+.chart-bar-track { fill: #dce9f1; }
+.chart-bar-a { fill: #448faf; }
+.chart-bar-b { fill: #b28a43; }
+.conversion-surplus { margin: 0; color: #82652f; font-size: 13px; text-align: center; }
+.conversion-quick-formula { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid #d2e3ed; text-align: center; overflow-wrap: anywhere; }
+.conversion-quick-formula code { font: 13px/1.8 Consolas, "Microsoft YaHei", monospace; }
 #rewardsForm select { width: 100%; min-width: 0; }
 #rewardsForm input:disabled { opacity: .6; }
+@media (max-width: 900px) {
+  .reward-workspace { grid-template-columns: 1fr; gap: 22px; }
+}
 @media (max-width: 680px) {
   .tool-input-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .fuel-plan-result dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -76,5 +143,10 @@
   .conversion-result { padding: 15px; }
 }
 @media (max-width: 480px) {
-  #rewardsForm .hangar-field:has(select), #rewardsForm .hangar-field:has(#rewardSearch) { grid-column: 1 / -1; }
+  .reward-controls { padding: 14px; }
+  .reward-controls > .conversion-fields { grid-template-columns: 1fr; }
+  .reward-result { padding: 14px; }
+  .reward-stats { gap: 10px; }
+  .conversion-quantity { gap: 12px; }
+  .conversion-fields { gap: 10px; }
 }

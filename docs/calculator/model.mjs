@@ -228,3 +228,18 @@ export function usefulActionsObservedFraction({ slReceived, slRate, minutes, imm
   const value = slReceived / slRate / minutes / immediateShare;
   return Number.isFinite(value) ? value : null;
 }
+
+/** Plot the same bounded estimates as the result, with no invented endpoints. */
+export function usefulActionsCurve({ mode, vehicleId, minutes, periodMinutes, slRate, immediateShare, score }) {
+  const sample = usefulActionsReferences[mode];
+  if (!sample || minutes !== sample.minutes || (sample.vehicleId && sample.vehicleId !== vehicleId)) return null;
+  const point = value => {
+    const reference = usefulActionsReference({ mode, vehicleId, minutes, score: value });
+    if (!reference) return null;
+    const plan = usefulActionsPlan({ periodMinutes, minutes, score: value, slRate, immediateShare, ...reference });
+    return plan ? { score: value, immediate: plan.slImmediate, total: plan.slImmediate + (plan.slDeferred ?? 0) } : null;
+  };
+  const points = sample.points.map(([value]) => point(value));
+  if (points.some(value => !value)) return null;
+  return { points, current: point(score), hasLanding: sample.basis === "before_landing_split", minutes };
+}

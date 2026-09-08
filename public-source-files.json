@@ -48,6 +48,7 @@
     "docs/assets/shots/web-cockpit-desktop.png",
     "docs/assets/shots/web-cockpit.png",
     "docs/calculator/app.js",
+    "docs/calculator/charts.mjs",
     "docs/calculator/index.html",
     "docs/calculator/model.mjs",
     "docs/calculator/search.mjs",

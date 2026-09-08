@@ -1,5 +1,6 @@
-import { compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate } from "./model.mjs";
+import { compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
+import { renderRewardChart, renderConversionChart } from "./charts.mjs";
 
 const catalogUrl = "/api/v1/calculator/index.json";
 const weaponsUrl = "/api/v1/calculator/weapons.json";
@@ -40,6 +41,8 @@ const chargeDamageResult = document.querySelector("#chargeDamageResult");
 const chargeCount = document.querySelector("#chargeCount");
 const chargeSides = conversionForm ? ["A", "B"].map(side => ({
   weapon: document.querySelector(`#chargeWeapon${side}`),
+  search: document.querySelector(`#chargeSearch${side}`),
+  custom: document.querySelector(`#chargeCustom${side}`),
   type: document.querySelector(`#chargeType${side}`),
   mass: document.querySelector(`#chargeMass${side}`),
   factor: document.querySelector(`#chargeFactor${side}`),
@@ -63,7 +66,8 @@ let rewardSelectedVehicle = "f_15e";
 const rewardsForm = document.querySelector("#rewardsForm");
 const rewardFields = Object.fromEntries(["Mode", "Search", "Vehicle", "Score", "Minutes", "SlRate", "Method", "Fraction", "Observed", "RpRate", "RpFraction", "Account", "Booster"].map(key => [key, document.querySelector(`#reward${key}`)]));
 const rewardResult = document.querySelector("#rewardResult");
-const rewardUseCard = document.querySelector("#rewardUseCard");
+const rewardManualRate = document.querySelector("#rewardManualRate");
+const rewardSlider = document.querySelector("#rewardScoreSlider");
 
 function rewardVehicle() {
   return rewardsCatalog?.vehicles.find(row => row.id === rewardSelectedVehicle && row.mode === rewardFields.Mode.value);
@@ -77,12 +81,12 @@ function renderRewardVehicles() {
   let selected = rewardVehicle();
   if (!selected && rows.length) { selected = rows[0]; rewardSelectedVehicle = selected.id; }
   if (selected && !matches.some(row => row.id === selected.id)) matches.unshift(selected);
-  fillSelect(rewardFields.Vehicle, matches, row => row.id, row => `${row.name} · ${row.id}`, rewardSelectedVehicle);
+  fillSelect(rewardFields.Vehicle, matches, row => row.id, row => row.name, rewardSelectedVehicle);
 }
 
 function loadRewardVehicle() {
-  const row = rewardVehicle();
-  rewardFields.SlRate.value = row ? String(row.sl_per_min) : "";
+  rewardManualRate.checked = false;
+  rewardFields.Method.value = "reference";
   for (const key of ["Fraction", "Observed", "RpRate", "RpFraction"]) rewardFields[key].value = "";
   refreshReward();
 }
@@ -92,14 +96,6 @@ function rewardCardReference() {
   return usefulActionsCardRate({ rawRate: row?.sl_per_min, special: row?.special,
     premiumAccount: rewardFields.Account.value === "premium", boosterPercent: inputNumber(rewardFields.Booster),
     premiumMultiplier: params?.premium_account_multiplier, premiumVisualPart: params?.premium_visual_part });
-}
-
-function renderRewardCard() {
-  const card = rewardCardReference(), preview = document.querySelector("#rewardCardPreview");
-  rewardUseCard.disabled = !card;
-  preview.replaceChildren();
-  if (!card) { preview.textContent = "卡片基准参数缺失或输入无效，请核对加成器效果。"; return; }
-  preview.append(conversionText("code", `${formatQuantity(card.visualBase)} × ${formatQuantity(card.visualMultiplier)} × (1 + ${formatQuantity(card.accountBonus)} + ${formatQuantity(card.boosterBonus)}) = ${formatQuantity(card.rate)} SL/min`));
 }
 
 function renderRewardReference() {
@@ -113,101 +109,104 @@ function renderRewardReference() {
     for (const text of [String(score), `${(fraction * 100).toFixed(2)}%`, index ? `+${((fraction - sample.points[index - 1][1]) * 100).toFixed(2)} 个百分点` : "—"]) row.append(conversionText("td", text));
     rows.append(row);
   });
-  const chart = document.querySelector("#rewardChart"); chart.replaceChildren();
-  chart.setAttribute("aria-label", `${sample.label}，各得分档比例见下表；折线仅连接历史样本。`);
-  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 600 155"); svg.setAttribute("aria-hidden", "true");
-  const polyline = document.createElementNS(ns, "polyline");
-  const xy = ([score, fraction]) => [30 + score / sample.points.at(-1)[0] * 535, 135 - fraction * 115];
-  polyline.setAttribute("points", sample.points.map(p => xy(p).join(",")).join(" ")); svg.append(polyline);
-  for (const p of sample.points) {
-    const [x, y] = xy(p), circle = document.createElementNS(ns, "circle"), label = document.createElementNS(ns, "text");
-    circle.setAttribute("cx", String(x)); circle.setAttribute("cy", String(y)); circle.setAttribute("r", "4");
-    label.setAttribute("x", String(x)); label.setAttribute("y", String(y + 22)); label.textContent = `${p[0]}分`;
-    svg.append(circle, label);
-  }
-  chart.append(svg);
 }
 
 function refreshReward() {
   if (!rewardsForm || !rewardsCatalog) return;
-  renderRewardCard();
   const mode = rewardFields.Mode.value, rules = rewardsCatalog.mechanics[mode], row = rewardVehicle();
-  const method = rewardFields.Method.value, minutes = inputNumber(rewardFields.Minutes), score = inputNumber(rewardFields.Score), slRate = inputNumber(rewardFields.SlRate);
-  rewardFields.Fraction.disabled = method !== "manual";
-  rewardFields.Observed.disabled = method !== "observed";
+  const method = rewardFields.Method.value, card = rewardCardReference();
+  const manualRate = rewardManualRate.checked;
+  if (!manualRate) rewardFields.SlRate.value = card ? String(card.rate) : "";
+  rewardFields.SlRate.disabled = !manualRate;
+  rewardFields.Account.disabled = manualRate;
+  rewardFields.Booster.disabled = manualRate;
+  rewardFields.Account.title = manualRate ? "正在使用手填卡片值；账号加成已包含在该值中" : "";
+  if (method === "reference") rewardFields.Minutes.value = String(rules.period_minutes);
+  const minutes = inputNumber(rewardFields.Minutes), score = inputNumber(rewardFields.Score), slRate = inputNumber(rewardFields.SlRate);
+  for (const [field, visible] of [["Minutes", method !== "reference"], ["Fraction", method === "manual"], ["Observed", method === "observed"]]) {
+    document.querySelector(`#reward${field}Field`).hidden = !visible;
+    rewardFields[field].disabled = !visible;
+  }
+  rewardSlider.max = String(Number.isFinite(score) ? Math.max(1200, score) : 1200);
+  rewardSlider.value = String(Number.isFinite(score) ? Math.max(0, score) : 0);
+  for (const button of document.querySelectorAll(".score-presets button")) button.setAttribute("aria-pressed", String(Number(button.dataset.score) === score));
+  document.querySelector("#rewardPeriod").textContent = `${formatQuantity(minutes)} 分钟内`;
+  document.querySelector("#rewardChartPeriod").textContent = "横轴：本周期得分";
+  const quality = document.querySelector(".reference-pill");
+  quality.textContent = `${method === "reference" ? "2024 历史实测参考" : method === "observed" ? "你的实战记录" : "自定义比例参考"}${manualRate ? " · 手填卡片基准" : ""} · 实际到账以游戏为准`;
   const origin = document.querySelector("#rewardSource");
-  origin.textContent = row ? `${row.name} · 客户端 ${rewardsCatalog.source.version} 基准 ${formatQuantity(row.sl_per_min)} SL/min${row.special ? " · 高级载具" : ""} · 载具研发倍率 ×${row.rp_multiplier ?? "未知"}（不是 RP/min）${slRate !== row.sl_per_min ? " · 使用调整后的 SL/min" : ""}` : "未选择有效收益机型";
+  origin.textContent = row ? `${row.name} · 客户端 ${rewardsCatalog.source.version} 基准 ${formatQuantity(row.sl_per_min)} SL/min${row.special ? " · 高级载具" : ""} · 载具研发倍率 ×${row.rp_multiplier ?? "未知"}（不是 RP/min）${manualRate ? " · 使用手填卡片值" : ""}` : "未选择有效收益机型";
+  const preview = document.querySelector("#rewardCardPreview"); preview.replaceChildren();
+  if (card) preview.append(conversionText("code", `客户端卡片参考：${formatQuantity(card.visualBase)} × ${formatQuantity(card.visualMultiplier)} × (1 + ${formatQuantity(card.accountBonus)} + ${formatQuantity(card.boosterBonus)}) = ${formatQuantity(card.rate)} SL/min`));
+  else preview.textContent = "卡片基准参数缺失或输入无效，请核对加成器效果。";
   rewardResult.replaceChildren();
-  const title = method === "observed" ? "本次结算核对" : method === "reference" ? "历史样本参考 · 非原生公式" : "自定义比例参考";
-  rewardResult.append(conversionText("h3", title));
+  const formulas = document.querySelector("#rewardFormula"); formulas.replaceChildren();
   let basis = mode === "air_sim" ? "before_landing_split" : "immediate";
   let fraction = inputNumber(rewardFields.Fraction) / 100;
-  let unavailable = "填写有效收益比例后计算；目前无法从任务得分准确推导服务器活动率。也可选择实战反算或历史样本参考。";
+  let unavailable = "在展开区填写已核验的收益比例后计算。";
   if (method === "reference") {
     const ref = usefulActionsReference({ mode, score, minutes, vehicleId: rewardSelectedVehicle });
-    fraction = ref?.fraction ?? NaN;
-    basis = ref?.basis ?? basis;
-    unavailable = mode === "air_sim" ? "参考仅覆盖完整 15 分钟、200–1050 分；不外推低分、封顶和提前死亡。" : "参考仅覆盖 Ka-52 完整 10 分钟、200–800 分；其他机型和提前死亡不能套用。";
+    fraction = ref?.fraction ?? NaN; basis = ref?.basis ?? basis;
+    unavailable = mode === "air_sim" ? "当前得分超出 200–1050 分的历史样本范围，不外推收益。" : rewardSelectedVehicle !== "ka_52" ? "这台直升机还没有可用的得分实测曲线，不能套用 Ka-52 的结果。" : "当前得分超出 Ka-52 的 200–800 分样本范围，不外推收益。";
   } else if (method === "observed") {
     fraction = usefulActionsObservedFraction({ slReceived: inputNumber(rewardFields.Observed), slRate, minutes, immediateShare: mode === "air_sim" ? rules.immediate_share : 1 }) ?? NaN;
-    unavailable = fraction > 1 ? `反算比例为 ${formatQuantity(fraction * 100)}%，超过 100%；请核对卡片加成、周期时间和奖励口径，不把它当作游戏活动率。` : "填入该周期实际即时 SL、正确的基准和时长后反算。";
+    unavailable = fraction > 1 ? `反算比例为 ${formatQuantity(fraction * 100)}%，超过 100%；请核对卡片加成、周期时间和奖励口径。` : "填入这次有用行动实际即时到账的 SL，即可核对记录。";
   }
   const rpRate = rewardFields.RpRate.value.trim() ? inputNumber(rewardFields.RpRate) : null;
   const rpFraction = rewardFields.RpFraction.value.trim() ? inputNumber(rewardFields.RpFraction) / 100 : null;
   const plan = usefulActionsPlan({ periodMinutes: rules.period_minutes, minutes, score, slRate, rpRate, rpFraction, fraction, basis, immediateShare: rules.immediate_share });
+  const curve = method === "reference" ? usefulActionsCurve({ mode, vehicleId: rewardSelectedVehicle, minutes,
+    periodMinutes: rules.period_minutes, slRate, immediateShare: rules.immediate_share, score }) : null;
+  renderRewardChart(document.querySelector("#rewardChart"), curve,
+    method !== "reference" ? "实战核对与自定义比例只计算本条记录，不生成得分曲线。切回历史样本估算可查看曲线。" : !Number.isFinite(slRate) || slRate <= 0 ? "卡片基准无效，暂时无法绘制收益图。" : "这台机型暂无可用得分曲线，可展开高级选项核对实战记录。");
+  document.querySelector("#rewardChartHint").textContent = curve ? `${curve.hasLanding ? "蓝色为即时部分，金色为成功着陆后追加部分。" : "仅展示即时 SL，不套用空战的着陆分成。"}拖动得分可看变化；曲线仅覆盖已有样本，灰区没有估算。` : "样本和服务器公式缺失时保留未知，不以卡片最大值代替实际到账。";
   if (!plan) {
     if (!Number.isFinite(score) || score < 0) unavailable = "请填写本周期新增任务分数，不能使用负数。";
     else if (!Number.isFinite(minutes) || minutes <= 0 || minutes > rules.period_minutes) unavailable = `本周期时长须大于 0 且不超过 ${rules.period_minutes} 分钟。`;
-    else if (!Number.isFinite(slRate) || slRate <= 0) unavailable = "请填写大于 0 的 SL/min 基准。";
+    else if (!Number.isFinite(slRate) || slRate <= 0) unavailable = manualRate ? "请填写大于 0 的 SL/min 基准。" : "机型基准或加成器输入无效，请在高级选项中核对。";
     else if (rpRate !== null && (!Number.isFinite(rpRate) || rpRate <= 0)) unavailable = "RP/min 基准须大于 0；未知时请留空。";
     else if (rpFraction !== null && (!Number.isFinite(rpFraction) || rpFraction < 0 || rpFraction > 1)) unavailable = "RP 有效收益比例须在 0–100% 之间；未知时请留空。";
-    else if (method === "manual" && (fraction < 0 || fraction > 1)) unavailable = "有效收益比例须在 0–100% 之间；若含有额外加成，请先核对每分钟基准。";
-    rewardResult.append(conversionText("p", unavailable));
-    if (Number.isFinite(slRate * rules.period_minutes) && slRate > 0) rewardResult.append(conversionText("p", `卡片完整周期基准：${formatQuantity(slRate)} × ${rules.period_minutes} = ${formatQuantity(slRate * rules.period_minutes)} SL。这是 100% 基准，不是实际到账承诺。`, "tool-note"));
+    else if (method === "manual" && (fraction < 0 || fraction > 1)) unavailable = "有效收益比例须在 0–100% 之间；请先核对每分钟基准。";
+    rewardResult.append(conversionText("h3", "暂不能估算这次收益"), conversionText("p", unavailable));
+    if (Number.isFinite(slRate * rules.period_minutes) && slRate > 0) rewardResult.append(conversionText("p", `卡片整周期基准为 ${formatInt(slRate * rules.period_minutes)} SL，不是实际到账预测。`, "tool-note"));
     return;
   }
+  rewardResult.append(conversionText("p", `${formatQuantity(score)} 分 · ${formatQuantity(minutes)} 分钟${method === "observed" ? " · 本次记录" : " · 参考收益"}`, "reward-context"));
   const stats = document.createElement("dl"); stats.className = "reward-stats";
   const add = (label, value) => { const pair = document.createElement("div"); pair.append(conversionText("dt", label), conversionText("dd", value)); stats.append(pair); };
-  add("有效 SL 比例", `${(fraction * 100).toFixed(2)}%`);
-  add("即时 SL · 参考", `≈ ${formatInt(plan.slImmediate)}`);
-  if (plan.slDeferred !== null) add("成功着陆 SL · 条件份额", `≈ ${formatInt(plan.slDeferred)}`);
-  add("周期得分 / 分钟", formatQuantity(plan.scorePerMinute));
-  if (plan.rpImmediate !== null) add("即时 RP · 自填参考", `≈ ${formatInt(plan.rpImmediate)}`);
-  if (plan.rpDeferred !== null) add("成功着陆 RP · 条件份额", `≈ ${formatInt(plan.rpDeferred)}`);
+  add(method === "observed" ? "已即时到账 · SL" : "即时获得约 · SL", formatInt(plan.slImmediate));
+  if (plan.slDeferred !== null) add("成功着陆后追加约 · SL", `+ ${formatInt(plan.slDeferred)}`);
+  if (plan.rpImmediate !== null) add("即时 RP · 自填参考", formatInt(plan.rpImmediate));
+  if (plan.rpDeferred !== null) add("着陆 RP · 自填参考", `+ ${formatInt(plan.rpDeferred)}`);
   rewardResult.append(stats);
-  const formulas = document.createElement("div"); formulas.className = "conversion-formulas";
-  const text = `即时 SL ≈ ${formatQuantity(slRate)} SL/min × ${formatQuantity(minutes)} min × ${(fraction * 100).toFixed(2)}%${basis === "before_landing_split" ? " × 80%" : "（比例已含即时份额）"}`;
-  const formula = document.createElement("p"); formula.append(conversionText("code", text)); formulas.append(formula);
+  if (plan.slDeferred !== null) rewardResult.append(conversionText("p", `本周期含着陆份额合计约 ${formatInt(plan.slImmediate + plan.slDeferred)} SL`, "reward-total"));
+  const formula = document.createElement("p");
+  formula.append(conversionText("code", `即时 SL ≈ ${formatQuantity(slRate)} SL/min × ${formatQuantity(minutes)} min × ${(fraction * 100).toFixed(2)}%${basis === "before_landing_split" ? " × 80%" : "（比例已含即时份额）"}`)); formulas.append(formula);
   if (plan.rpImmediate !== null) {
     const rpFormula = document.createElement("p");
     rpFormula.append(conversionText("code", `即时 RP ≈ ${formatQuantity(rpRate)} RP/min × ${formatQuantity(minutes)} min × ${formatQuantity(rpFraction * 100)}%${basis === "before_landing_split" ? " × 80%" : "（RP 比例已含即时份额）"}`)); formulas.append(rpFormula);
   }
-  rewardResult.append(formulas);
-  if (method === "observed") rewardResult.append(conversionText("p", `本条记录为 ${formatQuantity(score)} 分 → ${formatQuantity(inputNumber(rewardFields.Observed))} 即时 SL；每分 ${score > 0 ? formatQuantity(inputNumber(rewardFields.Observed) / score) : "无法计算"} SL 只描述这条记录，不能线性外推。`));
-  rewardResult.append(conversionText("p", `${minutes < rules.period_minutes ? "不足整周期：仅按输入做算术核对，死亡与退场规则未验证。" : ""}${method === "reference" ? "历史数据插值未按当前服务器校准，不能证明分数封顶。" : "有效比例按你的输入或记录计算，未提取服务器活动率。"}${mode === "heli_pve" ? "直升机的战后奖励及分成未知，未套用空战 80/20。" : "20% 仅展示成功机场着陆条件下的份额，未计算多周期累积或死亡损失。"}RP 独立使用手填参数；结果不含出场费、维修、胜利奖励和其他后处理。`, "tool-note"));
+  if (method === "observed") formulas.append(conversionText("p", `本条记录为 ${formatQuantity(score)} 分 → ${formatQuantity(inputNumber(rewardFields.Observed))} 即时 SL；每分 ${score > 0 ? formatQuantity(inputNumber(rewardFields.Observed) / score) : "无法计算"} SL 只描述这条记录，不能线性外推。`));
+  rewardResult.append(conversionText("p", `${minutes < rules.period_minutes ? "不足整周期仅作算术核对，死亡与退场规则未验证。" : ""}不含维修、出场费与胜负结算。${mode === "heli_pve" ? "直升机战后奖励未知。" : "着陆份额需满足成功机场着陆条件。"}`, "tool-note"));
 }
 
 function bindRewards() {
   rewardsForm?.addEventListener("submit", event => event.preventDefault());
-  rewardFields.Account?.addEventListener("change", renderRewardCard);
-  rewardFields.Booster?.addEventListener("input", renderRewardCard);
-  rewardUseCard?.addEventListener("click", () => {
-    const card = rewardCardReference();
-    if (card) { rewardFields.SlRate.value = String(card.rate); refreshReward(); }
-  });
+  rewardFields.Account?.addEventListener("change", refreshReward);
+  rewardFields.Booster?.addEventListener("input", refreshReward);
+  rewardManualRate?.addEventListener("change", refreshReward);
+  rewardSlider?.addEventListener("input", () => { rewardFields.Score.value = rewardSlider.value; refreshReward(); });
+  for (const button of document.querySelectorAll(".score-presets button")) button.addEventListener("click", () => { rewardFields.Score.value = button.dataset.score; refreshReward(); });
   rewardFields.Search?.addEventListener("input", renderRewardVehicles);
   rewardFields.Vehicle?.addEventListener("change", () => { rewardSelectedVehicle = rewardFields.Vehicle.value; loadRewardVehicle(); });
   rewardFields.Mode?.addEventListener("change", () => {
     rewardSelectedVehicle = rewardFields.Mode.value === "air_sim" ? "f_15e" : "ka_52";
     rewardFields.Search.value = "";
     const period = rewardsCatalog?.mechanics[rewardFields.Mode.value]?.period_minutes;
-    if (period) { rewardFields.Minutes.value = String(period); rewardFields.Minutes.max = String(period); }
+    if (period) rewardFields.Minutes.max = String(period);
     renderRewardVehicles(); loadRewardVehicle(); renderRewardReference();
   });
-  for (const key of ["Score", "Minutes", "SlRate", "Method", "Fraction", "Observed", "RpRate", "RpFraction"]) {
-    rewardFields[key]?.addEventListener(key === "Method" ? "change" : "input", refreshReward);
-  }
+  for (const key of ["Score", "Minutes", "SlRate", "Method", "Fraction", "Observed", "RpRate", "RpFraction"]) rewardFields[key]?.addEventListener(key === "Method" ? "change" : "input", refreshReward);
 }
 
 function formatInt(value) {
@@ -217,6 +216,11 @@ function formatInt(value) {
 function formatQuantity(value) {
   if (value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 1e12)) return value.toExponential(5);
   return value.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
+}
+
+function formatApproximate(value) {
+  if (value !== 0 && Math.abs(value) < 0.01) return value.toExponential(2);
+  return value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 }
 
 function inputNumber(input) {
@@ -231,23 +235,37 @@ function conversionText(tag, text, className) {
 }
 
 function refreshChargeSource(side) {
-  const weapon = side.loadedWeapon;
-  const origin = weapon ? `${side.customCharge ? "修改自 " : ""}${weaponName(weapon)} · 原装药 ${weapon.charge?.type || "未提供"}` : "手动参数";
+  const weapon = side.loadedWeapon, mass = inputNumber(side.mass), factor = inputNumber(side.factor);
+  const equivalent = mass * factor;
+  const amount = mass > 0 && factor > 0 && Number.isFinite(equivalent)
+    ? `${formatQuantity(equivalent)} kg TNT / 枚` : "装药数据缺失，可展开自填";
   const special = weapon?.damage_model && weapon.damage_model !== "splash_tnte_curve"
-    ? "；特殊任务伤害模型，不能按 TNT 当量推算伤害" : "";
-  side.source.textContent = `${origin} · ${side.customCharge ? "自定义装药参数" : "目录原始装药参数"}${special}。`;
+    ? " · 特殊任务伤害模型，请勿按当量推算伤害" : "";
+  side.source.textContent = `${side.customCharge ? "自定义装药" : "目录自动读取"} · ${amount}${special}`;
+}
+
+function renderChargeWeapons(side) {
+  const weapons = catalog?.weapons ?? [], query = side.search.value.trim();
+  const matches = query ? rankFuzzyMatches(weapons, query, item => [item.id, item.name, item.name_en]).slice(0, 100) : [...weapons];
+  if (side.loadedWeapon && !matches.some(item => item.id === side.loadedWeapon.id)) matches.unshift(side.loadedWeapon);
+  fillSelect(side.weapon, [null, ...matches], item => item?.id || "", item =>
+    item ? `${weaponName(item)} · ${KIND_LABELS[item.kind] || item.kind}` : "自定义装药", side.customCharge ? "" : side.loadedWeapon?.id || "");
 }
 
 function loadChargeWeapon(side, weapon) {
   side.loadedWeapon = weapon;
   side.customCharge = !weapon;
-  side.weapon.value = weapon?.id || "";
-  const charge = weapon?.charge;
-  side.mass.value = charge?.mass_kg > 0 ? String(charge.mass_kg) : "";
-  side.factor.value = charge?.strength_equivalent > 0 ? String(charge.strength_equivalent) : "";
-  side.type.value = charge ? `${charge.type}:${charge.strength_equivalent}` : "";
+  if (weapon) {
+    const charge = weapon.charge;
+    side.mass.value = charge?.mass_kg > 0 ? String(charge.mass_kg) : "";
+    side.factor.value = charge?.strength_equivalent > 0 ? String(charge.strength_equivalent) : "";
+    side.type.value = charge ? `${charge.type}:${charge.strength_equivalent}` : "";
+  }
+  // Choosing custom keeps the shown filler as a starting point, but clears HP.
   side.damage.value = weapon?.dmg > 0 ? String(weapon.dmg) : "";
   side.autoDamage = Boolean(weapon?.dmg > 0);
+  if (!weapon || !side.mass.value || !side.factor.value) side.custom.open = true;
+  renderChargeWeapons(side);
   refreshChargeSource(side);
   refreshConversion();
 }
@@ -255,6 +273,7 @@ function loadChargeWeapon(side, weapon) {
 function editCharge(side) {
   side.customCharge = true;
   side.edited = true;
+  side.weapon.value = "";
   // A catalog HP value belongs to the original weapon, not an edited filler.
   if (side.autoDamage) side.damage.value = "";
   side.autoDamage = false;
@@ -275,8 +294,7 @@ function fillConversionCatalog() {
   }
   for (const [index, side] of chargeSides.entries()) {
     const previousType = side.type.value;
-    fillSelect(side.weapon, [null, ...weapons], item => item?.id || "", item =>
-      item ? `${weaponName(item)} · ${KIND_LABELS[item.kind] || item.kind}` : "自定义参数", "");
+    renderChargeWeapons(side);
     fillSelect(side.type, [null, ...presets.values()], item => item?.key || "", item =>
       item ? `${item.type} · ×${formatQuantity(item.factor)}` : "自定义系数", previousType);
     side.use.disabled = false;
@@ -287,54 +305,55 @@ function fillConversionCatalog() {
 
 function refreshConversion() {
   if (!conversionForm) return;
-  const [a, b] = chargeSides;
+  const [a, b] = chargeSides, q = formatQuantity;
   const sourceCount = inputNumber(chargeCount);
   const result = explosiveConversion({ sourceMassKg: inputNumber(a.mass), sourceFactor: inputNumber(a.factor),
     sourceCount, targetMassKg: inputNumber(b.mass), targetFactor: inputNumber(b.factor) });
-  chargeResult.replaceChildren(conversionText("h3", "按 TNT 当量换算"));
+  const formulas = document.querySelector("#chargeFormula"); formulas.replaceChildren();
+  chargeResult.replaceChildren();
   if (!result) {
-    chargeResult.append(conversionText("p", "请填写两侧大于 0 的装药质量和 TNT 系数；A 的数量需为非负整数。空白、无效或超出计算范围的数值不会用于换算。"));
+    chargeResult.append(conversionText("h3", "暂不能换算"), conversionText("p", "请选择两种有装药数据的武器，或展开自定义参数，填写大于 0 的装药质量和 TNT 系数；A 的数量需为非负整数。"));
   } else {
-    const q = formatQuantity;
-    const summary = conversionText("p", `${q(sourceCount)} 枚 A ≈ ${q(result.exactCount)} 枚 B（按当量折算）；整枚换装至少需要 `);
-    summary.append(conversionText("strong", `${q(result.wholeCount)} 枚 B`));
-    chargeResult.append(summary);
-    const formulas = document.createElement("div");
-    formulas.className = "conversion-formulas";
-    const lines = [
+    const name = (side, label) => side.customCharge ? `自定义装药 ${label}` : weaponName(side.loadedWeapon);
+    const headline = conversionText("p", "整枚换装需要 ", "conversion-headline");
+    headline.append(conversionText("strong", `${q(result.wholeCount)} 枚 B`));
+    chargeResult.append(headline,
+      conversionText("p", `${q(sourceCount)} 枚 ${name(a, "A")} ≈ ${formatApproximate(result.exactCount)} 枚 ${name(b, "B")}`, "conversion-equation"));
+    const chart = document.createElement("div"); chart.className = "conversion-chart"; chargeResult.append(chart);
+    renderConversionChart(chart, result, sourceCount);
+    chargeResult.append(conversionText("p", `整枚取整后多出 ${formatApproximate(result.surplus)} kg TNT`, "conversion-surplus"));
+    const quick = document.createElement("p"); quick.className = "conversion-quick-formula";
+    quick.append(conversionText("code", `${q(result.sourceTotal)} kg TNT ÷ ${q(result.targetTntKg)} kg TNT/枚 ≈ ${formatApproximate(result.exactCount)} 枚 B`)); chargeResult.append(quick);
+    for (const line of [
       `A 单枚当量 Eₐ = 装药质量 mₐ × TNT 系数 rₐ = ${q(inputNumber(a.mass))} kg × ${q(inputNumber(a.factor))} = ${q(result.sourceTntKg)} kg TNT`,
       `B 单枚当量 Eᵦ = mᵦ × rᵦ = ${q(inputNumber(b.mass))} kg × ${q(inputNumber(b.factor))} = ${q(result.targetTntKg)} kg TNT`,
       `A 总当量 = Nₐ × Eₐ = ${q(sourceCount)} × ${q(result.sourceTntKg)} = ${q(result.sourceTotal)} kg TNT`,
       `B 折算枚数 Nᵦ = Nₐ × Eₐ ÷ Eᵦ = ${q(result.sourceTotal)} ÷ ${q(result.targetTntKg)} ≈ ${q(result.exactCount)}；向上取整 ⌈Nᵦ⌉ = ${q(result.wholeCount)}`,
-    ];
-    for (const line of lines) {
+    ]) {
       const row = document.createElement("p"); row.append(conversionText("code", line)); formulas.append(row);
     }
-    chargeResult.append(formulas);
-    const scale = Math.max(result.sourceTotal, result.targetTotal);
-    for (const [side, label, value] of [["A", `A · ${q(sourceCount)} 枚`, result.sourceTotal], ["B", `B · ${q(result.wholeCount)} 枚（取整后）`, result.targetTotal]]) {
-      const bar = document.createElement("div"), track = document.createElement("div"), fill = document.createElement("i");
-      bar.className = "conversion-bar"; bar.dataset.side = side;
-      fill.style.width = `${scale > 0 ? value / scale * 100 : 0}%`;
-      track.setAttribute("aria-hidden", "true"); track.append(fill);
-      bar.append(conversionText("span", `${label}：${q(value)} kg TNT`), track); chargeResult.append(bar);
-    }
-    chargeResult.append(conversionText("p", `整枚取整后多出 ${q(result.surplus)} kg TNT。当量相等不代表任务伤害相等；公式显示值经过缩写，取整使用完整精度。`));
   }
+  document.querySelector("#chargeLess").disabled = !Number.isSafeInteger(sourceCount) || sourceCount <= 0;
+  document.querySelector("#chargeMore").disabled = !Number.isSafeInteger(sourceCount) || sourceCount < 0 || sourceCount === Number.MAX_SAFE_INTEGER;
   const damage = equivalentWeaponCount({ sourcePerItem: inputNumber(a.damage), targetPerItem: inputNumber(b.damage), sourceCount });
   chargeDamageResult.replaceChildren(conversionText("strong", "按任务伤害换算（独立计算）"));
   const note = damage
-    ? `Nᵦ = Nₐ × Dₐ ÷ Dᵦ = ${formatQuantity(sourceCount)} × ${formatQuantity(inputNumber(a.damage))} ÷ ${formatQuantity(inputNumber(b.damage))} ≈ ${formatQuantity(damage.exactCount)} 枚；向上取整为 ${formatQuantity(damage.wholeCount)} 枚 B。A 合计 ${formatQuantity(damage.sourceTotal)} HP，取整后 B 合计 ${formatQuantity(damage.targetTotal)} HP。${a.autoDamage && b.autoDamage ? "使用两种武器各自的目录任务伤害。" : "包含自定义 HP，仅按所填假设比较。"}`
-    : "展开任务伤害参数，补充两侧有效的单枚 HP 后可单独比较。不会从自定义 TNT 当量猜测任务伤害。";
+    ? `Nᵦ = Nₐ × Dₐ ÷ Dᵦ = ${q(sourceCount)} × ${q(inputNumber(a.damage))} ÷ ${q(inputNumber(b.damage))} ≈ ${q(damage.exactCount)} 枚；向上取整为 ${q(damage.wholeCount)} 枚 B。A 合计 ${q(damage.sourceTotal)} HP，取整后 B 合计 ${q(damage.targetTotal)} HP。${a.autoDamage && b.autoDamage ? "使用两种武器各自的目录任务伤害。" : "包含自定义 HP，仅按所填假设比较。"}`
+    : "补充两侧有效的单枚 HP 后可单独比较。不会从自定义 TNT 当量猜测任务伤害。";
   chargeDamageResult.append(conversionText("p", note));
 }
 
 function bindConversion() {
   if (!conversionForm) return;
   conversionForm.addEventListener("submit", event => event.preventDefault());
-  chargeCount.addEventListener("input", () => { chargeSides.forEach(side => { side.edited = true; }); refreshConversion(); });
+  chargeCount.addEventListener("input", refreshConversion);
+  for (const [id, delta] of [["chargeLess", -1], ["chargeMore", 1]]) document.querySelector(`#${id}`).addEventListener("click", () => {
+    const count = inputNumber(chargeCount);
+    if (Number.isSafeInteger(count) && count + delta >= 0 && Number.isSafeInteger(count + delta)) { chargeCount.value = String(count + delta); refreshConversion(); }
+  });
   for (const side of chargeSides) {
     side.use.disabled = true;
+    side.search.addEventListener("input", () => renderChargeWeapons(side));
     side.weapon.addEventListener("change", () => {
       side.edited = true;
       loadChargeWeapon(side, catalog?.weapons.find(item => item.id === side.weapon.value) || null);
@@ -350,11 +369,15 @@ function bindConversion() {
   }
   document.querySelector("#chargeSwap").addEventListener("click", () => {
     const [a, b] = chargeSides;
-    for (const key of ["weapon", "type", "mass", "factor", "damage"]) [a[key].value, b[key].value] = [b[key].value, a[key].value];
+    for (const key of ["type", "mass", "factor", "damage"]) [a[key].value, b[key].value] = [b[key].value, a[key].value];
     for (const key of ["loadedWeapon", "customCharge", "autoDamage"]) [a[key], b[key]] = [b[key], a[key]];
-    chargeSides.forEach(side => { side.edited = true; refreshChargeSource(side); });
+    chargeSides.forEach(side => {
+      side.edited = true; side.search.value = ""; renderChargeWeapons(side); refreshChargeSource(side);
+      if (side.customCharge) side.custom.open = true;
+    });
     refreshConversion();
   });
+  window.addEventListener("resize", () => { refreshReward(); refreshConversion(); });
   refreshConversion();
 }
 
@@ -827,6 +850,8 @@ async function boot() {
     catalog = null;
     rewardsCatalog = null;
     if (rewardResult) rewardResult.replaceChildren(conversionText("p", "收益数据加载失败或参数来源不一致，请刷新后重试。"));
+    renderRewardChart(document.querySelector("#rewardChart"), null, "收益目录未就绪，暂无曲线。");
+    document.querySelector("#rewardFormula").replaceChildren();
     if (sourceEl) sourceEl.textContent = "数据未就绪：目录加载失败或来源版本不一致，请刷新后重试。";
     setHudUnknown("目录加载失败", "未使用缺失或混合版本的数据，刷新页面后再试。");
   }

@@ -14,6 +14,7 @@ import {
   usefulActionsPlan,
   usefulActionsObservedFraction,
   usefulActionsCardRate,
+  usefulActionsCurve,
 } from "../../docs/calculator/model.mjs";
 
 test("client card restores the premium visual split and adds account/booster effects", () => {
@@ -51,6 +52,25 @@ test("Air SB splits supplied SL and independent RP fractions without inventing R
   assert.equal(usefulActionsPlan({ ...input, fraction: 0 }).slImmediate, 0);
   // An observed record does not create a constant exchange rate per point.
   assert.equal(usefulActionsPlan({ ...input, score: 1200 }).slImmediate, plan.slImmediate);
+});
+
+test("reward charts share payout arithmetic and leave unsupported scores or aircraft unknown", () => {
+  const input = { mode: "air_sim", vehicleId: "f_15e", periodMinutes: 15, minutes: 15, slRate: 1730, immediateShare: .8, score: 500 };
+  const curve = usefulActionsCurve(input);
+  assert.deepEqual(curve.points.map(point => point.score), [200, 400, 600, 800, 1050]);
+  assert.ok(Math.abs(curve.current.immediate - 1730 * 15 * .805 * .8) < 1e-9);
+  assert.ok(Math.abs(curve.current.total - 1730 * 15 * .805) < 1e-9);
+  assert.equal(curve.hasLanding, true);
+  assert.equal(usefulActionsCurve({ ...input, score: 1500 }).current, null);
+  assert.equal(usefulActionsCurve({ ...input, score: 0 }).current, null);
+  assert.equal(usefulActionsCurve({ ...input, minutes: 7.5 }), null);
+  assert.equal(usefulActionsCurve({ ...input, slRate: NaN }), null);
+  assert.equal(usefulActionsCurve({ ...input, slRate: 1e308 }), null);
+  const helicopter = { ...input, mode: "heli_pve", vehicleId: "ka_52", periodMinutes: 10, minutes: 10, slRate: 1660, score: 600 };
+  assert.equal(usefulActionsCurve(helicopter).hasLanding, false);
+  assert.equal(usefulActionsCurve(helicopter).current.total, usefulActionsCurve(helicopter).current.immediate);
+  assert.ok(Math.abs(usefulActionsCurve(helicopter).current.immediate - 11586) < 1e-9);
+  assert.equal(usefulActionsCurve({ ...helicopter, vehicleId: "ka_50" }), null);
 });
 
 test("Helicopter measurements already include the immediate share and never get Air SB's 20% deduction", () => {
