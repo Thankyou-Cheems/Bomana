@@ -43,7 +43,7 @@
           <p class="hangar-lede">出发前算清挂载，返航前留够燃油。</p>
           <p class="tool-source" id="calcSource" role="status">正在核对参数版本…</p>
           <nav class="tool-nav" aria-label="工具导航">
-            <a href="#calcForm">战区与机场计算器</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
+            <a href="#calcForm">战区与机场计算器</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
           </nav>
         </div>
 
@@ -148,6 +148,31 @@
           </ul>
         </details>
         <p class="hangar-aside">适用于 EC 任务参数；请勿套用为空战历史模式（Air RB）炸点表。所有伤害结果均假设全部命中。</p>
+
+        <section class="tool-panel" id="usefulActions" aria-labelledby="rewards-title">
+          <header class="tool-panel-head"><p class="hangar-kicker">USEFUL ACTIONS</p><h2 id="rewards-title">周期收益与得分</h2><p>官方已知周期：全真空战 15 分钟，直升机 PvE 10 分钟。载具基准来自客户端；得分到实际收益的服务器曲线尚未核实。</p></header>
+          <form id="rewardsForm">
+            <div class="tool-input-grid">
+              <label class="hangar-field"><span>模式</span><select id="rewardMode"><option value="air_sim">空战全真 EC · 15 分钟</option><option value="heli_pve">直升机 PvE · 10 分钟</option></select></label>
+              <label class="hangar-field"><span>搜索收益机型</span><input id="rewardSearch" type="search" autocomplete="off" placeholder="例如 F-15E、Ka-52"></label>
+              <label class="hangar-field"><span>载具</span><select id="rewardVehicle"><option value="">等待数据…</option></select></label>
+            </div>
+            <p class="tool-note" id="rewardSource" role="status">正在读取收益参数…</p>
+            <div class="tool-input-grid">
+              <label class="hangar-field"><span>本周期任务得分</span><input id="rewardScore" type="number" min="0" step="any" value="600" inputmode="decimal"><small>填写本周期新增分数，不是全场累计分数</small></label>
+              <label class="hangar-field"><span>本周期时长 · 分钟</span><input id="rewardMinutes" type="number" min="0.01" max="15" step="any" value="15" inputmode="decimal"><small>不足整周期的死亡、退场折算尚未核实</small></label>
+              <label class="hangar-field"><span>最大收益基准 · SL/min</span><input id="rewardSlRate" type="number" min="0.01" step="any" inputmode="decimal"><small>可改填游戏卡片数值；确认是否已含加成</small></label>
+              <label class="hangar-field"><span>换算依据</span><select id="rewardMethod"><option value="manual">自填有效收益比例</option><option value="observed">从本次即时 SL 反算</option><option value="reference">历史得分实测参考（非原生公式）</option></select></label>
+              <label class="hangar-field"><span>有效收益比例 · %</span><input id="rewardFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="未知时留空"><small>综合活动率及隐藏系数，不等于战后总活跃度</small></label>
+              <label class="hangar-field"><span>本周期实际即时奖励 · SL</span><input id="rewardObserved" type="number" min="0" step="any" inputmode="decimal" placeholder="结算记录中的有用行动 SL"><small>用于反算，不含着陆奖励、战后奖励与费用</small></label>
+            </div>
+            <details class="tool-details" id="rewardCardDetails"><summary>按高级账号与加成器计算卡片基准</summary><div class="conversion-fields"><label class="hangar-field"><span>账号状态</span><select id="rewardAccount"><option value="regular">普通账号</option><option value="premium">高级账号</option></select></label><label class="hangar-field"><span>游戏显示的 SL 加成器总效果 · %</span><input id="rewardBooster" type="number" min="0" step="any" inputmode="decimal" value="0"></label></div><p id="rewardCardPreview"></p><button type="button" class="conversion-use" id="rewardUseCard">填入上方 SL/min</button><p>这里复现同版本客户端的卡片显示公式。高级载具倍率已包含在原始基准中；账号和加成器作为加法项进入。多个加成器请填写游戏显示的合并效果。卡片数值不代表周期实际到账，租用载具及加成器跨时段结算请按游戏记录核对。</p></details>
+            <details class="tool-details"><summary>RP 参考参数（独立填写）</summary><div class="conversion-fields"><label class="hangar-field"><span>RP/min 基准</span><input id="rewardRpRate" type="number" min="0.01" step="any" inputmode="decimal" placeholder="只有经过核验的数值才填写"></label><label class="hangar-field"><span>RP 有效收益比例 · %</span><input id="rewardRpFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="不沿用 SL 比例"></label></div><p>客户端 expMul 是载具研发倍率，不是 RP/min。缺少服务器基础研发率时不自动生成 RP；研究等级惩罚、护符和加成的最终结算也不包含在内。</p></details>
+          </form>
+          <div class="reward-result" id="rewardResult" aria-live="polite"><p>收益目录加载后可查看载具基准。</p></div>
+          <details class="tool-details"><summary>得分参考曲线与证据</summary><p id="rewardReferenceNote"></p><div class="reward-chart" id="rewardChart" role="img"></div><div class="tool-table-scroll"><table class="tool-table"><thead><tr><th scope="col">周期得分</th><th scope="col">观测比例</th><th scope="col">相比上一档</th></tr></thead><tbody id="rewardReferenceRows"></tbody></table></div><p>仅在样本得分范围内对完整周期做线性插值，不外推低分、封顶或提前死亡。直升机样本仅适用于原文 Ka-52 情景，其比例已包含即时发放部分；不能再扣一次 20%。</p></details>
+          <details class="tool-details"><summary>公式、结算规则与如何核对</summary><p><code>参考奖励 = 每分钟基准 × 周期分钟数 × 有效收益比例</code>。分数并非固定兑换率；未知函数是 <code>比例 = f(本周期得分、时间、模式、服务器参数…)</code>。客户端的最大收益基准不能证明实际能拿满。</p><p>空战全真：<code>即时 = 参考奖励 × 80%</code>，<code>成功机场着陆后 = 参考奖励 × 20%</code>。该拆分适用于 SL 和 RP。直升机 PvE 没有已闭合的着陆拆分，页面只计算即时部分。<a href="https://warthunder.com/en/game/changelog/current/1441">官方空战全真结算说明</a> · <a href="https://warthunder.com/en/game/changelog/current/1362">官方直升机 10 分钟周期</a></p><p>用游戏“消息 → 战斗”的详细结果核对每一条“有用行动”：记录机型、该周期新增任务分、时长、即时 SL/RP 和之后的着陆奖励。反算式为 <code>有效比例 = 即时 SL ÷ (基准 SL/min × 分钟 × 即时份额)</code>，空战份额取 0.8，直升机以即时奖励为口径取 1。超过 100% 通常表示基准未含加成或奖励口径不同，页面会提示核对。</p><p>本页不读取账号或 8111 结算记录。社区样本不是当前服务器承诺；死亡、J-out、跨周期存款、加成跨时段、胜利奖励和净收益仍以游戏流水为准。</p></details>
+        </section>
 
         <section class="tool-panel" id="explosiveConversion" aria-labelledby="conversion-title">
           <header class="tool-panel-head"><p class="hangar-kicker">WAR THUNDER · EXPLOSIVE EQUIVALENCE</p><h2 id="conversion-title">不同武器与装药换算</h2><p>先按实际装药质量和 TNT 系数换算，再看换成另一种武器需要多少枚。总弹重不参与当量计算。</p></header>

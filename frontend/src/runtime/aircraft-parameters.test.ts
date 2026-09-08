@@ -39,6 +39,14 @@ describe("shared aircraft parameter lookup", () => {
     expect(() => AircraftParameters.parse({ ...data, flight_models: { ...data.flight_models,
       shared: { speed: { ias: [[0, 1000], [0, 2000]], mach: null }, fuel: null } } })).toThrow(/速度参数/);
   });
+  it("keeps arrestor hooks unit-specific when two variants share landing limits", () => {
+    const parameters = new AircraftParameters({...data,flight_models:{...data.flight_models,
+      shared:{...data.flight_models.shared!,landing:{gearIasKmh:482,gearControl:true}}},arrestor_hooks:{variant_a:true,variant_b:false}});
+    expect(parameters.landing("variant_a")).toEqual({gearIasKmh:482,gearControl:true,arrestorHook:true});
+    expect(parameters.landing("variant_b")?.arrestorHook).toBe(false);
+    expect(parameters.landing("shared")?.arrestorHook).toBeNull();
+    expect(parameters.landing("guessed_variant")).toBeNull();
+  });
   it("loads the shipped index and evaluates extracted F-14 sweep limits", async () => {
     const parameters = AircraftParameters.parse(JSON.parse(await readFile(new URL("../../../bomana/data/aircraft_parameters.json", import.meta.url), "utf8")));
     expect(parameters.speed("f_14a_early", .5)).toMatchObject({ ias: 1360, mach: 2, estimated: false });

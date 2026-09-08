@@ -39,6 +39,21 @@ try {
   await page.waitForFunction(() => document.querySelector("#timer").textContent !== "--:--");
   assert.equal(await page.locator("#navigation-select option").count(), 2, "Standard must not expose POI navigation");
   assert.equal(await page.locator("#ias-value").innerText(), "700");
+  const landing = page.getByRole("region", {name:"降落辅助"});
+  const priorNavigation = await page.locator("#navigation-target").innerText();
+  await landing.getByRole("button", {name:"开启",exact:true}).click();
+  await landing.locator("[data-part='active']").waitFor({state:"visible"});
+  assert.equal(await page.locator("#heading-tape").getAttribute("data-mode"),"landing");
+  assert.match(await page.locator("#heading-tape").getAttribute("aria-label"),/IAS 700 km\/h.*燃油/);
+  assert.equal(await page.locator("#navigation-target").innerText(), priorNavigation, "Landing does not change the strike/navigation target");
+  await landing.locator("summary").click();
+  await landing.locator("[data-part='ias']").fill("250");
+  await landing.locator("[data-part='elevation']").fill("100");
+  await landing.getByRole("button", {name:"应用参考参数"}).click();
+  await page.waitForFunction(() => document.querySelector("[data-part='message']").textContent.includes("手动高程 100"));
+  await landing.getByRole("button", {name:"反向进近"}).click();
+  await page.waitForFunction(() => document.querySelector("[data-part='elevation']").value === "");
+  await landing.locator("summary").click();
   const speedStrip = await page.locator("#speed-track").evaluate(track => ({
     markers: [...track.querySelectorAll("b")].map(marker => marker.style.left),
     transition: getComputedStyle(track.querySelector("i")).transition,

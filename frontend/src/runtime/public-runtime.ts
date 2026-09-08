@@ -4,6 +4,7 @@ import { normalizeOfficialMapInfo } from "./map-info";
 import { GroundTrackEstimator, type GroundTrackEstimate } from "./ground-track";
 import { FuelManager, fuelEngines, fuelNumber } from "./fuel-management";
 import type { AircraftParameters } from "./aircraft-parameters";
+import { LandingAssist } from "./landing-assist";
 import { RESET_UNDO_WINDOW_MS, sortieMapSignature, type SortieRecoveryStore, type SortieResetReason,
   type SortieResetUndoRecord, type SortieRestorePoint } from "./sortie-recovery";
 import type { RuntimePhase, NavigationSelectionMode, RuntimeSettings, RuntimeSettingsStore,
@@ -100,6 +101,8 @@ export class PublicRuntime {
   protected readonly _now: () => number;
   protected readonly _aircraftParameters: AircraftParameters | null;
   protected readonly _fuel: FuelManager;
+  protected readonly _landing = new LandingAssist();
+  protected _landingAircraft = "";
   protected _settings: RuntimeSettings;
   protected _phase: RuntimePhase = "idle";
   protected _candidateSinceMs: number | null = null;
@@ -244,6 +247,20 @@ export class PublicRuntime {
       navigation = this._buildContinuityNavigation(navigation);
     }
     const fuel = this._buildFuel(navigation, frame.sampledAtMs, fuelLive);
+    const stateNumber = (keys: readonly string[]) => optionalNumericField(frame.state ?? {}, keys);
+    if (frame.availability.indicators && !frame.holdover?.indicators && frame.indicators?.valid === true && telemetry.aircraft) this._landingAircraft = telemetry.aircraft;
+    const landing = this._edition.capabilities.airfieldNavigation ? this._landing.update({
+      sampledAtMs: frame.sampledAtMs,
+      context: `${this._currentMapSignature}|${this._landingAircraft}|${this._lifeIndex}|${this._phase === "hangar" || this._phase === "wait-next" ? this._phase : "sortie"}`,
+      fresh: sortieContinuity.state === "live" && !frameHeld && frame.availability.state
+        && frame.availability.indicators && frame.availability.mapObjects && frame.state?.valid !== false
+        && [frame.stateSampledAtMs, frame.indicatorsSampledAtMs, frame.mapObjectsSampledAtMs].every(at => at == null || frame.sampledAtMs - at <= 1500),
+      navigation, track: this._groundTrackEstimate,
+      aircraft: this._aircraftParameters?.landing(this._landingAircraft) ?? null,
+      altitudeM: stateNumber(["H, m", "H", "altitude"]), iasKmh: stateNumber(["IAS, km/h", "IAS", "ias"]),
+      verticalSpeedMps: stateNumber(["Vy, m/s", "Vy", "vy"]), gearPercent: stateNumber(["gear, %", "gear"]),
+      airbrakePercent: stateNumber(["airbrake, %", "airbrake"]), flapsPercent: stateNumber(["flaps, %", "flaps"]),
+    }, point => this._landingElevation(point)) : null;
     const extension = this._snapshotExtension(telemetry, navigation, headingDeg, sortieContinuity);
     this._revision += 1;
     const timer = this._buildTimer(frame.sampledAtMs);
@@ -262,7 +279,7 @@ export class PublicRuntime {
       if (sortieContinuity.state === "reset-undo") alerts.push("出击状态已重置，可在 30 秒内撤销");
       if (overspeed.level === "critical") alerts.push("空速危险");
       else if (overspeed.level === "warning") alerts.push("接近结构限速");
-      if (telemetry.gearPercent > 50 && telemetry.iasKmh > 80) alerts.push("起落架未收起");
+      if (!landing?.settings.enabled && telemetry.gearPercent > 50 && telemetry.iasKmh > 80) alerts.push("起落架未收起");
       alerts.push(...this._extensionAlerts(frame.sampledAtMs));
     }
     this._lastSnapshot = Object.freeze({
@@ -290,6 +307,7 @@ export class PublicRuntime {
       navigation,
       ...extension,
       fuel,
+      landing,
       checklist: this._edition.capabilities.checklist
         ? Object.freeze({
             items: this._settings.checklistItems,
@@ -305,6 +323,10 @@ export class PublicRuntime {
     const commandNowMs = this._now();
     this._expireResetUndo(commandNowMs);
     switch (command.type) {
+      case "landing.configure":
+        if (!this._edition.capabilities.airfieldNavigation) throw new Error("landing assistance is disabled in this edition");
+        this._landing.configure(command.landing, this._lastSnapshot.navigation);
+        break;
       case "timer.reset":
         this._lifeStartedAtMs = this._now();
         this._resetUndo = null;
@@ -762,6 +784,7 @@ export class PublicRuntime {
   protected _navigationTargetUpdated(_item: NavigationItem | null): void {}
   protected _parseMap(payload: Official8111Frame["mapObjects"]): ParsedMap { return parseBasicMap(payload); }
   protected _resetExtension(_reason: "map" | "hangar" | "life" | "loss"): void {}
+  protected _landingElevation(_point: readonly [number, number]): number | null { return null; }
   protected _observeExtension(_frame: Official8111Frame, _map: ParsedMap, _continuity: EditionSnapshot["sortieContinuity"]): void {}
   protected _snapshotExtension(_telemetry: ParsedTelemetry, _navigation: EditionSnapshot["navigation"], _heading: number,
     _continuity: EditionSnapshot["sortieContinuity"]): Pick<EditionSnapshot, "destroyedZones" | "mapGrid" | "markedZones" | "gameChat" | "strikeSelection" | "strike"> {

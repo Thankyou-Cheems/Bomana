@@ -9,6 +9,7 @@ import {
   type HeadingTapeTargetMarker,
 } from "./heading-tape";
 import { SampledAngleMotion, sampledAtPerformanceTime } from "./sampled-angle-motion";
+import { drawLandingTape, landingTapePresentation } from "./landing-tape";
 
 export interface PictureInPictureHeadingLayout {
   readonly visualScale: number;
@@ -63,7 +64,9 @@ export class PictureInPictureHeadingRenderer {
     this.#snapshot = snapshot;
     this.#extraTargets = extraTargets;
     const guidance = this.#guidance(snapshot);
-    this.#canvas.setAttribute("aria-label", `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
+    const landing = landingTapePresentation(snapshot);
+    this.#canvas.dataset.mode = landing.active ? "landing" : "navigation";
+    this.#canvas.setAttribute("aria-label", landing.active ? landing.aria : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
     if (guidance.target?.id !== this.#targetId || guidance.window) this.#displayGuidance = guidance.ratio;
     this.#targetId = guidance.target?.id ?? "";
     const observedAtMs = sampledAtPerformanceTime(
@@ -148,6 +151,10 @@ export class PictureInPictureHeadingRenderer {
     if (!context) return;
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.clearRect(0, 0, width, height);
+    if (snapshot.landing?.settings.enabled) {
+      drawLandingTape(context, snapshot, width, height, this.#displayHeading);
+      return;
+    }
     const layout = pictureInPictureHeadingLayout(width, height);
     const target = this.#guidance(snapshot).target;
     const pixelsPerDegree = 8 * layout.visualScale * headingTapeScale(target?.distanceKm ?? 20);

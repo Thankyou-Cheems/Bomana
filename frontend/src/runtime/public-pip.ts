@@ -1,4 +1,5 @@
 import type { EditionSnapshot } from "./runtime-types";
+import { landingPresentation } from "./landing-presentation";
 import { PictureInPictureHeadingRenderer } from "./pip-heading-renderer";
 import { PublicNavigationMap } from "./public-pip-mini-map";
 import { SpeedStripRenderer } from "./speed-strip-renderer";
@@ -58,10 +59,11 @@ export class PublicPictureInPicture {
     const flight = doc.createElement("small"), gear = doc.createElement("small");
     this.#badges = new FlightStatusBadgeRenderer({ flight, gear });
     const status = doc.createElement("span"); status.dataset.status = "true";
-    const cycle = doc.createElement("button"); cycle.textContent = "切换目标"; cycle.onclick = this.#cycle;
+    const cycle = doc.createElement("button"); cycle.className = "pip-cycle-target"; cycle.textContent = "切换目标"; cycle.onclick = this.#cycle;
     const toggle = doc.createElement("button"); toggle.id = "pip-map-toggle"; toggle.textContent = "小地图";
     toggle.onclick = () => this.setMapVisible(!this.#mapVisible);
     summary.append(brand, status, flight, gear, cycle, toggle);
+    const landing = doc.createElement("span"); landing.className = "public-landing-compact"; landing.dataset.landing = "true"; summary.append(landing);
     const strip = document.getElementById("speed-strip")!.cloneNode(true) as HTMLElement;
     const part = (id: string) => strip.querySelector<HTMLElement>(`#${id}`)!;
     this.#speed = new SpeedStripRenderer({ root: strip, state: part("overspeed"), value: part("speed-limit-value"), mach: part("speed-limit-mach"), track: part("speed-track"), fill: part("speed-fill"), markers: [part("speed-caution-mark"), part("speed-warning-mark"), part("speed-critical-mark")] });
@@ -79,6 +81,7 @@ export class PublicPictureInPicture {
   update(snapshot: EditionSnapshot): void {
     this.#snapshot = snapshot;
     if (!this.#view || this.#view.closed) return;
+    this.#view.document.querySelector(".pip-cockpit")?.classList.toggle("is-landing", snapshot.landing?.settings.enabled === true);
     this.#heading?.update(snapshot); if (this.#mapVisible) this.#map?.update(snapshot);
     this.#badges?.update(this.#flight.update(snapshot));
     const headingValue = this.#view.document.getElementById("pip-heading-value");
@@ -87,5 +90,7 @@ export class PublicPictureInPicture {
     const seconds = snapshot.timer.remainingSec === null ? null : Math.max(0, Math.ceil(snapshot.timer.remainingSec));
     if (status) status.textContent = seconds === null ? "--:--" : `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
     this.#speed?.update(snapshot);
+    const landing = this.#view.document.querySelector<HTMLElement>("[data-landing]");
+    if (landing) { landing.textContent = landingPresentation(snapshot.landing).compact; landing.title = landing.textContent; landing.hidden = !landing.textContent; }
   }
 }

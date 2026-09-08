@@ -1,4 +1,5 @@
 import type { EditionSnapshot } from "./runtime-types";
+import { landingPresentation } from "./landing-presentation";
 
 export interface HeadingGuidance {
   readonly target: NonNullable<EditionSnapshot["strikeSelection"]>["target"] | NonNullable<EditionSnapshot["navigation"]>["target"] | undefined;
@@ -13,6 +14,11 @@ export interface HeadingGuidance {
 }
 
 export function headingGuidance(snapshot: EditionSnapshot): HeadingGuidance {
+  if (snapshot.landing?.settings.enabled) {
+    const landing = landingPresentation(snapshot.landing);
+    return { target:null,window:null,relativeDeg:0,toleranceDeg:1,bandHalfRatio:0,color:"#8bdddc",ratio:0,
+      text:snapshot.landing.geometry ? `${landing.lateral} · ${landing.vertical}` : "降落引导等待数据" };
+  }
   const target = snapshot.navigation?.target;
   const relativeDeg = target?.relativeDeg ?? 0;
   const toleranceDeg = headingCdiTolerance(target?.distanceKm ?? 20);

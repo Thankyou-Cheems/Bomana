@@ -10,7 +10,75 @@ import {
   returnFuelPlan,
   sharedParameterSource,
   sortiePlan,
+  usefulActionsReference,
+  usefulActionsPlan,
+  usefulActionsObservedFraction,
+  usefulActionsCardRate,
 } from "../../docs/calculator/model.mjs";
+
+test("client card restores the premium visual split and adds account/booster effects", () => {
+  const inputs = { rawRate: 3260, special: true, premiumAccount: false, boosterPercent: 0,
+    premiumMultiplier: 1.5, premiumVisualPart: .5 };
+  assert.equal(usefulActionsCardRate(inputs).rate, 3260);
+  assert.equal(usefulActionsCardRate({ ...inputs, premiumAccount: true }).rate, 4890);
+  assert.equal(usefulActionsCardRate({ ...inputs, premiumAccount: true, boosterPercent: 100 }).rate, 8150);
+  assert.equal(usefulActionsCardRate({ ...inputs, special: false, rawRate: 1730, premiumAccount: true }).rate, 2595);
+  for (const field of ["rawRate", "boosterPercent", "premiumMultiplier", "premiumVisualPart"]) {
+    for (const value of [null, NaN, Infinity, -1, true]) assert.equal(usefulActionsCardRate({ ...inputs, [field]: value }), null);
+  }
+  assert.equal(usefulActionsCardRate({ ...inputs, premiumVisualPart: 1 }), null);
+  assert.equal(usefulActionsCardRate({ ...inputs, rawRate: 1e308, boosterPercent: 1e308 }), null);
+});
+
+test("Useful Actions keeps historical score observations within their actual scope", () => {
+  assert.deepEqual(usefulActionsReference({ mode: "air_sim", score: 600, minutes: 15 }), { fraction: .86, basis: "before_landing_split" });
+  assert.ok(Math.abs(usefulActionsReference({ mode: "air_sim", score: 500, minutes: 15 }).fraction - .805) < 1e-12);
+  for (const score of [0, 199, 1051, Infinity, NaN, null]) assert.equal(usefulActionsReference({ mode: "air_sim", score, minutes: 15 }), null);
+  assert.equal(usefulActionsReference({ mode: "air_sim", score: 600, minutes: 7.5 }), null);
+  assert.equal(usefulActionsReference({ mode: "heli_pve", score: 600, minutes: 10, vehicleId: "ka_50" }), null);
+  assert.equal(usefulActionsReference({ mode: "heli_pve", score: 600, minutes: 15, vehicleId: "ka_52" }), null);
+});
+
+test("Air SB splits supplied SL and independent RP fractions without inventing RP/min", () => {
+  const input = { periodMinutes: 15, minutes: 15, score: 600, slRate: 1730, fraction: .86, basis: "before_landing_split", immediateShare: .8 };
+  const plan = usefulActionsPlan(input);
+  assert.ok(Math.abs(plan.slImmediate - 17853.6) < 1e-9);
+  assert.ok(Math.abs(plan.slDeferred - 4463.4) < 1e-9);
+  assert.equal(plan.scorePerMinute, 40);
+  assert.equal(plan.rpImmediate, null);
+  assert.equal(usefulActionsPlan({ ...input, rpRate: 100 }).rpImmediate, null);
+  assert.equal(usefulActionsPlan({ ...input, rpRate: 100, rpFraction: .5 }).rpImmediate, 600);
+  assert.equal(usefulActionsPlan({ ...input, fraction: 0 }).slImmediate, 0);
+  // An observed record does not create a constant exchange rate per point.
+  assert.equal(usefulActionsPlan({ ...input, score: 1200 }).slImmediate, plan.slImmediate);
+});
+
+test("Helicopter measurements already include the immediate share and never get Air SB's 20% deduction", () => {
+  const reference = usefulActionsReference({ mode: "heli_pve", score: 600, minutes: 10, vehicleId: "ka_52" });
+  const plan = usefulActionsPlan({ periodMinutes: 10, minutes: 10, score: 600, slRate: 1660, ...reference, immediateShare: null });
+  assert.ok(Math.abs(plan.slImmediate - 11586) < 1e-9);
+  assert.equal(plan.slDeferred, null);
+  assert.equal(plan.rpImmediate, null);
+});
+
+test("Useful Actions missing or invalid inputs do not become a payable reward", () => {
+  const input = { periodMinutes: 15, minutes: 15, score: 600, slRate: 1000, fraction: .8, basis: "before_landing_split", immediateShare: .8 };
+  for (const field of ["periodMinutes", "minutes", "score", "slRate", "fraction", "immediateShare"]) {
+    for (const value of [null, NaN, Infinity, -1, true]) assert.equal(usefulActionsPlan({ ...input, [field]: value }), null, `${field}=${value}`);
+  }
+  assert.equal(usefulActionsPlan({ ...input, minutes: 16 }), null);
+  assert.equal(usefulActionsPlan({ ...input, fraction: 1.01 }), null);
+  assert.equal(usefulActionsPlan({ ...input, slRate: 1e308 }), null);
+  assert.equal(usefulActionsPlan({ ...input, rpRate: NaN }), null);
+});
+
+test("observed SL inverts the selected payment basis but does not clamp contradictory records", () => {
+  assert.ok(Math.abs(usefulActionsObservedFraction({ slReceived: 9600, slRate: 1000, minutes: 15, immediateShare: .8 }) - .8) < 1e-12);
+  assert.equal(usefulActionsObservedFraction({ slReceived: 7000, slRate: 1000, minutes: 10, immediateShare: 1 }), .7);
+  assert.ok(usefulActionsObservedFraction({ slReceived: 20000, slRate: 1000, minutes: 15, immediateShare: .8 }) > 1);
+  assert.equal(usefulActionsObservedFraction({ slReceived: 0, slRate: 1000, minutes: 15, immediateShare: .8 }), 0);
+  assert.equal(usefulActionsObservedFraction({ slReceived: null, slRate: 1000, minutes: 15, immediateShare: .8 }), null);
+});
 
 test("converts actual filler and TNT strength without confusing weapon mass or mission damage", () => {
   const inputs = { sourceMassKg: 100, sourceFactor: 1.5, sourceCount: 2, targetMassKg: 50, targetFactor: 1 };

@@ -1,9 +1,10 @@
-import { compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan } from "./model.mjs";
+import { compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate } from "./model.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
 
 const catalogUrl = "/api/v1/calculator/index.json";
 const weaponsUrl = "/api/v1/calculator/weapons.json";
 const aircraftUrl = "/api/v1/calculator/aircraft.json";
+const rewardsUrl = "/api/v1/calculator/rewards.json";
 const defaultWeaponId = "us_1000lb_mk_83_ldgp";
 const defaultBr = "14.7";
 
@@ -57,6 +58,157 @@ let visibleWeapons = [];
 let visibleBrBuckets = [];
 let selectedWeaponId = defaultWeaponId;
 let selectedAircraftId = "";
+let rewardsCatalog = null;
+let rewardSelectedVehicle = "f_15e";
+const rewardsForm = document.querySelector("#rewardsForm");
+const rewardFields = Object.fromEntries(["Mode", "Search", "Vehicle", "Score", "Minutes", "SlRate", "Method", "Fraction", "Observed", "RpRate", "RpFraction", "Account", "Booster"].map(key => [key, document.querySelector(`#reward${key}`)]));
+const rewardResult = document.querySelector("#rewardResult");
+const rewardUseCard = document.querySelector("#rewardUseCard");
+
+function rewardVehicle() {
+  return rewardsCatalog?.vehicles.find(row => row.id === rewardSelectedVehicle && row.mode === rewardFields.Mode.value);
+}
+
+function renderRewardVehicles() {
+  if (!rewardsCatalog) return;
+  const rows = rewardsCatalog.vehicles.filter(row => row.mode === rewardFields.Mode.value);
+  const query = rewardFields.Search.value.trim();
+  const matches = query ? rankFuzzyMatches(rows, query, row => [row.id, row.name, row.name_en]).slice(0, 100) : rows.slice(0, 100);
+  let selected = rewardVehicle();
+  if (!selected && rows.length) { selected = rows[0]; rewardSelectedVehicle = selected.id; }
+  if (selected && !matches.some(row => row.id === selected.id)) matches.unshift(selected);
+  fillSelect(rewardFields.Vehicle, matches, row => row.id, row => `${row.name} · ${row.id}`, rewardSelectedVehicle);
+}
+
+function loadRewardVehicle() {
+  const row = rewardVehicle();
+  rewardFields.SlRate.value = row ? String(row.sl_per_min) : "";
+  for (const key of ["Fraction", "Observed", "RpRate", "RpFraction"]) rewardFields[key].value = "";
+  refreshReward();
+}
+
+function rewardCardReference() {
+  const row = rewardVehicle(), params = rewardsCatalog?.card_parameters;
+  return usefulActionsCardRate({ rawRate: row?.sl_per_min, special: row?.special,
+    premiumAccount: rewardFields.Account.value === "premium", boosterPercent: inputNumber(rewardFields.Booster),
+    premiumMultiplier: params?.premium_account_multiplier, premiumVisualPart: params?.premium_visual_part });
+}
+
+function renderRewardCard() {
+  const card = rewardCardReference(), preview = document.querySelector("#rewardCardPreview");
+  rewardUseCard.disabled = !card;
+  preview.replaceChildren();
+  if (!card) { preview.textContent = "卡片基准参数缺失或输入无效，请核对加成器效果。"; return; }
+  preview.append(conversionText("code", `${formatQuantity(card.visualBase)} × ${formatQuantity(card.visualMultiplier)} × (1 + ${formatQuantity(card.accountBonus)} + ${formatQuantity(card.boosterBonus)}) = ${formatQuantity(card.rate)} SL/min`));
+}
+
+function renderRewardReference() {
+  const sample = usefulActionsReferences[rewardFields.Mode.value];
+  const note = document.querySelector("#rewardReferenceNote");
+  note.replaceChildren(conversionText("span", `${sample.label}。${sample.basis === "immediate" ? "比例为即时 SL / 卡片整周期基准，未代表活动率。" : "比例为着陆拆分前的 SL / 卡片整周期基准。"} `));
+  const link = conversionText("a", "查看原始实测"); link.href = sample.url; note.append(link);
+  const rows = document.querySelector("#rewardReferenceRows"); rows.replaceChildren();
+  sample.points.forEach(([score, fraction], index) => {
+    const row = document.createElement("tr");
+    for (const text of [String(score), `${(fraction * 100).toFixed(2)}%`, index ? `+${((fraction - sample.points[index - 1][1]) * 100).toFixed(2)} 个百分点` : "—"]) row.append(conversionText("td", text));
+    rows.append(row);
+  });
+  const chart = document.querySelector("#rewardChart"); chart.replaceChildren();
+  chart.setAttribute("aria-label", `${sample.label}，各得分档比例见下表；折线仅连接历史样本。`);
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 600 155"); svg.setAttribute("aria-hidden", "true");
+  const polyline = document.createElementNS(ns, "polyline");
+  const xy = ([score, fraction]) => [30 + score / sample.points.at(-1)[0] * 535, 135 - fraction * 115];
+  polyline.setAttribute("points", sample.points.map(p => xy(p).join(",")).join(" ")); svg.append(polyline);
+  for (const p of sample.points) {
+    const [x, y] = xy(p), circle = document.createElementNS(ns, "circle"), label = document.createElementNS(ns, "text");
+    circle.setAttribute("cx", String(x)); circle.setAttribute("cy", String(y)); circle.setAttribute("r", "4");
+    label.setAttribute("x", String(x)); label.setAttribute("y", String(y + 22)); label.textContent = `${p[0]}分`;
+    svg.append(circle, label);
+  }
+  chart.append(svg);
+}
+
+function refreshReward() {
+  if (!rewardsForm || !rewardsCatalog) return;
+  renderRewardCard();
+  const mode = rewardFields.Mode.value, rules = rewardsCatalog.mechanics[mode], row = rewardVehicle();
+  const method = rewardFields.Method.value, minutes = inputNumber(rewardFields.Minutes), score = inputNumber(rewardFields.Score), slRate = inputNumber(rewardFields.SlRate);
+  rewardFields.Fraction.disabled = method !== "manual";
+  rewardFields.Observed.disabled = method !== "observed";
+  const origin = document.querySelector("#rewardSource");
+  origin.textContent = row ? `${row.name} · 客户端 ${rewardsCatalog.source.version} 基准 ${formatQuantity(row.sl_per_min)} SL/min${row.special ? " · 高级载具" : ""} · 载具研发倍率 ×${row.rp_multiplier ?? "未知"}（不是 RP/min）${slRate !== row.sl_per_min ? " · 使用调整后的 SL/min" : ""}` : "未选择有效收益机型";
+  rewardResult.replaceChildren();
+  const title = method === "observed" ? "本次结算核对" : method === "reference" ? "历史样本参考 · 非原生公式" : "自定义比例参考";
+  rewardResult.append(conversionText("h3", title));
+  let basis = mode === "air_sim" ? "before_landing_split" : "immediate";
+  let fraction = inputNumber(rewardFields.Fraction) / 100;
+  let unavailable = "填写有效收益比例后计算；目前无法从任务得分准确推导服务器活动率。也可选择实战反算或历史样本参考。";
+  if (method === "reference") {
+    const ref = usefulActionsReference({ mode, score, minutes, vehicleId: rewardSelectedVehicle });
+    fraction = ref?.fraction ?? NaN;
+    basis = ref?.basis ?? basis;
+    unavailable = mode === "air_sim" ? "参考仅覆盖完整 15 分钟、200–1050 分；不外推低分、封顶和提前死亡。" : "参考仅覆盖 Ka-52 完整 10 分钟、200–800 分；其他机型和提前死亡不能套用。";
+  } else if (method === "observed") {
+    fraction = usefulActionsObservedFraction({ slReceived: inputNumber(rewardFields.Observed), slRate, minutes, immediateShare: mode === "air_sim" ? rules.immediate_share : 1 }) ?? NaN;
+    unavailable = fraction > 1 ? `反算比例为 ${formatQuantity(fraction * 100)}%，超过 100%；请核对卡片加成、周期时间和奖励口径，不把它当作游戏活动率。` : "填入该周期实际即时 SL、正确的基准和时长后反算。";
+  }
+  const rpRate = rewardFields.RpRate.value.trim() ? inputNumber(rewardFields.RpRate) : null;
+  const rpFraction = rewardFields.RpFraction.value.trim() ? inputNumber(rewardFields.RpFraction) / 100 : null;
+  const plan = usefulActionsPlan({ periodMinutes: rules.period_minutes, minutes, score, slRate, rpRate, rpFraction, fraction, basis, immediateShare: rules.immediate_share });
+  if (!plan) {
+    if (!Number.isFinite(score) || score < 0) unavailable = "请填写本周期新增任务分数，不能使用负数。";
+    else if (!Number.isFinite(minutes) || minutes <= 0 || minutes > rules.period_minutes) unavailable = `本周期时长须大于 0 且不超过 ${rules.period_minutes} 分钟。`;
+    else if (!Number.isFinite(slRate) || slRate <= 0) unavailable = "请填写大于 0 的 SL/min 基准。";
+    else if (rpRate !== null && (!Number.isFinite(rpRate) || rpRate <= 0)) unavailable = "RP/min 基准须大于 0；未知时请留空。";
+    else if (rpFraction !== null && (!Number.isFinite(rpFraction) || rpFraction < 0 || rpFraction > 1)) unavailable = "RP 有效收益比例须在 0–100% 之间；未知时请留空。";
+    else if (method === "manual" && (fraction < 0 || fraction > 1)) unavailable = "有效收益比例须在 0–100% 之间；若含有额外加成，请先核对每分钟基准。";
+    rewardResult.append(conversionText("p", unavailable));
+    if (Number.isFinite(slRate * rules.period_minutes) && slRate > 0) rewardResult.append(conversionText("p", `卡片完整周期基准：${formatQuantity(slRate)} × ${rules.period_minutes} = ${formatQuantity(slRate * rules.period_minutes)} SL。这是 100% 基准，不是实际到账承诺。`, "tool-note"));
+    return;
+  }
+  const stats = document.createElement("dl"); stats.className = "reward-stats";
+  const add = (label, value) => { const pair = document.createElement("div"); pair.append(conversionText("dt", label), conversionText("dd", value)); stats.append(pair); };
+  add("有效 SL 比例", `${(fraction * 100).toFixed(2)}%`);
+  add("即时 SL · 参考", `≈ ${formatInt(plan.slImmediate)}`);
+  if (plan.slDeferred !== null) add("成功着陆 SL · 条件份额", `≈ ${formatInt(plan.slDeferred)}`);
+  add("周期得分 / 分钟", formatQuantity(plan.scorePerMinute));
+  if (plan.rpImmediate !== null) add("即时 RP · 自填参考", `≈ ${formatInt(plan.rpImmediate)}`);
+  if (plan.rpDeferred !== null) add("成功着陆 RP · 条件份额", `≈ ${formatInt(plan.rpDeferred)}`);
+  rewardResult.append(stats);
+  const formulas = document.createElement("div"); formulas.className = "conversion-formulas";
+  const text = `即时 SL ≈ ${formatQuantity(slRate)} SL/min × ${formatQuantity(minutes)} min × ${(fraction * 100).toFixed(2)}%${basis === "before_landing_split" ? " × 80%" : "（比例已含即时份额）"}`;
+  const formula = document.createElement("p"); formula.append(conversionText("code", text)); formulas.append(formula);
+  if (plan.rpImmediate !== null) {
+    const rpFormula = document.createElement("p");
+    rpFormula.append(conversionText("code", `即时 RP ≈ ${formatQuantity(rpRate)} RP/min × ${formatQuantity(minutes)} min × ${formatQuantity(rpFraction * 100)}%${basis === "before_landing_split" ? " × 80%" : "（RP 比例已含即时份额）"}`)); formulas.append(rpFormula);
+  }
+  rewardResult.append(formulas);
+  if (method === "observed") rewardResult.append(conversionText("p", `本条记录为 ${formatQuantity(score)} 分 → ${formatQuantity(inputNumber(rewardFields.Observed))} 即时 SL；每分 ${score > 0 ? formatQuantity(inputNumber(rewardFields.Observed) / score) : "无法计算"} SL 只描述这条记录，不能线性外推。`));
+  rewardResult.append(conversionText("p", `${minutes < rules.period_minutes ? "不足整周期：仅按输入做算术核对，死亡与退场规则未验证。" : ""}${method === "reference" ? "历史数据插值未按当前服务器校准，不能证明分数封顶。" : "有效比例按你的输入或记录计算，未提取服务器活动率。"}${mode === "heli_pve" ? "直升机的战后奖励及分成未知，未套用空战 80/20。" : "20% 仅展示成功机场着陆条件下的份额，未计算多周期累积或死亡损失。"}RP 独立使用手填参数；结果不含出场费、维修、胜利奖励和其他后处理。`, "tool-note"));
+}
+
+function bindRewards() {
+  rewardsForm?.addEventListener("submit", event => event.preventDefault());
+  rewardFields.Account?.addEventListener("change", renderRewardCard);
+  rewardFields.Booster?.addEventListener("input", renderRewardCard);
+  rewardUseCard?.addEventListener("click", () => {
+    const card = rewardCardReference();
+    if (card) { rewardFields.SlRate.value = String(card.rate); refreshReward(); }
+  });
+  rewardFields.Search?.addEventListener("input", renderRewardVehicles);
+  rewardFields.Vehicle?.addEventListener("change", () => { rewardSelectedVehicle = rewardFields.Vehicle.value; loadRewardVehicle(); });
+  rewardFields.Mode?.addEventListener("change", () => {
+    rewardSelectedVehicle = rewardFields.Mode.value === "air_sim" ? "f_15e" : "ka_52";
+    rewardFields.Search.value = "";
+    const period = rewardsCatalog?.mechanics[rewardFields.Mode.value]?.period_minutes;
+    if (period) { rewardFields.Minutes.value = String(period); rewardFields.Minutes.max = String(period); }
+    renderRewardVehicles(); loadRewardVehicle(); renderRewardReference();
+  });
+  for (const key of ["Score", "Minutes", "SlRate", "Method", "Fraction", "Observed", "RpRate", "RpFraction"]) {
+    rewardFields[key]?.addEventListener(key === "Method" ? "change" : "input", refreshReward);
+  }
+}
 
 function formatInt(value) {
   return Math.round(value).toLocaleString("zh-CN");
@@ -646,14 +798,16 @@ async function loadJson(url) {
 
 async function boot() {
   try {
-    const [catalogBody, weaponsBody, aircraftBody] = await Promise.all([
+    const [catalogBody, weaponsBody, aircraftBody, rewardsBody] = await Promise.all([
       loadJson(catalogUrl),
       loadJson(weaponsUrl),
       loadJson(aircraftUrl),
+      loadJson(rewardsUrl),
     ]);
-    const source = sharedParameterSource([catalogBody, weaponsBody, aircraftBody]);
+    const source = sharedParameterSource([catalogBody, weaponsBody, aircraftBody, rewardsBody]);
     if (!source) throw new Error("mixed_parameter_sources");
     catalog = catalogBody;
+    rewardsCatalog = rewardsBody;
     catalog.weapons = weaponsBody.weapons || [];
     aircraftCatalog = (aircraftBody.aircraft || []).filter((item) =>
       Array.isArray(item.w) && Array.isArray(item.n) && item.w.length === item.n.length &&
@@ -667,9 +821,12 @@ async function boot() {
     renderWeaponList();
     refreshResult();
     fillConversionCatalog();
+    renderRewardVehicles(); loadRewardVehicle(); renderRewardReference();
     await nextFrame();
   } catch {
     catalog = null;
+    rewardsCatalog = null;
+    if (rewardResult) rewardResult.replaceChildren(conversionText("p", "收益数据加载失败或参数来源不一致，请刷新后重试。"));
     if (sourceEl) sourceEl.textContent = "数据未就绪：目录加载失败或来源版本不一致，请刷新后重试。";
     setHudUnknown("目录加载失败", "未使用缺失或混合版本的数据，刷新页面后再试。");
   }
@@ -739,4 +896,5 @@ searchInput.addEventListener("input", refreshWeapons);
 aircraftSearchInput.addEventListener("input", renderAircraftList);
 
 bindConversion();
+bindRewards();
 boot();

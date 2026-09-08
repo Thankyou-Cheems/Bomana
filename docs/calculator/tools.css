@@ -54,6 +54,18 @@
 .conversion-bar i { display: block; height: 100%; background: #448faf; transition: width .12s linear; }
 .conversion-bar[data-side=B] i { background: #b28a43; }
 .conversion-damage { padding-top: 16px; color: #49657a; font-size: 13px; line-height: 1.9; overflow-wrap: anywhere; }
+.reward-result { padding: 20px; border-radius: 14px; background: #edf5fb; color: #254962; line-height: 1.8; overflow-wrap: anywhere; }
+.reward-result h3 { margin: 0 0 16px; font-size: 19px; }
+.reward-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 18px; margin: 0; }
+.reward-stats dt { font-size: 12px; color: #537086; }
+.reward-stats dd { margin: 5px 0 0; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.reward-chart { max-width: 700px; margin: 16px auto; border-radius: 12px; background: #edf5fb; }
+.reward-chart svg { display: block; width: 100%; }
+.reward-chart polyline { fill: none; stroke: #448faf; stroke-width: 2; stroke-dasharray: 5 4; }
+.reward-chart circle { fill: #276c8c; }
+.reward-chart text { fill: #426176; font: 13px sans-serif; text-anchor: middle; }
+#rewardsForm select { width: 100%; min-width: 0; }
+#rewardsForm input:disabled { opacity: .6; }
 @media (max-width: 680px) {
   .tool-input-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .fuel-plan-result dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -62,4 +74,7 @@
   .conversion-sides { grid-template-columns: 1fr; }
   .conversion-side { padding: 14px; }
   .conversion-result { padding: 15px; }
+}
+@media (max-width: 480px) {
+  #rewardsForm .hangar-field:has(select), #rewardsForm .hangar-field:has(#rewardSearch) { grid-column: 1 / -1; }
 }

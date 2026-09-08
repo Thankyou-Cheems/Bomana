@@ -73,6 +73,15 @@ function gearBadge(
   retracting: boolean,
 ): InstrumentBadgePresentation {
   if (!snapshot.connected) return HIDDEN_BADGE;
+  const landing = snapshot.landing;
+  if (landing?.settings.enabled) {
+    if (landing.gearPercent === null) return HIDDEN_BADGE;
+    if (landing.gearRisk === "over-limit") return { text: "起落架超参考限速", tone: "danger", progressPercent: 100, visible: true };
+    if (landing.gearRisk === "extension-too-fast") return { text: "放轮前减速", tone: "warning", progressPercent: 100, visible: true };
+    if (landing.gearRisk === "near-limit") return { text: "接近起落架限速", tone: "warning", progressPercent: 100, visible: true };
+    if (landing.gearPercent <= .5) return HIDDEN_BADGE;
+    return { text: `${retracting ? "收轮" : "放轮"} ${Math.round(landing.gearPercent)}%`, tone: "info", progressPercent: landing.gearPercent, visible: true };
+  }
   const moving = gearPercent > 0.5 && gearPercent < 99.5;
   if (moving) {
     return Object.freeze({

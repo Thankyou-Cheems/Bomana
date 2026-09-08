@@ -2,6 +2,7 @@ import type { AircraftFuelProfile } from "./fuel-management";
 
 type LimitValue = number | readonly (readonly [number, number])[] | null;
 export interface AircraftSpeedLimits { readonly ias: LimitValue; readonly mach: LimitValue }
+export interface AircraftLandingProfile { readonly gearIasKmh: number | null; readonly gearControl: boolean | null; readonly arrestorHook: boolean | null }
 export interface AircraftParameterData {
   readonly schema_version: 1;
   readonly source?: { readonly kind: string; readonly version: string };
@@ -9,7 +10,9 @@ export interface AircraftParameterData {
   readonly flight_models: Readonly<Record<string, {
     readonly speed: AircraftSpeedLimits | null;
     readonly fuel: AircraftFuelProfile | null;
+    readonly landing?: Omit<AircraftLandingProfile, "arrestorHook"> | null;
   }>>;
+  readonly arrestor_hooks?: Readonly<Record<string, boolean | null>>;
   readonly loadouts: Readonly<Record<string, {
     readonly name: string;
     readonly name_zh?: string;
@@ -35,6 +38,11 @@ export class AircraftParameters {
       if (!profile || typeof profile !== "object") throw new Error(`飞行模型参数无效：${fm}`);
       if (profile.speed && Object.values(profile.speed).some(value => !validLimit(value))) throw new Error(`速度参数无效：${fm}`);
       if (profile.fuel && (!Array.isArray(profile.fuel.engines) || !["reference-only", "unsupported"].includes(profile.fuel.modelConfidence ?? ""))) throw new Error(`燃油参数无效：${fm}`);
+      if (profile.landing && (!(profile.landing.gearIasKmh === null || typeof profile.landing.gearIasKmh === "number" && Number.isFinite(profile.landing.gearIasKmh) && profile.landing.gearIasKmh > 0)
+        || !(profile.landing.gearControl === null || typeof profile.landing.gearControl === "boolean"))) throw new Error(`起落架参数无效：${fm}`);
+    }
+    for (const [unit, hook] of Object.entries(data.arrestor_hooks ?? {})) {
+      if (!Object.hasOwn(data.unit_to_fm,unit) || !(hook === null || typeof hook === "boolean")) throw new Error(`着舰钩参数无效：${unit}`);
     }
     for (const [unit, loadout] of Object.entries(data.loadouts)) {
       if (!Object.hasOwn(data.unit_to_fm, unit) || !loadout.weapon_max_counts || Object.values(loadout.weapon_max_counts).some(count => !Number.isInteger(count) || count <= 0)) throw new Error(`挂载参数无效：${unit}`);
@@ -61,6 +69,11 @@ export class AircraftParameters {
       estimated: sweep === null && (Array.isArray(limits.ias) || Array.isArray(limits.mach)) };
   }
   fuel(aircraft: string): AircraftFuelProfile | null { return this.#profile(aircraft)?.fuel ?? null; }
+  landing(aircraft: string): AircraftLandingProfile | null {
+    const profile = this.#profile(aircraft)?.landing;
+    if (!profile) return null;
+    return { ...profile, arrestorHook: this.#data.arrestor_hooks?.[aircraft.trim().toLowerCase()] ?? null };
+  }
 
   /** Loadouts retain unit IDs: two variants sharing an FM can carry different weapons. */
   strikeCatalog(): Readonly<Record<string, unknown>> {

@@ -154,3 +154,77 @@ export function sortiePlan({ required, capacity, damage, reward }) {
     fullLoadReward: rewardUi(reward, capacity * damage),
   });
 }
+
+// Historical measurements, not a recovered server function or hard score cap.
+// Heli observations already include its unknown immediate-payment fraction.
+export const usefulActionsReferences = Object.freeze({
+  air_sim: {
+    minutes: 15, basis: "before_landing_split", vehicleId: null,
+    points: [[200, .54], [400, .75], [600, .86], [800, .90], [1050, .92]],
+    url: "https://www.reddit.com/r/WarthunderSim/comments/1e7s9gu/",
+    label: "2024 玩家实测 · 15 分钟完整周期",
+  },
+  heli_pve: {
+    minutes: 10, basis: "immediate", vehicleId: "ka_52",
+    points: [[200, 8800 / 16600], [400, 10957 / 16600], [600, 11586 / 16600], [800, 11714 / 16600]],
+    url: "https://wiki.warthunder.ru/economy/735-ekonomika-v-vertoletnom-pve-rezhime",
+    label: "2024 Wiki 作者 Ka-52 实测 · 10 分钟即时 SL",
+  },
+});
+
+/** Client card display only: GUI unit.nut / airinfo.nut, reviewed at 2.57.1.132. */
+export function usefulActionsCardRate({ rawRate, special, premiumAccount, boosterPercent,
+  premiumMultiplier, premiumVisualPart }) {
+  if (![rawRate, boosterPercent, premiumMultiplier, premiumVisualPart].every(Number.isFinite) ||
+      rawRate <= 0 || boosterPercent < 0 || premiumMultiplier < 1 ||
+      premiumVisualPart < 0 || premiumVisualPart >= 1 ||
+      typeof special !== "boolean" || typeof premiumAccount !== "boolean") return null;
+  const visualShare = 1 - (special ? premiumVisualPart : 0);
+  const visualMultiplier = Math.round(10 / visualShare) / 10;
+  const visualBase = rawRate * visualShare;
+  const accountBonus = premiumAccount ? premiumMultiplier - 1 : 0;
+  const boosterBonus = boosterPercent / 100;
+  const rate = visualBase * visualMultiplier * (1 + accountBonus + boosterBonus);
+  return Number.isFinite(rate) && rate > 0
+    ? { rate, visualBase, visualMultiplier, accountBonus, boosterBonus } : null;
+}
+
+export function usefulActionsReference({ mode, score, minutes, vehicleId }) {
+  const sample = usefulActionsReferences[mode];
+  if (!sample || !Number.isFinite(score) || minutes !== sample.minutes ||
+      (sample.vehicleId && sample.vehicleId !== vehicleId) ||
+      score < sample.points[0][0] || score > sample.points.at(-1)[0]) return null;
+  // Interpolation is only a planning reference inside the observed range.
+  return { fraction: interpolate(sample.points, score), basis: sample.basis };
+}
+
+/** Arithmetic on an explicitly supplied effective fraction, never score->server activity. */
+export function usefulActionsPlan({ periodMinutes, minutes, score, slRate, rpRate = null, rpFraction = null,
+  fraction, basis, immediateShare }) {
+  if (![periodMinutes, minutes, score, slRate, fraction].every(Number.isFinite) ||
+      periodMinutes <= 0 || minutes <= 0 || minutes > periodMinutes || score < 0 ||
+      slRate <= 0 || fraction < 0 || fraction > 1 ||
+      (rpRate !== null && (!Number.isFinite(rpRate) || rpRate <= 0)) ||
+      (rpFraction !== null && (!Number.isFinite(rpFraction) || rpFraction < 0 || rpFraction > 1)) ||
+      !["before_landing_split", "immediate"].includes(basis) ||
+      (basis === "before_landing_split" && (!Number.isFinite(immediateShare) || immediateShare < 0 || immediateShare > 1))) return null;
+  const slNominal = slRate * minutes;
+  const rpNominal = rpRate === null || rpFraction === null ? null : rpRate * minutes;
+  const split = basis === "before_landing_split";
+  const sl = slNominal * fraction, rp = rpNominal === null ? null : rpNominal * rpFraction;
+  if (![slNominal, sl, score / minutes, ...[rpNominal, rp].filter(v => v !== null)].every(Number.isFinite)) return null;
+  return {
+    scorePerMinute: score / minutes, slNominal,
+    slImmediate: sl * (split ? immediateShare : 1),
+    slDeferred: split ? sl * (1 - immediateShare) : null,
+    rpImmediate: rp === null ? null : rp * (split ? immediateShare : 1),
+    rpDeferred: !split || rp === null ? null : rp * (1 - immediateShare),
+  };
+}
+
+export function usefulActionsObservedFraction({ slReceived, slRate, minutes, immediateShare }) {
+  if (![slReceived, slRate, minutes, immediateShare].every(Number.isFinite) || slReceived < 0 ||
+      slRate <= 0 || minutes <= 0 || immediateShare <= 0 || immediateShare > 1) return null;
+  const value = slReceived / slRate / minutes / immediateShare;
+  return Number.isFinite(value) ? value : null;
+}

@@ -9,6 +9,7 @@ import { LatestSampleProcessor } from "./runtime/latest-sample-processor";
 import { bindPageSession } from "./runtime/page-session";
 import { IncompatibleBridgeError } from "./runtime/bridge-discovery";
 import { fuelPresentation } from "./runtime/fuel-presentation";
+import { LandingPanel } from "./runtime/landing-panel";
 import { StrikeEncyclopedia, roomMaxBattleRatings, type AirportModule } from "./runtime/strike-encyclopedia";
 import { PipRiskConsentStore } from "./runtime/pip-risk-consent";
 import { readPipMapVisible } from "./runtime/pip-map-preference";
@@ -33,6 +34,7 @@ const runtime = new PublicRuntime({ edition, aircraftParameters, settingsStore: 
   timerCheckpointStore: new BrowserTimerCheckpointStore(edition.channel),
   sortieRecoveryStore: edition.channel === "Lite" ? null : new BrowserSortieRecoveryStore(edition.channel) });
 const telemetry = new TelemetrySource("", fetch, Date.now, { includeGameChat: false });
+const landingPanel = new LandingPanel(element("landing-slot"), landing => execute({ type: "landing.configure", landing }));
 const soundStore = new SoundCuePreferencesStore();
 const sound = new SoundCues(soundStore.load());
 let map: PublicNavigationMap | null = null;
@@ -135,6 +137,7 @@ void fetch("https://bomana.ruikang.wang/app/app-release.json", { cache: "no-stor
 }).catch(() => {});
 
 function render(snapshot: EditionSnapshot): void {
+  landingPanel.update(snapshot.landing);
   text("status", !snapshot.connected ? "等待 Bridge · 从在线启动器下载并运行" : !latestFrame?.availability.state ? "Bridge 已连接 · 等待游戏出击" : "Bridge 已连接 · 官方 8111 实时数据");
   const remaining = snapshot.timer.remainingSec;
   const seconds = remaining === null ? null : Math.max(0, Math.ceil(remaining));

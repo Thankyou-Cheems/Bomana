@@ -3,6 +3,7 @@ import type { BombingWindow, OfficialMapGrid, OfficialChatMessage, MarkedZoneMar
 import type { EditionPolicy } from "./edition-policy";
 import type { FuelSnapshot } from "./fuel-management";
 import type { SortieResetReason } from "./sortie-recovery";
+import type { LandingSettings, LandingSnapshot } from "./landing-assist";
 
 export type RuntimePhase = "idle" | "hangar" | "arming" | "alive" | "loss-pending" | "wait-next";
 export type StrikeTargetMode = "auto" | "zone" | "airfield-module" | "poi" | "hostile";
@@ -147,6 +148,7 @@ export interface EditionSnapshot {
   readonly markedZones: readonly MarkedZoneMarker[];
   readonly gameChat: readonly OfficialChatMessage[];
   readonly fuel: FuelSnapshot | null;
+  readonly landing?: LandingSnapshot | null;
   readonly checklist: {
     readonly items: readonly string[];
     readonly checked: readonly boolean[];
@@ -184,6 +186,7 @@ export interface EditionSnapshot {
 }
 
 export type EditionCommand =
+  | { readonly type: "landing.configure"; readonly landing: LandingSettings }
   | { readonly type: "timer.reset" }
   | { readonly type: "timer.set-cycle"; readonly minutes: number }
   | { readonly type: "navigation.select"; readonly targetId: string | null }
