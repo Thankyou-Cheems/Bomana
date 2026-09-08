@@ -1,5 +1,5 @@
 import { createPublicKey, verify } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { downloadEnhancedDesktop } from "./desktop-download";
 import { sha256Digest } from "../runtime/crypto-compat";
 
@@ -11,7 +11,10 @@ const url = new URL(`/subscriber-artifacts/${resource}`, base);
 const hex = (v: Uint8Array): string => Array.from(v, x => x.toString(16).padStart(2, "0")).join("");
 
 describe("Launcher Enhanced Desktop download", () => {
-  it("requests eligibility online, signs with an ephemeral key and checks the private bytes", async () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([0, 3_000, 60_000])("verifies eligibility, proof and bytes with the issuer clock %i ms ahead", async clockSkewMs => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-08T11:28:15.413Z"));
     let key = "";
     const paths: string[] = [];
     const result = await downloadEnhancedDesktop(base, "account-token", async (input, init) => {
@@ -19,7 +22,7 @@ describe("Launcher Enhanced Desktop download", () => {
       if (paths.length === 1) {
         expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer account-token");
         key = JSON.parse(String(init?.body)).publicKeySpki;
-        return Response.json({ schemaVersion: 1, version, bytes: bytes.length, sha256: hex(await sha256Digest(bytes)), resource, downloadUrl: url.href, token: "private.grant.token", expiresAt: new Date(Date.now() + 300_000).toISOString() });
+        return Response.json({ schemaVersion: 1, version, bytes: bytes.length, sha256: hex(await sha256Digest(bytes)), resource, downloadUrl: url.href, token: "private.grant.token", expiresAt: new Date(Date.now() + 300_000 + clockSkewMs).toISOString() });
       }
       const h = new Headers(init?.headers);
       expect(h.get("Authorization")).toBe("Bearer private.grant.token");
@@ -33,7 +36,8 @@ describe("Launcher Enhanced Desktop download", () => {
     expect(await result.blob.text()).toBe("a private desktop package");
   });
 
-  it.each(["ineligible", "unpublished", "offsite", "wrong-resource", "digest", "too-large", "expired"])("does not download unsafe or unavailable data: %s", async failure => {
+  it.each(["ineligible", "unpublished", "offsite", "wrong-resource", "digest", "too-large", "expired", "overlong"])("does not download unsafe or unavailable data: %s", async failure => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-08T11:28:15.413Z"));
     let calls = 0;
     await expect(downloadEnhancedDesktop(base, "account-token", async () => {
       calls++;
@@ -43,7 +47,7 @@ describe("Launcher Enhanced Desktop download", () => {
           sha256: failure === "digest" ? "0".repeat(64) : hex(await sha256Digest(bytes)),
           resource: failure === "wrong-resource" ? "terrain/private.json" : resource,
           downloadUrl: failure === "offsite" ? "https://outside.example/private.zip" : url.href,
-          token: "private.grant.token", expiresAt: new Date(Date.now() + (failure === "expired" ? -1000 : 300_000)).toISOString() });
+          token: "private.grant.token", expiresAt: new Date(Date.now() + (failure === "expired" ? -1000 : failure === "overlong" ? 360_001 : 300_000)).toISOString() });
       }
       return new Response(bytes);
     })).rejects.toThrow();

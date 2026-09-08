@@ -31,13 +31,16 @@ export async function downloadEnhancedDesktop(
     const size = Number(grant.bytes);
     const now = Date.now();
     const expiresAt = Date.parse(String(grant.expiresAt));
+    // Five-minute grants can appear longer when the issuer clock is ahead.
+    // Allow one minute of clock skew; the gateway still enforces signed expiry.
+    const maxRemainingMs = 5 * 60_000 + 60_000;
     if (grant.schemaVersion !== 1 || !/^\d+\.\d+\.\d+(?:-[a-z0-9.]+)?$/.test(version)
       || grant.resource !== resource || url.origin !== base.origin || url.pathname !== `/subscriber-artifacts/${resource}`
       || url.username || url.password || url.search || url.hash
       || !Number.isInteger(size) || size < 1 || size > 128 * 1024 * 1024
       || typeof grant.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(grant.sha256)
       || typeof grant.token !== "string" || !/^[A-Za-z0-9._-]{1,8192}$/.test(grant.token)
-      || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt - now > 301_000) throw new Error("私有下载响应无效");
+      || !Number.isFinite(expiresAt) || expiresAt <= now || expiresAt - now > maxRemainingMs) throw new Error("私有下载响应无效");
     const timestamp = new Date(now).toISOString();
     const canonical = `GET\n${url.pathname}\n${timestamp}\n${hex(await sha256Digest(new Uint8Array()))}`;
     const signature = base64url(ed25519.sign(new TextEncoder().encode(canonical), secret));
