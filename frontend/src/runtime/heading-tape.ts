@@ -81,8 +81,9 @@ export function headingTapeMarks(headingDeg: number): readonly HeadingTapeMark[]
 export function headingTapeTargetMarkers(
   targets: readonly HeadingTapeTargetInput[],
 ): readonly HeadingTapeTargetMarker[] {
+  const friendlyAirfield = (target: HeadingTapeTargetInput) => target.kind === "airfield" && target.friendly === true && target.hostile !== true;
   const zones = targets.filter((target) => target.kind === "zone");
-  const visible = targets.filter((target) => target.isTarget || (
+  const visible = targets.filter((target) => target.isTarget || friendlyAirfield(target) || (
     target.kind !== "hostile" && Math.abs(target.relativeDeg) <= 30
   ));
   const overlappingZones = new Map<string, HeadingTapeTargetInput>();
@@ -101,6 +102,7 @@ export function headingTapeTargetMarkers(
       return overlappingZone ? Object.freeze({ ...target, isTarget: target.isTarget || overlappingZone.isTarget }) : target;
     })
     .sort((left, right) => Number(right.isTarget) - Number(left.isTarget)
+      || Number(friendlyAirfield(right)) - Number(friendlyAirfield(left))
       || Math.abs(left.relativeDeg) - Math.abs(right.relativeDeg)
       || left.distanceKm - right.distanceKm)
     .slice(0, 6)
