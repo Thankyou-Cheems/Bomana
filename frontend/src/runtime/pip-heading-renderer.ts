@@ -19,7 +19,6 @@ export interface PictureInPictureHeadingLayout {
   readonly markerY: number;
   readonly distanceY: number;
   readonly guidanceTop: number;
-  readonly guidanceTextY: number;
   readonly guidanceTrackY: number;
 }
 
@@ -32,8 +31,7 @@ export function pictureInPictureHeadingLayout(width: number, height: number): Pi
     degreeTextY: height * 0.27,
     markerY: height * 0.42,
     distanceY: height * 0.54,
-    guidanceTop: height * 0.70,
-    guidanceTextY: height * 0.73,
+    guidanceTop: height * 0.84,
     guidanceTrackY: height * 0.92,
   });
 }
@@ -67,7 +65,7 @@ export class PictureInPictureHeadingRenderer {
     const landing = landingTapePresentation(snapshot);
     this.#canvas.dataset.mode = landing.active ? "landing" : "navigation";
     this.#canvas.setAttribute("aria-label", landing.active ? landing.aria : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
-    if (guidance.target?.id !== this.#targetId || guidance.window) this.#displayGuidance = guidance.ratio;
+    if (guidance.target?.id !== this.#targetId || guidance.windowMode) this.#displayGuidance = guidance.ratio;
     this.#targetId = guidance.target?.id ?? "";
     const observedAtMs = sampledAtPerformanceTime(
       snapshot.sampledAtMs,
@@ -102,10 +100,10 @@ export class PictureInPictureHeadingRenderer {
     const displayedTargetRelative = target
       ? this.#markerDisplay.get(target.id)?.step(nowMs) ?? target.relativeDeg
       : 0;
-    const targetGuidance = guidance.window ? guidance.ratio : target
+    const targetGuidance = guidance.windowMode ? guidance.ratio : target
       ? projectHeadingGuidanceRatio(snapshot.strike?.status === "ready"
         ? snapshot.strike.targetRelativeDeg ?? displayedTargetRelative : displayedTargetRelative, guidance.toleranceDeg) : 0;
-    this.#displayGuidance = guidance.window ? targetGuidance
+    this.#displayGuidance = guidance.windowMode ? targetGuidance
       : this.#displayGuidance + (targetGuidance - this.#displayGuidance) * (1 - Math.exp(-elapsed / 70));
     this.#render();
     if (nowMs - this.#lastObservationMs < 360 || Math.abs(targetGuidance - this.#displayGuidance) > 0.002) {
@@ -326,13 +324,9 @@ function drawGuidance(
   const halfHeight = 4 * layout.visualScale;
   context.strokeStyle = "rgba(142,196,225,.38)";
   context.lineWidth = 1;
-  context.beginPath(); context.moveTo(0, layout.guidanceTop); context.lineTo(width, layout.guidanceTop); context.stroke();
   context.beginPath(); context.moveTo(trackLeft, layout.guidanceTrackY); context.lineTo(trackRight, layout.guidanceTrackY); context.stroke();
-  context.font = `800 ${Math.max(9, 8 * layout.visualScale)}px "Microsoft YaHei"`;
-  context.textAlign = "center";
-  context.textBaseline = "top";
-  context.fillStyle = target ? guidance.color : "rgba(214,233,246,.55)";
-  context.fillText(guidance.text, centerX, layout.guidanceTextY);
+  // Geometry carries live correction; the complete description stays in the
+  // canvas accessible label instead of reserving another visible text row.
   for (const fraction of [.3, .6, 1]) {
     const ratio = fraction ** .62;
     for (const sign of [-1, 1]) {
@@ -347,20 +341,25 @@ function drawGuidance(
   const approach = guidance.windowMode === "approach" || guidance.windowMode === "correction";
   // A minimum 12 CSS-pixel correction marker stays legible at long range.
   // Never widen an actual impact window: that would imply a false release cue.
-  const gateHalf = approach ? Math.max(6, 6 * layout.visualScale, guidance.bandHalfRatio * halfTrack)
-    : guidance.bandHalfRatio * halfTrack;
-  context.strokeStyle = approach ? "#8ec4e1" : gateHalf > 0 ? "#6de0a3" : "rgba(142,196,225,.38)";
-  if (gateHalf > 0) {
-    context.fillStyle = approach ? "rgba(142,196,225,.16)" : "rgba(109,224,163,.22)";
-    context.fillRect(centerX - gateHalf, layout.guidanceTrackY - halfHeight, gateHalf * 2, halfHeight * 2);
-  }
+  context.strokeStyle = approach ? "#8ec4e1" : "#6de0a3";
   context.lineWidth = 2 * layout.visualScale;
-  context.beginPath();
-  context.moveTo(centerX - gateHalf, layout.guidanceTrackY - halfHeight);
-  context.lineTo(centerX - gateHalf, layout.guidanceTrackY + halfHeight);
-  context.lineTo(centerX + gateHalf, layout.guidanceTrackY + halfHeight);
-  context.lineTo(centerX + gateHalf, layout.guidanceTrackY - halfHeight);
-  context.stroke();
+  for (const [low, high] of guidance.bandRanges) {
+    let left = centerX + low * halfTrack, right = centerX + high * halfTrack;
+    if (approach) {
+      const halfWidth = Math.max(6, 6 * layout.visualScale, (right - left) / 2);
+      const midpoint = clamp((left + right) / 2, trackLeft + halfWidth, trackRight - halfWidth);
+      left = midpoint - halfWidth; right = midpoint + halfWidth;
+    } else if (right - left <= 1e-8) continue;
+    context.fillStyle = approach ? "rgba(142,196,225,.16)" : "rgba(109,224,163,.22)";
+    context.fillRect(left, layout.guidanceTrackY - halfHeight, right - left, halfHeight * 2);
+    context.beginPath();
+    context.moveTo(left, layout.guidanceTrackY - halfHeight);
+    context.lineTo(left, layout.guidanceTrackY + halfHeight);
+    context.lineTo(right, layout.guidanceTrackY + halfHeight);
+    context.lineTo(right, layout.guidanceTrackY - halfHeight);
+    context.stroke();
+  }
+  context.strokeStyle = "rgba(142,196,225,.7)";
   context.beginPath();
   context.moveTo(centerX, layout.guidanceTrackY - halfHeight - 2 * layout.visualScale);
   context.lineTo(centerX, layout.guidanceTrackY + halfHeight + 2 * layout.visualScale);

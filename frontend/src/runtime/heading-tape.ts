@@ -1,12 +1,13 @@
 import type { EditionSnapshot } from "./runtime-types";
 import { landingPresentation } from "./landing-presentation";
+import type { AngularRange } from "./extension-types";
 
 export interface HeadingGuidance {
   readonly target: NonNullable<EditionSnapshot["strikeSelection"]>["target"] | NonNullable<EditionSnapshot["navigation"]>["target"] | undefined;
   readonly window: NonNullable<EditionSnapshot["strike"]>["bombingWindow"];
   readonly relativeDeg: number;
   readonly toleranceDeg: number;
-  readonly bandHalfRatio: number;
+  readonly bandRanges: readonly AngularRange[];
   readonly windowMode?: "impact" | "approach" | "correction";
   readonly color: string;
   readonly text: string;
@@ -16,13 +17,13 @@ export interface HeadingGuidance {
 export function headingGuidance(snapshot: EditionSnapshot): HeadingGuidance {
   if (snapshot.landing?.settings.enabled) {
     const landing = landingPresentation(snapshot.landing);
-    return { target:null,window:null,relativeDeg:0,toleranceDeg:1,bandHalfRatio:0,color:"#8bdddc",ratio:0,
+    return { target:null,window:null,relativeDeg:0,toleranceDeg:1,bandRanges:[],color:"#8bdddc",ratio:0,
       text:snapshot.landing.geometry ? `${landing.lateral} · ${landing.vertical}` : "降落引导等待数据" };
   }
   const target = snapshot.navigation?.target;
   const relativeDeg = target?.relativeDeg ?? 0;
   const toleranceDeg = headingCdiTolerance(target?.distanceKm ?? 20);
-  return { target, window: null, relativeDeg, toleranceDeg, bandHalfRatio: 0,
+  return { target, window: null, relativeDeg, toleranceDeg, bandRanges: [],
     color: Math.abs(relativeDeg) <= toleranceDeg ? "#f8d66f" : "#ff8e86",
     text: target ? headingGuidanceText(relativeDeg, target.distanceKm) : snapshot.connected ? "选择目标" : "等待 8111",
     ratio: projectHeadingGuidanceRatio(relativeDeg, toleranceDeg) };

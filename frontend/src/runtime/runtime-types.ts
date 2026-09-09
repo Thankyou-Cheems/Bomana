@@ -1,5 +1,5 @@
 import type { GuidedEnvelope } from "./contracts";
-import type { BombingWindow, OfficialMapGrid, OfficialChatMessage, MarkedZoneMarker } from "./extension-types";
+import type { AirfieldModuleArea, BombingWindow, OfficialMapGrid, OfficialChatMessage, MarkedZoneMarker } from "./extension-types";
 import type { EditionPolicy } from "./edition-policy";
 import type { FuelSnapshot } from "./fuel-management";
 import type { SortieResetReason } from "./sortie-recovery";
@@ -168,6 +168,7 @@ export interface EditionSnapshot {
       readonly relativeDeg: number;
       readonly dx?: number;
       readonly dy?: number;
+      readonly area?: AirfieldModuleArea;
     } | null;
   } | null;
   readonly strike: {
@@ -205,6 +206,7 @@ export type EditionCommand =
       readonly x: number;
       readonly y: number;
       readonly label: string;
+      readonly area?: AirfieldModuleArea;
     }
   | { readonly type: "strike.clear-target-point" }
   | { readonly type: "sortie.undo-reset" };

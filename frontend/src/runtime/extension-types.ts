@@ -24,11 +24,19 @@ export interface OfficialMapGrid {
   readonly steps: readonly [number, number];
 }
 
+export type AngularRange = readonly [number, number];
+
+/** Normalized map coordinates of the static module rectangle, not a 3D hitbox. */
+export interface AirfieldModuleArea {
+  readonly corners: readonly (readonly [number, number])[];
+  readonly uncertaintyM: number;
+}
+
 export interface BombingWindow {
-  readonly halfAngleDeg: number;
+  readonly source: "mission-area" | "airfield-module";
   readonly relativeDeg: number;
-  readonly radiusM: number;
-  readonly crossTrackM: number;
-  readonly impactMissM: number;
+  readonly approachRangeDeg: AngularRange;
+  readonly impactRangesDeg: readonly AngularRange[];
+  readonly alongTrackRangeM: readonly [number, number] | null;
   readonly inside: boolean;
 }
