@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"testing"
 	"time"
+
+	"bomana/native/telemetry_gateway/internal/extuihttp"
 )
 
 func TestResolverPrefersTheFirstVerifiedExtUI(t *testing.T) {
@@ -15,7 +17,7 @@ func TestResolverPrefersTheFirstVerifiedExtUI(t *testing.T) {
 	second := newVerifiedExtUIServer(t)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, first.URL), mustURL(t, second.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {
@@ -44,7 +46,7 @@ func TestResolverKeepsTheSelectedExtUIUntilInvalidated(t *testing.T) {
 	second := newVerifiedExtUIServer(t)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, first.URL), mustURL(t, second.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {
@@ -78,7 +80,7 @@ func TestResolverRediscoversAfterTheSelectedExtUIFails(t *testing.T) {
 	second := newVerifiedExtUIServer(t)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, first.URL), mustURL(t, second.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {
@@ -113,7 +115,7 @@ func TestResolverBacksOffAfterNoExtUIIsAvailable(t *testing.T) {
 	now := time.Unix(1_000, 0)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, server.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		Now:        func() time.Time { return now },
 		RetryDelay: time.Second,
 	})
@@ -138,7 +140,7 @@ func TestResolverDoesNotNegativeCacheACancelledDiscovery(t *testing.T) {
 	server := newVerifiedExtUIServer(t)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, server.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Minute,
 	})
 	if err != nil {
@@ -159,7 +161,7 @@ func TestResolverSnapshotReportsTheSelectedExtUIPort(t *testing.T) {
 	server := newVerifiedExtUIServer(t)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, server.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {
@@ -209,7 +211,7 @@ func TestResolverRejectsAnIncompleteMapInfoFingerprint(t *testing.T) {
 	verified := newVerifiedExtUIServer(t)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, impostor.URL), mustURL(t, verified.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {
@@ -245,7 +247,7 @@ func TestResolverRejectsIndicatorsWithoutAnArmyWhenValid(t *testing.T) {
 	verified := newVerifiedExtUIServer(t)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, impostor.URL), mustURL(t, verified.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {
@@ -278,7 +280,7 @@ func TestResolverRejectsATruncatedSFNTFingerprint(t *testing.T) {
 	verified := newVerifiedExtUIServer(t)
 	resolver, err := NewResolver(Options{
 		Candidates: []*url.URL{mustURL(t, impostor.URL), mustURL(t, verified.URL)},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {

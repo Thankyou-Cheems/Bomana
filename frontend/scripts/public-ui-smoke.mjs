@@ -20,7 +20,7 @@ try {
       const elapsed = Date.now() - started;
       if (url.pathname.endsWith("/capabilities")) return Promise.resolve(Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 4, input: "official-8111-only", write_commands: false, bridge_version: "1.0.0" }));
       if (url.pathname.endsWith("/indicators")) return Promise.resolve(Response.json({ valid: true, type: "saab_jas39c", compass1: 15 }));
-      if (url.pathname.endsWith("/state")) return Promise.resolve(Response.json({ valid: true, "IAS, km/h": 700, "TAS, km/h": 720, "H, m": 3000, "Vy, m/s": 0, "Mfuel, kg": 1200 - elapsed / 1000, "Mfuel0, kg": 1400, "throttle 1, %": 90, "gear, %": 0 }));
+      if (url.pathname.endsWith("/state")) return Promise.resolve(Response.json({ valid: true, "IAS, km/h": 700, "TAS, km/h": 720, "H, m": 3000, "Vy, m/s": 0, "Mfuel, kg": 1200 - elapsed / 1000, "Mfuel0, kg": 1400, "throttle 1, %": 90, "gear, %": 0, "flaps, %": 20 }));
       if (url.pathname.endsWith("/map-objects")) return Promise.resolve(Response.json(window.__publicMapInactive ? [] : [{ type: "player", x: .5, y: .5 - elapsed * .000002, dx: 0, dy: -1 }, { type: "bombing_point", x: .5, y: .3 }, { type: "airfield", side: "friendly", sx: .2, sy: .7, ex: .2, ey: .8 }, { type: "point_of_interest", x: .49, y: .3 }]));
       if (url.pathname.endsWith("/map-info")) return Promise.resolve(Response.json({ valid: !window.__publicMapInactive, map_min: [-50000, -50000], map_max: [50000 + window.__publicMapRevision, 50000] }));
       if (url.pathname.endsWith("/map-image")) {
@@ -39,18 +39,26 @@ try {
   await page.waitForFunction(() => document.querySelector("#timer").textContent !== "--:--");
   assert.equal(await page.locator("#navigation-select option").count(), 2, "Standard must not expose POI navigation");
   assert.equal(await page.locator("#ias-value").innerText(), "700");
+  assert.match(await page.locator("#speed-limit-value").innerText(), /IAS 700\/533 · 襟翼参考$/);
+  assert.ok(await page.locator("#speed-strip").evaluate(node => node.classList.contains("level-critical")), "Automatic flaps constrain the strip before landing mode is enabled");
   const landing = page.getByRole("region", {name:"降落辅助"});
   const priorNavigation = await page.locator("#navigation-target").innerText();
   await landing.getByRole("button", {name:"开启",exact:true}).click();
   await landing.locator("[data-part='active']").waitFor({state:"visible"});
   assert.equal(await page.locator("#heading-tape").getAttribute("data-mode"),"landing");
   assert.match(await page.locator("#heading-tape").getAttribute("aria-label"),/IAS 700 km\/h.*燃油/);
+  assert.match(await landing.locator("[data-part='limits']").innerText(),/起落架 ≤ \d+ km\/h/);
+  assert.ok(await landing.locator("meter:visible").count() >= 1, "The live IAS comparison is visible without a manually chosen approach speed");
+  assert.match(await landing.locator("[data-part='configuration']").innerText(),/襟翼 20%（无手动控制）/);
+  assert.match(await landing.locator("[data-part='flapAdvice']").innerText(),/襟翼超过参考上限 · 减速$/);
+  assert.match(await page.locator("#heading-tape").getAttribute("aria-label"),/襟翼超限/);
   assert.equal(await page.locator("#navigation-target").innerText(), priorNavigation, "Landing does not change the strike/navigation target");
   await landing.locator("summary").click();
   await landing.locator("[data-part='ias']").fill("250");
   await landing.locator("[data-part='elevation']").fill("100");
   await landing.getByRole("button", {name:"应用参考参数"}).click();
   await page.waitForFunction(() => document.querySelector("[data-part='speed']").textContent.includes("/ 250"));
+  assert.match(await page.locator("#speed-limit-value").innerText(), /IAS 700\/533 · 襟翼参考$/, "Manual approach IAS must not replace the flap destruction reference");
   assert.match(await landing.locator("[data-part='message']").innerText(), /返航机场/);
   assert.equal(await landing.locator("[data-part='vertical-dot']").isVisible(), false, "Far return must not show a glide reference even with manual elevation");
   await landing.getByRole("button", {name:"反向进近"}).click();

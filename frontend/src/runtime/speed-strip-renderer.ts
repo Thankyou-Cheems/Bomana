@@ -30,10 +30,10 @@ export function speedStripPresentation(snapshot: EditionSnapshot): SpeedStripPre
   const projection = overspeedDynamicProjection(speedRatio);
   const levelClass = overspeed.level === "none" ? "safe" : overspeed.level;
   const stateText = overspeed.matched
-    ? { none: overspeed.estimated ? "保守限速" : "速度安全", caution: "高速预警", warning: "接近极限", critical: "超速危险" }[overspeed.level]
+    ? { none: overspeed.iasLimitSource === "flaps" ? "速度参考" : overspeed.estimated ? "保守限速" : "速度安全", caution: "高速预警", warning: "接近极限", critical: "超速危险" }[overspeed.level]
     : "速度监视";
   const valueText = overspeed.matched && overspeed.iasLimitKmh > 0
-    ? `极限 ${Math.round(speedRatio * 100)}% · IAS ${Math.round(snapshot.flight.iasKmh)}/${Math.round(overspeed.iasLimitKmh)}`
+    ? `${Math.round(speedRatio * 100)}% · IAS ${Math.round(snapshot.flight.iasKmh)}/${Math.round(overspeed.iasLimitKmh)} · ${overspeed.iasLimitSource === "flaps" ? "襟翼参考" : "结构"}`
     : `IAS ${Math.round(snapshot.flight.iasKmh) || "--"}`;
   const machText = snapshot.flight.mach !== null && overspeed.machLimit > 0
     ? `M${snapshot.flight.mach.toFixed(2)}/${overspeed.machLimit.toFixed(2)}`

@@ -5,6 +5,7 @@ import { GroundTrackEstimator, type GroundTrackEstimate } from "./ground-track";
 import { FuelManager, fuelEngines, fuelNumber } from "./fuel-management";
 import type { AircraftParameters } from "./aircraft-parameters";
 import { LandingAssist } from "./landing-assist";
+import { landingFlapReference } from "./landing-configuration";
 import { RESET_UNDO_WINDOW_MS, sortieMapSignature, type SortieRecoveryStore, type SortieResetReason,
   type SortieResetUndoRecord, type SortieRestorePoint } from "./sortie-recovery";
 import type { RuntimePhase, NavigationSelectionMode, RuntimeSettings, RuntimeSettingsStore,
@@ -264,12 +265,19 @@ export class PublicRuntime {
     const extension = this._snapshotExtension(telemetry, navigation, headingDeg, sortieContinuity);
     this._revision += 1;
     const timer = this._buildTimer(frame.sampledAtMs);
+    const speedStateFresh = frame.availability.state && frame.availability.indicators
+      && !frame.holdover?.state && !frame.holdover?.indicators
+      && frame.state?.valid !== false && frame.indicators?.valid === true
+      && [frame.stateSampledAtMs, frame.indicatorsSampledAtMs]
+        .every(at => at == null || frame.sampledAtMs - at <= 1500);
+    const observedIas = stateNumber(["IAS, km/h", "IAS", "ias"]);
     const overspeed = evaluateOverspeed(
       telemetry.aircraft,
       telemetry.iasKmh,
       telemetry.mach,
       this._aircraftParameters,
       optionalNumericField(frame.indicators ?? {}, ["wing_sweep_indicator", "wing_sweep", "sweep"]),
+      speedStateFresh && observedIas !== null && observedIas >= 0 ? stateNumber(["flaps, %", "flaps"]) : null,
     );
     const alerts: string[] = [];
     if (this._edition.capabilities.missionAlerts) {
@@ -278,7 +286,8 @@ export class PublicRuntime {
       }
       if (sortieContinuity.state === "reset-undo") alerts.push("出击状态已重置，可在 30 秒内撤销");
       if (overspeed.level === "critical") alerts.push("空速危险");
-      else if (overspeed.level === "warning") alerts.push("接近结构限速");
+      else if (overspeed.level === "warning") alerts.push(overspeed.iasLimitSource === "flaps" && overspeed.ratio >= .97
+        ? "接近襟翼参考限速" : "接近结构限速");
       if (!landing?.settings.enabled && telemetry.gearPercent > 50 && telemetry.iasKmh > 80) alerts.push("起落架未收起");
       alerts.push(...this._extensionAlerts(frame.sampledAtMs));
     }
@@ -1118,9 +1127,15 @@ function mapHeading(player: ParsedMap["player"]): number {
   return normalizeHeading(Math.atan2(player.dx, -player.dy) * 180 / Math.PI);
 }
 
-function evaluateOverspeed(aircraft: string, iasKmh: number, mach: number | null, catalog: AircraftParameters | null, sweep: number | null): EditionSnapshot["flight"]["overspeed"] {
+function evaluateOverspeed(aircraft: string, iasKmh: number, mach: number | null, catalog: AircraftParameters | null, sweep: number | null, flapsPercent: number | null): EditionSnapshot["flight"]["overspeed"] {
   const limit = catalog?.speed(aircraft, sweep);
-  const iasLimit = finiteValue(limit?.ias) ?? 0;
+  let iasLimit = finiteValue(limit?.ias) ?? 0;
+  let iasLimitSource: "airframe" | "flaps" | null = iasLimit > 0 ? "airframe" : null;
+  const flapLimit = landingFlapReference(catalog?.landing(aircraft), flapsPercent, iasKmh, "unknown").limitIasKmh;
+  if (flapLimit !== null && (iasLimit <= 0 || flapLimit < iasLimit)) {
+    iasLimit = flapLimit;
+    iasLimitSource = "flaps";
+  }
   const machLimit = finiteValue(limit?.mach) ?? 0;
   const ratio = iasLimit > 0 ? Math.max(0, iasKmh / iasLimit) : 0;
   const machMargin = mach !== null && machLimit > 0 ? machLimit - mach : Number.POSITIVE_INFINITY;
@@ -1128,7 +1143,8 @@ function evaluateOverspeed(aircraft: string, iasKmh: number, mach: number | null
   if (ratio >= 0.992 || machMargin <= 0.02) level = "critical";
   else if (ratio >= 0.97 || machMargin <= 0.04) level = "warning";
   else if (ratio >= 0.94 || machMargin <= 0.06) level = "caution";
-  return Object.freeze({ level, ratio, iasLimitKmh: iasLimit, machLimit, matched: Boolean(limit), estimated: limit?.estimated ?? false });
+  return Object.freeze({ level, ratio, iasLimitKmh: iasLimit, iasLimitSource, machLimit,
+    matched: Boolean(limit) || flapLimit !== null, estimated: limit?.estimated ?? false });
 }
 
 function numericField(record: Readonly<Record<string, unknown>>, keys: readonly string[], fallback: number): number {

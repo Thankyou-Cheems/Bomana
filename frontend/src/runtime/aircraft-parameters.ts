@@ -2,7 +2,16 @@ import type { AircraftFuelProfile } from "./fuel-management";
 
 type LimitValue = number | readonly (readonly [number, number])[] | null;
 export interface AircraftSpeedLimits { readonly ias: LimitValue; readonly mach: LimitValue }
-export interface AircraftLandingProfile { readonly gearIasKmh: number | null; readonly gearControl: boolean | null; readonly arrestorHook: boolean | null }
+export interface AircraftLandingProfile {
+  readonly gearIasKmh: number | null;
+  readonly gearControl: boolean | null;
+  readonly arrestorHook: boolean | null;
+  readonly flapsIasKmh?: readonly (readonly [number, number])[] | null;
+  readonly flapsControl?: boolean | null;
+  readonly airbrakeControl?: boolean | null;
+  readonly wheelBrakeControl?: boolean | null;
+  readonly brakeChute?: boolean | null;
+}
 export interface AircraftParameterData {
   readonly schema_version: 1;
   readonly source?: { readonly kind: string; readonly version: string };
@@ -40,6 +49,11 @@ export class AircraftParameters {
       if (profile.fuel && (!Array.isArray(profile.fuel.engines) || !["reference-only", "unsupported"].includes(profile.fuel.modelConfidence ?? ""))) throw new Error(`燃油参数无效：${fm}`);
       if (profile.landing && (!(profile.landing.gearIasKmh === null || typeof profile.landing.gearIasKmh === "number" && Number.isFinite(profile.landing.gearIasKmh) && profile.landing.gearIasKmh > 0)
         || !(profile.landing.gearControl === null || typeof profile.landing.gearControl === "boolean"))) throw new Error(`起落架参数无效：${fm}`);
+      const landing = profile.landing;
+      if (landing?.flapsIasKmh != null && (!Array.isArray(landing.flapsIasKmh) || !validLimit(landing.flapsIasKmh)
+        || landing.flapsIasKmh.some(point => point[0] < 0 || point[0] > 1))) throw new Error(`襟翼参数无效：${fm}`);
+      if (landing && [landing.flapsControl, landing.airbrakeControl, landing.wheelBrakeControl, landing.brakeChute]
+        .some(value => value != null && typeof value !== "boolean")) throw new Error(`降落构型参数无效：${fm}`);
     }
     for (const [unit, hook] of Object.entries(data.arrestor_hooks ?? {})) {
       if (!Object.hasOwn(data.unit_to_fm,unit) || !(hook === null || typeof hook === "boolean")) throw new Error(`着舰钩参数无效：${unit}`);

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"bomana/native/telemetry_gateway/internal/extui"
+	"bomana/native/telemetry_gateway/internal/extuihttp"
 )
 
 const (
@@ -106,13 +107,13 @@ func main() {
 	extUITransport.Proxy = nil
 	extUIResolver, err := extui.NewResolver(extui.Options{
 		Candidates: extui.DefaultCandidates(),
-		Client: &http.Client{
+		Read: extuihttp.NewReader(&http.Client{
 			Transport: extUITransport,
 			Timeout:   750 * time.Millisecond,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
-		},
+		}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {

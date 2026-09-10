@@ -2,6 +2,7 @@
 
 只保留周期计时与官方战区、机场的距离和航向导航。Windows x64 单个
 `BomanaBasic.exe`，直接双击，无需安装、登录、Bridge、浏览器或本地计算模块。
+程序由 Go 和 Windows 原生控件编写，不需要 Java/JVM；本机 HTTP 读取使用系统 WinHTTP。
 
 - 默认 15 分钟，进入有效飞机状态后开始计时；右键可重新计时。
   周期可设为 1–180 分钟。它是本地周期参考，不读取服务器结算时刻。
@@ -23,15 +24,27 @@
 Build manually from clean committed source with Go 1.25+ and PowerShell 7:
 
 ```powershell
-pwsh -NoProfile -File tools/build_basic_desktop.ps1 -Version 0.1.0
+pwsh -NoProfile -File tools/build_basic_desktop.ps1 -Version 0.1.2
 ```
 
 The builder strips symbols, rejects unexpected linked packages, checks the GUI
-subsystem and launches the actual EXE alone in a temporary directory. It does
-not bundle a browser, fonts, a kernel, catalogs or another executable. No UPX or
-other executable packer is used. Send only `dist/basic-desktop/0.1.0/BomanaBasic.exe`;
+subsystem and application icon, and launches the actual EXE alone in a temporary
+directory. It does not bundle a browser, fonts, a kernel, catalogs or another executable. No UPX or
+other executable packer is used. Send only `dist/basic-desktop/0.1.2/BomanaBasic.exe`;
 `build-info.json` is maintainer evidence and is not required by users.
+
+The EXE, native windows and tray reuse `bomana/assets/web/favicon.svg`. The
+committed `app.ico` and `rsrc_windows_amd64.syso` contain compressed 16/32/48/256 px
+frames. After changing the SVG, run `pwsh -NoProfile -File tools/generate_basic_icon.ps1`
+with the frontend's frozen dependencies, Edge, Node and Go installed. These are
+maintenance tools only; regular Go builds use the committed resource and the
+product needs no SVG renderer or external icon file.
 
 Automated tests cover source/clock/navigation behavior and real native window,
 settings and alpha composition. Real War Thunder acceptance is separate from
 these tests. See `docs/specs/basic-desktop.md` for the supported boundary.
+
+WinHTTP requests use asynchronous completions with a 600 ms total deadline.
+Cancellation closes the request, and its read buffer stays pinned until the last
+handle callback completes; see
+[Microsoft's concurrency contract](https://learn.microsoft.com/en-us/windows/win32/winhttp/concurrency-in-winhttp).

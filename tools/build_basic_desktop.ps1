@@ -40,6 +40,10 @@ try {
         $nonStandard = @(Invoke-Checked go @('list', '-deps', '-f', '{{if not .Standard}}{{.ImportPath}}{{end}}', './cmd/bomana_basic') | Where-Object { $_ })
         $allowed = @('bomana/native/telemetry_gateway/internal/extui', 'bomana/native/telemetry_gateway/cmd/bomana_basic')
         foreach ($dependency in $nonStandard) { if ($dependency -notin $allowed) { throw "Unexpected linked dependency: $dependency" } }
+        $dependencies = @(Invoke-Checked go @('list', '-deps', './cmd/bomana_basic'))
+        foreach ($dependency in @('net/http', 'crypto/tls')) {
+            if ($dependency -in $dependencies) { throw "Basic Desktop must use system HTTP instead of linking $dependency" }
+        }
         $builtAt = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
         $flags = "-H=windowsgui -s -w -X main.version=$Version -X main.sourceCommit=$source -X main.builtAt=$builtAt"
         Invoke-Checked go @('build', '-trimpath', '-ldflags', $flags, '-o', $exe, './cmd/bomana_basic')
@@ -47,6 +51,7 @@ try {
     }
     finally { Pop-Location }
     & (Join-Path $PSScriptRoot 'assert_windows_gui_subsystem.ps1') -Path $exe | Out-Null
+    & (Join-Path $PSScriptRoot 'assert_windows_application_icon.ps1') -Path $exe -IconPath (Join-Path $root 'native/telemetry_gateway/cmd/bomana_basic/app.ico') | Out-Null
 
     # Run the actual GUI executable from a directory containing only that EXE.
     # Its package check creates, paints and closes its own native window; it
@@ -92,7 +97,7 @@ try {
         dirty = ($dirty.Count -gt 0); builtAt = $builtAt; toolchain = $toolchain
         artifact = 'BomanaBasic.exe'; bytes = $bytes
         sha256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-        linkedProjectPackages = $nonStandard; packageCheck = 'passed'
+        linkedProjectPackages = $nonStandard; httpTransport = 'windows-winhttp'; packageCheck = 'passed'
     }
     [IO.File]::WriteAllText((Join-Path $OutputDir 'build-info.json'), ($info | ConvertTo-Json -Depth 4) + "`n", [Text.UTF8Encoding]::new($false))
     Write-Output ("Built {0}: {1} bytes ({2:N2} MiB). Distribute the EXE alone." -f $exe, $bytes, ($bytes / 1MB))

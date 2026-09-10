@@ -131,6 +131,7 @@ export interface EditionSnapshot {
       readonly level: "none" | "caution" | "warning" | "critical";
       readonly ratio: number;
       readonly iasLimitKmh: number;
+      readonly iasLimitSource?: "airframe" | "flaps" | null;
       readonly machLimit: number;
       readonly matched: boolean;
       readonly estimated?: boolean;

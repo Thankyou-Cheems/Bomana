@@ -1,0 +1,14 @@
+[
+  {"name":"retracted flaps do not constrain structural IAS","ias":700,"flaps":0,"airframeIas":1000,"mach":null,"curve":true,"expected":{"iasLimitKmh":1000,"iasLimitSource":"airframe","level":"none","matched":true}},
+  {"name":"partial automatic flaps interpolate the current reference","ias":400,"flaps":25,"airframeIas":1000,"mach":null,"curve":true,"expected":{"iasLimitKmh":405,"iasLimitSource":"flaps","level":"warning","matched":true}},
+  {"name":"fully deployed flaps constrain IAS","ias":300,"flaps":100,"airframeIas":1000,"mach":null,"curve":true,"expected":{"iasLimitKmh":300,"iasLimitSource":"flaps","level":"critical","matched":true}},
+  {"name":"flap reference retains the common caution bands","ias":285,"flaps":100,"airframeIas":1000,"mach":null,"curve":true,"expected":{"iasLimitKmh":300,"iasLimitSource":"flaps","level":"caution","matched":true}},
+  {"name":"low speed stays below the current reference","ias":200,"flaps":100,"airframeIas":1000,"mach":null,"curve":true,"expected":{"iasLimitKmh":300,"iasLimitSource":"flaps","level":"none","matched":true}},
+  {"name":"a lower structural limit is never relaxed by flaps","ias":285,"flaps":25,"airframeIas":300,"mach":null,"curve":true,"expected":{"iasLimitKmh":300,"iasLimitSource":"airframe","level":"caution","matched":true}},
+  {"name":"a flap reference works without structural IAS","ias":400,"flaps":25,"airframeIas":null,"mach":null,"curve":true,"expected":{"iasLimitKmh":405,"iasLimitSource":"flaps","level":"warning","matched":true}},
+  {"name":"Mach warning remains independent of flap IAS","ias":100,"flaps":25,"airframeIas":1000,"mach":1.99,"curve":true,"expected":{"iasLimitKmh":405,"iasLimitSource":"flaps","level":"critical","matched":true}},
+  {"name":"missing flap position restores structural IAS","ias":700,"flaps":null,"airframeIas":1000,"mach":null,"curve":true,"expected":{"iasLimitKmh":1000,"iasLimitSource":"airframe","level":"none","matched":true}},
+  {"name":"invalid flap position does not select a reference","ias":700,"flaps":101,"airframeIas":1000,"mach":null,"curve":true,"expected":{"iasLimitKmh":1000,"iasLimitSource":"airframe","level":"none","matched":true}},
+  {"name":"missing curve does not invent a flap limit","ias":700,"flaps":100,"airframeIas":1000,"mach":null,"curve":false,"expected":{"iasLimitKmh":1000,"iasLimitSource":"airframe","level":"none","matched":true}},
+  {"name":"retraction still preserves structural overspeed","ias":995,"flaps":0,"airframeIas":1000,"mach":null,"curve":true,"expected":{"iasLimitKmh":1000,"iasLimitSource":"airframe","level":"critical","matched":true}}
+]

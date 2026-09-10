@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"bomana/native/telemetry_gateway/internal/extui"
+	"bomana/native/telemetry_gateway/internal/extuihttp"
 )
 
 const testOrigin = "https://bomana.example.test"
@@ -84,7 +85,7 @@ func TestRelayDiscoversTheWarThunderExtUIFallback(t *testing.T) {
 	fallbackURL, _ := url.Parse(fallback.URL)
 	resolver, err := extui.NewResolver(extui.Options{
 		Candidates: []*url.URL{occupiedURL, fallbackURL},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {
@@ -120,7 +121,7 @@ func TestRelayRecoversWhenWarThunderMovesToAnotherExtUIPort(t *testing.T) {
 	secondURL, _ := url.Parse(second.URL)
 	resolver, err := extui.NewResolver(extui.Options{
 		Candidates: []*url.URL{firstURL, secondURL},
-		Client:     &http.Client{Timeout: time.Second},
+		Read:       extuihttp.NewReader(&http.Client{Timeout: time.Second}),
 		RetryDelay: time.Second,
 	})
 	if err != nil {

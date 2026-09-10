@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_LANDING_SETTINGS, LandingAssist, landingGeometry, type LandingInput } from "./landing-assist";
 import { landingPresentation } from "./landing-presentation";
 import cases from "./landing-geometry-cases.json";
+import configurationCases from "./landing-configuration-cases.json";
+import { landingFlapReference } from "./landing-configuration";
+import { AircraftParameters } from "./aircraft-parameters";
 import { PublicRuntime } from "./public-runtime";
 import { editionPolicy } from "./edition-policy";
 import { publicFlight } from "./public-runtime-fixture";
@@ -16,6 +19,41 @@ function inboundSample(at: number): LandingInput {
     track: { valid: true, worldX:0,worldZ:0,velocityX:0,velocityZ:100,groundSpeedMps:100,headingDeg:0,residualM:0,sampleCount:4,sampleSpanMs:300 },
     altitudeM:500,iasKmh:300,verticalSpeedMps:-4,gearPercent:0,airbrakePercent:0,flapsPercent:0 };
 }
+
+it("corrects a drifting ground track before the aircraft leaves the runway centerline", () => {
+  const input = inboundSample(1000), assist = new LandingAssist();
+  assist.update(input);
+  assist.configure({ ...DEFAULT_LANDING_SETTINGS, enabled: true }, input.navigation);
+  const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+  for (const drift of [-20, 20]) {
+    const landing = assist.update({ ...input,
+      navigation: { ...input.navigation!, player: { x: .5, y: .55 } },
+      track: { ...input.track!, velocityX: drift, velocityZ: 80 },
+    });
+    expect(Math.sign(landing.geometry!.trackErrorDeg!), "the fresh ground-track axes are already correct").toBe(Math.sign(drift));
+    const tape = landingTapePresentation({ ...runtime.snapshot(), landing });
+    expect(Math.sign(tape.lateral!), "guide against sideways motion while position is still centered").toBe(-Math.sign(drift));
+  }
+});
+
+it.each(configurationCases)("flap reference: $name", test => {
+  const profile = AircraftParameters.parse({schema_version:1,unit_to_fm:{test:"test"},flight_models:{test:{speed:null,fuel:null,landing:test.profile}},loadouts:{}}).landing("test");
+  expect(landingFlapReference(profile, test.percent, test.ias, test.previous)).toEqual(test.expected);
+});
+
+it("uses fresh flap observations for compact warnings and withdraws them during a telemetry gap", () => {
+  const profile = AircraftParameters.parse({schema_version:1,unit_to_fm:{test:"test"},flight_models:{test:{speed:null,fuel:null,landing:configurationCases[1]!.profile}},loadouts:{}}).landing("test");
+  const assist = new LandingAssist(), input = { ...inboundSample(1000), aircraft: profile, iasKmh:400, flapsPercent:25 };
+  assist.update(input); assist.configure({ ...DEFAULT_LANDING_SETTINGS, enabled:true }, input.navigation);
+  const runtime = new PublicRuntime({ edition:editionPolicy("Standard") });
+  const live = assist.update(input);
+  expect(live.flapReference).toMatchObject({risk:"over-limit",limitIasKmh:397});
+  expect(landingTapePresentation({...runtime.snapshot(), landing:live})).toMatchObject({config:"襟翼超限",speedTone:"danger",speedDetail:"翼参 ≤397"});
+  const missing = assist.update({...input, fresh:false});
+  expect(missing.flapReference).toEqual({risk:"unknown",limitIasKmh:null,next:null});
+  expect(landingTapePresentation({...runtime.snapshot(), landing:missing}).config).not.toContain("超限");
+  expect(assist.update({...input, fresh:true, iasKmh:380}).flapReference?.risk).toBe("near-limit");
+});
 
 it("acquires a sustained inbound runway, holds it through dropouts, and exits after turning away", () => {
   const assist = new LandingAssist();

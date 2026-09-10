@@ -1,21 +1,20 @@
+//go:build windows
+
 package main
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
 	"net/url"
 	"sync"
-	"time"
 
 	"bomana/native/telemetry_gateway/internal/extui"
 )
 
 type source struct {
 	resolver *extui.Resolver
-	client   *http.Client
+	client   *localHTTP
 	last     frame
 	nextMap  int64
 }
@@ -24,9 +23,16 @@ func newSource(candidates []*url.URL) (*source, error) {
 	if candidates == nil {
 		candidates = extui.DefaultCandidates()
 	}
-	client := &http.Client{Timeout: 600 * time.Millisecond, Transport: &http.Transport{Proxy: nil, MaxIdleConnsPerHost: 4}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	r, err := extui.NewResolver(extui.Options{Candidates: candidates, Client: client})
-	return &source{resolver: r, client: client}, err
+	client, err := newLocalHTTP()
+	if err != nil {
+		return nil, err
+	}
+	r, err := extui.NewResolver(extui.Options{Candidates: candidates, Read: client.read})
+	if err != nil {
+		client.close()
+		return nil, err
+	}
+	return &source{resolver: r, client: client}, nil
 }
 func (s *source) read(ctx context.Context, now int64) frame {
 	f := frame{At: now}
@@ -34,7 +40,7 @@ func (s *source) read(ctx context.Context, now int64) frame {
 	if err != nil {
 		return f
 	}
-	paths := []string{"/indicators", "/state", "/map_objects.json", "/map_info.json"}
+	paths := []string{"/indicators", "/state", "/map_obj.json", "/map_info.json"}
 	data := make([][]byte, 4)
 	errs := make([]error, 4)
 	var wg sync.WaitGroup
@@ -122,21 +128,6 @@ func (s *source) read(ctx context.Context, now int64) frame {
 func (s *source) get(ctx context.Context, base *url.URL, path string) ([]byte, error) {
 	u := *base
 	u.Path = path
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	response, err := s.client.Do(r)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, errors.New("ExtUI unavailable")
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 1024*1024+1))
-	if len(data) > 1024*1024 {
-		return nil, errors.New("ExtUI response exceeds limit")
-	}
+	data, _, err := s.client.read(ctx, &u, 1024*1024)
 	return data, err
 }

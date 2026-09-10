@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -40,7 +42,7 @@ func TestSourceFixedRoutesHoldoverAndAuthoritativeEmpty(t *testing.T) {
 			json.NewEncoder(w).Encode(f.Indicators)
 		case "/state":
 			json.NewEncoder(w).Encode(f.State)
-		case "/map_objects.json":
+		case "/map_obj.json":
 			if failObjects {
 				http.Error(w, "busy", 503)
 			} else if empty {
@@ -59,7 +61,7 @@ func TestSourceFixedRoutesHoldoverAndAuthoritativeEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.client.CloseIdleConnections()
+	defer s.client.close()
 	f := s.read(context.Background(), 1000)
 	if f.ObjectsAt != 1000 || len(f.Objects) != 6 {
 		t.Fatalf("%+v", f)
@@ -90,6 +92,48 @@ func TestSourceFixedRoutesHoldoverAndAuthoritativeEmpty(t *testing.T) {
 		t.Fatal("repeated discovery on partial error")
 	}
 }
+func TestSourceOfficialMapRouteStartsTimerAndNavigation(t *testing.T) {
+	// The official client map.js and Bridge route use /map_obj.json.
+	// Keep the fixture independent of the source's requested route names.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		f := flight(1000)
+		switch r.URL.Path {
+		case "/icons.ttf":
+			b := make([]byte, 29)
+			b[1] = 1
+			binary.BigEndian.PutUint16(b[4:6], 1)
+			binary.BigEndian.PutUint32(b[20:24], 28)
+			binary.BigEndian.PutUint32(b[24:28], 1)
+			w.Write(b)
+		case "/map_info.json":
+			json.NewEncoder(w).Encode(f.MapInfo)
+		case "/indicators":
+			json.NewEncoder(w).Encode(f.Indicators)
+		case "/state":
+			json.NewEncoder(w).Encode(f.State)
+		case "/map_obj.json":
+			json.NewEncoder(w).Encode(f.Objects)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	s, err := newSource([]*url.URL{u})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.client.close()
+	m := newModel(defaults())
+	for _, now := range []int64{1000, 2000} {
+		m.ingest(s.read(context.Background(), now))
+	}
+	v := m.snapshot(2000)
+	if !v.HasHeading || v.Selected == nil || v.Remaining != "15:00" {
+		t.Fatalf("official ExtUI did not reach navigation/timer: heading=%v target=%v timer=%q status=%q", v.HasHeading, v.Selected, v.Remaining, v.Status)
+	}
+}
 func TestSourceRejectsOffMachineAndRedirectsAndOversizedBodies(t *testing.T) {
 	u, _ := url.Parse("https://example.com:8111")
 	if _, err := newSource([]*url.URL{u}); err == nil {
@@ -108,7 +152,7 @@ func TestSourceRejectsOffMachineAndRedirectsAndOversizedBodies(t *testing.T) {
 	defer server.Close()
 	u, _ = url.Parse(server.URL)
 	s, _ := newSource([]*url.URL{u})
-	defer s.client.CloseIdleConnections()
+	defer s.client.close()
 	for _, path := range []string{"/redirect", "/large"} {
 		if _, err := s.get(context.Background(), u, path); err == nil {
 			t.Fatal("accepted", path)

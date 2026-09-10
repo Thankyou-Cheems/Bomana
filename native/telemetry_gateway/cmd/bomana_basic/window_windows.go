@@ -33,7 +33,8 @@ var taskbarCreated, _, _ = user32.NewProc("RegisterWindowMessageW").Call(uintptr
 func register(name string, callback uintptr, background uintptr) error {
 	instance, _, _ := getModuleHandle.Call(0)
 	cursor, _, _ := loadCursor.Call(0, 32512)
-	wc := windowClass{Proc: callback, Instance: instance, Cursor: cursor, Name: wide(name), Background: background}
+	icon, _, _ := loadIcon.Call(instance, 1) // First icon group in the generated EXE resource.
+	wc := windowClass{Proc: callback, Instance: instance, Icon: icon, Cursor: cursor, Name: wide(name), Background: background}
 	wc.Size = uint32(unsafe.Sizeof(wc))
 	ok, _, err := registerClass.Call(uintptr(unsafe.Pointer(&wc)))
 	if ok == 0 && err != syscall.Errno(1410) {
@@ -94,7 +95,8 @@ func newApp(s settings, path string, frames <-chan frame, class string) (*applic
 	return a, nil
 }
 func (a *application) addTray() {
-	icon, _, _ := loadIcon.Call(0, 32512)
+	instance, _, _ := getModuleHandle.Call(0)
+	icon, _, _ := loadIcon.Call(instance, 1)
 	a.tray = iconData{HWND: a.hwnd, ID: 1, Flags: 1 | 2 | 4, Callback: wmTray, Icon: icon}
 	a.tray.Size = uint32(unsafe.Sizeof(a.tray))
 	copy(a.tray.Tip[:], syscall.StringToUTF16("Bomana 精简版 · 左键设置 / 右键菜单"))

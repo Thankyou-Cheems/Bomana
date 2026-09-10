@@ -60,7 +60,7 @@ func main() {
 			return
 		}
 		go func() {
-			defer src.client.CloseIdleConnections()
+			defer src.client.close()
 			ticker := time.NewTicker(200 * time.Millisecond)
 			defer ticker.Stop()
 			for {

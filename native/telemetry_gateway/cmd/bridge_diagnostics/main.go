@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"bomana/native/telemetry_gateway/internal/extui"
+	"bomana/native/telemetry_gateway/internal/extuihttp"
 )
 
 const (
@@ -138,7 +139,7 @@ func collectDiagnostics() diagnosticSnapshot {
 	}
 	resolver, resolverErr := extui.NewResolver(extui.Options{
 		Candidates: extui.DefaultCandidates(),
-		Client:     extUIClient,
+		Read:       extuihttp.NewReader(extUIClient),
 		RetryDelay: time.Second,
 	})
 	var gameCheck httpCheck

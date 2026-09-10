@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"mime"
-	"net"
-	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -24,9 +22,14 @@ const (
 
 var defaultPorts = [...]string{"8111", "9222", "10333"}
 
+// ReadFunc performs one bounded GET, rejects non-200 responses, and returns the
+// body and Content-Type. Keeping transport outside the resolver lets the small
+// native surface use system HTTP without linking Go's HTTP/TLS implementation.
+type ReadFunc func(context.Context, *url.URL, int64) ([]byte, string, error)
+
 type Options struct {
 	Candidates []*url.URL
-	Client     *http.Client
+	Read       ReadFunc
 	Now        func() time.Time
 	RetryDelay time.Duration
 }
@@ -47,7 +50,7 @@ type Snapshot struct {
 
 type Resolver struct {
 	candidates []*url.URL
-	client     *http.Client
+	read       ReadFunc
 	now        func() time.Time
 	retryDelay time.Duration
 	mu         sync.Mutex
@@ -80,9 +83,8 @@ func NewResolver(options Options) (*Resolver, error) {
 		copy.Fragment = ""
 		candidates = append(candidates, &copy)
 	}
-	client := options.Client
-	if client == nil {
-		client = &http.Client{Timeout: 750 * time.Millisecond}
+	if options.Read == nil {
+		return nil, errors.New("ExtUI bounded reader is required")
 	}
 	now := options.Now
 	if now == nil {
@@ -92,7 +94,7 @@ func NewResolver(options Options) (*Resolver, error) {
 	if retryDelay <= 0 {
 		retryDelay = time.Second
 	}
-	return &Resolver{candidates: candidates, client: client, now: now, retryDelay: retryDelay}, nil
+	return &Resolver{candidates: candidates, read: options.Read, now: now, retryDelay: retryDelay}, nil
 }
 
 func (resolver *Resolver) Resolve(ctx context.Context) (*url.URL, error) {
@@ -159,21 +161,14 @@ func (resolver *Resolver) verify(ctx context.Context, candidate *url.URL) error 
 func (resolver *Resolver) verifyJSON(ctx context.Context, candidate *url.URL, path string) error {
 	probeURL := *candidate
 	probeURL.Path = path
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL.String(), nil)
+	body, contentType, err := resolver.read(ctx, &probeURL, maxProbeJSONBytes)
 	if err != nil {
 		return err
 	}
-	request.Header.Set("Accept", "application/json")
-	response, err := resolver.client.Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK || !contentTypeIs(response.Header.Get("Content-Type"), "application/json") {
+	if !contentTypeIs(contentType, "application/json") {
 		return fmt.Errorf("%s did not return ExtUI JSON", path)
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxProbeJSONBytes+1))
-	if err != nil || len(body) > maxProbeJSONBytes {
+	if len(body) > maxProbeJSONBytes {
 		return fmt.Errorf("%s response exceeded the probe limit", path)
 	}
 	var object map[string]json.RawMessage
@@ -220,21 +215,11 @@ func finitePair(raw json.RawMessage) bool {
 func (resolver *Resolver) verifyFont(ctx context.Context, candidate *url.URL) error {
 	probeURL := *candidate
 	probeURL.Path = "/icons.ttf"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL.String(), nil)
+	body, _, err := resolver.read(ctx, &probeURL, maxProbeFontBytes)
 	if err != nil {
 		return err
 	}
-	request.Header.Set("Accept", "font/ttf, application/octet-stream")
-	response, err := resolver.client.Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return errors.New("icons.ttf is unavailable")
-	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxProbeFontBytes+1))
-	if err != nil || len(body) > maxProbeFontBytes || !validSFNT(body) {
+	if len(body) > maxProbeFontBytes || !validSFNT(body) {
 		return errors.New("icons.ttf is not a bounded sfnt font")
 	}
 	return nil
@@ -245,8 +230,8 @@ func validateCandidate(candidate *url.URL) error {
 		return errors.New("ExtUI candidate must be an uncredentialed loopback HTTP origin")
 	}
 	host := candidate.Hostname()
-	ip := net.ParseIP(host)
-	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+	ip, err := netip.ParseAddr(host)
+	if host != "localhost" && (err != nil || !ip.IsLoopback()) {
 		return errors.New("ExtUI candidate must use loopback")
 	}
 	if candidate.Port() == "" {

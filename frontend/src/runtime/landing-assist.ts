@@ -1,6 +1,7 @@
 import type { EditionSnapshot, NavigationItem } from "./runtime-types";
 import type { GroundTrackEstimate } from "./ground-track";
 import type { AircraftLandingProfile } from "./aircraft-parameters";
+import { landingFlapReference, type LandingFlapReference } from "./landing-configuration";
 
 export interface LandingSettings {
   readonly enabled: boolean;
@@ -30,6 +31,11 @@ export interface LandingGeometry {
   readonly heightM: number | null;
   readonly glideDeviationM: number | null;
   readonly referenceDescentMps: number | null;
+  /** Product ground-track interception reference; never a commanded aircraft heading. */
+  readonly guidanceCourseDeg?: number | null;
+  readonly guidanceErrorDeg?: number | null;
+  readonly thresholdTimeS?: number | null;
+  readonly predictedThresholdCrossM?: number | null;
 }
 export interface LandingSnapshot {
   readonly settings: LandingSettings;
@@ -47,6 +53,7 @@ export interface LandingSnapshot {
   readonly geometry: LandingGeometry | null;
   readonly aircraft?: AircraftLandingProfile | null;
   readonly gearRisk?: "unknown" | "reference" | "near-limit" | "over-limit" | "extension-too-fast";
+  readonly flapReference?: LandingFlapReference;
 }
 export interface LandingInput {
   readonly context: string;
@@ -122,9 +129,25 @@ export function landingGeometry(input: {
   const glideDeviationM = aligned && heightM !== null ? heightM - (15 - along * slope) : null;
   const referenceDescentMps = aligned && heightM !== null && velocity
     ? -(velocity[0] * ux + velocity[1] * uy) * slope : null;
+  let guidanceCourseDeg: number | null = null, guidanceErrorDeg: number | null = null;
+  let thresholdTimeS: number | null = null, predictedThresholdCrossM: number | null = null;
+  if (velocity && trackErrorDeg !== null) {
+    // A bounded 12-second lookahead avoids steering solely from position: an
+    // aircraft on the centerline can already be drifting out of the approach.
+    const lookaheadM = Math.max(300, Math.min(3000, Math.hypot(...velocity) * 12));
+    const interceptDeg = Math.max(-35, Math.min(35, Math.atan2(crossTrackM, lookaheadM) * 180 / Math.PI));
+    guidanceCourseDeg = stage === "return" ? airportBearingDeg : (courseDeg - interceptDeg + 360) % 360;
+    if (guidanceCourseDeg !== null) guidanceErrorDeg = ((courseDeg + trackErrorDeg - guidanceCourseDeg + 540) % 360) - 180;
+    const closingMps = velocity[0] * ux + velocity[1] * uy;
+    if (along < 0 && closingMps >= 10 && -along / closingMps <= 120) {
+      thresholdTimeS = -along / closingMps;
+      predictedThresholdCrossM = crossTrackM + (-velocity[0] * uy + velocity[1] * ux) * thresholdTimeS;
+    }
+  }
   return { courseDeg, lengthM, thresholdDistanceM: -along, crossTrackM, trackErrorDeg,
     airportDistanceM, airportBearingDeg, airportTrackErrorDeg, stage,
-    heightM, glideDeviationM, referenceDescentMps };
+    heightM, glideDeviationM, referenceDescentMps, guidanceCourseDeg, guidanceErrorDeg,
+    thresholdTimeS, predictedThresholdCrossM };
 }
 
 /** Acquire an airport-bound return, then retain the same runway through its approach. */
@@ -133,6 +156,7 @@ export class LandingAssist {
   #context = "";
   #runwayKey = "";
   #gearRisk: NonNullable<LandingSnapshot["gearRisk"]> = "unknown";
+  #flapRisk = "unknown";
   #candidateKey = "";
   #candidateSince = 0;
   #exitSince = 0;
@@ -161,6 +185,7 @@ export class LandingAssist {
     if (this.#context && input.context !== this.#context) {
       this.#settings = { ...DEFAULT_LANDING_SETTINGS, automatic: this.#settings.automatic }; this.#runwayKey = "";
       this.#gearRisk = "unknown";
+      this.#flapRisk = "unknown";
       this.#candidateKey = ""; this.#exitSince = this.#lastAutoAt = this.#cooldownUntil = 0;
     }
     this.#context = input.context;
@@ -175,6 +200,9 @@ export class LandingAssist {
       else this.#gearRisk = "reference";
     }
     const settings = this.#settings, runways = landingRunways(input.navigation);
+    const flapReference = landingFlapReference(input.aircraft, input.fresh ? input.flapsPercent : null,
+      input.fresh ? input.iasKmh : null, this.#flapRisk);
+    this.#flapRisk = flapReference.risk;
     const runway = runways.find(item => item.id === settings.runwayId);
     const unavailable = !settings.enabled ? "disabled" : !input.fresh || !input.navigation?.player ? "telemetry"
       : !runway ? "runway-missing" : JSON.stringify([runway.runwayStart, runway.runwayEnd]) !== this.#runwayKey ? "runway-changed" : "";
@@ -193,7 +221,7 @@ export class LandingAssist {
       elevationSource: geometry && elevationM !== null ? settings.runwayElevationM !== null ? "manual" : "terrain" : null,
       iasKmh: input.fresh ? input.iasKmh : null, verticalSpeedMps: input.fresh ? input.verticalSpeedMps : null,
       gearPercent: input.fresh ? input.gearPercent : null, airbrakePercent: input.fresh ? input.airbrakePercent : null,
-      flapsPercent: input.fresh ? input.flapsPercent : null, geometry, aircraft: input.aircraft ?? null, gearRisk: this.#gearRisk };
+      flapsPercent: input.fresh ? input.flapsPercent : null, geometry, aircraft: input.aircraft ?? null, gearRisk: this.#gearRisk, flapReference };
   }
 
   #updateAutomatic(input: LandingInput): void {
