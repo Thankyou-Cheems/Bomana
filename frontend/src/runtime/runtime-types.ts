@@ -100,6 +100,11 @@ export interface EditionSnapshot {
   readonly sampledAtMs: number;
   readonly mapObjectsSampledAtMs?: number;
   readonly connected: boolean;
+  readonly weaponRelease?: {
+    readonly machLimits: readonly (number | null)[] | null;
+    readonly mach: number | null;
+    readonly tasKmh: number | null;
+  } | null;
   readonly phase: RuntimePhase;
   readonly sortieContinuity: {
     readonly state: "live" | "partial-data" | "no-data-grace" | "reset-cancelled" | "reset-undo";

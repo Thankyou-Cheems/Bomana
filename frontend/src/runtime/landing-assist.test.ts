@@ -20,6 +20,33 @@ function inboundSample(at: number): LandingInput {
     altitudeM:500,iasKmh:300,verticalSpeedMps:-4,gearPercent:0,airbrakePercent:0,flapsPercent:0 };
 }
 
+it.each(["stable", "reordered", "missing"])("restores navigation after repeated landings with %s airport observations", async variant => {
+  const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+  let at = 1000;
+  const home = { type: "airfield", side: "friendly", sx: .5, sy: .5, ex: .5, ey: .48 };
+  const other = { type: "airfield", side: "friendly", sx: .8, sy: .5, ex: .8, ey: .48 };
+  let y = .58;
+  const fly = async (seconds: number, vy: number, dy: number, airports: object[]) => {
+    for (let step = 0; step < seconds * 10; step++, at += 100) {
+      y += dy * .0001;
+      const f = publicFlight(at);
+      await runtime.ingest({ ...f, state: { ...f.state, "Vy, m/s": vy, "IAS, km/h": dy ? 360 : 0 },
+        mapObjects: [{ type: "player", x: .5, y, dx: 0, dy }, ...airports] });
+    }
+  };
+  for (let cycle = 0; cycle < 3; cycle++) {
+    y = .58;
+    await fly(12, -4, -1, [home, other]);
+    expect(runtime.snapshot().landing?.settings.enabled, `approach ${cycle}`).toBe(true);
+    y = .49;
+    await fly(3, 0, 0, [home, other]);
+    const airports = variant === "reordered" ? [other, home] : variant === "missing" ? [other] : [home, other];
+    await fly(40, 5, -1, airports);
+    expect(runtime.snapshot().landing?.settings.enabled, `departure ${cycle}`).toBe(false);
+    expect(landingTapePresentation(runtime.snapshot()).active).toBe(false);
+  }
+});
+
 it("keeps excessive-descent advice visible without static touchdown explanations", () => {
   const input = inboundSample(1000), assist = new LandingAssist();
   assist.update(input);
@@ -83,6 +110,18 @@ it("acquires a sustained inbound runway, holds it through dropouts, and exits af
   assist.configure({...assist.settings(),automatic:false,enabled:false},inboundSample(18000).navigation);
   for(let at=30000;at<=35000;at+=500) expect(assist.update(inboundSample(at)).settings.enabled).toBe(false);
   expect(assist.update({...inboundSample(36000),context:"new-sortie"}).settings.automatic).toBe(false);
+});
+
+it("keeps a manual runway through reorder but never revives its elevation after endpoint change", () => {
+  const assist = new LandingAssist(), input = inboundSample(1000);
+  assist.update(input);
+  assist.configure({...DEFAULT_LANDING_SETTINGS,enabled:true,automatic:false},input.navigation);
+  assist.configure({...assist.settings(),runwayElevationM:123},input.navigation);
+  const reordered = {...input,sampledAtMs:1500,navigation:{...input.navigation!,items:input.navigation!.items.map(r=>({...r,id:"renumbered"}))}};
+  expect(assist.update(reordered)).toMatchObject({status:"guidance",elevationM:123,settings:{runwayId:"renumbered"}});
+  const changed = {...reordered,sampledAtMs:2000,navigation:{...reordered.navigation,items:reordered.navigation.items.map(r=>({...r,runwayEnd:[.51,.45] as const}))}};
+  expect(assist.update(changed)).toMatchObject({reason:"runway-changed",settings:{runwayElevationM:null}});
+  expect(assist.update({...reordered,sampledAtMs:2500})).toMatchObject({status:"guidance",elevationM:null});
 });
 
 it("does not enter on departure, lateral flybys, hostile runways or intermittent observations", () => {

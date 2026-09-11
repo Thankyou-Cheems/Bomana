@@ -297,6 +297,11 @@ export class PublicRuntime {
       sampledAtMs: frame.sampledAtMs,
       mapObjectsSampledAtMs: zoneObservedAtMs,
       connected: frame.availability.indicators && frame.availability.state && frame.availability.mapObjects,
+      weaponRelease: this._edition.capabilities.strikePrediction ? {
+        machLimits: this._aircraftParameters?.releaseMach(telemetry.aircraft, this._settings.selectedWeaponId) ?? null,
+        mach: speedStateFresh && sortieContinuity.state === "live" ? telemetry.mach : null,
+        tasKmh: speedStateFresh && sortieContinuity.state === "live" && telemetry.tasObserved ? telemetry.tasKmh : null,
+      } : null,
       phase: this._phase,
       sortieContinuity,
       timer,

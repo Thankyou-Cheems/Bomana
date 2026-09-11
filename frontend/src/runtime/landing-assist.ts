@@ -160,6 +160,7 @@ export class LandingAssist {
   #candidateKey = "";
   #candidateSince = 0;
   #exitSince = 0;
+  #missingSince = 0;
   #lastAutoAt = 0;
   #cooldownUntil = 0;
   settings(): LandingSettings { return this.#settings; }
@@ -179,16 +180,21 @@ export class LandingAssist {
     this.#settings = { ...settings, automatic: settings.automatic ?? false, runwayId: runway?.id ?? null, reverse,
       runwayElevationM: directionChanged ? null : settings.runwayElevationM };
     this.#runwayKey = key;
-    this.#candidateKey = ""; this.#exitSince = 0;
+    this.#candidateKey = ""; this.#exitSince = this.#missingSince = 0;
   }
   update(input: LandingInput, terrainElevation: (point: readonly [number, number]) => number | null = () => null): LandingSnapshot {
     if (this.#context && input.context !== this.#context) {
       this.#settings = { ...DEFAULT_LANDING_SETTINGS, automatic: this.#settings.automatic }; this.#runwayKey = "";
       this.#gearRisk = "unknown";
       this.#flapRisk = "unknown";
-      this.#candidateKey = ""; this.#exitSince = this.#lastAutoAt = this.#cooldownUntil = 0;
+      this.#candidateKey = ""; this.#exitSince = this.#missingSince = this.#lastAutoAt = this.#cooldownUntil = 0;
     }
     this.#context = input.context;
+    if (this.#settings.enabled && input.fresh) {
+      const runway = this.#lockedRunway(landingRunways(input.navigation));
+      if (runway && runway.id !== this.#settings.runwayId) this.#settings = { ...this.#settings, runwayId: runway.id };
+      else if (!runway && this.#settings.runwayElevationM !== null) this.#settings = { ...this.#settings, runwayElevationM: null };
+    }
     this.#updateAutomatic(input);
     const limit = input.aircraft?.gearIasKmh;
     if (!input.fresh || input.iasKmh === null || input.gearPercent === null || !limit) this.#gearRisk = "unknown";
@@ -228,10 +234,10 @@ export class LandingAssist {
     const at = input.sampledAtMs, n = input.navigation, track = input.track;
     if (!this.#settings.automatic || !input.fresh || at == null || !Number.isFinite(at)
       || !n?.player || !n.mapScaleM || !track?.valid) {
-      this.#candidateKey = ""; this.#exitSince = 0; return;
+      this.#candidateKey = ""; this.#exitSince = this.#missingSince = 0; return;
     }
     if (at <= this.#lastAutoAt) return;
-    if (at - this.#lastAutoAt > 1500) { this.#candidateKey = ""; this.#exitSince = 0; }
+    if (at - this.#lastAutoAt > 1500) { this.#candidateKey = ""; this.#exitSince = this.#missingSince = 0; }
     this.#lastAutoAt = at;
     const runways = landingRunways(n);
     const geometry = (r: NavigationItem, reverse: boolean) => landingGeometry({ player: n.player!, scale: n.mapScaleM!,
@@ -239,11 +245,16 @@ export class LandingAssist {
       altitudeM: null, elevationM: null, glideAngleDeg: this.#settings.glideAngleDeg,
       velocity: [track.velocityX, -track.velocityZ] });
     if (this.#settings.enabled) {
-      const runway = runways.find(r => r.id === this.#settings.runwayId);
-      // A missing or moved runway withdraws live guidance; it cannot select a replacement.
-      if (!runway || JSON.stringify([runway.runwayStart, runway.runwayEnd]) !== this.#runwayKey) {
-        this.#exitSince = 0; return;
+      // Official list ordinals are not airport identities. Rebind only the
+      // same unique, ordered endpoints; never follow an ordinal to a new field.
+      const runway = this.#lockedRunway(runways);
+      if (!runway) {
+        this.#exitSince = 0;
+        if (!this.#missingSince) this.#missingSince = at;
+        if (at - this.#missingSince >= 8000) this.#leaveAutomatic(at);
+        return;
       }
+      this.#missingSince = 0;
       const g = geometry(runway, this.#settings.reverse);
       // A runway-relative course is irrelevant while returning from its side.
       const leaving = g.airportDistanceM > g.lengthM * .5 + 1000 && Math.abs(g.airportTrackErrorDeg ?? 0) > 75
@@ -252,8 +263,7 @@ export class LandingAssist {
       if (!leaving) { this.#exitSince = 0; return; }
       if (!this.#exitSince) this.#exitSince = at;
       if (at - this.#exitSince >= 8000) {
-        this.#settings = { ...this.#settings, enabled: false, runwayId: null, runwayElevationM: null };
-        this.#runwayKey = ""; this.#candidateKey = ""; this.#exitSince = 0; this.#cooldownUntil = at + 15_000;
+        this.#leaveAutomatic(at);
       }
       return;
     }
@@ -280,5 +290,16 @@ export class LandingAssist {
       this.#runwayKey = JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd]);
       this.#candidateKey = ""; this.#exitSince = 0;
     }
+  }
+
+  #leaveAutomatic(at: number): void {
+    this.#settings = { ...this.#settings, enabled: false, runwayId: null, runwayElevationM: null };
+    this.#runwayKey = ""; this.#candidateKey = "";
+    this.#exitSince = this.#missingSince = 0; this.#cooldownUntil = at + 15_000;
+  }
+
+  #lockedRunway(runways: readonly NavigationItem[]): NavigationItem | undefined {
+    const matches = runways.filter(r => JSON.stringify([r.runwayStart, r.runwayEnd]) === this.#runwayKey);
+    return matches.length === 1 ? matches[0] : undefined;
   }
 }

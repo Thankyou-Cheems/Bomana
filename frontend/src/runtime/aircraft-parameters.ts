@@ -22,6 +22,7 @@ export interface AircraftParameterData {
     readonly landing?: Omit<AircraftLandingProfile, "arrestorHook"> | null;
   }>>;
   readonly arrestor_hooks?: Readonly<Record<string, boolean | null>>;
+  readonly weapon_release_limits?: Readonly<Record<string, Readonly<Record<string, readonly (number | null)[]>>>>;
   readonly loadouts: Readonly<Record<string, {
     readonly name: string;
     readonly name_zh?: string;
@@ -61,6 +62,13 @@ export class AircraftParameters {
     for (const [unit, loadout] of Object.entries(data.loadouts)) {
       if (!Object.hasOwn(data.unit_to_fm, unit) || !loadout.weapon_max_counts || Object.values(loadout.weapon_max_counts).some(count => !Number.isInteger(count) || count <= 0)) throw new Error(`挂载参数无效：${unit}`);
     }
+    for (const [unit, weapons] of Object.entries(data.weapon_release_limits ?? {})) {
+      if (!Object.hasOwn(data.unit_to_fm, unit) || !weapons || typeof weapons !== "object"
+        || Object.values(weapons).some(values => !Array.isArray(values) || !values.length
+          || values.some(v => v !== null && (typeof v !== "number" || !Number.isFinite(v) || v <= 0)))) {
+        throw new Error(`武器投放限速无效：${unit}`);
+      }
+    }
     this.#data = data;
   }
 
@@ -83,6 +91,9 @@ export class AircraftParameters {
       estimated: sweep === null && (Array.isArray(limits.ias) || Array.isArray(limits.mach)) };
   }
   fuel(aircraft: string): AircraftFuelProfile | null { return this.#profile(aircraft)?.fuel ?? null; }
+  releaseMach(aircraft: string, weapon: string): readonly (number | null)[] | null {
+    return this.#data.weapon_release_limits?.[aircraft.trim().toLowerCase()]?.[weapon] ?? null;
+  }
   landing(aircraft: string): AircraftLandingProfile | null {
     const profile = this.#profile(aircraft)?.landing;
     if (!profile) return null;
