@@ -30,12 +30,14 @@ const repairNote = document.querySelector("#calcRepairNote");
 const repairSummary = document.querySelector("#calcRepairSummary");
 const repairDetail = document.querySelector("#calcRepairDetail");
 const repairPercent = document.querySelector("#repairPercent");
-let airportDiagramAngle = 180;
+let airportDiagramAngle = 270;
 function refreshAirportDiagram() {
-  const container = document.querySelector("#airportDiagram");
-  if (container && catalog) renderAirportBars(container, airportBarPositions(catalog.airport_display, airportDiagramAngle), airportDiagramAngle);
+  if (!catalog) return;
+  for (const [id, offset] of [["airportDiagram", 0], ["airportDiagramReversed", 180]]) {
+    const container = document.getElementById(id), angle = (airportDiagramAngle + offset) % 360;
+    if (container) renderAirportBars(container, airportBarPositions(catalog.airport_display, angle), angle);
+  }
 }
-document.querySelector("#airportDiagramDetails")?.addEventListener("toggle", refreshAirportDiagram);
 for (const button of document.querySelectorAll("[data-airport-rotate]")) button.addEventListener("click", () => {
   airportDiagramAngle = (airportDiagramAngle + Number(button.dataset.airportRotate)) % 360;
   refreshAirportDiagram();

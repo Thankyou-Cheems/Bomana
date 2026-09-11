@@ -163,7 +163,19 @@
 .airport-palette > span > span { white-space: nowrap; font-size: 11px; }
 .airport-reference { max-width: 370px; margin: 12px auto; background: #edf5fb; border-radius: 12px; color: #244e69; }
 .airport-reference svg { display: block; width: 100%; }
-.airport-reference text { font: 12px system-ui, sans-serif; fill: #244e69; }
+.airport-reference text { font: 14px system-ui, sans-serif; fill: #244e69; }
 .airport-runway { stroke: #388ece; stroke-width: 5; }
 .airport-arrow { fill: #164a6e; }
 .airport-module-bar { stroke: #627b8c; stroke-width: 4; }
+.airport-comparison { margin: 24px 0; }
+.airport-comparison h3 { font-size: 18px; margin: 0 0 10px; }
+.airport-comparison-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.airport-comparison-panels figure { margin: 0; min-width: 0; }
+.airport-comparison-panels figcaption { text-align: center; font-size: 14px; font-weight: 700; color: #246d9d; }
+.airport-reversed figcaption { color: #b43d43; }
+.airport-reversed .airport-reference { background: #fff1f0; }
+.airport-reversed .airport-runway { stroke: #cb5059; }
+.airport-reversed .airport-arrow { fill: #a9323a; }
+.airport-endpoint { paint-order: stroke; stroke: #edf5fb; stroke-width: 5px; stroke-linejoin: round; }
+.airport-reversed .airport-endpoint { stroke: #fff1f0; }
+@media (max-width: 560px) { .airport-comparison-panels { grid-template-columns: 1fr; gap: 18px; } }

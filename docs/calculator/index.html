@@ -153,7 +153,17 @@
           <header><p class="hangar-kicker">AIRFIELD · 机场状态</p><h2 id="airport-status-title">条带识读与机场回血</h2><p>颜色表示模块剩余耐久；修复取决于生活区。耐久档沿用上方房间 BR。</p></header>
           <div class="airport-palette" id="airportPalette" aria-label="机场状态条颜色参考"></div>
           <p class="tool-source" id="airportPaletteSource"></p>
-          <details class="tool-details" id="airportDiagramDetails"><summary>四条带分别代表什么？</summary><div class="airport-reference" id="airportDiagram"></div><div class="score-presets"><button type="button" data-airport-rotate="90">旋转 90°</button><button type="button" data-airport-rotate="180">交换端点</button></div><p>沿箭头 A→B 看：B 端为跑道、油库，A 端为生活区、停机区；跑道与生活区位于同一侧。条带随跑道方向排列，不代表地面建筑位置。</p><p>这是原生绘制规则示意。已追踪的绘制链没有敌方专用 180° 翻转；交换端点本身就会改变四角。A/B 与 8111 起终点的对应尚未证实，不能仅凭敌我关系或屏幕左上角识别。</p><p><a href="https://warthunder.com/en/news/5973-development-modular-airfields-in-enduring-confrontation-en">官方历史说明</a>仅作背景；颜色与位置以本次客户端核对为参考。</p></details>
+          <section class="airport-comparison" id="airportDiagramDetails" aria-labelledby="airport-comparison-title">
+            <h3 id="airport-comparison-title">起终点反过来，四条带也整体转 180°</h3>
+            <p>两图保持同一地图朝向，仅将跑道起点、终点对调。箭头表示起点 → 终点。</p>
+            <div class="airport-comparison-panels">
+              <figure><figcaption>我方 · 基准方向</figcaption><div class="airport-reference" id="airportDiagram"></div></figure>
+              <figure class="airport-reversed"><figcaption>敌方 · 起终点相反时</figcaption><div class="airport-reference" id="airportDiagramReversed"></div></figure>
+            </div>
+            <div class="score-presets"><button type="button" data-airport-rotate="90">一起旋转 90°</button></div>
+            <p><strong>左上 ↔ 右下，右上 ↔ 左下。</strong>模块名称和各自的血量颜色跟着位置移动，颜色含义不变。灰条只示意位置，不表示当前血量。</p>
+            <details class="tool-details"><summary>对应关系与适用条件</summary><p>终点一端是跑道、油库，起点一端是生活区、停机区；跑道与生活区同侧。这是跑道端点反向带来的旋转，不需要另一个敌方翻转开关。</p><p>右图适用于敌方起终点确实相反的情况，不代表所有地图的敌方机场都固定反向。原生端点与 8111 起终点字段的对应尚未证实；条带位置不代表地面建筑位置。</p></details>
+          </section>
           <div class="repair-controls">
             <label class="hangar-field"><span>生活区剩余 <output id="repairPercentLabel">100%</output></span><input id="repairPercent" type="range" min="0" max="100" value="100" step="0.1"></label>
             <div class="score-presets" aria-label="生活区状态"><button type="button" data-dwelling="100">完好</button><button type="button" data-dwelling="50">受损</button><button type="button" data-dwelling="0">摧毁</button></div>

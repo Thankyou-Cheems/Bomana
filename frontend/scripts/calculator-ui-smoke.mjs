@@ -34,14 +34,29 @@ try {
   assert.equal(await page.locator("#repairChart .chart-current").getAttribute("data-repair-gain"), "0");
   assert.match(await text("#airportPalette"), /0%.*>0～25%.*>25～75%.*>75%/s);
   assert.match(await text("#airportPaletteSource"), /2\.57\.1\.135/);
-  await open("#airportDiagramDetails");
+  assert.equal(await page.locator("#airportDiagram").isVisible(), true);
+  assert.equal(await page.locator("#airportDiagramReversed").isVisible(), true);
   assert.equal(await page.locator("#airportDiagram [data-module]").count(), 4);
-  const beforeSwap = await page.locator('#airportDiagram [data-module="airfield"]').getAttribute("x1");
-  await page.locator('[data-airport-rotate="180"]').click();
-  assert.notEqual(await page.locator('#airportDiagram [data-module="airfield"]').getAttribute("x1"), beforeSwap);
-  await page.locator('[data-airport-rotate="180"]').click();
-  assert.match(await text("#airportDiagramDetails"), /没有敌方专用 180°.*对应尚未证实/s);
-  await close("#airportDiagramDetails");
+  const checkOppositeEndpoints = async () => {
+    const positions = await page.locator("#airportDiagramDetails .airport-reference").evaluateAll(containers => containers.map(container => {
+      const svg = container.querySelector("svg"), cx = svg.viewBox.baseVal.width / 2, cy = svg.viewBox.baseVal.height / 2;
+      return [...container.querySelectorAll("[data-module]")].map(bar => ({
+        module: bar.dataset.module,
+        x: (Number(bar.getAttribute("x1")) + Number(bar.getAttribute("x2"))) / 2 - cx,
+        y: (Number(bar.getAttribute("y1")) + Number(bar.getAttribute("y2"))) / 2 - cy,
+      }));
+    }));
+    positions[0].forEach((bar, index) => {
+      assert.equal(positions[1][index].module, bar.module);
+      assert.ok(Math.abs(bar.x + positions[1][index].x) < 1e-6);
+      assert.ok(Math.abs(bar.y + positions[1][index].y) < 1e-6);
+    });
+  };
+  await checkOppositeEndpoints();
+  await page.locator('[data-airport-rotate="90"]').click();
+  await checkOppositeEndpoints();
+  for (let index = 0; index < 3; index++) await page.locator('[data-airport-rotate="90"]').click();
+  assert.match(await text("#airportDiagramDetails"), /起终点反过来.*整体转 180°.*起终点确实相反.*对应尚未证实/s);
   await page.locator("#repairPercent").fill("0.9");
   assert.match(await text("#repairResult"), /不足 1%.*整数百分比判定为 0/);
   assert.equal(await page.locator("#repairChart .chart-current").getAttribute("data-repair-gain"), "0");
@@ -221,9 +236,8 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: horizontal overflow`);
     assert.ok(await page.locator("#rewardChart text").first().evaluate(node => parseFloat(getComputedStyle(node).fontSize) >= 12), `${width}: unreadable chart text`);
     await page.locator("#airportStatus").screenshot({ path: `../.artifacts/calculator-ui/airport-${width}.png`, style: ".site-header { visibility: hidden; }" });
-    await open("#airportDiagramDetails");
+    await checkOppositeEndpoints();
     await page.locator("#airportDiagramDetails").screenshot({ path: `../.artifacts/calculator-ui/airport-bars-${width}.png`, style: ".site-header { visibility: hidden; }" });
-    await close("#airportDiagramDetails");
     await page.locator("#explosiveConversion").screenshot({ path: `../.artifacts/calculator-ui/conversion-${width}.png`, style: ".site-header { visibility: hidden; }" });
     await page.locator("#usefulActions").screenshot({ path: `../.artifacts/calculator-ui/rewards-${width}.png`, style: ".site-header { visibility: hidden; }" });
   }

@@ -56,21 +56,21 @@ export function renderAirportRepairChart(container, data) {
 
 export function renderAirportBars(container, positions, angleDegrees) {
   if (!positions) { container.replaceChildren(); container.textContent = "当前没有已核对的条带位置。"; return; }
-  const { svg, width } = canvas(container, 190, "按原生有向端点 A 到 B 排列的机场四模块条带示意；不是实时机场状态。");
-  const scale = Math.min(70, width * .23), cx = width / 2, cy = 95;
+  const { svg, width } = canvas(container, 230, "按跑道起点到终点排列的机场四模块条带示意；不是实时机场状态。");
+  const scale = Math.min(70, width * .23), cx = width / 2, cy = 115;
   const angle = angleDegrees * Math.PI / 180, dx = Math.cos(angle), dy = Math.sin(angle);
   const x = value => cx + value * scale, y = value => cy + value * scale;
   svg.append(element("line", { x1: x(-dx), y1: y(-dy), x2: x(dx), y2: y(dy), class: "airport-runway" }));
   svg.append(element("polygon", { points: `${x(dx)},${y(dy)} ${x(dx)-dx*11-dy*5},${y(dy)-dy*11+dx*5} ${x(dx)-dx*11+dy*5},${y(dy)-dy*11-dx*5}`, class: "airport-arrow" }));
-  for (const [label, sign] of [["A", -1], ["B", 1]]) svg.append(element("text", {
-    x: x(sign * dx * .78), y: y(sign * dy * .78) + 17, "text-anchor": "middle", class: "airport-endpoint",
+  for (const [label, sign] of [["起点", -1], ["终点", 1]]) svg.append(element("text", {
+    x: x(sign * dx * .55), y: y(sign * dy * .55) + 5, "text-anchor": "middle", class: "airport-endpoint",
   }, label));
   const labels = { airfield: "跑道", storage: "油库", parking: "停机 / 维修", dwelling: "生活区" };
   for (const position of positions) {
     const px = x(position.x), py = y(position.y);
     svg.append(element("line", { x1: px - dx * 12, y1: py - dy * 12, x2: px + dx * 12, y2: py + dy * 12,
       class: "airport-module-bar", "data-module": position.module }));
-    svg.append(element("text", { x: px, y: py + (position.y < 0 ? -13 : 22), "text-anchor": "middle" }, labels[position.module]));
+    svg.append(element("text", { x: px, y: py + (position.y < 0 ? -18 : 27), "text-anchor": "middle" }, labels[position.module]));
   }
 }
 
