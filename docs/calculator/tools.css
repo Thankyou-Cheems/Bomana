@@ -150,3 +150,20 @@
   .conversion-quantity { gap: 12px; }
   .conversion-fields { gap: 10px; }
 }
+.repair-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; margin: 20px 0; }
+.repair-controls .hangar-field { flex: 1; min-width: 180px; }
+.repair-controls input[type="range"] { width: 100%; }
+.repair-controls .score-presets { flex: 1; min-width: 180px; }
+.repair-controls .score-presets button { min-height: 44px; }
+.repair-result { padding: 16px; border-radius: 12px; background: #edf5fb; color: #244e69; line-height: 1.8; }
+.repair-open-end { fill: #fff; stroke: #177ca2; stroke-width: 2; }
+.airport-palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0 12px; }
+.airport-palette > span { display: flex; flex-direction: column; gap: 8px; text-align: center; font-size: 12px; color: #244e69; }
+.airport-palette i { display: block; height: 8px; border: 1px solid #8395a0; border-radius: 2px; }
+.airport-palette > span > span { white-space: nowrap; font-size: 11px; }
+.airport-reference { max-width: 370px; margin: 12px auto; background: #edf5fb; border-radius: 12px; color: #244e69; }
+.airport-reference svg { display: block; width: 100%; }
+.airport-reference text { font: 12px system-ui, sans-serif; fill: #244e69; }
+.airport-runway { stroke: #388ece; stroke-width: 5; }
+.airport-arrow { fill: #164a6e; }
+.airport-module-bar { stroke: #627b8c; stroke-width: 4; }

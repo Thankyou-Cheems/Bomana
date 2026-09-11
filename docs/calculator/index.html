@@ -43,7 +43,7 @@
           <p class="hangar-lede">出发前算清挂载，返航前留够燃油。</p>
           <p class="tool-source" id="calcSource" role="status">正在核对参数版本…</p>
           <nav class="tool-nav" aria-label="工具导航">
-            <a href="#calcForm">战区与机场计算器</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
+            <a href="#calcForm">战区与机场计算器</a><a href="#airportStatus">机场状态</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
           </nav>
         </div>
 
@@ -148,6 +148,21 @@
           </ul>
         </details>
         <p class="hangar-aside">适用于 EC 任务参数；请勿套用为空战历史模式（Air RB）炸点表。所有伤害结果均假设全部命中。</p>
+
+        <section class="tool-panel" id="airportStatus" aria-labelledby="airport-status-title">
+          <header><p class="hangar-kicker">AIRFIELD · 机场状态</p><h2 id="airport-status-title">条带识读与机场回血</h2><p>颜色表示模块剩余耐久；修复取决于生活区。耐久档沿用上方房间 BR。</p></header>
+          <div class="airport-palette" id="airportPalette" aria-label="机场状态条颜色参考"></div>
+          <p class="tool-source" id="airportPaletteSource"></p>
+          <details class="tool-details" id="airportDiagramDetails"><summary>四条带分别代表什么？</summary><div class="airport-reference" id="airportDiagram"></div><div class="score-presets"><button type="button" data-airport-rotate="90">旋转 90°</button><button type="button" data-airport-rotate="180">交换端点</button></div><p>沿箭头 A→B 看：B 端为跑道、油库，A 端为生活区、停机区；跑道与生活区位于同一侧。条带随跑道方向排列，不代表地面建筑位置。</p><p>这是原生绘制规则示意。已追踪的绘制链没有敌方专用 180° 翻转；交换端点本身就会改变四角。A/B 与 8111 起终点的对应尚未证实，不能仅凭敌我关系或屏幕左上角识别。</p><p><a href="https://warthunder.com/en/news/5973-development-modular-airfields-in-enduring-confrontation-en">官方历史说明</a>仅作背景；颜色与位置以本次客户端核对为参考。</p></details>
+          <div class="repair-controls">
+            <label class="hangar-field"><span>生活区剩余 <output id="repairPercentLabel">100%</output></span><input id="repairPercent" type="range" min="0" max="100" value="100" step="0.1"></label>
+            <div class="score-presets" aria-label="生活区状态"><button type="button" data-dwelling="100">完好</button><button type="button" data-dwelling="50">受损</button><button type="button" data-dwelling="0">摧毁</button></div>
+          </div>
+          <p class="repair-result" id="repairResult" role="status">正在读取任务规则…</p>
+          <div class="tool-chart" id="repairChart"></div>
+          <p class="tool-source">这是客户端任务分支参考，不是实时血量或修复倒计时。8111 没有提供四模块剩余 HP；满血分支跳过，不等于已证明服务器永不修复。</p>
+          <details class="tool-details"><summary>公式与适用边界</summary><p id="repairFormula"></p><p>原生条件先将百分比截为整数：生活区不足 1% 或完好（100%）时，该分支跳过。1% 至不足 100% 时，为跑道、油库、停机区和生活区加入相同 HP；生活区自身也在恢复。一次轮询不等于一秒，实际轮询还取决于机场数量及任务调度，因此不推算实际恢复时间或最终恢复量。</p><p><a href="https://wiki.warthunder.com/gamemode/enduring_confrontation#airfields-and-their-modules">官方 EC 模块说明</a> · <a href="https://wiki.warthunder.com/cdk/760-cdk-mission-editor-variables">官方变量运算说明</a></p></details>
+        </section>
 
         <section class="tool-panel" id="usefulActions" aria-labelledby="rewards-title">
           <header class="tool-panel-head"><p class="hangar-kicker">USEFUL ACTIONS</p><h2 id="rewards-title">这一周期，能拿多少收益？</h2><p>选好飞机，拖动得分看变化。周期和机型基准会自动填好。</p></header>

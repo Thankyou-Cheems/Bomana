@@ -28,6 +28,52 @@ function legend(container, items) {
   container.append(list);
 }
 
+export function renderAirportRepairChart(container, data) {
+  if (!data) { container.replaceChildren(); container.removeAttribute("aria-label"); return; }
+  const { result, points, percent } = data;
+  const { svg, width } = canvas(container, 230,
+    `生活区耐久与单次分支回血曲线。不足 1% 与 100% 均跳过，当前 ${percent}%：每模块 ${number(result.gain)} HP。`);
+  const left = 48, right = width - 30, top = 30, bottom = 184;
+  const x = value => left + value / 100 * (right - left);
+  const y = value => bottom - value / (result.base * 1.1) * (bottom - top);
+  for (const fraction of [0, .5, 1]) {
+    const value = result.base * fraction;
+    svg.append(element("line", { x1: left, x2: right, y1: y(value), y2: y(value), class: "chart-grid" }),
+      element("text", { x: left - 7, y: y(value) + 4, "text-anchor": "end" }, axisNumber(value)));
+  }
+  svg.append(element("text", { x: left, y: 16 }, "单次加值 · HP / 模块"));
+  for (const value of [0, 50, 100]) svg.append(element("text", { x: x(value), y: 207, "text-anchor": "middle" }, `${value}%`));
+  const curve = [...points, { percent: 100, gain: result.base * (result.maximum + 1) / result.maximum }];
+  svg.append(element("polyline", { points: curve.map(point => `${x(point.percent)},${y(point.gain)}`).join(" "), class: "chart-immediate-line" }));
+  for (const point of [{ percent: 1, gain: 0 }, curve.at(-1)]) svg.append(element("circle", {
+    cx: x(point.percent), cy: y(point.gain), r: 4, class: "repair-open-end",
+  }));
+  for (const value of [0, 100]) svg.append(element("circle", { cx: x(value), cy: y(0), r: 4, class: "chart-sample" }));
+  svg.append(element("circle", { cx: x(1), cy: y(curve[0].gain), r: 4, class: "chart-sample" }));
+  svg.append(element("circle", { cx: x(percent), cy: y(result.gain), r: 6, class: "chart-current", "data-repair-gain": result.gain }));
+  legend(container, [["横轴：生活区剩余耐久", "legend-immediate"], ["不足 1% 与满血跳过；空心点不含端点", "legend-unknown"]]);
+}
+
+export function renderAirportBars(container, positions, angleDegrees) {
+  if (!positions) { container.replaceChildren(); container.textContent = "当前没有已核对的条带位置。"; return; }
+  const { svg, width } = canvas(container, 190, "按原生有向端点 A 到 B 排列的机场四模块条带示意；不是实时机场状态。");
+  const scale = Math.min(70, width * .23), cx = width / 2, cy = 95;
+  const angle = angleDegrees * Math.PI / 180, dx = Math.cos(angle), dy = Math.sin(angle);
+  const x = value => cx + value * scale, y = value => cy + value * scale;
+  svg.append(element("line", { x1: x(-dx), y1: y(-dy), x2: x(dx), y2: y(dy), class: "airport-runway" }));
+  svg.append(element("polygon", { points: `${x(dx)},${y(dy)} ${x(dx)-dx*11-dy*5},${y(dy)-dy*11+dx*5} ${x(dx)-dx*11+dy*5},${y(dy)-dy*11-dx*5}`, class: "airport-arrow" }));
+  for (const [label, sign] of [["A", -1], ["B", 1]]) svg.append(element("text", {
+    x: x(sign * dx * .78), y: y(sign * dy * .78) + 17, "text-anchor": "middle", class: "airport-endpoint",
+  }, label));
+  const labels = { airfield: "跑道", storage: "油库", parking: "停机 / 维修", dwelling: "生活区" };
+  for (const position of positions) {
+    const px = x(position.x), py = y(position.y);
+    svg.append(element("line", { x1: px - dx * 12, y1: py - dy * 12, x2: px + dx * 12, y2: py + dy * 12,
+      class: "airport-module-bar", "data-module": position.module }));
+    svg.append(element("text", { x: px, y: py + (position.y < 0 ? -13 : 22), "text-anchor": "middle" }, labels[position.module]));
+  }
+}
+
 export function renderRewardChart(container, curve, emptyText) {
   if (!curve) {
     container.replaceChildren(); container.setAttribute("aria-label", emptyText);

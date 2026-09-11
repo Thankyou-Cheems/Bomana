@@ -1,6 +1,6 @@
-import { compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
+import { airportBarPositions, airportRepairVisit, airportPaletteBands, compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
-import { renderRewardChart, renderConversionChart } from "./charts.mjs";
+import { renderRewardChart, renderConversionChart, renderAirportRepairChart, renderAirportBars } from "./charts.mjs";
 
 const catalogUrl = "/api/v1/calculator/index.json";
 const weaponsUrl = "/api/v1/calculator/weapons.json";
@@ -29,6 +29,17 @@ const hintEl = document.querySelector("#calcHint");
 const repairNote = document.querySelector("#calcRepairNote");
 const repairSummary = document.querySelector("#calcRepairSummary");
 const repairDetail = document.querySelector("#calcRepairDetail");
+const repairPercent = document.querySelector("#repairPercent");
+let airportDiagramAngle = 180;
+function refreshAirportDiagram() {
+  const container = document.querySelector("#airportDiagram");
+  if (container && catalog) renderAirportBars(container, airportBarPositions(catalog.airport_display, airportDiagramAngle), airportDiagramAngle);
+}
+document.querySelector("#airportDiagramDetails")?.addEventListener("toggle", refreshAirportDiagram);
+for (const button of document.querySelectorAll("[data-airport-rotate]")) button.addEventListener("click", () => {
+  airportDiagramAngle = (airportDiagramAngle + Number(button.dataset.airportRotate)) % 360;
+  refreshAirportDiagram();
+});
 const sourceEl = document.querySelector("#calcSource");
 const compareContext = document.querySelector("#compareContext");
 const compareTable = document.querySelector("#compareTable");
@@ -129,7 +140,7 @@ function refreshReward() {
   }
   rewardSlider.max = String(Number.isFinite(score) ? Math.max(1200, score) : 1200);
   rewardSlider.value = String(Number.isFinite(score) ? Math.max(0, score) : 0);
-  for (const button of document.querySelectorAll(".score-presets button")) button.setAttribute("aria-pressed", String(Number(button.dataset.score) === score));
+  for (const button of document.querySelectorAll("button[data-score]")) button.setAttribute("aria-pressed", String(Number(button.dataset.score) === score));
   document.querySelector("#rewardPeriod").textContent = `${formatQuantity(minutes)} 分钟内`;
   document.querySelector("#rewardChartPeriod").textContent = "横轴：本周期得分";
   const quality = document.querySelector(".reference-pill");
@@ -196,7 +207,7 @@ function bindRewards() {
   rewardFields.Booster?.addEventListener("input", refreshReward);
   rewardManualRate?.addEventListener("change", refreshReward);
   rewardSlider?.addEventListener("input", () => { rewardFields.Score.value = rewardSlider.value; refreshReward(); });
-  for (const button of document.querySelectorAll(".score-presets button")) button.addEventListener("click", () => { rewardFields.Score.value = button.dataset.score; refreshReward(); });
+  for (const button of document.querySelectorAll("button[data-score]")) button.addEventListener("click", () => { rewardFields.Score.value = button.dataset.score; refreshReward(); });
   rewardFields.Search?.addEventListener("input", renderRewardVehicles);
   rewardFields.Vehicle?.addEventListener("change", () => { rewardSelectedVehicle = rewardFields.Vehicle.value; loadRewardVehicle(); });
   rewardFields.Mode?.addEventListener("change", () => {
@@ -659,12 +670,60 @@ function renderRepairNote(target, tier) {
   const airport = target.kind === "airport_module";
   repairNote.hidden = !airport;
   if (!airport || !tier) return;
-  repairSummary.textContent = "生活区状态影响模块恢复；本页按不计回血估算，实战可能需要更多弹药。";
+  if (!airportRepairVisit({ rule: catalog.airport_repair, tier, dwellingPercent: 50 })) {
+    repairSummary.textContent = "当前参数没有已核对的修复规则；投弹枚数仍按不计回血计算。";
+    repairDetail.textContent = "";
+    return;
+  }
+  repairSummary.textContent = "投弹枚数不计回血。生活区剩余 1%～不足 100% 时，任务分支恢复四模块；其他情况跳过。";
   const base = Number(tier.repair_base_hp || 0);
   repairDetail.textContent = base > 0
     ? `当前 BR 每次机场修复轮询约 +${formatInt(base / 10)}～+${formatInt(base)} HP；跑道与其他模块每轮加值相同。`
     : "跑道与其他模块每轮加值相同。";
 }
+
+function refreshAirportRepair() {
+  if (!catalog || !repairPercent) return;
+  refreshAirportDiagram();
+  const palette = airportPaletteBands(catalog.airport_display);
+  const paletteContainer = document.querySelector("#airportPalette");
+  paletteContainer.replaceChildren();
+  if (palette) for (const [index, band] of palette.entries()) {
+    const item = document.createElement("span"), swatch = document.createElement("i");
+    swatch.style.backgroundColor = band.color;
+    const label = document.createElement("span");
+    label.textContent = index === 0 ? "0%" : index === 3 ? `>${band.lower}%` : `>${band.lower}～${band.upper}%`;
+    item.append(swatch, label); paletteContainer.append(item);
+  }
+  document.querySelector("#airportPaletteSource").textContent = palette
+    ? `剩余 HP 的颜色参考 · 原生规则 ${catalog.airport_display.native_reference.client_version}。恰好在 ${palette[1].upper}% / ${palette[2].upper}% 时保留红 / 黄；颜色不是实时读数。`
+    : "当前没有已核对的颜色规则。";
+  const tier = tierFor(catalog.airport_tiers, balanceLevel(brSelect.value || defaultBr));
+  const dwellingPercent = Number(repairPercent.value);
+  for (const button of document.querySelectorAll("[data-dwelling]")) button.setAttribute("aria-pressed", String(Number(button.dataset.dwelling) === dwellingPercent));
+  const input = { rule: catalog.airport_repair, tier, dwellingPercent };
+  const result = airportRepairVisit(input);
+  document.querySelector("#repairPercentLabel").textContent = `${dwellingPercent}%`;
+  document.querySelector("#repairResult").textContent = !result ? "当前参数没有已核对的修复规则。" : result.state === "intact"
+    ? "生活区完好：这条修复分支不执行，即使其他模块受损。实战是否另有恢复路径尚未证实。"
+    : result.state === "destroyed" ? "生活区摧毁：这条分支停止为四模块回血。"
+    : result.state === "below_threshold" ? "生活区不足 1%：仍有血，但整数百分比判定为 0，这条修复分支跳过。"
+    : `生活区受损：每次进入这条分支，四模块各 +${result.gain.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} HP（生活区自身也恢复）。`;
+  document.querySelector("#repairFormula").textContent = result
+    ? `D = 生活区当前 HP；M = 生活区满血 ${formatInt(result.maximum)} HP；B = 本档回血基数 ${formatInt(result.base)} HP。先计算 q = 截断(100 × D ÷ M)，仅当 0 < q < 100：每次加值 = B ÷ min(M ÷ (D + 1), 10)；否则为 0。原生比较参考：${catalog.airport_repair.native_reference?.client_version || "未知版本"}；不代表完整服务器修复。`
+    : "缺少规则时不套用历史公式。";
+  renderAirportRepairChart(document.querySelector("#repairChart"), result ? {
+    points: Array.from({ length: 99 }, (_, index) => ({ percent: index + 1, gain: airportRepairVisit({ ...input, dwellingPercent: index + 1 }).gain })),
+    result, percent: dwellingPercent,
+  } : null);
+}
+
+repairPercent?.addEventListener("input", refreshAirportRepair);
+for (const button of document.querySelectorAll("[data-dwelling]")) button.addEventListener("click", () => {
+  repairPercent.value = button.dataset.dwelling;
+  refreshAirportRepair();
+});
+window.addEventListener("resize", refreshAirportRepair);
 
 function setHudUnknown(context, hint) {
   hudContext.textContent = context;
@@ -746,6 +805,7 @@ function refreshFuel() {
 
 function refreshResult() {
   if (!catalog) return;
+  refreshAirportRepair();
   const weapon = selectedWeapon();
   const target = selectedTarget();
   const br = brSelect.value || defaultBr;

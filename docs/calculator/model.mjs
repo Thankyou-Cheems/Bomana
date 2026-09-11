@@ -1,3 +1,52 @@
+function airportNativeReferenceSupported(reference) {
+  return typeof reference?.client_version === "string" && reference.client_version.trim().length > 0 &&
+    typeof reference.pe_sha256 === "string" && /^[0-9a-fA-F]{64}$/.test(reference.pe_sha256) &&
+    reference.hp_condition === "truncate_percent_to_integer" &&
+    reference.palette_selection === "first_key_greater_or_equal" && reference.server_recovery === "unknown";
+}
+
+export function airportBarPositions(display, angleDegrees) {
+  const modules = display?.modules;
+  if (!airportNativeReferenceSupported(display?.native_reference) ||
+      display?.orientation !== "runway_endpoint_relative" || !Number.isFinite(angleDegrees) ||
+      !Array.isArray(modules) || modules.length !== 4 ||
+      new Set(modules.map(row => row?.module)).size !== 4 ||
+      modules.some(row => !["airfield", "storage", "parking", "dwelling"].includes(row?.module) ||
+        !Array.isArray(row.position) || row.position.length !== 2 || !row.position.every(Number.isFinite))) return null;
+  const angle = angleDegrees * Math.PI / 180, dx = Math.cos(angle), dy = Math.sin(angle);
+  return modules.map(row => {
+    const end = row.position[0] >= 0 ? 1 : -1, side = row.position[1] > 0 ? 1 : -1;
+    return { module: row.module, x: end * dx - side * dy * .6, y: end * dy + side * dx * .6 };
+  });
+}
+
+export function airportPaletteBands(display) {
+  const rows = display?.palette;
+  if (!airportNativeReferenceSupported(display?.native_reference) ||
+      !Array.isArray(rows) || rows.length !== 4 ||
+      rows.some((row, index) => !Array.isArray(row) || row.length !== 4 ||
+        !row.every(Number.isFinite) || row.slice(0, 3).some(value => value < 0 || value > 255) ||
+        row[3] < 0 || row[3] > 1 || (index > 0 && row[3] <= rows[index - 1][3])) ||
+      rows[0][3] !== 0 || rows[3][3] !== 1) return null;
+  return rows.map((row, index) => ({ color: `rgb(${row.slice(0, 3).join(",")})`,
+    lower: index === 0 ? 0 : rows[index - 1][3] * 100, upper: row[3] * 100 }));
+}
+
+export function airportRepairVisit({ rule, tier, dwellingPercent }) {
+  if (rule?.model !== "integer_percent_dwelling/v1" ||
+      !airportNativeReferenceSupported(rule.native_reference) ||
+      rule.timing !== "per_airfield_repair_visit" || rule.evidence !== "client_mission_branch_not_server_prediction" ||
+      rule.hp_offset !== 1 || rule.maximum_slowdown !== 10 ||
+      ![tier?.auxiliary_module_mission_hp, tier?.repair_base_hp].every(value => Number.isFinite(value) && value > 0) ||
+      !Number.isFinite(dwellingPercent) || dwellingPercent < 0 || dwellingPercent > 100) return null;
+  const maximum = tier.auxiliary_module_mission_hp, base = tier.repair_base_hp;
+  const dwellingHp = maximum * dwellingPercent / 100;
+  const state = dwellingPercent === 0 ? "destroyed" : dwellingPercent < 1 ? "below_threshold" : dwellingPercent === 100 ? "intact" : "damaged";
+  const gain = state === "damaged" ? base / Math.min(maximum / (dwellingHp + rule.hp_offset), rule.maximum_slowdown) : 0;
+  if (!Number.isFinite(gain)) return null;
+  return { state, dwellingHp, maximum, base, gain };
+}
+
 export function requiredCount(hp, damage) {
   if (!Number.isFinite(hp) || !Number.isFinite(damage) || !(hp > 0) || !(damage > 0)) return null;
   return Math.max(1, Math.ceil(hp / damage - 1e-9));

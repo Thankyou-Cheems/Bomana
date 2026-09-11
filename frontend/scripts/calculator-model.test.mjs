@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   compareLoadouts,
+  airportRepairVisit,
+  airportPaletteBands,
+  airportBarPositions,
   equivalentWeaponCount,
   explosiveConversion,
   durabilityBrBuckets,
@@ -16,6 +19,54 @@ import {
   usefulActionsCardRate,
   usefulActionsCurve,
 } from "../../docs/calculator/model.mjs";
+
+const airportNativeReference = { client_version: "2.57.1.135", pe_sha256: "0".repeat(64),
+  hp_condition: "truncate_percent_to_integer", palette_selection: "first_key_greater_or_equal", server_recovery: "unknown" };
+
+test("airport mission repair skips both dwelling boundaries and uses same HP for every module", () => {
+  const input = { rule: { model: "integer_percent_dwelling/v1", hp_offset: 1, maximum_slowdown: 10,
+    timing: "per_airfield_repair_visit", evidence: "client_mission_branch_not_server_prediction", native_reference: airportNativeReference },
+    tier: { auxiliary_module_mission_hp: 160000, repair_base_hp: 4000 } };
+  assert.equal(airportRepairVisit({ ...input, dwellingPercent: 100 }).gain, 0);
+  assert.equal(airportRepairVisit({ ...input, dwellingPercent: 0 }).gain, 0);
+  assert.equal(airportRepairVisit({ ...input, dwellingPercent: .9 }).gain, 0);
+  assert.equal(airportRepairVisit({ ...input, dwellingPercent: .9 }).state, "below_threshold");
+  assert.equal(airportRepairVisit({ ...input, dwellingPercent: 1 }).gain, 400);
+  assert.equal(airportRepairVisit({ ...input, dwellingPercent: 50 }).gain, 2000.025);
+  assert.ok(airportRepairVisit({ ...input, dwellingPercent: 99.999 }).gain > 3999);
+  for (const dwellingPercent of [-1, 101, NaN, Infinity, null]) assert.equal(airportRepairVisit({ ...input, dwellingPercent }), null);
+  assert.equal(airportRepairVisit({ ...input, rule: null, dwellingPercent: 50 }), null);
+  assert.equal(airportRepairVisit({ ...input, rule: { ...input.rule, timing: "changed" }, dwellingPercent: 50 }), null);
+  assert.equal(airportRepairVisit({ ...input, rule: { ...input.rule, native_reference: { ...airportNativeReference, client_version: null } }, dwellingPercent: 50 }), null);
+});
+
+test("airport bars follow directed endpoints and perpendicular sides, without a team flip", () => {
+  const display = { orientation: "runway_endpoint_relative", native_reference: airportNativeReference, modules: [
+    { module: "airfield", position: [.5,.5] }, { module: "storage", position: [.5,-.5] },
+    { module: "parking", position: [-.5,-.5] }, { module: "dwelling", position: [-.5,.5] },
+  ] };
+  const rightward = airportBarPositions(display, 0);
+  assert.deepEqual(rightward.map(row => [row.x, row.y]), [[1,.6],[1,-.6],[-1,-.6],[-1,.6]]);
+  const reversed = airportBarPositions(display, 180);
+  rightward.forEach((row, index) => {
+    assert.ok(Math.abs(row.x + reversed[index].x) < 1e-12);
+    assert.ok(Math.abs(row.y + reversed[index].y) < 1e-12);
+  });
+  display.modules[0].position[0] = -.5;
+  assert.equal(airportBarPositions(display, 0)[0].x, -1, "consume updated HUD positions");
+  assert.equal(airportBarPositions(null, 0), null);
+});
+
+test("airport color legend uses the generated palette instead of historical 30/70", () => {
+  const display = { palette: [[0,0,0,0], [255,70,70,.25], [255,255,70,.75], [70,255,70,1]],
+    native_reference: airportNativeReference };
+  assert.deepEqual(airportPaletteBands(display).map(row => row.upper), [0,25,75,100]);
+  display.palette[1][3] = .2;
+  assert.equal(airportPaletteBands(display)[1].upper, 20);
+  assert.equal(airportPaletteBands(null), null);
+  display.palette[2][3] = .1;
+  assert.equal(airportPaletteBands(display), null);
+});
 
 test("client card restores the premium visual split and adds account/booster effects", () => {
   const inputs = { rawRate: 3260, special: true, premiumAccount: false, boosterPercent: 0,
