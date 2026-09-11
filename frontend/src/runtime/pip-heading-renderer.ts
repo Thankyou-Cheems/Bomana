@@ -375,6 +375,20 @@ function drawGuidance(
     context.lineTo(right, layout.guidanceTrackY + halfHeight);
     context.lineTo(right, layout.guidanceTrackY - halfHeight);
     context.stroke();
+    if (guidance.windowMode) {
+      const midpoint = (left + right) / 2;
+      const tipY = layout.guidanceTrackY - halfHeight - 2 * layout.visualScale;
+      context.save();
+      context.fillStyle = "#f2f8fc";
+      context.strokeStyle = "#071923";
+      context.lineWidth = Math.max(1, layout.visualScale);
+      context.beginPath();
+      context.moveTo(midpoint, tipY);
+      context.lineTo(midpoint - 5 * layout.visualScale, tipY - 6 * layout.visualScale);
+      context.lineTo(midpoint + 5 * layout.visualScale, tipY - 6 * layout.visualScale);
+      context.closePath(); context.fill(); context.stroke();
+      context.restore();
+    }
   }
   context.strokeStyle = "rgba(142,196,225,.7)";
   context.beginPath();
