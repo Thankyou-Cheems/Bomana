@@ -14,11 +14,14 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   const fuel = snapshot.fuel;
   const fuelAvailable = fuel?.available === true && snapshot.sortieContinuity.state === "live"
     && landing?.reason !== "telemetry" && finite(fuel.currentKg) && fuel.currentKg >= 0;
-  const minutes = fuelAvailable && fuel?.source === "measured" && fuel.stable && finite(fuel.remainingMinutes)
+  const minutes = fuelAvailable && fuel?.source === "measured" && fuel.stable && finite(fuel.remainingMinutes) && fuel.remainingMinutes >= 0
     ? fuel.remainingMinutes : null;
-  const fuelText = fuelAvailable ? fuel!.currentKg >= 10_000 ? `${(fuel!.currentKg / 1000).toFixed(1)}t` : `${Math.round(fuel!.currentKg)}` : "—";
-  const fuelDetail = minutes !== null ? `约 ${Math.max(0, minutes).toFixed(1)} 分`
-    : fuelAvailable && finite(fuel?.initialKg) && fuel!.initialKg > 0 && finite(fuel?.percent) ? `${Math.round(fuel!.percent)}%` : "续航 —";
+  const fuelText = minutes !== null ? `${Math.round(minutes * 60)}` : "—";
+  const fuelDetail = minutes !== null ? `约 ${fuelText} 秒` : "— 秒";
+  const equipmentState = (value: boolean | null | undefined) => value === true ? "✓" : value === false ? "×" : "?";
+  const equipmentText = `钩${equipmentState(landing?.aircraft?.arrestorHook)} 伞${equipmentState(landing?.aircraft?.brakeChute)}`;
+  const equipmentDescription = (value: boolean | null | undefined) => value === true ? "已配备" : value === false ? "未配备" : "未知";
+  const equipmentAria = `机型配置：尾钩${equipmentDescription(landing?.aircraft?.arrestorHook)}，减速伞${equipmentDescription(landing?.aircraft?.brakeChute)}；仅为静态配备，非当前展开或挂索状态`;
   const configuration = landingConfigurationPresentation(landing);
   const speedTone = configuration.tone === "danger" ? "danger"
     : configuration.tone === "caution" || finite(ias) && finite(targetIas) && Math.abs(ias - targetIas) > targetIas * .1 ? "caution" : "reference";
@@ -41,8 +44,8 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   const speedText = finite(ias) ? `${Math.round(ias)}` : "—";
   const speedDetail = finite(targetIas) ? `参考 ${Math.round(targetIas)}` : configuration.speedDetail;
   return { active, mode, course, distance, lateral, glide, lateralText, glideText, vy, config,
-    speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone,
-    aria: `${mode}；${course}，${distance}；IAS ${speedText} km/h，${speedDetail}；燃油 ${fuelAvailable ? Math.round(fuel!.currentKg) : "未知"} kg，${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}` };
+    speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
+    aria: `${mode}；${course}，${distance}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
 }
 
 export function drawLandingTape(ctx: CanvasRenderingContext2D, snapshot: EditionSnapshot, width: number, height: number, displayHeading: number): void {
@@ -64,9 +67,9 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, snapshot: Edition
   text(compact ? "IAS" : "IAS · km/h", pad, height * .17, font, muted, "left", side - pad);
   text(p.speedText, pad, height * .48, large, tone(p.speedTone), "left", side - pad);
   text(p.speedDetail, pad, height * .80, font, muted, "left", side - pad);
-  text(compact || p.fuelText.endsWith("t") ? "燃油" : "燃油 · kg", width - pad, height * .17, font, muted, "right", side - pad);
+  text("余油估算·秒", width - pad, height * .17, font, muted, "right", side - pad);
   text(p.fuelText, width - pad, height * .48, large, tone(p.fuelTone), "right", side - pad);
-  text(compact && p.fuelDetail === "续航 —" ? "kg" : p.fuelDetail, width - pad, height * .80, font, muted, "right", side - pad);
+  text(p.equipmentText, width - pad, height * .80, font, muted, "right", side - pad);
   ctx.strokeStyle = "rgba(139,221,220,.25)"; ctx.lineWidth = 1;
   for (const x of [side, width - side]) { ctx.beginPath(); ctx.moveTo(x, height * .12); ctx.lineTo(x, height * .88); ctx.stroke(); }
   const centerWidth = right - left;

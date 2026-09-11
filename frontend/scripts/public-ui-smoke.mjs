@@ -42,18 +42,32 @@ try {
   assert.match(await page.locator("#speed-limit-value").innerText(), /IAS 700\/533 · 襟翼参考$/);
   assert.ok(await page.locator("#speed-strip").evaluate(node => node.classList.contains("level-critical")), "Automatic flaps constrain the strip before landing mode is enabled");
   const landing = page.getByRole("region", {name:"降落辅助"});
+  assert.equal(await landing.locator('[data-part="message"]').innerText(), '自动待命');
   const priorNavigation = await page.locator("#navigation-target").innerText();
   await landing.getByRole("button", {name:"开启",exact:true}).click();
   await landing.locator("[data-part='active']").waitFor({state:"visible"});
   assert.equal(await page.locator("#heading-tape").getAttribute("data-mode"),"landing");
   assert.match(await page.locator("#heading-tape").getAttribute("aria-label"),/IAS 700 km\/h.*燃油/);
-  assert.match(await landing.locator("[data-part='limits']").innerText(),/起落架 ≤ \d+ km\/h/);
-  assert.ok(await landing.locator("meter:visible").count() >= 1, "The live IAS comparison is visible without a manually chosen approach speed");
+  assert.equal(await landing.locator('[data-part="arrestor"]').isVisible(), false, 'Static capability belongs in the collapsed reference section');
+  assert.equal(await landing.locator('[data-part="touchdown"]').isVisible(), false, 'Default panel omits static touchdown explanation');
+  assert.equal(await landing.locator('[data-part="flapAdvice"]').isVisible(), true, 'Current overspeed advice remains visible');
   assert.match(await landing.locator("[data-part='configuration']").innerText(),/襟翼 20%（无手动控制）/);
   assert.match(await landing.locator("[data-part='flapAdvice']").innerText(),/襟翼超过参考上限 · 减速$/);
   assert.match(await page.locator("#heading-tape").getAttribute("aria-label"),/襟翼超限/);
   assert.equal(await page.locator("#navigation-target").innerText(), priorNavigation, "Landing does not change the strike/navigation target");
+  for (const theme of ['glacier', 'classic-dark']) {
+    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mkdir(new URL('../../.artifacts/public-ui/', import.meta.url), { recursive: true });
+    await landing.screenshot({ path: new URL(`../../.artifacts/public-ui/landing-${theme}.png`, import.meta.url).pathname.replace(/^\/(\w:)/, '$1') });
+    assert.equal(await landing.locator('[data-part="flapAdvice"]').isVisible(), true);
+  }
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'glacier'; });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await landing.locator("summary").click();
+  assert.match(await landing.locator("[data-part='limits']").innerText(),/起落架 ≤ \d+ km\/h/);
+  assert.ok(await landing.locator("meter:visible").count() >= 1, "Reference details retain the live IAS comparison");
+  assert.equal(await landing.locator('[data-part="arrestor"]').isVisible(), true);
   await landing.locator("[data-part='ias']").fill("250");
   await landing.locator("[data-part='elevation']").fill("100");
   await landing.getByRole("button", {name:"应用参考参数"}).click();

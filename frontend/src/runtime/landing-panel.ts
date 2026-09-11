@@ -8,15 +8,15 @@ export class LandingPanel {
   #runways = "";
   constructor(parent: HTMLElement, submit: (settings: LandingSettings) => void) {
     const panel = document.createElement("section"); panel.className = "landing-panel"; panel.setAttribute("aria-label", "降落辅助");
-    panel.innerHTML = `<header><strong>降落辅助 <small>参考</small></strong><label class="landing-auto"><input type="checkbox" data-part="automatic">自动切换</label><button type="button" data-part="toggle" aria-pressed="false">开启</button></header>
+    panel.innerHTML = `<header><strong>降落辅助 <small>参考</small></strong><label class="landing-auto" title="持续飞向友方机场 3 秒后自动开启；也可手动开启"><input type="checkbox" data-part="automatic">自动切换</label><button type="button" data-part="toggle" aria-pressed="false">开启</button></header>
       <p data-part="message"></p><button type="button" data-part="confirm-runway" hidden>确认新端点</button><div data-part="active" hidden>
       <div class="landing-runway"><select data-part="runway" aria-label="降落跑道"></select><button type="button" data-part="reverse" title="反向进近会清空手动高程">反向进近</button></div>
       <div class="landing-deviations"><div><span data-part="lateral"></span><div class="landing-axis"><i data-part="lateral-dot"></i></div></div><div><span data-part="vertical"></span><div class="landing-axis"><i data-part="vertical-dot"></i></div></div></div>
       <div class="landing-readouts"><span data-part="distance"></span><span data-part="course"></span><span data-part="speed"></span><span data-part="verticalSpeed"></span></div>
       <p class="landing-projection" data-part="projection"></p>
       <p class="landing-configuration" data-part="configuration"></p>
-      <div class="landing-airframe"><span data-part="gearLimit"></span><div class="landing-limits" data-part="limits" aria-label="构型 IAS 参考上限"></div><strong data-part="gearAdvice"></strong><strong data-part="flapAdvice"></strong><span data-part="braking"></span><span data-part="arrestor"></span><span data-part="touchdown"></span></div>
-      <details><summary>进近参考参数</summary><div class="landing-fields">
+      <div class="landing-airframe"><strong data-part="gearAdvice"></strong><strong data-part="flapAdvice"></strong><strong data-part="descentAdvice"></strong></div>
+      <details><summary>参数与机型参考</summary><div class="landing-airframe"><span data-part="gearLimit"></span><div class="landing-limits" data-part="limits" aria-label="构型 IAS 参考上限"></div><span data-part="gearUnknown"></span><span data-part="braking"></span><span data-part="arrestor"></span><span data-part="touchdown"></span></div><div class="landing-fields">
         <label>参考 IAS · km/h<input type="number" min="60" max="600" step="1" data-part="ias" placeholder="按机型手动设定"></label>
         <label>参考下滑角 · °<input type="number" min="1" max="8" step="0.1" data-part="angle"></label>
         <label>跑道高程 · m<input type="number" min="-1000" max="10000" step="1" data-part="elevation" placeholder="留空使用可用地形"></label>
@@ -48,6 +48,12 @@ export class LandingPanel {
     this.part<HTMLInputElement>("automatic").checked = snapshot.settings.automatic === true;
     this.part<HTMLButtonElement>("toggle").disabled = !enabled && snapshot.runways.length === 0;
     for (const name of ["message","lateral","vertical","speed","distance","course","verticalSpeed","configuration","gearLimit","gearAdvice","arrestor","touchdown","flapAdvice","projection","braking"] as const) this.part(name).textContent = p[name];
+    if (!enabled) this.part("message").textContent = snapshot.runways.length === 0 ? "等待友方机场" : snapshot.settings.automatic ? "自动待命" : "手动待命";
+    this.part("gearUnknown").textContent = snapshot.gearRisk == null || snapshot.gearRisk === "unknown" ? p.gearAdvice : "";
+    this.part("gearAdvice").hidden = snapshot.gearRisk == null || snapshot.gearRisk === "unknown";
+    this.part("descentAdvice").textContent = p.descentAdvice;
+    this.part("gearAdvice").textContent = p.gearCue;
+    this.part("gearAdvice").title = p.gearAdvice;
     this.part("gearAdvice").dataset.risk = snapshot.gearRisk ?? "unknown";
     this.part("flapAdvice").dataset.risk = snapshot.flapReference?.risk ?? "unknown";
     const limits = landingConfigurationPresentation(snapshot).limits;
@@ -62,6 +68,8 @@ export class LandingPanel {
     }));
     this.part("gearLimit").hidden = limits.some(row => row.label === "起落架");
     const g = snapshot.geometry;
+    if (g?.stage === "return") this.part("vertical").textContent = "下滑待近场";
+    this.part("vertical").title = p.vertical;
     const optionsKey = JSON.stringify(snapshot.runways.map(r => [r.id,r.label]));
     if (optionsKey !== this.#runways) {
       this.#runways = optionsKey;

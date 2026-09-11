@@ -68,6 +68,7 @@ export function landingPresentation(landing: LandingSnapshot | null | undefined)
   const limit = landing?.aircraft?.gearIasKmh;
   const gearLimit = limit ? `起落架参考上限 IAS ${Math.round(limit)} km/h` : "起落架限速资料未知";
   const gearAdvice = ({ "over-limit":"已超过静态限速 · 起落架可能损坏", "near-limit":"接近起落架静态限速", "extension-too-fast":"当前超过放轮参考限速 · 放轮前减速", reference:"", unknown:"当前起落架超速风险未知" })[landing?.gearRisk ?? "unknown"];
+  const gearCue = ({ "over-limit":"起落架超限 · 减速", "near-limit":"起落架近限", "extension-too-fast":"放轮前减速", reference:"", unknown:"" })[landing?.gearRisk ?? "unknown"];
   const config = landingConfigurationPresentation(landing);
   const flapAdvice = landing?.flapReference?.risk === "over-limit" ? `襟翼超过参考上限 · ${landing.aircraft?.flapsControl === true ? "减速/收翼" : "减速"}`
     : landing?.flapReference?.risk === "near-limit" ? "襟翼接近参考上限" : "";
@@ -82,6 +83,7 @@ export function landingPresentation(landing: LandingSnapshot | null | undefined)
   const compact = !landing?.settings.enabled ? "" : !g ? `降落 · ${unavailable}`
     : returning ? `返航 · ${course} · ${distance}`
     : `降落 ${Math.round(g.courseDeg).toString().padStart(3,"0")}° · ${g.thresholdDistanceM < 0 ? "入口后" : "距入口"}${(Math.abs(g.thresholdDistanceM)/1000).toFixed(1)}km`;
-  return { stage, lateral, vertical, speed, configuration, distance, course, verticalSpeed, elevation, compact, gearLimit, gearAdvice, arrestor, touchdown, flapAdvice, projection, braking: config.braking,
+  return { stage, lateral, vertical, speed, configuration, distance, course, verticalSpeed, elevation, compact, gearLimit, gearAdvice, gearCue, arrestor, touchdown, flapAdvice, projection, braking: config.braking,
+    descentAdvice: !returning && fastDescent ? "下沉偏快 · 减小下沉率" : "",
     message: landing?.status === "disabled" ? landing.settings.automatic ? "自动待命 · 飞向友方机场 3 秒后切换，也可手动开启" : "开启后锁定友方跑道，独立于投弹目标" : g ? `${landing?.settings.automatic ? "自动" : ""}${stage} · ${returning ? landing.runwayLabel : elevation}` : unavailable };
 }

@@ -13,6 +13,8 @@ import { drawLandingTape, landingTapePresentation } from "./landing-tape";
 
 export interface PictureInPictureHeadingLayout {
   readonly visualScale: number;
+  readonly markerScale: number;
+  readonly countdownFontPx: number;
   readonly degreeFontPx: number;
   readonly tickTop: number;
   readonly degreeTextY: number;
@@ -24,13 +26,16 @@ export interface PictureInPictureHeadingLayout {
 
 export function pictureInPictureHeadingLayout(width: number, height: number): PictureInPictureHeadingLayout {
   const visualScale = clamp(Math.min(width / 720, height / 150), 0.72, 2);
+  const areaScale = Math.sqrt(width / 720 * height / 150);
   return Object.freeze({
     visualScale,
+    markerScale: clamp(Math.min(1.25 * areaScale, height / 100), .8, 3),
+    countdownFontPx: clamp(Math.min(18 * areaScale, height * .18), 14, 32),
     degreeFontPx: Math.max(8, 8 * visualScale),
     tickTop: height * 0.05,
     degreeTextY: height * 0.27,
-    markerY: height * 0.42,
-    distanceY: height * 0.54,
+    markerY: height * 0.45,
+    distanceY: height * 0.68,
     guidanceTop: height * 0.84,
     guidanceTrackY: height * 0.92,
   });
@@ -136,8 +141,9 @@ export class PictureInPictureHeadingRenderer {
     const snapshot = this.#snapshot;
     if (!snapshot) return;
     const bounds = this.#canvas.getBoundingClientRect();
-    const width = Math.max(320, bounds.width);
-    const height = Math.max(72, bounds.height);
+    const width = bounds.width;
+    const height = bounds.height;
+    if (width <= 0 || height <= 0) return;
     const pixelRatio = this.#view.devicePixelRatio || 1;
     const bitmapWidth = Math.round(width * pixelRatio);
     const bitmapHeight = Math.round(height * pixelRatio);
@@ -154,6 +160,7 @@ export class PictureInPictureHeadingRenderer {
       return;
     }
     const layout = pictureInPictureHeadingLayout(width, height);
+    this.#canvas.parentElement?.style.setProperty("--heading-countdown-size", `${layout.countdownFontPx}px`);
     const target = this.#guidance(snapshot).target;
     const pixelsPerDegree = 8 * layout.visualScale * headingTapeScale(target?.distanceKm ?? 20);
     const centerX = width / 2;
@@ -184,12 +191,13 @@ export class PictureInPictureHeadingRenderer {
     }
     const markers = headingTapeTargetMarkers(markerTargets);
     const renderAtMs = this.#view.performance.now();
+    const occupiedLabels: [number, number][] = [];
     for (const marker of markers) {
       const rawX = centerX + (this.#markerDisplay.get(marker.id)?.step(renderAtMs) ?? marker.relativeDeg) * pixelsPerDegree;
-      const edge = 12 * layout.visualScale;
+      const edge = 12 * layout.markerScale;
       const inView = rawX >= edge && rawX <= width - edge;
       if (!inView && !marker.isTarget && marker.kind !== "airfield") continue;
-      drawMarker(context, marker, clamp(rawX, edge, width - edge), layout, !inView, width);
+      drawMarker(context, marker, clamp(rawX, edge, width - edge), layout, !inView, width, occupiedLabels);
     }
     drawGuidance(context, this.#guidance(snapshot), this.#displayGuidance, width, layout);
   }
@@ -236,8 +244,9 @@ function drawMarker(
   layout: PictureInPictureHeadingLayout,
   overflow: boolean,
   width: number,
+  occupiedLabels: [number, number][],
 ): void {
-  const scale = layout.visualScale;
+  const scale = layout.markerScale;
   const y = layout.markerY;
   const size = (marker.isTarget ? 7 : 5) * scale;
   const color = marker.kind === "airfield"
@@ -281,8 +290,16 @@ function drawMarker(
   context.font = `700 ${Math.max(8, 7 * scale)}px "Microsoft YaHei"`;
   context.textAlign = "center";
   const label = `${marker.markerLabel} ${marker.distanceKm.toFixed(1)}`;
-  const halfLabel = context.measureText(label).width / 2 + 3;
-  context.fillText(label, clamp(x, halfLabel, width - halfLabel), layout.distanceY);
+  const labelWidth = Math.min(context.measureText(label).width, width - 8);
+  const halfLabel = labelWidth / 2 + 3;
+  const labelX = clamp(x, halfLabel, width - halfLabel);
+  const left = labelX - halfLabel, right = labelX + halfLabel;
+  // Markers arrive in target-first order. Keep all symbols, but reserve label
+  // space for the selected target before nearby or edge-clamped alternatives.
+  if (!occupiedLabels.some(([low, high]) => left < high && right > low)) {
+    context.fillText(label, labelX, layout.distanceY, labelWidth);
+    occupiedLabels.push([left, right]);
+  }
   context.restore();
 }
 

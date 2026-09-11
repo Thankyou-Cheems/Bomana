@@ -20,6 +20,18 @@ function inboundSample(at: number): LandingInput {
     altitudeM:500,iasKmh:300,verticalSpeedMps:-4,gearPercent:0,airbrakePercent:0,flapsPercent:0 };
 }
 
+it("keeps excessive-descent advice visible without static touchdown explanations", () => {
+  const input = inboundSample(1000), assist = new LandingAssist();
+  assist.update(input);
+  assist.configure({ ...DEFAULT_LANDING_SETTINGS, enabled: true }, input.navigation);
+  assist.configure({ ...assist.settings(), runwayElevationM: 100 }, input.navigation);
+  const descending = assist.update({ ...input, verticalSpeedMps: -12 });
+  expect(descending.geometry?.referenceDescentMps).not.toBeNull();
+  expect(landingPresentation(descending).descentAdvice).toBe("下沉偏快 · 减小下沉率");
+  expect(landingPresentation(assist.update(input)).descentAdvice).toBe("");
+  expect(landingPresentation(assist.update({ ...input, fresh: false })).descentAdvice).toBe("");
+});
+
 it("corrects a drifting ground track before the aircraft leaves the runway centerline", () => {
   const input = inboundSample(1000), assist = new LandingAssist();
   assist.update(input);
@@ -179,9 +191,18 @@ it("switches the shared runtime automatically from actual 8111 ground-track samp
   const tape=landingTapePresentation(snapshot);
   expect(tape.active).toBe(true);expect(tape.aria).toContain("燃油");expect(tape.speedText).toBe("300");
   const measured={...snapshot,fuel:{...snapshot.fuel!,available:true,currentKg:400,percent:40,source:"measured" as const,stable:true,remainingMinutes:2}};
-  expect(landingTapePresentation(measured)).toMatchObject({fuelText:"400",fuelTone:"danger",fuelDetail:"约 2.0 分"});
-  expect(landingTapePresentation({...measured,fuel:{...measured.fuel,source:"aircraft-estimate"}}).fuelDetail).toBe("40%");
-  expect(landingTapePresentation({...measured,fuel:{...measured.fuel,initialKg:0,source:"aircraft-estimate"}}).fuelDetail).toBe("续航 —");
+  expect(landingTapePresentation(measured)).toMatchObject({fuelText:"120",fuelTone:"danger",fuelDetail:"约 120 秒"});
+  expect(landingTapePresentation({...measured,fuel:{...measured.fuel,remainingMinutes:4.25}})).toMatchObject({fuelText:"255",fuelTone:"caution"});
+  expect(landingTapePresentation({...measured,fuel:{...measured.fuel,remainingMinutes:8.5}})).toMatchObject({fuelText:"510",fuelTone:"reference"});
+  for (const fuel of [{...measured.fuel,source:"aircraft-estimate" as const},{...measured.fuel,stable:false},{...measured.fuel,remainingMinutes:-1},{...measured.fuel,remainingMinutes:NaN}]) {
+    expect(landingTapePresentation({...measured,fuel})).toMatchObject({fuelText:"—",fuelDetail:"— 秒"});
+  }
+  expect(landingTapePresentation({...measured,sortieContinuity:{...measured.sortieContinuity,state:"no-data-grace"}}).fuelText).toBe("—");
+  for (const [arrestorHook,brakeChute,equipmentText] of [[true,false,"钩✓ 伞×"],[false,true,"钩× 伞✓"],[null,undefined,"钩? 伞?"]] as const) {
+    const view = landingTapePresentation({...measured,landing:{...snapshot.landing!,aircraft:{gearIasKmh:null,gearControl:null,arrestorHook,brakeChute}}});
+    expect(view.equipmentText).toBe(equipmentText);
+    expect(view.aria).toContain("仅为静态配备，非当前展开或挂索状态");
+  }
   expect(landingTapePresentation({...measured,landing:{...snapshot.landing!,reason:"telemetry",iasKmh:null}})).toMatchObject({fuelText:"—",speedText:"—"});
 });
 
