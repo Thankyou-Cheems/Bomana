@@ -10,4 +10,9 @@ The online Launcher opens an independently versioned App Web and distributes Bri
 
 The runtime owns lifecycle, recovery, timer, fuel learning and official zone / airfield navigation. Presentation consumes snapshots and commands. The heading renderer is shared with the private extension through a guidance presentation callback; only navigation guidance is included here. Advanced release calculation remains private.
 
+Commands update their snapshot without ingesting the previous telemetry sample
+again. Standard's page and Picture-in-Picture window share one flight-status
+presentation, so reopening the window preserves gear movement direction. Each
+phone page has its own runtime while consuming the paired Bridge's observations.
+
 Public source updates are generated, tested in a clean directory and appended to public `main`. CI in this repository repeats the public checks. It does not sign official releases, store deployment credentials or deploy to Tencent Cloud. Existing tags / Releases are historical, not a second publication pipeline.

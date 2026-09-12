@@ -182,6 +182,17 @@ export class LandingAssist {
     this.#runwayKey = key;
     this.#candidateKey = ""; this.#exitSince = this.#missingSince = 0;
   }
+
+  /**
+   * Render a command response from the current landing observer without
+   * advancing context, runway acquisition, dwell timers, or risk hysteresis.
+   * A command can change #settings through configure(), so the view still
+   * reflects that change immediately.
+   */
+  project(input: LandingInput, terrainElevation: (point: readonly [number, number]) => number | null = () => null): LandingSnapshot {
+    return this.#buildView(input, terrainElevation, this.#settings, this.#runwayKey, this.#gearRisk, this.#flapRisk);
+  }
+
   update(input: LandingInput, terrainElevation: (point: readonly [number, number]) => number | null = () => null): LandingSnapshot {
     if (this.#context && input.context !== this.#context) {
       this.#settings = { ...DEFAULT_LANDING_SETTINGS, automatic: this.#settings.automatic }; this.#runwayKey = "";
@@ -196,22 +207,35 @@ export class LandingAssist {
       else if (!runway && this.#settings.runwayElevationM !== null) this.#settings = { ...this.#settings, runwayElevationM: null };
     }
     this.#updateAutomatic(input);
+    const snapshot = this.#buildView(input, terrainElevation, this.#settings, this.#runwayKey, this.#gearRisk, this.#flapRisk);
+    this.#gearRisk = snapshot.gearRisk ?? "unknown";
+    this.#flapRisk = snapshot.flapReference?.risk ?? "unknown";
+    return snapshot;
+  }
+
+  #buildView(
+    input: LandingInput,
+    terrainElevation: (point: readonly [number, number]) => number | null,
+    settings: LandingSettings,
+    runwayKey: string,
+    previousGearRisk: NonNullable<LandingSnapshot["gearRisk"]>,
+    previousFlapRisk: string,
+  ): LandingSnapshot {
     const limit = input.aircraft?.gearIasKmh;
-    if (!input.fresh || input.iasKmh === null || input.gearPercent === null || !limit) this.#gearRisk = "unknown";
-    else {
+    let gearRisk: NonNullable<LandingSnapshot["gearRisk"]> = "unknown";
+    if (input.fresh && input.iasKmh !== null && input.gearPercent !== null && limit) {
       const ratio = input.iasKmh / limit;
-      if (input.gearPercent <= 0) this.#gearRisk = ratio >= 1 && input.aircraft?.gearControl !== false ? "extension-too-fast" : "reference";
-      else if (ratio >= 1 || this.#gearRisk === "over-limit" && ratio >= .98) this.#gearRisk = "over-limit";
-      else if (ratio >= .9 || this.#gearRisk === "near-limit" && ratio >= .88) this.#gearRisk = "near-limit";
-      else this.#gearRisk = "reference";
+      if (input.gearPercent <= 0) gearRisk = ratio >= 1 && input.aircraft?.gearControl !== false ? "extension-too-fast" : "reference";
+      else if (ratio >= 1 || previousGearRisk === "over-limit" && ratio >= .98) gearRisk = "over-limit";
+      else if (ratio >= .9 || previousGearRisk === "near-limit" && ratio >= .88) gearRisk = "near-limit";
+      else gearRisk = "reference";
     }
-    const settings = this.#settings, runways = landingRunways(input.navigation);
+    const runways = landingRunways(input.navigation);
     const flapReference = landingFlapReference(input.aircraft, input.fresh ? input.flapsPercent : null,
-      input.fresh ? input.iasKmh : null, this.#flapRisk);
-    this.#flapRisk = flapReference.risk;
+      input.fresh ? input.iasKmh : null, previousFlapRisk);
     const runway = runways.find(item => item.id === settings.runwayId);
     const unavailable = !settings.enabled ? "disabled" : !input.fresh || !input.navigation?.player ? "telemetry"
-      : !runway ? "runway-missing" : JSON.stringify([runway.runwayStart, runway.runwayEnd]) !== this.#runwayKey ? "runway-changed" : "";
+      : !runway ? "runway-missing" : JSON.stringify([runway.runwayStart, runway.runwayEnd]) !== runwayKey ? "runway-changed" : "";
     const start = runway && (settings.reverse ? runway.runwayEnd! : runway.runwayStart!);
     const end = runway && (settings.reverse ? runway.runwayStart! : runway.runwayEnd!);
     const terrainM = !unavailable && start && settings.runwayElevationM === null ? terrainElevation(start) : null;
@@ -227,7 +251,7 @@ export class LandingAssist {
       elevationSource: geometry && elevationM !== null ? settings.runwayElevationM !== null ? "manual" : "terrain" : null,
       iasKmh: input.fresh ? input.iasKmh : null, verticalSpeedMps: input.fresh ? input.verticalSpeedMps : null,
       gearPercent: input.fresh ? input.gearPercent : null, airbrakePercent: input.fresh ? input.airbrakePercent : null,
-      flapsPercent: input.fresh ? input.flapsPercent : null, geometry, aircraft: input.aircraft ?? null, gearRisk: this.#gearRisk, flapReference };
+      flapsPercent: input.fresh ? input.flapsPercent : null, geometry, aircraft: input.aircraft ?? null, gearRisk, flapReference };
   }
 
   #updateAutomatic(input: LandingInput): void {

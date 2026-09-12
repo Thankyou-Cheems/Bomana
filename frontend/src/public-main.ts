@@ -16,7 +16,7 @@ import { readPipMapVisible } from "./runtime/pip-map-preference";
 import { WindowClock } from "./runtime/window-clock";
 import { SpeedStripRenderer } from "./runtime/speed-strip-renderer";
 import { PictureInPictureHeadingRenderer } from "./runtime/pip-heading-renderer";
-import { FlightStatusPresenter, FlightStatusBadgeRenderer } from "./runtime/flight-status-badges";
+import { FlightStatusPresenter, FlightStatusBadgeRenderer, type FlightStatusPresentation } from "./runtime/flight-status-badges";
 import { SoundCues, SoundCuePreferencesStore, type SoundCuePreset } from "./runtime/sound-cues";
 import { applyTheme, readTheme, saveTheme, type WebTheme } from "./runtime/theme-preference";
 import type { DesktopMobilePairingOffer } from "./runtime/mobile-pairing";
@@ -45,6 +45,7 @@ let pairingBusy = false;
 let latestFrame: Official8111Frame | null = null;
 const speed = new SpeedStripRenderer({ root: element("speed-strip"), state: element("overspeed"), value: element("speed-limit-value"), mach: element("speed-limit-mach"), track: element("speed-track"), fill: element("speed-fill"), markers: [element("speed-caution-mark"), element("speed-warning-mark"), element("speed-critical-mark")] });
 const flightPresenter = new FlightStatusPresenter();
+let latestFlightStatus: FlightStatusPresentation | null = null;
 const flightBadges = new FlightStatusBadgeRenderer({ flight: element("flight-phase-badge"), gear: element("gear-status-badge") });
 document.body.dataset.edition = edition.channel;
 text("edition-name", edition.displayName);
@@ -83,13 +84,19 @@ on("cycle-navigation-target", cycleTarget);
 on("clear-navigation-target", () => execute({ type: "navigation.resume-auto" }));
 element<HTMLSelectElement>("navigation-select").addEventListener("change", (event) => selectTarget((event.target as HTMLSelectElement).value));
 on("toggle-pip", () => {
-  if (pipConsent.accepted()) void pip?.toggle(runtime.snapshot()).catch(showError);
+  if (pipConsent.accepted()) {
+    const snapshot = runtime.snapshot();
+    const flightStatus = currentFlightStatus(snapshot);
+    void pip?.toggle(snapshot, flightStatus).catch(showError);
+  }
   else element<HTMLDialogElement>("pip-risk-dialog").showModal();
 });
 on("accept-pip-risk", () => {
   pipConsent.accept(element<HTMLInputElement>("remember-pip-risk").checked);
   element<HTMLDialogElement>("pip-risk-dialog").close();
-  void pip?.toggle(runtime.snapshot()).catch(showError);
+  const snapshot = runtime.snapshot();
+  const flightStatus = currentFlightStatus(snapshot);
+  void pip?.toggle(snapshot, flightStatus).catch(showError);
 });
 on("cancel-pip-risk", () => element<HTMLDialogElement>("pip-risk-dialog").close());
 on("open-settings", () => {
@@ -181,7 +188,15 @@ function render(snapshot: EditionSnapshot): void {
   }
   list.querySelectorAll<HTMLInputElement>("input").forEach((input, index) => { input.checked = checklist?.checked[index] ?? false; });
   text("alerts", snapshot.alerts.join(" · ") || "当前无告警");
-  heading?.update(snapshot); speed.update(snapshot); flightBadges.update(flightPresenter.update(snapshot)); map?.update(snapshot, latestFrame?.mapInfo ?? null); pip?.update(snapshot); sound.update(snapshot);
+  const flightStatus = flightPresenter.update(snapshot);
+  latestFlightStatus = flightStatus;
+  heading?.update(snapshot); speed.update(snapshot); flightBadges.update(flightStatus); map?.update(snapshot, latestFrame?.mapInfo ?? null); pip?.update(snapshot, flightStatus); sound.update(snapshot);
+}
+function currentFlightStatus(snapshot: EditionSnapshot): FlightStatusPresentation {
+  if (latestFlightStatus) return latestFlightStatus;
+  const status = flightPresenter.update(snapshot);
+  latestFlightStatus = status;
+  return status;
 }
 function execute(command: EditionCommand): void { void runtime.command(command).then(render).catch(showError); }
 function selectTarget(id: string): void { if (id) execute({ type: "navigation.select", targetId: id }); }

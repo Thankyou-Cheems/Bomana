@@ -112,6 +112,15 @@ it("acquires a sustained inbound runway, holds it through dropouts, and exits af
   expect(assist.update({...inboundSample(36000),context:"new-sortie"}).settings.automatic).toBe(false);
 });
 
+it("keeps automatic landing dwell history out of stale command projections", () => {
+  const assist = new LandingAssist();
+  expect(assist.update(inboundSample(1000)).settings.enabled).toBe(false);
+  expect(assist.project({ ...inboundSample(1500), fresh: false }).settings.enabled).toBe(false);
+  expect(assist.update(inboundSample(1500)).settings.enabled).toBe(false);
+  expect(assist.update(inboundSample(3000)).settings.enabled).toBe(false);
+  expect(assist.update(inboundSample(4000)).settings.enabled).toBe(true);
+});
+
 it("keeps a manual runway through reorder but never revives its elevation after endpoint change", () => {
   const assist = new LandingAssist(), input = inboundSample(1000);
   assist.update(input);

@@ -6,7 +6,7 @@ import { SpeedStripRenderer } from "./speed-strip-renderer";
 import stylesheetURL from "../public-styles.css?url";
 import { WindowClock } from "./window-clock";
 import { readPipMapVisible, savePipMapVisible } from "./pip-map-preference";
-import { FlightStatusPresenter, FlightStatusBadgeRenderer } from "./flight-status-badges";
+import { FlightStatusBadgeRenderer, type FlightStatusPresentation } from "./flight-status-badges";
 
 interface PipApi { readonly window: Window | null; requestWindow(options: { width: number; height: number }): Promise<Window> }
 export class PublicPictureInPicture {
@@ -15,7 +15,6 @@ export class PublicPictureInPicture {
   #map: PublicNavigationMap | null = null;
   #speed: SpeedStripRenderer | null = null;
   #badges: FlightStatusBadgeRenderer | null = null;
-  readonly #flight = new FlightStatusPresenter();
   readonly #select: (id: string) => void;
   readonly #cycle: () => void;
   readonly #visibility: (visible: boolean) => void;
@@ -23,6 +22,7 @@ export class PublicPictureInPicture {
   readonly #clock = new WindowClock(() => this.#view && !this.#view.closed ? this.#view : window);
   #mapVisible = readPipMapVisible("Standard");
   #snapshot: EditionSnapshot | null = null;
+  #latestFlightStatus: FlightStatusPresentation | null = null;
   constructor(select: (id: string) => void, cycle: () => void, visibility: (visible: boolean) => void, basemap: PublicNavigationMap) { this.#select = select; this.#cycle = cycle; this.#visibility = visibility; this.#basemap = basemap; }
   wait(milliseconds: number, signal?: AbortSignal): Promise<void> { return this.#clock.wait(milliseconds, signal); }
   setMapVisible(visible: boolean): void {
@@ -31,10 +31,12 @@ export class PublicPictureInPicture {
     doc?.querySelector(".pip-cockpit")?.classList.toggle("has-mini-map", visible);
     const map = doc?.querySelector<HTMLElement>(".pip-mini-map"); if (map) map.hidden = !visible;
     doc?.querySelector("#pip-map-toggle")?.setAttribute("aria-pressed", String(visible));
-    if (this.#snapshot) this.update(this.#snapshot);
+    if (this.#snapshot && this.#latestFlightStatus) this.update(this.#snapshot, this.#latestFlightStatus);
   }
-  async toggle(snapshot: EditionSnapshot): Promise<void> {
+  async toggle(snapshot: EditionSnapshot, flightStatus: FlightStatusPresentation): Promise<void> {
     if (this.#view && !this.#view.closed) { this.#view.close(); return; }
+    this.#snapshot = snapshot;
+    this.#latestFlightStatus = flightStatus;
     const api = (window as Window & { documentPictureInPicture?: PipApi }).documentPictureInPicture;
     if (!window.isSecureContext || !api) throw new Error("此浏览器不支持置顶导航窗，请用桌面 Edge / Chrome 的 HTTPS 页面。");
     const view = await api.requestWindow({ width: this.#mapVisible ? 910 : 720, height: 188 });
@@ -75,15 +77,16 @@ export class PublicPictureInPicture {
     this.#heading = new PictureInPictureHeadingRenderer({ view, canvas: heading });
     this.#map = new PublicNavigationMap(map, this.#select, this.#basemap);
     this.setMapVisible(this.#mapVisible);
-    this.update(snapshot);
+    if (this.#snapshot && this.#latestFlightStatus) this.update(this.#snapshot, this.#latestFlightStatus);
     this.#clock.wake();
   }
-  update(snapshot: EditionSnapshot): void {
+  update(snapshot: EditionSnapshot, flightStatus: FlightStatusPresentation): void {
     this.#snapshot = snapshot;
+    this.#latestFlightStatus = flightStatus;
     if (!this.#view || this.#view.closed) return;
     this.#view.document.querySelector(".pip-cockpit")?.classList.toggle("is-landing", snapshot.landing?.settings.enabled === true);
     this.#heading?.update(snapshot); if (this.#mapVisible) this.#map?.update(snapshot);
-    this.#badges?.update(this.#flight.update(snapshot));
+    this.#badges?.update(flightStatus);
     const headingValue = this.#view.document.getElementById("pip-heading-value");
     if (headingValue) headingValue.textContent = `HDG ${Math.round(snapshot.flight.headingDeg).toString().padStart(3, "0")}°`;
     const status = this.#view.document.querySelector<HTMLElement>("[data-status]");

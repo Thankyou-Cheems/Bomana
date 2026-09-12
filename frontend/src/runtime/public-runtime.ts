@@ -249,19 +249,7 @@ export class PublicRuntime {
     }
     const fuel = this._buildFuel(navigation, frame.sampledAtMs, fuelLive);
     const stateNumber = (keys: readonly string[]) => optionalNumericField(frame.state ?? {}, keys);
-    if (frame.availability.indicators && !frame.holdover?.indicators && frame.indicators?.valid === true && telemetry.aircraft) this._landingAircraft = telemetry.aircraft;
-    const landing = this._edition.capabilities.airfieldNavigation ? this._landing.update({
-      sampledAtMs: frame.sampledAtMs,
-      context: `${this._currentMapSignature}|${this._landingAircraft}|${this._lifeIndex}|${this._phase === "hangar" || this._phase === "wait-next" ? this._phase : "sortie"}`,
-      fresh: sortieContinuity.state === "live" && !frameHeld && frame.availability.state
-        && frame.availability.indicators && frame.availability.mapObjects && frame.state?.valid !== false
-        && [frame.stateSampledAtMs, frame.indicatorsSampledAtMs, frame.mapObjectsSampledAtMs].every(at => at == null || frame.sampledAtMs - at <= 1500),
-      navigation, track: this._groundTrackEstimate,
-      aircraft: this._aircraftParameters?.landing(this._landingAircraft) ?? null,
-      altitudeM: stateNumber(["H, m", "H", "altitude"]), iasKmh: stateNumber(["IAS, km/h", "IAS", "ias"]),
-      verticalSpeedMps: stateNumber(["Vy, m/s", "Vy", "vy"]), gearPercent: stateNumber(["gear, %", "gear"]),
-      airbrakePercent: stateNumber(["airbrake, %", "airbrake"]), flapsPercent: stateNumber(["flaps, %", "flaps"]),
-    }, point => this._landingElevation(point)) : null;
+    const landing = this._buildLandingSnapshot(frame, telemetry, navigation, sortieContinuity, frameHeld, frame.sampledAtMs);
     const extension = this._snapshotExtension(telemetry, navigation, headingDeg, sortieContinuity);
     this._revision += 1;
     const timer = this._buildTimer(frame.sampledAtMs);
@@ -351,6 +339,11 @@ export class PublicRuntime {
           this._lifeIndex += 1;
         }
         this._persistTimerCheckpoint(this._lifeStartedAtMs, true);
+        // A manual restart clears the previous ground-continuity evidence. If
+        // the latest authoritative map already has no player, preserve the
+        // existing loss/undo contract without replaying the full frame into
+        // fuel, track, chat, or zone-history observers.
+        this._projectLossAfterTimerReset(commandNowMs);
         break;
       case "timer.set-cycle":
         if (!Number.isInteger(command.minutes) || command.minutes < 1 || command.minutes > 180) {
@@ -416,8 +409,145 @@ export class PublicRuntime {
     this._afterCommand(command);
     this._settingsStore.save(this._settings);
     this._persistSortieRecovery(commandNowMs, true);
-    if (this._lastFrame) return this.ingest(this._lastFrame);
+    return this._projectCommandSnapshot(commandNowMs);
+  }
+
+  /**
+   * Rebuild the command-facing view from the most recent observation without
+   * feeding that observation through lifecycle, fuel, chat or zone-history
+   * consumers a second time. A command can invalidate a completed strike, so
+   * the projected view intentionally carries no strike result until a newer
+   * telemetry sample and solver pass establish one.
+   */
+  protected _projectCommandSnapshot(nowMs: number): EditionSnapshot {
+    const previous = this._lastSnapshot;
+    const frame = this._lastFrame;
+    if (!frame) {
+      const continuity = this._buildSortieContinuity(nowMs);
+      const extension = this._projectCommandExtension(null, previous.navigation, previous.flight.headingDeg, continuity);
+      this._revision += 1;
+      this._lastSnapshot = Object.freeze({
+        ...previous,
+        revision: this._revision,
+        phase: this._phase,
+        timer: this._buildTimer(nowMs),
+        sortieContinuity: continuity,
+        ...extension,
+        strike: null,
+        alerts: this._projectCommandAlerts(previous.alerts, previous.flight, previous.landing),
+        checklist: this._edition.capabilities.checklist
+          ? Object.freeze({ items: this._settings.checklistItems, checked: Object.freeze([...this._checklistChecked]) })
+          : null,
+      });
+      return this._lastSnapshot;
+    }
+
+    const telemetry = parseTelemetry(frame);
+    const map = this._parseMap(frame.mapObjects);
+    const frameHeld = Object.values(frame.holdover ?? {}).some(Boolean);
+    const continuity = this._buildSortieContinuity(nowMs);
+    const headingDeg = telemetry.headingDeg ?? mapHeading(map.player);
+    let navigation = previous.navigation;
+    if (previous.connected && !frameHeld) {
+      navigation = this._buildNavigation(frame, map, headingDeg);
+      if (continuity.state !== "live" && continuity.state !== "reset-undo" && !navigation?.player) {
+        navigation = this._buildContinuityNavigation(navigation);
+      }
+    }
+    const fuelLive = this._phase === "alive" && continuity.state === "live"
+      && frame.availability.state && frame.holdover?.state !== true && frame.state?.valid !== false;
+    const landing = this._buildLandingSnapshot(frame, telemetry, navigation, continuity, frameHeld, nowMs, true);
+    const extension = this._projectCommandExtension(telemetry, navigation, headingDeg, continuity);
+    this._revision += 1;
+    this._lastSnapshot = Object.freeze({
+      ...previous,
+      revision: this._revision,
+      phase: this._phase,
+      timer: this._buildTimer(nowMs),
+      sortieContinuity: continuity,
+      navigation,
+      fuel: this._buildFuel(navigation, nowMs, fuelLive),
+      landing,
+      ...extension,
+      strike: null,
+      alerts: this._projectCommandAlerts(previous.alerts, previous.flight, landing),
+      checklist: this._edition.capabilities.checklist
+        ? Object.freeze({ items: this._settings.checklistItems, checked: Object.freeze([...this._checklistChecked]) })
+        : null,
+    });
     return this._lastSnapshot;
+  }
+
+  private _projectCommandAlerts(
+    previous: readonly string[],
+    flight: EditionSnapshot["flight"],
+    landing: EditionSnapshot["landing"],
+  ): readonly string[] {
+    const alerts = previous.filter((alert) => alert !== "起落架未收起");
+    if (this._edition.capabilities.missionAlerts && !landing?.settings.enabled && flight.gearPercent > 50 && flight.iasKmh > 80) {
+      return Object.freeze([...alerts, "起落架未收起"]);
+    }
+    return Object.freeze([...alerts]);
+  }
+
+  protected _buildLandingSnapshot(
+    frame: Official8111Frame,
+    telemetry: ParsedTelemetry,
+    navigation: EditionSnapshot["navigation"],
+    continuity: EditionSnapshot["sortieContinuity"],
+    frameHeld: boolean,
+    nowMs: number,
+    projectOnly = false,
+  ): EditionSnapshot["landing"] {
+    if (!this._edition.capabilities.airfieldNavigation) return null;
+    if (!projectOnly && frame.availability.indicators && !frame.holdover?.indicators && frame.indicators?.valid === true && telemetry.aircraft) {
+      this._landingAircraft = telemetry.aircraft;
+    }
+    const sourceTimes = [frame.stateSampledAtMs, frame.indicatorsSampledAtMs, frame.mapObjectsSampledAtMs];
+    const fresh = continuity.state === "live" && !frameHeld && frame.availability.state
+      && frame.availability.indicators && frame.availability.mapObjects && frame.state?.valid !== false
+      && nowMs - frame.sampledAtMs <= 1_500
+      && sourceTimes.every((at) => at == null || frame.sampledAtMs - at <= 1_500);
+    const stateNumber = (keys: readonly string[]) => optionalNumericField(frame.state ?? {}, keys);
+    const input = {
+      sampledAtMs: frame.sampledAtMs,
+      context: `${this._currentMapSignature}|${this._landingAircraft}|${this._lifeIndex}|${this._phase === "hangar" || this._phase === "wait-next" ? this._phase : "sortie"}`,
+      fresh,
+      navigation,
+      track: this._groundTrackEstimate,
+      aircraft: this._aircraftParameters?.landing(this._landingAircraft) ?? null,
+      altitudeM: stateNumber(["H, m", "H", "altitude"]),
+      iasKmh: stateNumber(["IAS, km/h", "IAS", "ias"]),
+      verticalSpeedMps: stateNumber(["Vy, m/s", "Vy", "vy"]),
+      gearPercent: stateNumber(["gear, %", "gear"]),
+      airbrakePercent: stateNumber(["airbrake, %", "airbrake"]),
+      flapsPercent: stateNumber(["flaps, %", "flaps"]),
+    };
+    return projectOnly ? this._landing.project(input, point => this._landingElevation(point))
+      : this._landing.update(input, point => this._landingElevation(point));
+  }
+
+  protected _projectCommandExtension(
+    _telemetry: ParsedTelemetry | null,
+    _navigation: EditionSnapshot["navigation"],
+    _heading: number,
+    _continuity: EditionSnapshot["sortieContinuity"],
+  ): Pick<EditionSnapshot, "destroyedZones" | "mapGrid" | "markedZones" | "gameChat" | "strikeSelection" | "strike"> {
+    return {
+      destroyedZones: this._lastSnapshot.destroyedZones,
+      mapGrid: this._lastSnapshot.mapGrid,
+      markedZones: this._lastSnapshot.markedZones,
+      gameChat: this._lastSnapshot.gameChat,
+      strikeSelection: this._lastSnapshot.strikeSelection,
+      strike: null,
+    };
+  }
+
+  protected _projectLossAfterTimerReset(nowMs: number): void {
+    const frame = this._lastFrame;
+    if (!frame || !frame.bridgeReachable || !frame.availability.mapObjects || frame.holdover?.mapObjects === true) return;
+    if (this._parseMap(frame.mapObjects).player !== null) return;
+    this._beginSortieReset(nowMs, "aircraft-loss");
   }
 
   protected _updateLifecycle(frame: Official8111Frame, telemetry: ParsedTelemetry, map: ParsedMap): void {
