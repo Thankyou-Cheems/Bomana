@@ -165,6 +165,8 @@
     "frontend/src/runtime/speed-strip-renderer.ts",
     "frontend/src/runtime/strike-encyclopedia.test.ts",
     "frontend/src/runtime/strike-encyclopedia.ts",
+    "frontend/src/runtime/target-center-motion.test.ts",
+    "frontend/src/runtime/target-center-motion.ts",
     "frontend/src/runtime/telemetry-source.ts",
     "frontend/src/runtime/theme-preference.test.ts",
     "frontend/src/runtime/theme-preference.ts",

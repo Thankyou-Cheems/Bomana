@@ -1,3 +1,5 @@
+import type { MatchedMissionArea } from "./extension-types";
+
 export interface ReleaseState {
   readonly altitudeM: number;
   readonly horizontalSpeedMps: number;
@@ -100,6 +102,7 @@ export type SolverWorkerResponse =
       readonly altitudeM: number | null;
       readonly altitudeDatumM: number | null;
       readonly bombingAreaRadiusM?: number | null;
+      readonly bombingArea?: MatchedMissionArea | null;
     }
   | {
       readonly type: "catalog-result";

@@ -1,5 +1,5 @@
 import type { GuidedEnvelope } from "./contracts";
-import type { AirfieldModuleArea, BombingWindow, OfficialMapGrid, OfficialChatMessage, MarkedZoneMarker } from "./extension-types";
+import type { AirfieldModuleArea, BombingWindow, MatchedMissionArea, OfficialMapGrid, OfficialChatMessage, MarkedZoneMarker, TargetAreaProjection } from "./extension-types";
 import type { EditionPolicy } from "./edition-policy";
 import type { FuelSnapshot } from "./fuel-management";
 import type { SortieResetReason } from "./sortie-recovery";
@@ -62,6 +62,7 @@ export interface RealtimeSolverPort {
     readonly altitudeM: number | null;
     readonly altitudeDatumM: number | null;
     readonly bombingAreaRadiusM?: number | null;
+    readonly bombingArea?: MatchedMissionArea | null;
   }>;
 }
 
@@ -153,6 +154,8 @@ export interface EditionSnapshot {
   readonly mapGrid: OfficialMapGrid | null;
   readonly markedZones: readonly MarkedZoneMarker[];
   readonly gameChat: readonly OfficialChatMessage[];
+  /** Display-only target silhouette, available independently of a strike solve. */
+  readonly targetArea?: TargetAreaProjection | null;
   readonly fuel: FuelSnapshot | null;
   readonly landing?: LandingSnapshot | null;
   readonly checklist: {

@@ -1,6 +1,7 @@
 import type { EditionSnapshot } from "./runtime-types";
 import {
   headingGuidance,
+  headingTargetCenterRatio,
   headingTapeScale,
   headingTapeTargetMarkers,
   headingTargetSymbol,
@@ -10,6 +11,7 @@ import {
 } from "./heading-tape";
 import { SampledAngleMotion, sampledAtPerformanceTime } from "./sampled-angle-motion";
 import { drawLandingTape, landingTapePresentation } from "./landing-tape";
+import { TargetCenterMotion } from "./target-center-motion";
 
 export interface PictureInPictureHeadingLayout {
   readonly visualScale: number;
@@ -49,6 +51,8 @@ export class PictureInPictureHeadingRenderer {
   #displayHeading = Number.NaN;
   readonly #headingMotion = new SampledAngleMotion();
   #displayGuidance = 0;
+  readonly #targetCenterMotion = new TargetCenterMotion();
+  #displayTargetCenter = 0;
   readonly #markerDisplay = new Map<string, SampledAngleMotion>();
   #lastFrameMs = 0;
   #lastObservationMs = 0;
@@ -69,9 +73,11 @@ export class PictureInPictureHeadingRenderer {
     const guidance = this.#guidance(snapshot);
     const landing = landingTapePresentation(snapshot);
     this.#canvas.dataset.mode = landing.active ? "landing" : "navigation";
-    this.#canvas.setAttribute("aria-label", landing.active ? landing.aria : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
+    this.#canvas.setAttribute("aria-label", landing.active ? `${landing.aria}${guidance.target ? `；目标方位参考；${guidance.text}` : ""}` : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
     if (guidance.target?.id !== this.#targetId || guidance.windowMode) this.#displayGuidance = guidance.ratio;
     this.#targetId = guidance.target?.id ?? "";
+    this.#targetCenterMotion.observe(this.#targetId, guidance.centerRelativeDeg ?? guidance.relativeDeg);
+    this.#displayTargetCenter = this.#targetCenterMotion.step(this.#view.performance.now());
     const observedAtMs = sampledAtPerformanceTime(
       snapshot.sampledAtMs,
       Date.now(),
@@ -100,6 +106,7 @@ export class PictureInPictureHeadingRenderer {
     const elapsed = Math.min(50, Math.max(0, nowMs - this.#lastFrameMs));
     this.#lastFrameMs = nowMs;
     this.#displayHeading = normalizeHeading(this.#headingMotion.step(nowMs));
+    this.#displayTargetCenter = this.#targetCenterMotion.step(nowMs);
     const guidance = this.#guidance(snapshot);
     const target = guidance.target;
     const displayedTargetRelative = target
@@ -111,7 +118,8 @@ export class PictureInPictureHeadingRenderer {
     this.#displayGuidance = guidance.windowMode ? targetGuidance
       : this.#displayGuidance + (targetGuidance - this.#displayGuidance) * (1 - Math.exp(-elapsed / 70));
     this.#render();
-    if (nowMs - this.#lastObservationMs < 360 || Math.abs(targetGuidance - this.#displayGuidance) > 0.002) {
+    if (nowMs - this.#lastObservationMs < 360 || Math.abs(targetGuidance - this.#displayGuidance) > 0.002
+      || Math.abs(this.#displayTargetCenter - (guidance.centerRelativeDeg ?? guidance.relativeDeg)) > .001) {
       this.#frame = this.#view.requestAnimationFrame(this.#animate);
     } else {
       this.#frame = 0;
@@ -155,8 +163,11 @@ export class PictureInPictureHeadingRenderer {
     if (!context) return;
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.clearRect(0, 0, width, height);
+    const guidance = this.#guidance(snapshot);
     if (snapshot.landing?.settings.enabled) {
-      drawLandingTape(context, snapshot, width, height, this.#displayHeading);
+      drawLandingTape(context, snapshot, width, guidance.target ? height * .82 : height, this.#displayHeading);
+      if (guidance.target) drawGuidance(context, guidance, guidance.ratio, width,
+        { ...pictureInPictureHeadingLayout(width, height), guidanceTop: height * .85, guidanceTrackY: height * .95 }, this.#displayTargetCenter);
       return;
     }
     const layout = pictureInPictureHeadingLayout(width, height);
@@ -199,7 +210,7 @@ export class PictureInPictureHeadingRenderer {
       if (!inView && !marker.isTarget && marker.kind !== "airfield") continue;
       drawMarker(context, marker, clamp(rawX, edge, width - edge), layout, !inView, width, occupiedLabels);
     }
-    drawGuidance(context, this.#guidance(snapshot), this.#displayGuidance, width, layout);
+    drawGuidance(context, guidance, this.#displayGuidance, width, layout, this.#displayTargetCenter);
   }
 }
 
@@ -332,6 +343,7 @@ function drawGuidance(
   guidanceRatio: number,
   width: number,
   layout: PictureInPictureHeadingLayout,
+  displayCenterDeg: number,
 ): void {
   const target = guidance.target;
   const centerX = width / 2;
@@ -355,40 +367,42 @@ function drawGuidance(
     }
   }
   const tolerance = guidance.toleranceDeg;
-  const approach = guidance.windowMode === "approach" || guidance.windowMode === "correction";
-  // A minimum 12 CSS-pixel correction marker stays legible at long range.
-  // Never widen an actual impact window: that would imply a false release cue.
-  context.strokeStyle = approach ? "#8ec4e1" : "#6de0a3";
-  context.lineWidth = 2 * layout.visualScale;
-  for (const [low, high] of guidance.bandRanges) {
-    let left = centerX + low * halfTrack, right = centerX + high * halfTrack;
-    if (approach) {
-      const halfWidth = Math.max(6, 6 * layout.visualScale, (right - left) / 2);
-      const midpoint = clamp((left + right) / 2, trackLeft + halfWidth, trackRight - halfWidth);
-      left = midpoint - halfWidth; right = midpoint + halfWidth;
-    } else if (right - left <= 1e-8) continue;
-    context.fillStyle = approach ? "rgba(142,196,225,.16)" : "rgba(109,224,163,.22)";
-    context.fillRect(left, layout.guidanceTrackY - halfHeight, right - left, halfHeight * 2);
+  // Paint the geometric silhouette even while a separate impact window exists.
+  // Neither physical interval is inflated to make a distant target easier to see.
+  const layers = [
+    ...(guidance.areaRangeDeg ? [{ ranges: (guidance.areaRangesDeg ?? [guidance.areaRangeDeg])
+      .map(range => range.map(value => projectHeadingGuidanceRatio(value, tolerance))), area: true }] : []),
+    ...(guidance.windowMode === "impact" ? [{ ranges: guidance.bandRanges, area: false }] : []),
+  ];
+  for (const layer of layers) for (const [low, high] of layer.ranges) {
+    const left = centerX + low! * halfTrack, right = centerX + high! * halfTrack;
+    if (right - left <= 1e-8) continue;
+    const bandHalfHeight = halfHeight * (layer.area ? 1.5 : 1);
+    context.strokeStyle = layer.area ? "#8ec4e1" : "#6de0a3";
+    context.lineWidth = (layer.area ? 1 : 2) * layout.visualScale;
+    context.fillStyle = layer.area ? "rgba(142,196,225,.16)" : "rgba(109,224,163,.22)";
+    context.fillRect(left, layout.guidanceTrackY - bandHalfHeight, right - left, bandHalfHeight * 2);
     context.beginPath();
-    context.moveTo(left, layout.guidanceTrackY - halfHeight);
-    context.lineTo(left, layout.guidanceTrackY + halfHeight);
-    context.lineTo(right, layout.guidanceTrackY + halfHeight);
-    context.lineTo(right, layout.guidanceTrackY - halfHeight);
+    context.moveTo(left, layout.guidanceTrackY - bandHalfHeight);
+    context.lineTo(left, layout.guidanceTrackY + bandHalfHeight);
+    context.lineTo(right, layout.guidanceTrackY + bandHalfHeight);
+    context.lineTo(right, layout.guidanceTrackY - bandHalfHeight);
     context.stroke();
-    if (guidance.windowMode) {
-      const midpoint = (left + right) / 2;
-      const tipY = layout.guidanceTrackY - halfHeight - 2 * layout.visualScale;
-      context.save();
-      context.fillStyle = "#f2f8fc";
-      context.strokeStyle = "#071923";
-      context.lineWidth = Math.max(1, layout.visualScale);
-      context.beginPath();
-      context.moveTo(midpoint, tipY);
-      context.lineTo(midpoint - 5 * layout.visualScale, tipY - 6 * layout.visualScale);
-      context.lineTo(midpoint + 5 * layout.visualScale, tipY - 6 * layout.visualScale);
-      context.closePath(); context.fill(); context.stroke();
-      context.restore();
-    }
+  }
+  if (target && guidance.windowMode) {
+    const x = centerX + headingTargetCenterRatio(guidance, displayCenterDeg) * halfTrack;
+    const tipY = layout.guidanceTrackY - halfHeight * 1.5 - 2 * layout.visualScale;
+    const size = Math.max(6, 6 * layout.visualScale);
+    context.save();
+    context.fillStyle = "#f2f8fc";
+    context.strokeStyle = "#071923";
+    context.lineWidth = Math.max(1, layout.visualScale);
+    context.beginPath();
+    context.moveTo(x, tipY);
+    context.lineTo(x - size, tipY - size);
+    context.lineTo(x + size, tipY - size);
+    context.closePath(); context.fill(); context.stroke();
+    context.restore();
   }
   context.strokeStyle = "rgba(142,196,225,.7)";
   context.beginPath();

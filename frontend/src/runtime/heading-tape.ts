@@ -8,6 +8,10 @@ export interface HeadingGuidance {
   readonly relativeDeg: number;
   readonly toleranceDeg: number;
   readonly bandRanges: readonly AngularRange[];
+  /** Geometric target silhouette, independent of ballistic impact eligibility. */
+  readonly areaRangeDeg?: AngularRange;
+  readonly areaRangesDeg?: readonly AngularRange[];
+  readonly centerRelativeDeg?: number;
   readonly windowMode?: "impact" | "approach" | "correction";
   readonly color: string;
   readonly text: string;
@@ -137,6 +141,14 @@ export function projectHeadingGuidanceRatio(relativeDeg: number, toleranceDeg: n
   const tolerance = Math.max(0.1, toleranceDeg);
   const magnitude = Math.min(1, Math.abs(relativeDeg) / tolerance) ** 0.62;
   return magnitude ? Math.sign(relativeDeg) * magnitude : 0;
+}
+
+export function headingTargetCenterRatio(guidance: HeadingGuidance, displayCenterDeg: number): number {
+  const anchor = guidance.centerRelativeDeg ?? guidance.relativeDeg;
+  const unwrapped = anchor + ((displayCenterDeg - anchor + 180) % 360 + 360) % 360 - 180;
+  const centre = guidance.areaRangeDeg
+    ? Math.max(guidance.areaRangeDeg[0], Math.min(guidance.areaRangeDeg[1], unwrapped)) : unwrapped;
+  return projectHeadingGuidanceRatio(centre, guidance.toleranceDeg);
 }
 
 export function headingGuidanceText(relativeDeg: number, distanceKm: number): string {
