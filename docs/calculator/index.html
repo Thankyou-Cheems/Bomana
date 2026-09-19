@@ -43,7 +43,7 @@
           <p class="hangar-lede">出发前算清挂载，返航前留够燃油。</p>
           <p class="tool-source" id="calcSource" role="status">正在核对参数版本…</p>
           <nav class="tool-nav" aria-label="工具导航">
-            <a href="#calcForm">战区与机场计算器</a><a href="#airportStatus">机场状态</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
+            <a href="#calcForm">战区与机场计算器</a><a href="#airportStatus">机场状态</a><a href="#airfieldDefense">机场防空</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
           </nav>
         </div>
 
@@ -246,6 +246,21 @@
           </form>
           <div class="fuel-plan-result" id="fuelResult" aria-live="polite"><p>填入油耗、地速和距离后计算；缺少当前燃油时只显示所需油量。</p></div>
           <details class="tool-details"><summary>怎样获得可用的实测油耗？</summary><p>在接近返航的高度、挂载与油门下保持稳定平飞，用前后燃油质量差除以间隔分钟数。排除加油、抛副油箱和大幅机动。改油门、爬升或开加力后应重新测量。地速反映实际行进速度，不能直接用 IAS 代替。</p><p>默认 20% 绕行和 5 分钟储备只是可调整的规划假设。这里不读取 8111，也不以静态发动机表冒充实测；结果不含空战、等待和机况变化。</p></details>
+        </section>
+
+        <section class="tool-panel" id="airfieldDefense" aria-labelledby="defense-title">
+          <header class="tool-panel-head"><p class="hangar-kicker">AIRFIELD DEFENSE</p><h2 id="defense-title">机场防空会选中哪些弹药？</h2><p>Sky Odyssey · 客户端 2.59.0.13 静态研究。已核对 AI 筛选代码，尚无同版本实战拦截率。</p></header>
+          <p>以高等级 EC 的 <strong>ItO 90M + ZA-35</strong> 机场配置为例；不同国家模板还会使用 Tor-M1 或其他高炮。上方合并的耐久 BR 档不能用来确定实际防空配置。</p>
+          <p class="repair-result" id="defenseSelection" aria-live="polite">在上方选择武器后，可对照本节两种防空的质量筛选窗。</p>
+          <dl class="module-guide">
+            <dt>ItO 90M 的第一层门槛</dt><dd>整弹质量 30～3500 kg、瞬时速度 120～1200 m/s，边界值包含在内；通过后还要匹配目标优先级。投弹后加速可能从窗外进入窗内。</dd>
+            <dt>两种防空的弹药优先级</dt><dd>已配置的质量窗合起来为 80～3500 kg。低于 80 kg 或高于 3500 kg 没有相应质量条目；窗内弹药仍受速度、距离、航迹与探测条件限制。只代表这两种配置，不是全局免拦截名单。</dd>
+            <dt>普通炸弹与小型制导弹药</dt><dd>代码中缺少制导组件的弹药会被这条主动拦截分支排除，普通无制导航弹值得优先实测；尚未逐弹种验证实例。例如 BLU-27（401.4 kg）没有制导配置，GBU-8（1027 kg）有电视制导，两者质量都在窗内，不能仅凭质量判定拦截资格。小型制导弹药也不能只看“小直径”名称判断。</dd>
+          </dl>
+          <p>当前客户端示例：GBU-39 为 121.563 kg、GBU-53 为 92.533 kg、SPICE 250 为 130 kg，均落入上述质量范围；Brimstone 为 50 kg，不落入这两种配置的优先级质量窗。这里只比较整弹质量，未据此计算拦截概率。</p>
+          <details class="tool-details"><summary>高空灌顶有用吗？</summary><p>当前 ItO 发射架的静态最大仰角为 80°，ZA-35 为 81°，近天顶方向值得实测，但尚未证实为 AI 禁射区。角度取决于弹药相对每一处防空阵地的方位；已经发射的导弹和其他阵地仍可能拦截。</p><p>原生 AI 还会按航迹是否威胁阵地来筛选目标；没有找到“超过某个投放高度就免拦截”的通用开关。目前不能据此推荐一个保证安全的高度。</p></details>
+          <details class="tool-details"><summary>能否靠远投、压低或饱和攻击保证突破？</summary><p>地形遮蔽、远投和缩短载机暴露时间可以作为风险管理思路，但不能推出弹药不会被拦截。目标优先级、反应时间与多阵地覆盖会影响结果；尚无支持固定齐射数量或固定突防概率的同版本证据。</p><p>上方枚数是造成所需伤害的有效命中枚数，架次按全部有效命中估算，不包含拦截、脱靶和机场回血。</p></details>
+          <details class="tool-details"><summary>来源和适用边界</summary><p>数据来自 2.59.0.13 的 EC 机场任务模板、ItO 90M / ZA-35 武器配置及客户端原生筛选函数；这是版本化参考，不是实时战局读取。对比 2.57.1.89，这些质量／速度窗此前已存在，当前新增了显式反应时间等参数；不能把整套规则都称为本次新增。当前模板坐标不足以确认防空阵地在本次更新中被垫高。</p><p><a href="https://warthunder.com/en/game/changelog/current/1797">官方 EC 高等级机场防空更新</a> · <a href="https://warthunder.com/en/game/changelog/current/1876">核升级模式的拦截改动</a>。后者的小型弹药例外和低空规则属于 Nuclear Escalation，不能直接套用到全真 EC。</p></details>
         </section>
 
         <section class="tool-panel" id="fieldGuide" aria-labelledby="guide-title">

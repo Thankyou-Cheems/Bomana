@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { overspeedDynamicProjection, speedStripProgress } from "./overspeed-scale";
 
 describe("shared fixed overspeed scale", () => {
-  it("reserves 60 percent for the final tenth and 36 percent for the warning region", () => {
+  it("marks the source limit and reserves visible room beyond it", () => {
     expect(overspeedDynamicProjection(0).fillRatio).toBe(0);
     expect(overspeedDynamicProjection(0.5).fillRatio).toBeLessThan(0.06);
     expect(overspeedDynamicProjection(0.8).fillRatio).toBeLessThan(0.10);
-    expect(overspeedDynamicProjection(0.9).fillRatio).toBeCloseTo(0.40, 8);
-    expect(overspeedDynamicProjection(0.94).fillRatio).toBeCloseTo(0.64, 8);
-    expect(overspeedDynamicProjection(1).fillRatio).toBe(1);
+    expect(overspeedDynamicProjection(0.9).fillRatio).toBeCloseTo(0.25, 8);
+    expect(overspeedDynamicProjection(1).fillRatio).toBeCloseTo(0.625, 8);
+    expect(overspeedDynamicProjection(1.1).fillRatio).toBe(1);
   });
 
   it("joins the compressed and expanded regions without a jump in movement rate", () => {
@@ -22,8 +22,8 @@ describe("shared fixed overspeed scale", () => {
   });
 
   it("gives equal speed increments equal distances throughout the approach to overspeed", () => {
-    for (let percent = 90; percent < 100; percent++) {
-      expect(speedStripProgress((percent + 1) / 100) - speedStripProgress(percent / 100)).toBeCloseTo(0.06, 10);
+    for (let percent = 90; percent < 110; percent++) {
+      expect(speedStripProgress((percent + 1) / 100) - speedStripProgress(percent / 100)).toBeCloseTo(0.0375, 10);
     }
     let previous = 0;
     for (let sample = 1; sample <= 1000; sample++) {
@@ -41,12 +41,14 @@ describe("shared fixed overspeed scale", () => {
     expect(Math.abs(after.fillRatio - before.fillRatio)).toBeLessThan(0.01);
     expect(after.markerRatios).toEqual(before.markerRatios);
     expect(projection.markerRatios[0]).toBeGreaterThan(projection.fillRatio);
-    for (const [index, expected] of [0.64, 0.82, 0.952].entries()) {
+    expect(projection.markerRatios).toHaveLength(3);
+    for (const [index, expected] of [0.25, 0.4375, 0.625].entries()) {
       expect(projection.markerRatios[index]).toBeCloseTo(expected, 10);
     }
   });
 
-  it("caps actual overspeed at a full bar and does not invent progress from invalid input", () => {
+  it("caps the display at 110 percent without inventing another damage node", () => {
+    expect(speedStripProgress(1.05)).toBeCloseTo(0.8125);
     expect(speedStripProgress(1.1)).toBe(1);
     for (const invalid of [-1, NaN, Infinity]) expect(speedStripProgress(invalid)).toBe(0);
   });

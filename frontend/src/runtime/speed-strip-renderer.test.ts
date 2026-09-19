@@ -40,21 +40,26 @@ describe("speed strip presentation", () => {
       level: "warning",
       matched: true,
     }));
-    expect(presentation.stateText).toBe("接近极限");
-    expect(presentation.valueText).toBe("95% · IAS 900/1500 · 结构");
-    expect(presentation.machText).toBe("M1.90/2.00");
-    expect(presentation.fillPercent).toBeGreaterThan(50);
-    expect(presentation.markerPercents).toHaveLength(3);
+    expect(presentation.stateText).toBe("减速");
+    expect(presentation.levelClass).toBe("warning");
+    expect(presentation.valueText).toBe("IAS 900/1500");
+    expect(presentation.machText).toBe("95% · M1.90/2.00");
+    expect(presentation.fillPercent).toBeCloseTo(43.75);
+    expect(presentation.markerPercents).toEqual([25, 43.75, 62.5]);
   });
 
   it("labels the flap reference without claiming safe flight or masking Mach warnings", () => {
     const observed = { iasKmh: 100, iasLimitKmh: 400, mach: null, machLimit: 2,
       ratio: .25, level: "none" as const, matched: true, iasLimitSource: "flaps" as const };
     expect(speedStripPresentation(snapshot(observed))).toMatchObject({
-      stateText: "速度参考", valueText: "25% · IAS 100/400 · 襟翼参考",
+      stateText: "襟翼参考", valueText: "IAS 100/400", machText: "25%",
     });
     expect(speedStripPresentation(snapshot({ ...observed, mach: 1.99, level: "critical" })))
-      .toMatchObject({ stateText: "超速危险", valueText: "100% · IAS 100/400 · 襟翼参考" });
+      .toMatchObject({ stateText: "减速", levelClass: "warning", machText: "99.5% · M1.99/2.00" });
+    expect(speedStripPresentation(snapshot({ ...observed, mach: 2, level: "critical" })))
+      .toMatchObject({ stateText: "超限", levelClass: "critical", valueText: "IAS 100/400", machText: "100% · M2.00/2.00" });
+    expect(speedStripPresentation(snapshot({ ...observed, mach: 1.9998, level: "none" })))
+      .toMatchObject({ machText: "99.9% · M2.00/2.00", levelClass: "warning" });
   });
 
   it("shows a truthful empty scale before aircraft limits are matched", () => {
@@ -67,7 +72,7 @@ describe("speed strip presentation", () => {
       level: "none",
       matched: false,
     }));
-    expect(presentation).toMatchObject({ stateText: "速度监视", fillPercent: 0, valueText: "IAS --" });
+    expect(presentation).toMatchObject({ stateText: "", fillPercent: 0, valueText: "IAS 0", machText: "", limitsKnown: false });
   });
 
   it("places the colored bands and markers on the same expanded fixed scale", () => {
@@ -97,9 +102,9 @@ describe("speed strip presentation", () => {
       level: "caution",
       matched: true,
     }));
-    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-caution", "64%");
-    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-warning", "82%");
-    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-critical", "95.2%");
-    expect(markers.map(marker => marker.style.left)).toEqual(["64%", "82%", "95.2%"]);
+    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-limit", "62.5%");
+    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-caution", "25%");
+    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-warning", "43.75%");
+    expect(markers.map(marker => marker.style.left)).toEqual(["25%", "43.75%", "62.5%"]);
   });
 });

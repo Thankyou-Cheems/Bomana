@@ -41,20 +41,20 @@ try {
   await page.waitForFunction(() => document.querySelector("#timer").textContent !== "--:--");
   assert.equal(await page.locator("#navigation-select option").count(), 2, "Standard must not expose POI navigation");
   assert.equal(await page.locator("#ias-value").innerText(), "700");
-  assert.match(await page.locator("#speed-limit-value").innerText(), /IAS 700\/533 · 襟翼参考$/);
-  assert.ok(await page.locator("#speed-strip").evaluate(node => node.classList.contains("level-critical")), "Automatic flaps constrain the strip before landing mode is enabled");
-  await page.waitForFunction(() => document.querySelector("#gear-status-badge")?.textContent === "起落架未收");
+  assert.match(await page.locator("#pip-speed-value").innerText(), /IAS 700\/533$/);
+  assert.ok(await page.locator("#pip-speed-strip").evaluate(node => node.classList.contains("level-critical")), "Automatic flaps constrain the strip before landing mode is enabled");
+  await page.waitForFunction(() => document.querySelector("#pip-gear-status-badge")?.textContent === "起落架未收");
   await page.evaluate(() => { window.__publicGearPercent = 40; });
-  await page.waitForFunction(() => document.querySelector("#gear-status-badge")?.textContent === "收轮 40%");
+  await page.waitForFunction(() => document.querySelector("#pip-gear-status-badge")?.textContent === "收轮 40%");
   const firstPipOpening = page.context().waitForEvent("page");
   await page.locator("#toggle-pip").click();
   const firstPip = await firstPipOpening;
   firstPip.setDefaultTimeout(10_000);
-  await firstPip.locator(".pip-header small").nth(1).waitFor({ state: "visible" });
-  assert.equal(await firstPip.locator(".pip-header small").nth(1).innerText(), "收轮 40%", "PiP must consume the page's current gear direction");
+  await firstPip.locator("#pip-gear-status-badge").waitFor({ state: "visible" });
+  assert.equal(await firstPip.locator("#pip-gear-status-badge").innerText(), "收轮 40%", "PiP must consume the page's current gear direction");
   await page.evaluate(() => { window.__publicGearPercent = 90; });
-  await page.waitForFunction(() => document.querySelector("#gear-status-badge")?.textContent === "放轮 90%");
-  await firstPip.waitForFunction(() => [...document.querySelectorAll(".pip-header small")].some(node => node.textContent === "放轮 90%"));
+  await page.waitForFunction(() => document.querySelector("#pip-gear-status-badge")?.textContent === "放轮 90%");
+  await firstPip.waitForFunction(() => [...document.querySelectorAll("#pip-gear-status-badge")].some(node => node.textContent === "放轮 90%"));
   await firstPip.close();
   await page.waitForTimeout(100);
   await page.locator("#open-settings").click();
@@ -62,29 +62,29 @@ try {
   await page.locator("#save-settings").click();
   await page.waitForFunction(() => document.querySelector("#timer-cycle")?.textContent?.includes("15 分钟"));
   await page.evaluate(() => { window.__publicGearPercent = 40; });
-  await page.waitForFunction(() => document.querySelector("#gear-status-badge")?.textContent === "收轮 40%");
+  await page.waitForFunction(() => document.querySelector("#pip-gear-status-badge")?.textContent === "收轮 40%");
   const reopenedPipOpening = page.context().waitForEvent("page");
   await page.locator("#toggle-pip").click();
   const reopenedPip = await reopenedPipOpening;
   reopenedPip.setDefaultTimeout(10_000);
-  await reopenedPip.locator(".pip-header small").nth(1).waitFor({ state: "visible" });
-  assert.equal(await reopenedPip.locator(".pip-header small").nth(1).innerText(), "收轮 40%", "Reopened PiP must retain direction observed while closed");
+  await reopenedPip.locator("#pip-gear-status-badge").waitFor({ state: "visible" });
+  assert.equal(await reopenedPip.locator("#pip-gear-status-badge").innerText(), "收轮 40%", "Reopened PiP must retain direction observed while closed");
   await reopenedPip.close();
   await page.evaluate(() => { window.__publicGearPercent = 0; });
-  await page.waitForFunction(() => document.querySelector("#gear-status-badge")?.hasAttribute("hidden"));
+  await page.waitForFunction(() => document.querySelector("#pip-gear-status-badge")?.hasAttribute("hidden"));
   const landing = page.getByRole("region", {name:"降落辅助"});
   assert.equal(await landing.locator('[data-part="message"]').innerText(), '自动待命');
   const priorNavigation = await page.locator("#navigation-target").innerText();
   await landing.getByRole("button", {name:"开启",exact:true}).click();
   await landing.locator("[data-part='active']").waitFor({state:"visible"});
-  assert.equal(await page.locator("#heading-tape").getAttribute("data-mode"),"landing");
-  assert.match(await page.locator("#heading-tape").getAttribute("aria-label"),/IAS 700 km\/h.*燃油/);
+  assert.equal(await page.locator("#pip-heading-canvas").getAttribute("data-mode"),"landing");
+  assert.match(await page.locator("#pip-heading-canvas").getAttribute("aria-label"),/IAS 700 km\/h.*燃油/);
   assert.equal(await landing.locator('[data-part="arrestor"]').isVisible(), false, 'Static capability belongs in the collapsed reference section');
   assert.equal(await landing.locator('[data-part="touchdown"]').isVisible(), false, 'Default panel omits static touchdown explanation');
   assert.equal(await landing.locator('[data-part="flapAdvice"]').isVisible(), true, 'Current overspeed advice remains visible');
   assert.match(await landing.locator("[data-part='configuration']").innerText(),/襟翼 20%（无手动控制）/);
   assert.match(await landing.locator("[data-part='flapAdvice']").innerText(),/襟翼超过参考上限 · 减速$/);
-  assert.match(await page.locator("#heading-tape").getAttribute("aria-label"),/襟翼超限/);
+  assert.match(await page.locator("#pip-heading-canvas").getAttribute("aria-label"),/襟翼超限/);
   assert.equal(await page.locator("#navigation-target").innerText(), priorNavigation, "Landing does not change the strike/navigation target");
   for (const theme of ['glacier', 'classic-dark']) {
     await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
@@ -103,17 +103,17 @@ try {
   await landing.locator("[data-part='elevation']").fill("100");
   await landing.getByRole("button", {name:"应用参考参数"}).click();
   await page.waitForFunction(() => document.querySelector("[data-part='speed']").textContent.includes("/ 250"));
-  assert.match(await page.locator("#speed-limit-value").innerText(), /IAS 700\/533 · 襟翼参考$/, "Manual approach IAS must not replace the flap destruction reference");
+  assert.match(await page.locator("#pip-speed-value").innerText(), /IAS 700\/533$/, "Manual approach IAS must not replace the flap destruction reference");
   assert.match(await landing.locator("[data-part='message']").innerText(), /返航机场/);
   assert.equal(await landing.locator("[data-part='vertical-dot']").isVisible(), false, "Far return must not show a glide reference even with manual elevation");
   await landing.getByRole("button", {name:"反向进近"}).click();
   await page.waitForFunction(() => document.querySelector("[data-part='elevation']").value === "");
   await landing.locator("summary").click();
-  const speedStrip = await page.locator("#speed-track").evaluate(track => ({
+  const speedStrip = await page.locator("#pip-speed-track").evaluate(track => ({
     markers: [...track.querySelectorAll("b")].map(marker => marker.style.left),
     transition: getComputedStyle(track.querySelector("i")).transition,
   }));
-  assert.deepEqual(speedStrip.markers, ["64%", "82%", "95.2%"], "Public speed strip shares the expanded warning scale");
+  assert.deepEqual(speedStrip.markers, ["25%", "43.75%", "62.5%"], "Public speed strip shares the expanded warning scale");
   assert.match(speedStrip.transition, /width 0\.08s linear/, "Public speed fill must finish before the next normal observation");
   await page.waitForFunction(() => {
     const canvas = document.querySelector("#navigation-map");
@@ -149,7 +149,7 @@ try {
     assert.equal(await page.locator("#toggle-pip").isVisible(), false);
     assert.equal(await page.locator("#open-mobile-pairing").isVisible(), false);
     assert.equal(await page.locator("#open-settings").isVisible(), true);
-    assert.ok(await page.locator(".heading-tape-wrap").evaluate(node => node.getBoundingClientRect().top < 55));
+    assert.ok(await page.locator(".web-flight-instruments").evaluate(node => node.getBoundingClientRect().top < 55));
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await page.screenshot({ path: `../.artifacts/public-ui/Standard-paired-${width}x${height}.png`, fullPage: true });
   }

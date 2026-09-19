@@ -18,7 +18,11 @@ Status: Active
   manual reset. Preserve timer continuity across short telemetry gaps; clear
   stale navigation after three seconds and reset after twelve seconds without
   data or confirmed loss. Grounded ownship-marker loss must not alone reset a
-  live timer. Period changes retain the current start time.
+  live timer. Period changes retain the current start time. Spawn confirmation
+  waits one second on fresh observations but anchors the cycle to the first
+  qualifying observation, not the later confirmation frame. The wait therefore
+  counts as elapsed time. This is an observed spawn estimate, not an exported
+  server reward clock; no fixed game-notification offset is assumed.
 - BASIC-04: Navigate only official bombing zones and airfields. Reject missing
   position, heading or map scale rather than showing fabricated guidance.
   Support automatic forward-target selection and manual selection; keep manual

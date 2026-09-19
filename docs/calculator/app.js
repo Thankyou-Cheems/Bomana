@@ -1,4 +1,4 @@
-import { airportBarPositions, airportRepairVisit, airportPaletteBands, compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
+import { airfieldDefenseMassAssessment, airportBarPositions, airportRepairVisit, airportPaletteBands, compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
 import { renderRewardChart, renderConversionChart, renderAirportRepairChart, renderAirportBars } from "./charts.mjs";
 
@@ -30,6 +30,28 @@ const repairNote = document.querySelector("#calcRepairNote");
 const repairSummary = document.querySelector("#calcRepairSummary");
 const repairDetail = document.querySelector("#calcRepairDetail");
 const repairPercent = document.querySelector("#repairPercent");
+const defenseSelection = document.querySelector("#defenseSelection");
+let defenseCatalogVersion = null;
+
+function refreshDefenseSelection(weapon) {
+  if (!defenseSelection) return;
+  if (!weapon) {
+    defenseSelection.textContent = "在上方选择武器后，可对照本节两种防空的质量筛选窗。";
+    return;
+  }
+  const state = airfieldDefenseMassAssessment({ massKg: weapon.kg, sourceVersion: defenseCatalogVersion });
+  if (state === "version_mismatch") {
+    defenseSelection.textContent = `防空研究为 2.59.0.13；当前武器目录为 ${defenseCatalogVersion || "未知版本"}，暂不关联弹种判断。`;
+    return;
+  }
+  if (state === "unknown_mass") {
+    defenseSelection.textContent = "所选武器缺少整弹质量，无法对照拦截筛选窗。";
+    return;
+  }
+  defenseSelection.textContent = `${weaponName(weapon)} · 整弹 ${formatQuantity(weapon.kg)} kg：${state === "outside_mass_windows"
+    ? "不落入本节 ItO 90M 与 ZA-35 的弹药优先级质量窗。这里只核对静态质量条件，不代表所有机场防空都忽略它。"
+    : "落入本节弹药优先级的质量范围；小型、滑翔或重型标签都不能单独证明免拦截。是否被选中还取决于制导组件、速度、航迹、探测与其他目标。"}`;
+}
 let airportDiagramAngle = 270;
 function refreshAirportDiagram() {
   if (!catalog) return;
@@ -810,6 +832,7 @@ function refreshResult() {
   refreshAirportRepair();
   const weapon = selectedWeapon();
   const target = selectedTarget();
+  refreshDefenseSelection(weapon);
   const br = brSelect.value || defaultBr;
   const rank = balanceLevel(br);
   const tier = targetTier(target, rank);
@@ -843,7 +866,7 @@ function refreshResult() {
   hudContext.textContent = context;
   destroyCountEl.textContent = String(practicalCount);
   destroyLabelEl.textContent = target.kind === "airport_module"
-    ? "满血摧毁（不计回血）"
+    ? "有效命中枚数（不计回血）"
     : fireCount < destroyCount ? "点燃 / 自毁" : "满血摧毁";
   fireLineEl.textContent = fireCount !== null && fireCount < destroyCount
     ? `直接打空需要 ${destroyCount} 枚`
@@ -864,13 +887,13 @@ function refreshResult() {
     if (plan.sorties > 1) appendStat("末次所需", `${plan.lastSortieCount} 枚`);
     if (plan.fullLoadReward !== null) appendStat("满载收益系数", plan.fullLoadReward.toFixed(1));
     hintEl.textContent = target.kind === "airport_module"
-      ? `按 ${plan.capacity} 枚/次需要 ${plan.sorties} 次；机场回血可能让实战多一轮。`
+      ? `全部有效命中时，按 ${plan.capacity} 枚/次至少 ${plan.sorties} 次；未计防空拦截、脱靶与机场回血。`
       : `${aircraft.name} 每次最多 ${plan.capacity} 枚，约 ${plan.sorties} 次。`;
   } else {
     sortieCountEl.textContent = "—";
     appendStat("机型", "未选择");
     hintEl.textContent = target.kind === "airport_module"
-      ? "选择机型后显示挂载上限和架次；机场结果不含投弹间回血。"
+      ? "选择机型后显示挂载上限和理想架次；枚数指有效命中，未计防空拦截、脱靶与机场回血。"
       : "选择机型后显示挂载上限、满载收益系数和架次。";
   }
 }
@@ -891,6 +914,7 @@ async function boot() {
     ]);
     const source = sharedParameterSource([catalogBody, weaponsBody, aircraftBody, rewardsBody]);
     if (!source) throw new Error("mixed_parameter_sources");
+    defenseCatalogVersion = source.version;
     catalog = catalogBody;
     rewardsCatalog = rewardsBody;
     catalog.weapons = weaponsBody.weapons || [];

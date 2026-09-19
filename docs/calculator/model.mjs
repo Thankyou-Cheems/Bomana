@@ -1,3 +1,12 @@
+// Reviewed 2.59.0.13 EC rank 07 example: fr_crotale_ng + uk_rooikat_za_35.
+// This is only the mass gate of their configured projectile priority windows.
+export function airfieldDefenseMassAssessment({ massKg, sourceVersion }) {
+  if (sourceVersion !== "2.59.0.13") return "version_mismatch";
+  if (!Number.isFinite(massKg) || massKg <= 0) return "unknown_mass";
+  if (massKg < 80 || massKg > 3500) return "outside_mass_windows";
+  return "within_mass_windows";
+}
+
 function airportNativeReferenceSupported(reference) {
   return typeof reference?.client_version === "string" && reference.client_version.trim().length > 0 &&
     typeof reference.pe_sha256 === "string" && /^[0-9a-fA-F]{64}$/.test(reference.pe_sha256) &&

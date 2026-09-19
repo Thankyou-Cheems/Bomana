@@ -5,6 +5,7 @@ import {
   airportRepairVisit,
   airportPaletteBands,
   airportBarPositions,
+  airfieldDefenseMassAssessment,
   equivalentWeaponCount,
   explosiveConversion,
   durabilityBrBuckets,
@@ -22,6 +23,16 @@ import {
 
 const airportNativeReference = { client_version: "2.57.1.135", pe_sha256: "0".repeat(64),
   hp_condition: "truncate_percent_to_integer", palette_selection: "first_key_greater_or_equal", server_recovery: "unknown" };
+
+test("airport defense mass reference preserves inclusive boundaries and version scope", () => {
+  const assess = massKg => airfieldDefenseMassAssessment({ massKg, sourceVersion: "2.59.0.13" });
+  for (const mass of [79.99, 3500.01]) assert.equal(assess(mass), "outside_mass_windows");
+  for (const mass of [80, 130, 3500]) assert.equal(assess(mass), "within_mass_windows");
+  for (const mass of [null, undefined, NaN, Infinity, 0, -1]) assert.equal(assess(mass), "unknown_mass");
+  for (const sourceVersion of [null, "2.57.1.89", "2.59.0.14"]) {
+    assert.equal(airfieldDefenseMassAssessment({ massKg: 130, sourceVersion }), "version_mismatch");
+  }
+});
 
 test("airport mission repair skips both dwelling boundaries and uses same HP for every module", () => {
   const input = { rule: { model: "integer_percent_dwelling/v1", hp_offset: 1, maximum_slowdown: 10,

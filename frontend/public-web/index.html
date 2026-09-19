@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#091b27"><meta name="referrer" content="no-referrer">
+  <link rel="icon" type="image/svg+xml" href="../src/generated/bomana-logo.svg">
   <title>Bomana · 飞行导航</title>
   <script type="module" src="../src/public-bootstrap.ts"></script>
 </head>
@@ -14,12 +15,7 @@
       <div class="actions"><button id="toggle-pip" class="standard-only">置顶导航窗</button><button id="open-mobile-pairing" class="standard-only">手机配对</button><button id="open-settings">设置</button></div>
     </header>
     <div class="connection" role="status"><span id="status">正在连接 Bridge</span><button id="connect">立即重试</button><a id="update-bridge" href="https://bomana.ruikang.wang/launcher/" hidden>更新 Bridge</a></div>
-    <section class="heading-tape-wrap standard-only" aria-label="航向和速度">
-      <canvas id="heading-tape" aria-label="航向带"></canvas>
-      <strong class="public-heading-value" id="heading-tape-value">HDG ---</strong>
-      <div class="instrument-badges"><span id="flight-phase-badge" hidden></span><span id="gear-status-badge" hidden></span></div>
-      <div class="speed-strip" id="speed-strip"><div class="speed-copy"><strong id="overspeed">等待限速</strong><span id="speed-limit-value">IAS --</span><small id="speed-limit-mach">阈值未匹配</small></div><div class="speed-track" id="speed-track"><i id="speed-fill"></i><b id="speed-caution-mark"></b><b id="speed-warning-mark"></b><b id="speed-critical-mark"></b></div></div>
-    </section>
+    <section id="flight-instruments" class="web-flight-instruments standard-only"></section>
     <div class="flight-layout">
       <section class="card timer-card"><span class="eyebrow">RESPAWN TIMER</span><strong id="timer">--:--</strong><div class="mission-progress"><i id="timer-progress"></i></div><span id="timer-cycle">等待出击</span><button id="reset-timer">重置计时</button><button id="undo-sortie-reset" hidden>撤销出击重置</button></section>
       <section class="card flight-card standard-only"><h2 id="aircraft">等待飞机</h2><dl class="flight-readouts"><div><dt>IAS · km/h</dt><dd id="ias-value">---</dd></div><div><dt>TAS · km/h</dt><dd id="tas-value">---</dd></div><div><dt>高度 · m</dt><dd id="altitude">---</dd></div><div><dt>航向 · °</dt><dd id="heading-value">---</dd></div></dl><div id="fuel-panel"><strong id="fuel-current-total">等待燃油读数</strong><small id="fuel-source"></small><div class="fuel-level-track"><b id="fuel-level-fill"></b><i id="fuel-return-marker"></i></div><p><strong id="return-fuel"></strong><span id="fuel-balance"></span></p><p id="fuel-rate"></p><details><summary>返航依据与省油建议</summary><p id="fuel-detail"></p><p id="fuel-advice"></p></details></div><div class="landing-slot" id="landing-slot"></div></section>

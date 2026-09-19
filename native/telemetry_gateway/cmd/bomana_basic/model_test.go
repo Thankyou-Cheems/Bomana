@@ -25,20 +25,51 @@ func running() *model {
 	m.ingest(flight(2000))
 	return m
 }
+func TestSpawnConfirmationKeepsObservedOrigin(t *testing.T) {
+	for _, delay := range []int64{1000, 4700} {
+		m := newModel(defaults())
+		m.ingest(flight(1000))
+		m.ingest(flight(1000 + delay))
+		if m.started != 1000 {
+			t.Fatalf("confirmation shifted origin: %d", m.started)
+		}
+		if v := m.snapshot(902000); v.Remaining != "14:59" || v.Cycle != 2 {
+			t.Fatalf("next cycle drifted: %+v", v)
+		}
+	}
+}
+func TestHeldAircraftCannotConfirmSpawn(t *testing.T) {
+	m := newModel(defaults())
+	m.ingest(flight(1000))
+	held := flight(2500)
+	held.IndicatorsAt = 1000
+	m.ingest(held)
+	if m.started != 0 {
+		t.Fatal("held aircraft confirmed spawn")
+	}
+	m.ingest(flight(3000))
+	if m.started != 0 {
+		t.Fatal("gap counted toward confirmation")
+	}
+	m.ingest(flight(4000))
+	if m.started != 3000 {
+		t.Fatalf("fresh confirmation origin: %d", m.started)
+	}
+}
 func TestTimerContinuityAndGroundMarkerLoss(t *testing.T) {
 	m := running()
-	if got := m.snapshot(62000).Remaining; got != "14:00" {
+	if got := m.snapshot(62000).Remaining; got != "13:59" {
 		t.Fatal(got)
 	}
 	f := flight(63000)
 	f.ObjectsAt = 62000
 	m.ingest(f)
-	if m.started != 2000 {
+	if m.started != 1000 {
 		t.Fatal("held route reset timer")
 	}
 	f = flight(64000)
 	m.ingest(f)
-	if m.started != 2000 {
+	if m.started != 1000 {
 		t.Fatal("short gap reset timer")
 	}
 	f = flight(65000)
@@ -49,21 +80,21 @@ func TestTimerContinuityAndGroundMarkerLoss(t *testing.T) {
 	f.Objects = f.Objects[1:]
 	f.State["IAS, km/h"] = float64(0)
 	m.ingest(f)
-	if m.started != 2000 {
+	if m.started != 1000 {
 		t.Fatal("grounded marker loss reset timer")
 	}
 	f.At, f.IndicatorsAt, f.StateAt, f.ObjectsAt, f.MapAt = 100000, 100000, 100000, 100000, 100000
 	m.ingest(f)
-	if m.started != 2000 {
+	if m.started != 1000 {
 		t.Fatal("ground continuity was not retained")
 	}
 	f = flight(101000)
 	m.ingest(f)
-	if m.started != 2000 {
+	if m.started != 1000 {
 		t.Fatal("ground recovery reset timer")
 	}
 	m.Settings.Minutes = 10
-	if got := m.snapshot(122000).Remaining; got != "08:00" {
+	if got := m.snapshot(122000).Remaining; got != "07:59" {
 		t.Fatal(got)
 	}
 	m.reset(122000)

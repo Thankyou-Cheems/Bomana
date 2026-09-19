@@ -6,6 +6,7 @@ import { FuelManager, fuelEngines, fuelNumber } from "./fuel-management";
 import type { AircraftParameters } from "./aircraft-parameters";
 import { LandingAssist } from "./landing-assist";
 import { landingFlapReference } from "./landing-configuration";
+import { speedWarningLevel } from "./speed-warning";
 import { RESET_UNDO_WINDOW_MS, sortieMapSignature, type SortieRecoveryStore, type SortieResetReason,
   type SortieResetUndoRecord, type SortieRestorePoint } from "./sortie-recovery";
 import type { RuntimePhase, NavigationSelectionMode, RuntimeSettings, RuntimeSettingsStore,
@@ -273,9 +274,10 @@ export class PublicRuntime {
         alerts.push("游戏数据暂不完整");
       }
       if (sortieContinuity.state === "reset-undo") alerts.push("出击状态已重置，可在 30 秒内撤销");
-      if (overspeed.level === "critical") alerts.push("空速危险");
-      else if (overspeed.level === "warning") alerts.push(overspeed.iasLimitSource === "flaps" && overspeed.ratio >= .97
-        ? "接近襟翼参考限速" : "接近结构限速");
+      if (overspeed.level === "critical") alerts.push(overspeed.iasLimitSource === "flaps" && overspeed.ratio >= 1
+        ? "达到襟翼参考限速" : "达到原生参考限速");
+      else if (overspeed.level === "warning") alerts.push(overspeed.iasLimitSource === "flaps" && overspeed.ratio >= .95
+        ? "接近襟翼参考限速，请减速" : "接近原生参考限速，请减速");
       if (!landing?.settings.enabled && telemetry.gearPercent > 50 && telemetry.iasKmh > 80) alerts.push("起落架未收起");
       alerts.push(...this._extensionAlerts(frame.sampledAtMs));
     }
@@ -557,6 +559,12 @@ export class PublicRuntime {
       || !frame.availability.indicators
       || !frame.availability.state
       || !frame.availability.mapObjects;
+    // Confirmation must observe live spawn evidence, not replay a held aircraft.
+    if (!activeSortie && (dynamicStale || !frame.bridgeReachable)) {
+      this._candidateSinceMs = null;
+      if (this._phase === "arming") this._phase = "idle";
+      return;
+    }
     if (activeSortie && dynamicStale) {
       if (this._noDataSinceMs === null) this._noDataSinceMs = now;
     } else if (!dynamicStale) {
@@ -638,7 +646,7 @@ export class PublicRuntime {
     if (this._phase === "arming") {
       if (!spawnCandidate) { this._phase = "idle"; this._candidateSinceMs = null; return; }
       if (this._candidateSinceMs === null) this._candidateSinceMs = now;
-      else if (now - this._candidateSinceMs >= 1_000) this._startLife(now);
+      else if (now - this._candidateSinceMs >= 1_000) this._startLife(now, this._candidateSinceMs);
       return;
     }
     if (this._phase === "alive" || this._phase === "loss-pending") {
@@ -655,7 +663,7 @@ export class PublicRuntime {
     }
     if (this._phase === "wait-next" && spawnCandidate) {
       if (this._candidateSinceMs === null) this._candidateSinceMs = now;
-      else if (now - this._candidateSinceMs >= 1_000) this._startLife(now);
+      else if (now - this._candidateSinceMs >= 1_000) this._startLife(now, this._candidateSinceMs);
     } else if (this._phase === "wait-next") {
       this._candidateSinceMs = null;
     }
@@ -820,10 +828,11 @@ export class PublicRuntime {
     return Object.freeze({ state: "live", graceExpiresAtMs: null, resetUndo: null });
   }
 
-  protected _startLife(now: number): void {
+  protected _startLife(now: number, observedSpawnAtMs: number): void {
     this._resetExtension("life");
     this._phase = "alive";
-    this._lifeStartedAtMs = now;
+    // Debouncing confirms the spawn; it must not postpone the cycle's origin.
+    this._lifeStartedAtMs = observedSpawnAtMs;
     this._lifeIndex += 1;
     this._candidateSinceMs = null;
     this._resetUndo = null;
@@ -1059,7 +1068,7 @@ function parseTelemetry(frame: Official8111Frame): ParsedTelemetry {
   const verticalSpeedMps = numericField(state, ["Vy, m/s", "Vy", "vy"], 0);
   const fuelKg = numericField(state, ["Mfuel, kg", "Mfuel", "fuel"], 0);
   const altitudeM = numericField(state, ["H, m", "H", "altitude"], 0);
-  const stateValid = ["IAS, km/h", "Vy, m/s", "Mfuel, kg", "H, m"].every((key) => finiteValue(state[key]) !== null);
+  const stateValid = state.valid !== false && ["IAS, km/h", "Vy, m/s", "Mfuel, kg", "H, m"].every((key) => finiteValue(state[key]) !== null);
   const indicatorsValid = indicators.valid === true && Boolean(aircraft);
   const heading = optionalNumericField(indicators, ["compass1", "compass", "compass1, deg", "compass, deg"]);
   const gearPercent = numericField(state, ["gear, %", "gear"], 0);
@@ -1273,11 +1282,10 @@ function evaluateOverspeed(aircraft: string, iasKmh: number, mach: number | null
   }
   const machLimit = finiteValue(limit?.mach) ?? 0;
   const ratio = iasLimit > 0 ? Math.max(0, iasKmh / iasLimit) : 0;
-  const machMargin = mach !== null && machLimit > 0 ? machLimit - mach : Number.POSITIVE_INFINITY;
-  let level: "none" | "caution" | "warning" | "critical" = "none";
-  if (ratio >= 0.992 || machMargin <= 0.02) level = "critical";
-  else if (ratio >= 0.97 || machMargin <= 0.04) level = "warning";
-  else if (ratio >= 0.94 || machMargin <= 0.06) level = "caution";
+  const machRatio = mach !== null && machLimit > 0 ? mach / machLimit : 0;
+  // Source limit crossing, not a prediction of the native stochastic break.
+  // See war-thunder-native-speed-damage-2026-09-19.md.
+  const level = speedWarningLevel(Math.max(ratio, machRatio));
   return Object.freeze({ level, ratio, iasLimitKmh: iasLimit, iasLimitSource, machLimit,
     matched: Boolean(limit) || flapLimit !== null, estimated: limit?.estimated ?? false });
 }

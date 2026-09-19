@@ -15,11 +15,19 @@ describe("display-only target centre bearing", () => {
     const motion = new TargetCenterMotion();
     motion.observe("zone", 0); motion.step(0);
     motion.observe("zone", 30);
-    expect(motion.step(100)).toBeGreaterThanOrEqual(29.9);
-    for (let t = 150; t <= 1200; t += 50) motion.step(t);
-    expect(motion.step(1250)).toBeCloseTo(30, 5);
+    expect(motion.step(100)).toBeGreaterThanOrEqual(29.4);
+    for (let t = 150; t <= 2400; t += 50) motion.step(t);
+    expect(motion.step(2450)).toBeCloseTo(30, 5);
     motion.observe("module", -12);
     expect(motion.step(1260)).toBe(-12);
+  });
+  it("absorbs a visible half-degree sample jump instead of snapping within a tenth", () => {
+    const motion = new TargetCenterMotion();
+    motion.observe("zone", 0); motion.step(0);
+    motion.observe("zone", .5);
+    expect(motion.step(16)).toBeLessThan(.1);
+    motion.observe("zone", -.5);
+    expect(Math.abs(motion.step(32))).toBeLessThan(.1);
   });
   it("handles the wrap boundary and duplicate command projections without resets", () => {
     const motion = new TargetCenterMotion();

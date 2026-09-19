@@ -104,7 +104,8 @@ func (m *model) ingest(f frame) {
 				m.candidate = f.At
 			}
 			if f.At-m.candidate >= 1000 {
-				m.started, m.candidate = f.At, 0
+				// Keep the first spawn observation as the cycle origin.
+				m.started, m.candidate = m.candidate, 0
 			}
 		}
 		return

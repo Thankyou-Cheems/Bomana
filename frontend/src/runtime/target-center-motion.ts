@@ -1,4 +1,4 @@
-/** Display-only target bearing filter. It never changes area edges or release membership. */
+/** Display-only target bearing filter. It never changes source geometry or release membership. */
 export class TargetCenterMotion {
   #id = "";
   #raw = 0;
@@ -20,8 +20,8 @@ export class TargetCenterMotion {
     this.#lastAt = nowMs;
     const error = signedAngle(this.#raw - this.#display);
     // Limit visual lag during real turns; no velocity extrapolation of noisy map samples.
-    const bounded = Math.max(-.1, Math.min(.1, error));
-    this.#display = this.#raw - bounded * Math.exp(-elapsed / 90);
+    const bounded = Math.max(-.6, Math.min(.6, error));
+    this.#display = this.#raw - bounded * Math.exp(-elapsed / 160);
     return this.#display;
   }
 }

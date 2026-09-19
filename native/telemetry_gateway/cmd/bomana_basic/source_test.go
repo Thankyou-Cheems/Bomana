@@ -130,7 +130,7 @@ func TestSourceOfficialMapRouteStartsTimerAndNavigation(t *testing.T) {
 		m.ingest(s.read(context.Background(), now))
 	}
 	v := m.snapshot(2000)
-	if !v.HasHeading || v.Selected == nil || v.Remaining != "15:00" {
+	if !v.HasHeading || v.Selected == nil || v.Remaining != "14:59" {
 		t.Fatalf("official ExtUI did not reach navigation/timer: heading=%v target=%v timer=%q status=%q", v.HasHeading, v.Selected, v.Remaining, v.Status)
 	}
 }

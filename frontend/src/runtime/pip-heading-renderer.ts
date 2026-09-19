@@ -12,6 +12,18 @@ import {
 import { SampledAngleMotion, sampledAtPerformanceTime } from "./sampled-angle-motion";
 import { drawLandingTape, landingTapePresentation } from "./landing-tape";
 import { TargetCenterMotion } from "./target-center-motion";
+import { canonicalAngularRanges } from "./angular-ranges";
+
+/** Move the blue silhouette and its physical anchor together; impact bands stay live. */
+export function displayedTargetGuidance(guidance: ReturnType<typeof headingGuidance>, centerDeg: number): ReturnType<typeof headingGuidance> {
+  if (!guidance.areaRangeDeg) return guidance;
+  const anchor = guidance.centerRelativeDeg ?? guidance.relativeDeg;
+  const offset = ((centerDeg - anchor + 180) % 360 + 360) % 360 - 180;
+  const range = guidance.areaRangeDeg;
+  const areaRangeDeg = [range[0] + offset, range[1] + offset] as const;
+  return { ...guidance, centerRelativeDeg: anchor + offset, areaRangeDeg,
+    areaRangesDeg: canonicalAngularRanges(areaRangeDeg) };
+}
 
 export interface PictureInPictureHeadingLayout {
   readonly visualScale: number;
@@ -149,10 +161,11 @@ export class PictureInPictureHeadingRenderer {
     const snapshot = this.#snapshot;
     if (!snapshot) return;
     const bounds = this.#canvas.getBoundingClientRect();
-    const width = bounds.width;
-    const height = bounds.height;
-    if (width <= 0 || height <= 0) return;
-    const pixelRatio = this.#view.devicePixelRatio || 1;
+    const width = this.#canvas.clientWidth;
+    const height = this.#canvas.clientHeight;
+    if (width <= 0 || height <= 0 || bounds.width <= 0 || bounds.height <= 0) return;
+    // Draw in the panel's shared coordinates, at the host's actual resolution.
+    const pixelRatio = (this.#view.devicePixelRatio || 1) * bounds.width / width;
     const bitmapWidth = Math.round(width * pixelRatio);
     const bitmapHeight = Math.round(height * pixelRatio);
     if (this.#canvas.width !== bitmapWidth || this.#canvas.height !== bitmapHeight) {
@@ -345,6 +358,7 @@ function drawGuidance(
   layout: PictureInPictureHeadingLayout,
   displayCenterDeg: number,
 ): void {
+  guidance = displayedTargetGuidance(guidance, displayCenterDeg);
   const target = guidance.target;
   const centerX = width / 2;
   const trackLeft = width * .075;

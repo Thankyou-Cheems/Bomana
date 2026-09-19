@@ -149,9 +149,11 @@ function auditHeadingComposite(edition, root, files) {
   const cssFiles = files.filter((path) => path.endsWith(".css") && index.includes(basename(path)));
   const css = cssFiles.map((path) => readFileSync(path, "utf8")).join("\n");
   const hasStandardBackdropNone = (declarations) => /(?:^|;)backdrop-filter:none!important(?:;|$)/.test(declarations);
-  const headingBlocks = [...css.matchAll(/[.]heading-tape-wrap\{([^}]*)\}/g)].map((match) => match[1]);
-  const overlay = css.match(/[.]heading-tape-wrap>[.]heading-release\{([^}]*)\}/)?.[1] ?? "";
-  if (!headingBlocks.some(hasStandardBackdropNone) || !hasStandardBackdropNone(overlay)) {
+  const blocks = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  // The minifier can merge the heading and overlay into one selector list.
+  const hasOverride = (selector) => blocks.some(([, selectors, declarations]) =>
+    selectors.split(",").some((item) => item.trim() === selector) && hasStandardBackdropNone(declarations));
+  if (!hasOverride(".flight-instruments .pip-heading") || !hasOverride(".flight-instruments .pip-release-cue")) {
     throw new Error(`${edition} production CSS lost the standard heading backdrop override`);
   }
 }

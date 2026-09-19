@@ -14,9 +14,8 @@ import { StrikeEncyclopedia, roomMaxBattleRatings, type AirportModule } from "./
 import { PipRiskConsentStore } from "./runtime/pip-risk-consent";
 import { readPipMapVisible } from "./runtime/pip-map-preference";
 import { WindowClock } from "./runtime/window-clock";
-import { SpeedStripRenderer } from "./runtime/speed-strip-renderer";
-import { PictureInPictureHeadingRenderer } from "./runtime/pip-heading-renderer";
-import { FlightStatusPresenter, FlightStatusBadgeRenderer, type FlightStatusPresentation } from "./runtime/flight-status-badges";
+import { FlightInstruments } from "./runtime/flight-instruments";
+import { FlightStatusPresenter, type FlightStatusPresentation } from "./runtime/flight-status-badges";
 import { SoundCues, SoundCuePreferencesStore, type SoundCuePreset } from "./runtime/sound-cues";
 import { applyTheme, readTheme, saveTheme, type WebTheme } from "./runtime/theme-preference";
 import type { DesktopMobilePairingOffer } from "./runtime/mobile-pairing";
@@ -39,14 +38,12 @@ const soundStore = new SoundCuePreferencesStore();
 const sound = new SoundCues(soundStore.load());
 let map: PublicNavigationMap | null = null;
 let pip: PublicPictureInPicture | null = null;
-let heading: PictureInPictureHeadingRenderer | null = null;
+let instruments: FlightInstruments | null = null;
 let pairing: DesktopMobilePairingOffer | null = null;
 let pairingBusy = false;
 let latestFrame: Official8111Frame | null = null;
-const speed = new SpeedStripRenderer({ root: element("speed-strip"), state: element("overspeed"), value: element("speed-limit-value"), mach: element("speed-limit-mach"), track: element("speed-track"), fill: element("speed-fill"), markers: [element("speed-caution-mark"), element("speed-warning-mark"), element("speed-critical-mark")] });
 const flightPresenter = new FlightStatusPresenter();
 let latestFlightStatus: FlightStatusPresentation | null = null;
-const flightBadges = new FlightStatusBadgeRenderer({ flight: element("flight-phase-badge"), gear: element("gear-status-badge") });
 document.body.dataset.edition = edition.channel;
 text("edition-name", edition.displayName);
 for (const node of document.querySelectorAll<HTMLElement>(".standard-only")) node.hidden = edition.channel === "Lite";
@@ -60,7 +57,7 @@ if (__BOMANA_EDITION__ !== "Lite") {
   const { PublicPictureInPicture } = await import("./runtime/public-pip");
   map = new PublicNavigationMap(element<HTMLCanvasElement>("navigation-map"), selectTarget);
   pip = new PublicPictureInPicture(selectTarget, cycleTarget, (visible) => { element<HTMLInputElement>("pip-map-visible").checked = visible; }, map);
-  heading = new PictureInPictureHeadingRenderer({ view: window, canvas: element<HTMLCanvasElement>("heading-tape") });
+  instruments = new FlightInstruments(element("flight-instruments"), { onCycleTarget: cycleTarget });
 }
 const processor = new LatestSampleProcessor(async (frame: Official8111Frame) => {
   latestFrame = frame;
@@ -157,7 +154,6 @@ function render(snapshot: EditionSnapshot): void {
   text("aircraft", snapshot.flight.aircraft || "等待飞机");
   for (const [id, value] of [["ias-value", snapshot.flight.iasKmh], ["tas-value", snapshot.flight.tasKmh], ["altitude", snapshot.flight.altitudeM], ["heading-value", snapshot.flight.headingDeg]] as const) text(id, Math.round(value).toString());
   if (snapshot.flight.tasObserved === false) text("tas-value", "—");
-  text("heading-tape-value", `HDG ${Math.round(snapshot.flight.headingDeg).toString().padStart(3, "0")}°`);
   const target = snapshot.navigation?.target;
   text("navigation-target", target?.label ?? "暂无目标");
   text("navigation-bearing", target ? `方位 ${Math.round(target.bearingDeg).toString().padStart(3, "0")}°` : "方位 ---");
@@ -190,7 +186,7 @@ function render(snapshot: EditionSnapshot): void {
   text("alerts", snapshot.alerts.join(" · ") || "当前无告警");
   const flightStatus = flightPresenter.update(snapshot);
   latestFlightStatus = flightStatus;
-  heading?.update(snapshot); speed.update(snapshot); flightBadges.update(flightStatus); map?.update(snapshot, latestFrame?.mapInfo ?? null); pip?.update(snapshot, flightStatus); sound.update(snapshot);
+  instruments?.update(snapshot, flightStatus); map?.update(snapshot, latestFrame?.mapInfo ?? null); pip?.update(snapshot, flightStatus); sound.update(snapshot);
 }
 function currentFlightStatus(snapshot: EditionSnapshot): FlightStatusPresentation {
   if (latestFlightStatus) return latestFlightStatus;
@@ -240,3 +236,5 @@ function element<T extends HTMLElement = HTMLElement>(id: string): T { const nod
 function text(id: string, value: string): void { element(id).textContent = value; }
 function on(id: string, run: () => void): void { element(id).addEventListener("click", run); }
 function showError(error: unknown): void { text("command-status", error instanceof Error ? error.message : "操作失败"); }
+
+window.addEventListener("pagehide", event => { if (!event.persisted) instruments?.close(); });

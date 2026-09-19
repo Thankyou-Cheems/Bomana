@@ -6,6 +6,31 @@ import { AircraftParameters } from "./aircraft-parameters";
 import speedCases from "./speed-limit-cases.json";
 
 describe("public runtime boundary", () => {
+  it.each([1000, 4700])("counts spawn confirmation latency (%i ms) in the cycle", async delayMs => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Lite") });
+    expect((await runtime.ingest(publicFlight(1000))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(publicFlight(1000 + delayMs))).timer.remainingSec).toBeCloseTo(900 - delayMs / 1000, 6);
+    const nextCycle = await runtime.ingest({ ...publicFlight(1000), sampledAtMs: 901250 });
+    expect(nextCycle.timer.cycle).toBe(2);
+    expect(nextCycle.timer.remainingSec).toBeCloseTo(899.75, 6);
+  });
+  it("requires fresh spawn observations after a held or missing route", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Lite"), now: () => 4000 });
+    await runtime.ingest(publicFlight(1000));
+    const held = publicFlight(2500);
+    expect((await runtime.ingest({ ...held, holdover: { indicators: true, state: false, mapObjects: false } })).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(publicFlight(3000))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(publicFlight(4000))).timer.remainingSec).toBe(899);
+    await runtime.command({ type: "timer.reset" });
+    expect(runtime.snapshot().timer.remainingSec).toBe(900);
+  });
+  it("does not anchor a spawn to an explicitly invalid state", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Lite") });
+    const invalid = publicFlight(1000);
+    await runtime.ingest({ ...invalid, state: { ...invalid.state, valid: false } });
+    expect((await runtime.ingest(publicFlight(3000))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(publicFlight(4000))).timer.remainingSec).toBe(899);
+  });
   it("keeps Standard navigation restricted and rejects private commands", async () => {
     const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
     await runtime.ingest(publicFlight(0)); const result = await runtime.ingest(publicFlight(2000));
@@ -58,7 +83,10 @@ describe("current flap speed constraint", () => {
     const mapMissing = await manager.ingest({ ...frame, mapObjects: null,
       availability: { ...frame.availability, mapObjects: false } });
     expect(mapMissing.flight.overspeed).toMatchObject({ iasLimitKmh: 405, level: "warning", iasLimitSource: "flaps" });
-    expect(mapMissing.alerts).toContain("接近襟翼参考限速");
+    expect(mapMissing.alerts).toContain("接近襟翼参考限速，请减速");
+    expect(mapMissing.alerts).not.toContain("达到襟翼参考限速");
+    const exceeded = await manager.ingest({ ...frame, state: { ...frame.state, "IAS, km/h": 406 } });
+    expect(exceeded.alerts).toContain("达到襟翼参考限速");
     expect((await manager.ingest({ ...frame, indicators: { valid: true, type: "unknown" } }))
       .flight.overspeed).toMatchObject({ matched: false, iasLimitKmh: 0 });
   });
