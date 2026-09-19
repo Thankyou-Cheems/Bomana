@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -85,6 +86,7 @@ type mapCacheStatus struct {
 }
 
 type localCacheStatus struct {
+	SupportsMapPriority    bool             `json:"supports_map_priority"`
 	SchemaVersion          int              `json:"schema_version"`
 	State                  string           `json:"state"`
 	Revision               string           `json:"revision,omitempty"`
@@ -145,6 +147,7 @@ type localDataStore struct {
 	lastError     string
 	files         map[string]*cacheFileProgress
 	selectedMaps  map[string]struct{}
+	priorityMap   string
 	mapFiles      map[string][]string
 	syncRequests  chan struct{}
 }
@@ -276,10 +279,25 @@ func (store *localDataStore) Start(ctx context.Context) {
 }
 
 func (store *localDataStore) SetSelectedMaps(mapIDs []string) error {
+	return store.setMapSelection(mapIDs, "", false)
+}
+
+// RequestMap adds one signed map atomically, preserving selections from other
+// App surfaces. Priority is transient; cached objects and selections persist.
+func (store *localDataStore) RequestMap(mapID string) error {
+	return store.setMapSelection([]string{mapID}, mapID, true)
+}
+
+func (store *localDataStore) setMapSelection(mapIDs []string, priority string, additive bool) error {
 	store.selectionMu.Lock()
 	defer store.selectionMu.Unlock()
 	selected := make(map[string]struct{}, len(mapIDs))
 	store.mu.RLock()
+	if additive {
+		for mapID := range store.selectedMaps {
+			selected[mapID] = struct{}{}
+		}
+	}
 	known := make(map[string]struct{}, len(store.mapFiles))
 	for mapID := range store.mapFiles {
 		known[mapID] = struct{}{}
@@ -307,20 +325,24 @@ func (store *localDataStore) SetSelectedMaps(mapIDs []string) error {
 	}
 	store.mu.Lock()
 	store.selectedMaps = selected
-	for mapID, paths := range store.mapFiles {
-		_, mapSelected := selected[mapID]
-		for _, path := range paths {
-			progress := store.files[path]
-			if progress == nil {
-				continue
-			}
-			progress.selected = mapSelected
-			if !progress.selected && progress.state != "cached" {
-				progress.state, progress.cachedBytes, progress.err = "not-selected", 0, ""
-			}
-			if progress.selected && progress.state == "not-selected" {
-				progress.state = "pending"
-			}
+	if priority != "" {
+		store.priorityMap = priority
+	} else if _, kept := selected[store.priorityMap]; !kept {
+		store.priorityMap = ""
+	}
+	wanted := make(map[string]bool)
+	for mapID := range selected {
+		for _, path := range store.mapFiles[mapID] {
+			wanted[path] = true
+		}
+	}
+	for path, progress := range store.files {
+		progress.selected = wanted[path] || !strings.HasSuffix(path, ".bth")
+		if !progress.selected && progress.state != "cached" {
+			progress.state, progress.cachedBytes, progress.err = "not-selected", 0, ""
+		}
+		if progress.selected && progress.state == "not-selected" {
+			progress.state = "pending"
 		}
 	}
 	store.totalBytes = 0
@@ -329,25 +351,37 @@ func (store *localDataStore) SetSelectedMaps(mapIDs []string) error {
 			store.totalBytes += progress.file.SizeBytes
 		}
 	}
+	needsSync := !additive || aggregateMapStatus(priority, store.mapFiles[priority], store.files).State != "cached"
 	store.mu.Unlock()
-	select {
-	case store.syncRequests <- struct{}{}:
-	default:
+	if needsSync {
+		select {
+		case store.syncRequests <- struct{}{}:
+		default:
+		}
 	}
 	return nil
 }
 
-func (store *localDataStore) filesToDownload(files []terrainManifestFile) []terrainManifestFile {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
-	result := make([]terrainManifestFile, 0, len(files))
-	for _, file := range files {
-		progress := store.files[file.Path]
-		if progress != nil && progress.selected {
-			result = append(result, file)
+func (store *localDataStore) nextDownload(files []terrainManifestFile, attempted map[string]bool) (terrainManifestFile, bool) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	// Re-evaluate selection at each free worker slot, including requests arriving
+	// while a background pre-download is already running.
+	for _, priorityOnly := range []bool{true, false} {
+		for _, file := range files {
+			if priorityOnly && !slices.Contains(store.mapFiles[store.priorityMap], file.Path) {
+				continue
+			}
+			progress := store.files[file.Path]
+			// A cached size is not an integrity proof: ensureManifestFile still
+			// verifies selected objects and repairs same-size corruption.
+			if progress != nil && progress.selected && !attempted[file.SHA256] {
+				attempted[file.SHA256] = true
+				return file, true
+			}
 		}
 	}
-	return result
+	return terrainManifestFile{}, false
 }
 
 func (store *localDataStore) syncOnce(ctx context.Context) {
@@ -381,31 +415,28 @@ func (store *localDataStore) syncOnce(ctx context.Context) {
 		return
 	}
 	store.pruneUnknownObjects()
-	jobs := make(chan terrainManifestFile)
+	attempted := make(map[string]bool)
 	var workers sync.WaitGroup
 	for range cacheDownloadWorkers {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			for file := range jobs {
+			for ctx.Err() == nil {
+				file, ok := store.nextDownload(files, attempted)
+				if !ok {
+					return
+				}
 				if err := store.ensureManifestFile(ctx, file); err != nil {
 					store.updateFile(file.Path, 0, "error", err.Error())
 				}
 			}
 		}()
 	}
-	for _, file := range store.filesToDownload(files) {
-		select {
-		case jobs <- file:
-		case <-ctx.Done():
-			close(jobs)
-			workers.Wait()
-			store.setSyncError(ctx.Err())
-			return
-		}
-	}
-	close(jobs)
 	workers.Wait()
+	if ctx.Err() != nil {
+		store.setSyncError(ctx.Err())
+		return
+	}
 	store.finishSync()
 }
 
@@ -413,7 +444,8 @@ func (store *localDataStore) Status() localCacheStatus {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 	status := localCacheStatus{
-		SchemaVersion: 1, State: store.state, Revision: store.revision, MapCount: store.mapCount,
+		SupportsMapPriority: true,
+		SchemaVersion:       1, State: store.state, Revision: store.revision, MapCount: store.mapCount,
 		ObjectCount: len(store.files), TotalBytes: store.totalBytes, Error: store.lastError,
 		Maps: make([]mapCacheStatus, 0, store.mapCount),
 	}
@@ -551,10 +583,30 @@ func (store *localDataStore) RemoveObject(digest string) error {
 		return os.ErrNotExist
 	}
 	err := os.Remove(store.objectPath(digest))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
-	return err
+	// Web removes a corrupt object before retrying. Do not leave its map marked
+	// cached until the periodic refresh; queue the still-selected object now.
+	retry := false
+	store.mu.Lock()
+	for _, progress := range store.files {
+		if progress.file.SHA256 == digest {
+			progress.cachedBytes, progress.err = 0, ""
+			progress.state = "not-selected"
+			if progress.selected {
+				progress.state, retry = "pending", true
+			}
+		}
+	}
+	store.mu.Unlock()
+	if retry {
+		select {
+		case store.syncRequests <- struct{}{}:
+		default:
+		}
+	}
+	return nil
 }
 
 func (store *localDataStore) allowsDigest(digest string) bool {
@@ -988,7 +1040,11 @@ func (store *localDataStore) updateFile(path string, cachedBytes int64, state, m
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if progress := store.files[path]; progress != nil {
-		progress.cachedBytes, progress.state, progress.err = cachedBytes, state, message
+		for _, alias := range store.files {
+			if alias.file.SHA256 == progress.file.SHA256 && alias.file.SizeBytes == progress.file.SizeBytes {
+				alias.cachedBytes, alias.state, alias.err = cachedBytes, state, message
+			}
+		}
 	}
 }
 

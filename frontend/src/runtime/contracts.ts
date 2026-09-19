@@ -61,6 +61,7 @@ export type SolverWorkerRequest =
       readonly type: "terrain-load";
       readonly requestId: number;
       readonly container: ArrayBuffer;
+      readonly detailContainers?: readonly ArrayBuffer[];
       readonly mapInfo: {
         readonly minimum: readonly [number, number];
         readonly maximum: readonly [number, number];

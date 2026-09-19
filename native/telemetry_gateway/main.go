@@ -712,7 +712,8 @@ func (gateway *relay) serveCache(response http.ResponseWriter, request *http.Req
 			return
 		}
 		var selection struct {
-			MapIDs []string `json:"map_ids"`
+			MapIDs        []string `json:"map_ids"`
+			PriorityMapID string   `json:"priority_map_id"`
 		}
 		decoder := json.NewDecoder(io.LimitReader(request.Body, 64*1024))
 		decoder.DisallowUnknownFields()
@@ -720,7 +721,17 @@ func (gateway *relay) serveCache(response http.ResponseWriter, request *http.Req
 			http.Error(response, "terrain selection rejected", http.StatusBadRequest)
 			return
 		}
-		if err := gateway.cache.SetSelectedMaps(selection.MapIDs); err != nil {
+		var selectionErr error
+		if selection.PriorityMapID != "" {
+			if selection.MapIDs != nil {
+				http.Error(response, "use either map_ids or priority_map_id", http.StatusBadRequest)
+				return
+			}
+			selectionErr = gateway.cache.RequestMap(selection.PriorityMapID)
+		} else {
+			selectionErr = gateway.cache.SetSelectedMaps(selection.MapIDs)
+		}
+		if selectionErr != nil {
 			http.Error(response, "terrain selection rejected", http.StatusUnprocessableEntity)
 			return
 		}

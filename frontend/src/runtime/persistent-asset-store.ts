@@ -27,6 +27,9 @@ export interface OfflineCacheStatus {
   readonly cachedBytes?: number;
   readonly maps?: readonly OfflineMapCacheStatus[];
   readonly error?: string;
+  readonly revision?: string;
+  readonly lastCheckedAt?: string;
+  readonly supportsMapPriority?: boolean;
 }
 
 export interface OfflineMapCacheStatus {
@@ -51,6 +54,7 @@ export interface AssetObjectStorage {
   remove(sha256: string): Promise<void>;
   stats(): Promise<StorageStats>;
   selectTerrainMaps?(mapIds: readonly string[]): Promise<void>;
+  requestTerrainMap?(mapId: string): Promise<void>;
   readTerrainCatalog?(): Promise<ArrayBuffer | null>;
 }
 
@@ -116,6 +120,16 @@ export class PersistentAssetStore {
 
   async terrainCatalog(): Promise<ArrayBuffer | null> {
     return this.#storage.readTerrainCatalog?.() ?? null;
+  }
+
+  async requestTerrainMap(mapId: string): Promise<void> {
+    if (this.#storage.requestTerrainMap) return this.#storage.requestTerrainMap(mapId);
+    const status = await this.status();
+    const ids = new Set((status.maps ?? []).filter(map => map.selected).map(map => map.id));
+    if (!ids.has(mapId)) {
+      ids.add(mapId);
+      await this.selectTerrainMaps([...ids].sort());
+    }
   }
 
   async terrainMapSelected(mapId: string): Promise<boolean | null> {
@@ -188,6 +202,8 @@ export class BridgeAssetObjectStorage implements AssetObjectStorage {
         state: status.state, mapCount: status.mapCount, cachedMapCount: status.cachedMapCount,
         selectedMapCount: status.selectedMapCount, selectedCachedMapCount: status.selectedCachedMapCount,
         totalBytes: status.totalBytes, cachedBytes: status.cachedBytes, maps: status.maps, error: status.error,
+        revision: status.revision, lastCheckedAt: status.lastCheckedAt,
+        supportsMapPriority: status.supportsMapPriority,
       },
     };
   }
@@ -209,6 +225,25 @@ export class BridgeAssetObjectStorage implements AssetObjectStorage {
     const bytes = await response.arrayBuffer();
     if (bytes.byteLength <= 0 || bytes.byteLength > 4 * 1024 * 1024) throw new Error("Bridge 地形目录大小无效");
     return bytes;
+  }
+
+  async requestTerrainMap(mapId: string): Promise<void> {
+    const status = (await this.stats()).cache;
+    if (!status?.supportsMapPriority) {
+      // Existing Bridge installations still support on-demand selection.
+      const ids = new Set((status?.maps ?? []).filter(map => map.selected).map(map => map.id));
+      if (!ids.has(mapId)) {
+        ids.add(mapId);
+        await this.selectTerrainMaps([...ids].sort());
+      }
+      return;
+    }
+    const baseURL = await discoverBridgeEndpoint(this.#fetcher, this.#configuredURL);
+    const response = await fetchBridgeResource(this.#fetcher, new URL("api/v1/cache/selection", baseURL), {
+      method: "PUT", cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority_map_id: mapId }),
+    });
+    if (!response.ok) throw new Error(`Bridge 当前地图下载请求失败 (${response.status})`);
   }
   async #objectURL(sha256: string): Promise<URL> {
     return new URL(`api/v1/cache/objects/${sha256}`, await discoverBridgeEndpoint(this.#fetcher, this.#configuredURL));
@@ -247,7 +282,7 @@ function parseBridgeCacheStatus(value: unknown): {
   state: "checking" | "syncing" | "ready" | "degraded";
   mapCount: number; cachedMapCount: number; selectedMapCount: number; selectedCachedMapCount: number;
   cachedObjectCount: number; totalBytes: number; cachedBytes: number;
-  maps: readonly OfflineMapCacheStatus[]; error?: string;
+  maps: readonly OfflineMapCacheStatus[]; error?: string; revision?: string; lastCheckedAt?: string; supportsMapPriority?: boolean;
 } {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Bridge 缓存状态无效");
   const record = value as Record<string, unknown>;
@@ -266,7 +301,10 @@ function parseBridgeCacheStatus(value: unknown): {
     mapCount: Number(record.map_count), cachedMapCount: Number(record.cached_map_count),
     selectedMapCount: Number(record.selected_map_count), selectedCachedMapCount: Number(record.selected_cached_map_count),
     cachedObjectCount: Number(record.cached_object_count),
+    supportsMapPriority: record.supports_map_priority === true,
     totalBytes: Number(record.total_bytes), cachedBytes: Number(record.cached_bytes), maps,
+    ...(typeof record.revision === "string" ? { revision: record.revision } : {}),
+    ...(typeof record.last_checked_at === "string" ? { lastCheckedAt: record.last_checked_at } : {}),
     ...(typeof record.error === "string" && record.error ? { error: record.error } : {}),
   };
 }

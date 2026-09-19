@@ -112,17 +112,19 @@ describe("PersistentAssetStore", () => {
     await expect(store.load(workerDescriptor)).resolves.toEqual(bytes.buffer);
   });
 
-  it("uses Bridge as the durable object store and projects every map status", async () => {
+  it.each([true, false])("uses Bridge as the durable store with map-priority support=%s", async (priority) => {
     const payload = new TextEncoder().encode("bridge object");
     const digest = createHash("sha256").update(payload).digest("hex");
-    const calls: Array<{ url: string; method: string }> = [];
+    const calls: Array<{ url: string; method: string; body?: BodyInit | null }> = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? "GET";
-      calls.push({ url, method });
+      calls.push({ url, method, body: init?.body });
       if (url.endsWith("/api/v1/capabilities")) return new Response(JSON.stringify({ schema_version: 1, bridge_protocol: 1, cache_protocol: 4, input: "official-8111-only", write_commands: false }));
       if (url.endsWith("/api/v1/cache/status")) return new Response(JSON.stringify({
         schema_version: 1, state: "syncing", map_count: 2, cached_map_count: 1,
+        revision: "a".repeat(64), last_checked_at: "2026-09-19T13:00:00Z",
+        supports_map_priority: priority,
         selected_map_count: 1, selected_cached_map_count: 1,
         object_count: 3, cached_object_count: 2, total_bytes: 100, cached_bytes: 60,
         maps: [
@@ -139,9 +141,12 @@ describe("PersistentAssetStore", () => {
     await storage.remove(digest);
     await storage.selectTerrainMaps(["air_alpha"]);
     const stats = await storage.stats();
-    expect(stats).toMatchObject({ count: 2, bytes: 60, cache: { state: "syncing", mapCount: 2, cachedMapCount: 1 } });
+    expect(stats).toMatchObject({ count: 2, bytes: 60, cache: { state: "syncing", mapCount: 2, cachedMapCount: 1, revision: "a".repeat(64), lastCheckedAt: "2026-09-19T13:00:00Z" } });
     expect(stats.cache?.maps).toHaveLength(2);
-    expect(calls.map((call) => call.method)).toEqual(["GET", "GET", "PUT", "DELETE", "PUT", "GET"]);
+    expect(calls.filter(call => !call.url.endsWith("/capabilities")).map(call => call.method)).toEqual(["GET", "PUT", "DELETE", "PUT", "GET"]);
+    await storage.requestTerrainMap("air_bravo");
+    expect(JSON.parse(String(calls.at(-1)!.body))).toEqual(priority
+      ? { priority_map_id: "air_bravo" } : { map_ids: ["air_alpha", "air_bravo"] });
   });
 
   it("waits for Bridge-owned terrain sync instead of downloading a missing object in Web", async () => {

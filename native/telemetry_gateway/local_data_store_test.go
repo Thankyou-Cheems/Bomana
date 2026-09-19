@@ -16,6 +16,57 @@ import (
 	"testing"
 )
 
+func TestCurrentMapOvertakesQueuedDownloadsAndPreservesSelections(t *testing.T) {
+	store := &localDataStore{root: t.TempDir(), files: map[string]*cacheFileProgress{}, selectedMaps: map[string]struct{}{},
+		mapFiles: map[string][]string{"background": {"a.bth", "b.bth"}, "current": {"c.bth", "c.detail.bth"}, "unselected": {"d.bth"}}, syncRequests: make(chan struct{}, 1)}
+	files := []terrainManifestFile{}
+	for _, path := range []string{"a.bth", "b.bth", "c.bth", "c.detail.bth", "d.bth"} {
+		file := terrainManifestFile{Path: path, SHA256: digestBytes([]byte(path)), SizeBytes: 10}
+		files = append(files, file)
+		store.files[path] = &cacheFileProgress{file: file, state: "not-selected"}
+	}
+	if err := store.SetSelectedMaps([]string{"background"}); err != nil {
+		t.Fatal(err)
+	}
+	attempted := map[string]bool{}
+	first, _ := store.nextDownload(files, attempted)
+	if first.Path != "a.bth" {
+		t.Fatal(first.Path)
+	}
+	if err := store.RequestMap("current"); err != nil {
+		t.Fatal(err)
+	}
+	if _, kept := store.selectedMaps["background"]; !kept {
+		t.Fatal("background selection lost")
+	}
+	for _, want := range []string{"c.bth", "c.detail.bth"} {
+		file, ok := store.nextDownload(files, attempted)
+		if !ok || file.Path != want {
+			t.Fatalf("priority: %s want %s", file.Path, want)
+		}
+	}
+	if err := store.SetSelectedMaps([]string{"current"}); err != nil {
+		t.Fatal(err)
+	}
+	if file, ok := store.nextDownload(files, attempted); ok {
+		t.Fatalf("unselected task still queued: %s", file.Path)
+	}
+	if err := store.RequestMap("unknown"); err == nil {
+		t.Fatal("unknown map accepted")
+	}
+	// Aliases share one content-addressed download and completion state.
+	alias := files[2]
+	alias.Path = "alias.bth"
+	store.files[alias.Path] = &cacheFileProgress{file: alias, selected: true, state: "pending"}
+	if _, ok := store.nextDownload(append(files, alias), attempted); ok {
+		t.Fatal("duplicate content was scheduled")
+	}
+	store.updateFile("c.bth", 10, "cached", "")
+	if store.files[alias.Path].state != "cached" {
+		t.Fatal("alias progress not updated")
+	}
+}
+
 func TestLocalDataStoreDownloadsOnlyMapsSelectedByWeb(t *testing.T) {
 	objects := map[string][]byte{
 		"index.json":           []byte(`{"schema_version":1,"maps":[{"id":"air_alpha","file":"air_alpha.bth","detail_layers":[{"file":"air_alpha.detail.bth"}]},{"id":"air_bravo","file":"air_bravo.bth"}]}`),
@@ -106,6 +157,26 @@ func TestLocalDataStoreDownloadsOnlyMapsSelectedByWeb(t *testing.T) {
 	}
 	if requests := objectRequests.Load(); requests != 3 {
 		t.Fatalf("unselected terrain was downloaded: requests=%d", requests)
+	}
+	if err := os.WriteFile(store.objectPath(alpha.SHA256), bytes.Repeat([]byte("x"), len(objects["air_alpha.bth"])), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store.syncOnce(context.Background())
+	if valid, err := verifyDiskObject(store.objectPath(alpha.SHA256), alpha.SizeBytes, alpha.SHA256); !valid || err != nil {
+		t.Fatalf("same-size corrupted cache was not repaired: %v", err)
+	}
+	if objectRequests.Load() != 4 {
+		t.Fatalf("cache repair fetched unrelated objects: %d", objectRequests.Load())
+	}
+	if err := store.RemoveObject(alpha.SHA256); err != nil {
+		t.Fatal(err)
+	}
+	if store.Status().Maps[0].State != "pending" {
+		t.Fatal("removed corrupt object still reported cached")
+	}
+	store.syncOnce(context.Background())
+	if store.Status().Maps[0].State != "cached" {
+		t.Fatal("cache recovery did not finish")
 	}
 	if _, err := os.Stat(store.objectPath(rogueDigest)); !os.IsNotExist(err) {
 		t.Fatalf("non-terrain Bridge object was not pruned: %v", err)

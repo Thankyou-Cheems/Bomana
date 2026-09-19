@@ -482,6 +482,14 @@ func TestBridgeCacheSelectionRequiresBrowserOriginAndKnownMaps(t *testing.T) {
 	if status.SelectedMapCount != 1 || !status.Maps[0].Selected {
 		t.Fatalf("selection not applied: %#v", status)
 	}
+	priority := httptest.NewRequest(http.MethodPut, "/api/v1/cache/selection", strings.NewReader(`{"priority_map_id":"air_bravo"}`))
+	priority.Header.Set("Origin", testOrigin)
+	priority.Header.Set("Content-Type", "application/json")
+	priorityResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(priorityResponse, priority)
+	if priorityResponse.Code != http.StatusAccepted || store.Status().SelectedMapCount != 2 || store.priorityMap != "air_bravo" {
+		t.Fatalf("atomic current map selection failed: %d %s", priorityResponse.Code, priorityResponse.Body.String())
+	}
 
 	unknown := httptest.NewRequest(http.MethodPut, "/api/v1/cache/selection", strings.NewReader(`{"map_ids":["air_unknown"]}`))
 	unknown.Header.Set("Origin", testOrigin)
