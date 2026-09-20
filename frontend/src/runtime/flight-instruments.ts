@@ -32,6 +32,7 @@ export class FlightInstruments {
   readonly #speed: SpeedStripRenderer;
   readonly #badges: FlightStatusBadgeRenderer;
   readonly #resize: ResizeObserver;
+  readonly #fit: () => void;
 
   constructor(host: HTMLElement, options: { guidance?: typeof headingGuidance; onCycleTarget?: () => void; trailingAction?: HTMLElement }) {
     const document = host.ownerDocument;
@@ -45,7 +46,7 @@ export class FlightInstruments {
         <strong class="pip-target" id="pip-target" hidden></strong>
         <div class="pip-actions" aria-label="状态与快捷操作">
           <div class="instrument-badges pip-instrument-badges" aria-label="飞行状态"><span class="instrument-badge flight-phase-badge" id="pip-flight-phase-badge" hidden></span><span class="instrument-badge gear-status-badge" id="pip-gear-status-badge" hidden></span></div>
-          <details class="pip-aircraft-info" id="pip-aircraft-info" hidden><summary title="点击查看完整机型名称"><span id="pip-aircraft"></span><i aria-hidden="true">ⓘ</i></summary><p id="pip-aircraft-full"></p></details>
+          <span class="pip-aircraft-info" id="pip-aircraft-info" hidden><span id="pip-aircraft"></span></span>
           <span class="pip-status-badge" id="pip-limit-status" title="尚未匹配当前机型的速度限制；速度读数仍可显示。" hidden>限速待匹配</span>
           <span class="pip-status-badge" id="pip-connection" role="status">待连接</span>
         </div>
@@ -59,15 +60,23 @@ export class FlightInstruments {
         </section>
       </footer>`;
     host.replaceChildren(this.root);
-    // One coordinate system on every surface; narrow hosts scale the entire
-    // panel instead of hiding fields or rearranging individual instruments.
+    // Keep one shared layout and uniform text scaling, but let its flexible
+    // rows span the host instead of letterboxing a fixed 720 × 182 panel.
     const fit = () => {
-      if (!this.root.offsetWidth || !this.root.offsetHeight) return;
-      const scale = Math.min(host.clientWidth / this.root.offsetWidth, host.clientHeight / this.root.offsetHeight);
+      const width = host.clientWidth, height = host.clientHeight;
+      if (!width || !height) return;
+      const style = host.ownerDocument.defaultView!.getComputedStyle(host);
+      const scale = Math.min(width / Number(style.getPropertyValue("--instrument-width")), height / Number(style.getPropertyValue("--instrument-height")));
+      this.root.style.width = `${width / scale}px`;
+      this.root.style.height = `${height / scale}px`;
       this.root.style.transform = `translate(-50%, -50%) scale(${scale})`;
     };
     this.#resize = new ResizeObserver(fit);
     this.#resize.observe(host);
+    this.#fit = fit;
+    // Document PiP can throttle the opener's ResizeObserver while it is in the
+    // background. Its own resize event must also update the shared panel.
+    document.defaultView!.addEventListener("resize", fit);
     fit();
     const part = <T extends Element = HTMLElement>(selector: string) => instrumentElement<T>(this.root, selector);
     if (options.onCycleTarget) {
@@ -91,14 +100,12 @@ export class FlightInstruments {
     const set = (selector: string, value: string) => { instrumentElement(this.root, selector).textContent = value; };
     set("#pip-connection", status.connectionText);
     set("#pip-aircraft", status.aircraftText);
-    set("#pip-aircraft-full", status.aircraftText);
     const connection = instrumentElement(this.root, "#pip-connection");
     connection.dataset.tone = snapshot.connected ? "connected" : "waiting";
     connection.title = snapshot.connected ? "已接收到游戏遥测数据" : "等待游戏遥测数据，请确认 Bridge 已运行";
-    const aircraft = instrumentElement<HTMLDetailsElement>(this.root, "#pip-aircraft-info");
+    const aircraft = instrumentElement(this.root, "#pip-aircraft-info");
     aircraft.hidden = !snapshot.connected;
-    if (!snapshot.connected) aircraft.open = false;
-    instrumentElement(aircraft, "summary").title = snapshot.flight.aircraft ? `当前机型：${snapshot.flight.aircraft} · 点击查看全名` : "等待游戏提供机型信息";
+    aircraft.title = snapshot.flight.aircraft ? `当前机型：${snapshot.flight.aircraft}` : "等待游戏提供机型信息";
     instrumentElement(this.root, "#pip-limit-status").hidden = !snapshot.connected || snapshot.flight.overspeed.matched;
     set("#pip-timer", status.timerText);
     set("#pip-heading-value", Math.round(snapshot.flight.headingDeg).toString().padStart(3, "0"));
@@ -112,5 +119,5 @@ export class FlightInstruments {
     this.#badges.update(flightStatus);
   }
 
-  close(): void { this.#resize.disconnect(); this.#heading.close(); }
+  close(): void { this.#resize.disconnect(); this.root.ownerDocument.defaultView!.removeEventListener("resize", this.#fit); this.#heading.close(); }
 }

@@ -24,7 +24,10 @@ export class PublicNavigationMap {
     this.#basemap = basemap;
     if (basemap) canvas.addEventListener("click", this.#click);
     else this.#viewport = new MapViewport(canvas, () => this.#fitRect(), this.#resize, this.#click);
-    this.#resizeObserver = new ResizeObserver(this.#resize);
+    // PiP must observe layout from its own window: the opener's rendering
+    // callbacks can be suspended while the separate PiP window stays visible.
+    const ViewResizeObserver = canvas.ownerDocument.defaultView!.ResizeObserver;
+    this.#resizeObserver = new ViewResizeObserver(this.#resize);
     this.#resizeObserver.observe(canvas);
   }
   update(snapshot: EditionSnapshot, mapInfo: Readonly<Record<string, unknown>> | null = null): void {

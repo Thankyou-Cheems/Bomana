@@ -135,18 +135,14 @@ body:has(.pip-cockpit) { min-width: 0 !important; color: #dbeaf1; font-family: v
 .flight-instruments .pip-heading:has(canvas[data-mode="landing"]) .pip-heading-value { display: none; }
 
 .flight-instruments .pip-actions { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; justify-content: flex-end; gap: 4px; margin-left: auto; }
-.flight-instruments .pip-aircraft-info { position: relative; flex: 0 1 110px; width: 110px; min-width: 32px; max-width: 110px; margin: 0; font: 700 7px/1 var(--sans); color: #91acba; }
-.flight-instruments .pip-aircraft-info summary { display: flex; align-items: center; gap: 4px; min-width: 0; padding: 3px 4px; border: 1px solid #36515f; border-radius: 4px; background: #10232d; list-style: none; cursor: pointer; }
-.flight-instruments .pip-aircraft-info summary::-webkit-details-marker { display: none; }
+.flight-instruments .pip-aircraft-info { display: flex; align-items: center; flex: 0 1 110px; width: 110px; min-width: 32px; max-width: 110px; margin: 0; padding: 3px 4px; border: 1px solid #36515f; border-radius: 4px; background: #10232d; font: 700 7px/1 var(--sans); color: #91acba; cursor: default; }
 .flight-instruments #pip-aircraft { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.flight-instruments .pip-aircraft-info i { flex: none; font-style: normal; color: #8ac9de; }
-.flight-instruments .pip-aircraft-info p { position: absolute; top: calc(100% + 4px); right: 0; width: 230px; max-height: 120px; overflow: auto; margin: 0; padding: 8px; border: 1px solid #567b90; border-radius: 4px; background: #071923; color: #dbeaf1; white-space: normal; overflow-wrap: anywhere; font: 10px/1.5 var(--sans); }
 .flight-instruments .pip-status-badge { flex: none; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 4px; border: 1px solid #36515f; border-radius: 4px; background: #10232d; color: #91acba; font: 700 7px/1 var(--sans); }
 .flight-instruments .pip-status-badge[data-tone="connected"] { color: #6de0a3; border-color: #386957; }
 .flight-instruments .pip-status-badge[data-tone="waiting"] { color: #c0a674; border-color: #5d5540; }
 .flight-instruments :is(.pip-map-toggle, .pip-cycle-target)::after { content: attr(data-action-icon); font-size: 9px; margin-left: 2px; }
-.flight-instruments :is(.pip-map-toggle, .pip-cycle-target, .pip-aircraft-info summary):hover { background: #204353; border-color: #8ac9de; }
-.flight-instruments :is(.pip-map-toggle, .pip-cycle-target, .pip-aircraft-info summary):focus-visible { outline: 2px solid #8ac9de; outline-offset: 1px; }
+.flight-instruments :is(.pip-map-toggle, .pip-cycle-target):hover { background: #204353; border-color: #8ac9de; }
+.flight-instruments :is(.pip-map-toggle, .pip-cycle-target):focus-visible { outline: 2px solid #8ac9de; outline-offset: 1px; }
 .flight-instruments :is(.pip-map-toggle, .pip-cycle-target):active { background: #2c596b; }
 .flight-instruments .pip-actions { position: relative; z-index: 8; }
 .flight-instruments :is(.pip-map-toggle, .pip-cycle-target) { position: relative; }

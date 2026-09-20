@@ -165,16 +165,16 @@ export class PictureInPictureHeadingRenderer {
     const height = this.#canvas.clientHeight;
     if (width <= 0 || height <= 0 || bounds.width <= 0 || bounds.height <= 0) return;
     // Draw in the panel's shared coordinates, at the host's actual resolution.
-    const pixelRatio = (this.#view.devicePixelRatio || 1) * bounds.width / width;
-    const bitmapWidth = Math.round(width * pixelRatio);
-    const bitmapHeight = Math.round(height * pixelRatio);
+    const pixelRatio = this.#view.devicePixelRatio || 1;
+    const bitmapWidth = Math.round(bounds.width * pixelRatio);
+    const bitmapHeight = Math.round(bounds.height * pixelRatio);
     if (this.#canvas.width !== bitmapWidth || this.#canvas.height !== bitmapHeight) {
       this.#canvas.width = bitmapWidth;
       this.#canvas.height = bitmapHeight;
     }
     const context = this.#canvas.getContext("2d");
     if (!context) return;
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.setTransform(bitmapWidth / width, 0, 0, bitmapHeight / height, 0, 0);
     context.clearRect(0, 0, width, height);
     const guidance = this.#guidance(snapshot);
     if (snapshot.landing?.settings.enabled) {

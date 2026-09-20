@@ -920,6 +920,7 @@ export class PublicRuntime {
     this._automaticNavigationTargetId = target?.id ?? null;
     this._navigationTargetUpdated(target);
     return Object.freeze({ player: Object.freeze({ x: player.x, y: player.y }), mapScaleM: scale,
+      ...(map.friendlyAircraft ? { friendlyAircraft: Object.freeze(map.friendlyAircraft) } : {}),
       items: Object.freeze(items), target, selectionMode: this._navigationSelectionMode });
   }
 

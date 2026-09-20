@@ -66,6 +66,13 @@ export interface RealtimeSolverPort {
   }>;
 }
 
+/** Display-only friendly aircraft; never a navigation or weapon target. */
+export interface FriendlyAircraft {
+  readonly x: number;
+  readonly y: number;
+  readonly officialIcon?: string;
+}
+
 export interface NavigationItem {
   readonly id: string;
   readonly kind: "zone" | "airfield" | "poi" | "traceback" | "hostile";
@@ -151,6 +158,7 @@ export interface EditionSnapshot {
     readonly player: { readonly x: number; readonly y: number } | null;
     readonly mapScaleM: readonly [number, number] | null;
     readonly items: readonly NavigationItem[];
+    readonly friendlyAircraft?: readonly FriendlyAircraft[];
     readonly target: NavigationItem | null;
     readonly selectionMode: NavigationSelectionMode;
   } | null;
@@ -244,6 +252,7 @@ export interface ParsedTelemetry {
 }
 
 export interface ParsedMap {
+  friendlyAircraft?: FriendlyAircraft[];
   player: { x: number; y: number; dx: number; dy: number } | null;
   objects: Array<{
     id: string;
