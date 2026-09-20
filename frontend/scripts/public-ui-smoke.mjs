@@ -113,7 +113,7 @@ try {
     markers: [...track.querySelectorAll("b")].map(marker => marker.style.left),
     transition: getComputedStyle(track.querySelector("i")).transition,
   }));
-  assert.deepEqual(speedStrip.markers, ["25%", "43.75%", "62.5%"], "Public speed strip shares the expanded warning scale");
+  assert.deepEqual(speedStrip.markers, ["40%", "65%", "95%"], "Public speed strip shares the pre-limit warning scale");
   assert.match(speedStrip.transition, /width 0\.08s linear/, "Public speed fill must finish before the next normal observation");
   await page.waitForFunction(() => {
     const canvas = document.querySelector("#navigation-map");

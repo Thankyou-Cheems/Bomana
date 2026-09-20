@@ -62,6 +62,7 @@ export class FlightInstruments {
     // One coordinate system on every surface; narrow hosts scale the entire
     // panel instead of hiding fields or rearranging individual instruments.
     const fit = () => {
+      if (!this.root.offsetWidth || !this.root.offsetHeight) return;
       const scale = Math.min(host.clientWidth / this.root.offsetWidth, host.clientHeight / this.root.offsetHeight);
       this.root.style.transform = `translate(-50%, -50%) scale(${scale})`;
     };

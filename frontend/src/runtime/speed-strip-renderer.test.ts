@@ -44,8 +44,8 @@ describe("speed strip presentation", () => {
     expect(presentation.levelClass).toBe("warning");
     expect(presentation.valueText).toBe("IAS 900/1500");
     expect(presentation.machText).toBe("95% · M1.90/2.00");
-    expect(presentation.fillPercent).toBeCloseTo(43.75);
-    expect(presentation.markerPercents).toEqual([25, 43.75, 62.5]);
+    expect(presentation.fillPercent).toBeCloseTo(65);
+    expect(presentation.markerPercents).toEqual([40, 65, 95]);
   });
 
   it("labels the flap reference without claiming safe flight or masking Mach warnings", () => {
@@ -75,6 +75,16 @@ describe("speed strip presentation", () => {
     expect(presentation).toMatchObject({ stateText: "", fillPercent: 0, valueText: "IAS 0", machText: "", limitsKnown: false });
   });
 
+  it("shows the actual overspeed percentage after the short red tail is full", () => {
+    const presentation = speedStripPresentation(snapshot({
+      iasKmh: 1350, iasLimitKmh: 1200, mach: null, machLimit: 0,
+      ratio: 1.125, level: "critical", matched: true,
+    }));
+    expect(presentation).toMatchObject({
+      stateText: "超限", levelClass: "critical", fillPercent: 100, machText: "112.5%",
+    });
+  });
+
   it("places the colored bands and markers on the same expanded fixed scale", () => {
     const createElement = () => ({
       classList: { remove: vi.fn(), add: vi.fn() },
@@ -102,9 +112,9 @@ describe("speed strip presentation", () => {
       level: "caution",
       matched: true,
     }));
-    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-limit", "62.5%");
-    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-caution", "25%");
-    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-warning", "43.75%");
-    expect(markers.map(marker => marker.style.left)).toEqual(["25%", "43.75%", "62.5%"]);
+    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-limit", "95%");
+    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-caution", "40%");
+    expect(track.style.setProperty).toHaveBeenCalledWith("--speed-warning", "65%");
+    expect(markers.map(marker => marker.style.left)).toEqual(["40%", "65%", "95%"]);
   });
 });

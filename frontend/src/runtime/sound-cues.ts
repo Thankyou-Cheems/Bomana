@@ -104,13 +104,13 @@ export class SoundCues {
 
   preview(kind: CueKind, preset: SoundCuePreset): void { this.#playCue(kind, preset, 5); }
 
-  update(snapshot: EditionSnapshot): void {
+  update(snapshot: EditionSnapshot, airRealistic = false): void {
     const remaining = snapshot.timer.remainingSec === null ? null : Math.ceil(snapshot.timer.remainingSec);
     const destroyedZoneIds = new Set(snapshot.destroyedZones.map((zone) => zone.id));
     const newlyDestroyed = [...destroyedZoneIds].some((id) => !this.#knownDestroyedZones.has(id));
     if (this.#preferences.masterEnabled && this.#context) {
       if (
-        this.#preferences.timerEnabled
+        !airRealistic && this.#preferences.timerEnabled
         && remaining !== null
         && remaining !== this.#lastTimerSecond
         && [30, 20, 10, 5, 4, 3, 2, 1].includes(remaining)
@@ -121,7 +121,7 @@ export class SoundCues {
         this.#lastOverspeedAtMs = snapshot.sampledAtMs;
         this.#tone(level === "critical" ? 760 : 620, 45, 0.035);
       }
-      if (this.#preferences.zoneDestroyedEnabled && newlyDestroyed) {
+      if (!airRealistic && this.#preferences.zoneDestroyedEnabled && newlyDestroyed) {
         this.#playCue("zone-destroyed", this.#preferences.zoneDestroyedPreset, 0);
       }
     }

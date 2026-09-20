@@ -24,9 +24,16 @@ export interface SpeedStripElements {
   readonly markers: readonly [HTMLElement, HTMLElement, HTMLElement];
 }
 
-export function speedStripPresentation(snapshot: EditionSnapshot): SpeedStripPresentation {
+export function speedObservationCurrent(snapshot: EditionSnapshot, nowMs = snapshot.sampledAtMs): boolean {
+  // Older hosts have only the aggregate flag; new hosts carry source freshness.
+  if (snapshot.speedSampledAtMs === undefined) return snapshot.connected !== false;
+  return snapshot.speedSampledAtMs !== null && nowMs >= snapshot.speedSampledAtMs && nowMs - snapshot.speedSampledAtMs <= 1500;
+}
+
+export function speedStripPresentation(snapshot: EditionSnapshot, nowMs = snapshot.sampledAtMs): SpeedStripPresentation {
   const overspeed = snapshot.flight.overspeed;
-  const matched = snapshot.connected !== false && overspeed.matched;
+  const current = speedObservationCurrent(snapshot, nowMs);
+  const matched = current && overspeed.matched;
   const machRatio = snapshot.flight.mach !== null && overspeed.machLimit > 0
     ? snapshot.flight.mach / overspeed.machLimit
     : 0;
@@ -39,13 +46,13 @@ export function speedStripPresentation(snapshot: EditionSnapshot): SpeedStripPre
     : "";
   const valueText = matched && overspeed.iasLimitKmh > 0
     ? `IAS ${Math.round(snapshot.flight.iasKmh)}/${Math.round(overspeed.iasLimitKmh)}`
-    : `IAS ${snapshot.connected === false ? "—" : Math.round(snapshot.flight.iasKmh)}`;
+    : `IAS ${current ? Math.round(snapshot.flight.iasKmh) : "—"}`;
   const mach = snapshot.flight.mach !== null && overspeed.machLimit > 0
     ? `M${snapshot.flight.mach.toFixed(2)}/${overspeed.machLimit.toFixed(2)}` : "";
   const percent = speedRatio < 1 ? Math.min(99.9, Math.round(speedRatio * 1000) / 10) : Math.round(speedRatio * 1000) / 10;
   const machText = matched ? `${percent}%${mach ? ` · ${mach}` : ""}` : "";
   const detail = matched
-    ? `IAS：当前指示空速 / ${overspeed.iasLimitSource === "flaps" ? "当前襟翼构型的原生参考限速" : "原生 VNE"}（km/h）；Mach 对照原生 MNE。取两项较高比例：90% 预警、95% 减速、100% 超限。前两档是提前提醒，100% 采用保守的原生限速基准，不追加随机损坏宽限。它不是所有载荷和战损下的最低断裂速度。右端 110% 仅为显示范围。${overspeed.estimated ? "后掠角未知，当前采用曲线中的最低限速。" : ""}`
+    ? `IAS：当前指示空速 / ${overspeed.iasLimitSource === "flaps" ? "当前襟翼构型的原生参考限速" : "原生 VNE"}（km/h）；Mach 对照原生 MNE。取两项较高比例：90% 预警、95% 减速、100% 超限。前两档是提前提醒，100% 采用保守的原生限速基准，不追加随机损坏宽限。它不是所有载荷和战损下的最低断裂速度。请在 100% 参考线前减速；末端短红尾仅表示已超限，不代表安全余量。条形到顶后仍显示实际比例。${overspeed.estimated ? "后掠角未知，当前采用曲线中的最低限速。" : ""}`
     : "IAS 为指示空速（km/h）。当前未匹配机型限速，因此不显示限速刻度。";
   return Object.freeze({
     levelClass,

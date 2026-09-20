@@ -286,6 +286,9 @@ export class PublicRuntime {
       revision: this._revision,
       sampledAtMs: frame.sampledAtMs,
       mapObjectsSampledAtMs: zoneObservedAtMs,
+      mapObjectsFresh: frame.availability.mapObjects && frame.holdover?.mapObjects !== true,
+      speedSampledAtMs: speedStateFresh && observedIas !== null && observedIas >= 0
+        ? Math.min(frame.stateSampledAtMs ?? frame.sampledAtMs, frame.indicatorsSampledAtMs ?? frame.sampledAtMs) : null,
       connected: frame.availability.indicators && frame.availability.state && frame.availability.mapObjects,
       weaponRelease: this._edition.capabilities.strikePrediction ? {
         machLimits: this._aircraftParameters?.releaseMach(telemetry.aircraft, this._settings.selectedWeaponId) ?? null,
@@ -1019,6 +1022,8 @@ function emptySnapshot(edition: EditionPolicy, settings: RuntimeSettings): Editi
     revision: 0,
     sampledAtMs: 0,
     mapObjectsSampledAtMs: 0,
+    mapObjectsFresh: false,
+    speedSampledAtMs: null,
     connected: false,
     phase: "idle",
     sortieContinuity: Object.freeze({ state: "live", graceExpiresAtMs: null, resetUndo: null }),
@@ -1161,9 +1166,10 @@ function playerRank(object: Record<string, unknown>): number {
 
 export function isAircraft(object: Record<string, unknown>): boolean {
   const type = lowerText(object.type);
+  // The object type takes precedence over its map symbol. Neither identifies AI ownership.
+  if (type) return ["aircraft", "plane", "player", "player_aircraft"].includes(type);
   const icon = lowerText(object.icon);
-  return ["aircraft", "plane", "player", "player_aircraft"].includes(type)
-    || ["fighter", "assault", "bomber", "helicopter"].includes(icon);
+  return ["fighter", "assault", "bomber", "helicopter"].includes(icon);
 }
 
 export function isAirfield(object: Record<string, unknown>): boolean {

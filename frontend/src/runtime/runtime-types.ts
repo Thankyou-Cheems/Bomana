@@ -100,6 +100,10 @@ export interface EditionSnapshot {
   readonly revision: number;
   readonly sampledAtMs: number;
   readonly mapObjectsSampledAtMs?: number;
+  /** True only when the latest acquisition succeeded, never a Holdover replay. */
+  readonly mapObjectsFresh?: boolean;
+  /** Valid non-held state/indicator speed observation, independent of the map. */
+  readonly speedSampledAtMs?: number | null;
   readonly connected: boolean;
   readonly weaponRelease?: {
     readonly machLimits: readonly (number | null)[] | null;

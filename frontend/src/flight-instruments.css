@@ -119,10 +119,10 @@ body:has(.pip-cockpit) { min-width: 0 !important; color: #dbeaf1; font-family: v
 .flight-instruments .pip-heading.is-ready .release-cue-prompt { animation: none; }
 .flight-instruments .pip-speed { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr); flex: 1 1 auto; align-items: center; gap: 6px; min-width: 0; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; color: #dbeaf1; backdrop-filter: none; }
 .flight-instruments .speed-track { min-width: 90px; margin: 0; height: calc(6px * var(--speed-scale, 1)); background: linear-gradient(90deg,
-    rgba(39, 178, 115, .18) 0 var(--speed-caution, 25%),
-    rgba(88, 185, 233, .18) var(--speed-caution, 25%) var(--speed-warning, 43.75%),
-    rgba(248, 214, 111, .2) var(--speed-warning, 43.75%) var(--speed-limit, 62.5%),
-    rgba(221, 47, 56, .24) var(--speed-limit, 62.5%) 100%); transition: height 120ms ease; border-radius: 4px; position: relative; overflow: hidden; border: 0; }
+    rgba(39, 178, 115, .18) 0 var(--speed-caution, 40%),
+    rgba(88, 185, 233, .18) var(--speed-caution, 40%) var(--speed-warning, 65%),
+    rgba(248, 214, 111, .2) var(--speed-warning, 65%) var(--speed-limit, 95%),
+    rgba(221, 47, 56, .32) var(--speed-limit, 95%) 100%); transition: height 120ms ease; border-radius: 4px; position: relative; overflow: hidden; border: 0; }
 .flight-instruments .speed-track i { transition: width 80ms linear, background 150ms ease; display: block; width: 0; height: 100%; background: #69c5da; border-radius: inherit; box-shadow: none; }
 .flight-instruments .speed-strip.level-safe .speed-state { color: #6de0a3; }
 .flight-instruments .speed-strip.level-caution .speed-state { color: #58b9e9; }
