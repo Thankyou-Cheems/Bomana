@@ -19,3 +19,11 @@
 .landing-panel [data-risk="near-limit"],.landing-panel [data-risk="extension-too-fast"],.landing-panel [data-part="descentAdvice"]{color:var(--landing-caution)}
 .landing-panel meter::-webkit-meter-suboptimum-value{background:var(--landing-caution)}
 .landing-panel [data-part="descentAdvice"]:empty{display:none}
+
+/* The shared flight canvas owns guidance; this panel only owns configuration. */
+.landing-panel header strong{font-size:13px;letter-spacing:.04em}
+.landing-panel [data-part="message"]{font-size:11px;margin:5px 0 8px}
+.landing-panel .landing-configuration{font-variant-numeric:tabular-nums;color:var(--landing-muted);font-size:11px;margin:9px 0}
+.landing-panel>.landing-airframe,.landing-panel [data-part="active"]>.landing-airframe{display:flex;flex-wrap:wrap;gap:5px}
+.landing-panel [data-part="active"]>.landing-airframe:has(>strong:empty):not(:has(>strong:not(:empty))){display:none}
+.landing-panel .landing-note{font-size:10px;line-height:1.5;margin-bottom:0}

@@ -82,8 +82,8 @@ try {
   assert.equal(await landing.locator('[data-part="arrestor"]').isVisible(), false, 'Static capability belongs in the collapsed reference section');
   assert.equal(await landing.locator('[data-part="touchdown"]').isVisible(), false, 'Default panel omits static touchdown explanation');
   assert.equal(await landing.locator('[data-part="flapAdvice"]').isVisible(), true, 'Current overspeed advice remains visible');
-  assert.match(await landing.locator("[data-part='configuration']").innerText(),/襟翼 20%（无手动控制）/);
-  assert.match(await landing.locator("[data-part='flapAdvice']").innerText(),/襟翼超过参考上限 · 减速$/);
+  assert.match(await landing.locator("[data-part='configuration']").innerText(),/翼 20%/);
+  assert.equal(await landing.locator("[data-part='flapAdvice']").innerText(), '襟翼超限');
   assert.match(await page.locator("#pip-heading-canvas").getAttribute("aria-label"),/襟翼超限/);
   assert.equal(await page.locator("#navigation-target").innerText(), priorNavigation, "Landing does not change the strike/navigation target");
   for (const theme of ['glacier', 'classic-dark']) {
@@ -96,15 +96,16 @@ try {
   await page.evaluate(() => { document.documentElement.dataset.theme = 'glacier'; });
   await page.setViewportSize({ width: 1440, height: 900 });
   await landing.locator("summary").click();
+  await landing.locator('[data-part="limits"] .landing-limit').first().waitFor();
   assert.match(await landing.locator("[data-part='limits']").innerText(),/起落架 ≤ \d+ km\/h/);
   assert.ok(await landing.locator("meter:visible").count() >= 1, "Reference details retain the live IAS comparison");
   assert.equal(await landing.locator('[data-part="arrestor"]').isVisible(), true);
   await landing.locator("[data-part='ias']").fill("250");
   await landing.locator("[data-part='elevation']").fill("100");
-  await landing.getByRole("button", {name:"应用参考参数"}).click();
+  await landing.getByRole("button", {name:"应用",exact:true}).click();
   await page.waitForFunction(() => document.querySelector("[data-part='speed']").textContent.includes("/ 250"));
   assert.match(await page.locator("#pip-speed-value").innerText(), /IAS 700\/533$/, "Manual approach IAS must not replace the flap destruction reference");
-  assert.match(await landing.locator("[data-part='message']").innerText(), /返航机场/);
+  assert.equal(await landing.locator("[data-part='message']").innerText(), '返航');
   assert.equal(await landing.locator("[data-part='vertical-dot']").isVisible(), false, "Far return must not show a glide reference even with manual elevation");
   await landing.getByRole("button", {name:"反向进近"}).click();
   await page.waitForFunction(() => document.querySelector("[data-part='elevation']").value === "");

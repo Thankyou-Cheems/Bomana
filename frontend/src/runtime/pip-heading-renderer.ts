@@ -10,7 +10,7 @@ import {
   type HeadingTapeTargetMarker,
 } from "./heading-tape";
 import { SampledAngleMotion, sampledAtPerformanceTime } from "./sampled-angle-motion";
-import { drawLandingTape, landingTapePresentation } from "./landing-tape";
+import { drawLandingTape, landingTapePresentation, LandingCueMotion, type LandingTapeView } from "./landing-tape";
 import { TargetCenterMotion } from "./target-center-motion";
 import { canonicalAngularRanges } from "./angular-ranges";
 
@@ -60,6 +60,8 @@ export class PictureInPictureHeadingRenderer {
   readonly #view: Window;
   readonly #canvas: HTMLCanvasElement;
   #snapshot: EditionSnapshot | null = null;
+  #landing: LandingTapeView | null = null;
+  readonly #landingMotion = new LandingCueMotion();
   #displayHeading = Number.NaN;
   readonly #headingMotion = new SampledAngleMotion();
   #displayGuidance = 0;
@@ -83,9 +85,17 @@ export class PictureInPictureHeadingRenderer {
     this.#snapshot = snapshot;
     this.#extraTargets = extraTargets;
     const guidance = this.#guidance(snapshot);
-    const landing = landingTapePresentation(snapshot);
+    const landing = this.#landing = landingTapePresentation(snapshot);
+    this.#landingMotion.observe(landing, this.#view.performance.now(), this.#view.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
     this.#canvas.dataset.mode = landing.active ? "landing" : "navigation";
-    this.#canvas.setAttribute("aria-label", landing.active ? `${landing.aria}${guidance.target ? `；目标方位参考；${guidance.text}` : ""}` : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
+    this.#canvas.dataset.landingScene = landing.active ? landing.scene : "";
+    this.#canvas.setAttribute("aria-label", landing.active ? landing.aria : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
+    if (landing.active) {
+      this.#render();
+      if (!this.#frame && this.#canvas.clientWidth > 0 && this.#canvas.clientHeight > 0
+        && this.#landingMotion.isMoving(this.#view.performance.now())) this.#frame = this.#view.requestAnimationFrame(this.#animate);
+      return;
+    }
     if (guidance.target?.id !== this.#targetId || guidance.windowMode) this.#displayGuidance = guidance.ratio;
     this.#targetId = guidance.target?.id ?? "";
     this.#targetCenterMotion.observe(this.#targetId, guidance.centerRelativeDeg ?? guidance.relativeDeg);
@@ -115,6 +125,12 @@ export class PictureInPictureHeadingRenderer {
   readonly #animate = (nowMs: number): void => {
     const snapshot = this.#snapshot;
     if (!snapshot) { this.#frame = 0; return; }
+    if (this.#landing?.active) {
+      this.#render();
+      this.#frame = this.#canvas.clientWidth > 0 && this.#canvas.clientHeight > 0 && this.#landingMotion.isMoving(nowMs)
+        ? this.#view.requestAnimationFrame(this.#animate) : 0;
+      return;
+    }
     const elapsed = Math.min(50, Math.max(0, nowMs - this.#lastFrameMs));
     this.#lastFrameMs = nowMs;
     this.#displayHeading = normalizeHeading(this.#headingMotion.step(nowMs));
@@ -177,10 +193,11 @@ export class PictureInPictureHeadingRenderer {
     context.setTransform(bitmapWidth / width, 0, 0, bitmapHeight / height, 0, 0);
     context.clearRect(0, 0, width, height);
     const guidance = this.#guidance(snapshot);
-    if (snapshot.landing?.settings.enabled) {
-      drawLandingTape(context, snapshot, width, guidance.target ? height * .82 : height, this.#displayHeading);
-      if (guidance.target) drawGuidance(context, guidance, guidance.ratio, width,
-        { ...pictureInPictureHeadingLayout(width, height), guidanceTop: height * .85, guidanceTrackY: height * .95 }, this.#displayTargetCenter);
+    if (this.#landing?.active) {
+      // The surrounding instrument has a shared logical width, but landing
+      // labels must retain readable pixel sizes in narrow PiP/phone hosts.
+      context.setTransform(bitmapWidth / bounds.width, 0, 0, bitmapHeight / bounds.height, 0, 0);
+      drawLandingTape(context, this.#landing, bounds.width, bounds.height, this.#landingMotion.step(this.#view.performance.now()));
       return;
     }
     const layout = pictureInPictureHeadingLayout(width, height);

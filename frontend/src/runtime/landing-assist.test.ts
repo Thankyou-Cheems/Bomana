@@ -9,7 +9,7 @@ import { PublicRuntime } from "./public-runtime";
 import { editionPolicy } from "./edition-policy";
 import { publicFlight } from "./public-runtime-fixture";
 import { FlightStatusPresenter } from "./flight-status-badges";
-import { landingTapePresentation } from "./landing-tape";
+import { landingTapePresentation, LandingCueMotion } from "./landing-tape";
 
 function inboundSample(at: number): LandingInput {
   return { context: "auto|plane|1", sampledAtMs: at, fresh: true,
@@ -19,6 +19,43 @@ function inboundSample(at: number): LandingInput {
     track: { valid: true, worldX:0,worldZ:0,velocityX:0,velocityZ:100,groundSpeedMps:100,headingDeg:0,residualM:0,sampleCount:4,sampleSpanMs:300 },
     altitudeM:500,iasKmh:300,verticalSpeedMps:-4,gearPercent:0,airbrakePercent:0,flapsPercent:0 };
 }
+
+it("animates correction direction without inventing a glide path or retaining an outage", () => {
+  const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+  const assist = new LandingAssist(), input = inboundSample(1000);
+  assist.configure({ ...DEFAULT_LANDING_SETTINGS, enabled: true, automatic: false, runwayElevationM: 0 }, input.navigation);
+  assist.configure({ ...assist.settings(), runwayElevationM: 0 }, input.navigation);
+  const live = assist.update(input), base = runtime.snapshot();
+  const view = (landing = live) => landingTapePresentation({ ...base, landing });
+  const initial = view();
+  expect(initial.scene).toBe("glide");
+  expect(initial.glide).toBeGreaterThan(0); // too high: the correction is below ownship
+  const motion = new LandingCueMotion();
+  motion.observe(initial, 0);
+  const left = { ...initial, lateral: -.8, glide: -.5 };
+  motion.observe(left, 100);
+  expect(motion.step(190).lateral).toBeCloseTo(-.4);
+  motion.observe(left, 190); // repeated telemetry must not restart an unchanged animation
+  expect(motion.step(280)).toEqual({ lateral: -.8, glide: -.5 });
+  expect(motion.isMoving(280)).toBe(false);
+  for (const stage of ["return", "intercept", "runway", "past-runway"] as const) {
+    const changed = view({ ...live, geometry: { ...live.geometry!, stage } });
+    expect(changed.glide).toBeNull();
+    motion.observe(changed, 300);
+    expect(motion.step(300).glide).toBeNull();
+  }
+  expect(view({ ...live, geometry: { ...live.geometry!, heightM: null } }).glide).toBeNull();
+  const lost = view({ ...live, status: "unavailable", reason: "telemetry", geometry: null });
+  motion.observe(lost, 320);
+  expect(motion.step(320)).toEqual({ lateral: null, glide: null });
+  expect(motion.isMoving(320)).toBe(false);
+  motion.observe(initial, 400);
+  motion.observe(left, 401, true);
+  expect(motion.step(401)).toEqual({ lateral: -.8, glide: -.5 });
+  expect(motion.isMoving(401)).toBe(false);
+  motion.observe({ ...initial, cueKey: "another-runway" }, 402);
+  expect(motion.step(402)).toEqual({ lateral: initial.lateral, glide: initial.glide });
+});
 
 it.each(["stable", "reordered", "missing"])("restores navigation after repeated landings with %s airport observations", async variant => {
   const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });

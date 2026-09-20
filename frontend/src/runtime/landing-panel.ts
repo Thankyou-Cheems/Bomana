@@ -1,28 +1,27 @@
 import { DEFAULT_LANDING_SETTINGS, type LandingSettings, type LandingSnapshot } from "./landing-assist";
-import { landingConfigurationPresentation, landingLateralGuidance, landingPresentation } from "./landing-presentation";
+import { landingConfigurationPresentation, landingPresentation } from "./landing-presentation";
 
 /** Shared controls/presentation only. The caller owns every calculation. */
 export class LandingPanel {
   readonly element: HTMLElement;
   #snapshot: LandingSnapshot | null = null;
   #runways = "";
+  #limitsKey = "";
   constructor(parent: HTMLElement, submit: (settings: LandingSettings) => void) {
     const panel = document.createElement("section"); panel.className = "landing-panel"; panel.setAttribute("aria-label", "降落辅助");
-    panel.innerHTML = `<header><strong>降落辅助 <small>参考</small></strong><label class="landing-auto" title="持续飞向友方机场 3 秒后自动开启；也可手动开启"><input type="checkbox" data-part="automatic">自动切换</label><button type="button" data-part="toggle" aria-pressed="false">开启</button></header>
+    panel.innerHTML = `<header><strong>降落</strong><label class="landing-auto" title="持续飞向友方机场 3 秒后自动开启；也可手动开启"><input type="checkbox" data-part="automatic">自动</label><button type="button" data-part="toggle" aria-pressed="false">开启</button></header>
       <p data-part="message"></p><button type="button" data-part="confirm-runway" hidden>确认新端点</button><div data-part="active" hidden>
       <div class="landing-runway"><select data-part="runway" aria-label="降落跑道"></select><button type="button" data-part="reverse" title="反向进近会清空手动高程">反向进近</button></div>
-      <div class="landing-deviations"><div><span data-part="lateral"></span><div class="landing-axis"><i data-part="lateral-dot"></i></div></div><div><span data-part="vertical"></span><div class="landing-axis"><i data-part="vertical-dot"></i></div></div></div>
-      <div class="landing-readouts"><span data-part="distance"></span><span data-part="course"></span><span data-part="speed"></span><span data-part="verticalSpeed"></span></div>
-      <p class="landing-projection" data-part="projection"></p>
       <p class="landing-configuration" data-part="configuration"></p>
       <div class="landing-airframe"><strong data-part="gearAdvice"></strong><strong data-part="flapAdvice"></strong><strong data-part="descentAdvice"></strong></div>
-      <details><summary>参数与机型参考</summary><div class="landing-airframe"><span data-part="gearLimit"></span><div class="landing-limits" data-part="limits" aria-label="构型 IAS 参考上限"></div><span data-part="gearUnknown"></span><span data-part="braking"></span><span data-part="arrestor"></span><span data-part="touchdown"></span></div><div class="landing-fields">
-        <label>参考 IAS · km/h<input type="number" min="60" max="600" step="1" data-part="ias" placeholder="按机型手动设定"></label>
-        <label>参考下滑角 · °<input type="number" min="1" max="8" step="0.1" data-part="angle"></label>
+      <details><summary>进近设置</summary><div class="landing-fields">
+        <label>目标 IAS · km/h<input type="number" min="60" max="600" step="1" data-part="ias" placeholder="未设定"></label>
+        <label>下滑角 · °<input type="number" min="1" max="8" step="0.1" data-part="angle"></label>
         <label>跑道高程 · m<input type="number" min="-1000" max="10000" step="1" data-part="elevation" placeholder="留空使用可用地形"></label>
-      </div><button type="button" data-part="apply">应用参考参数</button><p>高程须与 8111 高度使用相同基准。参考线在入口上方 15 m；角度和 IAS 需按机型、载荷自行选择。地形不含跑道设施与障碍物，越过入口后不提供拉平或接地判定。</p><p>构型限速来自机型离线数据，襟翼参考点不等于可选档位；按展开比例插值，不能当作失速、安全落地速度或实际损坏判定。轮刹、伞和钩仅表示机型配置，实际展开、接触和挂索需在游戏内确认。</p></details>
+      </div><button type="button" data-part="apply">应用</button><div class="landing-airframe"><span data-part="speed"></span><div class="landing-limits" data-part="limits" aria-label="构型 IAS 参考上限"></div><span data-part="arrestor"></span></div><p class="landing-note">漏斗为几何参考，入口上方 15 m。高程与 8111 同基准；不含障碍物或接地判定。</p></details>
       </div><p class="landing-error" data-part="error" role="alert"></p>`;
     parent.append(panel); this.element = panel;
+    panel.querySelector("details")!.addEventListener("toggle", () => { if (this.#snapshot) this.update(this.#snapshot); });
     const change = (patch: Partial<LandingSettings>) => submit({ ...(this.#snapshot?.settings ?? DEFAULT_LANDING_SETTINGS), ...patch });
     this.part("toggle").addEventListener("click", () => change({ enabled: !this.#snapshot?.settings.enabled, automatic: false }));
     this.part<HTMLInputElement>("automatic").addEventListener("change", event => change({ automatic: (event.target as HTMLInputElement).checked, enabled: false }));
@@ -47,17 +46,30 @@ export class LandingPanel {
     this.part("toggle").setAttribute("aria-pressed", String(enabled));
     this.part<HTMLInputElement>("automatic").checked = snapshot.settings.automatic === true;
     this.part<HTMLButtonElement>("toggle").disabled = !enabled && snapshot.runways.length === 0;
-    for (const name of ["message","lateral","vertical","speed","distance","course","verticalSpeed","configuration","gearLimit","gearAdvice","arrestor","touchdown","flapAdvice","projection","braking"] as const) this.part(name).textContent = p[name];
-    if (!enabled) this.part("message").textContent = snapshot.runways.length === 0 ? "等待友方机场" : snapshot.settings.automatic ? "自动待命" : "手动待命";
-    this.part("gearUnknown").textContent = snapshot.gearRisk == null || snapshot.gearRisk === "unknown" ? p.gearAdvice : "";
+    const g = snapshot.geometry;
+    this.part("message").textContent = !enabled ? snapshot.runways.length === 0 ? "等待友方机场" : snapshot.settings.automatic ? "自动待命" : "手动待命"
+      : !g ? snapshot.reason === "runway-changed" ? "跑道已变化" : snapshot.reason === "runway-missing" ? "跑道不可见" : "等待数据"
+        : ({ return: "返航", intercept: "对正", final: "进近", runway: "入口后", "past-runway": "末端后" })[g.stage];
+    this.part("message").title = p.message;
+    const percent = (value: number | null) => value === null ? "—" : `${Math.round(value)}%`;
+    this.part("configuration").textContent = `轮 ${percent(snapshot.gearPercent)} · 翼 ${percent(snapshot.flapsPercent)} · 板 ${percent(snapshot.airbrakePercent)}`;
+    this.part("configuration").title = p.configuration;
+    this.part("speed").textContent = p.speed;
+    const equipment = (value: boolean | null | undefined) => value === true ? "✓" : value === false ? "×" : "?";
+    this.part("arrestor").textContent = `配备：钩 ${equipment(snapshot.aircraft?.arrestorHook)} · 伞 ${equipment(snapshot.aircraft?.brakeChute)}`;
+    this.part("arrestor").title = "机型静态配备，不表示当前展开或挂索";
     this.part("gearAdvice").hidden = snapshot.gearRisk == null || snapshot.gearRisk === "unknown";
-    this.part("descentAdvice").textContent = p.descentAdvice;
-    this.part("gearAdvice").textContent = p.gearCue;
+    this.part("descentAdvice").textContent = p.descentAdvice ? "下沉过快" : "";
+    this.part("gearAdvice").textContent = p.gearCue.replace(" · 减速", "");
     this.part("gearAdvice").title = p.gearAdvice;
     this.part("gearAdvice").dataset.risk = snapshot.gearRisk ?? "unknown";
     this.part("flapAdvice").dataset.risk = snapshot.flapReference?.risk ?? "unknown";
+    this.part("flapAdvice").textContent = snapshot.flapReference?.risk === "over-limit" ? "襟翼超限" : snapshot.flapReference?.risk === "near-limit" ? "襟翼近限" : "";
     const limits = landingConfigurationPresentation(snapshot).limits;
-    this.part("limits").replaceChildren(...limits.map(({ label, limit, risk }) => {
+    const limitsKey = JSON.stringify(limits);
+    if (this.element.querySelector("details")!.open && limitsKey !== this.#limitsKey) {
+      this.#limitsKey = limitsKey;
+      this.part("limits").replaceChildren(...limits.map(({ label, limit, risk }) => {
       const row = document.createElement("div"), text = document.createElement("span"), bar = document.createElement("meter");
       row.className = "landing-limit"; row.dataset.risk = risk;
       text.textContent = `${label} ≤ ${Math.round(limit)} km/h`;
@@ -65,11 +77,12 @@ export class LandingPanel {
       bar.value = snapshot.iasKmh ?? 0; bar.hidden = snapshot.iasKmh === null;
       bar.setAttribute("aria-label", `${label}：当前 IAS ${Math.round(snapshot.iasKmh ?? 0)}，参考上限 ${Math.round(limit)}`);
       row.append(text, bar); return row;
-    }));
-    this.part("gearLimit").hidden = limits.some(row => row.label === "起落架");
-    const g = snapshot.geometry;
-    if (g?.stage === "return") this.part("vertical").textContent = "下滑待近场";
-    this.part("vertical").title = p.vertical;
+      }));
+    }
+    if (this.element.querySelector("details")!.open) for (const meter of this.part("limits").querySelectorAll("meter")) {
+      meter.value = snapshot.iasKmh ?? 0; meter.hidden = snapshot.iasKmh === null;
+      meter.setAttribute("aria-label", `当前 IAS ${snapshot.iasKmh === null ? "未知" : Math.round(snapshot.iasKmh)}，参考上限 ${Math.round(meter.high / .9)}`);
+    }
     const optionsKey = JSON.stringify(snapshot.runways.map(r => [r.id,r.label]));
     if (optionsKey !== this.#runways) {
       this.#runways = optionsKey;
@@ -78,11 +91,6 @@ export class LandingPanel {
     this.part<HTMLSelectElement>("runway").value = snapshot.settings.runwayId ?? "";
     for (const [part, value] of [["ias",snapshot.settings.targetIasKmh],["angle",snapshot.settings.glideAngleDeg],["elevation",snapshot.settings.runwayElevationM]] as const) {
       if (!previous || JSON.stringify(previous.settings) !== JSON.stringify(snapshot.settings)) this.part<HTMLInputElement>(part).value = value === null ? "" : String(value);
-    }
-    const lateralOffset = landingLateralGuidance(g).position;
-    for (const [part, value, extent] of [["lateral-dot",lateralOffset,1],["vertical-dot",g?.glideDeviationM ?? null, g ? Math.max(20,Math.abs(g.thresholdDistanceM)*.02) : 20]] as const) {
-      this.part(part).hidden = value === null;
-      this.part(part).style.left = `${50 + Math.max(-1,Math.min(1,(value ?? 0)/extent))*46}%`;
     }
   }
 }
