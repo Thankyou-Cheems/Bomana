@@ -32,29 +32,85 @@ it("animates correction direction without inventing a glide path or retaining an
   expect(initial.glide).toBeGreaterThan(0); // too high: the correction is below ownship
   const motion = new LandingCueMotion();
   motion.observe(initial, 0);
-  const left = { ...initial, lateral: -.8, glide: -.5 };
+  const left = { ...initial, runway: { ...initial.runway!, across: -800, height: 200 } };
   motion.observe(left, 100);
-  expect(motion.step(190).lateral).toBeCloseTo(-.4);
+  expect(motion.step(190)!.across).toBeLessThan(0);
+  expect(motion.step(190)!.across).toBeGreaterThan(-800);
   motion.observe(left, 190); // repeated telemetry must not restart an unchanged animation
-  expect(motion.step(280)).toEqual({ lateral: -.8, glide: -.5 });
-  expect(motion.isMoving(280)).toBe(false);
+  expect(motion.step(1000)).toEqual(left.runway);
+  expect(motion.isMoving(1000)).toBe(false);
+  motion.observe(initial, 1000, true);
   for (const stage of ["return", "intercept", "runway", "past-runway"] as const) {
     const changed = view({ ...live, geometry: { ...live.geometry!, stage } });
     expect(changed.glide).toBeNull();
-    motion.observe(changed, 300);
-    expect(motion.step(300).glide).toBeNull();
+    motion.observe(changed, 1100);
+    expect(motion.step(1100)).toEqual(changed.runway);
   }
   expect(view({ ...live, geometry: { ...live.geometry!, heightM: null } }).glide).toBeNull();
   const lost = view({ ...live, status: "unavailable", reason: "telemetry", geometry: null });
-  motion.observe(lost, 320);
-  expect(motion.step(320)).toEqual({ lateral: null, glide: null });
-  expect(motion.isMoving(320)).toBe(false);
-  motion.observe(initial, 400);
-  motion.observe(left, 401, true);
-  expect(motion.step(401)).toEqual({ lateral: -.8, glide: -.5 });
-  expect(motion.isMoving(401)).toBe(false);
-  motion.observe({ ...initial, cueKey: "another-runway" }, 402);
-  expect(motion.step(402)).toEqual({ lateral: initial.lateral, glide: initial.glide });
+  motion.observe(lost, 1200);
+  expect(motion.step(1200)).toBeNull();
+  expect(motion.isMoving(1200)).toBe(false);
+  motion.observe(initial, 1300);
+  motion.observe(left, 1301, true);
+  expect(motion.step(1301)).toEqual(left.runway);
+  expect(motion.isMoving(1301)).toBe(false);
+  motion.observe({ ...initial, cueKey: "another-runway" }, 1302);
+  expect(motion.step(1302)).toEqual(initial.runway);
+});
+
+it("keeps the runway continuous through stage changes and list renumbering", () => {
+  const assist = new LandingAssist(), input = inboundSample(1000);
+  assist.configure({ ...DEFAULT_LANDING_SETTINGS, enabled: true }, input.navigation);
+  const landing = assist.update(input, () => 0);
+  const base = new PublicRuntime({ edition: editionPolicy("Standard") }).snapshot();
+  const a = landingTapePresentation({ ...base, navigation: input.navigation, landing });
+  const b = landingTapePresentation({ ...base, navigation: input.navigation, landing: { ...landing,
+    geometry: { ...landing.geometry!, stage: "intercept", crossTrackM: 200 } } });
+  expect(b.cueKey).toBe(a.cueKey);
+  const motion = new LandingCueMotion();
+  motion.observe(a, 0); motion.observe(b, 100);
+  expect(motion.step(101)!.across).toBeGreaterThan(-200);
+  const renamed = landingTapePresentation({ ...base, navigation: { ...input.navigation!,
+    items: input.navigation!.items.map(item => ({ ...item, id: "renumbered" })) },
+    landing: { ...landing, settings: { ...landing.settings, runwayId: "renumbered" } } });
+  expect(renamed.cueKey).toBe(a.cueKey);
+  expect(a.course).toContain("友方机场");
+});
+
+it("shows known airport elevation at long range without creating a glide command", () => {
+  const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+  const assist = new LandingAssist(), input = inboundSample(1000);
+  assist.configure({ ...DEFAULT_LANDING_SETTINGS, enabled: true, automatic: false }, input.navigation);
+  const live = assist.update(input), base = runtime.snapshot();
+  const view = (heightM: number | null, airportDistanceM = 30000) => landingTapePresentation({ ...base,
+    landing: { ...live, geometry: { ...live.geometry!, stage: "return", heightM, airportDistanceM } } });
+  expect(view(3000)).toMatchObject({ scene: "return", glide: null, airportHeightText: "↓3000m" });
+  expect(view(3000).runway!.height).toBe(3000);
+  expect(view(-500).runway!.height).toBe(-500);
+  expect(view(null).runway).toBeNull();
+  const motion = new LandingCueMotion();
+  motion.observe(view(3000), 0);
+  motion.observe(view(null), 10);
+  expect(motion.step(10)).toBeNull(); // no easing a missing datum away
+});
+
+it("preserves correction velocity across samples and settles without overshoot", () => {
+  const base = landingTapePresentation(new PublicRuntime({ edition: editionPolicy("Standard") }).snapshot());
+  const view = (across: number) => ({ ...base, runway: { across, along: 5000, height: 400, length: 2000, angle: 0, slope: .05, approach: true }, cueKey: "same-valid-approach" });
+  const motion = new LandingCueMotion();
+  motion.observe(view(0), 0);
+  motion.observe(view(600), 10);
+  const before = motion.step(99)!.across;
+  const current = motion.step(100)!.across;
+  motion.observe(view(800), 100);
+  const after = motion.step(101)!.across;
+  expect((after - current) / (current - before)).toBeGreaterThan(.9);
+  expect((after - current) / (current - before)).toBeLessThan(1.1);
+  motion.observe(view(-800), 120);
+  for (let t = 130; t <= 1500; t += 10) expect(motion.step(t)!.across).toBeGreaterThanOrEqual(-800);
+  expect(motion.step(1500)!.across).toBe(-800);
+  expect(motion.isMoving(1500)).toBe(false);
 });
 
 it.each(["stable", "reordered", "missing"])("restores navigation after repeated landings with %s airport observations", async variant => {
@@ -257,7 +313,7 @@ it("shows airport bearing and direct distance on the return tape from actual 811
   const snapshot=runtime.snapshot();
   expect(snapshot.landing?.settings.enabled).toBe(true);
   expect(snapshot.landing?.geometry).toMatchObject({stage:"return",airportBearingDeg:90,airportTrackErrorDeg:0,glideDeviationM:null});
-  expect(landingTapePresentation(snapshot)).toMatchObject({active:true,mode:"自动返航",course:"机场 090°",distance:"距机场 28.7km",glide:null,lateralText:"正飞向机场",glideText:"返航中",speedText:"1000"});
+  expect(landingTapePresentation(snapshot)).toMatchObject({active:true,mode:"自动返航",course:"机场 1 · 090°",distance:"距机场 28.7km",glide:null,lateralText:"正飞向机场",glideText:"返航中",speedText:"1000"});
   expect(landingTapePresentation(snapshot).lateral).toBeCloseTo(0,7);
   expect(landingPresentation(snapshot.landing)).toMatchObject({stage:"返航机场",distance:"距机场 28.7 km",course:"机场方位 090°"});
   expect(landingTapePresentation(snapshot).aria).toContain("燃油");

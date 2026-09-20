@@ -17,6 +17,8 @@ export const DEFAULT_LANDING_SETTINGS: LandingSettings = Object.freeze({
   targetIasKmh: null, runwayElevationM: null,
 });
 export interface LandingGeometry {
+  /** Optional display reference from a static definition, not collision width. */
+  readonly referenceWidthM?: number;
   readonly courseDeg: number;
   readonly lengthM: number;
   /** Positive before the selected threshold, negative after it. */
@@ -39,7 +41,7 @@ export interface LandingGeometry {
 }
 export interface LandingSnapshot {
   readonly settings: LandingSettings;
-  readonly runways: readonly { readonly id: string; readonly label: string; readonly distanceKm: number }[];
+  readonly runways: readonly { readonly id: string; readonly label: string; readonly distanceKm: number; readonly courseDeg?: number; readonly lengthM?: number; readonly grid?: string }[];
   readonly runwayLabel: string;
   readonly status: "disabled" | "unavailable" | "guidance";
   readonly reason: string;
@@ -245,7 +247,12 @@ export class LandingAssist {
       altitudeM: input.altitudeM, elevationM, glideAngleDeg: settings.glideAngleDeg,
       velocity: input.track?.valid ? [input.track.velocityX, -input.track.velocityZ] : null,
     }) : null;
-    return { settings, runways: runways.map(({ id, label, distanceKm }) => ({ id, label, distanceKm })),
+    return { settings, runways: runways.map(item => {
+      const dx = (item.runwayEnd![0] - item.runwayStart![0]) * input.navigation!.mapScaleM![0];
+      const dy = (item.runwayEnd![1] - item.runwayStart![1]) * input.navigation!.mapScaleM![1];
+      return { id: item.id, label: item.label, distanceKm: item.distanceKm, grid: item.grid,
+        courseDeg: (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360, lengthM: Math.hypot(dx, dy) };
+    }),
       runwayLabel: runway?.label ?? "", status: !settings.enabled ? "disabled" : geometry ? "guidance" : "unavailable",
       reason: unavailable, elevationM: geometry ? elevationM : null,
       elevationSource: geometry && elevationM !== null ? settings.runwayElevationM !== null ? "manual" : "terrain" : null,

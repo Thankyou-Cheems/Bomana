@@ -18,7 +18,7 @@ export class LandingPanel {
         <label>目标 IAS · km/h<input type="number" min="60" max="600" step="1" data-part="ias" placeholder="未设定"></label>
         <label>下滑角 · °<input type="number" min="1" max="8" step="0.1" data-part="angle"></label>
         <label>跑道高程 · m<input type="number" min="-1000" max="10000" step="1" data-part="elevation" placeholder="留空使用可用地形"></label>
-      </div><button type="button" data-part="apply">应用</button><div class="landing-airframe"><span data-part="speed"></span><div class="landing-limits" data-part="limits" aria-label="构型 IAS 参考上限"></div><span data-part="arrestor"></span></div><p class="landing-note">漏斗为几何参考，入口上方 15 m。高程与 8111 同基准；不含障碍物或接地判定。</p></details>
+      </div><button type="button" data-part="apply">应用</button><div class="landing-airframe"><span data-part="speed"></span><div class="landing-limits" data-part="limits" aria-label="构型 IAS 参考上限"></div><span data-part="arrestor"></span></div><p class="landing-note">宽度匹配游戏机场定义，否则为示意；不代表碰撞边界。高程为地形参考，高台或甲板需手动修正。双线在入口上方 15 m；不含接地或挂索判定。</p></details>
       </div><p class="landing-error" data-part="error" role="alert"></p>`;
     parent.append(panel); this.element = panel;
     panel.querySelector("details")!.addEventListener("toggle", () => { if (this.#snapshot) this.update(this.#snapshot); });
@@ -89,6 +89,14 @@ export class LandingPanel {
       this.part<HTMLSelectElement>("runway").replaceChildren(...snapshot.runways.map(r => new Option(r.label,r.id)));
     }
     this.part<HTMLSelectElement>("runway").value = snapshot.settings.runwayId ?? "";
+    // Update text in place so live distances never rebuild an open select.
+    for (const option of this.part<HTMLSelectElement>("runway").options) {
+      const r = snapshot.runways.find(runway => runway.id === option.value)!;
+      const course = r.courseDeg == null ? "" : ` · ${Math.round(r.courseDeg).toString().padStart(3, "0")}°`;
+      const length = r.lengthM == null ? "" : ` · ${(r.lengthM / 1000).toFixed(2)}km`;
+      const label = `${r.label}${r.grid ? ` ${r.grid}` : ""}${course}${length} · 距 ${r.distanceKm.toFixed(1)}km`;
+      if (option.text !== label) option.text = label;
+    }
     for (const [part, value] of [["ias",snapshot.settings.targetIasKmh],["angle",snapshot.settings.glideAngleDeg],["elevation",snapshot.settings.runwayElevationM]] as const) {
       if (!previous || JSON.stringify(previous.settings) !== JSON.stringify(snapshot.settings)) this.part<HTMLInputElement>(part).value = value === null ? "" : String(value);
     }

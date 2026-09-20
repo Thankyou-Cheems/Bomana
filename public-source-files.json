@@ -125,6 +125,8 @@
     "frontend/src/runtime/landing-geometry-cases.json",
     "frontend/src/runtime/landing-panel.ts",
     "frontend/src/runtime/landing-presentation.ts",
+    "frontend/src/runtime/landing-runway-projection.test.ts",
+    "frontend/src/runtime/landing-runway-projection.ts",
     "frontend/src/runtime/landing-tape.ts",
     "frontend/src/runtime/latest-sample-processor.test.ts",
     "frontend/src/runtime/latest-sample-processor.ts",
