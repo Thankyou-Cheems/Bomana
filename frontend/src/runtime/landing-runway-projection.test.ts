@@ -1,13 +1,33 @@
 import { expect, it } from "vitest";
 import { landingGeometry } from "./landing-assist";
-import { landingApproachPath, landingRunwayScene, landingRunwayCamera, projectLandingRunway, RunwaySceneMotion } from "./landing-runway-projection";
+import { landingApproachPath, landingRunwayScene, landingRunwayCamera, landingRunwayFrame, projectLandingRunway, RunwaySceneMotion } from "./landing-runway-projection";
 
 const input = { player: { x: .53, y: .53 }, scale: [10000, 100000] as const,
   start: [.5, .5] as const, end: [.5, .48] as const, altitudeM: 400, elevationM: 100, glideAngleDeg: 3, velocity: [0, -100] as const };
 const geometry = landingGeometry(input);
 const scene = landingRunwayScene(geometry, 0, 3)!;
 
-it("keeps one aircraft camera independent of the selected airport and uses definition width", () => {
+it.each([
+  [1200, 150, 3000, 3000, 0, 0],
+  [1200, 150, 3000, 800, 25, 40],
+  [220, 210, 800, 1400, 35, 65],
+  [1200, 150, 30000, 2500, 0, 0],
+  [220, 140, 500, 20, -35, -70],
+  [1200, 150, 1500, -40, 15, -20],
+  [1200, 150, 80000, 10000, 45, 80],
+])("fits the runway into %dx%d at distance %dm / height %dm / pitch %d / bank %d", (width, height, along, altitude, pitch, roll) => {
+  const frame = landingRunwayFrame({ ...scene, across: 0, along, height: altitude, pitch: pitch * Math.PI / 180, roll: roll * Math.PI / 180 }, width, height);
+  expect(frame.projected.surface.length).toBeGreaterThanOrEqual(3);
+  const pixels = frame.projected.surface.map(([x, y]) => [frame.x + x * frame.focal, frame.y + y * frame.focal]);
+  for (const [x, y] of pixels) {
+    expect(x).toBeGreaterThanOrEqual(8); expect(x).toBeLessThanOrEqual(width - 8);
+    expect(y).toBeGreaterThanOrEqual(25); expect(y).toBeLessThanOrEqual(height - 8);
+  }
+  expect(Math.max(...pixels.map(p => p[1]!)) - Math.min(...pixels.map(p => p[1]!))
+    + Math.max(...pixels.map(p => p[0]!)) - Math.min(...pixels.map(p => p[0]!))).toBeGreaterThan(20);
+});
+
+it("retains aircraft pitch inside the forward viewing cone and uses definition width", () => {
   const s = landingRunwayScene({ ...geometry, crossTrackM: 0, referenceWidthM: 140 }, 0, 3)!;
   const pitch = landingRunwayCamera(s), result = projectLandingRunway(s, pitch);
   expect(pitch).toBeCloseTo(0);
@@ -16,6 +36,50 @@ it("keeps one aircraft camera independent of the selected airport and uses defin
   expect(result.surface[1]![0] - result.surface[0]![0]).toBeGreaterThan(result.surface[2]![0] - result.surface[3]![0]);
   expect(projectLandingRunway(s).surface[1]![0]).toBeCloseTo(70 / 3000);
   expect(landingRunwayCamera({ ...s, angle: Math.PI })).toBeCloseTo(0);
+  expect(landingRunwayCamera({ ...s, height: 3000, pitch: .5 })).toBeGreaterThan(0);
+});
+
+it("fits with one uniform perspective scale and keeps the corridor joined to the runway", () => {
+  const frame = landingRunwayFrame({ ...scene, across: 0, height: 1400, pitch: .3, roll: .5 }, 1200, 150);
+  const pixel = ([x, y]: readonly number[]) => [frame.x + x! * frame.focal, frame.y + y! * frame.focal];
+  const distance = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!);
+  const surface = frame.projected.surface;
+  const nearWidth = distance(surface[0]!, surface[1]!), farWidth = distance(surface[2]!, surface[3]!);
+  expect(nearWidth).toBeGreaterThan(farWidth);
+  expect(distance(pixel(surface[0]!), pixel(surface[1]!)) / distance(pixel(surface[2]!), pixel(surface[3]!))).toBeCloseTo(nearWidth / farWidth);
+  expect(frame.projected.rails[0]!.at(-1)![1]).toEqual(surface[0]);
+  expect(frame.projected.rails[1]!.at(-1)![1]).toEqual(surface[1]);
+});
+
+it("keeps adaptive framing continuous as the aircraft moves through route samples", () => {
+  const initial = { ...scene, across: 700, speed: 120, height: 1600, pitch: .25, roll: .4 };
+  let previous = landingRunwayFrame(initial, 1200, 150);
+  for (let i = 1; i <= 200; i++) {
+    const next = landingRunwayFrame({ ...initial, along: initial.along - i, height: initial.height - i * .1 }, 1200, 150);
+    for (let j = 0; j < 4; j++) {
+      const a = previous.projected.surface[j]!, b = next.projected.surface[j]!;
+      expect(Math.hypot(previous.x + a[0] * previous.focal - next.x - b[0] * next.focal,
+        previous.y + a[1] * previous.focal - next.y - b[1] * next.focal)).toBeLessThan(1);
+    }
+    previous = next;
+  }
+});
+
+it("keeps a rearward runway behind the view and a passed entrance finite", () => {
+  const rear = landingRunwayFrame({ ...scene, angle: Math.PI }, 1200, 150);
+  expect(rear.projected.surface).toHaveLength(0);
+  expect(rear.projected.rails).toHaveLength(0);
+  const past = landingRunwayFrame({ ...scene, along: -200, height: 5, approach: false }, 220, 150);
+  expect(past.projected.rails).toHaveLength(0);
+  expect([past.focal, past.x, past.y, ...past.projected.surface.flat()].every(Number.isFinite)).toBe(true);
+});
+
+it("does not jump when the approach ribbon withdraws at the entrance boundary during an oblique pass", () => {
+  const pass = { ...scene, across: 1000, angle: -Math.PI / 4, height: 300 };
+  const before = landingRunwayFrame({ ...pass, along: 30.01, approach: true }, 1200, 150);
+  const after = landingRunwayFrame({ ...pass, along: 29.99, approach: false }, 1200, 150);
+  expect(Math.abs(before.focal - after.focal)).toBeLessThan(1);
+  expect(Math.hypot(before.x - after.x, before.y - after.y)).toBeLessThan(1);
 });
 
 it("shows a runway plane with a wider near edge and narrower far edge", () => {

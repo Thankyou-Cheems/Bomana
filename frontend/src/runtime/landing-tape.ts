@@ -1,6 +1,6 @@
 import type { EditionSnapshot } from "./runtime-types";
 import { landingConfigurationPresentation, landingLateralGuidance } from "./landing-presentation";
-import { landingRunwayScene, landingRunwayCamera, projectLandingRunway, RunwaySceneMotion, type LandingRunwayScene, type ProjectedPoint } from "./landing-runway-projection";
+import { landingRunwayScene, landingRunwayFrame, projectLandingRunway, RunwaySceneMotion, type LandingRunwayScene, type ProjectedPoint } from "./landing-runway-projection";
 
 const finite = (n: number | null | undefined): n is number => typeof n === "number" && Number.isFinite(n);
 const clamp = (n: number) => Math.max(-1, Math.min(1, n));
@@ -123,13 +123,14 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   text(p.equipmentText, width - pad, height * .87, font * .85, muted, "right", side - pad);
   const configColor = /超限/.test(p.config) ? tone("danger") : /检查|减速|近限/.test(p.config) ? tone("caution") : muted;
   text(p.config, pad, height * .87, font * .9, configColor, "left", side - pad);
-  const projected = cue ? projectLandingRunway(cue, landingRunwayCamera(cue)) : null;
-  // One 60-degree horizontal camera for every runway and the guide ribbon.
-  // No target-fit zoom: switching airports must not move the rest of the world.
-  const cy = height * .5;
-  const focal = centerWidth / (2 * Math.tan(Math.PI / 6));
+  const frame = cue ? landingRunwayFrame(cue, centerWidth, height) : null;
+  const projected = frame?.projected;
+  // The selected runway frames one camera for the whole scene. Its uniform
+  // scale and offset also apply to the guide ribbon and every other runway.
+  const cy = frame?.y ?? height * .5, cx = left + (frame?.x ?? centerWidth / 2);
+  const focal = frame?.focal ?? centerWidth / (2 * Math.tan(Math.PI / 6));
   const top = 4, bottom = height - 4;
-  const pixel = (point: ProjectedPoint): ProjectedPoint => [center + point[0] * focal, cy + point[1] * focal];
+  const pixel = (point: ProjectedPoint): ProjectedPoint => [cx + point[0] * focal, cy + point[1] * focal];
   const inside = (point: ProjectedPoint) => point[0] >= left + 8 && point[0] <= right - 8 && point[1] >= top + 8 && point[1] <= bottom - 8;
   ctx.save();
   ctx.beginPath(); ctx.rect(left, top, centerWidth, bottom - top); ctx.clip();
@@ -143,13 +144,14 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   // Farthest first. Unknown elevations get bearing-only marks, never the
   // selected runway's height or an invented sea-level surface.
   for (const item of [...others].sort((a, b) => b.geometry.airportDistanceM - a.geometry.airportDistanceM)) {
-    const other = item.scene ? projectLandingRunway({ ...item.scene, approach: false }, cue ? landingRunwayCamera(cue) : undefined, cue?.roll) : null;
+    const other = item.scene ? projectLandingRunway({ ...item.scene, approach: false }, frame?.pitch, frame?.roll) : null;
     const color = item.friendly ? muted : "#cc9992";
     ctx.strokeStyle = color; ctx.globalAlpha = .48; ctx.lineWidth = 1;
     if (other?.surface.length) { polygon(other.surface); ctx.stroke(); }
     const anchor = other?.threshold ? pixel(other.threshold) : null;
     if (Math.abs(item.bearing) <= 30 && (!anchor || !inside(anchor))) {
-      const x = anchor ? Math.max(left + 8, Math.min(right - 8, anchor[0])) : center + Math.tan(item.bearing * Math.PI / 180) * focal;
+      // Unknown height stays on the heading rail, independent of adaptive zoom.
+      const x = anchor ? Math.max(left + 8, Math.min(right - 8, anchor[0])) : center + item.bearing / 30 * (centerWidth / 2 - 8);
       const y = anchor ? Math.max(top + 25, Math.min(bottom - 9, anchor[1])) : bottom - 9;
       if (!item.scene) {
         // Schematic runway at its known bearing, not a fabricated altitude.
@@ -210,8 +212,8 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
     if (!target || !inside(target)) {
       // A clipped or rearward runway remains a direction cue, never a fabricated projection.
       const x = target ? Math.max(left + 10, Math.min(right - 10, target[0])) : projected.bearing < 0 ? left + 10 : right - 10;
-      const y = target ? Math.max(top + 10, Math.min(bottom - 10, target[1])) : cy;
-      const angle = target ? Math.atan2(target[1] - cy, target[0] - center) : projected.bearing < 0 ? Math.PI : 0;
+      const y = target ? Math.max(top + 10, Math.min(bottom - 10, target[1])) : height / 2;
+      const angle = target ? Math.atan2(target[1] - height / 2, target[0] - center) : projected.bearing < 0 ? Math.PI : 0;
       ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.globalAlpha = .85; ctx.strokeStyle = "#f0f8fc";
       ctx.beginPath(); ctx.moveTo(-4, -4); ctx.lineTo(1, 0); ctx.lineTo(-4, 4); ctx.stroke(); ctx.restore();
     }

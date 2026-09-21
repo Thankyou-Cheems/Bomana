@@ -133,8 +133,18 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   }
   const rails: ProjectedSegment[][] = [];
   const ribbon: ProjectedPoint[][] = [];
+  const framing: ProjectedPoint[] = [...runwaySurface];
   if (scene.approach && start[2] >= 30) {
     const path = landingApproachPath(scene);
+    const distances = [0];
+    for (let i = 1; i < path.points.length; i++) {
+      const a = path.points[i - 1]!, b = path.points[i]!;
+      distances.push(distances[i - 1]! + Math.hypot(b[0] - a[0], b[1] - a[1]));
+    }
+    // Frame the route ahead, not the enormous near-plane cross-section beneath
+    // the aircraft. Interpolate this cut so crossing a sample never steps the zoom.
+    const routeLength = distances.at(-1)!;
+    const lookAhead = Math.max(250, Math.min(routeLength * .35, Math.max(routeLength * .2, (scene.speed ?? 0) * 3)));
     // The reference centerline remains 15 m over the threshold. Draw the floor
     // 15 m below it: an eye exactly on the reference must not see a coplanar,
     // edge-on pair of lines. The floor joins the runway, with metric width.
@@ -146,6 +156,12 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
       for (let i = 1; i < samples.length; i++) {
         const piece = segment(samples[i - 1]!, samples[i]!);
         if (piece) rail.push(piece);
+        if (distances[i]! >= lookAhead) {
+          const a = samples[i - 1]!, b = samples[i]!;
+          const t = Math.max(0, (lookAhead - distances[i - 1]!) / (distances[i]! - distances[i - 1]!));
+          const visible = segment([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t], b);
+          if (visible) framing.push(...visible);
+        }
       }
       rails.push(rail);
     }
@@ -156,13 +172,54 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   }
   const bearing = Math.atan2((start[0] + end[0]) / 2, (start[2] + end[2]) / 2);
   const project = (p: Point3): ProjectedPoint | null => p[2] >= 30 ? [p[0] / p[2], p[1] / p[2]] : null;
-  return { runway, entrance, surface: runwaySurface, markings, ground, rails, ribbon, bearing,
+  return { runway, entrance, surface: runwaySurface, markings, ground, rails, ribbon, framing, bearing,
     threshold: project(start), end: project(end) };
 }
 
-/** Aircraft-referenced camera; no target-following tilt or target-specific zoom. */
+/** Keep aircraft pitch inside a usable viewing cone around the forward runway.
+ * Zoom alone cannot recover ground behind a pitched-up camera's near plane. */
 export function landingRunwayCamera(scene: LandingRunwayScene) {
-  return -(scene.pitch ?? 0);
+  const aircraftPitch = -(scene.pitch ?? 0);
+  const depth = (scene.along + scene.length / 2) * Math.cos(scene.angle) - scene.across * Math.sin(scene.angle);
+  if (depth <= near) return aircraftPitch;
+  const depression = Math.atan2(scene.height, depth), margin = 20 * radians;
+  return Math.max(depression - margin, Math.min(depression + margin, aircraftPitch));
+}
+
+/** One perspective viewport shared by the target, corridor and other runways. */
+export function landingRunwayFrame(scene: LandingRunwayScene, width: number, height: number) {
+  const pitch = landingRunwayCamera(scene), roll = scene.roll ?? 0;
+  const projected = projectLandingRunway(scene, pitch, roll);
+  const base = { pitch, roll, projected, focal: width / (2 * Math.tan(Math.PI / 6)), x: width / 2, y: height / 2 };
+  if (projected.surface.length < 3) return base;
+  const bounds = (points: readonly ProjectedPoint[]) => ({
+    left: Math.min(...points.map(p => p[0])), right: Math.max(...points.map(p => p[0])),
+    top: Math.min(...points.map(p => p[1])), bottom: Math.max(...points.map(p => p[1])),
+  });
+  const runway = bounds(projected.surface), route = bounds(projected.framing);
+  // A large lateral offset can leave a long route at the entrance boundary.
+  // Ease its framing influence out before the ribbon is withdrawn at 30 m;
+  // the runway view must not jump when that immediate guidance flag changes.
+  const progress = Math.max(0, Math.min(1, (scene.along - near) / 250));
+  const routeWeight = progress * progress * (3 - 2 * progress);
+  for (const edge of ["left", "right", "top", "bottom"] as const) {
+    route[edge] = runway[edge] + (route[edge] - runway[edge]) * routeWeight;
+  }
+  // Reserve the caption and a quiet margin. All axes, surfaces and neighboring
+  // runways still share one focal length: never stretch or widen screen geometry.
+  const left = 12, right = width - 12, top = 28, bottom = height - 14;
+  const availableWidth = right - left, availableHeight = bottom - top;
+  const fit = (b: ReturnType<typeof bounds>) => Math.min(availableWidth / Math.max(.000001, b.right - b.left), availableHeight / Math.max(.000001, b.bottom - b.top));
+  const runwaySpan = Math.max(runway.right - runway.left, runway.bottom - runway.top);
+  const readable = Math.min(32, Math.min(availableWidth, availableHeight) * .3) / Math.max(.000001, runwaySpan);
+  // A long/high return can make the near route dominate the frame. Keep the
+  // runway readable and let that route continue naturally beyond the lower edge.
+  const focal = Math.min(fit(runway) * .85, Math.max(readable, Math.min(base.focal, fit(route))));
+  const origin = (start: number, end: number, targetStart: number, targetEnd: number, routeStart: number, routeEnd: number) =>
+    Math.max(start - targetStart * focal, Math.min(end - targetEnd * focal, (start + end - (routeStart + routeEnd) * focal) / 2));
+  return { ...base, focal,
+    x: origin(left, right, runway.left, runway.right, route.left, route.right),
+    y: origin(top, bottom, runway.top, runway.bottom, route.top, route.bottom) };
 }
 
 /** Display-only critical damping. Preserves a coherent 3D scene instead of

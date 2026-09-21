@@ -1,7 +1,7 @@
 name: Public browser quality
 on:
-  push:
-    branches: [main]
+  # Generated main already passed private Quality Gates and an export build.
+  # Keep the complete public check for contributions and explicit diagnostics.
   pull_request:
   workflow_dispatch:
 permissions:
