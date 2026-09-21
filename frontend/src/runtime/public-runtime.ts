@@ -4,7 +4,7 @@ import { normalizeOfficialMapInfo } from "./map-info";
 import { GroundTrackEstimator, type GroundTrackEstimate } from "./ground-track";
 import { FuelManager, fuelEngines, fuelNumber } from "./fuel-management";
 import type { AircraftParameters } from "./aircraft-parameters";
-import { LandingAssist } from "./landing-assist";
+import { LandingAssist, landingAttitude } from "./landing-assist";
 import { landingFlapReference } from "./landing-configuration";
 import { speedWarningLevel } from "./speed-warning";
 import { RESET_UNDO_WINDOW_MS, sortieMapSignature, type SortieRecoveryStore, type SortieResetReason,
@@ -515,6 +515,9 @@ export class PublicRuntime {
       && sourceTimes.every((at) => at == null || frame.sampledAtMs - at <= 1_500);
     const stateNumber = (keys: readonly string[]) => optionalNumericField(frame.state ?? {}, keys);
     const input = {
+      attitude: landingAttitude(stateNumber(["TAS, km/h", "TAS", "tas"]), stateNumber(["Vy, m/s", "Vy", "vy"]),
+        stateNumber(["AoA, deg", "AoA", "aoa"]), optionalNumericField(frame.indicators ?? {}, ["aviahorizon_pitch", "aviahorizon_pitch, deg", "pitch, deg", "pitch"]),
+        optionalNumericField(frame.indicators ?? {}, ["aviahorizon_roll", "aviahorizon_roll, deg", "bank, deg", "bank", "roll, deg", "roll"])),
       sampledAtMs: frame.sampledAtMs,
       context: `${this._currentMapSignature}|${this._landingAircraft}|${this._lifeIndex}|${this._phase === "hangar" || this._phase === "wait-next" ? this._phase : "sortie"}`,
       fresh,

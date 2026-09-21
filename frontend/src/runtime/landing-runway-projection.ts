@@ -1,4 +1,4 @@
-import type { LandingGeometry } from "./landing-assist";
+import type { LandingGeometry, LandingSnapshot } from "./landing-assist";
 
 export interface LandingRunwayScene {
   readonly along: number;
@@ -9,6 +9,9 @@ export interface LandingRunwayScene {
   readonly slope: number;
   readonly approach: boolean;
   readonly width?: number;
+  readonly pitch?: number;
+  readonly roll?: number;
+  readonly speed?: number;
 }
 type Point2 = readonly [number, number];
 export type ProjectedPoint = Point2;
@@ -33,14 +36,15 @@ function surface(corners: readonly Point3[]): ProjectedPoint[] {
   return clipped.map(perspective);
 }
 
-/** Level, heading-referenced camera. Width is a definition reference or symbolic. */
-export function landingRunwayScene(g: LandingGeometry | null | undefined, headingDeg: number, glideAngleDeg: number): LandingRunwayScene | null {
+/** Heading/attitude-referenced camera. Width is a definition reference or symbolic. */
+export function landingRunwayScene(g: LandingGeometry | null | undefined, headingDeg: number, glideAngleDeg: number, attitude?: LandingSnapshot["attitude"]): LandingRunwayScene | null {
   if (!g || g.heightM === null || ![g.heightM, g.thresholdDistanceM, g.crossTrackM, g.lengthM, g.courseDeg, headingDeg, glideAngleDeg].every(Number.isFinite)
     || g.lengthM <= 0) return null;
   return { along: g.thresholdDistanceM, across: -g.crossTrackM, height: g.heightM, length: g.lengthM,
     angle: ((g.courseDeg - headingDeg + 540) % 360 - 180) * radians,
     slope: Math.tan(glideAngleDeg * radians), approach: g.thresholdDistanceM > 30 && g.stage !== "runway" && g.stage !== "past-runway",
-    width: Number.isFinite(g.referenceWidthM) && g.referenceWidthM! > 0 ? g.referenceWidthM : 90 };
+    width: Number.isFinite(g.referenceWidthM) && g.referenceWidthM! > 0 ? g.referenceWidthM : 90,
+    pitch: (attitude?.pitchDeg ?? 0) * radians, roll: (attitude?.rollDeg ?? 0) * radians, speed: attitude?.tasMps ?? 0 };
 }
 
 /** Clip in camera space before dividing, including a runway partly behind ownship. */
@@ -58,7 +62,9 @@ export function landingApproachPath(scene: LandingRunwayScene) {
   const finalLength = Math.min(1500, scene.along * .25);
   const gate: Point2 = [scene.along - finalLength, scene.across];
   const reach = Math.hypot(gate[0], gate[1]);
-  const handle = reach * .35;
+  // Airspeed sets an eight-second visual lead, bounded by the actual intercept
+  // distance. It changes route smoothness, never apparent perspective width.
+  const handle = scene.speed && scene.speed > 0 ? Math.min(reach * .45, Math.max(reach * .15, scene.speed * 8)) : reach * .35;
   const controls: readonly [Point2, Point2, Point2, Point2] = [
     [0, 0],
     [Math.cos(scene.angle) * handle, -Math.sin(scene.angle) * handle],
@@ -88,13 +94,15 @@ export function landingApproachPath(scene: LandingRunwayScene) {
   return { controls, points, normals };
 }
 
-export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = 0) {
+export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(scene.pitch ?? 0), cameraRoll = scene.roll ?? 0) {
   const runwayHalfWidth = (scene.width ?? 90) / 2;
   const sin = Math.sin(scene.angle), cos = Math.cos(scene.angle);
   const cp = Math.cos(cameraPitch), sp = Math.sin(cameraPitch);
   const point = (along: number, across: number, heightAboveRunway: number): Point3 => {
     const depth = along * cos - across * sin, down = scene.height - heightAboveRunway;
-    return [along * sin + across * cos, down * cp - depth * sp, depth * cp + down * sp];
+    const x = along * sin + across * cos, y = down * cp - depth * sp;
+    // Positive right bank rotates the world counterclockwise in screen space.
+    return [x * Math.cos(cameraRoll) + y * Math.sin(cameraRoll), -x * Math.sin(cameraRoll) + y * Math.cos(cameraRoll), depth * cp + down * sp];
   };
   const start = point(scene.along, scene.across, 0);
   const end = point(scene.along + scene.length, scene.across, 0);
@@ -124,11 +132,16 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = 0)
     }
   }
   const rails: ProjectedSegment[][] = [];
+  const ribbon: ProjectedPoint[][] = [];
   if (scene.approach && start[2] >= 30) {
     const path = landingApproachPath(scene);
-    // Offset in world space, then project every sampled segment with the runway.
+    // The reference centerline remains 15 m over the threshold. Draw the floor
+    // 15 m below it: an eye exactly on the reference must not see a coplanar,
+    // edge-on pair of lines. The floor joins the runway, with metric width.
+    const edges: Point3[][] = [];
     for (const side of [-runwayHalfWidth, runwayHalfWidth]) {
-      const samples = path.points.map((p, i) => point(p[0] + path.normals[i]![0] * side, p[1] + path.normals[i]![1] * side, p[2]));
+      const samples = path.points.map((p, i) => point(p[0] + path.normals[i]![0] * side, p[1] + path.normals[i]![1] * side, p[2] - 15));
+      edges.push(samples);
       const rail: ProjectedSegment[] = [];
       for (let i = 1; i < samples.length; i++) {
         const piece = segment(samples[i - 1]!, samples[i]!);
@@ -136,18 +149,20 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = 0)
       }
       rails.push(rail);
     }
+    for (let i = 1; i < path.points.length; i++) {
+      const quad = surface([edges[0]![i - 1]!, edges[1]![i - 1]!, edges[1]![i]!, edges[0]![i]!]);
+      if (quad.length >= 3) ribbon.push(quad);
+    }
   }
   const bearing = Math.atan2((start[0] + end[0]) / 2, (start[2] + end[2]) / 2);
   const project = (p: Point3): ProjectedPoint | null => p[2] >= 30 ? [p[0] / p[2], p[1] / p[2]] : null;
-  return { runway, entrance, surface: runwaySurface, markings, ground, rails, bearing,
+  return { runway, entrance, surface: runwaySurface, markings, ground, rails, ribbon, bearing,
     threshold: project(start), end: project(end) };
 }
 
-/** Inspection camera tilts toward the runway, not a measured aircraft attitude.
- * Keep yaw heading-referenced; zoom/tilt never distort the runway itself. */
+/** Aircraft-referenced camera; no target-following tilt or target-specific zoom. */
 export function landingRunwayCamera(scene: LandingRunwayScene) {
-  const depth = (scene.along + scene.length / 2) * Math.cos(scene.angle) - scene.across * Math.sin(scene.angle);
-  return depth > 30 ? Math.max(-Math.PI / 3, Math.min(Math.PI / 3, Math.atan2(scene.height, depth))) : 0;
+  return -(scene.pitch ?? 0);
 }
 
 /** Display-only critical damping. Preserves a coherent 3D scene instead of
@@ -155,13 +170,13 @@ export function landingRunwayCamera(scene: LandingRunwayScene) {
 export class RunwaySceneMotion {
   #value: LandingRunwayScene | null = null;
   #target: LandingRunwayScene | null = null;
-  #velocity = { along: 0, across: 0, height: 0, angle: 0 };
+  #velocity = { along: 0, across: 0, height: 0, angle: 0, pitch: 0, roll: 0, speed: 0 };
   #at = 0;
   observe(next: LandingRunwayScene | null, at: number, reset: boolean): void {
     this.step(at);
     if (reset || !next || !this.#value) {
       this.#value = next;
-      this.#velocity = { along: 0, across: 0, height: 0, angle: 0 };
+      this.#velocity = { along: 0, across: 0, height: 0, angle: 0, pitch: 0, roll: 0, speed: 0 };
     }
     this.#target = next;
     this.#at = at;
@@ -171,16 +186,17 @@ export class RunwaySceneMotion {
     this.#at = Math.max(at, this.#at);
     if (!this.#value || !this.#target) return this.#value;
     const value = { ...this.#target };
-    for (const axis of ["along", "across", "height", "angle"] as const) {
-      let offset = this.#value[axis] - this.#target[axis];
-      if (axis === "angle") offset = Math.atan2(Math.sin(offset), Math.cos(offset));
+    for (const axis of ["along", "across", "height", "angle", "pitch", "roll", "speed"] as const) {
+      if (this.#target[axis] === undefined) continue;
+      let offset = (this.#value[axis] ?? 0) - this.#target[axis]!;
+      if (axis === "angle" || axis === "roll") offset = Math.atan2(Math.sin(offset), Math.cos(offset));
       const c = this.#velocity[axis] + omega * offset;
       const delta = (offset + c * dt) * decay;
       const velocity = (this.#velocity[axis] - omega * c * dt) * decay;
       const epsilon = axis === "angle" ? .00001 : .01;
       if (delta * offset <= 0 || Math.abs(delta) < epsilon && Math.abs(velocity) < epsilon * 10) {
         value[axis] = this.#target[axis]; this.#velocity[axis] = 0;
-      } else { value[axis] += delta; this.#velocity[axis] = velocity; }
+      } else { value[axis] = this.#target[axis]! + delta; this.#velocity[axis] = velocity; }
     }
     this.#value = value;
     return value;
@@ -188,6 +204,6 @@ export class RunwaySceneMotion {
   isMoving(at: number): boolean {
     const value = this.step(at);
     return value !== null && this.#target !== null
-      && (["along", "across", "height", "angle"] as const).some(axis => value[axis] !== this.#target![axis]);
+      && (["along", "across", "height", "angle", "pitch", "roll", "speed"] as const).some(axis => value[axis] !== this.#target![axis]);
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDING_SETTINGS, LandingAssist, landingGeometry, type LandingInput } from "./landing-assist";
+import { DEFAULT_LANDING_SETTINGS, LandingAssist, landingGeometry, landingAttitude, type LandingInput } from "./landing-assist";
 import { landingPresentation } from "./landing-presentation";
 import cases from "./landing-geometry-cases.json";
 import configurationCases from "./landing-configuration-cases.json";
@@ -19,6 +19,76 @@ function inboundSample(at: number): LandingInput {
     track: { valid: true, worldX:0,worldZ:0,velocityX:0,velocityZ:100,groundSpeedMps:100,headingDeg:0,residualM:0,sampleCount:4,sampleSpanMs:300 },
     altitudeM:500,iasKmh:300,verticalSpeedMps:-4,gearPercent:0,airbrakePercent:0,flapsPercent:0 };
 }
+
+it("reselects a sustained new airport-bound track without leaving landing mode, preserving manual choice", () => {
+  for (const automatic of [true, false]) {
+    const assist = new LandingAssist();
+    const sample = (at: number, turn: boolean): LandingInput => {
+      const input = inboundSample(at), home = input.navigation!.items[0]!;
+      return { ...input, navigation: { ...input.navigation!, items: [home,
+        { ...home, id: "other", label: "另一个机场", x: .9, runwayStart: [.9, .5], runwayEnd: [.9, .45] }] },
+        track: { ...input.track!, velocityX: turn ? 80 : 0, velocityZ: 90 } };
+    };
+    for (let at = 1000; at <= 4000; at += 500) assist.update(sample(at, false));
+    assist.configure({ ...assist.settings(), automatic, runwayElevationM: 123 }, sample(4000, false).navigation);
+    for (let at = 4500; at <= 7500; at += 500) {
+      const view = assist.update(sample(at, true));
+      expect(view.settings.enabled).toBe(true);
+      expect(view.settings.runwayId).toBe(automatic && at === 7500 ? "other" : "home");
+    }
+    expect(assist.settings().runwayElevationM).toBe(automatic ? null : 123);
+  }
+});
+
+it("rejects transient target changes, broken observations and list ordinal changes during reacquisition", () => {
+  const assist = new LandingAssist();
+  for (let at = 1000; at <= 4000; at += 500) assist.update(inboundSample(at));
+  for (let at = 4500; at <= 10000; at += 500) {
+    const input = inboundSample(at), home = input.navigation!.items[0]!;
+    assist.update({ ...input, fresh: at !== 6500,
+      navigation: { ...input.navigation!, items: [home, { ...home, id: at < 8500 ? "other" : "renumbered", runwayStart: [.9, .5], runwayEnd: [.9, .45] }] },
+      track: { ...input.track!, velocityX: 80, velocityZ: 90 } });
+    expect(assist.settings().runwayId).toBe(at === 10000 ? "renumbered" : "home");
+  }
+});
+
+it("keeps a short final stable, then releases it after a deliberate turn toward another airport", () => {
+  const assist = new LandingAssist();
+  for (let at = 1000; at <= 4000; at += 500) assist.update(inboundSample(at));
+  for (let at = 4500; at <= 11000; at += 500) {
+    const input = inboundSample(at), home = input.navigation!.items[0]!;
+    const turned = at >= 8000;
+    assist.update({ ...input, navigation: { ...input.navigation!, player: { x: .5, y: .55 }, items: [home,
+      { ...home, id: "other", runwayStart: [turned ? .625 : .54, .5], runwayEnd: [turned ? .625 : .54, .45] }] },
+      track: { ...input.track!, velocityX: turned ? 83.333333333 : 26.666666667, velocityZ: 100 } });
+    expect(assist.settings().runwayId).toBe(at === 11000 ? "other" : "home");
+  }
+});
+
+it("provides every observed runway for display without borrowing the selected runway's elevation", () => {
+  const assist = new LandingAssist(), input = inboundSample(1000), home = input.navigation!.items[0]!;
+  const nav = { ...input.navigation!, items: [home, { ...home, id: "enemy", friendly: false, hostile: true, runwayStart: [.6, .5] as const, runwayEnd: [.6, .45] as const }] };
+  assist.configure({ ...DEFAULT_LANDING_SETTINGS, enabled: true, automatic: false }, nav);
+  assist.configure({ ...assist.settings(), runwayElevationM: 123 }, nav);
+  const view = assist.update({ ...input, navigation: nav });
+  expect(view.runways).toHaveLength(1);
+  expect(view.nearbyRunways).toHaveLength(2);
+  expect(view.nearbyRunways!.find(r => r.id === "home")!.geometry.heightM).toBe(377);
+  expect(view.nearbyRunways!.find(r => r.id === "enemy")!.geometry.heightM).toBeNull();
+  expect(assist.update({ ...input, navigation: nav, fresh: false }).nearbyRunways).toEqual([]);
+  const base = new PublicRuntime({ edition: editionPolicy("Standard") }).snapshot();
+  const tape = landingTapePresentation({ ...base, landing: view });
+  expect(tape.otherRunways).toHaveLength(1);
+  expect(tape.otherRunways[0]!.scene).toBeNull();
+  const away = landingTapePresentation({ ...base, flight: { ...base.flight, headingDeg: 180 }, landing: view });
+  expect(away.otherRunways).toEqual([]);
+});
+
+it("uses optional TAS and attitude without treating IAS or missing bank as measured pose", () => {
+  expect(landingAttitude(360, 0, 5, -5, 0)).toEqual({ tasMps: 100, pitchDeg: 5, rollDeg: 0 });
+  expect(landingAttitude(null, -5, null, 5, null)).toEqual({ tasMps: null, pitchDeg: null, rollDeg: null });
+  expect(landingAttitude(360, -5, null, null, 30).pitchDeg).toBeCloseTo(Math.asin(-.05) * 180 / Math.PI);
+});
 
 it("animates correction direction without inventing a glide path or retaining an outage", () => {
   const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });

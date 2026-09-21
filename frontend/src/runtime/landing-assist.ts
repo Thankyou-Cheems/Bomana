@@ -16,6 +16,18 @@ export const DEFAULT_LANDING_SETTINGS: LandingSettings = Object.freeze({
   enabled: false, automatic: true, runwayId: null, reverse: false, glideAngleDeg: 3,
   targetIasKmh: null, runwayElevationM: null,
 });
+
+/** Cockpit pitch indicators can reverse sign. Resolve against TAS/Vy/AoA
+ * when available; without that evidence use the flight-path pitch only. */
+export function landingAttitude(tasKmh: number | null, vy: number | null, aoa: number | null, cockpitPitch: number | null, roll: number | null): NonNullable<LandingSnapshot["attitude"]> {
+  const tasMps = tasKmh !== null && tasKmh >= 36 ? tasKmh / 3.6 : null;
+  const bank = roll !== null && Math.abs(roll) <= 180 ? roll : null;
+  const path = tasMps !== null && vy !== null && Math.abs(vy) <= tasMps ? Math.asin(vy / tasMps) * 180 / Math.PI : null;
+  const expected = path !== null ? path + (aoa ?? 0) * Math.cos((bank ?? 0) * Math.PI / 180) : null;
+  const pitchDeg = cockpitPitch !== null && Math.abs(cockpitPitch) <= 90 && expected !== null && aoa !== null
+    ? Math.abs(cockpitPitch - expected) <= Math.abs(-cockpitPitch - expected) ? cockpitPitch : -cockpitPitch : expected;
+  return { tasMps, pitchDeg, rollDeg: bank };
+}
 export interface LandingGeometry {
   /** Optional display reference from a static definition, not collision width. */
   readonly referenceWidthM?: number;
@@ -40,6 +52,8 @@ export interface LandingGeometry {
   readonly predictedThresholdCrossM?: number | null;
 }
 export interface LandingSnapshot {
+  readonly attitude?: { readonly pitchDeg: number | null; readonly rollDeg: number | null; readonly tasMps: number | null };
+  readonly nearbyRunways?: readonly { readonly key: string; readonly id: string; readonly label: string; readonly friendly: boolean; readonly geometry: LandingGeometry }[];
   readonly settings: LandingSettings;
   readonly runways: readonly { readonly id: string; readonly label: string; readonly distanceKm: number; readonly courseDeg?: number; readonly lengthM?: number; readonly grid?: string }[];
   readonly runwayLabel: string;
@@ -58,6 +72,7 @@ export interface LandingSnapshot {
   readonly flapReference?: LandingFlapReference;
 }
 export interface LandingInput {
+  readonly attitude?: LandingSnapshot["attitude"];
   readonly context: string;
   readonly sampledAtMs?: number;
   readonly fresh: boolean;
@@ -83,11 +98,11 @@ export function validateLandingSettings(value: LandingSettings): void {
   }
 }
 
-export function landingRunways(navigation: EditionSnapshot["navigation"]): readonly NavigationItem[] {
+export function landingRunways(navigation: EditionSnapshot["navigation"], all = false): readonly NavigationItem[] {
   const scale = navigation?.mapScaleM;
   if (!scale || !scale.every(v => Number.isFinite(v) && v > 0)) return [];
   return navigation.items.filter(item => {
-    if (item.kind !== "airfield" || !item.friendly || item.hostile || !item.runwayStart || !item.runwayEnd) return false;
+    if (item.kind !== "airfield" || !all && (!item.friendly || item.hostile) || !item.runwayStart || !item.runwayEnd) return false;
     if (![...item.runwayStart, ...item.runwayEnd].every(v => Number.isFinite(v) && v >= 0 && v <= 1)) return false;
     const length = Math.hypot((item.runwayEnd[0] - item.runwayStart[0]) * scale[0], (item.runwayEnd[1] - item.runwayStart[1]) * scale[1]);
     return length >= 150;
@@ -152,7 +167,7 @@ export function landingGeometry(input: {
     thresholdTimeS, predictedThresholdCrossM };
 }
 
-/** Acquire an airport-bound return, then retain the same runway through its approach. */
+/** Continuously compare airport-bound returns, with dwell and final-approach hysteresis. */
 export class LandingAssist {
   #settings = DEFAULT_LANDING_SETTINGS;
   #context = "";
@@ -247,7 +262,17 @@ export class LandingAssist {
       altitudeM: input.altitudeM, elevationM, glideAngleDeg: settings.glideAngleDeg,
       velocity: input.track?.valid ? [input.track.velocityX, -input.track.velocityZ] : null,
     }) : null;
-    return { settings, runways: runways.map(item => {
+    const nearbyRunways = settings.enabled && input.fresh && input.navigation?.player && input.navigation.mapScaleM
+      ? landingRunways(input.navigation, true).map(item => {
+        const selected = item.id === settings.runwayId && !unavailable;
+        const key = JSON.stringify([item.runwayStart, item.runwayEnd]);
+        return { key, id: item.id, label: item.label, friendly: item.friendly && !item.hostile,
+          geometry: selected && geometry ? geometry : landingGeometry({
+            player: input.navigation!.player!, scale: input.navigation!.mapScaleM!, start: item.runwayStart!, end: item.runwayEnd!,
+            altitudeM: input.altitudeM, elevationM: terrainElevation(item.runwayStart!), glideAngleDeg: settings.glideAngleDeg, velocity: null,
+          }) };
+      }) : [];
+    return { settings, attitude: input.fresh ? input.attitude : undefined, nearbyRunways, runways: runways.map(item => {
       const dx = (item.runwayEnd![0] - item.runwayStart![0]) * input.navigation!.mapScaleM![0];
       const dy = (item.runwayEnd![1] - item.runwayStart![1]) * input.navigation!.mapScaleM![1];
       return { id: item.id, label: item.label, distanceKm: item.distanceKm, grid: item.grid,
@@ -275,30 +300,32 @@ export class LandingAssist {
       start: reverse ? r.runwayEnd! : r.runwayStart!, end: reverse ? r.runwayStart! : r.runwayEnd!,
       altitudeM: null, elevationM: null, glideAngleDeg: this.#settings.glideAngleDeg,
       velocity: [track.velocityX, -track.velocityZ] });
+    let current: LandingGeometry | null = null;
     if (this.#settings.enabled) {
       // Official list ordinals are not airport identities. Rebind only the
       // same unique, ordered endpoints; never follow an ordinal to a new field.
       const runway = this.#lockedRunway(runways);
       if (!runway) {
+        this.#candidateKey = "";
         this.#exitSince = 0;
         if (!this.#missingSince) this.#missingSince = at;
         if (at - this.#missingSince >= 8000) this.#leaveAutomatic(at);
         return;
       }
       this.#missingSince = 0;
-      const g = geometry(runway, this.#settings.reverse);
+      const g = current = geometry(runway, this.#settings.reverse);
       // A runway-relative course is irrelevant while returning from its side.
       const leaving = g.airportDistanceM > g.lengthM * .5 + 1000 && Math.abs(g.airportTrackErrorDeg ?? 0) > 75
         || (g.airportDistanceM < g.lengthM * .5 + 2000 && input.verticalSpeedMps !== null && input.verticalSpeedMps > 3
           && input.gearPercent !== null && input.gearPercent < 5);
-      if (!leaving) { this.#exitSince = 0; return; }
-      if (!this.#exitSince) this.#exitSince = at;
-      if (at - this.#exitSince >= 8000) {
+      if (!leaving) this.#exitSince = 0;
+      else if (!this.#exitSince) this.#exitSince = at;
+      if (this.#exitSince && at - this.#exitSince >= 8000) {
         this.#leaveAutomatic(at);
+        return;
       }
-      return;
     }
-    if (at < this.#cooldownUntil) return;
+    if (!this.#settings.enabled && at < this.#cooldownUntil) return;
     let best: { runway: NavigationItem; reverse: boolean; score: number } | null = null;
     for (const runway of runways) {
       const g = geometry(runway, false);
@@ -313,8 +340,18 @@ export class LandingAssist {
       const score = g.airportDistanceM * (1 + Math.abs(g.airportTrackErrorDeg!) / 25);
       if (!best || score < best.score) best = { runway, reverse, score };
     }
+    if (current && best) {
+      const error = Math.abs(current.airportTrackErrorDeg ?? 180);
+      const score = current.airportDistanceM * (1 + error / 25);
+      // Preserve a committed short final/rollout; a genuine turn away releases
+      // this protection. Else require a 25% better candidate for three seconds.
+      const committed = (current.stage === "final" && current.thresholdDistanceM < 3000 || current.stage === "runway")
+        && Math.abs(current.trackErrorDeg ?? 180) <= 30;
+      if (JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd]) === this.#runwayKey
+        || committed || error <= 25 && best.score >= score * .75) best = null;
+    }
     // Small position changes can swap the nearer end without changing the airport-bound return.
-    const key = best ? `${best.runway.id}|${JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd])}` : "";
+    const key = best ? JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd]) : "";
     if (!key || key !== this.#candidateKey) { this.#candidateKey = key; this.#candidateSince = at; return; }
     if (best && at - this.#candidateSince >= 3000) {
       this.#settings = { ...this.#settings, enabled: true, runwayId: best.runway.id, reverse: best.reverse, runwayElevationM: null };

@@ -57,31 +57,49 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
       : g?.heightM === null ? "高程 —" : "对正";
   const cueLateral = scene === "unavailable" ? null : lateral;
   const cueGlide = scene === "glide" ? glide : null;
-  const runway = scene === "unavailable" ? null : landingRunwayScene(g, snapshot.flight.headingDeg, landing!.settings.glideAngleDeg);
+  const runway = scene === "unavailable" ? null : landingRunwayScene(g, snapshot.flight.headingDeg, landing!.settings.glideAngleDeg, landing?.attitude);
+  const otherRunways = active && landing?.reason !== "telemetry" ? (landing?.nearbyRunways ?? [])
+    .filter(item => item.id !== landing?.settings.runwayId)
+    .map(item => ({ ...item, scene: landingRunwayScene(item.geometry, snapshot.flight.headingDeg, landing!.settings.glideAngleDeg, landing?.attitude),
+      bearing: ((item.geometry.airportBearingDeg ?? snapshot.flight.headingDeg) - snapshot.flight.headingDeg + 540) % 360 - 180 }))
+    .filter(item => Math.abs(item.bearing) <= 30) : [];
   // Stage boundaries do not change the physical runway. Keep its motion
   // continuous; approach/validity flags still change immediately in the scene.
   const selected = snapshot.navigation?.items.find(item => item.id === landing?.settings.runwayId);
   const cueKey = `${selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId}|${landing?.settings.reverse}|${runway === null}|${g?.lengthM}`;
   return { active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
-    runway, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
-    aria: `${mode}；${course}，${distance}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}，跑道观察视角自动俯视和缩放，非飞机姿态；淡线表示跑道高程参考平面；曲线按当前航向接入跑道，不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
+    runway, otherRunways, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
+    aria: `${mode}；${course}，${distance}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；航向透视，姿态缺测使用可用航迹俯仰和水平滚转；引导带底面在参考线下方15m，按空速前视接入跑道；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
 }
 
 export type LandingTapeView = ReturnType<typeof landingTapePresentation>;
-/** Shared lifecycle boundary for the level-camera runway scene. */
+/** Shared lifecycle boundary for all runway scenes in the aircraft camera. */
 export class LandingCueMotion {
   #key = "";
   readonly #motion = new RunwaySceneMotion();
+  readonly #others = new Map<string, RunwaySceneMotion>();
+  #background: LandingTapeView["otherRunways"] = [];
   observe(p: LandingTapeView, now: number, reducedMotion = false): void {
     this.#motion.observe(p.runway, now, reducedMotion || p.cueKey !== this.#key);
     this.#key = p.cueKey;
+    this.#background = p.otherRunways;
+    const keys = new Set(p.otherRunways.map(item => item.key));
+    for (const key of this.#others.keys()) if (!keys.has(key)) this.#others.delete(key);
+    for (const item of p.otherRunways) {
+      let motion = this.#others.get(item.key);
+      if (!motion) { motion = new RunwaySceneMotion(); this.#others.set(item.key, motion); }
+      motion.observe(item.scene ? { ...item.scene, approach: false } : null, now, reducedMotion);
+    }
   }
   step(now: number): LandingRunwayScene | null { return this.#motion.step(now); }
-  isMoving(now: number): boolean { return this.#motion.isMoving(now); }
+  background(now: number): LandingTapeView["otherRunways"] {
+    return this.#background.map(item => ({ ...item, scene: this.#others.get(item.key)?.step(now) ?? null }));
+  }
+  isMoving(now: number): boolean { return this.#motion.isMoving(now) || [...this.#others.values()].some(motion => motion.isMoving(now)); }
 }
 
 /** Perspective runway, datum ground plane and two heading-tangent approach rails. */
-export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeView, width: number, height: number, cue: LandingRunwayScene | null): void {
+export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeView, width: number, height: number, cue: LandingRunwayScene | null, others = p.otherRunways): void {
   const pad = Math.max(8, Math.min(20, width * .025));
   const side = Math.max(54, Math.min(125, width * .18));
   const left = side + pad, right = width - side - pad, center = width / 2;
@@ -106,12 +124,10 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   const configColor = /超限/.test(p.config) ? tone("danger") : /检查|减速|近限/.test(p.config) ? tone("caution") : muted;
   text(p.config, pad, height * .87, font * .9, configColor, "left", side - pad);
   const projected = cue ? projectLandingRunway(cue, landingRunwayCamera(cue)) : null;
-  const verticalExtent = Math.max(Math.abs(projected?.threshold?.[1] ?? 0), Math.abs(projected?.end?.[1] ?? 0));
-  // Use the available height for a legible runway, zooming the entire scene
-  // uniformly. Never enlarge the far edge independently or flatten the plane.
+  // One 60-degree horizontal camera for every runway and the guide ribbon.
+  // No target-fit zoom: switching airports must not move the rest of the world.
   const cy = height * .5;
-  const horizontalExtent = Math.max(.001, ...(projected?.surface.map(point => Math.abs(point[0])) ?? []));
-  const focal = Math.max(1, Math.min(height * 80, centerWidth * .43 / horizontalExtent, height * .36 / Math.max(.0001, verticalExtent)));
+  const focal = centerWidth / (2 * Math.tan(Math.PI / 6));
   const top = 4, bottom = height - 4;
   const pixel = (point: ProjectedPoint): ProjectedPoint => [center + point[0] * focal, cy + point[1] * focal];
   const inside = (point: ProjectedPoint) => point[0] >= left + 8 && point[0] <= right - 8 && point[1] >= top + 8 && point[1] <= bottom - 8;
@@ -119,7 +135,34 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   ctx.beginPath(); ctx.rect(left, top, centerWidth, bottom - top); ctx.clip();
   ctx.lineWidth = Math.max(1, height / 155);
   ctx.lineJoin = "round";
-  // Quiet datum references share the inspection camera, not aircraft attitude.
+  const polygon = (points: readonly ProjectedPoint[]) => {
+    ctx.beginPath();
+    points.forEach((point, i) => { const v = pixel(point); if (i) ctx.lineTo(...v); else ctx.moveTo(...v); });
+    ctx.closePath();
+  };
+  // Farthest first. Unknown elevations get bearing-only marks, never the
+  // selected runway's height or an invented sea-level surface.
+  for (const item of [...others].sort((a, b) => b.geometry.airportDistanceM - a.geometry.airportDistanceM)) {
+    const other = item.scene ? projectLandingRunway({ ...item.scene, approach: false }, cue ? landingRunwayCamera(cue) : undefined, cue?.roll) : null;
+    const color = item.friendly ? muted : "#cc9992";
+    ctx.strokeStyle = color; ctx.globalAlpha = .48; ctx.lineWidth = 1;
+    if (other?.surface.length) { polygon(other.surface); ctx.stroke(); }
+    const anchor = other?.threshold ? pixel(other.threshold) : null;
+    if (Math.abs(item.bearing) <= 30 && (!anchor || !inside(anchor))) {
+      const x = anchor ? Math.max(left + 8, Math.min(right - 8, anchor[0])) : center + Math.tan(item.bearing * Math.PI / 180) * focal;
+      const y = anchor ? Math.max(top + 25, Math.min(bottom - 9, anchor[1])) : bottom - 9;
+      if (!item.scene) {
+        // Schematic runway at its known bearing, not a fabricated altitude.
+        ctx.save(); ctx.translate(x, y - 2);
+        ctx.rotate((item.geometry.courseDeg - (item.geometry.airportBearingDeg ?? 0) + item.bearing) * Math.PI / 180);
+        ctx.strokeRect(-2, -5, 4, 10); ctx.restore();
+      } else {
+        ctx.beginPath(); ctx.moveTo(x - 3, y - 2); ctx.lineTo(x, y + 2); ctx.lineTo(x + 3, y - 2); ctx.stroke();
+      }
+      text(item.label, x, y - 8, font * .75, color, "center", 65);
+    }
+  }
+  // Quiet datum references use the same aircraft camera as the runway.
   if (projected) {
     ctx.strokeStyle = "#91aebc"; ctx.globalAlpha = .13; ctx.lineWidth = 1;
     ctx.beginPath();
@@ -140,6 +183,8 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
         ctx.lineWidth /= 2;
       }
     }
+    ctx.fillStyle = cyan; ctx.globalAlpha = .045;
+    for (const quad of projected.ribbon) { polygon(quad); ctx.fill(); }
     ctx.strokeStyle = cyan; ctx.globalAlpha = .65;
     for (const rail of projected.rails) {
       ctx.beginPath();

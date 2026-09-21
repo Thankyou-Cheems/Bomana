@@ -197,7 +197,8 @@ export class PictureInPictureHeadingRenderer {
       // The surrounding instrument has a shared logical width, but landing
       // labels must retain readable pixel sizes in narrow PiP/phone hosts.
       context.setTransform(bitmapWidth / bounds.width, 0, 0, bitmapHeight / bounds.height, 0, 0);
-      drawLandingTape(context, this.#landing, bounds.width, bounds.height, this.#landingMotion.step(this.#view.performance.now()));
+      const now = this.#view.performance.now();
+      drawLandingTape(context, this.#landing, bounds.width, bounds.height, this.#landingMotion.step(now), this.#landingMotion.background(now));
       return;
     }
     const layout = pictureInPictureHeadingLayout(width, height);

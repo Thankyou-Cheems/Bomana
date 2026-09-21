@@ -7,15 +7,15 @@ const input = { player: { x: .53, y: .53 }, scale: [10000, 100000] as const,
 const geometry = landingGeometry(input);
 const scene = landingRunwayScene(geometry, 0, 3)!;
 
-it("tilts the inspection camera as one perspective transform and uses definition width", () => {
+it("keeps one aircraft camera independent of the selected airport and uses definition width", () => {
   const s = landingRunwayScene({ ...geometry, crossTrackM: 0, referenceWidthM: 140 }, 0, 3)!;
   const pitch = landingRunwayCamera(s), result = projectLandingRunway(s, pitch);
-  expect(pitch).toBeCloseTo(Math.atan2(300, 4000));
+  expect(pitch).toBeCloseTo(0);
   expect(result.threshold![1]).toBeGreaterThan(0);
-  expect(result.end![1]).toBeLessThan(0);
+  expect(result.end![1]).toBeGreaterThan(0);
   expect(result.surface[1]![0] - result.surface[0]![0]).toBeGreaterThan(result.surface[2]![0] - result.surface[3]![0]);
   expect(projectLandingRunway(s).surface[1]![0]).toBeCloseTo(70 / 3000);
-  expect(landingRunwayCamera({ ...s, angle: Math.PI })).toBe(0);
+  expect(landingRunwayCamera({ ...s, angle: Math.PI })).toBeCloseTo(0);
 });
 
 it("shows a runway plane with a wider near edge and narrower far edge", () => {
@@ -51,15 +51,33 @@ it("swaps the selected entrance without changing the endpoints' physical project
   expect(after.rails).toHaveLength(0);
 });
 
-it("uses the selected angle and 15 m threshold reference for exactly two rails", () => {
+it("draws two perspective floor edges 15 m below the reference, joining the runway", () => {
   const projection = projectLandingRunway(scene);
   expect(projection.rails).toHaveLength(2);
   const left = projection.rails[0]!.at(-1)!, right = projection.rails[1]!.at(-1)!;
-  expect(left[1][1]).toBeCloseTo((scene.height - 15) / scene.along);
+  expect(left[1][1]).toBeCloseTo(scene.height / scene.along);
   expect(left[1][0]).toBeLessThan(projection.threshold![0]);
   expect(right[1][0]).toBeGreaterThan(projection.threshold![0]);
   const steeper = projectLandingRunway({ ...scene, slope: Math.tan(6 * Math.PI / 180) });
   expect(steeper.rails[0]!.at(-1)![0][1]).toBeLessThan(left[0][1]);
+});
+
+it("retains visible near-wide far-narrow perspective even exactly on the glide reference", () => {
+  const current = { ...scene, across: 0, angle: 0, height: 15 + scene.along * scene.slope, pitch: -Math.atan(scene.slope) };
+  const result = projectLandingRunway(current);
+  const left = result.rails[0]!, right = result.rails[1]!;
+  const nearLeft = left[0]![0], nearRight = right[0]![0];
+  const farLeft = left.at(-1)![1], farRight = right.at(-1)![1];
+  expect(nearRight[0] - nearLeft[0]).toBeGreaterThan(20 * (farRight[0] - farLeft[0]));
+  expect(nearLeft[1]).toBeGreaterThan(farLeft[1] + .2);
+  expect(result.ribbon.length).toBeGreaterThan(1);
+  const banked = projectLandingRunway({ ...current, roll: Math.PI / 4 });
+  expect(banked.entrance![1][1]).toBeLessThan(banked.entrance![0][1]);
+  const norm = (p: readonly number[]) => Math.hypot(...p);
+  expect(norm(banked.threshold!)).toBeCloseTo(norm(result.threshold!));
+  expect(landingRunwayCamera({ ...current, along: 80000, height: 10000 })).toBe(landingRunwayCamera(current));
+  expect(landingApproachPath({ ...current, speed: 80 }).controls[1][0])
+    .toBeLessThan(landingApproachPath({ ...current, speed: 250 }).controls[1][0]);
 });
 
 it("starts along the current heading, curves to the runway axis and joins the chosen final slope tangentially", () => {
