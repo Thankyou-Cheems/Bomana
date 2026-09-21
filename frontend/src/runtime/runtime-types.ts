@@ -71,6 +71,8 @@ export interface FriendlyAircraft {
   readonly x: number;
   readonly y: number;
   readonly officialIcon?: string;
+  readonly dx?: number;
+  readonly dy?: number;
 }
 
 export interface NavigationItem {
