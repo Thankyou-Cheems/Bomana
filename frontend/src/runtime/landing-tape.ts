@@ -64,7 +64,7 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   const cueKey = `${selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId}|${landing?.settings.reverse}|${runway === null}|${g?.lengthM}`;
   return { active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
     runway, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
-    aria: `${mode}；${course}，${distance}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}，跑道观察视角自动俯视和缩放，非飞机姿态` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
+    aria: `${mode}；${course}，${distance}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}，跑道观察视角自动俯视和缩放，非飞机姿态；淡线表示跑道高程参考平面；曲线按当前航向接入跑道，不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
 }
 
 export type LandingTapeView = ReturnType<typeof landingTapePresentation>;
@@ -80,7 +80,7 @@ export class LandingCueMotion {
   isMoving(now: number): boolean { return this.#motion.isMoving(now); }
 }
 
-/** Perspective runway surface and two reference rails. No tunnel gates. */
+/** Perspective runway, datum ground plane and two heading-tangent approach rails. */
 export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeView, width: number, height: number, cue: LandingRunwayScene | null): void {
   const pad = Math.max(8, Math.min(20, width * .025));
   const side = Math.max(54, Math.min(125, width * .18));
@@ -105,31 +105,33 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   text(p.equipmentText, width - pad, height * .87, font * .85, muted, "right", side - pad);
   const configColor = /超限/.test(p.config) ? tone("danger") : /检查|减速|近限/.test(p.config) ? tone("caution") : muted;
   text(p.config, pad, height * .87, font * .9, configColor, "left", side - pad);
-  text(p.course, left, height * .09, font, cyan, "left", centerWidth * .57);
-  text(p.distance.replace("距机场 ", ""), right, height * .09, font, muted, "right", centerWidth * .4);
-
   const projected = cue ? projectLandingRunway(cue, landingRunwayCamera(cue)) : null;
   const verticalExtent = Math.max(Math.abs(projected?.threshold?.[1] ?? 0), Math.abs(projected?.end?.[1] ?? 0));
   // Use the available height for a legible runway, zooming the entire scene
   // uniformly. Never enlarge the far edge independently or flatten the plane.
-  const cy = height * .48;
+  const cy = height * .5;
   const horizontalExtent = Math.max(.001, ...(projected?.surface.map(point => Math.abs(point[0])) ?? []));
-  const focal = Math.max(height * .6, Math.min(height * 80, centerWidth * .43 / horizontalExtent, height * .23 / Math.max(.0001, verticalExtent)));
-  const top = height * .18, bottom = height * .82;
+  const focal = Math.max(1, Math.min(height * 80, centerWidth * .43 / horizontalExtent, height * .36 / Math.max(.0001, verticalExtent)));
+  const top = 4, bottom = height - 4;
   const pixel = (point: ProjectedPoint): ProjectedPoint => [center + point[0] * focal, cy + point[1] * focal];
   const inside = (point: ProjectedPoint) => point[0] >= left + 8 && point[0] <= right - 8 && point[1] >= top + 8 && point[1] <= bottom - 8;
   ctx.save();
   ctx.beginPath(); ctx.rect(left, top, centerWidth, bottom - top); ctx.clip();
   ctx.lineWidth = Math.max(1, height / 155);
   ctx.lineJoin = "round";
-  // No artificial horizon: the camera tilts to inspect the selected runway.
+  // Quiet datum references share the inspection camera, not aircraft attitude.
   if (projected) {
+    ctx.strokeStyle = "#91aebc"; ctx.globalAlpha = .13; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const line of projected.ground) { ctx.moveTo(...pixel(line[0])); ctx.lineTo(...pixel(line[1])); }
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, height / 155);
     if (projected.surface.length >= 3) {
       const corners = projected.surface.map(pixel);
       ctx.beginPath(); ctx.moveTo(...corners[0]!);
       for (const corner of corners.slice(1)) ctx.lineTo(...corner);
       ctx.closePath();
-      ctx.fillStyle = "#b4d2dc"; ctx.globalAlpha = .14; ctx.fill();
+      ctx.fillStyle = "#244653"; ctx.globalAlpha = 1; ctx.fill();
       ctx.strokeStyle = "#edf6fa"; ctx.globalAlpha = .85; ctx.stroke();
       // Mark the selected entrance with its actual projected near edge.
       if (projected.entrance) {
@@ -140,11 +142,18 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
     }
     ctx.strokeStyle = cyan; ctx.globalAlpha = .65;
     for (const rail of projected.rails) {
-      const a = pixel(rail[0]), b = pixel(rail[1]);
-      // A constant-angle glide reference is straight in perspective. Do not
-      // introduce a decorative bend that changes its indicated geometry.
-      ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+      ctx.beginPath();
+      let previous: ProjectedPoint | null = null;
+      for (const piece of rail) {
+        if (!previous || previous[0] !== piece[0][0] || previous[1] !== piece[0][1]) ctx.moveTo(...pixel(piece[0]));
+        ctx.lineTo(...pixel(piece[1])); previous = piece[1];
+      }
+      ctx.stroke();
     }
+    ctx.strokeStyle = "#edf6fa"; ctx.globalAlpha = .85; ctx.lineWidth = Math.max(1.5, height / 90);
+    ctx.beginPath();
+    for (const stripe of projected.markings) { ctx.moveTo(...pixel(stripe[0])); ctx.lineTo(...pixel(stripe[1])); }
+    ctx.stroke();
     if (projected.runway) {
       const a = pixel(projected.runway[0]), b = pixel(projected.runway[1]);
       ctx.strokeStyle = "#f0f8fc"; ctx.globalAlpha = .45; ctx.lineWidth = 1;
@@ -167,7 +176,13 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
     ctx.beginPath(); ctx.moveTo(x - 4, cy + 5); ctx.lineTo(x, cy); ctx.lineTo(x + 4, cy + 5); ctx.stroke();
   }
   ctx.restore();
-  text(p.scene !== "unavailable" && !cue ? "高程 —" : cue?.approach && p.scene !== "glide" ? `${p.stageLabel} · ${Number((Math.atan(cue.slope) * 180 / Math.PI).toFixed(1))}°` : p.stageLabel,
-    center, height * .9, font, muted, "center", centerWidth);
+  const stage = p.scene !== "unavailable" && !cue ? "高程 —" : cue?.approach && p.scene !== "glide"
+    ? `${p.stageLabel} ${Number((Math.atan(cue.slope) * 180 / Math.PI).toFixed(1))}°` : p.stageLabel;
+  const caption = `${p.course.replace("RWY ", "")} · ${p.distance.replace("距机场 ", "")} · ${stage}`;
+  ctx.font = `600 ${font * .9}px "Microsoft YaHei", sans-serif`;
+  const captionWidth = Math.min(centerWidth - 12, ctx.measureText(caption).width + 12);
+  ctx.fillStyle = "#071923cc";
+  ctx.fillRect(left + 4, top + 2, captionWidth, font + 8);
+  text(caption, left + 10, top + 6 + font / 2, font * .9, muted, "left", captionWidth - 12);
   ctx.restore();
 }
