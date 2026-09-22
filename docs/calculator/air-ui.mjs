@@ -121,6 +121,7 @@ export async function initAirCalculator() {
       const group = document.createElement("div"); group.append(text("dt", label), text("dd", value)); stats.append(group);
     }
     el("airResult").replaceChildren(stats, text("p", `初始接近 ${fixed(result.initial.closingMps, 0)} m/s · 目标对地径向投影 ${fixed(result.initial.targetRadialMps)} m/s · 指令峰值 ${fixed(result.peakRequestedG)} g`, "tool-note"));
+    if (result.initialLeadTimeS === null) el("airResult").append(text("p", "当前速度组合无法建立匀速交会提前量，来弹从直指飞机初始位置开始。", "tool-note"));
     el("airAdvice").textContent = result.reason === "ground"
       ? "轨迹触及地面，计算已截断；此结果不能作为躲弹方案。"
       : mode === "beam" ? "39 争取干扰观测。本场景若仍有观测或旧预测仍正确，横向飞行可以保持碰撞航向。"

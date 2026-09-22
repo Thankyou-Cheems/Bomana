@@ -269,7 +269,7 @@
                 <label class="hangar-field"><span>当前爬升角 · °</span><input id="airFlightPath" type="number" min="-45" max="45" step="1" value="0" required></label>
               </div>
               <details class="tool-details"><summary>观测中断假设</summary><p>默认始终有观测。这里手动假设从开始机动时丢失观测，期间沿旧速度外推，到期恢复观测；不会因为 39 或投箔条自动脱锁。</p><div class="conversion-fields"><label class="hangar-field"><span>中断持续 · s</span><input id="airGap" type="number" min="0" max="10" step="0.1" value="0" required></label><label class="hangar-field"><span>导弹已飞行 · s</span><input id="airAge" type="number" min="0" max="120" step="0.1" value="10" required></label></div></details>
-              <p class="tool-note">速度和高度均手填。无风；g 为理想航迹法向加速度，不等于座舱过载表读数。三个动作从相同的既有提前量开始。增益输入采用弹龄与距离／接近速度，未复刻原生计时状态。</p>
+              <p class="tool-note">速度和高度均手填。无风；g 为理想航迹法向加速度，不等于座舱过载表读数。三个动作采用相同的初始弹道：能匀速交会时使用提前量，否则直指目标。增益输入采用弹龄与距离／接近速度，未复刻原生计时状态。</p>
             </form>
             <div class="air-visuals">
               <p class="air-model-label">短时定速对照 · 不含气动耗能与引信</p>
