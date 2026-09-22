@@ -7,6 +7,35 @@ const input = { player: { x: .53, y: .53 }, scale: [10000, 100000] as const,
 const geometry = landingGeometry(input);
 const scene = landingRunwayScene(geometry, 0, 3)!;
 
+it.each([-90, 90])("uses a finite spatial lead at %d degrees of pitch", pitch => {
+  const current = { ...scene, height: 2500, pitch: pitch * Math.PI / 180 };
+  const path = landingApproachPath(current);
+  expect(path.points[0]![2]).toBeCloseTo(2500);
+  expect(path.points.at(-1)![2]).toBe(15);
+  expect(Math.max(...path.points.map(p => Math.abs(p[2])))).toBeLessThan(5500);
+});
+
+it.each([2000, 2500, 3000])("keeps a %dm high approach readable and enlarges the runway as distance closes", altitude => {
+  const sizes: number[] = [];
+  for (const along of [30000, 12000, 6000, 3000]) {
+    const frame = landingRunwayFrame({ ...scene, across: 500, along, height: altitude, pitch: 0, roll: 0 }, 1200, 150);
+    const pixel = ([x, y]: readonly number[]) => [frame.x + x! * frame.focal, frame.y + y! * frame.focal];
+    const corners = frame.projected.surface.map(pixel);
+    const runwayWidth = Math.hypot(corners[1]![0]! - corners[0]![0]!, corners[1]![1]! - corners[0]![1]!);
+    const visibleRailPoints = frame.projected.rails.flat(2).map(pixel)
+      .filter(([x, y]) => x! >= 8 && x! <= 1192 && y! >= 25 && y! <= 142);
+    const railHeight = visibleRailPoints.length ? Math.max(...visibleRailPoints.map(p => p[1]!)) - Math.min(...visibleRailPoints.map(p => p[1]!)) : 0;
+    sizes.push(runwayWidth);
+    expect.soft(runwayWidth).toBeGreaterThanOrEqual(8);
+    expect.soft(railHeight).toBeGreaterThan(40);
+    for (const [x, y] of frame.projected.framing.map(pixel)) {
+      expect(x).toBeGreaterThanOrEqual(8); expect(x).toBeLessThanOrEqual(1192);
+      expect(y).toBeGreaterThanOrEqual(25); expect(y).toBeLessThanOrEqual(142);
+    }
+  }
+  expect(sizes[3]!).toBeGreaterThan(sizes[0]! * 1.5);
+});
+
 it.each([
   [1200, 150, 3000, 3000, 0, 0],
   [1200, 150, 3000, 800, 25, 40],
@@ -152,10 +181,9 @@ it("starts along the current heading, curves to the runway axis and joins the ch
     expect(Math.atan2(-(b[1] - a[1]), b[0] - a[0])).toBeCloseTo(current.angle);
     expect(gate[1] - c[1]).toBe(0);
     expect(points.at(-1)).toEqual([scene.along, scene.across, 15]);
-    for (let i = 1; i < points.length; i++) {
-      const before = points[i - 1]!, after = points[i]!;
-      expect((before[2] - after[2]) / Math.hypot(after[0] - before[0], after[1] - before[1])).toBeCloseTo(scene.slope);
-    }
+    expect(points[0]![2]).toBeCloseTo(scene.height);
+    const before = points.at(-2)!, after = points.at(-1)!;
+    expect((before[2] - after[2]) / Math.hypot(after[0] - before[0], after[1] - before[1])).toBeCloseTo(scene.slope);
     expect(points.flat().every(Number.isFinite)).toBe(true);
   }
   const left = landingApproachPath({ ...scene, angle: -.6 }).points[15]!;
@@ -163,8 +191,11 @@ it("starts along the current heading, curves to the runway axis and joins the ch
   expect(left[1]).toBeGreaterThan(right[1]);
   const aligned = landingApproachPath({ ...scene, angle: 0, across: 0 });
   expect(aligned.points.every(point => point[1] === 0)).toBe(true);
-  expect(landingApproachPath({ ...scene, height: 1000 }).points).toEqual(landingApproachPath(scene).points);
-  const onGlide = { ...scene, angle: 0, across: 0, height: 15 + scene.along * scene.slope };
+  const high = landingApproachPath({ ...scene, height: 2500 }).points;
+  expect(high[0]![2]).toBeCloseTo(2500);
+  expect(high[15]![2]).toBeGreaterThan(landingApproachPath(scene).points[15]![2]);
+  expect(high.at(-2)).toEqual(landingApproachPath(scene).points.at(-2));
+  const onGlide = { ...scene, angle: 0, across: 0, height: 15 + scene.along * scene.slope, pitch: -Math.atan(scene.slope) };
   for (const point of landingApproachPath(onGlide).points) {
     expect(point[2]).toBeCloseTo(15 + (scene.along - point[0]) * scene.slope);
   }

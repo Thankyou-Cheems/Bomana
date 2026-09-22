@@ -69,7 +69,7 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   const cueKey = `${selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId}|${landing?.settings.reverse}|${runway === null}|${g?.lengthM}`;
   return { active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
     runway, otherRunways, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
-    aria: `${mode}；${course}，${distance}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；航向透视，姿态缺测使用可用航迹俯仰和水平滚转；引导带底面在参考线下方15m，按空速前视接入跑道；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
+    aria: `${mode}；${course}，${distance}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；跟随观察透视，高空自动后移并调整观察角度；姿态缺测使用可用航迹俯仰和水平滚转；曲线从当前高度与俯仰接入末段下滑线，底面低15m；高低偏差独立计算；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
 }
 
 export type LandingTapeView = ReturnType<typeof landingTapePresentation>;
@@ -144,7 +144,7 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   // Farthest first. Unknown elevations get bearing-only marks, never the
   // selected runway's height or an invented sea-level surface.
   for (const item of [...others].sort((a, b) => b.geometry.airportDistanceM - a.geometry.airportDistanceM)) {
-    const other = item.scene ? projectLandingRunway({ ...item.scene, approach: false }, frame?.pitch, frame?.roll) : null;
+    const other = item.scene ? projectLandingRunway({ ...item.scene, approach: false }, frame?.pitch, frame?.roll, frame?.retreat, frame?.yaw) : null;
     const color = item.friendly ? muted : "#cc9992";
     ctx.strokeStyle = color; ctx.globalAlpha = .48; ctx.lineWidth = 1;
     if (other?.surface.length) { polygon(other.surface); ctx.stroke(); }
@@ -171,20 +171,6 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
     for (const line of projected.ground) { ctx.moveTo(...pixel(line[0])); ctx.lineTo(...pixel(line[1])); }
     ctx.stroke();
     ctx.lineWidth = Math.max(1, height / 155);
-    if (projected.surface.length >= 3) {
-      const corners = projected.surface.map(pixel);
-      ctx.beginPath(); ctx.moveTo(...corners[0]!);
-      for (const corner of corners.slice(1)) ctx.lineTo(...corner);
-      ctx.closePath();
-      ctx.fillStyle = "#244653"; ctx.globalAlpha = 1; ctx.fill();
-      ctx.strokeStyle = "#edf6fa"; ctx.globalAlpha = .85; ctx.stroke();
-      // Mark the selected entrance with its actual projected near edge.
-      if (projected.entrance) {
-        ctx.strokeStyle = cyan; ctx.globalAlpha = .95; ctx.lineWidth *= 2;
-        ctx.beginPath(); ctx.moveTo(...pixel(projected.entrance[0])); ctx.lineTo(...pixel(projected.entrance[1])); ctx.stroke();
-        ctx.lineWidth /= 2;
-      }
-    }
     ctx.fillStyle = cyan; ctx.globalAlpha = .045;
     for (const quad of projected.ribbon) { polygon(quad); ctx.fill(); }
     ctx.strokeStyle = cyan; ctx.globalAlpha = .65;
@@ -196,6 +182,18 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
         ctx.lineTo(...pixel(piece[1])); previous = piece[1];
       }
       ctx.stroke();
+    }
+    // Keep the target surface legible where the intercept overlaps it in a
+    // steep/banked observation view. Guidance must not wash out the runway.
+    if (projected.surface.length >= 3) {
+      polygon(projected.surface);
+      ctx.fillStyle = "#244653"; ctx.globalAlpha = 1; ctx.fill();
+      ctx.strokeStyle = "#edf6fa"; ctx.globalAlpha = .85; ctx.stroke();
+      if (projected.entrance) {
+        ctx.strokeStyle = cyan; ctx.globalAlpha = .95; ctx.lineWidth *= 2;
+        ctx.beginPath(); ctx.moveTo(...pixel(projected.entrance[0])); ctx.lineTo(...pixel(projected.entrance[1])); ctx.stroke();
+        ctx.lineWidth /= 2;
+      }
     }
     ctx.strokeStyle = "#edf6fa"; ctx.globalAlpha = .85; ctx.lineWidth = Math.max(1.5, height / 90);
     ctx.beginPath();
