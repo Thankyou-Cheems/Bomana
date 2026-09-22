@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>全真出击工具箱 · Bomana</title>
-    <meta name="description" content="全真 EC 战区与机场计算器、机型挂载对比、返航燃油规划与实用速查，数据随 Bomana 更新。">
+    <meta name="description" content="空空导弹交会与机动对照、全真 EC 战区与机场计算器、机型挂载对比和返航规划，数据随 Bomana 更新。">
     <meta name="theme-color" content="#eef6fc">
     <meta property="og:title" content="Bomana · 全真出击工具箱">
     <meta property="og:description" content="计算投弹枚数、对比挂载、规划返航，查阅全真 EC 常见问题。">
@@ -43,7 +43,7 @@
           <p class="hangar-lede">出发前算清挂载，返航前留够燃油。</p>
           <p class="tool-source" id="calcSource" role="status">正在核对参数版本…</p>
           <nav class="tool-nav" aria-label="工具导航">
-            <a href="#calcForm">战区与机场计算器</a><a href="#airportStatus">机场状态</a><a href="#airfieldDefense">机场防空</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
+            <a href="#calcForm">战区与机场计算器</a><a href="#airCombat">空空弹测算</a><a href="#airportStatus">机场状态</a><a href="#airfieldDefense">机场防空</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
           </nav>
         </div>
 
@@ -246,6 +246,45 @@
           </form>
           <div class="fuel-plan-result" id="fuelResult" aria-live="polite"><p>填入油耗、地速和距离后计算；缺少当前燃油时只显示所需油量。</p></div>
           <details class="tool-details"><summary>怎样获得可用的实测油耗？</summary><p>在接近返航的高度、挂载与油门下保持稳定平飞，用前后燃油质量差除以间隔分钟数。排除加油、抛副油箱和大幅机动。改油门、爬升或开加力后应重新测量。地速反映实际行进速度，不能直接用 IAS 代替。</p><p>默认 20% 绕行和 5 分钟储备只是可调整的规划假设。这里不读取 8111，也不以静态发动机表冒充实测；结果不含空战、等待和机况变化。</p></details>
+        </section>
+
+        <section class="tool-panel air-combat" id="airCombat" aria-labelledby="air-title">
+          <header class="tool-panel-head"><p class="hangar-kicker">AIR-TO-AIR · ENCOUNTER LAB</p><h2 id="air-title">来弹还在跟，下一步怎么飞？</h2><p>比较持续 39、转冷与改变机动平面。输入当前来弹状态，查看它需要怎样修正交会。</p></header>
+          <p id="airSource" class="tool-source" role="status">正在载入雷达弹参数…</p>
+          <div class="air-workspace">
+            <form id="airForm" class="air-controls">
+              <label class="hangar-field"><span>来袭弹型</span><select id="airWeapon" disabled><option>载入中…</option></select></label>
+              <div class="air-presets" aria-label="交会示例"><button type="button" data-air-preset="high">高空横向</button><button type="button" data-air-preset="late">近距来弹</button><button type="button" data-air-preset="descending">上下交会</button></div>
+              <div class="conversion-fields">
+                <label class="hangar-field"><span>当前斜距 · km</span><input id="airRange" type="number" min="0.2" max="30" step="0.1" value="5" required></label>
+                <label class="hangar-field"><span>来弹速度 · m/s</span><input id="airMissileSpeed" type="number" min="200" max="2000" step="10" value="1000" required></label>
+                <label class="hangar-field"><span>飞机 TAS · km/h</span><input id="airTargetSpeed" type="number" min="360" max="2340" step="10" value="1080" required></label>
+                <label class="hangar-field"><span>机动法向加速度 · g</span><input id="airTargetG" type="number" min="1" max="12" step="0.5" value="9" required></label>
+                <label class="hangar-field"><span>飞机高度 · m</span><input id="airTargetAltitude" type="number" min="0" max="18000" step="100" value="8000" required></label>
+                <label class="hangar-field"><span>来弹高度 · m</span><input id="airMissileAltitude" type="number" min="0" max="20000" step="100" value="8000" required></label>
+              </div>
+              <div class="air-slider"><label for="airAspect">当前航迹方向 <output id="airAspectValue">90° · 横向</output></label><input id="airAspect" type="range" min="0" max="180" step="1" value="90"><div><span>0° 远离</span><span>90° 横向</span><span>180° 迎头</span></div></div>
+              <div class="conversion-fields">
+                <label class="hangar-field"><span>开始机动 · 秒后</span><input id="airDelay" type="number" min="0" max="15" step="0.1" value="0" required></label>
+                <label class="hangar-field"><span>当前爬升角 · °</span><input id="airFlightPath" type="number" min="-45" max="45" step="1" value="0" required></label>
+              </div>
+              <details class="tool-details"><summary>观测中断假设</summary><p>默认始终有观测。这里手动假设从开始机动时丢失观测，期间沿旧速度外推，到期恢复观测；不会因为 39 或投箔条自动脱锁。</p><div class="conversion-fields"><label class="hangar-field"><span>中断持续 · s</span><input id="airGap" type="number" min="0" max="10" step="0.1" value="0" required></label><label class="hangar-field"><span>导弹已飞行 · s</span><input id="airAge" type="number" min="0" max="120" step="0.1" value="10" required></label></div></details>
+              <p class="tool-note">速度和高度均手填。无风；g 为理想航迹法向加速度，不等于座舱过载表读数。三个动作从相同的既有提前量开始。增益输入采用弹龄与距离／接近速度，未复刻原生计时状态。</p>
+            </form>
+            <div class="air-visuals">
+              <p class="air-model-label">短时定速对照 · 不含气动耗能与引信</p>
+              <div id="airResult" class="air-result" aria-live="polite"></div>
+              <div id="airCompare" class="air-compare" role="group" aria-label="选择要查看的机动"></div>
+              <p class="air-plot-legend"><span>━━ 飞机</span><span>┄┄ 来弹</span><span>全轨迹 · 拖动时间查看位置</span></p>
+              <div id="airPlot" class="air-plot" role="img" aria-label="飞机与导弹交会轨迹"></div>
+              <div class="air-scrub"><button id="airPlay" type="button" aria-label="播放轨迹">▶ 播放</button><input id="airTime" type="range" min="0" max="1000" value="0" aria-label="交会时间"><output id="airTimeValue">0.0 s</output></div>
+              <p id="airAdvice" class="air-advice"></p>
+              <div id="airRecovery" class="air-recovery"></div>
+            </div>
+          </div>
+          <details class="tool-details"><summary>发射条件射程表</summary><p>这是发射时的条件参考，与上面的来弹当前状态分别填写。只在原表覆盖范围内插值；不包含玩家机动，也不是不可逃逸区。</p><div class="tool-input-grid" id="airLaunchInputs"><label class="hangar-field"><span>发射高度 · m</span><input id="airLaunchAltitude" type="number" min="0" max="20000" step="100" value="5000"></label><label class="hangar-field"><span>发射载机 · Mach</span><input id="airLaunchMach" type="number" min="0" max="3" step="0.05" value="1"></label><label class="hangar-field"><span>目标径向速度 · Mach</span><input id="airLaunchTarget" type="number" min="-3" max="3" step="0.05" value="-0.9"><small>负值迎头，正值远离；不是目标总速度。</small></label></div><p id="airLaunchResult" class="repair-result" aria-live="polite"></p><p id="airLaunchDomain" class="tool-note"></p></details>
+          <details class="tool-details"><summary>跟踪门与弹型参数</summary><div id="airParameters" class="air-parameters"></div><p>距离／速度搜索半窗用于重新搜索候选；角门率约束观测相对预测的误差。它们都不是固定的“39 安全角”。半主动弹还依赖照射端，单看导弹方向不足以复原双站观测。</p></details>
+          <details class="tool-details"><summary>模型与研究边界</summary><p>客户端 2.59.0.13 的导引配置、门控加载、预测与制导消费者经过离线核对。这里使用比例导引运动学与实际配置的增益、指令上限，对三个明确的机动假设做短时比较；保持速度恒定，未复现完整 PID、气动力、推力、爬升程序、目标闪烁、多径、地形与引信。</p><p>最近距离只属于这个简化场景，不等于实战脱靶距离或存活概率。观测中断和恢复由用户假设指定，搜索窗内仍不保证重捕，窗外也不代表全部制导终止。持续 39 可能与稳定碰撞航向同时成立。</p><p>原生检测路径把地面响应作为独立项放入响应商分母。其他项相同时，杂波较弱反而更容易保留目标；三九线本身不是无条件失锁开关。地面模型的完整几何输入尚未还原，本页不计算失锁概率。</p><p>高空防御需要提前改变接近条件；末段才转冷可能已经来不及。<a href="https://warthunder.com/en/news/8898?page=2">Gaijin FOX-3 说明</a> · <a href="https://warthunder.com/en/news/8164-development-radars-and-missiles-recent-updates-en">导弹诱导阻力说明</a>。</p></details>
         </section>
 
         <section class="tool-panel" id="airfieldDefense" aria-labelledby="defense-title">

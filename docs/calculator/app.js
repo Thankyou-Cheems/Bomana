@@ -1,5 +1,6 @@
 import { airfieldDefenseMassAssessment, airportBarPositions, airportRepairVisit, airportPaletteBands, compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
+import { initAirCalculator } from "./air-ui.mjs";
 import { renderRewardChart, renderConversionChart, renderAirportRepairChart, renderAirportBars } from "./charts.mjs";
 
 const catalogUrl = "/api/v1/calculator/index.json";
@@ -1008,4 +1009,5 @@ aircraftSearchInput.addEventListener("input", renderAircraftList);
 
 bindConversion();
 bindRewards();
+initAirCalculator();
 boot();

@@ -27,6 +27,7 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(url);
   await page.waitForFunction(() => document.querySelector("#chargeWeaponA").options.length > 600);
+  await page.waitForFunction(() => document.querySelector("#airCompare button") !== null);
   const open = async id => { if (!await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const close = async id => { if (await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const text = selector => page.locator(selector).textContent();
@@ -222,6 +223,28 @@ try {
   await page.locator("#chargeMassB").fill("0.3");
   assert.match(await text("#chargeResult strong"), /1 枚 B/);
 
+  // Air-to-air: actual encounter inputs, model boundaries, replay and ARH/SARH distinction.
+  assert.equal(await page.locator("#airWeapon option").count(), 10);
+  assert.match(await text("#airResult"), /<5 m/);
+  assert.equal(await page.locator("#airCompare button").count(), 3);
+  assert.equal(await page.locator("#airPlot svg").count(), 1);
+  await page.locator('#airCompare [data-mode="descend"]').click();
+  assert.match(await text("#airAdvice"), /改变原交会平面/);
+  await page.locator("#airTime").fill("500");
+  assert.notEqual(await text("#airTimeValue"), "0.0 s");
+  await page.locator("#airForm details > summary").click();
+  await page.locator("#airGap").fill("2");
+  await page.waitForFunction(() => document.querySelector("#airRecovery").textContent.includes("距离残差"));
+  await page.locator("#airWeapon").selectOption("su_r_27er");
+  await page.waitForFunction(() => document.querySelector("#airRecovery").textContent.includes("照射端"));
+  await page.locator("#airRange").fill("");
+  await page.waitForFunction(() => !document.querySelector("#airPlot svg"));
+  assert.match(await text("#airResult"), /完整数值/);
+  await page.locator('[data-air-preset="high"]').click();
+  await page.locator("#airWeapon").selectOption("us_aim_120a");
+  await page.waitForFunction(() => document.querySelector("#airPlot svg") !== null);
+  await page.locator("#airForm details > summary").click();
+
   // Capture the novice flow, with all optional parameters folded away.
   await page.locator("#chargeWeaponA").selectOption("us_1000lb_mk_83_ldgp");
   await page.locator("#chargeWeaponB").selectOption("us_500lb_mk_82_ldgp");
@@ -240,6 +263,7 @@ try {
     await page.locator("#airportDiagramDetails").screenshot({ path: `../.artifacts/calculator-ui/airport-bars-${width}.png`, style: ".site-header { visibility: hidden; }" });
     await page.locator("#explosiveConversion").screenshot({ path: `../.artifacts/calculator-ui/conversion-${width}.png`, style: ".site-header { visibility: hidden; }" });
     await page.locator("#usefulActions").screenshot({ path: `../.artifacts/calculator-ui/rewards-${width}.png`, style: ".site-header { visibility: hidden; }" });
+    await page.locator("#airCombat").screenshot({ path: `../.artifacts/calculator-ui/air-${width}.png`, style: ".site-header { visibility: hidden; }" });
   }
   if (!remote) {
     const noRepair = await browser.newPage();

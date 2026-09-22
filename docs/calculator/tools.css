@@ -179,3 +179,53 @@
 .airport-endpoint { paint-order: stroke; stroke: #edf5fb; stroke-width: 5px; stroke-linejoin: round; }
 .airport-reversed .airport-endpoint { stroke: #fff1f0; }
 @media (max-width: 560px) { .airport-comparison-panels { grid-template-columns: 1fr; gap: 18px; } }
+.air-workspace { display: grid; grid-template-columns: minmax(260px, .75fr) minmax(0, 1.4fr); gap: 26px; margin-top: 22px; }
+.air-controls { padding: 20px; border: 1px solid #d5e4ef; border-radius: 16px; background: #f5faff; align-self: start; min-width: 0; }
+.air-controls .conversion-fields { margin-top: 16px; gap: 14px; }
+.air-controls select { width: 100%; }
+.air-presets { display: flex; gap: 6px; margin: 14px 0; }
+.air-presets button, .air-scrub button { border: 1px solid #bbd1df; border-radius: 7px; background: white; color: #315c75; padding: 8px 10px; min-height: 38px; cursor: pointer; font: inherit; font-size: 12px; }
+.air-presets button { flex: 1; padding: 6px 2px; }
+.air-slider { margin: 22px 0 16px; color: #31566e; font-size: 12px; }
+.air-slider label, .air-slider > div { display: flex; justify-content: space-between; gap: 5px; }
+.air-slider input { width: 100%; height: 28px; margin: 8px 0 2px; accent-color: #2c85ad; cursor: pointer; }
+.air-slider output { font-weight: 700; color: #176e95; }
+.air-visuals { min-width: 0; }
+.air-model-label { margin: 0 0 12px; font-size: 12px; color: #826133; }
+.air-result { padding: 18px; border-radius: 14px; background: #eaf3fa; color: #234e69; }
+.air-result dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.air-result dt { font-size: 11px; color: #58758a; }
+.air-result dd { margin: 8px 0 0; font-size: clamp(18px, 2.4vw, 28px); font-weight: 700; font-variant-numeric: tabular-nums; }
+.air-result > .tool-note { margin-bottom: 0; font-size: 11px; }
+.air-compare { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
+.air-compare button { display: grid; gap: 7px; min-width: 0; border: 1px solid #d3e2ec; border-radius: 10px; background: #fff; color: #416278; padding: 12px 5px; text-align: center; cursor: pointer; font: inherit; }
+.air-compare button[aria-pressed=true] { border-color: #347fa2; box-shadow: inset 0 0 0 1px #347fa2; background: #f1f8fc; color: #1d688b; }
+.air-compare button span { font-size: 12px; }
+.air-compare button strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.air-compare button small { color: #688194; font-size: 10px; }
+.air-plot { border: 1px solid #dce8f0; background: #f6fafc; border-radius: 12px; overflow: hidden; }
+.air-plot-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; color: #688194; font-size: 11px; margin: 0 0 8px; }
+.air-plot-legend span:first-child { color: #2d89b4; }
+.air-plot-legend span:nth-child(2) { color: #b94858; }
+.air-plot svg { display: block; width: 100%; }
+.air-plot-label { fill: #648097; font: 11px system-ui, sans-serif; }
+.air-plot-grid { stroke: #dce7ee; stroke-width: 1; }
+.air-target-path, .air-missile-path { fill: none; stroke-width: 2; stroke-linecap: round; }
+.air-target-path { stroke: #2d89b4; }
+.air-missile-path { stroke: #cc6671; stroke-dasharray: 5 3; }
+.air-target-marker { fill: #13668f; stroke: white; stroke-width: 1; }
+.air-missile-marker { fill: #b94858; stroke: white; stroke-width: 1; }
+.air-los { stroke: #6a849a; stroke-width: 1; stroke-opacity: .5; stroke-dasharray: 3 5; }
+.air-scale { fill: none; stroke: #93a8b8; stroke-width: 1; }
+.air-scrub { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+.air-scrub input { flex: 1; min-width: 0; accent-color: #2d89b4; }
+.air-scrub output { color: #55778d; font-size: 12px; min-width: 42px; font-variant-numeric: tabular-nums; }
+.air-advice, .air-recovery { font-size: 12px; line-height: 1.85; color: #54758c; }
+.air-recovery:not(:empty) { border-left: 3px solid #c1d6e4; padding-left: 12px; }
+.air-recovery p { margin: 6px 0; }
+.air-parameters dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; padding: 14px 0; }
+.air-parameters dt { font-size: 12px; color: #637b8c; }
+.air-parameters dd { margin: 5px 0 0; color: #315a73; font-variant-numeric: tabular-nums; }
+.air-combat button:focus-visible, .air-combat input:focus-visible { outline: 2px solid #337da4; outline-offset: 3px; }
+@media (max-width: 900px) { .air-workspace { grid-template-columns: 1fr; } .air-parameters dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .air-controls { padding: 14px; } .air-result { padding: 14px; } .air-result dl { gap: 6px; } .air-result dd { font-size: 18px; } .air-compare { gap: 5px; } .air-compare button span { font-size: 11px; } .air-plot-label { font-size: 24px; } }
