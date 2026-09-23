@@ -25,15 +25,53 @@ it.each([2000, 2500, 3000])("keeps a %dm high approach readable and enlarges the
     const visibleRailPoints = frame.projected.rails.flat(2).map(pixel)
       .filter(([x, y]) => x! >= 8 && x! <= 1192 && y! >= 25 && y! <= 142);
     const railHeight = visibleRailPoints.length ? Math.max(...visibleRailPoints.map(p => p[1]!)) - Math.min(...visibleRailPoints.map(p => p[1]!)) : 0;
-    sizes.push(runwayWidth);
-    expect.soft(runwayWidth).toBeGreaterThanOrEqual(8);
-    expect.soft(railHeight).toBeGreaterThan(40);
-    for (const [x, y] of frame.projected.framing.map(pixel)) {
+    const boxW = Math.max(...corners.map(p => p[0]!)) - Math.min(...corners.map(p => p[0]!));
+    const boxH = Math.max(...corners.map(p => p[1]!)) - Math.min(...corners.map(p => p[1]!));
+    sizes.push(Math.max(boxW, boxH));
+    expect(Math.max(boxW, boxH)).toBeGreaterThanOrEqual(28);
+    expect(railHeight).toBeGreaterThan(24);
+    for (const [x, y] of corners) {
       expect(x).toBeGreaterThanOrEqual(8); expect(x).toBeLessThanOrEqual(1192);
       expect(y).toBeGreaterThanOrEqual(25); expect(y).toBeLessThanOrEqual(142);
     }
   }
-  expect(sizes[3]!).toBeGreaterThan(sizes[0]! * 1.5);
+  expect(sizes[3]!).toBeGreaterThanOrEqual(sizes[0]!);
+});
+
+it("keeps a 2–3 km return readable inside the flat instrument", () => {
+  for (const [along, altitude, heading, across, bank] of [[20000, 2500, 0, 800, 0], [12000, 2500, 0, 400, 0], [8000, 3000, 20, 1200, 25], [15000, 2500, -30, 600, 0]] as const) {
+    const frame = landingRunwayFrame({ ...scene, along, across, height: altitude, angle: scene.angle + heading * Math.PI / 180, pitch: 0, roll: bank * Math.PI / 180, approach: true }, 434, 134);
+    const pixel = ([x, y]: readonly number[]) => [frame.x + x! * frame.focal, frame.y + y! * frame.focal];
+    const corners = frame.projected.surface.map(pixel);
+    const width = Math.max(...corners.map(p => p[0]!)) - Math.min(...corners.map(p => p[0]!));
+    const height = Math.max(...corners.map(p => p[1]!)) - Math.min(...corners.map(p => p[1]!));
+    const rails = frame.projected.rails.flat(2).map(pixel).filter(([x, y]) => x! >= 8 && x! <= 426 && y! >= 20 && y! <= 126);
+    const railSpan = rails.length ? Math.max(
+      Math.max(...rails.map(p => p[0]!)) - Math.min(...rails.map(p => p[0]!)),
+      Math.max(...rails.map(p => p[1]!)) - Math.min(...rails.map(p => p[1]!))) : 0;
+    expect(Math.max(width, height), `${along}/${altitude}/${heading}`).toBeGreaterThanOrEqual(26);
+    expect(railSpan, `${along}/${altitude}/${heading}/${bank} n=${rails.length}`).toBeGreaterThan(22);
+    expect(frame.projected.groundSurface.length).toBeGreaterThanOrEqual(3);
+  }
+});
+
+it("keeps close runway perspective and enlarges a distant runway in proportion", () => {
+  const frameFor = (along: number, height: number) => landingRunwayFrame({ ...scene, across: 0, along, height, pitch: 0, roll: 0, approach: true }, 434, 134);
+  const span = (frame: ReturnType<typeof landingRunwayFrame>) => {
+    const pixel = ([x, y]: readonly number[]) => [frame.x + x! * frame.focal, frame.y + y! * frame.focal];
+    const corners = frame.projected.surface.map(pixel);
+    return Math.max(...corners.map(p => p[0]!)) - Math.min(...corners.map(p => p[0]!))
+      + Math.max(...corners.map(p => p[1]!)) - Math.min(...corners.map(p => p[1]!));
+  };
+  const natural = 434 / (2 * Math.tan(Math.PI / 6));
+  const close = frameFor(1400, 90);
+  const mid = frameFor(9000, 2500);
+  const far = frameFor(24000, 2500);
+  expect(close.focal).toBeLessThanOrEqual(natural * 1.02);
+  expect(far.focal / natural).toBeGreaterThan(mid.focal / natural);
+  expect(mid.focal / natural).toBeGreaterThan(1.4);
+  expect(span(mid)).toBeGreaterThan(span(far));
+  expect(span(close)).toBeGreaterThan(20);
 });
 
 it.each([

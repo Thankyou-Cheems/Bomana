@@ -69,7 +69,7 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   const cueKey = `${selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId}|${landing?.settings.reverse}|${runway === null}|${g?.lengthM}`;
   return { active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
     runway, otherRunways, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
-    aria: `${mode}；${course}，${distance}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；跟随观察透视，高空自动后移并调整观察角度；姿态缺测使用可用航迹俯仰和水平滚转；曲线从当前高度与俯仰接入末段下滑线，底面低15m；高低偏差独立计算；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
+    aria: `${mode}；${course}，${distance}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；靠近时按真实透视，远处按距离放大跑道；下滑道显示接入跑道的可见段；姿态缺测使用可用航迹俯仰和水平滚转；曲线从当前高度与俯仰接入末段下滑线，底面低15m；高低偏差独立计算；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
 }
 
 export type LandingTapeView = ReturnType<typeof landingTapePresentation>;
@@ -164,16 +164,22 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
       text(item.label, x, y - 8, font * .75, color, "center", 65);
     }
   }
-  // Quiet datum references use the same aircraft camera as the runway.
+  // Sky stays the instrument background. The ground is a calm datum, not a
+  // saturated fill and not an official map.
   if (projected) {
-    ctx.strokeStyle = "#91aebc"; ctx.globalAlpha = .13; ctx.lineWidth = 1;
+    if (projected.groundSurface.length >= 3) {
+      polygon(projected.groundSurface);
+      ctx.fillStyle = "#1c4a46"; ctx.globalAlpha = .92; ctx.fill();
+      ctx.strokeStyle = "#9eb8a4"; ctx.globalAlpha = .7; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ctx.strokeStyle = "#b7cfc4"; ctx.globalAlpha = .4; ctx.lineWidth = 1;
     ctx.beginPath();
     for (const line of projected.ground) { ctx.moveTo(...pixel(line[0])); ctx.lineTo(...pixel(line[1])); }
     ctx.stroke();
-    ctx.lineWidth = Math.max(1, height / 155);
-    ctx.fillStyle = cyan; ctx.globalAlpha = .045;
+    ctx.lineWidth = Math.max(1.5, height / 90);
+    ctx.fillStyle = cyan; ctx.globalAlpha = .28;
     for (const quad of projected.ribbon) { polygon(quad); ctx.fill(); }
-    ctx.strokeStyle = cyan; ctx.globalAlpha = .65;
+    ctx.strokeStyle = "#d7fff8"; ctx.globalAlpha = .95; ctx.lineWidth = Math.max(2, height / 55);
     for (const rail of projected.rails) {
       ctx.beginPath();
       let previous: ProjectedPoint | null = null;
@@ -187,8 +193,8 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
     // steep/banked observation view. Guidance must not wash out the runway.
     if (projected.surface.length >= 3) {
       polygon(projected.surface);
-      ctx.fillStyle = "#244653"; ctx.globalAlpha = 1; ctx.fill();
-      ctx.strokeStyle = "#edf6fa"; ctx.globalAlpha = .85; ctx.stroke();
+      ctx.fillStyle = "#e7eef2"; ctx.globalAlpha = 1; ctx.fill();
+      ctx.strokeStyle = "#071923"; ctx.globalAlpha = 1; ctx.lineWidth = Math.max(2, height / 70); ctx.stroke();
       if (projected.entrance) {
         ctx.strokeStyle = cyan; ctx.globalAlpha = .95; ctx.lineWidth *= 2;
         ctx.beginPath(); ctx.moveTo(...pixel(projected.entrance[0])); ctx.lineTo(...pixel(projected.entrance[1])); ctx.stroke();
