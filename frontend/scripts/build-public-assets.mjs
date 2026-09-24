@@ -44,7 +44,9 @@ export function buildPublicAssets() {
       readFileSync(resolve(repositoryRoot, "bomana", "data", asset)),
     );
   }
-  writeOfflineAssetModule(generatedRoot, "public-offline-assets.ts", "PUBLIC", "public", publicOfflineAssets);
+  writeOfflineAssetModule(generatedRoot, "public-offline-assets.ts", "PUBLIC", "public", publicOfflineAssets, {
+    sharedAssetIds: ["aircraft-parameters"],
+  });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) buildPublicAssets();

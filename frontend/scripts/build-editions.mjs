@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sharedAircraftParametersName } from "./offline-asset-builder.mjs";
 
 const frontendRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const distRoot = resolve(frontendRoot, "dist");
@@ -28,9 +29,22 @@ for (const edition of editions) {
   );
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${edition} frontend build failed`);
+  publishSharedAircraftParameters(edition);
   if (edition === "Enhanced") writeEnhancedRetirementWorker();
   else writeServiceWorker(edition);
   auditEdition(edition);
+}
+
+function publishSharedAircraftParameters(edition) {
+  const source = resolve(frontendRoot, "src/generated/aircraft-parameters.json");
+  const bytes = readFileSync(source);
+  const name = sharedAircraftParametersName(createHash("sha256").update(bytes).digest("hex"));
+  const assetsDir = resolve(distRoot, edition, "assets");
+  mkdirSync(assetsDir, { recursive: true });
+  writeFileSync(resolve(assetsDir, name), bytes);
+  const sharedDir = resolve(distRoot, "shared");
+  mkdirSync(sharedDir, { recursive: true });
+  writeFileSync(resolve(sharedDir, name), bytes);
 }
 
 function writeEnhancedRetirementWorker() {
