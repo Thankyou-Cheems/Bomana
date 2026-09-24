@@ -167,7 +167,10 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   // Sky stays the instrument background. The ground is a calm datum, not a
   // saturated fill and not an official map.
   if (projected) {
-    if (projected.groundSurface.length >= 3) {
+    if (projected.groundSurface.length >= 3 && projected.groundSurface.every((point) => {
+      const [x, y] = pixel(point);
+      return x >= left - centerWidth && x <= right + centerWidth && y >= -height && y <= bottom + height;
+    })) {
       polygon(projected.groundSurface);
       ctx.fillStyle = "#1c4a46"; ctx.globalAlpha = .92; ctx.fill();
       ctx.strokeStyle = "#9eb8a4"; ctx.globalAlpha = .7; ctx.lineWidth = 1.5; ctx.stroke();
@@ -176,14 +179,30 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
     ctx.beginPath();
     for (const line of projected.ground) { ctx.moveTo(...pixel(line[0])); ctx.lineTo(...pixel(line[1])); }
     ctx.stroke();
+    const placedInside = (point: ProjectedPoint) => {
+      const [x, y] = pixel(point);
+      return x >= left && x <= right && y >= top && y <= bottom;
+    };
+    // Far magnification stretches the path's near mouth into a loop. Keep the
+    // leg that joins the runway until the picture is close enough to show the whole corridor.
+    const natural = centerWidth / (2 * Math.tan(Math.PI / 6));
+    const joiningOnly = frame.focal > natural * 3;
+    const rails = joiningOnly ? projected.rails.map((rail) => rail.slice(-18)) : projected.rails;
+    const ribbon = joiningOnly ? projected.ribbon.slice(-18) : projected.ribbon;
     ctx.lineWidth = Math.max(1.5, height / 90);
     ctx.fillStyle = cyan; ctx.globalAlpha = .28;
-    for (const quad of projected.ribbon) { polygon(quad); ctx.fill(); }
+    // Only the part of the glide path that sits in the strip. A magnified segment
+    // that merely crosses the panel reads as a scribble around an abstract runway.
+    for (const quad of ribbon) {
+      if (quad.some((point) => !placedInside(point))) continue;
+      polygon(quad); ctx.fill();
+    }
     ctx.strokeStyle = "#d7fff8"; ctx.globalAlpha = .95; ctx.lineWidth = Math.max(2, height / 55);
-    for (const rail of projected.rails) {
+    for (const rail of rails) {
       ctx.beginPath();
       let previous: ProjectedPoint | null = null;
       for (const piece of rail) {
+        if (!placedInside(piece[0]) || !placedInside(piece[1])) { previous = null; continue; }
         if (!previous || previous[0] !== piece[0][0] || previous[1] !== piece[0][1]) ctx.moveTo(...pixel(piece[0]));
         ctx.lineTo(...pixel(piece[1])); previous = piece[1];
       }

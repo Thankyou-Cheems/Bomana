@@ -24,6 +24,26 @@ function intersectNear(p: Point3, q: Point3): Point3 {
   return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, near];
 }
 const perspective = (p: Point3): ProjectedPoint => [p[0] / p[2], p[1] / p[2]];
+const viewLimit = 2.4;
+/** Drop the part of a stroke that a near-plane clip would fling across the strip. */
+function clipProjected(piece: ProjectedSegment | null): ProjectedSegment | null {
+  if (!piece) return null;
+  const [a, b] = piece;
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  let t0 = 0, t1 = 1;
+  const bound = (limit: number, value: number, delta: number) => {
+    if (Math.abs(delta) < 1e-8) return value <= limit;
+    const t = (limit - value) / delta;
+    if (delta > 0) {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    } else if (t > t1) return false;
+    else if (t > t0) t0 = t;
+    return true;
+  };
+  if (!bound(viewLimit, a[0], dx) || !bound(viewLimit, -a[0], -dx) || !bound(viewLimit, a[1], dy) || !bound(viewLimit, -a[1], -dy) || t1 < t0) return null;
+  return [[a[0] + dx * t0, a[1] + dy * t0], [a[0] + dx * t1, a[1] + dy * t1]];
+}
 
 /** A runway may straddle the camera plane during a pass; clip its surface too. */
 function surface(corners: readonly Point3[]): ProjectedPoint[] {
@@ -108,8 +128,11 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   const runwayHalfWidth = (scene.width ?? 90) / 2;
   const sin = Math.sin(scene.angle + yaw), cos = Math.cos(scene.angle + yaw);
   const cp = Math.cos(cameraPitch), sp = Math.sin(cameraPitch);
+  // A one-metre altitude twitch at field elevation otherwise flips the pavement
+  // between a surface and an edge-on line. The displayed height is unchanged.
+  const eye = scene.height >= 0 ? Math.max(scene.height, 12) : scene.height;
   const point = (along: number, across: number, heightAboveRunway: number): Point3 => {
-    const depth = along * cos - across * sin + retreat, down = scene.height - heightAboveRunway;
+    const depth = along * cos - across * sin + retreat, down = eye - heightAboveRunway;
     const x = along * sin + across * cos, y = down * cp - depth * sp;
     // Positive right bank rotates the world counterclockwise in screen space.
     return [x * Math.cos(cameraRoll) + y * Math.sin(cameraRoll), -x * Math.sin(cameraRoll) + y * Math.cos(cameraRoll), depth * cp + down * sp];
@@ -172,7 +195,7 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
       edges.push(samples);
       const rail: ProjectedSegment[] = [];
       for (let i = 1; i < samples.length; i++) {
-        const piece = segment(samples[i - 1]!, samples[i]!);
+        const piece = clipProjected(segment(samples[i - 1]!, samples[i]!));
         if (piece) rail.push(piece);
         if (distances[i]! >= lookAhead) {
           const a = samples[i - 1]!, b = samples[i]!;
@@ -231,11 +254,12 @@ export function landingRunwayFrame(scene: LandingRunwayScene, width: number, hei
   const runway = bounds(projected.surface);
   const runwaySpan = Math.max(.000001, runway.bottom - runway.top);
   const widthSpan = Math.max(.000001, runway.right - runway.left);
-  // The visible glide path is the leg that joins the runway, not the bow under
-  // the aircraft. A fixed suffix keeps that leg in frame without a discrete pop.
+  // Rails run from the aircraft to the threshold. The joining curve is the suffix.
+  // Ignore a vertex the near plane has thrown far outside the view; it must not set the zoom.
   const joined: ProjectedPoint[] = [];
-  for (const rail of projected.rails) for (let index = Math.max(0, rail.length - 16); index < rail.length; index++) {
-    joined.push(rail[index]![0], rail[index]![1]);
+  for (const rail of projected.rails) for (const piece of rail.slice(-16)) {
+    if ([piece[0], piece[1]].some((point) => Math.abs(point[0]) > 1.2 || Math.abs(point[1]) > 1.2)) continue;
+    joined.push(piece[0], piece[1]);
   }
   const picture = bounds(joined.length ? [...projected.surface, ...joined] : projected.surface);
   // Ease the path out of the frame before the ribbon disappears at 30 m.
@@ -259,7 +283,14 @@ export function landingRunwayFrame(scene: LandingRunwayScene, width: number, hei
   const boosted = Math.min(contained, naturalFocal * gain);
   const together = fit(picture) * .92;
   const pathFocal = Math.min(boosted, Math.max(together, boosted * .58));
-  const focal = boosted + (pathFocal - boosted) * routeWeight;
+  let focal = boosted + (pathFocal - boosted) * routeWeight;
+  const shortNdc = Math.min(widthSpan, runwaySpan);
+  const aligned = Math.abs(scene.angle) < 25 * radians && Math.abs(scene.roll ?? 0) < 12 * radians;
+  if (aligned && range > handoff && shortNdc > 0.000001) {
+    const readableFocal = Math.min(contained, 26 / shortNdc);
+    const blend = Math.min(1, (range - handoff) / 1600);
+    if (readableFocal > focal) focal += (readableFocal - focal) * blend;
+  }
   const origin = (start: number, end: number, targetStart: number, targetEnd: number, routeStart: number, routeEnd: number) =>
     Math.max(start - targetStart * focal, Math.min(end - targetEnd * focal, (start + end - (routeStart + routeEnd) * focal) / 2));
   return { ...base, focal,
@@ -284,7 +315,10 @@ export class RunwaySceneMotion {
     this.#at = at;
   }
   step(at: number): LandingRunwayScene | null {
-    const dt = Math.max(0, at - this.#at) / 1000, omega = 18, decay = Math.exp(-omega * dt);
+    const dt = Math.max(0, at - this.#at) / 1000;
+    // Pitch and roll follow the flight path, whose vertical speed jitters between
+    // 8111 samples. A slower response keeps the runway from strobing in the strip.
+    const omegaFor = (axis: string) => axis === "pitch" || axis === "roll" ? 2.2 : 18;
     this.#at = Math.max(at, this.#at);
     if (!this.#value || !this.#target) return this.#value;
     const value = { ...this.#target };
@@ -292,6 +326,7 @@ export class RunwaySceneMotion {
       if (this.#target[axis] === undefined) continue;
       let offset = (this.#value[axis] ?? 0) - this.#target[axis]!;
       if (axis === "angle" || axis === "roll") offset = Math.atan2(Math.sin(offset), Math.cos(offset));
+      const omega = omegaFor(axis), decay = Math.exp(-omega * dt);
       const c = this.#velocity[axis] + omega * offset;
       const delta = (offset + c * dt) * decay;
       const velocity = (this.#velocity[axis] - omega * c * dt) * decay;
