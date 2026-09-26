@@ -2,6 +2,23 @@ import { describe, expect, it } from "vitest";
 import { GroundTrackEstimator, targetGroundTrackGeometry } from "./ground-track";
 
 describe("GroundTrackEstimator", () => {
+  it("adapts to slower positions without extending a frozen or disconnected track indefinitely", () => {
+    const estimator = new GroundTrackEstimator();
+    const scale = [100000, 100000] as const;
+    for (let atMs = 0; atMs <= 3500; atMs += 100) {
+      const positionAt = Math.floor(atMs / 600) * 600;
+      const track = estimator.update({ atMs, x: .5, y: .5 - positionAt * .0000015, scale });
+      if (atMs >= 1200) {
+        expect(track.valid).toBe(true);
+        expect(track.groundSpeedMps).toBeCloseTo(150);
+      }
+    }
+    for (let atMs = 3600; atMs <= 4100; atMs += 100) {
+      const track = estimator.update({ atMs, x: .5, y: .5 - 3000 * .0000015, scale });
+      if (atMs >= 4000) expect(track.valid).toBe(false);
+    }
+    expect(estimator.update({ atMs: 5000, x: .5, y: .49, scale }).valid).toBe(false);
+  });
   it("expires unchanged source positions instead of projecting a frozen map indefinitely", () => {
     const estimator = new GroundTrackEstimator();
     const scale = [100000, 100000] as const;

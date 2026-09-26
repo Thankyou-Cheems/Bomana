@@ -52,6 +52,7 @@ export interface LandingGeometry {
   readonly predictedThresholdCrossM?: number | null;
 }
 export interface LandingSnapshot {
+  readonly runwayKey?: string;
   readonly attitude?: { readonly pitchDeg: number | null; readonly rollDeg: number | null; readonly tasMps: number | null };
   readonly nearbyRunways?: readonly { readonly key: string; readonly id: string; readonly label: string; readonly friendly: boolean; readonly geometry: LandingGeometry }[];
   readonly settings: LandingSettings;
@@ -180,14 +181,19 @@ export class LandingAssist {
   #missingSince = 0;
   #lastAutoAt = 0;
   #cooldownUntil = 0;
+  #groundSince: number | null = null;
+  #departure = false;
+  #departureOrigin: { x: number; y: number; altitude: number | null } | null = null;
+  #groundObservation: { at: number; x: number; y: number; speed: number; nearGround: boolean } | null = null;
   settings(): LandingSettings { return this.#settings; }
   configure(settings: LandingSettings, navigation: EditionSnapshot["navigation"]): void {
     validateLandingSettings(settings);
+    if (settings.enabled && this.#departure) throw new Error("起飞阶段暂不显示进近，离场后可重新开启");
     const runways = landingRunways(navigation);
     const runway = settings.runwayId ? runways.find(item => item.id === settings.runwayId) : runways[0];
     if (settings.enabled && !runway) throw new Error("暂无带有效端点的友方跑道");
     const key = runway ? JSON.stringify([runway.runwayStart, runway.runwayEnd]) : "";
-    const changed = (runway?.id ?? null) !== this.#settings.runwayId || key !== this.#runwayKey;
+    const changed = !runway || !sameRunway(this.#runwayKey, runway, navigation?.mapScaleM);
     let reverse = settings.reverse;
     if (changed && runway && navigation?.player && navigation.mapScaleM) {
       const distance = (p: readonly [number, number]) => Math.hypot((p[0] - navigation.player!.x) * navigation.mapScaleM![0], (p[1] - navigation.player!.y) * navigation.mapScaleM![1]);
@@ -196,7 +202,7 @@ export class LandingAssist {
     const directionChanged = changed || reverse !== this.#settings.reverse;
     this.#settings = { ...settings, automatic: settings.automatic ?? false, runwayId: runway?.id ?? null, reverse,
       runwayElevationM: directionChanged ? null : settings.runwayElevationM };
-    this.#runwayKey = key;
+    this.#runwayKey = changed ? key : this.#runwayKey;
     this.#candidateKey = ""; this.#exitSince = this.#missingSince = 0;
   }
 
@@ -216,14 +222,16 @@ export class LandingAssist {
       this.#gearRisk = "unknown";
       this.#flapRisk = "unknown";
       this.#candidateKey = ""; this.#exitSince = this.#missingSince = this.#lastAutoAt = this.#cooldownUntil = 0;
+      this.#groundSince = null; this.#departure = false; this.#groundObservation = null; this.#departureOrigin = null;
     }
     this.#context = input.context;
     if (this.#settings.enabled && input.fresh) {
-      const runway = this.#lockedRunway(landingRunways(input.navigation));
+      const runway = this.#lockedRunway(landingRunways(input.navigation), input.navigation?.mapScaleM);
       if (runway && runway.id !== this.#settings.runwayId) this.#settings = { ...this.#settings, runwayId: runway.id };
       else if (!runway && this.#settings.runwayElevationM !== null) this.#settings = { ...this.#settings, runwayElevationM: null };
     }
-    this.#updateAutomatic(input);
+    this.#updateGround(input, terrainElevation);
+    if (!this.#departure) this.#updateAutomatic(input);
     const snapshot = this.#buildView(input, terrainElevation, this.#settings, this.#runwayKey, this.#gearRisk, this.#flapRisk);
     this.#gearRisk = snapshot.gearRisk ?? "unknown";
     this.#flapRisk = snapshot.flapReference?.risk ?? "unknown";
@@ -250,9 +258,11 @@ export class LandingAssist {
     const runways = landingRunways(input.navigation);
     const flapReference = landingFlapReference(input.aircraft, input.fresh ? input.flapsPercent : null,
       input.fresh ? input.iasKmh : null, previousFlapRisk);
-    const runway = runways.find(item => item.id === settings.runwayId);
+    const observed = runways.find(item => item.id === settings.runwayId);
+    const locked = this.#lockedRunway(runways, input.navigation?.mapScaleM);
+    const runway = locked ?? observed;
     const unavailable = !settings.enabled ? "disabled" : !input.fresh || !input.navigation?.player ? "telemetry"
-      : !runway ? "runway-missing" : JSON.stringify([runway.runwayStart, runway.runwayEnd]) !== runwayKey ? "runway-changed" : "";
+      : !runway ? "runway-missing" : !locked ? "runway-changed" : "";
     const start = runway && (settings.reverse ? runway.runwayEnd! : runway.runwayStart!);
     const end = runway && (settings.reverse ? runway.runwayStart! : runway.runwayEnd!);
     const terrainM = !unavailable && start && settings.runwayElevationM === null ? terrainElevation(start) : null;
@@ -272,7 +282,7 @@ export class LandingAssist {
             altitudeM: input.altitudeM, elevationM: terrainElevation(item.runwayStart!), glideAngleDeg: settings.glideAngleDeg, velocity: null,
           }) };
       }) : [];
-    return { settings, attitude: input.fresh ? input.attitude : undefined, nearbyRunways, runways: runways.map(item => {
+    return { settings, runwayKey, attitude: input.fresh ? input.attitude : undefined, nearbyRunways, runways: runways.map(item => {
       const dx = (item.runwayEnd![0] - item.runwayStart![0]) * input.navigation!.mapScaleM![0];
       const dy = (item.runwayEnd![1] - item.runwayStart![1]) * input.navigation!.mapScaleM![1];
       return { id: item.id, label: item.label, distanceKm: item.distanceKm, grid: item.grid,
@@ -284,6 +294,54 @@ export class LandingAssist {
       iasKmh: input.fresh ? input.iasKmh : null, verticalSpeedMps: input.fresh ? input.verticalSpeedMps : null,
       gearPercent: input.fresh ? input.gearPercent : null, airbrakePercent: input.fresh ? input.airbrakePercent : null,
       flapsPercent: input.fresh ? input.flapsPercent : null, geometry, aircraft: input.aircraft ?? null, gearRisk, flapReference };
+  }
+
+  // This is a presentation phase, not proof of wheel contact. It is observed
+  // before the track gate: a repair/respawn jump invalidates the ground track.
+  #updateGround(input: LandingInput, elevation: (p: readonly [number, number]) => number | null): void {
+    const at = input.sampledAtMs, n = input.navigation;
+    if (!input.fresh || at == null || !n?.player || !n.mapScaleM) {
+      this.#groundSince = null; this.#groundObservation = null; return;
+    }
+    const previous = this.#groundObservation;
+    if (previous && at <= previous.at) return;
+    if (previous && at - previous.at > 1500) this.#groundSince = null;
+    const speed = input.iasKmh;
+    const quiet = input.verticalSpeedMps !== null && Math.abs(input.verticalSpeedMps) <= 2;
+    const possibleGround = quiet && speed !== null && speed <= 80 && input.gearPercent !== null && input.gearPercent >= 95;
+    let onStrip = false, low = false, unknownHeight = false;
+    for (const r of possibleGround ? landingRunways(n) : []) {
+      const reference = sameRunway(this.#runwayKey, r, n.mapScaleM) ? this.#settings.runwayElevationM : null;
+      const g = landingGeometry({ player: n.player, scale: n.mapScaleM, start: r.runwayStart!, end: r.runwayEnd!,
+        altitudeM: input.altitudeM, elevationM: reference ?? elevation(r.runwayStart!), glideAngleDeg: 3, velocity: null });
+      const strip = g.thresholdDistanceM <= 100 && g.thresholdDistanceM >= -g.lengthM - 100 && Math.abs(g.crossTrackM) <= 120;
+      onStrip ||= strip;
+      low ||= strip && g.heightM !== null && Math.abs(g.heightM) <= 12;
+      unknownHeight ||= strip && g.heightM === null;
+    }
+    const nearGround = onStrip && quiet && speed !== null && speed <= 80 && input.gearPercent !== null && input.gearPercent >= 95
+      && (low || unknownHeight && speed <= 40);
+    // Repair pads can sit above the terrain mesh. A stopped, gear-down plane
+    // jumping between runway positions is evidence even without that elevation.
+    const resetEligible = nearGround || onStrip && quiet && speed !== null && speed <= 40 && input.gearPercent !== null && input.gearPercent >= 95;
+    const jump = previous && previous.nearGround && resetEligible && at - previous.at <= 1500
+      && Math.hypot((n.player.x - previous.x) * n.mapScaleM[0], (n.player.y - previous.y) * n.mapScaleM[1])
+        > Math.max(150, (previous.speed + (speed ?? 0)) / 3.6 * (at - previous.at) / 1000 * 2 + 50);
+    this.#groundObservation = { at, x: n.player.x, y: n.player.y, speed: speed ?? 0, nearGround: resetEligible };
+    if (nearGround) this.#groundSince ??= at;
+    else this.#groundSince = null;
+    if (jump || this.#groundSince !== null && at - this.#groundSince >= 1500) {
+      this.#departure = true;
+      this.#departureOrigin = { ...n.player, altitude: input.altitudeM };
+      if (this.#settings.enabled) this.#leaveAutomatic(at);
+      this.#candidateKey = "";
+    } else if (this.#departure && this.#departureOrigin && (
+      Math.hypot((n.player.x - this.#departureOrigin.x) * n.mapScaleM[0], (n.player.y - this.#departureOrigin.y) * n.mapScaleM[1]) > 3000
+      || input.altitudeM !== null && this.#departureOrigin.altitude !== null && input.altitudeM - this.#departureOrigin.altitude > 150)) {
+      this.#departure = false;
+      this.#departureOrigin = null;
+      this.#candidateKey = "";
+    }
   }
 
   #updateAutomatic(input: LandingInput): void {
@@ -304,7 +362,7 @@ export class LandingAssist {
     if (this.#settings.enabled) {
       // Official list ordinals are not airport identities. Rebind only the
       // same unique, ordered endpoints; never follow an ordinal to a new field.
-      const runway = this.#lockedRunway(runways);
+      const runway = this.#lockedRunway(runways, n.mapScaleM);
       if (!runway) {
         this.#candidateKey = "";
         this.#exitSince = 0;
@@ -347,11 +405,12 @@ export class LandingAssist {
       // this protection. Else require a 25% better candidate for three seconds.
       const committed = (current.stage === "final" && current.thresholdDistanceM < 3000 || current.stage === "runway")
         && Math.abs(current.trackErrorDeg ?? 180) <= 30;
-      if (JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd]) === this.#runwayKey
+      if (sameRunway(this.#runwayKey, best.runway, n.mapScaleM)
         || committed || error <= 25 && best.score >= score * .75) best = null;
     }
     // Small position changes can swap the nearer end without changing the airport-bound return.
-    const key = best ? JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd]) : "";
+    const key = best ? sameRunway(this.#candidateKey, best.runway, n.mapScaleM) ? this.#candidateKey
+      : JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd]) : "";
     if (!key || key !== this.#candidateKey) { this.#candidateKey = key; this.#candidateSince = at; return; }
     if (best && at - this.#candidateSince >= 3000) {
       this.#settings = { ...this.#settings, enabled: true, runwayId: best.runway.id, reverse: best.reverse, runwayElevationM: null };
@@ -366,8 +425,18 @@ export class LandingAssist {
     this.#exitSince = this.#missingSince = 0; this.#cooldownUntil = at + 15_000;
   }
 
-  #lockedRunway(runways: readonly NavigationItem[]): NavigationItem | undefined {
-    const matches = runways.filter(r => JSON.stringify([r.runwayStart, r.runwayEnd]) === this.#runwayKey);
-    return matches.length === 1 ? matches[0] : undefined;
+  #lockedRunway(runways: readonly NavigationItem[], scale: readonly [number, number] | null | undefined): NavigationItem | undefined {
+    const matches = runways.filter(r => sameRunway(this.#runwayKey, r, scale));
+    if (matches.length !== 1) return undefined;
+    const [runwayStart, runwayEnd] = JSON.parse(this.#runwayKey);
+    return { ...matches[0]!, runwayStart, runwayEnd };
   }
+}
+
+/** Fixed anchor tolerance; never accumulate drift into tracking a moving deck. */
+function sameRunway(key: string, runway: NavigationItem, scale: readonly [number, number] | null | undefined): boolean {
+  if (!key || !scale) return false;
+  const ends: [number, number][] = JSON.parse(key);
+  return [runway.runwayStart!, runway.runwayEnd!].every((p, i) =>
+    Math.hypot((p[0] - ends[i]![0]) * scale[0], (p[1] - ends[i]![1]) * scale[1]) <= 2);
 }

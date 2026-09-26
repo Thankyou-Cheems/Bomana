@@ -25,23 +25,14 @@ export function writeOfflineAssetModule(generatedRoot, fileName, exportPrefix, s
   const signedRoot = { ...root, manifest_signature: { algorithm: "ed25519", key_id: signing.keyId, signature } };
   const urls = records.map((record) => {
     const expression = shared.has(record.id)
-      ? `sharedAircraftParametersURL(${JSON.stringify(sharedAircraftParametersName(record.sha256))})`
+      ? `aircraftParametersURL(${JSON.stringify(sharedAircraftParametersName(record.sha256))}, import.meta.url, import.meta.env.DEV)`
       : `new URL(${JSON.stringify(`./${record.asset}`)}, import.meta.url)`;
     return `  ${JSON.stringify(record.id)}: ${expression},`;
   });
-  // Dev fetches the source JSON beside this module. Production web uses one shared
-  // URL, and desktop production uses the content-named file copied next to the bundle.
-  // A relative dynamic new URL(import.meta.url) is a Vite directory glob.
+  // Phones keep the edition-relative path accepted by already installed Bridges.
+  // A relative dynamic new URL(import.meta.url) would become a Vite directory glob.
   const helper = shared.size
-    ? `
-function sharedAircraftParametersURL(name: string): URL {
-  const path = globalThis.location?.pathname ?? "";
-  if (!import.meta.env.DEV && (path.startsWith("/app/") || path.startsWith("/mobile/"))) return new URL(\`/app/shared/\${name}\`, globalThis.location.origin);
-  const moduleURL = new URL(import.meta.url);
-  moduleURL.pathname = moduleURL.pathname.replace(/[^/]*$/, import.meta.env.DEV ? "aircraft-parameters.json" : name);
-  return moduleURL;
-}
-`
+    ? 'import { aircraftParametersURL } from "../runtime/aircraft-parameters-url";\n'
     : "";
   writeFileSync(
     resolve(generatedRoot, fileName),

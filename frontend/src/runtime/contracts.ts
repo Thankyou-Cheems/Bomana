@@ -102,7 +102,6 @@ export type SolverWorkerResponse =
       readonly requestId: number;
       readonly altitudeM: number | null;
       readonly altitudeDatumM: number | null;
-      readonly bombingAreaRadiusM?: number | null;
       readonly bombingArea?: MatchedMissionArea | null;
     }
   | {

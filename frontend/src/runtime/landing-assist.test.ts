@@ -20,6 +20,95 @@ function inboundSample(at: number): LandingInput {
     altitudeM:500,iasKmh:300,verticalSpeedMps:-4,gearPercent:0,airbrakePercent:0,flapsPercent:0 };
 }
 
+it("keeps one physical runway stable through sub-metre endpoint jitter", () => {
+  const assist = new LandingAssist();
+  for (let at = 1000; at <= 4000; at += 500) assist.update(inboundSample(at), () => 0);
+  for (let at = 4100; at <= 6000; at += 100) {
+    const input = inboundSample(at), offset = at % 200 === 0 ? .000005 : -.000005;
+    const navigation = { ...input.navigation!, items: input.navigation!.items.map(r => ({ ...r,
+      runwayStart: [r.runwayStart![0] + offset, r.runwayStart![1]] as const,
+      runwayEnd: [r.runwayEnd![0] + offset, r.runwayEnd![1]] as const })) };
+    const view = assist.update({ ...input, navigation }, () => 0);
+    expect(view.status).toBe("guidance");
+    expect(view.runwayKey).toBe(JSON.stringify([[.5,.5],[.5,.45]]));
+    expect(view.geometry!.crossTrackM).toBe(0);
+  }
+});
+
+it("withdraws guidance if two observed fields match the fixed runway anchor", () => {
+  const assist = new LandingAssist();
+  for (let at=1000;at<=4000;at+=500) assist.update(inboundSample(at),()=>0);
+  const input=inboundSample(4100), home=input.navigation!.items[0]!;
+  const result=assist.update({ ...input, navigation:{ ...input.navigation!, items:[home,{...home,id:"duplicate"}] } },()=>0);
+  expect(result).toMatchObject({status:"unavailable",reason:"runway-changed",geometry:null});
+});
+
+it("recognizes a repair-pad position reset before the ground dwell and without a valid track", () => {
+  const assist = new LandingAssist();
+  for (let at = 1000; at <= 4000; at += 500) assist.update(inboundSample(at), () => 0);
+  const stopped = (at: number, y: number): LandingInput => ({ ...inboundSample(at),
+    navigation: { ...inboundSample(at).navigation!, player: { x: .5, y } }, altitudeM: 60,
+    iasKmh: 0, verticalSpeedMps: 0, gearPercent: 100, track: null });
+  expect(assist.update(stopped(4100, .47), () => 0).settings.enabled).toBe(true);
+  expect(assist.update(stopped(4200, .495), () => 0).settings.enabled).toBe(false);
+  expect(() => assist.configure({ ...assist.settings(), enabled:true }, inboundSample(4200).navigation)).toThrow("起飞阶段");
+  for (let at = 4300; at <= 12000; at += 100) {
+    const sample = { ...inboundSample(at), altitudeM: 65, gearPercent: 100, verticalSpeedMps: 6,
+      navigation: { ...inboundSample(at).navigation!, player: { x: .5, y: .505 } } };
+    expect(assist.update(sample, () => 0).settings.enabled).toBe(false);
+  }
+  // Once genuinely airborne the same field can be acquired for another landing.
+  for (let at = 21000; at <= 24500; at += 500) assist.update(inboundSample(at), () => 0);
+  expect(assist.settings().enabled).toBe(true);
+});
+
+it("returns the shared 8111 runtime to navigation on repair reset, before the next takeoff", async () => {
+  const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+  const frame = (at: number, y: number, speed: number, altitude: number, vy: number, gear: number) => {
+    const f = publicFlight(at);
+    return { ...f, state: { ...f.state, "IAS, km/h": speed, "TAS, km/h": speed, "H, m": altitude, "Vy, m/s": vy, "gear, %": gear },
+      mapObjects: [{type:"player", x:.5, y, dx:0, dy:-1}, {type:"airfield", side:"friendly", sx:.5, sy:.5, ex:.5, ey:.48}] };
+  };
+  for (let at=1000; at<=6000; at+=100) await runtime.ingest(frame(at,.58-at*.000001,300,500,-4,100));
+  expect(runtime.snapshot().landing?.settings.enabled).toBe(true);
+  await runtime.ingest(frame(6100,.485,0,60,0,100));
+  const reset = await runtime.ingest(frame(6200,.499,0,60,0,100));
+  expect(reset.landing?.settings.enabled).toBe(false);
+  expect(landingTapePresentation(reset).active).toBe(false);
+  for (let at=6300; at<=20000; at+=100) {
+    const next = await runtime.ingest(frame(at,.499-(at-6300)*.0000005,200,65,4,100));
+    expect(next.landing?.settings.enabled).toBe(false);
+  }
+});
+
+it.each([[500, 0], [5, 200]])("does not treat height %dm / IAS %d above the runway as landed", (altitudeM, iasKmh) => {
+  const assist = new LandingAssist();
+  for (let at = 1000; at <= 4000; at += 500) assist.update(inboundSample(at), () => 0);
+  for (let at = 4100; at <= 7000; at += 100) {
+    const input = inboundSample(at);
+    expect(assist.update({ ...input, navigation: { ...input.navigation!, player: { x: .5, y: .49 } },
+      iasKmh, altitudeM, gearPercent: 100, verticalSpeedMps: 0 }, () => 0).settings.enabled).toBe(true);
+  }
+});
+
+it.each([true, false])("clears landing on ground reset and stays out during gear-down takeoff (automatic=%s)", automatic => {
+  const assist = new LandingAssist();
+  for (let at = 1000; at <= 4000; at += 500) assist.update(inboundSample(at), () => 0);
+  assist.configure({ ...assist.settings(), automatic }, inboundSample(4000).navigation);
+  const ground = (at: number, y: number, speed: number): LandingInput => {
+    const input = inboundSample(at);
+    return { ...input, navigation: { ...input.navigation!, player: { x: .5, y } },
+      altitudeM: 3, iasKmh: speed, verticalSpeedMps: 0, gearPercent: 100,
+      track: { ...input.track!, velocityZ: speed / 3.6, groundSpeedMps: speed / 3.6 } };
+  };
+  for (let at = 4500; at <= 7000; at += 500) assist.update(ground(at, .47, 20), () => 0);
+  const reset = ground(7100, .495, 0);
+  expect(assist.update({ ...reset, track: null }, () => 0).settings.enabled).toBe(false);
+  for (let at = 7200; at <= 13000; at += 200) {
+    expect(assist.update(ground(at, .495 - (at - 7200) / 1000000, 200), () => 0).settings.enabled).toBe(false);
+  }
+});
+
 it("reselects a sustained new airport-bound track without leaving landing mode, preserving manual choice", () => {
   for (const automatic of [true, false]) {
     const assist = new LandingAssist();

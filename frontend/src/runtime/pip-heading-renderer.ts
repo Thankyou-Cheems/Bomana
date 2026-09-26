@@ -55,6 +55,25 @@ export function pictureInPictureHeadingLayout(width: number, height: number): Pi
   });
 }
 
+/** Landing-only budget; a sustained slow draw latches the lightweight view.
+ * Keep the geometry intact: sacrifice fill, resolution and cadence first. */
+export class LandingRenderBudget {
+  reducedMotion = false;
+  #slow = 0;
+  #limited: boolean;
+  constructor(device: { hardwareConcurrency?: number; deviceMemory?: number }) {
+    this.#limited = (device.hardwareConcurrency ?? 8) <= 4 || (device.deviceMemory ?? 8) <= 4;
+  }
+  get simplified(): boolean { return this.reducedMotion || this.#limited; }
+  get intervalMs(): number { return 1000 / (this.simplified ? 30 : 60); }
+  pixelRatio(ratio: number): number { return Math.min(ratio || 1, this.simplified ? 1.25 : 2); }
+  recordDraw(durationMs: number): void {
+    // Ignore isolated resize/GC spikes, and never oscillate quality per frame.
+    this.#slow = durationMs > 8 ? this.#slow + 1 : 0;
+    if (this.#slow >= 8) this.#limited = true;
+  }
+}
+
 export class PictureInPictureHeadingRenderer {
   readonly #guidance: typeof headingGuidance;
   readonly #view: Window;
@@ -62,6 +81,10 @@ export class PictureInPictureHeadingRenderer {
   #snapshot: EditionSnapshot | null = null;
   #landing: LandingTapeView | null = null;
   readonly #landingMotion = new LandingCueMotion();
+  readonly #landingBudget: LandingRenderBudget;
+  readonly #motionPreference: MediaQueryList | undefined;
+  #landingTimer = 0;
+  #lastLandingDraw = -Infinity;
   #displayHeading = Number.NaN;
   readonly #headingMotion = new SampledAngleMotion();
   #displayGuidance = 0;
@@ -78,6 +101,10 @@ export class PictureInPictureHeadingRenderer {
     this.#guidance = options.guidance ?? headingGuidance;
     this.#view = options.view;
     this.#canvas = options.canvas;
+    this.#landingBudget = new LandingRenderBudget(this.#view.navigator);
+    this.#motionPreference = this.#view.matchMedia?.("(prefers-reduced-motion: reduce)");
+    this.#landingBudget.reducedMotion = this.#motionPreference?.matches ?? false;
+    this.#motionPreference?.addEventListener("change", this.#handleMotionPreference);
     this.#view.addEventListener("resize", this.#handleResize);
   }
 
@@ -85,17 +112,18 @@ export class PictureInPictureHeadingRenderer {
     this.#snapshot = snapshot;
     this.#extraTargets = extraTargets;
     const guidance = this.#guidance(snapshot);
+    const previous = this.#landing;
     const landing = this.#landing = landingTapePresentation(snapshot);
-    this.#landingMotion.observe(landing, this.#view.performance.now(), this.#view.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+    this.#landingMotion.observe(landing, this.#view.performance.now(), this.#landingBudget.reducedMotion);
     this.#canvas.dataset.mode = landing.active ? "landing" : "navigation";
     this.#canvas.dataset.landingScene = landing.active ? landing.scene : "";
     this.#canvas.setAttribute("aria-label", landing.active ? landing.aria : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
     if (landing.active) {
-      this.#render();
-      if (!this.#frame && this.#canvas.clientWidth > 0 && this.#canvas.clientHeight > 0
-        && this.#landingMotion.isMoving(this.#view.performance.now())) this.#frame = this.#view.requestAnimationFrame(this.#animate);
+      this.#renderLanding(!previous?.active || previous.cueKey !== landing.cueKey || previous.scene !== landing.scene);
       return;
     }
+    this.#view.clearTimeout(this.#landingTimer);
+    this.#landingTimer = 0;
     if (guidance.target?.id !== this.#targetId || guidance.windowMode) this.#displayGuidance = guidance.ratio;
     this.#targetId = guidance.target?.id ?? "";
     this.#targetCenterMotion.observe(this.#targetId, guidance.centerRelativeDeg ?? guidance.relativeDeg);
@@ -119,6 +147,9 @@ export class PictureInPictureHeadingRenderer {
   close(): void {
     if (this.#frame) this.#view.cancelAnimationFrame(this.#frame);
     this.#frame = 0;
+    this.#view.clearTimeout(this.#landingTimer);
+    this.#landingTimer = 0;
+    this.#motionPreference?.removeEventListener("change", this.#handleMotionPreference);
     this.#view.removeEventListener("resize", this.#handleResize);
   }
 
@@ -126,9 +157,8 @@ export class PictureInPictureHeadingRenderer {
     const snapshot = this.#snapshot;
     if (!snapshot) { this.#frame = 0; return; }
     if (this.#landing?.active) {
-      this.#render();
-      this.#frame = this.#canvas.clientWidth > 0 && this.#canvas.clientHeight > 0 && this.#landingMotion.isMoving(nowMs)
-        ? this.#view.requestAnimationFrame(this.#animate) : 0;
+      this.#frame = 0;
+      this.#renderLanding();
       return;
     }
     const elapsed = Math.min(50, Math.max(0, nowMs - this.#lastFrameMs));
@@ -154,7 +184,39 @@ export class PictureInPictureHeadingRenderer {
     }
   };
 
-  readonly #handleResize = (): void => { this.#render(); };
+  readonly #handleResize = (): void => {
+    if (this.#landing?.active) this.#renderLanding(true); else this.#render();
+  };
+
+  readonly #handleMotionPreference = (): void => {
+    this.#landingBudget.reducedMotion = this.#motionPreference?.matches ?? false;
+    if (this.#landing?.active) {
+      this.#landingMotion.observe(this.#landing, this.#view.performance.now(), true);
+      this.#renderLanding(true);
+    }
+  };
+
+  #renderLanding(force = false): void {
+    if (this.#frame) this.#view.cancelAnimationFrame(this.#frame);
+    this.#frame = 0;
+    this.#view.clearTimeout(this.#landingTimer);
+    this.#landingTimer = 0;
+    if (this.#canvas.clientWidth <= 0 || this.#canvas.clientHeight <= 0) return;
+    const now = this.#view.performance.now();
+    const remaining = this.#landingBudget.intervalMs - (now - this.#lastLandingDraw);
+    if (force || remaining <= 0) {
+      this.#render();
+      this.#lastLandingDraw = now;
+      if (this.#landingBudget.reducedMotion || !this.#landingMotion.isMoving(now)) return;
+    }
+    // Wake only when a frame is due. Rapid telemetry coalesces into the latest
+    // snapshot; lifecycle changes above bypass this limit immediately.
+    const delay = Math.max(0, this.#landingBudget.intervalMs - (this.#view.performance.now() - this.#lastLandingDraw));
+    this.#landingTimer = this.#view.setTimeout(() => {
+      this.#landingTimer = 0;
+      this.#frame = this.#view.requestAnimationFrame(this.#animate);
+    }, delay);
+  }
 
   #observeMarkerSamples(snapshot: EditionSnapshot, observedAtMs: number): void {
     const target = this.#guidance(snapshot).target;
@@ -181,7 +243,7 @@ export class PictureInPictureHeadingRenderer {
     const height = this.#canvas.clientHeight;
     if (width <= 0 || height <= 0 || bounds.width <= 0 || bounds.height <= 0) return;
     // Draw in the panel's shared coordinates, at the host's actual resolution.
-    const pixelRatio = this.#view.devicePixelRatio || 1;
+    const pixelRatio = this.#landing?.active ? this.#landingBudget.pixelRatio(this.#view.devicePixelRatio) : this.#view.devicePixelRatio || 1;
     const bitmapWidth = Math.round(bounds.width * pixelRatio);
     const bitmapHeight = Math.round(bounds.height * pixelRatio);
     if (this.#canvas.width !== bitmapWidth || this.#canvas.height !== bitmapHeight) {
@@ -198,7 +260,9 @@ export class PictureInPictureHeadingRenderer {
       // labels must retain readable pixel sizes in narrow PiP/phone hosts.
       context.setTransform(bitmapWidth / bounds.width, 0, 0, bitmapHeight / bounds.height, 0, 0);
       const now = this.#view.performance.now();
-      drawLandingTape(context, this.#landing, bounds.width, bounds.height, this.#landingMotion.step(now), this.#landingMotion.background(now));
+      this.#canvas.dataset.landingQuality = this.#landingBudget.simplified ? "simple" : "full";
+      drawLandingTape(context, this.#landing, bounds.width, bounds.height, this.#landingMotion.step(now), this.#landingMotion.background(now), this.#landingBudget.simplified);
+      this.#landingBudget.recordDraw(this.#view.performance.now() - now);
       return;
     }
     const layout = pictureInPictureHeadingLayout(width, height);

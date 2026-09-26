@@ -17,8 +17,8 @@ interface TrackSample {
   readonly worldZ: number;
 }
 
-const HISTORY_MS = 1_000;
-const MAX_OBSERVATION_GAP_MS = 500;
+const HISTORY_MS = 2_500;
+const MAX_OBSERVATION_GAP_MS = 1_500;
 const MAX_REPEATED_POSITION_MS = 350;
 const FIT_WINDOW_MS = 280;
 const MIN_SPAN_MS = 90;
@@ -46,6 +46,7 @@ export class GroundTrackEstimator {
   readonly #samples: TrackSample[] = [];
   #scale: readonly [number, number] | null = null;
   #firstObservedAtMs: number | null = null;
+  #lastObservedAtMs: number | null = null;
 
   get firstObservedAtMs(): number | null { return this.#firstObservedAtMs; }
 
@@ -53,6 +54,7 @@ export class GroundTrackEstimator {
     this.#samples.length = 0;
     this.#scale = null;
     this.#firstObservedAtMs = null;
+    this.#lastObservedAtMs = null;
   }
 
   update(input: {
@@ -77,6 +79,11 @@ export class GroundTrackEstimator {
       && (this.#scale[0] !== input.scale[0] || this.#scale[1] !== input.scale[1])
     ) this.reset();
     this.#scale = input.scale;
+    // Fresh HTTP responses may repeat a slower source position. A missing
+    // response interval is different and must still break the flight track.
+    if (this.#lastObservedAtMs !== null && (input.atMs < this.#lastObservedAtMs
+      || input.atMs - this.#lastObservedAtMs > 500)) this.reset();
+    this.#lastObservedAtMs = input.atMs;
     const latest = this.#samples.at(-1);
     if (
       latest
@@ -87,7 +94,11 @@ export class GroundTrackEstimator {
     // An unchanged map response is not a new zero-speed observation. Keep its
     // source time and only project the established track through a short gap.
     if (current && current.worldX === input.x * input.scale[0] && current.worldZ === -input.y * input.scale[1]) {
-      return input.atMs - current.atMs <= MAX_REPEATED_POSITION_MS
+      const recent = this.#samples.slice(-3);
+      const intervals = recent.slice(1).map((sample, i) => sample.atMs - recent[i]!.atMs);
+      const cadence = intervals.length ? Math.max(...intervals) : 0;
+      const holdMs = Math.min(1_000, Math.max(MAX_REPEATED_POSITION_MS, cadence * 1.5));
+      return input.atMs - current.atMs <= holdMs
         ? this.#estimate(input.atMs) : EMPTY_ESTIMATE;
     }
     if (this.#firstObservedAtMs === null) this.#firstObservedAtMs = input.atMs;

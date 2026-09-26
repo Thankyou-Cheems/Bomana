@@ -26,6 +26,13 @@ try {
   });
 
   await connect(target);
+  // Development signatures intentionally stop App startup on LAN. Still exercise
+  // the real packaged parameter request through Bridge, not just QR completion.
+  const parameter = await page.evaluate(async name => {
+    const response = await fetch(new URL(`assets/${name}`, location.href));
+    return { status: response.status, bytes: (await response.arrayBuffer()).byteLength };
+  }, process.env.BOMANA_PAIRING_PARAMETER_ASSET);
+  assert.deepEqual(parameter, { status: 200, bytes: Number(process.env.BOMANA_PAIRING_PARAMETER_BYTES) }, "Paired phone must receive its packaged aircraft parameters");
   assert.equal(completions, 1, "A first scan must consume its one-time claim");
 
   let currentQR = await rotate();

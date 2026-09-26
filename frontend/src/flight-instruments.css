@@ -47,7 +47,7 @@
 .flight-instruments .release-cursor-countdown { position: absolute; top: 55%; transform: translateY(-50%); width: 8ch; padding: 2px 3px; border-radius: 3px; background: rgba(5, 18, 28, .88); color: #fff0b3; font: 900 var(--heading-countdown-size, 16px)/1.1 var(--mono); letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
 .flight-instruments .release-cursor-countdown-left { text-align: right; }
 .flight-instruments .release-cursor-countdown-right { text-align: left; }
-.flight-instruments .pip-release-cue .release-cue-prompt[data-countdown="true"] { display: none; }
+.flight-instruments .pip-release-cue .release-cue-prompt[data-countdown="true"]:empty { display: none; }
 .flight-instruments .pip-header { display: flex; flex-wrap: nowrap; align-items: center; gap: 7px; min-width: 0; padding: 0 6px; text-shadow: 0 1px 4px #000; }
 .flight-instruments .pip-timer { flex: 0 0 auto; white-space: nowrap; padding: 2px 6px; border: 1px solid rgba(255, 67, 61, .3); border-radius: 4px; background: rgba(20, 8, 10, .76); color: #ff4945; font: 800 13px/1 var(--mono, "Microsoft YaHei"); letter-spacing: .04em; text-shadow: 0 0 7px rgba(255, 65, 60, .55); }
 .flight-instruments .pip-instrument-badges .instrument-badge { min-height: 16px; padding-inline: 4px; font-size: 7px; }
@@ -67,6 +67,7 @@
 .flight-instruments .pip-release-cue .release-bracket { top: 27%; bottom: 17%; color: rgba(214, 233, 246, .72); filter: drop-shadow(0 0 4px #000); }
 .flight-instruments .pip-release-cue .release-cue-prompt { top: 4px; left: calc(50% + 20px); transform: none; max-width: calc(50% - 28px); overflow: hidden; text-overflow: ellipsis; padding: 0 2px; border-radius: 2px; background: rgba(2, 10, 14, .72); font-size: 8px; text-shadow: 0 1px 4px #000; }
 .flight-instruments .pip-release-cue .release-cue-prompt:empty { display: none; }
+.flight-instruments .pip-release-cue .release-cue-prompt[data-window-duration="true"] { left: calc(50% + 36px); max-width: calc(50% - 44px); font: 800 max(10px, calc(var(--heading-countdown-size, 16px) * .7))/1.1 var(--mono); color: #f8d66f; letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .flight-instruments .release-speed { position: absolute; top: 4px; right: calc(50% + 30px); max-width: calc(50% - 38px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 3px; border-radius: 3px; background: #101f2b; font: 650 max(9px, calc(var(--heading-countdown-size, 16px) * .62))/1.1 var(--mono); color: #b6cdd8; pointer-events: auto; }
 .flight-instruments .release-speed[data-tone="caution"] { color: #f8d66f; }
 .flight-instruments .release-speed[data-tone="danger"] { color: #ff8e86; }

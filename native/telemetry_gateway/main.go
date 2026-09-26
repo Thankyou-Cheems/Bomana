@@ -103,6 +103,16 @@ func main() {
 		slog.Error("invalid browser origin", "error", err)
 		os.Exit(2)
 	}
+	releaseInstance, acquired, err := claimBridgeInstance()
+	if err != nil {
+		slog.Error("Bridge instance check failed", "error", err)
+		os.Exit(1)
+	}
+	if !acquired {
+		slog.Info("Bomana Bridge is already running")
+		return
+	}
+	defer releaseInstance()
 	extUITransport := http.DefaultTransport.(*http.Transport).Clone()
 	extUITransport.Proxy = nil
 	extUIResolver, err := extui.NewResolver(extui.Options{

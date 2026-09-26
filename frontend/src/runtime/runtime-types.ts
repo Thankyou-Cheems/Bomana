@@ -61,7 +61,6 @@ export interface RealtimeSolverPort {
   terrainAltitudeAt?(x: number, y: number): Promise<{
     readonly altitudeM: number | null;
     readonly altitudeDatumM: number | null;
-    readonly bombingAreaRadiusM?: number | null;
     readonly bombingArea?: MatchedMissionArea | null;
   }>;
 }
@@ -202,6 +201,8 @@ export interface EditionSnapshot {
     readonly reason: string;
     readonly targetDistanceM: number;
     readonly timeToWindowS: number;
+    /** Observed horizontal ground speed used by the release calculation. */
+    readonly groundSpeedMps?: number;
     readonly targetRelativeDeg?: number;
     readonly bombingWindow?: BombingWindow | null;
     readonly releaseStatus: "ready" | "approaching" | "too-far" | "passed" | "off-axis" | "reference-only" | "unavailable";

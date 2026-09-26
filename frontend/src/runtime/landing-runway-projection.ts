@@ -62,7 +62,7 @@ export function landingRunwayScene(g: LandingGeometry | null | undefined, headin
     || g.lengthM <= 0) return null;
   return { along: g.thresholdDistanceM, across: -g.crossTrackM, height: g.heightM, length: g.lengthM,
     angle: ((g.courseDeg - headingDeg + 540) % 360 - 180) * radians,
-    slope: Math.tan(glideAngleDeg * radians), approach: g.thresholdDistanceM > 30 && g.stage !== "runway" && g.stage !== "past-runway",
+    slope: Math.tan(glideAngleDeg * radians), approach: g.heightM > 40 || g.thresholdDistanceM > 30 && g.stage !== "runway" && g.stage !== "past-runway",
     width: Number.isFinite(g.referenceWidthM) && g.referenceWidthM! > 0 ? g.referenceWidthM : 90,
     pitch: (attitude?.pitchDeg ?? 0) * radians, roll: (attitude?.rollDeg ?? 0) * radians, speed: attitude?.tasMps ?? 0 };
 }
@@ -79,7 +79,7 @@ function segment(a: Point3, b: Point3): ProjectedSegment | null {
  * Coordinates are runway-forward, runway-right and height above its datum.
  * This is a visual route reference, not a turn-performance or clearance solution. */
 export function landingApproachPath(scene: LandingRunwayScene) {
-  const finalLength = Math.min(1500, scene.along * .25);
+  const finalLength = Math.min(1500, scene.along > 30 ? scene.along * .25 : Math.max(300, Math.hypot(scene.along, scene.across) * .25));
   const gate: Point2 = [scene.along - finalLength, scene.across];
   const reach = Math.hypot(gate[0], gate[1]);
   // Airspeed sets an eight-second visual lead, bounded by the actual intercept
@@ -95,14 +95,20 @@ export function landingApproachPath(scene: LandingRunwayScene) {
   ];
   const points: Point3[] = [];
   const normals: (readonly [number, number])[] = [];
+  // Collinear, opposite-facing cubic handles otherwise produce a cusp (fly
+  // backwards, then reverse instantly). A smooth lateral lobe preserves both
+  // endpoint tangents and provides a deterministic right-hand return reference.
+  const opposition = Math.max(0, (-Math.cos(scene.angle) - .2) / .8);
+  const turnOffset = reach * .45 * opposition * opposition * Math.exp(-((scene.across / Math.max(1, reach) / .35) ** 2));
   for (let i = 0; i <= 48; i++) {
     const t = i / 48, u = 1 - t;
     const [a, b, c, d] = controls;
     const coordinate = (axis: 0 | 1) => u ** 3 * a[axis] + 3 * u * u * t * b[axis]
       + 3 * u * t * t * c[axis] + t ** 3 * d[axis];
-    points.push([coordinate(0), coordinate(1), 0]);
+    points.push([coordinate(0), coordinate(1) + turnOffset * 16 * t * t * u * u, 0]);
     const along = 3 * u * u * (b[0] - a[0]) + 6 * u * t * (c[0] - b[0]) + 3 * t * t * (d[0] - c[0]);
-    const across = 3 * u * u * (b[1] - a[1]) + 6 * u * t * (c[1] - b[1]) + 3 * t * t * (d[1] - c[1]);
+    const across = 3 * u * u * (b[1] - a[1]) + 6 * u * t * (c[1] - b[1]) + 3 * t * t * (d[1] - c[1])
+      + turnOffset * 32 * t * u * (1 - 2 * t);
     const length = Math.hypot(along, across);
     normals.push(length > .001 ? [-across / length, along / length] : [0, 1]);
   }
@@ -124,13 +130,14 @@ export function landingApproachPath(scene: LandingRunwayScene) {
   return { controls, points, normals };
 }
 
-export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(scene.pitch ?? 0), cameraRoll = scene.roll ?? 0, retreat = 0, yaw = 0) {
+export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(scene.pitch ?? 0), cameraRoll = scene.roll ?? 0, retreat = 0, yaw = 0,
+  options: { simplified?: boolean; path?: ReturnType<typeof landingApproachPath> } = {}) {
   const runwayHalfWidth = (scene.width ?? 90) / 2;
   const sin = Math.sin(scene.angle + yaw), cos = Math.cos(scene.angle + yaw);
   const cp = Math.cos(cameraPitch), sp = Math.sin(cameraPitch);
   // A one-metre altitude twitch at field elevation otherwise flips the pavement
   // between a surface and an edge-on line. The displayed height is unchanged.
-  const eye = scene.height >= 0 ? Math.max(scene.height, 12) : scene.height;
+  const eye = Math.max(scene.height, 12);
   const point = (along: number, across: number, heightAboveRunway: number): Point3 => {
     const depth = along * cos - across * sin + retreat, down = eye - heightAboveRunway;
     const x = along * sin + across * cos, y = down * cp - depth * sp;
@@ -154,7 +161,7 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   }
   const ground: ProjectedSegment[] = [];
   let groundSurface: ProjectedPoint[] = [];
-  if (scene.height >= 0) {
+  if (scene.height >= 0 && !options.simplified) {
     const ahead = Math.max(120, Math.min(scene.along * .2, 1800));
     const half = Math.min(Math.max(1600, (scene.width ?? 90) * 18), 4500);
     for (const along of [ahead, scene.along + scene.length + 1200]) {
@@ -176,7 +183,7 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   const ribbon: ProjectedPoint[][] = [];
   const framing: ProjectedPoint[] = [...runwaySurface];
   if (scene.approach && start[2] >= 30) {
-    const path = landingApproachPath(scene);
+    const path = options.path ?? landingApproachPath(scene);
     const distances = [0];
     for (let i = 1; i < path.points.length; i++) {
       const a = path.points[i - 1]!, b = path.points[i]!;
@@ -185,7 +192,7 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
     // Frame the route ahead, not the enormous near-plane cross-section beneath
     // the aircraft. Interpolate this cut so crossing a sample never steps the zoom.
     const routeLength = distances.at(-1)!;
-    const lookAhead = Math.max(routeLength * .6, routeLength - Math.max(3000, scene.length * 2));
+    const lookAhead = Math.max(routeLength * .75, routeLength - Math.max(1800, scene.length));
     // The reference centerline remains 15 m over the threshold. Draw the floor
     // 15 m below it: an eye exactly on the reference must not see a coplanar,
     // edge-on pair of lines. The floor joins the runway, with metric width.
@@ -206,7 +213,7 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
       }
       rails.push(rail);
     }
-    for (let i = 1; i < path.points.length; i++) {
+    for (let i = 1; !options.simplified && i < path.points.length; i++) {
       const quad = surface([edges[0]![i - 1]!, edges[1]![i - 1]!, edges[1]![i]!, edges[0]![i]!]);
       if (quad.length >= 3) ribbon.push(quad);
     }
@@ -228,24 +235,37 @@ export function landingRunwayCamera(scene: LandingRunwayScene, retreat = 0) {
 }
 
 /** One perspective viewport shared by the target, corridor and other runways. */
-export function landingRunwayFrame(scene: LandingRunwayScene, width: number, height: number) {
+export function landingRunwayFrame(scene: LandingRunwayScene, width: number, height: number, simplified = false) {
+  const smooth = (v: number) => { const t = Math.max(0, Math.min(1, v)); return t * t * (3 - 2 * t); };
+  const routeWeight = scene.approach ? Math.max(smooth((scene.along - near) / 250), smooth((scene.height - 40) / 60)) : 0;
   const forward = (scene.along + scene.length / 2) * Math.cos(scene.angle) - scene.across * Math.sin(scene.angle);
+  const sideways = (scene.along + scene.length / 2) * Math.sin(scene.angle) + scene.across * Math.cos(scene.angle);
+  const bearing = Math.atan2(sideways, forward);
   const high = Math.max(0, Math.min(1, (scene.height / Math.max(scene.length, Math.hypot(scene.along, scene.across)) - .08) / .25));
-  const forwardFraction = Math.max(0, Math.min(1, (forward - near) / Math.max(500, scene.length)));
-  const forwardWeight = forwardFraction * forwardFraction * (3 - 2 * forwardFraction);
   const range = Math.hypot(scene.along, scene.across);
   const steep = Math.max(0, Math.min(1, (Math.abs(scene.height) / Math.max(800, range) - .12) / .35));
   const aspect = Math.max(0, Math.min(1, (width / height - 1) / 2));
   // Far returns stay nearly behind the aircraft. A steep, close return may
   // look slightly aside and aft so the pavement is a surface, not a vertical hairline.
-  const yaw = (10 + 22 * steep) * radians * high * aspect * forwardWeight;
+  // Orbit the observation camera, not the runway. This periodic correction
+  // remains continuous across +/-180 degrees and keeps side/rear targets in
+  // front of the same camera used for the entire world and approach geometry.
+  const yaw = -bearing + .5 * Math.sin(2 * bearing) + (10 + 22 * steep) * radians * high * aspect;
   const cameraScene = { ...scene, angle: scene.angle + yaw };
   const depth = (scene.along + scene.length / 2) * Math.cos(cameraScene.angle) - scene.across * Math.sin(cameraScene.angle);
-  const retreat = Math.min(Math.max(0, Math.abs(scene.height) / Math.tan((14 + 10 * steep) * radians) - depth),
-    range * (.2 + steep * 1.6)) * forwardWeight;
+  const nearestDepth = Math.min(scene.along * Math.cos(cameraScene.angle), (scene.along + scene.length) * Math.cos(cameraScene.angle))
+    - scene.across * Math.sin(cameraScene.angle) - (scene.width ?? 90) / 2;
+  const path = scene.approach ? landingApproachPath(scene) : undefined;
+  const pathDepth = path ? Math.min(...path.points.map(([along, across]) =>
+    along * Math.cos(cameraScene.angle) - across * Math.sin(cameraScene.angle) - (scene.width ?? 90) / 2)) : nearestDepth;
+  // The turn-back portion can sit behind ownship even with the runway in front.
+  // Move the observer behind the path too, before performing perspective division.
+  const retreat = Math.max(near * 2 - nearestDepth, (Math.max(near * 2, Math.abs(scene.height) * .5) - pathDepth) * routeWeight,
+    Math.min(Math.max(0, Math.abs(scene.height) / Math.tan((14 + 10 * steep) * radians) - depth),
+      Math.max(scene.length, range) * (.2 + steep * 1.6)));
   const pitch = landingRunwayCamera(cameraScene, retreat), roll = scene.roll ?? 0;
-  const projected = projectLandingRunway(scene, pitch, roll, retreat, yaw);
-  const base = { pitch, roll, retreat, yaw, projected, focal: width / (2 * Math.tan(Math.PI / 6)), x: width / 2, y: height / 2 };
+  const projected = projectLandingRunway(scene, pitch, roll, retreat, yaw, { simplified, path });
+  const base = { pitch, roll, retreat, yaw, projected, routeWeight, focal: width / (2 * Math.tan(Math.PI / 6)), x: width / 2, y: height / 2 };
   if (projected.surface.length < 3) return base;
   const bounds = (points: readonly ProjectedPoint[]) => ({
     left: Math.min(...points.map(p => p[0])), right: Math.max(...points.map(p => p[0])),
@@ -256,15 +276,9 @@ export function landingRunwayFrame(scene: LandingRunwayScene, width: number, hei
   const widthSpan = Math.max(.000001, runway.right - runway.left);
   // Rails run from the aircraft to the threshold. The joining curve is the suffix.
   // Ignore a vertex the near plane has thrown far outside the view; it must not set the zoom.
-  const joined: ProjectedPoint[] = [];
-  for (const rail of projected.rails) for (const piece of rail.slice(-16)) {
-    if ([piece[0], piece[1]].some((point) => Math.abs(point[0]) > 1.2 || Math.abs(point[1]) > 1.2)) continue;
-    joined.push(piece[0], piece[1]);
-  }
+  const joined = projected.framing;
   const picture = bounds(joined.length ? [...projected.surface, ...joined] : projected.surface);
   // Ease the path out of the frame before the ribbon disappears at 30 m.
-  const progress = Math.max(0, Math.min(1, (scene.along - near) / 250));
-  const routeWeight = progress * progress * (3 - 2 * progress);
   for (const edge of ["left", "right", "top", "bottom"] as const) {
     picture[edge] = runway[edge] + (picture[edge] - runway[edge]) * routeWeight;
   }
@@ -282,15 +296,24 @@ export function landingRunwayFrame(scene: LandingRunwayScene, width: number, hei
   const contained = Math.min(fit(runway) * .92, availableHeight * .86 / runwaySpan, availableWidth * .78 / widthSpan);
   const boosted = Math.min(contained, naturalFocal * gain);
   const together = fit(picture) * .92;
-  const pathFocal = Math.min(boosted, Math.max(together, boosted * .58));
+  const pathFocal = Math.min(boosted, together);
   let focal = boosted + (pathFocal - boosted) * routeWeight;
   const shortNdc = Math.min(widthSpan, runwaySpan);
-  const aligned = Math.abs(scene.angle) < 25 * radians && Math.abs(scene.roll ?? 0) < 12 * radians;
-  if (aligned && range > handoff && shortNdc > 0.000001) {
-    const readableFocal = Math.min(contained, 26 / shortNdc);
+  const alignment = (1 - smooth((Math.abs(Math.atan2(Math.sin(scene.angle), Math.cos(scene.angle))) - 25 * radians) / (25 * radians)))
+    * (1 - smooth((Math.abs(Math.atan2(Math.sin(scene.roll ?? 0), Math.cos(scene.roll ?? 0))) - 12 * radians) / (18 * radians)));
+  if (range > handoff && shortNdc > 0.000001) {
+    const readableFocal = Math.min(contained, together, 26 / shortNdc);
     const blend = Math.min(1, (range - handoff) / 1600);
-    if (readableFocal > focal) focal += (readableFocal - focal) * blend;
+    if (readableFocal > focal) focal += (readableFocal - focal) * blend * alignment;
   }
+  // A far runway must not become larger than a nearer one just because its
+  // joining curve is flatter. Bound magnification by a distance-driven size.
+  const sizeFocal = (24 + 60 / (1 + range / 3000)) / Math.max(runwaySpan, widthSpan);
+  const sizeBlend = Math.max(0, Math.min(1, (range - handoff) / 1600));
+  focal = Math.min(focal, naturalFocal + (sizeFocal - naturalFocal) * sizeBlend);
+  // Preserve the recorded aligned approach's legible pavement. Any enlarged
+  // near route is clipped by the viewport; its runway-joining leg remains drawn.
+  focal = Math.max(focal, Math.min(contained, 26 / Math.max(.000001, shortNdc)) * alignment * sizeBlend);
   const origin = (start: number, end: number, targetStart: number, targetEnd: number, routeStart: number, routeEnd: number) =>
     Math.max(start - targetStart * focal, Math.min(end - targetEnd * focal, (start + end - (routeStart + routeEnd) * focal) / 2));
   return { ...base, focal,

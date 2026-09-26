@@ -30,13 +30,14 @@ export type TargetAreaSource = "mission-area" | "airfield-module";
 
 /**
  * A mission-area match resolved against the active offline terrain/map pair.
- * The marker may be offset from the source sphere; effectiveRadiusM is the
- * conservative horizontal cross-section available around the observed marker.
+ * The sphere fields describe mission matching only. Display and release cues
+ * share the oriented building-layout footprint, not that mission radius.
  */
 export interface MatchedMissionArea {
   readonly mapId: string;
   readonly id: string;
   readonly centerNormalized: readonly [number, number];
+  readonly cornersNormalized: readonly (readonly [number, number])[];
   readonly radiusM: number;
   readonly crossSectionRadiusM: number;
   readonly effectiveRadiusM: number;

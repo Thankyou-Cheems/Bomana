@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -18,6 +19,14 @@ func TestStandardMobilePairingBrowser(t *testing.T) {
 		t.Fatal("run tools/smoke_mobile_pairing.ps1 after building App Web")
 	}
 	if _, err := os.Stat(filepath.Join(assetRoot, "Standard", "index.html")); err != nil {
+		t.Fatal(err)
+	}
+	parameters, err := filepath.Glob(filepath.Join(assetRoot, "Standard", "assets", "aircraft-parameters-*.json"))
+	if err != nil || len(parameters) != 1 {
+		t.Fatalf("packaged phone parameters: %v %v", parameters, err)
+	}
+	parameterInfo, err := os.Stat(parameters[0])
+	if err != nil {
 		t.Fatal(err)
 	}
 	cdn := httptest.NewServer(http.StripPrefix("/mobile/", http.FileServer(http.Dir(assetRoot))))
@@ -39,6 +48,7 @@ func TestStandardMobilePairingBrowser(t *testing.T) {
 	}
 	command := exec.Command("node", "../../frontend/scripts/mobile-pairing-smoke.mjs")
 	command.Env = append(os.Environ(), "BOMANA_PAIRING_REPRO_URL="+trayPairingHandoffURL(descriptor, 0), "BOMANA_PAIRING_CONTROL="+control.URL, "BOMANA_PAIRING_ORIGIN="+testOrigin)
+	command.Env = append(command.Env, "BOMANA_PAIRING_PARAMETER_ASSET="+filepath.Base(parameters[0]), "BOMANA_PAIRING_PARAMETER_BYTES="+strconv.FormatInt(parameterInfo.Size(), 10))
 	output, err := command.CombinedOutput()
 	t.Log(string(output))
 	if err != nil {
