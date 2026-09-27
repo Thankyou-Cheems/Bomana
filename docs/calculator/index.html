@@ -40,28 +40,31 @@
         <div class="calculator-heading">
           <p class="hangar-kicker">SIM EC · FLIGHT DESK</p>
           <h1 id="calc-title">全真出击工具箱</h1>
-          <p class="hangar-lede">出发前算清挂载，返航前留够燃油。</p>
+          <p class="hangar-lede">挂载、目标与返航，一页算清。</p>
           <p class="tool-source" id="calcSource" role="status">正在核对参数版本…</p>
-          <nav class="tool-nav" aria-label="工具导航">
-            <a href="#calcForm">战区与机场计算器</a><a href="#airCombat">空空弹测算</a><a href="#airportStatus">机场状态</a><a href="#airfieldDefense">机场防空</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#fieldGuide">全真速查</a>
+          <aside class="tool-directory" aria-label="工具目录">
+          <button id="toolDirectoryToggle" class="tool-directory-toggle" type="button" aria-expanded="false" aria-controls="toolDirectoryLinks">☰ 目录</button>
+          <nav id="toolDirectoryLinks" class="tool-nav" aria-label="工具导航">
+            <a href="#calcForm">战区与机场计算器</a><a href="#combinationCalculator">自由组合工具</a><a href="#airportStatus">机场状态</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#airCombat">空空弹测算</a><a href="#airfieldDefense">机场防空</a><a href="#fieldGuide">全真速查</a>
           </nav>
+          </aside>
         </div>
 
         <form class="calculator-context" id="calcForm">
-          <label class="hangar-field">
-            <span>房间最高 BR / 耐久档</span>
-            <select id="calcBr">
+          <div class="context-field">
+            <div class="context-label"><span id="brSegmentLabel">房间最高 BR</span><small>相同耐久合并为一档</small></div>
+            <select id="calcBr" hidden aria-hidden="true" tabindex="-1">
               <option value="14.7" selected>8.0–14.7 · 25,900 HP</option>
             </select>
-            <small>相同耐久已合并；选择房间最高 BR 所在区间</small>
-          </label>
-          <label class="hangar-field">
-            <span>目标</span>
-            <select id="calcTarget">
+            <div class="segment-scroll"><div id="calcBrSegments" class="segment-track" role="radiogroup" aria-labelledby="brSegmentLabel"></div></div>
+          </div>
+          <div class="context-field">
+            <div class="context-label"><span id="targetSegmentLabel">目标</span><small>按满血计算</small></div>
+            <select id="calcTarget" hidden aria-hidden="true" tabindex="-1">
               <option value="bombing_point_planes" selected>战区基地（空战）</option>
             </select>
-            <small>机场模块按满血且不计投弹间回血</small>
-          </label>
+            <div class="segment-scroll"><div id="calcTargetSegments" class="segment-track" role="radiogroup" aria-labelledby="targetSegmentLabel"></div></div>
+          </div>
           <aside class="hangar-repair" id="calcRepairNote" hidden>
             <strong>机场回血</strong>
             <span id="calcRepairSummary">生活区状态影响模块恢复；本页按不计回血估算，实战可能需要更多弹药。</span>
@@ -69,30 +72,32 @@
           </aside>
         </form>
 
-        <div class="calculator-workspace">
-          <div class="calculator-pickers">
-            <section class="hangar-picker" aria-labelledby="aircraft-picker-title">
+            <section class="hangar-picker aircraft-toolbar" aria-labelledby="aircraft-picker-title">
               <header class="hangar-picker-head">
                 <span class="picker-step">1</span>
-                <div><h2 id="aircraft-picker-title">选择机型</h2><p>可选；选中后计算单次挂载和架次</p></div>
-                <button class="hangar-clear" id="calcAircraftClear" type="button">不限机型</button>
+                <div><h2 id="aircraft-picker-title">机型</h2></div>
+                <div class="hangar-selection" id="calcAircraftSelection"><strong>不限机型</strong><span>按武器计算</span></div>
               </header>
+              <div class="aircraft-search-bar">
               <label class="hangar-search">
                 <span class="sr-only">搜索机型</span>
-                <input id="calcAircraftSearch" type="search" autocomplete="off" placeholder="搜索 F-15E、A-10C、Su-27">
+                <input id="calcAircraftSearch" type="search" autocomplete="off" placeholder="搜索机型、拼音，如 F-15E、taif">
               </label>
-              <div class="hangar-selection" id="calcAircraftSelection">
-                <strong>不限机型</strong><span>先按目标枚数计算</span>
+              <div class="aircraft-filter-group" role="group" aria-label="机型选项">
+                <button class="filter-chip" id="calcAircraftClear" type="button" aria-pressed="true">不限机型</button>
+                <button class="filter-chip" id="calcCustomOnly" type="button" aria-pressed="false" aria-label="仅显示支持自定义挂载的机型">仅支持自定义 <span id="calcCustomCount"></span></button>
+              </div>
               </div>
               <div id="calcAircraftList" class="hangar-weapon-list hangar-aircraft-list" role="listbox" aria-label="机型搜索结果" tabindex="0">
-                <p class="hangar-weapon-empty">输入名称开始搜索，支持简称和模糊匹配。</p>
+                <p class="hangar-weapon-empty">支持名称、拼音和首字母，如 taif、j10。</p>
               </div>
             </section>
-
+        <div class="calculator-workspace loadout-workspace">
+          <div class="calculator-pickers">
             <section class="hangar-picker" aria-labelledby="weapon-picker-title">
               <header class="hangar-picker-head">
                 <span class="picker-step">2</span>
-                <div><h2 id="weapon-picker-title">选择武器</h2><p>机型选中后只显示可用挂载</p></div>
+                <div><h2 id="weapon-picker-title">挂载配置</h2><p id="calcLoadoutCaption">选择预设，查看本次出击的对地弹药</p></div>
               </header>
               <div class="hangar-weapon-filters">
                 <label class="hangar-field hangar-kind-field">
@@ -109,12 +114,40 @@
                   <input id="calcSearch" type="search" autocomplete="off" placeholder="搜索 Mk 83、Hydra、FAB-500">
                 </label>
               </div>
+              <div id="calcPresetPanel" hidden>
+                <div class="loadout-scroll" id="calcPresetList" role="listbox" aria-label="挂载预设" tabindex="0"></div>
+                <div class="loadout-footer"><span id="calcPresetCount"></span><span>游戏挂点排列</span></div>
+              </div>
+              <section id="customLoadoutEditor" class="custom-editor" aria-label="自定义挂载编辑器">
+                <div class="custom-editor-toolbar"><button type="button" class="custom-launch" data-custom-open hidden aria-expanded="false" aria-controls="customLoadoutBody"><span class="custom-launch-symbol" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg></span><span>自定义挂载</span><svg class="custom-launch-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 5 5 5-5"/></svg></button><span data-custom-status role="status"></span></div>
+                <div id="customLoadoutBody" data-custom-body hidden>
+                  <div class="custom-rack-heading"><strong>挂点配置</strong><span>点击挂点选择装备</span><button type="button" class="custom-text-button" data-custom-new>清空 / 新建</button></div>
+                  <div class="custom-slots" data-custom-slots aria-label="机型挂点"></div>
+                  <dl class="custom-mass" data-custom-mass></dl>
+                  <ul class="custom-errors" data-custom-errors></ul>
+                  <button type="button" class="custom-dependency-button" data-custom-dependencies hidden>补齐必需装备（替换占用挂点）</button>
+                  <p class="custom-total" data-custom-total></p>
+                  <div class="custom-save-bar"><label><span class="sr-only">挂载名称</span><input type="text" maxlength="40" data-custom-name placeholder="挂载名称，例如：炸点 + 制导弹"></label><button type="button" class="custom-save-button" data-custom-save disabled>保存并应用</button></div>
+                  <p class="tool-note" data-custom-notice aria-live="polite"></p>
+                  <details class="custom-saved"><summary>我的挂载 <span data-custom-saved-count>0</span></summary><div data-custom-saved></div><p class="tool-note">每机最多 20 套，保存在此浏览器。</p></details>
+                  <details class="custom-requirements"><summary>改装与解锁要求</summary><p data-custom-requirements></p></details>
+                </div>
+                <dialog class="custom-picker" data-custom-picker aria-labelledby="customPickerTitle" aria-describedby="customPickerHelp">
+                  <div class="custom-picker-head"><div><p data-custom-picker-aircraft></p><h3 id="customPickerTitle" data-custom-picker-title>选择挂载</h3></div><button type="button" class="custom-picker-close" data-custom-picker-close aria-label="关闭挂点选择">×</button></div>
+                  <div class="custom-picker-search"><label><span class="sr-only">搜索此挂点的挂载</span><input type="search" data-custom-picker-search placeholder="搜索炸弹、导弹、吊舱…" autocomplete="off"></label><span data-custom-picker-count role="status"></span></div>
+                  <div class="custom-picker-options" data-custom-picker-options></div>
+                  <p id="customPickerHelp" class="custom-picker-help">点击图标装备。标有限制的选项需调整其他挂点，校验通过后才能保存。</p>
+                </dialog>
+              </section>
+              <details id="calcIndividualWeapons" class="loadout-individual" open>
+                <summary>按单一武器查看挂载上限</summary>
               <div class="hangar-selection" id="calcWeaponSelection">
                 <strong>正在读取武器目录…</strong>
               </div>
               <div id="calcWeaponList" class="hangar-weapon-list" role="listbox" aria-label="武器搜索结果" tabindex="0">
                 <p class="hangar-weapon-empty">正在加载武器…</p>
               </div>
+              </details>
             </section>
           </div>
 
@@ -131,11 +164,36 @@
               </div>
             </div>
             <p class="hangar-fire" id="calcFireLine"></p>
+            <div id="calcPresetDetail" hidden>
+              <p class="hangar-kicker">SELECTED LOADOUT</p>
+              <h2 id="calcPresetTitle"></h2>
+              <dl class="preset-stats" id="calcPresetStats"></dl>
+              <p class="tool-note" id="calcPresetNote"></p>
+            </div>
             <dl class="hangar-stats" id="calcStats"></dl>
             <p class="hangar-hint" id="calcHint">选择武器后显示结果；再选机型可计算挂载上限与架次。</p>
+            <section id="loadoutOptimizer" class="optimizer-panel" aria-label="挂载收益推荐" hidden>
+              <h3>挂载收益推荐</h3>
+              <div class="optimizer-modes" role="group" aria-label="推荐目标"><button type="button" data-optimizer-mode="reward" aria-pressed="true">单战区最高收益</button><button type="button" data-optimizer-mode="targets" aria-pressed="false">最多战区</button></div>
+              <p class="optimizer-note" data-optimizer-context></p>
+              <p class="optimizer-status" data-optimizer-status role="status"></p>
+              <div data-optimizer-result></div>
+              <div class="optimizer-actions"><button type="button" data-optimizer-apply hidden>应用推荐挂载</button><button type="button" data-optimizer-retry hidden>继续求解</button></div>
+              <details class="optimizer-plan"><summary>推荐依据</summary><p>按战区掉血自毁线分配完整弹药。单战区模式优先提高挂载收益系数；最多战区模式优先提高可摧毁目标数，再比较收益系数。同等收益优先减少多余伤害，再减轻载荷。保留已选挂点及其配套要求。</p><p>收益系数不等于实际银狮或研发点。仅校验客户端静态配装规则，改装与武器仍需在游戏中解锁。</p></details>
+            </section>
           </article>
         </div>
 
+        <details class="tool-panel combination-advanced" id="combinationCalculator">
+          <summary>自由组合当量与轮次 <small>高级工具 · 不限机型</small></summary>
+          <p class="tool-note">输入任意弹药数量做比较；按机型配装请使用上方自定义挂载。</p>
+          <div data-combination-rows></div>
+          <div class="combination-actions"><button type="button" class="conversion-use" data-combination-add>添加弹药</button><button type="button" class="conversion-use" data-combination-preset disabled>使用当前预设</button></div>
+          <label class="hangar-field"><span>对比一种弹药的当量（可选）</span><select data-combination-reference aria-label="组合当量参照弹药"></select></label>
+          <p class="tool-note" data-combination-target></p>
+          <div class="reward-result" data-combination-result aria-live="polite">正在载入弹药目录…</div>
+          <p class="tool-note">每轮投放整套弹药，按全部命中、不计回血估算。自由组合的机体限制请用上方编辑器检查。</p>
+        </details>
         <noscript><p class="hangar-noscript">需要启用 JavaScript。</p></noscript>
 
         <details class="hangar-help">
@@ -143,35 +201,37 @@
           <ul>
             <li>BR 使用房间允许的最高值。</li>
             <li>枚数按武器全部命中计算；战区约九成伤害后进入燃烧自毁参考线。</li>
-            <li>选机型后，架次按该武器的最大同型挂载计算；满载收益系数按一架次满载伤害计算。</li>
+            <li>自定义与混合挂载按整套伤害计算轮次和架次；单种弹药预设显示所需枚数及对应架次。</li>
+            <li>满载收益系数按整套携带弹药的任务伤害计算，不等同于实际银狮或研发点收益。</li>
             <li>机场没有战区的燃烧自毁线，而且会在投弹间隙回血，所以实战可能多一架次。</li>
           </ul>
         </details>
         <p class="hangar-aside">适用于 EC 任务参数；请勿套用为空战历史模式（Air RB）炸点表。所有伤害结果均假设全部命中。</p>
 
         <section class="tool-panel" id="airportStatus" aria-labelledby="airport-status-title">
-          <header><p class="hangar-kicker">AIRFIELD · 机场状态</p><h2 id="airport-status-title">条带识读与机场回血</h2><p>颜色表示模块剩余耐久；修复取决于生活区。耐久档沿用上方房间 BR。</p></header>
+          <header class="tool-panel-head"><p class="hangar-kicker">AIRFIELD</p><h2 id="airport-status-title">机场状态与回血</h2><p>沿用上方 BR，查看四模块位置与修复参考。</p></header>
+          <div class="airport-workspace"><div class="airport-map-panel">
           <div class="airport-palette" id="airportPalette" aria-label="机场状态条颜色参考"></div>
           <p class="tool-source" id="airportPaletteSource"></p>
           <section class="airport-comparison" id="airportDiagramDetails" aria-labelledby="airport-comparison-title">
-            <h3 id="airport-comparison-title">起终点反过来，四条带也整体转 180°</h3>
-            <p>两图保持同一地图朝向，仅将跑道起点、终点对调。箭头表示起点 → 终点。</p>
+            <div class="airport-diagram-heading"><h3 id="airport-comparison-title">四模块位置</h3><button class="conversion-use" type="button" data-airport-rotate="90">旋转 90°</button></div>
             <div class="airport-comparison-panels">
               <figure><figcaption>我方 · 基准方向</figcaption><div class="airport-reference" id="airportDiagram"></div></figure>
               <figure class="airport-reversed"><figcaption>敌方 · 起终点相反时</figcaption><div class="airport-reference" id="airportDiagramReversed"></div></figure>
             </div>
-            <div class="score-presets"><button type="button" data-airport-rotate="90">一起旋转 90°</button></div>
-            <p><strong>左上 ↔ 右下，右上 ↔ 左下。</strong>模块名称和各自的血量颜色跟着位置移动，颜色含义不变。灰条只示意位置，不表示当前血量。</p>
-            <details class="tool-details"><summary>对应关系与适用条件</summary><p>终点一端是跑道、油库，起点一端是生活区、停机区；跑道与生活区同侧。这是跑道端点反向带来的旋转，不需要另一个敌方翻转开关。</p><p>右图适用于敌方起终点确实相反的情况，不代表所有地图的敌方机场都固定反向。原生端点与 8111 起终点字段的对应尚未证实；条带位置不代表地面建筑位置。</p></details>
+            <p class="tool-note">箭头：起点 → 终点。起终点相反时，四模块转 180°。</p>
+            <details class="tool-details"><summary>图示说明</summary><p>终点一端是跑道、油库，起点一端是生活区、停机区；跑道与生活区同侧。两图保持相同地图朝向。</p><p>右图仅适用于敌方起终点确实相反的情况，不代表所有地图都固定反向。图示不是实时血量，也不表示建筑实际位置。</p></details>
           </section>
+          </div><div class="airport-repair-panel"><h3>修复参考</h3>
           <div class="repair-controls">
             <label class="hangar-field"><span>生活区剩余 <output id="repairPercentLabel">100%</output></span><input id="repairPercent" type="range" min="0" max="100" value="100" step="0.1"></label>
             <div class="score-presets" aria-label="生活区状态"><button type="button" data-dwelling="100">完好</button><button type="button" data-dwelling="50">受损</button><button type="button" data-dwelling="0">摧毁</button></div>
           </div>
           <p class="repair-result" id="repairResult" role="status">正在读取任务规则…</p>
           <div class="tool-chart" id="repairChart"></div>
-          <p class="tool-source">这是客户端任务分支参考，不是实时血量或修复倒计时。8111 没有提供四模块剩余 HP；满血分支跳过，不等于已证明服务器永不修复。</p>
+          <p class="tool-note">按单次修复计算，不代表每秒回血或实时倒计时。</p>
           <details class="tool-details"><summary>公式与适用边界</summary><p id="repairFormula"></p><p>原生条件先将百分比截为整数：生活区不足 1% 或完好（100%）时，该分支跳过。1% 至不足 100% 时，为跑道、油库、停机区和生活区加入相同 HP；生活区自身也在恢复。一次轮询不等于一秒，实际轮询还取决于机场数量及任务调度，因此不推算实际恢复时间或最终恢复量。</p><p><a href="https://wiki.warthunder.com/gamemode/enduring_confrontation#airfields-and-their-modules">官方 EC 模块说明</a> · <a href="https://wiki.warthunder.com/cdk/760-cdk-mission-editor-variables">官方变量运算说明</a></p></details>
+          </div></div>
         </section>
 
         <section class="tool-panel" id="usefulActions" aria-labelledby="rewards-title">
@@ -269,7 +329,7 @@
                 <label class="hangar-field"><span>当前爬升角 · °</span><input id="airFlightPath" type="number" min="-45" max="45" step="1" value="0" required></label>
               </div>
               <details class="tool-details"><summary>观测中断假设</summary><p>默认始终有观测。这里手动假设从开始机动时丢失观测，期间沿旧速度外推，到期恢复观测；不会因为 39 或投箔条自动脱锁。</p><div class="conversion-fields"><label class="hangar-field"><span>中断持续 · s</span><input id="airGap" type="number" min="0" max="10" step="0.1" value="0" required></label><label class="hangar-field"><span>导弹已飞行 · s</span><input id="airAge" type="number" min="0" max="120" step="0.1" value="10" required></label></div></details>
-              <p class="tool-note">速度和高度均手填。无风；g 为理想航迹法向加速度，不等于座舱过载表读数。三个动作采用相同的初始弹道：能匀速交会时使用提前量，否则直指目标。增益输入采用弹龄与距离／接近速度，未复刻原生计时状态。</p>
+              <details class="tool-details"><summary>输入与场景假设</summary><p>速度和高度均手填。无风；g 为理想航迹法向加速度，不等于座舱过载表读数。三个动作采用相同初始弹道，保持速度恒定；结果仅供短时机动比较。</p></details>
             </form>
             <div class="air-visuals">
               <p class="air-model-label">短时定速对照 · 不含气动耗能与引信</p>
@@ -288,15 +348,14 @@
         </section>
 
         <section class="tool-panel" id="airfieldDefense" aria-labelledby="defense-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">AIRFIELD DEFENSE</p><h2 id="defense-title">机场防空会选中哪些弹药？</h2><p>Sky Odyssey · 客户端 2.59.0.13 静态研究。已核对 AI 筛选代码，尚无同版本实战拦截率。</p></header>
-          <p>以高等级 EC 的 <strong>ItO 90M + ZA-35</strong> 机场配置为例；不同国家模板还会使用 Tor-M1 或其他高炮。上方合并的耐久 BR 档不能用来确定实际防空配置。</p>
+          <header class="tool-panel-head"><p class="hangar-kicker">AIRFIELD DEFENSE</p><h2 id="defense-title">机场防空与弹药</h2><p>ItO 90M / ZA-35 筛选参考，不代表实际拦截率。</p></header>
           <p class="repair-result" id="defenseSelection" aria-live="polite">在上方选择武器后，可对照本节两种防空的质量筛选窗。</p>
-          <dl class="module-guide">
+          <details class="tool-details"><summary>质量、速度与弹种限制</summary><p>以高等级 EC 的 ItO 90M + ZA-35 配置为例；不同国家可能使用其他防空。耐久 BR 档不能确定防空配置。</p><dl class="module-guide">
             <dt>ItO 90M 的第一层门槛</dt><dd>整弹质量 30～3500 kg、瞬时速度 120～1200 m/s，边界值包含在内；通过后还要匹配目标优先级。投弹后加速可能从窗外进入窗内。</dd>
             <dt>两种防空的弹药优先级</dt><dd>已配置的质量窗合起来为 80～3500 kg。低于 80 kg 或高于 3500 kg 没有相应质量条目；窗内弹药仍受速度、距离、航迹与探测条件限制。只代表这两种配置，不是全局免拦截名单。</dd>
             <dt>普通炸弹与小型制导弹药</dt><dd>代码中缺少制导组件的弹药会被这条主动拦截分支排除，普通无制导航弹值得优先实测；尚未逐弹种验证实例。例如 BLU-27（401.4 kg）没有制导配置，GBU-8（1027 kg）有电视制导，两者质量都在窗内，不能仅凭质量判定拦截资格。小型制导弹药也不能只看“小直径”名称判断。</dd>
           </dl>
-          <p>当前客户端示例：GBU-39 为 121.563 kg、GBU-53 为 92.533 kg、SPICE 250 为 130 kg，均落入上述质量范围；Brimstone 为 50 kg，不落入这两种配置的优先级质量窗。这里只比较整弹质量，未据此计算拦截概率。</p>
+          <p>GBU-39、GBU-53、SPICE 250 落入上述质量范围；50 kg 的 Brimstone 不在这两种配置的优先级质量窗内。质量范围不等于拦截概率。</p></details>
           <details class="tool-details"><summary>高空灌顶有用吗？</summary><p>当前 ItO 发射架的静态最大仰角为 80°，ZA-35 为 81°，近天顶方向值得实测，但尚未证实为 AI 禁射区。角度取决于弹药相对每一处防空阵地的方位；已经发射的导弹和其他阵地仍可能拦截。</p><p>原生 AI 还会按航迹是否威胁阵地来筛选目标；没有找到“超过某个投放高度就免拦截”的通用开关。目前不能据此推荐一个保证安全的高度。</p></details>
           <details class="tool-details"><summary>能否靠远投、压低或饱和攻击保证突破？</summary><p>地形遮蔽、远投和缩短载机暴露时间可以作为风险管理思路，但不能推出弹药不会被拦截。目标优先级、反应时间与多阵地覆盖会影响结果；尚无支持固定齐射数量或固定突防概率的同版本证据。</p><p>上方枚数是造成所需伤害的有效命中枚数，架次按全部有效命中估算，不包含拦截、脱靶和机场回血。</p></details>
           <details class="tool-details"><summary>来源和适用边界</summary><p>数据来自 2.59.0.13 的 EC 机场任务模板、ItO 90M / ZA-35 武器配置及客户端原生筛选函数；这是版本化参考，不是实时战局读取。对比 2.57.1.89，这些质量／速度窗此前已存在，当前新增了显式反应时间等参数；不能把整套规则都称为本次新增。当前模板坐标不足以确认防空阵地在本次更新中被垫高。</p><p><a href="https://warthunder.com/en/game/changelog/current/1797">官方 EC 高等级机场防空更新</a> · <a href="https://warthunder.com/en/game/changelog/current/1876">核升级模式的拦截改动</a>。后者的小型弹药例外和低空规则属于 Nuclear Escalation，不能直接套用到全真 EC。</p></details>

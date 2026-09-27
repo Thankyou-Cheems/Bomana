@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { presetTotals } from "../../docs/calculator/loadouts.mjs";
+
+test("complete preset totals sum mixed stores but preserve unknown damage", () => {
+  const weapons = new Map([["bomb", { dmg: 100, kg: 50 }], ["rocket", { dmg: 20, kg: 10 }]]);
+  const preset = { weapons: [["bomb", 2], ["rocket", 3]] };
+  assert.deepEqual(presetTotals(preset, weapons), { count: 5, damage: 260, mass: 130 });
+  weapons.get("rocket").dmg = null;
+  assert.deepEqual(presetTotals(preset, weapons), { count: 5, damage: null, mass: 130 });
+});
 import {
   compareLoadouts,
   airportRepairVisit,
