@@ -20,6 +20,27 @@ function inboundSample(at: number): LandingInput {
     altitudeM:500,iasKmh:300,verticalSpeedMps:-4,gearPercent:0,airbrakePercent:0,flapsPercent:0 };
 }
 
+it("retains a horizontal return route without runway elevation and withdraws it with stale telemetry", () => {
+  const assist = new LandingAssist();
+  for (let at = 1000; at <= 4500; at += 500) assist.update(inboundSample(at));
+  const base = new PublicRuntime({ edition: editionPolicy("Standard") }).snapshot();
+  const landing = assist.update(inboundSample(4600));
+  expect(landing.settings.enabled).toBe(true);
+  expect(landing.geometry?.heightM).toBeNull();
+  const horizontal = landingTapePresentation({ ...base, landing });
+  expect(horizontal.horizontal?.geometry.thresholdDistanceM).toBeGreaterThan(0);
+  expect(horizontal.runway).toMatchObject({ heightKnown: false, slope: 0 });
+  expect(horizontal.glide).toBeNull();
+  const located = assist.update(inboundSample(4700), () => 100);
+  const spatial = landingTapePresentation({ ...base, landing: located });
+  expect(spatial.horizontal).toBeNull();
+  expect(spatial.runway?.height).toBe(400);
+  const unavailable = assist.update({ ...inboundSample(4800), fresh: false });
+  const withdrawn = landingTapePresentation({ ...base, landing: unavailable });
+  expect(withdrawn.horizontal).toBeNull();
+  expect(withdrawn.runway).toBeNull();
+});
+
 it("keeps one physical runway stable through sub-metre endpoint jitter", () => {
   const assist = new LandingAssist();
   for (let at = 1000; at <= 4000; at += 500) assist.update(inboundSample(at), () => 0);
@@ -247,11 +268,11 @@ it("shows known airport elevation at long range without creating a glide command
   expect(view(3000)).toMatchObject({ scene: "return", glide: null, airportHeightText: "↓3000m" });
   expect(view(3000).runway!.height).toBe(3000);
   expect(view(-500).runway!.height).toBe(-500);
-  expect(view(null).runway).toBeNull();
+  expect(view(null).runway).toMatchObject({ heightKnown: false, slope: 0 });
   const motion = new LandingCueMotion();
   motion.observe(view(3000), 0);
   motion.observe(view(null), 10);
-  expect(motion.step(10)).toBeNull(); // no easing a missing datum away
+  expect(motion.step(10)).toMatchObject({ heightKnown: false, height: 0, slope: 0 }); // no easing a missing datum away
 });
 
 it("preserves correction velocity across samples and settles without overshoot", () => {

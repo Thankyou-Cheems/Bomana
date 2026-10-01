@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PublicRuntime } from "./public-runtime";
+import { MemorySortieRecoveryStore } from "./sortie-recovery";
 import { editionPolicy } from "./edition-policy";
 import { publicFlight } from "./public-runtime-fixture";
 import { AircraftParameters } from "./aircraft-parameters";
@@ -89,5 +90,197 @@ describe("current flap speed constraint", () => {
     expect(exceeded.alerts).toContain("达到襟翼参考限速");
     expect((await manager.ingest({ ...frame, indicators: { valid: true, type: "unknown" } }))
       .flight.overspeed).toMatchObject({ matched: false, iasLimitKmh: 0 });
+  });
+});
+
+// Synthetic official-route inputs, not a recording of the game's return warning.
+describe("map-edge sortie continuity", () => {
+  const edgePlayer = { type: "player", x: .999, y: .5, dx: 1, dy: 0 };
+  const observation = (at: number, player: Record<string, unknown> | null = edgePlayer) => {
+    const frame = publicFlight(at);
+    return { ...frame, mapObjects: [...(player ? [player] : []),
+      { type: "bombing_point", x: .5, y: .3 }] };
+  };
+  async function flying(channel: "Lite" | "Standard" | "Enhanced" = "Standard") {
+    const runtime = new PublicRuntime({ edition: editionPolicy(channel), now: () => 2_000 });
+    await runtime.ingest(observation(0));
+    await runtime.ingest(observation(1_000));
+    await runtime.ingest(observation(1_500));
+    return runtime;
+  }
+
+  it.each(["Lite", "Standard", "Enhanced"] as const)("keeps %s's original cycle through edge loss and return", async channel => {
+    const runtime = await flying(channel);
+    const missing = await runtime.ingest(observation(1_600, null));
+    expect(missing.phase).toBe("alive");
+    expect(missing.timer.remainingSec).toBe(898.4);
+    expect(missing.sortieContinuity).toMatchObject({ state: "partial-data", resetUndo: null });
+    expect(missing.navigation?.player ?? null).toBeNull();
+    const waiting = await runtime.ingest(observation(46_000, null));
+    expect(waiting.timer.remainingSec).toBe(854);
+    const returned = await runtime.ingest(observation(46_100, { ...edgePlayer, x: .8, dx: -1 }));
+    expect(returned).toMatchObject({ phase: "alive", timer: { lifeIndex: 1, remainingSec: 853.9 },
+      sortieContinuity: { state: "live", resetUndo: null } });
+  });
+
+  it.each([15, 20, 30, 45])("keeps the original cycle through %i seconds of fresh flight with no map marker", async durationSec => {
+    const runtime = await flying();
+    for (let elapsedSec = 0; elapsedSec <= durationSec; elapsedSec += 1) {
+      const at = 1_600 + elapsedSec * 1_000;
+      const snapshot = await runtime.ingest(observation(at, null));
+      expect(snapshot).toMatchObject({ phase: "alive", timer: { lifeIndex: 1, remainingSec: 900 - at / 1_000 },
+        sortieContinuity: { state: "partial-data", graceExpiresAtMs: null, resetUndo: null } });
+      expect(snapshot.navigation?.player).toBeNull();
+    }
+    const at = 1_700 + durationSec * 1_000;
+    const returned = await runtime.ingest(observation(at, { ...edgePlayer, x: .8, dx: -1 }));
+    expect(returned).toMatchObject({ phase: "alive", timer: { lifeIndex: 1, remainingSec: 900 - at / 1_000 },
+      sortieContinuity: { state: "live", resetUndo: null } });
+  });
+
+  it.each([
+    { x: .001, y: .5, dx: -1, dy: 0 }, { x: .5, y: .001, dx: 0, dy: -1 },
+    { x: .5, y: .999, dx: 0, dy: 1 }, { x: 1.01, y: .5, dx: -1, dy: 0 },
+  ])("recognizes all edges and already off-map ownship: %j", async point => {
+    const runtime = await flying();
+    await runtime.ingest(observation(1_500, { type: "player", ...point }));
+    expect((await runtime.ingest(observation(1_600, null))).timer.remainingSec).toBe(898.4);
+  });
+
+  it("does not let repeated missing markers extend the sixty-second bound", async () => {
+    const runtime = await flying();
+    for (const at of [1_600, 20_000, 61_599]) {
+      expect((await runtime.ingest(observation(at, null))).phase).toBe("alive");
+    }
+    expect(await runtime.ingest(observation(61_600, null))).toMatchObject({
+      phase: "wait-next", timer: { remainingSec: null },
+      sortieContinuity: { resetUndo: { reason: "aircraft-loss" } },
+    });
+  });
+
+  it.each([
+    { name: "interior", player: { ...edgePlayer, x: .5 } },
+    { name: "inward motion", player: { ...edgePlayer, dx: -1 } },
+    { name: "almost parallel motion", player: { ...edgePlayer, dx: .001, dy: 1 } },
+  ])("preserves immediate aircraft-loss for $name", async ({ player }) => {
+    const runtime = await flying();
+    await runtime.ingest(observation(1_500, player));
+    expect((await runtime.ingest(observation(1_600, null))).sortieContinuity.resetUndo?.reason).toBe("aircraft-loss");
+  });
+
+  it("rejects stale boundary evidence and current invalid/grounded death evidence", async () => {
+    for (const change of [
+      { sampledAtMs: 3_001 },
+      { state: { ...observation(1_600).state, valid: false } },
+      { indicators: { valid: false } },
+      { state: { ...observation(1_600).state, "IAS, km/h": 0, "Vy, m/s": 0 } },
+    ]) {
+      const runtime = await flying();
+      const result = await runtime.ingest({ ...observation(1_600, null), ...change });
+      expect(result.sortieContinuity.resetUndo?.reason).toBe("aircraft-loss");
+    }
+  });
+
+  it("preserves an admitted boundary gap through incomplete fields but expires unconfirmed loss after twelve seconds", async () => {
+    const runtime = await flying();
+    await runtime.ingest(observation(1_600, null));
+    const incomplete = (at: number) => ({ ...observation(at, null), indicators: {}, state: {} });
+    for (const at of [2_000, 4_000, 13_999]) {
+      expect(await runtime.ingest(incomplete(at))).toMatchObject({ phase: "alive",
+        sortieContinuity: { state: "no-data-grace", graceExpiresAtMs: 14_000 } });
+    }
+    expect((await runtime.ingest(incomplete(14_000))).sortieContinuity.resetUndo?.reason).toBe("telemetry-timeout");
+  });
+
+  it("retains short bridge gaps and their original twelve-second timeout", async () => {
+    const runtime = await flying();
+    await runtime.ingest(observation(1_600, null));
+    const disconnected = (at: number) => ({ ...observation(at, null), bridgeReachable: false,
+      indicators: null, state: null, mapObjects: null,
+      availability: { indicators: false, state: false, mapObjects: false, mapInfo: true } });
+    await runtime.ingest(disconnected(2_000));
+    expect((await runtime.ingest(disconnected(4_000))).timer.remainingSec).toBe(896);
+    expect((await runtime.ingest(observation(4_100))).timer.remainingSec).toBe(895.9);
+    await runtime.ingest(disconnected(5_000));
+    expect((await runtime.ingest(disconnected(17_000))).sortieContinuity.resetUndo?.reason).toBe("telemetry-timeout");
+  });
+
+  it("does not extend the boundary deadline by losing the map route just before expiry", async () => {
+    const runtime = await flying();
+    await runtime.ingest(observation(1_600, null));
+    await runtime.ingest(observation(61_000, null));
+    const unavailable = (at: number) => ({ ...observation(at, null), mapObjects: null,
+      availability: { ...observation(at).availability, mapObjects: false } });
+    expect(await runtime.ingest(unavailable(61_500))).toMatchObject({ phase: "alive",
+      sortieContinuity: { graceExpiresAtMs: 61_600 } });
+    expect((await runtime.ingest(unavailable(61_600))).sortieContinuity.resetUndo?.reason).toBe("telemetry-timeout");
+  });
+
+  it("does not revive an expired boundary absence when the next poll returns after suspension", async () => {
+    const runtime = await flying();
+    await runtime.ingest(observation(1_600, null));
+    expect((await runtime.ingest(observation(80_000))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(observation(81_000))).timer.remainingSec).toBe(899);
+  });
+
+  it("starts a new cycle when a different aircraft or map first returns with a player", async () => {
+    for (const changed of [
+      { mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } },
+      { indicators: { valid: true, type: "other_aircraft" } },
+    ]) {
+      const runtime = await flying();
+      await runtime.ingest(observation(1_600, null));
+      const returned = await runtime.ingest({ ...observation(2_000), ...changed });
+      expect(returned.timer.remainingSec).toBeNull();
+      expect((await runtime.ingest({ ...observation(3_000), ...changed })).timer.remainingSec).toBe(899);
+    }
+  });
+
+  it("clears persisted old-map undo immediately, including reopen before the next periodic save", async () => {
+    const store = new MemorySortieRecoveryStore();
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), sortieRecoveryStore: store, now: () => 0 });
+    await runtime.ingest(observation(0)); await runtime.ingest(observation(1_000));
+    await runtime.ingest(observation(1_500)); await runtime.ingest(observation(1_600, null));
+    await runtime.ingest({ ...observation(2_000), mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    expect(store.value).toBeNull();
+    const reopened = new PublicRuntime({ edition: editionPolicy("Standard"), sortieRecoveryStore: store, now: () => 2_100 });
+    expect(reopened.snapshot().sortieContinuity.resetUndo).toBeNull();
+  });
+
+  it.each(["invalid", "grounded", "changed-aircraft"])("ends boundary context on %s even while map reads fail", async kind => {
+    const runtime = await flying();
+    await runtime.ingest(observation(1_600, null));
+    const failed = { ...observation(2_000, null), mapObjects: null,
+      availability: { ...observation(2_000).availability, mapObjects: false } };
+    const changed = kind === "invalid" ? { indicators: { valid: false } }
+      : kind === "changed-aircraft" ? { indicators: { valid: true, type: "other_aircraft" } }
+        : { state: { ...failed.state, "IAS, km/h": 0, "Vy, m/s": 0 } };
+    await runtime.ingest({ ...failed, ...changed });
+    expect((await runtime.ingest(observation(2_100, null))).timer.remainingSec).toBeNull();
+  });
+
+  it("does not carry boundary evidence through manual reset, exit, respawn or changed map/aircraft", async () => {
+    const manual = await flying();
+    await manual.command({ type: "timer.reset" });
+    expect((await manual.ingest(observation(2_100, null))).sortieContinuity.resetUndo?.reason).toBe("aircraft-loss");
+    for (const changed of [
+      { mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } },
+      { indicators: { valid: true, type: "other_aircraft" } },
+    ]) {
+      const runtime = await flying();
+      await runtime.ingest(observation(1_600, null));
+      expect((await runtime.ingest({ ...observation(2_000, null), ...changed })).timer.remainingSec).toBeNull();
+      await runtime.ingest({ ...observation(3_000), ...changed });
+      expect((await runtime.ingest({ ...observation(4_000), ...changed })).timer.remainingSec).toBe(899);
+    }
+    const runtime = await flying();
+    await runtime.ingest(observation(1_600, null));
+    const hangar = (at: number) => ({ ...observation(at, null), mapObjects: [],
+      indicators: { valid: false }, state: { valid: false } });
+    await runtime.ingest(hangar(2_000));
+    await runtime.ingest(hangar(2_100));
+    expect((await runtime.ingest(hangar(3_400))).phase).toBe("hangar");
+    await runtime.ingest(observation(4_000));
+    expect((await runtime.ingest(observation(5_000))).timer).toMatchObject({ lifeIndex: 1, remainingSec: 899 });
   });
 });

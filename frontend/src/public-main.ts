@@ -1,3 +1,4 @@
+import "../../docs/assets/bomana-header.js";
 import { editionPolicy } from "./runtime/edition-policy";
 import { PublicRuntime, BrowserRuntimeSettingsStore, BrowserTimerCheckpointStore } from "./runtime/public-runtime";
 import type { EditionSnapshot, EditionCommand } from "./runtime/runtime-types";

@@ -32,8 +32,33 @@ try {
   const open = async id => { if (!await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const close = async id => { if (await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const text = selector => page.locator(selector).textContent();
+  // The same selected Pe-8 FAB-50 preset must recalculate against each native rule.
+  for (const [mode, hitPoints, count] of [["legacy_rb", "12,000", "10"], ["legacy_ab", "50,400", "40"], ["respawning", "25,900", "21"]]) {
+    await page.locator(`#calcBaseModeSegments [data-value="${mode}"]`).click();
+    assert.match(await text("#calcStats"), new RegExp(`目标耐久${hitPoints}`));
+    assert.equal(await text("#calcDestroyCount"), count);
+    assert.equal(await page.locator('#calcBaseModeSegments [aria-checked="true"]').count(), 1);
+  }
+  await page.locator('#calcBaseModeSegments [data-value="legacy_ab"]').click();
+  for (const [index, hp] of [[0, "15,000"], [1, "25,600"], [2, "32,000"], [3, "50,400"]]) {
+    await page.locator('#calcBrSegments [role="radio"]').nth(index).click();
+    assert.match(await text("#calcStats"), new RegExp(`目标耐久${hp}`));
+  }
+  await page.locator('#calcBaseModeSegments [data-value="legacy_rb"]').focus();
+  await page.keyboard.press("Home");
+  assert.equal(await page.locator("#calcBaseMode").inputValue(), "respawning");
+  // A wide legacy bracket must not promote a previously selected BR on return.
+  await page.locator('#calcBrSegments [data-value="6.3"]').click();
+  await page.locator('#calcBaseModeSegments [data-value="legacy_rb"]').click();
+  assert.equal(await page.locator("#calcBr").inputValue(), "14.7");
+  await page.locator('#calcBaseModeSegments [data-value="respawning"]').click();
+  assert.equal(await page.locator("#calcBr").inputValue(), "6.3");
+  assert.match(await text("#calcStats"), /目标耐久16,000/);
+  await page.locator('#calcBrSegments [role="radio"]').last().click();
   assert.equal(await page.locator("#combinationCalculator").getAttribute("open"), null);
-  assert.equal(await page.locator("#toolDirectoryLinks a").evaluateAll(links => links.every((link, index) => !index || document.querySelector(links[index - 1].hash).compareDocumentPosition(document.querySelector(link.hash)) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
+  const directoryTargets = await page.locator("#toolDirectoryLinks a").evaluateAll(links => links.map(link => ({hash: link.hash, exists: Boolean(document.querySelector(link.hash))})));
+  assert.ok(directoryTargets.every(target => target.exists), 'Every grouped shortcut reaches an existing tool');
+  assert.equal(new Set(directoryTargets.map(target => target.hash)).size, directoryTargets.length, 'Tool shortcuts are not duplicated');
   await page.locator("#calcAircraftSearch").fill("taif");
   for (const id of ["ef_2000_aesa", "ef_2000_fgr4", "ef_2000a", "typhoon_mk1a"]) {
     assert.equal(await page.locator(`[data-aircraft-id="${id}"]`).count(), 1);
@@ -44,6 +69,7 @@ try {
   await page.locator('#calcTargetSegments [data-value="airport_storage"]').click();
   assert.equal(await page.locator("#calcTarget").inputValue(), "airport_storage");
   assert.equal(await page.locator("#calcRepairNote").isVisible(), true);
+  assert.equal(await page.locator("#calcBaseModeControl").isVisible(), false);
   await page.locator('#calcBrSegments [role="radio"]').first().click();
   const lowBr = await page.locator("#calcBr").inputValue();
   await page.keyboard.press("End");
@@ -51,6 +77,7 @@ try {
   assert.equal(await page.locator('#calcBrSegments [aria-checked="true"]').count(), 1);
   await page.locator('#calcTargetSegments [data-value="bombing_point_planes"]').click();
   assert.equal(await page.locator("#calcRepairNote").isVisible(), false);
+  assert.equal(await page.locator("#calcBaseModeControl").isVisible(), true);
   await page.locator('#calcBrSegments [role="radio"]').last().click();
   // Game font code points must not leak into browser aircraft labels.
   await page.locator("#calcAircraftSearch").fill("a_4e_early_iaf");
@@ -72,10 +99,24 @@ try {
   assert.match(await text("#calcPresetStats"), /整套伤害45,440 HP/);
   assert.equal(await page.locator('#calcPresetList [aria-selected="true"] .ordnance-icon').count(), 10);
   assert.equal(await page.locator('#calcPresetList [aria-selected="true"] .ordnance-icon').first().getAttribute("data-icon"), "bombs_small_group_x4");
+  // Filtering available presets must not discard the current loadout or its settlement.
+  const selectedPresetBeforeSearch = await page.locator('#calcPresetList [aria-selected="true"]').getAttribute("data-preset-id");
+  const currentLoadout = async () => ({
+    title: await text("#calcPresetTitle"),
+    stats: await text("#calcPresetStats"),
+    destroyCount: await text("#calcDestroyCount"),
+    sortieCount: await text("#calcSortieCount"),
+    rewardCount: await text("#calcRewardCount"),
+  });
+  const loadoutBeforeSearch = await currentLoadout();
   await page.locator("#calcSearch").fill("not-a-real-loadout-12345");
   assert.equal(await page.locator("#calcPresetList [data-preset-id]").count(), 0);
-  assert.equal(await page.locator("#calcPresetDetail").isVisible(), false);
+  assert.equal(await page.locator("#calcPresetDetail").isVisible(), true);
+  assert.deepEqual(await currentLoadout(), loadoutBeforeSearch);
   await page.locator("#calcSearch").fill("");
+  assert.equal(await page.locator('#calcPresetList [aria-selected="true"]').getAttribute("data-preset-id"), selectedPresetBeforeSearch);
+  assert.equal(await page.locator("#calcPresetDetail").isVisible(), true);
+  assert.deepEqual(await currentLoadout(), loadoutBeforeSearch);
   await page.locator('[data-preset-id="pe-8_12xfab250"]').click();
   await page.locator(".ordnance-icon").evaluateAll(images => Promise.all(images.map(image => image.decode())));
   await mkdir("../.artifacts/calculator-ui", { recursive: true });
@@ -95,10 +136,10 @@ try {
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `../.artifacts/calculator-ui/overview-${width}.png` });
     await page.locator("#calcAircraftSearch").fill("f-16");
-    await page.locator(".aircraft-toolbar").screenshot({ path: `../.artifacts/calculator-ui/aircraft-search-${width}.png` });
+    await page.locator(".calculator-pickers").screenshot({ path: `../.artifacts/calculator-ui/aircraft-search-${width}.png` });
     await page.locator("#calcAircraftSearch").fill("");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: loadout horizontal overflow`);
-    await page.locator(".loadout-workspace").screenshot({ path: `../.artifacts/calculator-ui/loadout-${width}.png`, style: ".site-header { visibility: hidden; }" });
+    await page.locator(".loadout-workspace").screenshot({ path: `../.artifacts/calculator-ui/loadout-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
   }
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.locator("#calcAircraftSearch").fill("f_15e");
@@ -355,12 +396,12 @@ try {
     });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: horizontal overflow`);
     assert.ok(await page.locator("#rewardChart text").first().evaluate(node => parseFloat(getComputedStyle(node).fontSize) >= 12), `${width}: unreadable chart text`);
-    await page.locator("#airportStatus").screenshot({ path: `../.artifacts/calculator-ui/airport-${width}.png`, style: ".site-header { visibility: hidden; }" });
+    await page.locator("#airportStatus").screenshot({ path: `../.artifacts/calculator-ui/airport-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
     await checkOppositeEndpoints();
-    await page.locator("#airportDiagramDetails").screenshot({ path: `../.artifacts/calculator-ui/airport-bars-${width}.png`, style: ".site-header { visibility: hidden; }" });
-    await page.locator("#explosiveConversion").screenshot({ path: `../.artifacts/calculator-ui/conversion-${width}.png`, style: ".site-header { visibility: hidden; }" });
-    await page.locator("#usefulActions").screenshot({ path: `../.artifacts/calculator-ui/rewards-${width}.png`, style: ".site-header { visibility: hidden; }" });
-    await page.locator("#airCombat").screenshot({ path: `../.artifacts/calculator-ui/air-${width}.png`, style: ".site-header { visibility: hidden; }" });
+    await page.locator("#airportDiagramDetails").screenshot({ path: `../.artifacts/calculator-ui/airport-bars-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
+    await page.locator("#explosiveConversion").screenshot({ path: `../.artifacts/calculator-ui/conversion-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
+    await page.locator("#usefulActions").screenshot({ path: `../.artifacts/calculator-ui/rewards-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
+    await page.locator("#airCombat").screenshot({ path: `../.artifacts/calculator-ui/air-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
   }
   if (!remote) {
     for (const failure of ["unavailable", "mixed-source"]) {

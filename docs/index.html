@@ -20,26 +20,12 @@
     <link rel="canonical" href="https://bomana.ruikang.wang/">
     <link rel="icon" href="assets/favicon.ico">
     <link rel="stylesheet" href="styles.css">
+    <script type="module" src="/assets/bomana-header.js?v=2"></script>
   </head>
   <body>
     <a class="skip-link" href="#content">跳到主要内容</a>
 
-    <header class="site-header" aria-label="主导航">
-      <a class="brand" href="#top" aria-label="Bomana 首页">
-        <img src="assets/bomana-app.webp" alt="" width="36" height="36">
-        <span class="brand-mark">BOMANA</span>
-      </a>
-      <nav class="nav-links" aria-label="页面章节">
-        <a href="#start">开始</a>
-        <a href="#gallery">界面</a>
-        <a href="#features">功能</a>
-        <a href="#hotkeys">Bridge</a>
-        <a href="#docs">文档</a>
-        <a class="nav-launcher" href="/launcher/">在线启动器</a>
-        <a class="nav-calculator" href="/calculator/">在线计算器</a>
-        <a class="nav-github" href="https://github.com/Thankyou-Cheems/Bomana">GitHub</a>
-      </nav>
-    </header>
+    <bomana-site-header active="home" base="/"><nav aria-label="Bomana 全站导航"><a href="https://bomana.ruikang.wang/">官网</a> <a href="https://bomana.ruikang.wang/launcher/">启动器</a> <a href="https://bomana.ruikang.wang/calculator/">计算器</a> <a href="https://pay.ruikang.wang/">订阅</a> <a href="https://pay.ruikang.wang/contact">支持</a></nav></bomana-site-header>
 
     <main id="content">
       <!-- HERO -->
@@ -96,27 +82,16 @@
             </aside>
           </div>
 
-          <aside class="hero-aside" aria-label="关键数字">
-            <div class="hero-icon-card">
-              <img src="assets/bomana-app.webp" alt="Bomana 应用图标" width="96" height="96">
-            </div>
-            <div class="stat-block">
-              <span class="stat-label">REWARD CYCLE</span>
-              <strong class="stat-value led">15:00</strong>
-              <span class="stat-hint">每条命的收益窗口</span>
-            </div>
-            <div class="stat-row">
-              <div class="stat-block dim">
-                <span class="stat-label">DATA SOURCE</span>
-                <strong class="stat-value mono">:8111</strong>
-                <span class="stat-hint">官方本机接口</span>
-              </div>
-              <div class="stat-block dim">
-                <span class="stat-label">CHANNELS</span>
-                <strong class="stat-value">3</strong>
-                <span class="stat-hint">Enhanced · Standard · Lite</span>
-              </div>
-            </div>
+          <aside class="hero-aside hero-preview" aria-label="安装后可以看到什么">
+            <figure class="hero-app-shot">
+              <a href="assets/shots/web-app-current.webp"><img src="assets/shots/web-app-current.webp" alt="Bomana Enhanced 实机界面：收益计时、航向带和战术地图" width="1235" height="2016" fetchpriority="high"></a>
+              <figcaption><strong>装好后，就能看到这些</strong><span>网页计时、航向与地图 · 图示为 Enhanced 实机界面</span></figcaption>
+            </figure>
+            <figure class="hero-pip-shot">
+              <a href="assets/shots/pip-window-current.webp"><img src="assets/shots/pip-window-current.webp" alt="可置顶的紧凑航向窗口与小地图" width="1400" height="307"></a>
+              <figcaption>需要时，把航向窗口单独置顶</figcaption>
+            </figure>
+            <a class="text-link" href="#gallery">查看各版本的真实界面 →</a>
           </aside>
         </div>
       </section>
@@ -456,7 +431,7 @@
             <strong>公开 Edition 边界</strong>
             <span>Lite、Standard 与 Enhanced 的明确分界</span>
           </a>
-          <a href="https://github.com/Thankyou-Cheems/Bomana/blob/main/docs/QUICKSTART.md">
+          <a href="https://github.com/Thankyou-Cheems/Bomana#三步开始">
             <span class="docs-k">GUIDE</span>
             <strong>快速上手</strong>
             <span>安装、权限与常见问题</span>

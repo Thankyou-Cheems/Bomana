@@ -8,109 +8,71 @@
     <title>Bomana Launcher</title>
   </head>
   <body>
+    <bomana-site-header active="launcher"><nav aria-label="Bomana 全站导航"><a href="https://bomana.ruikang.wang/">官网</a> <a href="https://bomana.ruikang.wang/launcher/">启动器</a> <a href="https://bomana.ruikang.wang/calculator/">计算器</a> <a href="https://pay.ruikang.wang/">订阅</a> <a href="https://pay.ruikang.wang/contact">支持</a></nav></bomana-site-header>
     <main class="launcher-shell">
-      <header class="topbar">
-        <a class="brand" href="https://bomana.ruikang.wang/" target="_blank" rel="noopener noreferrer" aria-label="打开 Bomana 官网">
-          <img src="/src/generated/bomana-logo.svg" alt="Bomana" />
-          <span><strong>BOMANA</strong><small>LAUNCHER</small></span>
-        </a>
-        <nav class="product-nav" aria-label="Bomana 全站导航">
-          <a href="https://bomana.ruikang.wang/">官网</a>
-          <a href="https://bomana.ruikang.wang/launcher/" aria-current="page">在线启动器</a>
-          <a href="https://bomana.ruikang.wang/calculator/">在线计算器</a>
-        </nav>
-        <div class="bridge-controls">
-          <div class="host-pill offline" id="launcher-host-state">
-            <span class="status-dot"></span>
-            <span><strong>正在连接 Bridge</strong><small>请稍候</small></span>
-          </div>
-          <div class="bridge-version-panel checking" id="bridge-version-panel">
-            <span>BRIDGE VERSION</span>
-            <strong id="bridge-version-value">本机 -- · 最新 --</strong>
-            <small id="bridge-version-message">正在读取版本信息</small>
-          </div>
-          <a class="compact-button update hidden" id="update-bridge" href="../downloads/BomanaBridge.exe">下载更新</a>
-          <a class="compact-button secondary hidden" id="open-bridge" rel="noreferrer" target="_blank">打开 Bridge</a>
-          <button class="compact-button" id="connect-bridge" type="button">连接 Bridge</button>
-        </div>
-      </header>
-
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">BOMANA ONLINE</p>
-          <h1>选择版本，立即进入 Bomana</h1>
-        </div>
-        <div class="trust-line" aria-label="运行边界">
-          <span>只读 8111</span><span>本机长缓存</span><span>无游戏访存</span>
-        </div>
-      </section>
 
       <section class="workspace">
-        <section class="edition-area" aria-labelledby="edition-title">
-          <div class="section-heading">
-            <div><p class="eyebrow">选择功能版本</p><h2 id="edition-title">你想使用哪个版本？</h2></div>
-            <button class="compact-button secondary" id="refresh-catalog" type="button">刷新状态</button>
-          </div>
-          <div class="channel-grid" id="channel-grid" aria-live="polite">
-            <article class="channel-skeleton"></article>
-            <article class="channel-skeleton"></article>
-            <article class="channel-skeleton"></article>
-          </div>
-          <article class="desktop-download-panel" aria-labelledby="desktop-download-title">
-            <div><p class="eyebrow">ENHANCED · WINDOWS 64 位预览版</p><h3 id="desktop-download-title">独立本地计算与透明置顶窗</h3>
-              <p>Go 本地计算，无需保持网页开启。包含战术导航、计时与断流恢复、地形修正、炸弹 / AAM / AGM 解算、聊天标记及手机配对；透明置顶窗的背景和文字可独立调节。</p>
-              <small>可选下载，不替换 Web 版；首次使用需 Enhanced 设备授权。仅读取官方 ExtUI，无游戏访存、注入或自动操作；未获 Gaijin / BattlEye 官方认证，不能保证反作弊兼容性。预览版不支持独占全屏。</small></div>
-            <button class="button secondary" id="download-desktop" type="button" disabled>验证 Enhanced 后下载</button>
-            <p id="desktop-download-status" role="status"></p>
-          </article>
-        </section>
+        <section class="launcher-setup" aria-label="连接与启动准备">
+          <section class="start-flow" aria-label="三步开始">
+            <article class="start-step" id="download-step"><span class="step-number">1</span><div><h2>下载并运行 Bridge</h2><p>手动运行 BomanaBridge.exe，托盘出现图标后检测连接。</p></div><a class="primary-link" id="download-bridge" href="../downloads/BomanaBridge.exe">下载 Bridge</a></article>
+            <article class="start-step" id="connection-step"><span class="step-number">2</span><div><h2>检测本机连接</h2><p>保持 Bridge 运行，连接后选择版本。</p></div>
+              <div class="bridge-controls">
+                <div class="host-pill offline" id="launcher-host-state">
+                  <span class="status-dot"></span>
+                  <span><strong>正在连接 Bridge</strong><small>请稍候</small></span>
+                </div>
+                <div class="bridge-version-panel checking" id="bridge-version-panel">
+                  <span>BRIDGE VERSION</span>
+                  <strong id="bridge-version-value">本机 -- · 最新 --</strong>
+                  <small id="bridge-version-message">正在读取版本信息</small>
+                </div>
+                <a class="compact-button update hidden" id="update-bridge" href="../downloads/BomanaBridge.exe">下载更新</a>
+                <a class="compact-button secondary hidden" id="open-bridge" rel="noreferrer" target="_blank">打开 Bridge</a>
+                <button class="compact-button" id="connect-bridge" type="button">连接 Bridge</button>
+              </div>
+              <article class="host-help hidden" id="host-help">
+                <strong id="host-help-title">还没有 Bomana Bridge？</strong>
+                <p id="host-help-description">请手动运行下载好的 BomanaBridge.exe，看到系统托盘图标则代表启动成功。</p>
+                <section class="bridge-permission-guide hidden" id="bridge-permission-guide" aria-live="polite">
+                  <strong>在 Edge 中重新开放权限</strong>
+                  <ol>
+                    <li>点击地址栏左侧的网站信息图标，打开“此网站的权限”。</li>
+                    <li>把“设备上的应用”（部分版本显示“本地网络访问”）改为“允许”。</li>
+                    <li>回到本页，点击“权限已开放，重新连接”。</li>
+                  </ol>
+                  <p>如果站点权限中没有这一项：打开 Edge“设置 → 隐私、搜索和服务 → 网站权限 → 所有权限 → 本地网络访问”，开启“访问前询问”，再刷新本页。</p>
+                  <a href="https://support.microsoft.com/zh-cn/edge/control-a-website-s-access-to-the-local-network-in-microsoft-edge" rel="noopener noreferrer" target="_blank">查看 Microsoft 官方图文教程</a>
+                  <small>若权限显示“由组织管理”或无法修改，请让管理员允许 https://bomana.ruikang.wang 访问本机网络；重复下载 Bridge 无法绕过该策略。</small>
+                </section>
+                <div class="host-help-actions">
+                  <a class="diagnostic-link" id="download-bridge-diagnostics" href="../downloads/BomanaBridgeDiagnostics.exe">运行连接诊断</a>
+                </div>
+              </article>
 
-        <aside class="readiness" aria-label="启动准备">
-          <article class="readiness-card activity-panel hidden" id="cache-panel">
-            <div class="card-title">
-              <span class="step-number">1</span>
-              <div><p class="eyebrow">本机数据</p><h2>地图缓存</h2></div>
-              <span class="mode-badge" id="mode-badge">检查中</span>
-            </div>
-            <p class="activity-message" id="activity-message">正在读取地图缓存…</p>
-            <div class="progress-track"><span id="activity-progress"></span></div>
-            <details class="cache-map-details" id="cache-map-details">
-              <summary id="cache-map-summary">查看地图状态</summary>
-              <div class="cache-map-list" id="cache-map-list"></div>
-            </details>
-          </article>
+            </article>
+          </section>
+          <aside class="readiness" aria-label="启动准备">
+            <article class="readiness-card activity-panel hidden" id="cache-panel">
+              <div class="card-title">
+                <span class="step-number">1</span>
+                <div><p class="eyebrow">本机数据</p><h2>地图缓存</h2></div>
+                <span class="mode-badge" id="mode-badge">检查中</span>
+              </div>
+              <p class="activity-message" id="activity-message">正在读取地图缓存…</p>
+              <div class="progress-track"><span id="activity-progress"></span></div>
+              <details class="cache-map-details" id="cache-map-details">
+                <summary id="cache-map-summary">查看地图状态</summary>
+                <div class="cache-map-list" id="cache-map-list"></div>
+              </details>
+            </article>
 
-          <article class="readiness-card account-panel" id="account-panel">
-            <div class="card-title">
-              <span class="step-number">2</span>
-              <div><p class="eyebrow">可选登录</p><h2>超级爆弹订阅</h2></div>
-            </div>
-            <div class="account-title">
-              <span class="cheemspay-mark"><img src="https://pay.ruikang.wang/brand/cheems-burger.webp" alt="CheemsPay" /></span>
+            <article class="readiness-card account-panel" id="account-panel" aria-label="CheemsPay 订阅与登录">
+              <div class="account-title">
+                <span class="cheemspay-mark"><img src="https://pay.ruikang.wang/brand/cheems-burger.webp" alt="CheemsPay" /></span>
               <div><div class="cheemspay-name">Cheems<span>Pay</span></div><h3 id="account-label">检查账户状态</h3><p id="account-description">Lite 与 Standard 无需登录</p></div>
             </div>
             <div class="authorization-code hidden" id="authorization-code"><span>授权码</span><strong id="authorization-code-value">——</strong></div>
-            <div class="account-actions" id="account-actions"></div>
-          </article>
-
-          <article class="host-help hidden" id="host-help">
-            <strong id="host-help-title">还没有 Bomana Bridge？</strong>
-            <p id="host-help-description">请手动运行下载好的 BomanaBridge.exe，看到系统托盘图标则代表启动成功。</p>
-            <section class="bridge-permission-guide hidden" id="bridge-permission-guide" aria-live="polite">
-              <strong>在 Edge 中重新开放权限</strong>
-              <ol>
-                <li>点击地址栏左侧的网站信息图标，打开“此网站的权限”。</li>
-                <li>把“设备上的应用”（部分版本显示“本地网络访问”）改为“允许”。</li>
-                <li>回到本页，点击“权限已开放，重新连接”。</li>
-              </ol>
-              <p>如果站点权限中没有这一项：打开 Edge“设置 → 隐私、搜索和服务 → 网站权限 → 所有权限 → 本地网络访问”，开启“访问前询问”，再刷新本页。</p>
-              <a href="https://support.microsoft.com/zh-cn/edge/control-a-website-s-access-to-the-local-network-in-microsoft-edge" rel="noopener noreferrer" target="_blank">查看 Microsoft 官方图文教程</a>
-              <small>若权限显示“由组织管理”或无法修改，请让管理员允许 https://bomana.ruikang.wang 访问本机网络；重复下载 Bridge 无法绕过该策略。</small>
-            </section>
-            <div class="host-help-actions">
-              <a class="primary-link" id="download-bridge" href="../downloads/BomanaBridge.exe">下载 Bomana Bridge</a>
-              <a class="diagnostic-link" id="download-bridge-diagnostics" href="../downloads/BomanaBridgeDiagnostics.exe">运行连接诊断</a>
-            </div>
+            <div class="account-entry-actions"><a class="button secondary" href="https://pay.ruikang.wang/" target="_blank" rel="noopener noreferrer">查看订阅</a><div class="account-actions" id="account-actions"></div></div>
           </article>
 
           <details class="technical-details">
@@ -119,11 +81,29 @@
               <div><dt>Bridge</dt><dd id="bridge-technical">正在检测</dd></div>
               <div><dt>本机缓存</dt><dd id="cache-technical">正在检测</dd></div>
               <div><dt>运行边界</dt><dd>官方 8111 · 离线数据 · 无访存</dd></div>
-              <div><dt>匿名日活</dt><dd>默认匿名统计 · 每天最多一次 · 不含账号、游戏数据或 8111 内容</dd></div>
+              <div><dt>桌面预览</dt><dd>仅读取官方 ExtUI，无游戏访存、注入或自动操作；未获 Gaijin / BattlEye 官方认证，不能保证反作弊兼容性，不支持独占全屏。</dd></div>
+              <div><dt>匿名统计</dt><dd>统计每日活跃与 App 成功启动次数，不含账号、游戏数据或 8111 内容</dd></div>
             </dl>
           </details>
         </aside>
       </section>
+      <section class="edition-area" aria-labelledby="edition-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">第 3 步 · 选择功能版本</p><h1 id="edition-title">三个版本，按需要选择</h1></div>
+          <button class="compact-button secondary" id="refresh-catalog" type="button">刷新状态</button>
+        </div>
+        <div class="channel-grid" id="channel-grid" aria-live="polite">
+          <article class="channel-skeleton"></article>
+          <article class="channel-skeleton"></article>
+          <article class="channel-skeleton"></article>
+        </div>
+        <article class="desktop-download-panel" aria-labelledby="desktop-download-title">
+          <div><h3 id="desktop-download-title">独立桌面版</h3><small>Windows 64 位预览 · 独立运行与透明置顶 · 需 Enhanced 授权</small></div>
+          <button class="button secondary" id="download-desktop" type="button" disabled>需 Enhanced 授权</button>
+          <p id="desktop-download-status" role="status"></p>
+        </article>
+      </section>
+    </section>
 
       <footer>
         <span class="footer-slogan"><strong>全真飞行</strong><em>需要的信息</em><span>安静地放在手边</span></span>

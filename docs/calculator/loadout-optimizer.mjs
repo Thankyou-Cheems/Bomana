@@ -1,12 +1,32 @@
 import { rewardUi, requiredCount } from "./model.mjs";
 import { validateLoadout, previewCustomPreset } from "./custom-loadouts.mjs";
 import { presetTotals } from "./loadouts.mjs";
+import { deliveryGroup, loadoutSimplicity } from "./loadout-simplicity.mjs";
+import { availableGuidanceModes, guidanceExcluded, guidanceBurden, deliveryWorkload } from "./recommendation-guidance.mjs";
 
 // All decisions are whole options / whole projectiles. Damage is never rounded
 // to integer HP or converted through TNT. The original validator checks the
 // returned option set independently of the optimization model.
 const expression = terms => terms.filter(([, value]) => value !== 0).map(([name, value]) => `${value < 0 ? "-" : "+"} ${Math.abs(value)} ${name}`).join(" ") || "0 zero";
 const damageOf = (items, weapons) => items.reduce((sum, [id, count]) => weapons.get(id)?.dmg > 0 ? sum + weapons.get(id).dmg * count : NaN, 0);
+const rewardDamageOf = (items, weapons) => items.reduce((sum, [id, count]) => sum + (weapons.get(id)?.rewardDmg ?? weapons.get(id)?.dmg ?? 0) * count, 0);
+const forbidden = (option, weapons) => option.cells?.some(cell => ["aam", "arm", "ashm"].includes(cell.role)) || option.weapons.some(([id]) => ["aam", "arm", "ashm"].includes(weapons.get(id)?.role));
+const isGuidedStrikeWeapon = weapon => Boolean(weapon && (weapon.kind === "missile" || weapon.guidanceModes?.length || weapon.deliveryProfile?.guidance && weapon.deliveryProfile.guidance !== "none"));
+
+export function preferRecommendation(candidate, current, filters = {}) {
+  if (!candidate.preset) return false;
+  if (!current.preset) return true;
+  if (candidate.targets !== current.targets) return candidate.targets > current.targets;
+  const closeToCap = !filters.strictReward && Math.min(candidate.reward, current.reward) >= (candidate.rewardCap ?? 10) - (filters.rewardTolerance ?? .2) - 1e-8;
+  if (!filters.simpleLoadout && (closeToCap || Math.abs(candidate.reward - current.reward) < 1e-8) && candidate.workload && current.workload) {
+    for (const field of ["designation", "shots"]) if (candidate.workload[field] !== current.workload[field]) return candidate.workload[field] < current.workload[field];
+  }
+  if (filters.simpleLoadout || closeToCap || Math.abs(candidate.reward - current.reward) < 1e-8) for (const field of ["profiles", "types"]) {
+    if (candidate.simplicity?.[field] !== current.simplicity?.[field]) return candidate.simplicity[field] < current.simplicity[field];
+  }
+  return candidate.reward > current.reward + 1e-8 || Math.abs(candidate.reward - current.reward) < 1e-8 &&
+    (candidate.damage < current.damage || candidate.damage === current.damage && candidate.mass < current.mass);
+}
 
 function supportedReward(reward) {
   const {preset_dmg_min: min, preset_dmg_max: max, bombing_reward_modifier: modifier, piecewise_linear: points} = reward;
@@ -17,15 +37,23 @@ function supportedReward(reward) {
   return max > min && b >= 0 && points.every((point, i) => i === 0 || point[0] > points[i - 1][0] && point[1] <= points[i - 1][1]);
 }
 
-function prepare({definition, presets, lockedKeys, weapons, threshold}) {
+function prepare({definition, presets, lockedKeys, weapons, threshold, filters = {}}) {
   const custom = Boolean(definition);
   const source = custom ? definition.options : presets.filter(preset => !preset.customName);
-  const options = source.map((option, i) => ({...option, variable: `x${i}`, damage: damageOf(option.weapons, weapons)}));
+  const options = source.map((option, i) => ({...option, variable: `x${i}`, damage: damageOf(option.weapons, weapons), rewardDamage: rewardDamageOf(option.weapons, weapons)}));
   const constraints = [], bounds = ["zero = 0"], binaries = options.map(option => option.variable);
   const add = (terms, relation, value) => constraints.push(`${expression(terms)} ${relation} ${value}`);
   let unknown = false;
+  for (const option of options) {
+    option.excluded = !lockedKeys.includes(option.key) && (forbidden(option, weapons) || option.weapons.some(([id]) => {
+      const weapon = weapons.get(id);
+      return filters.onlyGuided && !isGuidedStrikeWeapon(weapon) || filters.noHighDrag && weapon?.highDrag || filters.noRockets && weapon?.kind === "rocket" || filters.noMissiles && weapon?.kind === "missile" || guidanceExcluded(weapon, filters);
+    }));
+    if (option.excluded) bounds.push(`${option.variable} = 0`);
+  }
   for (const option of options) if (!Number.isFinite(option.damage)) { bounds.push(`${option.variable} = 0`); unknown = true; option.damage = 0; }
   const damage = options.map(option => [option.variable, option.damage]);
+  const rewardDamage = options.map(option => [option.variable, option.rewardDamage]);
   let mass;
   if (custom) {
     const byKey = new Map(options.map(option => [option.key, option]));
@@ -46,6 +74,11 @@ function prepare({definition, presets, lockedKeys, weapons, threshold}) {
     for (const key of lockedKeys) {
       if (!byKey.has(key)) return {error: "locked_unknown"};
       bounds.push(`${byKey.get(key).variable} = 1`);
+    }
+    // Support equipment is added only for a selected dependency or user lock.
+    for (const option of options.filter(row => !row.weapons.some(([, count]) => count > 0) && !lockedKeys.includes(row.key))) {
+      const dependents = options.filter(other => other.requires.some(dep => dep.slot === option.slot && dep.preset === option.preset));
+      add([[option.variable, 1], ...dependents.map(other => [other.variable, -1])], "<=", 0);
     }
     const side = option => definition.center.includes(option.tier) ? 0 : option.tier < Math.floor(definition.columns / 2) ? -1 : 1;
     mass = options.map(option => [option.variable, option.mass]);
@@ -68,7 +101,24 @@ function prepare({definition, presets, lockedKeys, weapons, threshold}) {
   // Clip each projectile at one target's HP: a single oversized bomb cannot
   // be credited as destroying several geographically separate targets.
   const effective = options.map(option => [option.variable, option.weapons.reduce((sum, [id, count]) => sum + Math.min(weapons.get(id)?.dmg || 0, threshold) * count / threshold, 0)]);
-  return {options, constraints, bounds, binaries, damage, mass, supplies, effective, unknown, custom, add};
+  const types = [], profiles = [], groups = new Map();
+  for (const [index, [id]] of [...supplies].entries()) {
+    const variable = `w${index}`;
+    binaries.push(variable); types.push([variable, 1]);
+    const users = options.filter(option => option.weapons.some(([weapon, count]) => weapon === id && count > 0));
+    for (const option of users) add([[option.variable, 1], [variable, -1]], "<=", 0);
+    add([[variable, 1], ...users.map(option => [option.variable, -1])], "<=", 0);
+    const group = deliveryGroup(id, weapons.get(id));
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(variable);
+  }
+  for (const [index, variables] of [...groups.values()].entries()) {
+    const variable = `g${index}`;
+    binaries.push(variable); profiles.push([variable, 1]);
+    for (const weapon of variables) add([[weapon, 1], [variable, -1]], "<=", 0);
+    add([[variable, 1], ...variables.map(weapon => [weapon, -1])], "<=", 0);
+  }
+  return {options, constraints, bounds, binaries, damage, rewardDamage, mass, supplies, effective, types, profiles, unknown, custom, add};
 }
 
 export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
@@ -76,13 +126,14 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
   if (!(threshold > 0) || !supportedReward(reward)) return {status: "unsupported"};
   const model = prepare(input);
   if (model.error) return {status: "infeasible", reason: model.error};
-  const deadline = performance.now() + timeLimit * 1000;
+  const compareGuidance = model.options.some(option => !option.excluded && option.damage > 0 && option.weapons.some(([id]) => availableGuidanceModes(weapons.get(id), input.filters).length));
+  const overallDeadline = performance.now() + timeLimit * 1000;
+  const deadline = overallDeadline - (mode === "targets" ? timeLimit * 250 : 0);
   let complete = true;
   function solve(objective, direction, targets = 0, extra = []) {
     const constraints = [...model.constraints, ...extra], bounds = [...model.bounds], integers = [];
     const allocation = [];
-    if (targets === 1) constraints.push(`${expression(model.damage)} >= ${threshold}`);
-    if (targets > 1) {
+    if (targets >= 1) {
       for (let t = 0; t < targets; t++) {
         const row = [];
         for (const [w, [id]] of [...model.supplies].entries()) {
@@ -95,7 +146,8 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
       }
       for (const [id, supply] of model.supplies) constraints.push(`${expression([...allocation.filter(row => row.id === id).map(row => [row.variable, 1]), ...supply.map(([name, count]) => [name, -count])])} <= 0`);
     }
-    const lp = `${direction}\n obj: ${expression(objective)}\nSubject To\n${constraints.map((row, i) => ` c${i}: ${row}`).join("\n")}\nBounds\n${bounds.join("\n")}\nBinaries\n${model.binaries.join(" ")}\n${integers.length ? `Generals\n${integers.join(" ")}\n` : ""}End`;
+    const terms = typeof objective === "function" ? objective(allocation) : objective;
+    const lp = `${direction}\n obj: ${expression(terms)}\nSubject To\n${constraints.map((row, i) => ` c${i}: ${row}`).join("\n")}\nBounds\n${bounds.join("\n")}\nBinaries\n${model.binaries.join(" ")}\n${integers.length ? `Generals\n${integers.join(" ")}\n` : ""}End`;
     const result = highs.solve(lp, {output_flag: false, time_limit: Math.max(.01, (deadline - performance.now()) / 1000), mip_rel_gap: 0, mip_abs_gap: 0, mip_feasibility_tolerance: 1e-9});
     if (result.Status !== "Optimal" && result.Status !== "Infeasible") complete = false;
     if (!result.Columns) return {status: result.Status};
@@ -116,16 +168,8 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
       if (count < 0 || Math.abs(count - value(row.variable)) > 1e-6) { complete = false; return {status: "Invalid solution"}; }
       if (count) { plan[row.target].push([row.id, count]); used.set(row.id, (used.get(row.id) || 0) + count); }
     }
-    if (targets === 1) {
-      let remaining = threshold;
-      for (const [id, count] of [...items].sort(([a], [b]) => weapons.get(b).dmg - weapons.get(a).dmg)) {
-        if (remaining <= 0) break;
-        const amount = Math.min(count, requiredCount(remaining, weapons.get(id).dmg));
-        plan[0].push([id, amount]); remaining -= amount * weapons.get(id).dmg;
-      }
-    }
     if ([...used].some(([id, count]) => count > (items.get(id) || 0)) || plan.some(row => requiredCount(threshold, damageOf(row, weapons)) !== 1)) { complete = false; return {status: "Invalid solution"}; }
-    return {status: result.Status, chosen, keys, damage, plan, mass: validation?.mass ?? chosen.reduce((sum, option) => sum + (presetTotals(option, weapons).mass || 0), 0), effective: model.effective.reduce((sum, [name, coefficient]) => sum + coefficient * value(name), 0), warnings: validation?.warnings || []};
+    return {status: result.Status, chosen, keys, damage, rewardDamage: rewardDamageOf([...items], weapons), plan, workload: deliveryWorkload(plan, weapons, input.filters), simplicity: loadoutSimplicity([...items], weapons), mass: validation?.mass ?? chosen.reduce((sum, option) => sum + (presetTotals(option, weapons).mass || 0), 0), effective: model.effective.reduce((sum, [name, coefficient]) => sum + coefficient * value(name), 0), warnings: validation?.warnings || []};
   }
   if (!model.supplies.size || !model.options.length) return {status: "infeasible", unknown: model.unknown};
   let best, targets = 1, targetUpper = 1;
@@ -148,26 +192,99 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
     complete &&= low === high;
     if (!targets) return {status: complete ? "infeasible" : "unknown", unknown: model.unknown};
   }
-  const refined = solve(model.damage, "Minimize", targets);
+  if (input.filters?.simpleLoadout) {
+    for (const [objective, field] of [[model.profiles, "profiles"], [model.types, "types"]]) {
+      const simpler = solve(objective, "Minimize", targets);
+      if (simpler.chosen) best = simpler;
+      if (!best) return {status: complete ? "infeasible" : "unknown", unknown: model.unknown};
+      model.constraints.push(`${expression(objective)} <= ${best.simplicity[field]}`);
+    }
+  }
+  const refined = solve(model.rewardDamage, "Minimize", targets);
   if (refined.chosen) best = refined;
   if (!best) return {status: complete ? "infeasible" : "unknown", unknown: model.unknown};
   // The actual game curve jumps slightly upwards at its first knot. Compare
   // both decreasing regions rather than assuming that less damage always wins.
   const knot = reward.piecewise_linear[0][0];
-  if (best.damage < knot && rewardUi(reward, knot) > rewardUi(reward, best.damage)) {
-    const above = solve(model.damage, "Minimize", targets, [`${expression(model.damage)} >= ${knot}`]);
-    if (above.chosen && rewardUi(reward, above.damage) > rewardUi(reward, best.damage)) best = above;
+  if (best.rewardDamage < knot && rewardUi(reward, knot) > rewardUi(reward, best.rewardDamage)) {
+    const above = solve(model.rewardDamage, "Minimize", targets, [`${expression(model.rewardDamage)} >= ${knot}`]);
+    if (above.chosen && rewardUi(reward, above.rewardDamage) > rewardUi(reward, best.rewardDamage)) best = above;
   }
-  // Deterministic second priority after reward/damage: lower carried mass.
+  const maximumReward = rewardUi(reward, best.rewardDamage);
+  // Keep the exact best coefficient except in the near-cap band the user accepts.
+  // This inversion stays below the first knot, so its upward jump is not bridged.
+  const nearCapFloor = reward.ui_decoration - (input.filters?.rewardTolerance ?? .2);
+  let allowedDamage = best.rewardDamage <= reward.preset_dmg_min ? reward.preset_dmg_min : best.rewardDamage;
+  if (!input.filters?.simpleLoadout && !input.filters?.strictReward && maximumReward >= nearCapFloor && best.rewardDamage < knot) {
+    let low = reward.preset_dmg_min, high = knot;
+    for (let i = 0; i < 50; i++) {
+      const middle = (low + high) / 2;
+      if (rewardUi(reward, middle) >= nearCapFloor) low = middle;
+      else high = middle;
+    }
+    allowedDamage = Math.max(allowedDamage, low);
+  }
+  if (!input.filters?.simpleLoadout) {
+    // An upper bound alone would admit the lower-reward region just before the
+    // knot. Preserve the winning value when the best result is above that jump.
+    model.constraints.push(`${expression(model.rewardDamage)} ${best.rewardDamage >= knot ? "=" : "<="} ${allowedDamage}`);
+    // Compare actual delivery plans within the accepted reward band. Prefer
+    // coordinate guidance, then fewer seeker/illumination actions and releases;
+    // a small optical supplement can beat an otherwise insufficient GNSS load.
+    for (const [field, coefficient] of compareGuidance ? [["designation", id => guidanceBurden(weapons.get(id), input.filters)], ["shots", () => 1]] : []) {
+      const terms = rows => rows.map(row => [row.variable, coefficient(row.id)]);
+      const easier = solve(terms, "Minimize", targets);
+      if (easier.chosen) best = easier;
+      const allocation = [...model.supplies.keys()].flatMap((id, w) => Array.from({length: targets}, (_, target) => [`a${target}_${w}`, coefficient(id)]));
+      model.constraints.push(`${expression(allocation)} <= ${best.workload[field]}`);
+    }
+    for (const [objective, field] of [[model.profiles, "profiles"], [model.types, "types"]]) {
+      const simpler = solve(objective, "Minimize", targets);
+      if (simpler.chosen) best = simpler;
+      model.constraints.push(`${expression(objective)} <= ${best.simplicity[field]}`);
+    }
+    const higherReward = solve(model.rewardDamage, "Minimize", targets);
+    if (higherReward.chosen) best = higherReward;
+  }
+  // Equal coefficient: first remove excess impact damage, then carried mass.
+  // Below the reward cap all damage values have the same coefficient.
+  const cap = reward.preset_dmg_min;
+  const rewardConstraint = best.rewardDamage <= cap
+    ? `${expression(model.rewardDamage)} <= ${cap}`
+    : `${expression(model.rewardDamage)} = ${best.rewardDamage}`;
+  const lessDamage = solve(model.damage, "Minimize", targets, [rewardConstraint]);
+  if (lessDamage.chosen) best = lessDamage;
+  // Deterministic final priority: lower carried mass.
   if (refined.status === "Optimal" && performance.now() < deadline) {
-    const lighter = solve(model.mass, "Minimize", targets, [`${expression(model.damage)} = ${best.damage}`]);
+    const lighter = solve(model.mass, "Minimize", targets, [rewardConstraint, `${expression(model.damage)} = ${best.damage}`]);
     if (lighter.chosen && Math.abs(lighter.damage - best.damage) <= 1e-7) best = lighter;
   }
+  // Once the carried loadout is fixed, choose exact integer shot counts. A
+  // feasibility witness may otherwise spend an arbitrary number of spare rockets.
+  const fixedLoadout = model.options.map(option => `${option.variable} = ${best.keys.includes(option.key) ? 1 : 0}`);
+  const fewerShots = solve(rows => rows.map(row => [row.variable, 1]), "Minimize", targets, fixedLoadout);
+  if (fewerShots.chosen) best = fewerShots;
   const preset = definition ? previewCustomPreset(definition, {id: "recommendation", name: "推荐挂载", keys: best.keys}).preset : best.chosen[0];
-  const fixedDamage = model.options.filter(option => input.lockedKeys.includes(option.key)).reduce((sum, option) => sum + option.damage, 0);
-  const minimumDamage = Math.max(threshold * targets, fixedDamage);
+  const minimumDamage = model.options.filter(option => input.lockedKeys.includes(option.key)).reduce((sum, option) => sum + option.rewardDamage, 0);
   const rewardUpper = Math.max(rewardUi(reward, minimumDamage), minimumDamage <= knot ? rewardUi(reward, knot) : 0);
-  return {status: complete ? "optimal" : "feasible", kind: definition ? "custom" : "preset", presetId: definition ? null : preset.id,
-    keys: best.keys, preset, targets, damage: best.damage, mass: best.mass, reward: rewardUi(reward, best.damage), plan: best.plan,
+  const output = {status: complete ? "optimal" : "feasible", kind: definition ? "custom" : "preset", presetId: definition ? null : preset.id,
+    keys: best.keys, preset, targets, damage: best.damage, rewardDamage: best.rewardDamage, mass: best.mass, reward: rewardUi(reward, best.rewardDamage), plan: best.plan,
     rewardUpper, targetUpper, unknown: model.unknown, warnings: best.warnings};
+  output.totalReward = output.targets * output.reward;
+  output.simplicity = best.simplicity;
+  output.workload = compareGuidance ? best.workload : null;
+  output.rewardCap = reward.ui_decoration;
+  output.maximumReward = maximumReward;
+  const used = new Map();
+  for (const row of best.plan) for (const [id, count] of row) used.set(id, (used.get(id) || 0) + count);
+  output.remaining = preset.weapons.map(([id, count]) => [id, count - (used.get(id) || 0)]).filter(([, count]) => count > 0);
+  if (mode === "targets") {
+    const single = optimizeLoadout({...input, mode: "reward"}, highs, {timeLimit: Math.max(.1, (overallDeadline - performance.now()) / 1000)});
+    if (single.status !== "optimal") output.status = "feasible";
+    if (single.preset) {
+      output.singleZone = single;
+      output.moreLoadoutUseful = targets > 1 && output.totalReward > single.totalReward + 1e-8;
+    }
+  }
+  return output;
 }

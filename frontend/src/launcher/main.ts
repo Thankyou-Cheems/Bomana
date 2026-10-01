@@ -1,3 +1,4 @@
+import "../../../docs/assets/bomana-header.js";
 import "./styles.css";
 import { downloadEnhancedDesktop } from "./desktop-download";
 import { readBrowserAuthorization } from "../runtime/enhanced-access";
@@ -156,6 +157,8 @@ function render(state: LauncherViewState): void {
 }
 
 function renderBridge(probe: BridgeProbe, release: BridgeRelease | null, appRelease: AppWebRelease | null): void {
+  document.querySelector('#download-step')!.classList.toggle('hidden', probe.state === 'connected');
+  document.querySelector("#connection-step")!.setAttribute("data-connected", String(probe.state === "connected"));
   connectBridge.disabled = false;
   const permissionDenied = probe.state === "permission-denied";
   const incompatible = probe.state === "incompatible";
@@ -174,6 +177,7 @@ function renderBridge(probe: BridgeProbe, release: BridgeRelease | null, appRele
     ));
     bridgeTechnical.textContent = `${probe.endpoint} · Bridge v${capabilities.bridge_version} · App Web v${appRelease?.appWebVersion ?? "--"} · 协议 v${capabilities.bridge_protocol} · ${provenance}`;
     hostHelp.classList.add("hidden");
+    downloadBridge.classList.add("hidden");
     openBridge.href = `${probe.endpoint}/`;
     openBridge.classList.remove("hidden");
     connectBridge.textContent = "重新检测";
@@ -182,7 +186,7 @@ function renderBridge(probe: BridgeProbe, release: BridgeRelease | null, appRele
   hostState.className = `host-pill ${permissionDenied ? "permission-denied" : incompatible || probe.state === "blocked" ? "blocked" : "offline"}`;
   hostState.replaceChildren(statusDot(), labelled(
     permissionDenied ? "浏览器权限已关闭" : incompatible ? "Bridge 版本不兼容" : probe.state === "blocked" ? "Bridge 访问受阻" : "Bridge 未连接",
-    permissionDenied ? "Bridge 可能正在运行，但网页访问被拒绝" : incompatible ? "请更新 Bridge 后重新检测" : "运行 Bridge 后点击连接",
+    permissionDenied ? "Bridge 可能正在运行，但网页访问被拒绝" : incompatible ? "请更新 Bridge 后重新检测" : "运行后点击检测",
   ));
   bridgeTechnical.textContent = probe.message;
   hostHelpTitle.textContent = permissionDenied ? "请允许访问“设备上的应用”" : incompatible ? "请更新 Bomana Bridge" : probe.state === "blocked" ? "请检查 Bridge 服务" : "还没有 Bomana Bridge？";
@@ -190,11 +194,11 @@ function renderBridge(probe: BridgeProbe, release: BridgeRelease | null, appRele
     ? "这不是 Bridge 未启动提示：Edge 已明确拒绝 Launcher 连接本机 Bridge。请按下面步骤恢复权限。"
     : incompatible
     ? "请从托盘退出旧版 Bridge，再运行这里下载的最新版本。"
-    : "请手动运行下载好的 BomanaBridge.exe，看到系统托盘图标则代表启动成功。";
+    : bridgeDownloadStarted ? "下载后手动运行，再检测连接。" : "未连接时先运行 Bridge，再检测。";
   hostHelp.classList.remove("hidden");
   openBridge.classList.add("hidden");
   openBridge.removeAttribute("href");
-  connectBridge.textContent = permissionDenied ? "权限已开放，重新连接" : "连接 Bridge";
+  connectBridge.textContent = permissionDenied ? "权限已开放，重新连接" : "检测 Bridge 连接";
 }
 
 function renderBridgeVersion(probe: BridgeProbe, release: BridgeRelease | null, appRelease: AppWebRelease | null): void {
@@ -223,7 +227,7 @@ function renderBridgeVersion(probe: BridgeProbe, release: BridgeRelease | null, 
 
 function renderAccess(access: BrowserAccess): void {
   desktopDownload.disabled = desktopDownloading || !access.enhanced || Boolean(access.offline);
-  if (!desktopDownloading) desktopDownload.textContent = access.enhanced ? "下载 Enhanced Desktop 预览版" : "验证 Enhanced 后下载";
+  if (!desktopDownloading) desktopDownload.textContent = access.enhanced ? "下载桌面版" : "需 Enhanced 授权";
   accountActions.replaceChildren();
   accountLabel.textContent = access.accountLabel;
   authorizationCode.classList.toggle("hidden", access.state !== "pending");
@@ -249,8 +253,9 @@ function renderAccess(access: BrowserAccess): void {
     return;
   }
   if (access.state === "signed_out") {
+    accountLabel.textContent = "未登录";
     accountDescription.textContent = "Lite / Standard 无需登录；超级爆弹版需要订阅";
-    accountActions.append(actionButton("登录 CheemsPay", "primary", () => beginAccess()));
+    accountActions.append(actionButton("登录 CheemsPay", "secondary", () => beginAccess()));
     return;
   }
   accountDescription.textContent = "不影响 Lite / Standard；可稍后重试 Enhanced 鉴权";
@@ -278,16 +283,17 @@ function channelCard(channel: Channel, state: LauncherViewState): HTMLElement {
   identity.append(eyebrow, title);
   const badge = document.createElement("span");
   badge.className = "version-badge";
-  badge.textContent = channel === "Enhanced" ? "订阅" : "公开";
+  badge.textContent = channel === "Enhanced" ? "订阅" : "免费";
   top.append(identity, badge);
   const description = document.createElement("p");
   description.className = "channel-description";
   description.textContent = channelDescription(channel);
   const features = document.createElement("ul");
   features.className = "channel-features";
-  features.replaceChildren(...channelFeatures(channel).map((label) => {
+  features.replaceChildren(...channelFeatures(channel).map((label, index) => {
     const item = document.createElement("li");
     item.textContent = label;
+    if (index === 0 && channel !== "Lite") item.className = "channel-includes";
     return item;
   }));
   const bottom = document.createElement("div");
@@ -298,7 +304,12 @@ function channelCard(channel: Channel, state: LauncherViewState): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "channel-actions";
   if (state.bridge.state !== "connected") {
-    actions.append(bridgeDownloadAction(channel === "Enhanced" ? "locked-button" : "primary"));
+    const waiting = document.createElement("button");
+    waiting.type = "button";
+    waiting.className = "button secondary";
+    waiting.textContent = "连接 Bridge 后可进入";
+    waiting.disabled = true;
+    actions.append(waiting);
   } else if (!enhancedAllowed) {
     actions.append(actionButton("登录后进入超级爆弹版", "locked-button", () => beginAccess()));
   } else {
@@ -311,13 +322,6 @@ function channelCard(channel: Channel, state: LauncherViewState): HTMLElement {
 
 function bridgeDownloadURL(): URL {
   return new URL("../downloads/BomanaBridge.exe", new URL("./", location.href));
-}
-
-function bridgeDownloadAction(style: string): HTMLElement {
-  if (bridgeDownloadStarted) return actionButton("连接 Bridge", style, () => { void refreshBridge(true); });
-  const link = linkButton("下载并运行 Bridge", bridgeDownloadURL(), style);
-  link.addEventListener("click", markBridgeDownloadStarted);
-  return link;
 }
 
 function markBridgeDownloadStarted(): void {
@@ -457,7 +461,7 @@ function channelFeatures(channel: Channel): readonly string[] {
     "机场模块标记、Y66 标定与本机离线高程",
     "常规与高阻炸弹实时投放解算",
     "卫星制导、滑翔武器与 AAM / AGM",
-    "手机 Enhanced 配对与本地 Worker / WASM",
+    "手机 Enhanced 配对，随时查看战术信息",
   ];
 }
 

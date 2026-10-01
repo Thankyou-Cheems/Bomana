@@ -78,6 +78,8 @@ export class SoundCues {
   #lastTimerSecond: number | null = null;
   #lastOverspeedAtMs = 0;
   #knownDestroyedZones = new Set<string>();
+  #airRealistic = false;
+  readonly #timerTones = new Set<OscillatorNode>();
 
   constructor(preferences: Partial<SoundCuePreferences> | null = null) {
     this.#preferences = normalizeSoundCuePreferences(preferences);
@@ -104,7 +106,19 @@ export class SoundCues {
 
   preview(kind: CueKind, preset: SoundCuePreset): void { this.#playCue(kind, preset, 5); }
 
-  update(snapshot: EditionSnapshot, airRealistic = false): void {
+  setAirRealistic(enabled: boolean): void {
+    this.#airRealistic = enabled;
+    if (enabled) {
+      for (const oscillator of this.#timerTones) {
+        oscillator.stop();
+        oscillator.disconnect();
+      }
+      this.#timerTones.clear();
+    }
+  }
+
+  update(snapshot: EditionSnapshot, airRealistic = this.#airRealistic): void {
+    this.setAirRealistic(airRealistic);
     const remaining = snapshot.timer.remainingSec === null ? null : Math.ceil(snapshot.timer.remainingSec);
     const destroyedZoneIds = new Set(snapshot.destroyedZones.map((zone) => zone.id));
     const newlyDestroyed = [...destroyedZoneIds].some((id) => !this.#knownDestroyedZones.has(id));
@@ -130,25 +144,27 @@ export class SoundCues {
   }
 
   #playCue(kind: CueKind, preset: SoundCuePreset, remaining: number): void {
+    if (kind === "timer" && this.#airRealistic) return;
     const urgent = remaining < 10;
     if (preset === "chime") {
       const first = kind === "timer" ? urgent ? 1046 : 880 : 659;
-      this.#tone(first, 70, 0.045);
-      this.#tone(kind === "timer" ? first * 1.25 : 784, 90, 0.04, 85);
+      this.#tone(first, 70, 0.045, 0, kind);
+      this.#tone(kind === "timer" ? first * 1.25 : 784, 90, 0.04, 85, kind);
       return;
     }
     if (preset === "low") {
-      this.#tone(kind === "timer" ? urgent ? 523 : 440 : 294, kind === "timer" ? 90 : 170, 0.05);
+      this.#tone(kind === "timer" ? urgent ? 523 : 440 : 294, kind === "timer" ? 90 : 170, 0.05, 0, kind);
       return;
     }
     this.#tone(
       kind === "timer" ? remaining >= 10 ? 784 : 988 : 440,
       kind === "timer" ? remaining >= 10 ? 55 : 35 : 100,
       kind === "timer" ? 0.045 : 0.05,
+      0, kind,
     );
   }
 
-  #tone(frequency: number, durationMs: number, gainValue: number, delayMs = 0): void {
+  #tone(frequency: number, durationMs: number, gainValue: number, delayMs = 0, kind?: CueKind): void {
     const context = this.#context;
     if (!context) return;
     const oscillator = context.createOscillator();
@@ -157,6 +173,8 @@ export class SoundCues {
     oscillator.frequency.value = frequency;
     gain.gain.value = gainValue;
     oscillator.connect(gain).connect(context.destination);
+    if (kind === "timer") this.#timerTones.add(oscillator);
+    oscillator.onended = () => { this.#timerTones.delete(oscillator); oscillator.disconnect(); gain.disconnect(); };
     oscillator.start(startsAt);
     oscillator.stop(startsAt + durationMs / 1000);
   }

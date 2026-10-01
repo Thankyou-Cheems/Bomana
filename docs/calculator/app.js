@@ -1,7 +1,9 @@
+import { t, numberLocale, initializeLanguage, localizeName } from "./i18n.mjs";
 import { airfieldDefenseMassAssessment, airportBarPositions, airportRepairVisit, airportPaletteBands, compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, rewardUi, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
+import { reportDailyActive } from "./anonymous-daily-active.mjs";
 import { readableVehicle } from "./vehicle-names.mjs";
-import { presetTitle, presetTotals, renderPresetRows } from "./loadouts.mjs";
+import { presetTitle, presetTotals, presetDiagram, renderPresetRows } from "./loadouts.mjs";
 import { createCombinationCalculator } from "./combination-ui.mjs";
 import { createCustomLoadoutEditor } from "./custom-loadout-ui.mjs";
 import { createLoadoutOptimizer } from "./optimizer-ui.mjs";
@@ -41,6 +43,7 @@ window.addEventListener("hashchange", markDirectoryLocation);
 markDirectoryLocation();
 
 const brSelect = document.querySelector("#calcBr");
+const baseModeSelect = document.querySelector("#calcBaseMode");
 const targetSelect = document.querySelector("#calcTarget");
 const kindSelect = document.querySelector("#calcKind");
 const searchInput = document.querySelector("#calcSearch");
@@ -67,21 +70,21 @@ let defenseCatalogVersion = null;
 function refreshDefenseSelection(weapon) {
   if (!defenseSelection) return;
   if (!weapon) {
-    defenseSelection.textContent = "在上方选择武器后，可对照本节两种防空的质量筛选窗。";
+    defenseSelection.textContent = t("app.selectAWeaponAboveToCompareItsMassWith", "在上方选择武器后，可对照本节两种防空的质量筛选窗。");
     return;
   }
   const state = airfieldDefenseMassAssessment({ massKg: weapon.kg, sourceVersion: defenseCatalogVersion });
   if (state === "version_mismatch") {
-    defenseSelection.textContent = `防空研究为 2.59.0.13；当前武器目录为 ${defenseCatalogVersion || "未知版本"}，暂不关联弹种判断。`;
+    defenseSelection.textContent = t("app.airDefenseResearchUses259013The", "防空研究为 2.59.0.13；当前武器目录为 {{v0}}，暂不关联弹种判断。", {v0: defenseCatalogVersion || t("app.unknownVersion", "未知版本")});
     return;
   }
   if (state === "unknown_mass") {
-    defenseSelection.textContent = "所选武器缺少整弹质量，无法对照拦截筛选窗。";
+    defenseSelection.textContent = t("app.completeWeaponMassIsUnavailableSoTheInterceptionMass", "所选武器缺少整弹质量，无法对照拦截筛选窗。");
     return;
   }
-  defenseSelection.textContent = `${weaponName(weapon)} · 整弹 ${formatQuantity(weapon.kg)} kg：${state === "outside_mass_windows"
-    ? "不落入本节 ItO 90M 与 ZA-35 的弹药优先级质量窗。这里只核对静态质量条件，不代表所有机场防空都忽略它。"
-    : "落入本节弹药优先级的质量范围；小型、滑翔或重型标签都不能单独证明免拦截。是否被选中还取决于制导组件、速度、航迹、探测与其他目标。"}`;
+  defenseSelection.textContent = t("app.weaponMassKg", "{{v0}} · 整弹 {{v1}} kg：{{v2}}", {v0: weaponName(weapon), v1: formatQuantity(weapon.kg), v2: state === "outside_mass_windows"
+    ? t("app.outsideTheIto90MAndZa35Ammunition", "不落入本节 ItO 90M 与 ZA-35 的弹药优先级质量窗。这里只核对静态质量条件，不代表所有机场防空都忽略它。")
+    : t("app.withinTheAmmunitionPriorityMassRangeSizeGlideCapability", "落入本节弹药优先级的质量范围；小型、滑翔或重型标签都不能单独证明免拦截。是否被选中还取决于制导组件、速度、航迹、探测与其他目标。")});
 }
 let airportDiagramAngle = 270;
 function refreshAirportDiagram() {
@@ -118,9 +121,10 @@ const chargeSides = conversionForm ? ["A", "B"].map(side => ({
   loadedWeapon: null, customCharge: true, autoDamage: false, edited: false,
 })) : [];
 
-const KIND_LABELS = Object.freeze({ bomb: "炸弹", rocket: "火箭弹", missile: "导弹" });
+const KIND_LABELS = Object.freeze({ get bomb() { return t("app.bombs", "炸弹"); }, get rocket() { return t("app.rockets", "火箭弹"); }, get missile() { return t("app.missiles", "导弹"); } });
 
 let catalog = null;
+let selectedRoomBr = defaultBr;
 let aircraftCatalog = [];
 let visibleAircraft = [];
 let visibleWeapons = [];
@@ -129,6 +133,7 @@ let selectedWeaponId = defaultWeaponId;
 let selectedAircraftId = "";
 let selectedPresetId = "";
 let customPreview = null;
+let currentCleared = false;
 let visiblePresets = [];
 let loadoutRequest = null;
 let loadoutState = "idle";
@@ -144,7 +149,7 @@ function loadCustomRules() {
   }).catch(error => { customRequest = null; throw error; });
 }
 const customEditor = createCustomLoadoutEditor(document.querySelector("#customLoadoutEditor"), {
-  preview: snapshot => { customPreview = snapshot; refreshResult(); },
+  preview: snapshot => { customPreview = snapshot; selectedPresetId = snapshot.preset.id === "draft" ? "" : snapshot.preset.id; renderPresets(); refreshResult(); },
   load: loadCustomRules,
   apply: (unitId, preset, select) => {
     const aircraft = aircraftCatalog.find(row => row.id === unitId);
@@ -203,12 +208,12 @@ function rewardCardReference() {
 function renderRewardReference() {
   const sample = usefulActionsReferences[rewardFields.Mode.value];
   const note = document.querySelector("#rewardReferenceNote");
-  note.replaceChildren(conversionText("span", `${sample.label}。${sample.basis === "immediate" ? "比例为即时 SL / 卡片整周期基准，未代表活动率。" : "比例为着陆拆分前的 SL / 卡片整周期基准。"} `));
-  const link = conversionText("a", "查看原始实测"); link.href = sample.url; note.append(link);
+  note.replaceChildren(conversionText("span", `${sample.label}。${sample.basis === "immediate" ? t("app.ratioOfImmediateSlToTheFullCycleStat", "比例为即时 SL / 卡片整周期基准，未代表活动率。") : t("app.ratioOfSlBeforeTheLandingSplitToThe", "比例为着陆拆分前的 SL / 卡片整周期基准。")} `));
+  const link = conversionText("a", t("app.viewOriginalMeasurements", "查看原始实测")); link.href = sample.url; note.append(link);
   const rows = document.querySelector("#rewardReferenceRows"); rows.replaceChildren();
   sample.points.forEach(([score, fraction], index) => {
     const row = document.createElement("tr");
-    for (const text of [String(score), `${(fraction * 100).toFixed(2)}%`, index ? `+${((fraction - sample.points[index - 1][1]) * 100).toFixed(2)} 个百分点` : "—"]) row.append(conversionText("td", text));
+    for (const text of [String(score), `${(fraction * 100).toFixed(2)}%`, index ? t("app.percentagePoints", "+{{v0}} 个百分点", {v0: ((fraction - sample.points[index - 1][1]) * 100).toFixed(2)}) : "—"]) row.append(conversionText("td", text));
     rows.append(row);
   });
 }
@@ -222,7 +227,7 @@ function refreshReward() {
   rewardFields.SlRate.disabled = !manualRate;
   rewardFields.Account.disabled = manualRate;
   rewardFields.Booster.disabled = manualRate;
-  rewardFields.Account.title = manualRate ? "正在使用手填卡片值；账号加成已包含在该值中" : "";
+  rewardFields.Account.title = manualRate ? t("app.usingAManuallyEnteredStatCardRateIncludingAccount", "正在使用手填卡片值；账号加成已包含在该值中") : "";
   if (method === "reference") rewardFields.Minutes.value = String(rules.period_minutes);
   const minutes = inputNumber(rewardFields.Minutes), score = inputNumber(rewardFields.Score), slRate = inputNumber(rewardFields.SlRate);
   for (const [field, visible] of [["Minutes", method !== "reference"], ["Fraction", method === "manual"], ["Observed", method === "observed"]]) {
@@ -232,27 +237,27 @@ function refreshReward() {
   rewardSlider.max = String(Number.isFinite(score) ? Math.max(1200, score) : 1200);
   rewardSlider.value = String(Number.isFinite(score) ? Math.max(0, score) : 0);
   for (const button of document.querySelectorAll("button[data-score]")) button.setAttribute("aria-pressed", String(Number(button.dataset.score) === score));
-  document.querySelector("#rewardPeriod").textContent = `${formatQuantity(minutes)} 分钟内`;
-  document.querySelector("#rewardChartPeriod").textContent = "横轴：本周期得分";
+  document.querySelector("#rewardPeriod").textContent = t("app.withinMinutes", "{{v0}} 分钟内", {v0: formatQuantity(minutes)});
+  document.querySelector("#rewardChartPeriod").textContent = t("app.horizontalAxisScoreEarnedThisCycle", "横轴：本周期得分");
   const quality = document.querySelector(".reference-pill");
-  quality.textContent = `${method === "reference" ? "2024 历史实测参考" : method === "observed" ? "你的实战记录" : "自定义比例参考"}${manualRate ? " · 手填卡片基准" : ""} · 实际到账以游戏为准`;
+  quality.textContent = t("app.actualAwardsAreDeterminedByTheGame", "{{v0}}{{v1}} · 实际到账以游戏为准", {v0: method === "reference" ? t("app.historicalMeasurementsFrom2024", "2024 历史实测参考") : method === "observed" ? t("app.yourBattleRecord", "你的实战记录") : t("app.customRatioReference", "自定义比例参考"), v1: manualRate ? t("app.manualStatCardRate", " · 手填卡片基准") : ""});
   const origin = document.querySelector("#rewardSource");
-  origin.textContent = row ? `${row.name} · 客户端 ${rewardsCatalog.source.version} 基准 ${formatQuantity(row.sl_per_min)} SL/min${row.special ? " · 高级载具" : ""} · 载具研发倍率 ×${row.rp_multiplier ?? "未知"}（不是 RP/min）${manualRate ? " · 使用手填卡片值" : ""}` : "未选择有效收益机型";
+  origin.textContent = row ? t("app.clientReferenceSlMinVehicleResearchMultiplierNotRp", "{{v0}} · 客户端 {{v1}} 基准 {{v2}} SL/min{{v3}} · 载具研发倍率 ×{{v4}}（不是 RP/min）{{v5}}", {v0: row.name, v1: rewardsCatalog.source.version, v2: formatQuantity(row.sl_per_min), v3: row.special ? t("app.premiumVehicle", " · 高级载具") : "", v4: row.rp_multiplier ?? t("app.unknown", "未知"), v5: manualRate ? t("app.manualStatCardRate2", " · 使用手填卡片值") : ""}) : t("app.noValidRewardVehicleSelected", "未选择有效收益机型");
   const preview = document.querySelector("#rewardCardPreview"); preview.replaceChildren();
-  if (card) preview.append(conversionText("code", `客户端卡片参考：${formatQuantity(card.visualBase)} × ${formatQuantity(card.visualMultiplier)} × (1 + ${formatQuantity(card.accountBonus)} + ${formatQuantity(card.boosterBonus)}) = ${formatQuantity(card.rate)} SL/min`));
-  else preview.textContent = "卡片基准参数缺失或输入无效，请核对加成器效果。";
+  if (card) preview.append(conversionText("code", t("app.statCardReference1SlMin", "客户端卡片参考：{{v0}} × {{v1}} × (1 + {{v2}} + {{v3}}) = {{v4}} SL/min", {v0: formatQuantity(card.visualBase), v1: formatQuantity(card.visualMultiplier), v2: formatQuantity(card.accountBonus), v3: formatQuantity(card.boosterBonus), v4: formatQuantity(card.rate)})));
+  else preview.textContent = t("app.missingStatCardParametersOrInvalidInputCheckThe", "卡片基准参数缺失或输入无效，请核对加成器效果。");
   rewardResult.replaceChildren();
   const formulas = document.querySelector("#rewardFormula"); formulas.replaceChildren();
   let basis = mode === "air_sim" ? "before_landing_split" : "immediate";
   let fraction = inputNumber(rewardFields.Fraction) / 100;
-  let unavailable = "在展开区填写已核验的收益比例后计算。";
+  let unavailable = t("app.enterAVerifiedRewardRatioInTheExpandedSection", "在展开区填写已核验的收益比例后计算。");
   if (method === "reference") {
     const ref = usefulActionsReference({ mode, score, minutes, vehicleId: rewardSelectedVehicle });
     fraction = ref?.fraction ?? NaN; basis = ref?.basis ?? basis;
-    unavailable = mode === "air_sim" ? "当前得分超出 200–1050 分的历史样本范围，不外推收益。" : rewardSelectedVehicle !== "ka_52" ? "这台直升机还没有可用的得分实测曲线，不能套用 Ka-52 的结果。" : "当前得分超出 Ka-52 的 200–800 分样本范围，不外推收益。";
+    unavailable = mode === "air_sim" ? t("app.scoreIsOutsideTheHistorical2001050RangeRewards", "当前得分超出 200–1050 分的历史样本范围，不外推收益。") : rewardSelectedVehicle !== "ka_52" ? t("app.noMeasuredScoreCurveIsAvailableForThisHelicopter", "这台直升机还没有可用的得分实测曲线，不能套用 Ka-52 的结果。") : t("app.scoreIsOutsideTheKa52SampleRangeOf", "当前得分超出 Ka-52 的 200–800 分样本范围，不外推收益。");
   } else if (method === "observed") {
     fraction = usefulActionsObservedFraction({ slReceived: inputNumber(rewardFields.Observed), slRate, minutes, immediateShare: mode === "air_sim" ? rules.immediate_share : 1 }) ?? NaN;
-    unavailable = fraction > 1 ? `反算比例为 ${formatQuantity(fraction * 100)}%，超过 100%；请核对卡片加成、周期时间和奖励口径。` : "填入这次有用行动实际即时到账的 SL，即可核对记录。";
+    unavailable = fraction > 1 ? t("app.theCalculatedRatioIsAbove100CheckStatCard", "反算比例为 {{v0}}%，超过 100%；请核对卡片加成、周期时间和奖励口径。", {v0: formatQuantity(fraction * 100)}) : t("app.enterTheSlActuallyReceivedImmediatelyForThisUseful", "填入这次有用行动实际即时到账的 SL，即可核对记录。");
   }
   const rpRate = rewardFields.RpRate.value.trim() ? inputNumber(rewardFields.RpRate) : null;
   const rpFraction = rewardFields.RpFraction.value.trim() ? inputNumber(rewardFields.RpFraction) / 100 : null;
@@ -260,36 +265,36 @@ function refreshReward() {
   const curve = method === "reference" ? usefulActionsCurve({ mode, vehicleId: rewardSelectedVehicle, minutes,
     periodMinutes: rules.period_minutes, slRate, immediateShare: rules.immediate_share, score }) : null;
   renderRewardChart(document.querySelector("#rewardChart"), curve,
-    method !== "reference" ? "实战核对与自定义比例只计算本条记录，不生成得分曲线。切回历史样本估算可查看曲线。" : !Number.isFinite(slRate) || slRate <= 0 ? "卡片基准无效，暂时无法绘制收益图。" : "这台机型暂无可用得分曲线，可展开高级选项核对实战记录。");
-  document.querySelector("#rewardChartHint").textContent = curve ? `${curve.hasLanding ? "蓝色为即时部分，金色为成功着陆后追加部分。" : "仅展示即时 SL，不套用空战的着陆分成。"}拖动得分可看变化；曲线仅覆盖已有样本，灰区没有估算。` : "样本和服务器公式缺失时保留未知，不以卡片最大值代替实际到账。";
+    method !== "reference" ? t("app.battleRecordsAndCustomRatiosApplyToThisEntry", "实战核对与自定义比例只计算本条记录，不生成得分曲线。切回历史样本估算可查看曲线。") : !Number.isFinite(slRate) || slRate <= 0 ? t("app.invalidStatCardReferenceTheRewardChartIsUnavailable", "卡片基准无效，暂时无法绘制收益图。") : t("app.noScoreCurveIsAvailableForThisVehicleExpand", "这台机型暂无可用得分曲线，可展开高级选项核对实战记录。"));
+  document.querySelector("#rewardChartHint").textContent = curve ? t("app.dragTheScoreToExploreChangesTheCurveCovers", "{{v0}}拖动得分可看变化；曲线仅覆盖已有样本，灰区没有估算。", {v0: curve.hasLanding ? t("app.blueIsTheImmediatePortionGoldIsTheAdditional", "蓝色为即时部分，金色为成功着陆后追加部分。") : t("app.onlyImmediateSlIsShownTheAircraftLandingSplit", "仅展示即时 SL，不套用空战的着陆分成。")}) : t("app.missingSamplesOrServerFormulasRemainUnknownTheMaximum", "样本和服务器公式缺失时保留未知，不以卡片最大值代替实际到账。");
   if (!plan) {
-    if (!Number.isFinite(score) || score < 0) unavailable = "请填写本周期新增任务分数，不能使用负数。";
-    else if (!Number.isFinite(minutes) || minutes <= 0 || minutes > rules.period_minutes) unavailable = `本周期时长须大于 0 且不超过 ${rules.period_minutes} 分钟。`;
-    else if (!Number.isFinite(slRate) || slRate <= 0) unavailable = manualRate ? "请填写大于 0 的 SL/min 基准。" : "机型基准或加成器输入无效，请在高级选项中核对。";
-    else if (rpRate !== null && (!Number.isFinite(rpRate) || rpRate <= 0)) unavailable = "RP/min 基准须大于 0；未知时请留空。";
-    else if (rpFraction !== null && (!Number.isFinite(rpFraction) || rpFraction < 0 || rpFraction > 1)) unavailable = "RP 有效收益比例须在 0–100% 之间；未知时请留空。";
-    else if (method === "manual" && (fraction < 0 || fraction > 1)) unavailable = "有效收益比例须在 0–100% 之间；请先核对每分钟基准。";
-    rewardResult.append(conversionText("h3", "暂不能估算这次收益"), conversionText("p", unavailable));
-    if (Number.isFinite(slRate * rules.period_minutes) && slRate > 0) rewardResult.append(conversionText("p", `卡片整周期基准为 ${formatInt(slRate * rules.period_minutes)} SL，不是实际到账预测。`, "tool-note"));
+    if (!Number.isFinite(score) || score < 0) unavailable = t("app.enterNonnegativeMissionScoreEarnedDuringThisCycle", "请填写本周期新增任务分数，不能使用负数。");
+    else if (!Number.isFinite(minutes) || minutes <= 0 || minutes > rules.period_minutes) unavailable = t("app.cycleDurationMustBeGreaterThan0AndAt", "本周期时长须大于 0 且不超过 {{v0}} 分钟。", {v0: rules.period_minutes});
+    else if (!Number.isFinite(slRate) || slRate <= 0) unavailable = manualRate ? t("app.enterAPositiveSlMinReferenceRate", "请填写大于 0 的 SL/min 基准。") : t("app.invalidVehicleRateOrBoosterInputCheckAdvancedOptions", "机型基准或加成器输入无效，请在高级选项中核对。");
+    else if (rpRate !== null && (!Number.isFinite(rpRate) || rpRate <= 0)) unavailable = t("app.rpMinMustBePositiveLeaveItBlankIf", "RP/min 基准须大于 0；未知时请留空。");
+    else if (rpFraction !== null && (!Number.isFinite(rpFraction) || rpFraction < 0 || rpFraction > 1)) unavailable = t("app.theEffectiveRpRatioMustBe0100Leave", "RP 有效收益比例须在 0–100% 之间；未知时请留空。");
+    else if (method === "manual" && (fraction < 0 || fraction > 1)) unavailable = t("app.theEffectiveRewardRatioMustBe0100Check", "有效收益比例须在 0–100% 之间；请先核对每分钟基准。");
+    rewardResult.append(conversionText("h3", t("app.rewardEstimateUnavailable", "暂不能估算这次收益")), conversionText("p", unavailable));
+    if (Number.isFinite(slRate * rules.period_minutes) && slRate > 0) rewardResult.append(conversionText("p", t("app.theFullCycleStatCardReferenceIsSlNot", "卡片整周期基准为 {{v0}} SL，不是实际到账预测。", {v0: formatInt(slRate * rules.period_minutes)}), "tool-note"));
     return;
   }
-  rewardResult.append(conversionText("p", `${formatQuantity(score)} 分 · ${formatQuantity(minutes)} 分钟${method === "observed" ? " · 本次记录" : " · 参考收益"}`, "reward-context"));
+  rewardResult.append(conversionText("p", t("app.pointsMinutes", "{{v0}} 分 · {{v1}} 分钟{{v2}}", {v0: formatQuantity(score), v1: formatQuantity(minutes), v2: method === "observed" ? t("app.thisRecord", " · 本次记录") : t("app.rewardReference", " · 参考收益")}), "reward-context"));
   const stats = document.createElement("dl"); stats.className = "reward-stats";
   const add = (label, value) => { const pair = document.createElement("div"); pair.append(conversionText("dt", label), conversionText("dd", value)); stats.append(pair); };
-  add(method === "observed" ? "已即时到账 · SL" : "即时获得约 · SL", formatInt(plan.slImmediate));
-  if (plan.slDeferred !== null) add("成功着陆后追加约 · SL", `+ ${formatInt(plan.slDeferred)}`);
-  if (plan.rpImmediate !== null) add("即时 RP · 自填参考", formatInt(plan.rpImmediate));
-  if (plan.rpDeferred !== null) add("着陆 RP · 自填参考", `+ ${formatInt(plan.rpDeferred)}`);
+  add(method === "observed" ? t("app.receivedImmediatelySl", "已即时到账 · SL") : t("app.estimatedImmediateSl", "即时获得约 · SL"), formatInt(plan.slImmediate));
+  if (plan.slDeferred !== null) add(t("app.additionalAfterLandingSl", "成功着陆后追加约 · SL"), `+ ${formatInt(plan.slDeferred)}`);
+  if (plan.rpImmediate !== null) add(t("app.immediateRpManualReference", "即时 RP · 自填参考"), formatInt(plan.rpImmediate));
+  if (plan.rpDeferred !== null) add(t("app.landingRpManualReference", "着陆 RP · 自填参考"), `+ ${formatInt(plan.rpDeferred)}`);
   rewardResult.append(stats);
-  if (plan.slDeferred !== null) rewardResult.append(conversionText("p", `本周期含着陆份额合计约 ${formatInt(plan.slImmediate + plan.slDeferred)} SL`, "reward-total"));
+  if (plan.slDeferred !== null) rewardResult.append(conversionText("p", t("app.estimatedTotalIncludingTheLandingPortionSl", "本周期含着陆份额合计约 {{v0}} SL", {v0: formatInt(plan.slImmediate + plan.slDeferred)}), "reward-total"));
   const formula = document.createElement("p");
-  formula.append(conversionText("code", `即时 SL ≈ ${formatQuantity(slRate)} SL/min × ${formatQuantity(minutes)} min × ${(fraction * 100).toFixed(2)}%${basis === "before_landing_split" ? " × 80%" : "（比例已含即时份额）"}`)); formulas.append(formula);
+  formula.append(conversionText("code", t("app.immediateSlSlMinMin", "即时 SL ≈ {{v0}} SL/min × {{v1}} min × {{v2}}%{{v3}}", {v0: formatQuantity(slRate), v1: formatQuantity(minutes), v2: (fraction * 100).toFixed(2), v3: basis === "before_landing_split" ? " × 80%" : t("app.ratioIncludesTheImmediatePortion", "（比例已含即时份额）")}))); formulas.append(formula);
   if (plan.rpImmediate !== null) {
     const rpFormula = document.createElement("p");
-    rpFormula.append(conversionText("code", `即时 RP ≈ ${formatQuantity(rpRate)} RP/min × ${formatQuantity(minutes)} min × ${formatQuantity(rpFraction * 100)}%${basis === "before_landing_split" ? " × 80%" : "（RP 比例已含即时份额）"}`)); formulas.append(rpFormula);
+    rpFormula.append(conversionText("code", t("app.immediateRpRpMinMin", "即时 RP ≈ {{v0}} RP/min × {{v1}} min × {{v2}}%{{v3}}", {v0: formatQuantity(rpRate), v1: formatQuantity(minutes), v2: formatQuantity(rpFraction * 100), v3: basis === "before_landing_split" ? " × 80%" : t("app.rpRatioIncludesTheImmediatePortion", "（RP 比例已含即时份额）")}))); formulas.append(rpFormula);
   }
-  if (method === "observed") formulas.append(conversionText("p", `本条记录为 ${formatQuantity(score)} 分 → ${formatQuantity(inputNumber(rewardFields.Observed))} 即时 SL；每分 ${score > 0 ? formatQuantity(inputNumber(rewardFields.Observed) / score) : "无法计算"} SL 只描述这条记录，不能线性外推。`));
-  rewardResult.append(conversionText("p", `${minutes < rules.period_minutes ? "不足整周期仅作算术核对，死亡与退场规则未验证。" : ""}不含维修、出场费与胜负结算。${mode === "heli_pve" ? "直升机战后奖励未知。" : "着陆份额需满足成功机场着陆条件。"}`, "tool-note"));
+  if (method === "observed") formulas.append(conversionText("p", t("app.thisRecordPointsImmediateSlTheSlPointRatio", "本条记录为 {{v0}} 分 → {{v1}} 即时 SL；每分 {{v2}} SL 只描述这条记录，不能线性外推。", {v0: formatQuantity(score), v1: formatQuantity(inputNumber(rewardFields.Observed)), v2: score > 0 ? formatQuantity(inputNumber(rewardFields.Observed) / score) : t("app.cannotCalculate", "无法计算")})));
+  rewardResult.append(conversionText("p", t("app.excludesRepairSpawnCostsAndWinLossSettlement", "{{v0}}不含维修、出场费与胜负结算。{{v1}}", {v0: minutes < rules.period_minutes ? t("app.shortCyclesAreArithmeticReferencesOnlyDeathAndExit", "不足整周期仅作算术核对，死亡与退场规则未验证。") : "", v1: mode === "heli_pve" ? t("app.helicopterPostBattleRewardsAreUnknown", "直升机战后奖励未知。") : t("app.theLandingPortionRequiresASuccessfulAirfieldLanding", "着陆份额需满足成功机场着陆条件。")}), "tool-note"));
 }
 
 function bindRewards() {
@@ -312,17 +317,17 @@ function bindRewards() {
 }
 
 function formatInt(value) {
-  return Math.round(value).toLocaleString("zh-CN");
+  return Math.round(value).toLocaleString(numberLocale());
 }
 
 function formatQuantity(value) {
   if (value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 1e12)) return value.toExponential(5);
-  return value.toLocaleString("zh-CN", { maximumFractionDigits: 6 });
+  return value.toLocaleString(numberLocale(), { maximumFractionDigits: 6 });
 }
 
 function formatApproximate(value) {
   if (value !== 0 && Math.abs(value) < 0.01) return value.toExponential(2);
-  return value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+  return value.toLocaleString(numberLocale(), { maximumFractionDigits: 2 });
 }
 
 function inputNumber(input) {
@@ -340,10 +345,10 @@ function refreshChargeSource(side) {
   const weapon = side.loadedWeapon, mass = inputNumber(side.mass), factor = inputNumber(side.factor);
   const equivalent = mass * factor;
   const amount = mass > 0 && factor > 0 && Number.isFinite(equivalent)
-    ? `${formatQuantity(equivalent)} kg TNT / 枚` : "装药数据缺失，可展开自填";
+    ? t("app.kgTntWeapon", "{{v0}} kg TNT / 枚", {v0: formatQuantity(equivalent)}) : t("app.fillerDataUnavailableExpandToEnterManually", "装药数据缺失，可展开自填");
   const special = weapon?.damage_model && weapon.damage_model !== "splash_tnte_curve"
-    ? " · 特殊任务伤害模型，请勿按当量推算伤害" : "";
-  side.source.textContent = `${side.customCharge ? "自定义装药" : "目录自动读取"} · ${amount}${special}`;
+    ? t("app.specialMissionDamageModelDoNotInferDamageFrom", " · 特殊任务伤害模型，请勿按当量推算伤害") : "";
+  side.source.textContent = `${side.customCharge ? t("app.customFiller", "自定义装药") : t("app.readFromCatalog", "目录自动读取")} · ${amount}${special}`;
 }
 
 function renderChargeWeapons(side) {
@@ -351,7 +356,7 @@ function renderChargeWeapons(side) {
   const matches = query ? rankFuzzyMatches(weapons, query, item => [item.id, item.name, item.name_en]).slice(0, 100) : [...weapons];
   if (side.loadedWeapon && !matches.some(item => item.id === side.loadedWeapon.id)) matches.unshift(side.loadedWeapon);
   fillSelect(side.weapon, [null, ...matches], item => item?.id || "", item =>
-    item ? `${weaponName(item)} · ${KIND_LABELS[item.kind] || item.kind}` : "自定义装药", side.customCharge ? "" : side.loadedWeapon?.id || "");
+    item ? `${weaponName(item)} · ${KIND_LABELS[item.kind] || item.kind}` : t("app.customFiller2", "自定义装药"), side.customCharge ? "" : side.loadedWeapon?.id || "");
 }
 
 function loadChargeWeapon(side, weapon) {
@@ -398,7 +403,7 @@ function fillConversionCatalog() {
     const previousType = side.type.value;
     renderChargeWeapons(side);
     fillSelect(side.type, [null, ...presets.values()], item => item?.key || "", item =>
-      item ? `${item.type} · ×${formatQuantity(item.factor)}` : "自定义系数", previousType);
+      item ? `${item.type} · ×${formatQuantity(item.factor)}` : t("app.customFactor", "自定义系数"), previousType);
     side.use.disabled = false;
     if (!side.edited) loadChargeWeapon(side, weapons.find(item => item.id ===
       (index === 0 ? defaultWeaponId : "us_500lb_mk_82_ldgp")) || weapons.find(item => item.charge?.mass_kg > 0));
@@ -414,23 +419,23 @@ function refreshConversion() {
   const formulas = document.querySelector("#chargeFormula"); formulas.replaceChildren();
   chargeResult.replaceChildren();
   if (!result) {
-    chargeResult.append(conversionText("h3", "暂不能换算"), conversionText("p", "请选择两种有装药数据的武器，或展开自定义参数，填写大于 0 的装药质量和 TNT 系数；A 的数量需为非负整数。"));
+    chargeResult.append(conversionText("h3", t("app.conversionUnavailable", "暂不能换算")), conversionText("p", t("app.selectTwoWeaponsWithFillerDataOrExpandCustom", "请选择两种有装药数据的武器，或展开自定义参数，填写大于 0 的装药质量和 TNT 系数；A 的数量需为非负整数。")));
   } else {
-    const name = (side, label) => side.customCharge ? `自定义装药 ${label}` : weaponName(side.loadedWeapon);
-    const headline = conversionText("p", "整枚换装需要 ", "conversion-headline");
-    headline.append(conversionText("strong", `${q(result.wholeCount)} 枚 B`));
+    const name = (side, label) => side.customCharge ? t("app.customFiller3", "自定义装药 {{v0}}", {v0: label}) : weaponName(side.loadedWeapon);
+    const headline = conversionText("p", t("app.wholeWeaponReplacementRequires", "整枚换装需要 "), "conversion-headline");
+    headline.append(conversionText("strong", t("app.ofB", "{{v0}} 枚 B", {v0: q(result.wholeCount)})));
     chargeResult.append(headline,
-      conversionText("p", `${q(sourceCount)} 枚 ${name(a, "A")} ≈ ${formatApproximate(result.exactCount)} 枚 ${name(b, "B")}`, "conversion-equation"));
+      conversionText("p", t("app.weaponEquivalenceEquation", "{{v0}} 枚 {{v1}} ≈ {{v2}} 枚 {{v3}}", {v0: q(sourceCount), v1: name(a, "A"), v2: formatApproximate(result.exactCount), v3: name(b, "B")}), "conversion-equation"));
     const chart = document.createElement("div"); chart.className = "conversion-chart"; chargeResult.append(chart);
     renderConversionChart(chart, result, sourceCount);
-    chargeResult.append(conversionText("p", `整枚取整后多出 ${formatApproximate(result.surplus)} kg TNT`, "conversion-surplus"));
+    chargeResult.append(conversionText("p", t("app.roundedReplacementAddsKgTnt", "整枚取整后多出 {{v0}} kg TNT", {v0: formatApproximate(result.surplus)}), "conversion-surplus"));
     const quick = document.createElement("p"); quick.className = "conversion-quick-formula";
-    quick.append(conversionText("code", `${q(result.sourceTotal)} kg TNT ÷ ${q(result.targetTntKg)} kg TNT/枚 ≈ ${formatApproximate(result.exactCount)} 枚 B`)); chargeResult.append(quick);
+    quick.append(conversionText("code", t("app.kgTntKgTntWeaponOfB", "{{v0}} kg TNT ÷ {{v1}} kg TNT/枚 ≈ {{v2}} 枚 B", {v0: q(result.sourceTotal), v1: q(result.targetTntKg), v2: formatApproximate(result.exactCount)}))); chargeResult.append(quick);
     for (const line of [
-      `A 单枚当量 Eₐ = 装药质量 mₐ × TNT 系数 rₐ = ${q(inputNumber(a.mass))} kg × ${q(inputNumber(a.factor))} = ${q(result.sourceTntKg)} kg TNT`,
-      `B 单枚当量 Eᵦ = mᵦ × rᵦ = ${q(inputNumber(b.mass))} kg × ${q(inputNumber(b.factor))} = ${q(result.targetTntKg)} kg TNT`,
-      `A 总当量 = Nₐ × Eₐ = ${q(sourceCount)} × ${q(result.sourceTntKg)} = ${q(result.sourceTotal)} kg TNT`,
-      `B 折算枚数 Nᵦ = Nₐ × Eₐ ÷ Eᵦ = ${q(result.sourceTotal)} ÷ ${q(result.targetTntKg)} ≈ ${q(result.exactCount)}；向上取整 ⌈Nᵦ⌉ = ${q(result.wholeCount)}`,
+      t("app.aPerWeaponEquivalenceEFillerMassMTnt", "A 单枚当量 Eₐ = 装药质量 mₐ × TNT 系数 rₐ = {{v0}} kg × {{v1}} = {{v2}} kg TNT", {v0: q(inputNumber(a.mass)), v1: q(inputNumber(a.factor)), v2: q(result.sourceTntKg)}),
+      t("app.bPerWeaponEquivalenceEMRKgKg", "B 单枚当量 Eᵦ = mᵦ × rᵦ = {{v0}} kg × {{v1}} = {{v2}} kg TNT", {v0: q(inputNumber(b.mass)), v1: q(inputNumber(b.factor)), v2: q(result.targetTntKg)}),
+      t("app.totalAEquivalenceNEKgTnt", "A 总当量 = Nₐ × Eₐ = {{v0}} × {{v1}} = {{v2}} kg TNT", {v0: q(sourceCount), v1: q(result.sourceTntKg), v2: q(result.sourceTotal)}),
+      t("app.equivalentBCountNNEERoundedUp", "B 折算枚数 Nᵦ = Nₐ × Eₐ ÷ Eᵦ = {{v0}} ÷ {{v1}} ≈ {{v2}}；向上取整 ⌈Nᵦ⌉ = {{v3}}", {v0: q(result.sourceTotal), v1: q(result.targetTntKg), v2: q(result.exactCount), v3: q(result.wholeCount)}),
     ]) {
       const row = document.createElement("p"); row.append(conversionText("code", line)); formulas.append(row);
     }
@@ -438,10 +443,10 @@ function refreshConversion() {
   document.querySelector("#chargeLess").disabled = !Number.isSafeInteger(sourceCount) || sourceCount <= 0;
   document.querySelector("#chargeMore").disabled = !Number.isSafeInteger(sourceCount) || sourceCount < 0 || sourceCount === Number.MAX_SAFE_INTEGER;
   const damage = equivalentWeaponCount({ sourcePerItem: inputNumber(a.damage), targetPerItem: inputNumber(b.damage), sourceCount });
-  chargeDamageResult.replaceChildren(conversionText("strong", "按任务伤害换算（独立计算）"));
+  chargeDamageResult.replaceChildren(conversionText("strong", t("app.missionDamageConversionCalculatedSeparately", "按任务伤害换算（独立计算）")));
   const note = damage
-    ? `Nᵦ = Nₐ × Dₐ ÷ Dᵦ = ${q(sourceCount)} × ${q(inputNumber(a.damage))} ÷ ${q(inputNumber(b.damage))} ≈ ${q(damage.exactCount)} 枚；向上取整为 ${q(damage.wholeCount)} 枚 B。A 合计 ${q(damage.sourceTotal)} HP，取整后 B 合计 ${q(damage.targetTotal)} HP。${a.autoDamage && b.autoDamage ? "使用两种武器各自的目录任务伤害。" : "包含自定义 HP，仅按所填假设比较。"}`
-    : "补充两侧有效的单枚 HP 后可单独比较。不会从自定义 TNT 当量猜测任务伤害。";
+    ? t("app.nNDDRoundedUpToOfB", "Nᵦ = Nₐ × Dₐ ÷ Dᵦ = {{v0}} × {{v1}} ÷ {{v2}} ≈ {{v3}} 枚；向上取整为 {{v4}} 枚 B。A 合计 {{v5}} HP，取整后 B 合计 {{v6}} HP。{{v7}}", {v0: q(sourceCount), v1: q(inputNumber(a.damage)), v2: q(inputNumber(b.damage)), v3: q(damage.exactCount), v4: q(damage.wholeCount), v5: q(damage.sourceTotal), v6: q(damage.targetTotal), v7: a.autoDamage && b.autoDamage ? t("app.usesEachWeaponSCatalogMissionDamage", "使用两种武器各自的目录任务伤害。") : t("app.includesCustomHpValuesComparisonUsesYourAssumptions", "包含自定义 HP，仅按所填假设比较。")})
+    : t("app.enterValidPerWeaponHpForBothSidesTo", "补充两侧有效的单枚 HP 后可单独比较。不会从自定义 TNT 当量猜测任务伤害。");
   chargeDamageResult.append(conversionText("p", note));
 }
 
@@ -495,7 +500,7 @@ function weaponDamage(weapon) {
 }
 
 function weaponName(weapon) {
-  return weapon?.name || weapon?.id || "未知武器";
+  return weapon?.name || weapon?.id || t("app.unknownWeapon", "未知武器");
 }
 
 function fillSelect(select, items, getValue, getLabel, selected) {
@@ -526,29 +531,26 @@ function selectedPreset() {
 }
 
 function currentWeaponCapacity(aircraft, weaponId) {
-  const preset = selectedPreset();
+  const preset = customPreview?.preset || selectedPreset();
   return preset ? preset.weapons.find(([id]) => id === weaponId)?.[1] || null
     : aircraftWeaponCapacity(aircraft, weaponId);
 }
 
 function renderPresets() {
-  const aircraft = selectedAircraft(), rows = aircraft?.presets || [];
+  const aircraft = selectedAircraft(), rows = (aircraft?.presets || []).filter(row => !row.customName);
   document.querySelector("#calcPresetPanel").hidden = !rows.length;
   document.querySelector("#calcLoadoutCaption").textContent = loadoutState === "loading"
-    ? "正在读取挂载排列…" : loadoutState === "error" ? "挂载排列未就绪，请重新选择机型重试；仍可按单一武器计算"
+    ? t("app.loadingLoadoutGrid", "正在读取挂载排列…") : loadoutState === "error" ? t("app.loadoutGridUnavailableSelectTheAircraftAgainToRetry", "挂载排列未就绪，请重新选择机型重试；仍可按单一武器计算")
     : rows.length
-    ? "每一行是一套游戏预设；选择后按实际弹数计算"
-    : aircraft ? "该机型暂无可用预设排列，可按单一武器查看上限" : "先选机型查看挂载网格，也可直接搜索武器";
+    ? t("app.eachRowIsOneGamePresetSelectionUsesIts", "每一行是一套游戏预设；选择后按实际弹数计算")
+    : aircraft ? t("app.noPresetGridIsAvailableForThisAircraftView", "该机型暂无可用预设排列，可按单一武器查看上限") : t("app.selectAnAircraftForItsLoadoutGridOrSearch", "先选机型查看挂载网格，也可直接搜索武器");
   const weapons = new Map(catalog.weapons.map(row => [row.id, row]));
   const allowed = new Set(matchingWeapons(Number.POSITIVE_INFINITY).map(row => row.id));
-  visiblePresets = rows.filter(row => row.weapons.some(([id]) => allowed.has(id)) || row.customName && !row.weapons.length);
-  if (selectedPresetId && !visiblePresets.some(row => row.id === selectedPresetId)) {
-    selectedPresetId = visiblePresets[0]?.id || "";
-  }
+  visiblePresets = rows.filter(row => row.weapons.some(([id]) => allowed.has(id)));
   const preset = selectedPreset();
   if (preset && !preset.weapons.some(([id]) => id === selectedWeaponId)) selectedWeaponId = preset.weapons[0]?.[0] || "";
   if (rows.length) renderPresetRows(presetList, visiblePresets, weapons, selectedPresetId, rows);
-  document.querySelector("#calcPresetCount").textContent = `${visiblePresets.length} / ${rows.length} 套预设`;
+  document.querySelector("#calcPresetCount").textContent = t("app.presets", "{{v0}} / {{v1}} 套预设", {v0: visiblePresets.length, v1: rows.length});
 }
 
 async function loadAircraftPresets() {
@@ -563,29 +565,39 @@ async function loadAircraftPresets() {
   }
   await loadoutRequest;
   const aircraft = selectedAircraft();
-  if (!aircraft?.presets?.some(row => row.id === selectedPresetId)) selectedPresetId = aircraft?.presets?.[0]?.id || "";
+  if (!currentCleared && !customPreview && !aircraft?.presets?.some(row => row.id === selectedPresetId)) selectedPresetId = aircraft?.presets?.[0]?.id || "";
   document.querySelector("#calcIndividualWeapons").open = !selectedPresetId;
   refreshWeapons();
+  if (!currentCleared && selectedPreset()) void syncCurrentPreset(selectedPreset());
 }
 
 function renderPresetDetail(preset) {
   document.querySelector("#calcPresetDetail").hidden = !preset;
-  if (!preset) return;
+  if (!preset) { document.querySelector("#calcPresetStats").replaceChildren(); document.querySelector("#calcPresetTitle").textContent = t("currentLoadout.empty", "未挂载"); document.querySelector("#calcPresetDiagram").replaceChildren(); return; }
   const weapons = new Map(catalog.weapons.map(row => [row.id, row]));
-  document.querySelector("#calcPresetTitle").textContent = presetTitle(preset, weapons);
+  document.querySelector("#calcPresetTitle").textContent = preset.cells.length ? presetTitle(preset, weapons) : t("currentLoadout.empty", "未挂载");
+  const detail = document.querySelector("#calcPresetDetail");
+  detail.style.setProperty("--tier-count", preset.columns);
+  document.querySelector("#calcPresetDiagram").replaceChildren(presetDiagram(preset, weapons));
+  document.querySelector("#calcPresetDiagram").hidden = customEditor.editable;
   const totals = presetTotals(preset, weapons);
   const target = selectedTarget();
   const combined = combinationTotals(preset.weapons, weapons, targetHp(target, targetTier(target, balanceLevel(brSelect.value || defaultBr))));
   const stats = document.querySelector("#calcPresetStats"); stats.replaceChildren();
   for (const [label, value] of [
-    ["弹药总重", totals.mass === null ? "未知" : `${formatQuantity(totals.mass)} kg`],
-    ["总 TNT 当量", combined?.tnt == null ? "未知" : `${formatQuantity(combined.tnt)} kg`],
-    ["整套伤害", totals.damage === null ? "未知" : `${formatInt(totals.damage)} HP`],
-  ]) stats.append(conversionText("dt", label), conversionText("dd", value));
-  document.querySelector("#calcPresetNote").textContent = preset.other ? "含其他装备；上方仅统计可计算的对地弹药。" : "";
+    [t("app.ammunitionMass", "弹药总重"), totals.mass === null ? t("app.unknown2", "未知") : `${formatQuantity(totals.mass)} kg`],
+    [t("app.totalTntEquivalent", "总 TNT 当量"), combined?.tnt == null ? t("app.unknown3", "未知") : `${formatQuantity(combined.tnt)} kg`],
+    [t("app.completeLoadoutDamage", "整套伤害"), totals.damage === null ? t("app.unknown4", "未知") : `${formatInt(totals.damage)} HP`],
+  ]) {
+    const item = conversionText("div", null);
+    item.append(conversionText("dt", label), conversionText("dd", value));
+    stats.append(item);
+  }
+  document.querySelector("#calcPresetNote").textContent = preset.other ? t("app.includesOtherEquipmentTotalsAboveCoverCalculableStrikeAmmunition", "含其他装备；上方仅统计可计算的对地弹药。") : "";
 }
 
 function choosePreset(id, focus = false) {
+  currentCleared = false;
   customPreview = null;
   selectedPresetId = id;
   const row = selectedPreset();
@@ -593,8 +605,24 @@ function choosePreset(id, focus = false) {
   if (!row.weapons.some(([weapon]) => weapon === selectedWeaponId)) selectedWeaponId = row.weapons[0]?.[0] || "";
   document.querySelector("#calcIndividualWeapons").open = false;
   renderPresets(); renderWeaponList(); refreshResult();
+  void syncCurrentPreset(row);
   if (focus) [...presetList.querySelectorAll("[data-preset-id]")].find(button => button.dataset.presetId === id)?.focus();
 }
+
+async function syncCurrentPreset(preset) {
+  const editable = await customEditor.usePreset(preset);
+  if (!editable && selectedPresetId === preset.id) refreshResult();
+}
+
+document.querySelector(".current-loadout-clear").addEventListener("click", () => {
+  const aircraft = selectedAircraft();
+  if (!aircraft) return;
+  currentCleared = true; selectedPresetId = "";
+  const preset = {id: "draft", customName: t("currentLoadout.empty", "未挂载"), weapons: [], cells: [], columns: aircraft.presets?.[0]?.columns || 1, layout: "slots", other: false};
+  customPreview = {preset, validation: {valid: true}, lockedKeys: []};
+  renderPresets(); refreshResult();
+  void customEditor.usePreset(preset);
+});
 
 function matchingAircraft() {
   const query = aircraftSearchInput.value.trim();
@@ -645,7 +673,21 @@ function selectedWeapon() {
 }
 
 function selectedTarget() {
-  return catalog.targets.find((target) => target.id === targetSelect.value) || catalog.targets[0];
+  const target = catalog.targets.find((target) => target.id === targetSelect.value) || catalog.targets[0];
+  if (target.id !== "bombing_point_planes") return { ...target, fireMultiplier: catalog.hp_fire_mult };
+  const profile = catalog.bombing_point_profiles.find(row => row.id === baseModeSelect.value);
+  return { ...target, tiers: profile.tiers, has_fire: profile.hp_fire_mult > 0,
+    fireMultiplier: profile.hp_fire_mult, label: `${target.label} · ${baseModeLabel(profile.id)}` };
+}
+
+function baseModeLabel(id) {
+  return t(`page.baseMode.${id}`);
+}
+
+function renderBaseModes() {
+  fillSelect(baseModeSelect, catalog.bombing_point_profiles, row => row.id,
+    row => baseModeLabel(row.id), baseModeSelect.value || catalog.bombing_point_profiles[0].id);
+  renderSegments(baseModeSelect, document.querySelector("#calcBaseModeSegments"));
 }
 
 function balanceLevel(brText) {
@@ -658,9 +700,7 @@ function tierFor(tiers, rank) {
 }
 
 function targetTier(target, rank) {
-  return target.kind === "bombing_point"
-    ? tierFor(catalog.bombing_point_tiers, rank)
-    : tierFor(catalog.airport_tiers, rank);
+  return tierFor(targetTiers(target), rank);
 }
 
 function targetHp(target, tier) {
@@ -672,12 +712,16 @@ function targetHp(target, tier) {
 }
 
 function targetTiers(target) {
-  return target.kind === "bombing_point" ? catalog.bombing_point_tiers : catalog.airport_tiers;
+  return target.tiers || (target.kind === "bombing_point" ? catalog.bombing_point_tiers : catalog.airport_tiers);
 }
 
-function renderBrOptions(selectedBr = defaultBr) {
+function renderBrOptions() {
   const target = selectedTarget();
-  const currentRank = balanceLevel(selectedBr);
+  document.querySelector("#calcBaseModeControl").hidden = target.id !== "bombing_point_planes";
+  const modeNote = document.querySelector("#calcBaseModeNote");
+  modeNote.hidden = target.id !== "bombing_point_planes";
+  modeNote.textContent = t(`page.baseModeHint.${baseModeSelect.value}`);
+  const currentRank = balanceLevel(selectedRoomBr);
   visibleBrBuckets = durabilityBrBuckets(catalog.br_values, targetTiers(target));
   const selectedBucket = visibleBrBuckets.find((bucket) =>
     currentRank >= bucket.startIndex && currentRank <= bucket.endIndex) || visibleBrBuckets.at(-1);
@@ -694,10 +738,10 @@ function renderBrOptions(selectedBr = defaultBr) {
   renderSegments(brSelect, document.querySelector("#calcBrSegments"));
 }
 
-const targetSegmentNames = {
-  bombing_point_planes: "战区基地", bombing_point_heli: "直升机基地",
-  airport_airfield: "机场跑道", airport_storage: "油库", airport_parking: "停机区", airport_dwelling: "生活区",
-};
+const targetSegmentNames = () => ({
+  bombing_point_planes: t("app.airBattleBase", "战区基地"), bombing_point_heli: t("app.helicopterBase", "直升机基地"),
+  airport_airfield: t("app.airfieldRunway", "机场跑道"), airport_storage: t("app.fuelStorage", "油库"), airport_parking: t("app.parkingArea", "停机区"), airport_dwelling: t("app.livingQuarters", "生活区"),
+});
 
 function renderSegments(select, track) {
   track.replaceChildren();
@@ -707,7 +751,8 @@ function renderSegments(select, track) {
     const button = document.createElement("button"); button.type = "button";
     button.setAttribute("role", "radio"); button.dataset.value = option.value;
     button.setAttribute("aria-label", option.textContent);
-    const [title, detail] = select === brSelect ? option.textContent.split(" · ") : [targetSegmentNames[option.value] || option.textContent];
+    if (select === baseModeSelect) button.title = t(`page.baseModeHint.${option.value}`);
+    const [title, detail] = select === brSelect ? option.textContent.split(" · ") : [targetSegmentNames()[option.value] || option.textContent];
     button.append(conversionText("span", title));
     if (detail) button.append(conversionText("small", detail));
     track.append(button);
@@ -731,7 +776,7 @@ function syncSegments(select, track) {
   }
 }
 
-for (const [select, trackId] of [[brSelect, "calcBrSegments"], [targetSelect, "calcTargetSegments"]]) {
+for (const [select, trackId] of [[brSelect, "calcBrSegments"], [targetSelect, "calcTargetSegments"], [baseModeSelect, "calcBaseModeSegments"]]) {
   const track = document.getElementById(trackId);
   const choose = button => {
     select.value = button.dataset.value;
@@ -757,12 +802,19 @@ function selectedBrRange() {
   return bucket.minBr === bucket.maxBr ? bucket.minBr : `${bucket.minBr}–${bucket.maxBr}`;
 }
 
-function appendStat(label, value) {
+function appendStat(label, value, key) {
+  if (key === "reward") {
+    document.querySelector("#calcRewardCard").hidden = false;
+    document.querySelector("#calcRewardCount").textContent = value;
+    document.querySelector("#calcRewardLabel").textContent = t("optimizer.coefficient", "收益系数");
+    return;
+  }
   const term = document.createElement("dt");
   term.textContent = label;
   const detail = document.createElement("dd");
   detail.textContent = value;
-  statsEl.append(term, detail);
+  const item = document.createElement("div");
+  item.append(term, detail); statsEl.append(item);
 }
 
 function selectionContent(container, title, detail) {
@@ -773,20 +825,20 @@ function selectionContent(container, title, detail) {
   container.replaceChildren(strong, span);
 }
 
-function renderAircraftSelection() {
-  customPreview = null;
+function renderAircraftSelection(resetEditor = true) {
+  if (resetEditor) { customPreview = null; currentCleared = false; }
   const aircraft = selectedAircraft();
-  customEditor.select(aircraft, new Map(catalog.weapons.map(row => [row.id, row])));
+  if (resetEditor) customEditor.select(aircraft, new Map(catalog.weapons.map(row => [row.id, row])));
   aircraftClear.setAttribute("aria-pressed", String(!aircraft));
   document.querySelector("#calcCustomCount").textContent = `（${aircraftCatalog.filter(row => row.custom).length}）`;
   if (!aircraft) {
-    selectionContent(aircraftSelection, "不限机型", "先按目标枚数计算");
+    selectionContent(aircraftSelection, t("app.anyAircraft", "不限机型"), t("app.calculateWeaponCountFirst", "先按目标枚数计算"));
     return;
   }
   selectionContent(
     aircraftSelection,
     aircraft.name,
-    `${aircraft.w.length} 种武器${aircraft.m ? ` · ${formatInt(aircraft.m)} kg` : ""}${aircraft.custom ? " · 可自定义" : ""}`,
+    t("app.weaponTypes", "{{v0}} 种武器{{v1}}{{v2}}", {v0: aircraft.w.length, v1: aircraft.m ? ` · ${formatInt(aircraft.m)} kg` : "", v2: aircraft.custom ? t("app.customLoadouts", " · 可自定义") : ""}),
   );
 }
 
@@ -795,14 +847,14 @@ function renderAircraftList() {
   if (!aircraftSearchInput.value.trim() && !onlyCustomAircraft()) {
     const empty = document.createElement("p");
     empty.className = "hangar-weapon-empty";
-    empty.textContent = "支持名称、拼音和首字母，如 taif、j10。";
+    empty.textContent = t("app.searchByNamePinyinOrInitialsEGTaif", "支持名称、拼音和首字母，如 taif、j10。");
     aircraftList.replaceChildren(empty);
     return;
   }
   if (!visibleAircraft.length) {
     const empty = document.createElement("p");
     empty.className = "hangar-weapon-empty";
-    empty.textContent = "没有找到机型，换个简称试试。";
+    empty.textContent = t("app.noAircraftFoundTryAShorterName", "没有找到机型，换个简称试试。");
     aircraftList.replaceChildren(empty);
     return;
   }
@@ -813,7 +865,7 @@ function renderAircraftList() {
     button.className = "hangar-weapon";
     button.setAttribute("role", "option");
     button.dataset.aircraftId = item.id;
-    button.title = item.name;
+    button.title = `${item.long || item.name} · ${item.countryName}`;
     const selected = item.id === selectedAircraftId;
     button.setAttribute("aria-selected", selected ? "true" : "false");
     if (selected) button.classList.add("is-selected");
@@ -822,7 +874,7 @@ function renderAircraftList() {
     name.textContent = item.name;
     const detail = document.createElement("span");
     detail.className = "hangar-weapon-kind";
-    detail.textContent = `${item.w.length} 种${item.custom ? " · 自定义" : ""}`;
+    detail.textContent = `${item.countryName} · ${t("app.types", "{{v0}} 种{{v1}}", {v0: item.w.length, v1: item.custom ? t("app.custom", " · 自定义") : ""})}`;
     button.append(name, detail);
     fragment.append(button);
   }
@@ -832,14 +884,14 @@ function renderAircraftList() {
 function renderWeaponSelection() {
   const weapon = selectedWeapon();
   if (!weapon) {
-    selectionContent(weaponSelection, "没有可用武器", "调整机型、种类或搜索词");
+    selectionContent(weaponSelection, t("app.noWeaponsAvailable", "没有可用武器"), t("app.changeTheAircraftTypeOrSearchTerms", "调整机型、种类或搜索词"));
     return;
   }
   const capacity = currentWeaponCapacity(selectedAircraft(), weapon.id);
   selectionContent(
     weaponSelection,
     weaponName(weapon),
-    `${KIND_LABELS[weapon.kind] || weapon.kind}${capacity ? ` · ${selectedPreset() ? "当前预设" : "单次最多"} ${capacity} 枚` : ""}`,
+    `${KIND_LABELS[weapon.kind] || weapon.kind}${capacity ? t("app.ammunitionQuantity", " · {{v0}} {{v1}} 枚", {v0: selectedPreset() ? t("app.currentPreset", "当前预设") : t("app.maximumPerSortie", "单次最多"), v1: capacity}) : ""}`,
   );
 }
 
@@ -847,7 +899,7 @@ function renderWeaponList() {
   if (!shouldShowWeaponResults()) {
     const empty = document.createElement("p");
     empty.className = "hangar-weapon-empty";
-    empty.textContent = "输入武器名，或先选机型 / 种类。";
+    empty.textContent = t("app.enterAWeaponNameOrSelectAnAircraftType", "输入武器名，或先选机型 / 种类。");
     weaponList.replaceChildren(empty);
     renderWeaponSelection();
     return;
@@ -855,7 +907,7 @@ function renderWeaponList() {
   if (!visibleWeapons.length) {
     const empty = document.createElement("p");
     empty.className = "hangar-weapon-empty";
-    empty.textContent = "当前筛选下没有可用武器。";
+    empty.textContent = t("app.noWeaponsMatchTheCurrentFilters", "当前筛选下没有可用武器。");
     weaponList.replaceChildren(empty);
     renderWeaponSelection();
     return;
@@ -877,7 +929,7 @@ function renderWeaponList() {
     const detail = document.createElement("span");
     detail.className = "hangar-weapon-kind";
     const capacity = aircraftWeaponCapacity(aircraft, weapon.id);
-    detail.textContent = capacity ? `${capacity} 枚/次` : KIND_LABELS[weapon.kind] || weapon.kind;
+    detail.textContent = capacity ? t("app.sortie", "{{v0}} 枚/次", {v0: capacity}) : KIND_LABELS[weapon.kind] || weapon.kind;
     button.append(name, detail);
     fragment.append(button);
   }
@@ -901,15 +953,15 @@ function renderRepairNote(target, tier) {
   repairNote.hidden = !airport;
   if (!airport || !tier) return;
   if (!airportRepairVisit({ rule: catalog.airport_repair, tier, dwellingPercent: 50 })) {
-    repairSummary.textContent = "当前参数没有已核对的修复规则；投弹枚数仍按不计回血计算。";
+    repairSummary.textContent = t("app.noVerifiedRepairRuleForTheseParametersWeaponCounts", "当前参数没有已核对的修复规则；投弹枚数仍按不计回血计算。");
     repairDetail.textContent = "";
     return;
   }
-  repairSummary.textContent = "投弹结果不计回血，连续攻击请留余量。";
+  repairSummary.textContent = t("app.resultsExcludeRegenerationAllowAMarginForRepeatedAttacks", "投弹结果不计回血，连续攻击请留余量。");
   const base = Number(tier.repair_base_hp || 0);
   repairDetail.textContent = base > 0
-    ? `本档每次修复 +${formatInt(base / 10)}～${formatInt(base)} HP。`
-    : "跑道与其他模块每轮加值相同。";
+    ? t("app.thisBracketRestoresHpPerRepairVisit", "本档每次修复 +{{v0}}～{{v1}} HP。", {v0: formatInt(base / 10), v1: formatInt(base)})
+    : t("app.theRunwayAndOtherModulesReceiveTheSameIncrement", "跑道与其他模块每轮加值相同。");
 }
 
 function refreshAirportRepair() {
@@ -926,22 +978,22 @@ function refreshAirportRepair() {
     item.append(swatch, label); paletteContainer.append(item);
   }
   document.querySelector("#airportPaletteSource").textContent = palette
-    ? "颜色表示剩余耐久；图中灰条仅示意位置。"
-    : "当前没有已核对的颜色规则。";
+    ? t("app.colorsIndicateRemainingHpGrayBarsOnlyShowPositions", "颜色表示剩余耐久；图中灰条仅示意位置。")
+    : t("app.noVerifiedColorRulesAvailable", "当前没有已核对的颜色规则。");
   const tier = tierFor(catalog.airport_tiers, balanceLevel(brSelect.value || defaultBr));
   const dwellingPercent = Number(repairPercent.value);
   for (const button of document.querySelectorAll("[data-dwelling]")) button.setAttribute("aria-pressed", String(Number(button.dataset.dwelling) === dwellingPercent));
   const input = { rule: catalog.airport_repair, tier, dwellingPercent };
   const result = airportRepairVisit(input);
   document.querySelector("#repairPercentLabel").textContent = `${dwellingPercent}%`;
-  document.querySelector("#repairResult").textContent = !result ? "当前参数没有已核对的修复规则。" : result.state === "intact"
-    ? "生活区完好 · 当前参考规则不触发修复。"
-    : result.state === "destroyed" ? "生活区摧毁 · 当前参考规则停止回血。"
-    : result.state === "below_threshold" ? "生活区不足 1% · 未达到参考规则的修复门槛。"
-    : `每次修复：四模块各 +${result.gain.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} HP。`;
+  document.querySelector("#repairResult").textContent = !result ? t("app.noVerifiedRepairRuleForTheseParameters", "当前参数没有已核对的修复规则。") : result.state === "intact"
+    ? t("app.livingQuartersIntactTheReferenceRuleDoesNotTrigger", "生活区完好 · 当前参考规则不触发修复。")
+    : result.state === "destroyed" ? t("app.livingQuartersDestroyedTheReferenceRuleStopsRegeneration", "生活区摧毁 · 当前参考规则停止回血。")
+    : result.state === "below_threshold" ? t("app.livingQuartersBelow1BelowTheReferenceRepairThreshold", "生活区不足 1% · 未达到参考规则的修复门槛。")
+    : t("app.eachRepairVisitHpToEachOfFourModules", "每次修复：四模块各 +{{v0}} HP。", {v0: result.gain.toLocaleString(numberLocale(), { maximumFractionDigits: 2 })});
   document.querySelector("#repairFormula").textContent = result
-    ? `D = 生活区当前 HP；M = 生活区满血 ${formatInt(result.maximum)} HP；B = 本档回血基数 ${formatInt(result.base)} HP。先计算 q = 截断(100 × D ÷ M)，仅当 0 < q < 100：每次加值 = B ÷ min(M ÷ (D + 1), 10)；否则为 0。原生比较参考：${catalog.airport_repair.native_reference?.client_version || "未知版本"}；不代表完整服务器修复。`
-    : "缺少规则时不套用历史公式。";
+    ? t("app.dCurrentLivingQuartersHpMFullHpB", "D = 生活区当前 HP；M = 生活区满血 {{v0}} HP；B = 本档回血基数 {{v1}} HP。先计算 q = 截断(100 × D ÷ M)，仅当 0 < q < 100：每次加值 = B ÷ min(M ÷ (D + 1), 10)；否则为 0。原生比较参考：{{v2}}；不代表完整服务器修复。", {v0: formatInt(result.maximum), v1: formatInt(result.base), v2: catalog.airport_repair.native_reference?.client_version || t("app.unknownVersion2", "未知版本")})
+    : t("app.historicalFormulasAreNotSubstitutedForMissingRules", "缺少规则时不套用历史公式。");
   renderAirportRepairChart(document.querySelector("#repairChart"), result ? {
     points: Array.from({ length: 99 }, (_, index) => ({ percent: index + 1, gain: airportRepairVisit({ ...input, dwellingPercent: index + 1 }).gain })),
     result, percent: dwellingPercent,
@@ -958,7 +1010,7 @@ window.addEventListener("resize", refreshAirportRepair);
 function setHudUnknown(context, hint) {
   hudContext.textContent = context;
   destroyCountEl.textContent = "—";
-  destroyLabelEl.textContent = "无法估算";
+  destroyLabelEl.textContent = t("app.estimateUnavailable", "无法估算");
   sortieCountEl.textContent = "—";
   fireLineEl.textContent = "";
   statsEl.replaceChildren();
@@ -970,12 +1022,12 @@ function renderComparison(target, tier) {
   if (!compareRows) return;
   const aircraft = selectedAircraft();
   const hp = targetHp(target, tier);
-  const threshold = target.has_fire ? hp * (1 - catalog.hp_fire_mult) : hp;
+  const threshold = target.has_fire ? hp * (1 - target.fireMultiplier) : hp;
   const rows = compareLoadouts({ aircraft, weapons: catalog.weapons, hp: threshold });
   compareTable.hidden = rows.length === 0;
   compareContext.textContent = aircraft
-    ? `${aircraft.name} · ${target.label} · BR ${selectedBrRange()} · ${rows.length} 种有伤害数据的挂载`
-    : "先在上方选择机型，即可对比它的全部可用挂载。";
+    ? t("app.brLoadoutTypesWithDamageData", "{{v0}} · {{v1}} · BR {{v2}} · {{v3}} 种有伤害数据的挂载", {v0: aircraft.name, v1: target.label, v2: selectedBrRange(), v3: rows.length})
+    : t("app.selectAnAircraftAboveToCompareItsAvailableLoadouts", "先在上方选择机型，即可对比它的全部可用挂载。");
   const fragment = document.createDocumentFragment();
   for (const row of rows) {
     const tr = document.createElement("tr");
@@ -985,10 +1037,10 @@ function renderComparison(target, tier) {
     button.type = "button";
     button.dataset.weaponId = row.weapon.id;
     button.textContent = weaponName(row.weapon);
-    button.title = "选择此武器并查看详细计算";
+    button.title = t("app.selectThisWeaponAndViewTheCalculation", "选择此武器并查看详细计算");
     weaponCell.append(button);
     tr.append(weaponCell);
-    for (const value of [row.required, row.capacity, `${row.targetsPerLoad}${row.remaining ? `（余 ${row.remaining} 枚）` : ""}`, row.sorties, row.massKg === null ? "未知" : `${formatInt(row.massKg)} kg`]) {
+    for (const value of [row.required, row.capacity, `${row.targetsPerLoad}${row.remaining ? t("app.remaining", "（余 {{v0}} 枚）", {v0: row.remaining}) : ""}`, row.sorties, row.massKg === null ? t("app.unknown5", "未知") : `${formatInt(row.massKg)} kg`]) {
       const td = document.createElement("td");
       td.textContent = String(value);
       tr.append(td);
@@ -1013,12 +1065,12 @@ function refreshFuel() {
   fuelResult.dataset.deficit = String(plan?.marginKg !== null && plan?.marginKg < 0);
   const note = document.createElement("p");
   if (!plan) {
-    note.textContent = "填入有效的油耗、地速、距离与储备；空白输入不会当作零。当前燃油可留空。";
+    note.textContent = t("app.enterValidFuelBurnGroundSpeedDistanceAndReserve", "填入有效的油耗、地速、距离与储备；空白输入不会当作零。当前燃油可留空。");
     fuelResult.append(note);
     return;
   }
   const dl = document.createElement("dl");
-  for (const [label, value] of [["预计航程时间", `${plan.tripMin.toFixed(1)} min`], ["航程耗油", `${formatInt(plan.tripKg)} kg`], ["到达后储备", `${formatInt(plan.reserveKg)} kg`], ["合计所需", `${formatInt(plan.requiredKg)} kg`]]) {
+  for (const [label, value] of [[t("app.estimatedFlightTime", "预计航程时间"), `${plan.tripMin.toFixed(1)} min`], [t("app.enRouteFuel", "航程耗油"), `${formatInt(plan.tripKg)} kg`], [t("app.arrivalReserve", "到达后储备"), `${formatInt(plan.reserveKg)} kg`], [t("app.totalRequired", "合计所需"), `${formatInt(plan.requiredKg)} kg`]]) {
     const group = document.createElement("div");
     const dt = document.createElement("dt");
     const dd = document.createElement("dd");
@@ -1028,13 +1080,14 @@ function refreshFuel() {
     dl.append(group);
   }
   note.textContent = plan.marginKg === null
-    ? "补充当前燃油可查看余量。以上按所填油耗和地速保持不变估算。"
-    : `扣除航程和储备后${plan.marginKg < 0 ? "缺少" : "剩余"} ${formatInt(Math.abs(plan.marginKg))} kg。仅按所填工况估算，油门、天气与航线改变后需要重算。`;
+    ? t("app.enterCurrentFuelToSeeTheMarginAssumesConstant", "补充当前燃油可查看余量。以上按所填油耗和地速保持不变估算。")
+    : t("app.afterFlightAndReserveKgBasedOnTheEntered", "扣除航程和储备后{{v0}} {{v1}} kg。仅按所填工况估算，油门、天气与航线改变后需要重算。", {v0: plan.marginKg < 0 ? t("app.shortfall", "缺少") : t("app.remaining2", "剩余"), v1: formatInt(Math.abs(plan.marginKg))});
   fuelResult.append(dl, note);
 }
 
 function refreshResult() {
   if (!catalog) return;
+  document.querySelector("#calcRewardCard").hidden = true;
   const preset = customPreview?.preset || selectedPreset();
   renderPresetDetail(preset);
   refreshAirportRepair();
@@ -1044,95 +1097,107 @@ function refreshResult() {
   const br = brSelect.value || defaultBr;
   const rank = balanceLevel(br);
   const tier = targetTier(target, rank);
+  const targetThreshold = document.querySelector("#calcTargetThreshold");
+  const zoneHp = targetHp(target, tier);
+  if (target.has_fire && zoneHp > 0) {
+    const remaining = zoneHp * target.fireMultiplier, damage = zoneHp * (1 - target.fireMultiplier);
+    targetThreshold.dataset.burnoutHp = String(remaining);
+    targetThreshold.dataset.requiredDamage = String(damage);
+    targetThreshold.textContent = t("app.baseBurnoutHp", "自毁剩余 {{remaining}} HP · 需伤害 {{damage}} HP", {remaining: formatInt(remaining), damage: formatInt(damage)});
+  } else {
+    delete targetThreshold.dataset.burnoutHp; delete targetThreshold.dataset.requiredDamage;
+    targetThreshold.textContent = t("page.startingFromFullHp", "按满血计算");
+  }
   renderRepairNote(target, tier);
   renderComparison(target, tier);
   const aircraft = selectedAircraft();
   const brRange = selectedBrRange();
+  document.querySelector("#calcApplicability").textContent = target.id === "bombing_point_planes" ? `${t(`page.baseModeHint.${baseModeSelect.value}`)} ${t("page.allHitsAssumption", "伤害结果假设全部命中，收益系数不是实际银狮或研发点。")}` : t("page.moduleScope", "当前使用 EC 机场／直升机目标参数；机场模块按满血且不计回血估算。伤害结果假设全部命中。");
   const context = aircraft
     ? `${target.label} · BR ${brRange} · ${aircraft.name}`
     : `${target.label} · BR ${brRange}`;
   combination.update({ weapons: new Map(catalog.weapons.map(row => [row.id, row])),
-    hp: targetHp(target, tier), fireHp: target.has_fire ? targetHp(target, tier) * (1 - catalog.hp_fire_mult) : null,
+    hp: targetHp(target, tier), fireHp: target.has_fire ? targetHp(target, tier) * (1 - target.fireMultiplier) : null,
     targetLabel: context, preset });
   customEditor.updateHp(targetHp(target, tier));
   optimizer.update({aircraft, weapons: new Map(catalog.weapons.map(row => [row.id, row])), reward: catalog.reward,
-    threshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - catalog.hp_fire_mult) : null,
-    lockedKeys: preset?.customName ? preset.keys || [] : []});
+    threshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : null,
+    currentStores: preset?.weapons || [], lockedKeys: customPreview?.lockedKeys ?? (preset?.customName ? preset.keys || [] : [])});
   if (preset && (preset.customName || preset.weapons.length > 1)) {
     const hp = targetHp(target, tier);
-    const { damage } = presetTotals(preset, new Map(catalog.weapons.map(row => [row.id, row])));
+    const { damage, rewardDamage } = presetTotals(preset, new Map(catalog.weapons.map(row => [row.id, row])));
     if (!(hp > 0) || !(damage > 0)) {
-      setHudUnknown(context, !preset.weapons.length ? "当前挂载没有可计算的对地弹药。" : "当前挂载或目标缺少伤害数据，无法估算整套轮次。");
+      setHudUnknown(context, !preset.weapons.length ? t("app.thisLoadoutHasNoCalculableStrikeAmmunition", "当前挂载没有可计算的对地弹药。") : t("app.loadoutOrTargetDamageDataIsMissingCompleteLoad", "当前挂载或目标缺少伤害数据，无法估算整套轮次。"));
       return;
     }
     const fullRounds = requiredCount(hp, damage);
-    const rounds = requiredCount(target.has_fire ? hp * (1 - catalog.hp_fire_mult) : hp, damage);
+    const rounds = requiredCount(target.has_fire ? hp * (1 - target.fireMultiplier) : hp, damage);
     hudContext.textContent = context;
     destroyCountEl.textContent = String(rounds);
-    destroyLabelEl.textContent = rounds < fullRounds ? "战区掉血自毁（轮）" : "满血摧毁（轮）";
+    destroyLabelEl.textContent = rounds < fullRounds ? t("app.burnOutThresholdLoads", "轮整套挂载全部命中，可触发战区自毁") : t("app.directDestructionLoads", "轮整套挂载全部命中，可直接摧毁目标");
     sortieCountEl.textContent = String(rounds);
-    fireLineEl.textContent = rounds < fullRounds ? `满血直接摧毁需${fullRounds}轮` : "每轮投放整套挂载";
+    fireLineEl.textContent = rounds < fullRounds ? t("app.completeLoadsForDirectDestruction", "满血直接摧毁需{{v0}}轮", {v0: fullRounds}) : t("app.eachRoundReleasesOneCompleteLoadout", "每轮投放整套挂载");
     statsEl.replaceChildren();
-    appendStat("目标耐久", formatInt(hp));
-    const reward = rewardUi(catalog.reward, damage);
-    if (reward !== null) appendStat("整套收益系数", reward.toFixed(1));
+    appendStat(t("app.targetHp", "目标耐久"), formatInt(hp));
+    const reward = rewardUi(catalog.reward, rewardDamage);
+    if (reward !== null) appendStat(t("app.loadoutRewardCoefficient", "整套收益系数"), reward.toFixed(1), "reward");
     hintEl.textContent = [
-      customPreview && !customPreview.validation.valid ? "当前配置未通过挂载限制校验；此处仅预览伤害。" : "",
-      target.kind === "airport_module" ? "未计机场回血，实战可能需要更多架次。" : "",
+      customPreview && !customPreview.validation.valid ? t("app.thisConfigurationFailsLoadoutRestrictionsDamagePreviewOnly", "当前配置未通过挂载限制校验；此处仅预览伤害。") : "",
+      target.kind === "airport_module" ? t("app.excludesAirfieldRegenerationMoreSortiesMayBeNeeded", "未计机场回血，实战可能需要更多架次。") : "",
     ].filter(Boolean).join(" ");
     return;
   }
   if (!weapon || !target) {
-    setHudUnknown(context, "调整机型、种类或搜索词。");
+    setHudUnknown(context, t("app.changeTheAircraftTypeOrSearchTerms2", "调整机型、种类或搜索词。"));
     return;
   }
   const hp = targetHp(target, tier);
   if (!(hp > 0)) {
-    setHudUnknown(context, "这一档没有耐久数据。");
+    setHudUnknown(context, t("app.noHpDataForThisBracket", "这一档没有耐久数据。"));
     return;
   }
   const damage = weaponDamage(weapon);
   if (!(damage > 0)) {
-    setHudUnknown(context, `${weaponName(weapon)} 暂时没有可用的任务伤害数据。`);
+    setHudUnknown(context, t("app.missionDamageIsCurrentlyUnavailableFor", "{{v0}} 暂时没有可用的任务伤害数据。", {v0: weaponName(weapon)}));
     return;
   }
 
   const destroyCount = requiredCount(hp, damage);
   const fireCount = target.has_fire
-    ? requiredCount(hp * (1 - catalog.hp_fire_mult), damage)
+    ? requiredCount(hp * (1 - target.fireMultiplier), damage)
     : null;
   const practicalCount = fireCount === null ? destroyCount : Math.min(destroyCount, fireCount);
   hudContext.textContent = context;
   destroyCountEl.textContent = String(practicalCount);
   destroyLabelEl.textContent = target.kind === "airport_module"
-    ? "有效命中枚数（不计回血）"
-    : fireCount < destroyCount ? "战区掉血自毁" : "满血摧毁";
+    ? t("app.effectiveHitsExcludingRegeneration", "枚有效命中可摧毁机场模块（未计回血）")
+    : fireCount !== null && fireCount < destroyCount ? t("app.baseBurnOut", "枚全部命中，可触发战区自毁") : t("app.directDestruction", "枚全部命中，可直接摧毁目标");
   fireLineEl.textContent = fireCount !== null && fireCount < destroyCount
-    ? `满血直接摧毁需${destroyCount}枚`
+    ? t("app.weaponsForDirectDestructionFromFullHp", "满血直接摧毁需{{v0}}枚", {v0: destroyCount})
     : "";
   statsEl.replaceChildren();
-  if (!preset) appendStat("武器", weaponName(weapon));
-  appendStat("每枚伤害", formatInt(damage));
-  appendStat("目标耐久", formatInt(hp));
+  if (!preset) appendStat(t("app.weapon", "武器"), weaponName(weapon));
+  appendStat(t("app.damagePerWeapon", "每枚伤害"), formatInt(damage));
+  appendStat(t("app.targetHp2", "目标耐久"), formatInt(hp));
 
   const capacity = currentWeaponCapacity(aircraft, weapon.id);
   const plan = aircraft && capacity
-    ? sortiePlan({ required: practicalCount, capacity, damage, reward: catalog.reward })
+    ? sortiePlan({ required: practicalCount, capacity, damage, rewardDamage: weapon.rewardDmg ?? damage, reward: catalog.reward })
     : null;
   if (plan) {
     sortieCountEl.textContent = String(plan.sorties);
-    if (!preset) appendStat("单次上限", `${plan.capacity} 枚`);
-    if (plan.sorties > 1) appendStat("末次所需", `${plan.lastSortieCount} 枚`);
-    if (plan.fullLoadReward !== null) appendStat("满载收益系数", plan.fullLoadReward.toFixed(1));
+    if (!preset) appendStat(t("app.maximumPerSortie2", "单次上限"), t("app.weapons", "{{v0}} 枚", {v0: plan.capacity}));
+    if (plan.sorties > 1) appendStat(t("app.neededOnFinalSortie", "末次所需"), t("app.weapons2", "{{v0}} 枚", {v0: plan.lastSortieCount}));
+    if (plan.fullLoadReward !== null) appendStat(t("app.fullLoadRewardCoefficient", "满载收益系数"), plan.fullLoadReward.toFixed(1), "reward");
     hintEl.textContent = target.kind === "airport_module"
-      ? "机场会在投弹间隙回血，实战可能需要更多架次。"
+      ? t("app.airfieldsRegenerateBetweenDropsMoreSortiesMayBeNeeded", "机场会在投弹间隙回血，实战可能需要更多架次。")
       : "";
   } else {
     sortieCountEl.textContent = "—";
-    appendStat("机型", "未选择");
+    appendStat(t("app.aircraft", "机型"), t("app.notSelected", "未选择"));
     hintEl.textContent = target.kind === "airport_module"
-      ? "选择机型后显示挂载上限和理想架次；枚数指有效命中，未计防空拦截、脱靶与机场回血。"
-      : "选择机型后显示挂载上限、满载收益系数和架次。";
+      ? t("app.selectAnAircraftForLoadCapacityAndIdealSorties", "选择机型后显示挂载上限和理想架次；枚数指有效命中，未计防空拦截、脱靶与机场回血。")
+      : t("app.selectAnAircraftForLoadCapacityFullLoadReward", "选择机型后显示挂载上限、满载收益系数和架次。");
   }
 }
 
@@ -1155,14 +1220,18 @@ async function boot() {
     defenseCatalogVersion = source.version;
     catalog = catalogBody;
     rewardsCatalog = { ...rewardsBody, vehicles: rewardsBody.vehicles.map(readableVehicle) };
-    catalog.weapons = weaponsBody.weapons || [];
-    aircraftCatalog = (aircraftBody.aircraft || []).map(readableVehicle).filter((item) =>
+    catalog.weapons = (weaponsBody.weapons || []).map(row => ({...row,
+      get name() { return localizeName(row.name, row.name_en); },
+      get short() { return localizeName(row.short, row.short_en); }}));
+    catalog.targets = catalog.targets.map(row => ({...row, get label() { return localizeName(row.label); }}));
+    aircraftCatalog = (aircraftBody.aircraft || []).filter(item => !item.id.endsWith("_missile_test") || !aircraftBody.aircraft.some(row => row.id === item.id.replace(/_missile_test$/, ""))).map(readableVehicle).filter((item) =>
       Array.isArray(item.w) && Array.isArray(item.n) && item.w.length === item.n.length &&
       item.n.every((count) => Number.isInteger(count) && count > 0));
-    if (sourceEl) sourceEl.textContent = `v${source.version} · ${aircraftCatalog.length.toLocaleString("zh-CN")} 机型 · ${catalog.weapons.length} 武器`;
+    if (sourceEl) sourceEl.textContent = t("app.vAircraftWeapons", "v{{v0}} · {{v1}} 机型 · {{v2}} 武器", {v0: source.version, v1: aircraftCatalog.length.toLocaleString(numberLocale()), v2: catalog.weapons.length});
     fillSelect(targetSelect, catalog.targets, (target) => target.id, (target) => target.label, catalog.targets[0].id);
     renderSegments(targetSelect, document.querySelector("#calcTargetSegments"));
-    renderBrOptions(defaultBr);
+    renderBaseModes();
+    renderBrOptions();
     selectedAircraftId = aircraftCatalog.find(item => item.id === "pe-8_m82")?.id || "";
     selectedPresetId = selectedAircraft()?.presets?.[0]?.id || "";
     document.querySelector("#calcIndividualWeapons").open = !selectedPresetId;
@@ -1177,14 +1246,15 @@ async function boot() {
     renderRewardVehicles(); loadRewardVehicle(); renderRewardReference();
     await loadAircraftPresets();
     await nextFrame();
+    if (location.origin === "https://bomana.ruikang.wang") void reportDailyActive("Calculator");
   } catch {
     catalog = null;
     rewardsCatalog = null;
-    if (rewardResult) rewardResult.replaceChildren(conversionText("p", "收益数据加载失败或参数来源不一致，请刷新后重试。"));
-    renderRewardChart(document.querySelector("#rewardChart"), null, "收益目录未就绪，暂无曲线。");
+    if (rewardResult) rewardResult.replaceChildren(conversionText("p", t("app.rewardDataFailedToLoadOrItsSourceIs", "收益数据加载失败或参数来源不一致，请刷新后重试。")));
+    renderRewardChart(document.querySelector("#rewardChart"), null, t("app.rewardCatalogUnavailableNoCurveToDisplay", "收益目录未就绪，暂无曲线。"));
     document.querySelector("#rewardFormula").replaceChildren();
-    if (sourceEl) sourceEl.textContent = "数据未就绪：目录加载失败或来源版本不一致，请刷新后重试。";
-    setHudUnknown("目录加载失败", "未使用缺失或混合版本的数据，刷新页面后再试。");
+    if (sourceEl) sourceEl.textContent = t("app.dataUnavailableCatalogLoadingFailedOrSourceVersionsDisagree", "数据未就绪：目录加载失败或来源版本不一致，请刷新后重试。");
+    setHudUnknown(t("app.catalogFailedToLoad", "目录加载失败"), t("app.missingOrMixedVersionDataWasNotUsedRefresh", "未使用缺失或混合版本的数据，刷新页面后再试。"));
   }
 }
 
@@ -1256,11 +1326,20 @@ weaponList.addEventListener("keydown", (event) => {
   refreshResult();
 });
 
-brSelect.addEventListener("change", () => { syncSegments(brSelect, document.querySelector("#calcBrSegments")); refreshResult(); });
+brSelect.addEventListener("change", () => {
+  selectedRoomBr = brSelect.value;
+  syncSegments(brSelect, document.querySelector("#calcBrSegments")); refreshResult();
+});
+baseModeSelect.addEventListener("change", () => {
+  if (!catalog) return;
+  syncSegments(baseModeSelect, document.querySelector("#calcBaseModeSegments"));
+  renderBrOptions();
+  refreshResult();
+});
 targetSelect.addEventListener("change", () => {
   if (!catalog) return;
   syncSegments(targetSelect, document.querySelector("#calcTargetSegments"));
-  renderBrOptions(brSelect.value || defaultBr);
+  renderBrOptions();
   refreshResult();
 });
 kindSelect.addEventListener("change", refreshWeapons);
@@ -1286,6 +1365,21 @@ presetList.addEventListener("keydown", event => {
 });
 document.querySelector("#calcForm").addEventListener("submit", event => event.preventDefault());
 
+await initializeLanguage();
+document.addEventListener("calculator:language", () => {
+  if (!catalog) return;
+  const aircraft = selectedAircraft();
+  aircraftSearchInput.value = aircraft?.name || aircraftSearchInput.value;
+  fillSelect(targetSelect, catalog.targets, target => target.id, target => target.label, targetSelect.value);
+  renderSegments(targetSelect, document.querySelector("#calcTargetSegments"));
+  renderBaseModes();
+  renderBrOptions();
+  renderAircraftSelection(false); renderAircraftList(); renderPresets(); renderWeaponList(); refreshResult();
+  sourceEl.textContent = t("app.vAircraftWeapons", "v{{v0}} · {{v1}} 机型 · {{v2}} 武器", {v0: catalog.source.version, v1: aircraftCatalog.length.toLocaleString(numberLocale()), v2: catalog.weapons.length});
+  renderRewardVehicles(); refreshReward(); renderRewardReference(); refreshFuel();
+  for (const side of chargeSides) { renderChargeWeapons(side); refreshChargeSource(side); }
+  refreshConversion();
+});
 bindConversion();
 bindRewards();
 initAirCalculator();

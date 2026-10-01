@@ -1,3 +1,4 @@
+import { t } from "./i18n.mjs";
 // Short-horizon, constant-speed encounter model. Radar observations are an
 // explicit input, never inferred from a 90-degree aspect or from chaff counts.
 const G = 9.81, RAD = Math.PI / 180;
@@ -89,10 +90,10 @@ export function validateEncounter(input, weapon) {
     flightPathDeg: [-45, 45], targetG: [1, 12], delayS: [0, 15],
     observationGapS: [0, 10], missileAgeS: [0, 120] };
   if (Object.entries(bounds).some(([key, [lo, hi]]) => !Number.isFinite(input[key]) || input[key] < lo || input[key] > hi)) {
-    return "请在标示范围内填写完整数值。";
+    return t("air-model.completeAllValuesWithinTheIndicatedRanges", "请在标示范围内填写完整数值。");
   }
-  if (Math.abs(input.targetAltitudeM - input.missileAltitudeM) >= input.rangeM) return "斜距必须大于双方高度差。";
-  if (weapon && input.missileAgeS >= weapon.lifetimeS) return `已飞行时间须小于本弹配置寿命 ${weapon.lifetimeS} s。`;
+  if (Math.abs(input.targetAltitudeM - input.missileAltitudeM) >= input.rangeM) return t("air-model.slantRangeMustExceedTheAltitudeDifference", "斜距必须大于双方高度差。");
+  if (weapon && input.missileAgeS >= weapon.lifetimeS) return t("air-model.elapsedFlightTimeMustBeBelowTheMissileS", "已飞行时间须小于本弹配置寿命 {{v0}} s。", {v0: weapon.lifetimeS});
   return null;
 }
 

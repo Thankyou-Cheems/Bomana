@@ -1,4 +1,4 @@
-import { reportDailyActive } from "./anonymous-daily-active";
+import { reportAppInitialized } from "./anonymous-daily-active";
 
 export async function authorizeMobileStandard(start: () => Promise<unknown>): Promise<void> {
   const mobileModule = await import("./mobile-pairing");
@@ -53,7 +53,7 @@ export async function authorizeMobileSession(
       await renderMobileBridgeConnectionGate(() => mobileModule.connectMobileBridge(), error, sameOriginPairing);
     }
     await start();
-    void reportDailyActive(edition);
+    void reportAppInitialized(edition, "mobile");
   } catch (error) {
     renderMobilePairingGate(error instanceof Error ? error.message : "手机配对不可用", edition);
   }

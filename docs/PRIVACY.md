@@ -1,36 +1,49 @@
 # Bomana 隐私说明
 
-**最后更新：2026-08-31**
+**最后更新：2026-09-28**
 
 Bomana App 通过 Web 运行；本机 Bridge 只转发官方 War Thunder ExtUI 并管理签名地形缓存。Bridge 不保存 Enhanced、账号授权、计算逻辑或统计身份，也不上报日活。
 
 ## 匿名日活
 
-当 Lite、Standard 或已授权 Enhanced 成功初始化后，Web 会以尽力而为方式向
-`https://bomanaupdate.ruikang.wang/api/v1/telemetry/dau`
+当 Lite、Standard、已授权 Enhanced 或在线计算器成功初始化后，Web 会以尽力而为方式向
+`https://bomanaupdate.ruikang.wang/api/v2/metrics/events`
 发送一次匿名日活。一次请求严格只有：
 
 ```json
 {
-  "schema_version": 1,
-  "install_day_token": "64 位小写十六进制 HMAC",
+  "type": "dau",
+  "day": "2026-09-28",
+  "dailyToken": "64 位小写十六进制 HMAC",
   "channel": "Lite"
 }
 ```
 
 - Web 在当前浏览器中生成随机 32 字节安装秘密；秘密永不上传。
-- `install_day_token` 是安装秘密对当前 UTC 日期的 HMAC-SHA-256，因此每天变化，无法跨日关联。
-- 三个 Edition 共用同一秘密和每日令牌；同一浏览器安装每天总体只计一次，服务端保留当天首次接受的 Edition 供聚合拆分。
+- `dailyToken` 是安装秘密对当前 UTC 日期的 HMAC-SHA-256，因此每天变化；上报不携带可跨日关联的安装 ID。
+- App 与计算器共用同一秘密和每日令牌；同一浏览器安装每天总体只计一次。App 的三个 Edition 仍共用一次每日上报，计算器以 `Calculator` 渠道每天单独上报至多一次。
+- `Calculator` 渠道统计计算器自身日活；同一天使用 App 和计算器会同时进入各自渠道，总日活仍按每日令牌去重，因此渠道日活不能直接相加。接入前的历史渠道数据仍保留原先首次接受的 Edition 归属。
 - 上报不包含 CheemsPay 账号、权益、IP 字段、硬件标识、版本、8111、地图、飞机、武器、投弹结果、文件路径或 Bridge 数据。
 - HTTPS/CDN 基础设施仍会看到普通连接元数据；匿名 DAU 数据表不会保存请求 IP 或 User-Agent。
 - 网络或存储失败会静默处理，不阻塞 App，也不会转投旧版事件接口。
 
-Launcher 在“技术详情 → 匿名日活”中以普通说明展示该默认策略，不要求用户理解或管理低层统计开关。
+Launcher 在“技术详情 → 匿名统计”中展示该默认策略。
 
-匿名日活的原始每日去重令牌滚动保留 30 个 UTC 日；每日、每 Edition 的聚合数量长期保留。聚合数据公开于：
+匿名日活的原始每日及渠道去重令牌滚动保留 30 个 UTC 日；每日、每渠道的聚合数量长期保留。聚合数据公开于：
 
-- `https://bomanaupdate.ruikang.wang/api/v1/stats/daily`
-- `https://bomanaupdate.ruikang.wang/api/v1/stats/daily/list`
+- `https://bomanaupdate.ruikang.wang/api/v2/metrics/daily`
+- `https://bomanaupdate.ruikang.wang/api/v2/metrics/history?start=2026-09-01&end=2026-09-28`
+- `https://bomanaupdate.ruikang.wang/api/v2/metrics/daily?channel=Calculator`（计算器日活）
+
+计算器只在正式域名成功加载后上报；本地预览不上报，统计失败不影响计算功能。
+
+## App 成功启动次数
+
+App 每次成功初始化另发一次 `app_start`：仅包含本次启动的随机 128 位 `eventId`、UTC 发生时间 `occurredAt`、Edition `channel` 和 `web` / `mobile` 展示端 `surface`。刷新或重新打开计为新启动；Launcher 浏览、计算器、初始化失败、Bridge 重连与组件重建不计。事件 ID 不包含每日安装令牌，不用于连接多次启动或跨产品识别用户。
+
+网络失败最多重试一次，并复用同一事件 ID；服务原子去重，按发生时间的 UTC 日期计数，仅接受最近 24 小时和最多超前五分钟的事件。原始事件及去重 ID 保留 30 个 UTC 日，日汇总长期保留。没有无限离线补报队列。与匿名日活共用现有本地禁用设置，开发预览不上报。
+
+此指标从新 App 版本上线开始采集。旧 Bomana 数据仅归档；新接口对未采集的历史启动次数返回 `null`，不会用日活补造启动历史。统计由独立 SiguaAnalytics 服务处理，Bomana 表不保存 IP 或 User-Agent。
 
 ## 游戏与本机数据
 

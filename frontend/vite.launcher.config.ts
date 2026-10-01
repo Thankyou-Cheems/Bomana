@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   base: "./",
+  server: { fs: { allow: [resolve("..")] } },
   build: {
     outDir: resolve("dist", "Launcher"),
     emptyOutDir: true,

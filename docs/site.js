@@ -31,21 +31,3 @@ if ("IntersectionObserver" in window) {
 } else {
   for (const slot of screenshotSlots) loadScreenshot(slot);
 }
-
-const sectionLinks = [...document.querySelectorAll('.nav-links a[href^="#"]')];
-const sections = sectionLinks
-  .map((link) => document.querySelector(link.getAttribute("href")))
-  .filter(Boolean);
-
-if (sections.length && "IntersectionObserver" in window) {
-  const observer = new IntersectionObserver((entries) => {
-    const current = entries
-      .filter((entry) => entry.isIntersecting)
-      .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
-    if (!current) return;
-    for (const link of sectionLinks) {
-      link.toggleAttribute("aria-current", link.getAttribute("href") === `#${current.target.id}`);
-    }
-  }, { rootMargin: "-20% 0px -70%", threshold: [0.05, 0.25, 0.6] });
-  for (const section of sections) observer.observe(section);
-}

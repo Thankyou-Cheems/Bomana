@@ -30,9 +30,14 @@ try {
   const chooseAircraft = async id => {
     await page.locator("#calcAircraftSearch").fill(id);
     await page.locator(`[data-aircraft-id="${id}"]`).click();
+    await page.locator("[data-custom-body]").waitFor();
+    assert.ok(await page.locator('[data-custom-selected]:not([data-custom-selected=""])').count(), 'The selected preset is present in the current editor');
+    await page.locator(".current-loadout-clear").click();
+    assert.equal(await page.locator('[data-custom-selected]:not([data-custom-selected=""])').count(), 0, 'Clear removes every current store');
+    assert.equal(await page.locator('#calcSortieCount').textContent(), '—', 'Clear does not use the previous preset for calculations');
+    if (await page.locator('.current-loadout-options').getAttribute('open') === null) await page.locator('.current-loadout-options > summary').click();
   };
   await chooseAircraft("a_10c");
-  await page.locator("[data-custom-open]").click();
   await page.locator("[data-custom-body]").waitFor();
   const aircraft = data.aircraft.a_10c;
   const guided = aircraft.options.find(row => row.weapons.some(([id]) => id.includes("gbu_12")) && row.requires.some(item => item.preset === "sniper_pod"));
@@ -86,17 +91,19 @@ try {
   await page.locator("[data-custom-name]").fill("制导炸弹与吊舱");
   await page.locator("[data-custom-save]").click();
   assert.match(await page.locator("#calcPresetTitle").textContent(), /制导炸弹与吊舱/);
+  assert.equal(await page.locator('#calcPresetList [data-preset-id^="user:"]').count(),0, 'native grid excludes saved custom loadouts');
   await assertTotals([guided, extra]);
   await page.locator('[data-preset-id="a_10c_mk82_default"]').click();
   assert.doesNotMatch(await page.locator("#calcDestroyLabel").textContent(), /轮/);
-  await page.locator('#calcPresetList [data-preset-id^="user:"]').click();
+  if (await page.locator('.custom-saved').getAttribute('open') === null) await page.locator('.custom-saved summary').click();
+  await page.getByRole('button',{name:'制导炸弹与吊舱',exact:true}).click();
   await assertTotals([guided, extra]);
   await page.locator("#combinationCalculator > summary").click();
   await page.locator("[data-combination-preset]").click();
   assert.match(await page.locator("[data-combination-result]").textContent(), /完整摧毁轮次\d+ 轮/);
   await page.reload();
   await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();
-  await chooseAircraft("a_10c"); await page.locator("[data-custom-open]").click();
+  await chooseAircraft("a_10c"); await page.locator("[data-custom-body]").waitFor();
   await page.locator(".custom-saved summary").click();
   await page.getByRole("button", {name: "制导炸弹与吊舱", exact: true}).click();
   assert.equal(await slot.getAttribute("data-custom-selected"), guided.key);
@@ -107,13 +114,13 @@ try {
   assert.equal(await page.locator("#calcDestroyCount").textContent(), "—");
   assert.equal(await page.locator("#calcSortieCount").textContent(), "—");
   await page.locator("[data-custom-name]").fill("空载"); await page.locator("[data-custom-save]").click();
-  assert.match(await page.locator("#calcPresetTitle").textContent(), /空载/);
+  assert.equal(await page.locator("#calcPresetTitle").textContent(), "未挂载");
   await page.getByRole("button", {name: "删除挂载 空载", exact: true}).click();
   await page.getByRole("button", {name: "制导炸弹与吊舱", exact: true}).click();
   const out = resolve("../.artifacts/calculator-ui"); await mkdir(out, {recursive: true});
   for (const width of [1440, 390]) {
     await page.setViewportSize({width, height: 1050});
-    await page.locator("#customLoadoutEditor").scrollIntoViewIfNeeded();
+    await page.locator("[data-custom-body]").scrollIntoViewIfNeeded();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `overflow ${width}`);
     await page.screenshot({path: resolve(out, `custom-loadout-${width}.png`)});
     await slot.click();
@@ -144,7 +151,7 @@ try {
   // Reproduce the reported Typhoon mixed-loadout: 8 stores plus a targeting pod.
   await page.setViewportSize({width: 1440, height: 1050});
   await chooseAircraft("ef_2000_typhoon_aesa");
-  await page.locator("[data-custom-open]").click();
+  await page.locator("[data-custom-body]").waitFor();
   const typhoon = data.aircraft.ef_2000_typhoon_aesa;
   const reported = ["11:mk18_slot11", "10:paveway_iv_slot10_x2", "7:litening", "4:epv2_mk13_slot4", "3:brimstone_dm_slot3", "2:500lbs_gbu_54b_slot2"]
     .map(key => typhoon.options.find(option => option.key === key));
@@ -156,10 +163,16 @@ try {
   await assertTotals(reported);
   assert.equal(await page.locator("#calcSortieCount").textContent(), "2");
   assert.match(await page.locator("#calcPresetStats").textContent(), /19,359 HP/);
+  for (const [mode, hp, rounds] of [["legacy_rb", 12000, "1"], ["legacy_ab", 50400, "3"], ["respawning", 25900, "2"]]) {
+    await page.locator(`#calcBaseModeSegments [data-value="${mode}"]`).click();
+    await assertTotals(reported, hp);
+    assert.equal(await page.locator("#calcSortieCount").textContent(), rounds);
+    for (const option of reported) assert.equal(await page.locator(`[data-custom-tier="${option.tier}"]`).getAttribute("data-custom-selected"), option.key);
+  }
   assert.equal(await page.locator("[data-custom-save]").isEnabled(), true);
   await page.locator("[data-custom-save]").click();
   await assertTotals(reported);
-  await page.locator(".hangar-hud").screenshot({path: resolve(out, "custom-total-typhoon.png"), style: ".site-header { visibility:hidden; }"});
+  await page.locator(".hangar-hud").screenshot({path: resolve(out, "custom-total-typhoon.png"), style: "bomana-site-header { visibility:hidden; }"});
   // Missing damage for one store must not silently calculate from the others.
   await page.route("**/weapons.json", route => route.fulfill({contentType: "application/json", body: JSON.stringify({
     ...weaponData, weapons: weaponData.weapons.map(weapon => weapon.id === "fr_mk18" ? {...weapon, dmg: null} : weapon),
@@ -167,7 +180,7 @@ try {
   await page.reload();
   await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();
   await chooseAircraft("ef_2000_typhoon_aesa");
-  await page.locator("[data-custom-open]").click();
+  await page.locator("[data-custom-body]").waitFor();
   await page.locator(".custom-saved summary").click();
   await page.getByRole("button", {name: "自定义挂载", exact: true}).last().click();
   assert.equal(await page.locator("#calcSortieCount").textContent(), "—");
@@ -176,7 +189,10 @@ try {
   await page.locator("#calcAircraftSearch").fill("");
   await page.locator("#calcCustomOnly").click();
   assert.equal(await page.locator("#calcCustomOnly").getAttribute("aria-pressed"), "true");
-  assert.equal(await page.locator("#calcAircraftList [data-aircraft-id]").count(), Object.keys(data.aircraft).length);
+  const customAircraftIds = await page.locator("#calcAircraftList [data-aircraft-id]").evaluateAll(nodes => nodes.map(node => node.dataset.aircraftId));
+  assert.ok(customAircraftIds.length > 0);
+  assert.ok(customAircraftIds.every(id => id in data.aircraft), 'Custom-only results all have a custom-loadout definition');
+  assert.equal(new Set(customAircraftIds).size, customAircraftIds.length, 'Custom-only results contain no duplicate aircraft IDs');
   // A stale CDN response must not be combined with the current calculator.
   const retryPage = await browser.newPage();
   retryPage.on("pageerror", error => errors.push(error.message));
@@ -195,6 +211,7 @@ try {
   await retryPage.locator("[data-custom-body]").waitFor();
   // Browser storage can be blocked while the current editor remains usable.
   await retryPage.evaluate(() => { Storage.prototype.setItem = () => { throw new DOMException("blocked", "SecurityError"); }; });
+  await retryPage.locator('.current-loadout-options > summary').click();
   await retryPage.locator("[data-custom-save]").click();
   assert.match(await retryPage.locator("[data-custom-notice]").textContent(), /本次页面有效/);
   await retryPage.close();

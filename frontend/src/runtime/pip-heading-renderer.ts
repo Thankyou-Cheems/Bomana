@@ -13,6 +13,7 @@ import { SampledAngleMotion, sampledAtPerformanceTime } from "./sampled-angle-mo
 import { drawLandingTape, landingTapePresentation, LandingCueMotion, type LandingTapeView } from "./landing-tape";
 import { TargetCenterMotion } from "./target-center-motion";
 import { canonicalAngularRanges } from "./angular-ranges";
+import { drawBombingZoneSymbol, drawPoiBracketSymbol } from "./navigation-symbols";
 
 /** Move the blue silhouette and its physical anchor together; impact bands stay live. */
 export function displayedTargetGuidance(guidance: ReturnType<typeof headingGuidance>, centerDeg: number): ReturnType<typeof headingGuidance> {
@@ -357,7 +358,7 @@ function drawMarker(
   const size = (marker.isTarget ? 7 : 5) * scale;
   const color = marker.kind === "airfield"
     ? marker.friendly ? "#70a7ff" : marker.hostile ? "#ff5a64" : "#d1a267"
-    : marker.kind === "zone" ? "#ff5a64" : marker.kind === "poi" ? "#f1bd4e" : "#e8bf58";
+    : marker.kind === "zone" || marker.kind === "poi" ? "#ff5a64" : "#e8bf58";
   context.save();
   context.globalAlpha = marker.isTarget ? 1 : .72;
   context.strokeStyle = color;
@@ -371,23 +372,18 @@ function drawMarker(
     context.lineTo(x - direction * 4 * scale, y + 6 * scale);
     context.closePath();
     context.fill();
-  } else if (marker.kind === "poi" && marker.overlapsZone) {
-    context.strokeStyle = "#ff5a64"; context.fillStyle = "#ff5a64";
-    context.arc(x, y, size * .72, 0, Math.PI * 2); context.stroke();
-    context.beginPath(); context.arc(x, y, size * .28, 0, Math.PI * 2); context.fill();
-    context.strokeStyle = "#ffd34e";
-    const outer = size * 1.35; const arm = size * .58;
-    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
-      context.beginPath(); context.moveTo(x + sx * outer, y + sy * arm); context.lineTo(x + sx * outer, y + sy * outer); context.lineTo(x + sx * arm, y + sy * outer); context.stroke();
-    }
+  } else if (marker.kind === "poi") {
+    context.save(); context.translate(x, y);
+    if (marker.overlapsZone) drawBombingZoneSymbol(context, size * .72);
+    drawPoiBracketSymbol(context, size * (marker.overlapsZone ? 1.35 : 1));
+    context.restore();
   } else if (marker.kind === "zone") {
     if (marker.isTarget) {
       context.strokeStyle = "#ffd34e"; context.lineWidth = 2.4 * scale;
       context.arc(x, y, size + 3 * scale, 0, Math.PI * 2); context.stroke();
       context.beginPath(); context.strokeStyle = color; context.fillStyle = color;
     }
-    context.arc(x, y, size, 0, Math.PI * 2); context.stroke();
-    context.beginPath(); context.arc(x, y, size * .42, 0, Math.PI * 2); context.fill();
+    context.save(); context.translate(x, y); drawBombingZoneSymbol(context, size); context.restore();
   } else if (headingTargetSymbol(marker.kind) === "aircraft") {
     drawAircraftSymbol(context, x, y, size);
   } else {
@@ -510,7 +506,16 @@ function drawGuidance(
     context.fillStyle = guidance.color;
     context.strokeStyle = "#071923";
     context.lineWidth = Math.max(1, layout.visualScale);
-    context.beginPath(); context.moveTo(x, layout.guidanceTrackY - 5 * layout.visualScale); context.lineTo(x + 5 * layout.visualScale, layout.guidanceTrackY); context.lineTo(x, layout.guidanceTrackY + 5 * layout.visualScale); context.lineTo(x - 5 * layout.visualScale, layout.guidanceTrackY); context.closePath(); context.fill(); context.stroke();
+    if (target.kind === "poi" || target.kind === "zone") {
+      context.save(); context.translate(x, layout.guidanceTrackY);
+      context.strokeStyle = context.fillStyle = "#ff5a64";
+      context.lineWidth = Math.max(1.5, 1.5 * layout.visualScale);
+      if (target.kind === "poi") drawPoiBracketSymbol(context, 5 * layout.visualScale);
+      else drawBombingZoneSymbol(context, 5 * layout.visualScale);
+      context.restore();
+    } else {
+      context.beginPath(); context.moveTo(x, layout.guidanceTrackY - 5 * layout.visualScale); context.lineTo(x + 5 * layout.visualScale, layout.guidanceTrackY); context.lineTo(x, layout.guidanceTrackY + 5 * layout.visualScale); context.lineTo(x - 5 * layout.visualScale, layout.guidanceTrackY); context.closePath(); context.fill(); context.stroke();
+    }
     if (Math.abs(guidance.relativeDeg) > tolerance) {
       const direction = Math.sign(guidance.relativeDeg) || 1;
       const edgeX = direction < 0 ? trackLeft : trackRight;

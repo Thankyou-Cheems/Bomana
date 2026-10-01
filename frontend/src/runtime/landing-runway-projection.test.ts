@@ -22,49 +22,28 @@ it("keeps identical camera, runway and guidance geometry in the lightweight view
   }
 });
 
-it("keeps the runway and joining curve visible through every heading and inverted attitudes", () => {
-  for (const heading of [0, 60, 89, 91, 120, 179, 180, 240, 300]) {
-    for (const roll of [-180, -90, 0, 90, 180]) {
-      const frame = landingRunwayFrame({ ...scene, along: 6000, across: 800, height: 2500,
-        angle: heading * Math.PI / 180, roll: roll * Math.PI / 180, pitch: .8 }, 434, 134);
-      expect(frame.projected.surface.length, `heading=${heading} roll=${roll}`).toBeGreaterThanOrEqual(3);
-      const pixels = frame.projected.rails.flat(2).map(([x, y]) => [frame.x + x * frame.focal, frame.y + y * frame.focal]);
-      const inside = pixels.filter(([x, y]) => x! >= 8 && x! <= 426 && y! >= 25 && y! <= 126);
-      expect(inside.length, `curve heading=${heading} roll=${roll}`).toBeGreaterThan(6);
+it("keeps perspective finite through clipping, all attitudes and threshold passage", () => {
+  for (const along of [-3000, 0, 1000, 30000]) for (const altitude of [-40, 300, 3000])
+    for (const heading of [-180, -90, 0, 90, 180]) for (const pitch of [-90, 0, 90]) for (const bank of [-180, -90, 0, 90, 180]) {
+      const frame = landingRunwayFrame({ ...scene, along, height: altitude, approach: true,
+        angle: heading * Math.PI / 180, pitch: pitch * Math.PI / 180, roll: bank * Math.PI / 180 }, 900, 86);
+      expect([frame.x, frame.y, frame.focal, ...frame.projected.surface.flat(), ...frame.projected.rails.flat(3)].every(Number.isFinite),
+        String([along, altitude, heading, pitch, bank])).toBe(true);
     }
-  }
 });
 
-it("fits airborne return curves across heading, pitch, bank and both sides of the threshold", () => {
-  for (const along of [-5000, -1000, 0, 500, 3000, 30000]) for (const altitude of [300, 3000]) {
-    for (let heading = -180; heading <= 180; heading += 30) for (const pitch of [-90, 0, 90]) for (const bank of [-180, -90, 0, 90, 180]) {
-      const frame = landingRunwayFrame({ ...scene, along, across: 800, height: altitude, approach: true,
-        angle: heading * Math.PI / 180, pitch: pitch * Math.PI / 180, roll: bank * Math.PI / 180 }, 434, 134);
-      const name = `${along}/${altitude}/${heading}/${pitch}/${bank}`;
-      const pixels = frame.projected.surface.map(([x,y]) => [frame.x + x * frame.focal, frame.y + y * frame.focal]);
-      expect(pixels.length, name).toBeGreaterThanOrEqual(3);
-      expect(pixels.every(([x,y]) => x! >= 8 && x! <= 426 && y! >= 25 && y! <= 126), name).toBe(true);
-      const rail = frame.projected.rails.flat(2).map(([x,y]) => [frame.x + x * frame.focal, frame.y + y * frame.focal]);
-      expect(rail.filter(([x,y]) => x! >= 8 && x! <= 426 && y! >= 25 && y! <= 126).length,
-        `${name} ${JSON.stringify({focal:frame.focal, pitch:frame.pitch, yaw:frame.yaw, retreat:frame.retreat, rails:frame.projected.rails.map(r=>r.length), framing:frame.projected.framing.length})}`).toBeGreaterThan(4);
-    }
+it("keeps the player view fixed when the runway moves off to either side or behind", () => {
+  const front = landingRunwayFrame({ ...scene, across: 0, angle: 0, pitch: 0 }, 900, 86);
+  const left = landingRunwayFrame({ ...scene, across: 0, angle: -.2, pitch: 0 }, 900, 86);
+  const right = landingRunwayFrame({ ...scene, across: 0, angle: .2, pitch: 0 }, 900, 86);
+  expect(left.x + left.projected.threshold![0] * left.focal).toBeLessThan(front.x);
+  expect(right.x + right.projected.threshold![0] * right.focal).toBeGreaterThan(front.x);
+  for (const angle of [-Math.PI, Math.PI]) {
+    const rear = landingRunwayFrame({ ...scene, across: 0, angle, pitch: 0 }, 900, 86);
+    expect(rear.projected.surface).toEqual([]);
+    expect(rear.projected.threshold).toBeNull();
+    expect(Math.abs(rear.projected.bearing)).toBeGreaterThan(Math.PI / 2);
   }
-});
-
-it("keeps the observation camera continuous around a full heading turn and the ground datum", () => {
-  const frameAt = (angle: number, height = 2500) => landingRunwayFrame({ ...scene, angle, height }, 434, 134);
-  let previous = frameAt(-Math.PI);
-  for (let i = 1; i <= 3600; i++) {
-    const next = frameAt(-Math.PI + i * Math.PI / 1800);
-    for (let j = 0; j < 4; j++) {
-      const a = previous.projected.surface[j]!, b = next.projected.surface[j]!;
-      expect(Math.hypot(previous.x + a[0] * previous.focal - next.x - b[0] * next.focal,
-        previous.y + a[1] * previous.focal - next.y - b[1] * next.focal)).toBeLessThan(2);
-    }
-    previous = next;
-  }
-  const a = frameAt(0, -.01), b = frameAt(0, .01);
-  expect(Math.abs(a.focal-b.focal)).toBeLessThan(1);
 });
 
 it("curves around instead of reversing at a cusp when facing directly away", () => {
@@ -84,98 +63,24 @@ it.each([-90, 90])("uses a finite spatial lead at %d degrees of pitch", pitch =>
   expect(Math.max(...path.points.map(p => Math.abs(p[2])))).toBeLessThan(5500);
 });
 
-it.each([2000, 2500, 3000])("keeps a %dm high approach readable and enlarges the runway as distance closes", altitude => {
-  const sizes: number[] = [];
-  for (const along of [30000, 12000, 6000, 3000]) {
-    const frame = landingRunwayFrame({ ...scene, across: 500, along, height: altitude, pitch: 0, roll: 0 }, 1200, 150);
-    const pixel = ([x, y]: readonly number[]) => [frame.x + x! * frame.focal, frame.y + y! * frame.focal];
-    const corners = frame.projected.surface.map(pixel);
-    const runwayWidth = Math.hypot(corners[1]![0]! - corners[0]![0]!, corners[1]![1]! - corners[0]![1]!);
-    const visibleRailPoints = frame.projected.rails.flat(2).map(pixel)
-      .filter(([x, y]) => x! >= 8 && x! <= 1192 && y! >= 25 && y! <= 142);
-    const railHeight = visibleRailPoints.length ? Math.max(...visibleRailPoints.map(p => p[1]!)) - Math.min(...visibleRailPoints.map(p => p[1]!)) : 0;
-    const boxW = Math.max(...corners.map(p => p[0]!)) - Math.min(...corners.map(p => p[0]!));
-    const boxH = Math.max(...corners.map(p => p[1]!)) - Math.min(...corners.map(p => p[1]!));
-    sizes.push(Math.max(boxW, boxH));
-    expect(Math.max(boxW, boxH)).toBeGreaterThanOrEqual(28);
-    expect(railHeight).toBeGreaterThan(24);
-    for (const [x, y] of corners) {
-      expect(x).toBeGreaterThanOrEqual(8); expect(x).toBeLessThanOrEqual(1192);
-      expect(y).toBeGreaterThanOrEqual(25); expect(y).toBeLessThanOrEqual(142);
-    }
-  }
-  expect(sizes[3]!).toBeGreaterThanOrEqual(sizes[0]!);
-});
-
-it("keeps a 2–3 km return readable inside the flat instrument", () => {
-  for (const [along, altitude, heading, across, bank] of [[20000, 2500, 0, 800, 0], [12000, 2500, 0, 400, 0], [8000, 3000, 20, 1200, 25], [15000, 2500, -30, 600, 0]] as const) {
-    const frame = landingRunwayFrame({ ...scene, along, across, height: altitude, angle: scene.angle + heading * Math.PI / 180, pitch: 0, roll: bank * Math.PI / 180, approach: true }, 434, 134);
-    const pixel = ([x, y]: readonly number[]) => [frame.x + x! * frame.focal, frame.y + y! * frame.focal];
-    const corners = frame.projected.surface.map(pixel);
-    const width = Math.max(...corners.map(p => p[0]!)) - Math.min(...corners.map(p => p[0]!));
-    const height = Math.max(...corners.map(p => p[1]!)) - Math.min(...corners.map(p => p[1]!));
-    const rails = frame.projected.rails.flat(2).map(pixel).filter(([x, y]) => x! >= 8 && x! <= 426 && y! >= 20 && y! <= 126);
-    const railSpan = rails.length ? Math.max(
-      Math.max(...rails.map(p => p[0]!)) - Math.min(...rails.map(p => p[0]!)),
-      Math.max(...rails.map(p => p[1]!)) - Math.min(...rails.map(p => p[1]!))) : 0;
-    expect(Math.max(width, height), `${along}/${altitude}/${heading}`).toBeGreaterThanOrEqual(26);
-    expect(railSpan, `${along}/${altitude}/${heading}/${bank} n=${rails.length}`).toBeGreaterThan(22);
-    expect(frame.projected.groundSurface.length).toBeGreaterThanOrEqual(3);
-  }
-});
-
-it("keeps close runway perspective and enlarges a distant runway in proportion", () => {
-  const frameFor = (along: number, height: number) => landingRunwayFrame({ ...scene, across: 0, along, height, pitch: 0, roll: 0, approach: true }, 434, 134);
-  const span = (frame: ReturnType<typeof landingRunwayFrame>) => {
-    const pixel = ([x, y]: readonly number[]) => [frame.x + x! * frame.focal, frame.y + y! * frame.focal];
-    const corners = frame.projected.surface.map(pixel);
-    return Math.max(...corners.map(p => p[0]!)) - Math.min(...corners.map(p => p[0]!))
-      + Math.max(...corners.map(p => p[1]!)) - Math.min(...corners.map(p => p[1]!));
+it("makes the same runway half as wide at twice the distance without automatic zoom", () => {
+  const widthAt = (along: number) => {
+    const f = landingRunwayFrame({ ...scene, along, across: 0, angle: 0, pitch: 0, roll: 0 }, 900, 86);
+    return (f.projected.surface[1]![0] - f.projected.surface[0]![0]) * f.focal;
   };
-  const natural = 434 / (2 * Math.tan(Math.PI / 6));
-  const close = frameFor(1400, 90);
-  const mid = frameFor(9000, 2500);
-  const far = frameFor(24000, 2500);
-  expect(close.focal).toBeLessThanOrEqual(natural * 1.02);
-  expect(far.focal / natural).toBeGreaterThan(mid.focal / natural);
-  expect(mid.focal / natural).toBeGreaterThan(1.4);
-  expect(span(mid)).toBeGreaterThan(span(far));
-  expect(span(close)).toBeGreaterThan(20);
+  expect(widthAt(3000) / widthAt(6000)).toBeCloseTo(2);
+  expect(widthAt(6000) / widthAt(12000)).toBeCloseTo(2);
 });
 
-it.each([
-  [1200, 150, 3000, 3000, 0, 0],
-  [1200, 150, 3000, 800, 25, 40],
-  [220, 210, 800, 1400, 35, 65],
-  [1200, 150, 30000, 2500, 0, 0],
-  [220, 140, 500, 20, -35, -70],
-  [1200, 150, 1500, -40, 15, -20],
-  [1200, 150, 80000, 10000, 45, 80],
-])("fits the runway into %dx%d at distance %dm / height %dm / pitch %d / bank %d", (width, height, along, altitude, pitch, roll) => {
-  const frame = landingRunwayFrame({ ...scene, across: 0, along, height: altitude, pitch: pitch * Math.PI / 180, roll: roll * Math.PI / 180 }, width, height);
-  expect(frame.projected.surface.length).toBeGreaterThanOrEqual(3);
-  const pixels = frame.projected.surface.map(([x, y]) => [frame.x + x * frame.focal, frame.y + y * frame.focal]);
-  for (const [x, y] of pixels) {
-    expect(x).toBeGreaterThanOrEqual(8); expect(x).toBeLessThanOrEqual(width - 8);
-    expect(y).toBeGreaterThanOrEqual(25); expect(y).toBeLessThanOrEqual(height - 8);
-  }
-  expect(Math.max(...pixels.map(p => p[1]!)) - Math.min(...pixels.map(p => p[1]!))
-    + Math.max(...pixels.map(p => p[0]!)) - Math.min(...pixels.map(p => p[0]!))).toBeGreaterThan(20);
-});
-
-it("retains aircraft pitch inside the forward viewing cone and uses definition width", () => {
+it("preserves the aircraft pitch and the runway's definition width", () => {
   const s = landingRunwayScene({ ...geometry, crossTrackM: 0, referenceWidthM: 140 }, 0, 3)!;
-  const pitch = landingRunwayCamera(s), result = projectLandingRunway(s, pitch);
-  expect(pitch).toBeCloseTo(0);
-  expect(result.threshold![1]).toBeGreaterThan(0);
-  expect(result.end![1]).toBeGreaterThan(0);
-  expect(result.surface[1]![0] - result.surface[0]![0]).toBeGreaterThan(result.surface[2]![0] - result.surface[3]![0]);
   expect(projectLandingRunway(s).surface[1]![0]).toBeCloseTo(70 / 3000);
-  expect(landingRunwayCamera({ ...s, angle: Math.PI })).toBeCloseTo(0);
-  expect(landingRunwayCamera({ ...s, height: 3000, pitch: .5 })).toBeGreaterThan(0);
+  expect(landingRunwayCamera({ ...s, height: 3000, pitch: .5 })).toBeCloseTo(-.5);
+  const view = landingRunwayFrame({ ...s, height: 3000, pitch: .5 }, 900, 86);
+  expect(view.y + view.projected.threshold![1] * view.focal).toBeGreaterThan(86);
 });
 
-it("fits with one uniform perspective scale and keeps the corridor joined to the runway", () => {
+it("uses one uniform perspective scale and keeps the corridor joined to the runway", () => {
   const frame = landingRunwayFrame({ ...scene, across: 0, height: 1400, pitch: .3, roll: .5 }, 1200, 150);
   const pixel = ([x, y]: readonly number[]) => [frame.x + x! * frame.focal, frame.y + y! * frame.focal];
   const distance = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!);
@@ -187,7 +92,7 @@ it("fits with one uniform perspective scale and keeps the corridor joined to the
   expect(frame.projected.rails[1]!.at(-1)![1]).toEqual(surface[1]);
 });
 
-it("keeps adaptive framing continuous as the aircraft moves through route samples", () => {
+it("keeps perspective continuous as the aircraft moves through route samples", () => {
   const initial = { ...scene, across: 700, speed: 120, height: 1600, pitch: .25, roll: .4 };
   let previous = landingRunwayFrame(initial, 1200, 150);
   for (let i = 1; i <= 200; i++) {
@@ -201,9 +106,9 @@ it("keeps adaptive framing continuous as the aircraft moves through route sample
   }
 });
 
-it("observes a rearward runway without fabricating a forward HUD projection and keeps rollout finite", () => {
+it("keeps a rearward runway offscreen and rollout finite", () => {
   const rear = landingRunwayFrame({ ...scene, angle: Math.PI }, 1200, 150);
-  expect(rear.projected.surface).toHaveLength(4);
+  expect(rear.projected.surface).toHaveLength(0);
   expect(rear.projected.rails).toHaveLength(2);
   expect(projectLandingRunway({ ...scene, angle: Math.PI }).surface).toHaveLength(0);
   const past = landingRunwayFrame({ ...scene, along: -200, height: 5, approach: false }, 220, 150);
@@ -323,7 +228,7 @@ it("keeps subtle ground references and runway markings on the same perspective d
   expect(projectLandingRunway({ ...scene, height: -10 }).ground).toHaveLength(0);
 });
 
-it("clips before perspective division and removes guidance beyond the entrance or behind the camera", () => {
+it("clips before perspective division, withdraws rollout guidance and keeps rear runways out of view", () => {
   const past = projectLandingRunway({ ...scene, along: -300, approach: false });
   expect(past.threshold).toBeNull();
   expect(past.runway).not.toBeNull();
@@ -334,8 +239,8 @@ it("clips before perspective division and removes guidance beyond the entrance o
   const behind = projectLandingRunway({ ...scene, angle: Math.PI });
   expect(behind.runway).toBeNull();
   expect(behind.surface).toHaveLength(0);
-  expect(behind.rails).toHaveLength(0);
-  expect(landingRunwayScene({ ...geometry, heightM: null }, 0, 3)).toBeNull();
+  expect(behind.rails.flat(3).every(Number.isFinite)).toBe(true);
+  expect(landingRunwayScene({ ...geometry, heightM: null }, 0, 3)).toMatchObject({ heightKnown: false, slope: 0 });
   expect(landingRunwayScene({ ...geometry, lengthM: 0 }, 0, 3)).toBeNull();
 });
 

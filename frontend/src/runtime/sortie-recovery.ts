@@ -3,7 +3,7 @@ import { normalizeOfficialMapInfo } from "./map-info";
 export const RESET_UNDO_WINDOW_MS = 30_000;
 const SORTIE_RESUME_WINDOW_MS = 15 * 60_000;
 
-export type SortieResetReason = "aircraft-loss" | "telemetry-timeout";
+export type SortieResetReason = "aircraft-loss" | "ground-absence" | "telemetry-timeout";
 
 export interface SortieRestorePoint {
   readonly savedAtMs: number;
@@ -99,7 +99,7 @@ function normalizeSortieRecoveryRecord(
     const candidate = record.resetUndo as Partial<SortieResetUndoRecord>;
     const restore = normalizeSortieRestorePoint(candidate.restore, nowMs, expectedCycleSeconds);
     if (
-      (candidate.reason === "aircraft-loss" || candidate.reason === "telemetry-timeout")
+      (candidate.reason === "aircraft-loss" || candidate.reason === "ground-absence" || candidate.reason === "telemetry-timeout")
       && Number.isFinite(candidate.createdAtMs)
       && Number.isFinite(candidate.expiresAtMs)
       && candidate.expiresAtMs! > nowMs

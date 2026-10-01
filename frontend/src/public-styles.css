@@ -28,6 +28,8 @@ body[data-edition=Lite] .flight-layout { display: block; max-width: 440px; margi
 :root[data-theme=glacier] :is(.brand small, .connection, dt, .eyebrow, #fuel-source, #fuel-balance, .enhanced-access-card small) { color: #476879; }
 body[data-mobile-paired=true] .public-shell { padding: 8px; }
 body[data-mobile-paired=true] .public-header :is(.brand, nav, #toggle-pip, #open-mobile-pairing) { display: none; }
+body[data-mobile-paired=true] .public-product-nav { display:none; }
+.public-header .public-product-nav { width:260px; margin:0 auto; }
 body[data-mobile-paired=true] .public-header { position: fixed; bottom: 10px; right: 10px; z-index: 10; }
 body[data-mobile-paired=true] .connection { margin: 0 0 6px; font-size: 10px; }
 body[data-mobile-paired=true] .flight-layout { display: flex; flex-direction: column; gap: 8px; }

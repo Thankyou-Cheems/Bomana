@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>全真出击工具箱 · Bomana</title>
-    <meta name="description" content="空空导弹交会与机动对照、全真 EC 战区与机场计算器、机型挂载对比和返航规划，数据随 Bomana 更新。">
+    <title data-i18n="page.simSortieToolboxBomana">全真出击工具箱 · Bomana</title>
+    <meta name="description" content="空空导弹交会与机动对照、全真 EC 战区与机场计算器、机型挂载对比和返航规划，数据随 Bomana 更新。" data-i18n-content="page.airToAirMissileEncounterComparisonsSimulatorEcBase">
     <meta name="theme-color" content="#eef6fc">
-    <meta property="og:title" content="Bomana · 全真出击工具箱">
-    <meta property="og:description" content="计算投弹枚数、对比挂载、规划返航，查阅全真 EC 常见问题。">
+    <meta property="og:title" content="Bomana · 全真出击工具箱" data-i18n-content="page.bomanaSimSortieToolbox">
+    <meta property="og:description" content="计算投弹枚数、对比挂载、规划返航，查阅全真 EC 常见问题。" data-i18n-content="page.calculateWeaponCountsCompareLoadoutsPlanYourReturnAnd">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://bomana.ruikang.wang/calculator">
     <meta property="og:image" content="https://bomana.ruikang.wang/assets/bomana-app.webp">
@@ -15,358 +15,384 @@
     <link rel="icon" href="/assets/favicon.ico">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/calculator/tools.css">
+    <script type="module" src="/assets/bomana-header.js?v=2"></script>
   </head>
   <body class="hangar calculator-page">
-    <a class="skip-link" href="#content">跳到主要内容</a>
+    <a class="skip-link" href="#content"><span data-i18n="page.skipToMainContent">跳到主要内容</span></a>
 
-    <header class="site-header" aria-label="主导航">
-      <a class="brand" href="/" aria-label="Bomana 首页">
-        <img src="/assets/bomana-app.webp" alt="" width="36" height="36">
-        <span class="brand-mark">BOMANA</span>
-      </a>
-      <nav class="nav-links" aria-label="页面章节">
-        <a href="/#start">开始</a>
-        <a href="/#gallery">界面</a>
-        <a href="/#features">功能</a>
-        <a href="/#docs">文档</a>
-        <a class="nav-launcher" href="/launcher/">在线启动器</a>
-        <a class="nav-calculator" href="/calculator/" aria-current="page">在线计算器</a>
-        <a class="nav-github" href="https://github.com/Thankyou-Cheems/Bomana">GitHub</a>
-      </nav>
-    </header>
+    <bomana-site-header active="calculator" base="/"><nav aria-label="Bomana 全站导航"><a href="https://bomana.ruikang.wang/">官网</a> <a href="https://bomana.ruikang.wang/launcher/">启动器</a> <a href="https://bomana.ruikang.wang/calculator/">计算器</a> <a href="https://pay.ruikang.wang/">订阅</a> <a href="https://pay.ruikang.wang/contact">支持</a></nav></bomana-site-header>
 
     <main id="content">
       <section class="hangar-stage" aria-labelledby="calc-title">
         <div class="calculator-heading">
           <p class="hangar-kicker">SIM EC · FLIGHT DESK</p>
-          <h1 id="calc-title">全真出击工具箱</h1>
-          <p class="hangar-lede">挂载、目标与返航，一页算清。</p>
-          <p class="tool-source" id="calcSource" role="status">正在核对参数版本…</p>
-          <aside class="tool-directory" aria-label="工具目录">
-          <button id="toolDirectoryToggle" class="tool-directory-toggle" type="button" aria-expanded="false" aria-controls="toolDirectoryLinks">☰ 目录</button>
-          <nav id="toolDirectoryLinks" class="tool-nav" aria-label="工具导航">
-            <a href="#calcForm">战区与机场计算器</a><a href="#combinationCalculator">自由组合工具</a><a href="#airportStatus">机场状态</a><a href="#usefulActions">周期收益</a><a href="#explosiveConversion">装药换算</a><a href="#loadoutCompare">挂载对比</a><a href="#returnFuel">返航规划</a><a href="#airCombat">空空弹测算</a><a href="#airfieldDefense">机场防空</a><a href="#fieldGuide">全真速查</a>
+          <h1 id="calc-title"><span data-i18n="page.simSortieToolbox">全真出击工具箱</span></h1>
+          <p class="tool-source" id="calcSource" role="status"><span data-i18n="page.checkingParameterVersion">正在核对参数版本…</span></p>
+          <aside class="tool-directory" aria-label="工具目录" data-i18n-aria-label="page.toolDirectory">
+            <div id="calculatorLanguage" class="directory-languages" role="group" aria-label="语言 / 語言 / Language">
+              <button type="button" data-calculator-language="zh-CN" aria-pressed="true" lang="zh-CN" title="简体中文"><span class="language-icon" aria-hidden="true">简</span><span>简体中文</span></button>
+              <button type="button" data-calculator-language="zh-Hant" aria-pressed="false" lang="zh-Hant" title="繁體中文"><span class="language-icon" aria-hidden="true">繁</span><span>繁體中文</span></button>
+              <button type="button" data-calculator-language="en" aria-pressed="false" lang="en" title="English"><span class="language-icon" aria-hidden="true">EN</span><span>English</span></button>
+            </div>
+          <button id="toolDirectoryToggle" class="tool-directory-toggle" type="button" aria-expanded="false" aria-controls="toolDirectoryLinks"><span data-i18n="page.tools">☰ 快捷跳转</span></button>
+          <nav id="toolDirectoryLinks" class="tool-nav" aria-label="工具导航" data-i18n-aria-label="page.toolNavigation">
+            <strong class="tool-nav-category" data-i18n="page.loadoutsAndBases">挂载与炸点</strong>
+            <a href="#calcForm"><span data-i18n="page.baseAirfieldCalculator">战区与机场计算器</span></a><a href="#combinationCalculator"><span data-i18n="page.freeCombinationTool">自由组合工具</span></a><a href="#loadoutCompare"><span data-i18n="page.loadoutComparison">挂载对比</span></a>
+            <strong class="tool-nav-category" data-i18n="page.sortiePreparation">出击准备</strong>
+            <a href="#airportStatus"><span data-i18n="page.airfieldStatus">机场状态</span></a><a href="#returnFuel"><span data-i18n="page.returnFuelPlan">返航规划</span></a><a href="#usefulActions"><span data-i18n="page.cycleRewards">周期收益</span></a>
+            <strong class="tool-nav-category" data-i18n="page.mechanicsResearch">机制研究</strong>
+            <a href="#explosiveConversion"><span data-i18n="page.explosiveEquivalence">装药换算</span></a><a href="#airCombat"><span data-i18n="page.airToAirMissiles">空空弹测算</span></a><a href="#airfieldDefense"><span data-i18n="page.airfieldDefenses">机场防空</span></a><a href="#fieldGuide"><span data-i18n="page.simQuickReference">全真速查</span></a>
           </nav>
           </aside>
         </div>
 
         <form class="calculator-context" id="calcForm">
           <div class="context-field">
-            <div class="context-label"><span id="brSegmentLabel">房间最高 BR</span><small>相同耐久合并为一档</small></div>
+            <div class="context-label context-br-label">
+              <span id="brSegmentLabel"><span data-i18n="page.roomMaximumBr">房间最高 BR</span></span>
+              <div id="calcBaseModeControl" class="segment-scroll base-mode-scroll">
+                <select id="calcBaseMode" hidden aria-hidden="true" tabindex="-1"></select>
+                <div id="calcBaseModeSegments" class="segment-track base-mode-track" role="radiogroup" aria-label="战区规则" data-i18n-aria-label="page.baseRules"></div>
+              </div>
+            </div>
             <select id="calcBr" hidden aria-hidden="true" tabindex="-1">
               <option value="14.7" selected>8.0–14.7 · 25,900 HP</option>
             </select>
             <div class="segment-scroll"><div id="calcBrSegments" class="segment-track" role="radiogroup" aria-labelledby="brSegmentLabel"></div></div>
+            <p id="calcBaseModeNote" class="base-mode-note"></p>
           </div>
           <div class="context-field">
-            <div class="context-label"><span id="targetSegmentLabel">目标</span><small>按满血计算</small></div>
+            <div class="context-label"><span id="targetSegmentLabel"><span data-i18n="page.target">目标</span></span><small id="calcTargetThreshold"><span data-i18n="page.startingFromFullHp">按满血计算</span></small></div>
             <select id="calcTarget" hidden aria-hidden="true" tabindex="-1">
-              <option value="bombing_point_planes" selected>战区基地（空战）</option>
+              <option value="bombing_point_planes" selected data-i18n="page.airBattleBase">战区基地（空战）</option>
             </select>
             <div class="segment-scroll"><div id="calcTargetSegments" class="segment-track" role="radiogroup" aria-labelledby="targetSegmentLabel"></div></div>
           </div>
           <aside class="hangar-repair" id="calcRepairNote" hidden>
-            <strong>机场回血</strong>
-            <span id="calcRepairSummary">生活区状态影响模块恢复；本页按不计回血估算，实战可能需要更多弹药。</span>
+            <strong><span data-i18n="page.airfieldRegeneration">机场回血</span></strong>
+            <span id="calcRepairSummary"><span data-i18n="page.livingQuartersAffectModuleRecoveryEstimatesExcludeRegenerationMore">生活区状态影响模块恢复；本页按不计回血估算，实战可能需要更多弹药。</span></span>
             <small id="calcRepairDetail"></small>
           </aside>
         </form>
-
+        <div class="calculator-workspace loadout-workspace">
+          <article class="hangar-hud" aria-live="polite">
+            <div class="loadout-summary"><div class="hangar-result-grid">
+                <div class="hangar-result-primary">
+                  <strong id="calcDestroyCount">—</strong>
+                  <span id="calcDestroyLabel"><span data-i18n="page.weaponsRequired">所需枚数</span></span>
+                </div>
+                <div class="hangar-sorties" id="calcSortieCard">
+                  <strong id="calcSortieCount">—</strong>
+                  <span><span data-i18n="page.estimatedSorties">次出击（按当前挂载估算）</span></span>
+                </div>
+              </div>
+              <div class="loadout-reward" id="calcRewardCard" hidden><strong id="calcRewardCount"></strong><span id="calcRewardLabel"></span></div>
+              <div id="calcPresetDetail" hidden>
+                <div class="loadout-row current-preset-row">
+                  <div class="loadout-row-name">
+                    <small data-i18n="optimizer.currentStores">当前挂载</small>
+                    <h2 id="calcPresetTitle"></h2>
+                    <button type="button" class="current-loadout-clear" data-custom-new data-i18n="currentLoadout.clear">清空挂载</button>
+                    <p class="tool-note" id="calcPresetNote"></p>
+                  </div>
+                  <div class="current-slot-area">
+                    <div id="calcPresetDiagram"></div>
+                    <section id="customLoadoutEditor" class="custom-editor" aria-label="自定义挂载编辑器" data-i18n-aria-label="page.customLoadoutEditor">
+                      <div class="custom-editor-toolbar"><button type="button" class="custom-text-button" data-custom-open hidden><span data-i18n="currentLoadout.retryRules">重试挂点规则</span></button><span data-custom-status role="status"></span></div>
+                      <div id="customLoadoutBody" data-custom-body hidden>
+                        <div class="custom-slots" data-custom-slots aria-label="机型挂点" data-i18n-aria-label="page.aircraftStations"></div>
+                        <ul class="custom-errors" data-custom-errors></ul>
+                        <button type="button" class="custom-dependency-button" data-custom-dependencies hidden><span data-i18n="page.addRequiredEquipmentReplaceOccupiedStations">补齐必需装备（替换占用挂点）</span></button>
+                        <details class="current-loadout-options"><summary data-i18n="currentLoadout.saveDetails">保存与配置详情</summary>
+                          <dl class="custom-mass" data-custom-mass></dl>
+                          <p class="custom-total" data-custom-total></p>
+                          <div class="custom-save-bar"><label><span class="sr-only"><span data-i18n="page.loadoutName">挂载名称</span></span><input type="text" maxlength="40" data-custom-name placeholder="挂载名称，例如：炸点 + 制导弹" data-i18n-placeholder="page.loadoutNameEGBaseGuidedWeapons"></label><button type="button" class="custom-save-button" data-custom-save disabled><span data-i18n="currentLoadout.save">保存当前挂载</span></button></div>
+                          <p class="tool-note" data-custom-notice aria-live="polite"></p>
+                          <details class="custom-saved"><summary><span data-i18n="page.myLoadouts">我的挂载</span> <span data-custom-saved-count>0</span></summary><div data-custom-saved></div><p class="tool-note"><span data-i18n="page.upTo20PerAircraftSavedInThisBrowser">每机最多 20 套，保存在此浏览器。</span></p></details>
+                          <details class="custom-requirements"><summary><span data-i18n="page.modificationsUnlocks">改装与解锁要求</span></summary><p data-custom-requirements></p></details>
+                        </details>
+                      </div>
+                      <dialog class="custom-picker" data-custom-picker aria-labelledby="customPickerTitle" aria-describedby="customPickerHelp">
+                        <div class="custom-picker-head"><div><p data-custom-picker-aircraft></p><h3 id="customPickerTitle" data-custom-picker-title><span data-i18n="page.selectStores">选择挂载</span></h3></div><button type="button" class="custom-picker-close" data-custom-picker-close aria-label="关闭挂点选择" data-i18n-aria-label="page.closeStationPicker">×</button></div>
+                        <div class="custom-picker-search"><label><span class="sr-only"><span data-i18n="page.searchStoresForThisStation">搜索此挂点的挂载</span></span><input type="search" data-custom-picker-search placeholder="搜索炸弹、导弹、吊舱…" data-i18n-placeholder="page.searchBombsMissilesPods" autocomplete="off"></label><span data-custom-picker-count role="status"></span></div>
+                        <div class="custom-picker-options" data-custom-picker-options></div>
+                        <p id="customPickerHelp" class="custom-picker-help"><span data-i18n="page.clickAnIconToEquipItRestrictedChoicesMay">点击图标装备。标有限制的选项需调整其他挂点，校验通过后才能保存。</span></p>
+                      </dialog>
+                    </section>
+                  </div>
+                </div>
+              </div>
+              <details class="loadout-analysis"><summary data-i18n="optimizer.damageDetails">伤害明细</summary><div class="loadout-analysis-content"><dl class="preset-stats" id="calcPresetStats"></dl><dl class="hangar-stats" id="calcStats"></dl><p class="hangar-fire" id="calcFireLine"></p><p class="hangar-hud-context" id="calcHudContext"><span data-i18n="page.readingCatalog">正在读取目录…</span></p></div></details>
+            </div>
+            <p class="hangar-hint" id="calcHint"><span data-i18n="page.selectAWeaponForResultsThenAnAircraftFor">选择武器后显示结果；再选机型可计算挂载上限与架次。</span></p>
+          </article>
+          <section id="loadoutOptimizer" class="optimizer-panel" aria-label="挂载收益推荐" data-i18n-aria-label="page.loadoutRewardRecommendations" hidden>
+            <div class="optimizer-heading"><div class="optimizer-heading-label"><h3><span data-i18n="page.rewardRecommendations">挂载收益推荐</span></h3><span class="recommendation-state" data-optimizer-state-label data-i18n="optimizer.notApplied">尚未应用的推荐</span></div><div class="optimizer-modes" role="group" aria-label="推荐目标" data-i18n-aria-label="page.recommendationObjective"><button type="button" data-optimizer-mode="reward" aria-pressed="true"><span data-i18n="page.bestSingleBaseReward">单战区最高收益</span></button><button type="button" data-optimizer-mode="targets" aria-pressed="false"><span data-i18n="page.mostBases">最多战区</span></button></div><div class="optimizer-priority" role="radiogroup" aria-label="推荐偏好" data-i18n-aria-label="optimizer.priority">
+                  <span class="optimizer-priority-thumb" aria-hidden="true"></span>
+                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="balanced" checked><span data-i18n="optimizer.balanced">高收益，优先好投放</span></label>
+                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="reward"><span data-i18n="optimizer.strictReward">严格最高收益</span></label>
+                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="simple"><span data-i18n="optimizer.uniform">尽量统一挂载</span></label>
+                </div></div>
+            <div class="optimizer-controls">
+              <fieldset class="optimizer-filters"><legend data-i18n="optimizer.allowedStores">可参与推荐的弹药</legend>
+                <div class="optimizer-filter-grid">
+                  <button type="button" role="switch" data-optimizer-guided-only aria-checked="false"><strong data-i18n="optimizer.guidedOnly">只考虑制导武器</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noHighDrag" aria-checked="true"><strong data-i18n="optimizer.highDrag">高阻炸弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noRockets" aria-checked="true"><strong data-i18n="page.rockets">火箭弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noMissiles" aria-checked="true"><strong data-i18n="optimizer.strikeMissiles">对地导弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noLaser" aria-checked="true"><strong data-i18n="optimizer.laserGuided">激光</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noOptical" aria-checked="true"><strong data-i18n="optimizer.opticalGuided">电视／红外</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noSatellite" aria-checked="true"><strong data-i18n="optimizer.satelliteGuided">全球卫星导航</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                </div>
+              </fieldset>
+            </div>
+            <div class="optimizer-actions"><button type="button" data-optimizer-apply hidden><span data-i18n="page.applyRecommendedLoadout">应用推荐挂载</span></button><button type="button" data-optimizer-retry hidden><span data-i18n="page.continueSearch">继续求解</span></button></div>
+            <p class="optimizer-note" data-optimizer-context></p>
+            <p class="optimizer-status" data-optimizer-status role="status"></p>
+            <div data-optimizer-result></div>
+            <details class="optimizer-explanation"><summary><span data-i18n="page.howRecommendationsWork">推荐依据</span></summary><small data-optimizer-priority-help></small><div data-optimizer-explanation></div><p class="optimizer-filter-help" data-i18n="optimizer.guidedOnlyHelp">只使用制导武器：自动推荐仅选制导炸弹或对地导弹；类别开关仍生效，手动固定挂点及配套吊舱保留。</p><p class="optimizer-filter-help" data-i18n="optimizer.guidanceHelp">多模弹药允许一种制导即可；关闭全部三类自动退出“只考虑制导”，重新开启会恢复三类。</p><p class="optimizer-filter-help" data-i18n="optimizer.allowedStoresHelp">亮起表示允许，点按即可排除；手动选好的挂点会保留。</p><p><span data-i18n="page.assignsWholeWeaponsToTheBaseBurnOutThreshold">按战区掉血自毁线分配完整弹药，火箭弹精确到枚。最多战区模式先保证目标数量；高收益同档先比较制导操作与投放枚数，再减少投放类型、弹种、多余伤害与载荷。手选挂点及配套要求会保留。</span></p><p><span data-i18n="page.theCoefficientIsNotAnActualSlOrRp">收益系数不等于实际银狮或研发点。仅校验客户端静态配装规则，改装与武器仍需在游戏中解锁。</span></p></details>
+          </section>
+          <div class="calculator-pickers">
             <section class="hangar-picker aircraft-toolbar" aria-labelledby="aircraft-picker-title">
               <header class="hangar-picker-head">
-                <span class="picker-step">1</span>
-                <div><h2 id="aircraft-picker-title">机型</h2></div>
-                <div class="hangar-selection" id="calcAircraftSelection"><strong>不限机型</strong><span>按武器计算</span></div>
+                <div><h2 id="aircraft-picker-title"><span data-i18n="page.aircraft">机型</span></h2></div>
+                <div class="hangar-selection" id="calcAircraftSelection"><strong><span data-i18n="page.anyAircraft">不限机型</span></strong><span><span data-i18n="page.calculateByWeapon">按武器计算</span></span></div>
               </header>
               <div class="aircraft-search-bar">
-              <label class="hangar-search">
-                <span class="sr-only">搜索机型</span>
-                <input id="calcAircraftSearch" type="search" autocomplete="off" placeholder="搜索机型、拼音，如 F-15E、taif">
-              </label>
-              <div class="aircraft-filter-group" role="group" aria-label="机型选项">
-                <button class="filter-chip" id="calcAircraftClear" type="button" aria-pressed="true">不限机型</button>
-                <button class="filter-chip" id="calcCustomOnly" type="button" aria-pressed="false" aria-label="仅显示支持自定义挂载的机型">仅支持自定义 <span id="calcCustomCount"></span></button>
+                <label class="hangar-search">
+                  <span class="sr-only"><span data-i18n="page.searchAircraft">搜索机型</span></span>
+                  <input id="calcAircraftSearch" type="search" autocomplete="off" placeholder="搜索机型、拼音，如 F-15E、taif" data-i18n-placeholder="page.searchAircraftOrPinyinEGF15E">
+                </label>
+                <div class="aircraft-filter-group" role="group" aria-label="机型选项" data-i18n-aria-label="page.aircraftOptions">
+                  <button class="filter-chip" id="calcAircraftClear" type="button" aria-pressed="true"><span data-i18n="page.anyAircraft2">不限机型</span></button>
+                  <button class="filter-chip" id="calcCustomOnly" type="button" aria-pressed="false" aria-label="仅显示支持自定义挂载的机型" data-i18n-aria-label="page.showOnlyAircraftSupportingCustomLoadouts"><span data-i18n="page.customLoadoutsOnly">仅支持自定义</span> <span id="calcCustomCount"></span></button>
+                </div>
               </div>
-              </div>
-              <div id="calcAircraftList" class="hangar-weapon-list hangar-aircraft-list" role="listbox" aria-label="机型搜索结果" tabindex="0">
-                <p class="hangar-weapon-empty">支持名称、拼音和首字母，如 taif、j10。</p>
+              <div id="calcAircraftList" class="hangar-weapon-list hangar-aircraft-list" role="listbox" aria-label="机型搜索结果" data-i18n-aria-label="page.aircraftSearchResults" tabindex="0">
+                <p class="hangar-weapon-empty"><span data-i18n="page.searchByNamePinyinOrInitialsEGTaif">支持名称、拼音和首字母，如 taif、j10。</span></p>
               </div>
             </section>
-        <div class="calculator-workspace loadout-workspace">
-          <div class="calculator-pickers">
             <section class="hangar-picker" aria-labelledby="weapon-picker-title">
               <header class="hangar-picker-head">
-                <span class="picker-step">2</span>
-                <div><h2 id="weapon-picker-title">挂载配置</h2><p id="calcLoadoutCaption">选择预设，查看本次出击的对地弹药</p></div>
+                <div><h2 id="weapon-picker-title"><span data-i18n="page.loadoutConfiguration">挂载配置</span></h2></div>
               </header>
               <div class="hangar-weapon-filters">
                 <label class="hangar-field hangar-kind-field">
-                  <span>种类</span>
+                  <span><span data-i18n="page.type">种类</span></span>
                   <select id="calcKind">
-                    <option value="">全部</option>
-                    <option value="bomb">炸弹</option>
-                    <option value="rocket">火箭弹</option>
-                    <option value="missile">导弹</option>
+                    <option value="" data-i18n="page.all">全部</option>
+                    <option value="bomb" data-i18n="page.bombs">炸弹</option>
+                    <option value="rocket" data-i18n="page.rockets">火箭弹</option>
+                    <option value="missile" data-i18n="page.missiles">导弹</option>
                   </select>
                 </label>
                 <label class="hangar-search">
-                  <span class="sr-only">搜索武器</span>
-                  <input id="calcSearch" type="search" autocomplete="off" placeholder="搜索 Mk 83、Hydra、FAB-500">
+                  <span class="sr-only"><span data-i18n="page.searchWeapons">搜索武器</span></span>
+                  <input id="calcSearch" type="search" autocomplete="off" placeholder="搜索 Mk 83、Hydra、FAB-500" data-i18n-placeholder="page.searchMk83HydraFab500">
                 </label>
               </div>
-              <div id="calcPresetPanel" hidden>
-                <div class="loadout-scroll" id="calcPresetList" role="listbox" aria-label="挂载预设" tabindex="0"></div>
-                <div class="loadout-footer"><span id="calcPresetCount"></span><span>游戏挂点排列</span></div>
-              </div>
-              <section id="customLoadoutEditor" class="custom-editor" aria-label="自定义挂载编辑器">
-                <div class="custom-editor-toolbar"><button type="button" class="custom-launch" data-custom-open hidden aria-expanded="false" aria-controls="customLoadoutBody"><span class="custom-launch-symbol" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg></span><span>自定义挂载</span><svg class="custom-launch-chevron" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 5 5 5-5"/></svg></button><span data-custom-status role="status"></span></div>
-                <div id="customLoadoutBody" data-custom-body hidden>
-                  <div class="custom-rack-heading"><strong>挂点配置</strong><span>点击挂点选择装备</span><button type="button" class="custom-text-button" data-custom-new>清空 / 新建</button></div>
-                  <div class="custom-slots" data-custom-slots aria-label="机型挂点"></div>
-                  <dl class="custom-mass" data-custom-mass></dl>
-                  <ul class="custom-errors" data-custom-errors></ul>
-                  <button type="button" class="custom-dependency-button" data-custom-dependencies hidden>补齐必需装备（替换占用挂点）</button>
-                  <p class="custom-total" data-custom-total></p>
-                  <div class="custom-save-bar"><label><span class="sr-only">挂载名称</span><input type="text" maxlength="40" data-custom-name placeholder="挂载名称，例如：炸点 + 制导弹"></label><button type="button" class="custom-save-button" data-custom-save disabled>保存并应用</button></div>
-                  <p class="tool-note" data-custom-notice aria-live="polite"></p>
-                  <details class="custom-saved"><summary>我的挂载 <span data-custom-saved-count>0</span></summary><div data-custom-saved></div><p class="tool-note">每机最多 20 套，保存在此浏览器。</p></details>
-                  <details class="custom-requirements"><summary>改装与解锁要求</summary><p data-custom-requirements></p></details>
-                </div>
-                <dialog class="custom-picker" data-custom-picker aria-labelledby="customPickerTitle" aria-describedby="customPickerHelp">
-                  <div class="custom-picker-head"><div><p data-custom-picker-aircraft></p><h3 id="customPickerTitle" data-custom-picker-title>选择挂载</h3></div><button type="button" class="custom-picker-close" data-custom-picker-close aria-label="关闭挂点选择">×</button></div>
-                  <div class="custom-picker-search"><label><span class="sr-only">搜索此挂点的挂载</span><input type="search" data-custom-picker-search placeholder="搜索炸弹、导弹、吊舱…" autocomplete="off"></label><span data-custom-picker-count role="status"></span></div>
-                  <div class="custom-picker-options" data-custom-picker-options></div>
-                  <p id="customPickerHelp" class="custom-picker-help">点击图标装备。标有限制的选项需调整其他挂点，校验通过后才能保存。</p>
-                </dialog>
-              </section>
               <details id="calcIndividualWeapons" class="loadout-individual" open>
-                <summary>按单一武器查看挂载上限</summary>
-              <div class="hangar-selection" id="calcWeaponSelection">
-                <strong>正在读取武器目录…</strong>
-              </div>
-              <div id="calcWeaponList" class="hangar-weapon-list" role="listbox" aria-label="武器搜索结果" tabindex="0">
-                <p class="hangar-weapon-empty">正在加载武器…</p>
-              </div>
+                <summary><span data-i18n="page.viewIndividualWeaponLimits">按单一武器查看挂载上限</span></summary>
+                <div class="hangar-selection" id="calcWeaponSelection">
+                  <strong><span data-i18n="page.readingWeaponCatalog">正在读取武器目录…</span></strong>
+                </div>
+                <div id="calcWeaponList" class="hangar-weapon-list" role="listbox" aria-label="武器搜索结果" data-i18n-aria-label="page.weaponSearchResults" tabindex="0">
+                  <p class="hangar-weapon-empty"><span data-i18n="page.loadingWeapons">正在加载武器…</span></p>
+                </div>
               </details>
             </section>
+          <section class="hangar-picker native-presets" aria-labelledby="native-presets-title"><header class="hangar-picker-head"><div><h2 id="native-presets-title" data-i18n="optimizer.gamePresets">游戏内置挂载</h2><p id="calcLoadoutCaption"><span data-i18n="page.selectAPresetToInspectItsStrikeAmmunition">选择预设，查看本次出击的对地弹药</span></p></div></header>
+            <div id="calcPresetPanel" hidden>
+              <div class="loadout-scroll" id="calcPresetList" role="listbox" aria-label="挂载预设" data-i18n-aria-label="page.loadoutPresets" tabindex="0"></div>
+              <div class="loadout-footer"><span id="calcPresetCount"></span><span><span data-i18n="page.gameStationLayout">游戏挂点排列</span></span></div>
+            </div>
+          </section>
           </div>
-
-          <article class="hangar-hud" aria-live="polite">
-            <p class="hangar-hud-context" id="calcHudContext">正在读取目录…</p>
-            <div class="hangar-result-grid">
-              <div class="hangar-result-primary">
-                <strong id="calcDestroyCount">—</strong>
-                <span id="calcDestroyLabel">所需枚数</span>
-              </div>
-              <div class="hangar-sorties" id="calcSortieCard">
-                <strong id="calcSortieCount">—</strong>
-                <span>预计出击</span>
-              </div>
-            </div>
-            <p class="hangar-fire" id="calcFireLine"></p>
-            <div id="calcPresetDetail" hidden>
-              <p class="hangar-kicker">SELECTED LOADOUT</p>
-              <h2 id="calcPresetTitle"></h2>
-              <dl class="preset-stats" id="calcPresetStats"></dl>
-              <p class="tool-note" id="calcPresetNote"></p>
-            </div>
-            <dl class="hangar-stats" id="calcStats"></dl>
-            <p class="hangar-hint" id="calcHint">选择武器后显示结果；再选机型可计算挂载上限与架次。</p>
-            <section id="loadoutOptimizer" class="optimizer-panel" aria-label="挂载收益推荐" hidden>
-              <h3>挂载收益推荐</h3>
-              <div class="optimizer-modes" role="group" aria-label="推荐目标"><button type="button" data-optimizer-mode="reward" aria-pressed="true">单战区最高收益</button><button type="button" data-optimizer-mode="targets" aria-pressed="false">最多战区</button></div>
-              <p class="optimizer-note" data-optimizer-context></p>
-              <p class="optimizer-status" data-optimizer-status role="status"></p>
-              <div data-optimizer-result></div>
-              <div class="optimizer-actions"><button type="button" data-optimizer-apply hidden>应用推荐挂载</button><button type="button" data-optimizer-retry hidden>继续求解</button></div>
-              <details class="optimizer-plan"><summary>推荐依据</summary><p>按战区掉血自毁线分配完整弹药。单战区模式优先提高挂载收益系数；最多战区模式优先提高可摧毁目标数，再比较收益系数。同等收益优先减少多余伤害，再减轻载荷。保留已选挂点及其配套要求。</p><p>收益系数不等于实际银狮或研发点。仅校验客户端静态配装规则，改装与武器仍需在游戏中解锁。</p></details>
-            </section>
-          </article>
         </div>
 
         <details class="tool-panel combination-advanced" id="combinationCalculator">
-          <summary>自由组合当量与轮次 <small>高级工具 · 不限机型</small></summary>
-          <p class="tool-note">输入任意弹药数量做比较；按机型配装请使用上方自定义挂载。</p>
+          <summary><span data-i18n="page.freeCombinationEquivalenceLoads">自由组合当量与轮次</span> <small><span data-i18n="page.advancedToolAnyAircraft">高级工具 · 不限机型</span></small></summary>
+          <p class="tool-note"><span data-i18n="page.compareArbitraryQuantitiesUseTheCustomEditorAboveFor">输入任意弹药数量做比较；按机型配装请使用上方自定义挂载。</span></p>
           <div data-combination-rows></div>
-          <div class="combination-actions"><button type="button" class="conversion-use" data-combination-add>添加弹药</button><button type="button" class="conversion-use" data-combination-preset disabled>使用当前预设</button></div>
-          <label class="hangar-field"><span>对比一种弹药的当量（可选）</span><select data-combination-reference aria-label="组合当量参照弹药"></select></label>
+          <div class="combination-actions"><button type="button" class="conversion-use" data-combination-add><span data-i18n="page.addWeapon">添加弹药</span></button><button type="button" class="conversion-use" data-combination-preset disabled><span data-i18n="page.useCurrentPreset">使用当前预设</span></button></div>
+          <label class="hangar-field"><span><span data-i18n="page.compareWithOneWeaponOptional">对比一种弹药的当量（可选）</span></span><select data-combination-reference aria-label="组合当量参照弹药" data-i18n-aria-label="page.referenceWeaponForCombinedEquivalence"></select></label>
           <p class="tool-note" data-combination-target></p>
-          <div class="reward-result" data-combination-result aria-live="polite">正在载入弹药目录…</div>
-          <p class="tool-note">每轮投放整套弹药，按全部命中、不计回血估算。自由组合的机体限制请用上方编辑器检查。</p>
+          <div class="reward-result" data-combination-result aria-live="polite"><span data-i18n="page.loadingAmmunitionCatalog">正在载入弹药目录…</span></div>
+          <p class="tool-note"><span data-i18n="page.eachRoundReleasesTheEntireCombinationAssumingAllHits">每轮投放整套弹药，按全部命中、不计回血估算。自由组合的机体限制请用上方编辑器检查。</span></p>
         </details>
-        <noscript><p class="hangar-noscript">需要启用 JavaScript。</p></noscript>
+        <noscript><p class="hangar-noscript"><span data-i18n="page.javascriptIsRequired">需要启用 JavaScript。</span></p></noscript>
 
         <details class="hangar-help">
-          <summary>怎么算</summary>
+          <summary><span data-i18n="page.calculationGuide">怎么算</span></summary>
           <ul>
-            <li>BR 使用房间允许的最高值。</li>
-            <li>枚数按武器全部命中计算；战区约九成伤害后进入燃烧自毁参考线。</li>
-            <li>自定义与混合挂载按整套伤害计算轮次和架次；单种弹药预设显示所需枚数及对应架次。</li>
-            <li>满载收益系数按整套携带弹药的任务伤害计算，不等同于实际银狮或研发点收益。</li>
-            <li>机场没有战区的燃烧自毁线，而且会在投弹间隙回血，所以实战可能多一架次。</li>
+            <li><span data-i18n="page.brIsTheHighestValueAllowedInTheRoom">BR 使用房间允许的最高值。</span></li>
+            <li><span data-i18n="page.countsAssumeAllWeaponsHitTheBaseBurnOut">枚数按武器全部命中计算；战区约九成伤害后进入燃烧自毁参考线。</span></li>
+            <li><span data-i18n="page.customAndMixedLoadoutsUseCompleteLoadDamageFor">自定义与混合挂载按整套伤害计算轮次和架次；单种弹药预设显示所需枚数及对应架次。</span></li>
+            <li><span data-i18n="page.theCoefficientUsesOnlyAmmunitionDamageCountedByThe">满载收益系数仅统计游戏计入收益的弹药伤害，不等同于实际银狮或研发点收益。</span></li>
+            <li><span data-i18n="page.airfieldsHaveNoBaseBurnOutThresholdAndRegenerate">机场没有战区的燃烧自毁线，而且会在投弹间隙回血，所以实战可能多一架次。</span></li>
           </ul>
         </details>
-        <p class="hangar-aside">适用于 EC 任务参数；请勿套用为空战历史模式（Air RB）炸点表。所有伤害结果均假设全部命中。</p>
+        <p class="hangar-aside" id="calcApplicability"></p>
 
         <section class="tool-panel" id="airportStatus" aria-labelledby="airport-status-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">AIRFIELD</p><h2 id="airport-status-title">机场状态与回血</h2><p>沿用上方 BR，查看四模块位置与修复参考。</p></header>
+          <header class="tool-panel-head"><p class="hangar-kicker">AIRFIELD</p><h2 id="airport-status-title"><span data-i18n="page.airfieldStatusRegeneration">机场状态与回血</span></h2><p><span data-i18n="page.usesTheBrAboveToShowFourModulePositions">沿用上方 BR，查看四模块位置与修复参考。</span></p></header>
           <div class="airport-workspace"><div class="airport-map-panel">
-          <div class="airport-palette" id="airportPalette" aria-label="机场状态条颜色参考"></div>
+          <div class="airport-palette" id="airportPalette" aria-label="机场状态条颜色参考" data-i18n-aria-label="page.airfieldHpBarColorReference"></div>
           <p class="tool-source" id="airportPaletteSource"></p>
           <section class="airport-comparison" id="airportDiagramDetails" aria-labelledby="airport-comparison-title">
-            <div class="airport-diagram-heading"><h3 id="airport-comparison-title">四模块位置</h3><button class="conversion-use" type="button" data-airport-rotate="90">旋转 90°</button></div>
+            <div class="airport-diagram-heading"><h3 id="airport-comparison-title"><span data-i18n="page.fourModuleLayout">四模块位置</span></h3><button class="conversion-use" type="button" data-airport-rotate="90"><span data-i18n="page.rotate90">旋转 90°</span></button></div>
             <div class="airport-comparison-panels">
-              <figure><figcaption>我方 · 基准方向</figcaption><div class="airport-reference" id="airportDiagram"></div></figure>
-              <figure class="airport-reversed"><figcaption>敌方 · 起终点相反时</figcaption><div class="airport-reference" id="airportDiagramReversed"></div></figure>
+              <figure><figcaption><span data-i18n="page.friendlyReferenceDirection">我方 · 基准方向</span></figcaption><div class="airport-reference" id="airportDiagram"></div></figure>
+              <figure class="airport-reversed"><figcaption><span data-i18n="page.enemyWhenEndpointsAreReversed">敌方 · 起终点相反时</span></figcaption><div class="airport-reference" id="airportDiagramReversed"></div></figure>
             </div>
-            <p class="tool-note">箭头：起点 → 终点。起终点相反时，四模块转 180°。</p>
-            <details class="tool-details"><summary>图示说明</summary><p>终点一端是跑道、油库，起点一端是生活区、停机区；跑道与生活区同侧。两图保持相同地图朝向。</p><p>右图仅适用于敌方起终点确实相反的情况，不代表所有地图都固定反向。图示不是实时血量，也不表示建筑实际位置。</p></details>
+            <p class="tool-note"><span data-i18n="page.arrowStartEndReversingEndpointsRotatesAllFourModules">箭头：起点 → 终点。起终点相反时，四模块转 180°。</span></p>
+            <details class="tool-details"><summary><span data-i18n="page.aboutTheDiagram">图示说明</span></summary><p><span data-i18n="page.theRunwayAndStorageAreAtTheEndLiving">终点一端是跑道、油库，起点一端是生活区、停机区；跑道与生活区同侧。两图保持相同地图朝向。</span></p><p><span data-i18n="page.theRightDiagramAppliesOnlyWhenEnemyEndpointsAre">右图仅适用于敌方起终点确实相反的情况，不代表所有地图都固定反向。图示不是实时血量，也不表示建筑实际位置。</span></p></details>
           </section>
-          </div><div class="airport-repair-panel"><h3>修复参考</h3>
+          </div><div class="airport-repair-panel"><h3><span data-i18n="page.repairReference">修复参考</span></h3>
           <div class="repair-controls">
-            <label class="hangar-field"><span>生活区剩余 <output id="repairPercentLabel">100%</output></span><input id="repairPercent" type="range" min="0" max="100" value="100" step="0.1"></label>
-            <div class="score-presets" aria-label="生活区状态"><button type="button" data-dwelling="100">完好</button><button type="button" data-dwelling="50">受损</button><button type="button" data-dwelling="0">摧毁</button></div>
+            <label class="hangar-field"><span><span data-i18n="page.livingQuartersRemaining">生活区剩余</span> <output id="repairPercentLabel">100%</output></span><input id="repairPercent" type="range" min="0" max="100" value="100" step="0.1"></label>
+            <div class="score-presets" aria-label="生活区状态" data-i18n-aria-label="page.livingQuartersState"><button type="button" data-dwelling="100"><span data-i18n="page.intact">完好</span></button><button type="button" data-dwelling="50"><span data-i18n="page.damaged">受损</span></button><button type="button" data-dwelling="0"><span data-i18n="page.destroyed">摧毁</span></button></div>
           </div>
-          <p class="repair-result" id="repairResult" role="status">正在读取任务规则…</p>
+          <p class="repair-result" id="repairResult" role="status"><span data-i18n="page.readingMissionRules">正在读取任务规则…</span></p>
           <div class="tool-chart" id="repairChart"></div>
-          <p class="tool-note">按单次修复计算，不代表每秒回血或实时倒计时。</p>
-          <details class="tool-details"><summary>公式与适用边界</summary><p id="repairFormula"></p><p>原生条件先将百分比截为整数：生活区不足 1% 或完好（100%）时，该分支跳过。1% 至不足 100% 时，为跑道、油库、停机区和生活区加入相同 HP；生活区自身也在恢复。一次轮询不等于一秒，实际轮询还取决于机场数量及任务调度，因此不推算实际恢复时间或最终恢复量。</p><p><a href="https://wiki.warthunder.com/gamemode/enduring_confrontation#airfields-and-their-modules">官方 EC 模块说明</a> · <a href="https://wiki.warthunder.com/cdk/760-cdk-mission-editor-variables">官方变量运算说明</a></p></details>
+          <p class="tool-note"><span data-i18n="page.calculatedPerRepairVisitNotPerSecondOrAs">按单次修复计算，不代表每秒回血或实时倒计时。</span></p>
+          <details class="tool-details"><summary><span data-i18n="page.formulaScope">公式与适用边界</span></summary><p id="repairFormula"></p><p><span data-i18n="page.theNativeConditionTruncatesThePercentageToAnInteger">原生条件先将百分比截为整数：生活区不足 1% 或完好（100%）时，该分支跳过。1% 至不足 100% 时，为跑道、油库、停机区和生活区加入相同 HP；生活区自身也在恢复。一次轮询不等于一秒，实际轮询还取决于机场数量及任务调度，因此不推算实际恢复时间或最终恢复量。</span></p><p><a href="https://wiki.warthunder.com/gamemode/enduring_confrontation#airfields-and-their-modules"><span data-i18n="page.officialEcModuleGuide">官方 EC 模块说明</span></a> · <a href="https://wiki.warthunder.com/cdk/760-cdk-mission-editor-variables"><span data-i18n="page.officialVariableOperations">官方变量运算说明</span></a></p></details>
           </div></div>
         </section>
 
         <section class="tool-panel" id="usefulActions" aria-labelledby="rewards-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">USEFUL ACTIONS</p><h2 id="rewards-title">这一周期，能拿多少收益？</h2><p>选好飞机，拖动得分看变化。周期和机型基准会自动填好。</p></header>
+          <header class="tool-panel-head"><p class="hangar-kicker">USEFUL ACTIONS</p><h2 id="rewards-title"><span data-i18n="page.howMuchCanThisCycleEarn">这一周期，能拿多少收益？</span></h2><p><span data-i18n="page.selectAnAircraftAndDragTheScoreCycleDuration">选好飞机，拖动得分看变化。周期和机型基准会自动填好。</span></p></header>
           <div class="reward-workspace">
             <form id="rewardsForm" class="reward-controls">
               <div class="conversion-fields">
-                <label class="hangar-field"><span>游戏模式</span><select id="rewardMode"><option value="air_sim">空战全真</option><option value="heli_pve">直升机 PvE</option></select></label>
-                <label class="hangar-field"><span>账号</span><select id="rewardAccount"><option value="regular">普通账号</option><option value="premium">高级账号</option></select></label>
+                <label class="hangar-field"><span><span data-i18n="page.gameMode">游戏模式</span></span><select id="rewardMode"><option value="air_sim" data-i18n="page.airSimulator">空战全真</option><option value="heli_pve" data-i18n="page.helicopterPve">直升机 PvE</option></select></label>
+                <label class="hangar-field"><span><span data-i18n="page.account">账号</span></span><select id="rewardAccount"><option value="regular" data-i18n="page.standardAccount">普通账号</option><option value="premium" data-i18n="page.premiumAccount">高级账号</option></select></label>
               </div>
-              <div class="simple-picker"><label class="hangar-field"><span>你驾驶的机型</span><input id="rewardSearch" type="search" autocomplete="off" placeholder="搜索名称，如 F-15E、Ka-52" aria-label="搜索收益机型"></label><select id="rewardVehicle" aria-label="选择收益机型"><option value="">正在加载机型…</option></select></div>
-              <div class="score-control"><label for="rewardScore">本周期新增得分 <small id="rewardPeriod">15 分钟内</small></label><div class="score-value"><input id="rewardScore" type="number" min="0" step="any" value="600" inputmode="decimal"><span>分</span></div><input id="rewardScoreSlider" type="range" min="0" max="1200" step="25" value="600" aria-label="调整本周期得分"><div class="score-presets"><button type="button" data-score="200">200</button><button type="button" data-score="400">400</button><button type="button" data-score="600">600</button><button type="button" data-score="800">800</button><button type="button" data-score="1000">1000</button></div><small>填写这一个周期获得的分数，不是全场累计分数。</small></div>
-              <details class="tool-details" id="rewardAdvanced"><summary>加成器、游戏卡片与实战核对</summary>
-                <label class="hangar-field"><span>SL 加成器总效果 · %</span><input id="rewardBooster" type="number" min="0" step="any" inputmode="decimal" value="0"><small>没有加成器就保持 0；多个加成器填游戏显示的合并效果。</small></label>
-                <label class="simple-check"><input id="rewardManualRate" type="checkbox">改用我在游戏里看到的 SL/min</label>
-                <label class="hangar-field"><span>游戏卡片的最大 SL/min</span><input id="rewardSlRate" type="number" min="0.01" step="any" inputmode="decimal" disabled><small>自动模式已计入上方账号与加成器；手填值直接使用。</small></label>
-                <label class="hangar-field"><span>计算方式</span><select id="rewardMethod"><option value="reference">按历史得分样本估算</option><option value="observed">核对我的实际到账</option><option value="manual">自定义换算比例</option></select></label>
-                <label class="hangar-field" id="rewardMinutesField" hidden><span>这次周期持续了几分钟</span><input id="rewardMinutes" type="number" min="0.01" max="15" step="any" value="15" inputmode="decimal"></label>
-                <label class="hangar-field" id="rewardFractionField" hidden><span>有效收益比例 · %</span><input id="rewardFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="仅在已有核验数据时填写"><small>这是合并系数，不等于战后总活跃度。</small></label>
-                <label class="hangar-field" id="rewardObservedField" hidden><span>这次“有用行动”即时到账 · SL</span><input id="rewardObserved" type="number" min="0" step="any" inputmode="decimal" placeholder="从战斗消息中的记录填写"></label>
-                <details id="rewardRpDetails"><summary>独立 RP 参数</summary><div class="conversion-fields"><label class="hangar-field"><span>RP/min 基准</span><input id="rewardRpRate" type="number" min="0.01" step="any" inputmode="decimal" placeholder="未知时留空"></label><label class="hangar-field"><span>RP 有效比例 · %</span><input id="rewardRpFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="不沿用 SL 比例"></label></div><p>客户端研发倍率不是 RP/min。没有经过核验的独立参数时，不估算 RP。</p></details>
+              <div class="simple-picker"><label class="hangar-field"><span><span data-i18n="page.yourVehicle">你驾驶的机型</span></span><input id="rewardSearch" type="search" autocomplete="off" placeholder="搜索名称，如 F-15E、Ka-52" data-i18n-placeholder="page.searchByNameEGF15EKa" aria-label="搜索收益机型" data-i18n-aria-label="page.searchRewardVehicles"></label><select id="rewardVehicle" aria-label="选择收益机型" data-i18n-aria-label="page.selectRewardVehicle"><option value="" data-i18n="page.loadingAircraft">正在加载机型…</option></select></div>
+              <div class="score-control"><label for="rewardScore"><span data-i18n="page.scoreEarnedThisCycle">本周期新增得分</span> <small id="rewardPeriod"><span data-i18n="page.within15Minutes">15 分钟内</span></small></label><div class="score-value"><input id="rewardScore" type="number" min="0" step="any" value="600" inputmode="decimal"><span><span data-i18n="page.points">分</span></span></div><input id="rewardScoreSlider" type="range" min="0" max="1200" step="25" value="600" aria-label="调整本周期得分" data-i18n-aria-label="page.adjustScoreEarnedThisCycle"><div class="score-presets"><button type="button" data-score="200">200</button><button type="button" data-score="400">400</button><button type="button" data-score="600">600</button><button type="button" data-score="800">800</button><button type="button" data-score="1000">1000</button></div><small><span data-i18n="page.enterPointsEarnedDuringThisCycleNotTheEntire">填写这一个周期获得的分数，不是全场累计分数。</span></small></div>
+              <details class="tool-details" id="rewardAdvanced"><summary><span data-i18n="page.boostersStatCardBattleRecord">加成器、游戏卡片与实战核对</span></summary>
+                <label class="hangar-field"><span><span data-i18n="page.combinedSlBoosterEffect">SL 加成器总效果 · %</span></span><input id="rewardBooster" type="number" min="0" step="any" inputmode="decimal" value="0"><small><span data-i18n="page.leave0ForNoBoosterForMultipleBoostersEnter">没有加成器就保持 0；多个加成器填游戏显示的合并效果。</span></small></label>
+                <label class="simple-check"><input id="rewardManualRate" type="checkbox"><span data-i18n="page.useTheSlMinISeeInTheGame">改用我在游戏里看到的 SL/min</span></label>
+                <label class="hangar-field"><span><span data-i18n="page.maximumSlMinOnTheStatCard">游戏卡片的最大 SL/min</span></span><input id="rewardSlRate" type="number" min="0.01" step="any" inputmode="decimal" disabled><small><span data-i18n="page.automaticModeIncludesAccountAndBoosterSettingsAboveManual">自动模式已计入上方账号与加成器；手填值直接使用。</span></small></label>
+                <label class="hangar-field"><span><span data-i18n="page.calculationMethod">计算方式</span></span><select id="rewardMethod"><option value="reference" data-i18n="page.estimateFromHistoricalScoreSamples">按历史得分样本估算</option><option value="observed" data-i18n="page.checkMyActualAward">核对我的实际到账</option><option value="manual" data-i18n="page.customConversionRatio">自定义换算比例</option></select></label>
+                <label class="hangar-field" id="rewardMinutesField" hidden><span><span data-i18n="page.cycleDurationInMinutes">这次周期持续了几分钟</span></span><input id="rewardMinutes" type="number" min="0.01" max="15" step="any" value="15" inputmode="decimal"></label>
+                <label class="hangar-field" id="rewardFractionField" hidden><span><span data-i18n="page.effectiveRewardRatio">有效收益比例 · %</span></span><input id="rewardFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="仅在已有核验数据时填写" data-i18n-placeholder="page.enterOnlyIfIndependentlyVerified"><small><span data-i18n="page.aCombinedFactorNotPostBattleOverallActivity">这是合并系数，不等于战后总活跃度。</span></small></label>
+                <label class="hangar-field" id="rewardObservedField" hidden><span><span data-i18n="page.immediateSlFromThisUsefulActionsCycle">这次“有用行动”即时到账 · SL</span></span><input id="rewardObserved" type="number" min="0" step="any" inputmode="decimal" placeholder="从战斗消息中的记录填写" data-i18n-placeholder="page.enterFromBattleMessageRecords"></label>
+                <details id="rewardRpDetails"><summary><span data-i18n="page.separateRpParameters">独立 RP 参数</span></summary><div class="conversion-fields"><label class="hangar-field"><span><span data-i18n="page.rpMinReference">RP/min 基准</span></span><input id="rewardRpRate" type="number" min="0.01" step="any" inputmode="decimal" placeholder="未知时留空" data-i18n-placeholder="page.leaveBlankIfUnknown"></label><label class="hangar-field"><span><span data-i18n="page.effectiveRpRatio">RP 有效比例 · %</span></span><input id="rewardRpFraction" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="不沿用 SL 比例" data-i18n-placeholder="page.doNotReuseTheSlRatio"></label></div><p><span data-i18n="page.theClientResearchMultiplierIsNotRpMinRp">客户端研发倍率不是 RP/min。没有经过核验的独立参数时，不估算 RP。</span></p></details>
               </details>
             </form>
-            <div class="reward-visuals"><p class="reference-pill">历史实测参考 · 实际到账以游戏为准</p><div class="reward-result" id="rewardResult" aria-live="polite"><p>正在载入收益目录…</p></div><div class="chart-heading"><h3>得分 → 收益参考</h3><span id="rewardChartPeriod">每 15 分钟</span></div><div class="reward-chart" id="rewardChart" role="img"></div><p id="rewardChartHint" class="tool-note">曲线仅连接已有样本，不推断低分或封顶。</p></div>
+            <div class="reward-visuals"><p class="reference-pill"><span data-i18n="page.historicalReferenceActualAwardsAreDeterminedByTheGame">历史实测参考 · 实际到账以游戏为准</span></p><div class="reward-result" id="rewardResult" aria-live="polite"><p><span data-i18n="page.loadingRewardCatalog">正在载入收益目录…</span></p></div><div class="chart-heading"><h3><span data-i18n="page.scoreRewardReference">得分 → 收益参考</span></h3><span id="rewardChartPeriod"><span data-i18n="page.every15Minutes">每 15 分钟</span></span></div><div class="reward-chart" id="rewardChart" role="img"></div><p id="rewardChartHint" class="tool-note"><span data-i18n="page.theCurveConnectsMeasuredSamplesOnlyNoLowScore">曲线仅连接已有样本，不推断低分或封顶。</span></p></div>
           </div>
-          <details class="tool-details" id="rewardEvidence"><summary>查看公式、数据来源与适用范围</summary><p id="rewardSource"></p><p id="rewardCardPreview"></p><div id="rewardFormula" class="conversion-formulas"></div><p id="rewardReferenceNote"></p><div class="tool-table-scroll"><table class="tool-table"><thead><tr><th scope="col">周期得分</th><th scope="col">样本比例</th><th scope="col">相比上一档</th></tr></thead><tbody id="rewardReferenceRows"></tbody></table></div><p><code>参考收益 = 每分钟基准 × 周期分钟数 × 样本比例</code>。样本比例不是当前服务器活动率公式。空战全真即时发放 80%，另外 20% 在成功机场着陆后发放；直升机参考只计算即时部分，不再扣 20%。</p><p>得分参考来自 2024 年实测，仅在完整周期和已观测得分内插值：空战 200–1050 分，直升机仅 Ka-52 的 200–800 分。它们不是当前版本的游戏内公式。加成器助手只复现客户端卡片显示，高级载具不重复乘倍数。死亡、J-out、跨周期着陆奖励、维修和胜负结算不在本页估算范围。<a href="https://warthunder.com/en/game/changelog/current/1441">官方空战说明</a> · <a href="https://warthunder.com/en/game/changelog/current/1362">官方直升机周期</a></p></details>
+          <details class="tool-details" id="rewardEvidence"><summary><span data-i18n="page.formulaSourcesScope">查看公式、数据来源与适用范围</span></summary><p id="rewardSource"></p><p id="rewardCardPreview"></p><div id="rewardFormula" class="conversion-formulas"></div><p id="rewardReferenceNote"></p><div class="tool-table-scroll"><table class="tool-table"><thead><tr><th scope="col"><span data-i18n="page.cycleScore">周期得分</span></th><th scope="col"><span data-i18n="page.sampleRatio">样本比例</span></th><th scope="col"><span data-i18n="page.changeFromPreviousBracket">相比上一档</span></th></tr></thead><tbody id="rewardReferenceRows"></tbody></table></div><p><code><span data-i18n="page.referenceRewardPerMinuteRateCycleMinutesSampleRatio">参考收益 = 每分钟基准 × 周期分钟数 × 样本比例</span></code><span data-i18n="page.theSampleRatioIsNotTheCurrentServerActivity">。样本比例不是当前服务器活动率公式。空战全真即时发放 80%，另外 20% 在成功机场着陆后发放；直升机参考只计算即时部分，不再扣 20%。</span></p><p><span data-i18n="page.scoreReferencesComeFrom2024MeasurementsInterpolatedOnlyWithin">得分参考来自 2024 年实测，仅在完整周期和已观测得分内插值：空战 200–1050 分，直升机仅 Ka-52 的 200–800 分。它们不是当前版本的游戏内公式。加成器助手只复现客户端卡片显示，高级载具不重复乘倍数。死亡、J-out、跨周期着陆奖励、维修和胜负结算不在本页估算范围。</span><a href="https://warthunder.com/en/game/changelog/current/1441"><span data-i18n="page.officialAircraftExplanation">官方空战说明</span></a> · <a href="https://warthunder.com/en/game/changelog/current/1362"><span data-i18n="page.officialHelicopterCycle">官方直升机周期</span></a></p></details>
         </section>
 
         <section class="tool-panel" id="explosiveConversion" aria-labelledby="conversion-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">EXPLOSIVE EQUIVALENCE</p><h2 id="conversion-title">换一种武器，需要多少枚？</h2><p>选两种武器，再填已有数量。装药和 TNT 系数会从目录自动读取。</p></header>
+          <header class="tool-panel-head"><p class="hangar-kicker">EXPLOSIVE EQUIVALENCE</p><h2 id="conversion-title"><span data-i18n="page.howManyOfAnotherWeapon">换一种武器，需要多少枚？</span></h2><p><span data-i18n="page.selectTwoWeaponsAndEnterTheExistingQuantityFiller">选两种武器，再填已有数量。装药和 TNT 系数会从目录自动读取。</span></p></header>
           <form id="conversionForm">
             <div class="conversion-sides">
-              <fieldset class="conversion-side"><legend>A · 已有的武器</legend>
-                <div class="simple-picker"><input id="chargeSearchA" type="search" autocomplete="off" placeholder="搜索武器，如 Mk 83" aria-label="搜索 A 武器"><select id="chargeWeaponA" aria-label="选择 A 武器"><option value="">自定义装药</option></select></div>
-                <p class="conversion-source" id="chargeSourceA">自定义示例 · 100 kg TNT / 枚</p>
-                <details id="chargeCustomA" class="charge-custom"><summary>修改装药 / 自定义参数</summary><button class="conversion-use" id="chargeUseA" type="button">使用上方计算器的武器</button><label class="hangar-field"><span>装药类型</span><select id="chargeTypeA"><option value="">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label><div class="conversion-fields"><label class="hangar-field"><span>每枚实际装药 · kg</span><input id="chargeMassA" type="number" min="0" step="any" inputmode="decimal" value="100"></label><label class="hangar-field"><span>TNT 系数</span><input id="chargeFactorA" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div><p>填弹内装药质量，不是整枚武器重量。</p></details>
+              <fieldset class="conversion-side"><legend><span data-i18n="page.aCurrentWeapon">A · 已有的武器</span></legend>
+                <div class="simple-picker"><input id="chargeSearchA" type="search" autocomplete="off" placeholder="搜索武器，如 Mk 83" data-i18n-placeholder="page.searchWeaponsEGMk83" aria-label="搜索 A 武器" data-i18n-aria-label="page.searchWeaponA"><select id="chargeWeaponA" aria-label="选择 A 武器" data-i18n-aria-label="page.selectWeaponA"><option value="" data-i18n="page.customFiller">自定义装药</option></select></div>
+                <p class="conversion-source" id="chargeSourceA"><span data-i18n="page.customExample100KgTntWeapon">自定义示例 · 100 kg TNT / 枚</span></p>
+                <details id="chargeCustomA" class="charge-custom"><summary><span data-i18n="page.editFillerCustomParameters">修改装药 / 自定义参数</span></summary><button class="conversion-use" id="chargeUseA" type="button"><span data-i18n="page.useWeaponFromCalculatorAbove">使用上方计算器的武器</span></button><label class="hangar-field"><span><span data-i18n="page.fillerType">装药类型</span></span><select id="chargeTypeA"><option value="" data-i18n="page.customFactor">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label><div class="conversion-fields"><label class="hangar-field"><span><span data-i18n="page.fillerMassPerWeaponKg">每枚实际装药 · kg</span></span><input id="chargeMassA" type="number" min="0" step="any" inputmode="decimal" value="100"></label><label class="hangar-field"><span><span data-i18n="page.tntFactor">TNT 系数</span></span><input id="chargeFactorA" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div><p><span data-i18n="page.enterExplosiveFillerMassNotTotalWeaponMass">填弹内装药质量，不是整枚武器重量。</span></p></details>
               </fieldset>
-              <fieldset class="conversion-side"><legend>B · 想换成的武器</legend>
-                <div class="simple-picker"><input id="chargeSearchB" type="search" autocomplete="off" placeholder="搜索武器，如 Mk 82" aria-label="搜索 B 武器"><select id="chargeWeaponB" aria-label="选择 B 武器"><option value="">自定义装药</option></select></div>
-                <p class="conversion-source" id="chargeSourceB">自定义示例 · 50 kg TNT / 枚</p>
-                <details id="chargeCustomB" class="charge-custom"><summary>修改装药 / 自定义参数</summary><button class="conversion-use" id="chargeUseB" type="button">使用上方计算器的武器</button><label class="hangar-field"><span>装药类型</span><select id="chargeTypeB"><option value="">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label><div class="conversion-fields"><label class="hangar-field"><span>每枚实际装药 · kg</span><input id="chargeMassB" type="number" min="0" step="any" inputmode="decimal" value="50"></label><label class="hangar-field"><span>TNT 系数</span><input id="chargeFactorB" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div><p>填弹内装药质量，不是整枚武器重量。</p></details>
+              <fieldset class="conversion-side"><legend><span data-i18n="page.bReplacementWeapon">B · 想换成的武器</span></legend>
+                <div class="simple-picker"><input id="chargeSearchB" type="search" autocomplete="off" placeholder="搜索武器，如 Mk 82" data-i18n-placeholder="page.searchWeaponsEGMk82" aria-label="搜索 B 武器" data-i18n-aria-label="page.searchWeaponB"><select id="chargeWeaponB" aria-label="选择 B 武器" data-i18n-aria-label="page.selectWeaponB"><option value="" data-i18n="page.customFiller2">自定义装药</option></select></div>
+                <p class="conversion-source" id="chargeSourceB"><span data-i18n="page.customExample50KgTntWeapon">自定义示例 · 50 kg TNT / 枚</span></p>
+                <details id="chargeCustomB" class="charge-custom"><summary><span data-i18n="page.editFillerCustomParameters2">修改装药 / 自定义参数</span></summary><button class="conversion-use" id="chargeUseB" type="button"><span data-i18n="page.useWeaponFromCalculatorAbove2">使用上方计算器的武器</span></button><label class="hangar-field"><span><span data-i18n="page.fillerType2">装药类型</span></span><select id="chargeTypeB"><option value="" data-i18n="page.customFactor2">自定义系数</option><option value="tnt:1">TNT · ×1</option></select></label><div class="conversion-fields"><label class="hangar-field"><span><span data-i18n="page.fillerMassPerWeaponKg2">每枚实际装药 · kg</span></span><input id="chargeMassB" type="number" min="0" step="any" inputmode="decimal" value="50"></label><label class="hangar-field"><span><span data-i18n="page.tntFactor2">TNT 系数</span></span><input id="chargeFactorB" type="number" min="0" step="any" inputmode="decimal" value="1"></label></div><p><span data-i18n="page.enterExplosiveFillerMassNotTotalWeaponMass2">填弹内装药质量，不是整枚武器重量。</span></p></details>
               </fieldset>
             </div>
-            <div class="conversion-quantity"><div class="hangar-field"><label for="chargeCount">已有 A 的数量</label><div class="quantity-stepper"><button id="chargeLess" type="button" aria-label="减少一枚 A">−</button><input id="chargeCount" type="number" min="0" step="1" inputmode="numeric" value="1"><button id="chargeMore" type="button" aria-label="增加一枚 A">+</button></div></div><button class="conversion-use" id="chargeSwap" type="button">交换两种武器 ⇄</button><span class="tool-note">交换后保持已有数量。</span></div>
+            <div class="conversion-quantity"><div class="hangar-field"><label for="chargeCount"><span data-i18n="page.quantityOfA">已有 A 的数量</span></label><div class="quantity-stepper"><button id="chargeLess" type="button" aria-label="减少一枚 A" data-i18n-aria-label="page.removeOneA">−</button><input id="chargeCount" type="number" min="0" step="1" inputmode="numeric" value="1"><button id="chargeMore" type="button" aria-label="增加一枚 A" data-i18n-aria-label="page.addOneA">+</button></div></div><button class="conversion-use" id="chargeSwap" type="button"><span data-i18n="page.swapWeapons">交换两种武器 ⇄</span></button><span class="tool-note"><span data-i18n="page.swappingPreservesTheExistingQuantity">交换后保持已有数量。</span></span></div>
           </form>
           <div id="chargeResult" class="conversion-result" aria-live="polite"></div>
-          <p class="tool-note">这里比较 TNT 当量；要算摧毁战区的枚数，请使用上方战区计算器。</p>
-          <details class="tool-details" id="chargeFormulaDetails"><summary>查看换算公式</summary><div id="chargeFormula" class="conversion-formulas"></div><p>整枚数量向上取整，图中斜纹是取整后多出的当量。显示值会缩写，计算使用完整精度。</p></details>
-          <details class="tool-details" id="chargeDamageDetails"><summary>另外比较任务伤害（HP）</summary><div class="conversion-fields"><label class="hangar-field"><span>A 单枚任务伤害 · HP</span><input id="chargeDamageA" type="number" min="0" step="any" inputmode="decimal" placeholder="目录读取或自填"></label><label class="hangar-field"><span>B 单枚任务伤害 · HP</span><input id="chargeDamageB" type="number" min="0" step="any" inputmode="decimal" placeholder="目录读取或自填"></label></div><div id="chargeDamageResult" class="conversion-damage" aria-live="polite"></div><p>装药修改后会清除原目录伤害。TNT 当量相等不代表任务伤害相等，燃烧弹等特殊武器尤其不能套用；手填 HP 只按所填假设比较。</p></details>
+          <p class="tool-note"><span data-i18n="page.thisComparesTntEquivalenceUseTheBaseCalculatorAbove">这里比较 TNT 当量；要算摧毁战区的枚数，请使用上方战区计算器。</span></p>
+          <details class="tool-details" id="chargeFormulaDetails"><summary><span data-i18n="page.conversionFormulas">查看换算公式</span></summary><div id="chargeFormula" class="conversion-formulas"></div><p><span data-i18n="page.wholeWeaponCountsRoundUpHatchingShowsTheResulting">整枚数量向上取整，图中斜纹是取整后多出的当量。显示值会缩写，计算使用完整精度。</span></p></details>
+          <details class="tool-details" id="chargeDamageDetails"><summary><span data-i18n="page.compareMissionDamageSeparatelyHp">另外比较任务伤害（HP）</span></summary><div class="conversion-fields"><label class="hangar-field"><span><span data-i18n="page.aMissionDamagePerWeaponHp">A 单枚任务伤害 · HP</span></span><input id="chargeDamageA" type="number" min="0" step="any" inputmode="decimal" placeholder="目录读取或自填" data-i18n-placeholder="page.catalogOrManualEntry"></label><label class="hangar-field"><span><span data-i18n="page.bMissionDamagePerWeaponHp">B 单枚任务伤害 · HP</span></span><input id="chargeDamageB" type="number" min="0" step="any" inputmode="decimal" placeholder="目录读取或自填" data-i18n-placeholder="page.catalogOrManualEntry2"></label></div><div id="chargeDamageResult" class="conversion-damage" aria-live="polite"></div><p><span data-i18n="page.editingFillerClearsTheOriginalCatalogDamageEqualTnt">装药修改后会清除原目录伤害。TNT 当量相等不代表任务伤害相等，燃烧弹等特殊武器尤其不能套用；手填 HP 只按所填假设比较。</span></p></details>
         </section>
 
         <section class="tool-panel" id="loadoutCompare" aria-labelledby="compare-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">LOADOUTS</p><h2 id="compare-title">同机型挂载对比</h2><p id="compareContext">先在上方选择机型，即可对比它的全部可用挂载。</p></header>
-          <div class="tool-table-scroll" tabindex="0" role="region" aria-label="挂载对比，可横向滚动">
+          <header class="tool-panel-head"><p class="hangar-kicker">LOADOUTS</p><h2 id="compare-title"><span data-i18n="page.compareOneAircraftSLoadouts">同机型挂载对比</span></h2><p id="compareContext"><span data-i18n="page.selectAnAircraftAboveToCompareItsAvailableLoadouts">先在上方选择机型，即可对比它的全部可用挂载。</span></p></header>
+          <div class="tool-table-scroll" tabindex="0" role="region" aria-label="挂载对比，可横向滚动" data-i18n-aria-label="page.loadoutComparisonHorizontallyScrollable">
             <table class="tool-table" id="compareTable" hidden>
-              <thead><tr><th scope="col">武器</th><th scope="col">每目标枚数</th><th scope="col">单次上限</th><th scope="col">目标 / 满载</th><th scope="col">打一个目标需出击</th><th scope="col">每目标弹重</th></tr></thead>
+              <thead><tr><th scope="col"><span data-i18n="page.weapon">武器</span></th><th scope="col"><span data-i18n="page.weaponsTarget">每目标枚数</span></th><th scope="col"><span data-i18n="page.maximumSortie">单次上限</span></th><th scope="col"><span data-i18n="page.targetsFullLoad">目标 / 满载</span></th><th scope="col"><span data-i18n="page.sortiesTarget">打一个目标需出击</span></th><th scope="col"><span data-i18n="page.ammunitionMassTarget">每目标弹重</span></th></tr></thead>
               <tbody id="compareRows"></tbody>
             </table>
           </div>
-          <p class="tool-note">按最少架次、每次可完成的目标数排序。每行是独立的同型武器上限，不可把各行相加当作混挂；弹重不含挂架。基地采用点燃 / 自毁参考线，机场按满血且不计回血。不能据此判断飞行性能或实际命中率。</p>
+          <p class="tool-note"><span data-i18n="page.sortedByFewestSortiesThenTargetsPerSortieEach">按最少架次、每次可完成的目标数排序。每行是独立的同型武器上限，不可把各行相加当作混挂；弹重不含挂架。基地采用点燃 / 自毁参考线，机场按满血且不计回血。不能据此判断飞行性能或实际命中率。</span></p>
         </section>
 
         <section class="tool-panel" id="returnFuel" aria-labelledby="fuel-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">RETURN PLAN</p><h2 id="fuel-title">返航燃油规划</h2><p>用本次飞行的实测油耗和地速，估算到达机场后还能留多少油。</p></header>
+          <header class="tool-panel-head"><p class="hangar-kicker">RETURN PLAN</p><h2 id="fuel-title"><span data-i18n="page.returnFuelPlanner">返航燃油规划</span></h2><p><span data-i18n="page.useMeasuredFuelBurnAndGroundSpeedToEstimate">用本次飞行的实测油耗和地速，估算到达机场后还能留多少油。</span></p></header>
           <form id="fuelForm" class="tool-input-grid">
-            <label class="hangar-field"><span>当前燃油 · kg（可选）</span><input id="fuelKg" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000"></label>
-            <label class="hangar-field"><span>实测油耗 · kg/min</span><input id="fuelBurn" type="number" min="0.01" step="any" inputmode="decimal" placeholder="例如 60"></label>
-            <label class="hangar-field"><span>返航地速 · km/h</span><input id="fuelSpeed" type="number" min="0.01" step="any" inputmode="decimal" placeholder="例如 720"></label>
-            <label class="hangar-field"><span>机场直线距离 · km</span><input id="fuelDistance" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 36"></label>
-            <label class="hangar-field"><span>绕行余量 · %</span><input id="fuelRoute" type="number" min="0" step="any" inputmode="decimal" value="20"></label>
-            <label class="hangar-field"><span>到达后储备 · min</span><input id="fuelReserve" type="number" min="0" step="any" inputmode="decimal" value="5"></label>
+            <label class="hangar-field"><span><span data-i18n="page.currentFuelKgOptional">当前燃油 · kg（可选）</span></span><input id="fuelKg" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 1000" data-i18n-placeholder="page.eG1000"></label>
+            <label class="hangar-field"><span><span data-i18n="page.measuredFuelBurnKgMin">实测油耗 · kg/min</span></span><input id="fuelBurn" type="number" min="0.01" step="any" inputmode="decimal" placeholder="例如 60" data-i18n-placeholder="page.eG60"></label>
+            <label class="hangar-field"><span><span data-i18n="page.returnGroundSpeedKmH">返航地速 · km/h</span></span><input id="fuelSpeed" type="number" min="0.01" step="any" inputmode="decimal" placeholder="例如 720" data-i18n-placeholder="page.eG720"></label>
+            <label class="hangar-field"><span><span data-i18n="page.directDistanceToAirfieldKm">机场直线距离 · km</span></span><input id="fuelDistance" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 36" data-i18n-placeholder="page.eG36"></label>
+            <label class="hangar-field"><span><span data-i18n="page.routeAllowance">绕行余量 · %</span></span><input id="fuelRoute" type="number" min="0" step="any" inputmode="decimal" value="20"></label>
+            <label class="hangar-field"><span><span data-i18n="page.arrivalReserveMin">到达后储备 · min</span></span><input id="fuelReserve" type="number" min="0" step="any" inputmode="decimal" value="5"></label>
           </form>
-          <div class="fuel-plan-result" id="fuelResult" aria-live="polite"><p>填入油耗、地速和距离后计算；缺少当前燃油时只显示所需油量。</p></div>
-          <details class="tool-details"><summary>怎样获得可用的实测油耗？</summary><p>在接近返航的高度、挂载与油门下保持稳定平飞，用前后燃油质量差除以间隔分钟数。排除加油、抛副油箱和大幅机动。改油门、爬升或开加力后应重新测量。地速反映实际行进速度，不能直接用 IAS 代替。</p><p>默认 20% 绕行和 5 分钟储备只是可调整的规划假设。这里不读取 8111，也不以静态发动机表冒充实测；结果不含空战、等待和机况变化。</p></details>
+          <div class="fuel-plan-result" id="fuelResult" aria-live="polite"><p><span data-i18n="page.enterFuelBurnGroundSpeedAndDistanceWithoutCurrent">填入油耗、地速和距离后计算；缺少当前燃油时只显示所需油量。</span></p></div>
+          <details class="tool-details"><summary><span data-i18n="page.howDoIMeasureUsefulFuelBurn">怎样获得可用的实测油耗？</span></summary><p><span data-i18n="page.maintainSteadyLevelFlightNearTheReturnAltitudeLoadout">在接近返航的高度、挂载与油门下保持稳定平飞，用前后燃油质量差除以间隔分钟数。排除加油、抛副油箱和大幅机动。改油门、爬升或开加力后应重新测量。地速反映实际行进速度，不能直接用 IAS 代替。</span></p><p><span data-i18n="page.theDefault20RouteAllowanceAnd5MinuteReserve">默认 20% 绕行和 5 分钟储备只是可调整的规划假设。这里不读取 8111，也不以静态发动机表冒充实测；结果不含空战、等待和机况变化。</span></p></details>
         </section>
 
         <section class="tool-panel air-combat" id="airCombat" aria-labelledby="air-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">AIR-TO-AIR · ENCOUNTER LAB</p><h2 id="air-title">来弹还在跟，下一步怎么飞？</h2><p>比较持续 39、转冷与改变机动平面。输入当前来弹状态，查看它需要怎样修正交会。</p></header>
-          <p id="airSource" class="tool-source" role="status">正在载入雷达弹参数…</p>
+          <header class="tool-panel-head"><p class="hangar-kicker">AIR-TO-AIR · ENCOUNTER LAB</p><h2 id="air-title"><span data-i18n="page.theMissileIsStillTrackingWhatNext">来弹还在跟，下一步怎么飞？</span></h2><p><span data-i18n="page.compareContinuedBeamingTurningColdAndChangingTheManeuver">比较持续 39、转冷与改变机动平面。输入当前来弹状态，查看它需要怎样修正交会。</span></p></header>
+          <p id="airSource" class="tool-source" role="status"><span data-i18n="page.loadingRadarMissileParameters">正在载入雷达弹参数…</span></p>
           <div class="air-workspace">
             <form id="airForm" class="air-controls">
-              <label class="hangar-field"><span>来袭弹型</span><select id="airWeapon" disabled><option>载入中…</option></select></label>
-              <div class="air-presets" aria-label="交会示例"><button type="button" data-air-preset="high">高空横向</button><button type="button" data-air-preset="late">近距来弹</button><button type="button" data-air-preset="descending">上下交会</button></div>
+              <label class="hangar-field"><span><span data-i18n="page.incomingMissile">来袭弹型</span></span><select id="airWeapon" disabled><option data-i18n="page.loading">载入中…</option></select></label>
+              <div class="air-presets" aria-label="交会示例" data-i18n-aria-label="page.encounterExamples"><button type="button" data-air-preset="high"><span data-i18n="page.highAltitudeBeam">高空横向</span></button><button type="button" data-air-preset="late"><span data-i18n="page.closeRangeThreat">近距来弹</span></button><button type="button" data-air-preset="descending"><span data-i18n="page.verticalSeparation">上下交会</span></button></div>
               <div class="conversion-fields">
-                <label class="hangar-field"><span>当前斜距 · km</span><input id="airRange" type="number" min="0.2" max="30" step="0.1" value="5" required></label>
-                <label class="hangar-field"><span>来弹速度 · m/s</span><input id="airMissileSpeed" type="number" min="200" max="2000" step="10" value="1000" required></label>
-                <label class="hangar-field"><span>飞机 TAS · km/h</span><input id="airTargetSpeed" type="number" min="360" max="2340" step="10" value="1080" required></label>
-                <label class="hangar-field"><span>机动法向加速度 · g</span><input id="airTargetG" type="number" min="1" max="12" step="0.5" value="9" required></label>
-                <label class="hangar-field"><span>飞机高度 · m</span><input id="airTargetAltitude" type="number" min="0" max="18000" step="100" value="8000" required></label>
-                <label class="hangar-field"><span>来弹高度 · m</span><input id="airMissileAltitude" type="number" min="0" max="20000" step="100" value="8000" required></label>
+                <label class="hangar-field"><span><span data-i18n="page.currentSlantRangeKm">当前斜距 · km</span></span><input id="airRange" type="number" min="0.2" max="30" step="0.1" value="5" required></label>
+                <label class="hangar-field"><span><span data-i18n="page.missileSpeedMS">来弹速度 · m/s</span></span><input id="airMissileSpeed" type="number" min="200" max="2000" step="10" value="1000" required></label>
+                <label class="hangar-field"><span><span data-i18n="page.aircraftTasKmH">飞机 TAS · km/h</span></span><input id="airTargetSpeed" type="number" min="360" max="2340" step="10" value="1080" required></label>
+                <label class="hangar-field"><span><span data-i18n="page.maneuverNormalAccelerationG">机动法向加速度 · g</span></span><input id="airTargetG" type="number" min="1" max="12" step="0.5" value="9" required></label>
+                <label class="hangar-field"><span><span data-i18n="page.aircraftAltitudeM">飞机高度 · m</span></span><input id="airTargetAltitude" type="number" min="0" max="18000" step="100" value="8000" required></label>
+                <label class="hangar-field"><span><span data-i18n="page.missileAltitudeM">来弹高度 · m</span></span><input id="airMissileAltitude" type="number" min="0" max="20000" step="100" value="8000" required></label>
               </div>
-              <div class="air-slider"><label for="airAspect">当前航迹方向 <output id="airAspectValue">90° · 横向</output></label><input id="airAspect" type="range" min="0" max="180" step="1" value="90"><div><span>0° 远离</span><span>90° 横向</span><span>180° 迎头</span></div></div>
+              <div class="air-slider"><label for="airAspect"><span data-i18n="page.currentFlightPathDirection">当前航迹方向</span> <output id="airAspectValue"><span data-i18n="page.90Beam">90° · 横向</span></output></label><input id="airAspect" type="range" min="0" max="180" step="1" value="90"><div><span><span data-i18n="page.0Away">0° 远离</span></span><span><span data-i18n="page.90Beam2">90° 横向</span></span><span><span data-i18n="page.180HeadOn">180° 迎头</span></span></div></div>
               <div class="conversion-fields">
-                <label class="hangar-field"><span>开始机动 · 秒后</span><input id="airDelay" type="number" min="0" max="15" step="0.1" value="0" required></label>
-                <label class="hangar-field"><span>当前爬升角 · °</span><input id="airFlightPath" type="number" min="-45" max="45" step="1" value="0" required></label>
+                <label class="hangar-field"><span><span data-i18n="page.startManeuverAfterS">开始机动 · 秒后</span></span><input id="airDelay" type="number" min="0" max="15" step="0.1" value="0" required></label>
+                <label class="hangar-field"><span><span data-i18n="page.currentFlightPathAngle">当前爬升角 · °</span></span><input id="airFlightPath" type="number" min="-45" max="45" step="1" value="0" required></label>
               </div>
-              <details class="tool-details"><summary>观测中断假设</summary><p>默认始终有观测。这里手动假设从开始机动时丢失观测，期间沿旧速度外推，到期恢复观测；不会因为 39 或投箔条自动脱锁。</p><div class="conversion-fields"><label class="hangar-field"><span>中断持续 · s</span><input id="airGap" type="number" min="0" max="10" step="0.1" value="0" required></label><label class="hangar-field"><span>导弹已飞行 · s</span><input id="airAge" type="number" min="0" max="120" step="0.1" value="10" required></label></div></details>
-              <details class="tool-details"><summary>输入与场景假设</summary><p>速度和高度均手填。无风；g 为理想航迹法向加速度，不等于座舱过载表读数。三个动作采用相同初始弹道，保持速度恒定；结果仅供短时机动比较。</p></details>
+              <details class="tool-details"><summary><span data-i18n="page.observationInterruptionAssumption">观测中断假设</span></summary><p><span data-i18n="page.observationIsContinuousByDefaultYouMayAssumeIt">默认始终有观测。这里手动假设从开始机动时丢失观测，期间沿旧速度外推，到期恢复观测；不会因为 39 或投箔条自动脱锁。</span></p><div class="conversion-fields"><label class="hangar-field"><span><span data-i18n="page.interruptionDurationS">中断持续 · s</span></span><input id="airGap" type="number" min="0" max="10" step="0.1" value="0" required></label><label class="hangar-field"><span><span data-i18n="page.missileFlightTimeElapsedS">导弹已飞行 · s</span></span><input id="airAge" type="number" min="0" max="120" step="0.1" value="10" required></label></div></details>
+              <details class="tool-details"><summary><span data-i18n="page.inputsScenarioAssumptions">输入与场景假设</span></summary><p><span data-i18n="page.speedsAndAltitudesAreManualInputsNoWindG">速度和高度均手填。无风；g 为理想航迹法向加速度，不等于座舱过载表读数。三个动作采用相同初始弹道，保持速度恒定；结果仅供短时机动比较。</span></p></details>
             </form>
             <div class="air-visuals">
-              <p class="air-model-label">短时定速对照 · 不含气动耗能与引信</p>
+              <p class="air-model-label"><span data-i18n="page.shortTermConstantSpeedComparisonNoAerodynamicEnergyLoss">短时定速对照 · 不含气动耗能与引信</span></p>
               <div id="airResult" class="air-result" aria-live="polite"></div>
-              <div id="airCompare" class="air-compare" role="group" aria-label="选择要查看的机动"></div>
-              <p class="air-plot-legend"><span>━━ 飞机</span><span>┄┄ 来弹</span><span>全轨迹 · 拖动时间查看位置</span></p>
-              <div id="airPlot" class="air-plot" role="img" aria-label="飞机与导弹交会轨迹"></div>
-              <div class="air-scrub"><button id="airPlay" type="button" aria-label="播放轨迹">▶ 播放</button><input id="airTime" type="range" min="0" max="1000" value="0" aria-label="交会时间"><output id="airTimeValue">0.0 s</output></div>
+              <div id="airCompare" class="air-compare" role="group" aria-label="选择要查看的机动" data-i18n-aria-label="page.selectManeuverToView"></div>
+              <p class="air-plot-legend"><span><span data-i18n="page.aircraft2">━━ 飞机</span></span><span><span data-i18n="page.missile">┄┄ 来弹</span></span><span><span data-i18n="page.fullTrajectoryDragTimeToInspectPositions">全轨迹 · 拖动时间查看位置</span></span></p>
+              <div id="airPlot" class="air-plot" role="img" aria-label="飞机与导弹交会轨迹" data-i18n-aria-label="page.aircraftMissileEncounterTrajectory"></div>
+              <div class="air-scrub"><button id="airPlay" type="button" aria-label="播放轨迹" data-i18n-aria-label="page.playTrajectory"><span data-i18n="page.play">▶ 播放</span></button><input id="airTime" type="range" min="0" max="1000" value="0" aria-label="交会时间" data-i18n-aria-label="page.encounterTime"><output id="airTimeValue">0.0 s</output></div>
               <p id="airAdvice" class="air-advice"></p>
               <div id="airRecovery" class="air-recovery"></div>
             </div>
           </div>
-          <details class="tool-details"><summary>发射条件射程表</summary><p>这是发射时的条件参考，与上面的来弹当前状态分别填写。只在原表覆盖范围内插值；不包含玩家机动，也不是不可逃逸区。</p><div class="tool-input-grid" id="airLaunchInputs"><label class="hangar-field"><span>发射高度 · m</span><input id="airLaunchAltitude" type="number" min="0" max="20000" step="100" value="5000"></label><label class="hangar-field"><span>发射载机 · Mach</span><input id="airLaunchMach" type="number" min="0" max="3" step="0.05" value="1"></label><label class="hangar-field"><span>目标径向速度 · Mach</span><input id="airLaunchTarget" type="number" min="-3" max="3" step="0.05" value="-0.9"><small>负值迎头，正值远离；不是目标总速度。</small></label></div><p id="airLaunchResult" class="repair-result" aria-live="polite"></p><p id="airLaunchDomain" class="tool-note"></p></details>
-          <details class="tool-details"><summary>跟踪门与弹型参数</summary><div id="airParameters" class="air-parameters"></div><p>距离／速度搜索半窗用于重新搜索候选；角门率约束观测相对预测的误差。它们都不是固定的“39 安全角”。半主动弹还依赖照射端，单看导弹方向不足以复原双站观测。</p></details>
-          <details class="tool-details"><summary>模型与研究边界</summary><p>客户端 2.59.0.13 的导引配置、门控加载、预测与制导消费者经过离线核对。这里使用比例导引运动学与实际配置的增益、指令上限，对三个明确的机动假设做短时比较；保持速度恒定，未复现完整 PID、气动力、推力、爬升程序、目标闪烁、多径、地形与引信。</p><p>最近距离只属于这个简化场景，不等于实战脱靶距离或存活概率。观测中断和恢复由用户假设指定，搜索窗内仍不保证重捕，窗外也不代表全部制导终止。持续 39 可能与稳定碰撞航向同时成立。</p><p>原生检测路径把地面响应作为独立项放入响应商分母。其他项相同时，杂波较弱反而更容易保留目标；三九线本身不是无条件失锁开关。地面模型的完整几何输入尚未还原，本页不计算失锁概率。</p><p>高空防御需要提前改变接近条件；末段才转冷可能已经来不及。<a href="https://warthunder.com/en/news/8898?page=2">Gaijin FOX-3 说明</a> · <a href="https://warthunder.com/en/news/8164-development-radars-and-missiles-recent-updates-en">导弹诱导阻力说明</a>。</p></details>
+          <details class="tool-details"><summary><span data-i18n="page.launchConditionRangeTable">发射条件射程表</span></summary><p><span data-i18n="page.aLaunchTimeReferenceEnteredSeparatelyFromTheCurrent">这是发射时的条件参考，与上面的来弹当前状态分别填写。只在原表覆盖范围内插值；不包含玩家机动，也不是不可逃逸区。</span></p><div class="tool-input-grid" id="airLaunchInputs"><label class="hangar-field"><span><span data-i18n="page.launchAltitudeM">发射高度 · m</span></span><input id="airLaunchAltitude" type="number" min="0" max="20000" step="100" value="5000"></label><label class="hangar-field"><span><span data-i18n="page.launchAircraftMach">发射载机 · Mach</span></span><input id="airLaunchMach" type="number" min="0" max="3" step="0.05" value="1"></label><label class="hangar-field"><span><span data-i18n="page.targetRadialVelocityMach">目标径向速度 · Mach</span></span><input id="airLaunchTarget" type="number" min="-3" max="3" step="0.05" value="-0.9"><small><span data-i18n="page.negativeIsApproachingPositiveIsRecedingThisIsNot">负值迎头，正值远离；不是目标总速度。</span></small></label></div><p id="airLaunchResult" class="repair-result" aria-live="polite"></p><p id="airLaunchDomain" class="tool-note"></p></details>
+          <details class="tool-details"><summary><span data-i18n="page.trackingGatesMissileParameters">跟踪门与弹型参数</span></summary><div id="airParameters" class="air-parameters"></div><p><span data-i18n="page.rangeVelocityHalfWindowsSearchReacquisitionCandidatesAngularGate">距离／速度搜索半窗用于重新搜索候选；角门率约束观测相对预测的误差。它们都不是固定的“39 安全角”。半主动弹还依赖照射端，单看导弹方向不足以复原双站观测。</span></p></details>
+          <details class="tool-details"><summary><span data-i18n="page.modelResearchLimits">模型与研究边界</span></summary><p><span data-i18n="page.client259013GuidanceConfigurationGateLoading">客户端 2.59.0.13 的导引配置、门控加载、预测与制导消费者经过离线核对。这里使用比例导引运动学与实际配置的增益、指令上限，对三个明确的机动假设做短时比较；保持速度恒定，未复现完整 PID、气动力、推力、爬升程序、目标闪烁、多径、地形与引信。</span></p><p><span data-i18n="page.closestApproachBelongsOnlyToThisSimplifiedScenarioNot">最近距离只属于这个简化场景，不等于实战脱靶距离或存活概率。观测中断和恢复由用户假设指定，搜索窗内仍不保证重捕，窗外也不代表全部制导终止。持续 39 可能与稳定碰撞航向同时成立。</span></p><p><span data-i18n="page.theNativeDetectionPathIncludesGroundResponseAsA">原生检测路径把地面响应作为独立项放入响应商分母。其他项相同时，杂波较弱反而更容易保留目标；三九线本身不是无条件失锁开关。地面模型的完整几何输入尚未还原，本页不计算失锁概率。</span></p><p><span data-i18n="page.highAltitudeDefenseRequiresEarlyChangesToClosingConditions">高空防御需要提前改变接近条件；末段才转冷可能已经来不及。</span><a href="https://warthunder.com/en/news/8898?page=2"><span data-i18n="page.gaijinFox3Explanation">Gaijin FOX-3 说明</span></a> · <a href="https://warthunder.com/en/news/8164-development-radars-and-missiles-recent-updates-en"><span data-i18n="page.missileInducedDragExplanation">导弹诱导阻力说明</span></a>。</p></details>
         </section>
 
         <section class="tool-panel" id="airfieldDefense" aria-labelledby="defense-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">AIRFIELD DEFENSE</p><h2 id="defense-title">机场防空与弹药</h2><p>ItO 90M / ZA-35 筛选参考，不代表实际拦截率。</p></header>
-          <p class="repair-result" id="defenseSelection" aria-live="polite">在上方选择武器后，可对照本节两种防空的质量筛选窗。</p>
-          <details class="tool-details"><summary>质量、速度与弹种限制</summary><p>以高等级 EC 的 ItO 90M + ZA-35 配置为例；不同国家可能使用其他防空。耐久 BR 档不能确定防空配置。</p><dl class="module-guide">
-            <dt>ItO 90M 的第一层门槛</dt><dd>整弹质量 30～3500 kg、瞬时速度 120～1200 m/s，边界值包含在内；通过后还要匹配目标优先级。投弹后加速可能从窗外进入窗内。</dd>
-            <dt>两种防空的弹药优先级</dt><dd>已配置的质量窗合起来为 80～3500 kg。低于 80 kg 或高于 3500 kg 没有相应质量条目；窗内弹药仍受速度、距离、航迹与探测条件限制。只代表这两种配置，不是全局免拦截名单。</dd>
-            <dt>普通炸弹与小型制导弹药</dt><dd>代码中缺少制导组件的弹药会被这条主动拦截分支排除，普通无制导航弹值得优先实测；尚未逐弹种验证实例。例如 BLU-27（401.4 kg）没有制导配置，GBU-8（1027 kg）有电视制导，两者质量都在窗内，不能仅凭质量判定拦截资格。小型制导弹药也不能只看“小直径”名称判断。</dd>
+          <header class="tool-panel-head"><p class="hangar-kicker">AIRFIELD DEFENSE</p><h2 id="defense-title"><span data-i18n="page.airfieldDefensesAmmunition">机场防空与弹药</span></h2><p><span data-i18n="page.ito90MZa35FilteringReferenceNotActual">ItO 90M / ZA-35 筛选参考，不代表实际拦截率。</span></p></header>
+          <p class="repair-result" id="defenseSelection" aria-live="polite"><span data-i18n="page.selectAWeaponAboveToCompareItWithThese">在上方选择武器后，可对照本节两种防空的质量筛选窗。</span></p>
+          <details class="tool-details"><summary><span data-i18n="page.massSpeedAmmunitionRestrictions">质量、速度与弹种限制</span></summary><p><span data-i18n="page.exampleHighTierEcIto90MZa35">以高等级 EC 的 ItO 90M + ZA-35 配置为例；不同国家可能使用其他防空。耐久 BR 档不能确定防空配置。</span></p><dl class="module-guide">
+            <dt><span data-i18n="page.ito90MInitialThresholds">ItO 90M 的第一层门槛</span></dt><dd><span data-i18n="page.completeWeaponMass303500KgAndInstantaneousSpeed">整弹质量 30～3500 kg、瞬时速度 120～1200 m/s，边界值包含在内；通过后还要匹配目标优先级。投弹后加速可能从窗外进入窗内。</span></dd>
+            <dt><span data-i18n="page.ammunitionPrioritiesOfBothDefenses">两种防空的弹药优先级</span></dt><dd><span data-i18n="page.combinedConfiguredMassWindowsCover803500KgThere">已配置的质量窗合起来为 80～3500 kg。低于 80 kg 或高于 3500 kg 没有相应质量条目；窗内弹药仍受速度、距离、航迹与探测条件限制。只代表这两种配置，不是全局免拦截名单。</span></dd>
+            <dt><span data-i18n="page.unguidedBombsSmallGuidedWeapons">普通炸弹与小型制导弹药</span></dt><dd><span data-i18n="page.weaponsWithoutGuidanceComponentsAreExcludedFromThisActive">代码中缺少制导组件的弹药会被这条主动拦截分支排除，普通无制导航弹值得优先实测；尚未逐弹种验证实例。例如 BLU-27（401.4 kg）没有制导配置，GBU-8（1027 kg）有电视制导，两者质量都在窗内，不能仅凭质量判定拦截资格。小型制导弹药也不能只看“小直径”名称判断。</span></dd>
           </dl>
-          <p>GBU-39、GBU-53、SPICE 250 落入上述质量范围；50 kg 的 Brimstone 不在这两种配置的优先级质量窗内。质量范围不等于拦截概率。</p></details>
-          <details class="tool-details"><summary>高空灌顶有用吗？</summary><p>当前 ItO 发射架的静态最大仰角为 80°，ZA-35 为 81°，近天顶方向值得实测，但尚未证实为 AI 禁射区。角度取决于弹药相对每一处防空阵地的方位；已经发射的导弹和其他阵地仍可能拦截。</p><p>原生 AI 还会按航迹是否威胁阵地来筛选目标；没有找到“超过某个投放高度就免拦截”的通用开关。目前不能据此推荐一个保证安全的高度。</p></details>
-          <details class="tool-details"><summary>能否靠远投、压低或饱和攻击保证突破？</summary><p>地形遮蔽、远投和缩短载机暴露时间可以作为风险管理思路，但不能推出弹药不会被拦截。目标优先级、反应时间与多阵地覆盖会影响结果；尚无支持固定齐射数量或固定突防概率的同版本证据。</p><p>上方枚数是造成所需伤害的有效命中枚数，架次按全部有效命中估算，不包含拦截、脱靶和机场回血。</p></details>
-          <details class="tool-details"><summary>来源和适用边界</summary><p>数据来自 2.59.0.13 的 EC 机场任务模板、ItO 90M / ZA-35 武器配置及客户端原生筛选函数；这是版本化参考，不是实时战局读取。对比 2.57.1.89，这些质量／速度窗此前已存在，当前新增了显式反应时间等参数；不能把整套规则都称为本次新增。当前模板坐标不足以确认防空阵地在本次更新中被垫高。</p><p><a href="https://warthunder.com/en/game/changelog/current/1797">官方 EC 高等级机场防空更新</a> · <a href="https://warthunder.com/en/game/changelog/current/1876">核升级模式的拦截改动</a>。后者的小型弹药例外和低空规则属于 Nuclear Escalation，不能直接套用到全真 EC。</p></details>
+          <p><span data-i18n="page.gbu39Gbu53AndSpice250FallWithin">GBU-39、GBU-53、SPICE 250 落入上述质量范围；50 kg 的 Brimstone 不在这两种配置的优先级质量窗内。质量范围不等于拦截概率。</span></p></details>
+          <details class="tool-details"><summary><span data-i18n="page.doesASteepAttackFromAboveHelp">高空灌顶有用吗？</span></summary><p><span data-i18n="page.staticMaximumLauncherElevationIs80ForItoAnd">当前 ItO 发射架的静态最大仰角为 80°，ZA-35 为 81°，近天顶方向值得实测，但尚未证实为 AI 禁射区。角度取决于弹药相对每一处防空阵地的方位；已经发射的导弹和其他阵地仍可能拦截。</span></p><p><span data-i18n="page.nativeAiAlsoFiltersTargetsByWhetherTheirTrajectory">原生 AI 还会按航迹是否威胁阵地来筛选目标；没有找到“超过某个投放高度就免拦截”的通用开关。目前不能据此推荐一个保证安全的高度。</span></p></details>
+          <details class="tool-details"><summary><span data-i18n="page.canStandoffLowAltitudeOrSaturationGuaranteePenetration">能否靠远投、压低或饱和攻击保证突破？</span></summary><p><span data-i18n="page.terrainMaskingStandoffAndReducedAircraftExposureCanManage">地形遮蔽、远投和缩短载机暴露时间可以作为风险管理思路，但不能推出弹药不会被拦截。目标优先级、反应时间与多阵地覆盖会影响结果；尚无支持固定齐射数量或固定突防概率的同版本证据。</span></p><p><span data-i18n="page.countsAboveAreEffectiveHitsNeededForTheRequired">上方枚数是造成所需伤害的有效命中枚数，架次按全部有效命中估算，不包含拦截、脱靶和机场回血。</span></p></details>
+          <details class="tool-details"><summary><span data-i18n="page.sourcesScope">来源和适用边界</span></summary><p><span data-i18n="page.dataComesFrom259013EcAirfield">数据来自 2.59.0.13 的 EC 机场任务模板、ItO 90M / ZA-35 武器配置及客户端原生筛选函数；这是版本化参考，不是实时战局读取。对比 2.57.1.89，这些质量／速度窗此前已存在，当前新增了显式反应时间等参数；不能把整套规则都称为本次新增。当前模板坐标不足以确认防空阵地在本次更新中被垫高。</span></p><p><a href="https://warthunder.com/en/game/changelog/current/1797"><span data-i18n="page.officialHighTierEcAirfieldDefenseUpdate">官方 EC 高等级机场防空更新</span></a> · <a href="https://warthunder.com/en/game/changelog/current/1876"><span data-i18n="page.nuclearEscalationInterceptionChanges">核升级模式的拦截改动</span></a><span data-i18n="page.theLatterSSmallAmmunitionExceptionsAndLowAltitude">。后者的小型弹药例外和低空规则属于 Nuclear Escalation，不能直接套用到全真 EC。</span></p></details>
         </section>
 
         <section class="tool-panel" id="fieldGuide" aria-labelledby="guide-title">
-          <header class="tool-panel-head"><p class="hangar-kicker">FIELD NOTES</p><h2 id="guide-title">全真 EC 速查</h2><p>参数来自同批客户端数据；机制说明参考官方资料，社区疑问不直接作为公式。</p></header>
-          <details class="tool-details" open><summary>机场四个模块分别影响什么？</summary><dl class="module-guide"><dt>跑道</dt><dd>影响新飞机在该机场出生。</dd><dt>油库 / 储存区</dt><dd>影响补给与重新装填。</dd><dt>停机 / 维修区</dt><dd>影响飞机维修。</dd><dt>生活区</dt><dd>影响机场模块恢复；持续打击时需要考虑模块回血。</dd></dl><p>需要命中相应模块，不能把整个机场当成一个血池。上方选择具体模块可查看当前耐久档与伤害枚数；页面不知道战局中的剩余血量。<a href="https://warthunder.com/en/news/5973-development-modular-airfields-in-enduring-confrontation-en">官方模块机场介绍</a> · <a href="https://wiki.warthunder.com/gamemode/enduring_confrontation">EC Wiki</a></p></details>
-          <details class="tool-details"><summary>同样的 TNT 吨数，为什么投弹枚数不同？</summary><p>本页按具体武器的任务伤害与 EC 目标耐久计算；标称 TNT 当量不是通用枚数表。目标类型、房间最高 BR、弹种与是否按点燃线计算都会改变结果。社区中的 Air RB 表也不能直接用于 Sim EC。<a href="https://forum.warthunder.com/t/what-are-the-true-base-bombing-requirements-in-air-rb/7923">官方论坛中的模式与旧表讨论</a></p></details>
-          <details class="tool-details"><summary>有 CCRP 提示就能保证命中吗？</summary><p>先确认当前选择的武器、齐射枚数与目标点。地图标点、任务预选目标和座舱标记可能存在差异；以游戏里的目标确认与原生投放流程为准。<a href="https://wiki.warthunder.com/mechanics/1067-use-of-ccrp-in-sim-battles-sim-ec">官方 CCRP 全真指南</a></p><p>Bomana 的 8111 估算无法完整复现游戏制导、遮挡与末端命中过程。缺少 TAS 或目标地形时不能给出可靠投放判定；保留的范围只供参考。</p></details>
-          <details class="tool-details"><summary>这里的数据多久更新一次？</summary><p>每次维护者刷新 Bomana 参数后，机型、武器、耐久与本页目录一起生成和校验，并随 Web 发布。页首显示实际来源版本。游戏热更新不会立即自动反映到这里；资料中的静态伤害、油耗规划与实战结果仍需区分。</p></details>
+          <header class="tool-panel-head"><p class="hangar-kicker">FIELD NOTES</p><h2 id="guide-title"><span data-i18n="page.simulatorEcQuickReference">全真 EC 速查</span></h2><p><span data-i18n="page.parametersComeFromOneClientDatasetMechanicExplanationsUse">参数来自同批客户端数据；机制说明参考官方资料，社区疑问不直接作为公式。</span></p></header>
+          <details class="tool-details" open><summary><span data-i18n="page.whatDoTheFourAirfieldModulesAffect">机场四个模块分别影响什么？</span></summary><dl class="module-guide"><dt><span data-i18n="page.runway">跑道</span></dt><dd><span data-i18n="page.affectsSpawningNewAircraftAtThisAirfield">影响新飞机在该机场出生。</span></dd><dt><span data-i18n="page.fuelStorage">油库 / 储存区</span></dt><dd><span data-i18n="page.affectsResupplyAndRearming">影响补给与重新装填。</span></dd><dt><span data-i18n="page.parkingRepairArea">停机 / 维修区</span></dt><dd><span data-i18n="page.affectsAircraftRepairs">影响飞机维修。</span></dd><dt><span data-i18n="page.livingQuarters">生活区</span></dt><dd><span data-i18n="page.affectsAirfieldModuleRecoveryRegenerationMattersDuringSustainedAttacks">影响机场模块恢复；持续打击时需要考虑模块回血。</span></dd></dl><p><span data-i18n="page.hitTheRelevantModuleAnAirfieldIsNotOne">需要命中相应模块，不能把整个机场当成一个血池。上方选择具体模块可查看当前耐久档与伤害枚数；页面不知道战局中的剩余血量。</span><a href="https://warthunder.com/en/news/5973-development-modular-airfields-in-enduring-confrontation-en"><span data-i18n="page.officialModularAirfieldIntroduction">官方模块机场介绍</span></a> · <a href="https://wiki.warthunder.com/gamemode/enduring_confrontation">EC Wiki</a></p></details>
+          <details class="tool-details"><summary><span data-i18n="page.whyDoEqualTntMassesRequireDifferentWeaponCounts">同样的 TNT 吨数，为什么投弹枚数不同？</span></summary><p><span data-i18n="page.thisPageUsesWeaponSpecificMissionDamageAndEc">本页按具体武器的任务伤害与 EC 目标耐久计算；标称 TNT 当量不是通用枚数表。目标类型、房间最高 BR、弹种与是否按点燃线计算都会改变结果。社区中的 Air RB 表也不能直接用于 Sim EC。</span><a href="https://forum.warthunder.com/t/what-are-the-true-base-bombing-requirements-in-air-rb/7923"><span data-i18n="page.officialForumDiscussionOfModesAndOldCharts">官方论坛中的模式与旧表讨论</span></a></p></details>
+          <details class="tool-details"><summary><span data-i18n="page.doesACcrpCueGuaranteeAHit">有 CCRP 提示就能保证命中吗？</span></summary><p><span data-i18n="page.checkTheSelectedWeaponSalvoQuantityAndTargetPoint">先确认当前选择的武器、齐射枚数与目标点。地图标点、任务预选目标和座舱标记可能存在差异；以游戏里的目标确认与原生投放流程为准。</span><a href="https://wiki.warthunder.com/mechanics/1067-use-of-ccrp-in-sim-battles-sim-ec"><span data-i18n="page.officialSimulatorCcrpGuide">官方 CCRP 全真指南</span></a></p><p><span data-i18n="page.bomanaS8111EstimateCannotFullyReproduceGameGuidance">Bomana 的 8111 估算无法完整复现游戏制导、遮挡与末端命中过程。缺少 TAS 或目标地形时不能给出可靠投放判定；保留的范围只供参考。</span></p></details>
+          <details class="tool-details"><summary><span data-i18n="page.howOftenIsThisDataUpdated">这里的数据多久更新一次？</span></summary><p><span data-i18n="page.whenMaintainersRefreshBomanaParametersAircraftWeaponsHpAnd">每次维护者刷新 Bomana 参数后，机型、武器、耐久与本页目录一起生成和校验，并随 Web 发布。页首显示实际来源版本。游戏热更新不会立即自动反映到这里；资料中的静态伤害、油耗规划与实战结果仍需区分。</span></p></details>
         </section>
       </section>
     </main>
@@ -376,7 +402,7 @@
         <img src="/assets/bomana-app.webp" alt="" width="40" height="40">
         <p><strong>Bomana</strong><span>Made for the Space Monkeys community.</span></p>
       </div>
-      <p class="footer-note">独立开源项目，MIT License。War Thunder 及相关商标归 Gaijin Entertainment 所有；Bomana 与其无隶属或赞助关系。</p>
+      <p class="footer-note"><span data-i18n="page.independentOpenSourceProjectMitLicenseWarThunderAnd">独立开源项目，MIT License。War Thunder 及相关商标归 Gaijin Entertainment 所有；Bomana 与其无隶属或赞助关系。</span></p>
     </footer>
 
     <script type="module" src="/calculator/app.js"></script>

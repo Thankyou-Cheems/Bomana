@@ -2,19 +2,289 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import loadHighs from "highs";
-import {optimizeLoadout} from "../../docs/calculator/loadout-optimizer.mjs";
+import {optimizeLoadout, preferRecommendation} from "../../docs/calculator/loadout-optimizer.mjs";
 import {validateLoadout} from "../../docs/calculator/custom-loadouts.mjs";
 import {rewardUi} from "../../docs/calculator/model.mjs";
+import {deliveryGroup} from "../../docs/calculator/loadout-simplicity.mjs";
+import {availableGuidanceModes, guidanceExcluded, toggleRecommendationFilter, guidanceBurden, preferredGuidanceMode} from "../../docs/calculator/recommendation-guidance.mjs";
 
 const highs = await loadHighs();
 const catalog = JSON.parse(await readFile(new URL("../../docs/api/v1/calculator/index.json", import.meta.url)));
 const weaponData = JSON.parse(await readFile(new URL("../../docs/api/v1/calculator/weapons.json", import.meta.url)));
 const customData = JSON.parse(await readFile(new URL("../../docs/api/v1/calculator/custom-loadouts.json", import.meta.url)));
+const presetData = JSON.parse(await readFile(new URL("../../docs/api/v1/calculator/loadouts.json", import.meta.url)));
 const weapons = new Map(weaponData.weapons.map(row => [row.id, row]));
 const limits = {maxloadMass: -1, maxloadMassLeftConsoles: -1, maxloadMassRightConsoles: -1, maxDisbalance: -1};
 const option = (tier, id, count = 1, extra = {}) => ({key: `${tier}:${id}`, slot: tier, tier, preset: id, weapons: [[id, count]], mass: count,
   cells: [{weapon: id, count, icon: "bombs_small", tier: tier + 1}], requires: [], bans: [], modifications: [], requiredWeapons: [], ...extra});
 const run = (definition, weaponMap, mode = "reward", lockedKeys = [], threshold = 100) => optimizeLoadout({definition, presets: [], lockedKeys, weapons: weaponMap, threshold, mode, reward: catalog.reward}, highs);
+
+test("guided-only recommendations filter complete presets and completions while preserving manual stations", () => {
+  const map = new Map([
+    ['plain',{kind:'bomb',dmg:100,deliveryProfile:{guidance:'none'}}],
+    ['satellite',{kind:'bomb',dmg:110,satelliteGuidance:true,guidanceModes:['satellite']}],
+    ['laser',{kind:'bomb',dmg:120,sensorOnlyGuidance:true,guidanceModes:['laser']}],
+    ['command',{kind:'missile',dmg:130}],
+  ]);
+  const presets = [...map].map(([id]) => ({...option(0,id),id}));
+  presets.push({...option(0,'mixed'),id:'mixed',weapons:[['satellite',1],['plain',1]]});
+  for (const mode of ['reward','targets']) for (const guided of ['satellite','laser','command']) {
+    const choices = presets.filter(row => ['plain','mixed',guided].includes(row.id));
+    const definition = {columns:1,center:[0],limits,options:choices};
+    const input = {presets:choices,lockedKeys:[],weapons:map,threshold:100,mode,reward:catalog.reward,filters:{onlyGuided:true}};
+    for (const custom of [null,definition]) {
+      const result = optimizeLoadout({...input,definition:custom},highs);
+      assert.deepEqual(result.preset.weapons,[[guided,1]]);
+    }
+    const locked = optimizeLoadout({...input,definition,lockedKeys:['0:plain']},highs);
+    assert.ok(locked.keys.includes('0:plain'));
+  }
+});
+
+test("guidance switches use available multimode routes and cannot leave guided-only with all three excluded", () => {
+  let filters = {onlyGuided:true,noLaser:false,noOptical:false,noSatellite:false};
+  for (const key of ['noLaser','noOptical','noSatellite']) filters = toggleRecommendationFilter(filters,key);
+  assert.equal(filters.onlyGuided,false);
+  filters = toggleRecommendationFilter(filters,'onlyGuided');
+  assert.deepEqual(filters,{onlyGuided:true,noLaser:false,noOptical:false,noSatellite:false});
+  const dual = {guidanceModes:['satellite','infrared']};
+  assert.deepEqual(availableGuidanceModes(dual,{noSatellite:true}),['infrared']);
+  assert.equal(guidanceExcluded(dual,{noOptical:true}),false);
+  assert.equal(guidanceExcluded(dual,{noOptical:true,noSatellite:true}),true);
+  assert.equal(guidanceBurden(dual,{noSatellite:true}),1);
+  assert.equal(guidanceBurden(dual,{noOptical:true}),0);
+  assert.equal(preferredGuidanceMode(dual,{noSatellite:true}),'infrared');
+  assert.equal(preferredGuidanceMode(dual,{noOptical:true}),'satellite');
+});
+
+test("fixed-target recommendations combine coordinate weapons with IR top-up and keep TV as a fallback", () => {
+  const map = new Map([
+    ['coordinate',{kind:'bomb',dmg:70,rewardDmg:40,guidanceModes:['satellite']}],
+    ['ir',{kind:'missile',dmg:30,rewardDmg:0,guidanceModes:['infrared']}],
+    ['tv',{kind:'missile',dmg:110,rewardDmg:0,guidanceModes:['tv']}],
+  ]);
+  const options = [option(0,'coordinate'),option(1,'ir'),option(0,'tv')];
+  const definition = {columns:2,center:[0,1],limits,options};
+  const presets = [{...option(0,'tv'),id:'tv'}, {...option(0,'mix'),id:'mix',weapons:[['coordinate',1],['ir',1]]}];
+  for (const mode of ['reward','targets']) for (const custom of [null,definition]) {
+    const input = {definition:custom,presets,lockedKeys:[],weapons:map,threshold:100,mode,reward:catalog.reward,filters:{onlyGuided:true}};
+    const result = optimizeLoadout(input,highs);
+    assert.deepEqual(result.preset.weapons,[['coordinate',1],['ir',1]]);
+    assert.equal(result.reward,10);
+    assert.equal(result.workload.designation,1);
+    const tv = optimizeLoadout({...input,filters:{onlyGuided:true,noSatellite:true}},highs);
+    assert.deepEqual(tv.preset.weapons,[['tv',1]]);
+    assert.equal(optimizeLoadout({...input,filters:{onlyGuided:true,noOptical:true}},highs).status,'infeasible');
+  }
+});
+
+test("same-source AGM-130 variants follow native modes instead of aircraft exceptions", () => {
+  assert.deepEqual(weapons.get('su_kh_29t').guidanceModes,['tv']);
+  assert.deepEqual(weapons.get('us_2000lb_agm_130a_12').guidanceModes,['satellite','infrared']);
+  const definition = {columns:1,center:[0],limits,options:[option(0,'us_2000lb_agm_130a_12',3)]};
+  const input = {definition,presets:[],lockedKeys:[],weapons,threshold:23310,mode:'reward',reward:catalog.reward};
+  assert.ok(optimizeLoadout({...input,filters:{onlyGuided:true,noOptical:true}},highs).preset);
+  const optical = optimizeLoadout({...input,filters:{onlyGuided:true,noSatellite:true}},highs);
+  assert.ok(optical.preset);
+  assert.ok(optical.workload.designation>0);
+  assert.equal(optimizeLoadout({...input,filters:{onlyGuided:true,noSatellite:true,noOptical:true}},highs).status,'infeasible');
+});
+
+test("air-dropped mines remain eligible in native presets and custom completions", () => {
+  const mineIds = weaponData.weapons.filter(weapon=>weapon.id.includes('_mine_')).map(weapon=>weapon.id);
+  assert.ok(mineIds.includes('us_mine_mk13_mod0'));
+  for (const id of mineIds) {
+    const mine = weapons.get(id);
+    assert.ok(mine?.dmg > 0, `${id} must have calculable damage`);
+    assert.equal(mine.kind,'bomb');
+    assert.equal(mine.role,'strike');
+    const preset = Object.values(presetData.aircraft).flat().find(row=>row.weapons.length === 1 && row.weapons[0][0] === id);
+    assert.ok(preset,`${id} must remain in native presets`);
+    for (const mode of ['reward','targets']) {
+      const result=optimizeLoadout({definition:null,presets:[preset],lockedKeys:[],weapons,threshold:mine.dmg,mode,reward:catalog.reward,filters:{noMissiles:true,noRockets:true,noLaser:true,noOptical:true,simpleLoadout:true}},highs);
+      assert.ok(result.preset,`${id}:${mode}`);
+      assert.ok(result.damage >= mine.dmg);
+    }
+  }
+  const definition=Object.values(customData.aircraft).find(row=>row.options.some(option=>option.weapons.some(([id])=>id==='us_mine_mk13_mod0')));
+  assert.ok(definition);
+  const mineOption=definition.options.find(option=>option.weapons.some(([id])=>id==='us_mine_mk13_mod0'));
+  const result=run(definition,weapons,'reward',[mineOption.key],weapons.get('us_mine_mk13_mod0').dmg);
+  assert.ok(result.keys.includes(mineOption.key));
+  assert.equal(validateLoadout(definition,result.keys).valid,true);
+});
+
+test("equal maximum rewards prefer fewer ammunition types before surplus damage", () => {
+  const definition = {columns:3,center:[1],limits,options:[option(0,'a'),option(1,'b'),option(2,'c'),option(0,'uniform')]};
+  const map = new Map([['a',{dmg:40}],['b',{dmg:30}],['c',{dmg:30}],['uniform',{dmg:110}]]);
+  assert.deepEqual(run(definition,map).keys,['0:uniform']);
+  const input = {definition,presets:[],lockedKeys:[],weapons:map,threshold:100,mode:'reward',reward:catalog.reward,filters:{simpleLoadout:true}};
+  const simple = optimizeLoadout(input,highs);
+  assert.deepEqual(simple.keys,['0:uniform']);
+  assert.equal(simple.simplicity.types,1);
+  const most = optimizeLoadout({...input, mode:'targets'},highs);
+  assert.equal(most.targets,1);
+  assert.equal(most.simplicity.types,1);
+  const presets = [{...option(0,'a'),id:'mixed',weapons:[['a',1],['b',1],['c',1]]},{...option(0,'uniform'),id:'uniform'}];
+  assert.equal(optimizeLoadout({...input,definition:null,presets},highs).presetId,'uniform');
+});
+
+test("near-cap rewards prefer uniform delivery while strict reward and lower bands preserve yield", () => {
+  const map = new Map([['a',{dmg:9000}],['b',{dmg:9000}],['uniform',{dmg:18400}]]);
+  const definition = {columns:2,center:[0,1],limits,options:[option(0,'a'),option(1,'b'),option(0,'uniform')]};
+  const input = {definition,presets:[],lockedKeys:[],weapons:map,threshold:18000,mode:'reward',reward:catalog.reward};
+  const balanced = optimizeLoadout(input,highs);
+  assert.deepEqual(balanced.keys,['0:uniform']);
+  assert.ok(balanced.reward >= 9.8 && balanced.reward < 10);
+  assert.equal(balanced.maximumReward,10);
+  assert.deepEqual(optimizeLoadout({...input,filters:{strictReward:true}},highs).keys,['0:a','1:b']);
+  const lower = new Map([...map, ['uniform',{dmg:18800}]]);
+  assert.deepEqual(optimizeLoadout({...input,weapons:lower},highs).keys,['0:a','1:b']);
+  assert.deepEqual(optimizeLoadout({...input,weapons:lower,filters:{simpleLoadout:true}},highs).keys,['0:uniform']);
+});
+
+test("matching bomb delivery groups outrank fewer types with different delivery behavior", () => {
+  const bomb = {kind:'bomb',dmg:6000,deliveryProfile:{guidance:'none',drag_area_mass:.001,area_mass:.01}};
+  const map = new Map([['a',bomb],['b',bomb],['c',bomb],['rocket',{kind:'rocket',dmg:9000}],['missile',{kind:'missile',dmg:9000}]]);
+  const presets = [{id:'same-bombs',weapons:[['a',1],['b',1],['c',1]],cells:[]}, {id:'mixed-powered',weapons:[['rocket',1],['missile',1]],cells:[]}];
+  const result = optimizeLoadout({definition:null,presets,lockedKeys:[],weapons:map,threshold:18000,mode:'reward',reward:catalog.reward},highs);
+  assert.equal(result.presetId,'same-bombs');
+  assert.deepEqual(result.simplicity,{types:3,profiles:1});
+});
+
+test("simple completion keeps user stores and favors compatible bomb profiles", () => {
+  const bomb = {kind:'bomb',dmg:60,deliveryProfile:{guidance:'none',drag_area_mass:.001,area_mass:.01}};
+  const map = new Map([['locked',{...bomb,dmg:40}],['similar',bomb],['different',{...bomb,highDrag:true}]]);
+  const definition = {columns:2,center:[0,1],limits,options:[option(0,'locked'),option(1,'different'),option(1,'similar')]};
+  const result = optimizeLoadout({definition,presets:[],lockedKeys:['0:locked'],weapons:map,threshold:100,mode:'reward',reward:catalog.reward,filters:{simpleLoadout:true}},highs);
+  assert.deepEqual(result.keys,['0:locked','1:similar']);
+  assert.deepEqual(result.simplicity,{types:2,profiles:1});
+  assert.notEqual(deliveryGroup('a',{...bomb,deliveryProfile:null}),deliveryGroup('b',{...bomb,deliveryProfile:null}));
+  assert.notEqual(deliveryGroup('a',bomb),deliveryGroup('b',{...bomb,satelliteGuidance:true}));
+  assert.notEqual(deliveryGroup('a',bomb),deliveryGroup('b',{...bomb,deliveryProfile:{...bomb.deliveryProfile,drag_area_mass:.01}}));
+  assert.notEqual(deliveryGroup('a',bomb),deliveryGroup('b',{...bomb,deliveryProfile:{...bomb.deliveryProfile,lift_scale:20}}));
+});
+
+test("simple loadouts retain maximum target coverage and reject impossible locked completions", () => {
+  const definition = {columns:2,center:[0,1],limits,options:[option(0,'a'),option(1,'b')]};
+  const input = {definition,presets:[],lockedKeys:[],weapons:new Map([['a',{dmg:110}],['b',{dmg:110}]]),threshold:100,mode:'targets',reward:catalog.reward,filters:{simpleLoadout:true}};
+  const result = optimizeLoadout(input,highs);
+  assert.equal(result.targets,2);
+  assert.deepEqual(result.simplicity,{types:2,profiles:2});
+  assert.equal(result.singleZone.targets,1);
+  assert.equal(result.singleZone.simplicity.types,1);
+  assert.equal(optimizeLoadout({...input,lockedKeys:['missing']},highs).status,'infeasible');
+});
+
+test("timed worker results retain simplicity priority before rewards", () => {
+  const quick = {preset:{},targets:1,reward:10,damage:100,mass:10,simplicity:{types:4,profiles:3}};
+  const full = {...quick,reward:8,simplicity:{types:1,profiles:1}};
+  assert.equal(preferRecommendation(quick,full,{simpleLoadout:true}),false);
+  assert.equal(preferRecommendation(quick,full),true);
+  assert.equal(preferRecommendation({...quick,targets:2},full,{simpleLoadout:true}),true);
+  assert.equal(preferRecommendation({...quick,simplicity:{types:1,profiles:2}},full,{simpleLoadout:true}),false);
+  assert.equal(preferRecommendation(quick,{status:'unknown'},{simpleLoadout:true}),true);
+  assert.equal(preferRecommendation({status:'unknown'},full,{simpleLoadout:true}),false);
+  const near = {...full,reward:9.9};
+  assert.equal(preferRecommendation(near,quick),true);
+  assert.equal(preferRecommendation(quick,near),false);
+  assert.equal(preferRecommendation(quick,near,{strictReward:true}),true);
+  assert.equal(preferRecommendation({...near,reward:9.79},quick),false);
+  const manyLocks = {...quick,workload:{designation:3,shots:3}};
+  const easier = {...near,simplicity:{types:5,profiles:4},workload:{designation:1,shots:2}};
+  assert.equal(preferRecommendation(easier,manyLocks),true);
+  assert.equal(preferRecommendation(easier,manyLocks,{strictReward:true}),false);
+  assert.equal(preferRecommendation({...easier,reward:9.79},manyLocks),false);
+});
+
+test("reward-exempt strike weapons deal damage without lowering the bombing coefficient", () => {
+  const definition = {columns: 2, center: [0, 1], limits, options: [option(0, "guided"), option(1, "bomb")]};
+  const map = new Map([['guided', {dmg: 23000, rewardDmg: 0}], ['bomb', {dmg: 4000, rewardDmg: 4000}]]);
+  const result = run(definition, map, "reward", [], 23310);
+  assert.equal(result.damage, 27000);
+  assert.equal(result.reward, 10);
+});
+
+test("quick filters omit only automatic candidates and preserve satellite multimode stores", () => {
+  const definition = {columns: 1, center: [0], limits, options: [option(0,'laser'),option(0,'dual'),option(0,'drag'),option(0,'rocket')]};
+  const map = new Map([['laser',{dmg:110,guidanceModes:['laser']}],['dual',{dmg:120,satelliteGuidance:true,guidanceModes:['laser','satellite']}],['drag',{dmg:105,highDrag:true}],['rocket',{dmg:101,kind:'rocket'}]]);
+  const input={definition,presets:[],lockedKeys:[],weapons:map,threshold:100,mode:'reward',reward:catalog.reward,filters:{noLaser:true,noOptical:true,noHighDrag:true,noRockets:true}};
+  assert.deepEqual(optimizeLoadout(input,highs).keys,['0:dual']);
+  assert.deepEqual(optimizeLoadout({...input,lockedKeys:['0:laser']},highs).keys,['0:laser']);
+});
+
+test("native sensor filtering retains multimode GNSS variants", () => {
+  assert.equal(weapons.get('us_gbu_12_paveway_2').sensorOnlyGuidance, true);
+  for (const id of ['us_gbu_39', 'us_500lb_gbu_54b', 'fr_250kg_aasm_250_hammer_laser', 'fr_250kg_aasm_250_hammer_ir', 'su_kh_38ml']) {
+    assert.equal(weapons.get(id).satelliteGuidance, true, id);
+    assert.equal(weapons.get(id).sensorOnlyGuidance, false, id);
+  }
+});
+
+test("real AGM-130 and Grom / KH-38 combinations retain the maximum reward", () => {
+  for (const items of [[['us_2000lb_agm_130a_12',2],['us_gbu_39',2]],[['su_grom_2',2],['su_kh_38mt',3]]]) {
+    const definition={columns:2,center:[0,1],limits,options:items.map(([id,count],tier)=>option(tier,id,count))};
+    const result=run(definition,weapons,'reward',[],23310);
+    assert.equal(result.reward,10);
+    assert.ok(result.damage>=23310);
+  }
+});
+
+test("real Su-34 automatic recommendations contain no AAM or anti-radiation stores", () => {
+  const definition=customData.aircraft.su_34;
+  const result=run(definition,weapons,'reward',[],23310);
+  assert.ok(result.preset);
+  for(const key of result.keys) for(const cell of definition.options.find(row=>row.key===key).cells) assert.ok(!['aam','arm'].includes(cell.role),cell.weapon);
+});
+
+test("non-strike options cannot be automatically added to improve the reward curve", () => {
+  const definition = {columns: 2, center: [0, 1], limits, options: [option(0, "bomb"), option(1, "arm")]};
+  const map = new Map([['bomb', {dmg: 199000}], ['arm', {dmg: 1000, role: 'arm'}]]);
+  const result = run(definition, map, "reward", [], 190000);
+  assert.deepEqual(result.keys, ['0:bomb']);
+});
+
+test("all excluded weapon roles are blocked in custom and mixed preset recommendations", () => {
+  for (const role of ['aam', 'arm', 'ashm']) {
+    const map = new Map([['bomb', {dmg:110}], ['excluded', {dmg:100, rewardDmg:0, role}], ['cell-only', {dmg:100,rewardDmg:0}]]);
+    const bomb = option(0,'bomb'), excluded = option(0,'excluded');
+    const definition = {columns:1,center:[0],limits,options:[bomb,excluded]};
+    assert.deepEqual(run(definition,map).keys,[bomb.key],role);
+    // Explicit user stores remain locked, as for every recommendation filter.
+    assert.deepEqual(run(definition,map,'reward',[excluded.key]).keys,[excluded.key],role);
+    const safe = {...bomb,id:'safe'}, mixed = {...excluded,id:'mixed',cells:[{weapon:'cell-only',role}],weapons:[['cell-only',1]]};
+    const preset = optimizeLoadout({definition:null,presets:[safe,mixed],lockedKeys:[],weapons:map,threshold:100,mode:'reward',reward:catalog.reward},highs);
+    assert.equal(preset.presetId,'safe',role);
+  }
+});
+
+test("every catalog anti-radiation and anti-ship missile is excluded independently of aircraft", () => {
+  const excluded = weaponData.weapons.filter(weapon=>['arm','ashm'].includes(weapon.role));
+  assert.ok(excluded.some(weapon=>weapon.id==='us_agm_88c'&&weapon.role==='arm'));
+  assert.ok(excluded.some(weapon=>weapon.id==='uk_alarm'&&weapon.role==='arm'));
+  assert.ok(excluded.some(weapon=>weapon.id==='cn_cm_102'&&weapon.role==='arm'));
+  assert.ok(excluded.some(weapon=>weapon.id==='us_agm_84d'&&weapon.role==='ashm'));
+  assert.ok(excluded.some(weapon=>weapon.id==='su_kh_35u'&&weapon.role==='ashm'));
+  assert.ok(excluded.some(weapon=>weapon.id==='jp_asm2'&&weapon.role==='ashm'));
+  assert.equal(weapons.get('us_agm_84h_slam_er').role,'strike');
+  for(const weapon of excluded) {
+    const item=option(0,weapon.id);
+    for(const mode of ['reward','targets']) assert.equal(run({columns:1,center:[0],limits,options:[item]},weapons,mode,[],1).status,'infeasible',weapon.id);
+  }
+  for(const definition of Object.values(customData.aircraft)) for(const option of definition.options) for(const cell of option.cells) {
+    const role=weapons.get(cell.weapon)?.role;
+    if(['arm','ashm'].includes(role)) assert.equal(cell.role,role,cell.weapon);
+  }
+});
+
+test("more-zone recommendation compares total reward against a single zone", () => {
+  const definition = {columns: 1, center: [0], limits, options: [option(0, 'small'), option(0, 'large', 2)]};
+  const map = new Map([['small', {dmg: 24000}], ['large', {dmg: 200000}]]);
+  const result = run(definition, map, 'targets', [], 23310);
+  assert.equal(result.targets, 2);
+  assert.equal(result.moreLoadoutUseful, false);
+  assert.ok(result.singleZone.totalReward > result.totalReward);
+});
 
 test("single-zone optimum preserves selected stores and adds required pods under native constraints", () => {
   const a = option(0, "a", 1, {requires: [{slot: 1, preset: "pod"}], mass: 3});
@@ -48,6 +318,18 @@ test("mixed per-zone allocation uses every weapon at most as many times as carri
   const result = run(definition, map, "targets");
   assert.equal(result.targets, 3);
   for (const row of result.plan) assert.equal(row.reduce((sum, [id, count]) => sum + map.get(id).dmg * count, 0), 100);
+});
+
+test("rocket plans spend exact projectiles in each zone and report unused carried rounds", () => {
+  const map = new Map([['rocket',{kind:'rocket',dmg:10}]]);
+  const definition = {columns:1,center:[0],limits,options:[option(0,'rocket',28)]};
+  const multi = run(definition,map,'targets');
+  assert.equal(multi.targets,2);
+  assert.deepEqual(multi.plan,[[['rocket',10]],[['rocket',10]]]);
+  assert.deepEqual(multi.remaining,[['rocket',8]]);
+  const single = run(definition,map);
+  assert.deepEqual(single.plan,[[['rocket',10]]]);
+  assert.deepEqual(single.remaining,[['rocket',18]]);
 });
 
 test("unknown weapon damage is excluded and cannot satisfy a locked requirement", () => {
@@ -96,11 +378,15 @@ test("both optimization modes match exhaustive option and bomb-allocation enumer
         const damage = items.reduce((sum, item) => sum + item, 0);
         const targets = mode === "reward" ? Number(damage >= 100) : bruteTargets(items, 100);
         if (!targets) continue;
-        if (!expected || targets > expected.targets || targets === expected.targets && damage < expected.damage) expected = {targets, damage};
+        // Every enumerated loadout is below the reward cap. Unknown profiles
+        // remain distinct, so the independent tie-break is distinct weapon IDs.
+        const types = new Set(selected.flatMap(row => row.weapons.map(([id]) => id))).size;
+        if (!expected || targets > expected.targets || targets === expected.targets &&
+          (types < expected.types || types === expected.types && damage < expected.damage)) expected = {targets, types, damage};
       }
       const actual = run(definition, map, mode);
       assert.equal(actual.status, "optimal", `seed ${seed}, ${mode}`);
-      assert.deepEqual({targets: actual.targets, damage: actual.damage}, expected, `seed ${seed}, ${mode}`);
+      assert.deepEqual({targets: actual.targets, types: actual.simplicity.types, damage: actual.damage}, expected, `seed ${seed}, ${mode}`);
     }
   }
 });

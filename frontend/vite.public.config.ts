@@ -8,6 +8,7 @@ if (edition !== "Lite" && edition !== "Standard") throw new Error("public Web su
 export default defineConfig({
   root: resolve("public-web"),
   base: "./",
+  server: { fs: { allow: [resolve("..")] } },
   publicDir: false,
   plugins: [publicBuildBoundary(resolve(".."))],
   define: { __BOMANA_EDITION__: JSON.stringify(edition) },

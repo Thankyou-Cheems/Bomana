@@ -236,10 +236,36 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .aircraft-toolbar .hangar-selection { margin: 0; }
 .aircraft-toolbar .hangar-aircraft-list { grid-column: 1 / -1; margin-top: 10px; }
 .aircraft-toolbar .hangar-aircraft-list:has(.hangar-weapon-empty) { display: none; }
-.loadout-workspace { grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; }
-.loadout-workspace .hangar-picker { min-width: 0; padding: 16px; }
-.loadout-workspace .calculator-pickers { min-width: 0; }
-.loadout-workspace .hangar-hud { min-height: 0; padding: 20px; gap: 12px; }
+.loadout-workspace { display:block; padding:10px 12px; border:1px solid #c4d8e4; border-radius:10px; background:#f8fcff; min-width:0; }
+.loadout-workspace .hangar-picker, .loadout-workspace .hangar-hud, .loadout-workspace .optimizer-panel { min-width:0; padding:5px 0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.loadout-workspace .hangar-hud { position:static; display:block; min-height:0; padding-top:0; }
+.loadout-summary { display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; }
+.loadout-summary .hangar-result-grid { display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; min-width:0; }
+.loadout-summary .hangar-result-primary, .loadout-summary .hangar-sorties { display:flex; align-items:baseline; gap:6px; min-height:0; padding:0; border:0; border-radius:0; background:none; }
+.loadout-summary .hangar-result-primary span, .loadout-summary .hangar-sorties span { margin:0; font-size:12px; letter-spacing:0; }
+.loadout-summary #calcPresetDetail { order:2; flex-basis:100%; min-width:0; overflow-x:auto; border:1px solid #78b4cf; border-radius:6px; background:#e6f3fb; }
+.loadout-summary #calcPresetDetail[hidden] { display:none; }
+.loadout-summary .hangar-kicker { display:none; }
+.loadout-analysis dl > div { display:flex; align-items:baseline; gap:6px; font-size:11px; }
+.loadout-summary dd { margin:0; }
+.loadout-summary #calcPresetNote { margin:0; font-size:10px; }
+.loadout-workspace .hangar-fire { margin:4px 0 0; font-size:11px; }
+.loadout-workspace .hangar-fire:empty { display:none; }
+.loadout-workspace .hangar-hint { margin:3px 0 0; padding:0; background:none; font-size:11px; }
+.loadout-workspace .hangar-hud-context { margin:0 0 6px; font-size:10px; letter-spacing:0; }
+.loadout-workspace #calcPresetTitle { margin:0; font-size:12px; max-width:100%; }
+.loadout-workspace .optimizer-panel { border-top:1px solid #d4e1e9; border-bottom:1px solid #d4e1e9; margin:4px 0 6px; }
+.loadout-workspace .calculator-pickers { position:relative; display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; min-width:0; }
+.loadout-workspace .calculator-pickers > .hangar-picker { display:contents; }
+.loadout-workspace .hangar-picker-head { margin-bottom:6px; gap:8px; }
+.loadout-workspace .hangar-picker-head h2 { font-size:12px; }
+.loadout-workspace .hangar-selection { margin:0; }
+.loadout-workspace .hangar-aircraft-list { display:none; }
+.loadout-workspace .aircraft-toolbar:focus-within .hangar-aircraft-list:not(:has(.hangar-weapon-empty)) { display:grid; position:absolute; top:38px; left:0; z-index:4; width:min(560px,100%); max-height:260px; margin:0; padding:6px; border:1px solid #afc8d7; border-radius:7px; background:#f8fcff; box-shadow:0 6px 18px #284a6826; }
+.loadout-workspace .hangar-search input, .loadout-workspace .hangar-field select { min-height:34px; padding:6px 10px; border-radius:7px; font-size:12px; }
+.native-presets h2 { margin:0; font-size:12px; }
+.native-presets .loadout-scroll { max-height:440px; margin-top:6px; }
+#calcTargetThreshold { font-size:11px; letter-spacing:0; }
 .loadout-scroll { margin-top: 16px; overflow: auto; max-height: 440px; border: 1px solid #b7d0dd; border-radius: 10px; background: #e5f0f6; scrollbar-color: #9cbacb #e5f0f6; }
 .loadout-table-head, .loadout-row { display: grid; grid-template-columns: 200px minmax(390px, 1fr); width: 100%; min-width: 590px; }
 .loadout-table-head { position: sticky; top: 0; z-index: 2; background: #d6e7f0; color: #426a80; font-size: 10px; }
@@ -274,8 +300,7 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 #calcPresetNote:empty { display:none; }
 #calcHint:empty { display:none; }
 #calcPresetDetail[hidden], #calcPresetPanel[hidden] { display: none; }
-.loadout-workspace .hangar-result-primary strong { font-size: 62px; }
-.loadout-workspace .hangar-sorties strong { font-size: 44px; }
+.loadout-workspace .hangar-result-primary strong, .loadout-workspace .hangar-sorties strong { font-size:20px; }
 @media (max-width: 1100px) {
   .loadout-workspace { grid-template-columns: minmax(0, 1fr); }
   .loadout-workspace .hangar-hud { position: static; }
@@ -283,7 +308,7 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 @media (max-width: 640px) {
   .aircraft-toolbar { grid-template-columns: minmax(0, 1fr); }
   .aircraft-toolbar .hangar-selection { margin-top: 10px; }
-  .loadout-workspace .hangar-picker { padding: 12px; }
+  .loadout-workspace .hangar-picker { padding:8px 0; }
   .loadout-table-head, .loadout-row { grid-template-columns: 140px minmax(390px, 1fr); min-width: 530px; }
   .loadout-row-name { padding: 10px 8px; }
   .loadout-row-name strong { font-size: 11px; }
@@ -375,25 +400,31 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 }
 
 /* Compact flight desk: primary choices above the loadout, supporting tools below. */
-.optimizer-panel { margin-top:16px; padding-top:14px; border-top:1px solid #c4d8e4; }
+.optimizer-panel { margin:0; min-width:0; }
 .optimizer-panel[hidden], .optimizer-panel [hidden] { display:none !important; }
-.optimizer-panel h3 { margin:0 0 10px; font-size:15px; color:#315f7b; }
-.optimizer-modes { display:flex; gap:3px; padding:3px; border-radius:8px; background:#e5eef4; }
+.optimizer-heading { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; }
+.optimizer-panel h3 { margin:0; font-size:12px; color:#315f7b; }
+.optimizer-modes { display:flex; gap:3px; padding:3px; border-radius:8px; background:#e5eef4; width:250px; max-width:100%; }
 .optimizer-modes button { flex:1; padding:7px 4px; border:0; border-radius:6px; background:none; color:#55778b; font:inherit; font-size:11px; cursor:pointer; }
 .optimizer-modes button[aria-pressed=true] { background:#fff0b8; color:#715513; font-weight:700; }
-.optimizer-note, .optimizer-status { margin:9px 0; font-size:11px; line-height:1.6; color:#6e899a; }
+.optimizer-note, .optimizer-status { margin:4px 0; font-size:11px; line-height:1.6; color:#6e899a; }
+.optimizer-note:empty { display:none; }
 .optimizer-status { color:#347662; }
 .optimizer-panel[data-state=searching] .optimizer-status { color:#6e899a; }
 .optimizer-metrics { display:flex; flex-wrap:wrap; gap:5px 12px; align-items:center; font-size:12px; color:#315f7b; }
 .optimizer-metrics strong { color:#9a701d; }
-.optimizer-stores { display:flex; flex-wrap:wrap; gap:4px; margin:10px 0; }
-.optimizer-store { display:grid; justify-items:center; align-content:start; width:61px; padding:5px; border:1px solid #cbdee9; border-radius:6px; background:#eff6fb; }
-.optimizer-store .ordnance-icon { width:34px; height:34px; }
-.optimizer-store small { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:9px; line-height:1.4; text-align:center; color:#5c7f93; }
-.optimizer-plan { margin-top:9px; font-size:11px; line-height:1.65; color:#638091; }
+.optimizer-stores { display:block; flex-basis:100%; width:100%; min-width:0; overflow-x:auto; margin:5px 0; border:1px solid #d7ba71; border-radius:6px; }
+.optimizer-preset-row, .optimizer-preset-row:hover { background:#fff7d6; cursor:default; }
+.optimizer-preset-row .loadout-cell small { font-size:10px; color:#315f7b; }
+.optimizer-plan { margin-top:5px; font-size:11px; line-height:1.65; color:#638091; }
 .optimizer-plan summary { cursor:pointer; }
-.optimizer-plan p { margin:7px 0; }
-.optimizer-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+.optimizer-plan p { margin:3px 0; }
+.optimizer-plan h4 { margin:5px 0 3px; font-size:11px; color:#315f7b; }
+.optimizer-zone-plan { display:flex; flex-wrap:wrap; gap:4px 14px; list-style:none; margin:0; padding:0; }
+.optimizer-zone-plan li { display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 8px; min-width:0; padding:0; }
+.optimizer-zone-plan strong { color:#315f7b; font-size:11px; }
+.optimizer-zone-plan p { margin:0; color:#315f7b; font-size:11px; overflow-wrap:anywhere; }
+.optimizer-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:5px; }
 .optimizer-actions button { padding:7px 10px; border:1px solid #dcbf67; border-radius:7px; background:#fff0b8; color:#715513; font:inherit; font-size:11px; cursor:pointer; }
 .optimizer-actions [data-optimizer-retry] { background:#edf5fa; border-color:#c6dbe7; color:#537990; }
 .optimizer-panel button:focus-visible { outline:2px solid #258dbd; outline-offset:2px; }
@@ -405,7 +436,7 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .calculator-page .calculator-heading h1 { font-size:30px; margin:0; }
 .calculator-page .calculator-heading .hangar-lede { font-size:13px; margin:6px 0 0; grid-column:1; }
 .calculator-heading > .tool-source { grid-column:2; grid-row:2 / 4; font-size:11px; margin:0; }
-.tool-directory { position:fixed; bottom:calc(18px + env(safe-area-inset-bottom)); right:18px; z-index:60; }
+.tool-directory { position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); right:12px; z-index:60; display:flex; align-items:center; gap:6px; max-width:calc(100vw - 24px); padding:5px; border:1px solid #c5d8e4; border-radius:14px; background:#f5faff; box-shadow:0 4px 18px #244a6030; }
 .tool-directory-toggle { display:block; margin-left:auto; padding:10px 16px; border:1px solid #ddbb5b; border-radius:999px; background:#fff0b8; color:#614a13; font:inherit; font-size:13px; font-weight:700; box-shadow:0 4px 18px #244a6030; cursor:pointer; }
 .tool-directory .tool-nav { display:none; position:absolute; bottom:50px; right:0; width:190px; max-height:calc(100dvh - 110px); overflow-y:auto; margin:0; padding:8px; border:1px solid #c5d8e4; border-radius:14px; background:#f5faff; box-shadow:0 6px 24px #244a6030; }
 .tool-directory-toggle[aria-expanded=true] + .tool-nav { display:grid; gap:3px; }
@@ -414,15 +445,16 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .tool-directory-toggle:focus-visible { outline:2px solid #2388bd; outline-offset:3px; }
 @media (min-width:1280px) {
   .calculator-page .hangar-stage { width:min(var(--wrap),calc(100% - 212px)); margin-left:max(188px,calc((100% - var(--wrap)) / 2)); margin-right:24px; }
-  .tool-directory { top:100px; left:max(12px,calc((100vw - var(--wrap)) / 2 - 176px)); right:auto; bottom:auto; width:164px; }
+  .tool-directory { display:block; top:100px; left:max(12px,calc((100vw - var(--wrap)) / 2 - 176px)); right:auto; bottom:auto; width:164px; max-height:calc(100dvh - 112px); padding:8px; overflow-y:auto; box-shadow:none; }
   .tool-directory-toggle { display:none; }
-  .tool-directory .tool-nav { display:grid; position:static; width:100%; max-height:calc(100dvh - 120px); gap:3px; box-shadow:none; }
+  .tool-directory .tool-nav { display:grid; position:static; width:100%; max-height:none; gap:3px; padding:0; border:0; box-shadow:none; }
 }
 .calculator-context { grid-template-columns:minmax(0,1fr); gap:12px; padding:14px 16px; border-radius:14px; }
 .calculator-context [hidden] { display:none !important; }
 .context-field { min-width:0; }
 .context-label { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:7px; color:#315b73; font-size:12px; font-weight:700; }
 .context-label small { font-size:10px; font-weight:400; color:#718a9b; }
+.context-label > span { flex-shrink:0; }
 .segment-scroll { overflow-x:auto; scrollbar-width:thin; border-radius:10px; }
 .segment-track { --segments:6; --selected-segment:0; position:relative; display:grid; grid-template-columns:repeat(var(--segments),minmax(0,1fr)); min-width:540px; padding:3px; border-radius:10px; background:#e5eef4; isolation:isolate; }
 .segment-thumb { position:absolute; top:3px; bottom:3px; left:3px; width:calc((100% - 6px) / var(--segments)); border:1px solid #e5c46a; border-radius:8px; background:#fff0b8; box-shadow:0 2px 5px #8b7b3920; transform:translateX(calc(var(--selected-segment) * 100%)); transition:transform .18s ease,width .18s ease; pointer-events:none; box-sizing:border-box; }
@@ -431,6 +463,11 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .segment-track button[aria-checked=true] { color:#614a13; font-weight:750; }
 .segment-track button[aria-checked=true] small { color:#80652c; }
 .segment-track button:focus-visible { outline:2px solid #2388bd; outline-offset:-2px; }
+.context-br-label { align-items:center; flex-wrap:wrap; }
+.base-mode-scroll { max-width:100%; margin-left:auto; }
+.segment-track.base-mode-track { min-width:0; }
+.segment-track.base-mode-track button { min-height:28px; padding:4px 10px; font-size:11px; white-space:normal; word-break:keep-all; text-wrap:balance; line-height:1.35; }
+.base-mode-note { margin:6px 0 0; color:#718a9b; font-size:10px; line-height:1.5; }
 .calculator-context .hangar-repair { padding:8px 11px; font-size:11px; display:flex; flex-wrap:wrap; gap:4px 10px; }
 .calculator-context .hangar-repair small { font-size:11px; }
 .aircraft-toolbar { display:block; padding:14px 16px; border-radius:14px; margin-bottom:12px; }
@@ -525,4 +562,203 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
   .tool-panel-head h2 { font-size:19px; }
   .airport-comparison-panels { gap:6px; }
   .airport-reference text { font-size:12px; }
+}
+/* Locale and recommendation controls share the compact calculator rhythm. */
+.directory-languages { display:grid; gap:3px; padding:2px 0 8px; margin-bottom:5px; border-bottom:1px solid #cbdde8; }
+.directory-languages button { display:flex; align-items:center; gap:9px; width:100%; padding:7px 10px; border:0; border-radius:7px; background:transparent; color:#225776; font:inherit; font-size:12px; text-align:left; cursor:pointer; }
+.directory-languages button:hover, .directory-languages button:focus-visible { background:#dfeff9; }
+.directory-languages button:focus-visible { outline:2px solid #2388bd; outline-offset:-2px; }
+.directory-languages button[aria-pressed=true] { background:#fff0b8; color:#614a13; font-weight:700; }
+.directory-languages button:disabled { cursor:wait; opacity:.65; }
+.language-icon { display:grid; place-items:center; width:25px; height:25px; flex-shrink:0; border:1px solid currentColor; border-radius:6px; font-size:13px; font-weight:700; }
+@media (max-width:1279px) {
+  .calculator-page { padding-bottom:70px; }
+  .tool-directory .directory-languages { display:flex; gap:2px; margin:0; padding:0 5px 0 0; border-bottom:0; border-right:1px solid #cbdde8; }
+  .tool-directory .directory-languages button { width:auto; min-height:34px; padding:4px; }
+  .directory-languages button > span:last-child { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  .tool-directory .tool-nav { bottom:calc(100% + 8px); width:min(240px,calc(100vw - 24px)); max-height:calc(100dvh - 100px); }
+  .tool-directory-toggle { margin:0; box-shadow:none; padding:8px 12px; }
+}
+.optimizer-controls { display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; margin-top:6px; }
+.optimizer-filters { min-width:0; margin:0; padding:0; border:0; }
+.optimizer-filters legend, .optimizer-priority > span { color:#315f7b; font-weight:700; font-size:11px; }
+.optimizer-filter-help, [data-optimizer-priority-help] { display:block; margin:3px 0; color:#5c7f93; font-size:10px; line-height:1.6; }
+.optimizer-filter-grid { display:flex; flex-wrap:wrap; gap:5px; }
+.optimizer-filter-grid button { display:flex; align-items:center; gap:6px; min-width:0; padding:5px 8px; border:1px solid #c4d8e4; border-radius:6px; background:#eaf0f4; color:#496b80; text-align:left; font:inherit; cursor:pointer; }
+.optimizer-filter-grid button[aria-checked=true] { background:#e7f3f8; border-color:#78adc3; color:#285d7c; }
+.optimizer-filter-grid strong { font-size:11px; font-weight:650; }
+.optimizer-filter-grid small { font-size:10px; }
+.optimizer-filter-grid button[aria-checked=true] small { color:#347662; }
+.optimizer-priority { --priority-index:0; display:grid; position:relative; grid-template-columns:repeat(3,minmax(0,1fr)); width:344px; max-width:100%; min-width:0; padding:2px; border-radius:8px; background:#e5eef4; isolation:isolate; }
+.optimizer-priority-thumb { display:block; position:absolute; z-index:-1; top:2px; bottom:2px; left:2px; width:calc((100% - 4px) / 3); border:1px solid #ddc270; border-radius:6px; background:#fff0b8; box-shadow:0 1px 3px #8b7b3920; transform:translateX(calc(var(--priority-index) * 100%)); transition:transform .18s ease; }
+.optimizer-priority label { display:grid; place-items:center; min-width:0; min-height:26px; padding:4px 6px; border-radius:6px; color:#55778b; font-size:11px; text-align:center; line-height:1.35; cursor:pointer; }
+.optimizer-priority label:has(input:checked) { color:#715513; font-weight:700; }
+.optimizer-priority label:has(input:focus-visible) { outline:2px solid #258dbd; outline-offset:-2px; }
+@media (prefers-reduced-motion:reduce) { .optimizer-priority-thumb { transition:none; } }
+@media (max-width:560px) {
+  .loadout-workspace { padding:10px; }
+  .loadout-summary { gap:6px 12px; }
+  .loadout-workspace .hangar-result-primary strong, .loadout-workspace .hangar-sorties strong { font-size:26px; }
+  #calcTargetThreshold { flex-basis:100%; }
+}
+.optimizer-warning { border-left:3px solid #e5ad25; padding:3px 7px; margin:3px 0; background:#fff4ce; font-size:11px; }
+
+/* One continuous loadout surface, with details disclosed only on demand. */
+.tool-nav-category { padding:8px 8px 2px; color:#6c8493; font-size:10px; letter-spacing:.04em; }
+.recommendation-state { padding:2px 6px; border:1px solid #d7bb67; border-radius:4px; background:#fff4cd; color:#856719; font-size:10px; white-space:nowrap; }
+.optimizer-panel[data-applied=true] .recommendation-state { border-color:#91c4ad; background:#e3f3eb; color:#2f7659; }
+.optimizer-panel [data-optimizer-apply]:disabled { opacity:.55; cursor:default; }
+.loadout-reward { display:flex; align-items:baseline; gap:6px; font-size:12px; color:#638091; }
+.loadout-reward strong { font-size:20px; color:#9a701d; }
+.loadout-reward[hidden] { display:none; }
+.loadout-analysis { font-size:11px; color:#77909f; }
+.loadout-analysis > summary { cursor:pointer; }
+.loadout-analysis { margin-left:auto; }
+.loadout-analysis[open] { order:3; flex-basis:100%; margin-left:0; }
+.loadout-analysis-content { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:6px; margin-top:6px; padding:8px; border:1px solid #cbdfe9; border-radius:6px; background:#edf5fa; }
+.loadout-analysis .preset-stats, .loadout-analysis .hangar-stats { display:contents; }
+.loadout-analysis-content dl > div { display:flex; flex-direction:column; justify-content:center; gap:3px; padding:7px 10px; border:0; border-radius:4px; background:#f9fcff; }
+.loadout-analysis-content dt { color:#638091; font-size:11px; }
+.loadout-analysis-content dd { margin:0; color:#285d7c; text-align:left; font-weight:700; font-size:13px; }
+.loadout-analysis .hangar-stats dt, .loadout-analysis .hangar-stats dd { padding:0; border:0; font-size:11px; }
+.loadout-analysis .hangar-stats dd { font-size:13px; font-weight:700; }
+.loadout-analysis .hangar-hud-context, .loadout-analysis .hangar-fire { grid-column:1/-1; margin:0; padding:2px; font-size:11px; font-weight:400; color:#638091; }
+.current-preset-row { background:#e6f3fb; cursor:default; border:0; box-shadow:inset 4px 0 #258dbd; }
+.loadout-summary #calcPresetDetail { margin-top:5px; padding:4px 0; }
+.current-preset-row .loadout-row-name > small { color:#24789b; font-weight:700; }
+.current-slot-area { min-width:0; }
+.current-slot-area #calcPresetDiagram[hidden] { display:none; }
+.loadout-workspace .current-slot-area .custom-editor { display:block; margin:0; padding:4px 6px; border:0; }
+.loadout-workspace .current-slot-area .custom-editor-toolbar { display:flex; font-size:10px; gap:5px; }
+.loadout-workspace .current-slot-area [data-custom-body] { margin:0; padding:0; }
+.loadout-workspace .current-slot-area .custom-slots { grid-template-columns:repeat(var(--custom-columns),minmax(44px,1fr)); }
+.loadout-workspace .current-slot-area .custom-slot-caption { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px; }
+.current-loadout-options { margin-top:4px; font-size:10px; color:#64849a; }
+.current-loadout-options > summary { cursor:pointer; }
+.current-loadout-clear { align-self:flex-start; margin-top:5px; padding:3px 8px; border:1px solid #9fbfce; border-radius:5px; background:#f7fcff; color:#416c82; font:inherit; font-size:10px; cursor:pointer; }
+.current-loadout-clear:hover { background:#fff0b8; border-color:#dcbf67; color:#715513; }
+#calcPresetDiagram { min-width:0; }
+#calcPresetDiagram > .loadout-cells { height:100%; }
+.loadout-workspace .calculator-pickers .hangar-picker-head { display:none; }
+.calculator-page .loadout-workspace .aircraft-toolbar .hangar-aircraft-list { display:none; }
+.calculator-page .loadout-workspace .aircraft-toolbar:focus-within .hangar-aircraft-list:not(:has(.hangar-weapon-empty)) { display:grid; position:absolute; top:36px; left:0; margin:0; }
+.loadout-workspace .aircraft-search-bar { display:flex; flex:1 1 340px; align-items:center; gap:5px; min-width:0; margin:0; }
+.loadout-workspace .aircraft-search-bar .hangar-search { flex:1; min-width:150px; }
+.loadout-workspace .aircraft-filter-group { flex:none; gap:4px; }
+.loadout-workspace .filter-chip { min-height:32px; padding:5px 7px; font-size:11px; }
+.loadout-workspace .aircraft-filter-group #calcCustomCount { display:none; }
+.loadout-workspace .hangar-weapon-filters { display:flex; flex:1 1 240px; align-items:center; gap:5px; min-width:0; margin:0; }
+.loadout-workspace .hangar-kind-field { flex:none; width:68px; margin:0; }
+.loadout-workspace .hangar-kind-field > span { display:none; }
+.loadout-workspace .hangar-weapon-filters .hangar-search { flex:1; min-width:140px; }
+.loadout-workspace .hangar-search input, .loadout-workspace .hangar-field select { width:100%; min-height:32px; padding:5px 8px; }
+.loadout-workspace .custom-editor { display:contents; }
+.loadout-workspace .custom-editor-toolbar { flex:none; gap:5px; }
+.loadout-workspace .custom-launch { min-height:32px; padding:4px 7px; gap:5px; border-radius:6px; font-size:11px; }
+.loadout-workspace .custom-launch-symbol { width:17px; height:17px; }
+.loadout-workspace .custom-launch-chevron { width:12px; margin:0; }
+.loadout-workspace .custom-editor [data-custom-body] { order:1; flex-basis:100%; min-width:0; margin:2px 0; padding:6px 0; border:0; border-radius:0; background:none; }
+.loadout-workspace .custom-rack-heading { margin:0 0 4px; }
+.loadout-workspace .custom-slots { padding:0 0 3px; }
+.loadout-workspace .custom-slot { grid-template-rows:13px 30px 20px; padding:3px 2px; }
+.loadout-workspace .custom-slot-icon .ordnance-icon { width:30px; height:30px; }
+.loadout-workspace .custom-mass { display:flex; flex-wrap:wrap; gap:4px 14px; margin:3px 0; }
+.loadout-workspace .custom-mass > div { display:flex; align-items:baseline; gap:5px; padding:0; border:0; }
+.loadout-workspace .custom-mass dd { margin:0; }
+.loadout-workspace .custom-total { margin:3px 0; padding:0; background:none; color:#7990a0; font-size:10px; }
+.loadout-workspace .custom-save-bar { display:inline-flex; width:min(440px,100%); vertical-align:middle; margin:3px 12px 0 0; }
+.loadout-workspace .custom-editor .custom-save-bar input { min-height:30px; padding:4px 8px; font-size:11px; }
+.loadout-workspace .custom-save-button { padding:4px 8px; font-size:11px; }
+.loadout-workspace .custom-saved, .loadout-workspace .custom-requirements { display:inline-block; margin:3px 10px 0 0; vertical-align:middle; }
+.loadout-workspace .custom-saved[open], .loadout-workspace .custom-requirements[open] { display:block; }
+.loadout-workspace .loadout-individual { order:2; margin:0; font-size:11px; }
+.loadout-workspace .loadout-individual > summary { padding:2px 0; font-size:11px; }
+.loadout-workspace .loadout-individual[open] { flex-basis:100%; }
+.loadout-workspace .native-presets .hangar-picker-head { display:flex; order:2; margin:0; }
+.loadout-workspace .native-presets .hangar-picker-head p { display:none; }
+.loadout-workspace .native-presets h2 { font-size:11px; font-weight:600; }
+.loadout-workspace #calcPresetPanel { order:3; flex-basis:100%; min-width:0; }
+.loadout-workspace .loadout-scroll { margin-top:2px; border-radius:6px; }
+.loadout-workspace .loadout-row-name { padding:5px 8px; }
+.loadout-workspace .loadout-row-name strong { font-size:11px; line-height:1.35; }
+.loadout-workspace .loadout-cell { min-height:38px; }
+.loadout-workspace .loadout-cell .ordnance-icon { max-width:36px; }
+.loadout-workspace .loadout-table-head .loadout-row-name, .loadout-workspace .loadout-ruler > span { padding:4px 6px; }
+.loadout-workspace .loadout-footer { margin-top:3px; }
+.loadout-workspace .optimizer-panel { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; padding:8px 0; }
+.loadout-workspace .optimizer-panel > * { grid-column:1/-1; }
+.loadout-workspace .optimizer-panel[hidden] { display:none; }
+.optimizer-heading { display:grid; grid-template-columns:auto minmax(200px,.8fr) minmax(320px,1.2fr); align-items:center; gap:10px; }
+.optimizer-heading-label { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.optimizer-controls { display:block; min-width:0; margin:0; }
+.optimizer-modes, .optimizer-priority { width:100%; padding:2px; min-height:34px; }
+.optimizer-modes button { padding:5px 6px; }
+.optimizer-filters { display:block; margin:0; padding:0; min-width:0; }
+.optimizer-filters legend { float:none; padding:0 0 4px; font-size:11px; }
+.optimizer-filter-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+.optimizer-filter-grid button:first-child { grid-column:span 2; }
+.optimizer-filter-grid button { min-height:32px; padding:4px 7px; gap:6px; }
+.optimizer-filter-grid button strong { margin-right:auto; }
+.optimizer-filter-grid button small { font-size:10px; }
+.optimizer-switch-track { display:block; position:relative; flex:none; width:28px; height:16px; border-radius:999px; background:#b7c8d2; box-shadow:inset 0 0 0 1px #496b8026; }
+.optimizer-switch-track::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; box-shadow:0 1px 3px #25496240; }
+.optimizer-filter-grid button[aria-checked=true] .optimizer-switch-track { background:#347f70; }
+.optimizer-filter-grid button[aria-checked=true] .optimizer-switch-track::after { transform:translateX(12px); }
+.optimizer-panel [data-optimizer-result] { display:grid; grid-template-columns:minmax(0,1fr); gap:5px; }
+.optimizer-panel[data-state=optimal] > .optimizer-status { display:none; }
+.optimizer-metrics { justify-content:flex-end; font-size:11px; }
+.optimizer-metrics [data-optimizer-context] { margin:0 auto 0 0; }
+.optimizer-metrics .optimizer-actions { margin-left:0; margin-top:0; }
+.optimizer-stores { margin:0; }
+.optimizer-plan { display:flex; flex-wrap:wrap; align-items:baseline; gap:5px 8px; margin:0; }
+.optimizer-plan h4 { display:none; }
+.optimizer-plan .optimizer-note { margin:0; }
+.loadout-workspace .optimizer-actions { display:flex; grid-column:1; align-items:center; gap:6px; margin:0; }
+.optimizer-actions:not(:has(> button:not([hidden]))) { display:none; }
+.optimizer-actions:has(> button:not([hidden])) { margin-top:1px; }
+.optimizer-actions button { min-height:32px; padding:4px 10px; }
+.loadout-workspace .optimizer-explanation { grid-column:2; align-self:center; color:#79909f; font-size:11px; }
+.optimizer-explanation > summary { cursor:pointer; }
+.loadout-workspace .optimizer-explanation[open] { grid-column:1/-1; }
+.optimizer-explanation p { margin:3px 0; }
+.optimizer-slot-shares { display:flex; flex-wrap:wrap; justify-content:center; gap:2px; padding:2px; }
+.optimizer-zone-share, .optimizer-zone-plan li { border:1px solid hsl(var(--zone-hue) 42% 63%); background:hsl(var(--zone-hue) 65% 94%); border-radius:4px; }
+.optimizer-preset-row .loadout-cell .optimizer-zone-share { padding:1px 3px; color:hsl(var(--zone-hue) 60% 28%); font-size:9px; white-space:nowrap; }
+.optimizer-zone-plan { gap:5px; }
+.optimizer-zone-plan li { padding:4px 7px; }
+.optimizer-zone-plan li strong, .optimizer-zone-plan li p { color:hsl(var(--zone-hue) 60% 28%); }
+.optimizer-spare-share { padding:1px 3px; color:#6e899a; }
+.loadout-workspace .calculator-pickers { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.85fr) auto; align-items:center; gap:6px 8px; }
+.loadout-workspace .aircraft-search-bar { grid-column:1; }
+.loadout-workspace .hangar-weapon-filters { grid-column:2; }
+.loadout-workspace .custom-editor-toolbar { grid-column:3; }
+.loadout-workspace .custom-editor [data-custom-body] { grid-column:1/-1; }
+.loadout-workspace .loadout-individual { grid-column:2/-1; justify-self:end; }
+.loadout-workspace .loadout-individual[open] { grid-column:1/-1; justify-self:stretch; }
+.loadout-workspace .native-presets .hangar-picker-head { grid-column:1; }
+.loadout-workspace #calcPresetPanel { grid-column:1/-1; }
+@media (max-width:1100px) {
+  .optimizer-heading { grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); }
+  .optimizer-heading-label { grid-column:1/-1; }
+  .optimizer-filter-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .optimizer-filter-grid button:first-child { grid-column:1/-1; }
+  .loadout-workspace .calculator-pickers { grid-template-columns:minmax(0,1fr) auto; }
+  .loadout-workspace .aircraft-search-bar { grid-column:1/-1; }
+  .loadout-workspace .hangar-weapon-filters { grid-column:1; }
+  .loadout-workspace .custom-editor-toolbar { grid-column:2; }
+  .loadout-workspace .loadout-individual { grid-column:2; }
+}
+@media (max-width:560px) {
+  .optimizer-heading { grid-template-columns:minmax(0,1fr); gap:5px; }
+  .optimizer-filter-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .optimizer-filter-grid button:first-child { grid-column:1/-1; }
+  .loadout-workspace .calculator-pickers { grid-template-columns:minmax(0,1fr); }
+  .loadout-workspace .aircraft-search-bar { flex-wrap:wrap; }
+  .loadout-workspace .aircraft-search-bar .hangar-search { flex-basis:100%; min-width:0; }
+  .optimizer-filter-grid button { flex-wrap:wrap; }
+  .optimizer-filter-grid button strong { flex-basis:100%; text-align:left; }
+  .optimizer-filter-grid button:first-child strong { flex-basis:auto; }
+  .loadout-workspace .hangar-weapon-filters, .loadout-workspace .custom-editor-toolbar, .loadout-workspace .loadout-individual { grid-column:1; justify-self:stretch; }
+  .loadout-workspace .hangar-result-primary strong, .loadout-workspace .hangar-sorties strong, .loadout-reward strong { font-size:18px; }
+  .loadout-workspace .aircraft-search-bar, .loadout-workspace .hangar-weapon-filters { flex-basis:100%; }
 }

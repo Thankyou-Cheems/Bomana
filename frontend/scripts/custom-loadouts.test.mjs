@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { combinationTotals, validateLoadout, customPreset } from "../../docs/calculator/custom-loadouts.mjs";
+import { combinationTotals, validateLoadout, customPreset, keysFromPreset, previewCustomPreset } from "../../docs/calculator/custom-loadouts.mjs";
 import { readFileSync } from "node:fs";
 
 const weapons = new Map([
@@ -82,4 +82,20 @@ test("zero rows are ignored; unknown inputs never silently become zero damage", 
     assert.equal(combinationTotals([["a", count]], weapons, 1000), null);
   }
   assert.equal(combinationTotals([["absent", 1]], weapons, 1000), null);
+});
+
+test("game presets populate editable stations without losing weapons or support equipment", () => {
+  const rules = JSON.parse(readFileSync(new URL('../../docs/api/v1/calculator/custom-loadouts.json', import.meta.url)));
+  const presets = JSON.parse(readFileSync(new URL('../../docs/api/v1/calculator/loadouts.json', import.meta.url)));
+  for (const unit of ['a_10c', 'f_16c_block_50']) {
+    const definition = rules.aircraft[unit];
+    const preset = presets.aircraft[unit][0];
+    const keys = keysFromPreset(definition, preset);
+    assert.ok(keys, unit);
+    const restored = previewCustomPreset(definition, {id:'current',name:'current',keys}).preset;
+    const counts = cells => cells.map(cell => `${cell.tier}:${cell.weapon}:${cell.count}`).sort();
+    assert.deepEqual(counts(restored.cells), counts(preset.cells), `${unit}: support equipment must be preserved too`);
+    assert.deepEqual(keysFromPreset(definition, {...preset,cells:[]}), []);
+    assert.equal(keysFromPreset(definition, {...preset,cells:[...preset.cells,{tier:1,weapon:'unavailable',count:1}]}), null);
+  }
 });

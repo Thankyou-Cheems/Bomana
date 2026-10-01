@@ -182,6 +182,7 @@ function interpolate(points, value) {
 }
 
 export function rewardUi(reward, totalDamage) {
+  if (reward && totalDamage === 0) return reward.ui_decoration;
   if (!reward || !(totalDamage > 0)) return null;
   const floor = reward.piecewise_linear?.[0]?.[0];
   if (!(floor > 0)) return null;
@@ -198,7 +199,7 @@ export function rewardUi(reward, totalDamage) {
   return multiplier === null ? null : multiplier * reward.ui_decoration;
 }
 
-export function sortiePlan({ required, capacity, damage, reward }) {
+export function sortiePlan({ required, capacity, damage, rewardDamage = damage, reward }) {
   if (!Number.isInteger(required) || required <= 0 || !Number.isInteger(capacity) || capacity <= 0 || !(damage > 0)) {
     return null;
   }
@@ -209,7 +210,7 @@ export function sortiePlan({ required, capacity, damage, reward }) {
     sorties,
     lastSortieCount,
     fullLoadDamage: capacity * damage,
-    fullLoadReward: rewardUi(reward, capacity * damage),
+    fullLoadReward: rewardUi(reward, capacity * rewardDamage),
   });
 }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright-core";
 import { preview } from "vite";
+import { measureLandingGuidance } from "./landing-visibility.mjs";
 
 const site = await preview({ configFile: false, build: { outDir: "dist/Standard" }, preview: { host: "127.0.0.1", port: 0 } });
 const browser = await chromium.launch({ channel: "msedge", headless: true });
@@ -79,6 +80,45 @@ try {
   await landing.locator("[data-part='active']").waitFor({state:"visible"});
   assert.equal(await page.locator("#pip-heading-canvas").getAttribute("data-mode"),"landing");
   assert.match(await page.locator("#pip-heading-canvas").getAttribute("aria-label"),/IAS 700 km\/h.*燃油/);
+  // Follow the real Standard runtime from official telemetry to both visible canvases,
+  // with untouched default (unknown) airport elevation.
+  const assertRoute = async surface => {
+    const canvas = surface.locator("#pip-heading-canvas");
+    await surface.waitForFunction(() => document.querySelector("#pip-heading-canvas")?.getAttribute("aria-label")?.includes("高程未知"));
+    await surface.waitForFunction(() => {
+      const canvas = document.querySelector("#pip-heading-canvas");
+      return canvas?.dataset.mode === "landing" && canvas.width >= canvas.getBoundingClientRect().width;
+    });
+    const sample = await canvas.evaluate(measureLandingGuidance);
+    assert.ok(sample.light > 6 && sample.routeArea > 12 && sample.routeSpan >= 24,
+      `Default Standard route must be visible without manually supplying elevation: ${JSON.stringify(sample)}`);
+  };
+  await assertRoute(page);
+  const landingPipOpening = page.context().waitForEvent("page");
+  await page.locator("#toggle-pip").click();
+  const landingPip = await landingPipOpening;
+  await landingPip.setViewportSize({ width: 900, height: 120 });
+  await mkdir("../.artifacts/public-ui", { recursive: true });
+  const headingWidths = [];
+  for (const showMap of [true, false]) {
+    const map = landingPip.locator(".pip-mini-map");
+    if (await map.isVisible() !== showMap) await landingPip.locator("#pip-map-toggle").click();
+    await map.waitFor({ state: showMap ? "visible" : "hidden" });
+    await landingPip.waitForFunction(() => {
+      const canvas = document.querySelector("#pip-heading-canvas");
+      return Math.abs(canvas.width / devicePixelRatio - canvas.getBoundingClientRect().width) < 2;
+    });
+    await assertRoute(landingPip);
+    const heading = await landingPip.locator("#pip-heading-canvas").boundingBox();
+    headingWidths.push(heading.width);
+    if (showMap) {
+      const box = await map.boundingBox();
+      assert.ok(heading.x + heading.width <= box.x, "The perspective canvas must exclude the PiP map column");
+    }
+    await landingPip.screenshot({ path: `../.artifacts/public-ui/Standard-landing-map-${showMap ? "on" : "off"}-900x120.png` });
+  }
+  assert.ok(headingWidths[1] > headingWidths[0], "Hiding the map must release space for the perspective viewport");
+  await landingPip.close();
   assert.equal(await landing.locator('[data-part="arrestor"]').isVisible(), false, 'Static capability belongs in the collapsed reference section');
   assert.equal(await landing.locator('[data-part="touchdown"]').isVisible(), false, 'Default panel omits static touchdown explanation');
   assert.equal(await landing.locator('[data-part="flapAdvice"]').isVisible(), true, 'Current overspeed advice remains visible');
@@ -146,7 +186,7 @@ try {
   await page.evaluate(() => { document.body.dataset.mobilePaired = "true"; });
   for (const [width, height] of [[390, 844], [844, 390]]) {
     await page.setViewportSize({ width, height });
-    assert.equal(await page.locator(".public-header nav").isVisible(), false);
+    assert.equal(await page.locator(".public-product-nav").isVisible(), false);
     assert.equal(await page.locator("#toggle-pip").isVisible(), false);
     assert.equal(await page.locator("#open-mobile-pairing").isVisible(), false);
     assert.equal(await page.locator("#open-settings").isVisible(), true);

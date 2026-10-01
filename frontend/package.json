@@ -5,13 +5,13 @@
   "type": "module",
   "packageManager": "pnpm@11.3.0",
   "scripts": {
-    "generate": "node scripts/build-public-assets.mjs && node scripts/copy-calculator-solver.mjs",
-    "test": "pnpm generate && node --test scripts/calculator-model.test.mjs scripts/custom-loadouts.test.mjs scripts/loadout-optimizer.test.mjs scripts/calculator-search.test.mjs && vitest run",
+    "generate": "node scripts/build-public-assets.mjs && node scripts/copy-calculator-solver.mjs && node scripts/copy-calculator-i18n.mjs && node scripts/build-calculator-locales.mjs && node scripts/build-calculator-analytics.mjs",
+    "test": "pnpm generate && node --test scripts/calculator-locales.test.mjs scripts/calculator-model.test.mjs scripts/custom-loadouts.test.mjs scripts/loadout-optimizer.test.mjs scripts/calculator-search.test.mjs && vitest run",
     "build": "pnpm generate && tsc --noEmit && node scripts/build-public-editions.mjs",
     "build:launcher": "pnpm generate && tsc --noEmit && vite build --config vite.launcher.config.ts",
     "check": "pnpm test && pnpm build && pnpm build:launcher && node ../tools/check-boundary.mjs && pnpm test:public-ui && pnpm test:calculator-ui",
     "test:public-ui": "node scripts/public-ui-smoke.mjs",
-    "test:calculator-ui": "node scripts/calculator-ui-smoke.mjs && node scripts/custom-loadout-ui-smoke.mjs && node scripts/optimizer-ui-smoke.mjs"
+    "test:calculator-ui": "node scripts/calculator-ui-smoke.mjs && node scripts/custom-loadout-ui-smoke.mjs && node scripts/optimizer-ui-smoke.mjs && node scripts/calculator-analytics-ui-smoke.mjs && node scripts/calculator-locales-ui-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
@@ -20,11 +20,14 @@
     "playwright-core": "1.62.1",
     "typescript": "7.0.2",
     "vite": "8.2.2",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "opencc-js": "1.4.2",
+    "@babel/parser": "7.29.9"
   },
   "dependencies": {
     "@noble/ed25519": "3.1.0",
     "@noble/hashes": "2.2.0",
-    "qrcode": "1.5.4"
+    "qrcode": "1.5.4",
+    "i18next": "26.4.2"
   }
 }

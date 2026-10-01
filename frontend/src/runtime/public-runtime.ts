@@ -34,8 +34,21 @@ const DEFAULT_CHECKLIST = [
 ] as const;
 
 const NO_DATA_GRACE_MS = 12_000;
-const LANDING_EVIDENCE_MAX_AGE_MS = 1_500;
+const LIFECYCLE_CONFIRMATION_MS = 1_000;
+const PLAYER_EVIDENCE_MAX_AGE_MS = 1_500;
 const GROUND_CONTINUITY_MAX_MS = 60_000;
+const GROUND_ABSENCE_CONFIRMATION_MS = 3_000;
+interface GroundAbsenceEvidence {
+  readonly sinceMs: number;
+  readonly sourceTimes: readonly number[];
+}
+const BOUNDARY_CONTINUITY_MAX_MS = 60_000;
+interface BoundaryContinuityEvidence {
+  readonly aircraft: string;
+  readonly mapSignature: string;
+  readonly sampledAtMs: number;
+  missingSinceMs: number | null;
+}
 const LOW_ENERGY_APPROACH_MAX_IAS_KMH = 180;
 const LOW_ENERGY_APPROACH_MAX_VERTICAL_SPEED_MPS = 8;
 const LOW_ENERGY_APPROACH_MIN_GEAR_PERCENT = 50;
@@ -110,12 +123,20 @@ export class PublicRuntime {
   protected _candidateSinceMs: number | null = null;
   protected _lifeStartedAtMs: number | null = null;
   protected _lifeIndex = 0;
+  protected _lifeAircraft = "";
   protected _revision = 0;
   protected _checklistChecked: boolean[];
   protected _lastFrame: Official8111Frame | null = null;
+  protected readonly _lastDynamicObservationAtMs = {
+    indicators: Number.NEGATIVE_INFINITY, state: Number.NEGATIVE_INFINITY, mapObjects: Number.NEGATIVE_INFINITY,
+  };
   protected _lastPlayerPoint: { readonly x: number; readonly y: number } | null = null;
   protected _lastPlayerFlightEvidence: PlayerFlightEvidence | null = null;
   protected _groundContinuitySinceMs: number | null = null;
+  protected _groundExitSinceMs: number | null = null;
+  protected _groundExitObservedAtMs: number | null = null;
+  protected _groundAbsenceEvidence: GroundAbsenceEvidence | null = null;
+  protected _boundaryContinuity: BoundaryContinuityEvidence | null = null;
   protected _automaticNavigationTargetId: string | null = null;
   protected _navigationSelectionMode: NavigationSelectionMode = "auto";
   protected _lastTimerCheckpointAtMs = 0;
@@ -194,6 +215,20 @@ export class PublicRuntime {
   }
 
   async ingest(frame: Official8111Frame): Promise<EditionSnapshot> {
+    // A late response must not revive Player or erase a newer exit/undo decision.
+    if (this._lastFrame && frame.sampledAtMs < this._lastFrame.sampledAtMs) return this._lastSnapshot;
+    for (const route of ["indicators", "state", "mapObjects"] as const) {
+      if (!frame.availability[route] || frame.holdover?.[route]) continue;
+      const atMs = frame[`${route}SampledAtMs`] ?? frame.sampledAtMs;
+      if (atMs < this._lastDynamicObservationAtMs[route]
+        || route === "mapObjects" && this._resetSuppressedUntilEvidence && atMs === this._lastDynamicObservationAtMs[route]) {
+        // A newer aggregate can contain an older route response. In particular,
+        // old Player must not cancel an undo's unresolved-absence suppression.
+        frame = { ...frame, ...(route === "mapObjects" ? { mapObjects: null } : {}),
+          availability: { ...frame.availability, [route]: false },
+          holdover: { indicators: false, state: false, mapObjects: false, ...frame.holdover, [route]: true } };
+      } else this._lastDynamicObservationAtMs[route] = atMs;
+    }
     this._lastFrame = frame;
     this._expireResetUndo(frame.sampledAtMs);
     const telemetry = parseTelemetry(frame);
@@ -202,6 +237,17 @@ export class PublicRuntime {
     const mapSignature = sortieMapSignature(frame.mapInfo);
     if (mapSignature) {
       if (this._currentMapSignature && mapSignature !== this._currentMapSignature) {
+        // A different confirmed map is a new session, never a boundary return.
+        this._beginSortieReset(frame.sampledAtMs, "aircraft-loss");
+        this._resetUndo = null;
+        this._sortieRecoveryStore?.clear();
+        this._lastSortieRecoveryAtMs = 0;
+        this._candidateSinceMs = null;
+        this._phase = "idle";
+        this._lifeStartedAtMs = null;
+        this._lifeIndex = 0;
+        this._lifeAircraft = "";
+        this._clearPlayerContinuity();
         this._fuel.reset();
         this._groundTrack.reset();
         this._groundTrackEstimate = null;
@@ -338,7 +384,7 @@ export class PublicRuntime {
         this._lifeStartedAtMs = this._now();
         this._resetUndo = null;
         this._resetSuppressedUntilEvidence = false;
-        this._clearGroundContinuity();
+        this._clearPlayerContinuity();
         if (this._phase !== "alive") {
           this._phase = "alive";
           this._lifeIndex += 1;
@@ -561,10 +607,10 @@ export class PublicRuntime {
   protected _updateLifecycle(frame: Official8111Frame, telemetry: ParsedTelemetry, map: ParsedMap): void {
     const now = frame.sampledAtMs;
     const activeSortie = this._phase === "alive" || this._phase === "loss-pending";
-    const dynamicStale = Object.values(frame.holdover ?? {}).some(Boolean)
-      || !frame.availability.indicators
-      || !frame.availability.state
-      || !frame.availability.mapObjects;
+    const dynamicStale = !frame.bridgeReachable || !freshObservation(frame, "indicators")
+      || !freshObservation(frame, "state") || !freshObservation(frame, "mapObjects");
+    if (dynamicStale || !frame.bridgeReachable || map.player || !telemetry.indicatorsValid
+      || !telemetry.stateValid || !telemetry.onGround) this._groundAbsenceEvidence = null;
     // Confirmation must observe live spawn evidence, not replay a held aircraft.
     if (!activeSortie && (dynamicStale || !frame.bridgeReachable)) {
       this._candidateSinceMs = null;
@@ -576,11 +622,63 @@ export class PublicRuntime {
     } else if (!dynamicStale) {
       this._noDataSinceMs = null;
     }
-    const authoritativeMap = frame.bridgeReachable
-      && frame.availability.mapObjects
-      && frame.holdover?.mapObjects !== true;
+    const authoritativeMap = frame.bridgeReachable && freshObservation(frame, "mapObjects");
+    if (activeSortie && frame.bridgeReachable) {
+      const aircraft = this._lifeAircraft || this._boundaryContinuity?.aircraft;
+      const aircraftChanged = freshObservation(frame, "indicators") && telemetry.indicatorsValid
+        && aircraft && telemetry.aircraft !== aircraft;
+      const exitSourceTimes = (["indicators", "state"] as const)
+        .filter(route => freshObservation(frame, route) && frame[route]?.valid === false)
+        .map(route => frame[`${route}SampledAtMs`] ?? now);
+      const explicitExit = exitSourceTimes.length > 0 && (!authoritativeMap || !map.player);
+      // Ground service may briefly hide the marker, but a current explicit exit
+      // or another aircraft ends this sortie, even if map reads are failing.
+      if (aircraftChanged || explicitExit) {
+        if (!aircraftChanged && this._resetSuppressedUntilEvidence) {
+          this._noDataSinceMs ??= now;
+          return;
+        }
+        const groundedContext = this._lastPlayerFlightEvidence?.onGround || this._groundContinuitySinceMs !== null;
+        if (!aircraftChanged && groundedContext) {
+          // A single invalid sample can be a service transition. Require
+          // consecutive current exit observations over the spawn-confirmation
+          // interval; missing/held data alone cannot confirm a grounded exit.
+          const observedAtMs = Math.max(...exitSourceTimes);
+          if (this._groundExitObservedAtMs === null || observedAtMs <= this._groundExitObservedAtMs
+            || observedAtMs - this._groundExitObservedAtMs > PLAYER_EVIDENCE_MAX_AGE_MS) this._groundExitSinceMs = observedAtMs;
+          this._groundExitObservedAtMs = observedAtMs;
+          this._groundExitSinceMs ??= observedAtMs;
+          if (observedAtMs - this._groundExitSinceMs < LIFECYCLE_CONFIRMATION_MS) {
+            this._noDataSinceMs ??= now;
+            return;
+          }
+        }
+        this._beginSortieReset(now, "aircraft-loss");
+        if (aircraftChanged && authoritativeMap && map.player && telemetry.entityLike && !dynamicStale) {
+          this._candidateSinceMs = now;
+        }
+        return;
+      }
+      this._groundExitSinceMs = null;
+      this._groundExitObservedAtMs = null;
+      if (this._boundaryContinuity && freshObservation(frame, "state") && telemetry.stateValid && telemetry.onGround) {
+        this._boundaryContinuity = null;
+      }
+    } else {
+      this._groundExitSinceMs = null;
+      this._groundExitObservedAtMs = null;
+    }
     if (!authoritativeMap) {
       if (activeSortie) {
+        // Retain recently established ground context through the no-data grace,
+        // but do not count the unobserved interval toward exit confirmation.
+        if (hasRecentGroundEvidence(this._lastPlayerFlightEvidence, now)) this._groundContinuitySinceMs ??= now;
+        const boundarySince = this._boundaryContinuity?.missingSinceMs;
+        if (boundarySince != null && now - boundarySince >= BOUNDARY_CONTINUITY_MAX_MS
+          && !this._resetSuppressedUntilEvidence) {
+          this._beginSortieReset(now, "telemetry-timeout");
+          return;
+        }
         if (this._lifecycleEvidenceMissingSinceMs === null) this._lifecycleEvidenceMissingSinceMs = now;
         if (
           now - this._lifecycleEvidenceMissingSinceMs >= NO_DATA_GRACE_MS
@@ -589,11 +687,45 @@ export class PublicRuntime {
       }
       return;
     }
-    this._lifecycleEvidenceMissingSinceMs = null;
     const playerPresent = map.player !== null;
-    const currentStateEvidence = frame.availability.state && frame.holdover?.state !== true;
+    if (!playerPresent && activeSortie) this._noDataSinceMs ??= now;
+    if (this._updateBoundaryContinuity(frame, telemetry, map) && activeSortie) {
+      // A disappearing map marker near an observed outward crossing is not
+      // sufficient death evidence. Do not restore its coordinates or live solve.
+      this._noDataSinceMs ??= now;
+      if (freshAirborneTelemetry(frame, telemetry)) {
+        this._lifecycleEvidenceMissingSinceMs = null;
+      } else {
+        this._lifecycleEvidenceMissingSinceMs ??= now;
+        if (now - this._lifecycleEvidenceMissingSinceMs >= NO_DATA_GRACE_MS
+          && !this._resetSuppressedUntilEvidence) this._beginSortieReset(now, "telemetry-timeout");
+      }
+      return;
+    }
+    const groundedContext = this._groundContinuitySinceMs !== null
+      || hasRecentGroundEvidence(this._lastPlayerFlightEvidence, now);
+    if (!playerPresent && activeSortie && groundedContext
+      && this._lifecycleEvidenceMissingSinceMs !== null
+      && now - this._lifecycleEvidenceMissingSinceMs >= NO_DATA_GRACE_MS
+      && !this._resetSuppressedUntilEvidence) {
+      this._beginSortieReset(now, "telemetry-timeout");
+      return;
+    }
+    if (!playerPresent && activeSortie && groundedContext && dynamicStale) {
+      // Missing/held flight input is not a sustained exit observation, even if
+      // the map route still answers. Give it the ordinary no-data grace.
+      this._groundContinuitySinceMs ??= now;
+      this._noDataSinceMs ??= now;
+      this._lifecycleEvidenceMissingSinceMs ??= now;
+      if (now - this._lifecycleEvidenceMissingSinceMs >= NO_DATA_GRACE_MS
+        && !this._resetSuppressedUntilEvidence) this._beginSortieReset(now, "telemetry-timeout");
+      return;
+    }
+    this._lifecycleEvidenceMissingSinceMs = null;
+    const currentStateEvidence = freshObservation(frame, "state");
     const currentStateObservedAtMs = frame.stateSampledAtMs ?? now;
     if (map.player) {
+      if (freshObservation(frame, "indicators") && telemetry.indicatorsValid) this._lifeAircraft = telemetry.aircraft;
       this._groundContinuitySinceMs = null;
       this._lastPlayerPoint = Object.freeze({ x: map.player.x, y: map.player.y });
       if (currentStateEvidence && telemetry.stateValid) {
@@ -625,6 +757,12 @@ export class PublicRuntime {
       if (groundContinuity && this._groundContinuitySinceMs === null) this._groundContinuitySinceMs = now;
       else if (!groundContinuity) this._groundContinuitySinceMs = null;
     }
+    if (activeSortie && groundContinuity && this._confirmGroundAbsence(frame, telemetry)
+      && !this._resetSuppressedUntilEvidence) {
+      this._beginSortieReset(now, "ground-absence");
+      return;
+    }
+    if (!groundContinuity) this._groundAbsenceEvidence = null;
     const spawnCandidate = playerPresent && telemetry.entityLike;
     const hangarLike = map.objectCount === 0;
     if (hangarLike && !playerPresent && this._phase !== "alive" && this._phase !== "loss-pending") {
@@ -636,7 +774,7 @@ export class PublicRuntime {
         this._fuel.reset();
         this._resetExtension("hangar");
         this._lastPlayerPoint = null;
-        this._clearGroundContinuity();
+        this._clearPlayerContinuity();
         this._automaticNavigationTargetId = null;
         this._navigationSelectionMode = "auto";
         this._settings = { ...this._settings, selectedNavigationId: null };
@@ -652,7 +790,7 @@ export class PublicRuntime {
     if (this._phase === "arming") {
       if (!spawnCandidate) { this._phase = "idle"; this._candidateSinceMs = null; return; }
       if (this._candidateSinceMs === null) this._candidateSinceMs = now;
-      else if (now - this._candidateSinceMs >= 1_000) this._startLife(now, this._candidateSinceMs);
+      else if (now - this._candidateSinceMs >= LIFECYCLE_CONFIRMATION_MS) this._startLife(now, this._candidateSinceMs);
       return;
     }
     if (this._phase === "alive" || this._phase === "loss-pending") {
@@ -669,10 +807,65 @@ export class PublicRuntime {
     }
     if (this._phase === "wait-next" && spawnCandidate) {
       if (this._candidateSinceMs === null) this._candidateSinceMs = now;
-      else if (now - this._candidateSinceMs >= 1_000) this._startLife(now, this._candidateSinceMs);
+      else if (now - this._candidateSinceMs >= LIFECYCLE_CONFIRMATION_MS) this._startLife(now, this._candidateSinceMs);
     } else if (this._phase === "wait-next") {
       this._candidateSinceMs = null;
     }
+  }
+
+  protected _confirmGroundAbsence(frame: Official8111Frame, telemetry: ParsedTelemetry): boolean {
+    if (!frame.bridgeReachable || !telemetry.indicatorsValid || !telemetry.stateValid || !telemetry.onGround
+      || telemetry.aircraft !== this._lifeAircraft
+      || !freshObservation(frame, "indicators") || !freshObservation(frame, "state")
+      || !freshObservation(frame, "mapObjects")) {
+      this._groundAbsenceEvidence = null;
+      return false;
+    }
+    const sourceTimes = [frame.indicatorsSampledAtMs, frame.stateSampledAtMs, frame.mapObjectsSampledAtMs]
+      .map(at => at ?? frame.sampledAtMs);
+    const previous = this._groundAbsenceEvidence;
+    // Receipt time alone cannot turn held/duplicate route data or a suspended
+    // polling loop into consecutive observations. Values may be identical on
+    // a stationary aircraft; successful advancing source times are the evidence.
+    const continuous = previous && sourceTimes.every((at, index) =>
+      at > previous.sourceTimes[index]! && at - previous.sourceTimes[index]! <= PLAYER_EVIDENCE_MAX_AGE_MS);
+    const sinceMs = continuous ? previous.sinceMs : Math.max(...sourceTimes);
+    this._groundAbsenceEvidence = { sinceMs, sourceTimes };
+    return Math.min(...sourceTimes) - sinceMs >= GROUND_ABSENCE_CONFIRMATION_MS;
+  }
+
+  protected _updateBoundaryContinuity(frame: Official8111Frame, telemetry: ParsedTelemetry, map: ParsedMap): boolean {
+    const now = frame.sampledAtMs;
+    const currentFlight = freshAirborneTelemetry(frame, telemetry);
+    const evidence = this._boundaryContinuity;
+    const indicatorsCurrent = freshObservation(frame, "indicators");
+    const aircraftChanged = indicatorsCurrent && telemetry.aircraft && evidence
+      && telemetry.aircraft !== evidence.aircraft;
+    if (evidence?.missingSinceMs != null && (aircraftChanged
+      || now - evidence.missingSinceMs >= BOUNDARY_CONTINUITY_MAX_MS)) {
+      this._beginSortieReset(now, aircraftChanged || !map.player ? "aircraft-loss" : "telemetry-timeout");
+    }
+    if (map.player) {
+      const atMs = frame.mapObjectsSampledAtMs ?? now;
+      const signature = sortieMapSignature(frame.mapInfo);
+      this._boundaryContinuity = currentFlight && signature && now - atMs <= PLAYER_EVIDENCE_MAX_AGE_MS
+        && approachingMapBoundary(map.player, parseMapScale(frame.mapInfo), telemetry)
+        ? { aircraft: telemetry.aircraft, mapSignature: signature, sampledAtMs: atMs, missingSinceMs: null }
+        : null;
+      return false;
+    }
+    if (!evidence || aircraftChanged) return false;
+    const stateCurrent = freshObservation(frame, "state");
+    if (evidence.mapSignature !== this._currentMapSignature
+      || indicatorsCurrent && frame.indicators?.valid === false
+      || stateCurrent && (frame.state?.valid === false || telemetry.stateValid && telemetry.onGround)
+      || evidence.missingSinceMs === null && (!currentFlight || now - evidence.sampledAtMs > PLAYER_EVIDENCE_MAX_AGE_MS)
+      || evidence.missingSinceMs !== null && now - evidence.missingSinceMs >= BOUNDARY_CONTINUITY_MAX_MS) {
+      this._boundaryContinuity = null;
+      return false;
+    }
+    evidence.missingSinceMs ??= now;
+    return true;
   }
 
   protected _beginSortieReset(nowMs: number, reason: SortieResetReason): void {
@@ -692,7 +885,7 @@ export class PublicRuntime {
     this._noDataSinceMs = null;
     this._lifecycleEvidenceMissingSinceMs = null;
     this._resetSuppressedUntilEvidence = false;
-    this._clearGroundContinuity();
+    this._clearPlayerContinuity();
     this._timerCheckpointStore?.clear();
     this._lastTimerCheckpointAtMs = 0;
     this._persistSortieRecovery(nowMs, true);
@@ -827,7 +1020,11 @@ export class PublicRuntime {
       }
       return Object.freeze({
         state: "no-data-grace",
-        graceExpiresAtMs: this._lifecycleEvidenceMissingSinceMs + NO_DATA_GRACE_MS,
+        graceExpiresAtMs: Math.min(
+          this._lifecycleEvidenceMissingSinceMs + NO_DATA_GRACE_MS,
+          this._boundaryContinuity?.missingSinceMs == null ? Number.POSITIVE_INFINITY
+            : this._boundaryContinuity.missingSinceMs + BOUNDARY_CONTINUITY_MAX_MS,
+        ),
         resetUndo: null,
       });
     }
@@ -839,11 +1036,19 @@ export class PublicRuntime {
     this._phase = "alive";
     // Debouncing confirms the spawn; it must not postpone the cycle's origin.
     this._lifeStartedAtMs = observedSpawnAtMs;
+    this._lifeAircraft = this._lastFrame ? parseTelemetry(this._lastFrame).aircraft : "";
     this._lifeIndex += 1;
     this._candidateSinceMs = null;
     this._resetUndo = null;
     this._resetSuppressedUntilEvidence = false;
-    this._clearGroundContinuity();
+    // Lifecycle recorded this qualifying Player frame before confirming spawn.
+    // Clear prior-life candidates, but keep the new life's current evidence so
+    // its first subsequent ground/boundary marker gap gets the same protection.
+    const currentPlayerEvidence = this._lastPlayerFlightEvidence;
+    const currentBoundaryEvidence = this._boundaryContinuity;
+    this._clearPlayerContinuity();
+    this._lastPlayerFlightEvidence = currentPlayerEvidence;
+    this._boundaryContinuity = currentBoundaryEvidence;
     this._fuel.reset();
     this._checklistChecked.fill(false);
     this._navigationSelectionMode = "auto";
@@ -851,7 +1056,11 @@ export class PublicRuntime {
     this._persistTimerCheckpoint(now, true);
   }
 
-  protected _clearGroundContinuity(): void {
+  protected _clearPlayerContinuity(): void {
+    this._boundaryContinuity = null;
+    this._groundExitSinceMs = null;
+    this._groundExitObservedAtMs = null;
+    this._groundAbsenceEvidence = null;
     this._lastPlayerFlightEvidence = null;
     this._groundContinuitySinceMs = null;
   }
@@ -1061,8 +1270,11 @@ function hasGroundContinuity(
   previous: PlayerFlightEvidence | null,
   nowMs: number,
 ): boolean {
-  if (!current.stateValid || !current.onGround || !previous) return false;
-  if (nowMs - previous.sampledAtMs > LANDING_EVIDENCE_MAX_AGE_MS) return false;
+  return current.stateValid && current.onGround && hasRecentGroundEvidence(previous, nowMs);
+}
+
+function hasRecentGroundEvidence(previous: PlayerFlightEvidence | null, nowMs: number): boolean {
+  if (!previous || Math.abs(nowMs - previous.sampledAtMs) > PLAYER_EVIDENCE_MAX_AGE_MS) return false;
   if (previous.onGround) return true;
   return previous.gearPercent >= LOW_ENERGY_APPROACH_MIN_GEAR_PERCENT
     && previous.iasKmh <= LOW_ENERGY_APPROACH_MAX_IAS_KMH
@@ -1099,6 +1311,36 @@ function parseTelemetry(frame: Official8111Frame): ParsedTelemetry {
     entityLike: indicatorsValid && stateValid && (fuelKg > 0.1 || Math.abs(iasKmh) > 0.1 || Math.abs(verticalSpeedMps) > 0.1),
     onGround: iasKmh < 40 && Math.abs(verticalSpeedMps) < 2,
   };
+}
+
+function freshObservation(frame: Official8111Frame, route: "state" | "indicators" | "mapObjects"): boolean {
+  const atMs = frame[`${route}SampledAtMs`];
+  return frame.availability[route] && !frame.holdover?.[route]
+    && (atMs == null || Math.abs(frame.sampledAtMs - atMs) <= PLAYER_EVIDENCE_MAX_AGE_MS);
+}
+
+/** Only current flight data may extend boundary continuity; missing fields are not death. */
+function freshAirborneTelemetry(frame: Official8111Frame, telemetry: ParsedTelemetry): boolean {
+  return freshObservation(frame, "state") && freshObservation(frame, "indicators")
+    && telemetry.entityLike && !telemetry.onGround;
+}
+
+function approachingMapBoundary(player: NonNullable<ParsedMap["player"]>, scale: readonly [number, number] | null,
+  telemetry: ParsedTelemetry): boolean {
+  if (!scale) return false;
+  if (player.x <= 0 || player.x >= 1 || player.y <= 0 || player.y >= 1) return true;
+  // Use the distance the aircraft can cover within the existing 1.5 s evidence
+  // window, not an arbitrary percentage of differently sized maps. dx/dy is a
+  // heading vector, not a measured velocity or a server boundary signal.
+  const reachM = Math.max(telemetry.tasKmh, telemetry.iasKmh) / 3.6 * PLAYER_EVIDENCE_MAX_AGE_MS / 1_000;
+  const directionLength = Math.hypot(player.dx, player.dy);
+  if (directionLength === 0) return false;
+  const reachX = reachM * Math.abs(player.dx) / directionLength;
+  const reachY = reachM * Math.abs(player.dy) / directionLength;
+  return player.dx < 0 && player.x * scale[0] <= reachX
+    || player.dx > 0 && (1 - player.x) * scale[0] <= reachX
+    || player.dy < 0 && player.y * scale[1] <= reachY
+    || player.dy > 0 && (1 - player.y) * scale[1] <= reachY;
 }
 
 export function parseBasicMap(payload: Official8111Frame["mapObjects"]): ParsedMap {

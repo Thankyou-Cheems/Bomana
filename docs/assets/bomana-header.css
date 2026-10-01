@@ -1,0 +1,34 @@
+:host { display:block; position:sticky; top:8px; z-index:60; width:min(1180px,calc(100% - 28px)); margin:10px auto 0; color:#204c63; font-family:"Microsoft YaHei",system-ui,sans-serif; }
+  * { box-sizing:border-box; }
+  header { display:flex; align-items:center; gap:28px; min-height:58px; padding:0 16px 0 10px; border:1px solid #bbd4e3; border-bottom:3px solid #bfd9e9; border-radius:8px; background:#f3f9fd; box-shadow:0 3px 10px #315b730b; }
+  a { color:inherit; text-decoration:none; }
+  a:focus-visible { outline:2px solid #2186b0; outline-offset:2px; border-radius:3px; }
+  .brand { display:flex; flex:none; align-items:center; gap:10px; }
+  .brand img { display:block; width:40px; height:40px; object-fit:contain; }
+  .brand strong { font-size:19px; font-weight:850; letter-spacing:.07em; }
+  .main-nav { display:flex; align-self:stretch; align-items:stretch; gap:6px; margin-left:auto; }
+  .main-nav a { position:relative; display:flex; align-items:center; justify-content:center; padding:0 15px; min-height:44px; font-size:14px; font-weight:650; white-space:nowrap; }
+  .main-nav a:hover { background:#e5f0f8; }
+  .main-nav a[aria-current=page] { color:#174d6c; background:#e0eef8; }
+  .main-nav a[aria-current=page]::after { content:""; position:absolute; left:15px; right:15px; bottom:5px; height:3px; border-radius:1px; background:#e5b53e; }
+  .resources { display:flex; align-items:center; gap:20px; padding-left:22px; border-left:1px solid #bed3df; }
+  .resources a { display:flex; align-items:center; gap:5px; min-height:36px; color:#52788d; font-size:13px; white-space:nowrap; }
+  .resources a:hover { color:#174d6c; text-decoration:underline; text-underline-offset:4px; }
+  .resources svg { width:15px; height:15px; }
+  @media(max-width:960px) { header { gap:12px; padding-right:12px; } .main-nav { gap:0; } .main-nav a { padding:0 10px; font-size:13px; } .resources { gap:12px; padding-left:12px; } }
+  @media(max-width:700px) {
+    :host { top:4px; width:calc(100% - 20px); margin-top:6px; }
+    header { display:grid; grid-template-columns:1fr auto; gap:0; padding:5px 8px 0; }
+    .brand { gap:7px; } .brand img { width:32px; height:32px; } .brand strong { font-size:17px; }
+    .resources { border:0; padding:0; gap:14px; } .resources a { font-size:12px; }
+    .main-nav { grid-row:2; grid-column:1/-1; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin:3px -3px 0; }
+    .main-nav a { min-height:37px; padding:0 2px; font-size:12px; }
+    .main-nav a[aria-current=page]::after { left:12px; right:12px; bottom:2px; }
+  }
+  :host([compact]) { position:static; width:100%; margin:0; }
+  :host([compact]) header { display:flex; min-height:0; padding:3px; gap:4px; border-radius:6px; border-bottom-width:1px; }
+  :host([compact]) .brand { flex:none; } :host([compact]) .brand img { width:24px; height:24px; }
+  :host([compact]) .brand strong, :host([compact]) .resources { display:none; }
+  :host([compact]) .main-nav { display:grid; flex:1; grid-template-columns:repeat(4,minmax(0,1fr)); margin:0; gap:1px; }
+  :host([compact]) .main-nav a { min-height:25px; padding:2px 0; font-size:9px; }
+  :host([compact]) .main-nav a[aria-current=page]::after { left:5px; right:5px; bottom:0; height:2px; }

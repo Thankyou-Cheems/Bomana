@@ -1,5 +1,6 @@
 // Game-font substitutions, not text-encoding repairs. See the source research note.
 import { vehiclePinyin } from "./vehicle-pinyin.mjs";
+import { localizeName } from "./i18n.mjs";
 const countries = { usa: "美国", ussr: "苏联", germany: "德国", britain: "英国",
   japan: "日本", china: "中国", italy: "意大利", france: "法国", sweden: "瑞典", israel: "以色列",
   thailand: "泰国", switzerland: "瑞士", netherlands: "荷兰", belgium: "比利时", greece: "希腊",
@@ -16,13 +17,13 @@ export function vehicleName(value, country) {
   // Source names remain untouched in the API. Only the leading game marker is
   // replaced, following getClearUnitName; country comes from unit metadata.
   return String(value ?? "").replace(/^[\uF059\u2415-\u2419\u241e-\u2420\u2580-\u2588◄◊◐◘◥◔◌◢◗◡⋠]/u,
-    () => flags[country] ? `${flags[country]} ` : `〔${countries[country] || "特殊型号"}〕`).trim();
+    () => flags[country] ? `${flags[country]} ` : `〔${localizeName(countries[country] || "特殊型号")}〕`).trim();
 }
 
 export function readableVehicle(row) {
-  return { ...row, name: vehicleName(row.name, row.country), countryName: countries[row.country] || "",
+  return { ...row, get name() { return vehicleName(localizeName(row.name, row.name_en), row.country); }, get countryName() { return localizeName(countries[row.country] || ""); },
     searchTerms: vehicleSearchTerms(row),
-    ...(row.long ? { long: vehicleName(row.long, row.country) } : {}),
+    ...(row.long ? { get long() { return vehicleName(localizeName(row.long, row.name_en), row.country); } } : {}),
     ...(row.name_en ? { name_en: vehicleName(row.name_en, row.country) } : {}) };
 }
 

@@ -1,5 +1,5 @@
 import loadHighs from "./solver/highs.mjs";
-import { optimizeLoadout } from "./loadout-optimizer.mjs";
+import { optimizeLoadout, preferRecommendation } from "./loadout-optimizer.mjs";
 
 const runtime = loadHighs({locateFile: file => new URL(`./solver/${file}`, import.meta.url).href + new URL(import.meta.url).search});
 self.onmessage = async ({data}) => {
@@ -10,9 +10,7 @@ self.onmessage = async ({data}) => {
     if (quick.status === "optimal" || quick.status === "infeasible") { self.postMessage(quick); return; }
     if (quick.preset) self.postMessage({...quick, searching: true});
     const result = optimizeLoadout(input, highs, {timeLimit: data.timeLimit || 20});
-    const betterQuick = quick.preset && (!result.preset || quick.targets > result.targets || quick.targets === result.targets &&
-      (quick.reward > result.reward || quick.reward === result.reward &&
-        (quick.damage < result.damage || quick.damage === result.damage && quick.mass < result.mass)));
+    const betterQuick = preferRecommendation(quick, result, data.filters);
     self.postMessage(betterQuick ? quick : result);
   } catch (error) { self.postMessage({status: "error", message: error.message}); }
 };
