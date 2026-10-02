@@ -54,10 +54,11 @@ export class PublicPictureInPicture {
       onCycleTarget: this.#cycle,
       trailingAction: createPipMapToggle(doc, () => this.setMapVisible(!this.#mapVisible)),
     });
+    // The toggle is already interactive while CSS loads; apply its saved state now.
+    this.setMapVisible(this.#mapVisible);
     await Promise.race([stylesheetLoaded, new Promise<void>((resolve) => window.setTimeout(resolve, 1500))]);
     if (view.closed || this.#view !== view) return;
     this.#map = new PublicNavigationMap(doc.querySelector<HTMLCanvasElement>(".pip-mini-map canvas")!, this.#select, this.#basemap);
-    this.setMapVisible(this.#mapVisible);
     if (this.#snapshot && this.#latestFlightStatus) this.update(this.#snapshot, this.#latestFlightStatus);
     this.#clock.wake();
   }

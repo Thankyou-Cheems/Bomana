@@ -1,5 +1,5 @@
 import type { EditionSnapshot } from "./runtime-types";
-import { landingConfigurationPresentation, landingLateralGuidance } from "./landing-presentation";
+import { landingConfigurationPresentation, landingHeightPresentation, landingLateralGuidance } from "./landing-presentation";
 import { landingRunwayScene, landingRunwayFrame, projectLandingRunway, RunwaySceneMotion, type LandingRunwayScene, type ProjectedPoint } from "./landing-runway-projection";
 
 const finite = (n: number | null | undefined): n is number => typeof n === "number" && Number.isFinite(n);
@@ -9,6 +9,7 @@ const heading = (n: number) => Math.round((n % 360 + 360) % 360).toString().padS
 /** Compact flight references only; no learned-fuel diagnostics or landing safety claim. */
 export function landingTapePresentation(snapshot: EditionSnapshot) {
   const landing = snapshot.landing, g = landing?.geometry;
+  const height = landingHeightPresentation(landing);
   const returning = g?.stage === "return";
   const active = landing?.settings.enabled === true;
   const ias = landing?.iasKmh, targetIas = landing?.settings.targetIasKmh;
@@ -69,9 +70,9 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   // continuous; approach/validity flags still change immediately in the scene.
   const selected = snapshot.navigation?.items.find(item => item.id === landing?.settings.runwayId);
   const cueKey = `${landing?.runwayKey || (selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId)}|${landing?.settings.reverse}|${runway?.heightKnown}`;
-  return { active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
+  return { heightReference: height.reference, active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
     runway, horizontal, otherRunways, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
-    aria: `${mode}；${course}，${distance}${horizontal ? "；前向航线透视，高程未知，无下滑指令" : ""}${airportHeightText ? `；机场相对高度 ${airportHeightText}` : ""}${runway && !horizontal ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；以玩家前向视角呈现，近端以中央透视区两侧为翼端参考、远端按深度收缩；视野外机场保留方向提示；姿态缺测使用可用航迹俯仰和水平滚转；曲线从当前高度与俯仰接入末段下滑线；近端显示面随翼端衔接，远端接入跑道；高低偏差独立计算；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
+    aria: `${mode}；${course}，${distance}${horizontal ? "；前向航线透视，垂直数据不完整，无下滑指令" : ""}${g ? `；${height.reference}` : ""}${runway && !horizontal ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；以玩家前向视角呈现，近端以中央透视区两侧为翼端参考、远端按深度收缩；视野外机场保留方向提示；姿态缺测使用可用航迹俯仰和水平滚转；曲线从当前高度与俯仰接入末段下滑线；近端显示面随翼端衔接，远端接入跑道；高低偏差独立计算；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
 }
 
 export type LandingTapeView = ReturnType<typeof landingTapePresentation>;
@@ -208,21 +209,6 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
       ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
       ctx.setLineDash([]);
     }
-    const target = projected.threshold ? pixel(projected.threshold) : null;
-    if (!target || !inside(target)) {
-      // A clipped or rearward runway remains a direction cue, never a fabricated projection.
-      const x = target ? target[0] < left + 8 ? left + 10 : target[0] > right - 8 ? right - 10 : target[0]
-        : projected.bearing < 0 ? left + 10 : right - 10;
-      const y = target && x === target[0] ? Math.max(top + 10, Math.min(bottom - 10, target[1])) : height / 2;
-      const angle = target ? Math.atan2(target[1] - height / 2, target[0] - center) : projected.bearing < 0 ? Math.PI : 0;
-      ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.globalAlpha = 1; ctx.strokeStyle = "#f0f8fc"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(-5, -5); ctx.lineTo(1, 0); ctx.lineTo(-5, 5); ctx.stroke(); ctx.restore();
-    } else if (!projected.entrance || Math.hypot(...projected.entrance[0].map((v, i) => v - projected.entrance![1][i]!)) * focal < 6) {
-      // Mark a distant/unknown-height entrance without zooming its geometry.
-      ctx.globalAlpha = 1; ctx.strokeStyle = "#f0f8fc"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(target[0], target[1] - 3); ctx.lineTo(target[0] + 3, target[1]);
-      ctx.lineTo(target[0], target[1] + 3); ctx.lineTo(target[0] - 3, target[1]); ctx.closePath(); ctx.stroke();
-    }
   } else if (p.scene !== "unavailable" && p.lateral !== null) {
     const x = center + p.lateral * centerWidth * .4;
     ctx.globalAlpha = .8; ctx.strokeStyle = cyan;
@@ -238,13 +224,50 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   text(p.equipmentText, width - pad, height * .87, font * .85, muted, "right", side - pad);
   const configColor = /超限/.test(p.config) ? tone("danger") : /检查|减速|近限/.test(p.config) ? tone("caution") : muted;
   text(p.config, pad, height * .87, font * .9, configColor, "left", side - pad);
-  const stage = p.horizontal ? "方位透视 · 高程未知" : p.scene !== "unavailable" && !cue ? "高程 —" : cue?.approach && p.scene !== "glide"
+  const stage = p.horizontal ? "方位透视" : p.scene !== "unavailable" && !cue ? "高程 —" : cue?.approach && p.scene !== "glide"
     ? `${p.stageLabel} ${Number((Math.atan(cue.slope) * 180 / Math.PI).toFixed(1))}°` : p.stageLabel;
   const caption = `${p.course.replace("RWY ", "")} · ${p.distance.replace("距机场 ", "")} · ${stage}`;
   ctx.font = `600 ${font * .9}px "Microsoft YaHei", sans-serif`;
-  const captionWidth = Math.min(centerWidth - 12, ctx.measureText(caption).width + 12);
+  const captions = p.scene === "unavailable" ? [caption] : [caption, p.heightReference];
+  const captionWidth = Math.min(centerWidth - 12, Math.max(...captions.map(line => ctx.measureText(line).width)) + 12);
+  const captionHeight = (font + 4) * captions.length + 4;
+  const target = projected?.threshold ? pixel(projected.threshold) : null;
+  const offscreen = projected && (!target || !inside(target));
+  const cueX = offscreen ? target ? target[0] < left + 8 ? left + 10 : target[0] > right - 8 ? right - 10 : target[0]
+    : projected.bearing < 0 ? left + 10 : right - 10 : target?.[0];
+  const cueY = offscreen ? target && cueX === target[0] ? Math.max(top + 10, Math.min(bottom - 10, target[1])) : height / 2 : target?.[1];
+  const overlapsCue = (x: number) => cueX != null && cueY != null
+    && cueX + 8 >= x && cueX - 8 <= x + captionWidth && cueY + 8 >= top + 2 && cueY - 8 <= top + 2 + captionHeight;
+  // Keep the familiar corner unless the airport cue needs that space. A small
+  // window may leave neither corner clear; the final cue overlay still wins.
+  const rightCaptionX = right - captionWidth - 4;
+  const captionX = overlapsCue(left + 4) && !overlapsCue(rightCaptionX) ? rightCaptionX : left + 4;
   ctx.fillStyle = "#071923cc";
-  ctx.fillRect(left + 4, top + 2, captionWidth, font + 8);
-  text(caption, left + 10, top + 6 + font / 2, font * .9, muted, "left", captionWidth - 12);
+  ctx.fillRect(captionX, top + 2, captionWidth, captionHeight);
+  captions.forEach((line, index) => text(line, captionX + 6, top + 6 + font / 2 + index * (font + 4),
+    font * .9, muted, "left", captionWidth - 12));
+  // Airport entrance/direction is essential even when its projected position
+  // overlaps a caption. Draw it last, within the same instrument-free viewport.
+  if (projected) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(left, top, centerWidth, bottom - top); ctx.clip();
+    if (offscreen) {
+      // A clipped or rearward runway remains a direction cue, never a fabricated projection.
+      const angle = target ? Math.atan2(target[1] - height / 2, target[0] - center) : projected.bearing < 0 ? Math.PI : 0;
+      ctx.save(); ctx.translate(cueX!, cueY!); ctx.rotate(angle); ctx.globalAlpha = 1; ctx.strokeStyle = "#f0f8fc"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-5, -5); ctx.lineTo(1, 0); ctx.lineTo(-5, 5); ctx.stroke(); ctx.restore();
+    } else if (target && (
+      // Even a broad known runway can disappear beneath the readable caption.
+      // Preserve its true threshold position with the same compact marker.
+      target[0] >= captionX - 3 && target[0] <= captionX + captionWidth + 3
+        && target[1] >= top - 1 && target[1] <= top + captionHeight + 5
+      || !projected.entrance || Math.hypot(...projected.entrance[0].map((v, i) => v - projected.entrance![1][i]!)) * focal < 6)) {
+      // Mark a distant/unknown-height entrance without zooming its geometry.
+      ctx.globalAlpha = 1; ctx.strokeStyle = "#f0f8fc"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(target[0], target[1] - 3); ctx.lineTo(target[0] + 3, target[1]);
+      ctx.lineTo(target[0], target[1] + 3); ctx.lineTo(target[0] - 3, target[1]); ctx.closePath(); ctx.stroke();
+    }
+    ctx.restore();
+  }
   ctx.restore();
 }

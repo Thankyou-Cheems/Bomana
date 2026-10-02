@@ -41,16 +41,29 @@ export function landingConfigurationPresentation(landing: LandingSnapshot | null
   return { limits, cue, tone, speedDetail, braking: support.length ? `减速配置：${support.join(" · ")}` : "" };
 }
 
+/** Height above the selected threshold, not ground clearance along the return. */
+export function landingHeightPresentation(landing: LandingSnapshot | null | undefined) {
+  const g = landing?.geometry;
+  const elevationKnown = landing?.elevationM != null && Number.isFinite(landing.elevationM);
+  const elevation = elevationKnown ? `${landing!.elevationSource === "terrain" ? "地形高程" : "手动高程"} ${Math.round(landing!.elevationM!)} m` : "机场高程未知";
+  const relative = !g ? "等待高度数据" : g.heightM === null || !Number.isFinite(g.heightM)
+    ? elevationKnown ? "本机高度未知" : "机场高程未知"
+    : `${g.heightM >= 0 ? "高于机场" : "低于机场"} ${metres(g.heightM)}`;
+  const reference = !g ? "等待高度数据" : !elevationKnown ? `${elevation} · 仅水平引导` : `${elevation} · ${relative}`;
+  return { elevation, relative, reference };
+}
+
 export function landingPresentation(landing: LandingSnapshot | null | undefined) {
   const g = landing?.geometry;
   const returning = g?.stage === "return";
+  const height = landingHeightPresentation(landing);
   const unavailable = landing?.reason === "runway-missing" ? "所选跑道暂不可见，等待恢复或重新选择"
     : landing?.reason === "runway-changed" ? "跑道端点已改变，请确认固定跑道的新端点"
       : "等待新鲜遥测与本机位置";
   const stage = g ? ({ return: "返航机场", intercept: "建立进近", final: "跑道进近", runway: "入口后方", "past-runway": "末端后方" })[g.stage] : "等待数据";
   const lateral = landingLateralGuidance(g).text;
-  const vertical = !g ? "垂直 —" : returning ? "近场对准后显示下滑参考" : g.stage === "runway" || g.stage === "past-runway" ? "下滑参考已结束"
-    : g.heightM === null ? "高程未知 · 仅水平引导" : g.glideDeviationM === null ? "对准后显示下滑参考"
+  const vertical = !g ? "垂直 —" : returning ? `${height.relative} · ${g.heightM === null ? "仅水平引导" : "近场对准后显示下滑参考"}` : g.stage === "runway" || g.stage === "past-runway" ? "下滑参考已结束"
+    : g.heightM === null ? `${height.relative} · 仅水平引导` : g.glideDeviationM === null ? "对准后显示下滑参考"
       : Math.abs(g.glideDeviationM) <= Math.max(10, g.thresholdDistanceM * Math.tan(.4 * Math.PI / 180)) ? "参考下滑线附近"
         : `${g.glideDeviationM > 0 ? "偏高" : "偏低"} ${metres(g.glideDeviationM)}`;
   const target = landing?.settings.targetIasKmh;
@@ -64,7 +77,7 @@ export function landingPresentation(landing: LandingSnapshot | null | undefined)
   const course = returning ? g.airportBearingDeg === null ? "机场方位 —" : `机场方位 ${Math.round(g.airportBearingDeg).toString().padStart(3,"0")}°`
     : g ? `跑道方向 ${Math.round(g.courseDeg).toString().padStart(3,"0")}°` : "跑道方向 —";
   const verticalSpeed = landing?.verticalSpeedMps == null ? "下降率 —" : `垂直 ${landing.verticalSpeedMps.toFixed(1)} m/s${g?.referenceDescentMps == null ? "" : ` · 参考 ${g.referenceDescentMps.toFixed(1)}`}`;
-  const elevation = landing?.elevationM == null ? "等待跑道高程" : `${landing.elevationSource === "terrain" ? "地形初估" : "手动高程"} ${Math.round(landing.elevationM)} m`;
+  const elevation = height.elevation;
   const limit = landing?.aircraft?.gearIasKmh;
   const gearLimit = limit ? `起落架参考上限 IAS ${Math.round(limit)} km/h` : "起落架限速资料未知";
   const gearAdvice = ({ "over-limit":"已超过静态限速 · 起落架可能损坏", "near-limit":"接近起落架静态限速", "extension-too-fast":"当前超过放轮参考限速 · 放轮前减速", reference:"", unknown:"当前起落架超速风险未知" })[landing?.gearRisk ?? "unknown"];
@@ -83,7 +96,7 @@ export function landingPresentation(landing: LandingSnapshot | null | undefined)
   const compact = !landing?.settings.enabled ? "" : !g ? `降落 · ${unavailable}`
     : returning ? `返航 · ${course} · ${distance}`
     : `降落 ${Math.round(g.courseDeg).toString().padStart(3,"0")}° · ${g.thresholdDistanceM < 0 ? "入口后" : "距入口"}${(Math.abs(g.thresholdDistanceM)/1000).toFixed(1)}km`;
-  return { stage, lateral, vertical, speed, configuration, distance, course, verticalSpeed, elevation, compact, gearLimit, gearAdvice, gearCue, arrestor, touchdown, flapAdvice, projection, braking: config.braking,
+  return { heightReference: height.reference, stage, lateral, vertical, speed, configuration, distance, course, verticalSpeed, elevation, compact, gearLimit, gearAdvice, gearCue, arrestor, touchdown, flapAdvice, projection, braking: config.braking,
     descentAdvice: !returning && fastDescent ? "下沉偏快 · 减小下沉率" : "",
     message: landing?.status === "disabled" ? landing.settings.automatic ? "自动待命 · 飞向友方机场 3 秒后切换，也可手动开启" : "开启后锁定友方跑道，独立于投弹目标" : g ? `${landing?.settings.automatic ? "自动" : ""}${stage} · ${returning ? landing.runwayLabel : elevation}` : unavailable };
 }

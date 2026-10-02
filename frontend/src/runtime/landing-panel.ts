@@ -12,6 +12,7 @@ export class LandingPanel {
     panel.innerHTML = `<header><strong>降落</strong><label class="landing-auto" title="持续飞向友方机场 3 秒后自动开启；也可手动开启"><input type="checkbox" data-part="automatic">自动</label><button type="button" data-part="toggle" aria-pressed="false">开启</button></header>
       <p data-part="message"></p><button type="button" data-part="confirm-runway" hidden>确认新端点</button><div data-part="active" hidden>
       <div class="landing-runway"><select data-part="runway" aria-label="降落跑道"></select><button type="button" data-part="reverse" title="反向进近会清空手动高程">反向进近</button></div>
+      <p data-part="height"></p>
       <p class="landing-configuration" data-part="configuration"></p>
       <div class="landing-airframe"><strong data-part="gearAdvice"></strong><strong data-part="flapAdvice"></strong><strong data-part="descentAdvice"></strong></div>
       <details><summary>进近设置</summary><div class="landing-fields">
@@ -51,6 +52,8 @@ export class LandingPanel {
       : !g ? snapshot.reason === "runway-changed" ? "跑道已变化" : snapshot.reason === "runway-missing" ? "跑道不可见" : "等待数据"
         : ({ return: "返航", intercept: "对正", final: "进近", runway: "入口后", "past-runway": "末端后" })[g.stage];
     this.part("message").title = p.message;
+    this.part("height").textContent = p.heightReference;
+    this.part("height").title = "与 8111 H 相同基准；相对所选跑道入口，不代表沿途地形净空。高台和甲板需手动修正";
     const percent = (value: number | null) => value === null ? "—" : `${Math.round(value)}%`;
     this.part("configuration").textContent = `轮 ${percent(snapshot.gearPercent)} · 翼 ${percent(snapshot.flapsPercent)} · 板 ${percent(snapshot.airbrakePercent)}`;
     this.part("configuration").title = p.configuration;
