@@ -72,7 +72,7 @@ try {
     const sorties = Math.ceil(hp * (hasFire ? .9 : 1) / damage);
     assert.equal(await page.locator("#calcDestroyCount").textContent(), String(sorties), "HUD uses all current stores before saving");
     assert.equal(await page.locator("#calcSortieCount").textContent(), String(sorties));
-    assert.match(await page.locator("#calcDestroyLabel").textContent(), /轮/);
+    assert.match(await page.locator("#calcDestroyLabel").textContent(), /次出击/);
   };
   await assertTotals([guided]);
   assert.match(await page.locator("#calcPresetTitle").textContent(), /自定义挂载/);
@@ -94,7 +94,7 @@ try {
   assert.equal(await page.locator('#calcPresetList [data-preset-id^="user:"]').count(),0, 'native grid excludes saved custom loadouts');
   await assertTotals([guided, extra]);
   await page.locator('[data-preset-id="a_10c_mk82_default"]').click();
-  assert.doesNotMatch(await page.locator("#calcDestroyLabel").textContent(), /轮/);
+  assert.doesNotMatch(await page.locator("#calcDestroyLabel").textContent(), /次出击/);
   if (await page.locator('.custom-saved').getAttribute('open') === null) await page.locator('.custom-saved summary').click();
   await page.getByRole('button',{name:'制导炸弹与吊舱',exact:true}).click();
   await assertTotals([guided, extra]);

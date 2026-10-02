@@ -160,10 +160,10 @@
   "app.afterFlightAndReserveKgBasedOnTheEntered": "After flight and reserve: {{v0}} {{v1}} kg. Based on the entered conditions; recalculate after throttle, weather or route changes.",
   "app.thisLoadoutHasNoCalculableStrikeAmmunition": "This loadout has no calculable strike ammunition.",
   "app.loadoutOrTargetDamageDataIsMissingCompleteLoad": "Loadout or target damage data is missing; complete-load rounds cannot be estimated.",
-  "app.burnOutThresholdLoads": "full loads hitting the base trigger burn-out",
-  "app.directDestructionLoads": "full loads hitting the target destroy it directly",
-  "app.completeLoadsForDirectDestruction": "{{v0}} complete loads for direct destruction",
-  "app.eachRoundReleasesOneCompleteLoadout": "Each round releases one complete loadout",
+  "app.burnOutThresholdLoads": "sorties required to trigger base burn-out",
+  "app.directDestructionLoads": "sorties required to destroy the target directly",
+  "app.completeLoadsForDirectDestruction": "Direct destruction from full HP requires {{v0}} sorties",
+  "app.eachRoundReleasesOneCompleteLoadout": "Each sortie carries the complete loadout, and every weapon must hit",
   "app.targetHp": "Target HP",
   "app.loadoutRewardCoefficient": "Loadout reward coefficient",
   "app.thisConfigurationFailsLoadoutRestrictionsDamagePreviewOnly": "This configuration fails loadout restrictions; damage preview only.",
@@ -819,5 +819,11 @@
   "optimizer.mode.tv": "TV",
   "optimizer.mode.optical": "Optical (unclassified)",
   "optimizer.mode.laser": "Laser",
-  "optimizer.mode.unguided": "Unguided / unclassified"
+  "optimizer.mode.unguided": "Unguided / unclassified",
+  "app.burnOutThresholdLoads_one": "sortie required to trigger base burn-out",
+  "app.burnOutThresholdLoads_other": "sorties required to trigger base burn-out",
+  "app.directDestructionLoads_one": "sortie required to destroy the target directly",
+  "app.directDestructionLoads_other": "sorties required to destroy the target directly",
+  "app.completeLoadsForDirectDestruction_one": "Direct destruction from full HP requires {{v0}} sortie",
+  "app.completeLoadsForDirectDestruction_other": "Direct destruction from full HP requires {{v0}} sorties"
 }

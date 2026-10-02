@@ -160,10 +160,10 @@
   "app.afterFlightAndReserveKgBasedOnTheEntered": "扣除航程和儲備後{{v0}} {{v1}} kg。僅按所填工況估算，油門、天氣與航線改變後需要重算。",
   "app.thisLoadoutHasNoCalculableStrikeAmmunition": "當前掛載沒有可計算的對地彈藥。",
   "app.loadoutOrTargetDamageDataIsMissingCompleteLoad": "當前掛載或目標缺少傷害數據，無法估算整套輪次。",
-  "app.burnOutThresholdLoads": "輪整套掛載全部命中，可觸發戰區自毀",
-  "app.directDestructionLoads": "輪整套掛載全部命中，可直接摧毀目標",
-  "app.completeLoadsForDirectDestruction": "滿血直接摧毀需{{v0}}輪",
-  "app.eachRoundReleasesOneCompleteLoadout": "每輪投放整套掛載",
+  "app.burnOutThresholdLoads": "次出擊才能觸發戰區自毀",
+  "app.directDestructionLoads": "次出擊才能直接摧毀目標",
+  "app.completeLoadsForDirectDestruction": "直接摧毀滿血目標需 {{v0}} 次出擊",
+  "app.eachRoundReleasesOneCompleteLoadout": "每次均攜帶整套掛載並全部命中",
   "app.targetHp": "目標耐久",
   "app.loadoutRewardCoefficient": "整套收益係數",
   "app.thisConfigurationFailsLoadoutRestrictionsDamagePreviewOnly": "當前配置未通過掛載限制校驗；此處僅預覽傷害。",
@@ -819,5 +819,11 @@
   "optimizer.mode.tv": "電視",
   "optimizer.mode.optical": "光電（類型未細分）",
   "optimizer.mode.laser": "雷射",
-  "optimizer.mode.unguided": "非導引／未分類"
+  "optimizer.mode.unguided": "非導引／未分類",
+  "app.burnOutThresholdLoads_one": "次出擊才能觸發戰區自毀",
+  "app.burnOutThresholdLoads_other": "次出擊才能觸發戰區自毀",
+  "app.directDestructionLoads_one": "次出擊才能直接摧毀目標",
+  "app.directDestructionLoads_other": "次出擊才能直接摧毀目標",
+  "app.completeLoadsForDirectDestruction_one": "直接摧毀滿血目標需 {{v0}} 次出擊",
+  "app.completeLoadsForDirectDestruction_other": "直接摧毀滿血目標需 {{v0}} 次出擊"
 }

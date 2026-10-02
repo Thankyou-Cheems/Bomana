@@ -157,7 +157,7 @@ try {
   const mixedDamage = mixed.weapons.reduce((sum, [id, count]) => sum + weaponData.weapons.find(weapon => weapon.id === id).dmg * count, 0);
   assert.equal(await text("#calcDestroyCount"), String(Math.ceil(25900 * .9 / mixedDamage)));
   assert.equal(await text("#calcSortieCount"), String(Math.ceil(25900 * .9 / mixedDamage)));
-  assert.match(await text("#calcDestroyLabel"), /轮/);
+  assert.match(await text("#calcDestroyLabel"), /次出击/);
   assert.doesNotMatch(await text("#calcStats"), /每枚伤害|所选弹药|末次所需/);
   assert.equal(await page.locator("#calcPresetWeapon").count(), 0);
   await page.locator('#calcTargetSegments [data-value="airport_storage"]').click();

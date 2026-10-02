@@ -1134,9 +1134,9 @@ function refreshResult() {
     const rounds = requiredCount(target.has_fire ? hp * (1 - target.fireMultiplier) : hp, damage);
     hudContext.textContent = context;
     destroyCountEl.textContent = String(rounds);
-    destroyLabelEl.textContent = rounds < fullRounds ? t("app.burnOutThresholdLoads", "轮整套挂载全部命中，可触发战区自毁") : t("app.directDestructionLoads", "轮整套挂载全部命中，可直接摧毁目标");
+    destroyLabelEl.textContent = rounds < fullRounds ? t("app.burnOutThresholdLoads", "次出击才能触发战区自毁", {count: rounds}) : t("app.directDestructionLoads", "次出击才能直接摧毁目标", {count: rounds});
     sortieCountEl.textContent = String(rounds);
-    fireLineEl.textContent = rounds < fullRounds ? t("app.completeLoadsForDirectDestruction", "满血直接摧毁需{{v0}}轮", {v0: fullRounds}) : t("app.eachRoundReleasesOneCompleteLoadout", "每轮投放整套挂载");
+    fireLineEl.textContent = [t("app.eachRoundReleasesOneCompleteLoadout", "每次均携带整套挂载并全部命中"), rounds < fullRounds ? t("app.completeLoadsForDirectDestruction", "直接摧毁满血目标需 {{v0}} 次出击", {v0: fullRounds, count: fullRounds}) : ""].filter(Boolean).join(" · ");
     statsEl.replaceChildren();
     appendStat(t("app.targetHp", "目标耐久"), formatInt(hp));
     const reward = rewardUi(catalog.reward, rewardDamage);
