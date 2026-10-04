@@ -3,15 +3,173 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestTrayPairingKeepsSelectedNetworkWhenSwitchingEditionAndRotating(t *testing.T) {
+	gateway := newRelay(mustURL("http://127.0.0.1:8111"), testOrigin)
+	gateway.mobile.listen = func(network, _ string) (net.Listener, error) { return net.Listen(network, "127.0.0.1:0") }
+	gateway.mobile.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+		return []mobileNetworkCandidate{
+			{Interface: "Ethernet", Address: "10.0.0.1", Endpoint: "http://10.0.0.1:" + strconv.Itoa(httpPort) + "/"},
+			{Interface: "Wi-Fi", Address: "192.168.1.20", Endpoint: "http://192.168.1.20:" + strconv.Itoa(httpPort) + "/"},
+		}, nil
+	}
+	t.Cleanup(func() { _ = gateway.mobile.Close() })
+	open := func(target string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8878"+target, nil)
+		request.RemoteAddr = "127.0.0.1:50100"
+		response := httptest.NewRecorder()
+		gateway.ServeHTTP(response, request)
+		if response.Code == http.StatusFound {
+			request = httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8878"+response.Header().Get("Location"), nil)
+			request.RemoteAddr = "127.0.0.1:50100"
+			response = httptest.NewRecorder()
+			gateway.ServeHTTP(response, request)
+		}
+		if response.Code != http.StatusOK {
+			t.Fatalf("tray GET status = %d", response.Code)
+		}
+		return response
+	}
+	assertWiFiSelected := func(page *httptest.ResponseRecorder) {
+		selected := regexp.MustCompile(`<a class="selected" href="([^"]+)"[^>]*>Wi-Fi`).FindStringSubmatch(page.Body.String())
+		if len(selected) != 2 {
+			t.Fatal("selected Wi-Fi network was discarded")
+		}
+		target, err := url.Parse(html.UnescapeString(selected[1]))
+		if err != nil || target.Query().Get("network") != "1" {
+			t.Fatal("selected network link does not refer to Wi-Fi")
+		}
+	}
+	page := open("/mobile-pairing?edition=Enhanced&network=1")
+	for _, label := range []string{"普通版", "超级爆弹版"} {
+		link := regexp.MustCompile(`<a[^>]*href="([^"]+)"[^>]*>` + label + `</a>`).FindStringSubmatch(page.Body.String())
+		if len(link) != 2 {
+			t.Fatal("missing Edition link")
+		}
+		page = open(html.UnescapeString(link[1]))
+		assertWiFiSelected(page)
+		form := regexp.MustCompile(`<form method="post" action="([^"]+)"`).FindStringSubmatch(page.Body.String())
+		if len(form) != 2 {
+			t.Fatal("missing rotation form")
+		}
+		request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8878"+html.UnescapeString(form[1]), nil)
+		request.RemoteAddr = "127.0.0.1:50100"
+		request.Header.Set("Origin", "http://127.0.0.1:8878")
+		response := httptest.NewRecorder()
+		gateway.ServeHTTP(response, request)
+		if response.Code != http.StatusSeeOther {
+			t.Fatalf("rotation status = %d", response.Code)
+		}
+		page = open(response.Header().Get("Location"))
+		assertWiFiSelected(page)
+	}
+}
+
+func TestTrayPairingNetworkIdentitySurvivesListChanges(t *testing.T) {
+	for _, scenario := range []struct {
+		name    string
+		edition mobileEdition
+		claimed bool
+	}{
+		{"Standard offer", mobileEditionStandard, false},
+		{"Enhanced phone offer", mobileEditionEnhanced, false},
+		{"Standard claimed", mobileEditionStandard, true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			gateway := newRelay(mustURL("http://127.0.0.1:8111"), testOrigin)
+			gateway.mobile.listen = func(network, _ string) (net.Listener, error) { return net.Listen(network, "127.0.0.1:0") }
+			addresses := []string{"10.0.0.1", "192.168.1.20"}
+			gateway.mobile.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+				output := make([]mobileNetworkCandidate, len(addresses))
+				for index, address := range addresses {
+					output[index] = mobileNetworkCandidate{Interface: address, Address: address, Endpoint: "http://" + address + ":" + strconv.Itoa(httpPort) + "/"}
+				}
+				return output, nil
+			}
+			t.Cleanup(func() { _ = gateway.mobile.Close() })
+			get := func(target string) *httptest.ResponseRecorder {
+				request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8878"+target, nil)
+				request.RemoteAddr = "127.0.0.1:50100"
+				response := httptest.NewRecorder()
+				gateway.ServeHTTP(response, request)
+				return response
+			}
+			target := "/mobile-pairing?network=1&edition=" + string(scenario.edition)
+			legacy := get(target)
+			if legacy.Code == http.StatusFound {
+				target = legacy.Header().Get("Location")
+			} else if legacy.Code != http.StatusOK {
+				t.Fatal("initial network choice unavailable")
+			}
+			page := get(target)
+			if page.Code != http.StatusOK {
+				t.Fatal("pinned page unavailable")
+			}
+			first, _, _ := gateway.mobile.Current(time.Now())
+			if scenario.claimed {
+				if _, result := gateway.mobile.Claim(first.PairingToken, time.Now()); result != mobilePairingCompleteOK {
+					t.Fatal("claim failed")
+				}
+				page = get(target)
+			}
+			qr := regexp.MustCompile(`<img src="([^"]+)"`).FindStringSubmatch(page.Body.String())
+			form := regexp.MustCompile(`<form method="post" action="([^"]+)"`).FindStringSubmatch(page.Body.String())
+			if len(form) != 2 {
+				t.Fatal("missing initial rotation form")
+			}
+			addresses = []string{"192.168.1.20", "10.0.0.1"}
+			for refresh := 0; refresh < 3; refresh++ {
+				page = get(target)
+				selected := regexp.MustCompile(`<a class="selected" href="([^"]+)"[^>]*>192\.168\.1\.20`).FindStringSubmatch(page.Body.String())
+				if page.Code != http.StatusOK || len(selected) != 2 {
+					t.Fatal("reordered list selected a different address")
+				}
+				selectedURL, _ := url.Parse(html.UnescapeString(selected[1]))
+				if selectedURL.Query().Get("network") != "0" || selectedURL.Query().Get("network-address") != "192.168.1.20" {
+					t.Fatal("selection did not follow current address index")
+				}
+				if !scenario.claimed {
+					currentQR := regexp.MustCompile(`<img src="([^"]+)"`).FindStringSubmatch(page.Body.String())
+					if len(qr) != 2 || len(currentQR) != 2 || currentQR[1] != qr[1] {
+						t.Fatal("refresh changed the address or one-time offer in the QR")
+					}
+				}
+			}
+			addresses = []string{"10.0.0.1"}
+			for refresh := 0; refresh < 3; refresh++ {
+				page = get(target)
+				if page.Code != http.StatusOK || strings.Contains(page.Body.String(), `data:image/png;base64,`) || strings.Contains(page.Body.String(), `<a class="selected" href="/mobile-pairing?network=`) || !strings.Contains(page.Body.String(), "已选择的网卡地址不再可用") {
+					t.Fatal("missing address showed a stale QR or a mismatching selected address")
+				}
+			}
+			request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8878"+html.UnescapeString(form[1]), nil)
+			request.RemoteAddr = "127.0.0.1:50100"
+			request.Header.Set("Origin", "http://127.0.0.1:8878")
+			response := httptest.NewRecorder()
+			gateway.ServeHTTP(response, request)
+			after, claimed, _ := gateway.mobile.Current(time.Now())
+			if response.Code != http.StatusConflict || after.BridgePairingID != first.BridgePairingID || claimed != scenario.claimed {
+				t.Fatal("stale rotation form changed the session or silently selected another address")
+			}
+			addresses = nil
+			page = get(target)
+			if page.Code != http.StatusServiceUnavailable || strings.Contains(page.Body.String(), `data:image/png;base64,`) {
+				t.Fatal("loss of all networks displayed an old QR")
+			}
+		})
+	}
+}
 
 func TestTrayPairingHandoffKeepsPrivateDetailsInFragment(t *testing.T) {
 	descriptor := mobilePairingDescriptor{

@@ -36,6 +36,9 @@ func validMobileEdition(value mobileEdition) bool {
 	return value == mobileEditionStandard || value == mobileEditionEnhanced
 }
 
+var errTrayPairingNetworkUnavailable = errors.New("selected network unavailable")
+var errTrayPairingRotationUnauthorized = errors.New("pairing rotation unauthorized")
+
 type mobileNetworkCandidate struct {
 	Interface   string `json:"interface"`
 	Address     string `json:"address"`
@@ -116,11 +119,29 @@ func (manager *mobilePairingManager) Start(handler http.Handler, now time.Time, 
 }
 
 func (manager *mobilePairingManager) StartEdition(handler http.Handler, now time.Time, edition mobileEdition, forceNew bool) (mobilePairingDescriptor, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.startEditionLocked(handler, now, edition, forceNew, "")
+}
+
+func (manager *mobilePairingManager) rotateTrayEdition(handler http.Handler, now time.Time, edition mobileEdition, address, pageToken string) (mobilePairingDescriptor, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	// A page token may have passed the HTTP check before another request rotated.
+	// Recheck it while holding the same lock that replaces the session.
+	if pageToken != "" {
+		session := manager.session
+		if session == nil || !now.Before(session.expiresAt) || subtle.ConstantTimeCompare([]byte(pageToken), []byte(session.token)) != 1 {
+			return mobilePairingDescriptor{}, errTrayPairingRotationUnauthorized
+		}
+	}
+	return manager.startEditionLocked(handler, now, edition, true, address)
+}
+
+func (manager *mobilePairingManager) startEditionLocked(handler http.Handler, now time.Time, edition mobileEdition, forceNew bool, address string) (mobilePairingDescriptor, error) {
 	if !validMobileEdition(edition) {
 		return mobilePairingDescriptor{}, errors.New("invalid mobile edition")
 	}
-	manager.mu.Lock()
-	defer manager.mu.Unlock()
 	if manager.listener == nil {
 		listener, err := manager.listen("tcp", "0.0.0.0:0")
 		if err != nil {
@@ -180,7 +201,22 @@ func (manager *mobilePairingManager) StartEdition(handler http.Handler, now time
 	}
 	networks, err := manager.networks(manager.port, manager.tlsPort)
 	if err != nil || len(networks) == 0 {
+		if address != "" {
+			return mobilePairingDescriptor{}, errTrayPairingNetworkUnavailable
+		}
 		return mobilePairingDescriptor{}, errors.New("no private IPv4 network is available")
+	}
+	if address != "" {
+		available := false
+		for _, candidate := range networks {
+			if candidate.Address == address {
+				available = true
+				break
+			}
+		}
+		if !available {
+			return mobilePairingDescriptor{}, errTrayPairingNetworkUnavailable
+		}
 	}
 	if session := manager.session; !forceNew && session != nil && session.edition == edition && !session.claimed && session.code != "" && now.Before(session.codeExpiresAt) && now.Before(session.expiresAt) {
 		return pairingDescriptor(session, networks), nil

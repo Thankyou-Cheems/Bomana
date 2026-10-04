@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -25,14 +26,44 @@ func (gateway *relay) serveTrayMobilePairing(response http.ResponseWriter, reque
 			http.Error(response, "origin forbidden", http.StatusForbidden)
 			return
 		}
-		if _, err := gateway.mobile.StartEdition(gateway, time.Now(), edition, true); err != nil {
+		if request.URL.Query().Has("network-address") {
+			current, _, ok := gateway.mobile.Current(time.Now())
+			if !ok || selectedPairingNetwork(request, current.Networks) < 0 {
+				http.Error(response, "selected network unavailable", http.StatusConflict)
+				return
+			}
+		}
+		pageToken := ""
+		if !sameOriginTrayPairingRequest(request) {
+			pageToken = request.PostForm.Get("pairing-token")
+		}
+		descriptor, err := gateway.mobile.rotateTrayEdition(gateway, time.Now(), edition, request.URL.Query().Get("network-address"), pageToken)
+		if err != nil {
+			if errors.Is(err, errTrayPairingNetworkUnavailable) {
+				http.Error(response, "selected network unavailable", http.StatusConflict)
+				return
+			}
+			if errors.Is(err, errTrayPairingRotationUnauthorized) {
+				http.Error(response, "origin forbidden", http.StatusForbidden)
+				return
+			}
 			http.Error(response, "mobile pairing unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		response.Header().Set("Cache-Control", "no-store")
-		location := "/mobile-pairing"
+		selectionQuery := url.Values{}
 		if edition == mobileEditionStandard {
-			location += "?edition=Standard"
+			selectionQuery.Set("edition", "Standard")
+		}
+		if selected := selectedPairingNetwork(request, descriptor.Networks); selected > 0 {
+			selectionQuery.Set("network", strconv.Itoa(selected))
+		}
+		if address := request.URL.Query().Get("network-address"); address != "" {
+			selectionQuery.Set("network-address", address)
+		}
+		location := "/mobile-pairing"
+		if len(selectionQuery) > 0 {
+			location += "?" + selectionQuery.Encode()
 		}
 		response.Header().Set("Location", location)
 		response.WriteHeader(http.StatusSeeOther)
@@ -54,12 +85,19 @@ func (gateway *relay) serveTrayMobilePairing(response http.ResponseWriter, reque
 		edition = currentDescriptor.Edition
 	}
 	if currentOK && currentClaimed && currentDescriptor.Edition == edition {
+		selected := selectedPairingNetwork(request, currentDescriptor.Networks)
+		if redirectIndexedPairingNetwork(response, request, currentDescriptor.Networks, selected) {
+			return
+		}
 		writeTrayPairingPage(response, trayPairingPage{
 			Title:             "手机已连接",
 			Message:           "当前手机会话仍然有效。关闭电脑网页不会中断手机；请保持 Bridge 运行。",
 			ExpiresAt:         currentDescriptor.ExpiresAt,
 			RegenerationToken: currentDescriptor.PairingToken,
 			Edition:           currentDescriptor.Edition,
+			Networks:          currentDescriptor.Networks,
+			Selected:          selected,
+			NetworkAddress:    request.URL.Query().Get("network-address"),
 		}, request.Method == http.MethodHead)
 		return
 	}
@@ -69,11 +107,18 @@ func (gateway *relay) serveTrayMobilePairing(response http.ResponseWriter, reque
 		return
 	}
 	selected := selectedPairingNetwork(request, descriptor.Networks)
-	pairingURL := trayPairingHandoffURL(descriptor, selected)
-	png, err := qrcode.Encode(pairingURL, qrcode.Medium, 300)
-	if err != nil {
-		http.Error(response, "QR generation failed", http.StatusInternalServerError)
+	if redirectIndexedPairingNetwork(response, request, descriptor.Networks, selected) {
 		return
+	}
+	qrData := ""
+	if selected >= 0 {
+		pairingURL := trayPairingHandoffURL(descriptor, selected)
+		png, err := qrcode.Encode(pairingURL, qrcode.Medium, 300)
+		if err != nil {
+			http.Error(response, "QR generation failed", http.StatusInternalServerError)
+			return
+		}
+		qrData = "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
 	}
 	message := "普通版为公开功能，扫码后直接连接 Bridge，不需要 CheemsPay 登录。"
 	if edition == mobileEditionEnhanced {
@@ -83,9 +128,10 @@ func (gateway *relay) serveTrayMobilePairing(response http.ResponseWriter, reque
 		Title:             "连接手机",
 		Message:           message,
 		ExpiresAt:         descriptor.PairingExpiresAt,
-		QRCodeData:        "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
+		QRCodeData:        qrData,
 		Networks:          descriptor.Networks,
 		Selected:          selected,
+		NetworkAddress:    request.URL.Query().Get("network-address"),
 		RegenerationToken: descriptor.PairingToken,
 		Edition:           descriptor.Edition,
 	}, request.Method == http.MethodHead)
@@ -98,11 +144,20 @@ type trayPairingPage struct {
 	QRCodeData        string
 	Networks          []mobileNetworkCandidate
 	Selected          int
+	NetworkAddress    string
 	RegenerationToken string
 	Edition           mobileEdition
 }
 
 func writeTrayPairingPage(response http.ResponseWriter, page trayPairingPage, head bool) {
+	if page.Selected < 0 {
+		page.Title = "重新选择局域网"
+		page.Message = "已选择的网卡地址不再可用，请选择与手机同一 Wi-Fi 的当前地址。"
+		page.QRCodeData = ""
+		page.RegenerationToken = ""
+	} else if page.Selected < len(page.Networks) {
+		page.NetworkAddress = page.Networks[page.Selected].Address
+	}
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 	response.Header().Set("Referrer-Policy", "no-referrer")
@@ -122,7 +177,7 @@ func writeTrayPairingPage(response http.ResponseWriter, page trayPairingPage, he
 		if index == page.Selected {
 			className = ` class="selected"`
 		}
-		networkLinks += fmt.Sprintf(`<a%s href="/mobile-pairing?network=%d%s">%s · %s</a>`, className, index, editionQuery, html.EscapeString(candidate.Interface), html.EscapeString(candidate.Address))
+		networkLinks += fmt.Sprintf(`<a%s href="/mobile-pairing?network=%d%s&amp;network-address=%s">%s · %s</a>`, className, index, editionQuery, url.QueryEscape(candidate.Address), html.EscapeString(candidate.Interface), html.EscapeString(candidate.Address))
 	}
 	standardClass := ""
 	enhancedClass := ""
@@ -131,7 +186,14 @@ func writeTrayPairingPage(response http.ResponseWriter, page trayPairingPage, he
 	} else {
 		enhancedClass = ` class="selected"`
 	}
-	editionLinks := `<nav class="editions" aria-label="选择手机版本"><a` + standardClass + ` href="/mobile-pairing?edition=Standard">普通版</a><a` + enhancedClass + ` href="/mobile-pairing?edition=Enhanced">超级爆弹版</a></nav>`
+	networkQuery := ""
+	if page.Selected > 0 {
+		networkQuery = "&amp;network=" + strconv.Itoa(page.Selected)
+	}
+	if page.NetworkAddress != "" {
+		networkQuery += "&amp;network-address=" + url.QueryEscape(page.NetworkAddress)
+	}
+	editionLinks := `<nav class="editions" aria-label="选择手机版本"><a` + standardClass + ` href="/mobile-pairing?edition=Standard` + networkQuery + `">普通版</a><a` + enhancedClass + ` href="/mobile-pairing?edition=Enhanced` + networkQuery + `">超级爆弹版</a></nav>`
 	qr := ""
 	if page.QRCodeData != "" {
 		qr = `<img src="` + html.EscapeString(page.QRCodeData) + `" alt="Bomana 手机配对二维码" width="300" height="300">`
@@ -142,6 +204,7 @@ func writeTrayPairingPage(response http.ResponseWriter, page trayPairingPage, he
 		if page.Edition == mobileEditionStandard {
 			action = "/mobile-pairing?edition=Standard&amp;rotate=1"
 		}
+		action += networkQuery
 		regenerate = `<form method="post" action="` + action + `"><input type="hidden" name="pairing-token" value="` + html.EscapeString(page.RegenerationToken) + `"><button class="regenerate" type="submit">重新生成并撤销旧会话</button></form>`
 	}
 	body := `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>` + html.EscapeString(page.Title) + ` · Bomana Bridge</title><style>` + trayPairingCSS + `</style></head><body><main><header><b>B</b><div><small>BOMANA BRIDGE</small><h1>` + html.EscapeString(page.Title) + `</h1></div></header>` + editionLinks + `<p>` + html.EscapeString(page.Message) + `</p>` + qr + `<nav>` + networkLinks + `</nav><footer><span>` + html.EscapeString(formatPairingExpiry(page.ExpiresAt)) + `</span>` + regenerate + `</footer></main></body></html>`
@@ -178,11 +241,36 @@ func (gateway *relay) authorizeTrayPairingRotation(response http.ResponseWriter,
 }
 
 func selectedPairingNetwork(request *http.Request, networks []mobileNetworkCandidate) int {
+	if addresses, exists := request.URL.Query()["network-address"]; exists {
+		if len(addresses) != 1 {
+			return -1
+		}
+		for index, candidate := range networks {
+			if candidate.Address == addresses[0] {
+				return index
+			}
+		}
+		return -1
+	}
 	index, err := strconv.Atoi(request.URL.Query().Get("network"))
 	if err != nil || index < 0 || index >= len(networks) {
 		return 0
 	}
 	return index
+}
+
+// Pin legacy numeric selection URLs once, so refreshing cannot select another IP
+// merely because the interface list changed order.
+func redirectIndexedPairingNetwork(response http.ResponseWriter, request *http.Request, networks []mobileNetworkCandidate, selected int) bool {
+	query := request.URL.Query()
+	if selected < 0 || !query.Has("network") || query.Has("network-address") {
+		return false
+	}
+	query.Set("network-address", networks[selected].Address)
+	response.Header().Set("Cache-Control", "no-store")
+	response.Header().Set("Location", "/mobile-pairing?"+query.Encode())
+	response.WriteHeader(http.StatusFound)
+	return true
 }
 
 func selectedTrayPairingEdition(request *http.Request) (mobileEdition, bool) {
@@ -204,7 +292,7 @@ func trayPairingRotationRequest(request *http.Request) bool {
 		return false
 	}
 	for key := range query {
-		if key != "rotate" && key != "edition" {
+		if key != "rotate" && key != "edition" && key != "network" && key != "network-address" {
 			return false
 		}
 	}
