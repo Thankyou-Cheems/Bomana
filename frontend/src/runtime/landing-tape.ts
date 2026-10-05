@@ -70,7 +70,7 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   // continuous; approach/validity flags still change immediately in the scene.
   const selected = snapshot.navigation?.items.find(item => item.id === landing?.settings.runwayId);
   const cueKey = `${landing?.runwayKey || (selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId)}|${landing?.settings.reverse}|${runway?.heightKnown}`;
-  return { heightReference: height.reference, active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
+  return { heightReference: height.reference, heightCaption: height.compactReference, active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
     runway, horizontal, otherRunways, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
     aria: `${mode}；${course}，${distance}${horizontal ? "；前向航线透视，垂直数据不完整，无下滑指令" : ""}${g ? `；${height.reference}` : ""}${runway && !horizontal ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；以玩家前向视角呈现，近端以中央透视区两侧为翼端参考、远端按深度收缩；视野外机场保留方向提示；姿态缺测使用可用航迹俯仰和水平滚转；曲线从当前高度与俯仰接入末段下滑线；近端显示面随翼端衔接，远端接入跑道；高低偏差独立计算；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
 }
@@ -226,11 +226,17 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   text(p.config, pad, height * .87, font * .9, configColor, "left", side - pad);
   const stage = p.horizontal ? "方位透视" : p.scene !== "unavailable" && !cue ? "高程 —" : cue?.approach && p.scene !== "glide"
     ? `${p.stageLabel} ${Number((Math.atan(cue.slope) * 180 / Math.PI).toFixed(1))}°` : p.stageLabel;
-  const caption = `${p.course.replace("RWY ", "")} · ${p.distance.replace("距机场 ", "")} · ${stage}`;
-  ctx.font = `600 ${font * .9}px "Microsoft YaHei", sans-serif`;
-  const captions = p.scene === "unavailable" ? [caption] : [caption, p.heightReference];
+  const caption = `${p.scene === "return" ? "返航 " : ""}${p.course.replace("RWY ", "")} · ${p.distance.replace("距机场 ", "")}${p.scene === "return" ? "" : ` · ${stage}`}`;
+  const captionFont = Math.max(9, font * .9);
+  ctx.font = `600 ${captionFont}px "Microsoft YaHei", sans-serif`;
+  const joinedCaption = `${caption} · ${p.heightCaption}`;
+  // Compact return context fits on one line when the window permits it. Phone
+  // windows keep two short lines; full reference wording remains in ARIA/panel.
+  const captions = p.scene === "unavailable" ? [caption]
+    : p.scene === "return" && ctx.measureText(joinedCaption).width <= centerWidth - 24 ? [joinedCaption]
+      : [caption, p.heightCaption];
   const captionWidth = Math.min(centerWidth - 12, Math.max(...captions.map(line => ctx.measureText(line).width)) + 12);
-  const captionHeight = (font + 4) * captions.length + 4;
+  const captionHeight = (captionFont + 2) * captions.length + 4;
   const target = projected?.threshold ? pixel(projected.threshold) : null;
   const offscreen = projected && (!target || !inside(target));
   const cueX = offscreen ? target ? target[0] < left + 8 ? left + 10 : target[0] > right - 8 ? right - 10 : target[0]
@@ -242,10 +248,9 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   // window may leave neither corner clear; the final cue overlay still wins.
   const rightCaptionX = right - captionWidth - 4;
   const captionX = overlapsCue(left + 4) && !overlapsCue(rightCaptionX) ? rightCaptionX : left + 4;
-  ctx.fillStyle = "#071923cc";
-  ctx.fillRect(captionX, top + 2, captionWidth, captionHeight);
-  captions.forEach((line, index) => text(line, captionX + 6, top + 6 + font / 2 + index * (font + 4),
-    font * .9, muted, "left", captionWidth - 12));
+  // Text only: no opaque or translucent airport-debug panel over the route.
+  captions.forEach((line, index) => text(line, captionX + 6, top + 5 + captionFont / 2 + index * (captionFont + 2),
+    captionFont, muted, "left", captionWidth - 12));
   // Airport entrance/direction is essential even when its projected position
   // overlaps a caption. Draw it last, within the same instrument-free viewport.
   if (projected) {
@@ -257,7 +262,7 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
       ctx.save(); ctx.translate(cueX!, cueY!); ctx.rotate(angle); ctx.globalAlpha = 1; ctx.strokeStyle = "#f0f8fc"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(-5, -5); ctx.lineTo(1, 0); ctx.lineTo(-5, 5); ctx.stroke(); ctx.restore();
     } else if (target && (
-      // Even a broad known runway can disappear beneath the readable caption.
+      // Even a broad known runway can lose contrast beneath a text caption.
       // Preserve its true threshold position with the same compact marker.
       target[0] >= captionX - 3 && target[0] <= captionX + captionWidth + 3
         && target[1] >= top - 1 && target[1] <= top + captionHeight + 5

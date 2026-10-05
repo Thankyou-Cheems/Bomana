@@ -223,6 +223,7 @@ export type EditionCommand =
   | { readonly type: "checklist.toggle"; readonly index: number }
   | { readonly type: "strike.select-weapon"; readonly weaponId: string }
   | { readonly type: "strike.set-target-mode"; readonly mode: StrikeTargetMode }
+  | { readonly type: "strike.select-airfield"; readonly airfieldId: string }
   | { readonly type: "strike.set-airfield-module"; readonly module: StrikeAirfieldModule }
   | { readonly type: "strike.set-target-altitude"; readonly altitudeM: number }
   | {

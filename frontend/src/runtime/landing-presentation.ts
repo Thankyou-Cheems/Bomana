@@ -50,7 +50,9 @@ export function landingHeightPresentation(landing: LandingSnapshot | null | unde
     ? elevationKnown ? "本机高度未知" : "机场高程未知"
     : `${g.heightM >= 0 ? "高于机场" : "低于机场"} ${metres(g.heightM)}`;
   const reference = !g ? "等待高度数据" : !elevationKnown ? `${elevation} · 仅水平引导` : `${elevation} · ${relative}`;
-  return { elevation, relative, reference };
+  const compactReference = !g || !elevationKnown ? reference
+    : `${landing!.elevationSource === "terrain" ? "地形" : "手动"}${Math.round(landing!.elevationM!)}m · ${relative.replace(/ (\d+) m$/, "$1m")}`;
+  return { elevation, relative, reference, compactReference };
 }
 
 export function landingPresentation(landing: LandingSnapshot | null | undefined) {
