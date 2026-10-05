@@ -52,6 +52,8 @@ export interface LandingGeometry {
   readonly predictedThresholdCrossM?: number | null;
 }
 export interface LandingSnapshot {
+  /** Conservative display inference; never a native wheel-contact flag. */
+  readonly surfacePhase?: "rollout" | "taxi" | null;
   readonly runwayKey?: string;
   readonly attitude?: { readonly pitchDeg: number | null; readonly rollDeg: number | null; readonly tasMps: number | null };
   readonly nearbyRunways?: readonly { readonly key: string; readonly id: string; readonly label: string; readonly friendly: boolean; readonly geometry: LandingGeometry }[];
@@ -185,6 +187,10 @@ export class LandingAssist {
   #departure = false;
   #departureOrigin: { x: number; y: number; altitude: number | null } | null = null;
   #groundObservation: { at: number; x: number; y: number; speed: number; nearGround: boolean } | null = null;
+  #surfacePhase: LandingSnapshot["surfacePhase"] = null;
+  #surfaceSince: number | null = null;
+  #surfaceAt = 0;
+  #surfaceHeightM: number | null = null;
   settings(): LandingSettings { return this.#settings; }
   configure(settings: LandingSettings, navigation: EditionSnapshot["navigation"]): void {
     validateLandingSettings(settings);
@@ -200,6 +206,7 @@ export class LandingAssist {
       reverse = distance(runway.runwayEnd!) < distance(runway.runwayStart!);
     }
     const directionChanged = changed || reverse !== this.#settings.reverse;
+    if (directionChanged || !settings.enabled || settings.runwayElevationM !== this.#settings.runwayElevationM) this.#resetSurface();
     this.#settings = { ...settings, automatic: settings.automatic ?? false, runwayId: runway?.id ?? null, reverse,
       runwayElevationM: directionChanged ? null : settings.runwayElevationM };
     this.#runwayKey = changed ? key : this.#runwayKey;
@@ -223,6 +230,7 @@ export class LandingAssist {
       this.#flapRisk = "unknown";
       this.#candidateKey = ""; this.#exitSince = this.#missingSince = this.#lastAutoAt = this.#cooldownUntil = 0;
       this.#groundSince = null; this.#departure = false; this.#groundObservation = null; this.#departureOrigin = null;
+      this.#resetSurface();
     }
     this.#context = input.context;
     if (this.#settings.enabled && input.fresh) {
@@ -230,6 +238,7 @@ export class LandingAssist {
       if (runway && runway.id !== this.#settings.runwayId) this.#settings = { ...this.#settings, runwayId: runway.id };
       else if (!runway && this.#settings.runwayElevationM !== null) this.#settings = { ...this.#settings, runwayElevationM: null };
     }
+    this.#updateSurface(input, terrainElevation);
     this.#updateGround(input, terrainElevation);
     if (!this.#departure) this.#updateAutomatic(input);
     const snapshot = this.#buildView(input, terrainElevation, this.#settings, this.#runwayKey, this.#gearRisk, this.#flapRisk);
@@ -289,11 +298,58 @@ export class LandingAssist {
         courseDeg: (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360, lengthM: Math.hypot(dx, dy) };
     }),
       runwayLabel: runway?.label ?? "", status: !settings.enabled ? "disabled" : geometry ? "guidance" : "unavailable",
-      reason: unavailable, elevationM: geometry ? elevationM : null,
+      reason: unavailable, surfacePhase: geometry?.heightM != null ? this.#surfacePhase : null, elevationM: geometry ? elevationM : null,
       elevationSource: geometry && elevationM !== null ? settings.runwayElevationM !== null ? "manual" : "terrain" : null,
       iasKmh: input.fresh ? input.iasKmh : null, verticalSpeedMps: input.fresh ? input.verticalSpeedMps : null,
       gearPercent: input.fresh ? input.gearPercent : null, airbrakePercent: input.fresh ? input.airbrakePercent : null,
       flapsPercent: input.fresh ? input.flapsPercent : null, geometry, aircraft: input.aircraft ?? null, gearRisk, flapReference };
+  }
+
+  #resetSurface(): void {
+    this.#surfacePhase = null; this.#surfaceSince = null; this.#surfaceAt = 0; this.#surfaceHeightM = null;
+  }
+
+  // A descending/decelerating low pass is indistinguishable from touchdown in
+  // official telemetry. Only a sustained, very slow near-surface observation
+  // enters this reference. Higher-speed landing retains its airborne cues.
+  #updateSurface(input: LandingInput, elevation: (p: readonly [number, number]) => number | null): void {
+    const at = input.sampledAtMs, n = input.navigation;
+    const runway = this.#lockedRunway(landingRunways(n), n?.mapScaleM);
+    if (!this.#settings.enabled || !input.fresh || at == null || !Number.isFinite(at)
+      || !n?.player || !n.mapScaleM || !runway) { this.#resetSurface(); return; }
+    if (at <= this.#surfaceAt) return;
+    if (at - this.#surfaceAt > 1500) this.#resetSurface();
+    this.#surfaceAt = at;
+    const start = this.#settings.reverse ? runway.runwayEnd! : runway.runwayStart!;
+    const end = this.#settings.reverse ? runway.runwayStart! : runway.runwayEnd!;
+    const g = landingGeometry({ player: n.player, scale: n.mapScaleM, start, end,
+      altitudeM: input.altitudeM, elevationM: this.#settings.runwayElevationM ?? elevation(start), glideAngleDeg: 3,
+      velocity: input.track?.valid ? [input.track.velocityX, -input.track.velocityZ] : null });
+    const height = g.heightM, speed = input.iasKmh, vy = input.verticalSpeedMps;
+    if (height === null || speed === null || vy === null || input.gearPercent === null
+      || ![height, speed, vy, input.gearPercent].every(Number.isFinite) || speed < 0 || input.gearPercent < 95) {
+      this.#resetSurface(); return;
+    }
+    // Shared public geometry has no collision width. Stay in a narrow center
+    // band; the Enhanced presentation also respects its supplied width reference.
+    const entryWidthM = 20, exitWidthM = 25;
+    const inside = g.thresholdDistanceM <= 0 && g.thresholdDistanceM >= -g.lengthM;
+    if (this.#surfacePhase) {
+      // A modest observation band prevents flicker. Renewed climb, missing
+      // evidence or leaving the strip revokes it on this observation.
+      if (!inside || Math.abs(g.crossTrackM) > exitWidthM || height < -5 || height > 7
+        || this.#surfaceHeightM !== null && height - this.#surfaceHeightM > 2 || vy > 1 || vy < -1.5
+        || speed > 80 && !input.track?.valid) {
+        this.#surfacePhase = null; this.#surfaceSince = null; this.#surfaceHeightM = null; return;
+      }
+      this.#surfacePhase = this.#surfacePhase === "taxi" ? speed > 90 ? "rollout" : "taxi" : speed <= 70 ? "taxi" : "rollout";
+      return;
+    }
+    const candidate = inside && Math.abs(g.crossTrackM) <= entryWidthM && speed <= 40 && Math.abs(height) <= 5
+      && Math.abs(vy) <= 1 && (!input.track?.valid || input.track.groundSpeedMps <= 12);
+    if (!candidate) { this.#surfaceSince = null; return; }
+    this.#surfaceSince ??= at;
+    if (at - this.#surfaceSince >= 1000) { this.#surfacePhase = "taxi"; this.#surfaceHeightM = height; }
   }
 
   // This is a presentation phase, not proof of wheel contact. It is observed
@@ -413,6 +469,7 @@ export class LandingAssist {
       : JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd]) : "";
     if (!key || key !== this.#candidateKey) { this.#candidateKey = key; this.#candidateSince = at; return; }
     if (best && at - this.#candidateSince >= 3000) {
+      this.#resetSurface();
       this.#settings = { ...this.#settings, enabled: true, runwayId: best.runway.id, reverse: best.reverse, runwayElevationM: null };
       this.#runwayKey = JSON.stringify([best.runway.runwayStart, best.runway.runwayEnd]);
       this.#candidateKey = ""; this.#exitSince = 0;
@@ -420,6 +477,7 @@ export class LandingAssist {
   }
 
   #leaveAutomatic(at: number): void {
+    this.#resetSurface();
     this.#settings = { ...this.#settings, enabled: false, runwayId: null, runwayElevationM: null };
     this.#runwayKey = ""; this.#candidateKey = "";
     this.#exitSince = this.#missingSince = 0; this.#cooldownUntil = at + 15_000;

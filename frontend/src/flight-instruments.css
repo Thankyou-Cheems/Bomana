@@ -104,12 +104,6 @@ body:has(.pip-cockpit) { min-width: 0 !important; color: #dbeaf1; font-family: v
 .pip-map-toggle[hidden], .pip-mini-map[hidden] { display: none; }
 .pip-mini-map { position: relative; align-self: center; width: var(--pip-map-size); aspect-ratio: 1; overflow: hidden; border: 1px solid rgba(143,193,217,.42); border-radius: 3px; background: #06141c; box-shadow: inset 0 0 18px rgba(0,0,0,.55), 0 0 8px rgba(44,132,170,.12); }
 .pip-mini-map canvas { display: block; width: 100%; height: 100%; }
-.pip-map-flags { position: absolute; left: 5px; right: 5px; bottom: 5px; display: flex; justify-content: flex-end; gap: 3px; pointer-events: none; }
-.pip-map-flags span { padding: 2px 4px; border: 1px solid currentColor; border-radius: 2px; background: rgba(2,12,17,.82); font: 800 6px/1 var(--mono, "Microsoft YaHei"); text-shadow: 0 1px 3px #000; }
-.pip-map-flags .is-team { color: #6de0a3; }
-.pip-map-flags .is-y66 { color: #cfa4ff; }
-.pip-map-flags .is-target { color: #ffd65a; }
-.pip-map-flags span[hidden] { display: none; }
 .pip-cockpit { --pip-map-size: min(40vw, calc(100vh - 6px)); box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) var(--pip-map-size); gap: 3px; width: 100%; height: 100%; padding: 2px 3px; background: rgba(2, 12, 17, .96); }
 .pip-cockpit:not(.has-mini-map) { grid-template-columns: minmax(0, 1fr); }
 .pip-instruments-slot { width: 100%; height: 100%; }

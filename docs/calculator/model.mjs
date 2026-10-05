@@ -302,3 +302,157 @@ export function usefulActionsCurve({ mode, vehicleId, minutes, periodMinutes, sl
   if (points.some(value => !value)) return null;
   return { points, current: point(score), hasLanding: sample.basis === "before_landing_split", minutes };
 }
+
+
+// One user observation calibrates this empirical model. These are exact API
+// identities, not a claim that other aircraft or incendiaries are equivalent.
+const calibrationReward = Object.freeze({
+  preset_dmg_min: 18000,
+  preset_dmg_max: 97500,
+  bombing_reward_modifier: 2,
+  ui_decoration: 10,
+  piecewise_linear: Object.freeze([[200000, .3], [1200000, .17], [50000000, .017]].map(Object.freeze)),
+});
+const calibrationDamage = 8 * 10860;
+const calibrationMultiplier = rewardUi(calibrationReward, calibrationDamage) / calibrationReward.ui_decoration;
+
+export const simScoreCalibrations = Object.freeze([Object.freeze({
+  id: "q_5l_250_2_dwelling_br10_7_8_full_burn/v1",
+  aircraftId: "q_5l",
+  weaponId: "cn_gp_250_2_incendiary",
+  targetId: "airport_dwelling",
+  roomMaxBr: 10.7,
+  carriedCount: 8,
+  deliveredCount: 8,
+  damagePerItem: 10860,
+  rewardDamagePerItem: 10860,
+  acceptedDamage: calibrationDamage,
+  reward: calibrationReward,
+  multiplier: calibrationMultiplier,
+  tabBefore: 3230,
+  tabAfter: 4038,
+  score: 808,
+  scale: 808 / (calibrationDamage * calibrationMultiplier),
+  source: Object.freeze({
+    kind: "user_battle_record",
+    label: "用户实战记录 · 强-5L / 8 枚 250-2 / 生活区 / 房间最高 BR 10.7 · Tab 3230→4038（+808）",
+    url: null,
+  }),
+})]);
+
+export const simScoreAssumptions = Object.freeze({
+  fullHit: true,
+  burnComplete: true,
+  damageBasis: "catalog_modeled_direct_plus_burn_damage",
+  multiplierBasis: "whole_carried_loadout_reward_damage",
+  acceptedDamageBasis: "minimum_of_delivered_modeled_damage_and_remaining_target_hp",
+  empirical: true,
+  observationCount: 1,
+  uncalibrated: Object.freeze(["bonus", "SL", "RP"]),
+  warning: "经验估算假设投放武器全部命中、燃烧完成；计入伤害不超过目标剩余 HP，倍率始终按整套携带挂载计算。仅有一条 +808 分实测校准，同条件其他数量属于模型估算，跨机型、弹种、目标或房间 BR 属于未实测外推。额外奖励、SL 和 RP 未校准，此模型不是服务器计分公式或命中保证。",
+});
+
+const coverageLabels = Object.freeze({
+  calibrated_observation: Object.freeze({ coverageLabel: "实测条件校准", confidence: "single_observation", confidenceLabel: "单条实测校准，精度未验证" }),
+  within_condition_estimate: Object.freeze({ coverageLabel: "同条件模型估算", confidence: "model_estimate", confidenceLabel: "同条件估算，非独立实测" }),
+  extrapolated: Object.freeze({ coverageLabel: "未实测跨条件外推", confidence: "uncalibrated_extrapolation", confidenceLabel: "跨条件未校准，精度未知" }),
+});
+
+/** Validate all reward parameters even when an explicit rewardDmg of zero gives M=1. */
+export function simScoreRewardParametersSupported(reward) {
+  if (!reward || ![reward.preset_dmg_min, reward.preset_dmg_max,
+    reward.bombing_reward_modifier, reward.ui_decoration].every(Number.isFinite) ||
+    reward.preset_dmg_min <= 0 || reward.preset_dmg_max <= reward.preset_dmg_min ||
+    reward.bombing_reward_modifier < 0 || reward.ui_decoration <= 0) return false;
+  const points = reward.piecewise_linear;
+  return Array.isArray(points) && points.length >= 2 && Array.from(points).every((point, index) =>
+    Array.isArray(point) && point.length === 2 && point.every(Number.isFinite) &&
+    point[0] > 0 && point[1] > 0 && (index === 0 || point[0] > points[index - 1][0]));
+}
+
+function loadoutCounts(items, allowZero) {
+  if (!Array.isArray(items)) return null;
+  const counts = new Map();
+  for (const row of items) {
+    if (!Array.isArray(row) || row.length !== 2) return null;
+    const [id, count] = row;
+    if (typeof id !== "string" || !id.trim() || !Number.isSafeInteger(count) ||
+      count < (allowZero ? 0 : 1)) return null;
+    const total = (counts.get(id) ?? 0) + count;
+    if (!Number.isSafeInteger(total)) return null;
+    counts.set(id, total);
+  }
+  return counts;
+}
+
+function sameRewardCurve(reward, reference) {
+  return ["preset_dmg_min", "preset_dmg_max", "bombing_reward_modifier"].every(field => reward[field] === reference[field]) &&
+    reward.piecewise_linear.length === reference.piecewise_linear.length &&
+    reward.piecewise_linear.every((point, index) => point.every((value, coordinate) => value === reference.piecewise_linear[index][coordinate]));
+}
+
+/**
+ * Empirical Air Simulator target-damage score, S = k * acceptedDamage * M.
+ * carried/delivered are [[weaponId, wholeCount]], weapons is the catalog Map.
+ * dmg already includes modeled direct + complete burn damage; never apply a
+ * fire multiplier again. Unknown damage/reward data excludes the whole loadout.
+ * remainingHp must be explicitly supplied by the caller, including zero.
+ */
+export function empiricalSimScore(input = {}) {
+  if (!input) return null;
+  const { aircraftId, roomMaxBr, targetId, carried, delivered = carried,
+    weapons, reward, remainingHp } = input;
+  if (typeof aircraftId !== "string" || !aircraftId.trim() ||
+    typeof targetId !== "string" || !targetId.trim() ||
+    !Number.isFinite(roomMaxBr) || roomMaxBr <= 0 ||
+    !Number.isFinite(remainingHp) || remainingHp < 0 ||
+    !(weapons instanceof Map) || !simScoreRewardParametersSupported(reward)) return null;
+  const carriedCounts = loadoutCounts(carried, false);
+  const deliveredCounts = loadoutCounts(delivered, true);
+  if (!carriedCounts?.size || !deliveredCounts) return null;
+  for (const [id, count] of deliveredCounts) {
+    if (!carriedCounts.has(id) || count > carriedCounts.get(id)) return null;
+  }
+  let carriedDamage = 0, carriedRewardDamage = 0, deliveredDamage = 0;
+  for (const [id, count] of carriedCounts) {
+    const weapon = weapons.get(id);
+    if (!Number.isFinite(weapon?.dmg) || weapon.dmg <= 0 ||
+      !Number.isFinite(weapon?.rewardDmg) || weapon.rewardDmg < 0 ||
+      ["aam", "arm", "ashm"].includes(weapon.role)) return null;
+    carriedDamage += weapon.dmg * count;
+    carriedRewardDamage += weapon.rewardDmg * count;
+    deliveredDamage += weapon.dmg * (deliveredCounts.get(id) ?? 0);
+  }
+  if (![carriedDamage, carriedRewardDamage, deliveredDamage].every(Number.isFinite)) return null;
+  const multiplier = rewardUi(reward, carriedRewardDamage) / reward.ui_decoration;
+  if (!Number.isFinite(multiplier) || multiplier <= 0) return null;
+  const acceptedDamage = Math.min(deliveredDamage, remainingHp);
+
+  // Add future exact-identity observations as separate rows. An unmatched
+  // request uses the first observation only as explicitly labelled extrapolation.
+  const condition = simScoreCalibrations.find(reference =>
+    reference.aircraftId === aircraftId && reference.targetId === targetId &&
+    reference.roomMaxBr === roomMaxBr && carriedCounts.size === 1 &&
+    carriedCounts.has(reference.weaponId) &&
+    weapons.get(reference.weaponId).dmg === reference.damagePerItem &&
+    weapons.get(reference.weaponId).rewardDmg === reference.rewardDamagePerItem &&
+    sameRewardCurve(reward, reference.reward));
+  const calibration = condition ?? simScoreCalibrations[0];
+  // This is k * acceptedDamage * M, evaluated relative to the calibration
+  // so its exact 808-point anchor is not lost to binary multiplication order.
+  const score = calibration.score * (acceptedDamage / calibration.acceptedDamage) *
+    (multiplier / calibration.multiplier);
+  if (!Number.isFinite(score)) return null;
+  const reproducesObservation = condition &&
+    carriedCounts.get(condition.weaponId) === condition.carriedCount &&
+    deliveredCounts.get(condition.weaponId) === condition.deliveredCount &&
+    acceptedDamage === condition.acceptedDamage;
+  const coverage = reproducesObservation ? "calibrated_observation" :
+    condition ? "within_condition_estimate" : "extrapolated";
+  return Object.freeze({
+    score, carriedDamage, carriedRewardDamage, multiplier, deliveredDamage, acceptedDamage,
+    calibrationId: calibration.id, coverage, ...coverageLabels[coverage],
+    source: calibration.source, sourceLabel: calibration.source.label,
+    assumptions: simScoreAssumptions,
+  });
+}

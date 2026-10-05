@@ -762,3 +762,18 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
   .loadout-workspace .hangar-result-primary strong, .loadout-workspace .hangar-sorties strong, .loadout-reward strong { font-size:18px; }
   .loadout-workspace .aircraft-search-bar, .loadout-workspace .hangar-weapon-filters { flex-basis:100%; }
 }
+.sim-score-panel { grid-column:1 / -1; min-width:0; padding:12px; border:1px solid #c6dbe7; border-radius:8px; background:#f5faff; }
+.sim-score-panel h3 { margin:0 0 6px; font-size:14px; color:#315f7b; }
+.sim-score-controls { display:flex; flex-wrap:wrap; gap:8px 18px; }
+.sim-score-controls .hangar-field { flex:1 1 180px; max-width:340px; }
+.sim-score-controls input, .sim-score-delivery input { width:100%; min-height:32px; padding:5px 8px; border:1px solid #c6dbe7; border-radius:6px; font:inherit; background:white; }
+.sim-score-panel .reward-stats { margin:6px 0; }
+.sim-score-delivery-details { font-size:12px; color:#537990; }
+.sim-score-delivery { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0; }
+.sim-score-delivery span { flex:1 1 180px; }
+.sim-score-delivery input { width:90px; }
+.sim-score-delivery-details button { margin-top:4px; padding:6px 9px; border:1px solid #c6dbe7; border-radius:6px; background:#edf5fa; color:#315f7b; font:inherit; cursor:pointer; }
+.optimizer-panel[data-objective="sim_score"] .optimizer-priority { display:none; }
+.optimizer-panel[data-objective="sim_score"] .optimizer-heading { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.optimizer-modes button { min-width:0; overflow-wrap:anywhere; }
+@media (max-width:560px) { .optimizer-panel[data-objective="sim_score"] .optimizer-heading { grid-template-columns:minmax(0,1fr); } }

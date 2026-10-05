@@ -104,10 +104,17 @@ try {
     assert.equal(await page.locator('.optimizer-zone-plan > [data-plan-zone="1"]').isVisible(), true);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   }
-  // Changing target hides this battle-zone tool and cancels its in-flight work.
+  // Airport targets retain score recommendations; battle-zone objectives are hidden.
   await page.locator('#calcTargetSegments [data-value="airport_storage"]').click();
-  assert.equal(await page.locator("#loadoutOptimizer").isVisible(), false);
+  assert.equal(await page.locator("#loadoutOptimizer").isVisible(), true);
+  assert.equal(await page.locator("#loadoutOptimizer").getAttribute("data-objective"), "sim_score");
+  for (const mode of ["reward", "targets"]) {
+    assert.equal(await page.locator(`[data-optimizer-mode="${mode}"]`).isVisible(), false);
+  }
+  await waitResult();
+  assert.match(await page.locator("[data-optimizer-result]").textContent(), /全挂载预计.*分/);
   await page.locator('#calcTargetSegments [data-value="bombing_point_planes"]').click();
+  await page.locator('[data-optimizer-mode="reward"]').click();
   await page.locator('#calcBrSegments [role="radio"]').first().click();
   await page.locator('#calcBrSegments [role="radio"]').last().click();
   await waitResult();

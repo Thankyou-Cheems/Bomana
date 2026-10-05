@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { landingGeometry } from "./landing-assist";
-import { landingApproachPath, landingRunwayScene, landingRunwayCamera, landingRunwayFrame, projectLandingRunway, RunwaySceneMotion } from "./landing-runway-projection";
+import { landingApproachPath, landingRunwayScene, landingRunwayCamera, landingRunwayFrame, projectLandingRunway, RunwaySceneMotion, landingRunwayPattern } from "./landing-runway-projection";
 
 const input = { player: { x: .53, y: .53 }, scale: [10000, 100000] as const,
   start: [.5, .5] as const, end: [.5, .48] as const, altitudeM: 400, elevationM: 100, glideAngleDeg: 3, velocity: [0, -100] as const };
@@ -253,4 +253,52 @@ it("smooths heading across north on the shortest arc and resets unknown geometry
   expect(motion.isMoving(1500)).toBe(false);
   motion.observe(null, 1501, false);
   expect(motion.step(1501)).toBeNull();
+});
+
+it("caches bounded War Thunder-inspired markings without airport-specific numbers or metric dimensions", () => {
+  const full = landingRunwayPattern("full"), sparse = landingRunwayPattern("sparse");
+  expect(landingRunwayPattern("full")).toBe(full); expect(landingRunwayPattern("sparse")).toBe(sparse);
+  expect(full.length).toBeLessThanOrEqual(64); expect(sparse.length).toBeLessThanOrEqual(24);
+  for (const kind of ["threshold", "centerline", "aiming", "touchdown", "edge", "rubber"]) expect(full.some(item => item.kind === kind)).toBe(true);
+  for (const item of full) {
+    expect(item.rect.every(Number.isFinite)).toBe(true);
+    expect(item.rect[0]).toBeGreaterThanOrEqual(0); expect(item.rect[2]).toBeLessThanOrEqual(1);
+    expect(item.rect[1]).toBeGreaterThanOrEqual(-1); expect(item.rect[3]).toBeLessThanOrEqual(1);
+    expect(item.rect[0]).toBeLessThan(item.rect[2]); expect(item.rect[1]).toBeLessThan(item.rect[3]);
+  }
+  for (const pattern of [full, sparse]) for (const item of pattern) {
+    const [from, left, to, right] = item.rect;
+    // Reversing the selected entrance must not move the physical paint layout.
+    expect(pattern.some(other => other.kind === item.kind && other.rect.every((value, index) =>
+      Math.abs(value - [1 - to, left, 1 - from, right][index]!) < 1e-9))).toBe(true);
+  }
+});
+
+it("uses projected scale for LOD and never changes the physical runway or camera", () => {
+  const near = { ...scene, across: 0, along: 300, height: 51, angle: 0, approach: false };
+  const full = landingRunwayFrame(near, 400, 100), sparse = landingRunwayFrame(near, 400, 100, true);
+  expect(full.projected.detailLod).toBe("full"); expect(sparse.projected.detailLod).toBe("sparse");
+  expect(full.projected.details.length).toBeLessThanOrEqual(64); expect(sparse.projected.details.length).toBeLessThanOrEqual(24);
+  expect(sparse.projected.surface).toEqual(full.projected.surface); expect(sparse.projected.runway).toEqual(full.projected.runway);
+  expect([sparse.focal, sparse.pitch, sparse.roll, sparse.yaw]).toEqual([full.focal, full.pitch, full.roll, full.yaw]);
+  const far = landingRunwayFrame({ ...near, along: 30000, height: 2000 }, 400, 100);
+  expect(far.projected.detailLod).toBe("outline"); expect(far.projected.details).toEqual([]);
+  expect(landingRunwayFrame({ ...near, heightKnown: false }, 400, 100).projected.details).toEqual([]);
+});
+
+it("clips bounded paint quads across both thresholds and extreme attitudes without inventing altitude", () => {
+  for (const along of [-1900, -300, 0, 300, 5000]) for (const angle of [0, 1.5, Math.PI]) for (const roll of [0, Math.PI / 2, Math.PI]) {
+    const frame = landingRunwayFrame({ ...scene, along, across: 0, height: 51, approach: false, angle, roll }, 400, 100);
+    expect(frame.projected.details.length).toBeLessThanOrEqual(64);
+    for (const item of frame.projected.details) {
+      expect(item.points.length).toBeLessThanOrEqual(5); expect(item.points.flat().every(Number.isFinite)).toBe(true);
+      const boundary = frame.projected.surface;
+      for (const point of item.points) {
+        const sides = boundary.map((a, i) => { const b = boundary[(i + 1) % boundary.length]!;
+          return (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]); });
+        expect(sides.every(value => value >= -1e-7) || sides.every(value => value <= 1e-7)).toBe(true);
+      }
+    }
+    expect(frame.projected.rails).toEqual([]); expect(frame.projected.ribbon).toEqual([]);
+  }
 });

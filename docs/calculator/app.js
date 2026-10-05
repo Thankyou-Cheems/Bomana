@@ -6,7 +6,7 @@ import { readableVehicle } from "./vehicle-names.mjs";
 import { presetTitle, presetTotals, presetDiagram, renderPresetRows } from "./loadouts.mjs";
 import { createCombinationCalculator } from "./combination-ui.mjs";
 import { createCustomLoadoutEditor } from "./custom-loadout-ui.mjs";
-import { createLoadoutOptimizer } from "./optimizer-ui.mjs";
+import { createLoadoutOptimizer, createSimScoreEstimator } from "./optimizer-ui.mjs";
 import { combinationTotals } from "./custom-loadouts.mjs";
 import { initAirCalculator } from "./air-ui.mjs";
 import { renderRewardChart, renderConversionChart, renderAirportRepairChart, renderAirportBars } from "./charts.mjs";
@@ -167,6 +167,10 @@ const customEditor = createCustomLoadoutEditor(document.querySelector("#customLo
 const optimizer = createLoadoutOptimizer(document.querySelector("#loadoutOptimizer"), {
   load: loadCustomRules,
   apply: result => result.kind === "custom" ? customEditor.recommend(result.keys) : choosePreset(result.presetId),
+});
+const scoreEstimator = createSimScoreEstimator(document.querySelector("#simScoreEstimator"), {
+  changeRoomBr: value => { selectedRoomBr = value; renderBrOptions(); refreshResult(); },
+  changeScenario: () => refreshResult(),
 });
 let rewardsCatalog = null;
 let rewardSelectedVehicle = "f_15e";
@@ -1120,7 +1124,12 @@ function refreshResult() {
     hp: targetHp(target, tier), fireHp: target.has_fire ? targetHp(target, tier) * (1 - target.fireMultiplier) : null,
     targetLabel: context, preset });
   customEditor.updateHp(targetHp(target, tier));
-  optimizer.update({aircraft, weapons: new Map(catalog.weapons.map(row => [row.id, row])), reward: catalog.reward,
+  const carried = preset?.weapons || (aircraft && weapon && currentWeaponCapacity(aircraft, weapon.id)
+    ? [[weapon.id, currentWeaponCapacity(aircraft, weapon.id)]] : []);
+  const scoreScenario = scoreEstimator.update({aircraft, carried, weapons: new Map(catalog.weapons.map(row => [row.id, row])),
+    reward: catalog.reward, roomMaxBr: selectedRoomBr, brValues: catalog.br_values, targetId: target.id,
+    targetLabel: target.label, hp: targetHp(target, tier), validLoadout: !customPreview || customPreview.validation.valid});
+  optimizer.update({aircraft, scenario: scoreScenario, weapons: new Map(catalog.weapons.map(row => [row.id, row])), reward: catalog.reward,
     threshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : null,
     currentStores: preset?.weapons || [], lockedKeys: customPreview?.lockedKeys ?? (preset?.customName ? preset.keys || [] : [])});
   if (preset && (preset.customName || preset.weapons.length > 1)) {

@@ -1,4 +1,4 @@
-import type { EditionSnapshot } from "./runtime-types";
+import type { EditionSnapshot, StrikeAirfieldModule } from "./runtime-types";
 import { landingPresentation } from "./landing-presentation";
 import type { AngularRange } from "./extension-types";
 
@@ -8,6 +8,8 @@ export interface HeadingGuidance {
   readonly relativeDeg: number;
   readonly toleranceDeg: number;
   readonly bandRanges: readonly AngularRange[];
+  /** Bounded-stale impact geometry is neutral while release readiness refreshes. */
+  readonly impactColor?: string;
   /** Geometric target silhouette, independent of ballistic impact eligibility. */
   readonly areaRangeDeg?: AngularRange;
   readonly areaRangesDeg?: readonly AngularRange[];
@@ -49,6 +51,8 @@ export interface HeadingTapeTargetInput {
   readonly isTarget: boolean;
   readonly friendly?: boolean;
   readonly hostile?: boolean;
+  /** Explicit module identity; ordinary airfields retain their navigation icon. */
+  readonly airfieldModule?: StrikeAirfieldModule;
 }
 
 export interface HeadingTapeTargetMarker extends HeadingTapeTargetInput {
@@ -58,14 +62,22 @@ export interface HeadingTapeTargetMarker extends HeadingTapeTargetInput {
   readonly overlapsZone: boolean;
 }
 
-export type HeadingTargetSymbol = "target" | "aircraft" | "brackets" | "traceback" | "diamond";
+export type HeadingTargetSymbol = "target" | "aircraft" | "brackets" | "traceback" | "diamond" | "runway" | "storage" | "parking" | "dwelling";
 
-export function headingTargetSymbol(kind: HeadingTapeTargetInput["kind"]): HeadingTargetSymbol {
+export function headingTargetSymbol(kind: HeadingTapeTargetInput["kind"], module?: StrikeAirfieldModule): HeadingTargetSymbol {
   if (kind === "zone") return "target";
+  if (kind === "airfield" && (module === "airfield" || module === "storage" || module === "parking" || module === "dwelling")) return module === "airfield" ? "runway" : module;
   if (kind === "airfield") return "aircraft";
   if (kind === "poi") return "brackets";
   if (kind === "traceback") return "traceback";
   return "diamond";
+}
+
+export function headingTargetAirfieldModule(snapshot: EditionSnapshot, target: HeadingGuidance["target"]): StrikeAirfieldModule | undefined {
+  const selection = snapshot.strikeSelection;
+  if (target?.kind !== "airfield_module" || selection?.target?.kind !== "airfield_module" || selection.target.id !== target.id) return undefined;
+  const module = selection.airfieldModule;
+  return headingTargetSymbol("airfield", module) === "aircraft" ? undefined : module;
 }
 
 export function headingTapeMarks(headingDeg: number): readonly HeadingTapeMark[] {

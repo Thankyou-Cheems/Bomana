@@ -1,4 +1,4 @@
-import { rewardUi, requiredCount } from "./model.mjs";
+import { rewardUi, requiredCount, empiricalSimScore, simScoreCalibrations, simScoreRewardParametersSupported } from "./model.mjs";
 import { validateLoadout, previewCustomPreset } from "./custom-loadouts.mjs";
 import { presetTotals } from "./loadouts.mjs";
 import { deliveryGroup, loadoutSimplicity } from "./loadout-simplicity.mjs";
@@ -16,6 +16,15 @@ const isGuidedStrikeWeapon = weapon => Boolean(weapon && (weapon.kind === "missi
 export function preferRecommendation(candidate, current, filters = {}) {
   if (!candidate.preset) return false;
   if (!current.preset) return true;
+  if (candidate.objective === "sim_score" || current.objective === "sim_score") {
+    if (!Number.isFinite(candidate.score)) return false;
+    if (!Number.isFinite(current.score)) return true;
+    if (Math.abs(candidate.score - current.score) > 1e-8) return candidate.score > current.score;
+    for (const field of ["profiles", "types"]) if (candidate.simplicity?.[field] !== current.simplicity?.[field]) return candidate.simplicity[field] < current.simplicity[field];
+    if (candidate.damage !== current.damage) return candidate.damage < current.damage;
+    if (candidate.mass !== current.mass) return candidate.mass < current.mass;
+    return candidate.keys.join(",") < current.keys.join(",");
+  }
   if (candidate.targets !== current.targets) return candidate.targets > current.targets;
   const closeToCap = !filters.strictReward && Math.min(candidate.reward, current.reward) >= (candidate.rewardCap ?? 10) - (filters.rewardTolerance ?? .2) - 1e-8;
   if (!filters.simpleLoadout && (closeToCap || Math.abs(candidate.reward - current.reward) < 1e-8) && candidate.workload && current.workload) {
@@ -51,7 +60,7 @@ function prepare({definition, presets, lockedKeys, weapons, threshold, filters =
     }));
     if (option.excluded) bounds.push(`${option.variable} = 0`);
   }
-  for (const option of options) if (!Number.isFinite(option.damage)) { bounds.push(`${option.variable} = 0`); unknown = true; option.damage = 0; }
+  for (const option of options) if (!Number.isFinite(option.damage) || filters.requireSimScore && option.weapons.some(([id, count]) => count > 0 && (!Number.isFinite(weapons.get(id)?.rewardDmg) || weapons.get(id).rewardDmg < 0))) { bounds.push(`${option.variable} = 0`); unknown = true; option.damage = 0; option.rewardDamage = 0; }
   const damage = options.map(option => [option.variable, option.damage]);
   const rewardDamage = options.map(option => [option.variable, option.rewardDamage]);
   let mass;
@@ -123,6 +132,7 @@ function prepare({definition, presets, lockedKeys, weapons, threshold, filters =
 
 export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
   const {definition, weapons, threshold, mode, reward} = input;
+  if (mode === "sim_score") return optimizeSimScore(input, highs, {timeLimit});
   if (!(threshold > 0) || !supportedReward(reward)) return {status: "unsupported"};
   const model = prepare(input);
   if (model.error) return {status: "infeasible", reason: model.error};
@@ -287,4 +297,126 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
     }
   }
   return output;
+}
+
+// Maximize the empirical score itself. The existing whole-option feasibility
+// model is shared, but neither reward coefficient nor zone count is the objective.
+function optimizeSimScore(input, highs, {timeLimit}) {
+  const {definition, weapons, reward, scenario} = input;
+  if (!scenario || !simScoreRewardParametersSupported(reward) || !supportedReward(reward) ||
+      !Number.isFinite(scenario.remainingHp) || scenario.remainingHp < 0) return {status: "unsupported", objective: "sim_score"};
+  const model = prepare({...input, threshold: Math.max(1, scenario.remainingHp), filters: {...input.filters, requireSimScore: true}});
+  if (model.error) return {status: "infeasible", reason: model.error, objective: "sim_score"};
+  const positive = model.options.filter(option => option.damage > 0);
+  if (!positive.length) return {status: "infeasible", objective: "sim_score", unknown: model.unknown};
+  model.constraints.push(`${expression(model.damage)} >= ${Math.min(...positive.map(option => option.damage))}`);
+  const deadline = performance.now() + timeLimit * 1000;
+  let complete = true, best = null;
+  function solve(terms, direction, extra = []) {
+    const constraints = [...model.constraints, ...extra];
+    const lp = `${direction}\n obj: ${expression(terms)}\nSubject To\n${constraints.map((row, index) => ` c${index}: ${row}`).join("\n")}\nBounds\n${model.bounds.join("\n")}\nBinaries\n${model.binaries.join(" ")}\nEnd`;
+    const result = highs.solve(lp, {output_flag: false, time_limit: Math.max(.01, (deadline - performance.now()) / 1000), mip_rel_gap: 0, mip_abs_gap: 0, mip_feasibility_tolerance: 1e-9});
+    if (!["Optimal", "Infeasible"].includes(result.Status)) complete = false;
+    if (!result.Columns) return {status: result.Status};
+    const chosen = model.options.filter(option => result.Columns[option.variable]?.Primal > .5);
+    return evaluate(chosen, result.Status);
+  }
+  function evaluate(chosen, solverStatus) {
+    const keys = chosen.map(option => option.key ?? option.id);
+    if (!chosen.length || input.lockedKeys.some(key => !keys.includes(key))) return {status: solverStatus};
+    const validation = definition ? validateLoadout(definition, keys) : null;
+    if (validation && !validation.valid) { complete = false; return {status: "Invalid solution"}; }
+    const preset = definition ? previewCustomPreset(definition, {id: "recommendation", name: "推荐挂载", keys}).preset : chosen[0];
+    const estimate = empiricalSimScore({...scenario, carried: preset.weapons, weapons, reward});
+    if (!estimate) return {status: solverStatus};
+    const totals = presetTotals(preset, weapons);
+    const candidate = {status: solverStatus, objective: "sim_score", kind: definition ? "custom" : "preset", presetId: definition ? null : preset.id,
+      preset, keys, score: estimate.score, estimate, damage: estimate.carriedDamage, rewardDamage: estimate.carriedRewardDamage,
+      mass: validation?.mass ?? totals.mass ?? Infinity, simplicity: loadoutSimplicity(preset.weapons, weapons),
+      plan: [preset.weapons.map(row => [...row])], remaining: [], targets: 1, warnings: validation?.warnings || [], unknown: model.unknown};
+    if (preferRecommendation(candidate, best || {})) best = candidate;
+    return {...candidate, solverStatus};
+  }
+  if (!model.options.length || !model.supplies.size) return {status: "infeasible", objective: "sim_score", unknown: model.unknown};
+  if (!definition) {
+    // Native presets are a finite list: compare every eligible complete row,
+    // including equal-score rows with different carried reward damage.
+    for (const option of model.options) if (!option.excluded && option.damage > 0) evaluate([option], "Optimal");
+    return best ? {...best, status: "optimal", scoreUpper: best.score, scoreTolerance: 0}
+      : {status: "infeasible", objective: "sim_score", unknown: model.unknown};
+  }
+  const lower = solve(model.rewardDamage, "Minimize"), upper = solve(model.rewardDamage, "Maximize");
+  if (!best) return {status: complete ? "infeasible" : "unknown", objective: "sim_score", unknown: model.unknown};
+  if (lower.solverStatus !== "Optimal" || upper.solverStatus !== "Optimal") return {...best, status: "feasible", scoreUpper: null};
+  const scale = Math.max(...simScoreCalibrations.map(reference => reference.scale)), hp = scenario.remainingHp;
+  // A proportional damage/reward basis has a tight one-dimensional bound.
+  // This is verified from the eligible options, never assumed for all weapons.
+  const eligible = model.options.filter(option => option.damage > 0 && !option.excluded);
+  const ratio = eligible.find(option => option.rewardDamage > 0)?.damage / eligible.find(option => option.rewardDamage > 0)?.rewardDamage;
+  const proportional = Number.isFinite(ratio) && eligible.every(option => Math.abs(option.damage - ratio * option.rewardDamage) <= 1e-7);
+  const knots = [reward.preset_dmg_min, ...reward.piecewise_linear.map(([x]) => x)];
+  const multiplier = value => rewardUi(reward, value) / reward.ui_decoration;
+  function bound(lo, hi, damageMaximum) {
+    if (proportional) {
+      const values = [lo, hi, hp / ratio, damageMaximum / ratio];
+      for (const knot of knots) values.push(knot, knot - Number.EPSILON * Math.max(1, knot));
+      for (let index = 0; index < reward.piecewise_linear.length - 1; index++) {
+        const [x0, y0] = reward.piecewise_linear[index], [x1, y1] = reward.piecewise_linear[index + 1];
+        const slope = (y1 - y0) / (x1 - x0), intercept = y0 - slope * x0;
+        if (slope < 0) {
+          const vertex = -intercept / (2 * slope);
+          if (vertex >= x0 && vertex <= x1) values.push(vertex);
+        }
+      }
+      return Math.max(...values.filter(value => value >= lo && value <= hi).map(value => scale * Math.min(ratio * value, hp, damageMaximum) * multiplier(value)));
+    }
+    const maxMultiplier = Math.max(...[lo, hi, ...knots.filter(value => value >= lo && value <= hi)].map(multiplier));
+    return scale * Math.min(damageMaximum, hp) * maxMultiplier;
+  }
+  const queue = [{lo: lower.rewardDamage, hi: upper.rewardDamage, bound: Infinity}];
+  let unresolvedUpper = 0;
+  // Bounds are conservative; time-limited results remain visibly feasible.
+  // The 1e-6 point tolerance is far below the two-decimal score presentation.
+  const tolerance = 1e-6;
+  while (queue.length && performance.now() < deadline) {
+    queue.sort((a, b) => b.bound - a.bound);
+    const interval = queue.shift();
+    if (interval.bound <= best.score + tolerance) continue;
+    const extra = [`${expression(model.rewardDamage)} >= ${interval.lo}`, `${expression(model.rewardDamage)} <= ${interval.hi}`];
+    const candidate = solve(model.damage, "Maximize", extra);
+    if (!candidate.preset) { if (candidate.status !== "Infeasible") unresolvedUpper = Math.max(unresolvedUpper, interval.bound); continue; }
+    if (candidate.solverStatus !== "Optimal") { unresolvedUpper = Math.max(unresolvedUpper, interval.bound); break; }
+    const scoreUpper = bound(interval.lo, interval.hi, candidate.damage);
+    if (scoreUpper <= best.score + tolerance) continue;
+    const middle = interval.lo + (interval.hi - interval.lo) / 2;
+    if (!(middle > interval.lo && middle < interval.hi)) { unresolvedUpper = Math.max(unresolvedUpper, scoreUpper); break; }
+    queue.push({lo: interval.lo, hi: middle, bound: scoreUpper}, {lo: middle, hi: interval.hi, bound: scoreUpper});
+  }
+  const scoreUpper = Math.max(best.score, unresolvedUpper, ...queue.map(interval => interval.bound));
+  complete &&= scoreUpper <= best.score + tolerance;
+  if (complete && performance.now() < deadline) {
+    // Refine an equal-score witness and its constant-M region: fewer delivery profiles and
+    // types, then less excess modeled damage and lower mass. Reward preferences
+    // never lower the predicted score in this mode.
+    let tieLow = best.rewardDamage, tieHigh = best.rewardDamage;
+    if (best.rewardDamage <= reward.preset_dmg_min && best.estimate.multiplier === 1) {
+      tieLow = 0; tieHigh = reward.preset_dmg_min;
+    }
+    const points = reward.piecewise_linear;
+    if (best.rewardDamage >= points.at(-1)[0]) { tieLow = points.at(-1)[0]; tieHigh = upper.rewardDamage; }
+    for (let index = 0; index < points.length - 1; index++) if (points[index][1] === points[index + 1][1] &&
+      best.rewardDamage >= points[index][0] && best.rewardDamage <= points[index + 1][0]) {
+      tieLow = Math.min(tieLow, points[index][0]); tieHigh = Math.max(tieHigh, points[index + 1][0]);
+    }
+    const equal = [`${expression(model.rewardDamage)} >= ${tieLow}`, `${expression(model.rewardDamage)} <= ${tieHigh}`,
+      `${expression(model.damage)} ${best.damage >= hp ? ">=" : "="} ${Math.min(best.damage, hp)}`];
+    for (const [terms, field] of [[model.profiles, "profiles"], [model.types, "types"]]) {
+      const result = solve(terms, "Minimize", equal);
+      if (result.preset) equal.push(`${expression(terms)} <= ${result.simplicity[field]}`);
+    }
+    const less = solve(model.damage, "Minimize", equal);
+    if (less.preset) equal.push(`${expression(model.damage)} = ${less.damage}`);
+    solve(model.mass, "Minimize", equal);
+  }
+  return {...best, status: complete ? "optimal" : "feasible", scoreUpper: Number.isFinite(scoreUpper) ? scoreUpper : null, scoreTolerance: tolerance};
 }

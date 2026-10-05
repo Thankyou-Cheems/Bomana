@@ -18,6 +18,44 @@ type Point2 = readonly [number, number];
 export type ProjectedPoint = Point2;
 type Point3 = readonly [number, number, number];
 export type ProjectedSegment = readonly [ProjectedPoint, ProjectedPoint];
+type RunwayDetailLod = "outline" | "sparse" | "full";
+interface RunwayPatternMark {
+  readonly kind: "threshold" | "centerline" | "aiming" | "touchdown" | "edge" | "rubber";
+  /** Forward fractions [0,1] and lateral fractions [-1,1], never measured paint dimensions. */
+  readonly rect: readonly [number, number, number, number];
+}
+
+// War Thunder paved-runway references are recorded in landing-assist.md.
+// Counts and spacing are deliberately schematic; no airport-instance identity,
+// designation number or real-world marking standard is inferred from them.
+function runwayPattern(sparse: boolean): readonly RunwayPatternMark[] {
+  const marks: RunwayPatternMark[] = [];
+  const add = (kind: RunwayPatternMark["kind"], from: number, to: number, cross: number, half: number) => {
+    marks.push(Object.freeze({ kind, rect: Object.freeze([from, cross - half, to, cross + half]) as RunwayPatternMark["rect"] }));
+  };
+  for (const end of [0, 1]) {
+    const pair = (kind: RunwayPatternMark["kind"], from: number, to: number, cross: number, half: number) => {
+      for (const side of [-1, 1]) add(kind, end ? 1 - to : from, end ? 1 - from : to, side * cross, half);
+    };
+    for (const cross of sparse ? [.35, .7] : [.25, .45, .65, .85]) pair("threshold", .014, .042, cross, .035);
+    for (const from of sparse ? [.13] : [.13, .37]) pair("aiming", from, from + .025, .35, .075);
+    if (!sparse) {
+      for (const from of [.075, .21, .28]) pair("touchdown", from, from + .014, .65, .028);
+      pair("rubber", .065, .24, .11, .035);
+    }
+  }
+  const count = sparse ? 8 : 18;
+  for (let i = 0; i < count; i++) {
+    const from = .055 + (i + .225) * .89 / count;
+    add("centerline", from, from + .89 / count * .55, 0, .018);
+  }
+  for (const side of [-1, 1]) add("edge", .005, .995, side * .96, .012);
+  return Object.freeze(marks);
+}
+// Only two tiny immutable vector layouts are built; telemetry never rebuilds
+// a texture or an unbounded collection keyed by runway position or dimensions.
+const runwayPatterns = { full: runwayPattern(false), sparse: runwayPattern(true), outline: Object.freeze([]) };
+export function landingRunwayPattern(lod: RunwayDetailLod): readonly RunwayPatternMark[] { return runwayPatterns[lod]; }
 const radians = Math.PI / 180;
 
 const near = 30;
@@ -134,7 +172,7 @@ export function landingApproachPath(scene: LandingRunwayScene) {
 }
 
 export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(scene.pitch ?? 0), cameraRoll = scene.roll ?? 0, retreat = 0, yaw = 0,
-  options: { simplified?: boolean; floorDrop?: number; path?: ReturnType<typeof landingApproachPath> } = {}) {
+  options: { simplified?: boolean; floorDrop?: number; pixelScale?: number; path?: ReturnType<typeof landingApproachPath> } = {}) {
   const runwayHalfWidth = (scene.width ?? 90) / 2;
   const sin = Math.sin(scene.angle + yaw), cos = Math.cos(scene.angle + yaw);
   const cp = Math.cos(cameraPitch), sp = Math.sin(cameraPitch);
@@ -161,6 +199,27 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
     const across = scene.across + fraction * runwayHalfWidth;
     const stripe = segment(point(scene.along + 25, across, 0), point(scene.along + Math.min(110, scene.length * .08), across, 0));
     if (stripe) markings.push(stripe);
+  }
+  const scale = options.pixelScale ?? 0;
+  const projectedWidthPx = runwaySurface.length ? (Math.max(...runwaySurface.map(p => p[0])) - Math.min(...runwaySurface.map(p => p[0]))) * scale : 0;
+  const detailLod: RunwayDetailLod = scene.heightKnown === false || projectedWidthPx < 8 ? "outline"
+    : options.simplified || projectedWidthPx < 24 ? "sparse" : "full";
+  const details: { readonly kind: RunwayPatternMark["kind"]; readonly points: readonly ProjectedPoint[] }[] = [];
+  for (const mark of landingRunwayPattern(detailLod)) {
+    const [from, left, to, right] = mark.rect;
+    const corners = surface([
+      point(scene.along + from * scene.length, scene.across + left * runwayHalfWidth, 0),
+      point(scene.along + from * scene.length, scene.across + right * runwayHalfWidth, 0),
+      point(scene.along + to * scene.length, scene.across + right * runwayHalfWidth, 0),
+      point(scene.along + to * scene.length, scene.across + left * runwayHalfWidth, 0),
+    ]);
+    let twiceArea = 0;
+    for (let i = 0; i < corners.length; i++) {
+      const a = corners[i]!, b = corners[(i + 1) % corners.length]!;
+      twiceArea += a[0] * b[1] - a[1] * b[0];
+    }
+    // Cull sub-pixel marks instead of fattening their geometry or strobing dots.
+    if (corners.length >= 3 && Math.abs(twiceArea) * scale * scale >= 1) details.push({ kind: mark.kind, points: corners });
   }
   const ground: ProjectedSegment[] = [];
   let groundSurface: ProjectedPoint[] = [];
@@ -223,7 +282,7 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   }
   const bearing = Math.atan2((start[0] + end[0]) / 2, (start[2] + end[2]) / 2);
   const project = (p: Point3): ProjectedPoint | null => p[2] >= 30 ? [p[0] / p[2], p[1] / p[2]] : null;
-  return { runway, entrance, surface: runwaySurface, markings, ground, groundSurface, rails, ribbon, bearing,
+  return { runway, entrance, surface: runwaySurface, markings, details, detailLod, projectedWidthPx, ground, groundSurface, rails, ribbon, bearing,
     threshold: project(start), end: project(end) };
 }
 
@@ -242,7 +301,7 @@ export function landingRunwayFrame(scene: LandingRunwayScene, width: number, hei
   // At the near edge, half the corridor occupies half the window. One focal
   // length then makes every farther cross-section smaller with actual depth.
   const floorDrop = Math.max(1, (height - 6 - y) * (scene.width ?? 90) / width);
-  const projected = projectLandingRunway(scene, pitch, roll, 0, 0, { simplified, floorDrop });
+  const projected = projectLandingRunway(scene, pitch, roll, 0, 0, { simplified, floorDrop, pixelScale: focal });
   return { pitch, roll, retreat: 0, yaw: 0, projected, routeWeight: scene.approach ? 1 : 0,
     focal, x: width / 2, y };
 }

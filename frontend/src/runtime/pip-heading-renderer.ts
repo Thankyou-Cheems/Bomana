@@ -5,6 +5,7 @@ import {
   headingTapeScale,
   headingTapeTargetMarkers,
   headingTargetSymbol,
+  headingTargetAirfieldModule,
   projectHeadingGuidanceRatio,
   type HeadingTapeTargetInput,
   type HeadingTapeTargetMarker,
@@ -14,6 +15,10 @@ import { drawLandingTape, landingTapePresentation, LandingCueMotion, type Landin
 import { TargetCenterMotion } from "./target-center-motion";
 import { canonicalAngularRanges } from "./angular-ranges";
 import { drawBombingZoneSymbol, drawPoiBracketSymbol } from "./navigation-symbols";
+
+/** Enhanced supplies its pictogram painter without pulling private modules into Standard. */
+export type HeadingAirfieldModulePainter = (context: CanvasRenderingContext2D, x: number, y: number,
+  module: NonNullable<HeadingTapeTargetInput["airfieldModule"]>, selected: boolean, unit: number) => void;
 
 /** Move the blue silhouette and its physical anchor together; impact bands stay live. */
 export function displayedTargetGuidance(guidance: ReturnType<typeof headingGuidance>, centerDeg: number): ReturnType<typeof headingGuidance> {
@@ -77,6 +82,7 @@ export class LandingRenderBudget {
 
 export class PictureInPictureHeadingRenderer {
   readonly #guidance: typeof headingGuidance;
+  readonly #drawAirfieldModule: HeadingAirfieldModulePainter | undefined;
   readonly #view: Window;
   readonly #canvas: HTMLCanvasElement;
   #snapshot: EditionSnapshot | null = null;
@@ -98,8 +104,10 @@ export class PictureInPictureHeadingRenderer {
   #targetId = "";
   #extraTargets: readonly HeadingTapeTargetInput[] = [];
 
-  constructor(options: { readonly view: Window; readonly canvas: HTMLCanvasElement; readonly guidance?: typeof headingGuidance }) {
+  constructor(options: { readonly view: Window; readonly canvas: HTMLCanvasElement; readonly guidance?: typeof headingGuidance;
+    readonly drawAirfieldModule?: HeadingAirfieldModulePainter }) {
     this.#guidance = options.guidance ?? headingGuidance;
+    this.#drawAirfieldModule = options.drawAirfieldModule;
     this.#view = options.view;
     this.#canvas = options.canvas;
     this.#landingBudget = new LandingRenderBudget(this.#view.navigator);
@@ -269,6 +277,7 @@ export class PictureInPictureHeadingRenderer {
     const layout = pictureInPictureHeadingLayout(width, height);
     this.#canvas.parentElement?.style.setProperty("--heading-countdown-size", `${layout.countdownFontPx}px`);
     const target = this.#guidance(snapshot).target;
+    const airfieldModule = headingTargetAirfieldModule(snapshot, target);
     const pixelsPerDegree = 8 * layout.visualScale * headingTapeScale(target?.distanceKm ?? 20);
     const centerX = width / 2;
     drawTicks(context, this.#displayHeading, centerX, width, pixelsPerDegree, layout);
@@ -282,6 +291,7 @@ export class PictureInPictureHeadingRenderer {
       isTarget: item.id === target?.id,
       friendly: item.friendly,
       hostile: item.hostile,
+      ...(item.id === target?.id && airfieldModule ? { airfieldModule } : {}),
     }));
     markerTargets.push(...this.#extraTargets);
     if (target && !markerTargets.some((item) => item.id === target.id)) {
@@ -294,6 +304,7 @@ export class PictureInPictureHeadingRenderer {
         isTarget: true,
         friendly: target.kind === "airfield_module" ? false : undefined,
         hostile: target.kind === "airfield_module" ? true : undefined,
+        airfieldModule,
       });
     }
     const markers = headingTapeTargetMarkers(markerTargets);
@@ -301,12 +312,14 @@ export class PictureInPictureHeadingRenderer {
     const occupiedLabels: [number, number][] = [];
     for (const marker of markers) {
       const rawX = centerX + (this.#markerDisplay.get(marker.id)?.step(renderAtMs) ?? marker.relativeDeg) * pixelsPerDegree;
-      const edge = 12 * layout.markerScale;
+      const hasModuleIcon = this.#drawAirfieldModule && marker.kind === "airfield"
+        && headingTargetSymbol(marker.kind, marker.airfieldModule) !== "aircraft";
+      const edge = (hasModuleIcon ? 15 : 12) * layout.markerScale;
       const inView = rawX >= edge && rawX <= width - edge;
       if (!inView && !marker.isTarget && marker.kind !== "airfield") continue;
-      drawMarker(context, marker, clamp(rawX, edge, width - edge), layout, !inView, width, occupiedLabels);
+      drawMarker(context, marker, clamp(rawX, edge, width - edge), layout, !inView, width, occupiedLabels, this.#drawAirfieldModule);
     }
-    drawGuidance(context, guidance, this.#displayGuidance, width, layout, this.#displayTargetCenter);
+    drawGuidance(context, guidance, this.#displayGuidance, width, layout, this.#displayTargetCenter, airfieldModule, this.#drawAirfieldModule);
   }
 }
 
@@ -352,6 +365,7 @@ function drawMarker(
   overflow: boolean,
   width: number,
   occupiedLabels: [number, number][],
+  drawAirfieldModule: HeadingAirfieldModulePainter | undefined,
 ): void {
   const scale = layout.markerScale;
   const y = layout.markerY;
@@ -365,7 +379,18 @@ function drawMarker(
   context.fillStyle = color;
   context.lineWidth = marker.isTarget ? 2 * scale : Math.max(1, scale);
   context.beginPath();
-  if (overflow) {
+  if (drawAirfieldModule && marker.kind === "airfield" && headingTargetSymbol(marker.kind, marker.airfieldModule) !== "aircraft") {
+    // Fit the shared selection glow inside the tape's existing label clearance.
+    drawAirfieldModule(context, x, y, marker.airfieldModule!, marker.isTarget, .55 * scale);
+    if (overflow) {
+      const direction = Math.sign(marker.relativeDeg) || 1;
+      context.beginPath();
+      context.moveTo(x + direction * 13 * scale, y);
+      context.lineTo(x + direction * 8 * scale, y - 3 * scale);
+      context.lineTo(x + direction * 8 * scale, y + 3 * scale);
+      context.closePath(); context.fill();
+    }
+  } else if (overflow) {
     const direction = Math.sign(marker.relativeDeg) || 1;
     context.moveTo(x + direction * 5 * scale, y);
     context.lineTo(x - direction * 4 * scale, y - 6 * scale);
@@ -435,6 +460,8 @@ function drawGuidance(
   width: number,
   layout: PictureInPictureHeadingLayout,
   displayCenterDeg: number,
+  airfieldModule: HeadingTapeTargetInput["airfieldModule"],
+  drawAirfieldModule: HeadingAirfieldModulePainter | undefined,
 ): void {
   guidance = displayedTargetGuidance(guidance, displayCenterDeg);
   const target = guidance.target;
@@ -470,9 +497,9 @@ function drawGuidance(
     const left = centerX + low! * halfTrack, right = centerX + high! * halfTrack;
     if (right - left <= 1e-8) continue;
     const bandHalfHeight = halfHeight * (layer.area ? 1.5 : 1);
-    context.strokeStyle = layer.area ? "#8ec4e1" : "#6de0a3";
+    context.strokeStyle = layer.area ? "#8ec4e1" : guidance.impactColor ?? "#6de0a3";
     context.lineWidth = (layer.area ? 1 : 2) * layout.visualScale;
-    context.fillStyle = layer.area ? "rgba(142,196,225,.16)" : "rgba(109,224,163,.22)";
+    context.fillStyle = layer.area || guidance.impactColor === "#8ec4e1" ? "rgba(142,196,225,.16)" : "rgba(109,224,163,.22)";
     context.fillRect(left, layout.guidanceTrackY - bandHalfHeight, right - left, bandHalfHeight * 2);
     context.beginPath();
     context.moveTo(left, layout.guidanceTrackY - bandHalfHeight);
@@ -489,11 +516,15 @@ function drawGuidance(
     context.fillStyle = "#f2f8fc";
     context.strokeStyle = "#071923";
     context.lineWidth = Math.max(1, layout.visualScale);
-    context.beginPath();
-    context.moveTo(x, tipY);
-    context.lineTo(x - size, tipY - size);
-    context.lineTo(x + size, tipY - size);
-    context.closePath(); context.fill(); context.stroke();
+    if (airfieldModule && drawAirfieldModule) {
+      drawAirfieldModule(context, x, tipY - size, airfieldModule, true, .5 * Math.max(1, layout.visualScale));
+    } else {
+      context.beginPath();
+      context.moveTo(x, tipY);
+      context.lineTo(x - size, tipY - size);
+      context.lineTo(x + size, tipY - size);
+      context.closePath(); context.fill(); context.stroke();
+    }
     context.restore();
   }
   context.strokeStyle = "rgba(142,196,225,.7)";

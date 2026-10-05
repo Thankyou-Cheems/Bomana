@@ -1,3 +1,4 @@
+import { empiricalSimScore } from "./model.mjs";
 import { t, numberLocale, localizeName } from "./i18n.mjs";
 import { presetDiagram, presetZoneAllocations } from "./loadouts.mjs";
 import { validateLoadout } from "./custom-loadouts.mjs";
@@ -28,6 +29,11 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   })).join(" + ");
 
   function reflectControls() {
+    root.dataset.objective = mode;
+    for (const button of root.querySelectorAll("[data-optimizer-mode]")) {
+      button.hidden = button.dataset.optimizerMode !== "sim_score" && context && !context.threshold;
+      button.setAttribute("aria-pressed", String(button.dataset.optimizerMode === mode));
+    }
     const priority = filters.simpleLoadout ? "simple" : filters.strictReward ? "reward" : "balanced";
     const priorities = [...root.querySelectorAll("[data-optimizer-priority]")];
     for (const control of priorities) control.checked = control.value === priority;
@@ -44,6 +50,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       ? t("optimizer.uniformHelp", "优先统一投放特性和弹种，允许降低收益；始终保留手动选择。")
       : filters.strictReward ? t("optimizer.strictRewardHelp", "优先收益系数；收益完全相同时再选择更简单的挂载。")
         : t("optimizer.balancedHelp", "收益系数 ≥ {{floor}} 时优先更省事的投放方案，再减少弹种；其他情况优先收益。", {floor: format((context?.reward.ui_decoration ?? 10) - filters.rewardTolerance)});
+    if (mode === "sim_score") { root.querySelector("[data-optimizer-priority-help]").textContent = t("simScore.objectiveHelp", "严格最大化同一目标剩余 HP、房间 BR 下的全挂载预计分数；已找到的同分候选优先减少投放类型、弹种、多余伤害及质量。收益偏好不降低分数目标。"); return; }
     if (!filters.simpleLoadout) root.querySelector("[data-optimizer-priority-help]").textContent += " " + t("optimizer.guidancePreference", "在收益范围内优先卫星导航，光电补足伤害；按实际投放枚数比较操作负担。");
   }
 
@@ -58,7 +65,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     applyButton.hidden = !next.preset;
     retry.hidden = next.searching || ["optimal", "infeasible"].includes(next.status);
     if (!next.preset) {
-      status.textContent = next.status === "infeasible" ? next.unknown ? t("optimizer-ui.noFeasibleConfigurationAmongWeaponsWithKnownDamage", "已知伤害数据中没有可行方案。") : context.lockedKeys.length ? t("optimizer-ui.noFeasibleCompletionWhileKeepingTheSelectedStores", "保留当前挂载时，没有可行的补齐方案。") : Object.entries(filters).some(([key, value]) => value === true && (key === "onlyGuided" || key.startsWith("no"))) ? t("optimizer.noFeasibleWithFilters", "当前弹药筛选下没有可行方案，可放宽筛选后重试。") : t("optimizer-ui.thisAircraftCannotReachTheBaseBurnOutThreshold", "此机型无法在一架次达到当前战区自毁线。")
+      status.textContent = mode === "sim_score" ? t("simScore.noRecommendation", "当前约束中没有可确认的分数推荐；请检查合法挂载、已知伤害与倍率参数，或继续求解。") : next.status === "infeasible" ? next.unknown ? t("optimizer-ui.noFeasibleConfigurationAmongWeaponsWithKnownDamage", "已知伤害数据中没有可行方案。") : context.lockedKeys.length ? t("optimizer-ui.noFeasibleCompletionWhileKeepingTheSelectedStores", "保留当前挂载时，没有可行的补齐方案。") : Object.entries(filters).some(([key, value]) => value === true && (key === "onlyGuided" || key.startsWith("no"))) ? t("optimizer.noFeasibleWithFilters", "当前弹药筛选下没有可行方案，可放宽筛选后重试。") : t("optimizer-ui.thisAircraftCannotReachTheBaseBurnOutThreshold", "此机型无法在一架次达到当前战区自毁线。")
         : next.status === "unknown" ? t("optimizer-ui.noConfirmedConfigurationFoundYetContinueSearching", "搜索尚未找到可确认的方案，可继续求解。") : t("optimizer-ui.recommendationIncompleteRetry", "推荐暂未完成，请重试。");
       if (next.unknown) output.append(node("p", t("optimizer-ui.someAmmunitionLacksDamageDataAndCannotBeCompared", "部分弹药缺少伤害数据，无法参与比较。"), "optimizer-note"));
       const summary = node("div", null, "optimizer-metrics");
@@ -69,7 +76,12 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     status.textContent = next.searching ? t("optimizer-ui.optimizing", "继续优化中…") : next.status === "optimal" ? t("optimizer-ui.recommendedLoadout", "推荐配置") : t("optimizer-ui.availableConfiguration", "可用配置");
     const metrics = node("div", null, "optimizer-metrics");
     metrics.append(contextNote);
-    metrics.append(node("strong", t("optimizer-ui.bases", "理论可收 {{v0}} 个战区", {v0: next.targets})), node("span", t("optimizer.recommendedReward", "收益系数 {{value}}", {value: format(next.reward)})));
+    if (mode === "sim_score") {
+      metrics.append(node("strong", t("simScore.recommendedScore", "全挂载预计 {{score}} 分", {score: format(next.score)})));
+      explanation.append(node("p", simScoreCoverageText(next.estimate), "optimizer-warning"), node("p", simScoreWarning(), "optimizer-warning"));
+      explanation.append(node("p", t("simScore.source", "校准来源：用户强-5L，8 枚 250-2 全中燃尽生活区，最高 BR10.7，Tab 3230→4038（+808）；仅 1 次记录。"), "optimizer-note"));
+      output.append(node("p", simScoreCoverageText(next.estimate) + " · " + simScoreWarning(), "optimizer-warning"));
+    } else metrics.append(node("strong", t("optimizer-ui.bases", "理论可收 {{v0}} 个战区", {v0: next.targets})), node("span", t("optimizer.recommendedReward", "收益系数 {{value}}", {value: format(next.reward)})));
     metrics.append(actions);
     output.append(metrics);
     if (next.workload) {
@@ -124,12 +136,12 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     row.append(label, diagram); stores.append(row);
     output.append(stores);
     const plan = node("section", null, "optimizer-plan");
-    plan.append(node("h4", t("optimizer.deliveryPlan", "逐战区投放")));
+    plan.append(node("h4", mode === "sim_score" ? t("simScore.deliveryPlan", "全挂载投放至这个目标") : t("optimizer.deliveryPlan", "逐战区投放")));
     const zones = node("ol", null, "optimizer-zone-plan");
     next.plan.forEach((items, index) => {
       const zone = node("li"); zone.dataset.planZone = String(index + 1);
       colorZone(zone, index + 1);
-      zone.append(node("strong", t("optimizer.zonePlan", "战区 {{index}}", {index: index + 1})));
+      zone.append(node("strong", mode === "sim_score" ? t("simScore.oneTarget", "1 个所选目标") : t("optimizer.zonePlan", "战区 {{index}}", {index: index + 1})));
       for (const item of items) {
         const row = node("p", describe([item]));
         row.dataset.weaponId = item[0]; row.dataset.projectileCount = String(item[1]);
@@ -140,7 +152,8 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     plan.append(zones);
     if (next.remaining?.length) plan.append(node("p", t("optimizer.remainingStores", "投放后剩余：{{stores}}", {stores: describe(next.remaining)}), "optimizer-note"));
     output.append(plan);
-    if (next.status !== "optimal") explanation.append(node("p", t("optimizer-ui.rewardCoefficientUpperBound", "收益系数理论上限 {{v0}}{{v1}}。", {v0: format(next.rewardUpper), v1: mode === "targets" ? t("optimizer-ui.baseCountUpperBound", " · 战区数量上限 {{v0}}", {v0: next.targetUpper}) : ""}), "optimizer-note"));
+    if (mode === "sim_score" && next.status !== "optimal") explanation.append(node("p", Number.isFinite(next.scoreUpper) ? t("simScore.scoreUpper", "预计分数理论上限 {{score}}；尚未证明最高，可继续求解。", {score: format(next.scoreUpper)}) : t("simScore.maximumUnproved", "尚未证明最高预计分数，可继续求解。"), "optimizer-note"));
+    if (mode !== "sim_score" && next.status !== "optimal") explanation.append(node("p", t("optimizer-ui.rewardCoefficientUpperBound", "收益系数理论上限 {{v0}}{{v1}}。", {v0: format(next.rewardUpper), v1: mode === "targets" ? t("optimizer-ui.baseCountUpperBound", " · 战区数量上限 {{v0}}", {v0: next.targetUpper}) : ""}), "optimizer-note"));
     const warnings = definition ? validateLoadout(definition, next.keys).warnings : next.warnings;
     if (next.unknown || warnings.length) output.append(node("p", [next.unknown ? t("optimizer-ui.onlyEquipmentWithKnownDamageIsCompared", "仅比较伤害数据已知的装备。") : "", ...warnings].join(" "), "optimizer-note"));
     applyButton.textContent = context.lockedKeys.length ? t("optimizer-ui.fillRemainingStations", "补齐剩余挂点") : t("optimizer-ui.applyRecommendedLoadout", "应用推荐挂载");
@@ -166,18 +179,19 @@ export function createLoadoutOptimizer(root, {load, apply}) {
         worker.terminate(); worker = null; render({status: "error"}, definition);
       };
       worker.postMessage({definition, presets: current.aircraft.presets || [], lockedKeys: current.lockedKeys,
-        weapons: [...current.weapons], reward: current.reward, threshold: current.threshold, mode, filters, timeLimit});
+        weapons: [...current.weapons], reward: current.reward, threshold: current.threshold, scenario: current.scenario, mode, filters, timeLimit});
     } catch {
       if (id === generation) render({status: "error"}, null);
     }
   }
   function update(next, timeLimit = 20) {
     context = next;
+    if (!next.threshold) mode = "sim_score";
     reflectControls();
-    const nextSignature = `${next.aircraft?.id}|${next.aircraft?.presets?.length}|${next.threshold}|${mode}|${JSON.stringify(filters)}|${next.lockedKeys.join(",")}`;
+    const nextSignature = `${next.aircraft?.id}|${next.aircraft?.presets?.length}|${next.threshold}|${mode}|${JSON.stringify(filters)}|${next.lockedKeys.join(",")}|${JSON.stringify(next.scenario)}`;
     if (nextSignature === signature) { if (result) render(result, currentDefinition); return; }
     signature = nextSignature; generation++; clearTimeout(timer); worker?.terminate(); worker = null; result = null;
-    root.hidden = !next.aircraft || !next.threshold;
+    root.hidden = !next.aircraft;
     if (root.hidden) return;
     applyButton.hidden = true; retry.hidden = true; output.replaceChildren(); explanation.replaceChildren(); root.dataset.state = "searching";
     root.dataset.applied = "false";
@@ -220,4 +234,77 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   });
   reflectControls();
   return {update};
+}
+
+export const simScoreWarning = () => t("simScore.warning", "经验模型：仅用一条 +808 分记录校准。假设全部命中、燃烧完成；直接＋燃烧模型伤害按目标剩余 HP 截断。跨机型、弹种、目标或 BR 均为低置信度外推；摧毁额外奖励、SL、RP 未校准。");
+export function simScoreCoverageText(estimate) {
+  const labels = {calibrated_observation: "单条实测条件校准，精度未验证", within_condition_estimate: "同条件模型估算，非独立实测", extrapolated: "低置信度：未实测跨条件外推"};
+  return t(`simScore.coverage.${estimate.coverage}`, labels[estimate.coverage]);
+}
+export function createSimScoreEstimator(root, {changeRoomBr, changeScenario}) {
+  let context, signature = "", delivered = [];
+  const br = root.querySelector("[data-sim-score-br]");
+  const percent = root.querySelector("[data-sim-score-hp]");
+  const rows = root.querySelector("[data-sim-score-rows]");
+  const output = root.querySelector("[data-sim-score-result]");
+  const scenario = () => ({aircraftId: context?.aircraft?.id, targetId: context?.targetId,
+    roomMaxBr: Number(br.value), remainingHp: percent.value === "" ? NaN :
+      Number(percent.value) >= 0 && Number(percent.value) <= 100 ? context?.hp * Number(percent.value) / 100 : NaN});
+  function renderRows() {
+    rows.replaceChildren();
+    for (const [id, count] of context.carried) {
+      const label = node("label", null, "sim-score-delivery");
+      const weapon = context.weapons.get(id);
+      label.append(node("span", t("simScore.deliveredCount", "{{weapon}}：投放 / 命中枚数（携带 {{count}}）", {weapon: localizeName(weapon?.short || weapon?.name || id), count})));
+      const input = node("input"); input.type = "number"; input.min = "0"; input.max = String(count); input.step = "1";
+      input.dataset.simScoreDelivered = id; input.value = String(delivered.find(([weapon]) => weapon === id)?.[1] ?? count);
+      label.append(input); rows.append(label);
+    }
+  }
+  function render() {
+    if (!context) return;
+    output.replaceChildren();
+    const current = scenario();
+    root.querySelector("[data-sim-score-assumption]").textContent = t("simScore.targetAssumption", "1 个所选目标 · {{target}} · 剩余 {{hp}} HP（{{percent}}%）；不计回血，不假设额外目标。", {
+      target: context.targetLabel, hp: Number.isFinite(current.remainingHp) ? format(current.remainingHp) : "—", percent: percent.value || "—"});
+    root.querySelector("[data-sim-score-warning]").textContent = simScoreWarning();
+    const full = context.validLoadout && empiricalSimScore({...current, carried: context.carried, weapons: context.weapons, reward: context.reward});
+    const actual = full && empiricalSimScore({...current, carried: context.carried, delivered, weapons: context.weapons, reward: context.reward});
+    if (!full || !actual) {
+      root.dataset.coverage = "unavailable";
+      output.append(node("p", t("simScore.unavailable", "分数不可估：请选机型与合法挂载，并确认伤害、整套挂载倍率参数、目标 HP 和投放数量有效。缺参数的挂载不参与最高分推荐。"), "optimizer-note"));
+      return;
+    }
+    root.dataset.coverage = actual.coverage;
+    const stats = node("dl", null, "reward-stats");
+    for (const [label, value, attribute] of [[t("simScore.fullLoadScore", "全挂载投放预计分数"), format(full.score), "simScoreFull"],
+      [t("simScore.deliveredScore", "当前投放预计分数"), format(actual.score), "simScoreDeliveredScore"],
+      [t("simScore.acceptedDamage", "当前计入模型伤害"), `${format(actual.acceptedDamage)} HP`, "simScoreDamage"],
+      [t("simScore.carriedMultiplier", "整套携带挂载 M"), actual.multiplier.toLocaleString(numberLocale(), {maximumFractionDigits: 6}), "simScoreMultiplier"]]) {
+      const row = node("div"), dd = node("dd", value); dd.dataset[attribute] = "";
+      row.append(node("dt", label), dd); stats.append(row);
+    }
+    output.append(stats, node("p", simScoreCoverageText(actual), "optimizer-warning"));
+    output.append(node("p", t("simScore.source", "校准来源：用户强-5L，8 枚 250-2 全中燃尽生活区，最高 BR10.7，Tab 3230→4038（+808）；仅 1 次记录。"), "optimizer-note"));
+  }
+  rows.addEventListener("input", event => {
+    const id = event.target.dataset.simScoreDelivered;
+    if (!id) return;
+    const row = delivered.find(([weapon]) => weapon === id);
+    row[1] = event.target.value === "" ? NaN : Number(event.target.value);
+    render();
+  });
+  percent.addEventListener("input", () => { render(); changeScenario(); });
+  br.addEventListener("change", () => changeRoomBr(br.value));
+  root.querySelector("[data-sim-score-full-delivery]").addEventListener("click", () => { delivered = context.carried.map(row => [...row]); renderRows(); render(); });
+  document.addEventListener("calculator:language", () => { if (context) { renderRows(); render(); } });
+  return {scenario, update(next) {
+    const nextSignature = `${next.aircraft?.id}|${JSON.stringify(next.carried)}`;
+    context = next;
+    if (br.options.length !== next.brValues.length) br.replaceChildren(...next.brValues.map(value => new Option(value, value)));
+    br.value = String(next.roomMaxBr);
+    if (nextSignature !== signature) { signature = nextSignature; delivered = next.carried.map(row => [...row]); renderRows(); }
+    render();
+    return scenario();
+  }};
 }
