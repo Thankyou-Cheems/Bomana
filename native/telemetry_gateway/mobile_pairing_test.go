@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -481,6 +482,43 @@ func TestRemoteBridgeRequestsRequireTheActiveMobilePairingToken(t *testing.T) {
 	gateway.ServeHTTP(weaponWriteResponse, weaponWrite)
 	if weaponWriteResponse.Code != http.StatusOK || !strings.Contains(weaponWriteResponse.Body.String(), `"selected_weapon_id":"gbu_39"`) {
 		t.Fatalf("paired weapon write status = %d: %s", weaponWriteResponse.Code, weaponWriteResponse.Body.String())
+	}
+
+	timerRead := httptest.NewRequest(http.MethodGet, "/api/v1/presentation/timer", nil)
+	timerRead = timerRead.WithContext(weaponWrite.Context())
+	timerRead.RemoteAddr = weaponWrite.RemoteAddr
+	timerRead.Header.Set("Origin", testOrigin)
+	timerRead.Header.Set("X-Bomana-Mobile-Pairing", descriptor.PairingToken)
+	timerReadResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(timerReadResponse, timerRead)
+	var timerState timerPresentation
+	if err := json.Unmarshal(timerReadResponse.Body.Bytes(), &timerState); timerReadResponse.Code != http.StatusOK || err != nil {
+		t.Fatalf("paired timer read = %d %s", timerReadResponse.Code, timerReadResponse.Body.String())
+	}
+	if timerState.DesktopPresent {
+		t.Fatal("a phone request must not establish desktop timer authority")
+	}
+	timerBody := fmt.Sprintf(`{"schema_version":1,"epoch":%q,"expected_revision":%d,"timer":{"active":true,"elapsed_sec":0,"cycle_seconds":900,"life_index":1}}`, timerState.Epoch, timerState.Revision)
+	timerWrite := httptest.NewRequest(http.MethodPut, "/api/v1/presentation/timer", strings.NewReader(timerBody))
+	timerWrite = timerWrite.WithContext(timerRead.Context())
+	timerWrite.RemoteAddr = timerRead.RemoteAddr
+	timerWrite.Header = timerRead.Header.Clone()
+	timerWriteResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(timerWriteResponse, timerWrite)
+	if timerWriteResponse.Code != http.StatusOK {
+		t.Fatalf("paired timer write = %d %s", timerWriteResponse.Code, timerWriteResponse.Body.String())
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPut} {
+		unpaired := httptest.NewRequest(method, "/api/v1/presentation/timer", strings.NewReader(timerBody))
+		unpaired = unpaired.WithContext(timerRead.Context())
+		unpaired.RemoteAddr = timerRead.RemoteAddr
+		unpaired.Header.Set("Origin", testOrigin)
+		unpaired.Header.Set("X-Bomana-Mobile-Pairing", "wrong")
+		denied := httptest.NewRecorder()
+		gateway.ServeHTTP(denied, unpaired)
+		if denied.Code != http.StatusUnauthorized {
+			t.Fatalf("unpaired timer %s = %d", method, denied.Code)
+		}
 	}
 
 	wrong := httptest.NewRequest(http.MethodGet, "/api/v1/8111/state", nil)

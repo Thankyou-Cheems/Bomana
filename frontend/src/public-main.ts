@@ -18,6 +18,8 @@ import { WindowClock } from "./runtime/window-clock";
 import { FlightInstruments } from "./runtime/flight-instruments";
 import { FlightStatusPresenter, type FlightStatusPresentation } from "./runtime/flight-status-badges";
 import { SoundCues, SoundCuePreferencesStore, type SoundCuePreset } from "./runtime/sound-cues";
+import { bindSoundCueStatus } from "./runtime/sound-cue-status";
+import { SharedTimerSession } from "./runtime/shared-timer";
 import { applyTheme, readTheme, saveTheme, type WebTheme } from "./runtime/theme-preference";
 import type { DesktopMobilePairingOffer } from "./runtime/mobile-pairing";
 import type { PublicNavigationMap } from "./runtime/public-pip-mini-map";
@@ -37,6 +39,16 @@ const telemetry = new TelemetrySource("", fetch, Date.now, { includeGameChat: fa
 const landingPanel = new LandingPanel(element("landing-slot"), landing => execute({ type: "landing.configure", landing }));
 const soundStore = new SoundCuePreferencesStore();
 const sound = new SoundCues(soundStore.load());
+bindSoundCueStatus(sound, element("connect").parentElement!);
+const timerSyncStatus = document.createElement("small");
+timerSyncStatus.id = "timer-sync-status"; timerSyncStatus.setAttribute("role", "status");
+element("connect").parentElement!.append(timerSyncStatus);
+const timerSession = new SharedTimerSession({ runtime, mobile: document.body.dataset.mobilePaired === "true",
+  onStatus: message => { timerSyncStatus.textContent = message; } });
+window.setInterval(() => { void timerSession.refresh(); renderTimer(timerSession.project(runtime.snapshot())); }, 100);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void timerSession.refresh(true);
+});
 let map: PublicNavigationMap | null = null;
 let pip: PublicPictureInPicture | null = null;
 let instruments: FlightInstruments | null = null;
@@ -112,7 +124,6 @@ on("open-mobile-pairing", () => { void openPairing(false); });
 on("regenerate-mobile-pairing", () => { void openPairing(true); });
 on("generate-mobile-pairing", () => { void generateQR().catch(showError); });
 on("close-mobile-pairing", () => element<HTMLDialogElement>("mobile-pairing-dialog").close());
-document.addEventListener("pointerdown", () => { void sound.enable().catch(showError); }, { once: true });
 document.addEventListener("keydown", (event) => {
   if (event.ctrlKey && event.key.toLowerCase() === "z" && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) && runtime.snapshot().sortieContinuity.resetUndo) {
     event.preventDefault(); execute({ type: "sortie.undo-reset" });
@@ -142,16 +153,13 @@ void fetch("https://bomana.ruikang.wang/app/app-release.json", { cache: "no-stor
 }).catch(() => {});
 
 function render(snapshot: EditionSnapshot): void {
+  snapshot = timerSession.project(snapshot);
   landingPanel.update(snapshot.landing);
   text("status", !snapshot.connected ? "等待 Bridge · 从在线启动器下载并运行" : !latestFrame?.availability.state ? "Bridge 已连接 · 等待游戏出击" : "Bridge 已连接 · 官方 8111 实时数据");
-  const remaining = snapshot.timer.remainingSec;
-  const seconds = remaining === null ? null : Math.max(0, Math.ceil(remaining));
-  text("timer", seconds === null ? "--:--" : `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`);
-  text("timer-cycle", snapshot.timer.cycle === null ? "等待出击" : `第 ${snapshot.timer.cycle} 周期 · ${snapshot.timer.cycleMinutes} 分钟`);
-  element("timer-progress").style.width = `${snapshot.timer.progress * 100}%`;
+  renderTimer(snapshot);
   const undo = snapshot.sortieContinuity.resetUndo;
   element("undo-sortie-reset").hidden = !undo || undo.expiresAtMs <= Date.now();
-  if (edition.channel === "Lite") { sound.update(snapshot); return; }
+  if (edition.channel === "Lite") return;
   text("aircraft", snapshot.flight.aircraft || "等待飞机");
   for (const [id, value] of [["ias-value", snapshot.flight.iasKmh], ["tas-value", snapshot.flight.tasKmh], ["altitude", snapshot.flight.altitudeM], ["heading-value", snapshot.flight.headingDeg]] as const) text(id, Math.round(value).toString());
   if (snapshot.flight.tasObserved === false) text("tas-value", "—");
@@ -187,7 +195,14 @@ function render(snapshot: EditionSnapshot): void {
   text("alerts", snapshot.alerts.join(" · ") || "当前无告警");
   const flightStatus = flightPresenter.update(snapshot);
   latestFlightStatus = flightStatus;
-  instruments?.update(snapshot, flightStatus); map?.update(snapshot, latestFrame?.mapInfo ?? null); pip?.update(snapshot, flightStatus); sound.update(snapshot);
+  instruments?.update(snapshot, flightStatus); map?.update(snapshot, latestFrame?.mapInfo ?? null); pip?.update(snapshot, flightStatus);
+}
+function renderTimer(snapshot: EditionSnapshot): void {
+  const seconds = snapshot.timer.remainingSec === null ? null : Math.max(0, Math.ceil(snapshot.timer.remainingSec));
+  text("timer", seconds === null ? "--:--" : `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`);
+  text("timer-cycle", snapshot.timer.cycle === null ? "等待出击" : `第 ${snapshot.timer.cycle} 周期 · ${snapshot.timer.cycleMinutes} 分钟`);
+  element("timer-progress").style.width = `${snapshot.timer.progress * 100}%`;
+  sound.update(snapshot);
 }
 function currentFlightStatus(snapshot: EditionSnapshot): FlightStatusPresentation {
   if (latestFlightStatus) return latestFlightStatus;
@@ -195,7 +210,10 @@ function currentFlightStatus(snapshot: EditionSnapshot): FlightStatusPresentatio
   latestFlightStatus = status;
   return status;
 }
-function execute(command: EditionCommand): void { void runtime.command(command).then(render).catch(showError); }
+function execute(command: EditionCommand): void {
+  void (command.type === "timer.reset" || command.type === "timer.set-cycle"
+    ? timerSession.command(command) : runtime.command(command)).then(render).catch(showError);
+}
 function selectTarget(id: string): void { if (id) execute({ type: "navigation.select", targetId: id }); }
 function cycleTarget(): void {
   const navigation = runtime.snapshot().navigation;
@@ -205,11 +223,11 @@ function cycleTarget(): void {
   selectTarget(items[(index + 1) % items.length]!.id);
 }
 async function saveSettings(): Promise<void> {
-  await runtime.command({ type: "timer.set-cycle", minutes: Number(element<HTMLInputElement>("cycle-minutes").value) });
+  await timerSession.command({ type: "timer.set-cycle", minutes: Number(element<HTMLInputElement>("cycle-minutes").value) });
   if (edition.capabilities.checklist) await runtime.command({ type: "checklist.set", items: element<HTMLTextAreaElement>("checklist-items").value.split("\n") });
   const theme = element<HTMLSelectElement>("theme-select").value as WebTheme; applyTheme(theme); saveTheme(theme);
   const preferences = sound.configure({ ...sound.preferences, masterEnabled: element<HTMLInputElement>("sound-enabled").checked, timerPreset: element<HTMLSelectElement>("sound-preset").value as SoundCuePreset });
-  soundStore.save(preferences); await sound.enable(); render(runtime.snapshot()); element<HTMLDialogElement>("settings-dialog").close();
+  soundStore.save(preferences); await sound.enable().catch(showError); render(runtime.snapshot()); element<HTMLDialogElement>("settings-dialog").close();
 }
 async function openPairing(forceNew: boolean): Promise<void> {
   if (pairingBusy) return;

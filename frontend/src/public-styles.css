@@ -38,7 +38,12 @@ body[data-mobile-paired=true] .navigation-card { order: -2; }
 body[data-mobile-paired=true] .navigation-card h2 { display: none; }
 body[data-mobile-paired=true] #navigation-map { height: clamp(180px, 48vh, 440px); aspect-ratio: auto; }
 body[data-mobile-paired=true] .timer-card { order: -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-body[data-mobile-paired=true] .timer-card :is(.eyebrow, .mission-progress, #reset-timer) { display: none; }
+body[data-mobile-paired=true] .timer-card :is(.eyebrow, .mission-progress) { display: none; }
+body[data-mobile-paired=true] #reset-timer { font-size: 11px; padding: 5px 8px; }
+.connection:has(#sound-ready) { flex-wrap: wrap; }
+#sound-ready { inline-size: 176px; min-block-size: 32px; max-width: 100%; flex-shrink: 0; }
+#timer-sync-status:empty { display: none; }
+#timer-sync-status { flex-basis: 100%; }
 body[data-mobile-paired=true] #timer { font-size: 24px; }
 body[data-mobile-paired=true] .public-shell { padding-bottom: 58px; }
 

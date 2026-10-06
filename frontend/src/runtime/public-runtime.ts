@@ -209,6 +209,31 @@ export class PublicRuntime {
     return this._lastSnapshot;
   }
 
+  timerPresentation(): import("./runtime-types").TimerPresentationState {
+    const active = this._lifeStartedAtMs !== null && (this._phase === "alive" || this._phase === "loss-pending");
+    return { active, elapsed_sec: active ? Math.max(0, (this._now() - this._lifeStartedAtMs!) / 1000) : 0,
+      cycle_seconds: this._settings.cycleMinutes * 60, life_index: this._lifeIndex };
+  }
+
+  timerPresentationKey(): string {
+    const timer = this.timerPresentation();
+    return `${timer.active}:${timer.active ? this._lifeStartedAtMs : ""}:${timer.life_index}:${timer.cycle_seconds}`;
+  }
+
+  /** Rebase only timer fields; never replay telemetry or start a gameplay life. */
+  rebaseTimerPresentation(timer: import("./runtime-types").TimerPresentationState): void {
+    const nowMs = this._now();
+    if (this._settings.cycleMinutes !== timer.cycle_seconds / 60) {
+      this._settings = { ...this._settings, cycleMinutes: timer.cycle_seconds / 60 };
+      this._settingsStore.save(this._settings);
+    }
+    if (timer.active && (this._phase === "alive" || this._phase === "loss-pending")) {
+      this._lifeStartedAtMs = nowMs - timer.elapsed_sec * 1000;
+      this._lifeIndex = timer.life_index;
+      this._persistTimerCheckpoint(nowMs, true);
+    }
+  }
+
   saveTimerCheckpoint(nowMs = this._now()): void {
     this._persistTimerCheckpoint(nowMs, true);
     this._persistSortieRecovery(nowMs, true);

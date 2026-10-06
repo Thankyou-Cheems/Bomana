@@ -76,6 +76,9 @@ export class SoundCues {
   #context: AudioContext | null = null;
   #preferences: SoundCuePreferences;
   #lastTimerSecond: number | null = null;
+  #timerIdentity = "";
+  #playedThresholds = new Set<number>();
+  readonly #statusListeners = new Set<() => void>();
   #lastOverspeedAtMs = 0;
   #knownDestroyedZones = new Set<string>();
   #airRealistic = false;
@@ -87,19 +90,33 @@ export class SoundCues {
 
   get enabled(): boolean { return this.#preferences.masterEnabled; }
   get preferences(): SoundCuePreferences { return this.#preferences; }
+  get ready(): boolean { return this.#context?.state === "running"; }
+  observeStatus(listener: () => void): () => void {
+    this.#statusListeners.add(listener); listener();
+    return () => { this.#statusListeners.delete(listener); };
+  }
+  #notifyStatus(): void { for (const listener of this.#statusListeners) listener(); }
 
   async enable(): Promise<void> {
-    if (!this.#context) this.#context = new AudioContext();
-    if (this.#context.state === "suspended") await this.#context.resume();
+    if (!this.#context || this.#context.state === "closed") {
+      this.#context = new AudioContext();
+      this.#context.onstatechange = () => this.#notifyStatus();
+    }
+    try {
+      if (!this.ready) await this.#context.resume();
+    } finally { this.#notifyStatus(); }
   }
+  async recover(): Promise<void> { if (this.#context) await this.enable(); }
 
   configure(preferences: SoundCuePreferences): SoundCuePreferences {
     this.#preferences = normalizeSoundCuePreferences(preferences);
+    this.#notifyStatus();
     return this.#preferences;
   }
 
   toggle(): boolean {
     this.#preferences = Object.freeze({ ...this.#preferences, masterEnabled: !this.#preferences.masterEnabled });
+    this.#notifyStatus();
     if (this.#preferences.masterEnabled) this.#tone(988, 40, 0.05);
     return this.#preferences.masterEnabled;
   }
@@ -120,14 +137,26 @@ export class SoundCues {
   update(snapshot: EditionSnapshot, airRealistic = this.#airRealistic): void {
     this.setAirRealistic(airRealistic);
     const remaining = snapshot.timer.remainingSec === null ? null : Math.ceil(snapshot.timer.remainingSec);
+    const identity = `${snapshot.timer.cueIdentity ?? snapshot.timer.lifeIndex ?? ""}:${snapshot.timer.cycle ?? ""}`;
+    if (identity !== this.#timerIdentity) {
+      this.#timerIdentity = identity; this.#lastTimerSecond = null; this.#playedThresholds.clear();
+    }
+    const thresholds = [30, 20, 10, 5, 4, 3, 2, 1];
+    const crossed = remaining === null ? [] : thresholds.filter(threshold => !this.#playedThresholds.has(threshold)
+      && (remaining === threshold || this.#lastTimerSecond !== null
+        && this.#lastTimerSecond > threshold && remaining < threshold));
+    // Coalesce skipped thresholds into one current warning; never replay a burst
+    // after background suspension, or consume the same threshold twice.
+    const warn = crossed.length > 0 && remaining !== null && remaining > 0
+      && (this.#lastTimerSecond === null || this.#lastTimerSecond - remaining <= 3);
+    for (const threshold of crossed) this.#playedThresholds.add(threshold);
     const destroyedZoneIds = new Set(snapshot.destroyedZones.map((zone) => zone.id));
     const newlyDestroyed = [...destroyedZoneIds].some((id) => !this.#knownDestroyedZones.has(id));
-    if (this.#preferences.masterEnabled && this.#context) {
+    if (this.#preferences.masterEnabled && this.ready) {
       if (
         !airRealistic && this.#preferences.timerEnabled
         && remaining !== null
-        && remaining !== this.#lastTimerSecond
-        && [30, 20, 10, 5, 4, 3, 2, 1].includes(remaining)
+        && remaining !== this.#lastTimerSecond && warn
       ) this.#playCue("timer", this.#preferences.timerPreset, remaining);
       const level = snapshot.flight.overspeed.level;
       const interval = level === "critical" ? 550 : level === "warning" ? 1100 : 0;
@@ -166,7 +195,7 @@ export class SoundCues {
 
   #tone(frequency: number, durationMs: number, gainValue: number, delayMs = 0, kind?: CueKind): void {
     const context = this.#context;
-    if (!context) return;
+    if (!context || !this.ready) return;
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     const startsAt = context.currentTime + delayMs / 1000;

@@ -25,6 +25,13 @@ export interface RuntimeSettingsStore {
   save(settings: RuntimeSettings): void;
 }
 
+export interface TimerPresentationState {
+  readonly active: boolean;
+  readonly elapsed_sec: number;
+  readonly cycle_seconds: number;
+  readonly life_index: number;
+}
+
 export interface TimerCheckpoint {
   readonly lifeStartedAtMs: number;
   readonly savedAtMs: number;
@@ -128,6 +135,8 @@ export interface EditionSnapshot {
     } | null;
   };
   readonly timer: {
+    /** Presentation revision distinguishes reset/restore from the same second. */
+    readonly cueIdentity?: string;
     readonly remainingSec: number | null;
     readonly progress: number;
     readonly cycle: number | null;

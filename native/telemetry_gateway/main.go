@@ -271,6 +271,10 @@ func (gateway *relay) ServeHTTP(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	setSecurityHeaders(response)
+	if request.URL.RawQuery == "" && request.URL.Path == "/api/v1/presentation/timer" {
+		gateway.serveTimerPresentation(response, request)
+		return
+	}
 	if request.URL.RawQuery == "" && request.URL.Path == "/api/v1/presentation/weapon-selection" {
 		gateway.serveWeaponSelection(response, request)
 		return
@@ -636,7 +640,7 @@ func (gateway *relay) serveLocalState(response http.ResponseWriter, request *htt
 		_, _ = io.WriteString(response, `{"status":"ok","input":"official-8111-only"}`)
 		return
 	}
-	_, _ = fmt.Fprintf(response, `{"schema_version":1,"bridge_protocol":1,"cache_protocol":%d,"mobile_pairing_protocol":%d,"bridge_version":%q,"app_web_version":%q,"build_provenance":%q,"authenticode":false,"input":"official-8111-only","write_commands":false,"routes":["state","indicators","map-objects","map-info","map-image","icons-font","gamechat","cache-catalog","cache-status","cache-selection","cache-objects","mobile-pairing","presentation-weapon-selection"]}`, cacheProtocol, mobilePairingProtocol, bridgeVersion, appWebVersion, bridgeProvenance)
+	_, _ = fmt.Fprintf(response, `{"schema_version":1,"bridge_protocol":1,"cache_protocol":%d,"mobile_pairing_protocol":%d,"presentation_timer_protocol":1,"bridge_version":%q,"app_web_version":%q,"build_provenance":%q,"authenticode":false,"input":"official-8111-only","write_commands":false,"routes":["state","indicators","map-objects","map-info","map-image","icons-font","gamechat","cache-catalog","cache-status","cache-selection","cache-objects","mobile-pairing","presentation-weapon-selection","presentation-timer"]}`, cacheProtocol, mobilePairingProtocol, bridgeVersion, appWebVersion, bridgeProvenance)
 }
 
 func (gateway *relay) serveWeaponSelection(response http.ResponseWriter, request *http.Request) {

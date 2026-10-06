@@ -1,9 +1,11 @@
 package main
 
 import (
+	"crypto/rand"
 	"errors"
 	"regexp"
 	"sync"
+	"time"
 )
 
 var sharedWeaponID = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
@@ -18,9 +20,17 @@ type presentationState struct {
 	mu               sync.RWMutex
 	revision         uint64
 	selectedWeaponID string
+	timerEpoch       string
+	timerRevision    uint64
+	timer            *timerProjection
+	timerAt          time.Time
+	startedAt        time.Time
+	desktopSeenAt    time.Time
 }
 
-func newPresentationState() *presentationState { return &presentationState{} }
+func newPresentationState() *presentationState {
+	return &presentationState{timerEpoch: rand.Text(), startedAt: time.Now()}
+}
 
 func (state *presentationState) WeaponSelection() weaponSelectionState {
 	state.mu.RLock()
