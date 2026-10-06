@@ -78,9 +78,6 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     metrics.append(contextNote);
     if (mode === "sim_score") {
       metrics.append(node("strong", t("simScore.recommendedScore", "全挂载预计 {{score}} 分", {score: format(next.score)})));
-      explanation.append(node("p", simScoreCoverageText(next.estimate), "optimizer-warning"), node("p", simScoreWarning(), "optimizer-warning"));
-      explanation.append(node("p", t("simScore.source", "校准来源：用户强-5L，8 枚 250-2 全中燃尽生活区，最高 BR10.7，Tab 3230→4038（+808）；仅 1 次记录。"), "optimizer-note"));
-      output.append(node("p", simScoreCoverageText(next.estimate) + " · " + simScoreWarning(), "optimizer-warning"));
     } else metrics.append(node("strong", t("optimizer-ui.bases", "理论可收 {{v0}} 个战区", {v0: next.targets})), node("span", t("optimizer.recommendedReward", "收益系数 {{value}}", {value: format(next.reward)})));
     metrics.append(actions);
     output.append(metrics);
@@ -236,12 +233,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   return {update};
 }
 
-export const simScoreWarning = () => t("simScore.warning", "经验模型：仅用一条 +808 分记录校准。假设全部命中、燃烧完成；直接＋燃烧模型伤害按目标剩余 HP 截断。跨机型、弹种、目标或 BR 均为低置信度外推；摧毁额外奖励、SL、RP 未校准。");
-export function simScoreCoverageText(estimate) {
-  const labels = {calibrated_observation: "单条实测条件校准，精度未验证", within_condition_estimate: "同条件模型估算，非独立实测", extrapolated: "低置信度：未实测跨条件外推"};
-  return t(`simScore.coverage.${estimate.coverage}`, labels[estimate.coverage]);
-}
-export function createSimScoreEstimator(root, {changeRoomBr, changeScenario}) {
+export function createSimScoreEstimator(root, {changeRoomBr, changeScenario, summary}) {
   let context, signature = "", delivered = [];
   const br = root.querySelector("[data-sim-score-br]");
   const percent = root.querySelector("[data-sim-score-hp]");
@@ -265,27 +257,24 @@ export function createSimScoreEstimator(root, {changeRoomBr, changeScenario}) {
     if (!context) return;
     output.replaceChildren();
     const current = scenario();
-    root.querySelector("[data-sim-score-assumption]").textContent = t("simScore.targetAssumption", "1 个所选目标 · {{target}} · 剩余 {{hp}} HP（{{percent}}%）；不计回血，不假设额外目标。", {
-      target: context.targetLabel, hp: Number.isFinite(current.remainingHp) ? format(current.remainingHp) : "—", percent: percent.value || "—"});
-    root.querySelector("[data-sim-score-warning]").textContent = simScoreWarning();
+    summary.replaceChildren();
     const full = context.validLoadout && empiricalSimScore({...current, carried: context.carried, weapons: context.weapons, reward: context.reward});
     const actual = full && empiricalSimScore({...current, carried: context.carried, delivered, weapons: context.weapons, reward: context.reward});
     if (!full || !actual) {
       root.dataset.coverage = "unavailable";
-      output.append(node("p", t("simScore.unavailable", "分数不可估：请选机型与合法挂载，并确认伤害、整套挂载倍率参数、目标 HP 和投放数量有效。缺参数的挂载不参与最高分推荐。"), "optimizer-note"));
+      summary.textContent = t("simScore.unavailable", "暂无估算");
       return;
     }
     root.dataset.coverage = actual.coverage;
+    const fullScore = node("strong", format(full.score));
+    fullScore.dataset.simScoreFull = "";
+    summary.append(node("span", t("simScore.estimatedScore", "预计得分")), fullScore);
     const stats = node("dl", null, "reward-stats");
-    for (const [label, value, attribute] of [[t("simScore.fullLoadScore", "全挂载投放预计分数"), format(full.score), "simScoreFull"],
-      [t("simScore.deliveredScore", "当前投放预计分数"), format(actual.score), "simScoreDeliveredScore"],
-      [t("simScore.acceptedDamage", "当前计入模型伤害"), `${format(actual.acceptedDamage)} HP`, "simScoreDamage"],
-      [t("simScore.carriedMultiplier", "整套携带挂载 M"), actual.multiplier.toLocaleString(numberLocale(), {maximumFractionDigits: 6}), "simScoreMultiplier"]]) {
-      const row = node("div"), dd = node("dd", value); dd.dataset[attribute] = "";
-      row.append(node("dt", label), dd); stats.append(row);
-    }
-    output.append(stats, node("p", simScoreCoverageText(actual), "optimizer-warning"));
-    output.append(node("p", t("simScore.source", "校准来源：用户强-5L，8 枚 250-2 全中燃尽生活区，最高 BR10.7，Tab 3230→4038（+808）；仅 1 次记录。"), "optimizer-note"));
+    const row = node("div"), deliveredScore = node("dd", format(actual.score));
+    deliveredScore.dataset.simScoreDeliveredScore = "";
+    row.append(node("dt", t("simScore.deliveredScore", "当前投放预计分数")), deliveredScore);
+    stats.append(row);
+    output.append(stats);
   }
   rows.addEventListener("input", event => {
     const id = event.target.dataset.simScoreDelivered;

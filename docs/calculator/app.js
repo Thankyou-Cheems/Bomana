@@ -169,6 +169,7 @@ const optimizer = createLoadoutOptimizer(document.querySelector("#loadoutOptimiz
   apply: result => result.kind === "custom" ? customEditor.recommend(result.keys) : choosePreset(result.presetId),
 });
 const scoreEstimator = createSimScoreEstimator(document.querySelector("#simScoreEstimator"), {
+  summary: document.querySelector("#calcScoreSummary"),
   changeRoomBr: value => { selectedRoomBr = value; renderBrOptions(); refreshResult(); },
   changeScenario: () => refreshResult(),
 });

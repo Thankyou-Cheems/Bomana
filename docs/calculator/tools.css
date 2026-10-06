@@ -611,6 +611,8 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-reward { display:flex; align-items:baseline; gap:6px; font-size:12px; color:#638091; }
 .loadout-reward strong { font-size:20px; color:#9a701d; }
 .loadout-reward[hidden] { display:none; }
+.loadout-score { display:flex; align-items:baseline; gap:6px; max-width:100%; font-size:12px; color:#638091; }
+.loadout-score strong { font-size:20px; color:#315f7b; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .loadout-analysis { font-size:11px; color:#77909f; }
 .loadout-analysis > summary { cursor:pointer; }
 .loadout-analysis { margin-left:auto; }
@@ -759,11 +761,12 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
   .optimizer-filter-grid button strong { flex-basis:100%; text-align:left; }
   .optimizer-filter-grid button:first-child strong { flex-basis:auto; }
   .loadout-workspace .hangar-weapon-filters, .loadout-workspace .custom-editor-toolbar, .loadout-workspace .loadout-individual { grid-column:1; justify-self:stretch; }
-  .loadout-workspace .hangar-result-primary strong, .loadout-workspace .hangar-sorties strong, .loadout-reward strong { font-size:18px; }
+  .loadout-workspace .hangar-result-primary strong, .loadout-workspace .hangar-sorties strong, .loadout-reward strong, .loadout-score strong { font-size:18px; }
   .loadout-workspace .aircraft-search-bar, .loadout-workspace .hangar-weapon-filters { flex-basis:100%; }
 }
-.sim-score-panel { grid-column:1 / -1; min-width:0; padding:12px; border:1px solid #c6dbe7; border-radius:8px; background:#f5faff; }
-.sim-score-panel h3 { margin:0 0 6px; font-size:14px; color:#315f7b; }
+.sim-score-panel { grid-column:1 / -1; min-width:0; padding:0; font-size:12px; color:#537990; }
+.sim-score-panel > summary { cursor:pointer; }
+.sim-score-panel[open] > summary { margin-bottom:8px; }
 .sim-score-controls { display:flex; flex-wrap:wrap; gap:8px 18px; }
 .sim-score-controls .hangar-field { flex:1 1 180px; max-width:340px; }
 .sim-score-controls input, .sim-score-delivery input { width:100%; min-height:32px; padding:5px 8px; border:1px solid #c6dbe7; border-radius:6px; font:inherit; background:white; }

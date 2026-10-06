@@ -87,6 +87,7 @@
                 </div>
               </div>
               <div class="loadout-reward" id="calcRewardCard" hidden><strong id="calcRewardCount"></strong><span id="calcRewardLabel"></span></div>
+              <div class="loadout-score" id="calcScoreSummary"><span data-i18n="simScore.unavailable">暂无估算</span></div>
               <div id="calcPresetDetail" hidden>
                 <div class="loadout-row current-preset-row">
                   <div class="loadout-row-name">
@@ -126,17 +127,15 @@
             </div>
             <p class="hangar-hint" id="calcHint"><span data-i18n="page.selectAWeaponForResultsThenAnAircraftFor">选择武器后显示结果；再选机型可计算挂载上限与架次。</span></p>
           </article>
-          <section id="simScoreEstimator" class="sim-score-panel" aria-label="全真经验分数估算" data-i18n-aria-label="simScore.title">
-            <h3 data-i18n="simScore.title">全真经验分数估算</h3>
-            <p class="optimizer-warning" data-sim-score-warning></p>
+          <details id="simScoreEstimator" class="sim-score-panel">
+            <summary data-i18n="simScore.settings">估分设置</summary>
             <div class="sim-score-controls">
-              <label class="hangar-field"><span data-i18n="simScore.roomBr">全真房间最高 BR（精确评分条件）</span><select data-sim-score-br></select></label>
+              <label class="hangar-field"><span data-i18n="simScore.roomBr">全真房间最高 BR</span><select data-sim-score-br></select></label>
               <label class="hangar-field"><span data-i18n="simScore.remainingHp">这个目标的剩余 HP（%）</span><input type="number" min="0" max="100" step="0.1" value="100" data-sim-score-hp></label>
             </div>
-            <p class="optimizer-note" data-sim-score-assumption></p>
             <div data-sim-score-result aria-live="polite"></div>
             <details class="sim-score-delivery-details"><summary data-i18n="simScore.partialDelivery">部分投放：按实际命中数量估算</summary><div data-sim-score-rows></div><button type="button" data-sim-score-full-delivery data-i18n="simScore.resetDelivery">恢复全挂载投放</button></details>
-          </section>
+          </details>
           <section id="loadoutOptimizer" class="optimizer-panel" aria-label="挂载收益推荐" data-i18n-aria-label="page.loadoutRewardRecommendations" hidden>
             <div class="optimizer-heading"><div class="optimizer-heading-label"><h3><span data-i18n="page.rewardRecommendations">挂载收益推荐</span></h3><span class="recommendation-state" data-optimizer-state-label data-i18n="optimizer.notApplied">尚未应用的推荐</span></div><div class="optimizer-modes" role="group" aria-label="推荐目标" data-i18n-aria-label="page.recommendationObjective"><button type="button" data-optimizer-mode="reward" aria-pressed="true"><span data-i18n="page.bestSingleBaseReward">单战区最高收益</span></button><button type="button" data-optimizer-mode="targets" aria-pressed="false"><span data-i18n="page.mostBases">最多战区</span></button><button type="button" data-optimizer-mode="sim_score" aria-pressed="false"><span data-i18n="simScore.highestScore">全真最高预计分数</span></button></div><div class="optimizer-priority" role="radiogroup" aria-label="推荐偏好" data-i18n-aria-label="optimizer.priority">
                   <span class="optimizer-priority-thumb" aria-hidden="true"></span>
