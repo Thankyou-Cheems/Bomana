@@ -1,6 +1,6 @@
 import { empiricalSimScore } from "./model.mjs";
 import { t, numberLocale, localizeName } from "./i18n.mjs";
-import { presetDiagram, presetZoneAllocations } from "./loadouts.mjs";
+import { presetDiagram, presetZoneAllocations, storesTitle } from "./loadouts.mjs";
 import { validateLoadout } from "./custom-loadouts.mjs";
 import { toggleRecommendationFilter, selectRecommendationGuidance, preferredGuidanceMode, normalizeGuidanceSelection, recommendationWeaponExcluded } from "./recommendation-guidance.mjs";
 
@@ -32,9 +32,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   const retry = root.querySelector("[data-optimizer-retry]");
   const actions = root.querySelector(".optimizer-actions");
   const countInput = root.querySelector("[data-optimizer-target-count]");
-  const describe = items => items.map(([id, count]) => t(context.weapons.get(id)?.dmg > 0 ? "optimizer.shotCount" : "optimizer.supportCount", "{{weapon}} ×{{count}}", {
-    weapon: localizeName(context.weapons.get(id)?.short || names[id] || context.weapons.get(id)?.name || id), count,
-  })).join(" + ");
+  const describe = items => storesTitle(items, context.weapons, names);
 
   function reflectControls() {
     root.dataset.objective = mode;
@@ -295,6 +293,7 @@ export function createSimScoreEstimator(root, {changeRoomBr, changeScenario, sum
   const rows = root.querySelector("[data-sim-score-rows]");
   const output = root.querySelector("[data-sim-score-result]");
   const scenario = () => ({aircraftId: context?.aircraft?.id, targetId: context?.targetId,
+    battleMode: "simulator", targetFullHp: context?.hp, destructionThreshold: context?.destructionThreshold,
     roomMaxBr: Number(br.value), remainingHp: percent.value === "" ? NaN :
       Number(percent.value) >= 0 && Number(percent.value) <= 100 ? context?.hp * Number(percent.value) / 100 : NaN});
   function renderRows() {
@@ -321,15 +320,27 @@ export function createSimScoreEstimator(root, {changeRoomBr, changeScenario, sum
       return;
     }
     root.dataset.coverage = actual.coverage;
+    root.dataset.confidence = actual.confidence;
     const fullScore = node("strong", format(full.score));
     fullScore.dataset.simScoreFull = "";
-    summary.append(node("span", t("simScore.estimatedScore", "预计得分")), fullScore);
+    summary.append(node("span", full.scoreKind === "damage_only"
+      ? t("simScore.estimatedDamage", "预计轰炸得分") : t("simScore.estimatedScore", "预计得分")), fullScore);
     const stats = node("dl", null, "reward-stats");
     const row = node("div"), deliveredScore = node("dd", format(actual.score));
     deliveredScore.dataset.simScoreDeliveredScore = "";
-    row.append(node("dt", t("simScore.deliveredScore", "当前投放预计分数")), deliveredScore);
+    row.append(node("dt", actual.scoreKind === "damage_only" ? t("simScore.deliveredDamage", "当前投放轰炸得分")
+      : t("simScore.deliveredScore", "当前投放预计分数")), deliveredScore);
     stats.append(row);
-    output.append(stats);
+    if (current.targetId === "bombing_point_planes") {
+      for (const [key, label, value] of [
+        ["simScoreDamage", t("simScore.damageScore", "轰炸基地"), actual.damageScore],
+        ["simScoreDestruction", t("simScore.destructionScore", "摧毁基地"), actual.destructionScore],
+      ]) {
+        const detail = node("div"), amount = node("dd", value === null ? t("simScore.uncalibratedDestruction", "未校准") : format(value));
+        amount.dataset[key] = ""; detail.append(node("dt", label), amount); stats.append(detail);
+      }
+    }
+    output.append(stats, node("p", t("simScore.modelScope", "经验估算，跨条件精度未知；不计其他奖励。"), "optimizer-note"));
   }
   rows.addEventListener("input", event => {
     const id = event.target.dataset.simScoreDelivered;

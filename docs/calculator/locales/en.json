@@ -862,5 +862,11 @@
   "optimizer.customHelp": "Meet the desired count first, then compare covered bases × whole-loadout coefficient. Spare capacity earns no additional reward. Equal reward prefers less surplus damage, then mass. The uniform-loadout preference still applies.",
   "optimizer.unguidedHelp": "Unguided only automatically selects stores explicitly classified as unguided. Unknown classifications are excluded. Conflicting manual locks are retained and shown.",
   "simScore.moduleHighestScore": "Highest module strike estimate",
-  "simScore.moduleEstimate": "Empirical estimate capped at remaining module HP; assumes all hits and complete burn, excluding regeneration."
+  "simScore.moduleEstimate": "Empirical estimate capped at remaining module HP; assumes all hits and complete burn, excluding regeneration.",
+  "simScore.modelScope": "Empirical estimate; accuracy in other conditions is unknown. Other rewards excluded.",
+  "simScore.estimatedDamage": "Estimated bombing score",
+  "simScore.deliveredDamage": "Current delivery bombing score",
+  "simScore.damageScore": "Base bombing",
+  "simScore.destructionScore": "Base destruction",
+  "simScore.uncalibratedDestruction": "Uncalibrated"
 }

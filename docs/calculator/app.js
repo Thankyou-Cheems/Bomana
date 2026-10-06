@@ -1128,6 +1128,7 @@ function refreshResult() {
     ? [[weapon.id, currentWeaponCapacity(aircraft, weapon.id)]] : []);
   const scoreScenario = scoreEstimator.update({aircraft, carried, weapons: new Map(catalog.weapons.map(row => [row.id, row])),
     reward: catalog.reward, roomMaxBr: selectedRoomBr, brValues: catalog.br_values, targetId: target.id,
+    destructionThreshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : undefined,
     targetLabel: target.label, hp: targetHp(target, tier), validLoadout: !customPreview || customPreview.validation.valid});
   optimizer.update({aircraft, scenario: scoreScenario, weapons: new Map(catalog.weapons.map(row => [row.id, row])), reward: catalog.reward,
     threshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : null,

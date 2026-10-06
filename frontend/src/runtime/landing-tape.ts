@@ -107,7 +107,7 @@ export class LandingCueMotion {
   isMoving(now: number): boolean { return this.#motion.isMoving(now) || [...this.#others.values()].some(motion => motion.isMoving(now)); }
 }
 
-/** Perspective runway, datum ground plane and two heading-tangent approach rails. */
+/** Perspective runway and two heading-tangent approach rails. */
 export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeView, width: number, height: number, cue: LandingRunwayScene | null, others = p.otherRunways, simplified = false): void {
   const pad = Math.max(8, Math.min(20, width * .025));
   const side = Math.max(54, Math.min(125, width * .18));
@@ -166,13 +166,7 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
       text(item.label, x, y - 8, font * .75, color, "center", 65);
     }
   }
-  // Sky stays the instrument background. The ground is a calm datum, not a
-  // saturated fill and not an official map.
   if (projected) {
-    ctx.strokeStyle = "#b7cfc4"; ctx.globalAlpha = .2; ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (const line of projected.ground) { ctx.moveTo(...pixel(line[0])); ctx.lineTo(...pixel(line[1])); }
-    ctx.stroke();
     const rails = projected.rails;
     const ribbon = projected.ribbon;
     ctx.lineWidth = Math.max(1.5, height / 90);

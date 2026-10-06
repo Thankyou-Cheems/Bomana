@@ -862,5 +862,11 @@
   "optimizer.customHelp": "先完成目標數量，再比較實際覆蓋數 × 整套掛載收益係數；多餘容量不計獎。同收益優先減少冗餘傷害、載荷。統一掛載偏好仍生效。",
   "optimizer.unguidedHelp": "「不使用導引」僅自動選擇明確非導引的彈藥；未知分類不參與。手動鎖定衝突會提示並保留。",
   "simScore.moduleHighestScore": "模組單次最高預計分數",
-  "simScore.moduleEstimate": "按模組剩餘 HP 封頂的經驗估算；假設全部命中、燃燒完成，不計回血。"
+  "simScore.moduleEstimate": "按模組剩餘 HP 封頂的經驗估算；假設全部命中、燃燒完成，不計回血。",
+  "simScore.modelScope": "經驗估算，跨條件精度未知；不計其他獎勵。",
+  "simScore.estimatedDamage": "預計轟炸得分",
+  "simScore.deliveredDamage": "目前投放轟炸得分",
+  "simScore.damageScore": "轟炸基地",
+  "simScore.destructionScore": "摧毀基地",
+  "simScore.uncalibratedDestruction": "未校準"
 }

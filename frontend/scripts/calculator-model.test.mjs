@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {readFileSync} from "node:fs";
 import { presetTotals } from "../../docs/calculator/loadouts.mjs";
 
 test("complete preset totals sum mixed stores but preserve unknown damage", () => {
@@ -31,6 +32,21 @@ import {
   usefulActionsCardRate,
   usefulActionsCurve,
 } from "../../docs/calculator/model.mjs";
+
+test('formal .49 British bomb correction changes base completion count and preserves Su-33 capacity', () => {
+  const catalog = JSON.parse(readFileSync(new URL('../../docs/api/v1/calculator/weapons.json', import.meta.url)));
+  assert.equal(catalog.source.version, '2.59.0.49');
+  assert.equal(catalog.source.commit, 'c5d0072c608dbac81e58150dc8e77efcb611a2c8');
+  const weapons = new Map(catalog.weapons.map(weapon => [weapon.id, weapon]));
+  const retarded = weapons.get('uk_540lb_mc_mk2_retarded');
+  assert.equal(retarded.charge.mass_kg, 94);
+  assert.ok(Math.abs(retarded.dmg - 2897.5384615384614) < 1e-9);
+  assert.equal(requiredCount(23310, retarded.dmg), 9);
+  assert.equal(requiredCount(23310, 2960.3076923076924), 8, 'previous explosive input crossed the completion threshold with eight');
+  assert.equal(weapons.get('uk_540lbs').kg, 254.9);
+  const custom = JSON.parse(readFileSync(new URL('../../docs/api/v1/calculator/custom-loadouts.json', import.meta.url)));
+  assert.deepEqual(custom.aircraft.su_33.limits, {maxloadMass:8040,maxloadMassLeftConsoles:3000,maxloadMassRightConsoles:3000,maxDisbalance:1500});
+});
 
 const airportNativeReference = { client_version: "2.57.1.135", pe_sha256: "0".repeat(64),
   hp_condition: "truncate_percent_to_integer", palette_selection: "first_key_greater_or_equal", server_recovery: "unknown" };

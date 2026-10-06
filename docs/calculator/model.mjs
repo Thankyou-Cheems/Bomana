@@ -304,8 +304,10 @@ export function usefulActionsCurve({ mode, vehicleId, minutes, periodMinutes, sl
 }
 
 
-// One user observation calibrates this empirical model. These are exact API
-// identities, not a claim that other aircraft or incendiaries are equivalent.
+// Empirical coefficients supported by the recorded conventional/napalm samples.
+// Neither coefficient nor napalm attribution is a recovered server function.
+export const simScoreDamageScale = .018;
+const simScoreDestructionScale = .009;
 const calibrationReward = Object.freeze({
   preset_dmg_min: 18000,
   preset_dmg_max: 97500,
@@ -325,6 +327,7 @@ export const simScoreCalibrations = Object.freeze([Object.freeze({
   carriedCount: 8,
   deliveredCount: 8,
   damagePerItem: 10860,
+  scoreDamagePerItem: 14500,
   rewardDamagePerItem: 10860,
   acceptedDamage: calibrationDamage,
   reward: calibrationReward,
@@ -332,24 +335,86 @@ export const simScoreCalibrations = Object.freeze([Object.freeze({
   tabBefore: 3230,
   tabAfter: 4038,
   score: 808,
-  scale: 808 / (calibrationDamage * calibrationMultiplier),
+  damageScore: 808, destructionScore: 0, observedTotal: 808,
+  reportedDamageScoreRange: Object.freeze([807, 808]),
+  repeatedObservation: Object.freeze({source: "user_report", exactTrialCount: null,
+    clientVersion: null, roundingMechanism: null, usedForCoefficientCalibration: false}),
+  battleMode: "simulator", targetDestroyed: false,
+  scale: simScoreDamageScale,
   source: Object.freeze({
     kind: "user_battle_record",
-    label: "用户实战记录 · 强-5L / 8 枚 250-2 / 生活区 / 房间最高 BR 10.7 · Tab 3230→4038（+808）",
+    label: "用户实战记录 / 强-5L / 8 枚 250-2 / 生活区未摧毁 / 房间最高 BR 10.7 / 轰炸分 3230→4038（+808），摧毁分 0",
+    confirmation: "user_confirmed_bombing_only_no_destruction",
+    clientVersion: null,
     url: null,
   }),
+})]);
+
+// Separate damage and destruction events from a confirmed solo, full-health
+// Air Simulator base kill. Equal RB/SB HP does not make their scores equal.
+const baseDamage = 12 * 2071;
+const baseMultiplier = rewardUi(calibrationReward, baseDamage) / calibrationReward.ui_decoration;
+export const simBaseScoreCalibrations = Object.freeze([Object.freeze({
+  id: "jh_7_250_3_12_solo_high_br_base/v1",
+  aircraftId: "jh_7", weaponId: "cn_gp_250_3_default", targetId: "bombing_point_planes",
+  minimumRoomBr: 8, targetFullHp: 25900, destructionThreshold: 23310,
+  roomMaxBr: null, roomRangeEvidence: "user_reported_shared_hp_not_shared_score",
+  carriedCount: 12, deliveredCount: 12, damagePerItem: 2071, rewardDamagePerItem: 2071,
+  scoreDamagePerItem: 2071,
+  acceptedDamage: baseDamage, reward: calibrationReward, multiplier: baseMultiplier,
+  score: 367, destructionScore: 183, observedTotal: 550, independentDestruction: true,
+  scale: simScoreDamageScale,
+  source: Object.freeze({kind: "user_battle_record", url: null, clientVersion: null,
+    label: "用户实战记录 · 全真 JH-7 / 12 枚 250-3 / 独立摧毁满血高 BR 战区 · 轰炸 367 + 摧毁 183 = 550"}),
+})]);
+
+// Cumulative damage-score counter, not a 719-point sortie. Unknown hit count
+// makes this comparison evidence unsuitable for fitting full-hit damage scale.
+export const simScoreComparisonObservations = Object.freeze([Object.freeze({
+  id: "jh_7_250_3_12_dwelling_unknown_hits/v1", aircraftId: "jh_7",
+  weaponId: "cn_gp_250_3_default", targetId: "airport_dwelling", carriedCount: 12,
+  deliveredCount: null, initialTargetHealth: "full", counterBefore: 367, counterAfter: 719,
+  score: 352, usableForFullHitCalibration: false,
+  source: Object.freeze({kind: "user_battle_record", url: null,
+    label: "用户实战记录 · JH-7 / 12 枚 250-3 / 满血生活区 · 轰炸累计 367→719（+352），命中数未知、期间无其它轰炸分"}),
+}), Object.freeze({
+  id: "jh_7_250_3_12_repeated_base_counter/v1", aircraftId: "jh_7",
+  weaponId: "cn_gp_250_3_default", targetId: "bombing_point_planes", carriedCount: 12,
+  deliveredCount: null, initialTargetHealth: null, teammateDamage: null,
+  counterBefore: 719, counterAfter: 1086, score: 367,
+  destructionCounterBefore: 183, destructionCounterAfter: 366, destructionScore: 183,
+  totalScore: 550, usableForFullHitCalibration: false,
+  source: Object.freeze({kind: "user_battle_record", url: null,
+    label: "用户同局后续记录 · 挂载未变 / 再炸战区 · 轰炸累计 719→1086（+367），摧毁累计 183→366（+183）；初始满血及队友参与未确认"}),
+}), Object.freeze({
+  id: "jh_7_250_3_single_dwelling_counter/v1", aircraftId: "jh_7",
+  weaponId: "cn_gp_250_3_default", targetId: "airport_dwelling", battleMode: "simulator",
+  deliveredCount: 1, confirmedHits: 1, initialTargetHealth: "full",
+  counterBefore: 2550, counterAfter: 2579, score: 29,
+  followupDeliveredCount: 11, followupConfirmedHits: null,
+  followupCounterAfter: 2902, followupScore: 323, totalDeliveredCount: 12, totalScore: 352,
+  followupOtherScoreEventsExcluded: null,
+  picturedPresetId: "jh_7_bomb250_gp_default", picturedCarriedCount: 12,
+  roomMaxBr: null, usedForCoefficientCalibration: false,
+  source: Object.freeze({kind: "user_battle_record", url: null, clientVersion: null,
+    libraryFileId: "libfile_c1356b404cec8191845185c0c8517628",
+    imageReview: "actual_pixels_reviewed_in_parent_thread_not_this_executor",
+    label: "用户连续记录 / 歼轰-7 02 批次飞豹 / 精确命中满血生活区一枚250-3 / 2550→2579（+29），随后投11枚→2902（+323），合计352；后11枚命中及其它同期得分未单独确认"}),
 })]);
 
 export const simScoreAssumptions = Object.freeze({
   fullHit: true,
   burnComplete: true,
-  damageBasis: "catalog_modeled_direct_plus_burn_damage",
+  model: "empirical_sim_score/v2",
+  damageBasis: "nominal_hp_damage_separate_from_empirical_score_damage",
   multiplierBasis: "whole_carried_loadout_reward_damage",
-  acceptedDamageBasis: "minimum_of_delivered_modeled_damage_and_remaining_target_hp",
+  acceptedDamageBasis: "separate_hp_and_score_caps_observed_solo_base_full_hp_credit",
   empirical: true,
-  observationCount: 1,
+  observationCount: 5,
+  calibrationCount: 2,
+  destructionRewardScope: "exact_observed_solo_base_kill_only",
   uncalibrated: Object.freeze(["bonus", "SL", "RP"]),
-  warning: "经验估算假设投放武器全部命中、燃烧完成；计入伤害不超过目标剩余 HP，倍率始终按整套携带挂载计算。仅有一条 +808 分实测校准，同条件其他数量属于模型估算，跨机型、弹种、目标或房间 BR 属于未实测外推。额外奖励、SL 和 RP 未校准，此模型不是服务器计分公式或命中保证。",
+  warning: "经验估算假设投放武器全部命中，倍率始终按整套携带挂载计算。普通弹得分使用 .018；燃烧弹以原始溅射估计得分伤害，HP 求解仍用原名义伤害并假设燃烧完成，强-5L 的 807–808 分支持此口径但未证实服务器归属。战区仅已记录的完整独立击毁条件计满 HP，分项使用 .018 和 .009；其它摧毁归属、额外奖励、SL 和 RP 未校准。跨条件未实测，不能保证服务器分数或命中。",
 });
 
 const coverageLabels = Object.freeze({
@@ -392,67 +457,102 @@ function sameRewardCurve(reward, reference) {
 }
 
 /**
- * Empirical Air Simulator target-damage score, S = k * acceptedDamage * M.
+ * Empirical Air Simulator score keeps HP solving and score damage separate.
+ * Only an exact observed base kill supplies a destruction reward. Unknown
+ * rewards yield damage-only estimates, not silently fabricated total scores.
  * carried/delivered are [[weaponId, wholeCount]], weapons is the catalog Map.
- * dmg already includes modeled direct + complete burn damage; never apply a
- * fire multiplier again. Unknown damage/reward data excludes the whole loadout.
+ * Napalm scoreDmg is a raw-splash hypothesis, not actual HP damage. Explicitly
+ * unknown score damage excludes the loadout; older ordinary rows use dmg.
  * remainingHp must be explicitly supplied by the caller, including zero.
  */
 export function empiricalSimScore(input = {}) {
   if (!input) return null;
-  const { aircraftId, roomMaxBr, targetId, carried, delivered = carried,
+  const { aircraftId, roomMaxBr, targetId, carried, delivered = carried, battleMode = "simulator",
     weapons, reward, remainingHp } = input;
   if (typeof aircraftId !== "string" || !aircraftId.trim() ||
     typeof targetId !== "string" || !targetId.trim() ||
     !Number.isFinite(roomMaxBr) || roomMaxBr <= 0 ||
     !Number.isFinite(remainingHp) || remainingHp < 0 ||
-    !(weapons instanceof Map) || !simScoreRewardParametersSupported(reward)) return null;
+    !(weapons instanceof Map) || !simScoreRewardParametersSupported(reward) || battleMode !== "simulator") return null;
+  const isBase = targetId === "bombing_point_planes";
+  if (!isBase && !targetId.startsWith("airport_")) return null;
   const carriedCounts = loadoutCounts(carried, false);
   const deliveredCounts = loadoutCounts(delivered, true);
   if (!carriedCounts?.size || !deliveredCounts) return null;
   for (const [id, count] of deliveredCounts) {
     if (!carriedCounts.has(id) || count > carriedCounts.get(id)) return null;
   }
-  let carriedDamage = 0, carriedRewardDamage = 0, deliveredDamage = 0;
+  let carriedDamage = 0, carriedRewardDamage = 0, deliveredDamage = 0, deliveredScoreDamage = 0;
   for (const [id, count] of carriedCounts) {
     const weapon = weapons.get(id);
     if (!Number.isFinite(weapon?.dmg) || weapon.dmg <= 0 ||
       !Number.isFinite(weapon?.rewardDmg) || weapon.rewardDmg < 0 ||
       ["aam", "arm", "ashm"].includes(weapon.role)) return null;
+    const scoreDamage = simScoreDamageOf(weapon);
+    if (!Number.isFinite(scoreDamage) || scoreDamage <= 0) return null;
     carriedDamage += weapon.dmg * count;
     carriedRewardDamage += weapon.rewardDmg * count;
     deliveredDamage += weapon.dmg * (deliveredCounts.get(id) ?? 0);
+    deliveredScoreDamage += scoreDamage * (deliveredCounts.get(id) ?? 0);
   }
-  if (![carriedDamage, carriedRewardDamage, deliveredDamage].every(Number.isFinite)) return null;
+  if (![carriedDamage, carriedRewardDamage, deliveredDamage, deliveredScoreDamage].every(Number.isFinite)) return null;
   const multiplier = rewardUi(reward, carriedRewardDamage) / reward.ui_decoration;
   if (!Number.isFinite(multiplier) || multiplier <= 0) return null;
   const acceptedDamage = Math.min(deliveredDamage, remainingHp);
 
   // Add future exact-identity observations as separate rows. An unmatched
   // request uses the first observation only as explicitly labelled extrapolation.
-  const condition = simScoreCalibrations.find(reference =>
+  const references = isBase ? simBaseScoreCalibrations : simScoreCalibrations;
+  const condition = references.find(reference =>
     reference.aircraftId === aircraftId && reference.targetId === targetId &&
-    reference.roomMaxBr === roomMaxBr && carriedCounts.size === 1 &&
+    (isBase ? roomMaxBr >= reference.minimumRoomBr && input.targetFullHp === reference.targetFullHp &&
+      input.destructionThreshold === reference.destructionThreshold : reference.roomMaxBr === roomMaxBr) && carriedCounts.size === 1 &&
     carriedCounts.has(reference.weaponId) &&
     weapons.get(reference.weaponId).dmg === reference.damagePerItem &&
     weapons.get(reference.weaponId).rewardDmg === reference.rewardDamagePerItem &&
+    simScoreDamageOf(weapons.get(reference.weaponId)) === reference.scoreDamagePerItem &&
     sameRewardCurve(reward, reference.reward));
-  const calibration = condition ?? simScoreCalibrations[0];
-  // This is k * acceptedDamage * M, evaluated relative to the calibration
-  // so its exact 808-point anchor is not lost to binary multiplication order.
-  const score = calibration.score * (acceptedDamage / calibration.acceptedDamage) *
-    (multiplier / calibration.multiplier);
-  if (!Number.isFinite(score)) return null;
+  const calibration = condition ?? references[0];
   const reproducesObservation = condition &&
     carriedCounts.get(condition.weaponId) === condition.carriedCount &&
     deliveredCounts.get(condition.weaponId) === condition.deliveredCount &&
-    acceptedDamage === condition.acceptedDamage;
-  const coverage = reproducesObservation ? "calibrated_observation" :
-    condition ? "within_condition_estimate" : "extrapolated";
+    acceptedDamage === condition.acceptedDamage && (!isBase || remainingHp === condition.targetFullHp);
+  const {targetFullHp, destructionThreshold} = input;
+  const knownTarget = Number.isFinite(targetFullHp) && Number.isFinite(destructionThreshold) &&
+    targetFullHp > 0 && destructionThreshold > 0 && destructionThreshold <= targetFullHp && remainingHp <= targetFullHp;
+  const mayDestroy = knownTarget && deliveredDamage >= Math.max(0, remainingHp - (targetFullHp - destructionThreshold));
+  // Full-HP scoring credit belongs only to the verified complete solo base
+  // conditions; it never changes delivered HP damage or the number solver.
+  const acceptedScoreDamage = isBase && reproducesObservation ? targetFullHp : Math.min(deliveredScoreDamage, remainingHp);
+  const damageScore = simScoreDamageScale * acceptedScoreDamage * multiplier;
+  if (!Number.isFinite(damageScore)) return null;
+  // A threshold predicts destruction, not who receives a server reward. Never
+  // generalize this single observed 183-point event to other aircraft/loadouts.
+  const destructionScore = !isBase ? 0 : reproducesObservation ? simScoreDestructionScale * targetFullHp * multiplier :
+    deliveredDamage === 0 || remainingHp === 0 || knownTarget && !mayDestroy ? 0 : null;
+  const totalScore = destructionScore === null ? null : damageScore + destructionScore;
+  const score = totalScore ?? damageScore;
+  // The base sample's exact room BR/client version was not measured. Matching
+  // the shared HP range reproduces its anchor, not independent score trials.
+  const jhAirportObservation = !isBase && aircraftId === "jh_7" && targetId === "airport_dwelling" &&
+    carriedCounts.size === 1 && carriedCounts.get("cn_gp_250_3_default") === 12 &&
+    weapons.get("cn_gp_250_3_default")?.dmg === 2071 &&
+    weapons.get("cn_gp_250_3_default")?.rewardDmg === 2071 &&
+    simScoreDamageOf(weapons.get("cn_gp_250_3_default")) === 2071 && sameRewardCurve(reward, calibrationReward)
+    ? simScoreComparisonObservations[2] : null;
+  const coverage = condition || jhAirportObservation ? "within_condition_estimate" : "extrapolated";
+  const reference = jhAirportObservation ?? calibration;
   return Object.freeze({
-    score, carriedDamage, carriedRewardDamage, multiplier, deliveredDamage, acceptedDamage,
-    calibrationId: calibration.id, coverage, ...coverageLabels[coverage],
-    source: calibration.source, sourceLabel: calibration.source.label,
+    score, damageScore, destructionScore, totalScore, scoreKind: totalScore === null ? "damage_only" : "total",
+    carriedDamage, carriedRewardDamage, multiplier, deliveredDamage, acceptedDamage,
+    deliveredScoreDamage, acceptedScoreDamage, damageScale: simScoreDamageScale,
+    calibrationId: reference.id, coverage, ...coverageLabels[coverage],
+    source: reference.source, sourceLabel: reference.source.label,
     assumptions: simScoreAssumptions,
   });
+}
+
+export function simScoreDamageOf(weapon) {
+  if (weapon && Object.hasOwn(weapon, "scoreDmg")) return weapon.scoreDmg;
+  return weapon?.damage_model === "napalm_splash_fire" ? null : weapon?.dmg;
 }

@@ -862,5 +862,11 @@
   "optimizer.customHelp": "先完成目标数量，再比较实际覆盖数 × 整套挂载收益系数；多余容量不计奖。同收益优先减少冗余伤害、载荷。统一挂载偏好仍生效。",
   "optimizer.unguidedHelp": "“不使用制导”仅自动选择明确非制导的弹药；未知分类不参与。手动锁定冲突会提示并保留。",
   "simScore.moduleHighestScore": "模块单次最高预计分数",
-  "simScore.moduleEstimate": "按模块剩余 HP 封顶的经验估算；假设全部命中、燃烧完成，不计回血。"
+  "simScore.moduleEstimate": "按模块剩余 HP 封顶的经验估算；假设全部命中、燃烧完成，不计回血。",
+  "simScore.modelScope": "经验估算，跨条件精度未知；不计其他奖励。",
+  "simScore.estimatedDamage": "预计轰炸得分",
+  "simScore.deliveredDamage": "当前投放轰炸得分",
+  "simScore.damageScore": "轰炸基地",
+  "simScore.destructionScore": "摧毁基地",
+  "simScore.uncalibratedDestruction": "未校准"
 }

@@ -1,4 +1,4 @@
-import { rewardUi, requiredCount, empiricalSimScore, simScoreCalibrations, simScoreRewardParametersSupported } from "./model.mjs";
+import { rewardUi, requiredCount, empiricalSimScore, simScoreDamageScale, simScoreDamageOf, simScoreRewardParametersSupported } from "./model.mjs";
 import { validateLoadout, previewCustomPreset } from "./custom-loadouts.mjs";
 import { presetTotals } from "./loadouts.mjs";
 import { deliveryGroup, loadoutSimplicity } from "./loadout-simplicity.mjs";
@@ -9,6 +9,10 @@ import { availableGuidanceModes, guidanceBurden, deliveryWorkload, recommendatio
 // returned option set independently of the optimization model.
 const expression = terms => terms.filter(([, value]) => value !== 0).map(([name, value]) => `${value < 0 ? "-" : "+"} ${Math.abs(value)} ${name}`).join(" ") || "0 zero";
 const damageOf = (items, weapons) => items.reduce((sum, [id, count]) => weapons.get(id)?.dmg > 0 ? sum + weapons.get(id).dmg * count : NaN, 0);
+const scoreDamageOf = (items, weapons) => items.reduce((sum, [id, count]) => {
+  const weapon = weapons.get(id), damage = simScoreDamageOf(weapon);
+  return weapon?.dmg > 0 && Number.isFinite(damage) && damage > 0 ? sum + damage * count : NaN;
+}, 0);
 const rewardDamageOf = (items, weapons) => items.reduce((sum, [id, count]) => sum + (weapons.get(id)?.rewardDmg ?? weapons.get(id)?.dmg ?? 0) * count, 0);
 const forbidden = (option, weapons) => option.cells?.some(cell => ["aam", "arm", "ashm"].includes(cell.role)) || option.weapons.some(([id]) => ["aam", "arm", "ashm"].includes(weapons.get(id)?.role));
 
@@ -53,7 +57,9 @@ function supportedReward(reward) {
 function prepare({definition, presets, lockedKeys, weapons, threshold, filters = {}}) {
   const custom = Boolean(definition);
   const source = custom ? definition.options : presets.filter(preset => !preset.customName);
-  const options = source.map((option, i) => ({...option, variable: `x${i}`, damage: damageOf(option.weapons, weapons), rewardDamage: rewardDamageOf(option.weapons, weapons)}));
+  const options = source.map((option, i) => ({...option, variable: `x${i}`,
+    damage: (filters.requireSimScore ? scoreDamageOf : damageOf)(option.weapons, weapons),
+    nativeDamage: damageOf(option.weapons, weapons), rewardDamage: rewardDamageOf(option.weapons, weapons)}));
   const constraints = [], bounds = ["zero = 0"], binaries = options.map(option => option.variable);
   const add = (terms, relation, value) => constraints.push(`${expression(terms)} ${relation} ${value}`);
   let unknown = false;
@@ -66,6 +72,7 @@ function prepare({definition, presets, lockedKeys, weapons, threshold, filters =
   }
   for (const option of options) if (!Number.isFinite(option.damage) || filters.requireSimScore && option.weapons.some(([id, count]) => count > 0 && (!Number.isFinite(weapons.get(id)?.rewardDmg) || weapons.get(id).rewardDmg < 0))) { bounds.push(`${option.variable} = 0`); unknown = true; option.damage = 0; option.rewardDamage = 0; }
   const damage = options.map(option => [option.variable, option.damage]);
+  const nativeDamage = options.map(option => [option.variable, Number.isFinite(option.nativeDamage) ? option.nativeDamage : 0]);
   const rewardDamage = options.map(option => [option.variable, option.rewardDamage]);
   let mass;
   if (custom) {
@@ -131,7 +138,7 @@ function prepare({definition, presets, lockedKeys, weapons, threshold, filters =
     for (const weapon of variables) add([[weapon, 1], [variable, -1]], "<=", 0);
     add([[variable, 1], ...variables.map(weapon => [weapon, -1])], "<=", 0);
   }
-  return {options, constraints, bounds, binaries, damage, rewardDamage, mass, supplies, effective, types, profiles, unknown, custom, add};
+  return {options, constraints, bounds, binaries, damage, nativeDamage, rewardDamage, mass, supplies, effective, types, profiles, unknown, custom, add};
 }
 
 export function optimizeLoadout(input, highs, {timeLimit = 20, preparedModel} = {}) {
@@ -346,6 +353,9 @@ export function createOptimizerSession(input, highs) {
 // model is shared, but neither reward coefficient nor zone count is the objective.
 function optimizeSimScore(input, highs, {timeLimit}) {
   const {definition, weapons, reward, scenario} = input;
+  // Fixed-HP bases retain reward/count objectives. Unknown destruction rewards
+  // cannot support a proof of highest total-score optimality across loadouts.
+  if (scenario?.targetId === "bombing_point_planes") return {status: "unsupported", objective: "sim_score"};
   if (!scenario || !simScoreRewardParametersSupported(reward) || !supportedReward(reward) ||
       !Number.isFinite(scenario.remainingHp) || scenario.remainingHp < 0) return {status: "unsupported", objective: "sim_score"};
   const model = prepare({...input, threshold: Math.max(1, scenario.remainingHp), filters: {...input.filters, requireSimScore: true}});
@@ -375,6 +385,7 @@ function optimizeSimScore(input, highs, {timeLimit}) {
     const totals = presetTotals(preset, weapons);
     const candidate = {status: solverStatus, objective: "sim_score", kind: definition ? "custom" : "preset", presetId: definition ? null : preset.id,
       preset, keys, score: estimate.score, estimate, damage: estimate.carriedDamage, rewardDamage: estimate.carriedRewardDamage,
+      scoreDamage: estimate.deliveredScoreDamage,
       mass: validation?.mass ?? totals.mass ?? Infinity, simplicity: loadoutSimplicity(preset.weapons, weapons),
       plan: [preset.weapons.map(row => [...row])], remaining: [], targets: 1, warnings: validation?.warnings || [], unknown: model.unknown};
     if (preferRecommendation(candidate, best || {})) best = candidate;
@@ -391,7 +402,7 @@ function optimizeSimScore(input, highs, {timeLimit}) {
   const lower = solve(model.rewardDamage, "Minimize"), upper = solve(model.rewardDamage, "Maximize");
   if (!best) return {status: complete ? "infeasible" : "unknown", objective: "sim_score", unknown: model.unknown};
   if (lower.solverStatus !== "Optimal" || upper.solverStatus !== "Optimal") return {...best, status: "feasible", scoreUpper: null};
-  const scale = Math.max(...simScoreCalibrations.map(reference => reference.scale)), hp = scenario.remainingHp;
+  const scale = simScoreDamageScale, hp = scenario.remainingHp;
   // A proportional damage/reward basis has a tight one-dimensional bound.
   // This is verified from the eligible options, never assumed for all weapons.
   const eligible = model.options.filter(option => option.damage > 0 && !option.excluded);
@@ -429,7 +440,7 @@ function optimizeSimScore(input, highs, {timeLimit}) {
     const candidate = solve(model.damage, "Maximize", extra);
     if (!candidate.preset) { if (candidate.status !== "Infeasible") unresolvedUpper = Math.max(unresolvedUpper, interval.bound); continue; }
     if (candidate.solverStatus !== "Optimal") { unresolvedUpper = Math.max(unresolvedUpper, interval.bound); break; }
-    const scoreUpper = bound(interval.lo, interval.hi, candidate.damage);
+    const scoreUpper = bound(interval.lo, interval.hi, candidate.scoreDamage);
     if (scoreUpper <= best.score + tolerance) continue;
     const middle = interval.lo + (interval.hi - interval.lo) / 2;
     if (!(middle > interval.lo && middle < interval.hi)) { unresolvedUpper = Math.max(unresolvedUpper, scoreUpper); break; }
@@ -452,13 +463,13 @@ function optimizeSimScore(input, highs, {timeLimit}) {
       tieLow = Math.min(tieLow, points[index][0]); tieHigh = Math.max(tieHigh, points[index + 1][0]);
     }
     const equal = [`${expression(model.rewardDamage)} >= ${tieLow}`, `${expression(model.rewardDamage)} <= ${tieHigh}`,
-      `${expression(model.damage)} ${best.damage >= hp ? ">=" : "="} ${Math.min(best.damage, hp)}`];
+      `${expression(model.damage)} ${best.scoreDamage >= hp ? ">=" : "="} ${Math.min(best.scoreDamage, hp)}`];
     for (const [terms, field] of [[model.profiles, "profiles"], [model.types, "types"]]) {
       const result = solve(terms, "Minimize", equal);
       if (result.preset) equal.push(`${expression(terms)} <= ${result.simplicity[field]}`);
     }
-    const less = solve(model.damage, "Minimize", equal);
-    if (less.preset) equal.push(`${expression(model.damage)} = ${less.damage}`);
+    const less = solve(model.nativeDamage, "Minimize", equal);
+    if (less.preset) equal.push(`${expression(model.nativeDamage)} = ${less.damage}`);
     solve(model.mass, "Minimize", equal);
   }
   return {...best, status: complete ? "optimal" : "feasible", scoreUpper: Number.isFinite(scoreUpper) ? scoreUpper : null, scoreTolerance: tolerance};

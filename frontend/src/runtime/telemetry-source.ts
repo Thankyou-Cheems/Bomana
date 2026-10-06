@@ -18,6 +18,8 @@ export interface Observable8111State {
 
 export interface Official8111Frame {
   readonly sampledAtMs: number;
+  /** Local receipt time after all dynamic routes settle; route sample times may differ. */
+  readonly receivedAtMs?: number;
   readonly indicatorsSampledAtMs?: number | null;
   readonly stateSampledAtMs?: number | null;
   readonly mapObjectsSampledAtMs?: number | null;
@@ -143,6 +145,7 @@ export class TelemetrySource {
     signal?.throwIfAborted();
     return this.#applyHoldover(Object.freeze({
       sampledAtMs,
+      receivedAtMs: completedAtMs,
       indicatorsSampledAtMs: indicatorObservation.sampledAtMs,
       stateSampledAtMs: stateObservation.sampledAtMs,
       mapObjectsSampledAtMs: objectsValid ? mapObjectObservation.sampledAtMs : null,

@@ -1,6 +1,6 @@
 import { t, numberLocale, localizeName } from "./i18n.mjs";
 import { customPreset, previewCustomPreset, validateLoadout, combinationTotals, keysFromPreset } from "./custom-loadouts.mjs";
-import { ordnance } from "./loadouts.mjs";
+import { ordnance, storesTitle } from "./loadouts.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
 
 const STORAGE = "bomana.custom-loadouts.v1";
@@ -59,7 +59,7 @@ export function createCustomLoadoutEditor(root, { load, apply, remove, preview }
   function optionName(option) {
     const counts = new Map();
     for (const cell of option.cells) counts.set(cell.weapon, (counts.get(cell.weapon) || 0) + cell.count);
-    return [...counts].map(([id, count]) => `${weapons.get(id)?.short || localizeName(names[id]) || weapons.get(id)?.name || id} ×${count}`).join(" + ");
+    return storesTitle([...counts], weapons, names);
   }
   function appendIcons(container, option) {
     // Each icon already represents its rack/group; use one preview per icon type.

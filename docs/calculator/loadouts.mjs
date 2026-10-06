@@ -1,9 +1,37 @@
-import { t } from "./i18n.mjs";
+import { t, localizeName } from "./i18n.mjs";
+
+function equalParameters(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every(key => Object.hasOwn(b, key) && equalParameters(a[key], b[key]));
+}
+
+function equivalentStores(a, b) {
+  // An equal label alone proves nothing. Compare every exported field except
+  // identity; require known strike parameters before combining different IDs.
+  const known = row => row && [row.kg, row.dmg].every(value => Number.isFinite(value) && value > 0)
+    && Number.isFinite(row.rewardDmg) && Array.isArray(row.guidanceModes) && Object.hasOwn(row, "deliveryProfile");
+  if (!known(a) || !known(b)) return false;
+  const {id: aId, ...aParameters} = a, {id: bId, ...bParameters} = b;
+  return equalParameters(aParameters, bParameters);
+}
+
+export function storesTitle(stores, weapons, names = {}) {
+  const groups = [];
+  for (const [id, count] of stores) {
+    const group = groups.find(([other]) => id === other || equivalentStores(weapons.get(id), weapons.get(other)));
+    if (group) group[1] += count;
+    else groups.push([id, count]);
+  }
+  return groups.map(([id, count]) => `${localizeName(weapons.get(id)?.short || names[id] || weapons.get(id)?.name || id)} ×${count}`).join(" + ");
+}
+
 // Presentation of complete preset rows. Cells are exported from game UI tiers;
 // they are not aircraft geometry or a free-form loadout builder.
 export function presetTitle(preset, weapons) {
-  const contents = preset.weapons.map(([id, count]) => `${weapons.get(id)?.short || weapons.get(id)?.name || id} ×${count}`).join(" + ");
-  return preset.customName ? `${preset.customName} · ${contents || t("loadouts.otherEquipment", "其他装备")}` : contents;
+  const contents = storesTitle(preset.weapons, weapons);
+  return preset.customName ? `${preset.customName}: ${contents || t("loadouts.otherEquipment", "其他装备")}` : contents;
 }
 
 export function presetTotals(preset, weapons) {
