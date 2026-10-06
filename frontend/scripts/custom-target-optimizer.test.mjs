@@ -99,7 +99,11 @@ test('huge requests use the proven bound; invalid counts do not enter the solver
 });
 
 test('guidance tri-state preserves legacy onlyGuided, excludes unknowns and complete mixed rows, and keeps manual conflicts',()=>{
-  assert.deepEqual(normalizeGuidanceSelection({onlyGuided:true,noGuided:true}),{onlyGuided:true,noGuided:false});
+  const restored=normalizeGuidanceSelection({onlyGuided:true,noGuided:true});
+  assert.equal(restored.onlyGuided,true);assert.equal(restored.noGuided,false);
+  assert.equal(restored.noHighDrag,true);assert.equal(restored.noRockets,true);
+  const staleUnguided=normalizeGuidanceSelection({noGuided:true,noLaser:false,noOptical:false,noSatellite:false,noManual:false,noMissiles:false});
+  for(const key of ['noLaser','noOptical','noSatellite','noManual','noMissiles'])assert.equal(staleUnguided[key],true,'Legacy unguided selection repairs contradictory saved child switches');
   assert.equal(normalizeGuidanceSelection({onlyGuided:false}).noGuided,false);
   assert.equal(toggleRecommendationFilter({onlyGuided:true,noGuided:false},'noGuided').onlyGuided,false);
   assert.equal(toggleRecommendationFilter({onlyGuided:false,noGuided:true},'onlyGuided').noGuided,false);

@@ -26,6 +26,9 @@ try {
   await page.waitForFunction(()=>['optimal','feasible','infeasible','invalid'].includes(document.querySelector('#loadoutOptimizer').dataset.state),null,{timeout:35000});
  };
  const text=()=>page.locator('[data-optimizer-result]').textContent();
+ const guidanceFamilies=['noLaser','noOptical','noSatellite','noManual'];
+ const allowed=async key=>page.locator(`[data-optimizer-filter="${key}"]`).getAttribute('aria-checked');
+ const checkFamilies=async value=>{for(const key of guidanceFamilies)assert.equal(await allowed(key),String(value),key);};
  await page.goto(url);await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();
  await page.locator('#calcAircraftSearch').fill('tu_4');await page.locator('[data-aircraft-id="tu_4"]').click();await wait();
  await page.locator('[data-optimizer-mode="custom_targets"]').click();await wait();
@@ -42,11 +45,24 @@ try {
  assert.match(await page.locator('[data-optimizer-status]').textContent(),/正整数/);
  await page.locator('[data-optimizer-target-preset="3"]').click();await wait();assert.equal(await page.locator('[data-optimizer-target-count]').getAttribute('aria-invalid'),'false');
  await page.locator('[data-optimizer-unguided-only]').click();await wait();
+ await checkFamilies(false);assert.equal(await allowed('noMissiles'),'false');
  // Native radio keys move the slider without turning the selected choice off.
  await page.locator('[data-optimizer-unguided-only]').press('ArrowLeft');await wait();
  assert.equal(await page.locator('[data-optimizer-guided-only]').isChecked(),true);
+ await checkFamilies(true);assert.equal(await allowed('noRockets'),'false');assert.equal(await allowed('noHighDrag'),'false');
  await page.locator('[data-optimizer-guided-only]').press('ArrowLeft');await wait();
  assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true);
+ for(const key of [...guidanceFamilies,'noHighDrag','noRockets','noMissiles'])assert.equal(await allowed(key),'true',`Any restores ${key}`);
+ await page.locator('[data-optimizer-guided-only]').click();await wait();
+ await page.locator('[data-optimizer-filter="noRockets"]').click();await wait();
+ assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true,'Allowing rockets updates guided-only');
+ await page.locator('[data-optimizer-unguided-only]').click();await wait();
+ await page.locator('[data-optimizer-filter="noManual"]').click();await wait();
+ assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true,'Allowing manual guidance updates unguided-only');
+ await page.locator('[data-optimizer-filter="noManual"]').click();await wait();
+ assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),true,'Closing the last family updates the selector');
+ await page.locator('[data-optimizer-filter="noMissiles"]').click();await wait();
+ await checkFamilies(true);assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true);
  await page.locator('[data-optimizer-guidance-all]').click();await wait();
  assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true);
  await page.locator('[data-optimizer-unguided-only]').click();await wait();
@@ -89,6 +105,27 @@ try {
  }
  await page.reload();await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
  assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),true,'Guidance selection survives refresh');
+ await checkFamilies(false);assert.equal(await allowed('noMissiles'),'false','Linked switches survive refresh');
+ await page.setViewportSize({width:390,height:1050});
+ await page.locator('[data-calculator-language="zh-CN"]').click();
+ await page.waitForFunction(()=>document.documentElement.lang==='zh-CN'&&!document.querySelector('#calculatorLanguage').hasAttribute('aria-busy'));
+ await page.locator('#calcAircraftSearch').fill('he-177a-5');await page.locator('[data-aircraft-id="he-177a-5"]').click();await wait();
+ await checkFamilies(false);assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),true,'Aircraft changes preserve linked state');
+ await page.locator('[data-optimizer-mode="reward"]').click();await wait();
+ await page.locator('#calcBrSegments [data-value]').first().click();await wait();
+ await page.locator('[data-optimizer-guided-only]').click();await wait();
+ for(const key of ['noLaser','noOptical','noSatellite']){await page.locator(`[data-optimizer-filter="${key}"]`).click();await wait();}
+ assert.equal(await allowed('noManual'),'true');assert.equal(await page.locator('[data-optimizer-guided-only]').isChecked(),true);
+ assert.match(await text(),/Fritz|FX|1400/i,'Native manual-command stores can be recommended');
+ await page.locator('[data-optimizer-filter="noManual"]').click();await wait();
+ assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),true);
+ assert.doesNotMatch(await text(),/Fritz|FX|1400/i,'Automatic recommendations exclude manual-command stores');
+ await page.locator('[data-optimizer-guidance-all]').click();await wait();
+ await checkFamilies(true);
+ await page.locator('[data-optimizer-filter="noManual"]').click();await wait();
+ await page.reload();await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
+ assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true);assert.equal(await allowed('noManual'),'false','Partial family exclusions survive refresh');
+ await page.locator('[data-optimizer-unguided-only]').click();await wait();
  await page.setViewportSize({width:1440,height:1050});
  await page.locator('[data-calculator-language="zh-CN"]').click();
  await page.waitForFunction(()=>document.documentElement.lang==='zh-CN'&&!document.querySelector('#calculatorLanguage').hasAttribute('aria-busy'));
@@ -109,7 +146,7 @@ try {
  await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
  assert.equal(await page.locator('[data-optimizer-guided-only]').isChecked(),true);assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),false);
  assert.deepEqual(errors,[]);
- const receipt={passed:true,switchMilliseconds,workerReusedForN:true,catalogRefetchForN:0,manualFilterConflictPreserved:true,locales:['zh-CN','zh-Hant','en'],widths:[1440,390,320],errors};
+ const receipt={passed:true,switchMilliseconds,workerReusedForN:true,catalogRefetchForN:0,manualFilterConflictPreserved:true,guidanceSwitchesBidirectional:true,manualCommandNativeRecommendation:true,mobileGuidanceInteraction:true,partialFiltersPersist:true,locales:['zh-CN','zh-Hant','en'],widths:[1440,390,320],errors};
  await writeFile('../.artifacts/calculator-ui/custom-target-result.json',JSON.stringify(receipt,null,2)+'\n');
  console.log('Custom target / airport module browser checks passed',JSON.stringify(receipt));
 }finally{await browser.close();server.close();}

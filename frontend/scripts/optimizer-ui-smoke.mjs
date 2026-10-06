@@ -34,7 +34,7 @@ try {
   };
   await waitResult();
   const guidedOnly = page.locator('[data-optimizer-guided-only]');
-  const guidanceFilters = ['noLaser', 'noOptical', 'noSatellite'];
+  const guidanceFilters = ['noLaser', 'noOptical', 'noSatellite', 'noManual'];
   await guidedOnly.click();
   for (const key of guidanceFilters) await page.locator(`[data-optimizer-filter="${key}"]`).click();
   assert.equal(await guidedOnly.isChecked(), false, 'Excluding the last guidance family exits guided-only mode');

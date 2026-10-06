@@ -2,7 +2,7 @@ import { empiricalSimScore } from "./model.mjs";
 import { t, numberLocale, localizeName } from "./i18n.mjs";
 import { presetDiagram, presetZoneAllocations } from "./loadouts.mjs";
 import { validateLoadout } from "./custom-loadouts.mjs";
-import { toggleRecommendationFilter, preferredGuidanceMode, normalizeGuidanceSelection, recommendationWeaponExcluded } from "./recommendation-guidance.mjs";
+import { toggleRecommendationFilter, selectRecommendationGuidance, preferredGuidanceMode, normalizeGuidanceSelection, recommendationWeaponExcluded } from "./recommendation-guidance.mjs";
 
 const node = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -16,7 +16,7 @@ const colorZone = (element, zone) => element.style.setProperty("--zone-hue", Str
 export function createLoadoutOptimizer(root, {load, apply}) {
   let context, mode = "reward", baseMode = "reward", targetCount = 3, signature = "", generation = 0, timer, worker, workerBusy = false, workerContextKey = "", result, names = {};
   let currentDefinition;
-  let filters = {onlyGuided: false, noGuided: false, noHighDrag: false, noRockets: false, noMissiles: false, noLaser: false, noOptical: false, noSatellite: false, simpleLoadout: false, strictReward: false, rewardTolerance: .2};
+  let filters = {onlyGuided: false, noGuided: false, noHighDrag: false, noRockets: false, noMissiles: false, noLaser: false, noOptical: false, noSatellite: false, noManual: false, simpleLoadout: false, strictReward: false, rewardTolerance: .2};
   const storageKey = "bomana:calculator:optimizerFilters";
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
@@ -119,7 +119,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
         const mode = preferredGuidanceMode(context.weapons.get(id), filters) || "unguided";
         modes.set(mode, (modes.get(mode) || 0) + count);
       }
-      const modeNames = {satellite: "全球卫星导航", infrared: "红外", tv: "电视", optical: "光电（类型未细分）", laser: "激光", unguided: "非制导／未分类"};
+      const modeNames = {satellite: "全球卫星导航", infrared: "红外", tv: "电视", optical: "光电（类型未细分）", laser: "激光", manual: "手动指令制导", unguided: "非制导／未分类"};
       const summary = [...modes].map(([mode, count]) => `${t(`optimizer.mode.${mode}`, modeNames[mode])} ×${count}`).join(" + ");
       explanation.append(node("p", t("optimizer.deliveryModes", "投放方案的可用制导方式：{{modes}}", {modes: summary}), "optimizer-note"));
     }
@@ -259,9 +259,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   root.addEventListener("change", event => {
     if (event.target.matches("[data-optimizer-guidance]")) {
       const selection = event.target.dataset.optimizerGuidance;
-      filters.onlyGuided = false;
-      filters.noGuided = false;
-      if (selection !== "any") filters = toggleRecommendationFilter(filters, selection === "guided" ? "onlyGuided" : "noGuided");
+      filters = selectRecommendationGuidance(filters, selection);
       persistFilters();
       reflectControls();
       if (context) update(context);

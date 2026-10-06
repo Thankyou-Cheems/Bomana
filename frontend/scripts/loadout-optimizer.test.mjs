@@ -19,6 +19,28 @@ const option = (tier, id, count = 1, extra = {}) => ({key: `${tier}:${id}`, slot
   cells: [{weapon: id, count, icon: "bombs_small", tier: tier + 1}], requires: [], bans: [], modifications: [], requiredWeapons: [], ...extra});
 const run = (definition, weaponMap, mode = "reward", lockedKeys = [], threshold = 100) => optimizeLoadout({definition, presets: [], lockedKeys, weapons: weaponMap, threshold, mode, reward: catalog.reward}, highs);
 
+test("guidance selection and child switches stay synchronized in either direction", () => {
+  const families = ['noLaser', 'noOptical', 'noSatellite', 'noManual'];
+  let filters = toggleRecommendationFilter({}, 'onlyGuided');
+  assert.equal(filters.noHighDrag, true);
+  assert.equal(filters.noRockets, true);
+  assert.equal(filters.noMissiles, false);
+  for (const key of families) assert.equal(filters[key], false);
+  filters = toggleRecommendationFilter(filters, 'noRockets');
+  assert.equal(filters.onlyGuided, false, 'Allowing unguided rockets leaves guided-only');
+  filters = toggleRecommendationFilter(filters, 'noGuided');
+  for (const key of families) assert.equal(filters[key], true);
+  assert.equal(filters.noMissiles, true);
+  filters = toggleRecommendationFilter(filters, 'noManual');
+  assert.equal(filters.noGuided, false, 'Allowing manual command guidance leaves unguided-only');
+  assert.equal(filters.noManual, false);
+  filters = toggleRecommendationFilter(filters, 'noManual');
+  assert.equal(filters.noGuided, true, 'Closing the last guidance family selects unguided-only');
+  filters = toggleRecommendationFilter(filters, 'noMissiles');
+  assert.equal(filters.noGuided, false);
+  for (const key of families) assert.equal(filters[key], false, 'Enabling missiles restores their guidance families');
+});
+
 test("guided-only recommendations filter complete presets and completions while preserving manual stations", () => {
   const map = new Map([
     ['plain',{kind:'bomb',dmg:100,deliveryProfile:{guidance:'none'}}],
@@ -41,12 +63,13 @@ test("guided-only recommendations filter complete presets and completions while 
   }
 });
 
-test("guidance switches use available multimode routes and cannot leave guided-only with all three excluded", () => {
-  let filters = {onlyGuided:true,noLaser:false,noOptical:false,noSatellite:false};
-  for (const key of ['noLaser','noOptical','noSatellite']) filters = toggleRecommendationFilter(filters,key);
+test("guidance switches use available multimode routes and cannot leave guided-only with all families excluded", () => {
+  let filters = {onlyGuided:true,noLaser:false,noOptical:false,noSatellite:false,noManual:false};
+  for (const key of ['noLaser','noOptical','noSatellite','noManual']) filters = toggleRecommendationFilter(filters,key);
   assert.equal(filters.onlyGuided,false);
   filters = toggleRecommendationFilter(filters,'onlyGuided');
-  assert.deepEqual(filters,{onlyGuided:true,noGuided:false,noLaser:false,noOptical:false,noSatellite:false});
+  assert.equal(filters.onlyGuided,true);assert.equal(filters.noGuided,false);
+  for (const key of ['noLaser','noOptical','noSatellite','noManual']) assert.equal(filters[key],false);
   const dual = {guidanceModes:['satellite','infrared']};
   assert.deepEqual(availableGuidanceModes(dual,{noSatellite:true}),['infrared']);
   assert.equal(guidanceExcluded(dual,{noOptical:true}),false);
@@ -55,6 +78,30 @@ test("guidance switches use available multimode routes and cannot leave guided-o
   assert.equal(guidanceBurden(dual,{noOptical:true}),0);
   assert.equal(preferredGuidanceMode(dual,{noSatellite:true}),'infrared');
   assert.equal(preferredGuidanceMode(dual,{noOptical:true}),'satellite');
+});
+
+test("manual command guidance uses native evidence and every recommendation objective respects the same exclusions", () => {
+  for (const id of ['de_fx1400','su_kh_23m','us_agm_12b_bullpup']) assert.deepEqual(weapons.get(id).guidanceModes,['manual'],id);
+  const fritz=weapons.get('de_fx1400');
+  assert.equal(fritz.deliveryProfile.guidance,'manual');
+  assert.notEqual(deliveryGroup('manual',fritz),deliveryGroup('plain',{...fritz,guidanceModes:[],deliveryProfile:{...fritz.deliveryProfile,guidance:'none'}}),'Uniform-loadout preferences distinguish manual steering from unguided delivery');
+  assert.equal(weapons.get('su_9m114').guidanceModes.includes('manual'),false,'SACLOS is not manual steering');
+  const manual={kind:'missile',dmg:110,rewardDmg:110,guidanceModes:['manual']};
+  const plain={kind:'bomb',dmg:100,rewardDmg:100,deliveryProfile:{guidance:'none'}};
+  assert.equal(guidanceExcluded(manual,{noManual:true}),true);
+  assert.equal(guidanceExcluded({kind:'missile',guidanceModes:[]},{noManual:true}),true,'Unknown family cannot bypass a category exclusion');
+  assert.deepEqual(availableGuidanceModes({guidanceModes:['unrecognized']},{}),[]);
+  assert.equal(preferredGuidanceMode(manual,{}),'manual');
+  const map=new Map([['manual',manual],['plain',plain]]);
+  const presets=['manual','plain'].map(id=>({id,weapons:[[id,1]],columns:1,cells:[],mass:1}));
+  for(const mode of ['reward','targets','custom_targets','sim_score']){
+    const result=optimizeLoadout({presets,lockedKeys:[],weapons:map,threshold:100,targetCount:1,mode,reward:catalog.reward,
+      scenario:{aircraftId:'test',targetId:'airport_dwelling',roomMaxBr:10.7,remainingHp:100},filters:{noManual:true}},highs);
+    assert.equal(result.preset.id,'plain',mode);
+  }
+  const definition={columns:2,center:[],limits,options:[option(0,'manual'),option(1,'plain')]};
+  const result=optimizeLoadout({definition,presets:[],lockedKeys:['0:manual'],weapons:map,threshold:200,mode:'reward',reward:catalog.reward,filters:{noManual:true}},highs);
+  assert.deepEqual(result.keys,['0:manual','1:plain'],'Manual station locks survive category exclusions');
 });
 
 test("fixed-target recommendations combine coordinate weapons with IR top-up and keep TV as a fallback", () => {
