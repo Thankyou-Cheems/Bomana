@@ -501,6 +501,8 @@
     "frontend/scripts/copy-calculator-solver.mjs",
     "frontend/scripts/custom-loadout-ui-smoke.mjs",
     "frontend/scripts/custom-loadouts.test.mjs",
+    "frontend/scripts/custom-target-optimizer.test.mjs",
+    "frontend/scripts/custom-target-ui-smoke.mjs",
     "frontend/scripts/landing-visibility.mjs",
     "frontend/scripts/loadout-optimizer.test.mjs",
     "frontend/scripts/mobile-pairing-smoke.mjs",

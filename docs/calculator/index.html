@@ -88,6 +88,25 @@
               </div>
               <div class="loadout-reward" id="calcRewardCard" hidden><strong id="calcRewardCount"></strong><span id="calcRewardLabel"></span></div>
               <div class="loadout-score" id="calcScoreSummary"><span data-i18n="simScore.unavailable">暂无估算</span></div>
+            <section class="hangar-picker aircraft-toolbar" aria-labelledby="aircraft-picker-title">
+              <header class="hangar-picker-head">
+                <div><h2 id="aircraft-picker-title"><span data-i18n="page.aircraft">机型</span></h2></div>
+                <div class="hangar-selection" id="calcAircraftSelection"><strong><span data-i18n="page.anyAircraft">不限机型</span></strong><span><span data-i18n="page.calculateByWeapon">按武器计算</span></span></div>
+              </header>
+              <div class="aircraft-search-bar">
+                <label class="hangar-search">
+                  <span class="sr-only"><span data-i18n="page.searchAircraft">搜索机型</span></span>
+                  <input id="calcAircraftSearch" type="search" autocomplete="off" placeholder="搜索机型、拼音，如 F-15E、taif" data-i18n-placeholder="page.searchAircraftOrPinyinEGF15E">
+                </label>
+                <div class="aircraft-filter-group" role="group" aria-label="机型选项" data-i18n-aria-label="page.aircraftOptions">
+                  <button class="filter-chip" id="calcAircraftClear" type="button" aria-pressed="true"><span data-i18n="page.anyAircraft2">不限机型</span></button>
+                  <button class="filter-chip" id="calcCustomOnly" type="button" aria-pressed="false" aria-label="仅显示支持自定义挂载的机型" data-i18n-aria-label="page.showOnlyAircraftSupportingCustomLoadouts"><span data-i18n="page.customLoadoutsOnly">仅支持自定义</span> <span id="calcCustomCount"></span></button>
+                </div>
+              </div>
+              <div id="calcAircraftList" class="hangar-weapon-list hangar-aircraft-list" role="listbox" aria-label="机型搜索结果" data-i18n-aria-label="page.aircraftSearchResults" tabindex="0">
+                <p class="hangar-weapon-empty"><span data-i18n="page.searchByNamePinyinOrInitialsEGTaif">支持名称、拼音和首字母，如 taif、j10。</span></p>
+              </div>
+            </section>
               <div id="calcPresetDetail" hidden>
                 <div class="loadout-row current-preset-row">
                   <div class="loadout-row-name">
@@ -137,16 +156,21 @@
             <details class="sim-score-delivery-details"><summary data-i18n="simScore.partialDelivery">部分投放：按实际命中数量估算</summary><div data-sim-score-rows></div><button type="button" data-sim-score-full-delivery data-i18n="simScore.resetDelivery">恢复全挂载投放</button></details>
           </details>
           <section id="loadoutOptimizer" class="optimizer-panel" aria-label="挂载收益推荐" data-i18n-aria-label="page.loadoutRewardRecommendations" hidden>
-            <div class="optimizer-heading"><div class="optimizer-heading-label"><h3><span data-i18n="page.rewardRecommendations">挂载收益推荐</span></h3><span class="recommendation-state" data-optimizer-state-label data-i18n="optimizer.notApplied">尚未应用的推荐</span></div><div class="optimizer-modes" role="group" aria-label="推荐目标" data-i18n-aria-label="page.recommendationObjective"><button type="button" data-optimizer-mode="reward" aria-pressed="true"><span data-i18n="page.bestSingleBaseReward">单战区最高收益</span></button><button type="button" data-optimizer-mode="targets" aria-pressed="false"><span data-i18n="page.mostBases">最多战区</span></button><button type="button" data-optimizer-mode="sim_score" aria-pressed="false"><span data-i18n="simScore.highestScore">全真最高预计分数</span></button></div><div class="optimizer-priority" role="radiogroup" aria-label="推荐偏好" data-i18n-aria-label="optimizer.priority">
+            <div class="optimizer-heading"><div class="optimizer-heading-label"><h3><span data-i18n="page.rewardRecommendations">挂载收益推荐</span></h3><span class="recommendation-state" data-optimizer-state-label data-i18n="optimizer.notApplied">尚未应用的推荐</span></div><div class="optimizer-modes" role="group" aria-label="推荐目标" data-i18n-aria-label="page.recommendationObjective"><button type="button" data-optimizer-mode="reward" aria-pressed="true"><span data-i18n="page.bestSingleBaseReward">单战区最高收益</span></button><button type="button" data-optimizer-mode="targets" aria-pressed="false"><span data-i18n="page.mostBases">最多战区</span></button><button type="button" data-optimizer-mode="custom_targets" aria-pressed="false"><span data-i18n="optimizer.customTargets">自定义战区</span></button><button type="button" data-optimizer-mode="sim_score" aria-pressed="false"><span data-i18n="simScore.moduleHighestScore">模块单次最高预计分数</span></button></div><div class="optimizer-priority" role="radiogroup" aria-label="推荐偏好" data-i18n-aria-label="optimizer.priority">
                   <span class="optimizer-priority-thumb" aria-hidden="true"></span>
                   <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="balanced" checked><span data-i18n="optimizer.balanced">高收益，优先好投放</span></label>
                   <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="reward"><span data-i18n="optimizer.strictReward">严格最高收益</span></label>
                   <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="simple"><span data-i18n="optimizer.uniform">尽量统一挂载</span></label>
                 </div></div>
+            <div class="optimizer-target-controls" data-optimizer-target-controls hidden>
+              <label><span data-i18n="optimizer.targetCount">目标战区数</span><input type="number" min="1" step="1" value="3" inputmode="numeric" data-optimizer-target-count></label>
+              <button type="button" data-optimizer-target-preset="3" aria-pressed="true"><span data-i18n="optimizer.threeTargets">3 区</span></button><button type="button" data-optimizer-target-preset="4" aria-pressed="false"><span data-i18n="optimizer.fourTargets">4 区</span></button>
+            </div>
             <div class="optimizer-controls">
               <fieldset class="optimizer-filters"><legend data-i18n="optimizer.allowedStores">可参与推荐的弹药</legend>
                 <div class="optimizer-filter-grid">
-                  <button type="button" role="switch" data-optimizer-guided-only aria-checked="false"><strong data-i18n="optimizer.guidedOnly">只考虑制导武器</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <div class="optimizer-guidance-selection" role="group" data-i18n-aria-label="optimizer.guidanceSelection" aria-label="制导筛选"><button type="button" data-optimizer-guidance-all aria-pressed="true"><strong data-i18n="optimizer.guidanceAll">不限</strong></button><button type="button" role="switch" data-optimizer-guided-only aria-checked="false"><strong data-i18n="optimizer.guidedOnly">只考虑制导武器</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-unguided-only aria-checked="false"><strong data-i18n="optimizer.unguidedOnly">不使用制导</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button></div>
                   <button type="button" role="switch" data-optimizer-filter="noHighDrag" aria-checked="true"><strong data-i18n="optimizer.highDrag">高阻炸弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
                   <button type="button" role="switch" data-optimizer-filter="noRockets" aria-checked="true"><strong data-i18n="page.rockets">火箭弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
                   <button type="button" role="switch" data-optimizer-filter="noMissiles" aria-checked="true"><strong data-i18n="optimizer.strikeMissiles">对地导弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
@@ -163,25 +187,7 @@
             <details class="optimizer-explanation"><summary><span data-i18n="page.howRecommendationsWork">推荐依据</span></summary><small data-optimizer-priority-help></small><div data-optimizer-explanation></div><p class="optimizer-filter-help" data-i18n="optimizer.guidedOnlyHelp">只使用制导武器：自动推荐仅选制导炸弹或对地导弹；类别开关仍生效，手动固定挂点及配套吊舱保留。</p><p class="optimizer-filter-help" data-i18n="optimizer.guidanceHelp">多模弹药允许一种制导即可；关闭全部三类自动退出“只考虑制导”，重新开启会恢复三类。</p><p class="optimizer-filter-help" data-i18n="optimizer.allowedStoresHelp">亮起表示允许，点按即可排除；手动选好的挂点会保留。</p><p><span data-i18n="page.assignsWholeWeaponsToTheBaseBurnOutThreshold">按战区掉血自毁线分配完整弹药，火箭弹精确到枚。最多战区模式先保证目标数量；高收益同档先比较制导操作与投放枚数，再减少投放类型、弹种、多余伤害与载荷。手选挂点及配套要求会保留。</span></p><p><span data-i18n="page.theCoefficientIsNotAnActualSlOrRp">收益系数不等于实际银狮或研发点。仅校验客户端静态配装规则，改装与武器仍需在游戏中解锁。</span></p></details>
           </section>
           <div class="calculator-pickers">
-            <section class="hangar-picker aircraft-toolbar" aria-labelledby="aircraft-picker-title">
-              <header class="hangar-picker-head">
-                <div><h2 id="aircraft-picker-title"><span data-i18n="page.aircraft">机型</span></h2></div>
-                <div class="hangar-selection" id="calcAircraftSelection"><strong><span data-i18n="page.anyAircraft">不限机型</span></strong><span><span data-i18n="page.calculateByWeapon">按武器计算</span></span></div>
-              </header>
-              <div class="aircraft-search-bar">
-                <label class="hangar-search">
-                  <span class="sr-only"><span data-i18n="page.searchAircraft">搜索机型</span></span>
-                  <input id="calcAircraftSearch" type="search" autocomplete="off" placeholder="搜索机型、拼音，如 F-15E、taif" data-i18n-placeholder="page.searchAircraftOrPinyinEGF15E">
-                </label>
-                <div class="aircraft-filter-group" role="group" aria-label="机型选项" data-i18n-aria-label="page.aircraftOptions">
-                  <button class="filter-chip" id="calcAircraftClear" type="button" aria-pressed="true"><span data-i18n="page.anyAircraft2">不限机型</span></button>
-                  <button class="filter-chip" id="calcCustomOnly" type="button" aria-pressed="false" aria-label="仅显示支持自定义挂载的机型" data-i18n-aria-label="page.showOnlyAircraftSupportingCustomLoadouts"><span data-i18n="page.customLoadoutsOnly">仅支持自定义</span> <span id="calcCustomCount"></span></button>
-                </div>
-              </div>
-              <div id="calcAircraftList" class="hangar-weapon-list hangar-aircraft-list" role="listbox" aria-label="机型搜索结果" data-i18n-aria-label="page.aircraftSearchResults" tabindex="0">
-                <p class="hangar-weapon-empty"><span data-i18n="page.searchByNamePinyinOrInitialsEGTaif">支持名称、拼音和首字母，如 taif、j10。</span></p>
-              </div>
-            </section>
+
             <section class="hangar-picker" aria-labelledby="weapon-picker-title">
               <header class="hangar-picker-head">
                 <div><h2 id="weapon-picker-title"><span data-i18n="page.loadoutConfiguration">挂载配置</span></h2></div>

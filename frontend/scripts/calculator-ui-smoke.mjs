@@ -136,7 +136,7 @@ try {
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `../.artifacts/calculator-ui/overview-${width}.png` });
     await page.locator("#calcAircraftSearch").fill("f-16");
-    await page.locator(".calculator-pickers").screenshot({ path: `../.artifacts/calculator-ui/aircraft-search-${width}.png` });
+    await page.locator(".loadout-summary").screenshot({ path: `../.artifacts/calculator-ui/aircraft-search-${width}.png` });
     await page.locator("#calcAircraftSearch").fill("");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: loadout horizontal overflow`);
     await page.locator(".loadout-workspace").screenshot({ path: `../.artifacts/calculator-ui/loadout-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });

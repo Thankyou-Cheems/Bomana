@@ -2,7 +2,7 @@ import { empiricalSimScore } from "./model.mjs";
 import { t, numberLocale, localizeName } from "./i18n.mjs";
 import { presetDiagram, presetZoneAllocations } from "./loadouts.mjs";
 import { validateLoadout } from "./custom-loadouts.mjs";
-import { toggleRecommendationFilter, preferredGuidanceMode } from "./recommendation-guidance.mjs";
+import { toggleRecommendationFilter, preferredGuidanceMode, normalizeGuidanceSelection, recommendationWeaponExcluded } from "./recommendation-guidance.mjs";
 
 const node = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -14,9 +14,16 @@ const format = value => value.toLocaleString(numberLocale(), {maximumFractionDig
 const colorZone = (element, zone) => element.style.setProperty("--zone-hue", String((205 + (zone - 1) * 137.5) % 360));
 
 export function createLoadoutOptimizer(root, {load, apply}) {
-  let context, mode = "reward", signature = "", generation = 0, timer, worker, result, names = {};
+  let context, mode = "reward", baseMode = "reward", targetCount = 3, signature = "", generation = 0, timer, worker, workerBusy = false, workerContextKey = "", result, names = {};
   let currentDefinition;
-  let filters = {onlyGuided: false, noHighDrag: false, noRockets: false, noMissiles: false, noLaser: false, noOptical: false, noSatellite: false, simpleLoadout: false, strictReward: false, rewardTolerance: .2};
+  let filters = {onlyGuided: false, noGuided: false, noHighDrag: false, noRockets: false, noMissiles: false, noLaser: false, noOptical: false, noSatellite: false, simpleLoadout: false, strictReward: false, rewardTolerance: .2};
+  const storageKey = "bomana:calculator:optimizerFilters";
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+    for (const key of Object.keys(filters)) if (typeof filters[key] === "boolean" && typeof saved[key] === "boolean") filters[key] = saved[key];
+    filters = normalizeGuidanceSelection(filters);
+  } catch { /* Keep session defaults when storage is unavailable. */ }
+  const persistFilters = () => { try { localStorage.setItem(storageKey, JSON.stringify(filters)); } catch { /* Session-only choice. */ } };
   const status = root.querySelector("[data-optimizer-status]");
   const contextNote = root.querySelector("[data-optimizer-context]");
   const output = root.querySelector("[data-optimizer-result]");
@@ -24,6 +31,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   const applyButton = root.querySelector("[data-optimizer-apply]");
   const retry = root.querySelector("[data-optimizer-retry]");
   const actions = root.querySelector(".optimizer-actions");
+  const countInput = root.querySelector("[data-optimizer-target-count]");
   const describe = items => items.map(([id, count]) => t(context.weapons.get(id)?.dmg > 0 ? "optimizer.shotCount" : "optimizer.supportCount", "{{weapon}} ×{{count}}", {
     weapon: localizeName(context.weapons.get(id)?.short || names[id] || context.weapons.get(id)?.name || id), count,
   })).join(" + ");
@@ -31,9 +39,12 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   function reflectControls() {
     root.dataset.objective = mode;
     for (const button of root.querySelectorAll("[data-optimizer-mode]")) {
-      button.hidden = button.dataset.optimizerMode !== "sim_score" && context && !context.threshold;
+      button.hidden = context ? button.dataset.optimizerMode === "sim_score" ? Boolean(context.threshold) : !context.threshold : false;
       button.setAttribute("aria-pressed", String(button.dataset.optimizerMode === mode));
     }
+    root.querySelector("[data-optimizer-target-controls]").hidden = mode !== "custom_targets";
+    countInput.setAttribute("aria-invalid", String(!Number.isSafeInteger(targetCount) || targetCount < 1));
+    for (const button of root.querySelectorAll("[data-optimizer-target-preset]")) button.setAttribute("aria-pressed", String(Number(button.dataset.optimizerTargetPreset) === targetCount));
     const priority = filters.simpleLoadout ? "simple" : filters.strictReward ? "reward" : "balanced";
     const priorities = [...root.querySelectorAll("[data-optimizer-priority]")];
     for (const control of priorities) control.checked = control.value === priority;
@@ -46,12 +57,17 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     const guided = root.querySelector("[data-optimizer-guided-only]");
     guided.setAttribute("aria-checked", String(filters.onlyGuided));
     guided.querySelector("[data-optimizer-filter-state]").textContent = filters.onlyGuided ? t("optimizer.on", "开启") : t("optimizer.off", "关闭");
+    const unguided = root.querySelector("[data-optimizer-unguided-only]");
+    unguided.setAttribute("aria-checked", String(filters.noGuided));
+    unguided.querySelector("[data-optimizer-filter-state]").textContent = filters.noGuided ? t("optimizer.on", "开启") : t("optimizer.off", "关闭");
+    root.querySelector("[data-optimizer-guidance-all]").setAttribute("aria-pressed", String(!filters.onlyGuided && !filters.noGuided));
     root.querySelector("[data-optimizer-priority-help]").textContent = filters.simpleLoadout
       ? t("optimizer.uniformHelp", "优先统一投放特性和弹种，允许降低收益；始终保留手动选择。")
       : filters.strictReward ? t("optimizer.strictRewardHelp", "优先收益系数；收益完全相同时再选择更简单的挂载。")
         : t("optimizer.balancedHelp", "收益系数 ≥ {{floor}} 时优先更省事的投放方案，再减少弹种；其他情况优先收益。", {floor: format((context?.reward.ui_decoration ?? 10) - filters.rewardTolerance)});
     if (mode === "sim_score") { root.querySelector("[data-optimizer-priority-help]").textContent = t("simScore.objectiveHelp", "严格最大化同一目标剩余 HP、房间 BR 下的全挂载预计分数；已找到的同分候选优先减少投放类型、弹种、多余伤害及质量。收益偏好不降低分数目标。"); return; }
     if (!filters.simpleLoadout) root.querySelector("[data-optimizer-priority-help]").textContent += " " + t("optimizer.guidancePreference", "在收益范围内优先卫星导航，光电补足伤害；按实际投放枚数比较操作负担。");
+    if (mode === "custom_targets") root.querySelector("[data-optimizer-priority-help]").textContent = t("optimizer.customHelp", "先完成目标数量，再比较实际覆盖数 × 整套挂载收益系数；多余容量不计奖。同收益优先减少冗余伤害、载荷。统一挂载偏好仍生效。") + (!filters.simpleLoadout && !filters.strictReward ? " " + t("optimizer.balancedHelp", "收益系数 ≥ {{floor}} 时优先更省事的投放方案，再减少弹种；其他情况优先收益。", {floor: format((context?.reward.ui_decoration ?? 10) - filters.rewardTolerance)}) : "");
   }
 
   function render(next, definition) {
@@ -63,11 +79,19 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     applyButton.disabled = Boolean(storesEqual);
     root.dataset.state = next.searching ? "searching" : next.status;
     applyButton.hidden = !next.preset;
-    retry.hidden = next.searching || ["optimal", "infeasible"].includes(next.status);
+    retry.hidden = next.searching || ["optimal", "infeasible", "invalid"].includes(next.status);
     if (!next.preset) {
+      if (next.reason === "invalid_target_count") {
+        status.textContent = t("optimizer.targetInvalid", "请输入正整数战区数量。");
+        output.append(contextNote, actions); return;
+      }
       status.textContent = mode === "sim_score" ? t("simScore.noRecommendation", "当前约束中没有可确认的分数推荐；请检查合法挂载、已知伤害与倍率参数，或继续求解。") : next.status === "infeasible" ? next.unknown ? t("optimizer-ui.noFeasibleConfigurationAmongWeaponsWithKnownDamage", "已知伤害数据中没有可行方案。") : context.lockedKeys.length ? t("optimizer-ui.noFeasibleCompletionWhileKeepingTheSelectedStores", "保留当前挂载时，没有可行的补齐方案。") : Object.entries(filters).some(([key, value]) => value === true && (key === "onlyGuided" || key.startsWith("no"))) ? t("optimizer.noFeasibleWithFilters", "当前弹药筛选下没有可行方案，可放宽筛选后重试。") : t("optimizer-ui.thisAircraftCannotReachTheBaseBurnOutThreshold", "此机型无法在一架次达到当前战区自毁线。")
         : next.status === "unknown" ? t("optimizer-ui.noConfirmedConfigurationFoundYetContinueSearching", "搜索尚未找到可确认的方案，可继续求解。") : t("optimizer-ui.recommendationIncompleteRetry", "推荐暂未完成，请重试。");
       if (next.unknown) output.append(node("p", t("optimizer-ui.someAmmunitionLacksDamageDataAndCannotBeCompared", "部分弹药缺少伤害数据，无法参与比较。"), "optimizer-note"));
+      if (mode === "custom_targets") {
+        output.append(node("strong", t("optimizer.customSummary", "目标 {{requested}} 区 · 本次覆盖 {{covered}} 区", {requested: targetCount, covered: next.targets || 0})));
+        output.append(node("span", next.status === "infeasible" && !next.unknown ? t("optimizer.targetUnreachable", "单次不可达 · 最高 {{count}} 区", {count: 0}) : t("optimizer.targetUnproved", "已确认 {{count}} 区 · 目标可达性待确认", {count: next.targets || 0})));
+      }
       const summary = node("div", null, "optimizer-metrics");
       summary.append(contextNote, actions);
       output.append(summary);
@@ -78,9 +102,20 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     metrics.append(contextNote);
     if (mode === "sim_score") {
       metrics.append(node("strong", t("simScore.recommendedScore", "全挂载预计 {{score}} 分", {score: format(next.score)})));
-    } else metrics.append(node("strong", t("optimizer-ui.bases", "理论可收 {{v0}} 个战区", {v0: next.targets})), node("span", t("optimizer.recommendedReward", "收益系数 {{value}}", {value: format(next.reward)})));
+    } else {
+      if (mode === "custom_targets") {
+        metrics.append(node("strong", t("optimizer.customSummary", "目标 {{requested}} 区 · 本次覆盖 {{covered}} 区", {requested: next.requestedTargets, covered: next.targets})));
+        metrics.append(node("span", next.targetReached ? t("optimizer.targetReached", "可达 · 1 次出击") : next.coverageProven && !next.unknown ? t("optimizer.targetUnreachable", "单次不可达 · 最高 {{count}} 区", {count: next.targets}) : t("optimizer.targetUnproved", "已确认 {{count}} 区 · 目标可达性待确认", {count: next.targets})));
+        if (!next.targetReached) metrics.append(node("span", t("optimizer.repeatSorties", "按同挂载重复：预计 {{count}} 次出击", {count: next.estimatedSorties})));
+      } else metrics.append(node("strong", t("optimizer-ui.bases", "理论可收 {{v0}} 个战区", {v0: next.targets})));
+      metrics.append(node("span", t("optimizer.recommendedReward", "收益系数 {{value}}", {value: format(next.reward)})));
+    }
     metrics.append(actions);
     output.append(metrics);
+    if (mode === "sim_score") explanation.append(node("p", t("simScore.moduleEstimate", "按模块剩余 HP 封顶的经验估算；假设全部命中、燃烧完成，不计回血。"), "optimizer-note"));
+    if (filters.noGuided) explanation.append(node("p", t("optimizer.unguidedHelp", "“不使用制导”仅自动选择明确非制导的弹药；未知分类不参与。手动锁定冲突会提示并保留。"), "optimizer-note"));
+    const conflicts = next.preset.weapons.filter(([id]) => recommendationWeaponExcluded(context.weapons.get(id), filters));
+    if (conflicts.length) output.append(node("p", t("optimizer.lockedGuidanceConflict", "保留的手动挂点含筛选外弹药：{{stores}}；自动补齐仍遵守筛选。", {stores: describe(conflicts)}), "optimizer-warning"));
     if (next.workload) {
       const modes = new Map();
       for (const row of next.plan) for (const [id, count] of row) {
@@ -165,29 +200,39 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       names = catalog?.names || {};
       if (current.aircraft.custom && !definition) throw new Error("missing_custom_rules");
       const url = new URL("./optimizer-worker.mjs", import.meta.url); url.search = new URL(import.meta.url).search;
-      worker = new Worker(url, {type: "module"});
+      if (!worker) { worker = new Worker(url, {type: "module"}); workerContextKey = ""; }
+      workerBusy = true;
       worker.onmessage = event => {
-        if (id !== generation) return;
-        if (!event.data.searching) { worker.terminate(); worker = null; }
+        if (id !== generation || event.data.requestId !== id) return;
+        if (!event.data.searching) workerBusy = false;
         render(event.data, definition);
       };
       worker.onerror = () => {
         if (id !== generation) return;
-        worker.terminate(); worker = null; render({status: "error"}, definition);
+        worker.terminate(); worker = null; workerBusy = false; render({status: "error"}, definition);
       };
-      worker.postMessage({definition, presets: current.aircraft.presets || [], lockedKeys: current.lockedKeys,
-        weapons: [...current.weapons], reward: current.reward, threshold: current.threshold, scenario: current.scenario, mode, filters, timeLimit});
+      const contextKey = `${current.aircraft.id}|${current.threshold}|${JSON.stringify(filters)}|${current.lockedKeys.join(",")}|${JSON.stringify(current.scenario)}`;
+      const message = {contextKey, requestId: id, mode, targetCount, filters, timeLimit};
+      if (contextKey !== workerContextKey) {
+        message.context = {definition, presets: current.aircraft.presets || [], lockedKeys: current.lockedKeys,
+          weapons: [...current.weapons], reward: current.reward, threshold: current.threshold, scenario: current.scenario, filters};
+        workerContextKey = contextKey;
+      }
+      worker.postMessage(message);
     } catch {
       if (id === generation) render({status: "error"}, null);
     }
   }
   function update(next, timeLimit = 20) {
     context = next;
-    if (!next.threshold) mode = "sim_score";
+    if (!next.threshold) { if (mode !== "sim_score") baseMode = mode; mode = "sim_score"; }
+    else if (mode === "sim_score") mode = baseMode;
     reflectControls();
-    const nextSignature = `${next.aircraft?.id}|${next.aircraft?.presets?.length}|${next.threshold}|${mode}|${JSON.stringify(filters)}|${next.lockedKeys.join(",")}|${JSON.stringify(next.scenario)}`;
+    const nextSignature = `${next.aircraft?.id}|${next.aircraft?.presets?.length}|${next.threshold}|${mode}|${mode === "custom_targets" ? targetCount : ""}|${JSON.stringify(filters)}|${next.lockedKeys.join(",")}|${JSON.stringify(next.scenario)}`;
     if (nextSignature === signature) { if (result) render(result, currentDefinition); return; }
-    signature = nextSignature; generation++; clearTimeout(timer); worker?.terminate(); worker = null; result = null;
+    signature = nextSignature; generation++; clearTimeout(timer);
+    if (workerBusy) { worker?.terminate(); worker = null; workerBusy = false; }
+    result = null;
     root.hidden = !next.aircraft;
     if (root.hidden) return;
     applyButton.hidden = true; retry.hidden = true; output.replaceChildren(); explanation.replaceChildren(); root.dataset.state = "searching";
@@ -205,12 +250,18 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       mode = button.dataset.optimizerMode;
       for (const item of root.querySelectorAll("[data-optimizer-mode]")) item.setAttribute("aria-pressed", String(item === button));
       update(context);
+    } else if (button.dataset.optimizerTargetPreset) {
+      targetCount = Number(button.dataset.optimizerTargetPreset); countInput.value = String(targetCount); update(context);
+    } else if (button.hasAttribute("data-optimizer-guidance-all")) {
+      filters.onlyGuided = false; filters.noGuided = false; persistFilters(); reflectControls(); if (context) update(context);
+    } else if (button.hasAttribute("data-optimizer-unguided-only")) {
+      filters = toggleRecommendationFilter(filters, "noGuided"); persistFilters(); reflectControls(); if (context) update(context);
     } else if (button.hasAttribute("data-optimizer-guided-only")) {
-      filters = toggleRecommendationFilter(filters, "onlyGuided"); reflectControls();
+      filters = toggleRecommendationFilter(filters, "onlyGuided"); persistFilters(); reflectControls();
       if (context) update(context);
     } else if (button.dataset.optimizerFilter in filters) {
       const key = button.dataset.optimizerFilter;
-      filters = toggleRecommendationFilter(filters, key); reflectControls();
+      filters = toggleRecommendationFilter(filters, key); persistFilters(); reflectControls();
       if (context) update(context);
     } else if (button === applyButton && result?.preset) void apply(result);
     else if (button === retry) { signature = ""; update(context, 60); }
@@ -219,7 +270,13 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     if (!event.target.matches("[data-optimizer-priority]")) return;
     filters.simpleLoadout = event.target.value === "simple";
     filters.strictReward = event.target.value === "reward";
+    persistFilters();
     reflectControls();
+    if (context) update(context);
+  });
+  countInput.addEventListener("input", () => {
+    targetCount = countInput.value === "" ? NaN : Number(countInput.value);
+    countInput.setAttribute("aria-invalid", String(!Number.isSafeInteger(targetCount) || targetCount < 1));
     if (context) update(context);
   });
   document.addEventListener("calculator:language", () => {

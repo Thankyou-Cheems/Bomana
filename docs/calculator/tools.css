@@ -730,9 +730,9 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .optimizer-zone-plan li { padding:4px 7px; }
 .optimizer-zone-plan li strong, .optimizer-zone-plan li p { color:hsl(var(--zone-hue) 60% 28%); }
 .optimizer-spare-share { padding:1px 3px; color:#6e899a; }
-.loadout-workspace .calculator-pickers { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.85fr) auto; align-items:center; gap:6px 8px; }
+.loadout-workspace .calculator-pickers { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px 8px; }
 .loadout-workspace .aircraft-search-bar { grid-column:1; }
-.loadout-workspace .hangar-weapon-filters { grid-column:2; }
+.loadout-workspace .hangar-weapon-filters { grid-column:1; }
 .loadout-workspace .custom-editor-toolbar { grid-column:3; }
 .loadout-workspace .custom-editor [data-custom-body] { grid-column:1/-1; }
 .loadout-workspace .loadout-individual { grid-column:2/-1; justify-self:end; }
@@ -779,4 +779,17 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .optimizer-panel[data-objective="sim_score"] .optimizer-priority { display:none; }
 .optimizer-panel[data-objective="sim_score"] .optimizer-heading { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
 .optimizer-modes button { min-width:0; overflow-wrap:anywhere; }
+.optimizer-target-controls { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.optimizer-target-controls[hidden] { display:none; }
+.optimizer-target-controls label { display:flex; align-items:center; gap:8px; font-size:12px; }
+.optimizer-target-controls input { width:80px; min-height:34px; padding:5px 8px; border:1px solid #bdd2df; border-radius:6px; font:inherit; }
+.optimizer-target-controls button { padding:6px 10px; border:1px solid #bdd2df; border-radius:6px; background:#eef6fb; font:inherit; font-size:12px; cursor:pointer; }
+.optimizer-target-controls button[aria-pressed=true] { background:#fff3ca; border-color:#dbbe6e; }
+.optimizer-guidance-selection { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; }
+.optimizer-guidance-selection button { flex:1 1 90px; }
+.optimizer-guidance-selection button[aria-pressed=true] { background:#e3f3eb; border-color:#91c4ad; }
+.optimizer-guidance-selection button strong { flex-basis:auto; }
+.loadout-summary .aircraft-toolbar { position:relative; order:1; flex-basis:100%; width:100%; min-width:0; margin:4px 0 0; padding:0; border:0; border-radius:0; background:none; }
+.loadout-summary .aircraft-toolbar .hangar-picker-head { display:none; }
+.calculator-page .loadout-summary .aircraft-toolbar:focus-within .hangar-aircraft-list:not(:has(.hangar-weapon-empty)) { top:100%; }
 @media (max-width:560px) { .optimizer-panel[data-objective="sim_score"] .optimizer-heading { grid-template-columns:minmax(0,1fr); } }

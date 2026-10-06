@@ -1,0 +1,102 @@
+import assert from 'node:assert/strict';
+import {readFile,mkdir,writeFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {createServer} from 'node:http';
+import {resolve,sep,extname} from 'node:path';
+import {chromium} from 'playwright-core';
+const root=resolve('../docs');
+const server=createServer(async(req,res)=>{
+ let path=decodeURIComponent(new URL(req.url,'http://localhost').pathname);if(path.endsWith('/'))path+='index.html';
+ const file=resolve(root,`.${path}`);if(!file.startsWith(root+sep)){res.writeHead(403).end();return;}
+ try {res.setHeader('Content-Type',({'.mjs':'text/javascript','.js':'text/javascript','.wasm':'application/wasm','.css':'text/css','.json':'application/json','.webp':'image/webp'})[extname(file)]||'text/html; charset=utf-8');res.end(await readFile(file));}catch{res.writeHead(404).end();}
+});
+await new Promise(done=>server.listen(0,'127.0.0.1',done));
+const executablePath=process.env.BOMANA_BROWSER_EXECUTABLE||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':null);
+const browser=await chromium.launch(executablePath?{executablePath,headless:true}:{channel:'msedge',headless:true});
+try {
+ const page=await browser.newPage({viewport:{width:1440,height:1050}}),errors=[],requests=[];
+ page.on('pageerror',error=>errors.push(error.message));page.on('request',request=>requests.push(request.url()));
+ await page.addInitScript(()=>{
+  const Original=window.Worker;window.__optimizerWorkers=0;
+  window.Worker=class extends Original{constructor(...args){super(...args);if(String(args[0]).includes('optimizer-worker'))window.__optimizerWorkers++;}};
+ });
+ const url=`http://127.0.0.1:${server.address().port}/calculator/`;
+ const wait=async()=>{
+  await page.waitForFunction(()=>['optimal','feasible','infeasible','invalid'].includes(document.querySelector('#loadoutOptimizer').dataset.state),null,{timeout:35000});
+ };
+ const text=()=>page.locator('[data-optimizer-result]').textContent();
+ await page.goto(url);await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();
+ await page.locator('#calcAircraftSearch').fill('tu_4');await page.locator('[data-aircraft-id="tu_4"]').click();await wait();
+ await page.locator('[data-optimizer-mode="custom_targets"]').click();await wait();
+ assert.match(await text(),/目标 3 区.*覆盖 3 区/);assert.equal(await page.locator('.optimizer-zone-plan li').count(),3);
+ const workers=await page.evaluate(()=>window.__optimizerWorkers),apiRequests=requests.filter(url=>url.includes('/api/v1/')).length;
+ const switchStart=Date.now();await page.locator('[data-optimizer-target-preset="4"]').click();await wait();
+ const switchMilliseconds=Date.now()-switchStart;
+ assert.match(await text(),/目标 4 区.*覆盖 4 区/);assert.equal(await page.locator('.optimizer-zone-plan li').count(),4);
+ assert.equal(await page.evaluate(()=>window.__optimizerWorkers),workers,'Changing N retains the idle worker/WASM session');
+ assert.equal(requests.filter(url=>url.includes('/api/v1/')).length,apiRequests,'N changes do not regenerate/refetch catalogs');
+ await page.locator('[data-optimizer-target-count]').fill('1000');await wait();
+ assert.match(await text(),/目标 1,?000 区|目标 1000 区/);assert.match(await text(),/单次不可达.*最高 \d+ 区/);assert.match(await text(),/预计 \d+ 次出击/);
+ await page.locator('[data-optimizer-target-count]').fill('1.5');await wait();assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-state'),'invalid');
+ assert.match(await page.locator('[data-optimizer-status]').textContent(),/正整数/);
+ await page.locator('[data-optimizer-target-preset="3"]').click();await wait();assert.equal(await page.locator('[data-optimizer-target-count]').getAttribute('aria-invalid'),'false');
+ await page.locator('[data-optimizer-unguided-only]').click();await wait();
+ assert.equal(await page.locator('[data-optimizer-unguided-only]').getAttribute('aria-checked'),'true');
+ await page.locator('[data-optimizer-guided-only]').click();await wait();
+ assert.equal(await page.locator('[data-optimizer-unguided-only]').getAttribute('aria-checked'),'false');
+ assert.equal(await page.locator('[data-optimizer-guided-only]').getAttribute('aria-checked'),'true');
+ assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-state'),'infeasible','Tu-4 has no guided preset');
+ await page.locator('[data-optimizer-unguided-only]').click();await wait();
+ await page.locator('#calcTargetSegments [data-value="airport_airfield"]').click();await wait();
+ assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-objective'),'sim_score');assert.match(await text(),/全挂载预计/);
+ await page.locator('#calcTargetSegments [data-value="airport_storage"]').click();
+ await page.locator('#calcTargetSegments [data-value="airport_dwelling"]').click();await wait();
+ assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-objective'),'sim_score');
+ await page.locator('#simScoreEstimator > summary').click();await page.locator('[data-sim-score-hp]').fill('10');await wait();
+ const lowScore=await text();assert.match(lowScore,/全挂载预计/);
+ await page.locator('[data-sim-score-hp]').fill('100');await wait();assert.notEqual(await text(),lowScore,'Remaining module HP changes the single-strike score recommendation');
+ await page.locator('#calcTargetSegments [data-value="bombing_point_planes"]').click();await wait();
+ assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-objective'),'custom_targets','Return restores the selected base objective');
+ assert.match(await text(),/目标 3 区.*覆盖 3 区/);
+ assert.equal(await page.locator('[data-optimizer-mode="sim_score"]').isVisible(),false);
+ await mkdir('../.artifacts/calculator-ui',{recursive:true});
+ for(const [locale,label] of [['zh-CN','目标'],['zh-Hant','目標'],['en','Desired']]){
+  await page.locator(`[data-calculator-language="${locale}"]`).click();await page.waitForFunction(lang=>document.documentElement.lang===lang,locale);
+  assert.ok((await text()).includes(label));
+  for(const width of [1440,390,320]){
+   await page.setViewportSize({width,height:1050});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`${locale} ${width}px overflow`);
+   assert.equal(await page.locator('#calcAircraftSearch').count(),1,'The existing search remains unique');
+   const [sorties,search,stores]=await Promise.all(['#calcSortieCard','#calcAircraftSearch','#calcPresetDetail'].map(selector=>page.locator(selector).boundingBox()));
+   assert.ok(sorties.y+sorties.height<=search.y&&search.y+search.height<=stores.y,`${locale} ${width}px sortie/search/custom ordering`);
+   assert.equal(await page.evaluate(()=>Boolean(document.querySelector('#calcAircraftSearch').compareDocumentPosition(document.querySelector('#customLoadoutEditor'))&Node.DOCUMENT_POSITION_FOLLOWING)),true,'DOM focus order places aircraft search before custom stores');
+   await page.locator('.loadout-summary').screenshot({path:`../.artifacts/calculator-ui/aircraft-search-top-${locale}-${width}.png`});
+   await page.locator('#loadoutOptimizer').screenshot({path:`../.artifacts/calculator-ui/custom-target-${locale}-${width}.png`});
+  }
+ }
+ await page.reload();await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
+ assert.equal(await page.locator('[data-optimizer-unguided-only]').getAttribute('aria-checked'),'true','Guidance selection survives refresh');
+ await page.setViewportSize({width:1440,height:1050});
+ await page.locator('[data-calculator-language="zh-CN"]').click();
+ await page.waitForFunction(()=>document.documentElement.lang==='zh-CN'&&!document.querySelector('#calculatorLanguage').hasAttribute('aria-busy'));
+ await page.locator('#calcAircraftSearch').fill('a_10c');await page.locator('[data-aircraft-id="a_10c"]').click();
+ await page.locator('[data-custom-body]').waitFor();await page.locator('.current-loadout-clear').click();
+ const custom=JSON.parse(await readFile(resolve(root,'api/v1/calculator/custom-loadouts.json')));
+ const guided=custom.aircraft.a_10c.options.find(option=>option.weapons.some(([id])=>id.includes('gbu_12'))&&option.requires.some(relation=>relation.preset==='sniper_pod'));
+ await page.locator(`[data-custom-tier="${guided.tier}"]`).click();await page.locator(`[data-custom-option="${guided.key}"]`).click();await wait();
+ assert.match(await text(),/保留的手动挂点含筛选外弹药/);
+ await page.locator('[data-optimizer-apply]').click();await wait();
+ assert.equal(await page.locator(`[data-custom-tier="${guided.tier}"]`).getAttribute('data-custom-selected'),guided.key,'Conflicting manual lock remains selected');
+ const selected=await page.locator('[data-custom-tier][data-custom-selected]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-custom-selected')).filter(Boolean));
+ const weaponData=JSON.parse(await readFile(resolve(root,'api/v1/calculator/weapons.json')));
+ const map=new Map(weaponData.weapons.map(row=>[row.id,row]));
+ for(const key of selected.filter(key=>key!==guided.key))for(const [id]of custom.aircraft.a_10c.options.find(row=>row.key===key).weapons)assert.equal(map.get(id).deliveryProfile?.guidance,'none','Automatic additions obey unguided-only');
+ // Legacy storage onlyGuided:true maps to the exclusive guided state.
+ await page.evaluate(()=>localStorage.setItem('bomana:calculator:optimizerFilters',JSON.stringify({onlyGuided:true})));await page.reload();
+ await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
+ assert.equal(await page.locator('[data-optimizer-guided-only]').getAttribute('aria-checked'),'true');assert.equal(await page.locator('[data-optimizer-unguided-only]').getAttribute('aria-checked'),'false');
+ assert.deepEqual(errors,[]);
+ const receipt={passed:true,switchMilliseconds,workerReusedForN:true,catalogRefetchForN:0,manualFilterConflictPreserved:true,locales:['zh-CN','zh-Hant','en'],widths:[1440,390,320],errors};
+ await writeFile('../.artifacts/calculator-ui/custom-target-result.json',JSON.stringify(receipt,null,2)+'\n');
+ console.log('Custom target / airport module browser checks passed',JSON.stringify(receipt));
+}finally{await browser.close();server.close();}

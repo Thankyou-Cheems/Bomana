@@ -2,7 +2,7 @@ import { rewardUi, requiredCount, empiricalSimScore, simScoreCalibrations, simSc
 import { validateLoadout, previewCustomPreset } from "./custom-loadouts.mjs";
 import { presetTotals } from "./loadouts.mjs";
 import { deliveryGroup, loadoutSimplicity } from "./loadout-simplicity.mjs";
-import { availableGuidanceModes, guidanceExcluded, guidanceBurden, deliveryWorkload } from "./recommendation-guidance.mjs";
+import { availableGuidanceModes, guidanceBurden, deliveryWorkload, recommendationWeaponExcluded } from "./recommendation-guidance.mjs";
 
 // All decisions are whole options / whole projectiles. Damage is never rounded
 // to integer HP or converted through TNT. The original validator checks the
@@ -11,7 +11,6 @@ const expression = terms => terms.filter(([, value]) => value !== 0).map(([name,
 const damageOf = (items, weapons) => items.reduce((sum, [id, count]) => weapons.get(id)?.dmg > 0 ? sum + weapons.get(id).dmg * count : NaN, 0);
 const rewardDamageOf = (items, weapons) => items.reduce((sum, [id, count]) => sum + (weapons.get(id)?.rewardDmg ?? weapons.get(id)?.dmg ?? 0) * count, 0);
 const forbidden = (option, weapons) => option.cells?.some(cell => ["aam", "arm", "ashm"].includes(cell.role)) || option.weapons.some(([id]) => ["aam", "arm", "ashm"].includes(weapons.get(id)?.role));
-const isGuidedStrikeWeapon = weapon => Boolean(weapon && (weapon.kind === "missile" || weapon.guidanceModes?.length || weapon.deliveryProfile?.guidance && weapon.deliveryProfile.guidance !== "none"));
 
 export function preferRecommendation(candidate, current, filters = {}) {
   if (!candidate.preset) return false;
@@ -26,6 +25,11 @@ export function preferRecommendation(candidate, current, filters = {}) {
     return candidate.keys.join(",") < current.keys.join(",");
   }
   if (candidate.targets !== current.targets) return candidate.targets > current.targets;
+  if (candidate.objective === "custom_targets" && Math.abs(candidate.reward - current.reward) < 1e-8 &&
+      (!filters.simpleLoadout || candidate.simplicity?.profiles === current.simplicity?.profiles && candidate.simplicity?.types === current.simplicity?.types)) {
+    if (candidate.damage !== current.damage) return candidate.damage < current.damage;
+    if (candidate.mass !== current.mass) return candidate.mass < current.mass;
+  }
   const closeToCap = !filters.strictReward && Math.min(candidate.reward, current.reward) >= (candidate.rewardCap ?? 10) - (filters.rewardTolerance ?? .2) - 1e-8;
   if (!filters.simpleLoadout && (closeToCap || Math.abs(candidate.reward - current.reward) < 1e-8) && candidate.workload && current.workload) {
     for (const field of ["designation", "shots"]) if (candidate.workload[field] !== current.workload[field]) return candidate.workload[field] < current.workload[field];
@@ -56,7 +60,7 @@ function prepare({definition, presets, lockedKeys, weapons, threshold, filters =
   for (const option of options) {
     option.excluded = !lockedKeys.includes(option.key) && (forbidden(option, weapons) || option.weapons.some(([id]) => {
       const weapon = weapons.get(id);
-      return filters.onlyGuided && !isGuidedStrikeWeapon(weapon) || filters.noHighDrag && weapon?.highDrag || filters.noRockets && weapon?.kind === "rocket" || filters.noMissiles && weapon?.kind === "missile" || guidanceExcluded(weapon, filters);
+      return recommendationWeaponExcluded(weapon, filters);
     }));
     if (option.excluded) bounds.push(`${option.variable} = 0`);
   }
@@ -130,11 +134,13 @@ function prepare({definition, presets, lockedKeys, weapons, threshold, filters =
   return {options, constraints, bounds, binaries, damage, rewardDamage, mass, supplies, effective, types, profiles, unknown, custom, add};
 }
 
-export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
+export function optimizeLoadout(input, highs, {timeLimit = 20, preparedModel} = {}) {
   const {definition, weapons, threshold, mode, reward} = input;
   if (mode === "sim_score") return optimizeSimScore(input, highs, {timeLimit});
+  if (mode === "custom_targets" && (!Number.isSafeInteger(input.targetCount) || input.targetCount < 1)) return {status: "invalid", reason: "invalid_target_count"};
   if (!(threshold > 0) || !supportedReward(reward)) return {status: "unsupported"};
-  const model = prepare(input);
+  const template = preparedModel || prepare(input);
+  const model = {...template, constraints: [...(template.constraints || [])]};
   if (model.error) return {status: "infeasible", reason: model.error};
   const compareGuidance = model.options.some(option => !option.excluded && option.damage > 0 && option.weapons.some(([id]) => availableGuidanceModes(weapons.get(id), input.filters).length));
   const overallDeadline = performance.now() + timeLimit * 1000;
@@ -183,13 +189,19 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
   }
   if (!model.supplies.size || !model.options.length) return {status: "infeasible", unknown: model.unknown};
   let best, targets = 1, targetUpper = 1;
-  if (mode === "targets") {
+  if (mode === "targets" || mode === "custom_targets") {
     const upper = solve(model.effective, "Maximize");
     if (!upper.chosen) return {status: complete ? "infeasible" : "unknown", unknown: model.unknown};
     // A time-limited maximum is not a valid upper bound. Only proven maxima
     // can establish the global maximum number of independently covered zones.
     if (upper.status !== "Optimal") return {status: "unknown", unknown: model.unknown};
-    let low = 0, high = Math.floor(upper.effective + 1e-8);
+    let low = 0, high = Math.min(mode === "custom_targets" ? input.targetCount : Infinity, Math.floor(upper.effective + 1e-8));
+    if (mode === "custom_targets" && high === input.targetCount) {
+      const requested = solve([], "Minimize", high);
+      if (requested.chosen) { low = high; best = requested; }
+      else if (requested.status === "Infeasible") high--;
+      else return {status: "unknown", requestedTargets: input.targetCount, targetUpper: high, unknown: model.unknown};
+    }
     while (low < high && performance.now() < deadline) {
       const middle = Math.ceil((low + high) / 2);
       const candidate = solve([], "Minimize", middle);
@@ -200,7 +212,7 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
     targets = low;
     targetUpper = high;
     complete &&= low === high;
-    if (!targets) return {status: complete ? "infeasible" : "unknown", unknown: model.unknown};
+    if (!targets) return {status: complete ? "infeasible" : "unknown", requestedTargets: mode === "custom_targets" ? input.targetCount : undefined, targets: 0, targetUpper, unknown: model.unknown};
   }
   if (input.filters?.simpleLoadout) {
     for (const [objective, field] of [[model.profiles, "profiles"], [model.types, "types"]]) {
@@ -234,10 +246,12 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
     }
     allowedDamage = Math.max(allowedDamage, low);
   }
+  let sameRewardScope;
   if (!input.filters?.simpleLoadout) {
     // An upper bound alone would admit the lower-reward region just before the
     // knot. Preserve the winning value when the best result is above that jump.
     model.constraints.push(`${expression(model.rewardDamage)} ${best.rewardDamage >= knot ? "=" : "<="} ${allowedDamage}`);
+    sameRewardScope = [...model.constraints];
     // Compare actual delivery plans within the accepted reward band. Prefer
     // coordinate guidance, then fewer seeker/illumination actions and releases;
     // a small optical supplement can beat an otherwise insufficient GNSS load.
@@ -257,6 +271,9 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
     if (higherReward.chosen) best = higherReward;
   }
   // Equal coefficient: first remove excess impact damage, then carried mass.
+  // Custom counts retain the user's reward band / explicit uniform preference,
+  // but equal-coefficient candidates compare surplus before delivery convenience.
+  if (mode === "custom_targets" && sameRewardScope) model.constraints = sameRewardScope;
   // Below the reward cap all damage values have the same coefficient.
   const cap = reward.preset_dmg_min;
   const rewardConstraint = best.rewardDamage <= cap
@@ -285,6 +302,14 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
   output.workload = compareGuidance ? best.workload : null;
   output.rewardCap = reward.ui_decoration;
   output.maximumReward = maximumReward;
+  if (mode === "custom_targets") {
+    output.objective = mode;
+    output.requestedTargets = input.targetCount;
+    output.targetReached = targets === input.targetCount;
+    output.coverageProven = targets === targetUpper;
+    // Repeating this legal plan gives an estimate, not a game sortie guarantee.
+    output.estimatedSorties = Math.ceil(input.targetCount / targets);
+  }
   const used = new Map();
   for (const row of best.plan) for (const [id, count] of row) used.set(id, (used.get(id) || 0) + count);
   output.remaining = preset.weapons.map(([id, count]) => [id, count - (used.get(id) || 0)]).filter(([, count]) => count > 0);
@@ -297,6 +322,24 @@ export function optimizeLoadout(input, highs, {timeLimit = 20} = {}) {
     }
   }
   return output;
+}
+
+// A worker session retains the static hardpoint model while only N changes.
+// Each solve gets its own constraints; reward refinements cannot contaminate it.
+export function createOptimizerSession(input, highs) {
+  const template = input.threshold > 0 ? prepare(input) : null;
+  const results = new Map();
+  return (request, options = {}) => {
+    if (request.mode === "custom_targets" && (!Number.isSafeInteger(request.targetCount) || request.targetCount < 1)) return {status: "invalid", reason: "invalid_target_count"};
+    const key = `${request.mode}|${request.targetCount ?? ""}`;
+    if (results.has(key)) return results.get(key);
+    const result = optimizeLoadout({...input, mode: request.mode, targetCount: request.targetCount}, highs, {...options, preparedModel: template});
+    if (["optimal", "infeasible"].includes(result.status)) {
+      if (results.size >= 32) results.delete(results.keys().next().value);
+      results.set(key, result);
+    }
+    return result;
+  };
 }
 
 // Maximize the empirical score itself. The existing whole-option feasibility

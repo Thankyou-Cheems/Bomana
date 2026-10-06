@@ -46,7 +46,7 @@ test("guidance switches use available multimode routes and cannot leave guided-o
   for (const key of ['noLaser','noOptical','noSatellite']) filters = toggleRecommendationFilter(filters,key);
   assert.equal(filters.onlyGuided,false);
   filters = toggleRecommendationFilter(filters,'onlyGuided');
-  assert.deepEqual(filters,{onlyGuided:true,noLaser:false,noOptical:false,noSatellite:false});
+  assert.deepEqual(filters,{onlyGuided:true,noGuided:false,noLaser:false,noOptical:false,noSatellite:false});
   const dual = {guidanceModes:['satellite','infrared']};
   assert.deepEqual(availableGuidanceModes(dual,{noSatellite:true}),['infrared']);
   assert.equal(guidanceExcluded(dual,{noOptical:true}),false);
