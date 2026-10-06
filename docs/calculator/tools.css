@@ -287,8 +287,6 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .combination-row .hangar-clear { margin-bottom: 6px; }
 .combination-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 560px) { .combination-row { grid-template-columns: minmax(0, 1fr) 70px; } .combination-row .hangar-clear { grid-column: 1 / -1; justify-self: end; } }
-.loadout-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 10px; color: #607f90; }
-.loadout-footer span:first-child { color: #366b86; font-weight: 700; }
 .loadout-individual { margin-top: 16px; }
 .loadout-individual > summary { color: #376d89; font-size: 12px; cursor: pointer; padding: 7px 0; }
 .loadout-empty { padding: 24px; font-size: 13px; color: #5c7c8f; }
@@ -312,7 +310,6 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
   .loadout-table-head, .loadout-row { grid-template-columns: 140px minmax(390px, 1fr); min-width: 530px; }
   .loadout-row-name { padding: 10px 8px; }
   .loadout-row-name strong { font-size: 11px; }
-  .loadout-footer { flex-direction: column; gap: 4px; }
 }
 .custom-editor { margin-top:14px; border-top:1px solid #c4d8e4; padding:12px 0 0; }
 .custom-editor [hidden] { display:none !important; }
@@ -686,7 +683,6 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-workspace .loadout-cell { min-height:38px; }
 .loadout-workspace .loadout-cell .ordnance-icon { max-width:36px; }
 .loadout-workspace .loadout-table-head .loadout-row-name, .loadout-workspace .loadout-ruler > span { padding:4px 6px; }
-.loadout-workspace .loadout-footer { margin-top:3px; }
 .loadout-workspace .optimizer-panel { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; padding:8px 0; }
 .loadout-workspace .optimizer-panel > * { grid-column:1/-1; }
 .loadout-workspace .optimizer-panel[hidden] { display:none; }
@@ -785,10 +781,13 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .optimizer-target-controls input { width:80px; min-height:34px; padding:5px 8px; border:1px solid #bdd2df; border-radius:6px; font:inherit; }
 .optimizer-target-controls button { padding:6px 10px; border:1px solid #bdd2df; border-radius:6px; background:#eef6fb; font:inherit; font-size:12px; cursor:pointer; }
 .optimizer-target-controls button[aria-pressed=true] { background:#fff3ca; border-color:#dbbe6e; }
-.optimizer-guidance-selection { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; }
-.optimizer-guidance-selection button { flex:1 1 90px; }
-.optimizer-guidance-selection button[aria-pressed=true] { background:#e3f3eb; border-color:#91c4ad; }
-.optimizer-guidance-selection button strong { flex-basis:auto; }
+.optimizer-guidance-selection { --guidance-index:0; grid-column:1/-1; display:grid; position:relative; grid-template-columns:repeat(3,minmax(0,1fr)); min-width:0; padding:2px; border-radius:8px; background:#e5eef4; isolation:isolate; }
+.optimizer-guidance-thumb { position:absolute; z-index:-1; top:2px; bottom:2px; left:2px; width:calc((100% - 4px) / 3); border:1px solid #ddc270; border-radius:6px; background:#fff0b8; box-shadow:0 1px 3px #8b7b3920; transform:translateX(calc(var(--guidance-index) * 100%)); transition:transform .18s ease; }
+.optimizer-guidance-selection label { display:grid; place-items:center; position:relative; min-width:0; min-height:40px; padding:5px 6px; border-radius:6px; color:#55778b; font-size:11px; text-align:center; line-height:1.35; overflow-wrap:anywhere; cursor:pointer; }
+.optimizer-guidance-selection input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; }
+.optimizer-guidance-selection label:has(input:checked) { color:#715513; font-weight:700; }
+.optimizer-guidance-selection label:has(input:focus-visible) { outline:2px solid #258dbd; outline-offset:-2px; }
+@media (prefers-reduced-motion:reduce) { .optimizer-guidance-thumb { transition:none; } }
 .loadout-summary .aircraft-toolbar { position:relative; order:1; flex-basis:100%; width:100%; min-width:0; margin:4px 0 0; padding:0; border:0; border-radius:0; background:none; }
 .loadout-summary .aircraft-toolbar .hangar-picker-head { display:none; }
 .calculator-page .loadout-summary .aircraft-toolbar:focus-within .hangar-aircraft-list:not(:has(.hangar-weapon-empty)) { top:100%; }

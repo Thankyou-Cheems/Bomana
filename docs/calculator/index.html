@@ -169,8 +169,12 @@
             <div class="optimizer-controls">
               <fieldset class="optimizer-filters"><legend data-i18n="optimizer.allowedStores">可参与推荐的弹药</legend>
                 <div class="optimizer-filter-grid">
-                  <div class="optimizer-guidance-selection" role="group" data-i18n-aria-label="optimizer.guidanceSelection" aria-label="制导筛选"><button type="button" data-optimizer-guidance-all aria-pressed="true"><strong data-i18n="optimizer.guidanceAll">不限</strong></button><button type="button" role="switch" data-optimizer-guided-only aria-checked="false"><strong data-i18n="optimizer.guidedOnly">只考虑制导武器</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
-                  <button type="button" role="switch" data-optimizer-unguided-only aria-checked="false"><strong data-i18n="optimizer.unguidedOnly">不使用制导</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button></div>
+                  <div class="optimizer-guidance-selection" role="radiogroup" data-i18n-aria-label="optimizer.guidanceSelection" aria-label="制导筛选">
+                    <span class="optimizer-guidance-thumb" aria-hidden="true"></span>
+                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="any" data-optimizer-guidance-all checked><span data-i18n="optimizer.guidanceAll">不限</span></label>
+                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="guided" data-optimizer-guided-only><span data-i18n="optimizer.guidedOnly">只考虑制导武器</span></label>
+                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="unguided" data-optimizer-unguided-only><span data-i18n="optimizer.unguidedOnly">不使用制导</span></label>
+                  </div>
                   <button type="button" role="switch" data-optimizer-filter="noHighDrag" aria-checked="true"><strong data-i18n="optimizer.highDrag">高阻炸弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
                   <button type="button" role="switch" data-optimizer-filter="noRockets" aria-checked="true"><strong data-i18n="page.rockets">火箭弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
                   <button type="button" role="switch" data-optimizer-filter="noMissiles" aria-checked="true"><strong data-i18n="optimizer.strikeMissiles">对地导弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
@@ -220,7 +224,6 @@
           <section class="hangar-picker native-presets" aria-labelledby="native-presets-title"><header class="hangar-picker-head"><div><h2 id="native-presets-title" data-i18n="optimizer.gamePresets">游戏内置挂载</h2><p id="calcLoadoutCaption"><span data-i18n="page.selectAPresetToInspectItsStrikeAmmunition">选择预设，查看本次出击的对地弹药</span></p></div></header>
             <div id="calcPresetPanel" hidden>
               <div class="loadout-scroll" id="calcPresetList" role="listbox" aria-label="挂载预设" data-i18n-aria-label="page.loadoutPresets" tabindex="0"></div>
-              <div class="loadout-footer"><span id="calcPresetCount"></span><span><span data-i18n="page.gameStationLayout">游戏挂点排列</span></span></div>
             </div>
           </section>
           </div>

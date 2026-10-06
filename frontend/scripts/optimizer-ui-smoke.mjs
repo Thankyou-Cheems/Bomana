@@ -37,11 +37,11 @@ try {
   const guidanceFilters = ['noLaser', 'noOptical', 'noSatellite'];
   await guidedOnly.click();
   for (const key of guidanceFilters) await page.locator(`[data-optimizer-filter="${key}"]`).click();
-  assert.equal(await guidedOnly.getAttribute('aria-checked'), 'false', 'Excluding the last guidance family exits guided-only mode');
+  assert.equal(await guidedOnly.isChecked(), false, 'Excluding the last guidance family exits guided-only mode');
   for (const key of guidanceFilters) assert.equal(await page.locator(`[data-optimizer-filter="${key}"]`).getAttribute('aria-checked'), 'false');
   await guidedOnly.click();
   for (const key of guidanceFilters) assert.equal(await page.locator(`[data-optimizer-filter="${key}"]`).getAttribute('aria-checked'), 'true', 'Guided-only restores guidance families when all were excluded');
-  await guidedOnly.click();
+  await page.locator('[data-optimizer-guidance-all]').click();
   await waitResult();
   assert.equal(await page.locator('[data-optimizer-priority][value="balanced"]').isChecked(), true);
   assert.equal(await page.locator('[data-optimizer-filter="noRockets"]').getAttribute('aria-checked'), 'true');

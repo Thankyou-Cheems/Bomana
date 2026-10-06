@@ -555,7 +555,6 @@ function renderPresets() {
   const preset = selectedPreset();
   if (preset && !preset.weapons.some(([id]) => id === selectedWeaponId)) selectedWeaponId = preset.weapons[0]?.[0] || "";
   if (rows.length) renderPresetRows(presetList, visiblePresets, weapons, selectedPresetId, rows);
-  document.querySelector("#calcPresetCount").textContent = t("app.presets", "{{v0}} / {{v1}} 套预设", {v0: visiblePresets.length, v1: rows.length});
 }
 
 async function loadAircraftPresets() {

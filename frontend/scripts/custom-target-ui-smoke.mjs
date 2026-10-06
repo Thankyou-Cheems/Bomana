@@ -15,6 +15,7 @@ const executablePath=process.env.BOMANA_BROWSER_EXECUTABLE||(existsSync('/usr/bi
 const browser=await chromium.launch(executablePath?{executablePath,headless:true}:{channel:'msedge',headless:true});
 try {
  const page=await browser.newPage({viewport:{width:1440,height:1050}}),errors=[],requests=[];
+ await page.emulateMedia({reducedMotion:'reduce'});
  page.on('pageerror',error=>errors.push(error.message));page.on('request',request=>requests.push(request.url()));
  await page.addInitScript(()=>{
   const Original=window.Worker;window.__optimizerWorkers=0;
@@ -41,10 +42,18 @@ try {
  assert.match(await page.locator('[data-optimizer-status]').textContent(),/正整数/);
  await page.locator('[data-optimizer-target-preset="3"]').click();await wait();assert.equal(await page.locator('[data-optimizer-target-count]').getAttribute('aria-invalid'),'false');
  await page.locator('[data-optimizer-unguided-only]').click();await wait();
- assert.equal(await page.locator('[data-optimizer-unguided-only]').getAttribute('aria-checked'),'true');
+ // Native radio keys move the slider without turning the selected choice off.
+ await page.locator('[data-optimizer-unguided-only]').press('ArrowLeft');await wait();
+ assert.equal(await page.locator('[data-optimizer-guided-only]').isChecked(),true);
+ await page.locator('[data-optimizer-guided-only]').press('ArrowLeft');await wait();
+ assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true);
+ await page.locator('[data-optimizer-guidance-all]').click();await wait();
+ assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true);
+ await page.locator('[data-optimizer-unguided-only]').click();await wait();
+ assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),true);
  await page.locator('[data-optimizer-guided-only]').click();await wait();
- assert.equal(await page.locator('[data-optimizer-unguided-only]').getAttribute('aria-checked'),'false');
- assert.equal(await page.locator('[data-optimizer-guided-only]').getAttribute('aria-checked'),'true');
+ assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),false);
+ assert.equal(await page.locator('[data-optimizer-guided-only]').isChecked(),true);
  assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-state'),'infeasible','Tu-4 has no guided preset');
  await page.locator('[data-optimizer-unguided-only]').click();await wait();
  await page.locator('#calcTargetSegments [data-value="airport_airfield"]').click();await wait();
@@ -65,6 +74,10 @@ try {
   assert.ok((await text()).includes(label));
   for(const width of [1440,390,320]){
    await page.setViewportSize({width,height:1050});
+   assert.equal(await page.locator('#calcPresetCount, .loadout-footer').count(),0,'Preset count and station-layout captions are removed');
+   assert.equal(await page.locator('.optimizer-guidance-selection input:checked').count(),1,'Guidance is a single radio selection');
+   const [thumb,selected]=await Promise.all([page.locator('.optimizer-guidance-thumb').boundingBox(),page.locator('.optimizer-guidance-selection label:has(input:checked)').boundingBox()]);
+   assert.ok(Math.abs(thumb.x-selected.x)<1&&Math.abs(thumb.width-selected.width)<1,`${locale} ${width}px slider follows its selected segment`);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`${locale} ${width}px overflow`);
    assert.equal(await page.locator('#calcAircraftSearch').count(),1,'The existing search remains unique');
    const [sorties,search,stores]=await Promise.all(['#calcSortieCard','#calcAircraftSearch','#calcPresetDetail'].map(selector=>page.locator(selector).boundingBox()));
@@ -75,7 +88,7 @@ try {
   }
  }
  await page.reload();await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
- assert.equal(await page.locator('[data-optimizer-unguided-only]').getAttribute('aria-checked'),'true','Guidance selection survives refresh');
+ assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),true,'Guidance selection survives refresh');
  await page.setViewportSize({width:1440,height:1050});
  await page.locator('[data-calculator-language="zh-CN"]').click();
  await page.waitForFunction(()=>document.documentElement.lang==='zh-CN'&&!document.querySelector('#calculatorLanguage').hasAttribute('aria-busy'));
@@ -94,7 +107,7 @@ try {
  // Legacy storage onlyGuided:true maps to the exclusive guided state.
  await page.evaluate(()=>localStorage.setItem('bomana:calculator:optimizerFilters',JSON.stringify({onlyGuided:true})));await page.reload();
  await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
- assert.equal(await page.locator('[data-optimizer-guided-only]').getAttribute('aria-checked'),'true');assert.equal(await page.locator('[data-optimizer-unguided-only]').getAttribute('aria-checked'),'false');
+ assert.equal(await page.locator('[data-optimizer-guided-only]').isChecked(),true);assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),false);
  assert.deepEqual(errors,[]);
  const receipt={passed:true,switchMilliseconds,workerReusedForN:true,catalogRefetchForN:0,manualFilterConflictPreserved:true,locales:['zh-CN','zh-Hant','en'],widths:[1440,390,320],errors};
  await writeFile('../.artifacts/calculator-ui/custom-target-result.json',JSON.stringify(receipt,null,2)+'\n');

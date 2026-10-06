@@ -54,13 +54,10 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       button.setAttribute("aria-checked", String(allowed));
       button.querySelector("[data-optimizer-filter-state]").textContent = allowed ? t("optimizer.allowed", "允许") : t("optimizer.excluded", "排除");
     }
-    const guided = root.querySelector("[data-optimizer-guided-only]");
-    guided.setAttribute("aria-checked", String(filters.onlyGuided));
-    guided.querySelector("[data-optimizer-filter-state]").textContent = filters.onlyGuided ? t("optimizer.on", "开启") : t("optimizer.off", "关闭");
-    const unguided = root.querySelector("[data-optimizer-unguided-only]");
-    unguided.setAttribute("aria-checked", String(filters.noGuided));
-    unguided.querySelector("[data-optimizer-filter-state]").textContent = filters.noGuided ? t("optimizer.on", "开启") : t("optimizer.off", "关闭");
-    root.querySelector("[data-optimizer-guidance-all]").setAttribute("aria-pressed", String(!filters.onlyGuided && !filters.noGuided));
+    const guidance = filters.onlyGuided ? "guided" : filters.noGuided ? "unguided" : "any";
+    const guidanceControls = [...root.querySelectorAll("[data-optimizer-guidance]")];
+    for (const control of guidanceControls) control.checked = control.dataset.optimizerGuidance === guidance;
+    root.querySelector(".optimizer-guidance-selection").style.setProperty("--guidance-index", String(guidanceControls.findIndex(control => control.checked)));
     root.querySelector("[data-optimizer-priority-help]").textContent = filters.simpleLoadout
       ? t("optimizer.uniformHelp", "优先统一投放特性和弹种，允许降低收益；始终保留手动选择。")
       : filters.strictReward ? t("optimizer.strictRewardHelp", "优先收益系数；收益完全相同时再选择更简单的挂载。")
@@ -252,13 +249,6 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       update(context);
     } else if (button.dataset.optimizerTargetPreset) {
       targetCount = Number(button.dataset.optimizerTargetPreset); countInput.value = String(targetCount); update(context);
-    } else if (button.hasAttribute("data-optimizer-guidance-all")) {
-      filters.onlyGuided = false; filters.noGuided = false; persistFilters(); reflectControls(); if (context) update(context);
-    } else if (button.hasAttribute("data-optimizer-unguided-only")) {
-      filters = toggleRecommendationFilter(filters, "noGuided"); persistFilters(); reflectControls(); if (context) update(context);
-    } else if (button.hasAttribute("data-optimizer-guided-only")) {
-      filters = toggleRecommendationFilter(filters, "onlyGuided"); persistFilters(); reflectControls();
-      if (context) update(context);
     } else if (button.dataset.optimizerFilter in filters) {
       const key = button.dataset.optimizerFilter;
       filters = toggleRecommendationFilter(filters, key); persistFilters(); reflectControls();
@@ -267,6 +257,16 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     else if (button === retry) { signature = ""; update(context, 60); }
   });
   root.addEventListener("change", event => {
+    if (event.target.matches("[data-optimizer-guidance]")) {
+      const selection = event.target.dataset.optimizerGuidance;
+      filters.onlyGuided = false;
+      filters.noGuided = false;
+      if (selection !== "any") filters = toggleRecommendationFilter(filters, selection === "guided" ? "onlyGuided" : "noGuided");
+      persistFilters();
+      reflectControls();
+      if (context) update(context);
+      return;
+    }
     if (!event.target.matches("[data-optimizer-priority]")) return;
     filters.simpleLoadout = event.target.value === "simple";
     filters.strictReward = event.target.value === "reward";
