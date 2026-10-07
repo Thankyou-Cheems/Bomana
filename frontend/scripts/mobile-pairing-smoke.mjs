@@ -5,12 +5,24 @@ import { chromium } from "playwright-core";
 // local App assets and offline game responses. Pairing tokens stay out of logs.
 const target = process.env.BOMANA_PAIRING_REPRO_URL;
 assert.ok(target, "The Bridge browser fixture must provide its QR target");
+async function useLoopbackFixture(context) {
+  const fixtureHost = process.env.BOMANA_PAIRING_FIXTURE_HOST;
+  assert.equal(fixtureHost, new URL(target).hostname, "Fixture forwarding must match the QR host");
+  await context.route(`http://${fixtureHost}:*/**`, async route => {
+    const original = new URL(route.request().url());
+    const local = new URL(original);
+    local.hostname = "127.0.0.1";
+    const response = await route.fetch({ url: local.toString(), headers: { ...route.request().headers(), host: original.host }, maxRedirects: 0 });
+    await route.fulfill({ response });
+  });
+}
 function disableUsageReporting() {
   if (location.protocol === "http:") localStorage.setItem("bomana:dau:disabled:v1", "1");
 }
 const browser = await chromium.launch({ channel: "msedge", headless: true });
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+  await useLoopbackFixture(context);
   await context.addInitScript(disableUsageReporting);
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
@@ -54,6 +66,7 @@ try {
   assert.equal(completions, 3, "Reopening without a QR must restore the current session");
 
   const otherPhone = await browser.newPage();
+  await useLoopbackFixture(otherPhone.context());
   await otherPhone.addInitScript(disableUsageReporting);
   const rejected = otherPhone.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/mobile/pairing/complete");
   await otherPhone.goto(currentQR);

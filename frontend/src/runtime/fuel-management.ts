@@ -43,6 +43,9 @@ export interface FuelSnapshot {
   readonly engineType: string;
   readonly regime: string;
   readonly sampleSeconds: number;
+  /** Zero output is an observation, not proof of zero fuel flow. */
+  readonly flowState: "consuming" | "unresolved" | "output-zero" | "unavailable";
+  readonly rateUncertaintyKgMin: number | null;
   readonly returnNeededKg: number;
   readonly returnStatus: "safe" | "warning" | "danger" | "unknown";
   readonly returnTargetLabel: string;
@@ -64,6 +67,7 @@ export interface FuelSnapshot {
 }
 
 interface FuelSample { atMs: number; kg: number }
+interface FuelFit { rate: number; stable: boolean; uncertainty: number }
 interface LearnedFuel {
   observation: FuelObservation;
   rate: number;
@@ -84,6 +88,9 @@ export class FuelManager {
   #learned: LearnedFuel[] = [];
   #rate = 0;
   #stable = false;
+  #fit: FuelFit | null = null;
+  #lastAbruptLoss: { atMs: number; rate: number } | null = null;
+  #changeUntilMs = 0;
   #event = "";
   #eventUntil = 0;
   #speed: number | null = null;
@@ -98,38 +105,50 @@ export class FuelManager {
     this.#samples = [];
     this.#learned = [];
     this.#stable = false;
+    this.#fit = null;
+    this.#lastAbruptLoss = null;
+    this.#changeUntilMs = 0;
     this.#event = "";
     this.#eventUntil = 0;
     this.#speed = null;
   }
 
   observe(input: FuelObservation): void {
+    if (!Number.isFinite(input.atMs) || this.#last && input.atMs <= this.#last.atMs) return;
     if (input.aircraft && input.aircraft !== this.#aircraft) {
       this.reset();
       this.#aircraft = input.aircraft;
     }
     const previous = this.#last;
-    if (previous && input.atMs <= previous.atMs) return;
     this.#last = input;
     if (input.fuelKg === null || !Number.isFinite(input.fuelKg) || input.fuelKg < 0) {
       this.#clearSegment();
+      this.#learned = [];
       return;
     }
     this.#currentKg = input.fuelKg;
     if (this.#initialKg === 0 && input.initialKg !== null && input.initialKg > 0) this.#initialKg = input.initialKg;
     const dt = previous ? (input.atMs - previous.atMs) / 1000 : 0;
     const model = this.#modelRate(input);
-    if (previous?.fuelKg !== null && previous?.fuelKg !== undefined && dt > 0 && dt <= 3) {
+    if (previous?.fuelKg !== null && previous?.fuelKg !== undefined && dt > 0 && dt <= 12) {
       const change = previous.fuelKg - input.fuelKg;
       const expected = Math.max(this.#rate, model ?? 0) * dt / 60;
-      if (change < -.2 || change > Math.max(5, (this.#initialKg || this.#currentKg) * .02, expected * 6)) {
+      const lossRate = change / dt;
+      const priorLoss = this.#lastAbruptLoss;
+      const continuingLoss = priorLoss && input.atMs - priorLoss.atMs <= 3000
+        && lossRate > 0 && Math.abs(lossRate / priorLoss.rate - 1) <= .3;
+      const abruptLoss = change > Math.max(5, (this.#initialKg || this.#currentKg) * .02, expected * 6);
+      const increaseResolution = Math.max(1e-6, Math.min(massResolution(previous.fuelKg), massResolution(input.fuelKg)));
+      if (change < -increaseResolution * .75 || abruptLoss && !continuingLoss) {
         this.#clearSegment();
         this.#learned = [];
         this.#event = change < 0 ? "refuel" : "fuel-jump";
         if (change < 0 && input.initialKg !== null && input.initialKg > 0) this.#initialKg = input.initialKg;
         this.#eventUntil = input.atMs + 10000;
       }
+      this.#lastAbruptLoss = abruptLoss ? { atMs: input.atMs, rate: lossRate } : null;
     }
+    if (dt > 12) this.#learned = [];
     if (dt > 3 || !this.#segment || !sameCondition(this.#segment, input)) this.#clearSegment();
     if (!this.#segment) this.#segment = input;
     if (input.groundSpeedKmh !== null && input.groundSpeedKmh >= 50) {
@@ -139,18 +158,27 @@ export class FuelManager {
     const latest = this.#samples.at(-1);
     if (latest && input.atMs - latest.atMs < 1000) return;
     this.#samples.push({ atMs: input.atMs, kg: input.fuelKg });
-    this.#samples = this.#samples.filter((sample) => sample.atMs >= input.atMs - 45000);
+    this.#samples = this.#samples.filter((sample) => sample.atMs >= input.atMs - 180000);
     // A continuing leak or power change absent from /state must not take a full
     // 45-second history to displace the previous consumption rate.
     if (this.#stable && this.#samples.length >= 8) {
       const recent = this.#samples.filter((sample) => sample.atMs >= input.atMs - 6000);
-      const fitted = fitConsumption(recent, this.#initialKg);
-      if (fitted !== null && (fitted > this.#rate * 1.5 || fitted < this.#rate / 1.5)) this.#samples = recent;
+      const fitted = fitConsumption(recent);
+      if (fitted?.stable && (fitted.rate > this.#rate * 1.5 || fitted.rate < this.#rate / 1.5)) {
+        this.#samples = recent;
+        this.#changeUntilMs = input.atMs + 6000;
+      }
     }
-    const rate = fitConsumption(this.#samples, this.#initialKg);
-    this.#stable = rate !== null;
-    this.#rate = rate ?? 0;
-    if (rate !== null && this.#spanSeconds() >= 12 && input.atMs - this.#lastLearnedMs >= 3000
+    if (input.atMs < this.#changeUntilMs) this.#samples = this.#samples.filter((sample) => sample.atMs >= input.atMs - 6000);
+    // Prefer current conditions. Extend only when the shorter span cannot
+    // resolve the mass steps; retain plateaus and their elapsed time.
+    const short = this.#samples.filter((sample) => sample.atMs >= input.atMs - 45000);
+    const shortFit = fitConsumption(short);
+    this.#fit = shortFit?.stable ? shortFit : fitConsumption(this.#samples) ?? shortFit;
+    this.#stable = this.#fit?.stable === true && input.atMs >= this.#changeUntilMs;
+    this.#rate = this.#fit?.rate ?? 0;
+    const rate = this.#rate;
+    if (this.#stable && this.#spanSeconds() >= 12 && input.atMs - this.#lastLearnedMs >= 3000
       && !input.onGround && Math.abs(input.verticalSpeedMps) <= 5 && this.#speed !== null
       && input.engines.length > 0 && input.engines.every((engine) => engine.throttlePercent !== null && engine.throttlePercent > 5)) {
       const point = { observation: { ...input, groundSpeedKmh: this.#speed }, rate, modelRate: model };
@@ -163,14 +191,20 @@ export class FuelManager {
 
   view(nowMs: number, live: boolean, target: FuelReturnTarget | null, trackValid: boolean): FuelSnapshot {
     const input = this.#last;
-    const available = live && input !== null && input.fuelKg !== null && input.fuelKg >= 0 && nowMs - input.atMs <= 3000;
+    const available = live && input !== null && input.fuelKg !== null && Number.isFinite(input.fuelKg) && input.fuelKg >= 0 && nowMs - input.atMs <= 3000;
     const profile = this.#profile();
     const nominal = input ? this.#modelRate(input) : null;
-    const calibration = input ? this.#learned.findLast((item) => sameCondition(item.observation, input) && item.modelRate !== null) : null;
-    const modelRate = nominal !== null ? nominal * (calibration?.modelRate ? calibration.rate / calibration.modelRate : 1) : null;
+    const calibration = input ? this.#learned.findLast((item) => input.atMs - item.observation.atMs <= 600000 && sameCondition(item.observation, input) && item.modelRate !== null) : null;
+    // Raw FM units/interpolation are not closed. Only a same-sortie, same-
+    // condition calibration may bridge a short measurement restart.
+    const modelRate = nominal !== null && calibration?.modelRate ? nominal * calibration.rate / calibration.modelRate : null;
     const stable = available && this.#stable;
-    const rate = available ? stable ? this.#rate : modelRate ?? 0 : 0;
-    const source = !available ? "unavailable" : stable ? "measured" : modelRate !== null ? "aircraft-estimate" : "learning";
+    const outputZero = input !== null && input.engines.length > 0 && input.engines.every((engine) =>
+      (engine.thrustKgf !== null || engine.powerHp !== null)
+      && (engine.thrustKgf === null || engine.thrustKgf === 0) && (engine.powerHp === null || engine.powerHp === 0));
+    const rate = available ? this.#fit ? this.#rate : outputZero ? 0 : modelRate ?? 0 : 0;
+    const source = !available ? "unavailable" : this.#fit ? "measured" : modelRate !== null && !outputZero ? "aircraft-estimate" : "learning";
+    const flowState = !available ? "unavailable" : this.#fit ? "consuming" : outputZero ? "output-zero" : "unresolved";
     const regime = input ? fuelRegime(input) : "unknown";
     const currentSpeed = trackValid ? this.#speed : null;
     const cruise = input ? this.#learned.filter((item) =>
@@ -181,8 +215,9 @@ export class FuelManager {
       && item.observation.groundSpeedKmh >= 100)
       .sort((a, b) => a.rate / a.observation.groundSpeedKmh! - b.rate / b.observation.groundSpeedKmh!)[0] : null;
     let reason = !available ? "fuel-unavailable" : input?.onGround ? "on-ground"
+      : input && (Math.abs(input.verticalSpeedMps) > 10 || regime === "idle") ? "maneuver"
       : !rate ? "learning" : !target ? "no-airfield" : currentSpeed === null ? "no-track"
-      : input && (Math.abs(input.verticalSpeedMps) > 10 || regime === "idle") ? "maneuver" : "ready";
+      : "ready";
     if (available && this.#eventUntil > nowMs && !stable) reason = this.#event;
     let tripKg: number | null = null;
     let reserveKg: number | null = null;
@@ -214,7 +249,7 @@ export class FuelManager {
       available, rateKgMin: rate, stable,
       remainingMinutes: available && this.#currentKg === 0 ? 0 : rate > 0 ? this.#currentKg / rate : null,
       source, aircraftMatched: profile !== null, engineType: profile?.engineType ?? "unknown", regime,
-      sampleSeconds: this.#spanSeconds(), returnNeededKg, returnStatus,
+      sampleSeconds: this.#spanSeconds(), flowState, rateUncertaintyKgMin: available ? this.#fit?.uncertainty ?? null : null, returnNeededKg, returnStatus,
       returnTargetLabel: target?.label ?? "", returnDistanceKm: target?.distanceKm ?? null,
       returnMinutes, tripKg, reserveKg, reserveMinutes: RESERVE_MINUTES, marginKg, reason, economy,
     };
@@ -225,6 +260,8 @@ export class FuelManager {
     this.#segment = null;
     this.#rate = 0;
     this.#stable = false;
+    this.#fit = null;
+    this.#changeUntilMs = 0;
     this.#speed = null;
   }
   #spanSeconds(): number {
@@ -236,13 +273,20 @@ export class FuelManager {
   #modelRate(input: FuelObservation): number | null { return aircraftFuelRate(this.#profile(), input.engines); }
 }
 
-function fitConsumption(samples: readonly FuelSample[], capacityKg: number): number | null {
+function fitConsumption(samples: readonly FuelSample[]): FuelFit | null {
   if (samples.length < 5) return null;
   const first = samples[0]!;
   const last = samples.at(-1)!;
   const span = (last.atMs - first.atMs) / 1000;
   const used = first.kg - last.kg;
-  if (span < 6 || used < Math.max(.2, capacityKg * .0001)) return null;
+  // The observed decimal grid is a resolution bound, not a universal game
+  // quantizer. Regression residuals independently guard noisy/nonlinear data.
+  const decimalGrid = Math.min(...samples.map((sample) => massResolution(sample.kg)));
+  const changes = samples.slice(1).map((sample, index) => Math.abs(sample.kg - samples[index]!.kg)).filter((change) => change > 1e-6);
+  // Extra decimal places do not prove extra sensor precision. Require several
+  // observed steps too; a lone tank-transfer step cannot certify steady burn.
+  const resolution = Math.max(decimalGrid, changes.length ? Math.min(...changes) : decimalGrid);
+  if (span < 6 || used < resolution * .75) return null;
   const meanT = samples.reduce((sum, sample) => sum + (sample.atMs - first.atMs) / 1000, 0) / samples.length;
   const meanKg = samples.reduce((sum, sample) => sum + sample.kg, 0) / samples.length;
   let covariance = 0;
@@ -258,7 +302,17 @@ function fitConsumption(samples: readonly FuelSample[], capacityKg: number): num
     const error = sample.kg - meanKg - slope * ((sample.atMs - first.atMs) / 1000 - meanT);
     return sum + error * error;
   }, 0) / samples.length);
-  return slope < 0 && residual <= Math.max(.1, used * .15) ? -slope * 60 : null;
+  if (slope >= 0 || residual > Math.max(resolution * .6, used * .15)) return null;
+  const rate = -slope * 60, uncertainty = (resolution + residual * 2) / span * 60;
+  return { rate, stable: used + 1e-6 >= resolution * 3 && residual <= used * .15 && uncertainty <= rate * .5, uncertainty };
+}
+
+function massResolution(kg: number): number {
+  for (let digits = 0; digits < 6; digits++) {
+    const scale = 10 ** digits;
+    if (Math.abs(kg * scale - Math.round(kg * scale)) < 1e-6) return 1 / scale;
+  }
+  return 1e-6;
 }
 
 function averageThrottle(input: FuelObservation): number | null {
@@ -280,8 +334,11 @@ function sameCondition(a: FuelObservation, b: FuelObservation): boolean {
     && a.engines.length === b.engines.length
     && a.engines.every((engine, index) => {
       const next = b.engines[index]!;
-      return engine.throttlePercent === null ? next.throttlePercent === null
+      const throttleSame = engine.throttlePercent === null ? next.throttlePercent === null
         : next.throttlePercent !== null && Math.abs(engine.throttlePercent - next.throttlePercent) <= 5;
+      const outputSame = (before: number | null, after: number | null) => before === null ? after === null
+        : after !== null && Math.abs(before - after) <= Math.max(1, Math.abs(before) * .25);
+      return throttleSame && outputSame(engine.thrustKgf, next.thrustKgf) && outputSame(engine.powerHp, next.powerHp);
     })
     && Math.abs(a.altitudeM - b.altitudeM) <= 500
     && Math.abs(a.iasKmh - b.iasKmh) <= Math.max(50, a.iasKmh * .15)

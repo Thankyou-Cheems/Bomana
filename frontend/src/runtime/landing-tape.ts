@@ -1,4 +1,5 @@
 import type { EditionSnapshot } from "./runtime-types";
+import { fuelEndurance } from "./fuel-presentation";
 import { landingConfigurationPresentation, landingHeightPresentation, landingLateralGuidance, landingSurfacePresentation, landingRunwayRemaining } from "./landing-presentation";
 import { landingRunwayScene, landingRunwayFrame, projectLandingRunway, RunwaySceneMotion, type LandingRunwayScene, type ProjectedPoint } from "./landing-runway-projection";
 
@@ -18,10 +19,11 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   const fuel = snapshot.fuel;
   const fuelAvailable = fuel?.available === true && snapshot.sortieContinuity.state === "live"
     && landing?.reason !== "telemetry" && finite(fuel.currentKg) && fuel.currentKg >= 0;
-  const minutes = fuelAvailable && fuel?.source === "measured" && fuel.stable && finite(fuel.remainingMinutes) && fuel.remainingMinutes >= 0
+  const minutes = fuelAvailable && fuel?.source === "measured" && finite(fuel.remainingMinutes) && fuel.remainingMinutes >= 0
     ? fuel.remainingMinutes : null;
-  const fuelText = minutes !== null ? `${Math.round(minutes * 60)}` : "—";
-  const fuelDetail = minutes !== null ? `约 ${fuelText} 秒` : "— 秒";
+  const endurance = fuelEndurance(fuelAvailable ? fuel : null);
+  const fuelText = endurance.text;
+  const fuelDetail = endurance.detail;
   const equipmentState = (value: boolean | null | undefined) => value === true ? "✓" : value === false ? "×" : "?";
   const equipmentText = `钩${equipmentState(landing?.aircraft?.arrestorHook)} 伞${equipmentState(landing?.aircraft?.brakeChute)}`;
   const equipmentDescription = (value: boolean | null | undefined) => value === true ? "已配备" : value === false ? "未配备" : "未知";

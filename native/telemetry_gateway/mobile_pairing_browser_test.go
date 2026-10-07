@@ -3,6 +3,7 @@
 package main
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -39,6 +40,14 @@ func TestStandardMobilePairingBrowser(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 	gateway := newRelay(mustURL(upstream.URL), testOrigin)
+	// Keep the browser's private-LAN origin while the fixture sockets stay local.
+	// The browser adapter forwards those requests to these loopback ports.
+	gateway.mobile.listen = func(network, _ string) (net.Listener, error) {
+		return net.Listen(network, "127.0.0.1:0")
+	}
+	gateway.mobile.networks = func(httpPort, tlsPort int) ([]mobileNetworkCandidate, error) {
+		return []mobileNetworkCandidate{{Interface: "Browser fixture", Address: "192.168.1.20", Endpoint: "http://192.168.1.20:" + strconv.Itoa(httpPort) + "/", TLSEndpoint: "https://192.168.1.20:" + strconv.Itoa(tlsPort) + "/"}}, nil
+	}
 	t.Cleanup(func() { _ = gateway.mobile.Close() })
 	control := httptest.NewServer(gateway)
 	t.Cleanup(control.Close)
@@ -46,9 +55,18 @@ func TestStandardMobilePairingBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, listener := range []net.Listener{gateway.mobile.listener, gateway.mobile.tlsListener} {
+		address, ok := listener.Addr().(*net.TCPAddr)
+		if !ok || !address.IP.IsLoopback() {
+			t.Fatalf("browser fixture must listen only on loopback: %v", listener.Addr())
+		}
+		t.Logf("mobile browser fixture listener: %s", address)
+	}
+	t.Logf("mobile browser test executable: %s", os.Args[0])
 	command := exec.Command("node", "../../frontend/scripts/mobile-pairing-smoke.mjs")
 	command.Env = append(os.Environ(), "BOMANA_PAIRING_REPRO_URL="+trayPairingHandoffURL(descriptor, 0), "BOMANA_PAIRING_CONTROL="+control.URL, "BOMANA_PAIRING_ORIGIN="+testOrigin)
 	command.Env = append(command.Env, "BOMANA_PAIRING_PARAMETER_ASSET="+filepath.Base(parameters[0]), "BOMANA_PAIRING_PARAMETER_BYTES="+strconv.FormatInt(parameterInfo.Size(), 10))
+	command.Env = append(command.Env, "BOMANA_PAIRING_FIXTURE_HOST=192.168.1.20")
 	output, err := command.CombinedOutput()
 	t.Log(string(output))
 	if err != nil {

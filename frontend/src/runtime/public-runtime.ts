@@ -306,8 +306,8 @@ export class PublicRuntime {
       const state = frame.state ?? {};
       this._fuel.observe({
         atMs: frame.stateSampledAtMs ?? frame.sampledAtMs, aircraft: telemetry.aircraft,
-        fuelKg: fuelNumber(state, ["Mfuel, kg", "Mfuel", "fuel"]),
-        initialKg: fuelNumber(state, ["Mfuel0, kg", "Mfuel0", "fuel0"]),
+          fuelKg: fuelNumber(state, ["Mfuel, kg"]),
+          initialKg: fuelNumber(state, ["Mfuel0, kg"]),
         engines: fuelEngines(state), altitudeM: telemetry.altitudeM,
         tasKmh: telemetry.tasObserved ? telemetry.tasKmh : null, iasKmh: telemetry.iasKmh,
         verticalSpeedMps: telemetry.verticalSpeedMps, onGround: telemetry.onGround,

@@ -512,11 +512,12 @@ it("switches the shared runtime automatically from actual 8111 ground-track samp
   const tape=landingTapePresentation(snapshot);
   expect(tape.active).toBe(true);expect(tape.aria).toContain("燃油");expect(tape.speedText).toBe("300");
   const measured={...snapshot,fuel:{...snapshot.fuel!,available:true,currentKg:400,percent:40,source:"measured" as const,stable:true,remainingMinutes:2}};
-  expect(landingTapePresentation(measured)).toMatchObject({fuelText:"120",fuelTone:"danger",fuelDetail:"约 120 秒"});
+  expect(landingTapePresentation(measured)).toMatchObject({fuelText:"120",fuelTone:"danger",fuelDetail:"实测 120 秒"});
   expect(landingTapePresentation({...measured,fuel:{...measured.fuel,remainingMinutes:4.25}})).toMatchObject({fuelText:"255",fuelTone:"caution"});
   expect(landingTapePresentation({...measured,fuel:{...measured.fuel,remainingMinutes:8.5}})).toMatchObject({fuelText:"510",fuelTone:"reference"});
-  for (const fuel of [{...measured.fuel,source:"aircraft-estimate" as const},{...measured.fuel,stable:false},{...measured.fuel,remainingMinutes:-1},{...measured.fuel,remainingMinutes:NaN}]) {
-    expect(landingTapePresentation({...measured,fuel})).toMatchObject({fuelText:"—",fuelDetail:"— 秒"});
+  expect(landingTapePresentation({...measured,fuel:{...measured.fuel,stable:false}})).toMatchObject({fuelText:"≈120",fuelDetail:"收敛中 ≈120 秒"});
+  for (const fuel of [{...measured.fuel,source:"aircraft-estimate" as const},{...measured.fuel,remainingMinutes:-1},{...measured.fuel,remainingMinutes:NaN}]) {
+    expect(landingTapePresentation({...measured,fuel})).toMatchObject({fuelText:"—"});
   }
   expect(landingTapePresentation({...measured,sortieContinuity:{...measured.sortieContinuity,state:"no-data-grace"}}).fuelText).toBe("—");
   for (const [arrestorHook,brakeChute,equipmentText] of [[true,false,"钩✓ 伞×"],[false,true,"钩× 伞✓"],[null,undefined,"钩? 伞?"]] as const) {
