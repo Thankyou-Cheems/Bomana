@@ -1,3 +1,4 @@
+import { mountWebShell } from "./runtime/web-shell";
 import "../../docs/assets/bomana-header.js";
 import { editionPolicy } from "./runtime/edition-policy";
 import { PublicRuntime, BrowserRuntimeSettingsStore, BrowserTimerCheckpointStore } from "./runtime/public-runtime";
@@ -8,6 +9,7 @@ import { TelemetrySource, type Official8111Frame } from "./runtime/telemetry-sou
 import { AutoConnectionLoop } from "./runtime/auto-connection-loop";
 import { LatestSampleProcessor } from "./runtime/latest-sample-processor";
 import { bindPageSession } from "./runtime/page-session";
+import { initializeWebShellLayout } from "./runtime/web-shell-layout";
 import { IncompatibleBridgeError } from "./runtime/bridge-discovery";
 import { fuelPresentation } from "./runtime/fuel-presentation";
 import { LandingPanel } from "./runtime/landing-panel";
@@ -26,6 +28,7 @@ import type { PublicNavigationMap } from "./runtime/public-pip-mini-map";
 import type { PublicPictureInPicture } from "./runtime/public-pip";
 
 const edition = editionPolicy(__BOMANA_EDITION__);
+mountWebShell(element("hud-top"), element("hud-left"));
 if (edition.channel === "Enhanced") throw new Error("private edition requires its own entry point");
 const aircraftParameters = await loadAircraftParameters();
 const encyclopedia = new StrikeEncyclopedia(await loadStrikeResources(aircraftParameters));
@@ -59,6 +62,7 @@ const flightPresenter = new FlightStatusPresenter();
 let latestFlightStatus: FlightStatusPresentation | null = null;
 document.body.dataset.edition = edition.channel;
 text("edition-name", edition.displayName);
+text("edition-access", edition.channel.toUpperCase());
 for (const node of document.querySelectorAll<HTMLElement>(".standard-only")) node.hidden = edition.channel === "Lite";
 if (document.body.dataset.mobilePaired === "true") { element("open-mobile-pairing").hidden = true; element("toggle-pip").hidden = true; }
 if (!window.isSecureContext || !("documentPictureInPicture" in window)) {
@@ -72,6 +76,7 @@ if (__BOMANA_EDITION__ !== "Lite") {
   pip = new PublicPictureInPicture(selectTarget, cycleTarget, (visible) => { element<HTMLInputElement>("pip-map-visible").checked = visible; }, map);
   instruments = new FlightInstruments(element("flight-instruments"), { onCycleTarget: cycleTarget });
 }
+initializeWebShellLayout(element("hud-top"), element("hud-left"));
 const processor = new LatestSampleProcessor(async (frame: Official8111Frame) => {
   latestFrame = frame;
   render(await runtime.ingest(frame));
@@ -109,14 +114,16 @@ on("accept-pip-risk", () => {
   void pip?.toggle(snapshot, flightStatus).catch(showError);
 });
 on("cancel-pip-risk", () => element<HTMLDialogElement>("pip-risk-dialog").close());
-on("open-settings", () => {
+function openSettings(): void {
   element<HTMLInputElement>("cycle-minutes").value = String(runtime.snapshot().timer.cycleMinutes);
   element<HTMLSelectElement>("theme-select").value = readTheme();
   element<HTMLInputElement>("sound-enabled").checked = sound.enabled;
   element<HTMLSelectElement>("sound-preset").value = sound.preferences.timerPreset;
   element<HTMLTextAreaElement>("checklist-items").value = runtime.snapshot().checklist?.items.join("\n") ?? "";
   element<HTMLDialogElement>("settings-dialog").showModal();
-});
+}
+on("open-settings", openSettings);
+on("open-timer-settings", openSettings);
 on("save-settings", () => { void saveSettings().catch(showError); });
 element<HTMLInputElement>("pip-map-visible").checked = readPipMapVisible("Standard");
 element("pip-map-visible").addEventListener("change", () => pip?.setMapVisible(element<HTMLInputElement>("pip-map-visible").checked));
@@ -155,18 +162,20 @@ void fetch("https://bomana.ruikang.wang/app/app-release.json", { cache: "no-stor
 function render(snapshot: EditionSnapshot): void {
   snapshot = timerSession.project(snapshot);
   landingPanel.update(snapshot.landing);
-  text("status", !snapshot.connected ? "等待 Bridge · 从在线启动器下载并运行" : !latestFrame?.availability.state ? "Bridge 已连接 · 等待游戏出击" : "Bridge 已连接 · 官方 8111 实时数据");
+  const gameActive = snapshot.connected && latestFrame?.state?.valid !== false && latestFrame?.indicators?.valid !== false;
+  text("status", !latestFrame?.bridgeReachable ? "等待 Bridge · 从在线启动器下载并运行" : !gameActive ? "Bridge 已连接 · 等待游戏出击" : "Bridge 已连接 · 官方 8111 实时数据");
   renderTimer(snapshot);
   const undo = snapshot.sortieContinuity.resetUndo;
   element("undo-sortie-reset").hidden = !undo || undo.expiresAtMs <= Date.now();
+  element("sortie-reset-undo").hidden = element("undo-sortie-reset").hidden;
   if (edition.channel === "Lite") return;
   text("aircraft", snapshot.flight.aircraft || "等待飞机");
   for (const [id, value] of [["ias-value", snapshot.flight.iasKmh], ["tas-value", snapshot.flight.tasKmh], ["altitude", snapshot.flight.altitudeM], ["heading-value", snapshot.flight.headingDeg]] as const) text(id, Math.round(value).toString());
   if (snapshot.flight.tasObserved === false) text("tas-value", "—");
   const target = snapshot.navigation?.target;
   text("navigation-target", target?.label ?? "暂无目标");
-  text("navigation-bearing", target ? `方位 ${Math.round(target.bearingDeg).toString().padStart(3, "0")}°` : "方位 ---");
-  text("navigation-distance", target ? `${target.distanceKm.toFixed(1)} km` : "距离 ---");
+  text("navigation-bearing", target ? `${Math.round(target.bearingDeg).toString().padStart(3, "0")}°` : "---");
+  text("navigation-distance", target ? `${target.distanceKm.toFixed(1)} km` : "---");
   const select = element<HTMLSelectElement>("navigation-select");
   const options = snapshot.navigation?.items ?? [];
   if ([...select.options].map((option) => option.value).join("|") !== options.map((item) => item.id).join("|")) {
@@ -196,6 +205,7 @@ function render(snapshot: EditionSnapshot): void {
   const flightStatus = flightPresenter.update(snapshot);
   latestFlightStatus = flightStatus;
   instruments?.update(snapshot, flightStatus); map?.update(snapshot, latestFrame?.mapInfo ?? null); pip?.update(snapshot, flightStatus);
+  element("map-empty").hidden = gameActive && !!snapshot.navigation?.player;
 }
 function renderTimer(snapshot: EditionSnapshot): void {
   const seconds = snapshot.timer.remainingSec === null ? null : Math.max(0, Math.ceil(snapshot.timer.remainingSec));

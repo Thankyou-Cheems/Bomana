@@ -1,0 +1,33 @@
+.enhanced-access-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #15344a;
+  background: linear-gradient(145deg, #e8f5fc, #d6e9f5);
+  font-family: "Microsoft YaHei", "Microsoft YaHei UI", sans-serif;
+}
+.enhanced-access-card {
+  width: min(520px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(54,105,135,.25);
+  border-radius: 16px;
+  background: rgba(249,253,255,.95);
+  box-shadow: 0 18px 44px rgba(43,83,108,.16);
+}
+.enhanced-access-card > span { color: #507c96; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.enhanced-access-card h1 { margin: 10px 0 8px; font-size: 28px; }
+.enhanced-access-card p { color: #5f7f95; line-height: 1.7; }
+.enhanced-access-card small { display: block; margin-top: 18px; color: #7892a2; line-height: 1.6; }
+.enhanced-access-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.enhanced-access-actions a,.enhanced-access-actions button { min-height: 40px; padding: 9px 14px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }
+.enhanced-access-actions button:disabled { opacity: .62; cursor: wait; }
+.enhanced-access-primary { background: #f6c945; color: #45330a; }
+.enhanced-access-secondary { border: 1px solid rgba(54,105,135,.25); background: #edf7fc; color: #245f82; }
+.enhanced-access-pairing-form { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.enhanced-access-pairing-form input { min-width: 0; min-height: 44px; padding: 9px 12px; border: 1px solid rgba(54,105,135,.35); border-radius: 9px; background: #fff; color: #15344a; font: 900 20px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+
+:root[data-theme="classic-dark"] body .enhanced-access-gate { background: radial-gradient(circle at 50% 20%, #123247, #030b11 66%); color: var(--text); }
+:root[data-theme="classic-dark"] body .enhanced-access-card { border-color: var(--line); background: #081d29; color: var(--text); box-shadow: var(--shadow); }
+:root[data-theme="classic-dark"] body .enhanced-access-card p,
+:root[data-theme="classic-dark"] body .enhanced-access-card small { color: var(--muted); }

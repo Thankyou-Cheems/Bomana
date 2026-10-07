@@ -1,0 +1,169 @@
+/* Shared Standard and Enhanced Web presentation. */
+#connection-badge:has(#sound-ready) { flex-wrap: wrap; }
+
+#sound-ready { inline-size: 176px; min-block-size: 32px; max-width: 100%; flex-shrink: 0; }
+
+#timer-sync-status:empty { display: none; }
+
+#timer-sync-status { flex-basis: 100%; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .connection-copy { min-width: 0; flex: 1 1 150px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .connection-copy > span { font-size: 11px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .connection-copy small { font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .connection { flex-wrap: wrap; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage #sound-ready { flex-basis: 100%; inline-size: auto; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .connection-retry { flex: none; min-height: 30px; text-decoration: none; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-right { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-right .glass { padding: 14px; border-radius: 12px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-right .card-head { margin-bottom: 12px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-right .card-head h2 { font-size: 14px; letter-spacing: .02em; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .navigation-target { padding: 10px; margin-bottom: 8px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .navigation-target strong { font-size: 14px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .navigation-metrics { gap: 8px; margin-bottom: 8px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .navigation-metrics > span { padding: 8px; border-radius: 6px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .navigation-metrics i { font-size: 10px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .navigation-metrics b { font-size: 15px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .navigation-actions button { min-height: 36px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .map-stage {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  transition: none;
+}
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .map-target-clear {
+  position: absolute;
+  inset: auto auto 12px 12px;
+  max-width: calc(100% - 170px);
+  transform: none;
+}
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .map-controls { bottom: 12px; }
+
+@media (min-width: 1100px) and (min-height: 600px) and (orientation: landscape) {
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage {
+    --flight-column-width: clamp(156px, 11vw, 184px);
+    --tactical-column-width: clamp(252px, 18vw, 284px);
+  }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .map-stage {
+    top: calc(var(--hud-top-bottom, 138px) + 12px);
+    bottom: 12px;
+    left: calc(var(--flight-column-width) + 24px);
+    right: calc(var(--tactical-column-width) + 24px);
+  }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-top {
+    grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) 284px;
+    grid-template-areas: "brand tape end";
+    gap: 12px;
+    padding: 12px;
+  }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-top > .brand-stack { width: 100%; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-top > .web-flight-instruments { min-width: 0; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-product-nav { width: 100%; min-width: 0; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-left { top: calc(var(--hud-top-bottom, 138px) + 12px); left: 12px; width: var(--flight-column-width); max-height: calc(100svh - var(--hud-top-bottom, 138px) - 88px); overflow-y: auto; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-right { top: calc(var(--hud-top-bottom, 138px) + 12px); right: 12px; bottom: 12px; width: var(--tactical-column-width); max-height: none; gap: 10px; overflow-y: auto; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-bottom { left: 12px; width: var(--flight-column-width); }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-bottom .rail-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-left-body { gap: 10px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .readout { padding: 10px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .readout strong { font-size: 21px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .fuel-panel-compact { padding: 9px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .fuel-current-total { font-size: 11px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .fuel-relationship { display: grid; gap: 4px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .fuel-relationship strong,
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .fuel-relationship span,
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .fuel-consumption { font-size: 10px; white-space: normal; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-bottom .rail-btn { min-height: 42px; }
+
+}
+
+@media (max-width: 1099px), (max-height: 599px), (orientation: portrait) {
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage { --web-gutter-left: max(8px, var(--safe-l)); --web-gutter-right: max(8px, var(--safe-r)); display: flex; flex-direction: column; gap: 10px; height: calc(100dvh - 64px - var(--safe-b)); min-height: 0; overflow: auto; padding: max(8px, var(--safe-t)) var(--web-gutter-right) 8px var(--web-gutter-left); }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage > * { flex-shrink: 0; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-top { order: 0; position: relative; inset: auto; width: 100%; grid-template-areas: "brand" "tape" "end"; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 126px auto; gap: 8px; padding: 0; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-top > .brand-stack { display: grid; width: 100%; gap: 6px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .brand-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .brand { width: auto; min-width: 0; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .brand strong { font-size: 11px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .brand-actions { grid-template-columns: repeat(2, minmax(54px, 1fr)); }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .brand-action { min-height: 38px; padding: 4px; font-size: 10px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .brand-stack .connection { width: 100%; min-height: 36px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-product-nav { grid-area: end; justify-self: stretch; width: 100%; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-product-nav a { display: grid; min-height: 28px; font-size: 10px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .web-flight-instruments { width: 100%; min-width: 0; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-left { order: 2; position: relative; inset: auto; width: 100%; max-height: none; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-left-body { grid-template-columns: minmax(96px, .65fr) minmax(0, 1.35fr); gap: 6px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .aircraft-block { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .readout-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .readout { padding: 6px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .readout span { font-size: 9px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .readout strong { font-size: 18px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .map-stage { order: 1; position: relative; inset: auto; flex: none; width: 100%; height: clamp(240px, 65dvh, calc(100vw - var(--web-gutter-left) - var(--web-gutter-right))); border: 1px solid var(--line); border-radius: 12px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-right:not([hidden]) { order: 3; position: relative; inset: auto; display: grid !important; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); width: 100%; height: auto; max-height: none; padding: 0; gap: 10px; overflow: visible; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-right > .panel { width: auto; height: auto; min-height: 0; max-height: none; overflow: visible; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-bottom { order: 4; position: fixed; inset: auto var(--web-gutter-right) 0 var(--web-gutter-left); width: auto; min-height: 52px; padding: 6px 0 calc(6px + var(--safe-b)); background: var(--abyss); }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-bottom .rail { max-width: none; width: 100%; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-bottom .rail-btn { min-height: 42px; }
+
+body:is(:not([data-mobile-paired="true"]), [data-edition="Standard"]) #stage .hud-bottom .rail-btn strong { font-size: 12px; }
+
+}

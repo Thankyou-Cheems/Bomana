@@ -1,50 +1,42 @@
-@import "./map-controls.css";
+@import "./app-chrome.css";
+@import "./access-gate.css";
 @import "./landing.css";
+@import "./app-layout.css";
+@import "./map-controls.css";
 @import "./flight-instruments.css";
-:root { color-scheme: dark; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; color: #d6e9f6; background: #07151f; --card: #102733; --line: #2b4654; --accent: #89d9ec; }
-* { box-sizing: border-box; } body { margin: 0; } [hidden] { display: none !important; }
-a { color: var(--accent); text-decoration: none; } button, input, select, textarea { font: inherit; color: inherit; }
-button, select, input, textarea { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: .55rem .75rem; }
-button { cursor: pointer; } button:hover, a:hover { filter: brightness(1.2); } button:disabled { opacity: .45; cursor: wait; }
-.public-shell { width: min(1360px, 100%); margin: auto; padding: 18px; } .public-header { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 850; letter-spacing: .08em; } .brand img { width: 42px; height: 42px; } .brand small { display: block; font-size: 11px; letter-spacing: .02em; color: #9fb8c9; }
-nav, .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } nav { flex: 1; font-size: 13px; }
-.connection { display: flex; align-items: center; gap: 12px; font-size: 12px; margin: 16px 0; color: #9fb8c9; } .connection button { padding: 4px 10px; }    .mission-progress, .fuel-level-track { position: relative; height: 7px; background: #28424e; border-radius: 5px; overflow: hidden; } .mission-progress i, .fuel-level-track b { display: block; height: 100%; width: 0; background: #69c5da; transition: width .15s linear; }
-.flight-layout { display: grid; grid-template-columns: .8fr 1.15fr 1.2fr; grid-template-areas: "timer flight navigation" "checklist flight navigation"; align-items: start; gap: 14px; } .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-width: 0; }
-h2 { font-size: 14px; font-weight: 750; margin: 0 0 14px; } p, details { font-size: 12px; line-height: 1.7; } .eyebrow { font-size: 10px; letter-spacing: .12em; color: #9fb8c9; }
-.timer-card { grid-area: timer; display: grid; gap: 15px; } #timer { font: 750 clamp(40px, 5vw, 64px)/1.1 Consolas, "Cascadia Mono", monospace; letter-spacing: -.04em; } #timer-cycle { font-size: 12px; }
-.flight-card { grid-area: flight; } .checklist-card { grid-area: checklist; } .navigation-card { grid-area: navigation; }
-.flight-readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0 0 20px; } dt { color: #9fb8c9; font-size: 10px; } dd { font: 700 25px Consolas, "Cascadia Mono", monospace; margin: 3px 0 0; }
-#fuel-source { display: block; color: #9fb8c9; font-size: 10px; margin: 5px 0 9px; } .fuel-level-track i { position: absolute; top: 0; width: 3px; height: 100%; background: #ffd57a; } #fuel-balance { display: block; color: #9fb8c9; }
-#navigation-map { width: 100%; aspect-ratio: 1.3; margin-top: 12px; border-radius: 8px; background: #0b202e; } #navigation-select { width: 100%; } #checklist label { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 7px 0; }
-dialog { width: min(460px, 92vw); max-height: 90vh; overflow: auto; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px; } dialog::backdrop { background: #0009; } dialog label { display: grid; gap: 7px; font-size: 13px; margin: 14px 0; } dialog label:has(input[type=checkbox]) { display: flex; } #mobile-pairing-qr { width: 280px; max-width: 100%; display: block; margin: 18px auto; } #mobile-pairing-networks { width: 100%; }
-.enhanced-access-gate { min-height: 100vh; display: grid; place-items: center; padding: 22px; } .enhanced-access-card { width: min(500px, 100%); padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); } .enhanced-access-card small { display: block; margin-top: 20px; line-height: 1.7; color: #9fb8c9; } .enhanced-access-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+@import "./app-frame.css";
 
-body[data-edition=Lite] .flight-layout { display: block; max-width: 440px; margin: 12vh auto; } body[data-edition=Lite] .timer-card { text-align: center; }
-@media(max-width: 900px) { .flight-layout { grid-template-columns: 1fr 1fr; grid-template-areas: "timer navigation" "flight navigation" "flight checklist"; } nav { order: 3; flex-basis: 100%; } }
-@media(max-width: 580px) { .public-shell { padding: 10px; } .public-header { gap: 10px; justify-content: space-between; } .actions { gap: 6px; } button { padding: 7px 9px; font-size: 12px; } .flight-layout { grid-template-columns: 1fr; grid-template-areas: "timer" "flight" "navigation" "checklist"; }  .timer-card { grid-template-columns: 1fr 1fr; align-items: center; } .timer-card #timer { grid-column: 1 / -1; } }
-.encyclopedia { margin-top: 14px; } .encyclopedia-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; } .encyclopedia label { display: grid; gap: 5px; min-width: 0; } .encyclopedia select { min-width: 0; width: 100%; } :root[data-theme=glacier] { color-scheme: light; color: #163342; background: #e8f1f5; --card: #f5fafc; --line: #c3d6df; --accent: #18677d; } @media(max-width:580px) { .encyclopedia-fields { grid-template-columns: 1fr; } }
+:root { --card: var(--glass-hard); --accent: var(--blue); }
+[hidden] { display: none !important; }
+.map-stage > canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.public-checklist label { display: flex; align-items: center; gap: 8px; margin: 7px 0; font-size: 12px; }
+.public-checklist input { flex: none; }
+#navigation-select { width: 100%; }
+.encyclopedia { font-size: 12px; }
+.encyclopedia summary { cursor: pointer; font-weight: 800; }
+.encyclopedia-fields { display: grid; gap: 10px; margin-top: 12px; }
+.encyclopedia label { display: grid; gap: 4px; min-width: 0; }
+.encyclopedia select { width: 100%; min-width: 0; }
+dialog { width: min(460px, 92vw); max-height: 90dvh; overflow: auto; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--glass-hard); color: var(--text); }
+dialog::backdrop { background: #0009; }
+dialog label { display: grid; gap: 7px; margin: 14px 0; font-size: 13px; }
+dialog label:has(input[type=checkbox]) { display: flex; align-items: center; }
+dialog button, dialog input, dialog select, dialog textarea { font: inherit; color: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--glass); }
+dialog button { cursor: pointer; }
+dialog .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#mobile-pairing-qr { display: block; width: 280px; max-width: 100%; margin: 18px auto; }
+#mobile-pairing-networks { width: 100%; }
+body[data-edition=Lite] #stage { display: block; height: auto; min-height: 100dvh; overflow: auto; padding: 12px; }
+body[data-edition=Lite] #stage .hud-top { position: relative; inset: auto; grid-template-areas: "brand end"; grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); grid-template-rows: auto; padding: 0; }
+body[data-edition=Lite] #stage .hud-left { position: relative; inset: auto; width: min(440px, 100%); max-width: none; max-height: none; margin: 10vh auto 80px; }
+body[data-edition=Lite] #stage .hud-left-body { display: block; }
+body[data-edition=Lite] #stage .timer-block { padding: 24px; text-align: center; }
+body[data-edition=Lite] #stage #timer { font-size: clamp(42px, 10vw, 64px); }
+body[data-edition=Lite] #stage .hud-bottom { left: max(12px, calc((100vw - 440px)/2)); right: max(12px, calc((100vw - 440px)/2)); width: auto; }
+@media(max-width: 580px) { body[data-edition=Lite] #stage .hud-top { grid-template-areas: "brand" "end"; grid-template-columns: minmax(0, 1fr); } }
+body[data-mobile-paired=true] .brand-actions { display: none; }
 
-:root[data-theme=glacier] :is(.brand small, .connection, dt, .eyebrow, #fuel-source, #fuel-balance, .enhanced-access-card small) { color: #476879; }
-body[data-mobile-paired=true] .public-shell { padding: 8px; }
-body[data-mobile-paired=true] .public-header :is(.brand, nav, #toggle-pip, #open-mobile-pairing) { display: none; }
-body[data-mobile-paired=true] .public-product-nav { display:none; }
-.public-header .public-product-nav { width:260px; margin:0 auto; }
-body[data-mobile-paired=true] .public-header { position: fixed; bottom: 10px; right: 10px; z-index: 10; }
-body[data-mobile-paired=true] .connection { margin: 0 0 6px; font-size: 10px; }
-body[data-mobile-paired=true] .flight-layout { display: flex; flex-direction: column; gap: 8px; }
-body[data-mobile-paired=true] .flight-layout>.card { width: 100%; padding: 12px; }
-body[data-mobile-paired=true] .navigation-card { order: -2; }
-body[data-mobile-paired=true] .navigation-card h2 { display: none; }
-body[data-mobile-paired=true] #navigation-map { height: clamp(180px, 48vh, 440px); aspect-ratio: auto; }
-body[data-mobile-paired=true] .timer-card { order: -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-body[data-mobile-paired=true] .timer-card :is(.eyebrow, .mission-progress) { display: none; }
-body[data-mobile-paired=true] #reset-timer { font-size: 11px; padding: 5px 8px; }
-.connection:has(#sound-ready) { flex-wrap: wrap; }
-#sound-ready { inline-size: 176px; min-block-size: 32px; max-width: 100%; flex-shrink: 0; }
-#timer-sync-status:empty { display: none; }
-#timer-sync-status { flex-basis: 100%; }
-body[data-mobile-paired=true] #timer { font-size: 24px; }
-body[data-mobile-paired=true] .public-shell { padding-bottom: 58px; }
-
-.navigation-card { position: relative; }
+body[data-mobile-paired=true] #stage .brand-row,
+body[data-mobile-paired=true] #stage .hud-product-nav { display: none; }
+body[data-mobile-paired=true] #stage .hud-top { grid-template-areas: "tape" "brand"; grid-template-columns: minmax(0, 1fr); grid-template-rows: 126px auto; }
+body[data-mobile-paired=true] #stage .connection-copy small { display: none; }

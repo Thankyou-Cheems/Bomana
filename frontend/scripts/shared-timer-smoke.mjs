@@ -56,9 +56,12 @@ try {
       if (url.pathname.endsWith("/map-info")) return route.fulfill({ json: { valid: true, map_min: [-50000,-50000], map_max: [50000,50000] } });
       return route.abort(); // No payments, analytics or real game/Bridge traffic.
     });
+    const synchronized = !mobile ? page.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/presentation/timer"
+      && response.request().method() === "PUT" && response.ok()) : null;
     await page.goto(site.resolvedUrls.local[0]);
     await page.locator('body[data-edition="Standard"]').waitFor();
     await page.waitForFunction(() => document.querySelector("#timer").textContent !== "--:--");
+    await synchronized;
     return page;
   }
   const desktop = await open(false);

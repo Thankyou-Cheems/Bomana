@@ -15,6 +15,7 @@ try {
     const localFetch = fetch.bind(window), started = Date.now();
     window.__publicMapRevision = 0;
     window.__publicMapInactive = false;
+    window.__publicGameInactive = false;
     window.__publicGearPercent = 100;
     localStorage.setItem("bomana:web:pip-risk-consent:v1", "accepted");
     window.fetch = (input, init) => {
@@ -22,8 +23,8 @@ try {
       if (url.origin === location.origin) return localFetch(input, init);
       const elapsed = Date.now() - started;
       if (url.pathname.endsWith("/capabilities")) return Promise.resolve(Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 4, input: "official-8111-only", write_commands: false, bridge_version: "1.0.0" }));
-      if (url.pathname.endsWith("/indicators")) return Promise.resolve(Response.json({ valid: true, type: "saab_jas39c", compass1: 15 }));
-      if (url.pathname.endsWith("/state")) return Promise.resolve(Response.json({ valid: true, "IAS, km/h": 700, "TAS, km/h": 720, "H, m": 3000, "Vy, m/s": 0, "Mfuel, kg": 1200 - elapsed / 1000, "Mfuel0, kg": 1400, "throttle 1, %": 90, "gear, %": window.__publicGearPercent, "flaps, %": 20 }));
+      if (url.pathname.endsWith("/indicators")) return Promise.resolve(Response.json({ valid: !window.__publicGameInactive, type: "saab_jas39c", compass1: 15 }));
+      if (url.pathname.endsWith("/state")) return Promise.resolve(Response.json({ valid: !window.__publicGameInactive, "IAS, km/h": 700, "TAS, km/h": 720, "H, m": 3000, "Vy, m/s": 0, "Mfuel, kg": 1200 - elapsed / 1000, "Mfuel0, kg": 1400, "throttle 1, %": 90, "gear, %": window.__publicGearPercent, "flaps, %": 20 }));
       if (url.pathname.endsWith("/map-objects")) return Promise.resolve(Response.json(window.__publicMapInactive ? [] : [{ type: "player", x: .5, y: .5 - elapsed * .000002, dx: 0, dy: -1 }, { type: "bombing_point", x: .5, y: .3 }, { type: "airfield", side: "friendly", sx: .2, sy: .7, ex: .2, ey: .8 }, { type: "point_of_interest", x: .49, y: .3 }]));
       if (url.pathname.endsWith("/map-info")) return Promise.resolve(Response.json({ valid: !window.__publicMapInactive, map_min: [-50000, -50000], map_max: [50000 + window.__publicMapRevision, 50000] }));
       if (url.pathname.endsWith("/map-image")) {
@@ -41,6 +42,10 @@ try {
   await page.locator('body[data-edition="Standard"]').waitFor();
   await page.waitForFunction(() => document.querySelector("#timer").textContent !== "--:--");
   assert.equal(await page.locator("#navigation-select option").count(), 2, "Standard must not expose POI navigation");
+  assert.equal(await page.locator("#strike-panel, #offline-cache-panel, #calibrate-y66, #chat-panel").count(), 0, "Paid controls must be absent from public HTML");
+  await page.locator("#open-timer-settings").click();
+  assert.equal(await page.locator("#settings-dialog").isVisible(), true);
+  await page.locator("#close-settings").click();
   assert.equal(await page.locator("#ias-value").innerText(), "700");
   assert.match(await page.locator("#pip-speed-value").innerText(), /IAS 700\/533$/);
   assert.ok(await page.locator("#pip-speed-strip").evaluate(node => node.classList.contains("level-critical")), "Automatic flaps constrain the strip before landing mode is enabled");
@@ -181,16 +186,34 @@ try {
   for (const [width, height] of [[1440, 900], [390, 844], [320, 568], [844, 390]]) {
     await page.setViewportSize({ width, height });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: horizontal overflow`);
+    const frame = await page.evaluate(() => {
+      document.querySelector("#stage").scrollTop = 0;
+      const box = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+      return { header: box(".hud-top"), map: box(".map-stage"), left: box(".hud-left"), right: box(".hud-right"), actions: box(".hud-bottom") };
+    });
+    assert.ok(frame.map.top >= frame.header.bottom && frame.map.width > 250 && frame.map.height > 100, `Shared map viewport: ${JSON.stringify(frame)}`);
+    if (width === 1440) {
+      assert.ok(frame.map.left >= frame.left.right && frame.map.right <= frame.right.left, "Map uses the unobscured corridor between both columns");
+    } else {
+      assert.ok(frame.map.bottom <= frame.left.top && frame.left.bottom <= frame.right.top, "Compact cards follow the map without overlapping");
+      assert.ok(frame.actions.bottom <= height + 1, "Settings remain reachable above the screen edge");
+    }
     await page.screenshot({ path: `../.artifacts/public-ui/Standard-${width}x${height}.png`, fullPage: true });
   }
   await page.evaluate(() => { document.body.dataset.mobilePaired = "true"; });
   for (const [width, height] of [[390, 844], [844, 390]]) {
     await page.setViewportSize({ width, height });
-    assert.equal(await page.locator(".public-product-nav").isVisible(), false);
+    assert.equal(await page.locator(".hud-product-nav").isVisible(), false);
     assert.equal(await page.locator("#toggle-pip").isVisible(), false);
     assert.equal(await page.locator("#open-mobile-pairing").isVisible(), false);
     assert.equal(await page.locator("#open-settings").isVisible(), true);
-    assert.ok(await page.locator(".web-flight-instruments").evaluate(node => node.getBoundingClientRect().top < 55));
+    await page.locator("#open-settings").click();
+    await page.locator("#close-settings").click();
+    await page.locator("#cycle-navigation-target").scrollIntoViewIfNeeded();
+    assert.equal(await page.locator("#cycle-navigation-target").isVisible(), true, "Paired phone retains navigation actions");
+    await page.evaluate(() => { document.querySelector("#stage").scrollTop = 0; });
+    const instruments = await page.locator(".web-flight-instruments").boundingBox();
+    assert.ok(instruments.y >= 0 && instruments.y < 55 && instruments.height >= 120, "Paired heading must have a visible viewport, not a zero-height grid row");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await page.screenshot({ path: `../.artifacts/public-ui/Standard-paired-${width}x${height}.png`, fullPage: true });
   }
@@ -209,6 +232,32 @@ try {
     const canvas = document.querySelector("#navigation-map");
     return canvas.getContext("2d").getImageData(canvas.width / 2, canvas.height / 5, 1, 1).data[0];
   }), 11, "inactive map must reject the previous map's late image");
+  await page.evaluate(() => { window.__publicGameInactive = true; });
+  await page.waitForFunction(() => document.querySelector("#status").textContent === "Bridge 已连接 · 等待游戏出击");
+  assert.equal(await page.locator("#map-empty").isVisible(), true);
   assert.deepEqual(errors, []);
   console.log("Standard UI: timer/settings, official-only targets/basemap lifecycle, encyclopedia, desktop/paired phone geometry and console passed");
+  const liteSite = await preview({ configFile: false, build: { outDir: "dist/Lite" }, preview: { host: "127.0.0.1", port: 0 } });
+  try {
+    const lite = await browser.newPage();
+    lite.on("pageerror", error => errors.push(error.message));
+    await lite.addInitScript(() => { localStorage.setItem("bomana:dau:disabled:v1", "1"); });
+    await lite.goto(liteSite.resolvedUrls.local[0]);
+    await lite.locator('body[data-edition="Lite"]').waitFor();
+    for (const [width, height] of [[1440, 900], [320, 568]]) {
+      await lite.setViewportSize({ width, height });
+      assert.equal(await lite.locator(".map-stage").isVisible(), false);
+      assert.equal(await lite.locator(".web-flight-instruments").isVisible(), false);
+      assert.equal(await lite.locator(".hud-right").isVisible(), false);
+      await lite.locator("#open-timer-settings").click();
+      await lite.locator("#cycle-minutes").fill("15");
+      await lite.locator("#save-settings").click();
+      await lite.locator("#settings-dialog").waitFor({ state: "hidden" });
+      assert.ok(await lite.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      await lite.screenshot({ path: `../.artifacts/public-ui/Lite-${width}x${height}.png`, fullPage: true });
+    }
+    await lite.close();
+    assert.deepEqual(errors, []);
+    console.log("Lite UI: shared header/timer settings, hidden navigation and desktop/phone geometry passed");
+  } finally { await liteSite.close(); }
 } finally { await browser.close(); await site.close(); }
