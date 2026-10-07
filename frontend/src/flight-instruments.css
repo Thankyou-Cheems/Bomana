@@ -1,5 +1,15 @@
 /* One layout for Web, paired mobile, browser PiP and native Desktop. */
 .flight-instruments .pip-heading { backdrop-filter: none !important; }
+.terrain-preview { position: absolute; inset: 0; z-index: 0; min-width: 0; min-height: 0; overflow: hidden; pointer-events: none; }
+.flight-instruments .pip-heading .terrain-preview canvas { display: block; width: 100%; height: 100%; opacity: .2; }
+.terrain-preview-caption { position: absolute; top: 5px; left: 8px; max-width: 35%; overflow: hidden; text-overflow: ellipsis; color: #8da7b2; font: 700 10px/1.3 var(--sans, sans-serif); white-space: nowrap; pointer-events: auto; }
+.terrain-preview[data-tone="caution"] .terrain-preview-caption { color: #f8d66f; }
+.terrain-preview[data-tone="danger"] .terrain-preview-caption { color: #ff8e86; }
+.flight-instruments .pip-heading:has(.terrain-preview[data-tone="caution"]:not([hidden]))::after,
+.flight-instruments .pip-heading:has(.terrain-preview[data-tone="danger"]:not([hidden]))::after { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; border: 1px solid #f8d66f; }
+.flight-instruments .pip-heading:has(.terrain-preview[data-tone="danger"]:not([hidden]))::after { border-color: #ff8e86; }
+.flight-instruments .pip-heading:has(.terrain-preview) #pip-heading-canvas { position: relative; z-index: 1; }
+.flight-instruments .pip-heading:has(.terrain-preview) .pip-heading-value { z-index: 2; }
 .flight-instruments .pip-release-cue { backdrop-filter: none !important; }
 .flight-instruments-host { position: relative; min-width: 0; min-height: 0; overflow: hidden; --instrument-width: 720; --instrument-height: 182; }
 .web-flight-instruments { width: 100%; aspect-ratio: var(--instrument-width, 720) / var(--instrument-height, 182); border-radius: 6px; background: #071923; }
@@ -110,6 +120,7 @@ body:has(.pip-cockpit) { min-width: 0 !important; color: #dbeaf1; font-family: v
 .flight-instruments .speed-track .mark { top: 50%; bottom: auto; height: calc(8px * var(--speed-scale, 1)); transform: translate(-50%, -50%); transition: left 120ms ease, height 120ms ease; position: absolute; width: 2px; }
 .flight-instruments .pip-heading { position: relative; min-width: 0; overflow: hidden; border-block: 1px solid rgba(135, 184, 209, .2); background: #071923; box-shadow: inset 0 0 18px rgba(0, 0, 0, .22); min-height: 0; height: 100%; }
 .flight-instruments .pip-heading.is-ready .release-cursor-countdown { color: #6de0a3; }
+.flight-instruments .is-reference-countdown .release-cursor-countdown { color: #8ec4e1 !important; opacity: .5; }
 .flight-instruments .pip-heading.is-danger .release-cursor-countdown { color: #ff8e86; }
 .flight-instruments .pip-heading.is-ready .release-cue-prompt { animation: none; }
 .flight-instruments .pip-speed { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr); flex: 1 1 auto; align-items: center; gap: 6px; min-width: 0; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; color: #dbeaf1; backdrop-filter: none; }

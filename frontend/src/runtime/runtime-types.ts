@@ -4,6 +4,7 @@ import type { EditionPolicy } from "./edition-policy";
 import type { FuelSnapshot } from "./fuel-management";
 import type { SortieResetReason } from "./sortie-recovery";
 import type { LandingSettings, LandingSnapshot } from "./landing-assist";
+import type { TerrainPreviewRequest, TerrainPreviewMesh, TerrainAwarenessSnapshot } from "./extension-types";
 
 export type RuntimePhase = "idle" | "hangar" | "arming" | "alive" | "loss-pending" | "wait-next";
 export type StrikeTargetMode = "auto" | "zone" | "airfield-module" | "poi" | "hostile";
@@ -47,6 +48,7 @@ export interface TimerCheckpointStore {
 }
 
 export interface RealtimeSolverPort {
+  terrainPreview?(request: TerrainPreviewRequest): Promise<TerrainPreviewMesh | null>;
   readonly terrainReady?: boolean;
   readonly terrainGeneration?: number;
   solveWeaponEnvelope(weaponId: string, state: {
@@ -65,7 +67,8 @@ export interface RealtimeSolverPort {
       readonly to: readonly [number, number];
     };
   }): Promise<GuidedEnvelope>;
-  terrainAltitudeAt?(x: number, y: number): Promise<{
+  terrainAltitudeAt?(x: number, y: number, runway?: import("./contracts").RunwayEndpoints): Promise<{
+    readonly airportAltitudeM?: number | null;
     readonly altitudeM: number | null;
     readonly altitudeDatumM: number | null;
     readonly bombingArea?: MatchedMissionArea | null;
@@ -178,6 +181,7 @@ export interface EditionSnapshot {
   readonly gameChat: readonly OfficialChatMessage[];
   /** Display-only target silhouette, available independently of a strike solve. */
   readonly targetArea?: TargetAreaProjection | null;
+  readonly terrainAwareness?: TerrainAwarenessSnapshot | null;
   readonly fuel: FuelSnapshot | null;
   readonly landing?: LandingSnapshot | null;
   readonly checklist: {
@@ -210,6 +214,8 @@ export interface EditionSnapshot {
     readonly reason: string;
     readonly targetDistanceM: number;
     readonly timeToWindowS: number;
+    /** Signed target-center projection time; display only, never release authorization. */
+    readonly referenceTimeToReleaseS?: number | null;
     /** Observed horizontal ground speed used by the release calculation. */
     readonly groundSpeedMps?: number;
     readonly targetRelativeDeg?: number;

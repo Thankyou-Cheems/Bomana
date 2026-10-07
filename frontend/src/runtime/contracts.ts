@@ -1,4 +1,7 @@
 import type { MatchedMissionArea } from "./extension-types";
+import type { TerrainPreviewRequest, TerrainPreviewMesh } from "./extension-types";
+
+export type RunwayEndpoints = readonly [readonly [number, number], readonly [number, number]];
 
 export interface ReleaseState {
   readonly altitudeM: number;
@@ -56,6 +59,7 @@ export interface SolverCatalogSummary {
 }
 
 export type SolverWorkerRequest =
+  | { readonly type: "terrain-preview"; readonly requestId: number; readonly request: TerrainPreviewRequest }
   | { readonly type: "catalog"; readonly requestId: number }
   | {
       readonly type: "terrain-load";
@@ -69,6 +73,7 @@ export type SolverWorkerRequest =
     }
   | {
       readonly type: "terrain-sample";
+      readonly runway?: RunwayEndpoints;
       readonly requestId: number;
       readonly x: number;
       readonly y: number;
@@ -91,6 +96,7 @@ export type SolverWorkerRequest =
     };
 
 export type SolverWorkerResponse =
+  | { readonly type: "terrain-preview-result"; readonly requestId: number; readonly mesh: TerrainPreviewMesh | null }
   | { readonly type: "terrain-clear-result"; readonly requestId: number }
   | {
       readonly type: "terrain-load-result";
@@ -99,6 +105,7 @@ export type SolverWorkerResponse =
     }
   | {
       readonly type: "terrain-sample-result";
+      readonly airportAltitudeM?: number | null;
       readonly requestId: number;
       readonly altitudeM: number | null;
       readonly altitudeDatumM: number | null;

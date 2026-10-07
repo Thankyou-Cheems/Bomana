@@ -1,4 +1,5 @@
 import type { EditionPolicy } from "./edition-policy";
+import type { RunwayEndpoints } from "./contracts";
 import type { Official8111Frame } from "./telemetry-source";
 import { normalizeOfficialMapInfo } from "./map-info";
 import { GroundTrackEstimator, type GroundTrackEstimate } from "./ground-track";
@@ -602,8 +603,8 @@ export class PublicRuntime {
       airbrakePercent: stateNumber(["airbrake, %", "airbrake"]),
       flapsPercent: stateNumber(["flaps, %", "flaps"]),
     };
-    return projectOnly ? this._landing.project(input, point => this._landingElevation(point))
-      : this._landing.update(input, point => this._landingElevation(point));
+    return projectOnly ? this._landing.project(input, (point, runway) => this._landingElevation(point, runway), (point, runway) => this._landingElevationSource(point, runway))
+      : this._landing.update(input, (point, runway) => this._landingElevation(point, runway), (point, runway) => this._landingElevationSource(point, runway));
   }
 
   protected _projectCommandExtension(
@@ -1178,7 +1179,8 @@ export class PublicRuntime {
   protected _navigationTargetUpdated(_item: NavigationItem | null): void {}
   protected _parseMap(payload: Official8111Frame["mapObjects"]): ParsedMap { return parseBasicMap(payload); }
   protected _resetExtension(_reason: "map" | "hangar" | "life" | "loss"): void {}
-  protected _landingElevation(_point: readonly [number, number]): number | null { return null; }
+  protected _landingElevation(_point: readonly [number, number], _runway?: RunwayEndpoints): number | null { return null; }
+  protected _landingElevationSource(_point: readonly [number, number], _runway?: RunwayEndpoints): "terrain" | "runway" { return "terrain"; }
   protected _observeExtension(_frame: Official8111Frame, _map: ParsedMap, _continuity: EditionSnapshot["sortieContinuity"]): void {}
   protected _snapshotExtension(_telemetry: ParsedTelemetry, _navigation: EditionSnapshot["navigation"], _heading: number,
     _continuity: EditionSnapshot["sortieContinuity"]): Pick<EditionSnapshot, "destroyedZones" | "mapGrid" | "markedZones" | "gameChat" | "strikeSelection" | "strike"> {

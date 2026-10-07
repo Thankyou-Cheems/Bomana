@@ -33,10 +33,10 @@ import {
   usefulActionsCurve,
 } from "../../docs/calculator/model.mjs";
 
-test('formal .49 British bomb correction changes base completion count and preserves Su-33 capacity', () => {
+test('current parameters preserve British bomb completion counts and Su-33 capacity', () => {
   const catalog = JSON.parse(readFileSync(new URL('../../docs/api/v1/calculator/weapons.json', import.meta.url)));
-  assert.equal(catalog.source.version, '2.59.0.49');
-  assert.equal(catalog.source.commit, 'c5d0072c608dbac81e58150dc8e77efcb611a2c8');
+  const parameters = JSON.parse(readFileSync(new URL('../../bomana/data/parameter_set.json', import.meta.url)));
+  assert.deepEqual(catalog.source, parameters.source);
   const weapons = new Map(catalog.weapons.map(weapon => [weapon.id, weapon]));
   const retarded = weapons.get('uk_540lb_mc_mk2_retarded');
   assert.equal(retarded.charge.mass_kg, 94);

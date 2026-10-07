@@ -67,13 +67,14 @@ export function landingConfigurationPresentation(landing: LandingSnapshot | null
 export function landingHeightPresentation(landing: LandingSnapshot | null | undefined) {
   const g = landing?.geometry;
   const elevationKnown = landing?.elevationM != null && Number.isFinite(landing.elevationM);
-  const elevation = elevationKnown ? `${landing!.elevationSource === "terrain" ? "地形高程" : "手动高程"} ${Math.round(landing!.elevationM!)} m` : "机场高程未知";
+  const label = landing?.elevationSource === "runway" ? "机场高程" : landing?.elevationSource === "terrain" ? "入口地形" : "入口手动高程";
+  const elevation = elevationKnown ? `${label} ${Math.round(landing!.elevationM!)} m` : "入口高程未知";
   const relative = !g ? "等待高度数据" : g.heightM === null || !Number.isFinite(g.heightM)
-    ? elevationKnown ? "本机高度未知" : "机场高程未知"
-    : `${g.heightM >= 0 ? "高于机场" : "低于机场"} ${metres(g.heightM)}`;
+    ? elevationKnown ? "本机高度未知" : "入口高程未知"
+    : `${g.heightM >= 0 ? "高于" : "低于"}${landing?.elevationSource === "runway" ? "机场" : "入口参考"} ${metres(g.heightM)}`;
   const reference = !g ? "等待高度数据" : !elevationKnown ? `${elevation} · 仅水平引导` : `${elevation} · ${relative}`;
   const compactReference = !g || !elevationKnown ? reference
-    : `${landing!.elevationSource === "terrain" ? "地形" : "手动"}${Math.round(landing!.elevationM!)}m · ${relative.replace(/ (\d+) m$/, "$1m")}`;
+    : `${landing!.elevationSource === "runway" ? "机场" : landing!.elevationSource === "terrain" ? "入口地形" : "入口手动"}${Math.round(landing!.elevationM!)}m · ${g.heightM === null || !Number.isFinite(g.heightM) ? "高度未知" : `高差${g.heightM >= 0 ? "+" : "−"}${Math.round(Math.abs(g.heightM))}m`}`;
   return { elevation, relative, reference, compactReference };
 }
 

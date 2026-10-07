@@ -40,6 +40,15 @@ let authorizationPopup: AuthorizationPopup | null = null;
 let pendingAuthorizationCode = "";
 let fallbackAccess: BrowserAccess | null = null;
 let desktopDownloading = false;
+let bridgeStatusRequest = 0;
+let latestBridgeStatus = {
+  bridge: { state: "disconnected", message: "等待 Bridge 连接" } as BridgeProbe,
+  cache: unavailableCache("等待 Bridge 连接"),
+  bridgeRelease: null as BridgeRelease | null,
+  appWebRelease: null as AppWebRelease | null,
+};
+let cachePollTimer: number | undefined;
+let cachePollAttempts = 0;
 
 const hostState = required("launcher-host-state");
 const channelGrid = required("channel-grid");
@@ -118,14 +127,11 @@ async function refresh(): Promise<void> {
   refreshing = true;
   document.body.dataset.busy = "true";
   setActivity("正在检查 Bridge、账户与本地缓存…", .18);
-  const [bridgeState, access, cache, bridgeRelease, appWebRelease] = await Promise.all([
-    bridge.probe(),
+  const [, access] = await Promise.all([
+    refreshBridgeStatus(true),
     accessClient.snapshot(),
-    offlineStore.status().catch(() => ({ objectCount: 0, objectBytes: 0, persistent: true, quotaBytes: null, usageBytes: null, storageKind: "bridge" as const, state: "degraded" as const, mapCount: 0, cachedMapCount: 0, totalBytes: 0, cachedBytes: 0, maps: [], error: "Bridge 缓存状态暂不可用" })),
-    fetchBridgeRelease(bridgeReleaseURL).catch(() => null),
-    fetchAppWebRelease(appWebReleaseURL).catch(() => null),
   ]);
-  render({ bridge: bridgeState, access, cache, bridgeRelease, appWebRelease });
+  render({ ...latestBridgeStatus, access });
   refreshing = false;
   delete document.body.dataset.busy;
 }
@@ -574,21 +580,44 @@ async function refreshBridge(showResult: boolean): Promise<BridgeProbe> {
   connectBridge.disabled = true;
   connectBridge.textContent = "检测中…";
   try {
-    const [probe, bridgeRelease, appWebRelease] = await Promise.all([
-      bridge.probe(),
-      fetchBridgeRelease(bridgeReleaseURL).catch(() => currentState?.bridgeRelease ?? null),
-      fetchAppWebRelease(appWebReleaseURL).catch(() => currentState?.appWebRelease ?? null),
-    ]);
+    await refreshBridgeStatus(showResult);
+    const probe = latestBridgeStatus.bridge;
     if (currentState) {
-      currentState = { ...currentState, bridge: probe, bridgeRelease, appWebRelease };
-      renderBridge(probe, bridgeRelease, appWebRelease);
-      renderChannels(currentState);
+      render({ ...currentState, ...latestBridgeStatus });
     }
     if (showResult) showToast(probe.state === "connected" ? "Bomana Bridge 已连接" : probe.message);
     return probe;
   } finally {
     bridgeProbeBusy = false;
     connectBridge.disabled = false;
+  }
+}
+
+function unavailableCache(error: string): OfflineCacheStatus {
+  return { objectCount: 0, objectBytes: 0, persistent: true, quotaBytes: null, usageBytes: null,
+    storageKind: "bridge", state: "degraded", mapCount: 0, cachedMapCount: 0,
+    totalBytes: 0, cachedBytes: 0, maps: [], error };
+}
+
+async function refreshBridgeStatus(resetPolling: boolean): Promise<void> {
+  const request = ++bridgeStatusRequest;
+  window.clearTimeout(cachePollTimer);
+  if (resetPolling) cachePollAttempts = 0;
+  const [probe, bridgeRelease, appWebRelease] = await Promise.all([
+    bridge.probe(),
+    fetchBridgeRelease(bridgeReleaseURL).catch(() => latestBridgeStatus.bridgeRelease),
+    fetchAppWebRelease(appWebReleaseURL).catch(() => latestBridgeStatus.appWebRelease),
+  ]);
+  const cache = probe.state === "connected"
+    ? await offlineStore.status().catch(error => unavailableCache(`地图缓存读取失败：${error instanceof Error ? error.message : "请重新检测"}`))
+    : unavailableCache(probe.message);
+  // A connection check may finish while an older full refresh is still reading.
+  // Only the newest bridge/cache pair can replace the displayed connection fact.
+  if (request !== bridgeStatusRequest) return;
+  latestBridgeStatus = { bridge: probe, cache, bridgeRelease, appWebRelease };
+  if (probe.state === "connected" && (cache.state === "checking" || cache.state === "syncing") && cachePollAttempts < 15) {
+    cachePollAttempts++;
+    cachePollTimer = window.setTimeout(() => void refreshBridge(false), 2000);
   }
 }
 

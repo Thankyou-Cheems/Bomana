@@ -1,3 +1,4 @@
+import type { RunwayEndpoints } from "./contracts";
 import type { EditionSnapshot, NavigationItem } from "./runtime-types";
 import type { GroundTrackEstimate } from "./ground-track";
 import type { AircraftLandingProfile } from "./aircraft-parameters";
@@ -63,7 +64,7 @@ export interface LandingSnapshot {
   readonly status: "disabled" | "unavailable" | "guidance";
   readonly reason: string;
   readonly elevationM: number | null;
-  readonly elevationSource: "manual" | "terrain" | null;
+  readonly elevationSource: "manual" | "terrain" | "runway" | null;
   readonly iasKmh: number | null;
   readonly verticalSpeedMps: number | null;
   readonly gearPercent: number | null;
@@ -219,11 +220,11 @@ export class LandingAssist {
    * A command can change #settings through configure(), so the view still
    * reflects that change immediately.
    */
-  project(input: LandingInput, terrainElevation: (point: readonly [number, number]) => number | null = () => null): LandingSnapshot {
-    return this.#buildView(input, terrainElevation, this.#settings, this.#runwayKey, this.#gearRisk, this.#flapRisk);
+  project(input: LandingInput, terrainElevation: (point: readonly [number, number], runway?: RunwayEndpoints) => number | null = () => null, source: (point: readonly [number, number], runway?: RunwayEndpoints) => "terrain" | "runway" = () => "terrain"): LandingSnapshot {
+    return this.#buildView(input, terrainElevation, this.#settings, this.#runwayKey, this.#gearRisk, this.#flapRisk, source);
   }
 
-  update(input: LandingInput, terrainElevation: (point: readonly [number, number]) => number | null = () => null): LandingSnapshot {
+  update(input: LandingInput, terrainElevation: (point: readonly [number, number], runway?: RunwayEndpoints) => number | null = () => null, source: (point: readonly [number, number], runway?: RunwayEndpoints) => "terrain" | "runway" = () => "terrain"): LandingSnapshot {
     if (this.#context && input.context !== this.#context) {
       this.#settings = { ...DEFAULT_LANDING_SETTINGS, automatic: this.#settings.automatic }; this.#runwayKey = "";
       this.#gearRisk = "unknown";
@@ -241,7 +242,7 @@ export class LandingAssist {
     this.#updateSurface(input, terrainElevation);
     this.#updateGround(input, terrainElevation);
     if (!this.#departure) this.#updateAutomatic(input);
-    const snapshot = this.#buildView(input, terrainElevation, this.#settings, this.#runwayKey, this.#gearRisk, this.#flapRisk);
+    const snapshot = this.#buildView(input, terrainElevation, this.#settings, this.#runwayKey, this.#gearRisk, this.#flapRisk, source);
     this.#gearRisk = snapshot.gearRisk ?? "unknown";
     this.#flapRisk = snapshot.flapReference?.risk ?? "unknown";
     return snapshot;
@@ -249,11 +250,12 @@ export class LandingAssist {
 
   #buildView(
     input: LandingInput,
-    terrainElevation: (point: readonly [number, number]) => number | null,
+    terrainElevation: (point: readonly [number, number], runway?: RunwayEndpoints) => number | null,
     settings: LandingSettings,
     runwayKey: string,
     previousGearRisk: NonNullable<LandingSnapshot["gearRisk"]>,
     previousFlapRisk: string,
+    source: (point: readonly [number, number], runway?: RunwayEndpoints) => "terrain" | "runway",
   ): LandingSnapshot {
     const limit = input.aircraft?.gearIasKmh;
     let gearRisk: NonNullable<LandingSnapshot["gearRisk"]> = "unknown";
@@ -274,7 +276,7 @@ export class LandingAssist {
       : !runway ? "runway-missing" : !locked ? "runway-changed" : "";
     const start = runway && (settings.reverse ? runway.runwayEnd! : runway.runwayStart!);
     const end = runway && (settings.reverse ? runway.runwayStart! : runway.runwayEnd!);
-    const terrainM = !unavailable && start && settings.runwayElevationM === null ? terrainElevation(start) : null;
+    const terrainM = !unavailable && start && settings.runwayElevationM === null ? terrainElevation(start, [start,end!]) : null;
     const elevationM = settings.runwayElevationM ?? terrainM;
     const geometry = !unavailable && start && end && input.navigation?.player && input.navigation.mapScaleM ? landingGeometry({
       player: input.navigation.player, scale: input.navigation.mapScaleM, start, end,
@@ -288,7 +290,7 @@ export class LandingAssist {
         return { key, id: item.id, label: item.label, friendly: item.friendly && !item.hostile,
           geometry: selected && geometry ? geometry : landingGeometry({
             player: input.navigation!.player!, scale: input.navigation!.mapScaleM!, start: item.runwayStart!, end: item.runwayEnd!,
-            altitudeM: input.altitudeM, elevationM: terrainElevation(item.runwayStart!), glideAngleDeg: settings.glideAngleDeg, velocity: null,
+            altitudeM: input.altitudeM, elevationM: terrainElevation(item.runwayStart!, [item.runwayStart!,item.runwayEnd!]), glideAngleDeg: settings.glideAngleDeg, velocity: null,
           }) };
       }) : [];
     return { settings, runwayKey, attitude: input.fresh ? input.attitude : undefined, nearbyRunways, runways: runways.map(item => {
@@ -299,7 +301,7 @@ export class LandingAssist {
     }),
       runwayLabel: runway?.label ?? "", status: !settings.enabled ? "disabled" : geometry ? "guidance" : "unavailable",
       reason: unavailable, surfacePhase: geometry?.heightM != null ? this.#surfacePhase : null, elevationM: geometry ? elevationM : null,
-      elevationSource: geometry && elevationM !== null ? settings.runwayElevationM !== null ? "manual" : "terrain" : null,
+      elevationSource: geometry && elevationM !== null ? settings.runwayElevationM !== null ? "manual" : source(start!, [start!,end!]) : null,
       iasKmh: input.fresh ? input.iasKmh : null, verticalSpeedMps: input.fresh ? input.verticalSpeedMps : null,
       gearPercent: input.fresh ? input.gearPercent : null, airbrakePercent: input.fresh ? input.airbrakePercent : null,
       flapsPercent: input.fresh ? input.flapsPercent : null, geometry, aircraft: input.aircraft ?? null, gearRisk, flapReference };
@@ -312,7 +314,7 @@ export class LandingAssist {
   // A descending/decelerating low pass is indistinguishable from touchdown in
   // official telemetry. Only a sustained, very slow near-surface observation
   // enters this reference. Higher-speed landing retains its airborne cues.
-  #updateSurface(input: LandingInput, elevation: (p: readonly [number, number]) => number | null): void {
+  #updateSurface(input: LandingInput, elevation: (p: readonly [number, number], runway?: RunwayEndpoints) => number | null): void {
     const at = input.sampledAtMs, n = input.navigation;
     const runway = this.#lockedRunway(landingRunways(n), n?.mapScaleM);
     if (!this.#settings.enabled || !input.fresh || at == null || !Number.isFinite(at)
@@ -323,7 +325,7 @@ export class LandingAssist {
     const start = this.#settings.reverse ? runway.runwayEnd! : runway.runwayStart!;
     const end = this.#settings.reverse ? runway.runwayStart! : runway.runwayEnd!;
     const g = landingGeometry({ player: n.player, scale: n.mapScaleM, start, end,
-      altitudeM: input.altitudeM, elevationM: this.#settings.runwayElevationM ?? elevation(start), glideAngleDeg: 3,
+      altitudeM: input.altitudeM, elevationM: this.#settings.runwayElevationM ?? elevation(start, [start,end]), glideAngleDeg: 3,
       velocity: input.track?.valid ? [input.track.velocityX, -input.track.velocityZ] : null });
     const height = g.heightM, speed = input.iasKmh, vy = input.verticalSpeedMps;
     if (height === null || speed === null || vy === null || input.gearPercent === null
@@ -354,7 +356,7 @@ export class LandingAssist {
 
   // This is a presentation phase, not proof of wheel contact. It is observed
   // before the track gate: a repair/respawn jump invalidates the ground track.
-  #updateGround(input: LandingInput, elevation: (p: readonly [number, number]) => number | null): void {
+  #updateGround(input: LandingInput, elevation: (p: readonly [number, number], runway?: RunwayEndpoints) => number | null): void {
     const at = input.sampledAtMs, n = input.navigation;
     if (!input.fresh || at == null || !n?.player || !n.mapScaleM) {
       this.#groundSince = null; this.#groundObservation = null; return;
@@ -369,7 +371,7 @@ export class LandingAssist {
     for (const r of possibleGround ? landingRunways(n) : []) {
       const reference = sameRunway(this.#runwayKey, r, n.mapScaleM) ? this.#settings.runwayElevationM : null;
       const g = landingGeometry({ player: n.player, scale: n.mapScaleM, start: r.runwayStart!, end: r.runwayEnd!,
-        altitudeM: input.altitudeM, elevationM: reference ?? elevation(r.runwayStart!), glideAngleDeg: 3, velocity: null });
+        altitudeM: input.altitudeM, elevationM: reference ?? elevation(r.runwayStart!, [r.runwayStart!,r.runwayEnd!]), glideAngleDeg: 3, velocity: null });
       const strip = g.thresholdDistanceM <= 100 && g.thresholdDistanceM >= -g.lengthM - 100 && Math.abs(g.crossTrackM) <= 120;
       onStrip ||= strip;
       low ||= strip && g.heightM !== null && Math.abs(g.heightM) <= 12;

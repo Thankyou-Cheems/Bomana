@@ -53,7 +53,7 @@ export class LandingPanel {
         : ({ return: "返航", intercept: "对正", final: "进近", runway: "入口后", "past-runway": "末端后" })[g.stage];
     this.part("message").title = p.message;
     this.part("height").textContent = p.heightReference;
-    this.part("height").title = "与 8111 H 相同基准；相对所选跑道入口，不代表沿途地形净空。高台和甲板需手动修正";
+    this.part("height").title = "与 8111 H 相同基准；高差相对所选入口的自然地形或手动参考，不是雷达高度，也不是已验证的跑道表面高度。高台和甲板需手动修正";
     const percent = (value: number | null) => value === null ? "—" : `${Math.round(value)}%`;
     this.part("configuration").textContent = `轮 ${percent(snapshot.gearPercent)} · 翼 ${percent(snapshot.flapsPercent)} · 板 ${percent(snapshot.airbrakePercent)}`;
     this.part("configuration").title = p.configuration;

@@ -1,3 +1,29 @@
+/** Private Enhanced sampling data; public transports only describe the contract. */
+export interface TerrainPreviewRequest {
+  readonly x: number;
+  readonly y: number;
+  readonly headingDeg: number;
+  readonly trackDeg: number;
+  readonly rangeM: number;
+}
+export interface TerrainPreviewMesh {
+  readonly mapId: string;
+  readonly rangeM: number;
+  readonly groundM: number | null;
+  /** 17 depth rows × 17 lateral columns, in the 8111 altitude datum. */
+  readonly altitudesM: readonly (number | null)[];
+  /** Full-resolution grid crossings on ground track, independent of the display. */
+  readonly profile: readonly (readonly [number, number])[] | null;
+}
+export interface TerrainAwarenessSnapshot {
+  readonly state: "checking" | "ready" | "partial" | "unavailable";
+  readonly mesh: TerrainPreviewMesh | null;
+  readonly altitudeM: number;
+  readonly clearanceM: number | null;
+  readonly warning: "caution" | "danger" | null;
+  readonly conflictTimeS: number | null;
+}
+
 export interface OfficialChatMessage {
   readonly id: number;
   readonly msg: string;
