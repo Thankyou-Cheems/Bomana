@@ -38,7 +38,10 @@ try {
       throw new TypeError("External service disabled in cache regression");
     };
   });
-  await page.goto(`${server.resolvedUrls.local[0]}launcher.html`);
+  await page.route('**/launcher/', async route => route.fulfill({
+    response: await route.fetch({ url: `${server.resolvedUrls.local[0]}launcher.html` }),
+  }));
+  await page.goto(`${server.resolvedUrls.local[0]}launcher/`);
   await page.waitForFunction(() => document.body.dataset.busy !== "true" && document.querySelector("#account-actions button"), null, { timeout: 5000 })
     .catch(error => { throw new Error(`${error.message}; page errors: ${JSON.stringify(errors)}`); });
   await page.evaluate(() => { window.cacheFixture.connected = true; });
@@ -46,6 +49,11 @@ try {
   await page.waitForFunction(() => document.querySelector("#connection-step").dataset.connected === "true");
   await page.waitForFunction(() => document.querySelector("#activity-message").textContent.includes("23 / 23"));
   assert.match(await page.locator("#cache-map-summary").textContent(), /23/);
+  for (const [edition, label] of [['Lite', '进入轻量版'], ['Standard', '进入标准版']]) {
+    assert.equal(await page.getByRole('link', { name: label, exact: true }).getAttribute('href'),
+      new URL(`app/${edition}/`, server.resolvedUrls.local[0]).href,
+      `${edition}: missing build override still links from /launcher/ to the real /app/ entry`);
+  }
 
   // Disconnect/reconnect must update both panels, using the same cache protocol on 1.8.4.
   await page.evaluate(() => { window.cacheFixture.connected = false; });

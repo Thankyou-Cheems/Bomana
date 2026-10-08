@@ -343,7 +343,7 @@ function markBridgeDownloadStarted(): void {
 function appWebURL(channel: Channel): URL {
   const base = import.meta.env.VITE_APP_WEB_BASE_URL
     ? new URL(import.meta.env.VITE_APP_WEB_BASE_URL)
-    : new URL("./", location.href);
+    : new URL("../app/", location.href);
   return new URL(`${channel}/`, base);
 }
 
