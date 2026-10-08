@@ -71,7 +71,7 @@ export class LandingRenderBudget {
     this.#limited = (device.hardwareConcurrency ?? 8) <= 4 || (device.deviceMemory ?? 8) <= 4;
   }
   get simplified(): boolean { return this.reducedMotion || this.#limited; }
-  get intervalMs(): number { return 1000 / (this.simplified ? 30 : 60); }
+  get intervalMs(): number { return this.simplified ? 1000 / 30 : 0; }
   pixelRatio(ratio: number): number { return Math.min(ratio || 1, this.simplified ? 1.25 : 2); }
   recordDraw(durationMs: number): void {
     // Ignore isolated resize/GC spikes, and never oscillate quality per frame.
@@ -100,6 +100,7 @@ export class PictureInPictureHeadingRenderer {
   readonly #markerDisplay = new Map<string, SampledAngleMotion>();
   #lastFrameMs = 0;
   #lastObservationMs = 0;
+  #lastSampledAtMs = Number.NaN;
   #frame = 0;
   #targetId = "";
   #extraTargets: readonly HeadingTapeTargetInput[] = [];
@@ -137,15 +138,17 @@ export class PictureInPictureHeadingRenderer {
     this.#targetId = guidance.target?.id ?? "";
     this.#targetCenterMotion.observe(this.#targetId, guidance.centerRelativeDeg ?? guidance.relativeDeg);
     this.#displayTargetCenter = this.#targetCenterMotion.step(this.#view.performance.now());
-    const observedAtMs = sampledAtPerformanceTime(
+    const observedAtMs = snapshot.sampledAtMs === this.#lastSampledAtMs ? this.#lastObservationMs : sampledAtPerformanceTime(
       snapshot.sampledAtMs,
       Date.now(),
       this.#view.performance.now(),
     );
+    this.#lastSampledAtMs = snapshot.sampledAtMs;
     this.#headingMotion.observe(snapshot.flight.headingDeg, observedAtMs);
     this.#observeMarkerSamples(snapshot, observedAtMs);
     this.#lastObservationMs = observedAtMs;
     if (!Number.isFinite(this.#displayHeading)) this.#displayHeading = this.#headingMotion.step(observedAtMs);
+    // Apply readiness/target invalidation immediately, even between display frames.
     this.#render();
     if (!this.#frame) {
       this.#lastFrameMs = this.#view.performance.now();
@@ -206,6 +209,9 @@ export class PictureInPictureHeadingRenderer {
   };
 
   #renderLanding(force = false): void {
+    // A live display callback already owns the next draw. Do not restart it
+    // when a new observation arrives between refreshes.
+    if (this.#frame && !force) return;
     if (this.#frame) this.#view.cancelAnimationFrame(this.#frame);
     this.#frame = 0;
     this.#view.clearTimeout(this.#landingTimer);
@@ -217,6 +223,10 @@ export class PictureInPictureHeadingRenderer {
       this.#render();
       this.#lastLandingDraw = now;
       if (this.#landingBudget.reducedMotion || !this.#landingMotion.isMoving(now)) return;
+    }
+    if (!this.#landingBudget.simplified) {
+      this.#frame = this.#view.requestAnimationFrame(this.#animate);
+      return;
     }
     // Wake only when a frame is due. Rapid telemetry coalesces into the latest
     // snapshot; lifecycle changes above bypass this limit immediately.

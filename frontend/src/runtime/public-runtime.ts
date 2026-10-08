@@ -1159,6 +1159,7 @@ export class PublicRuntime {
     this._navigationTargetUpdated(target);
     return Object.freeze({ player: Object.freeze({ x: player.x, y: player.y }), mapScaleM: scale,
       ...(map.friendlyAircraft ? { friendlyAircraft: Object.freeze(map.friendlyAircraft) } : {}),
+      ...(map.poiLimitExceeded !== undefined ? { poiLimitExceeded: map.poiLimitExceeded } : {}),
       items: Object.freeze(items), target, selectionMode: this._navigationSelectionMode });
   }
 

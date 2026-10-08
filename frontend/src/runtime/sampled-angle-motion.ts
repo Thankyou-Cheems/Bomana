@@ -20,6 +20,8 @@ export class SampledAngleMotion {
     }
     const elapsed = atMs - this.#sampleAtMs;
     const delta = normalizeSigned(valueDeg - this.#sample);
+    // Solver/terrain completions may publish the same telemetry again.
+    if (elapsed === 0 && delta === 0) return;
     if (elapsed <= 0 || elapsed > 1_000 || Math.abs(delta) >= SNAP_DELTA_DEG) {
       this.#sample = valueDeg;
       this.#sampleAtMs = atMs;

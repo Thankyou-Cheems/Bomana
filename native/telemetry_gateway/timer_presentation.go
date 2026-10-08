@@ -90,7 +90,7 @@ func (gateway *relay) serveTimerPresentation(response http.ResponseWriter, reque
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	now := time.Now()
-	if !gateway.usesPairingListener(request) {
+	if !gateway.usesPairingListener(request) && request.Header.Get("Origin") == gateway.allowedOrigin {
 		state.desktopSeenAt = now
 	}
 	response.Header().Set("Content-Type", "application/json")

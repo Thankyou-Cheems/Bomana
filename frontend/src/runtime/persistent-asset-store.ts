@@ -68,7 +68,6 @@ export class PersistentAssetStore {
   readonly #fetcher: Fetcher;
   readonly #documentOrigin: string;
   readonly #inFlight = new Map<string, Promise<ArrayBuffer>>();
-  readonly #verified = new Set<string>();
 
   constructor(
     storage: AssetObjectStorage,
@@ -141,16 +140,11 @@ export class PersistentAssetStore {
   async #load(descriptor: OfflineAssetDescriptor, onProgress?: ProgressCallback): Promise<ArrayBuffer> {
     const cached = await this.#storage.read(descriptor.sha256);
     if (cached) {
-      if (cached.byteLength === descriptor.sizeBytes && (
-        this.#verified.has(descriptor.sha256)
-        || await sha256Hex(cached) === descriptor.sha256
-      )) {
-        this.#verified.add(descriptor.sha256);
+      if (cached.byteLength === descriptor.sizeBytes && await sha256Hex(cached) === descriptor.sha256) {
         onProgress?.(descriptor.sizeBytes, descriptor.sizeBytes);
         return cached;
       }
       await this.#storage.remove(descriptor.sha256);
-      this.#verified.delete(descriptor.sha256);
     }
     if (this.#storage.kind === "bridge") {
       throw new Error(`Bridge 正在下载离线资源：${descriptor.id}`);
@@ -160,7 +154,6 @@ export class PersistentAssetStore {
       throw new Error(`离线资源校验失败：${descriptor.id}`);
     }
     await this.#storage.write(descriptor.sha256, bytes);
-    this.#verified.add(descriptor.sha256);
     return bytes;
   }
 }

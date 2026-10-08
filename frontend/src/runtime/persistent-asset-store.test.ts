@@ -13,6 +13,17 @@ function descriptor(bytes: Uint8Array): OfflineAssetDescriptor {
 }
 
 describe("PersistentAssetStore", () => {
+  it("revalidates bytes replaced at the same cache key after a successful read", async () => {
+    const valid = new TextEncoder().encode("verified");
+    const storage = new MemoryAssetObjectStorage(), item = descriptor(valid);
+    const fetcher = vi.fn(async () => new Response(valid));
+    const store = new PersistentAssetStore(storage, fetcher as typeof fetch);
+    await store.load(item); await store.load(item);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    storage.objects.set(item.sha256, new TextEncoder().encode("tampered").buffer);
+    expect(new Uint8Array(await store.load(item))).toEqual(valid);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it("downloads once and reuses a content-addressed object across store instances", async () => {
     const bytes = new TextEncoder().encode("stable offline catalog");
     const storage = new MemoryAssetObjectStorage();

@@ -172,6 +172,7 @@ export interface EditionSnapshot {
     readonly mapScaleM: readonly [number, number] | null;
     readonly items: readonly NavigationItem[];
     readonly friendlyAircraft?: readonly FriendlyAircraft[];
+    readonly poiLimitExceeded?: boolean;
     readonly target: NavigationItem | null;
     readonly selectionMode: NavigationSelectionMode;
   } | null;
@@ -271,6 +272,7 @@ export interface ParsedTelemetry {
 }
 
 export interface ParsedMap {
+  poiLimitExceeded?: boolean;
   friendlyAircraft?: FriendlyAircraft[];
   player: { x: number; y: number; dx: number; dy: number } | null;
   objects: Array<{

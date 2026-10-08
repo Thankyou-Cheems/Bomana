@@ -10,6 +10,30 @@ import (
 	"testing"
 )
 
+func TestTimerReadWithoutTrustedOriginDoesNotClaimDesktop(t *testing.T) {
+	upstream, _ := url.Parse("http://127.0.0.1:8111")
+	for _, origin := range []string{"", "https://evil.example", "https://bomana.ruikang.wang"} {
+		gateway := newRelay(upstream, "https://bomana.ruikang.wang")
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/presentation/timer", nil)
+		request.RemoteAddr = "127.0.0.1:54321"
+		if origin != "" {
+			request.Header.Set("Origin", origin)
+		}
+		response := httptest.NewRecorder()
+		gateway.ServeHTTP(response, request)
+		trusted := origin == "https://bomana.ruikang.wang"
+		if !gateway.presentation.desktopSeenAt.IsZero() != trusted {
+			t.Fatalf("origin %q claimed desktop incorrectly", origin)
+		}
+		if origin == "" && response.Code != 200 {
+			t.Fatalf("originless read must remain supported: %d", response.Code)
+		}
+		if origin == "https://evil.example" && response.Code != 403 {
+			t.Fatalf("untrusted origin accepted: %d", response.Code)
+		}
+	}
+}
+
 func TestTimerPresentationSnapshotAndCompareAndSwap(t *testing.T) {
 	upstream, _ := url.Parse("http://127.0.0.1:8111")
 	gateway := newRelay(upstream, "https://bomana.ruikang.wang")

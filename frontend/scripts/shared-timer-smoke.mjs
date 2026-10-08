@@ -29,7 +29,7 @@ try {
         state = "suspended"; currentTime = 0; destination = {}; onstatechange = null;
         constructor() { window.__auditAudio = this; }
         async resume() { if (window.__auditAudioReject) throw new Error("Audio permission rejected"); this.state = "running"; this.onstatechange?.(); }
-        createGain() { return { gain: { value: 0 }, connect() {}, disconnect() {} }; }
+        createGain() { return { gain: { setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {}, disconnect() {} }; }
         createOscillator() { const tone = { frequency: { value: 0 }, connect: gain => gain,
           start: () => window.__auditTones.push(tone.frequency.value), stop() {}, disconnect() {} }; return tone; }
       };
@@ -71,7 +71,8 @@ try {
   await phone.waitForFunction(() => document.querySelector("#timer").textContent.startsWith("12:"));
   const seconds = async page => { const value = await page.locator("#timer").innerText(); const [m,s] = value.split(":").map(Number); return m*60+s; };
   assert.ok(Math.abs(await seconds(desktop) - await seconds(phone)) <= 1, "Late phone must share desktop timer");
-  assert.match(await phone.locator("#sound-ready").innerText(), /启用/);
+  assert.equal(await phone.locator("#sound-ready").getAttribute("data-ready"), "true", "Audio initializes before any page click");
+  assert.equal(await phone.locator("#sound-ready").isVisible(), false, "Ready audio needs no extra button");
   await phone.locator("#reset-timer").click();
   await desktop.waitForFunction(() => ["15:00", "14:59", "14:58"].includes(document.querySelector("#timer").textContent)).catch(async error => {
     console.log({ timer, revision, desktop: await desktop.locator("#timer").innerText(),
@@ -95,8 +96,10 @@ try {
   await phone.locator("#sound-ready").click();
   assert.match(await phone.locator("#sound-ready").innerText(), /恢复/);
   await phone.evaluate(() => { window.__auditAudioReject = false; });
-  await phone.locator("#sound-ready").click();
+  await phone.locator("#open-settings").click();
   await phone.waitForFunction(() => document.querySelector("#sound-ready").dataset.ready === "true");
+  assert.equal(await phone.locator("#sound-ready").isVisible(), false);
+  await phone.locator("#settings-dialog").evaluate(dialog => dialog.close());
   const width = await phone.evaluate(() => ({ scroll: document.documentElement.scrollWidth, viewport: innerWidth }));
   assert.ok(width.scroll <= width.viewport, "Phone sound controls must not overflow the viewport");
   assert.deepEqual(errors, []);

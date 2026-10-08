@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { SampledAngleMotion, sampledAtPerformanceTime } from "./sampled-angle-motion";
 
 describe("SampledAngleMotion", () => {
+  it("does not restart interpolation when a solver update republishes the same observation", () => {
+    const repeated = new SampledAngleMotion(), control = new SampledAngleMotion();
+    for (const motion of [repeated, control]) {
+      motion.observe(0, 0); motion.step(0); motion.observe(10, 200); motion.step(200);
+    }
+    for (let t = 216; t <= 440; t += 16) {
+      repeated.observe(10, 200);
+      expect(repeated.step(t)).toBeCloseTo(control.step(t), 10);
+    }
+  });
   it("continues moving between 5 Hz samples instead of settling into plateaus", () => {
     const motion = new SampledAngleMotion();
     motion.observe(0, 0);

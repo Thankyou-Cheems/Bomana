@@ -613,6 +613,7 @@
     "frontend/src/runtime/shared-timer.ts",
     "frontend/src/runtime/sortie-recovery.test.ts",
     "frontend/src/runtime/sortie-recovery.ts",
+    "frontend/src/runtime/sound-cue-design.ts",
     "frontend/src/runtime/sound-cue-status.ts",
     "frontend/src/runtime/sound-cues.ts",
     "frontend/src/runtime/speed-limit-cases.json",
