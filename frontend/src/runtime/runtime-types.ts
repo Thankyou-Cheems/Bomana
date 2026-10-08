@@ -39,6 +39,8 @@ export interface TimerCheckpoint {
   readonly cycleSeconds: number;
   readonly lifeIndex: number;
   readonly phase: "alive" | "loss-pending";
+  readonly mapSignature?: string;
+  readonly aircraft?: string;
 }
 
 export interface TimerCheckpointStore {

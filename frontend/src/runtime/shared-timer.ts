@@ -6,6 +6,7 @@ interface TimerResponse {
   accepted?: boolean;
   schema_version: number; epoch: string; revision: number; server_now_ms: number;
   anchor_at_ms: number; desktop_present: boolean; timer: TimerPresentationState | null;
+  readers_present?: boolean;
 }
 interface Anchor { timer: TimerPresentationState; at: number; identity: string }
 export type TimerCommand = Extract<EditionCommand, { type: "timer.reset" | "timer.set-cycle" }>;
@@ -27,6 +28,7 @@ export class SharedTimerSession {
   #busy = false;
   #commands: Promise<unknown> = Promise.resolve();
   #lastRefreshAt = Number.NEGATIVE_INFINITY;
+  #lastAcceptedAt = Number.NEGATIVE_INFINITY;
 
   constructor(options: { runtime: PublicRuntime; mobile: boolean; fetcher?: typeof fetch;
     endpoint?: () => Promise<URL>; now?: () => number; onStatus?: (message: string) => void }) {
@@ -42,7 +44,10 @@ export class SharedTimerSession {
     if (this.#localAnchor?.identity !== key) {
       this.#localAnchor = { timer: this.#runtime.timerPresentation(), at: this.#now(), identity: key };
     }
-    const anchor = this.#anchor ?? this.#localAnchor;
+    const followsDesktop = this.#mobile && this.#state?.desktop_present && this.#now() - this.#lastAcceptedAt < 5000;
+    const unpublishedLifecycle = this.#localKey !== key && !followsDesktop && !this.#awaitingLocalSpawn;
+    const locallyConfirmed = snapshot.phase === "alive" || snapshot.phase === "loss-pending";
+    const anchor = (unpublishedLifecycle || !locallyConfirmed && !followsDesktop ? null : this.#anchor) ?? this.#localAnchor;
     const timer = elapsedTimer(anchor, this.#now());
     const elapsed = timer.elapsed_sec, period = timer.cycle_seconds;
     return { ...snapshot, timer: {
@@ -76,15 +81,24 @@ export class SharedTimerSession {
           if (this.#mobile) throw error;
           return this.#runtime.command(command); // Ordinary Web on an older Bridge.
         }
-        this.#accept(remote);
+        const continuing = this.#state?.epoch === remote.epoch || remote.readers_present === true
+          || this.#mobile && remote.desktop_present;
+        this.#accept(remote, continuing);
         const prior = this.#anchor ? elapsedTimer(this.#anchor, this.#now()) : this.#runtime.timerPresentation();
         const snapshot = await this.#runtime.command(command);
         const local = this.#runtime.timerPresentation();
+        let commandKey = this.#runtime.timerPresentationKey();
         let desired = command.type === "timer.reset" ? { ...local, elapsed_sec: 0 }
           : { ...prior, cycle_seconds: command.minutes * 60 };
         for (let attempt = 0; attempt < 3; attempt++) {
           const result = await this.#request("PUT", remote, desired);
+          if (commandKey !== this.#runtime.timerPresentationKey()) {
+            this.#accept(result, false);
+            this.#localKey = commandKey;
+            return this.project(this.#runtime.snapshot());
+          }
           this.#accept(result);
+          commandKey = this.#runtime.timerPresentationKey();
           if (result.accepted) {
             this.#localKey = this.#runtime.timerPresentationKey();
             return this.project(snapshot);
@@ -102,19 +116,29 @@ export class SharedTimerSession {
   }
 
   async #synchronize(): Promise<void> {
+    if (this.#runtime.timerRecoveryPending()) return;
     const remote = await this.#request("GET");
     const local = this.#runtime.timerPresentation(), key = this.#runtime.timerPresentationKey();
     const first = !this.#state || this.#state.epoch !== remote.epoch;
     const mayPublish = !this.#mobile || !remote.desktop_present;
+    // Older Bridges cannot prove another page is still observing this timer.
+    // A paired phone can still follow their actively polling desktop owner.
+    const continuing = remote.readers_present === true || this.#mobile && remote.desktop_present;
+    const snapshot = this.#runtime.snapshot();
+    const observedInactive = !local.active && snapshot.connected && snapshot.mapObjectsFresh === true && snapshot.phase !== "arming";
     let changed = this.#localKey !== key || this.#mobile && !remote.desktop_present
       && this.#state?.desktop_present === true && local.active !== remote.timer?.active;
+    if (remote.timer?.active && observedInactive) {
+      changed = true;
+      this.#awaitingLocalSpawn = false;
+    }
     if (this.#awaitingLocalSpawn && local.active && remote.timer?.active) {
       changed = false; this.#awaitingLocalSpawn = false;
     }
-    if (first && remote.timer?.active && !local.active) this.#awaitingLocalSpawn = true;
+    if (first && continuing && !observedInactive && remote.timer?.active && !local.active) this.#awaitingLocalSpawn = true;
     // A previous page may have left Bridge idle before this page observed spawn.
     // The local lifecycle owner must publish that spawn even on its first read.
-    const result = (!remote.timer || first && local.active && !remote.timer.active || !first && changed) && mayPublish
+    const result = (!remote.timer || first && (!continuing || observedInactive || local.active && !remote.timer.active) || !first && changed) && mayPublish
       ? await this.#request("PUT", remote, local) : remote;
     // Telemetry keeps running during PUT. A response for the pre-spawn/death
     // state must neither rebase the new life nor mark its change as published.
@@ -127,6 +151,7 @@ export class SharedTimerSession {
   #accept(value: TimerResponse, applyTimer = true): void {
     if (this.#state?.epoch === value.epoch && value.revision < this.#state.revision) return;
     this.#state = value;
+    this.#lastAcceptedAt = this.#now();
     if (!value.timer || !applyTimer) { this.#anchor = null; return; }
     // #request rebases elapsed to the receive instant using midpoint RTT.
     this.#anchor = { timer: value.timer, at: this.#now(), identity: `${value.epoch}:${value.revision}` };
@@ -162,6 +187,7 @@ function validResponse(value: unknown): value is TimerResponse {
   const v = value as TimerResponse, t = v.timer;
   return v.schema_version === 1 && typeof v.epoch === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(v.epoch)
     && Number.isSafeInteger(v.revision) && v.revision >= 0 && typeof v.desktop_present === "boolean"
+    && (v.readers_present === undefined || typeof v.readers_present === "boolean")
     && Number.isFinite(v.server_now_ms) && Number.isFinite(v.anchor_at_ms)
     && v.server_now_ms >= v.anchor_at_ms && v.anchor_at_ms >= 0
     && (t === null || !!t && typeof t.active === "boolean" && Number.isFinite(t.elapsed_sec)

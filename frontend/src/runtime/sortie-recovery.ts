@@ -1,7 +1,7 @@
 import { normalizeOfficialMapInfo } from "./map-info";
 
 export const RESET_UNDO_WINDOW_MS = 30_000;
-const SORTIE_RESUME_WINDOW_MS = 15 * 60_000;
+export const SORTIE_RESUME_WINDOW_MS = 15 * 60_000;
 
 export type SortieResetReason = "aircraft-loss" | "ground-absence" | "telemetry-timeout";
 

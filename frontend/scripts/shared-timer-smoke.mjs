@@ -11,7 +11,7 @@ const origin = new URL(site.resolvedUrls.local[0]).origin;
 const html = await readFile("dist/Standard/index.html", "utf8");
 const started = Date.now(), errors = [];
 let timer = null, revision = 0, anchor = 0, desktopSeen = 0;
-let flying = true;
+let flying = true, lastReader = 0;
 const response = () => ({ schema_version: 1, epoch: "ui_bridge_epoch_123456", revision,
   server_now_ms: Date.now() - started, anchor_at_ms: anchor,
   desktop_present: Date.now() - desktopSeen < 5000, timer });
@@ -42,13 +42,15 @@ try {
         return route.continue();
       }
       if (url.pathname === "/api/v1/presentation/timer") {
+        const readersPresent = lastReader > 0 && Date.now() - lastReader < 5000;
+        lastReader = Date.now();
         if (!mobile) desktopSeen = Date.now();
         if (route.request().method() === "PUT") {
           const payload = route.request().postDataJSON();
           if (payload.epoch !== response().epoch || payload.expected_revision !== revision) return route.fulfill({ status: 409, json: response() });
           timer = payload.timer; revision++; anchor = Date.now() - started;
         }
-        return route.fulfill({ json: response() });
+        return route.fulfill({ json: { ...response(), readers_present: readersPresent } });
       }
       if (url.pathname.endsWith("/capabilities")) return route.fulfill({ json: { schema_version: 1, bridge_protocol: 1, cache_protocol: 4, mobile_pairing_protocol: 7, input: "official-8111-only", write_commands: false, bridge_version: "development" } });
       if (url.pathname.endsWith("/indicators")) return route.fulfill({ json: { valid: flying, type: "saab_jas39c", compass1: 15 } });
@@ -60,7 +62,7 @@ try {
       return route.abort(); // No payments, analytics or real game/Bridge traffic.
     });
     const synchronized = !mobile ? page.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/presentation/timer"
-      && response.request().method() === "PUT" && response.ok()) : null;
+      && response.request().method() === "PUT" && response.request().postDataJSON()?.timer?.active && response.ok()) : null;
     await page.goto(site.resolvedUrls.local[0]);
     await page.locator('body[data-edition="Standard"]').waitFor();
     await page.waitForFunction(() => document.querySelector("#timer").textContent !== "--:--");
@@ -74,16 +76,23 @@ try {
   assert.ok(timer?.active, "Fresh Standard flight must publish its timer without reset");
   flying = false;
   await cold.waitForFunction(() => document.querySelector("#timer").textContent === "--:--");
+  const respawnPublished = cold.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/presentation/timer"
+    && response.request().method() === "PUT" && response.request().postDataJSON()?.timer?.life_index === 2 && response.ok());
   flying = true;
   await cold.waitForFunction(() => document.querySelector("#timer").textContent.startsWith("14:"));
+  await respawnPublished;
   assert.ok(timer?.active && timer.life_index === 2, "Respawn must automatically start and publish a second life");
   await mkdir("../.artifacts/shared-timer", { recursive: true });
   await cold.screenshot({ path: "../.artifacts/shared-timer/standard-auto-respawn.png" });
   await cold.close();
-  timer = null; revision = 0; anchor = 0; desktopSeen = 0;
+  timer = null; revision = 0; anchor = 0; desktopSeen = 0; lastReader = 0;
   const desktop = await open(false);
   await desktop.waitForFunction(() => document.querySelector("#timer-sync-status").textContent === "");
   assert.ok(timer?.active);
+  assert.ok(timer.elapsed_sec < 10, "Launcher entry must reject the old browser checkpoint");
+  // Advance the authoritative presentation to exercise a late phone joining
+  // a running cycle without waiting two wall-clock minutes in this UI test.
+  timer = { ...timer, elapsed_sec: 120 }; revision++; anchor = Date.now() - started;
   const phone = await open(true);
   await phone.waitForFunction(() => document.querySelector("#timer").textContent.startsWith("12:"));
   const seconds = async page => { const value = await page.locator("#timer").innerText(); const [m,s] = value.split(":").map(Number); return m*60+s; };

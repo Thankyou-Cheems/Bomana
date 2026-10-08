@@ -8,7 +8,7 @@ import { loadAircraftParameters, loadStrikeResources } from "./runtime/runtime-r
 import { TelemetrySource, type Official8111Frame } from "./runtime/telemetry-source";
 import { AutoConnectionLoop } from "./runtime/auto-connection-loop";
 import { LatestSampleProcessor } from "./runtime/latest-sample-processor";
-import { bindPageSession } from "./runtime/page-session";
+import { bindPageSession, isPageReload } from "./runtime/page-session";
 import { initializeWebShellLayout } from "./runtime/web-shell-layout";
 import { IncompatibleBridgeError } from "./runtime/bridge-discovery";
 import { fuelPresentation } from "./runtime/fuel-presentation";
@@ -36,6 +36,7 @@ const pipConsent = new PipRiskConsentStore();
 const pageClock = new WindowClock(() => window);
 const settings = new BrowserRuntimeSettingsStore(edition.channel);
 const runtime = new PublicRuntime({ edition, aircraftParameters, settingsStore: settings,
+  resumeTimerOnReload: isPageReload(),
   timerCheckpointStore: new BrowserTimerCheckpointStore(edition.channel),
   sortieRecoveryStore: edition.channel === "Lite" ? null : new BrowserSortieRecoveryStore(edition.channel) });
 const telemetry = new TelemetrySource("", fetch, Date.now, { includeGameChat: false });
@@ -95,7 +96,8 @@ const connection = new AutoConnectionLoop<Official8111Frame>({
     if (state.phase !== "connected") text("status", state.error?.message ?? (state.phase === "connecting" ? "正在连接 Bridge" : `等待 Bridge · ${Math.ceil(state.retryDelayMs / 1000)} 秒后重试`));
   },
 });
-bindPageSession({ document, window, save: () => runtime.saveTimerCheckpoint(), suspend: () => connection.stop(), reconnect: () => connection.retryNow() });
+bindPageSession({ document, window, save: () => runtime.saveTimerCheckpoint(), suspend: () => connection.stop(),
+  reconcileTimer: history => runtime.reconcileTimerAfterResume(history), reconnect: () => connection.retryNow() });
 on("connect", () => connection.retryNow());
 on("reset-timer", () => execute({ type: "timer.reset" }));
 on("undo-sortie-reset", () => execute({ type: "sortie.undo-reset" }));

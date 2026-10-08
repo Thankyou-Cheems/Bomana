@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTimerReadWithoutTrustedOriginDoesNotClaimDesktop(t *testing.T) {
@@ -31,6 +32,37 @@ func TestTimerReadWithoutTrustedOriginDoesNotClaimDesktop(t *testing.T) {
 		if origin == "https://evil.example" && response.Code != 403 {
 			t.Fatalf("untrusted origin accepted: %d", response.Code)
 		}
+	}
+}
+
+func TestTimerReentryDoesNotClaimPriorContinuity(t *testing.T) {
+	upstream, _ := url.Parse("http://127.0.0.1:8111")
+	for _, gap := range []time.Duration{time.Second, 6 * time.Second, 16 * time.Minute} {
+		t.Run(gap.String(), func(t *testing.T) {
+			gateway := newRelay(upstream, "https://bomana.ruikang.wang")
+			state := gateway.presentation
+			state.timer = &timerProjection{Active: true, ElapsedSec: 120, CycleSeconds: 900, LifeIndex: 1}
+			state.timerAt = state.startedAt
+			state.timerRevision = 1
+			state.timerReaderSeenAt = time.Now().Add(-gap)
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/presentation/timer", nil)
+			request.Header.Set("Origin", gateway.allowedOrigin)
+			response := httptest.NewRecorder()
+			gateway.ServeHTTP(response, request)
+			var result timerPresentation
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.ReadersPresent != (gap < 5*time.Second) {
+				t.Fatalf("presence renewed by incoming request: %+v", result)
+			}
+			if (result.Timer == nil) != (gap > 15*time.Minute) {
+				t.Fatalf("unexpected timer expiry: %+v", result)
+			}
+			if gap > 15*time.Minute && result.Revision != 2 {
+				t.Fatal("expiry must invalidate outstanding writes")
+			}
+		})
 	}
 }
 

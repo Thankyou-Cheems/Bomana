@@ -8,7 +8,7 @@ import type { AircraftParameters } from "./aircraft-parameters";
 import { LandingAssist, landingAttitude } from "./landing-assist";
 import { landingFlapReference } from "./landing-configuration";
 import { speedWarningLevel } from "./speed-warning";
-import { RESET_UNDO_WINDOW_MS, sortieMapSignature, type SortieRecoveryStore, type SortieResetReason,
+import { RESET_UNDO_WINDOW_MS, SORTIE_RESUME_WINDOW_MS, sortieMapSignature, type SortieRecoveryStore, type SortieResetReason,
   type SortieResetUndoRecord, type SortieRestorePoint } from "./sortie-recovery";
 import type { RuntimePhase, NavigationSelectionMode, RuntimeSettings, RuntimeSettingsStore,
   TimerCheckpoint, TimerCheckpointStore, NavigationItem, EditionSnapshot, EditionCommand,
@@ -20,6 +20,8 @@ export interface PublicRuntimeOptions {
     settingsStore?: RuntimeSettingsStore;
     timerCheckpointStore?: TimerCheckpointStore | null;
     sortieRecoveryStore?: SortieRecoveryStore | null;
+    /** Only an explicit browser reload may continue a recently observed life. */
+    resumeTimerOnReload?: boolean;
     now?: () => number;
     aircraftParameters?: AircraftParameters | null;
   }
@@ -147,6 +149,10 @@ export class PublicRuntime {
   protected _resetSuppressedUntilEvidence = false;
   protected _resetUndo: SortieResetUndoRecord | null = null;
   protected _pendingSortieResume: SortieRestorePoint | null = null;
+  protected _pendingTimerResume: TimerCheckpoint | null = null;
+  protected _timerEvidenceAtMs: number | null = null;
+  protected _timerEvidenceAircraft = "";
+  protected _timerEvidenceMapSignature = "";
   protected _currentMapSignature = "";
   protected readonly _groundTrack = new GroundTrackEstimator();
   protected _groundTrackEstimate: GroundTrackEstimate | null = null;
@@ -175,25 +181,19 @@ export class PublicRuntime {
     if (storedTimer !== null && storedTimer !== undefined && !restoredTimer) {
       this._timerCheckpointStore?.clear();
     }
-    if (restoredTimer) {
-      this._phase = restoredTimer.phase;
-      this._lifeStartedAtMs = restoredTimer.lifeStartedAtMs;
-      this._lifeIndex = restoredTimer.lifeIndex;
-      this._lastTimerCheckpointAtMs = restoredTimer.savedAtMs;
+    if (options.resumeTimerOnReload && restoredTimer?.mapSignature && restoredTimer.aircraft
+      && nowMs - restoredTimer.savedAtMs <= NO_DATA_GRACE_MS && !this._resetUndo) {
+      this._pendingTimerResume = restoredTimer;
+    } else {
+      this._pendingSortieResume = null;
+      this._timerCheckpointStore?.clear();
+      if (!this._resetUndo) this._sortieRecoveryStore?.clear();
     }
     if (this._resetUndo) {
       this._phase = "wait-next";
       this._lifeStartedAtMs = null;
     }
     this._lastSnapshot = emptySnapshot(this._edition, this._settings);
-    if (restoredTimer) {
-      this._lastSnapshot = Object.freeze({
-        ...this._lastSnapshot,
-        sampledAtMs: this._now(),
-        phase: this._phase,
-        timer: this._buildTimer(this._now()),
-      });
-    }
     if (this._resetUndo) {
       this._lastSnapshot = Object.freeze({
         ...this._lastSnapshot,
@@ -219,6 +219,54 @@ export class PublicRuntime {
   timerPresentationKey(): string {
     const timer = this.timerPresentation();
     return `${timer.active}:${timer.active ? this._lifeStartedAtMs : ""}:${timer.life_index}:${timer.cycle_seconds}`;
+  }
+
+  timerRecoveryPending(): boolean {
+    if (this._pendingTimerResume && this._now() - this._pendingTimerResume.savedAtMs > NO_DATA_GRACE_MS) {
+      this._pendingTimerResume = null;
+      this._pendingSortieResume = null;
+      this._timerCheckpointStore?.clear();
+      this._sortieRecoveryStore?.clear();
+    }
+    return this._pendingTimerResume !== null;
+  }
+
+  /** BFCache keeps the old runtime alive; long freezes also missed lifecycle observations. */
+  reconcileTimerAfterResume(historyRestore: boolean): void {
+    const nowMs = this._now();
+    const gap = this._lastFrame ? nowMs - this._lastFrame.sampledAtMs : 0;
+    if (gap < 0) {
+      // The wall-clock epoch changed; old watermarks would reject fresh frames.
+      this._lastFrame = null;
+      this._lastDynamicObservationAtMs.indicators = Number.NEGATIVE_INFINITY;
+      this._lastDynamicObservationAtMs.state = Number.NEGATIVE_INFINITY;
+      this._lastDynamicObservationAtMs.mapObjects = Number.NEGATIVE_INFINITY;
+      this._resetUndo = null;
+      this._timerEvidenceAtMs = null;
+      this._lastTimerCheckpointAtMs = 0;
+      this._lastSortieRecoveryAtMs = 0;
+    }
+    this._expireResetUndo(nowMs);
+    // Undo is explicit user recovery with its own shorter expiry, not an
+    // automatically resumed timer. Treat BFCache like a fresh constructor.
+    if (this._resetUndo) return;
+    if (!historyRestore && gap >= 0 && gap <= NO_DATA_GRACE_MS) return;
+    this._pendingTimerResume = null;
+    this._pendingSortieResume = null;
+    this._phase = "idle";
+    this._lifeStartedAtMs = null;
+    this._lifeIndex = 0;
+    this._lifeAircraft = "";
+    this._candidateSinceMs = null;
+    this._resetUndo = null;
+    this._resetSuppressedUntilEvidence = false;
+    this._noDataSinceMs = null;
+    this._lifecycleEvidenceMissingSinceMs = null;
+    this._clearPlayerContinuity();
+    this._timerCheckpointStore?.clear();
+    this._sortieRecoveryStore?.clear();
+    this._lastSnapshot = Object.freeze({ ...this._lastSnapshot, phase: this._phase,
+      sampledAtMs: nowMs, timer: this._buildTimer(nowMs), sortieContinuity: this._buildSortieContinuity(nowMs) });
   }
 
   /** Rebase only timer fields; never replay telemetry or start a gameplay life. */
@@ -280,7 +328,14 @@ export class PublicRuntime {
         this._resetExtension("map");
       }
       this._currentMapSignature = mapSignature;
-      this._reconcilePendingSortieResume(mapSignature);
+    }
+    this._reconcilePendingTimerResume(frame, telemetry, map, mapSignature);
+    if (frame.bridgeReachable && map.player && telemetry.indicatorsValid && telemetry.stateValid
+      && (["indicators", "state", "mapObjects"] as const).every(route => freshObservation(frame, route))) {
+      this._timerEvidenceAtMs = Math.min(frame.indicatorsSampledAtMs ?? frame.sampledAtMs,
+        frame.stateSampledAtMs ?? frame.sampledAtMs, frame.mapObjectsSampledAtMs ?? frame.sampledAtMs);
+      this._timerEvidenceAircraft = telemetry.aircraft;
+      this._timerEvidenceMapSignature = mapSignature ?? "";
     }
     const mapScale = parseMapScale(frame.mapInfo);
     const mapObservedAtMs = frame.mapObjectsSampledAtMs ?? frame.sampledAtMs;
@@ -407,6 +462,10 @@ export class PublicRuntime {
         this._landing.configure(command.landing, this._lastSnapshot.navigation);
         break;
       case "timer.reset":
+        this._pendingTimerResume = null;
+        this._pendingSortieResume = null;
+        this._timerCheckpointStore?.clear();
+        this._sortieRecoveryStore?.clear();
         this._lifeStartedAtMs = this._now();
         this._resetUndo = null;
         this._resetSuppressedUntilEvidence = false;
@@ -426,6 +485,10 @@ export class PublicRuntime {
         if (!Number.isInteger(command.minutes) || command.minutes < 1 || command.minutes > 180) {
           throw new TypeError("timer cycle must be an integer from 1 through 180");
         }
+        this._pendingTimerResume = null;
+        this._pendingSortieResume = null;
+        this._timerCheckpointStore?.clear();
+        this._sortieRecoveryStore?.clear();
         this._settings = { ...this._settings, cycleMinutes: command.minutes };
         this._persistTimerCheckpoint(this._now(), true);
         break;
@@ -994,27 +1057,36 @@ export class PublicRuntime {
     this._candidateSinceMs = null;
   }
 
-  protected _reconcilePendingSortieResume(mapSignature: string): void {
+  protected _reconcilePendingTimerResume(frame: Official8111Frame, telemetry: ParsedTelemetry, map: ParsedMap, mapSignature: string | null): void {
+    const timer = this._pendingTimerResume;
+    if (!timer) return;
+    const fresh = frame.bridgeReachable && (["indicators", "state", "mapObjects"] as const).every(route => freshObservation(frame, route));
+    const expired = frame.sampledAtMs < timer.savedAtMs || frame.sampledAtMs - timer.savedAtMs > NO_DATA_GRACE_MS;
+    if (!expired && (!fresh || !mapSignature)) return;
+    this._pendingTimerResume = null;
     const restore = this._pendingSortieResume;
-    if (!restore) return;
     this._pendingSortieResume = null;
-    if (restore.mapSignature !== mapSignature) {
+    if (expired || !map.player || !telemetry.indicatorsValid || !telemetry.stateValid
+      || timer.mapSignature !== mapSignature || timer.aircraft !== telemetry.aircraft) {
       this._sortieRecoveryStore?.clear();
       this._timerCheckpointStore?.clear();
-      this._phase = "idle";
-      this._lifeStartedAtMs = null;
-      this._lifeIndex = 0;
       return;
     }
-    this._applySortieRestorePoint(restore);
-    this._persistTimerCheckpoint(this._now(), true);
+    if (restore?.mapSignature === mapSignature && restore.lifeStartedAtMs === timer.lifeStartedAtMs
+      && restore.lifeIndex === timer.lifeIndex) this._applySortieRestorePoint(restore);
+    this._phase = "alive";
+    this._lifeStartedAtMs = timer.lifeStartedAtMs;
+    this._lifeIndex = timer.lifeIndex;
+    this._lifeAircraft = telemetry.aircraft;
   }
 
   protected _persistSortieRecovery(nowMs: number, force = false): void {
     const store = this._sortieRecoveryStore;
     if (!store) return;
     if (!force && nowMs - this._lastSortieRecoveryAtMs < 1_000) return;
-    const resume = this._captureSortieRestorePoint(nowMs);
+    const resume = this._timerEvidenceAtMs !== null && this._lifeStartedAtMs !== null
+      && this._lifeStartedAtMs <= this._timerEvidenceAtMs && nowMs - this._timerEvidenceAtMs <= SORTIE_RESUME_WINDOW_MS
+      ? this._captureSortieRestorePoint(this._timerEvidenceAtMs) : null;
     const resetUndo = this._resetUndo && nowMs <= this._resetUndo.expiresAtMs ? this._resetUndo : null;
     if (!resume && !resetUndo) {
       store.clear();
@@ -1094,13 +1166,17 @@ export class PublicRuntime {
   protected _persistTimerCheckpoint(nowMs: number, force = false): void {
     const store = this._timerCheckpointStore;
     if (!store || this._lifeStartedAtMs === null || (this._phase !== "alive" && this._phase !== "loss-pending")) return;
+    if (this._timerEvidenceAtMs === null || this._lifeStartedAtMs > this._timerEvidenceAtMs
+      || nowMs - this._timerEvidenceAtMs > SORTIE_RESUME_WINDOW_MS) { store.clear(); return; }
     if (!force && nowMs - this._lastTimerCheckpointAtMs < 1_000) return;
     store.save(Object.freeze({
       lifeStartedAtMs: this._lifeStartedAtMs,
-      savedAtMs: nowMs,
+      savedAtMs: this._timerEvidenceAtMs,
       cycleSeconds: this._settings.cycleMinutes * 60,
       lifeIndex: this._lifeIndex,
       phase: this._phase,
+      mapSignature: this._timerEvidenceMapSignature,
+      aircraft: this._timerEvidenceAircraft,
     }));
     this._lastTimerCheckpointAtMs = nowMs;
   }
@@ -1227,8 +1303,8 @@ function normalizeTimerCheckpoint(
   const savedAtMs = checkpoint.savedAtMs!;
   if (
     lifeStartedAtMs > savedAtMs
-    || savedAtMs > nowMs + 5 * 60_000
-    || nowMs - savedAtMs > 12 * 60 * 60_000
+    || savedAtMs > nowMs
+    || nowMs - savedAtMs > SORTIE_RESUME_WINDOW_MS
   ) return null;
   return Object.freeze({
     lifeStartedAtMs,
@@ -1236,6 +1312,8 @@ function normalizeTimerCheckpoint(
     cycleSeconds: expectedCycleSeconds,
     lifeIndex: checkpoint.lifeIndex!,
     phase: checkpoint.phase,
+    ...(typeof checkpoint.mapSignature === "string" && checkpoint.mapSignature.length <= 512 ? { mapSignature: checkpoint.mapSignature } : {}),
+    ...(typeof checkpoint.aircraft === "string" && checkpoint.aircraft.length <= 160 ? { aircraft: checkpoint.aircraft } : {}),
   });
 }
 

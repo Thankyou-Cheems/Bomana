@@ -24,15 +24,16 @@ type timerPresentation struct {
 	AnchorAtMs     int64            `json:"anchor_at_ms"`
 	DesktopPresent bool             `json:"desktop_present"`
 	Timer          *timerProjection `json:"timer"`
+	ReadersPresent bool             `json:"readers_present"`
 }
 
-func (state *presentationState) timerSnapshot(now time.Time) timerPresentation {
+func (state *presentationState) timerSnapshot(now time.Time, readersPresent bool) timerPresentation {
 	anchor := int64(0)
 	if state.timer != nil {
 		anchor = state.timerAt.Sub(state.startedAt).Milliseconds()
 	}
 	return timerPresentation{1, state.timerEpoch, state.timerRevision, now.Sub(state.startedAt).Milliseconds(), anchor,
-		!state.desktopSeenAt.IsZero() && now.Sub(state.desktopSeenAt) < 5*time.Second, state.timer}
+		!state.desktopSeenAt.IsZero() && now.Sub(state.desktopSeenAt) < 5*time.Second, state.timer, readersPresent}
 }
 func (gateway *relay) serveTimerPresentation(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Cache-Control", "no-store")
@@ -90,6 +91,16 @@ func (gateway *relay) serveTimerPresentation(response http.ResponseWriter, reque
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	now := time.Now()
+	// Report presence BEFORE registering this request: a new page must not
+	// make an abandoned timer look continuously observed merely by reading it.
+	readersPresent := !state.timerReaderSeenAt.IsZero() && now.Sub(state.timerReaderSeenAt) < 5*time.Second
+	if state.timer != nil && (state.timerReaderSeenAt.IsZero() || now.Sub(state.timerReaderSeenAt) > 15*time.Minute) {
+		state.timer = nil
+		state.timerRevision++
+	}
+	if gateway.usesPairingListener(request) || request.Header.Get("Origin") == gateway.allowedOrigin {
+		state.timerReaderSeenAt = now
+	}
 	if !gateway.usesPairingListener(request) && request.Header.Get("Origin") == gateway.allowedOrigin {
 		state.desktopSeenAt = now
 	}
@@ -97,12 +108,12 @@ func (gateway *relay) serveTimerPresentation(response http.ResponseWriter, reque
 	if request.Method == http.MethodPut {
 		if payload.Epoch != state.timerEpoch || payload.ExpectedRevision != state.timerRevision {
 			response.WriteHeader(http.StatusConflict)
-			_ = json.NewEncoder(response).Encode(state.timerSnapshot(now))
+			_ = json.NewEncoder(response).Encode(state.timerSnapshot(now, readersPresent))
 			return
 		}
 		state.timer = payload.Timer
 		state.timerAt = now
 		state.timerRevision++
 	}
-	_ = json.NewEncoder(response).Encode(state.timerSnapshot(now))
+	_ = json.NewEncoder(response).Encode(state.timerSnapshot(now, readersPresent))
 }

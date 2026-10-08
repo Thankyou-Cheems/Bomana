@@ -17,15 +17,16 @@ type weaponSelectionState struct {
 }
 
 type presentationState struct {
-	mu               sync.RWMutex
-	revision         uint64
-	selectedWeaponID string
-	timerEpoch       string
-	timerRevision    uint64
-	timer            *timerProjection
-	timerAt          time.Time
-	startedAt        time.Time
-	desktopSeenAt    time.Time
+	mu                sync.RWMutex
+	revision          uint64
+	selectedWeaponID  string
+	timerEpoch        string
+	timerRevision     uint64
+	timer             *timerProjection
+	timerAt           time.Time
+	startedAt         time.Time
+	desktopSeenAt     time.Time
+	timerReaderSeenAt time.Time
 }
 
 func newPresentationState() *presentationState {

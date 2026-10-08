@@ -7,14 +7,17 @@ import type { TimerPresentationState } from "./runtime-types";
 
 class Relay {
   now = 0; epoch = "bridge_epoch_123456"; revision = 0; anchor = 0;
+  lastReader = Number.NEGATIVE_INFINITY;
   timer: TimerPresentationState | null = null;
   desktopSeen = Number.NEGATIVE_INFINITY;
   conflictNext = false;
   response() { return { schema_version: 1, epoch: this.epoch, revision: this.revision,
     server_now_ms: this.now, anchor_at_ms: this.anchor, desktop_present: this.now - this.desktopSeen < 5000,
-    timer: this.timer }; }
+    timer: this.timer, readers_present: this.now - this.lastReader < 5000 }; }
   fetcher(mobile: boolean): typeof fetch {
     return (async (_url, options) => {
+      const readersPresent = this.now - this.lastReader < 5000;
+      this.lastReader = this.now;
       if (!mobile) this.desktopSeen = this.now;
       if (options?.method === "PUT") {
         const payload = JSON.parse(String(options.body));
@@ -27,7 +30,7 @@ class Relay {
         }
         this.timer = payload.timer; this.anchor = this.now; this.revision++;
       }
-      return Response.json(this.response());
+      return Response.json({ ...this.response(), readers_present: readersPresent });
     }) as typeof fetch;
   }
 }
@@ -41,6 +44,114 @@ function client(relay: Relay, runtime: PublicRuntime, mobile: boolean) {
 }
 
 describe("shared cycle timer presentation", () => {
+  it("a late phone follows its active desktop before local spawn confirmation", async () => {
+    const relay = new Relay(); let desktopNow = 2000;
+    const desktop = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => desktopNow });
+    await spawn(desktop, 1000);
+    const desk = client(relay, desktop, false);
+    await desk.refresh(true);
+    relay.now = 120000; desktopNow = 122000; await desk.refresh(true);
+    const phone = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => 242000 });
+    const mobile = client(relay, phone, true);
+    await mobile.refresh(true);
+    expect(phone.snapshot().phase).toBe("idle");
+    expect(mobile.project(phone.snapshot()).timer.remainingSec).toBe(779);
+    await phone.ingest(frame(241000));
+    expect(mobile.project(phone.snapshot()).timer.remainingSec).toBe(779);
+    await phone.ingest(frame(242000)); await mobile.refresh(true);
+    expect(mobile.project(phone.snapshot()).timer.remainingSec).toBe(779);
+  });
+  it("keeps an offline desktop reset authoritative when Bridge reconnects", async () => {
+    const relay = new Relay(); let now = 2000, offline = false;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(runtime, 1000);
+    const fetcher = relay.fetcher(false);
+    const session = new SharedTimerSession({ runtime, mobile: false, now: () => relay.now,
+      endpoint: async () => new URL("http://127.0.0.1:8878/"),
+      fetcher: (...args) => offline ? Promise.reject(new Error("offline")) : fetcher(...args) });
+    await session.refresh(true);
+    offline = true; now = relay.now = 5000;
+    await session.command({ type: "timer.reset" });
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(900);
+    offline = false; now = relay.now = 6000;
+    await runtime.ingest(frame(now)); await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+    expect(relay.timer?.elapsed_sec).toBe(1);
+  });
+  it("rejects a recent relay timer after observing the spawn menu with map zones still present", async () => {
+    const relay = new Relay(); relay.revision = 1; relay.lastReader = relay.now;
+    relay.timer = { active: true, elapsed_sec: 420, cycle_seconds: 900, life_index: 3 };
+    let now = 1000;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    const session = client(relay, runtime, false);
+    await session.refresh(true);
+    await runtime.ingest({ ...frame(now), indicators: { valid: false }, state: { valid: false },
+      mapObjects: [{ type: "bombing_point", x: .5, y: .3 }] });
+    await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBeNull();
+    expect(relay.timer?.active).toBe(false);
+    now = 3000; await spawn(runtime, 2000); await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+  });
+  it("a late manual reset response cannot overwrite the next confirmed life", async () => {
+    const relay = new Relay(); let now = 2000;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(runtime, 1000);
+    const fetcher = relay.fetcher(false);
+    let delay = false, entered!: () => void, release!: () => void;
+    const pending = new Promise<void>(resolve => { entered = resolve; });
+    const resume = new Promise<void>(resolve => { release = resolve; });
+    const session = new SharedTimerSession({ runtime, mobile: false, now: () => relay.now,
+      endpoint: async () => new URL("http://127.0.0.1:8878/"), fetcher: async (...args) => {
+        const response = await fetcher(...args);
+        if (delay && args[1]?.method === "PUT") { entered(); await resume; }
+        return response;
+      } });
+    await session.refresh(true);
+    delay = true;
+    const resetting = session.command({ type: "timer.reset" });
+    await pending;
+    now = relay.now = 2100; await runtime.ingest({ ...frame(now), mapObjects: [] });
+    now = relay.now = 3200; await spawn(runtime, 2200);
+    release(); await resetting;
+    expect(runtime.timerPresentation()).toMatchObject({ life_index: 2, elapsed_sec: 1 });
+    delay = false; await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+  });
+  it("withdraws a disconnected owner's timer after lifecycle grace even while Bridge requests fail", async () => {
+    const relay = new Relay(); let now = 2000, offline = false;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(runtime, 1000);
+    const fetcher = relay.fetcher(false);
+    const session = new SharedTimerSession({ runtime, mobile: false, now: () => relay.now,
+      endpoint: async () => new URL("http://127.0.0.1:8878/"),
+      fetcher: (...args) => offline ? Promise.reject(new Error("offline")) : fetcher(...args) });
+    await session.refresh(true);
+    offline = true;
+    for (const at of [3000, 15000]) {
+      now = relay.now = at;
+      await runtime.ingest({ ...frame(at), bridgeReachable: false, indicators: null, state: null, mapObjects: null,
+        availability: { indicators: false, state: false, mapObjects: false, mapInfo: false } });
+      await session.refresh(true);
+    }
+    expect(runtime.snapshot().timer.remainingSec).toBeNull();
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBeNull();
+    offline = false; now = relay.now = 17000;
+    await spawn(runtime, 16000); await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+  });
+  it.each(["Lite", "Standard"] as const)("does not revive an unattended Bridge timer on %s entry", async edition => {
+    const relay = new Relay(); relay.revision = 1;
+    relay.timer = { active: true, elapsed_sec: 420, cycle_seconds: 900, life_index: 3 };
+    let now = 1000;
+    const runtime = new PublicRuntime({ edition: editionPolicy(edition), now: () => now });
+    const session = client(relay, runtime, false);
+    await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBeNull();
+    now = 2000; await spawn(runtime, 1000);
+    await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+  });
   it.each([false, true])("does not lose a Standard spawn during PUT (previous life: %s)", async previousLife => {
     const relay = new Relay(); let now = 0;
     const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
