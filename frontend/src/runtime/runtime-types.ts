@@ -172,6 +172,8 @@ export interface EditionSnapshot {
     readonly mapScaleM: readonly [number, number] | null;
     readonly items: readonly NavigationItem[];
     readonly friendlyAircraft?: readonly FriendlyAircraft[];
+    /** Official aircraft observations for Air Realistic, independent of selectable navigation. */
+    readonly aircraftObservations?: readonly NavigationItem[];
     readonly poiLimitExceeded?: boolean;
     readonly target: NavigationItem | null;
     readonly selectionMode: NavigationSelectionMode;

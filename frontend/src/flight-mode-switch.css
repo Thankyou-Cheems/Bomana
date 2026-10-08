@@ -1,0 +1,5 @@
+.flight-mode-switch { display: inline-flex; flex: none; gap: 1px; padding: 2px; border: 1px solid #456474; border-radius: 6px; background: #091c27ed; white-space: nowrap; }
+.flight-mode-switch > button[data-mode] { appearance: none; flex: none; width: auto; min-width: 0; min-height: 0; margin: 0; padding: 3px 5px; border: 0; border-radius: 3px; background: transparent; color: #a6bdc9; font: 600 10px/1.2 "Segoe UI", "Microsoft YaHei UI", sans-serif; cursor: pointer; }
+.flight-mode-switch > button[aria-pressed="true"] { background: #285266; color: #effbff; box-shadow: inset 0 0 0 1px #75bfd066; }
+.flight-mode-switch > button:hover { background: #326074; color: #fff; }
+.flight-mode-switch > button:focus-visible { outline: 2px solid #9ce0ee; outline-offset: 1px; }

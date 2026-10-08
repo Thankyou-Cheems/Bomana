@@ -144,6 +144,12 @@ function auditEdition(edition) {
   if (hasPipMiniMap !== (edition !== "Lite")) {
     throw new Error(`${edition} has an incorrect navigation PiP map closure`);
   }
+  if (javascript.includes("自机居中空中态势图") !== (edition !== "Lite")) {
+    throw new Error(`${edition} has an incorrect Air Realistic presentation closure`);
+  }
+  if (edition !== "Enhanced" && /pip-release-prompt|pip-weapon-select/.test(javascript)) {
+    throw new Error(`${edition} leaked the Enhanced instrument shell`);
+  }
   if (!files.some((path) => path.includes("strike-encyclopedia"))) {
     throw new Error(`${edition} is missing the shared strike encyclopedia`);
   }

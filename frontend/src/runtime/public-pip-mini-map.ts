@@ -36,6 +36,7 @@ export class PublicNavigationMap {
     if (!this.#basemap) this.#updateImage(snapshot, mapInfo);
     const canvas = this.#canvas;
     const canvasRect = canvas.getBoundingClientRect();
+    if (!canvasRect.width || !canvasRect.height) return;
     const ratio = canvas.ownerDocument.defaultView?.devicePixelRatio ?? 1;
     const width = Math.max(100, canvasRect.width), height = Math.max(100, canvasRect.height);
     canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);

@@ -17,7 +17,7 @@ import { StrikeEncyclopedia, roomMaxBattleRatings, type AirportModule } from "./
 import { PipRiskConsentStore } from "./runtime/pip-risk-consent";
 import { readPipMapVisible } from "./runtime/pip-map-preference";
 import { WindowClock } from "./runtime/window-clock";
-import { FlightInstruments } from "./runtime/flight-instruments";
+import type { PublicFlightInstruments } from "./runtime/public-flight-instruments";
 import { FlightStatusPresenter, type FlightStatusPresentation } from "./runtime/flight-status-badges";
 import { SoundCues, SoundCuePreferencesStore, type SoundCuePreset } from "./runtime/sound-cues";
 import { bindSoundCueStatus } from "./runtime/sound-cue-status";
@@ -54,7 +54,7 @@ document.addEventListener("visibilitychange", () => {
 });
 let map: PublicNavigationMap | null = null;
 let pip: PublicPictureInPicture | null = null;
-let instruments: FlightInstruments | null = null;
+let instruments: PublicFlightInstruments | null = null;
 let pairing: DesktopMobilePairingOffer | null = null;
 let pairingBusy = false;
 let latestFrame: Official8111Frame | null = null;
@@ -72,9 +72,13 @@ if (!window.isSecureContext || !("documentPictureInPicture" in window)) {
 if (__BOMANA_EDITION__ !== "Lite") {
   const { PublicNavigationMap } = await import("./runtime/public-pip-mini-map");
   const { PublicPictureInPicture } = await import("./runtime/public-pip");
+  const { PublicFlightInstruments: Instruments } = await import("./runtime/public-flight-instruments");
+  const { observeFlightDisplayMode } = await import("./runtime/flight-display-mode");
   map = new PublicNavigationMap(element<HTMLCanvasElement>("navigation-map"), selectTarget);
   pip = new PublicPictureInPicture(selectTarget, cycleTarget, (visible) => { element<HTMLInputElement>("pip-map-visible").checked = visible; }, map);
-  instruments = new FlightInstruments(element("flight-instruments"), { onCycleTarget: cycleTarget });
+  instruments = new Instruments(element("flight-instruments"), { onCycleTarget: cycleTarget,
+    airHost: element("navigation-map").parentElement!, paintBasemap: (context, rect) => map!.paintBasemap(context, rect) });
+  observeFlightDisplayMode(mode => sound.setAirRealistic(mode === "air-realistic"));
 }
 initializeWebShellLayout(element("hud-top"), element("hud-left"));
 const processor = new LatestSampleProcessor(async (frame: Official8111Frame) => {

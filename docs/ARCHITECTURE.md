@@ -8,7 +8,7 @@ calculation module. See [its usage and build guide](../native/telemetry_gateway/
 
 The online Launcher opens an independently versioned App Web and distributes Bridge. Bridge forwards official 8111 observations and stores signed resource objects. Lite / Standard use the same `PublicRuntime` and `public-main.ts` as the maintained production build. Parameter assets come from the same validated parameter set as the flight toolbox.
 
-The runtime owns lifecycle, recovery, timer, fuel learning and official zone / airfield navigation. Presentation consumes snapshots and commands. The heading renderer is shared with the private extension through a guidance presentation callback; only navigation guidance is included here. Advanced release calculation remains private.
+The runtime owns lifecycle, recovery, timer, fuel learning and official zone / airfield navigation. Presentation consumes snapshots and commands. The heading renderer is shared with the private extension through a guidance presentation callback; only navigation guidance is included here. Standard composes the shared Air Realistic renderer directly, without an Enhanced instrument shell. Official aircraft observations are independent of navigation selection; bounded motion estimates provide short trails, closure and uncertain grouping. The default-on horizontal ground-track vector and its remembered toggle are shared by the main map and compact PiP. Advanced release calculation, terrain, airport modules, Y66 and chat interpretation remain private.
 
 Commands update their snapshot without ingesting the previous telemetry sample
 again. Standard's page and Picture-in-Picture window share one flight-status

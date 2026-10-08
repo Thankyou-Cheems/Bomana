@@ -1158,6 +1158,10 @@ export class PublicRuntime {
     this._automaticNavigationTargetId = target?.id ?? null;
     this._navigationTargetUpdated(target);
     return Object.freeze({ player: Object.freeze({ x: player.x, y: player.y }), mapScaleM: scale,
+      ...(this._edition.capabilities.aircraftObservations ? { aircraftObservations: Object.freeze(map.objects.filter(item => item.aircraft).map(item => {
+        const { distanceKm, bearingDeg } = bearingDistance(player.x, player.y, item.x, item.y, scale);
+        return Object.freeze({ ...item, distanceKm, bearingDeg, relativeDeg: normalizeAngle(bearingDeg - headingDeg), selected: false });
+      })) } : {}),
       ...(map.friendlyAircraft ? { friendlyAircraft: Object.freeze(map.friendlyAircraft) } : {}),
       ...(map.poiLimitExceeded !== undefined ? { poiLimitExceeded: map.poiLimitExceeded } : {}),
       items: Object.freeze(items), target, selectionMode: this._navigationSelectionMode });
@@ -1178,7 +1182,9 @@ export class PublicRuntime {
   protected _decorateNavigation(item: NavigationItem): NavigationItem { return item; }
   protected _navigationSelected(_item: NavigationItem): void {}
   protected _navigationTargetUpdated(_item: NavigationItem | null): void {}
-  protected _parseMap(payload: Official8111Frame["mapObjects"]): ParsedMap { return parseBasicMap(payload); }
+  protected _parseMap(payload: Official8111Frame["mapObjects"]): ParsedMap {
+    return this._edition.capabilities.aircraftObservations ? parseAircraftMap(payload) : parseBasicMap(payload);
+  }
   protected _resetExtension(_reason: "map" | "hangar" | "life" | "loss"): void {}
   protected _landingElevation(_point: readonly [number, number], _runway?: RunwayEndpoints): number | null { return null; }
   protected _landingElevationSource(_point: readonly [number, number], _runway?: RunwayEndpoints): "terrain" | "runway" { return "terrain"; }
@@ -1405,6 +1411,33 @@ export function parseBasicMap(payload: Official8111Frame["mapObjects"]): ParsedM
     objects: parsed,
     objectCount: objects.length,
   };
+}
+
+/** Aircraft observations do not enable POIs, tactical coordinates or navigation selection. */
+export function parseAircraftMap(payload: Official8111Frame["mapObjects"]): ParsedMap {
+  const basic = parseBasicMap(payload), objects = extractObjects(payload);
+  const playerRaw = selectPlayerObject(objects);
+  const friendlyAircraft: NonNullable<ParsedMap["friendlyAircraft"]> = [];
+  let hostileIndex = 1;
+  for (const object of objects) {
+    if (object === playerRaw || !isAircraft(object) || isMapFeature(object)) continue;
+    const point = position(object);
+    if (!point || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) continue;
+    const officialIcon = textField(object, ["icon"]);
+    const dx = optionalNumericField(object, ["dx", "DX", "vel_x", "vx"]);
+    const dy = optionalNumericField(object, ["dy", "DY", "vel_y", "vy"]);
+    const observation = { ...point, ...(officialIcon ? { officialIcon } : {}),
+      ...(dx === null ? {} : { dx }), ...(dy === null ? {} : { dy }) };
+    if (isFriendly(object) && !isHostile(object)) friendlyAircraft.push(observation);
+    else if (isHostile(object)) {
+      const fallbackId = hostileIndex++;
+      basic.objects.push({ ...observation,
+        id: `hostile_${textField(object, ["id", "uid", "unit_id", "object_id"]) || fallbackId}`,
+        kind: "hostile", label: textField(object, ["name", "label", "icon"]) || "敌方单位",
+        friendly: false, hostile: true, aircraft: true });
+    }
+  }
+  return { ...basic, friendlyAircraft };
 }
 
 export function extractObjects(payload: Official8111Frame["mapObjects"]): Record<string, unknown>[] {

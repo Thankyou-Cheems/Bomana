@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
 import { preview } from "vite";
 import { measureLandingGuidance } from "./landing-visibility.mjs";
@@ -17,6 +17,9 @@ try {
     window.__publicMapInactive = false;
     window.__publicGameInactive = false;
     window.__publicGearPercent = 100;
+    window.__publicAirContacts = true;
+    window.__publicMapHeld = false;
+    window.__publicMapReads = 0;
     localStorage.setItem("bomana:web:pip-risk-consent:v1", "accepted");
     window.fetch = (input, init) => {
       const url = new URL(input instanceof Request ? input.url : input, location.href);
@@ -25,7 +28,14 @@ try {
       if (url.pathname.endsWith("/capabilities")) return Promise.resolve(Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 4, input: "official-8111-only", write_commands: false, bridge_version: "1.0.0" }));
       if (url.pathname.endsWith("/indicators")) return Promise.resolve(Response.json({ valid: !window.__publicGameInactive, type: "saab_jas39c", compass1: 15 }));
       if (url.pathname.endsWith("/state")) return Promise.resolve(Response.json({ valid: !window.__publicGameInactive, "IAS, km/h": 700, "TAS, km/h": 720, "H, m": 3000, "Vy, m/s": 0, "Mfuel, kg": 1200 - elapsed / 1000, "Mfuel0, kg": 1400, "throttle 1, %": 90, "gear, %": window.__publicGearPercent, "flaps, %": 20 }));
-      if (url.pathname.endsWith("/map-objects")) return Promise.resolve(Response.json(window.__publicMapInactive ? [] : [{ type: "player", x: .5, y: .5 - elapsed * .000002, dx: 0, dy: -1 }, { type: "bombing_point", x: .5, y: .3 }, { type: "airfield", side: "friendly", sx: .2, sy: .7, ex: .2, ey: .8 }, { type: "point_of_interest", x: .49, y: .3 }]));
+      if (url.pathname.endsWith("/map-objects")) {
+        window.__publicMapReads++;
+        if (window.__publicMapHeld) return Promise.reject(new TypeError("simulated map outage"));
+        return Promise.resolve(Response.json(window.__publicMapInactive ? [] : [{ type: "player", x: .5, y: .5 - elapsed * .000002, dx: 0, dy: -1 }, { type: "bombing_point", x: .5, y: .3 }, { type: "airfield", side: "friendly", sx: .2, sy: .7, ex: .2, ey: .8 }, { type: "point_of_interest", x: .49, y: .3 },
+          ...(window.__publicAirContacts ? Array.from({ length: 8 }, (_, index) => ({ type: "aircraft", side: "hostile", icon: "fighter", id: index,
+            x: .5 + (index + 1) * .004 + elapsed * .0000005, y: .49 - elapsed * .000002 + index * .002, dx: .2, dy: -.98 })) : []),
+          ...(window.__publicAirContacts ? [{ type: "aircraft", side: "friendly", icon: "bomber", x: .49, y: .49 - elapsed * .000002, dx: 0, dy: -1 }] : [])]));
+      }
       if (url.pathname.endsWith("/map-info")) return Promise.resolve(Response.json({ valid: !window.__publicMapInactive, map_min: [-50000, -50000], map_max: [50000 + window.__publicMapRevision, 50000] }));
       if (url.pathname.endsWith("/map-image")) {
         const image = async () => {
@@ -78,6 +88,82 @@ try {
   await reopenedPip.close();
   await page.evaluate(() => { window.__publicGearPercent = 0; });
   await page.waitForFunction(() => document.querySelector("#pip-gear-status-badge")?.hasAttribute("hidden"));
+  await page.locator('.pip-header [data-mode="air-realistic"]').click();
+  const air = page.locator(".air-realistic-instruments"), airCanvas = air.locator("canvas");
+  await page.waitForFunction(() => document.querySelector(".ar-map canvas")?.dataset.contacts === "8"
+    && document.querySelector(".ar-map canvas")?.dataset.friendlies === "1"
+    && document.querySelector(".ar-map canvas")?.dataset.trails !== "0"
+    && document.querySelector(".ar-velocity-readout")?.textContent.includes("航迹 000°"));
+  assert.equal(await air.locator(".ar-velocity-toggle").getAttribute("aria-pressed"), "true");
+  const vectorText = await air.locator(".ar-velocity-readout").innerText();
+  assert.match(vectorText, /偏左 15°.*地速 \d+ km\/h/);
+  assert.ok(Math.abs(Number(vectorText.match(/地速 (\d+)/)[1]) - 720) < 30, "Request-midpoint timing may vary slightly from the mocked game position time");
+  assert.equal(await air.locator(".ar-speed").getAttribute("data-level"), "critical");
+  assert.match(await air.locator(".ar-flaps").innerText(), /襟翼 超限/);
+  assert.equal(await page.locator("#navigation-select option").count(), 2, "Aircraft observations never become Standard navigation targets");
+  const airOpening = page.context().waitForEvent("page");
+  await page.locator("#toggle-pip").click();
+  const airPip = await airOpening;
+  await airPip.setViewportSize({ width: 320, height: 320 });
+  await airPip.waitForFunction(() => document.querySelector(".ar-map canvas")?.dataset.contacts === "8"
+    && document.querySelector(".ar-velocity-readout")?.textContent.includes("航迹 000°"));
+  assert.equal(await airPip.locator(".pip-mini-map").isVisible(), false);
+  assert.equal(await airPip.locator("#pip-heading-canvas").isVisible(), false);
+  await airPip.locator(".ar-velocity-toggle").click();
+  await page.waitForFunction(() => document.querySelector(".ar-velocity-toggle")?.getAttribute("aria-pressed") === "false");
+  assert.equal(await page.evaluate(() => localStorage.getItem("bomana:air-velocity-vector:v1")), "off");
+  await page.locator(".ar-velocity-toggle").click();
+  await airPip.waitForFunction(() => document.querySelector(".ar-velocity-toggle")?.getAttribute("aria-pressed") === "true");
+  await mkdir("../.artifacts/public-ui", { recursive: true });
+  const cdp = await page.context().newCDPSession(page), pipCdp = await page.context().newCDPSession(airPip);
+  for (const session of [cdp, pipCdp]) {
+    await session.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await session.send("Performance.enable");
+  }
+  const metric = async session => (await session.send("Performance.getMetrics")).metrics.find(item => item.name === "TaskDuration").value;
+  const before = await Promise.all([metric(cdp), metric(pipCdp), page.evaluate(() => window.__publicMapReads)]);
+  await page.waitForTimeout(3000);
+  const after = await Promise.all([metric(cdp), metric(pipCdp), page.evaluate(() => window.__publicMapReads)]);
+  const performance = { cpuThrottle: 4, durationSeconds: 3, contacts: 8, mainTaskSeconds: after[0] - before[0], pipTaskSeconds: after[1] - before[1], mapReads: after[2] - before[2] };
+  assert.ok(performance.mapReads > 0 && performance.mapReads <= 40, "PiP must not create a second 8111 polling loop");
+  for (const surface of [page, airPip]) {
+    assert.equal(await surface.locator(".ar-map canvas").getAttribute("data-contacts"), "8");
+    assert.ok(await surface.locator(".air-realistic-instruments").evaluate(root => root.scrollWidth <= root.clientWidth + 1));
+  }
+  await writeFile("../.artifacts/public-ui/Standard-air-performance.json", JSON.stringify(performance, null, 2));
+  for (const session of [cdp, pipCdp]) await session.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  await page.screenshot({ path: "../.artifacts/public-ui/Standard-air-main.png" });
+  await airPip.waitForFunction(() => document.querySelector(".ar-velocity-readout")?.textContent.includes("航迹 000°"));
+  await airPip.screenshot({ path: "../.artifacts/public-ui/Standard-air-pip-320.png" });
+  await page.evaluate(() => { window.__publicMapHeld = true; });
+  for (const surface of [page, airPip]) await surface.waitForFunction(() => document.querySelector(".ar-map canvas")?.dataset.contacts === "0"
+    && document.querySelector(".ar-map canvas")?.dataset.friendlies === "0"
+    && document.querySelector(".ar-velocity-readout")?.textContent === "速度矢量 —");
+  await page.evaluate(() => { window.__publicMapHeld = false; window.__publicAirContacts = false; });
+  await page.waitForFunction(() => document.querySelector(".ar-velocity-readout")?.textContent.includes("航迹 000°"));
+  assert.equal(await airCanvas.getAttribute("data-contacts"), "0", "Successful empty aircraft observations remain authoritative");
+  await airPip.locator('.ar-header [data-mode="simulator"]').click();
+  await page.locator(".air-realistic-instruments").waitFor({ state: "hidden" });
+  assert.equal(await page.locator('.pip-header [data-mode="simulator"]').getAttribute("aria-pressed"), "true");
+  await airPip.close();
+  await page.locator('.pip-header [data-mode="air-realistic"]').click();
+  await page.locator(".ar-velocity-toggle").click();
+  await page.reload();
+  await page.locator(".air-realistic-instruments").waitFor({ state: "visible" });
+  assert.equal(await page.locator(".ar-velocity-toggle").getAttribute("aria-pressed"), "false", "Standard remembers the disabled vector across reload");
+  await page.evaluate(() => { window.__publicGearPercent = 0; });
+  await page.waitForFunction(() => document.querySelector("#pip-gear-status-badge")?.hasAttribute("hidden"));
+  await page.locator(".ar-velocity-toggle").click();
+  for (const [width, height] of [[390, 844], [844, 390]]) {
+    await page.setViewportSize({ width, height });
+    await page.locator(".air-realistic-instruments").scrollIntoViewIfNeeded();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    const box = await page.locator(".air-realistic-instruments").boundingBox();
+    assert.ok(box.width >= 300 && box.height >= 240, "Standard Air Realistic retains a usable central map on phones");
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('.ar-header [data-mode="simulator"]').click();
+  console.log(`Standard Air Realistic: official aircraft, vector/preferences, main/PiP modes, stale withdrawal and 4x CPU smoke passed ${JSON.stringify(performance)}`);
   const landing = page.getByRole("region", {name:"降落辅助"});
   assert.equal(await landing.locator('[data-part="message"]').innerText(), '自动待命');
   const priorNavigation = await page.locator("#navigation-target").innerText();

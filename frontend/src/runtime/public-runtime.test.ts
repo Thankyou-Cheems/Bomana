@@ -5,6 +5,7 @@ import { editionPolicy } from "./edition-policy";
 import { publicFlight } from "./public-runtime-fixture";
 import { AircraftParameters } from "./aircraft-parameters";
 import speedCases from "./speed-limit-cases.json";
+import { airRealisticSituation } from "./air-realistic-model";
 
 describe("public runtime boundary", () => {
   it.each([1000, 4700])("counts spawn confirmation latency (%i ms) in the cycle", async delayMs => {
@@ -36,6 +37,8 @@ describe("public runtime boundary", () => {
     const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
     await runtime.ingest(publicFlight(0)); const result = await runtime.ingest(publicFlight(2000));
     expect(result.navigation?.items.map((item) => item.kind).sort()).toEqual(["airfield", "zone"]);
+    expect(result.navigation?.aircraftObservations).toHaveLength(1);
+    expect(airRealisticSituation(result, 20).contacts).toHaveLength(1);
     expect(result.strike).toBeNull(); expect(result.markedZones).toEqual([]); expect(result.gameChat).toEqual([]);
     await expect(runtime.command({ type: "navigation.set-poi", x: .3, y: .3 })).rejects.toThrow("disabled");
     await expect(runtime.command({ type: "strike.select-weapon", weaponId: "test" })).rejects.toThrow("disabled");
@@ -44,6 +47,28 @@ describe("public runtime boundary", () => {
     const runtime = new PublicRuntime({ edition: editionPolicy("Lite") });
     await runtime.ingest(publicFlight(0)); const result = await runtime.ingest(publicFlight(2000));
     expect(result.timer.remainingSec).not.toBeNull(); expect(result.navigation).toBeNull(); expect(result.fuel).toBeNull();
+  });
+  it("withdraws Standard aircraft observations on held, stale and empty map data", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+    await runtime.ingest(publicFlight(0));
+    const original = publicFlight(2000);
+    const frame = { ...original, mapObjects: [...original.mapObjects as Record<string, unknown>[],
+      { type: "aircraft", side: "friendly", icon: "fighter", x: .55, y: .4, dx: 1, dy: 0 },
+      { type: "tank", side: "hostile", icon: "fighter", x: .55, y: .4 },
+      { type: "aircraft", side: "hostile", x: 1.5, y: .4 }] };
+    const snapshot = await runtime.ingest(frame);
+    const situation = airRealisticSituation(snapshot, 20);
+    expect(situation.contacts).toHaveLength(1);
+    expect(situation.teammates).toHaveLength(1);
+    expect(snapshot.navigation?.items.every(item => item.kind === "zone" || item.kind === "airfield")).toBe(true);
+    expect(airRealisticSituation(snapshot, 20, 3501).contacts).toEqual([]);
+    const held = await runtime.ingest({ ...publicFlight(2100), mapObjectsSampledAtMs: 2000,
+      holdover: { mapObjects: true, indicators: false, state: false }, mapObjects: frame.mapObjects });
+    expect(airRealisticSituation(held, 20).contacts).toEqual([]);
+    expect(airRealisticSituation(held, 20).teammates).toEqual([]);
+    const empty = await runtime.ingest({ ...publicFlight(2200), mapObjects: [{ type: "player", x: .5, y: .49 }] });
+    expect(empty.navigation?.aircraftObservations).toEqual([]);
+    expect(airRealisticSituation(empty, 20).contacts).toEqual([]);
   });
 });
 

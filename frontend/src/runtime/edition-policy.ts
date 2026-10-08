@@ -6,6 +6,7 @@ export interface EditionCapabilities {
   readonly missionAlerts: boolean;
   readonly zoneNavigation: boolean;
   readonly airfieldNavigation: boolean;
+  readonly aircraftObservations: boolean;
   readonly extendedNavigationTargets: boolean;
   readonly airfieldModuleNavigation: boolean;
   readonly tacticalMapCoordinates: boolean;
@@ -41,6 +42,7 @@ export const EDITION_POLICIES: Readonly<Record<EditionChannel, EditionPolicy>> =
       strikeEncyclopedia: false,
       zoneNavigation: false,
       airfieldNavigation: false,
+      aircraftObservations: false,
       extendedNavigationTargets: false,
       airfieldModuleNavigation: false,
       tacticalMapCoordinates: false,
@@ -67,6 +69,7 @@ export const EDITION_POLICIES: Readonly<Record<EditionChannel, EditionPolicy>> =
       strikeEncyclopedia: true,
       zoneNavigation: true,
       airfieldNavigation: true,
+      aircraftObservations: true,
       extendedNavigationTargets: false,
       airfieldModuleNavigation: false,
       tacticalMapCoordinates: false,
@@ -93,6 +96,7 @@ export const EDITION_POLICIES: Readonly<Record<EditionChannel, EditionPolicy>> =
       strikeEncyclopedia: true,
       zoneNavigation: true,
       airfieldNavigation: true,
+      aircraftObservations: true,
       extendedNavigationTargets: true,
       airfieldModuleNavigation: true,
       tacticalMapCoordinates: true,
