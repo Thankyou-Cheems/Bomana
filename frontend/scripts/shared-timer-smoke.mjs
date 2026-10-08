@@ -11,17 +11,18 @@ const origin = new URL(site.resolvedUrls.local[0]).origin;
 const html = await readFile("dist/Standard/index.html", "utf8");
 const started = Date.now(), errors = [];
 let timer = null, revision = 0, anchor = 0, desktopSeen = 0;
+let flying = true;
 const response = () => ({ schema_version: 1, epoch: "ui_bridge_epoch_123456", revision,
   server_now_ms: Date.now() - started, anchor_at_ms: anchor,
   desktop_present: Date.now() - desktopSeen < 5000, timer });
 try {
-  async function open(mobile) {
+  async function open(mobile, restoreTimer = !mobile) {
     const page = await browser.newPage({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 } });
     page.setDefaultTimeout(10000);
     page.on("pageerror", error => errors.push(error.message));
-    await page.addInitScript(mobile => {
+    await page.addInitScript(restoreTimer => {
       localStorage.setItem("bomana:dau:disabled:v1", "1");
-      if (!mobile) localStorage.setItem("bomana:timer-checkpoint:v1:Standard", JSON.stringify({
+      if (restoreTimer) localStorage.setItem("bomana:timer-checkpoint:v1:Standard", JSON.stringify({
         lifeStartedAtMs: Date.now() - 120000, savedAtMs: Date.now(), cycleSeconds: 900, lifeIndex: 1, phase: "alive" }));
       window.__auditTones = [];
       window.__auditAudioReject = false;
@@ -33,7 +34,7 @@ try {
         createOscillator() { const tone = { frequency: { value: 0 }, connect: gain => gain,
           start: () => window.__auditTones.push(tone.frequency.value), stop() {}, disconnect() {} }; return tone; }
       };
-    }, mobile);
+    }, restoreTimer);
     await page.route("**/*", async route => {
       const url = new URL(route.request().url());
       if (url.origin === origin) {
@@ -50,9 +51,11 @@ try {
         return route.fulfill({ json: response() });
       }
       if (url.pathname.endsWith("/capabilities")) return route.fulfill({ json: { schema_version: 1, bridge_protocol: 1, cache_protocol: 4, mobile_pairing_protocol: 7, input: "official-8111-only", write_commands: false, bridge_version: "development" } });
-      if (url.pathname.endsWith("/indicators")) return route.fulfill({ json: { valid: true, type: "saab_jas39c", compass1: 15 } });
-      if (url.pathname.endsWith("/state")) return route.fulfill({ json: { valid: true, "IAS, km/h": 100, "TAS, km/h": 100, "H, m": 1000, "Vy, m/s": 0, "gear, %": 0, "Mfuel, kg": 1000 } });
-      if (url.pathname.endsWith("/map-objects")) return route.fulfill({ json: [{ type: "player", x: .5, y: .5, dx: 0, dy: -1 }, { type: "bombing_point", x: .5, y: .3 }] });
+      if (url.pathname.endsWith("/indicators")) return route.fulfill({ json: { valid: flying, type: "saab_jas39c", compass1: 15 } });
+      if (url.pathname.endsWith("/state")) return route.fulfill({ json: { valid: flying, "IAS, km/h": 100, "TAS, km/h": 100, "H, m": 1000, "Vy, m/s": 0, "gear, %": 0, "Mfuel, kg": 1000 } });
+      if (url.pathname.endsWith("/map-objects")) return route.fulfill({ json: flying
+        ? [{ type: "player", x: .5, y: .5, dx: 0, dy: -1 }, { type: "bombing_point", x: .5, y: .3 }]
+        : [{ type: "bombing_point", x: .5, y: .3 }] });
       if (url.pathname.endsWith("/map-info")) return route.fulfill({ json: { valid: true, map_min: [-50000,-50000], map_max: [50000,50000] } });
       return route.abort(); // No payments, analytics or real game/Bridge traffic.
     });
@@ -64,6 +67,20 @@ try {
     await synchronized;
     return page;
   }
+  // Cold entry and respawn must work without the checkpoint/reset that used
+  // to hide automatic-start failures in this UI test.
+  timer = { active: false, elapsed_sec: 0, cycle_seconds: 900, life_index: 0 }; revision = 1;
+  const cold = await open(false, false);
+  assert.ok(timer?.active, "Fresh Standard flight must publish its timer without reset");
+  flying = false;
+  await cold.waitForFunction(() => document.querySelector("#timer").textContent === "--:--");
+  flying = true;
+  await cold.waitForFunction(() => document.querySelector("#timer").textContent.startsWith("14:"));
+  assert.ok(timer?.active && timer.life_index === 2, "Respawn must automatically start and publish a second life");
+  await mkdir("../.artifacts/shared-timer", { recursive: true });
+  await cold.screenshot({ path: "../.artifacts/shared-timer/standard-auto-respawn.png" });
+  await cold.close();
+  timer = null; revision = 0; anchor = 0; desktopSeen = 0;
   const desktop = await open(false);
   await desktop.waitForFunction(() => document.querySelector("#timer-sync-status").textContent === "");
   assert.ok(timer?.active);
@@ -105,7 +122,7 @@ try {
   assert.deepEqual(errors, []);
   await mkdir("../.artifacts/shared-timer", { recursive: true });
   await phone.screenshot({ path: "../.artifacts/shared-timer/phone-ready.png" });
-  console.log("Shared timer UI: late join, phone/desktop reset, period change, mobile sound enable/rejected recovery/retry and layout passed");
+  console.log("Shared timer UI: cold auto-start, respawn without reset, late join, phone/desktop reset, period change, mobile sound recovery and layout passed");
 } finally {
   await browser.close(); await new Promise(resolve => site.httpServer.close(resolve));
 }

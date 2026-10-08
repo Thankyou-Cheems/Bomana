@@ -112,18 +112,22 @@ export class SharedTimerSession {
       changed = false; this.#awaitingLocalSpawn = false;
     }
     if (first && remote.timer?.active && !local.active) this.#awaitingLocalSpawn = true;
-    if ((!remote.timer || !first && changed) && mayPublish) {
-      const result = await this.#request("PUT", remote, local);
-      this.#accept(result);
-    } else this.#accept(remote);
-    this.#localKey = this.#runtime.timerPresentationKey();
+    // A previous page may have left Bridge idle before this page observed spawn.
+    // The local lifecycle owner must publish that spawn even on its first read.
+    const result = (!remote.timer || first && local.active && !remote.timer.active || !first && changed) && mayPublish
+      ? await this.#request("PUT", remote, local) : remote;
+    // Telemetry keeps running during PUT. A response for the pre-spawn/death
+    // state must neither rebase the new life nor mark its change as published.
+    const changedDuringRequest = key !== this.#runtime.timerPresentationKey();
+    this.#accept(result, !changedDuringRequest);
+    this.#localKey = changedDuringRequest ? key : this.#runtime.timerPresentationKey();
     this.#status("");
   }
 
-  #accept(value: TimerResponse): void {
+  #accept(value: TimerResponse, applyTimer = true): void {
     if (this.#state?.epoch === value.epoch && value.revision < this.#state.revision) return;
     this.#state = value;
-    if (!value.timer) { this.#anchor = null; return; }
+    if (!value.timer || !applyTimer) { this.#anchor = null; return; }
     // #request rebases elapsed to the receive instant using midpoint RTT.
     this.#anchor = { timer: value.timer, at: this.#now(), identity: `${value.epoch}:${value.revision}` };
     this.#runtime.rebaseTimerPresentation(value.timer);

@@ -41,6 +41,82 @@ function client(relay: Relay, runtime: PublicRuntime, mobile: boolean) {
 }
 
 describe("shared cycle timer presentation", () => {
+  it.each([false, true])("does not lose a Standard spawn during PUT (previous life: %s)", async previousLife => {
+    const relay = new Relay(); let now = 0;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    if (previousLife) { now = relay.now = 2000; await spawn(runtime, 1000); }
+    const requestAt = now;
+    const fetcher = relay.fetcher(false);
+    let release!: () => void;
+    let pending!: () => void;
+    const enteredPut = new Promise<void>(resolve => { pending = resolve; });
+    const resumePut = new Promise<void>(resolve => { release = resolve; });
+    let delay = true;
+    const session = new SharedTimerSession({ runtime, mobile: false, now: () => relay.now,
+      endpoint: async () => new URL("http://127.0.0.1:8878/"), fetcher: async (...args) => {
+        const response = await fetcher(...args);
+        if (args[1]?.method === "PUT" && delay) { delay = false; pending(); await resumePut; }
+        return response;
+      } });
+    const synchronizing = session.refresh(true);
+    await enteredPut;
+    if (previousLife) {
+      now = relay.now = requestAt + 100;
+      await runtime.ingest({ ...frame(now), mapObjects: [] });
+      expect(runtime.snapshot().phase).toBe("wait-next");
+    }
+    // Complete the transition within the real 1500ms request deadline.
+    now = relay.now = requestAt + 1200;
+    await spawn(runtime, requestAt + 200);
+    release(); await synchronizing;
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+    await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+    expect(runtime.timerPresentation().life_index).toBe(previousLife ? 2 : 1);
+    expect(relay.timer?.active).toBe(true);
+  });
+
+  it.each(["Lite", "Standard"] as const)("starts a fresh %s spawn when Bridge holds a previous inactive timer", async edition => {
+    const relay = new Relay(); relay.revision = 1;
+    relay.timer = { active: false, elapsed_sec: 0, cycle_seconds: 900, life_index: 0 };
+    const runtime = new PublicRuntime({ edition: editionPolicy(edition), now: () => 2000 });
+    await spawn(runtime, 1000);
+    const session = client(relay, runtime, false);
+    await session.refresh(true);
+    await session.refresh(true);
+    expect(runtime.snapshot().phase).toBe("alive");
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+    expect(relay.timer?.active).toBe(true);
+  });
+
+  it.each([false, true])("only lets the phone publish its spawn without a desktop owner (desktop present: %s)", async desktopPresent => {
+    const relay = new Relay(); relay.revision = 1;
+    relay.timer = { active: false, elapsed_sec: 0, cycle_seconds: 900, life_index: 0 };
+    if (desktopPresent) relay.desktopSeen = relay.now;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => 2000 });
+    await spawn(runtime, 1000);
+    const session = client(relay, runtime, true);
+    await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(desktopPresent ? null : 899);
+    expect(relay.timer?.active).toBe(!desktopPresent);
+  });
+
+  it("automatically starts the Standard timer after entering before spawn, without manual reset", async () => {
+    const relay = new Relay(); let now = 0;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    const session = client(relay, runtime, false);
+    await session.refresh(true);
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBeNull();
+    for (const at of [1000, 1500, 2000, 2500, 3000]) {
+      now = relay.now = at;
+      await runtime.ingest(frame(at));
+      await session.refresh(true);
+    }
+    expect(runtime.snapshot().phase).toBe("alive");
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(898);
+    expect(relay.timer?.active).toBe(true);
+  });
+
   it("Standard late phone shares actual cycle boundaries despite a 120s wall-clock offset", async () => {
     const relay = new Relay(); let desktopNow = 2000, phoneNow = 242000;
     const make = (now: () => number) => new PublicRuntime({ edition: editionPolicy("Standard"), now });
