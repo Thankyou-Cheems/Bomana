@@ -1,5 +1,7 @@
 # Bomana public context
 
+**Local Flight Recording** is default-on browser-local diagnostic storage for recent official telemetry, bounded to one detected match and a three-hour / 32 MiB rolling window. Settings supports export, disable and clear; it never uploads automatically or restores live flight/timer state. See [the recording contract](docs/specs/local-flight-recording.md).
+
 **Basic Desktop** is the separate minimal native Windows surface: only a cycle
 timer and official bombing-zone/airfield Basic Navigation. It does not include
 the complete Standard Edition, Web assets or an Enhanced calculation module.

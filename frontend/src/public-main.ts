@@ -7,6 +7,8 @@ import { BrowserSortieRecoveryStore } from "./runtime/sortie-recovery";
 import { loadAircraftParameters, loadStrikeResources } from "./runtime/runtime-resources";
 import { TelemetrySource, type Official8111Frame } from "./runtime/telemetry-source";
 import { AutoConnectionLoop } from "./runtime/auto-connection-loop";
+import { mountFlightRecorder } from "./runtime/flight-recorder";
+import { flightRecordingContext, type RecordingContext } from "./runtime/flight-recording";
 import { LatestSampleProcessor } from "./runtime/latest-sample-processor";
 import { bindPageSession, isPageReload } from "./runtime/page-session";
 import { initializeWebShellLayout } from "./runtime/web-shell-layout";
@@ -40,6 +42,7 @@ const runtime = new PublicRuntime({ edition, aircraftParameters, settingsStore: 
   timerCheckpointStore: new BrowserTimerCheckpointStore(edition.channel),
   sortieRecoveryStore: edition.channel === "Lite" ? null : new BrowserSortieRecoveryStore(edition.channel) });
 const telemetry = new TelemetrySource("", fetch, Date.now, { includeGameChat: false });
+const flightRecorder = mountFlightRecorder(element("settings-dialog"), edition.channel);
 const landingPanel = new LandingPanel(element("landing-slot"), landing => execute({ type: "landing.configure", landing }));
 const soundStore = new SoundCuePreferencesStore();
 const sound = new SoundCues(soundStore.load());
@@ -82,14 +85,17 @@ if (__BOMANA_EDITION__ !== "Lite") {
   observeFlightDisplayMode(mode => sound.setAirRealistic(mode === "air-realistic"));
 }
 initializeWebShellLayout(element("hud-top"), element("hud-left"));
+let recorderContext: RecordingContext = {};
 const processor = new LatestSampleProcessor(async (frame: Official8111Frame) => {
   latestFrame = frame;
-  render(await runtime.ingest(frame));
+  const snapshot = await runtime.ingest(frame);
+  recorderContext = flightRecordingContext(snapshot);
+  render(snapshot);
 }, showError);
 const connection = new AutoConnectionLoop<Official8111Frame>({
   attempt: (signal) => telemetry.readFrame(signal),
   isConnected: (frame) => frame.bridgeReachable || runtime.snapshot().phase === "alive" || runtime.snapshot().phase === "loss-pending",
-  onSample: (frame) => processor.push(frame), onInterrupt: () => telemetry.cancelPending(),
+  onSample: (frame) => { flightRecorder.record(frame, recorderContext); processor.push(frame); }, onInterrupt: () => telemetry.cancelPending(),
   wait: (milliseconds, signal) => pip ? pip.wait(milliseconds, signal) : pageClock.wait(milliseconds, signal),
   onState: (state) => {
     if (state.error instanceof IncompatibleBridgeError) element("update-bridge").hidden = false;

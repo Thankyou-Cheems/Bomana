@@ -1,5 +1,11 @@
 # Public architecture
 
+Both Web entrypoints send existing telemetry to a bounded local recorder before
+frame coalescing. `flight-recorder.worker.ts` owns filtering, delta/gzip encoding
+and IndexedDB persistence under one writer Web Lock per origin. Shared Settings
+offers export, disable and clear. Exports support offline replay only; no recorded
+data feeds live flight or timer restoration. See [the recording contract](specs/local-flight-recording.md).
+
 Basic Desktop (`native/telemetry_gateway/cmd/bomana_basic/`) is an independent
 native Windows timer/navigation window. It reuses the ExtUI resolver directly,
 without starting Bridge, and draws system fonts and vector symbols on a
