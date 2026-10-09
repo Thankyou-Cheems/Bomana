@@ -148,6 +148,29 @@ export function landingApproachPath(scene: LandingRunwayScene) {
   return { controls, points, normals };
 }
 
+/** Keep the verified horizontal footprint fixed in the world. Only its vertical
+ * intercept follows the same smoothed height/pitch as the camera; never blend a
+ * new terrain floor downward or move rails onto unmeasured ground. */
+export function landingTerrainPath(scene: LandingRunwayScene) {
+  const terrain = scene.terrainCorridor!;
+  const live = landingApproachPath({ ...terrain.referenceScene, along:scene.along, across:scene.across,
+    height: scene.height, pitch: scene.pitch, speed:scene.speed });
+  return { normals: terrain.normals, points: terrain.points.map((p, i): Point3 => {
+    const x = p[0] + scene.along - terrain.along, y = p[1] + scene.across - terrain.across;
+    let nearest = Infinity, height = scene.height;
+    // Sample the live vertical curve at this retained world position. Matching
+    // old array indices would anchor the intercept behind a moving aircraft and
+    // still jump every batch. Only height is taken from the live curve.
+    for (let j=1;j<live.points.length;j++) {
+      const a=live.points[j-1]!, b=live.points[j]!, dx=b[0]-a[0], dy=b[1]-a[1];
+      const t=Math.max(0,Math.min(1,((x-a[0])*dx+(y-a[1])*dy)/Math.max(1e-9,dx*dx+dy*dy)));
+      const distance=(x-a[0]-dx*t)**2+(y-a[1]-dy*t)**2;
+      if (distance<nearest) {nearest=distance;height=a[2]+(b[2]-a[2])*t;}
+    }
+    return [x,y,Math.max(terrain.floorsM[i]!,height)];
+  }) };
+}
+
 export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(scene.pitch ?? 0), cameraRoll = scene.roll ?? 0, retreat = 0, yaw = 0,
   options: { simplified?: boolean; floorDrop?: number; pixelScale?: number; path?: ReturnType<typeof landingApproachPath> } = {}) {
   const runwayHalfWidth = (scene.width ?? 90) / 2;
@@ -220,7 +243,7 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   const ribbon: ProjectedPoint[][] = [];
   if (scene.approach && scene.terrainCorridor !== null) {
     const terrain = scene.terrainCorridor;
-    const path = terrain ? { normals: terrain.normals, points: terrain.points.map(p => [p[0] + scene.along - terrain.along, p[1] + scene.across - terrain.across, p[2]] as Point3) }
+    const path = terrain ? landingTerrainPath(scene)
       : options.path ?? landingApproachPath(scene);
     const distances = [0];
     for (let i = 1; i < path.points.length; i++) {
@@ -274,6 +297,12 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
 /** The player is the camera; the runway must not rotate or zoom it. */
 export function landingRunwayCamera(scene: LandingRunwayScene) {
   return scene.heightKnown === false ? 0 : -(scene.pitch ?? 0);
+}
+
+/** Shared central perspective viewport, excluding IAS and fuel columns. */
+export function landingPerspectiveViewport(width: number) {
+  const left = Math.max(54, Math.min(125, width * .18)) + Math.max(8, Math.min(20, width * .025));
+  return { left, width: width - left * 2 };
 }
 
 /** A fixed forward perspective: the window sides are the near wing-tip anchors.

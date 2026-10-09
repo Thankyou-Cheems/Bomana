@@ -1,7 +1,7 @@
 import type { EditionSnapshot } from "./runtime-types";
 import { fuelEndurance } from "./fuel-presentation";
 import { landingConfigurationPresentation, landingHeightPresentation, landingLateralGuidance, landingSurfacePresentation, landingRunwayRemaining } from "./landing-presentation";
-import { landingRunwayScene, landingRunwayFrame, projectLandingRunway, RunwaySceneMotion, type LandingRunwayScene, type ProjectedPoint } from "./landing-runway-projection";
+import { landingRunwayScene, landingRunwayFrame, landingPerspectiveViewport, projectLandingRunway, RunwaySceneMotion, type LandingRunwayScene, type ProjectedPoint } from "./landing-runway-projection";
 
 const finite = (n: number | null | undefined): n is number => typeof n === "number" && Number.isFinite(n);
 const clamp = (n: number) => Math.max(-1, Math.min(1, n));
@@ -77,10 +77,10 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
     .map(item => ({ ...item, scene: item.geometry.heightM === null ? null : landingRunwayScene(item.geometry, snapshot.flight.headingDeg, landing!.settings.glideAngleDeg, landing?.attitude),
       bearing: ((item.geometry.airportBearingDeg ?? snapshot.flight.headingDeg) - snapshot.flight.headingDeg + 540) % 360 - 180 }))
     .filter(item => Math.abs(item.bearing) <= 30) : [];
-  // Stage boundaries do not change the physical runway. Keep its motion
-  // continuous; approach/validity flags still change immediately in the scene.
+  // Stage boundaries keep motion continuous. A changed altitude datum must
+  // reset relative-height interpolation so the absolute aircraft camera stays put.
   const selected = snapshot.navigation?.items.find(item => item.id === landing?.settings.runwayId);
-  const cueKey = `${landing?.runwayKey || (selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId)}|${landing?.settings.reverse}|${runway?.heightKnown}`;
+  const cueKey = `${landing?.runwayKey || (selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId)}|${landing?.settings.reverse}|${runway?.heightKnown}|${landing?.elevationM}`;
   return { heightReference: height.reference, heightCaption: height.compactReference, ground: surface, active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
     runway, horizontal, otherRunways, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
     aria: `${mode}${surface ? `；${surface.label}；跑道位置示意，观测推断，不证明轮胎接触、损伤或刹车状态` : ""}；${course}，${distance}${horizontal ? "；前向航线透视，垂直数据不完整，无下滑指令" : ""}${g ? `；${height.reference}` : ""}${runway && !horizontal ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；以玩家前向视角呈现，近端以中央透视区两侧为翼端参考、远端按深度收缩；视野外机场保留方向提示；姿态缺测使用可用航迹俯仰和水平滚转${landing?.terrainCorridor === undefined ? "；曲线从当前高度与俯仰接入末段下滑线；近端显示面随翼端衔接，远端接入跑道；高低偏差独立计算" : landing.terrainCorridor ? "；返航路径按沿途地形抬升，显示面预留75米，其中50米为植被余量而非实测树高；淡琥珀色表示路线抬升；对正后最后1.5公里交回普通降落参考，该末段未验证植被净空" : "；地形包线暂不可用，保留机场方向"}；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
@@ -116,7 +116,7 @@ export class LandingCueMotion {
 export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeView, width: number, height: number, cue: LandingRunwayScene | null, others = p.otherRunways, simplified = false): void {
   const pad = Math.max(8, Math.min(20, width * .025));
   const side = Math.max(54, Math.min(125, width * .18));
-  const left = side + pad, right = width - side - pad, center = width / 2;
+  const { left } = landingPerspectiveViewport(width), right = width - left, center = width / 2;
   const centerWidth = right - left;
   const font = Math.max(8, Math.min(13, height * .085, width * .021));
   const large = Math.max(18, Math.min(34, height * .24, side * .4));
@@ -193,7 +193,7 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
     }
     // A low aircraft can be below the entire raised route. Keep a small steady
     // upward cue at the viewport edge instead of pulling the path through rock.
-    if (cue?.terrainCorridor && cue.terrainCorridor.points[0]![2] > cue.height + 25) {
+    if (cue?.terrainCorridor && cue.terrainCorridor.floorsM[0]! > cue.height + 25) {
       ctx.globalAlpha = .95; ctx.strokeStyle = "#e8bd72";
       ctx.beginPath(); ctx.moveTo(center - 6, top + 8); ctx.lineTo(center, top + 3); ctx.lineTo(center + 6, top + 8); ctx.stroke();
     }

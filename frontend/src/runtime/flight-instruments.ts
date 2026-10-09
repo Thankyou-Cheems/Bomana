@@ -1,6 +1,6 @@
 import type { EditionSnapshot } from "./runtime-types";
 import { landingPresentation } from "./landing-presentation";
-import { PictureInPictureHeadingRenderer, type HeadingAirfieldModulePainter } from "./pip-heading-renderer";
+import { PictureInPictureHeadingRenderer, type HeadingAirfieldModulePainter, type LandingFramePainter } from "./pip-heading-renderer";
 import { headingGuidance, type HeadingTapeTargetInput } from "./heading-tape";
 import { SpeedStripRenderer } from "./speed-strip-renderer";
 import { FlightStatusBadgeRenderer, type FlightStatusPresentation } from "./flight-status-badges";
@@ -35,7 +35,7 @@ export class FlightInstruments {
   readonly #fit: () => void;
 
   constructor(host: HTMLElement, options: { guidance?: typeof headingGuidance; drawAirfieldModule?: HeadingAirfieldModulePainter;
-    onCycleTarget?: () => void; trailingAction?: HTMLElement }) {
+    onCycleTarget?: () => void; trailingAction?: HTMLElement; drawLandingBackground?: LandingFramePainter }) {
     const document = host.ownerDocument;
     host.classList.add("flight-instruments-host");
     this.root = document.createElement("section");
@@ -92,7 +92,7 @@ export class FlightInstruments {
     }
     if (options.trailingAction) part(".pip-actions").append(options.trailingAction);
     this.#heading = new PictureInPictureHeadingRenderer({ view: document.defaultView!, canvas: part<HTMLCanvasElement>("canvas"),
-      guidance: options.guidance, drawAirfieldModule: options.drawAirfieldModule });
+      guidance: options.guidance, drawAirfieldModule: options.drawAirfieldModule, drawLandingBackground: options.drawLandingBackground });
     this.#speed = new SpeedStripRenderer({ root: part("#pip-speed-strip"), state: part("#pip-speed-state"), value: part("#pip-speed-value"), mach: part("#pip-speed-mach"), track: part("#pip-speed-track"), fill: part("#pip-speed-fill"), markers: [part("#pip-speed-caution"), part("#pip-speed-warning"), part("#pip-speed-limit")] });
     this.#badges = new FlightStatusBadgeRenderer({ flight: part("#pip-flight-phase-badge"), gear: part("#pip-gear-status-badge") });
   }

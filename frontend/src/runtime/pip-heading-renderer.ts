@@ -13,12 +13,16 @@ import {
 import { SampledAngleMotion, sampledAtPerformanceTime } from "./sampled-angle-motion";
 import { drawLandingTape, landingTapePresentation, LandingCueMotion, type LandingTapeView } from "./landing-tape";
 import { TargetCenterMotion } from "./target-center-motion";
+import type { LandingRunwayScene } from "./landing-runway-projection";
 import { canonicalAngularRanges } from "./angular-ranges";
 import { drawBombingZoneSymbol, drawPoiBracketSymbol } from "./navigation-symbols";
 
 /** Enhanced supplies its pictogram painter without pulling private modules into Standard. */
 export type HeadingAirfieldModulePainter = (context: CanvasRenderingContext2D, x: number, y: number,
   module: NonNullable<HeadingTapeTargetInput["airfieldModule"]>, selected: boolean, unit: number) => void;
+
+export type LandingFramePainter = (snapshot: EditionSnapshot, scene: LandingRunwayScene | null,
+  width: number, height: number, simplified: boolean) => void;
 
 /** Move the blue silhouette and its physical anchor together; impact bands stay live. */
 export function displayedTargetGuidance(guidance: ReturnType<typeof headingGuidance>, centerDeg: number): ReturnType<typeof headingGuidance> {
@@ -83,6 +87,7 @@ export class LandingRenderBudget {
 export class PictureInPictureHeadingRenderer {
   readonly #guidance: typeof headingGuidance;
   readonly #drawAirfieldModule: HeadingAirfieldModulePainter | undefined;
+  readonly #drawLandingBackground: LandingFramePainter | undefined;
   readonly #view: Window;
   readonly #canvas: HTMLCanvasElement;
   #snapshot: EditionSnapshot | null = null;
@@ -106,9 +111,10 @@ export class PictureInPictureHeadingRenderer {
   #extraTargets: readonly HeadingTapeTargetInput[] = [];
 
   constructor(options: { readonly view: Window; readonly canvas: HTMLCanvasElement; readonly guidance?: typeof headingGuidance;
-    readonly drawAirfieldModule?: HeadingAirfieldModulePainter }) {
+    readonly drawAirfieldModule?: HeadingAirfieldModulePainter; readonly drawLandingBackground?: LandingFramePainter }) {
     this.#guidance = options.guidance ?? headingGuidance;
     this.#drawAirfieldModule = options.drawAirfieldModule;
+    this.#drawLandingBackground = options.drawLandingBackground;
     this.#view = options.view;
     this.#canvas = options.canvas;
     this.#landingBudget = new LandingRenderBudget(this.#view.navigator);
@@ -280,7 +286,9 @@ export class PictureInPictureHeadingRenderer {
       context.setTransform(bitmapWidth / bounds.width, 0, 0, bitmapHeight / bounds.height, 0, 0);
       const now = this.#view.performance.now();
       this.#canvas.dataset.landingQuality = this.#landingBudget.simplified ? "simple" : "full";
-      drawLandingTape(context, this.#landing, bounds.width, bounds.height, this.#landingMotion.step(now), this.#landingMotion.background(now), this.#landingBudget.simplified);
+      const scene = this.#landingMotion.step(now);
+      drawLandingTape(context, this.#landing, bounds.width, bounds.height, scene, this.#landingMotion.background(now), this.#landingBudget.simplified);
+      this.#drawLandingBackground?.(snapshot, scene, bounds.width, bounds.height, this.#landingBudget.simplified);
       this.#landingBudget.recordDraw(this.#view.performance.now() - now);
       return;
     }

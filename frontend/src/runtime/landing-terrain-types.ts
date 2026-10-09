@@ -13,5 +13,8 @@ export interface LandingTerrainCorridor {
   readonly across: number;
   readonly points: readonly (readonly [number,number,number])[];
   readonly normals: readonly (readonly [number,number])[];
+  /** Separate the sampled footprint/floor from the live vertical intercept. */
+  readonly referenceScene: LandingRunwayScene;
+  readonly floorsM: readonly number[];
   readonly raised: boolean;
 }
