@@ -55,6 +55,8 @@ export interface FuelSnapshot {
   readonly reserveKg: number | null;
   readonly reserveMinutes: number;
   readonly marginKg: number | null;
+  /** Maneuver budget constrained by an observed level-flight setting. */
+  readonly returnBasis?: { readonly rateKgMin: number; readonly groundSpeedKmh: number } | null;
   readonly reason: string;
   readonly economy: {
     readonly rateKgMin: number;
@@ -149,7 +151,9 @@ export class FuelManager {
       this.#lastAbruptLoss = abruptLoss ? { atMs: input.atMs, rate: lossRate } : null;
     }
     if (dt > 12) this.#learned = [];
-    if (dt > 3 || !this.#segment || !sameCondition(this.#segment, input)) this.#clearSegment();
+    // Fuel mass measures consumption directly. Flight-path changes alone do
+    // not invalidate it; actual power transitions and changing loss still do.
+    if (dt > 3 || !this.#segment || !samePower(this.#segment, input)) this.#clearSegment();
     if (!this.#segment) this.#segment = input;
     if (input.groundSpeedKmh !== null && input.groundSpeedKmh >= 50) {
       const alpha = 1 - Math.exp(-Math.max(0, dt) / 3);
@@ -207,13 +211,13 @@ export class FuelManager {
     const flowState = !available ? "unavailable" : this.#fit ? "consuming" : outputZero ? "output-zero" : "unresolved";
     const regime = input ? fuelRegime(input) : "unknown";
     const currentSpeed = trackValid ? this.#speed : null;
-    const cruise = input ? this.#learned.filter((item) =>
+    const recentLevel = input ? this.#learned.filter((item) =>
       input.atMs - item.observation.atMs <= 600000
       && Math.abs(input.altitudeM - item.observation.altitudeM) <= 1000
-      && fuelRegime(item.observation) !== "boost"
       && item.observation.groundSpeedKmh !== null
-      && item.observation.groundSpeedKmh >= 100)
-      .sort((a, b) => a.rate / a.observation.groundSpeedKmh! - b.rate / b.observation.groundSpeedKmh!)[0] : null;
+      && item.observation.groundSpeedKmh >= 100) : [];
+    const cruise = recentLevel.filter(item => fuelRegime(item.observation) !== "boost")
+      .sort((a, b) => a.rate / a.observation.groundSpeedKmh! - b.rate / b.observation.groundSpeedKmh!)[0];
     let reason = !available ? "fuel-unavailable" : input?.onGround ? "on-ground"
       : input && (Math.abs(input.verticalSpeedMps) > 10 || regime === "idle") ? "maneuver"
       : !rate ? "learning" : !target ? "no-airfield" : currentSpeed === null ? "no-track"
@@ -225,15 +229,21 @@ export class FuelManager {
     let marginKg: number | null = null;
     let returnNeededKg = 0;
     let returnStatus: FuelSnapshot["returnStatus"] = "unknown";
-    if (reason === "ready" && target && currentSpeed !== null) {
-      returnMinutes = target.distanceKm / currentSpeed * 60 * ROUTE_ALLOWANCE;
-      tripKg = rate * returnMinutes;
-      reserveKg = Math.max(rate, cruise?.rate ?? 0) * RESERVE_MINUTES;
+    const level = reason === "maneuver" ? recentLevel.at(-1) : null;
+    const returnBasis = level && currentSpeed !== null && rate > 0 ? {
+      rateKgMin: Math.max(rate, level.rate),
+      groundSpeedKmh: Math.min(currentSpeed, level.observation.groundSpeedKmh!),
+    } : null;
+    if ((reason === "ready" || returnBasis) && target && currentSpeed !== null) {
+      const budgetRate = returnBasis?.rateKgMin ?? rate;
+      returnMinutes = target.distanceKm / (returnBasis?.groundSpeedKmh ?? currentSpeed) * 60 * ROUTE_ALLOWANCE;
+      tripKg = budgetRate * returnMinutes;
+      reserveKg = Math.max(budgetRate, cruise?.rate ?? 0) * RESERVE_MINUTES;
       returnNeededKg = tripKg + reserveKg;
       marginKg = this.#currentKg - returnNeededKg;
       // Static engine coefficients are a starting estimate, never a positive
       // return verdict. The five-minute reserve is already inside this budget.
-      if (stable) returnStatus = marginKg < 0 ? "danger" : marginKg < reserveKg * .5 ? "warning" : "safe";
+      if (stable && reason === "ready") returnStatus = marginKg < 0 ? "danger" : marginKg < reserveKg * .5 ? "warning" : "safe";
     }
     if (available && this.#currentKg === 0) { reason = "empty"; returnStatus = "danger"; }
     const savings = cruise && currentSpeed && rate > 0 ? 100 * (1 - cruise.rate / cruise.observation.groundSpeedKmh! / (rate / currentSpeed)) : 0;
@@ -251,7 +261,7 @@ export class FuelManager {
       source, aircraftMatched: profile !== null, engineType: profile?.engineType ?? "unknown", regime,
       sampleSeconds: this.#spanSeconds(), flowState, rateUncertaintyKgMin: available ? this.#fit?.uncertainty ?? null : null, returnNeededKg, returnStatus,
       returnTargetLabel: target?.label ?? "", returnDistanceKm: target?.distanceKm ?? null,
-      returnMinutes, tripKg, reserveKg, reserveMinutes: RESERVE_MINUTES, marginKg, reason, economy,
+      returnMinutes, tripKg, reserveKg, reserveMinutes: RESERVE_MINUTES, marginKg, returnBasis, reason, economy,
     };
   }
 
@@ -329,7 +339,7 @@ export function fuelRegime(input: FuelObservation): string {
   return throttle >= 95 ? "military" : "cruise";
 }
 
-function sameCondition(a: FuelObservation, b: FuelObservation): boolean {
+function samePower(a: FuelObservation, b: FuelObservation): boolean {
   return fuelRegime(a) === fuelRegime(b)
     && a.engines.length === b.engines.length
     && a.engines.every((engine, index) => {
@@ -339,10 +349,12 @@ function sameCondition(a: FuelObservation, b: FuelObservation): boolean {
       const outputSame = (before: number | null, after: number | null) => before === null ? after === null
         : after !== null && Math.abs(before - after) <= Math.max(1, Math.abs(before) * .25);
       return throttleSame && outputSame(engine.thrustKgf, next.thrustKgf) && outputSame(engine.powerHp, next.powerHp);
-    })
-    && Math.abs(a.altitudeM - b.altitudeM) <= 500
-    && Math.abs(a.iasKmh - b.iasKmh) <= Math.max(50, a.iasKmh * .15)
-    && Math.sign(Math.trunc(a.verticalSpeedMps / 5)) === Math.sign(Math.trunc(b.verticalSpeedMps / 5));
+    });
+}
+
+function sameCondition(a: FuelObservation, b: FuelObservation): boolean {
+  return samePower(a, b) && Math.abs(a.altitudeM - b.altitudeM) <= 500
+    && Math.abs(a.iasKmh - b.iasKmh) <= Math.max(50, a.iasKmh * .15);
 }
 
 export function aircraftFuelRate(profile: AircraftFuelProfile | null, engines: readonly FuelEngine[]): number | null {

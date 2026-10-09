@@ -50,6 +50,7 @@ export interface TimerCheckpointStore {
 }
 
 export interface RealtimeSolverPort {
+  terrainCorridor?(request: import("./landing-terrain-types").LandingCorridorRequest): Promise<import("./landing-terrain-types").LandingTerrainCorridor | null>;
   terrainPreview?(request: TerrainPreviewRequest): Promise<TerrainPreviewMesh | null>;
   readonly terrainReady?: boolean;
   readonly terrainGeneration?: number;

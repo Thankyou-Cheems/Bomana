@@ -261,7 +261,7 @@ body[data-mobile-paired="true"][data-edition="Enhanced"] .hud-product-nav { disp
   background: rgba(238,247,253,.96);
 }
 
-.fuel-current-total { min-width: 0; overflow: hidden; color: var(--readout-value); font: 900 9px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.fuel-current-total { min-width: 0; color: var(--readout-value); font: 900 9px/1.2 var(--mono); overflow-wrap: anywhere; }
 
 .fuel-level-track { position: relative; grid-column: 1 / -1; height: 8px; border: 1px solid rgba(57,116,148,.34); background: rgba(41,91,118,.14); }
 
@@ -274,6 +274,7 @@ body[data-mobile-paired="true"][data-edition="Enhanced"] .hud-product-nav { disp
 .fuel-relationship {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
@@ -281,7 +282,7 @@ body[data-mobile-paired="true"][data-edition="Enhanced"] .hud-product-nav { disp
 }
 
 .fuel-relationship strong,
-.fuel-relationship span { min-width: 0; overflow: hidden; font: 800 8px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.fuel-relationship span { min-width: 0; font: 800 8px/1.2 var(--mono); overflow-wrap: anywhere; }
 
 .fuel-relationship strong { color: var(--readout-label); }
 
@@ -289,7 +290,7 @@ body[data-mobile-paired="true"][data-edition="Enhanced"] .hud-product-nav { disp
 
 .fuel-consumption { grid-column: 1 / -1; color: var(--readout-label); font: 800 9px/1.4 var(--mono); overflow-wrap: anywhere; }
 
-.fuel-source { color: var(--readout-label); font: 700 8px/1.3 var(--mono); text-align: right; }
+.fuel-source { max-width: 10ch; overflow-wrap: anywhere; color: var(--readout-label); font: 700 8px/1.3 var(--mono); text-align: right; }
 
 .fuel-details { grid-column: 1 / -1; min-width: 0; color: var(--readout-label); font: 500 10px/1.5 var(--mono); }
 

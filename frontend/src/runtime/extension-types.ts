@@ -5,6 +5,8 @@ export interface TerrainPreviewRequest {
   readonly headingDeg: number;
   readonly trackDeg: number;
   readonly rangeM: number;
+  /** Warning ray can stop before the visual horizon, preserving near coverage at map edges. */
+  readonly profileRangeM?: number;
 }
 export interface TerrainPreviewMesh {
   readonly mapId: string;
@@ -14,6 +16,8 @@ export interface TerrainPreviewMesh {
   readonly altitudesM: readonly (number | null)[];
   /** Full-resolution grid crossings on ground track, independent of the display. */
   readonly profile: readonly (readonly [number, number])[] | null;
+  /** False when only the known prefix of the prediction ray is available. */
+  readonly profileComplete?: boolean;
 }
 export interface TerrainAwarenessSnapshot {
   readonly state: "checking" | "ready" | "partial" | "unavailable";

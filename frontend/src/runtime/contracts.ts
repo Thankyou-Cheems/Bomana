@@ -59,6 +59,7 @@ export interface SolverCatalogSummary {
 }
 
 export type SolverWorkerRequest =
+  | { readonly type: "terrain-corridor"; readonly requestId: number; readonly request: import("./landing-terrain-types").LandingCorridorRequest }
   | { readonly type: "terrain-preview"; readonly requestId: number; readonly request: TerrainPreviewRequest }
   | { readonly type: "catalog"; readonly requestId: number }
   | {
@@ -96,6 +97,7 @@ export type SolverWorkerRequest =
     };
 
 export type SolverWorkerResponse =
+  | { readonly type: "terrain-corridor-result"; readonly requestId: number; readonly corridor: import("./landing-terrain-types").LandingTerrainCorridor | null }
   | { readonly type: "terrain-preview-result"; readonly requestId: number; readonly mesh: TerrainPreviewMesh | null }
   | { readonly type: "terrain-clear-result"; readonly requestId: number }
   | {

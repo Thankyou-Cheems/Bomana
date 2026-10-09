@@ -89,7 +89,9 @@ export function landingPresentation(landing: LandingSnapshot | null | undefined)
       : "等待新鲜遥测与本机位置";
   const stage = surface?.label ?? (remainingM !== null ? "沿跑道参考" : g ? ({ return: "返航机场", intercept: "建立进近", final: "跑道进近", runway: "入口后方", "past-runway": "末端后方" })[g.stage] : "等待数据");
   const lateral = surface ? "跑道内位置参考" : landingLateralGuidance(g).text;
-  const vertical = surface ? "地面阶段参考 · 无下滑指令" : !g ? "垂直 —" : returning ? `${height.relative} · ${g.heightM === null ? "仅水平引导" : "近场对准后显示下滑参考"}` : g.stage === "runway" || g.stage === "past-runway" ? "下滑参考已结束"
+  const vertical = surface ? "地面阶段参考 · 无下滑指令" : !g ? "垂直 —" : landing?.terrainCorridor !== undefined
+    ? landing.terrainCorridor ? "地形返航 · 植被余量 50m" : "地形航道暂无数据 · 保留方位"
+    : returning ? `${height.relative} · ${g.heightM === null ? "仅水平引导" : "近场对准后显示下滑参考"}` : g.stage === "runway" || g.stage === "past-runway" ? "下滑参考已结束"
     : g.heightM === null ? `${height.relative} · 仅水平引导` : g.glideDeviationM === null ? "对准后显示下滑参考"
       : Math.abs(g.glideDeviationM) <= Math.max(10, g.thresholdDistanceM * Math.tan(.4 * Math.PI / 180)) ? "参考下滑线附近"
         : `${g.glideDeviationM > 0 ? "偏高" : "偏低"} ${metres(g.glideDeviationM)}`;

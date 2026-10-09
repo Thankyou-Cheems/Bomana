@@ -21,6 +21,40 @@ function learn(manager: FuelManager, start = 0, end = 30000, initial = 1000, rat
 }
 
 describe("aircraft fuel management", () => {
+  it.each([
+    { verticalSpeedMps: 30 }, { verticalSpeedMps: -30 },
+    { altitudeM: 3600 }, { iasKmh: 820 },
+  ])("keeps measuring fuel mass through a flight-path change: %j", patch => {
+    const manager = new FuelManager(catalog);
+    learn(manager);
+    manager.observe(observation(30100, 969.9, patch));
+    expect(manager.view(30100, true, target, true)).toMatchObject({ source: "measured", rateKgMin: 60, stable: true });
+  });
+  it("recalculates a conditional maneuver budget without using a dive as cheap cruise", () => {
+    const manager = new FuelManager(catalog);
+    const before = learn(manager);
+    manager.observe(observation(30100, 969.9, { verticalSpeedMps: -30, groundSpeedKmh: 1000 }));
+    const during = manager.view(30100, true, target, true);
+    expect(during.returnStatus).toBe("unknown");
+    expect(during.tripKg).toBeCloseTo(before.tripKg!);
+    expect(during.marginKg).toBeCloseTo(before.marginKg! - .1);
+    expect(manager.view(30100, true, { ...target, distanceKm: 72 }, true).tripKg).toBeCloseTo(before.tripKg! * 2);
+    expect(manager.view(30100, true, target, false).marginKg).toBeNull();
+  });
+  it("keeps calibrated endurance through a maneuver during a measurement restart", () => {
+    const manager = new FuelManager(catalog);
+    learn(manager);
+    manager.observe(observation(35000, 965, { verticalSpeedMps: -30 }));
+    expect(manager.view(35000, true, target, true)).toMatchObject({ source: "aircraft-estimate", rateKgMin: 60, returnStatus: "unknown" });
+  });
+  it("does not borrow a distant-altitude or expired level-flight budget", () => {
+    const manager = new FuelManager(catalog);
+    learn(manager);
+    for (let at = 30100; at <= 631000; at += 100) {
+      manager.observe(observation(at, 1000 - at / 1000, { verticalSpeedMps: 30, altitudeM: at < 40000 ? 4101 : 3000 }));
+      if (at === 30100 || at === 631000) expect(manager.view(at, true, target, true).marginKg).toBeNull();
+    }
+  });
   it("learns actual consumption and budgets travel plus an explicit five-minute reserve", () => {
     const fuel = learn(new FuelManager(catalog));
     expect(fuel).toMatchObject({ source: "measured", rateKgMin: 60, returnStatus: "safe", reserveKg: 300 });

@@ -34,6 +34,7 @@ describe("fuel presentation", () => {
     expect(result.sourceLabel).toBe("已校准参考");
     expect(result.returnRequirement).toBe("返航参考 700 kg");
     expect(result.tone).toBe("unknown");
+    expect(fuelEndurance(snapshot({ available: true, currentKg: 1000, source: "aircraft-estimate", remainingMinutes: 10 })).text).toBe("≈600");
   });
   it.each(["zh-CN", "zh-Hant", "en"] as const)("renders low rates and convergence without rounded zero or separators in %s", (locale) => {
     const fuel = snapshot({ available: true, currentKg: .12, source: "measured", rateKgMin: .06, remainingMinutes: 2, stable: false, regime: "idle", flowState: "consuming" });

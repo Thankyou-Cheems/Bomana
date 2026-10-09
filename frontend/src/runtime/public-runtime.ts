@@ -666,9 +666,12 @@ export class PublicRuntime {
       airbrakePercent: stateNumber(["airbrake, %", "airbrake"]),
       flapsPercent: stateNumber(["flaps, %", "flaps"]),
     };
-    return projectOnly ? this._landing.project(input, (point, runway) => this._landingElevation(point, runway), (point, runway) => this._landingElevationSource(point, runway))
+    const landing = projectOnly ? this._landing.project(input, (point, runway) => this._landingElevation(point, runway), (point, runway) => this._landingElevationSource(point, runway))
       : this._landing.update(input, (point, runway) => this._landingElevation(point, runway), (point, runway) => this._landingElevationSource(point, runway));
+    return this._landingTerrainGuidance(landing, input, telemetry.headingDeg ?? mapHeading(this._parseMap(frame.mapObjects).player), nowMs);
   }
+
+  protected _landingTerrainGuidance(landing: import("./landing-assist").LandingSnapshot, _input: import("./landing-assist").LandingInput, _heading: number, _at: number): import("./landing-assist").LandingSnapshot { return landing; }
 
   protected _projectCommandExtension(
     _telemetry: ParsedTelemetry | null,

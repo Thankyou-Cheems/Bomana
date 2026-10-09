@@ -53,6 +53,8 @@ export interface LandingGeometry {
   readonly predictedThresholdCrossM?: number | null;
 }
 export interface LandingSnapshot {
+  /** Undefined: ordinary landing reference. Null: terrain route unavailable. */
+  readonly terrainCorridor?: import("./landing-terrain-types").LandingTerrainCorridor | null;
   /** Conservative display inference; never a native wheel-contact flag. */
   readonly surfacePhase?: "rollout" | "taxi" | null;
   readonly runwayKey?: string;

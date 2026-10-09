@@ -516,7 +516,8 @@ it("switches the shared runtime automatically from actual 8111 ground-track samp
   expect(landingTapePresentation({...measured,fuel:{...measured.fuel,remainingMinutes:4.25}})).toMatchObject({fuelText:"255",fuelTone:"caution"});
   expect(landingTapePresentation({...measured,fuel:{...measured.fuel,remainingMinutes:8.5}})).toMatchObject({fuelText:"510",fuelTone:"reference"});
   expect(landingTapePresentation({...measured,fuel:{...measured.fuel,stable:false}})).toMatchObject({fuelText:"≈120",fuelDetail:"收敛中 ≈120 秒"});
-  for (const fuel of [{...measured.fuel,source:"aircraft-estimate" as const},{...measured.fuel,remainingMinutes:-1},{...measured.fuel,remainingMinutes:NaN}]) {
+  expect(landingTapePresentation({...measured,fuel:{...measured.fuel,stable:false,source:"aircraft-estimate"}})).toMatchObject({fuelText:"≈120",fuelDetail:"已校准参考 ≈120 秒",fuelTone:"reference"});
+  for (const fuel of [{...measured.fuel,source:"learning" as const},{...measured.fuel,remainingMinutes:-1},{...measured.fuel,remainingMinutes:NaN}]) {
     expect(landingTapePresentation({...measured,fuel})).toMatchObject({fuelText:"—"});
   }
   expect(landingTapePresentation({...measured,sortieContinuity:{...measured.sortieContinuity,state:"no-data-grace"}}).fuelText).toBe("—");

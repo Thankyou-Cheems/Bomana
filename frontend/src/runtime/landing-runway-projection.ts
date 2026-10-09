@@ -2,6 +2,7 @@ import type { LandingGeometry, LandingSnapshot } from "./landing-assist";
 import { aircraftCamera, aircraftCameraFrame, projectCameraSegment as segment, projectCameraSurface as surface } from "./aircraft-perspective";
 
 export interface LandingRunwayScene {
+  readonly terrainCorridor?: import("./landing-terrain-types").LandingTerrainCorridor | null;
   readonly along: number;
   readonly across: number;
   readonly height: number;
@@ -197,7 +198,7 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   }
   const ground: ProjectedSegment[] = [];
   let groundSurface: ProjectedPoint[] = [];
-  if (scene.heightKnown !== false && scene.height >= 0 && !options.simplified) {
+  if (scene.terrainCorridor === undefined && scene.heightKnown !== false && scene.height >= 0 && !options.simplified) {
     const ahead = Math.max(120, Math.min(scene.along * .2, 1800));
     const half = Math.min(Math.max(1600, (scene.width ?? 90) * 18), 4500);
     for (const along of [ahead, scene.along + scene.length + 1200]) {
@@ -217,8 +218,10 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   }
   const rails: ProjectedSegment[][] = [];
   const ribbon: ProjectedPoint[][] = [];
-  if (scene.approach) {
-    const path = options.path ?? landingApproachPath(scene);
+  if (scene.approach && scene.terrainCorridor !== null) {
+    const terrain = scene.terrainCorridor;
+    const path = terrain ? { normals: terrain.normals, points: terrain.points.map(p => [p[0] + scene.along - terrain.along, p[1] + scene.across - terrain.across, p[2]] as Point3) }
+      : options.path ?? landingApproachPath(scene);
     const distances = [0];
     for (let i = 1; i < path.points.length; i++) {
       const a = path.points[i - 1]!, b = path.points[i]!;
@@ -232,14 +235,22 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
     const edges: Point3[][] = [];
     for (const side of [-runwayHalfWidth, runwayHalfWidth]) {
       const samples = path.points.map((p, i) => {
-        const nearDrop = options.floorDrop ?? 15;
+        const nearDrop = terrain ? Math.min(15, options.floorDrop ?? 15) : options.floorDrop ?? 15;
         const farDrop = scene.heightKnown === false ? nearDrop : 15;
         const world = point(p[0] + path.normals[i]![0] * side, p[1] + path.normals[i]![1] * side, p[2] - farDrop);
         if (options.floorDrop === undefined) return world;
         const center = point(...p), wing = [center[0] + side, center[1] + nearDrop, center[2]];
         const t = Math.min(1, distances[i]! / Math.max(1, handoff)), weight = t * t * (3 - 2 * t);
         const blend = (axis: 0 | 1 | 2) => wing[axis]! + (world[axis] - wing[axis]!) * weight;
-        return [blend(0), blend(1), blend(2)] as Point3;
+        const blended: [number,number,number] = [blend(0), blend(1), blend(2)];
+        if (terrain) {
+          // Preserve wing-following motion without allowing bank or a tall
+          // window's display drop to lower either rail beneath the terrain floor.
+          const up = camera(0,-1,0);
+          const below = Math.min(0, (blended[0]-world[0])*up[0] + (blended[1]-world[1])*up[1] + (blended[2]-world[2])*up[2]);
+          for (const axis of [0,1,2] as const) blended[axis] -= below * up[axis];
+        }
+        return blended;
       });
       edges.push(samples);
       const rail: ProjectedSegment[] = [];
