@@ -1,4 +1,5 @@
 import type { LandingGeometry, LandingSnapshot } from "./landing-assist";
+import { aircraftCamera, aircraftCameraFrame, projectCameraSegment as segment, projectCameraSurface as surface } from "./aircraft-perspective";
 
 export interface LandingRunwayScene {
   readonly along: number;
@@ -58,12 +59,6 @@ const runwayPatterns = { full: runwayPattern(false), sparse: runwayPattern(true)
 export function landingRunwayPattern(lod: RunwayDetailLod): readonly RunwayPatternMark[] { return runwayPatterns[lod]; }
 const radians = Math.PI / 180;
 
-const near = 30;
-function intersectNear(p: Point3, q: Point3): Point3 {
-  const t = (near - p[2]) / (q[2] - p[2]);
-  return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, near];
-}
-const perspective = (p: Point3): ProjectedPoint => [p[0] / p[2], p[1] / p[2]];
 const viewLimit = 2.4;
 /** Drop the part of a stroke that a near-plane clip would fling across the strip. */
 function clipProjected(piece: ProjectedSegment | null): ProjectedSegment | null {
@@ -85,17 +80,6 @@ function clipProjected(piece: ProjectedSegment | null): ProjectedSegment | null 
   return [[a[0] + dx * t0, a[1] + dy * t0], [a[0] + dx * t1, a[1] + dy * t1]];
 }
 
-/** A runway may straddle the camera plane during a pass; clip its surface too. */
-function surface(corners: readonly Point3[]): ProjectedPoint[] {
-  const clipped: Point3[] = [];
-  for (let i = 0; i < corners.length; i++) {
-    const a = corners[i]!, b = corners[(i + 1) % corners.length]!;
-    if (a[2] >= near) clipped.push(a);
-    if ((a[2] >= near) !== (b[2] >= near)) clipped.push(intersectNear(a, b));
-  }
-  return clipped.map(perspective);
-}
-
 /** Heading/attitude-referenced camera. Width is a definition reference or symbolic. */
 export function landingRunwayScene(g: LandingGeometry | null | undefined, headingDeg: number, glideAngleDeg: number, attitude?: LandingSnapshot["attitude"]): LandingRunwayScene | null {
   if (!g || ![g.heightM ?? 0, g.thresholdDistanceM, g.crossTrackM, g.lengthM, g.courseDeg, headingDeg, glideAngleDeg].every(Number.isFinite)
@@ -105,14 +89,6 @@ export function landingRunwayScene(g: LandingGeometry | null | undefined, headin
     slope: g.heightM === null ? 0 : Math.tan(glideAngleDeg * radians), approach: g.heightM === null ? Math.hypot(g.thresholdDistanceM, g.crossTrackM) > 30 : g.heightM > 40 || g.thresholdDistanceM > 30 && g.stage !== "runway" && g.stage !== "past-runway",
     width: Number.isFinite(g.referenceWidthM) && g.referenceWidthM! > 0 ? g.referenceWidthM : 90,
     pitch: g.heightM === null ? 0 : (attitude?.pitchDeg ?? 0) * radians, roll: g.heightM === null ? 0 : (attitude?.rollDeg ?? 0) * radians, speed: attitude?.tasMps ?? 0 };
-}
-
-/** Clip in camera space before dividing, including a runway partly behind ownship. */
-function segment(a: Point3, b: Point3): ProjectedSegment | null {
-  if (a[2] < near && b[2] < near) return null;
-  const start = a[2] < near ? intersectNear(a, b) : a;
-  const end = b[2] < near ? intersectNear(b, a) : b;
-  return [perspective(start), perspective(end)];
 }
 
 /** A heading-tangent geometric intercept, followed by an aligned final leg.
@@ -175,15 +151,13 @@ export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(
   options: { simplified?: boolean; floorDrop?: number; pixelScale?: number; path?: ReturnType<typeof landingApproachPath> } = {}) {
   const runwayHalfWidth = (scene.width ?? 90) / 2;
   const sin = Math.sin(scene.angle + yaw), cos = Math.cos(scene.angle + yaw);
-  const cp = Math.cos(cameraPitch), sp = Math.sin(cameraPitch);
+  const camera = aircraftCamera(cameraPitch, cameraRoll);
   // A one-metre altitude twitch at field elevation otherwise flips the pavement
   // between a surface and an edge-on line. The displayed height is unchanged.
   const eye = scene.heightKnown === false ? 0 : Math.max(scene.height, 12);
   const point = (along: number, across: number, heightAboveRunway: number): Point3 => {
     const depth = along * cos - across * sin + retreat, down = eye - heightAboveRunway;
-    const x = along * sin + across * cos, y = down * cp - depth * sp;
-    // Positive right bank rotates the world counterclockwise in screen space.
-    return [x * Math.cos(cameraRoll) + y * Math.sin(cameraRoll), -x * Math.sin(cameraRoll) + y * Math.cos(cameraRoll), depth * cp + down * sp];
+    return camera(along * sin + across * cos, down, depth);
   };
   const start = point(scene.along, scene.across, 0);
   const end = point(scene.along + scene.length, scene.across, 0);
@@ -296,14 +270,13 @@ export function landingRunwayCamera(scene: LandingRunwayScene) {
  * glide instruction. Unknown elevation has only horizontal bearing/depth. */
 export function landingRunwayFrame(scene: LandingRunwayScene, width: number, height: number, simplified = false) {
   const pitch = landingRunwayCamera(scene), roll = scene.heightKnown === false ? 0 : scene.roll ?? 0;
-  const focal = width / (2 * Math.tan(Math.PI / 6));
-  const y = Math.max(28, height * .25);
+  const { focal, x, y } = aircraftCameraFrame(width, height);
   // At the near edge, half the corridor occupies half the window. One focal
   // length then makes every farther cross-section smaller with actual depth.
   const floorDrop = Math.max(1, (height - 6 - y) * (scene.width ?? 90) / width);
   const projected = projectLandingRunway(scene, pitch, roll, 0, 0, { simplified, floorDrop, pixelScale: focal });
   return { pitch, roll, retreat: 0, yaw: 0, projected, routeWeight: scene.approach ? 1 : 0,
-    focal, x: width / 2, y };
+    focal, x, y };
 }
 
 /** Display-only critical damping. Preserves a coherent 3D scene instead of

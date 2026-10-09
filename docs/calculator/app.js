@@ -1149,7 +1149,7 @@ function refreshResult() {
     fireLineEl.textContent = [t("app.eachRoundReleasesOneCompleteLoadout", "每次均携带整套挂载并全部命中"), rounds < fullRounds ? t("app.completeLoadsForDirectDestruction", "直接摧毁满血目标需 {{v0}} 次出击", {v0: fullRounds, count: fullRounds}) : ""].filter(Boolean).join(" · ");
     statsEl.replaceChildren();
     appendStat(t("app.targetHp", "目标耐久"), formatInt(hp));
-    const reward = rewardUi(catalog.reward, rewardDamage);
+    const reward = rewardUi(catalog.reward, rewardDamage, aircraft);
     if (reward !== null) appendStat(t("app.loadoutRewardCoefficient", "整套收益系数"), reward.toFixed(1), "reward");
     hintEl.textContent = [
       customPreview && !customPreview.validation.valid ? t("app.thisConfigurationFailsLoadoutRestrictionsDamagePreviewOnly", "当前配置未通过挂载限制校验；此处仅预览伤害。") : "",
@@ -1192,7 +1192,8 @@ function refreshResult() {
 
   const capacity = currentWeaponCapacity(aircraft, weapon.id);
   const plan = aircraft && capacity
-    ? sortiePlan({ required: practicalCount, capacity, damage, rewardDamage: weapon.rewardDmg ?? damage, reward: catalog.reward })
+    ? sortiePlan({ required: practicalCount, capacity, damage, rewardDamage: weapon.rewardDmg ?? damage,
+      fullLoadRewardDamage: preset?.rewardDamage ?? null, reward: catalog.reward, aircraft })
     : null;
   if (plan) {
     sortieCountEl.textContent = String(plan.sorties);

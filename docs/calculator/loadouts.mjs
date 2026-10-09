@@ -46,7 +46,9 @@ export function presetTotals(preset, weapons) {
     if (!(weapon?.kg > 0)) knownMass = false;
     else mass += weapon.kg * amount;
   }
-  return { count, damage: knownDamage ? damage : null, rewardDamage: knownDamage ? rewardDamage : null, mass: knownMass ? mass : null };
+  return { count, damage: knownDamage ? damage : null,
+    rewardDamage: Object.hasOwn(preset, "rewardDamage") ? preset.rewardDamage : knownDamage ? rewardDamage : null,
+    mass: knownMass ? mass : null };
 }
 
 function node(tag, text, className) {

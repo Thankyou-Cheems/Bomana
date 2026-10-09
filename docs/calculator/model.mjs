@@ -181,7 +181,7 @@ function interpolate(points, value) {
   return points.at(-1)[1];
 }
 
-export function rewardUi(reward, totalDamage) {
+export function rewardUi(reward, totalDamage, aircraft = null) {
   if (reward && totalDamage === 0) return reward.ui_decoration;
   if (!reward || !(totalDamage > 0)) return null;
   const floor = reward.piecewise_linear?.[0]?.[0];
@@ -190,16 +190,34 @@ export function rewardUi(reward, totalDamage) {
   if (totalDamage >= floor) {
     multiplier = interpolate(reward.piecewise_linear, totalDamage);
   } else {
+    // Public aircraft flags: fighter=1, premium=2, ordinary=0, unknown=null.
+    if (aircraft && !Number.isInteger(aircraft.reward)) return null;
     const span = reward.preset_dmg_max - reward.preset_dmg_min;
     if (!(span > 0)) return null;
     const scale =
       1 + ((reward.bombing_reward_modifier - 1) * (totalDamage - reward.preset_dmg_min)) / span;
-    multiplier = Math.min((scale * reward.preset_dmg_min) / totalDamage, 1);
+    multiplier = (scale * reward.preset_dmg_min) / totalDamage;
+    if (aircraft?.reward & 2) multiplier *= reward.prem_bombing_reward_mul;
+    multiplier = Math.min(multiplier, 1);
+    if (aircraft?.reward & 1) multiplier *= reward.fighter_bombing_reward_mul;
   }
-  return multiplier === null ? null : multiplier * reward.ui_decoration;
+  if (multiplier === null) return null;
+  const result = multiplier * reward.ui_decoration;
+  return Number.isFinite(result) ? result : null;
 }
 
-export function sortiePlan({ required, capacity, damage, rewardDamage = damage, reward }) {
+// The premium factor moves the end of the constant-coefficient region.
+// Fighter penalties change its height, after the native clamp.
+export function rewardPlateauDamage(reward, aircraft = null) {
+  const span = reward.preset_dmg_max - reward.preset_dmg_min;
+  const a = reward.preset_dmg_min * (reward.bombing_reward_modifier - 1) / span;
+  const b = reward.preset_dmg_min * (1 - (reward.bombing_reward_modifier - 1) * reward.preset_dmg_min / span);
+  const premium = aircraft?.reward & 2 ? reward.prem_bombing_reward_mul : 1;
+  return Math.min(reward.piecewise_linear[0][0], b * premium / (1 - a * premium));
+}
+
+export function sortiePlan({ required, capacity, damage, rewardDamage = damage,
+  fullLoadRewardDamage = capacity * rewardDamage, reward, aircraft = null }) {
   if (!Number.isInteger(required) || required <= 0 || !Number.isInteger(capacity) || capacity <= 0 || !(damage > 0)) {
     return null;
   }
@@ -210,7 +228,7 @@ export function sortiePlan({ required, capacity, damage, rewardDamage = damage, 
     sorties,
     lastSortieCount,
     fullLoadDamage: capacity * damage,
-    fullLoadReward: rewardUi(reward, capacity * rewardDamage),
+    fullLoadReward: rewardUi(reward, fullLoadRewardDamage, aircraft),
   });
 }
 

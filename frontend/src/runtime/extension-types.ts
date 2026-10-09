@@ -22,6 +22,8 @@ export interface TerrainAwarenessSnapshot {
   readonly clearanceM: number | null;
   readonly warning: "caution" | "danger" | null;
   readonly conflictTimeS: number | null;
+  /** Current aircraft position in the retained mesh's heading-aligned metre frame. */
+  readonly pose?: { readonly forwardM: number; readonly rightM: number; readonly headingDeltaDeg: number };
 }
 
 export interface OfficialChatMessage {

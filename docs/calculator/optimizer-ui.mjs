@@ -1,4 +1,4 @@
-import { empiricalSimScore } from "./model.mjs";
+import { empiricalSimScore, rewardUi } from "./model.mjs";
 import { t, numberLocale, localizeName } from "./i18n.mjs";
 import { presetDiagram, presetZoneAllocations, storesTitle } from "./loadouts.mjs";
 import { validateLoadout } from "./custom-loadouts.mjs";
@@ -35,6 +35,10 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   const describe = items => storesTitle(items, context.weapons, names);
 
   function reflectControls() {
+    const rewardCap = context ? rewardUi(context.reward, 1, context.aircraft) : 10;
+    const balancedHelp = rewardCap === null
+      ? t("optimizer.strictRewardHelp", "优先收益系数；收益完全相同时再选择更简单的挂载。")
+      : t("optimizer.balancedHelp", "收益系数 ≥ {{floor}} 时优先更省事的投放方案，再减少弹种；其他情况优先收益。", {floor: format(rewardCap - filters.rewardTolerance)});
     root.dataset.objective = mode;
     for (const button of root.querySelectorAll("[data-optimizer-mode]")) {
       button.hidden = context ? button.dataset.optimizerMode === "sim_score" ? Boolean(context.threshold) : !context.threshold : false;
@@ -59,10 +63,10 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     root.querySelector("[data-optimizer-priority-help]").textContent = filters.simpleLoadout
       ? t("optimizer.uniformHelp", "优先统一投放特性和弹种，允许降低收益；始终保留手动选择。")
       : filters.strictReward ? t("optimizer.strictRewardHelp", "优先收益系数；收益完全相同时再选择更简单的挂载。")
-        : t("optimizer.balancedHelp", "收益系数 ≥ {{floor}} 时优先更省事的投放方案，再减少弹种；其他情况优先收益。", {floor: format((context?.reward.ui_decoration ?? 10) - filters.rewardTolerance)});
+        : balancedHelp;
     if (mode === "sim_score") { root.querySelector("[data-optimizer-priority-help]").textContent = t("simScore.objectiveHelp", "严格最大化同一目标剩余 HP、房间 BR 下的全挂载预计分数；已找到的同分候选优先减少投放类型、弹种、多余伤害及质量。收益偏好不降低分数目标。"); return; }
     if (!filters.simpleLoadout) root.querySelector("[data-optimizer-priority-help]").textContent += " " + t("optimizer.guidancePreference", "在收益范围内优先卫星导航，光电补足伤害；按实际投放枚数比较操作负担。");
-    if (mode === "custom_targets") root.querySelector("[data-optimizer-priority-help]").textContent = t("optimizer.customHelp", "先完成目标数量，再比较实际覆盖数 × 整套挂载收益系数；多余容量不计奖。同收益优先减少冗余伤害、载荷。统一挂载偏好仍生效。") + (!filters.simpleLoadout && !filters.strictReward ? " " + t("optimizer.balancedHelp", "收益系数 ≥ {{floor}} 时优先更省事的投放方案，再减少弹种；其他情况优先收益。", {floor: format((context?.reward.ui_decoration ?? 10) - filters.rewardTolerance)}) : "");
+    if (mode === "custom_targets") root.querySelector("[data-optimizer-priority-help]").textContent = t("optimizer.customHelp", "先完成目标数量，再比较实际覆盖数 × 整套挂载收益系数；多余容量不计奖。同收益优先减少冗余伤害、载荷。统一挂载偏好仍生效。") + (!filters.simpleLoadout && !filters.strictReward ? " " + balancedHelp : "");
   }
 
   function render(next, definition) {
@@ -210,7 +214,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       const message = {contextKey, requestId: id, mode, targetCount, filters, timeLimit};
       if (contextKey !== workerContextKey) {
         message.context = {definition, presets: current.aircraft.presets || [], lockedKeys: current.lockedKeys,
-          weapons: [...current.weapons], reward: current.reward, threshold: current.threshold, scenario: current.scenario, filters};
+          weapons: [...current.weapons], reward: current.reward, aircraft: {id: current.aircraft.id, reward: current.aircraft.reward}, threshold: current.threshold, scenario: current.scenario, filters};
         workerContextKey = contextKey;
       }
       worker.postMessage(message);

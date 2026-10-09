@@ -230,8 +230,41 @@ const reward = Object.freeze({
   preset_dmg_min: 18_000,
   preset_dmg_max: 97_500,
   bombing_reward_modifier: 2,
+  fighter_bombing_reward_mul: .8,
+  prem_bombing_reward_mul: 1.2,
   ui_decoration: 10,
   piecewise_linear: [[200_000, .3], [1_200_000, .17], [50_000_000, .017]],
+});
+
+test("MiG-23MLD four FAB-500s reproduce the user-confirmed 6.2 hangar coefficient", () => {
+  const read = name => JSON.parse(readFileSync(new URL(`../../docs/api/v1/calculator/${name}.json`, import.meta.url)));
+  const aircraft = read("aircraft").aircraft.find(row => row.id === "mig_23mld");
+  const weapon = read("weapons").weapons.find(row => row.id === "su_fab_500m_62t");
+  const capacity = aircraft.n[aircraft.w.indexOf(weapon.id)];
+  assert.equal(capacity, 4);
+  const plan = sortiePlan({required: 4, capacity, damage: weapon.dmg, rewardDamage: weapon.rewardDmg, reward: read("index").reward, aircraft});
+  assert.equal(plan.fullLoadReward.toFixed(1), "6.2");
+  assert.equal(rewardUi(read("index").reward, capacity * weapon.rewardDmg, aircraft), plan.fullLoadReward);
+});
+
+test("hangar coefficients apply premium before the clamp and fighter after, with native early returns", () => {
+  const bomber = {reward: 0};
+  const fighter = {reward: 1};
+  const premium = {reward: 2};
+  const premiumFighter = {reward: 3};
+  for (const damage of [5000, 18000, 20000, 25226.24, 97500, 199999]) {
+    const scale = 1 + (damage - 18000) / 79500;
+    const base = scale * 18000 / damage;
+    assert.equal(rewardUi(reward, damage, bomber), Math.min(base, 1) * 10);
+    assert.equal(rewardUi(reward, damage, fighter), Math.min(base, 1) * .8 * 10);
+    assert.equal(rewardUi(reward, damage, premium), Math.min(base * 1.2, 1) * 10);
+    assert.equal(rewardUi(reward, damage, premiumFighter), Math.min(base * 1.2, 1) * .8 * 10);
+  }
+  for (const aircraft of [bomber, fighter, premium, premiumFighter]) {
+    assert.equal(rewardUi(reward, 0, aircraft), 10);
+    assert.equal(rewardUi(reward, 200000, aircraft), 3);
+    assert.ok(Math.abs(rewardUi(reward, 1200000, aircraft) - 1.7) < 1e-12);
+  }
 });
 
 test("compares independent loadouts without inventing unknown damage or partial targets", () => {

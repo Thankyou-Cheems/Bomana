@@ -76,7 +76,10 @@ export function previewCustomPreset(definition, saved) {
     cells.push(...option.cells);
     for (const [id, count] of option.weapons) weapons.set(id, (weapons.get(id) || 0) + count);
   }
+  const rewardDamage = validation.selected.every(option => Number.isFinite(option.rewardDamage))
+    ? validation.selected.reduce((sum, option) => sum + option.rewardDamage, 0) : null;
   return { validation, preset: { id: saved.id, customName: saved.name, keys: [...saved.keys], weapons: [...weapons], cells,
+    ...(validation.selected.some(option => Object.hasOwn(option, "rewardDamage")) ? {rewardDamage} : {}),
     columns: definition.columns, layout: "slots", other: cells.some(cell => !weapons.has(cell.weapon)) } };
 }
 

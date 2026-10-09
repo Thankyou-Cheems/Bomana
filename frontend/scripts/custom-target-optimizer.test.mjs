@@ -29,7 +29,7 @@ test('Tu-4 actual complete native presets meet N=1/3/4/max and optimize the full
     const rows = presets.map(row=>{
       assert.equal(row.weapons.length,1);
       const [id,count]=row.weapons[0],weapon=weapons.get(id);
-      return {row,capacity:Math.floor(count/Math.ceil(threshold/weapon.dmg)),reward:rewardUi(catalog.reward,count*(weapon.rewardDmg??weapon.dmg))};
+      return {row,capacity:Math.floor(count/Math.ceil(threshold/weapon.dmg)),reward:rewardUi(catalog.reward,row.rewardDamage)};
     });
     const maximum=Math.max(...rows.map(row=>row.capacity));
     for (const N of [...new Set([1,3,4,maximum,maximum+1])]) {

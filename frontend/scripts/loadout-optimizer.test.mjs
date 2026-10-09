@@ -19,6 +19,38 @@ const option = (tier, id, count = 1, extra = {}) => ({key: `${tier}:${id}`, slot
   cells: [{weapon: id, count, icon: "bombs_small", tier: tier + 1}], requires: [], bans: [], modifications: [], requiredWeapons: [], ...extra});
 const run = (definition, weaponMap, mode = "reward", lockedKeys = [], threshold = 100) => optimizeLoadout({definition, presets: [], lockedKeys, weapons: weaponMap, threshold, mode, reward: catalog.reward}, highs);
 
+test("aircraft reward caps and premium plateaus govern recommendations", () => {
+  const definition = {columns: 2, center: [0, 1], limits, options: [option(0, "a"), option(0, "b"), option(1, "b")]};
+  const map = new Map([["a", {dmg: 20000}], ["b", {dmg: 10500}]]);
+  const aircraft = {reward: 3};
+  const result = optimizeLoadout({definition, presets: [], lockedKeys: [], weapons: map, threshold: 19000, mode: "reward", reward: catalog.reward, aircraft}, highs);
+  assert.equal(result.reward, 8);
+  assert.equal(result.rewardCap, 8);
+  assert.equal(result.maximumReward, 8);
+  assert.equal(result.damage, 20000);
+  const native = optimizeLoadout({definition: null, presets: [{id: "native", weapons: [["a", 1]], rewardDamage: 25228}], lockedKeys: [], weapons: map, threshold: 19000, mode: "reward", reward: catalog.reward, aircraft: {reward: 1}}, highs);
+  assert.equal(native.reward.toFixed(1), "6.2");
+  assert.equal(native.rewardDamage, 25228);
+});
+
+test("fighter recommendations preserve the zero-damage early return and the large-damage branch", () => {
+  const presets = [
+    {id: "zero", weapons: [["a", 1]], rewardDamage: 0},
+    {id: "positive", weapons: [["b", 1]], rewardDamage: 18000},
+  ];
+  const map = new Map([["a", {dmg: 20000}], ["b", {dmg: 20000}]]);
+  const input = {definition: null, presets, lockedKeys: [], weapons: map, threshold: 19000,
+    mode: "reward", reward: catalog.reward, aircraft: {reward: 1}};
+  const result = optimizeLoadout(input, highs);
+  assert.equal(result.presetId, "zero");
+  assert.equal(result.reward, 10);
+  const large = optimizeLoadout({...input, threshold: 190000,
+    presets: [{id: "below", weapons: [["a", 1]], rewardDamage: 199999}, {id: "above", weapons: [["b", 1]], rewardDamage: 200000}],
+    weapons: new Map([["a", {dmg: 199999}], ["b", {dmg: 200000}]])}, highs);
+  assert.equal(large.presetId, "above");
+  assert.equal(large.reward, 3);
+});
+
 test("guidance selection and child switches stay synchronized in either direction", () => {
   const families = ['noLaser', 'noOptical', 'noSatellite', 'noManual'];
   let filters = toggleRecommendationFilter({}, 'onlyGuided');

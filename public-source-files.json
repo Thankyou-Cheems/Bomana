@@ -553,6 +553,7 @@
     "frontend/src/runtime/aircraft-parameters-url.ts",
     "frontend/src/runtime/aircraft-parameters.test.ts",
     "frontend/src/runtime/aircraft-parameters.ts",
+    "frontend/src/runtime/aircraft-perspective.ts",
     "frontend/src/runtime/angular-ranges.ts",
     "frontend/src/runtime/anonymous-daily-active.test.ts",
     "frontend/src/runtime/anonymous-daily-active.ts",

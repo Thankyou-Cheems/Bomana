@@ -404,6 +404,29 @@ try {
     await page.locator("#airCombat").screenshot({ path: `../.artifacts/calculator-ui/air-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
   }
   if (!remote) {
+    const coefficients = await browser.newPage();
+    coefficients.on("pageerror", error => errors.push(error.message));
+    await coefficients.goto(url);
+    await coefficients.waitForFunction(() => document.querySelector("#calcPresetList [data-preset-id]") !== null);
+    await coefficients.locator("#calcAircraftSearch").fill("mig_23mld");
+    await coefficients.locator('[data-aircraft-id="mig_23mld"]').click();
+    await coefficients.locator('[data-preset-id="mig_23mld_bomb_fab500m_62"]').click();
+    assert.equal(await coefficients.locator('#calcRewardCount').innerText(), "6.2");
+    assert.match(await coefficients.locator('[data-optimizer-priority-help]').textContent(), /7.8/);
+    // Missing economy identity suppresses a coefficient instead of guessing a bomber.
+    await coefficients.route("**/api/v1/calculator/aircraft.json", async route => {
+      const response = await route.fetch(), payload = await response.json();
+      payload.aircraft.find(row => row.id === "mig_23mld").reward = null;
+      await route.fulfill({json: payload});
+    });
+    await coefficients.reload();
+    await coefficients.waitForFunction(() => document.querySelector("#calcPresetList [data-preset-id]") !== null);
+    await coefficients.locator("#calcAircraftSearch").fill("mig_23mld");
+    await coefficients.locator('[data-aircraft-id="mig_23mld"]').click();
+    await coefficients.locator('[data-preset-id="mig_23mld_bomb_fab500m_62"]').click();
+    assert.equal(await coefficients.locator('#calcRewardCard').isVisible(), false);
+    assert.doesNotMatch(await coefficients.locator('[data-optimizer-priority-help]').textContent(), /收益系数 ≥/);
+    await coefficients.close();
     for (const failure of ["unavailable", "mixed-source"]) {
       const loadoutFailure = await browser.newPage();
       loadoutFailure.on("pageerror", error => errors.push(error.message));
@@ -417,6 +440,7 @@ try {
       await loadoutFailure.waitForFunction(() => document.querySelector("#calcLoadoutCaption").textContent.includes("挂载排列未就绪"));
       assert.equal(await loadoutFailure.locator("#calcPresetDetail").isVisible(), false);
       assert.ok(await loadoutFailure.locator("#calcWeaponList [data-weapon-id]").count() > 0);
+      assert.equal(await loadoutFailure.locator("#calcRewardCard").isVisible(), false);
       await loadoutFailure.unroute("**/api/v1/calculator/loadouts.json");
       await loadoutFailure.locator("#calcAircraftSearch").fill("pe-8_m82");
       await loadoutFailure.locator('[data-aircraft-id="pe-8_m82"]').click();
