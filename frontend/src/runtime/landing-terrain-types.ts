@@ -12,9 +12,9 @@ export interface LandingTerrainCorridor {
   readonly along: number;
   readonly across: number;
   readonly points: readonly (readonly [number,number,number])[];
-  readonly normals: readonly (readonly [number,number])[];
-  /** Separate the sampled footprint/floor from the live vertical intercept. */
-  readonly referenceScene: LandingRunwayScene;
+  /** Terrain floors are independent of the live geometric intercept. */
   readonly floorsM: readonly number[];
+  /** Half-width covered by the five sampled longitudinal profiles. */
+  readonly halfWidthM: number;
   readonly raised: boolean;
 }

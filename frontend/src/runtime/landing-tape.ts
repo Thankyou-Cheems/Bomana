@@ -8,8 +8,9 @@ const clamp = (n: number) => Math.max(-1, Math.min(1, n));
 const heading = (n: number) => Math.round((n % 360 + 360) % 360).toString().padStart(3, "0");
 
 /** Compact flight references only; no learned-fuel diagnostics or landing safety claim. */
-export function landingTapePresentation(snapshot: EditionSnapshot) {
+export function landingTapePresentation(snapshot: EditionSnapshot, displayedScene?: LandingRunwayScene | null) {
   const landing = snapshot.landing, g = landing?.geometry;
+  const handoff=displayedScene?.terrainBlend!==undefined;
   const surface = landingSurfacePresentation(landing);
   const remainingM = landingRunwayRemaining(g);
   const height = landingHeightPresentation(landing);
@@ -35,9 +36,9 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
     : minutes !== null && minutes < 5 ? "caution" : "reference";
   const { position: lateral, text: lateralText } = surface ? { position: null, text: "跑道内位置参考" } : landingLateralGuidance(g);
   // A stale/older producer must never leave a vertical cue beyond the threshold.
-  const glide = landing?.terrainCorridor === undefined && g?.stage === "final" && g.thresholdDistanceM > 0 && finite(g.heightM) && finite(g.glideDeviationM)
+  const glide = !handoff && landing?.terrainCorridor === undefined && g?.stage === "final" && g.thresholdDistanceM > 0 && finite(g.heightM) && finite(g.glideDeviationM)
     ? clamp(g.glideDeviationM / Math.max(20, g.thresholdDistanceM * .02)) : null;
-  const glideText = surface ? "地面阶段参考" : !g ? "" : landing?.terrainCorridor !== undefined
+  const glideText = surface ? "地面阶段参考" : !g ? "" : handoff ? "最后进近" : landing?.terrainCorridor !== undefined
     ? landing.terrainCorridor ? landing.terrainCorridor.raised ? "注意地形" : "地形返航参考" : "地形航道暂无数据"
     : returning ? "返航中" : g.stage === "runway" || g.stage === "past-runway" ? "下滑结束"
     : g.heightM === null ? "高程未知" : g.glideDeviationM === null ? "先对准"
@@ -65,7 +66,7 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   const cueLateral = scene === "unavailable" ? null : lateral;
   const cueGlide = scene === "glide" ? glide : null;
   const projectedScene = scene === "unavailable" || surface ? null : landingRunwayScene(g, snapshot.flight.headingDeg, landing!.settings.glideAngleDeg, landing?.attitude);
-  const projectedRunway: LandingRunwayScene | null = projectedScene ? { ...projectedScene, terrainCorridor: landing?.terrainCorridor } : null;
+  const projectedRunway: LandingRunwayScene | null = projectedScene ? { ...projectedScene, terrainCorridor: landing?.terrainCorridor, terrainHandoffAllowed:landing?.terrainHandoffAllowed } : null;
   // Height can differ from a raised runway platform. Passing the selected
   // entrance still ends its inbound curve, without claiming wheel contact.
   const runway = projectedRunway && (g?.stage === "runway" || g?.stage === "past-runway")
@@ -83,7 +84,7 @@ export function landingTapePresentation(snapshot: EditionSnapshot) {
   const cueKey = `${landing?.runwayKey || (selected?.runwayStart && selected.runwayEnd ? JSON.stringify([selected.runwayStart, selected.runwayEnd]) : landing?.settings.runwayId)}|${landing?.settings.reverse}|${runway?.heightKnown}|${landing?.elevationM}`;
   return { heightReference: height.reference, heightCaption: height.compactReference, ground: surface, active, mode, course, distance, lateral: cueLateral, glide: cueGlide, airportHeightText, lateralText, glideText, vy, config, scene, stageLabel, cueKey,
     runway, horizontal, otherRunways, speedText, speedDetail, speedTone, fuelText, fuelDetail, fuelTone, equipmentText,
-    aria: `${mode}${surface ? `；${surface.label}；跑道位置示意，观测推断，不证明轮胎接触、损伤或刹车状态` : ""}；${course}，${distance}${horizontal ? "；前向航线透视，垂直数据不完整，无下滑指令" : ""}${g ? `；${height.reference}` : ""}${runway && !horizontal ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；以玩家前向视角呈现，近端以中央透视区两侧为翼端参考、远端按深度收缩；视野外机场保留方向提示；姿态缺测使用可用航迹俯仰和水平滚转${landing?.terrainCorridor === undefined ? "；曲线从当前高度与俯仰接入末段下滑线；近端显示面随翼端衔接，远端接入跑道；高低偏差独立计算" : landing.terrainCorridor ? "；返航路径按沿途地形抬升，显示面预留75米，其中50米为植被余量而非实测树高；淡琥珀色表示路线抬升；对正后最后1.5公里交回普通降落参考，该末段未验证植被净空" : "；地形包线暂不可用，保留机场方向"}；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
+    aria: `${mode}${surface ? `；${surface.label}；跑道位置示意，观测推断，不证明轮胎接触、损伤或刹车状态` : ""}；${course}，${distance}${horizontal ? "；前向航线透视，垂直数据不完整，无下滑指令" : ""}${g ? `；${height.reference}` : ""}${runway && !horizontal ? `；${g?.referenceWidthM ? "宽度采用同长度机场定义参考" : "跑道轮廓宽度为示意"}；以玩家前向视角呈现，近端以中央透视区两侧为翼端参考、远端按深度收缩；视野外机场保留方向提示；姿态缺测使用可用航迹俯仰和水平滚转${handoff ? "；进入最后进近，路线正在衔接；该末段未验证植被、建筑净空" : landing?.terrainCorridor === undefined ? "；曲线从当前高度与俯仰接入末段下滑线；近端显示面随翼端衔接，远端接入跑道；高低偏差独立计算" : landing.terrainCorridor ? "；返航路径按沿途地形抬升，显示面预留75米，其中50米为植被余量而非实测树高；淡琥珀色表示路线抬升；对正后最后1.5公里交回普通降落参考，该末段未验证植被净空" : "；地形包线暂不可用，保留机场方向"}；非目标跑道仅显示轮廓；不表示转弯性能或净空保证` : ""}；IAS ${speedText} km/h，${speedDetail}；燃油续航 ${fuelDetail}；${lateralText}，${glideText}，${vy}；${config}；${equipmentAria}` };
 }
 
 export type LandingTapeView = ReturnType<typeof landingTapePresentation>;
@@ -260,7 +261,7 @@ export function drawLandingTape(ctx: CanvasRenderingContext2D, p: LandingTapeVie
   text(p.equipmentText, width - pad, height * .87, font * .85, muted, "right", side - pad);
   const configColor = /超限/.test(p.config) ? tone("danger") : /检查|减速|近限/.test(p.config) ? tone("caution") : muted;
   text(p.config, pad, height * .87, font * .9, configColor, "left", side - pad);
-  const stage = p.ground ? p.stageLabel : p.horizontal ? "方位透视" : p.scene !== "unavailable" && !cue ? "高程 —" : cue?.approach && cue.terrainCorridor === undefined && p.scene !== "glide"
+  const stage = p.ground ? p.stageLabel : cue?.terrainBlend!==undefined ? "对正" : p.horizontal ? "方位透视" : p.scene !== "unavailable" && !cue ? "高程 —" : cue?.approach && cue.terrainCorridor === undefined && p.scene !== "glide"
     ? `${p.stageLabel} ${Number((Math.atan(cue.slope) * 180 / Math.PI).toFixed(1))}°` : p.stageLabel;
   const caption = `${p.scene === "return" ? "返航 " : ""}${p.course.replace("RWY ", "")} · ${p.distance.replace("距机场 ", "")}${p.scene === "return" ? "" : ` · ${stage}`}`;
   const captionFont = Math.max(9, font * .9);

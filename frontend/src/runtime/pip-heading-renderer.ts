@@ -131,9 +131,11 @@ export class PictureInPictureHeadingRenderer {
     const previous = this.#landing;
     const landing = this.#landing = landingTapePresentation(snapshot);
     this.#landingMotion.observe(landing, this.#view.performance.now(), this.#landingBudget.reducedMotion);
+    const scene=this.#landingMotion.step(this.#view.performance.now());
+    const displayed=scene?.terrainBlend!==undefined?landingTapePresentation(snapshot,scene):landing;
     this.#canvas.dataset.mode = landing.active ? "landing" : "navigation";
-    this.#canvas.dataset.landingScene = landing.active ? landing.scene : "";
-    this.#canvas.setAttribute("aria-label", landing.active ? landing.aria : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
+    this.#canvas.dataset.landingScene = landing.active ? displayed.scene : "";
+    this.#canvas.setAttribute("aria-label", landing.active ? displayed.aria : `航向 ${Math.round(snapshot.flight.headingDeg)}°；${guidance.text}`);
     if (landing.active) {
       this.#renderLanding(!previous?.active || previous.cueKey !== landing.cueKey || previous.scene !== landing.scene);
       return;
@@ -287,7 +289,10 @@ export class PictureInPictureHeadingRenderer {
       const now = this.#view.performance.now();
       this.#canvas.dataset.landingQuality = this.#landingBudget.simplified ? "simple" : "full";
       const scene = this.#landingMotion.step(now);
-      drawLandingTape(context, this.#landing, bounds.width, bounds.height, scene, this.#landingMotion.background(now), this.#landingBudget.simplified);
+      const displayed=scene?.terrainBlend!==undefined?landingTapePresentation(snapshot,scene):this.#landing;
+      if (this.#canvas.dataset.landingScene!==displayed.scene) this.#canvas.dataset.landingScene=displayed.scene;
+      if (this.#canvas.getAttribute("aria-label")!==displayed.aria) this.#canvas.setAttribute("aria-label",displayed.aria);
+      drawLandingTape(context, displayed, bounds.width, bounds.height, scene, this.#landingMotion.background(now), this.#landingBudget.simplified);
       this.#drawLandingBackground?.(snapshot, scene, bounds.width, bounds.height, this.#landingBudget.simplified);
       this.#landingBudget.recordDraw(this.#view.performance.now() - now);
       return;

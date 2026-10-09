@@ -3,6 +3,10 @@ import { aircraftCamera, aircraftCameraFrame, projectCameraSegment as segment, p
 
 export interface LandingRunwayScene {
   readonly terrainCorridor?: import("./landing-terrain-types").LandingTerrainCorridor | null;
+  /** Display-only release after entering the ordinary final approach. */
+  readonly terrainBlend?: number;
+  readonly finalApproach?: boolean;
+  readonly terrainHandoffAllowed?: boolean;
   readonly along: number;
   readonly across: number;
   readonly height: number;
@@ -86,6 +90,7 @@ export function landingRunwayScene(g: LandingGeometry | null | undefined, headin
   if (!g || ![g.heightM ?? 0, g.thresholdDistanceM, g.crossTrackM, g.lengthM, g.courseDeg, headingDeg, glideAngleDeg].every(Number.isFinite)
     || g.lengthM <= 0) return null;
   return { along: g.thresholdDistanceM, across: -g.crossTrackM, height: g.heightM ?? 0, heightKnown: g.heightM !== null, length: g.lengthM,
+    finalApproach:g.heightM!==null && g.stage==="final" && g.thresholdDistanceM>0 && g.thresholdDistanceM<=1500,
     angle: ((g.courseDeg - headingDeg + 540) % 360 - 180) * radians,
     slope: g.heightM === null ? 0 : Math.tan(glideAngleDeg * radians), approach: g.heightM === null ? Math.hypot(g.thresholdDistanceM, g.crossTrackM) > 30 : g.heightM > 40 || g.thresholdDistanceM > 30 && g.stage !== "runway" && g.stage !== "past-runway",
     width: Number.isFinite(g.referenceWidthM) && g.referenceWidthM! > 0 ? g.referenceWidthM : 90,
@@ -148,27 +153,67 @@ export function landingApproachPath(scene: LandingRunwayScene) {
   return { controls, points, normals };
 }
 
-/** Keep the verified horizontal footprint fixed in the world. Only its vertical
- * intercept follows the same smoothed height/pitch as the camera; never blend a
- * new terrain floor downward or move rails onto unmeasured ground. */
+/** A live intercept inside the retained sampled strip. Its near origin follows
+ * the aircraft, rather than falling behind the near plane between batches.
+ * Outside that strip, constrain the centre so both rails stay in coverage. */
 export function landingTerrainPath(scene: LandingRunwayScene) {
   const terrain = scene.terrainCorridor!;
-  const live = landingApproachPath({ ...terrain.referenceScene, along:scene.along, across:scene.across,
-    height: scene.height, pitch: scene.pitch, speed:scene.speed });
-  return { normals: terrain.normals, points: terrain.points.map((p, i): Point3 => {
-    const x = p[0] + scene.along - terrain.along, y = p[1] + scene.across - terrain.across;
-    let nearest = Infinity, height = scene.height;
-    // Sample the live vertical curve at this retained world position. Matching
-    // old array indices would anchor the intercept behind a moving aircraft and
-    // still jump every batch. Only height is taken from the live curve.
-    for (let j=1;j<live.points.length;j++) {
-      const a=live.points[j-1]!, b=live.points[j]!, dx=b[0]-a[0], dy=b[1]-a[1];
-      const t=Math.max(0,Math.min(1,((x-a[0])*dx+(y-a[1])*dy)/Math.max(1e-9,dx*dx+dy*dy)));
-      const distance=(x-a[0]-dx*t)**2+(y-a[1]-dy*t)**2;
-      if (distance<nearest) {nearest=distance;height=a[2]+(b[2]-a[2])*t;}
+  const live = landingApproachPath(scene);
+  const blend=scene.terrainBlend??1;
+  const margin = Math.max(0,terrain.halfWidthM-(scene.width??90)/2);
+  const points: Point3[] = [];
+  const sampledSegments: number[]=[], liveHeights: number[]=[];
+  for (const [i,p] of live.points.slice(0,-1).entries()) {
+    let nearest = Infinity, x=0, y=0, floor=0, beyondEnd=false, sample=1;
+    for (let j=1;j<terrain.points.length;j++) {
+      const a=terrain.points[j-1]!, b=terrain.points[j]!;
+      const ax=a[0]+scene.along-terrain.along, ay=a[1]+scene.across-terrain.across;
+      const dx=b[0]-a[0], dy=b[1]-a[1];
+      const t=Math.max(0,Math.min(1,((p[0]-ax)*dx+(p[1]-ay)*dy)/Math.max(1e-9,dx*dx+dy*dy)));
+      const nx=ax+dx*t, ny=ay+dy*t, distance=(p[0]-nx)**2+(p[1]-ny)**2;
+      if (distance<nearest) {
+        nearest=distance;x=nx;y=ny;sample=j;
+        beyondEnd=j===terrain.points.length-1 && t===1 && (p[0]-nx)*dx+(p[1]-ny)*dy>0;
+        // Use both endpoint maxima: a ridge must apply immediately even if
+        // the live intercept falls between samples or the camera is banked.
+        floor=Math.max(terrain.floorsM[j-1]!,terrain.floorsM[j]!);
+      }
     }
-    return [x,y,Math.max(terrain.floorsM[i]!,height)];
-  }) };
+    if (beyondEnd) {
+      const a=live.points[Math.max(0,i-1)]!,dx=p[0]-a[0],dy=p[1]-a[1];
+      const t=Math.max(0,Math.min(1,((x-a[0])*dx+(y-a[1])*dy)/Math.max(1e-9,dx*dx+dy*dy)));
+      const height=a[2]+(p[2]-a[2])*t;
+      points.push([x,y,blend===1?Math.max(floor,height):height+Math.max(0,floor-height)*blend]);
+      sampledSegments.push(sample);liveHeights.push(height);break;
+    }
+    const weight=Math.min(1,margin/Math.max(1e-9,Math.sqrt(nearest)));
+    const constrainedX=x+(p[0]-x)*weight,constrainedY=y+(p[1]-y)*weight;
+    points.push([p[0]+(constrainedX-p[0])*blend,p[1]+(constrainedY-p[1])*blend,
+      blend===1?Math.max(floor,p[2]):p[2]+Math.max(0,floor-p[2])*blend]);
+    sampledSegments.push(sample);liveHeights.push(p[2]);
+  }
+  const end=terrain.points.at(-1)!,x=end[0]+scene.along-terrain.along,y=end[1]+scene.across-terrain.across;
+  const last=points.at(-1);
+  if (last && Math.hypot(last[0]-x,last[1]-y)>.001) {
+    points.push([x,y,last[2]]);sampledSegments.push(terrain.points.length-1);liveHeights.push(last[2]);
+  }
+  // Live vertices are coarser than the sampled strip. A narrow ridge between
+  // them must constrain both ends, not disappear when nearest indices skip it.
+  for (let i=1;i<points.length;i++) {
+    let floor=Number.NEGATIVE_INFINITY;
+    const start=Math.min(sampledSegments[i-1]!,sampledSegments[i]!)-1,stop=Math.max(sampledSegments[i-1]!,sampledSegments[i]!);
+    for (let j=start;j<=stop;j++) floor=Math.max(floor,terrain.floorsM[j]!);
+    for (const index of [i-1,i]) {
+      const p=points[index]!,height=liveHeights[index]!;
+      points[index]=[p[0],p[1],Math.max(p[2],blend===1?floor:height+Math.max(0,floor-height)*blend)];
+    }
+  }
+  const normals = points.map((p,i): Point2 => {
+    const a=points[Math.max(0,i-1)]!, b=points[Math.min(points.length-1,i+1)]!;
+    const dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy);
+    return length>.001?[-dy/length,dx/length]:live.normals[i]!;
+  });
+  return {points,normals};
 }
 
 export function projectLandingRunway(scene: LandingRunwayScene, cameraPitch = -(scene.pitch ?? 0), cameraRoll = scene.roll ?? 0, retreat = 0, yaw = 0,
@@ -326,8 +371,11 @@ export class RunwaySceneMotion {
   #target: LandingRunwayScene | null = null;
   #velocity = { along: 0, across: 0, height: 0, angle: 0, pitch: 0, roll: 0, speed: 0 };
   #at = 0;
+  #release: { corridor: NonNullable<LandingRunwayScene["terrainCorridor"]>; at: number } | null = null;
   observe(next: LandingRunwayScene | null, at: number, reset: boolean): void {
     this.step(at);
+    if (reset || !next?.finalApproach || !next.approach || next.terrainHandoffAllowed===false || next.terrainCorridor !== undefined) this.#release=null;
+    else if (!this.#release && this.#target?.terrainCorridor) this.#release={corridor:this.#target.terrainCorridor,at};
     if (reset || !next || !this.#value) {
       this.#value = next;
       this.#velocity = { along: 0, across: 0, height: 0, angle: 0, pitch: 0, roll: 0, speed: 0 };
@@ -343,6 +391,13 @@ export class RunwaySceneMotion {
     this.#at = Math.max(at, this.#at);
     if (!this.#value || !this.#target) return this.#value;
     const value = { ...this.#target };
+    if (this.#release) {
+      const t=Math.min(1,Math.max(0,(at-this.#release.at)/350));
+      if (t<1) {
+        value.terrainCorridor=this.#release.corridor;
+        value.terrainBlend=1-t*t*(3-2*t);
+      } else this.#release=null;
+    }
     for (const axis of ["along", "across", "height", "angle", "pitch", "roll", "speed"] as const) {
       if (this.#target[axis] === undefined) continue;
       let offset = (this.#value[axis] ?? 0) - this.#target[axis]!;
@@ -351,7 +406,7 @@ export class RunwaySceneMotion {
       const c = this.#velocity[axis] + omega * offset;
       const delta = (offset + c * dt) * decay;
       const velocity = (this.#velocity[axis] - omega * c * dt) * decay;
-      const epsilon = axis === "angle" ? .00001 : .01;
+      const epsilon = axis === "angle" || axis === "pitch" || axis === "roll" ? .00001 : .01;
       if (delta * offset <= 0 || Math.abs(delta) < epsilon && Math.abs(velocity) < epsilon * 10) {
         value[axis] = this.#target[axis]; this.#velocity[axis] = 0;
       } else { value[axis] = this.#target[axis]! + delta; this.#velocity[axis] = velocity; }
@@ -362,6 +417,6 @@ export class RunwaySceneMotion {
   isMoving(at: number): boolean {
     const value = this.step(at);
     return value !== null && this.#target !== null
-      && (["along", "across", "height", "angle", "pitch", "roll", "speed"] as const).some(axis => value[axis] !== this.#target![axis]);
+      && (this.#release!==null || (["along", "across", "height", "angle", "pitch", "roll", "speed"] as const).some(axis => value[axis] !== this.#target![axis]));
   }
 }
