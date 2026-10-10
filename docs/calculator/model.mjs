@@ -418,21 +418,30 @@ export const simScoreComparisonObservations = Object.freeze([Object.freeze({
     libraryFileId: "libfile_c1356b404cec8191845185c0c8517628",
     imageReview: "actual_pixels_reviewed_in_parent_thread_not_this_executor",
     label: "用户连续记录 / 歼轰-7 02 批次飞豹 / 精确命中满血生活区一枚250-3 / 2550→2579（+29），随后投11枚→2902（+323），合计352；后11枚命中及其它同期得分未单独确认"}),
+}), Object.freeze({
+  id: "jh_7a_gb1000_gb250_two_solo_bases/v1", aircraftId: "jh_7a",
+  targetId: "bombing_point_planes", battleMode: "simulator",
+  carried: Object.freeze([Object.freeze(["cn_ls_1000j", 2]), Object.freeze(["cn_ts_250", 2])]),
+  rounds: 2, destroyedTargets: 2, initialTargetHealth: "full", teammateDamage: false,
+  roomMaxBr: null, damageScore: 728, destructionScore: 364, totalScore: 1092,
+  usedForCoefficientCalibration: false, roundingMechanism: null,
+  source: Object.freeze({kind: "user_battle_record", url: null, clientVersion: null,
+    label: "用户实战截图 · JH-7A / 每轮 2 枚 GB1000 + 2 枚 GB250 / 两轮独立摧毁两个满血战区 · 轰炸 728 + 摧毁 364 = 1092"}),
 })]);
 
 export const simScoreAssumptions = Object.freeze({
   fullHit: true,
   burnComplete: true,
-  model: "empirical_sim_score/v2",
+  model: "empirical_sim_score/v3",
   damageBasis: "nominal_hp_damage_separate_from_empirical_score_damage",
   multiplierBasis: "whole_carried_loadout_reward_damage",
-  acceptedDamageBasis: "separate_hp_and_score_caps_observed_solo_base_full_hp_credit",
+  acceptedDamageBasis: "separate_hp_and_score_caps_full_health_solo_base_full_hp_credit",
   empirical: true,
-  observationCount: 5,
+  observationCount: 6,
   calibrationCount: 2,
-  destructionRewardScope: "exact_observed_solo_base_kill_only",
+  destructionRewardScope: "full_health_solo_base_kill_estimate",
   uncalibrated: Object.freeze(["bonus", "SL", "RP"]),
-  warning: "经验估算假设投放武器全部命中，倍率始终按整套携带挂载计算。普通弹得分使用 .018；燃烧弹以原始溅射估计得分伤害，HP 求解仍用原名义伤害并假设燃烧完成，强-5L 的 807–808 分支持此口径但未证实服务器归属。战区仅已记录的完整独立击毁条件计满 HP，分项使用 .018 和 .009；其它摧毁归属、额外奖励、SL 和 RP 未校准。跨条件未实测，不能保证服务器分数或命中。",
+  warning: "经验估算假设投放武器全部命中，倍率始终按整套携带挂载计算。普通弹得分使用 .018；燃烧弹以原始溅射估计得分伤害，HP 求解仍用原名义伤害并假设燃烧完成，强-5L 的 807–808 分支持此口径但未证实服务器归属。独立摧毁满血战区时计满 HP，轰炸和摧毁分项使用 .018 和 .009；已受损战区的摧毁归属、额外奖励、SL 和 RP 未校准。跨条件未实测，不能保证服务器分数或命中。",
 });
 
 const coverageLabels = Object.freeze({
@@ -476,8 +485,8 @@ function sameRewardCurve(reward, reference) {
 
 /**
  * Empirical Air Simulator score keeps HP solving and score damage separate.
- * Only an exact observed base kill supplies a destruction reward. Unknown
- * rewards yield damage-only estimates, not silently fabricated total scores.
+ * Full-health solo base kills estimate damage and destruction events using
+ * the recorded coefficients. Damaged bases retain unknown reward attribution.
  * carried/delivered are [[weaponId, wholeCount]], weapons is the catalog Map.
  * Napalm scoreDmg is a raw-splash hypothesis, not actual HP damage. Explicitly
  * unknown score damage excludes the loadout; older ordinary rows use dmg.
@@ -531,22 +540,20 @@ export function empiricalSimScore(input = {}) {
     simScoreDamageOf(weapons.get(reference.weaponId)) === reference.scoreDamagePerItem &&
     sameRewardCurve(reward, reference.reward));
   const calibration = condition ?? references[0];
-  const reproducesObservation = condition &&
-    carriedCounts.get(condition.weaponId) === condition.carriedCount &&
-    deliveredCounts.get(condition.weaponId) === condition.deliveredCount &&
-    acceptedDamage === condition.acceptedDamage && (!isBase || remainingHp === condition.targetFullHp);
   const {targetFullHp, destructionThreshold} = input;
   const knownTarget = Number.isFinite(targetFullHp) && Number.isFinite(destructionThreshold) &&
     targetFullHp > 0 && destructionThreshold > 0 && destructionThreshold <= targetFullHp && remainingHp <= targetFullHp;
   const mayDestroy = knownTarget && deliveredDamage >= Math.max(0, remainingHp - (targetFullHp - destructionThreshold));
-  // Full-HP scoring credit belongs only to the verified complete solo base
-  // conditions; it never changes delivered HP damage or the number solver.
-  const acceptedScoreDamage = isBase && reproducesObservation ? targetFullHp : Math.min(deliveredScoreDamage, remainingHp);
+  // The solo/full-health planning scenario credits the burn tail up to full
+  // HP on reaching the native destruction threshold. Other loadouts are
+  // empirical extrapolations; HP damage and the number solver stay unchanged.
+  const soloBaseKill = isBase && knownTarget && remainingHp === targetFullHp && mayDestroy;
+  const acceptedScoreDamage = soloBaseKill ? targetFullHp : Math.min(deliveredScoreDamage, remainingHp);
   const damageScore = simScoreDamageScale * acceptedScoreDamage * multiplier;
   if (!Number.isFinite(damageScore)) return null;
-  // A threshold predicts destruction, not who receives a server reward. Never
-  // generalize this single observed 183-point event to other aircraft/loadouts.
-  const destructionScore = !isBase ? 0 : reproducesObservation ? simScoreDestructionScale * targetFullHp * multiplier :
+  // A damaged base can include teammate damage: its destruction attribution
+  // stays unknown. Full-health estimates assume this delivery destroys it solo.
+  const destructionScore = !isBase ? 0 : soloBaseKill ? simScoreDestructionScale * targetFullHp * multiplier :
     deliveredDamage === 0 || remainingHp === 0 || knownTarget && !mayDestroy ? 0 : null;
   const totalScore = destructionScore === null ? null : damageScore + destructionScore;
   const score = totalScore ?? damageScore;

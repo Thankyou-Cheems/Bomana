@@ -116,6 +116,15 @@ export interface DestroyedZoneMarker {
   readonly expiresAtMs: number;
 }
 
+export interface GuidedCcrpEstimate {
+  readonly status: "approaching" | "in-window" | "passed" | "off-axis" | "maneuver";
+  readonly minRangeM: number;
+  readonly maxRangeM: number;
+  readonly timeToWindowS: number;
+  readonly remainingS: number | null;
+  readonly totalS: number;
+}
+
 export interface EditionSnapshot {
   readonly edition: EditionPolicy;
   readonly revision: number;
@@ -226,6 +235,7 @@ export interface EditionSnapshot {
     readonly groundSpeedMps?: number;
     readonly targetRelativeDeg?: number;
     readonly bombingWindow?: BombingWindow | null;
+    readonly guidedEstimate?: GuidedCcrpEstimate | null;
     readonly releaseStatus: "ready" | "approaching" | "too-far" | "passed" | "off-axis" | "reference-only" | "unavailable";
   } | null;
   readonly alerts: readonly string[];

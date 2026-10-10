@@ -166,7 +166,16 @@ const customEditor = createCustomLoadoutEditor(document.querySelector("#customLo
 });
 const optimizer = createLoadoutOptimizer(document.querySelector("#loadoutOptimizer"), {
   load: loadCustomRules,
-  apply: result => result.kind === "custom" ? customEditor.recommend(result.keys) : choosePreset(result.presetId),
+  apply: result => {
+    if (result.objective === "global_sim_score") {
+      targetSelect.value = result.targetId;
+      baseModeSelect.value = "respawning";
+      document.querySelector('[data-sim-score-hp]').value = '100';
+      syncSegments(targetSelect, document.querySelector("#calcTargetSegments"));
+      renderBrOptions();
+    }
+    return result.kind === "custom" ? customEditor.recommend(result.keys) : choosePreset(result.presetId);
+  },
 });
 const scoreEstimator = createSimScoreEstimator(document.querySelector("#simScoreEstimator"), {
   summary: document.querySelector("#calcScoreSummary"),
@@ -1131,6 +1140,13 @@ function refreshResult() {
     destructionThreshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : undefined,
     targetLabel: target.label, hp: targetHp(target, tier), validLoadout: !customPreview || customPreview.validation.valid});
   optimizer.update({aircraft, scenario: scoreScenario, weapons: new Map(catalog.weapons.map(row => [row.id, row])), reward: catalog.reward,
+    scenarios: ["bombing_point_planes","airport_dwelling","airport_storage","airport_parking","airport_airfield"].map(id => {
+      const row = catalog.targets.find(target => target.id === id);
+      const profile = catalog.bombing_point_profiles.find(profile => profile.id === "respawning");
+      const hp = targetHp(row, tierFor(id === "bombing_point_planes" ? profile.tiers : catalog.airport_tiers, balanceLevel(selectedRoomBr)));
+      return {aircraftId:aircraft?.id,targetId:id,targetFullHp:hp,remainingHp:hp,roomMaxBr:Number(selectedRoomBr),battleMode:"simulator",
+        destructionThreshold:id === "bombing_point_planes" ? hp * (1 - profile.hp_fire_mult) : undefined};
+    }),
     threshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : null,
     currentStores: preset?.weapons || [], lockedKeys: customPreview?.lockedKeys ?? (preset?.customName ? preset.keys || [] : [])});
   if (preset && (preset.customName || preset.weapons.length > 1)) {

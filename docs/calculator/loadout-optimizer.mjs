@@ -19,10 +19,11 @@ const forbidden = (option, weapons) => option.cells?.some(cell => ["aam", "arm",
 export function preferRecommendation(candidate, current, filters = {}) {
   if (!candidate.preset) return false;
   if (!current.preset) return true;
-  if (candidate.objective === "sim_score" || current.objective === "sim_score") {
+  if (["sim_score", "global_sim_score"].includes(candidate.objective) || ["sim_score", "global_sim_score"].includes(current.objective)) {
     if (!Number.isFinite(candidate.score)) return false;
     if (!Number.isFinite(current.score)) return true;
     if (Math.abs(candidate.score - current.score) > 1e-8) return candidate.score > current.score;
+    if (candidate.objective === "global_sim_score" && candidate.plan.length !== current.plan.length) return candidate.plan.length < current.plan.length;
     for (const field of ["profiles", "types"]) if (candidate.simplicity?.[field] !== current.simplicity?.[field]) return candidate.simplicity[field] < current.simplicity[field];
     if (candidate.damage !== current.damage) return candidate.damage < current.damage;
     if (candidate.mass !== current.mass) return candidate.mass < current.mass;
@@ -145,6 +146,7 @@ function prepare({definition, presets, lockedKeys, weapons, threshold, filters =
 
 export function optimizeLoadout(input, highs, {timeLimit = 20, preparedModel} = {}) {
   const {definition, weapons, threshold, mode, reward, aircraft = null} = input;
+  if (mode === "global_sim_score") return optimizeGlobalSimScore(input, highs, timeLimit);
   if (mode === "sim_score") return optimizeSimScore(input, highs, {timeLimit});
   if (mode === "custom_targets" && (!Number.isSafeInteger(input.targetCount) || input.targetCount < 1)) return {status: "invalid", reason: "invalid_target_count"};
   if (!(threshold > 0) || !supportedReward(reward)) return {status: "unsupported"};
@@ -336,6 +338,129 @@ export function optimizeLoadout(input, highs, {timeLimit = 20, preparedModel} = 
     }
   }
   return output;
+}
+
+function optimizeGlobalSimScore(input, highs, timeLimit) {
+  if (!Number.isSafeInteger(input.targetCount ?? 3) || (input.targetCount ?? 3) < 1) return {status:"invalid",reason:"invalid_target_count",objective:"global_sim_score"};
+  const scenarios = input.scenarios || [], comparisons = [];
+  const deadline = performance.now() + timeLimit * 1000;
+  let best;
+  for (const scenario of scenarios) {
+    const airport = scenario.targetId.startsWith("airport_");
+    // This action searches the whole aircraft; current manual selections are
+    // not locks. Airport strike stores must be explicitly unguided, including
+    // multi-mode weapons. Other ammunition exclusions still apply.
+    const filters = {...input.filters, ...(airport ? {noGuided: true} : {})};
+    const budget = Math.max(.05, (deadline - performance.now()) / 1000 / (scenarios.length - comparisons.length));
+    const request = {...input, lockedKeys: [], filters, scenario};
+    const previous = airport && comparisons.find(row => row.targetId.startsWith("airport_") && row.scenario.remainingHp === scenario.remainingHp);
+    const next = previous ? {...previous, estimate: previous.preset && empiricalSimScore({...scenario,carried:previous.preset.weapons,weapons:input.weapons,reward:input.reward})}
+      : airport ? optimizeSimScore(request, highs, {timeLimit:budget}) : optimizeBaseSortieScore(request, highs, budget);
+    const candidate = {...next, objective:"global_sim_score", targetId:scenario.targetId, scenario};
+    comparisons.push(candidate);
+    if (preferRecommendation(candidate, best || {})) best = candidate;
+  }
+  const complete = comparisons.length > 0 && comparisons.every(row => ["optimal","infeasible"].includes(row.status) || best && Number.isFinite(row.scoreUpper) && row.scoreUpper <= best.score + 1e-6);
+  if (!best) return {status:complete ? "infeasible" : "unknown", objective:"global_sim_score", comparisons};
+  const upper = comparisons.every(row => row.status === "infeasible" || Number.isFinite(row.scoreUpper))
+    ? Math.max(...comparisons.map(row => row.scoreUpper || 0)) : null;
+  return {...best, status:complete ? "optimal" : "feasible", scoreUpper:upper, comparisons};
+}
+
+// Whole-projectile allocation to independent full-health bases. Score credit
+// is capped separately from native HP; only native damage can trigger a kill.
+function optimizeBaseSortieScore(input, highs, timeLimit) {
+  const {definition, weapons, reward, scenario} = input;
+  const hp = scenario.targetFullHp, threshold = scenario.destructionThreshold;
+  if (scenario.targetId !== "bombing_point_planes" || !(hp > 0) || !(threshold > 0) || threshold > hp ||
+      scenario.remainingHp !== hp || !simScoreRewardParametersSupported(reward) || !supportedReward(reward)) return {status:"unsupported"};
+  const model = prepare({...input, threshold, filters:{...input.filters,requireSimScore:true}});
+  if (model.error || !model.supplies.size) return {status:"infeasible"};
+  const eligible = model.options.filter(row => !row.excluded && row.damage > 0);
+  if (!eligible.length) return {status:"infeasible",unknown:model.unknown};
+  const suppliedIds = new Set(eligible.flatMap(row => row.weapons.map(([id]) => id)));
+  for (const id of model.supplies.keys()) if (!suppliedIds.has(id)) model.supplies.delete(id);
+  const weight = option => option.weapons.reduce((sum,[id,n]) => sum + n * Math.max(Math.min(weapons.get(id).dmg / threshold,1),Math.min(simScoreDamageOf(weapons.get(id)) / hp,1)),0);
+  // Every destroyed base consumes weight >= 1. Two partial targets that
+  // cannot be merged without losing score consume combined weight >= 1.
+  // Thus 2 * total weight + 1 safely bounds a score-maximizing allocation.
+  const maximumWeight = definition ? [...new Set(eligible.map(row=>row.tier))].reduce((sum,tier)=>sum+Math.max(...eligible.filter(row=>row.tier===tier).map(weight)),0)
+    : Math.max(...eligible.map(weight));
+  const targetCount = Math.min(input.targetCount ?? 3,Math.max(1,Math.ceil(2 * maximumWeight + 1)));
+  const globalMultiplierUpper = Math.max(...[0,reward.preset_dmg_min,...reward.piecewise_linear.map(([x])=>x)].map(value=>rewardUi(reward,value)/reward.ui_decoration));
+  const universalUpper = simScoreDamageScale * hp * 1.5 * targetCount * globalMultiplierUpper;
+  const allocation = [], credit = [], integers = [], binaries = [...model.binaries], bounds = [...model.bounds];
+  const constraints = [...model.constraints];
+  constraints.push(`${expression(model.damage)} >= ${Math.min(...eligible.map(row=>row.damage))}`);
+  for (let target=0; target<targetCount; target++) {
+    const native = [], score = [], kill = `k${target}`, damage = `d${target}`;
+    binaries.push(kill); bounds.push(`0 <= ${damage} <= 1`); credit.push([damage,1],[kill,.5]);
+    for (const [index,[id]] of [...model.supplies].entries()) {
+      const variable=`a${target}_${index}`;
+      integers.push(variable); allocation.push({variable,target,id});
+      native.push([variable,Math.min(weapons.get(id).dmg/threshold,1)]);
+      score.push([variable,Math.min(simScoreDamageOf(weapons.get(id))/hp,1)]);
+    }
+    constraints.push(`${expression([...native,[kill,-1]])} >= 0`);
+    constraints.push(`${expression([[damage,1],[kill,-1],...score.map(([name,value])=>[name,-value])])} <= 0`);
+    if (target) constraints.push(`${expression([[`d${target-1}`,1],[`k${target-1}`,.5],[damage,-1],[kill,-.5]])} >= 0`);
+  }
+  for (const [id,supply] of model.supplies) constraints.push(`${expression([...allocation.filter(row=>row.id===id).map(row=>[row.variable,1]),...supply.map(([name,n])=>[name,-n])])} = 0`);
+  const deadline=performance.now()+timeLimit*1000;
+  let best, complete=true;
+  function solve(terms,direction,extra=[]) {
+    const lp=`${direction}\n obj: ${expression(terms)}\nSubject To\n${[...constraints,...extra].map((row,index)=>` c${index}: ${row}`).join("\n")}\nBounds\n${bounds.join("\n")}\nBinaries\n${binaries.join(" ")}\nGenerals\n${integers.join(" ")}\nEnd`;
+    const solved=highs.solve(lp,{output_flag:false,time_limit:Math.max(.01,(deadline-performance.now())/1000),mip_rel_gap:0,mip_abs_gap:0,mip_feasibility_tolerance:1e-9});
+    if (!["Optimal","Infeasible"].includes(solved.Status)) complete=false;
+    if (!solved.Columns) return {solverStatus:solved.Status};
+    const value=name=>solved.Columns[name]?.Primal || 0;
+    const chosen=model.options.filter(row=>value(row.variable)>.5), keys=chosen.map(row=>row.key ?? row.id);
+    const validation=definition ? validateLoadout(definition,keys) : null;
+    if (!chosen.length || validation && !validation.valid) {complete=false;return {solverStatus:"Invalid solution"};}
+    const preset=definition ? previewCustomPreset(definition,{id:"recommendation",name:"推荐挂载",keys}).preset : chosen[0];
+    const rows=Array.from({length:targetCount},()=>[]), used=new Map();
+    for (const row of allocation) {
+      const n=Math.round(value(row.variable));
+      if (n<0 || Math.abs(n-value(row.variable))>1e-6) {complete=false;return {solverStatus:"Invalid solution"};}
+      if (n) {rows[row.target].push([row.id,n]);used.set(row.id,(used.get(row.id)||0)+n);}
+    }
+    const carried=new Map();
+    for (const [id,n] of preset.weapons) carried.set(id,(carried.get(id)||0)+n);
+    if ([...used].some(([id,n])=>n!==carried.get(id))) {complete=false;return {solverStatus:"Invalid solution"};}
+    const plan=rows.filter(row=>row.length), estimates=plan.map(delivered=>empiricalSimScore({...scenario,carried:preset.weapons,delivered,weapons,reward}));
+    if (estimates.some(row=>!row || row.totalScore===null)) {complete=false;return {solverStatus:"Invalid solution"};}
+    const score=estimates.reduce((sum,row)=>sum+row.totalScore,0), totals=presetTotals(preset,weapons);
+    const candidate={objective:"global_sim_score",status:"feasible",kind:definition?"custom":"preset",presetId:definition?null:preset.id,preset,keys,plan,remaining:[],
+      score,estimate:estimates[0],estimates,targets:plan.length,destroyedTargets:estimates.filter(row=>row.destructionScore>0).length,
+      damage:damageOf(preset.weapons,weapons),rewardDamage:rewardDamageOf(preset.weapons,weapons),mass:validation?.mass ?? totals.mass ?? Infinity,
+      simplicity:loadoutSimplicity(preset.weapons,weapons),warnings:validation?.warnings || [],unknown:model.unknown};
+    if (preferRecommendation(candidate,best || {})) best=candidate;
+    return {...candidate,solverStatus:solved.Status,credit:credit.reduce((sum,[name,n])=>sum+n*value(name),0)};
+  }
+  const lower=solve(model.rewardDamage,"Minimize"), upper=solve(model.rewardDamage,"Maximize");
+  if (!best) return {status:complete?"infeasible":"unknown",unknown:model.unknown,scoreUpper:universalUpper};
+  if (lower.solverStatus!=="Optimal" || upper.solverStatus!=="Optimal") return {...best,scoreUpper:universalUpper};
+  const multiplier=value=>rewardUi(reward,value)/reward.ui_decoration;
+  const knots=[reward.preset_dmg_min,...reward.piecewise_linear.map(([x])=>x)];
+  const queue=[{lo:lower.rewardDamage,hi:upper.rewardDamage,bound:universalUpper}];
+  let unresolved=0;
+  while(queue.length && performance.now()<deadline) {
+    queue.sort((a,b)=>b.bound-a.bound);
+    const interval=queue.shift();
+    if (interval.bound<=best.score+1e-6) continue;
+    const candidate=solve(credit,"Maximize",[`${expression(model.rewardDamage)} >= ${interval.lo}`,`${expression(model.rewardDamage)} <= ${interval.hi}`]);
+    if (!candidate.preset) {if(candidate.solverStatus!=="Infeasible") unresolved=Math.max(unresolved,interval.bound);continue;}
+    if (candidate.solverStatus!=="Optimal") {unresolved=Math.max(unresolved,interval.bound);break;}
+    const maxMultiplier=Math.max(...[interval.lo,interval.hi,...knots.filter(x=>x>=interval.lo && x<=interval.hi)].map(multiplier));
+    const bound=simScoreDamageScale*hp*candidate.credit*maxMultiplier;
+    if (bound<=best.score+1e-6) continue;
+    const middle=interval.lo+(interval.hi-interval.lo)/2;
+    if (!(middle>interval.lo && middle<interval.hi)) {unresolved=Math.max(unresolved,bound);break;}
+    queue.push({lo:interval.lo,hi:middle,bound},{lo:middle,hi:interval.hi,bound});
+  }
+  const scoreUpper=Math.max(best.score,unresolved,...queue.map(row=>row.bound));
+  complete &&= scoreUpper<=best.score+1e-6;
+  return {...best,status:complete?"optimal":"feasible",scoreUpper:Number.isFinite(scoreUpper)?scoreUpper:null};
 }
 
 // A worker session retains the static hardpoint model while only N changes.

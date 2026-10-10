@@ -864,9 +864,22 @@
   "simScore.moduleHighestScore": "模块单次最高预计分数",
   "simScore.moduleEstimate": "按模块剩余 HP 封顶的经验估算；假设全部命中、燃烧完成，不计回血。",
   "simScore.modelScope": "经验估算，跨条件精度未知；不计其他奖励。",
+  "simScore.baseScope": "满血战区按本轮独立摧毁估算轰炸＋摧毁分；已受损战区的摧毁归属未知。经验估算，跨条件精度未知；不计其他奖励。",
   "simScore.estimatedDamage": "预计轰炸得分",
   "simScore.deliveredDamage": "当前投放轰炸得分",
   "simScore.damageScore": "轰炸基地",
   "simScore.destructionScore": "摧毁基地",
-  "simScore.uncalibratedDestruction": "未校准"
+  "simScore.uncalibratedDestruction": "未校准",
+  "simScore.globalButton": "全局推荐全真最高得分方案",
+  "simScore.availableBases": "可用战区上限",
+  "simScore.globalHelp": "比较整架飞机的合法挂载；按上方数量限制可攻击的满血战区，并与单个满血机场模块比较。机场只用明确非制导弹药；当前手选挂点不固定。假设全部命中、燃烧完成，不计回血和机场摧毁奖励。",
+  "simScore.globalContext": "满血目标 · 可用战区数量为上方上限 · 机场排除制导",
+  "simScore.sortiePlan": "本轮投放方案",
+  "simScore.planScore": "预计 {{score}} 分 · 摧毁 {{destruction}} 分",
+  "simScore.airportScope": "机场只估算轰炸伤害分，不计摧毁奖励；伤害不足以摧毁时，摧毁分为零。经验估算，跨条件精度未知。",
+  "simScore.target.bombing_point_planes": "战区基地（空战）",
+  "simScore.target.airport_dwelling": "机场生活区",
+  "simScore.target.airport_storage": "机场油库 / 储存区",
+  "simScore.target.airport_parking": "机场停机 / 维修区",
+  "simScore.target.airport_airfield": "机场跑道"
 }

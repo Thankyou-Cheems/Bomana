@@ -864,9 +864,22 @@
   "simScore.moduleHighestScore": "Highest module strike estimate",
   "simScore.moduleEstimate": "Empirical estimate capped at remaining module HP; assumes all hits and complete burn, excluding regeneration.",
   "simScore.modelScope": "Empirical estimate; accuracy in other conditions is unknown. Other rewards excluded.",
+  "simScore.baseScope": "Full-health bases assume a solo kill this round and include bombing + destruction score. Destruction credit for damaged bases is unknown. Empirical estimate; accuracy in other conditions is unknown. Other rewards excluded.",
   "simScore.estimatedDamage": "Estimated bombing score",
   "simScore.deliveredDamage": "Current delivery bombing score",
   "simScore.damageScore": "Base bombing",
   "simScore.destructionScore": "Base destruction",
-  "simScore.uncalibratedDestruction": "Uncalibrated"
+  "simScore.uncalibratedDestruction": "Uncalibrated",
+  "simScore.globalButton": "Recommend highest Simulator sortie score",
+  "simScore.availableBases": "Available base limit",
+  "simScore.globalHelp": "Compare legal loadouts across this aircraft. The count above limits available full-health bases, compared with one full-health airfield module. Airfield candidates use explicitly unguided stores only. Current manual stations are not locked. Assumes all hits and complete burn; excludes regeneration and airfield destruction rewards.",
+  "simScore.globalContext": "Full-health targets · Base count above is the limit · Unguided airfield strikes only",
+  "simScore.sortiePlan": "This sortie's delivery plan",
+  "simScore.planScore": "Estimated {{score}} points · Destruction {{destruction}} points",
+  "simScore.airportScope": "Airfield estimates include bombing damage only, excluding destruction rewards. Insufficient damage awards zero destruction score. Empirical estimate; accuracy in other conditions is unknown.",
+  "simScore.target.bombing_point_planes": "Air battle bases",
+  "simScore.target.airport_dwelling": "Airfield living quarters",
+  "simScore.target.airport_storage": "Airfield fuel / storage",
+  "simScore.target.airport_parking": "Airfield parking / repair",
+  "simScore.target.airport_airfield": "Airfield runway"
 }

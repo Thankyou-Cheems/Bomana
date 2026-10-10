@@ -693,13 +693,13 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .optimizer-modes button { padding:5px 6px; }
 .optimizer-filters { display:block; margin:0; padding:0; min-width:0; }
 .optimizer-filters legend { float:none; padding:0 0 4px; font-size:11px; }
-.optimizer-filter-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+.optimizer-filter-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
 .optimizer-filter-grid button:first-child { grid-column:span 2; }
-.optimizer-filter-grid button { min-height:32px; padding:4px 7px; gap:6px; }
+.optimizer-filter-grid button { min-height:28px; padding:3px 6px; gap:4px; }
 .optimizer-filter-grid button strong { margin-right:auto; }
 .optimizer-filter-grid button small { font-size:10px; }
-.optimizer-switch-track { display:block; position:relative; flex:none; width:28px; height:16px; border-radius:999px; background:#b7c8d2; box-shadow:inset 0 0 0 1px #496b8026; }
-.optimizer-switch-track::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; box-shadow:0 1px 3px #25496240; }
+.optimizer-switch-track { display:block; position:relative; flex:none; width:26px; height:14px; border-radius:999px; background:#b7c8d2; box-shadow:inset 0 0 0 1px #496b8026; }
+.optimizer-switch-track::after { content:""; position:absolute; top:2px; left:2px; width:10px; height:10px; border-radius:50%; background:#fff; box-shadow:0 1px 3px #25496240; }
 .optimizer-filter-grid button[aria-checked=true] .optimizer-switch-track { background:#347f70; }
 .optimizer-filter-grid button[aria-checked=true] .optimizer-switch-track::after { transform:translateX(12px); }
 .optimizer-panel [data-optimizer-result] { display:grid; grid-template-columns:minmax(0,1fr); gap:5px; }
@@ -772,8 +772,10 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .sim-score-delivery span { flex:1 1 180px; }
 .sim-score-delivery input { width:90px; }
 .sim-score-delivery-details button { margin-top:4px; padding:6px 9px; border:1px solid #c6dbe7; border-radius:6px; background:#edf5fa; color:#315f7b; font:inherit; cursor:pointer; }
-.optimizer-panel[data-objective="sim_score"] .optimizer-priority { display:none; }
-.optimizer-panel[data-objective="sim_score"] .optimizer-heading { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.optimizer-panel:is([data-objective="sim_score"],[data-objective="global_sim_score"]) .optimizer-priority { display:none; }
+.optimizer-panel:is([data-objective="sim_score"],[data-objective="global_sim_score"]) .optimizer-heading { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.global-score-recommend { padding:6px 10px; margin-bottom:8px; max-width:100%; border:1px solid #78adc3; border-radius:6px; background:#e7f3f8; color:#285d7c; font:inherit; font-weight:650; cursor:pointer; }
+.global-score-recommend[aria-pressed="true"] { background:#285d7c; color:#fff; }
 .optimizer-modes button { min-width:0; overflow-wrap:anywhere; }
 .optimizer-target-controls { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
 .optimizer-target-controls[hidden] { display:none; }
@@ -783,7 +785,7 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .optimizer-target-controls button[aria-pressed=true] { background:#fff3ca; border-color:#dbbe6e; }
 .optimizer-guidance-selection { --guidance-index:0; grid-column:1/-1; display:grid; position:relative; grid-template-columns:repeat(3,minmax(0,1fr)); min-width:0; padding:2px; border-radius:8px; background:#e5eef4; isolation:isolate; }
 .optimizer-guidance-thumb { position:absolute; z-index:-1; top:2px; bottom:2px; left:2px; width:calc((100% - 4px) / 3); border:1px solid #ddc270; border-radius:6px; background:#fff0b8; box-shadow:0 1px 3px #8b7b3920; transform:translateX(calc(var(--guidance-index) * 100%)); transition:transform .18s ease; }
-.optimizer-guidance-selection label { display:grid; place-items:center; position:relative; min-width:0; min-height:40px; padding:5px 6px; border-radius:6px; color:#55778b; font-size:11px; text-align:center; line-height:1.35; overflow-wrap:anywhere; cursor:pointer; }
+.optimizer-guidance-selection label { display:grid; place-items:center; position:relative; min-width:0; min-height:28px; padding:3px 5px; border-radius:6px; color:#55778b; font-size:11px; text-align:center; line-height:1.35; overflow-wrap:anywhere; cursor:pointer; }
 .optimizer-guidance-selection input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; }
 .optimizer-guidance-selection label:has(input:checked) { color:#715513; font-weight:700; }
 .optimizer-guidance-selection label:has(input:focus-visible) { outline:2px solid #258dbd; outline-offset:-2px; }
@@ -791,4 +793,4 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-summary .aircraft-toolbar { position:relative; order:1; flex-basis:100%; width:100%; min-width:0; margin:4px 0 0; padding:0; border:0; border-radius:0; background:none; }
 .loadout-summary .aircraft-toolbar .hangar-picker-head { display:none; }
 .calculator-page .loadout-summary .aircraft-toolbar:focus-within .hangar-aircraft-list:not(:has(.hangar-weapon-empty)) { top:100%; }
-@media (max-width:560px) { .optimizer-panel[data-objective="sim_score"] .optimizer-heading { grid-template-columns:minmax(0,1fr); } }
+@media (max-width:560px) { .optimizer-panel:is([data-objective="sim_score"],[data-objective="global_sim_score"]) .optimizer-heading { grid-template-columns:minmax(0,1fr); } }

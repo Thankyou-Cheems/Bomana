@@ -34,6 +34,12 @@
     rgba(4, 15, 24, .72); box-shadow: inset 0 2px 8px rgba(0, 0, 0, .38); }
 .flight-instruments .release-cue-visual::before { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 1px; background: rgba(183, 221, 241, .28); }
 .flight-instruments .release-window-band { position: absolute; top: 6px; bottom: 6px; min-width: 3px; border: 1px solid rgba(109, 224, 163, .58); background: rgba(81, 211, 151, .18); box-shadow: 0 0 10px rgba(81, 211, 151, .15); transition: left .24s ease, width .24s ease; }
+.flight-instruments .is-estimated .release-window-band { border-color: rgba(248, 214, 111, .58); background: rgba(248, 214, 111, .15); box-shadow: none; }
+.flight-instruments :is(.is-estimated, .is-reference-countdown) { --release-countdown-width: 9ch; }
+.flight-instruments .pip-release-cue.is-estimated .release-bracket,
+.flight-instruments .is-estimated .release-cue-prompt,
+.flight-instruments .is-estimated .release-cursor-countdown { color: #f8d66f; }
+.flight-instruments .is-estimated .release-ghost-bracket { display: none; }
 .flight-instruments .release-cue-axis { position: absolute; left: 3.5%; right: 3.5%; top: 63%; height: 1px; background: rgba(183, 221, 241, .34); }
 .flight-instruments .release-cue-center { position: absolute; left: 50%; top: 50%; width: 6px; height: 17px; transform: translate(-50%, -20%); border: 1px solid rgba(214, 233, 246, .46); background: rgba(5, 18, 28, .55); }
 .flight-instruments .release-cue-center::after { content: ""; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; transform: translate(-50%, -50%); border: 2px solid #6de0a3; border-radius: 50%; opacity: 0; }
@@ -54,7 +60,7 @@
 .flight-instruments .release-cue-visual .release-ghost-bracket { opacity: .2 !important; color: #6de0a3 !important; filter: none; }
 .flight-instruments .release-cue-visual .release-ghost-left { left: 45% !important; }
 .flight-instruments .release-cue-visual .release-ghost-right { left: 55% !important; }
-.flight-instruments .release-cursor-countdown { position: absolute; top: 55%; transform: translateY(-50%); width: 8ch; padding: 2px 3px; border-radius: 3px; background: rgba(5, 18, 28, .88); color: #fff0b3; font: 900 var(--heading-countdown-size, 16px)/1.1 var(--mono); letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.flight-instruments .release-cursor-countdown { position: absolute; top: 55%; transform: translateY(-50%); width: var(--release-countdown-width, 8ch); padding: 2px 3px; border-radius: 3px; background: rgba(5, 18, 28, .88); color: #fff0b3; font: 900 var(--heading-countdown-size, 16px)/1.1 var(--mono); letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
 .flight-instruments .release-cursor-countdown-left { text-align: right; }
 .flight-instruments .release-cursor-countdown-right { text-align: left; }
 .flight-instruments .pip-release-cue .release-cue-prompt[data-countdown="true"]:empty { display: none; }
