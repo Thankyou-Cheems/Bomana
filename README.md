@@ -38,7 +38,20 @@ Enhanced 的战区、机场和投放窗口会结合当前可用的地图与飞�
 
 <br>
 
-<img src="docs/assets/shots/pip-window-current.webp" width="820" alt="Bomana 置顶导航窗：航向带、CCRP、速度和缩略地图">
+<p><strong>轰炸态势</strong></p>
+<a href="docs/assets/shots/pip-window-current.png"><img src="docs/assets/shots/pip-window-current.webp" width="820" alt="Bomana Enhanced 置顶战术窗：战区目标、方位距离、倒计时与小地图"></a>
+
+<br>
+
+<p><strong>起降参考</strong></p>
+<a href="docs/assets/shots/web-cockpit-desktop.png"><img src="docs/assets/shots/web-cockpit-desktop.png" width="820" alt="Bomana Enhanced 置顶战术窗：跑道方向、入口地形、高差、空速与起落架提示"></a>
+
+<br>
+
+<p><strong>返航导航</strong></p>
+<a href="docs/assets/shots/web-cockpit.png"><img src="docs/assets/shots/web-cockpit.png" width="820" alt="Bomana Enhanced 置顶战术窗：返航机场方位距离、入口地形、高差、曲线视图与减速提示"></a>
+
+<p>点击置顶战术窗截图可查看完整原图。图示为 Enhanced 参考信息，不代表命中或安全降落保证。</p>
 
 </div>
 

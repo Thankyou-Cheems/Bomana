@@ -11,11 +11,12 @@ function element(tag, attributes = {}, text) {
 }
 
 function canvas(container, height, description, minimumWidth = 180) {
+  // Read before mutating the chart, rather than forcing layout of an empty SVG.
+  const width = Math.max(minimumWidth, Math.floor(container.clientWidth));
   container.replaceChildren();
   container.setAttribute("role", "img");
   container.setAttribute("aria-label", description);
   // Use the rendered width so phone labels stay at 12px instead of shrinking.
-  const width = Math.max(minimumWidth, Math.floor(container.clientWidth));
   const svg = element("svg", { viewBox: `0 0 ${width} ${height}`, "aria-hidden": "true" });
   container.append(svg);
   return { svg, width };

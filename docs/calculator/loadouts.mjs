@@ -1,4 +1,6 @@
-import { t, localizeName } from "./i18n.mjs";
+import { t, localizeName, currentLocale } from "./i18n.mjs";
+
+const renderedPresetGrids = new WeakMap();
 
 function equalParameters(a, b) {
   if (a === b) return true;
@@ -106,12 +108,29 @@ export function presetZoneAllocations(preset, plan) {
 }
 
 export function renderPresetRows(container, rows, weapons, selectedId, allRows = rows) {
+  const maxTier = rows.length ? Math.max(...allRows.map(row => row.columns)) : 0;
+  const previous = renderedPresetGrids.get(container), locale = currentLocale();
+  // Selection changes affect only two rows. Preserve the full grid and decoded
+  // icons unless its rows, catalog, geometry, or translated labels changed.
+  if (previous && previous.locale === locale && previous.maxTier === maxTier
+      && previous.rows.length === rows.length && rows.every((row, index) => row === previous.rows[index])
+      && previous.weapons.size === weapons.size && [...weapons].every(([id, weapon]) => previous.weapons.get(id) === weapon)) {
+    for (const button of container.querySelectorAll('[data-preset-id]')) {
+      const selected = button.dataset.presetId === selectedId;
+      if (button.getAttribute('aria-selected') !== String(selected)) {
+        button.setAttribute('aria-selected', String(selected));
+        button.tabIndex = selected ? 0 : -1;
+      }
+    }
+    return;
+  }
+  renderedPresetGrids.delete(container);
   container.replaceChildren();
   if (!rows.length) {
     container.append(node("p", t("loadouts.noMatchingPresetsTryAnotherWeaponTypeOrClear", "没有匹配的预设。试试其他弹种或清空搜索。"), "loadout-empty"));
     return;
   }
-  const minTier = 1, maxTier = Math.max(...allRows.map(row => row.columns));
+  const minTier = 1;
   container.style.setProperty("--tier-count", maxTier - minTier + 1);
   const heading = node("div", null, "loadout-table-head");
   heading.setAttribute("aria-hidden", "true");
@@ -133,4 +152,5 @@ export function renderPresetRows(container, rows, weapons, selectedId, allRows =
     button.append(label);
     button.append(presetDiagram(row, weapons, maxTier)); container.append(button);
   }
+  renderedPresetGrids.set(container, {rows: [...rows], weapons, locale, maxTier});
 }

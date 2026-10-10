@@ -2,13 +2,9 @@ function normalizedWords(value) {
   return String(value ?? "")
     .normalize("NFKD")
     .replace(/\p{M}+/gu, "")
-    .toLocaleLowerCase("zh-CN")
+    .toLowerCase()
     .replace(/[\p{P}\p{S}\s_]+/gu, " ")
     .trim();
-}
-
-function compact(value) {
-  return normalizedWords(value).replace(/\s+/g, "");
 }
 
 function subsequenceScore(needle, haystack) {
@@ -23,24 +19,23 @@ function subsequenceScore(needle, haystack) {
   return 40 + gaps * 2 + Math.max(0, haystack.length - needle.length) * 0.05;
 }
 
-function tokenScore(token, value) {
-  const words = normalizedWords(value);
+function tokenScore(token, words) {
   const joined = words.replace(/\s+/g, "");
-  const query = compact(token);
+  // Both sides are already normalized; a token/word contains no whitespace.
+  const query = token;
   if (!query || !joined) return Number.POSITIVE_INFINITY;
   if (words === token || joined === query) return 0;
   const wordList = words.split(" ");
-  if (wordList.some((word) => word === token || compact(word) === query)) return 3;
+  if (wordList.includes(token)) return 3;
   if (joined.startsWith(query)) return 8 + (joined.length - query.length) * 0.01;
   const containedAt = joined.indexOf(query);
   if (containedAt >= 0) return 16 + containedAt + (joined.length - query.length) * 0.01;
   return subsequenceScore(query, joined);
 }
 
-export function fuzzySearchScore(query, values) {
-  const tokens = normalizedWords(query).split(" ").filter(Boolean);
+function scoreTokens(tokens, values) {
   if (!tokens.length) return 0;
-  const candidates = values.map((value) => String(value ?? "")).filter(Boolean);
+  const candidates = values.map(normalizedWords).filter(Boolean);
   let total = 0;
   for (const token of tokens) {
     let best = Number.POSITIVE_INFINITY;
@@ -51,11 +46,16 @@ export function fuzzySearchScore(query, values) {
   return total;
 }
 
+export function fuzzySearchScore(query, values) {
+  return scoreTokens(normalizedWords(query).split(" ").filter(Boolean), values);
+}
+
 export function rankFuzzyMatches(items, query, valuesForItem, limit = Number.POSITIVE_INFINITY) {
   const normalizedQuery = normalizedWords(query);
   if (!normalizedQuery) return items.slice(0, limit);
+  const tokens = normalizedQuery.split(" ");
   return items
-    .map((item, index) => ({ item, index, score: fuzzySearchScore(normalizedQuery, valuesForItem(item)) }))
+    .map((item, index) => ({ item, index, score: scoreTokens(tokens, valuesForItem(item)) }))
     .filter((entry) => Number.isFinite(entry.score))
     .sort((left, right) => left.score - right.score || left.index - right.index)
     .slice(0, limit)

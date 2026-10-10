@@ -38,7 +38,20 @@ Enhanced uses available map and flight observations to present references for zo
 
 <br>
 
-<img src="docs/assets/shots/pip-window-current.webp" width="820" alt="Bomana picture-in-picture navigator with heading tape, CCRP, speed and miniature map">
+<p><strong>Target situation</strong></p>
+<a href="docs/assets/shots/pip-window-current.png"><img src="docs/assets/shots/pip-window-current.webp" width="820" alt="Enhanced tactical window with target bearing, distance, countdowns and miniature map"></a>
+
+<br>
+
+<p><strong>Runway reference</strong></p>
+<a href="docs/assets/shots/web-cockpit-desktop.png"><img src="docs/assets/shots/web-cockpit-desktop.png" width="820" alt="Enhanced runway reference with runway direction, terrain height, airspeed and landing gear cues"></a>
+
+<br>
+
+<p><strong>Return navigation</strong></p>
+<a href="docs/assets/shots/web-cockpit.png"><img src="docs/assets/shots/web-cockpit.png" width="820" alt="Enhanced return navigation with airport bearing, distance, height difference and deceleration cues"></a>
+
+<p>Click a tactical-window screenshot to view the complete original. Enhanced imagery shows reference information; it does not guarantee a hit or a safe landing.</p>
 
 </div>
 

@@ -482,7 +482,6 @@ main > section {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-areas:
     "web mobile"
-    "web pip"
     "launcher launcher";
   gap: 20px;
   align-items: start;
@@ -516,12 +515,18 @@ main > section {
 }
 .shot--showcase-web { grid-area: web; }
 .shot--showcase-mobile { grid-area: mobile; width: min(100%, 420px); justify-self: center; }
-.shot--showcase-pip { grid-area: pip; align-self: end; }
 .shot--showcase-launcher { grid-area: launcher; }
 .shot--showcase-web .shot-empty { aspect-ratio: 2142 / 3496; }
 .shot--showcase-mobile .shot-empty { aspect-ratio: 1206 / 2622; }
-.shot--showcase-pip .shot-empty { aspect-ratio: 1690 / 370; }
 .shot--showcase-launcher .shot-empty { aspect-ratio: 1265 / 712; }
+.tactical-gallery { display: grid; gap: 24px; margin-top: 32px; }
+.tactical-gallery .section-head { margin-bottom: 0; }
+.tactical-shot { margin: 0; }
+.tactical-shot .shot-frame { display: block; }
+.tactical-shot img { display: block; width: 100%; height: auto; }
+.tactical-shot figcaption { display: grid; gap: 6px; padding-top: 12px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.tactical-shot figcaption strong { color: var(--ink); font-size: 18px; }
+.tactical-shot figcaption a { justify-self: start; }
 .shot-meta {
   color: var(--banana-deep);
   font-size: 10px;
@@ -1295,7 +1300,7 @@ body.calculator-page a { color: var(--blue); }
   .docs-grid { grid-template-columns: 1fr 1fr; }
   .gallery-stack {
     grid-template-columns: 1fr;
-    grid-template-areas: "web" "pip" "mobile" "launcher";
+    grid-template-areas: "web" "mobile" "launcher";
   }
   .shot--showcase-mobile { width: min(100%, 440px); }
   .hangar-board { grid-template-columns: 1fr; }

@@ -60,3 +60,11 @@ test("requires every query token to match", () => {
   const ranked = rankFuzzyMatches(aircraft, "strike eagle", (item) => [item.id, item.name, item.long], 40);
   assert.deepEqual(ranked.map((item) => item.id), ["f_15_e"]);
 });
+
+test("normalizes fullwidth, accents and Cyrillic while preserving stable multi-token ranking", () => {
+  for (const [query, values] of [["ＳＵ－２７", ["Su-27"]], ["СУ 27", ["Су-27"]], ["eclair mk83", ["ÉCLAIR", "MK-83"]]]) {
+    assert.ok(Number.isFinite(fuzzySearchScore(query, values)), query);
+  }
+  const rows = [{id:'first',name:'MK83 Éclair'}, {id:'second',name:'MK83 ECLAIR'}, {id:'absent',name:'MK82 Éclair'}];
+  assert.deepEqual(rankFuzzyMatches(rows, 'ｍｋ８３ éclair', row => [row.name]).map(row => row.id), ['first','second']);
+});

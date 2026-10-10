@@ -498,7 +498,6 @@ function bindConversion() {
     });
     refreshConversion();
   });
-  window.addEventListener("resize", () => { refreshReward(); refreshConversion(); });
   refreshConversion();
 }
 
@@ -1018,7 +1017,19 @@ for (const button of document.querySelectorAll("[data-dwelling]")) button.addEve
   repairPercent.value = button.dataset.dwelling;
   refreshAirportRepair();
 });
-window.addEventListener("resize", refreshAirportRepair);
+let chartViewportWidth = window.innerWidth, chartResizeFrame = 0;
+window.addEventListener("resize", () => {
+  // Height-only changes do not change SVG dimensions. Coalesce width changes
+  // so one resize burst cannot repeatedly rebuild all charts in the same frame.
+  if (chartResizeFrame || window.innerWidth === chartViewportWidth) return;
+  chartResizeFrame = requestAnimationFrame(() => {
+    chartResizeFrame = 0;
+    const width = window.innerWidth;
+    if (width === chartViewportWidth) return;
+    chartViewportWidth = width;
+    refreshReward(); refreshConversion(); refreshAirportRepair();
+  });
+});
 
 function setHudUnknown(context, hint) {
   hudContext.textContent = context;

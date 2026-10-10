@@ -5,6 +5,9 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .tool-nav a { padding: 8px 13px; border: 1px solid #cbdde8; border-radius: 999px; color: #225776; background: #f5faff; font-size: 13px; text-decoration: none; }
 .tool-nav a:hover, .tool-nav a:focus-visible { background: #dfeff9; }
 .tool-panel { margin-top: 32px; padding: clamp(18px, 3vw, 32px); border: 1px solid #cbdde8; border-radius: 22px; background: #ffffffd9; scroll-margin-top: 24px; min-width: 0; }
+/* Keep changing charts/list hover inside their own paint bounds. The aircraft
+   search dropdown lives outside these panels and remains free to overflow. */
+.tool-panel, .loadout-scroll, .air-plot { contain: paint; }
 .tool-panel-head h2 { margin: 4px 0 10px; font-size: clamp(21px, 3vw, 27px); color: #193c56; }
 .tool-panel-head > p:last-child, .tool-note { color: var(--muted); line-height: 1.8; font-size: 13px; }
 .tool-table-scroll { max-height: 480px; overflow: auto; margin: 18px 0; border-radius: 10px; }

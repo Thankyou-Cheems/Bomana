@@ -18,42 +18,53 @@ const svgNode = (tag, attributes = {}, content = null) => {
   return node;
 };
 
-function plotEncounter(result, timeS) {
+function createEncounterPlot(result) {
   const svg = svgNode("svg", { viewBox: "0 0 760 420", "aria-hidden": "true" });
   const samples = result.samples;
-  const current = samples.findIndex(sample => sample.t >= timeS);
-  const index = current < 0 ? samples.length - 1 : current;
-  const sample = samples[index], next = samples[Math.min(index + 1, samples.length - 1)];
+  const points = samples.flatMap(row => [row.target, row.missile]), axes = [];
+  const minX = Math.min(...points.map(p => p[0])), maxX = Math.max(...points.map(p => p[0]));
   for (const [axis, top, height, title] of [[1, 28, 222, t("air-ui.topView", "俯视")], [2, 290, 104, t("air-ui.sideView", "侧视")]]) {
-    const points = samples.flatMap(row => [row.target, row.missile]);
-    const minX = Math.min(...points.map(p => p[0])), maxX = Math.max(...points.map(p => p[0]));
     const minY = Math.min(...points.map(p => p[axis])), maxY = Math.max(...points.map(p => p[axis]));
     const scale = Math.min(670 / Math.max(maxX - minX, 500), (height - 28) / Math.max(maxY - minY, 300));
     const x = value => 380 + (value - (maxX + minX) / 2) * scale;
     const y = value => top + height / 2 - (value - (maxY + minY) / 2) * scale;
     svg.append(svgNode("text", { x: 16, y: top - 8, class: "air-plot-label" }, title));
     svg.append(svgNode("line", { x1: 16, y1: top + height + 8, x2: 744, y2: top + height + 8, class: "air-plot-grid" }));
+    const markers = [];
     for (const [key, className] of [["target", "air-target-path"], ["missile", "air-missile-path"]]) {
       const path = samples.map((row, i) => `${i ? "L" : "M"}${x(row[key][0]).toFixed(2)},${y(row[key][axis]).toFixed(2)}`).join(" ");
       svg.append(svgNode("path", { d: path, class: className }));
-      const from = sample[key], to = next[key], prev = samples[Math.max(0, index - 1)][key];
-      const dx = to[0] - prev[0], dy = to[axis] - prev[axis];
-      const angle = Math.atan2(-dy, dx) * 180 / Math.PI;
-      svg.append(svgNode("path", { d: key === "target" ? "M10 0 L-7 -6 L-3 0 L-7 6 Z" : "M8 0 L-6 -4 L-3 0 L-6 4 Z",
-        class: key === "target" ? "air-target-marker" : "air-missile-marker",
-        transform: `translate(${x(from[0])} ${y(from[axis])}) rotate(${angle})` }));
+      const marker = svgNode("path", { d: key === "target" ? "M10 0 L-7 -6 L-3 0 L-7 6 Z" : "M8 0 L-6 -4 L-3 0 L-6 4 Z",
+        class: key === "target" ? "air-target-marker" : "air-missile-marker" });
+      svg.append(marker); markers.push({key, marker});
     }
-    svg.append(svgNode("line", { x1: x(sample.target[0]), y1: y(sample.target[axis]), x2: x(sample.missile[0]), y2: y(sample.missile[axis]), class: "air-los" }));
+    const los = svgNode("line", { class: "air-los" }); svg.append(los);
     const rawScaleM = 100 / scale, exponent = 10 ** Math.floor(Math.log10(rawScaleM));
     const scaleM = [1, 2, 5, 10].find(v => v * exponent >= rawScaleM) * exponent;
     const scalePx = scaleM * scale;
     svg.append(svgNode("path", { d: `M${730 - scalePx} ${top + 5}v5h${scalePx}v-5`, class: "air-scale" }));
     svg.append(svgNode("text", { x: 730 - scalePx / 2, y: top - 2, "text-anchor": "middle", class: "air-plot-label" }, distance(scaleM)));
-    if (axis === 2) svg.append(svgNode("text", { x: 18, y: top + height - 2, class: "air-plot-label" }, t("air-ui.aircraftMMissileM", "飞机 {{v0}} m · 来弹 {{v1}} m", {v0: fixed(sample.target[2], 0), v1: fixed(sample.missile[2], 0)})));
+    const altitude = axis === 2 ? svgNode("text", { x: 18, y: top + height - 2, class: "air-plot-label" }) : null;
+    if (altitude) svg.append(altitude);
+    axes.push({axis, x, y, markers, los, altitude});
   }
   el("airPlot").replaceChildren(svg);
-  el("airPlot").setAttribute("aria-label", t("air-ui.secondsSeparationAircraftInBlueMissileInRed", "{{v0}}，{{v1}} 秒，双方距离 {{v2}}。蓝色为飞机，红色为导弹。", {v0: MODES[result.mode], v1: fixed(timeS), v2: distance(sample.rangeM)}));
-  el("airTimeValue").textContent = `${fixed(timeS)} s`;
+  return timeS => {
+    const current = samples.findIndex(sample => sample.t >= timeS);
+    const index = current < 0 ? samples.length - 1 : current;
+    const sample = samples[index], next = samples[Math.min(index + 1, samples.length - 1)];
+    for (const {axis, x, y, markers, los, altitude} of axes) {
+      for (const {key, marker} of markers) {
+        const from = sample[key], to = next[key], prev = samples[Math.max(0, index - 1)][key];
+        const angle = Math.atan2(-(to[axis] - prev[axis]), to[0] - prev[0]) * 180 / Math.PI;
+        marker.setAttribute("transform", `translate(${x(from[0])} ${y(from[axis])}) rotate(${angle})`);
+      }
+      for (const [attribute, value] of Object.entries({x1:x(sample.target[0]), y1:y(sample.target[axis]), x2:x(sample.missile[0]), y2:y(sample.missile[axis])})) los.setAttribute(attribute, String(value));
+      if (altitude) altitude.textContent = t("air-ui.aircraftMMissileM", "飞机 {{v0}} m · 来弹 {{v1}} m", {v0: fixed(sample.target[2], 0), v1: fixed(sample.missile[2], 0)});
+    }
+    el("airPlot").setAttribute("aria-label", t("air-ui.secondsSeparationAircraftInBlueMissileInRed", "{{v0}}，{{v1}} 秒，双方距离 {{v2}}。蓝色为飞机，红色为导弹。", {v0: MODES[result.mode], v1: fixed(timeS), v2: distance(sample.rangeM)}));
+    el("airTimeValue").textContent = `${fixed(timeS)} s`;
+  };
 }
 
 export async function initAirCalculator() {
@@ -76,7 +87,7 @@ export async function initAirCalculator() {
   }));
   el("airWeapon").value = "us_aim_120a";
   el("airWeapon").disabled = false;
-  let results = null, selected = "beam", pending = 0, frame = 0, playbackStart = 0;
+  let results = null, selected = "beam", pending = 0, frame = 0, playbackStart = 0, plot = null, plotVisible = false;
   const weapon = () => data.weapons.find(row => row.id === el("airWeapon").value);
   const input = () => ({ rangeM: number("airRange") * 1000,
     missileSpeedMps: number("airMissileSpeed"), targetSpeedMps: number("airTargetSpeed") / 3.6,
@@ -84,7 +95,11 @@ export async function initAirCalculator() {
     aspectDeg: number("airAspect"), flightPathDeg: number("airFlightPath"), targetG: number("airTargetG"),
     delayS: number("airDelay"), observationGapS: number("airGap"), missileAgeS: number("airAge") });
   const stop = () => { cancelAnimationFrame(frame); frame = 0; el("airPlay").textContent = t("air-ui.play", "▶ 播放"); el("airPlay").setAttribute("aria-label", t("air-ui.playTrajectory", "播放轨迹")); };
-  const drawTime = () => { if (results) plotEncounter(results[selected], number("airTime") / 1000 * results[selected].durationS); };
+  const drawTime = () => { if (results && plot) plot(number("airTime") / 1000 * results[selected].durationS); };
+  new IntersectionObserver(([entry]) => {
+    plotVisible = entry.isIntersecting;
+    if (plotVisible) drawTime();
+  }).observe(el("airPlot"));
 
   function renderLaunch() {
     const w = weapon(), tables = w.envelope?.tables;
@@ -143,7 +158,7 @@ export async function initAirCalculator() {
         } else el("airRecovery").append(text("p", t("air-ui.illuminatorStateIsMissingForSemiActiveMissilesMonostatic", "半主动弹缺少照射端状态，未用单站几何代替双站距离／速度门。")));
       }
     }
-    drawTime();
+    plot = createEncounterPlot(result); drawTime();
   }
 
   function calculate() {
@@ -154,7 +169,7 @@ export async function initAirCalculator() {
     const error = form.checkValidity() ? validateEncounter(value, weapon()) : t("air-ui.completeAllValuesWithinTheIndicatedRanges", "请在标示范围内填写完整数值。");
     el("airPlay").disabled = Boolean(error); el("airTime").disabled = Boolean(error);
     if (error) {
-      results = null; el("airResult").replaceChildren(text("p", error)); el("airCompare").replaceChildren();
+      results = null; plot = null; el("airResult").replaceChildren(text("p", error)); el("airCompare").replaceChildren();
       el("airPlot").replaceChildren(); el("airAdvice").textContent = ""; el("airRecovery").replaceChildren(); return;
     }
     results = Object.fromEntries(Object.keys(MODES).map(mode => [mode, simulateEncounter(weapon(), value, mode)]));
@@ -179,8 +194,11 @@ export async function initAirCalculator() {
     let lastPaint = -Infinity;
     const tick = now => {
       const progress = Math.min(1000, (now - playbackStart) / results[selected].durationS);
-      el("airTime").value = String(progress);
-      if (now - lastPaint >= 50 || progress >= 1000) { drawTime(); lastPaint = now; }
+      if (now - lastPaint >= 50 || progress >= 1000) {
+        el("airTime").value = String(progress);
+        if (plotVisible) drawTime();
+        lastPaint = now;
+      }
       if (progress >= 1000) stop(); else frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
