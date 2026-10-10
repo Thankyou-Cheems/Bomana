@@ -367,7 +367,7 @@
   "optimizer-ui.rewardCoefficientUpperBound": "Reward coefficient upper bound {{v0}}{{v1}}.",
   "optimizer-ui.onlyEquipmentWithKnownDamageIsCompared": "Only equipment with known damage is compared.",
   "optimizer-ui.fillRemainingStations": "Fill remaining stations",
-  "optimizer-ui.applyRecommendedLoadout": "Apply recommended loadout",
+  "optimizer-ui.applyRecommendedLoadout": "Apply loadout",
   "optimizer-ui.keepingSelectedStations": "Keeping {{v0}} selected stations",
   "optimizer-ui.calculating": "Calculating…",
   "custom-loadouts.loadoutIsAbsentFromThisVersion": "Loadout {{v0}} is absent from this version",
@@ -809,7 +809,7 @@
   "optimizer.currentStores": "Current loadout",
   "optimizer.zoneShare": "Zone {{zone}} ×{{count}}",
   "optimizer.spareShare": "Spare ×{{count}}",
-  "currentLoadout.clear": "Clear loadout",
+  "currentLoadout.clear": "Clear current loadout",
   "currentLoadout.empty": "No stores",
   "currentLoadout.save": "Save current loadout",
   "currentLoadout.saveDetails": "Save & configuration details",
@@ -883,5 +883,14 @@
   "simScore.target.airport_dwelling": "Airfield living quarters",
   "simScore.target.airport_storage": "Airfield fuel / storage",
   "simScore.target.airport_parking": "Airfield parking / repair",
-  "simScore.target.airport_airfield": "Airfield runway"
+  "simScore.target.airport_airfield": "Airfield runway",
+  "loadoutMetrics.score": "Score",
+  "loadoutMetrics.reward": "Coefficient",
+  "loadoutMetrics.required": "Required",
+  "loadoutMetrics.sorties": "Sorties",
+  "loadoutMetrics.coverage": "Base coverage",
+  "loadoutMetrics.scoreUnit": "pts",
+  "loadoutMetrics.sortiesUnit": "sorties",
+  "loadoutMetrics.weaponsUnit": "weapons",
+  "loadoutMetrics.basesUnit": "bases"
 }

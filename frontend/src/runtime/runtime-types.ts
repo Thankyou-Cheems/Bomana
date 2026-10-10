@@ -87,6 +87,14 @@ export interface FriendlyAircraft {
   readonly dy?: number;
 }
 
+export interface GroundTargetObservation {
+  readonly x: number;
+  readonly y: number;
+  readonly friendly: boolean;
+  readonly hostile: boolean;
+  readonly officialIcon?: string;
+}
+
 export interface NavigationItem {
   readonly id: string;
   readonly kind: "zone" | "airfield" | "poi" | "traceback" | "hostile";
@@ -187,6 +195,8 @@ export interface EditionSnapshot {
     readonly friendlyAircraft?: readonly FriendlyAircraft[];
     /** Official aircraft observations for Air Realistic, independent of selectable navigation. */
     readonly aircraftObservations?: readonly NavigationItem[];
+    /** Current official ground units; presentation only, never automatic strike targets. */
+    readonly groundTargets?: readonly GroundTargetObservation[];
     readonly poiLimitExceeded?: boolean;
     readonly target: NavigationItem | null;
     readonly selectionMode: NavigationSelectionMode;
@@ -289,6 +299,7 @@ export interface ParsedTelemetry {
 
 export interface ParsedMap {
   poiLimitExceeded?: boolean;
+  groundTargets?: GroundTargetObservation[];
   friendlyAircraft?: FriendlyAircraft[];
   player: { x: number; y: number; dx: number; dy: number } | null;
   objects: Array<{

@@ -349,13 +349,13 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .custom-total { margin:10px 0; padding:9px 10px; border-radius:7px; background:#dfedf6; font-size:11px; line-height:1.6; color:#315f7b; }
 .custom-save-bar { display:flex; align-items:stretch; gap:7px; }
 .custom-save-bar label { flex:1; min-width:0; }
-.custom-editor .custom-save-bar input { width:100%; min-width:0; min-height:36px; padding:8px 10px; border:1px solid #bdd2df; border-radius:7px; background:#fff; font:inherit; font-size:12px; color:#315f7b; }
+.custom-save-bar input { width:100%; min-width:0; min-height:36px; padding:8px 10px; border:1px solid #bdd2df; border-radius:7px; background:#fff; font:inherit; font-size:12px; color:#315f7b; }
 .custom-save-button { flex:none; border:1px solid #dcb74d; border-radius:7px; background:#f8ce56; color:#584412; padding:8px 12px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
 .custom-save-button:disabled { background:#e4ecf1; border-color:#cedce5; color:#8a9da9; cursor:not-allowed; }
 .custom-saved, .custom-requirements { margin-top:10px; color:#557a90; font-size:11px; line-height:1.7; }
 .custom-saved > summary, .custom-requirements > summary { cursor:pointer; }
 [data-custom-saved-count] { display:inline-block; padding:0 6px; margin-left:3px; border-radius:5px; background:#dceaf3; font-size:10px; }
-.custom-editor [data-custom-notice]:empty { display:none; }
+[data-custom-notice]:empty { display:none; }
 .custom-saved-row { display:flex; align-items:center; gap:8px; margin:6px 0; }
 .custom-saved-row button:first-child { flex:1; text-align:left; overflow-wrap:anywhere; margin:0; padding:6px 9px; font-size:11px; }
 .custom-picker { width:min(740px,calc(100vw - 32px)); max-height:calc(100dvh - 64px); margin:auto; padding:0; border:1px solid #a5c4d6; border-radius:18px; color:#2e5870; background:#f1f7fb; box-shadow:0 22px 80px #15394e55; font-family:inherit; }
@@ -612,7 +612,7 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-score strong { font-size:20px; color:#315f7b; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .loadout-analysis { font-size:11px; color:#77909f; }
 .loadout-analysis > summary { cursor:pointer; }
-.loadout-analysis { margin-left:auto; }
+.loadout-analysis { order:3; margin-left:auto; }
 .loadout-analysis[open] { order:3; flex-basis:100%; margin-left:0; }
 .loadout-analysis-content { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:6px; margin-top:6px; padding:8px; border:1px solid #cbdfe9; border-radius:6px; background:#edf5fa; }
 .loadout-analysis .preset-stats, .loadout-analysis .hangar-stats { display:contents; }
@@ -634,6 +634,9 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-workspace .current-slot-area .custom-slot-caption { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px; }
 .current-loadout-options { margin-top:4px; font-size:10px; color:#64849a; }
 .current-loadout-options > summary { cursor:pointer; }
+.loadout-summary > .current-loadout-options { order:3; margin:0; }
+.loadout-summary > .current-loadout-options[open] { flex-basis:100%; }
+.loadout-summary:has([data-custom-body][hidden], #calcPresetDetail[hidden]) > .current-loadout-options { display:none; }
 .current-loadout-clear { align-self:flex-start; margin-top:5px; padding:3px 8px; border:1px solid #9fbfce; border-radius:5px; background:#f7fcff; color:#416c82; font:inherit; font-size:10px; cursor:pointer; }
 .current-loadout-clear:hover { background:#fff0b8; border-color:#dcbf67; color:#715513; }
 #calcPresetDiagram { min-width:0; }
@@ -666,7 +669,7 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-workspace .custom-mass dd { margin:0; }
 .loadout-workspace .custom-total { margin:3px 0; padding:0; background:none; color:#7990a0; font-size:10px; }
 .loadout-workspace .custom-save-bar { display:inline-flex; width:min(440px,100%); vertical-align:middle; margin:3px 12px 0 0; }
-.loadout-workspace .custom-editor .custom-save-bar input { min-height:30px; padding:4px 8px; font-size:11px; }
+.loadout-workspace .custom-save-bar input { min-height:30px; padding:4px 8px; font-size:11px; }
 .loadout-workspace .custom-save-button { padding:4px 8px; font-size:11px; }
 .loadout-workspace .custom-saved, .loadout-workspace .custom-requirements { display:inline-block; margin:3px 10px 0 0; vertical-align:middle; }
 .loadout-workspace .custom-saved[open], .loadout-workspace .custom-requirements[open] { display:block; }
@@ -799,18 +802,39 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .optimizer-panel[data-available=false] > :not(.loadout-comparison), .optimizer-panel[data-available=false] .loadout-comparison > :not(.current-loadout-block) { display:none; }
 .loadout-comparison { min-width:0; display:grid; gap:0; overflow:hidden; border:1px solid #bdd5e2; border-radius:10px; }
 .current-loadout-block { min-width:0; background:#eaf5fc; border-bottom:1px solid #bdd5e2; }
-.current-loadout-metrics { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 14px; padding:9px 12px; }
-.current-loadout-metrics > small { color:#24789b; font-size:12px; font-weight:750; }
-.current-loadout-metrics .hangar-result-grid { gap:5px 12px; }
+.current-loadout-metrics, .loadout-comparison .optimizer-metrics { display:flex; justify-content:flex-start; align-items:baseline; flex-wrap:wrap; gap:3px 12px; padding:5px 8px; }
+.loadout-metrics-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; color:#638091; font-size:10px; line-height:1.2; }
+.loadout-metrics-heading > strong { color:#24789b; font-size:11px; font-weight:750; }
+.optimizer-metrics .loadout-metrics-heading > strong { color:#9a701d; }
+.loadout-metrics-target { font-weight:650; color:#315f7b; }
+.loadout-metric-grid { display:contents; }
+.current-loadout-metrics .hangar-result-grid { display:contents; }
+.loadout-comparison .loadout-metric { display:inline-flex; flex-wrap:wrap; align-items:baseline; gap:4px; min-width:0; min-height:0; margin:0; padding:0; border:0; border-radius:0; background:none; color:#315f7b; }
+.loadout-comparison .loadout-metric-label { display:block; margin:0; font-size:11px; font-weight:500; line-height:1.4; letter-spacing:0; color:#527186; }
+.loadout-comparison .loadout-metric-value { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px; max-width:100%; }
+.loadout-comparison .loadout-metric-value strong { font-size:17px; font-weight:750; line-height:1.2; color:#157bb1; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.loadout-comparison [data-loadout-metric=score] .loadout-metric-value strong { color:#c84421; }
+.loadout-comparison [data-loadout-metric=reward] .loadout-metric-value strong { color:#956700; }
+.loadout-comparison [data-loadout-metric=required] .loadout-metric-value strong, .loadout-comparison [data-loadout-metric=targets] .loadout-metric-value strong { color:#08775a; }
+.loadout-comparison .loadout-metric-value span { margin:0; font-size:11px; font-weight:400; color:#638091; }
+.loadout-metric[data-loadout-metric=score] { order:1; }
+.loadout-metric[data-loadout-metric=reward] { order:2; }
+.loadout-metric[data-loadout-metric=sorties] { order:3; }
+.loadout-metric[data-loadout-metric=required], .loadout-metric[data-loadout-metric=targets] { order:4; }
+.loadout-metrics-note { order:5; margin:0; font-size:10px; line-height:1.4; color:#638091; }
 .current-loadout-block .hangar-result-primary[data-quantity=sorties] { display:none; }
-.current-loadout-metrics .hangar-result-primary strong, .current-loadout-metrics .hangar-sorties strong, .current-loadout-metrics .loadout-reward strong, .current-loadout-metrics .loadout-score strong { font-size:17px; }
 .loadout-summary .loadout-comparison #calcPresetDetail { margin:0; padding:0; border:0; border-radius:0; background:inherit; }
-.loadout-comparison [data-optimizer-result] { min-width:0; background:#fff9e8; }
-.loadout-comparison .optimizer-stores { overflow-x:auto; }
+.loadout-comparison [data-optimizer-result] { min-width:0; gap:0; background:#fff9e8; }
+.loadout-comparison .optimizer-stores { overflow-x:auto; border:0; border-bottom:1px solid #e6dab4; border-radius:0; }
 .loadout-comparison .optimizer-preset-row { background:#fff9e8; cursor:default; box-shadow:inset 4px 0 #e5b82b; }
-.recommended-slot-area { min-width:0; padding:6px; }
-.loadout-comparison .optimizer-metrics { justify-content:flex-start; gap:6px 14px; min-height:30px; padding:9px 12px; }
-.loadout-comparison .optimizer-metrics [data-optimizer-context] { flex-basis:100%; order:1; }
+.recommended-slot-area { min-width:0; padding:3px 6px; }
+.loadout-comparison .optimizer-metrics > :not(.loadout-metrics-heading):not(.loadout-metric-grid) { order:5; }
+.loadout-comparison .optimizer-metrics [data-optimizer-context] { margin:0; }
+.optimizer-panel[data-state=optimal] .optimizer-metrics .optimizer-status { display:none; }
+.loadout-comparison .optimizer-metrics .optimizer-status { margin:0; font-size:10px; }
+.loadout-comparison .optimizer-metrics [data-optimizer-context]:empty { display:none; }
+.loadout-comparison [data-optimizer-result] > .optimizer-status, .loadout-comparison [data-optimizer-result] > [data-optimizer-context] { margin:0; padding:3px 8px; }
+.loadout-comparison [data-optimizer-result] > [data-optimizer-context]:empty { display:none; }
 .loadout-workspace .loadout-comparison .optimizer-actions { display:flex; flex-wrap:wrap; margin:5px 0; }
 .loadout-comparison [data-optimizer-apply] { background:#ffdf70; border:1px solid #d5ac34; border-radius:6px; color:#59400c; font-weight:750; }
 .loadout-comparison [data-optimizer-apply]:hover:enabled { background:#ffd34e; }
@@ -818,9 +842,14 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-comparison > .optimizer-actions, .loadout-comparison > .optimizer-note, .loadout-comparison > .optimizer-status { margin:0; padding:5px 12px; background:#fff9e8; }
 .loadout-comparison > .optimizer-note:empty, .loadout-comparison > .optimizer-status:empty { display:none; }
 .loadout-comparison > .recommendation-state { justify-self:start; margin:4px 12px; }
-.loadout-comparison .optimizer-preset-row .recommendation-state { align-self:flex-start; margin-top:4px; }
+.loadout-comparison .loadout-metrics-heading .recommendation-state { margin:0; padding:0; border:0; background:none; }
+.loadout-comparison .loadout-row-name { flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:flex-start; align-content:flex-start; gap:4px 6px; padding:4px 7px; }
+.loadout-comparison .optimizer-preset-row .optimizer-actions { display:contents; margin:0; }
+.loadout-comparison .optimizer-preset-row .optimizer-actions button { min-height:28px; padding:3px 7px; font-size:10px; line-height:1.4; }
+.loadout-comparison .current-loadout-clear { align-self:auto; margin:0; min-height:28px; padding:3px 7px; line-height:1.4; }
+.loadout-comparison .current-preset-row h2 { margin:0; font-size:12px; line-height:1.4; }
+.loadout-comparison .current-preset-row .tool-note:empty { display:none; }
 @media (max-width:560px) {
   .optimizer-priority label { padding:5px 3px; overflow-wrap:anywhere; }
-  .current-loadout-metrics { gap:5px 9px; padding:7px 9px; }
-  .current-loadout-metrics > small { flex-basis:100%; }
+  .current-loadout-metrics, .loadout-comparison .optimizer-metrics { gap:2px 8px; padding:4px 7px; }
 }

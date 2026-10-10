@@ -193,6 +193,10 @@ try {
   assert.ok(customAircraftIds.length > 0);
   assert.ok(customAircraftIds.every(id => id in data.aircraft), 'Custom-only results all have a custom-loadout definition');
   assert.equal(new Set(customAircraftIds).size, customAircraftIds.length, 'Custom-only results contain no duplicate aircraft IDs');
+  if (await page.locator('#calcIndividualWeapons').getAttribute('open') === null) await page.locator('#calcIndividualWeapons > summary').click();
+  await page.locator('#calcSearch').fill('');
+  await page.locator('#calcWeaponList [data-weapon-id]').first().click();
+  assert.equal(await page.locator('.current-loadout-options').isVisible(), false, 'switching to a single weapon hides the previous loadout save/configuration details');
   // A stale CDN response must not be combined with the current calculator.
   const retryPage = await browser.newPage();
   retryPage.on("pageerror", error => errors.push(error.message));

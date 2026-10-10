@@ -11,6 +11,14 @@ const node = (tag, text, className) => {
   return element;
 };
 const format = value => value.toLocaleString(numberLocale(), {maximumFractionDigits: 2});
+const metric = (key, label, value, unit = "") => {
+  const card = node("div", null, "loadout-metric");
+  card.dataset.loadoutMetric = key;
+  const amount = node("div", null, "loadout-metric-value");
+  amount.append(node("strong", value), " ", node("span", unit));
+  card.append(node("span", label, "loadout-metric-label"), amount);
+  return card;
+};
 const colorZone = (element, zone) => element.style.setProperty("--zone-hue", String((205 + (zone - 1) * 137.5) % 360));
 
 export function createLoadoutOptimizer(root, {load, apply}) {
@@ -86,6 +94,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     applyButton.hidden = !next.preset;
     retry.hidden = next.searching || ["optimal", "infeasible", "invalid"].includes(next.status);
     if (!next.preset) {
+      output.append(status);
       if (next.reason === "invalid_target_count") {
         status.textContent = t("optimizer.targetInvalid", "请输入正整数战区数量。");
         output.append(contextNote, actions); return;
@@ -104,28 +113,33 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     }
     status.textContent = next.searching ? t("optimizer-ui.optimizing", "继续优化中…") : next.status === "optimal" ? t("optimizer-ui.recommendedLoadout", "推荐配置") : t("optimizer-ui.availableConfiguration", "可用配置");
     const metrics = node("div", null, "optimizer-metrics");
-    metrics.append(contextNote);
+    const heading = node("div", null, "loadout-metrics-heading");
+    heading.append(node("strong", t("optimizer.recommendedStores", "推荐挂载")));
+    heading.append(stateLabel);
+    if (mode === "global_sim_score") heading.append(node("span", targetName(next.targetId), "loadout-metrics-target"));
+    const grid = node("div", null, "loadout-metric-grid");
+    metrics.append(heading, grid, contextNote);
     if (scoreMode()) {
-      metrics.append(node("strong", t("simScore.recommendedScore", "全挂载预计 {{score}} 分", {score: format(next.score)})));
+      grid.append(metric("score", t("loadoutMetrics.score", "预计得分"), format(next.score), t("loadoutMetrics.scoreUnit", "分")));
       if (mode === "global_sim_score") {
-        metrics.append(node("span", targetName(next.targetId)));
         const comparison = node("ul", null, "global-score-comparison");
         for (const row of next.comparisons || []) comparison.append(node("li", `${targetName(row.targetId)} · ${Number.isFinite(row.score) ? format(row.score) : t("simScore.unavailable", "暂无估算")}`));
         explanation.append(comparison);
       }
     } else {
       if (mode === "custom_targets") {
-        metrics.append(node("strong", t("optimizer.customSummary", "目标 {{requested}} 区 · 本次覆盖 {{covered}} 区", {requested: next.requestedTargets, covered: next.targets})));
+        grid.append(metric("targets", t("loadoutMetrics.coverage", "理论可收战区"), format(next.targets), t("loadoutMetrics.basesUnit", "个")));
+        metrics.append(node("p", t("optimizer.customSummary", "目标 {{requested}} 区 · 本次覆盖 {{covered}} 区", {requested: next.requestedTargets, covered: next.targets}), "loadout-metrics-note"));
         metrics.append(node("span", next.targetReached ? t("optimizer.targetReached", "可达 · 1 次出击") : next.coverageProven && !next.unknown ? t("optimizer.targetUnreachable", "单次不可达 · 最高 {{count}} 区", {count: next.targets}) : t("optimizer.targetUnproved", "已确认 {{count}} 区 · 目标可达性待确认", {count: next.targets})));
         if (!next.targetReached) metrics.append(node("span", t("optimizer.repeatSorties", "按同挂载重复：预计 {{count}} 次出击", {count: next.estimatedSorties})));
-      } else metrics.append(node("strong", t("optimizer-ui.bases", "理论可收 {{v0}} 个战区", {v0: next.targets})));
-      metrics.append(node("span", t("optimizer.recommendedReward", "收益系数 {{value}}", {value: format(next.reward)})));
+      } else grid.append(metric("targets", t("loadoutMetrics.coverage", "理论可收战区"), format(next.targets), t("loadoutMetrics.basesUnit", "个")));
+      grid.append(metric("reward", t("loadoutMetrics.reward", "收益系数"), format(next.reward)));
     }
     const scoreScenario = mode === "global_sim_score" ? next.scenario : context.scenario;
     const estimated = scoreMode() ? next.estimate : empiricalSimScore({...scoreScenario,carried:next.preset.weapons,weapons:context.weapons,reward:context.reward});
-    if (!scoreMode() && Number.isFinite(estimated?.totalScore)) metrics.append(node("span", t("simScore.recommendedScore", "全挂载预计 {{score}} 分", {score:format(estimated.totalScore)})));
+    if (!scoreMode()) grid.append(metric("score", t("loadoutMetrics.score", "预计得分"), Number.isFinite(estimated?.totalScore) ? format(estimated.totalScore) : "—", t("loadoutMetrics.scoreUnit", "分")));
     const sortieHp = scoreScenario?.destructionThreshold || scoreScenario?.remainingHp;
-    if (sortieHp > 0 && next.damage > 0) metrics.append(node("span", t("optimizer.sorties", "预计 {{count}} 次出击", {count:Math.ceil(sortieHp / next.damage)})));
+    grid.append(metric("sorties", t("loadoutMetrics.sorties", "预计出击"), sortieHp > 0 && next.damage > 0 ? format(Math.ceil(sortieHp / next.damage)) : "—", t("loadoutMetrics.sortiesUnit", "次")));
     if (scoreMode()) explanation.append(node("p", mode === "global_sim_score" ? t("simScore.globalHelp") : t("simScore.moduleEstimate", "按模块剩余 HP 封顶的经验估算；假设全部命中、燃烧完成，不计回血。"), "optimizer-note"));
     if (filters.noGuided) explanation.append(node("p", t("optimizer.unguidedHelp", "“不使用制导”仅自动选择明确非制导的弹药；未知分类不参与。手动锁定冲突会提示并保留。"), "optimizer-note"));
     const conflicts = next.preset.weapons.filter(([id]) => recommendationWeaponExcluded(context.weapons.get(id), filters));
@@ -151,7 +165,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     const row = node("div", null, "loadout-row optimizer-preset-row");
     row.dataset.optimizerPreset = "";
     const label = node("span", null, "loadout-row-name");
-    label.append(node("small", t("optimizer.recommendedStores", "推荐挂载")), stateLabel, actions, node("strong", describe(next.preset.weapons)));
+    label.append(actions, node("strong", describe(next.preset.weapons)));
     const diagram = presetDiagram(next.preset, context.weapons);
     const allocations = presetZoneAllocations(next.preset, next.plan);
     [...diagram.children].forEach((slot, index) => {
@@ -176,7 +190,8 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     const recommended = node("div", null, "recommended-slot-area");
     recommended.append(diagram);
     row.append(label, recommended); stores.append(row);
-    output.append(metrics, stores);
+    metrics.append(status, ...output.childNodes);
+    output.append(stores, metrics);
     const plan = node("section", null, "optimizer-plan");
     plan.append(node("h4", scoreMode() ? t("simScore.sortiePlan", "本轮投放方案") : t("optimizer.deliveryPlan", "逐战区投放")));
     const zones = node("ol", null, "optimizer-zone-plan");
@@ -257,6 +272,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     stateLabel.textContent = t("optimizer.notApplied", "尚未应用的推荐");
     contextNote.textContent = mode === "global_sim_score" ? t("simScore.globalContext", "每次出击1个满血目标 · 机场排除制导") : next.lockedKeys.length ? t("optimizer-ui.keepingSelectedStations", "保留已选 {{v0}} 个挂点", {v0: next.lockedKeys.length}) : "";
     status.textContent = t("optimizer-ui.calculating", "计算中…");
+    output.append(status, contextNote);
     const id = generation;
     timer = setTimeout(() => start(id, timeLimit), 300);
   }
@@ -340,15 +356,17 @@ export function createSimScoreEstimator(root, {changeRoomBr, changeScenario, sum
     const actual = full && empiricalSimScore({...current, carried: context.carried, delivered, weapons: context.weapons, reward: context.reward});
     if (!full || !actual) {
       root.dataset.coverage = "unavailable";
-      summary.textContent = t("simScore.unavailable", "暂无估算");
+      const unavailable = metric("score", t("loadoutMetrics.score", "预计得分"), "—", t("loadoutMetrics.scoreUnit", "分"));
+      summary.append(...unavailable.childNodes, node("small", t("simScore.unavailable", "暂无估算")));
       return;
     }
     root.dataset.coverage = actual.coverage;
     root.dataset.confidence = actual.confidence;
-    const fullScore = node("strong", format(full.score));
+    const scoreCard = metric("score", full.scoreKind === "damage_only"
+      ? t("simScore.estimatedDamage", "预计轰炸得分") : t("loadoutMetrics.score", "预计得分"), format(full.score), t("loadoutMetrics.scoreUnit", "分"));
+    const fullScore = scoreCard.querySelector("strong");
     fullScore.dataset.simScoreFull = "";
-    summary.append(node("span", full.scoreKind === "damage_only"
-      ? t("simScore.estimatedDamage", "预计轰炸得分") : t("simScore.estimatedScore", "预计得分")), fullScore);
+    summary.append(...scoreCard.childNodes);
     const stats = node("dl", null, "reward-stats");
     const row = node("div"), deliveredScore = node("dd", format(actual.score));
     deliveredScore.dataset.simScoreDeliveredScore = "";

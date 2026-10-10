@@ -809,7 +809,7 @@
   "optimizer.currentStores": "目前掛載",
   "optimizer.zoneShare": "{{zone}}區 ×{{count}}",
   "optimizer.spareShare": "餘 ×{{count}}",
-  "currentLoadout.clear": "清空掛載",
+  "currentLoadout.clear": "清空目前掛載",
   "currentLoadout.empty": "未掛載",
   "currentLoadout.save": "儲存目前掛載",
   "currentLoadout.saveDetails": "儲存與配置詳情",
@@ -883,5 +883,14 @@
   "simScore.target.airport_dwelling": "機場生活區",
   "simScore.target.airport_storage": "機場油庫 / 儲存區",
   "simScore.target.airport_parking": "機場停機 / 維修區",
-  "simScore.target.airport_airfield": "機場跑道"
+  "simScore.target.airport_airfield": "機場跑道",
+  "loadoutMetrics.sorties": "預計出擊",
+  "loadoutMetrics.score": "預計得分",
+  "loadoutMetrics.reward": "收益係數",
+  "loadoutMetrics.required": "所需枚數",
+  "loadoutMetrics.coverage": "理論可收戰區",
+  "loadoutMetrics.scoreUnit": "分",
+  "loadoutMetrics.sortiesUnit": "次",
+  "loadoutMetrics.weaponsUnit": "枚",
+  "loadoutMetrics.basesUnit": "個"
 }

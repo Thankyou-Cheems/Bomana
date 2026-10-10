@@ -68,7 +68,7 @@ try {
   }
   await page.locator('[data-optimizer-mode="targets"]').click();
   await waitResult();
-  assert.match(await page.locator(".optimizer-metrics").textContent(), /可收 \d+ 个战区/);
+  assert.match(await page.locator('.optimizer-metrics [data-loadout-metric="targets"]').textContent(), /理论可收战区\d+ 个/);
   // Retain a user's guided bomb while filling the remaining points and its pod.
   await page.locator("#calcAircraftSearch").fill("a_10c");
   await page.locator('[data-aircraft-id="a_10c"]').click();
@@ -113,7 +113,7 @@ try {
     assert.equal(await page.locator(`[data-optimizer-mode="${mode}"]`).isVisible(), false);
   }
   await waitResult();
-  assert.match(await page.locator("[data-optimizer-result]").textContent(), /全挂载预计.*分/);
+  assert.match(await page.locator('.optimizer-metrics [data-loadout-metric="score"]').textContent(), /预计得分.*分/);
   await page.locator('#calcTargetSegments [data-value="bombing_point_planes"]').click();
   await page.locator('[data-optimizer-mode="reward"]').click();
   await page.locator('#calcBrSegments [role="radio"]').first().click();

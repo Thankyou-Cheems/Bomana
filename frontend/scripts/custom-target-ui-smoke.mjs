@@ -73,12 +73,12 @@ try {
  assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-state'),'infeasible','Tu-4 has no guided preset');
  await page.locator('[data-optimizer-unguided-only]').click();await wait();
  await page.locator('#calcTargetSegments [data-value="airport_airfield"]').click();await wait();
- assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-objective'),'sim_score');assert.match(await text(),/全挂载预计/);
+ assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-objective'),'sim_score');assert.match(await page.locator('.optimizer-metrics [data-loadout-metric="score"]').textContent(),/预计得分.*分/);
  await page.locator('#calcTargetSegments [data-value="airport_storage"]').click();
  await page.locator('#calcTargetSegments [data-value="airport_dwelling"]').click();await wait();
  assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-objective'),'sim_score');
  await page.locator('#simScoreEstimator > summary').click();await page.locator('[data-sim-score-hp]').fill('10');await wait();
- const lowScore=await text();assert.match(lowScore,/全挂载预计/);
+ const lowScore=await text();assert.match(lowScore,/预计得分/);
  await page.locator('[data-sim-score-hp]').fill('100');await wait();assert.notEqual(await text(),lowScore,'Remaining module HP changes the single-strike score recommendation');
  await page.locator('#calcTargetSegments [data-value="bombing_point_planes"]').click();await wait();
  assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-objective'),'custom_targets','Return restores the selected base objective');

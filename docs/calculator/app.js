@@ -148,7 +148,7 @@ function loadCustomRules() {
     return body;
   }).catch(error => { customRequest = null; throw error; });
 }
-const customEditor = createCustomLoadoutEditor(document.querySelector("#customLoadoutEditor"), {
+const customEditor = createCustomLoadoutEditor(document.querySelector(".hangar-hud"), {
   preview: snapshot => { customPreview = snapshot; selectedPresetId = snapshot.preset.id === "draft" ? "" : snapshot.preset.id; renderPresets(); refreshResult(); },
   load: loadCustomRules,
   apply: (unitId, preset, select) => {
@@ -819,7 +819,7 @@ function appendStat(label, value, key) {
   if (key === "reward") {
     document.querySelector("#calcRewardCard").hidden = false;
     document.querySelector("#calcRewardCount").textContent = value;
-    document.querySelector("#calcRewardLabel").textContent = t("optimizer.coefficient", "收益系数");
+    document.querySelector("#calcRewardLabel").textContent = t("loadoutMetrics.reward", "收益系数");
     return;
   }
   const term = document.createElement("dt");
@@ -1100,7 +1100,7 @@ function refreshFuel() {
 
 function refreshResult() {
   if (!catalog) return;
-  document.querySelector("#calcRewardCard").hidden = true;
+  document.querySelector("#calcRewardCount").textContent = "—";
   const preset = customPreview?.preset || selectedPreset();
   const usesLoadoutRounds = Boolean(preset && (preset.customName || preset.weapons.length > 1));
   document.querySelector(".hangar-result-primary").dataset.quantity = usesLoadoutRounds ? "sorties" : "weapons";
@@ -1162,7 +1162,7 @@ function refreshResult() {
     const rounds = requiredCount(target.has_fire ? hp * (1 - target.fireMultiplier) : hp, damage);
     hudContext.textContent = context;
     destroyCountEl.textContent = String(rounds);
-    destroyLabelEl.textContent = rounds < fullRounds ? t("app.burnOutThresholdLoads", "次出击才能触发战区自毁", {count: rounds}) : t("app.directDestructionLoads", "次出击才能直接摧毁目标", {count: rounds});
+    destroyLabelEl.textContent = `${formatInt(rounds)} ${rounds < fullRounds ? t("app.burnOutThresholdLoads", "次出击才能触发战区自毁", {count: rounds}) : t("app.directDestructionLoads", "次出击才能直接摧毁目标", {count: rounds})}`;
     sortieCountEl.textContent = String(rounds);
     fireLineEl.textContent = [t("app.eachRoundReleasesOneCompleteLoadout", "每次均携带整套挂载并全部命中"), rounds < fullRounds ? t("app.completeLoadsForDirectDestruction", "直接摧毁满血目标需 {{v0}} 次出击", {v0: fullRounds, count: fullRounds}) : ""].filter(Boolean).join(" · ");
     statsEl.replaceChildren();
@@ -1197,9 +1197,9 @@ function refreshResult() {
   const practicalCount = fireCount === null ? destroyCount : Math.min(destroyCount, fireCount);
   hudContext.textContent = context;
   destroyCountEl.textContent = String(practicalCount);
-  destroyLabelEl.textContent = target.kind === "airport_module"
+  destroyLabelEl.textContent = `${formatInt(practicalCount)} ${target.kind === "airport_module"
     ? t("app.effectiveHitsExcludingRegeneration", "枚有效命中可摧毁机场模块（未计回血）")
-    : fireCount !== null && fireCount < destroyCount ? t("app.baseBurnOut", "枚全部命中，可触发战区自毁") : t("app.directDestruction", "枚全部命中，可直接摧毁目标");
+    : fireCount !== null && fireCount < destroyCount ? t("app.baseBurnOut", "枚全部命中，可触发战区自毁") : t("app.directDestruction", "枚全部命中，可直接摧毁目标")}`;
   fireLineEl.textContent = fireCount !== null && fireCount < destroyCount
     ? t("app.weaponsForDirectDestructionFromFullHp", "满血直接摧毁需{{v0}}枚", {v0: destroyCount})
     : "";

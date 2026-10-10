@@ -1227,7 +1227,8 @@ export class PublicRuntime {
     if (!this._edition.capabilities.zoneNavigation && !this._edition.capabilities.airfieldNavigation) return null;
     const scale = parseMapScale(frame.mapInfo);
     const player = map.player;
-    if (!player) return Object.freeze({ player: null, mapScaleM: scale, items: [], target: null, selectionMode: this._navigationSelectionMode });
+    const groundTargets = map.groundTargets ? { groundTargets: Object.freeze(map.groundTargets) } : {};
+    if (!player) return Object.freeze({ ...groundTargets, player: null, mapScaleM: scale, items: [], target: null, selectionMode: this._navigationSelectionMode });
     const items = this._navigationObjects(map).filter(item => this._navigationAllowed(item)).map(item => {
       const { distanceKm, bearingDeg } = bearingDistance(player.x, player.y, item.x, item.y, scale);
       return this._decorateNavigation(Object.freeze({ ...item, distanceKm, bearingDeg,
@@ -1236,7 +1237,7 @@ export class PublicRuntime {
     const target = this._selectNavigationTarget(items, frame);
     this._automaticNavigationTargetId = target?.id ?? null;
     this._navigationTargetUpdated(target);
-    return Object.freeze({ player: Object.freeze({ x: player.x, y: player.y }), mapScaleM: scale,
+    return Object.freeze({ ...groundTargets, player: Object.freeze({ x: player.x, y: player.y }), mapScaleM: scale,
       ...(this._edition.capabilities.aircraftObservations ? { aircraftObservations: Object.freeze(map.objects.filter(item => item.aircraft).map(item => {
         const { distanceKm, bearingDeg } = bearingDistance(player.x, player.y, item.x, item.y, scale);
         return Object.freeze({ ...item, distanceKm, bearingDeg, relativeDeg: normalizeAngle(bearingDeg - headingDeg), selected: false });

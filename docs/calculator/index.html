@@ -126,24 +126,24 @@
                 </div>
               </fieldset>
             </div>
-            <div class="loadout-comparison"><div class="current-loadout-block"><div class="current-loadout-metrics"><small data-i18n="optimizer.currentStores">当前挂载</small><div class="hangar-result-grid">
-                <div class="hangar-result-primary">
-                  <strong id="calcDestroyCount">—</strong>
-                  <span id="calcDestroyLabel"><span data-i18n="page.weaponsRequired">所需枚数</span></span>
+            <div class="loadout-comparison"><div class="current-loadout-block"><div class="current-loadout-metrics"><div class="loadout-metrics-heading"><strong data-i18n="optimizer.currentStores">当前挂载</strong></div><div class="loadout-metric-grid"><div class="hangar-result-grid">
+                <div class="hangar-result-primary loadout-metric" data-loadout-metric="required">
+                  <span class="loadout-metric-label" data-i18n="loadoutMetrics.required">所需枚数</span>
+                  <div class="loadout-metric-value"><strong id="calcDestroyCount">—</strong> <span data-i18n="loadoutMetrics.weaponsUnit">枚</span></div>
                 </div>
-                <div class="hangar-sorties" id="calcSortieCard">
-                  <strong id="calcSortieCount">—</strong>
-                  <span><span data-i18n="page.estimatedSorties">次出击（按当前挂载估算）</span></span>
+                <div class="hangar-sorties loadout-metric" id="calcSortieCard" data-loadout-metric="sorties">
+                  <span class="loadout-metric-label" data-i18n="loadoutMetrics.sorties">预计出击</span>
+                  <div class="loadout-metric-value"><strong id="calcSortieCount">—</strong> <span data-i18n="loadoutMetrics.sortiesUnit">次</span></div>
                 </div>
               </div>
-              <div class="loadout-reward" id="calcRewardCard" hidden><strong id="calcRewardCount"></strong><span id="calcRewardLabel"></span></div>
-              <div class="loadout-score" id="calcScoreSummary"><span data-i18n="simScore.unavailable">暂无估算</span></div>
+              <div class="loadout-reward loadout-metric" id="calcRewardCard" data-loadout-metric="reward"><span class="loadout-metric-label" id="calcRewardLabel" data-i18n="loadoutMetrics.reward">收益系数</span><div class="loadout-metric-value"><strong id="calcRewardCount">—</strong></div></div>
+              <div class="loadout-score loadout-metric" id="calcScoreSummary" data-loadout-metric="score"><span class="loadout-metric-label" data-i18n="loadoutMetrics.score">预计得分</span><div class="loadout-metric-value"><strong>—</strong> <span data-i18n="loadoutMetrics.scoreUnit">分</span></div></div>
+              </div><p class="loadout-metrics-note" id="calcDestroyLabel"><span data-i18n="page.weaponsRequired">所需枚数</span></p>
             </div><div id="calcPresetDetail" hidden>
                 <div class="loadout-row current-preset-row">
                   <div class="loadout-row-name">
-                    <small data-i18n="optimizer.currentStores">当前挂载</small>
+                    <button type="button" class="current-loadout-clear" data-custom-new data-i18n="currentLoadout.clear">清空当前挂载</button>
                     <h2 id="calcPresetTitle"></h2>
-                    <button type="button" class="current-loadout-clear" data-custom-new data-i18n="currentLoadout.clear">清空挂载</button>
                     <p class="tool-note" id="calcPresetNote"></p>
                   </div>
                   <div class="current-slot-area">
@@ -154,14 +154,6 @@
                         <div class="custom-slots" data-custom-slots aria-label="机型挂点" data-i18n-aria-label="page.aircraftStations"></div>
                         <ul class="custom-errors" data-custom-errors></ul>
                         <button type="button" class="custom-dependency-button" data-custom-dependencies hidden><span data-i18n="page.addRequiredEquipmentReplaceOccupiedStations">补齐必需装备（替换占用挂点）</span></button>
-                        <details class="current-loadout-options"><summary data-i18n="currentLoadout.saveDetails">保存与配置详情</summary>
-                          <dl class="custom-mass" data-custom-mass></dl>
-                          <p class="custom-total" data-custom-total></p>
-                          <div class="custom-save-bar"><label><span class="sr-only"><span data-i18n="page.loadoutName">挂载名称</span></span><input type="text" maxlength="40" data-custom-name placeholder="挂载名称，例如：炸点 + 制导弹" data-i18n-placeholder="page.loadoutNameEGBaseGuidedWeapons"></label><button type="button" class="custom-save-button" data-custom-save disabled><span data-i18n="currentLoadout.save">保存当前挂载</span></button></div>
-                          <p class="tool-note" data-custom-notice aria-live="polite"></p>
-                          <details class="custom-saved"><summary><span data-i18n="page.myLoadouts">我的挂载</span> <span data-custom-saved-count>0</span></summary><div data-custom-saved></div><p class="tool-note"><span data-i18n="page.upTo20PerAircraftSavedInThisBrowser">每机最多 20 套，保存在此浏览器。</span></p></details>
-                          <details class="custom-requirements"><summary><span data-i18n="page.modificationsUnlocks">改装与解锁要求</span></summary><p data-custom-requirements></p></details>
-                        </details>
                       </div>
                       <dialog class="custom-picker" data-custom-picker aria-labelledby="customPickerTitle" aria-describedby="customPickerHelp">
                         <div class="custom-picker-head"><div><p data-custom-picker-aircraft></p><h3 id="customPickerTitle" data-custom-picker-title><span data-i18n="page.selectStores">选择挂载</span></h3></div><button type="button" class="custom-picker-close" data-custom-picker-close aria-label="关闭挂点选择" data-i18n-aria-label="page.closeStationPicker">×</button></div>
@@ -180,6 +172,14 @@
             <details class="optimizer-explanation"><summary><span data-i18n="page.howRecommendationsWork">推荐依据</span></summary><small data-optimizer-priority-help></small><div data-optimizer-explanation></div><p class="optimizer-filter-help" data-i18n="optimizer.guidedOnlyHelp">自动推荐只选明确制导的弹药；类别开关仍生效，手动固定挂点及配套吊舱保留，冲突时会提示。</p><p class="optimizer-filter-help" data-i18n="optimizer.guidanceHelp">三段选择同步类别开关，手改开关同步上方选择。多模弹药允许一种制导即可；手动指令制导指持续操纵弹药，未知类别不绕过排除。</p><p class="optimizer-filter-help" data-i18n="optimizer.allowedStoresHelp">亮起表示允许，点按即可排除；手动选好的挂点会保留。</p><p><span data-i18n="page.assignsWholeWeaponsToTheBaseBurnOutThreshold">按战区掉血自毁线分配完整弹药，火箭弹精确到枚。最多战区模式先保证目标数量；高收益同档先比较制导操作与投放枚数，再减少投放类型、弹种、多余伤害与载荷。手选挂点及配套要求会保留。</span></p><p><span data-i18n="page.theCoefficientIsNotAnActualSlOrRp">收益系数不等于实际银狮或研发点。仅校验客户端静态配装规则，改装与武器仍需在游戏中解锁。</span></p></details>
           </section>
 
+              <details class="current-loadout-options"><summary data-i18n="currentLoadout.saveDetails">保存与配置详情</summary>
+                <dl class="custom-mass" data-custom-mass></dl>
+                <p class="custom-total" data-custom-total></p>
+                <div class="custom-save-bar"><label><span class="sr-only"><span data-i18n="page.loadoutName">挂载名称</span></span><input type="text" maxlength="40" data-custom-name placeholder="挂载名称，例如：炸点 + 制导弹" data-i18n-placeholder="page.loadoutNameEGBaseGuidedWeapons"></label><button type="button" class="custom-save-button" data-custom-save disabled><span data-i18n="currentLoadout.save">保存当前挂载</span></button></div>
+                <p class="tool-note" data-custom-notice aria-live="polite"></p>
+                <details class="custom-saved"><summary><span data-i18n="page.myLoadouts">我的挂载</span> <span data-custom-saved-count>0</span></summary><div data-custom-saved></div><p class="tool-note"><span data-i18n="page.upTo20PerAircraftSavedInThisBrowser">每机最多 20 套，保存在此浏览器。</span></p></details>
+                <details class="custom-requirements"><summary><span data-i18n="page.modificationsUnlocks">改装与解锁要求</span></summary><p data-custom-requirements></p></details>
+              </details>
               <details class="loadout-analysis"><summary data-i18n="optimizer.damageDetails">伤害明细</summary><div class="loadout-analysis-content"><dl class="preset-stats" id="calcPresetStats"></dl><dl class="hangar-stats" id="calcStats"></dl><p class="hangar-fire" id="calcFireLine"></p><p class="hangar-hud-context" id="calcHudContext"><span data-i18n="page.readingCatalog">正在读取目录…</span></p></div></details>
             </div>
             <p class="hangar-hint" id="calcHint"><span data-i18n="page.selectAWeaponForResultsThenAnAircraftFor">选择武器后显示结果；再选机型可计算挂载上限与架次。</span></p>
