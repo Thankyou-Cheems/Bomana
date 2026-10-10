@@ -586,8 +586,8 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .optimizer-filter-grid strong { font-size:11px; font-weight:650; }
 .optimizer-filter-grid small { font-size:10px; }
 .optimizer-filter-grid button[aria-checked=true] small { color:#347662; }
-.optimizer-priority { --priority-index:0; display:grid; position:relative; grid-template-columns:repeat(3,minmax(0,1fr)); width:344px; max-width:100%; min-width:0; padding:2px; border-radius:8px; background:#e5eef4; isolation:isolate; }
-.optimizer-priority-thumb { display:block; position:absolute; z-index:-1; top:2px; bottom:2px; left:2px; width:calc((100% - 4px) / 3); border:1px solid #ddc270; border-radius:6px; background:#fff0b8; box-shadow:0 1px 3px #8b7b3920; transform:translateX(calc(var(--priority-index) * 100%)); transition:transform .18s ease; }
+.optimizer-priority { --priority-index:0; display:grid; position:relative; grid-template-columns:repeat(4,minmax(0,1fr)); width:440px; max-width:100%; min-width:0; padding:2px; border-radius:8px; background:#e5eef4; isolation:isolate; }
+.optimizer-priority-thumb { display:block; position:absolute; z-index:-1; top:2px; bottom:2px; left:2px; width:calc((100% - 4px) / 4); border:1px solid #ddc270; border-radius:6px; background:#fff0b8; box-shadow:0 1px 3px #8b7b3920; transform:translateX(calc(var(--priority-index) * 100%)); transition:transform .18s ease; }
 .optimizer-priority label { display:grid; place-items:center; min-width:0; min-height:26px; padding:4px 6px; border-radius:6px; color:#55778b; font-size:11px; text-align:center; line-height:1.35; cursor:pointer; }
 .optimizer-priority label:has(input:checked) { color:#715513; font-weight:700; }
 .optimizer-priority label:has(input:focus-visible) { outline:2px solid #258dbd; outline-offset:-2px; }
@@ -772,10 +772,6 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .sim-score-delivery span { flex:1 1 180px; }
 .sim-score-delivery input { width:90px; }
 .sim-score-delivery-details button { margin-top:4px; padding:6px 9px; border:1px solid #c6dbe7; border-radius:6px; background:#edf5fa; color:#315f7b; font:inherit; cursor:pointer; }
-.optimizer-panel:is([data-objective="sim_score"],[data-objective="global_sim_score"]) .optimizer-priority { display:none; }
-.optimizer-panel:is([data-objective="sim_score"],[data-objective="global_sim_score"]) .optimizer-heading { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
-.global-score-recommend { padding:6px 10px; margin-bottom:8px; max-width:100%; border:1px solid #78adc3; border-radius:6px; background:#e7f3f8; color:#285d7c; font:inherit; font-weight:650; cursor:pointer; }
-.global-score-recommend[aria-pressed="true"] { background:#285d7c; color:#fff; }
 .optimizer-modes button { min-width:0; overflow-wrap:anywhere; }
 .optimizer-target-controls { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
 .optimizer-target-controls[hidden] { display:none; }
@@ -793,4 +789,38 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-summary .aircraft-toolbar { position:relative; order:1; flex-basis:100%; width:100%; min-width:0; margin:4px 0 0; padding:0; border:0; border-radius:0; background:none; }
 .loadout-summary .aircraft-toolbar .hangar-picker-head { display:none; }
 .calculator-page .loadout-summary .aircraft-toolbar:focus-within .hangar-aircraft-list:not(:has(.hangar-weapon-empty)) { top:100%; }
-@media (max-width:560px) { .optimizer-panel:is([data-objective="sim_score"],[data-objective="global_sim_score"]) .optimizer-heading { grid-template-columns:minmax(0,1fr); } }
+.tool-nav-group { display:grid; gap:3px; padding:5px; border:1px solid #c9dce8; border-radius:10px; background:#eaf3f9; }
+.tool-nav-group + .tool-nav-group { margin-top:7px; }
+.tool-nav-group .tool-nav-category { display:block; margin:0 4px 3px; padding:5px 4px 7px; border-bottom:1px solid #c1d7e5; color:#395e76; font-size:11px; font-weight:750; }
+.tool-directory .tool-nav-group a { background:#f8fcff; }
+.tool-directory .tool-nav-group a:hover { background:#dceef9; }
+.loadout-workspace .optimizer-panel { width:100%; min-width:0; border:0; }
+.loadout-summary > .optimizer-panel { order:2; flex-basis:100%; }
+.optimizer-panel[data-available=false] > :not(.loadout-comparison), .optimizer-panel[data-available=false] .loadout-comparison > :not(.current-loadout-block) { display:none; }
+.loadout-comparison { min-width:0; display:grid; gap:0; overflow:hidden; border:1px solid #bdd5e2; border-radius:10px; }
+.current-loadout-block { min-width:0; background:#eaf5fc; border-bottom:1px solid #bdd5e2; }
+.current-loadout-metrics { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 14px; padding:9px 12px; }
+.current-loadout-metrics > small { color:#24789b; font-size:12px; font-weight:750; }
+.current-loadout-metrics .hangar-result-grid { gap:5px 12px; }
+.current-loadout-block .hangar-result-primary[data-quantity=sorties] { display:none; }
+.current-loadout-metrics .hangar-result-primary strong, .current-loadout-metrics .hangar-sorties strong, .current-loadout-metrics .loadout-reward strong, .current-loadout-metrics .loadout-score strong { font-size:17px; }
+.loadout-summary .loadout-comparison #calcPresetDetail { margin:0; padding:0; border:0; border-radius:0; background:inherit; }
+.loadout-comparison [data-optimizer-result] { min-width:0; background:#fff9e8; }
+.loadout-comparison .optimizer-stores { overflow-x:auto; }
+.loadout-comparison .optimizer-preset-row { background:#fff9e8; cursor:default; box-shadow:inset 4px 0 #e5b82b; }
+.recommended-slot-area { min-width:0; padding:6px; }
+.loadout-comparison .optimizer-metrics { justify-content:flex-start; gap:6px 14px; min-height:30px; padding:9px 12px; }
+.loadout-comparison .optimizer-metrics [data-optimizer-context] { flex-basis:100%; order:1; }
+.loadout-workspace .loadout-comparison .optimizer-actions { display:flex; flex-wrap:wrap; margin:5px 0; }
+.loadout-comparison [data-optimizer-apply] { background:#ffdf70; border:1px solid #d5ac34; border-radius:6px; color:#59400c; font-weight:750; }
+.loadout-comparison [data-optimizer-apply]:hover:enabled { background:#ffd34e; }
+.loadout-comparison [data-optimizer-apply]:disabled { opacity:1; background:#f1e7bd; color:#7a7150; }
+.loadout-comparison > .optimizer-actions, .loadout-comparison > .optimizer-note, .loadout-comparison > .optimizer-status { margin:0; padding:5px 12px; background:#fff9e8; }
+.loadout-comparison > .optimizer-note:empty, .loadout-comparison > .optimizer-status:empty { display:none; }
+.loadout-comparison > .recommendation-state { justify-self:start; margin:4px 12px; }
+.loadout-comparison .optimizer-preset-row .recommendation-state { align-self:flex-start; margin-top:4px; }
+@media (max-width:560px) {
+  .optimizer-priority label { padding:5px 3px; overflow-wrap:anywhere; }
+  .current-loadout-metrics { gap:5px 9px; padding:7px 9px; }
+  .current-loadout-metrics > small { flex-basis:100%; }
+}

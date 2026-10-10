@@ -97,7 +97,7 @@ try {
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`${locale} ${width}px overflow`);
    assert.equal(await page.locator('#calcAircraftSearch').count(),1,'The existing search remains unique');
    const [sorties,search,stores]=await Promise.all(['#calcSortieCard','#calcAircraftSearch','#calcPresetDetail'].map(selector=>page.locator(selector).boundingBox()));
-   assert.ok(sorties.y+sorties.height<=search.y&&search.y+search.height<=stores.y,`${locale} ${width}px sortie/search/custom ordering`);
+   assert.ok(search.y+search.height<=sorties.y&&sorties.y+sorties.height<=stores.y,`${locale} ${width}px search/current summary/custom ordering`);
    assert.equal(await page.evaluate(()=>Boolean(document.querySelector('#calcAircraftSearch').compareDocumentPosition(document.querySelector('#customLoadoutEditor'))&Node.DOCUMENT_POSITION_FOLLOWING)),true,'DOM focus order places aircraft search before custom stores');
    await page.locator('.loadout-summary').screenshot({path:`../.artifacts/calculator-ui/aircraft-search-top-${locale}-${width}.png`});
    await page.locator('#loadoutOptimizer').screenshot({path:`../.artifacts/calculator-ui/custom-target-${locale}-${width}.png`});

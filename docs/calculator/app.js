@@ -1102,6 +1102,8 @@ function refreshResult() {
   if (!catalog) return;
   document.querySelector("#calcRewardCard").hidden = true;
   const preset = customPreview?.preset || selectedPreset();
+  const usesLoadoutRounds = Boolean(preset && (preset.customName || preset.weapons.length > 1));
+  document.querySelector(".hangar-result-primary").dataset.quantity = usesLoadoutRounds ? "sorties" : "weapons";
   renderPresetDetail(preset);
   refreshAirportRepair();
   const weapon = selectedWeapon();
@@ -1149,7 +1151,7 @@ function refreshResult() {
     }),
     threshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : null,
     currentStores: preset?.weapons || [], lockedKeys: customPreview?.lockedKeys ?? (preset?.customName ? preset.keys || [] : [])});
-  if (preset && (preset.customName || preset.weapons.length > 1)) {
+  if (usesLoadoutRounds) {
     const hp = targetHp(target, tier);
     const { damage, rewardDamage } = presetTotals(preset, new Map(catalog.weapons.map(row => [row.id, row])));
     if (!(hp > 0) || !(damage > 0)) {

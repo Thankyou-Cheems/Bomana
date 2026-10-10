@@ -121,6 +121,7 @@ export interface GuidedCcrpEstimate {
   readonly minRangeM: number;
   readonly maxRangeM: number;
   readonly timeToWindowS: number;
+  readonly referenceTimeToReleaseS: number;
   readonly remainingS: number | null;
   readonly totalS: number;
 }

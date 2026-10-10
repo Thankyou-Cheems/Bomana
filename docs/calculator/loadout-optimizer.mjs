@@ -341,7 +341,6 @@ export function optimizeLoadout(input, highs, {timeLimit = 20, preparedModel} = 
 }
 
 function optimizeGlobalSimScore(input, highs, timeLimit) {
-  if (!Number.isSafeInteger(input.targetCount ?? 3) || (input.targetCount ?? 3) < 1) return {status:"invalid",reason:"invalid_target_count",objective:"global_sim_score"};
   const scenarios = input.scenarios || [], comparisons = [];
   const deadline = performance.now() + timeLimit * 1000;
   let best;
@@ -367,8 +366,8 @@ function optimizeGlobalSimScore(input, highs, timeLimit) {
   return {...best, status:complete ? "optimal" : "feasible", scoreUpper:upper, comparisons};
 }
 
-// Whole-projectile allocation to independent full-health bases. Score credit
-// is capped separately from native HP; only native damage can trigger a kill.
+// One full-health base per sortie. Score credit is capped separately from
+// native HP; only native damage can trigger a kill.
 function optimizeBaseSortieScore(input, highs, timeLimit) {
   const {definition, weapons, reward, scenario} = input;
   const hp = scenario.targetFullHp, threshold = scenario.destructionThreshold;
@@ -380,13 +379,7 @@ function optimizeBaseSortieScore(input, highs, timeLimit) {
   if (!eligible.length) return {status:"infeasible",unknown:model.unknown};
   const suppliedIds = new Set(eligible.flatMap(row => row.weapons.map(([id]) => id)));
   for (const id of model.supplies.keys()) if (!suppliedIds.has(id)) model.supplies.delete(id);
-  const weight = option => option.weapons.reduce((sum,[id,n]) => sum + n * Math.max(Math.min(weapons.get(id).dmg / threshold,1),Math.min(simScoreDamageOf(weapons.get(id)) / hp,1)),0);
-  // Every destroyed base consumes weight >= 1. Two partial targets that
-  // cannot be merged without losing score consume combined weight >= 1.
-  // Thus 2 * total weight + 1 safely bounds a score-maximizing allocation.
-  const maximumWeight = definition ? [...new Set(eligible.map(row=>row.tier))].reduce((sum,tier)=>sum+Math.max(...eligible.filter(row=>row.tier===tier).map(weight)),0)
-    : Math.max(...eligible.map(weight));
-  const targetCount = Math.min(input.targetCount ?? 3,Math.max(1,Math.ceil(2 * maximumWeight + 1)));
+  const targetCount = 1;
   const globalMultiplierUpper = Math.max(...[0,reward.preset_dmg_min,...reward.piecewise_linear.map(([x])=>x)].map(value=>rewardUi(reward,value)/reward.ui_decoration));
   const universalUpper = simScoreDamageScale * hp * 1.5 * targetCount * globalMultiplierUpper;
   const allocation = [], credit = [], integers = [], binaries = [...model.binaries], bounds = [...model.bounds];

@@ -29,7 +29,7 @@ try {
   };
   const applyRecommendation = async () => {
     const apply = page.locator('[data-optimizer-apply]');
-    if (await apply.isEnabled()) await page.locator('[data-optimizer-preset]').click();
+    if (await apply.isEnabled()) await apply.click();
     assert.equal(await page.locator('#loadoutOptimizer').getAttribute('data-applied'), 'true', 'The recommendation is the current loadout');
   };
   await waitResult();
@@ -90,6 +90,7 @@ try {
   assert.equal(await page.locator("#calcSortieCount").textContent(), "1");
   await waitResult();
   await mkdir("../.artifacts/calculator-ui", {recursive:true});
+  await page.locator('.optimizer-explanation > summary').click();
   for (const width of [1440,390,320]) {
     await page.setViewportSize({width,height:1050});
     await page.locator("#loadoutOptimizer").screenshot({path:`../.artifacts/calculator-ui/optimizer-${width}.png`,style:"bomana-site-header {visibility:hidden;}"});
@@ -98,7 +99,7 @@ try {
       assert.equal(await page.locator(selector).isVisible(), true, `${width}: ${selector} remains usable`);
     }
     if (width === 1440) {
-      const summary = await Promise.all(['.hangar-result-primary','.hangar-sorties','.loadout-reward'].map(selector => page.locator(selector).boundingBox()));
+      const summary = await Promise.all(['.hangar-sorties','.loadout-reward','.loadout-score'].map(selector => page.locator(selector).boundingBox()));
       assert.ok(summary.every(box => Math.abs(box.y - summary[0].y) < 20), 'key settlement values share one horizontal strip');
     }
     assert.equal(await page.locator('.optimizer-zone-plan > [data-plan-zone="1"]').isVisible(), true);

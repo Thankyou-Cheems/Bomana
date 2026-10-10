@@ -16,6 +16,7 @@ const colorZone = (element, zone) => element.style.setProperty("--zone-hue", Str
 export function createLoadoutOptimizer(root, {load, apply}) {
   let context, mode = "reward", baseMode = "reward", targetCount = 3, signature = "", generation = 0, timer, worker, workerBusy = false, workerContextKey = "", result, names = {};
   let currentDefinition;
+  let displayedStores = "";
   let filters = {onlyGuided: false, noGuided: false, noHighDrag: false, noRockets: false, noMissiles: false, noLaser: false, noOptical: false, noSatellite: false, noManual: false, simpleLoadout: false, strictReward: false, rewardTolerance: .2};
   const storageKey = "bomana:calculator:optimizerFilters";
   try {
@@ -31,6 +32,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
   const applyButton = root.querySelector("[data-optimizer-apply]");
   const retry = root.querySelector("[data-optimizer-retry]");
   const actions = root.querySelector(".optimizer-actions");
+  const stateLabel = root.querySelector("[data-optimizer-state-label]");
   const countInput = root.querySelector("[data-optimizer-target-count]");
   const describe = items => storesTitle(items, context.weapons, names);
   const scoreMode = () => ["sim_score", "global_sim_score"].includes(mode);
@@ -46,11 +48,10 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       button.hidden = button.dataset.optimizerMode === "global_sim_score" ? false : context ? button.dataset.optimizerMode === "sim_score" ? Boolean(context.threshold) : !context.threshold : false;
       button.setAttribute("aria-pressed", String(button.dataset.optimizerMode === mode));
     }
-    root.querySelector("[data-optimizer-target-controls]").hidden = !["custom_targets", "global_sim_score"].includes(mode);
-    root.querySelector("[data-optimizer-target-controls] label span").textContent = mode === "global_sim_score" ? t("simScore.availableBases", "可用战区上限") : t("optimizer.targetCount", "目标战区数");
+    root.querySelector("[data-optimizer-target-controls]").hidden = mode !== "custom_targets";
     countInput.setAttribute("aria-invalid", String(!Number.isSafeInteger(targetCount) || targetCount < 1));
     for (const button of root.querySelectorAll("[data-optimizer-target-preset]")) button.setAttribute("aria-pressed", String(Number(button.dataset.optimizerTargetPreset) === targetCount));
-    const priority = filters.simpleLoadout ? "simple" : filters.strictReward ? "reward" : "balanced";
+    const priority = mode === "global_sim_score" ? mode : filters.simpleLoadout ? "simple" : filters.strictReward ? "reward" : "balanced";
     const priorities = [...root.querySelectorAll("[data-optimizer-priority]")];
     for (const control of priorities) control.checked = control.value === priority;
     root.querySelector(".optimizer-priority").style.setProperty("--priority-index", String(priorities.findIndex(control => control.value === priority)));
@@ -68,7 +69,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       : filters.strictReward ? t("optimizer.strictRewardHelp", "优先收益系数；收益完全相同时再选择更简单的挂载。")
         : balancedHelp;
     if (scoreMode()) { root.querySelector("[data-optimizer-priority-help]").textContent = mode === "global_sim_score"
-      ? t("simScore.globalHelp", "比较整架飞机的合法挂载；按上方数量限制可攻击的满血战区，并与单个满血机场模块比较。机场只用明确非制导弹药；当前手选挂点不固定。假设全部命中、燃烧完成，不计回血和机场摧毁奖励。")
+      ? t("simScore.globalHelp", "比较整架飞机的合法挂载；每次出击只攻击1个满血战区，或1个满血机场模块。机场只用明确非制导弹药；当前手选挂点不固定。假设全部命中、燃烧完成，不计回血和机场摧毁奖励。")
       : t("simScore.objectiveHelp", "严格最大化同一目标剩余 HP、房间 BR 下的全挂载预计分数；已找到的同分候选优先减少投放类型、弹种、多余伤害及质量。收益偏好不降低分数目标。"); return; }
     if (!filters.simpleLoadout) root.querySelector("[data-optimizer-priority-help]").textContent += " " + t("optimizer.guidancePreference", "在收益范围内优先卫星导航，光电补足伤害；按实际投放枚数比较操作负担。");
     if (mode === "custom_targets") root.querySelector("[data-optimizer-priority-help]").textContent = t("optimizer.customHelp", "先完成目标数量，再比较实际覆盖数 × 整套挂载收益系数；多余容量不计奖。同收益优先减少冗余伤害、载荷。统一挂载偏好仍生效。") + (!filters.simpleLoadout && !filters.strictReward ? " " + balancedHelp : "");
@@ -78,7 +79,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     result = next; currentDefinition = definition; output.replaceChildren(); explanation.replaceChildren();
     const storesEqual = next.preset && (mode !== "global_sim_score" || next.targetId === context.scenario.targetId && context.scenario.remainingHp === next.scenario.remainingHp) && [...new Set([...next.preset.weapons, ...(context.currentStores || [])].map(([id]) => id))].every(id =>
       next.preset.weapons.filter(([weapon]) => weapon === id).reduce((sum, [,count]) => sum + count, 0) === (context.currentStores || []).filter(([weapon]) => weapon === id).reduce((sum, [,count]) => sum + count, 0));
-    root.querySelector("[data-optimizer-state-label]").textContent = storesEqual ? t("optimizer.currentlyUsed", "当前已使用") : t("optimizer.notApplied", "尚未应用的推荐");
+    stateLabel.textContent = storesEqual ? t("optimizer.currentlyUsed", "当前已使用") : t("optimizer.notApplied", "尚未应用的推荐");
     root.dataset.applied = String(Boolean(storesEqual));
     applyButton.disabled = Boolean(storesEqual);
     root.dataset.state = next.searching ? "searching" : next.status;
@@ -120,8 +121,11 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       } else metrics.append(node("strong", t("optimizer-ui.bases", "理论可收 {{v0}} 个战区", {v0: next.targets})));
       metrics.append(node("span", t("optimizer.recommendedReward", "收益系数 {{value}}", {value: format(next.reward)})));
     }
-    metrics.append(actions);
-    output.append(metrics);
+    const scoreScenario = mode === "global_sim_score" ? next.scenario : context.scenario;
+    const estimated = scoreMode() ? next.estimate : empiricalSimScore({...scoreScenario,carried:next.preset.weapons,weapons:context.weapons,reward:context.reward});
+    if (!scoreMode() && Number.isFinite(estimated?.totalScore)) metrics.append(node("span", t("simScore.recommendedScore", "全挂载预计 {{score}} 分", {score:format(estimated.totalScore)})));
+    const sortieHp = scoreScenario?.destructionThreshold || scoreScenario?.remainingHp;
+    if (sortieHp > 0 && next.damage > 0) metrics.append(node("span", t("optimizer.sorties", "预计 {{count}} 次出击", {count:Math.ceil(sortieHp / next.damage)})));
     if (scoreMode()) explanation.append(node("p", mode === "global_sim_score" ? t("simScore.globalHelp") : t("simScore.moduleEstimate", "按模块剩余 HP 封顶的经验估算；假设全部命中、燃烧完成，不计回血。"), "optimizer-note"));
     if (filters.noGuided) explanation.append(node("p", t("optimizer.unguidedHelp", "“不使用制导”仅自动选择明确非制导的弹药；未知分类不参与。手动锁定冲突会提示并保留。"), "optimizer-note"));
     const conflicts = next.preset.weapons.filter(([id]) => recommendationWeaponExcluded(context.weapons.get(id), filters));
@@ -146,14 +150,8 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     stores.style.setProperty("--tier-count", next.preset.columns);
     const row = node("div", null, "loadout-row optimizer-preset-row");
     row.dataset.optimizerPreset = "";
-    row.setAttribute("role", "button"); row.tabIndex = 0;
-    row.setAttribute("aria-label", `${t("optimizer-ui.applyRecommendedLoadout", "应用推荐挂载")}：${describe(next.preset.weapons)}`);
-    row.setAttribute("aria-disabled", String(Boolean(storesEqual)));
-    const choose = () => { if (!storesEqual) void apply(next); };
-    row.addEventListener("click", choose);
-    row.addEventListener("keydown", event => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); choose(); } });
     const label = node("span", null, "loadout-row-name");
-    label.append(node("small", t("optimizer.recommendedStores", "推荐挂载")), node("strong", describe(next.preset.weapons)));
+    label.append(node("small", t("optimizer.recommendedStores", "推荐挂载")), stateLabel, actions, node("strong", describe(next.preset.weapons)));
     const diagram = presetDiagram(next.preset, context.weapons);
     const allocations = presetZoneAllocations(next.preset, next.plan);
     [...diagram.children].forEach((slot, index) => {
@@ -175,8 +173,10 @@ export function createLoadoutOptimizer(root, {load, apply}) {
         slot.append(shares);
       } else if (cells.length) slot.append(node("small", cells.map(cell => `×${cell.count}`).join(" + ")));
     });
-    row.append(label, diagram); stores.append(row);
-    output.append(stores);
+    const recommended = node("div", null, "recommended-slot-area");
+    recommended.append(diagram);
+    row.append(label, recommended); stores.append(row);
+    output.append(metrics, stores);
     const plan = node("section", null, "optimizer-plan");
     plan.append(node("h4", scoreMode() ? t("simScore.sortiePlan", "本轮投放方案") : t("optimizer.deliveryPlan", "逐战区投放")));
     const zones = node("ol", null, "optimizer-zone-plan");
@@ -194,7 +194,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     });
     plan.append(zones);
     if (next.remaining?.length) plan.append(node("p", t("optimizer.remainingStores", "投放后剩余：{{stores}}", {stores: describe(next.remaining)}), "optimizer-note"));
-    output.append(plan);
+    explanation.append(plan);
     if (scoreMode() && next.status !== "optimal") explanation.append(node("p", Number.isFinite(next.scoreUpper) ? t("simScore.scoreUpper", "预计分数理论上限 {{score}}；尚未证明最高，可继续求解。", {score: format(next.scoreUpper)}) : t("simScore.maximumUnproved", "尚未证明最高预计分数，可继续求解。"), "optimizer-note"));
     if (!scoreMode() && next.status !== "optimal") explanation.append(node("p", t("optimizer-ui.rewardCoefficientUpperBound", "收益系数理论上限 {{v0}}{{v1}}。", {v0: format(next.rewardUpper), v1: mode === "targets" ? t("optimizer-ui.baseCountUpperBound", " · 战区数量上限 {{v0}}", {v0: next.targetUpper}) : ""}), "optimizer-note"));
     const warnings = definition ? validateLoadout(definition, next.keys).warnings : next.warnings;
@@ -223,7 +223,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
         worker.terminate(); worker = null; workerBusy = false; render({status: "error"}, definition);
       };
       const contextKey = `${current.aircraft.id}|${current.threshold}|${JSON.stringify(filters)}|${current.lockedKeys.join(",")}|${JSON.stringify(current.scenario)}|${JSON.stringify(current.scenarios)}`;
-      const message = {contextKey, requestId: id, mode, targetCount, filters, timeLimit};
+      const message = {contextKey, requestId: id, mode, targetCount: mode === "global_sim_score" ? 1 : targetCount, filters, timeLimit};
       if (contextKey !== workerContextKey) {
         message.context = {definition, presets: current.aircraft.presets || [], lockedKeys: current.lockedKeys,
           weapons: [...current.weapons], reward: current.reward, aircraft: {id: current.aircraft.id, reward: current.aircraft.reward}, threshold: current.threshold, scenario: current.scenario, scenarios:current.scenarios, filters};
@@ -238,18 +238,24 @@ export function createLoadoutOptimizer(root, {load, apply}) {
     context = next;
     if (mode !== "global_sim_score" && !next.threshold) { if (mode !== "sim_score") baseMode = mode; mode = "sim_score"; }
     else if (mode === "sim_score") mode = baseMode;
+    const nextSignature = `${next.aircraft?.id}|${next.aircraft?.presets?.length}|${next.threshold}|${mode}|${mode === "custom_targets" ? targetCount : ""}|${JSON.stringify(filters)}|${next.lockedKeys.join(",")}|${JSON.stringify(next.scenario)}|${JSON.stringify(next.scenarios)}`;
+    const stores = JSON.stringify(next.currentStores || []);
+    if (nextSignature === signature) {
+      if (stores !== displayedStores && result) render(result, currentDefinition);
+      displayedStores = stores; return;
+    }
+    displayedStores = stores;
     reflectControls();
-    const nextSignature = `${next.aircraft?.id}|${next.aircraft?.presets?.length}|${next.threshold}|${mode}|${["custom_targets","global_sim_score"].includes(mode) ? targetCount : ""}|${JSON.stringify(filters)}|${next.lockedKeys.join(",")}|${JSON.stringify(next.scenario)}|${JSON.stringify(next.scenarios)}`;
-    if (nextSignature === signature) { if (result) render(result, currentDefinition); return; }
     signature = nextSignature; generation++; clearTimeout(timer);
     if (workerBusy) { worker?.terminate(); worker = null; workerBusy = false; }
     result = null;
-    root.hidden = !next.aircraft;
-    if (root.hidden) return;
+    root.hidden = false;
+    root.dataset.available = String(Boolean(next.aircraft));
     applyButton.hidden = true; retry.hidden = true; output.replaceChildren(); explanation.replaceChildren(); root.dataset.state = "searching";
+    if (!next.aircraft) { status.textContent = ""; contextNote.textContent = ""; return; }
     root.dataset.applied = "false";
-    root.querySelector("[data-optimizer-state-label]").textContent = t("optimizer.notApplied", "尚未应用的推荐");
-    contextNote.textContent = mode === "global_sim_score" ? t("simScore.globalContext", "满血目标 · 可用战区数量为上方上限 · 机场排除制导") : next.lockedKeys.length ? t("optimizer-ui.keepingSelectedStations", "保留已选 {{v0}} 个挂点", {v0: next.lockedKeys.length}) : "";
+    stateLabel.textContent = t("optimizer.notApplied", "尚未应用的推荐");
+    contextNote.textContent = mode === "global_sim_score" ? t("simScore.globalContext", "每次出击1个满血目标 · 机场排除制导") : next.lockedKeys.length ? t("optimizer-ui.keepingSelectedStations", "保留已选 {{v0}} 个挂点", {v0: next.lockedKeys.length}) : "";
     status.textContent = t("optimizer-ui.calculating", "计算中…");
     const id = generation;
     timer = setTimeout(() => start(id, timeLimit), 300);
@@ -280,6 +286,8 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       return;
     }
     if (!event.target.matches("[data-optimizer-priority]")) return;
+    if (event.target.value === "global_sim_score") { if (mode !== "global_sim_score" && mode !== "sim_score") baseMode = mode; mode = "global_sim_score"; }
+    else if (mode === "global_sim_score") mode = context?.threshold ? baseMode : "sim_score";
     filters.simpleLoadout = event.target.value === "simple";
     filters.strictReward = event.target.value === "reward";
     persistFilters();

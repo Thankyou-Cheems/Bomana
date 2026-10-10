@@ -36,13 +36,13 @@
             </div>
           <button id="toolDirectoryToggle" class="tool-directory-toggle" type="button" aria-expanded="false" aria-controls="toolDirectoryLinks"><span data-i18n="page.tools">☰ 快捷跳转</span></button>
           <nav id="toolDirectoryLinks" class="tool-nav" aria-label="工具导航" data-i18n-aria-label="page.toolNavigation">
-            <strong class="tool-nav-category" data-i18n="page.loadoutsAndBases">挂载与炸点</strong>
+            <div class="tool-nav-group"><strong class="tool-nav-category" data-i18n="page.loadoutsAndBases">挂载与炸点</strong>
             <a href="#calcForm"><span data-i18n="page.baseAirfieldCalculator">战区与机场计算器</span></a><a href="#combinationCalculator"><span data-i18n="page.freeCombinationTool">自由组合工具</span></a><a href="#loadoutCompare"><span data-i18n="page.loadoutComparison">挂载对比</span></a>
-            <strong class="tool-nav-category" data-i18n="page.sortiePreparation">出击准备</strong>
+            </div><div class="tool-nav-group"><strong class="tool-nav-category" data-i18n="page.sortiePreparation">出击准备</strong>
             <a href="#airportStatus"><span data-i18n="page.airfieldStatus">机场状态</span></a><a href="#returnFuel"><span data-i18n="page.returnFuelPlan">返航规划</span></a><a href="#usefulActions"><span data-i18n="page.cycleRewards">周期收益</span></a>
-            <strong class="tool-nav-category" data-i18n="page.mechanicsResearch">机制研究</strong>
+            </div><div class="tool-nav-group"><strong class="tool-nav-category" data-i18n="page.mechanicsResearch">机制研究</strong>
             <a href="#explosiveConversion"><span data-i18n="page.explosiveEquivalence">装药换算</span></a><a href="#airCombat"><span data-i18n="page.airToAirMissiles">空空弹测算</span></a><a href="#airfieldDefense"><span data-i18n="page.airfieldDefenses">机场防空</span></a><a href="#fieldGuide"><span data-i18n="page.simQuickReference">全真速查</span></a>
-          </nav>
+            </div></nav>
           </aside>
         </div>
 
@@ -76,19 +76,7 @@
         </form>
         <div class="calculator-workspace loadout-workspace">
           <article class="hangar-hud" aria-live="polite">
-            <div class="loadout-summary"><div class="hangar-result-grid">
-                <div class="hangar-result-primary">
-                  <strong id="calcDestroyCount">—</strong>
-                  <span id="calcDestroyLabel"><span data-i18n="page.weaponsRequired">所需枚数</span></span>
-                </div>
-                <div class="hangar-sorties" id="calcSortieCard">
-                  <strong id="calcSortieCount">—</strong>
-                  <span><span data-i18n="page.estimatedSorties">次出击（按当前挂载估算）</span></span>
-                </div>
-              </div>
-              <div class="loadout-reward" id="calcRewardCard" hidden><strong id="calcRewardCount"></strong><span id="calcRewardLabel"></span></div>
-              <div class="loadout-score" id="calcScoreSummary"><span data-i18n="simScore.unavailable">暂无估算</span></div>
-            <section class="hangar-picker aircraft-toolbar" aria-labelledby="aircraft-picker-title">
+            <div class="loadout-summary"><section class="hangar-picker aircraft-toolbar" aria-labelledby="aircraft-picker-title">
               <header class="hangar-picker-head">
                 <div><h2 id="aircraft-picker-title"><span data-i18n="page.aircraft">机型</span></h2></div>
                 <div class="hangar-selection" id="calcAircraftSelection"><strong><span data-i18n="page.anyAircraft">不限机型</span></strong><span><span data-i18n="page.calculateByWeapon">按武器计算</span></span></div>
@@ -107,7 +95,50 @@
                 <p class="hangar-weapon-empty"><span data-i18n="page.searchByNamePinyinOrInitialsEGTaif">支持名称、拼音和首字母，如 taif、j10。</span></p>
               </div>
             </section>
-              <div id="calcPresetDetail" hidden>
+              <section id="loadoutOptimizer" class="optimizer-panel" aria-label="挂载收益推荐" data-i18n-aria-label="page.loadoutRewardRecommendations" hidden>
+            <div class="optimizer-heading"><div class="optimizer-heading-label"><h3><span data-i18n="page.rewardRecommendations">挂载收益推荐</span></h3></div><div class="optimizer-modes" role="group" aria-label="推荐目标" data-i18n-aria-label="page.recommendationObjective"><button type="button" data-optimizer-mode="reward" aria-pressed="true"><span data-i18n="page.bestSingleBaseReward">单战区最高收益</span></button><button type="button" data-optimizer-mode="targets" aria-pressed="false"><span data-i18n="page.mostBases">最多战区</span></button><button type="button" data-optimizer-mode="custom_targets" aria-pressed="false"><span data-i18n="optimizer.customTargets">自定义战区</span></button><button type="button" data-optimizer-mode="sim_score" aria-pressed="false"><span data-i18n="simScore.moduleHighestScore">模块单次最高预计分数</span></button></div><div class="optimizer-priority" role="radiogroup" aria-label="推荐偏好" data-i18n-aria-label="optimizer.priority">
+                  <span class="optimizer-priority-thumb" aria-hidden="true"></span>
+                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="balanced" checked><span data-i18n="optimizer.balanced">高收益，优先好投放</span></label>
+                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="reward"><span data-i18n="optimizer.strictReward">严格最高收益</span></label>
+                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="simple"><span data-i18n="optimizer.uniform">尽量统一挂载</span></label>
+                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="global_sim_score"><span data-i18n="simScore.globalPriority">全局最高得分</span></label>
+                </div></div>
+            <div class="optimizer-target-controls" data-optimizer-target-controls hidden>
+              <label><span data-i18n="optimizer.targetCount">目标战区数</span><input type="number" min="1" step="1" value="3" inputmode="numeric" data-optimizer-target-count></label>
+              <button type="button" data-optimizer-target-preset="3" aria-pressed="true"><span data-i18n="optimizer.threeTargets">3 区</span></button><button type="button" data-optimizer-target-preset="4" aria-pressed="false"><span data-i18n="optimizer.fourTargets">4 区</span></button>
+            </div>
+            <div class="optimizer-controls">
+              <fieldset class="optimizer-filters"><legend data-i18n="optimizer.allowedStores">可参与推荐的弹药</legend>
+                <div class="optimizer-filter-grid">
+                  <div class="optimizer-guidance-selection" role="radiogroup" data-i18n-aria-label="optimizer.guidanceSelection" aria-label="制导筛选">
+                    <span class="optimizer-guidance-thumb" aria-hidden="true"></span>
+                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="any" data-optimizer-guidance-all checked><span data-i18n="optimizer.guidanceAll">不限</span></label>
+                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="guided" data-optimizer-guided-only><span data-i18n="optimizer.guidedOnly">只考虑制导武器</span></label>
+                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="unguided" data-optimizer-unguided-only><span data-i18n="optimizer.unguidedOnly">不使用制导</span></label>
+                  </div>
+                  <button type="button" role="switch" data-optimizer-filter="noHighDrag" aria-checked="true"><strong data-i18n="optimizer.highDrag">高阻炸弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noRockets" aria-checked="true"><strong data-i18n="page.rockets">火箭弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noMissiles" aria-checked="true"><strong data-i18n="optimizer.strikeMissiles">对地导弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noLaser" aria-checked="true"><strong data-i18n="optimizer.laserGuided">激光</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noOptical" aria-checked="true"><strong data-i18n="optimizer.opticalGuided">电视／红外</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noSatellite" aria-checked="true"><strong data-i18n="optimizer.satelliteGuided">全球卫星导航</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                  <button type="button" role="switch" data-optimizer-filter="noManual" aria-checked="true"><strong data-i18n="optimizer.manualGuided">手动指令制导</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
+                </div>
+              </fieldset>
+            </div>
+            <div class="loadout-comparison"><div class="current-loadout-block"><div class="current-loadout-metrics"><small data-i18n="optimizer.currentStores">当前挂载</small><div class="hangar-result-grid">
+                <div class="hangar-result-primary">
+                  <strong id="calcDestroyCount">—</strong>
+                  <span id="calcDestroyLabel"><span data-i18n="page.weaponsRequired">所需枚数</span></span>
+                </div>
+                <div class="hangar-sorties" id="calcSortieCard">
+                  <strong id="calcSortieCount">—</strong>
+                  <span><span data-i18n="page.estimatedSorties">次出击（按当前挂载估算）</span></span>
+                </div>
+              </div>
+              <div class="loadout-reward" id="calcRewardCard" hidden><strong id="calcRewardCount"></strong><span id="calcRewardLabel"></span></div>
+              <div class="loadout-score" id="calcScoreSummary"><span data-i18n="simScore.unavailable">暂无估算</span></div>
+            </div><div id="calcPresetDetail" hidden>
                 <div class="loadout-row current-preset-row">
                   <div class="loadout-row-name">
                     <small data-i18n="optimizer.currentStores">当前挂载</small>
@@ -142,6 +173,13 @@
                   </div>
                 </div>
               </div>
+              </div><span class="recommendation-state" data-optimizer-state-label data-i18n="optimizer.notApplied">尚未应用的推荐</span><div class="optimizer-actions"><button type="button" data-optimizer-apply hidden><span data-i18n="page.applyRecommendedLoadout">应用推荐挂载</span></button><button type="button" data-optimizer-retry hidden><span data-i18n="page.continueSearch">继续求解</span></button></div>
+            <p class="optimizer-note" data-optimizer-context></p>
+            <p class="optimizer-status" data-optimizer-status role="status"></p>
+            <div data-optimizer-result></div></div>
+            <details class="optimizer-explanation"><summary><span data-i18n="page.howRecommendationsWork">推荐依据</span></summary><small data-optimizer-priority-help></small><div data-optimizer-explanation></div><p class="optimizer-filter-help" data-i18n="optimizer.guidedOnlyHelp">自动推荐只选明确制导的弹药；类别开关仍生效，手动固定挂点及配套吊舱保留，冲突时会提示。</p><p class="optimizer-filter-help" data-i18n="optimizer.guidanceHelp">三段选择同步类别开关，手改开关同步上方选择。多模弹药允许一种制导即可；手动指令制导指持续操纵弹药，未知类别不绕过排除。</p><p class="optimizer-filter-help" data-i18n="optimizer.allowedStoresHelp">亮起表示允许，点按即可排除；手动选好的挂点会保留。</p><p><span data-i18n="page.assignsWholeWeaponsToTheBaseBurnOutThreshold">按战区掉血自毁线分配完整弹药，火箭弹精确到枚。最多战区模式先保证目标数量；高收益同档先比较制导操作与投放枚数，再减少投放类型、弹种、多余伤害与载荷。手选挂点及配套要求会保留。</span></p><p><span data-i18n="page.theCoefficientIsNotAnActualSlOrRp">收益系数不等于实际银狮或研发点。仅校验客户端静态配装规则，改装与武器仍需在游戏中解锁。</span></p></details>
+          </section>
+
               <details class="loadout-analysis"><summary data-i18n="optimizer.damageDetails">伤害明细</summary><div class="loadout-analysis-content"><dl class="preset-stats" id="calcPresetStats"></dl><dl class="hangar-stats" id="calcStats"></dl><p class="hangar-fire" id="calcFireLine"></p><p class="hangar-hud-context" id="calcHudContext"><span data-i18n="page.readingCatalog">正在读取目录…</span></p></div></details>
             </div>
             <p class="hangar-hint" id="calcHint"><span data-i18n="page.selectAWeaponForResultsThenAnAircraftFor">选择武器后显示结果；再选机型可计算挂载上限与架次。</span></p>
@@ -155,43 +193,6 @@
             <div data-sim-score-result aria-live="polite"></div>
             <details class="sim-score-delivery-details"><summary data-i18n="simScore.partialDelivery">部分投放：按实际命中数量估算</summary><div data-sim-score-rows></div><button type="button" data-sim-score-full-delivery data-i18n="simScore.resetDelivery">恢复全挂载投放</button></details>
           </details>
-          <section id="loadoutOptimizer" class="optimizer-panel" aria-label="挂载收益推荐" data-i18n-aria-label="page.loadoutRewardRecommendations" hidden>
-            <button type="button" class="global-score-recommend" data-optimizer-mode="global_sim_score" aria-pressed="false"><span data-i18n="simScore.globalButton">全局推荐全真最高得分方案</span></button>
-            <div class="optimizer-heading"><div class="optimizer-heading-label"><h3><span data-i18n="page.rewardRecommendations">挂载收益推荐</span></h3><span class="recommendation-state" data-optimizer-state-label data-i18n="optimizer.notApplied">尚未应用的推荐</span></div><div class="optimizer-modes" role="group" aria-label="推荐目标" data-i18n-aria-label="page.recommendationObjective"><button type="button" data-optimizer-mode="reward" aria-pressed="true"><span data-i18n="page.bestSingleBaseReward">单战区最高收益</span></button><button type="button" data-optimizer-mode="targets" aria-pressed="false"><span data-i18n="page.mostBases">最多战区</span></button><button type="button" data-optimizer-mode="custom_targets" aria-pressed="false"><span data-i18n="optimizer.customTargets">自定义战区</span></button><button type="button" data-optimizer-mode="sim_score" aria-pressed="false"><span data-i18n="simScore.moduleHighestScore">模块单次最高预计分数</span></button></div><div class="optimizer-priority" role="radiogroup" aria-label="推荐偏好" data-i18n-aria-label="optimizer.priority">
-                  <span class="optimizer-priority-thumb" aria-hidden="true"></span>
-                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="balanced" checked><span data-i18n="optimizer.balanced">高收益，优先好投放</span></label>
-                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="reward"><span data-i18n="optimizer.strictReward">严格最高收益</span></label>
-                  <label><input class="sr-only" type="radio" name="optimizerPriority" data-optimizer-priority value="simple"><span data-i18n="optimizer.uniform">尽量统一挂载</span></label>
-                </div></div>
-            <div class="optimizer-target-controls" data-optimizer-target-controls hidden>
-              <label><span data-i18n="optimizer.targetCount">目标战区数</span><input type="number" min="1" step="1" value="3" inputmode="numeric" data-optimizer-target-count></label>
-              <button type="button" data-optimizer-target-preset="3" aria-pressed="true"><span data-i18n="optimizer.threeTargets">3 区</span></button><button type="button" data-optimizer-target-preset="4" aria-pressed="false"><span data-i18n="optimizer.fourTargets">4 区</span></button>
-            </div>
-            <div class="optimizer-controls">
-              <fieldset class="optimizer-filters"><legend data-i18n="optimizer.allowedStores">可参与推荐的弹药</legend>
-                <div class="optimizer-filter-grid">
-                  <div class="optimizer-guidance-selection" role="radiogroup" data-i18n-aria-label="optimizer.guidanceSelection" aria-label="制导筛选">
-                    <span class="optimizer-guidance-thumb" aria-hidden="true"></span>
-                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="any" data-optimizer-guidance-all checked><span data-i18n="optimizer.guidanceAll">不限</span></label>
-                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="guided" data-optimizer-guided-only><span data-i18n="optimizer.guidedOnly">只考虑制导武器</span></label>
-                    <label><input type="radio" name="optimizerGuidance" data-optimizer-guidance="unguided" data-optimizer-unguided-only><span data-i18n="optimizer.unguidedOnly">不使用制导</span></label>
-                  </div>
-                  <button type="button" role="switch" data-optimizer-filter="noHighDrag" aria-checked="true"><strong data-i18n="optimizer.highDrag">高阻炸弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
-                  <button type="button" role="switch" data-optimizer-filter="noRockets" aria-checked="true"><strong data-i18n="page.rockets">火箭弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
-                  <button type="button" role="switch" data-optimizer-filter="noMissiles" aria-checked="true"><strong data-i18n="optimizer.strikeMissiles">对地导弹</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
-                  <button type="button" role="switch" data-optimizer-filter="noLaser" aria-checked="true"><strong data-i18n="optimizer.laserGuided">激光</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
-                  <button type="button" role="switch" data-optimizer-filter="noOptical" aria-checked="true"><strong data-i18n="optimizer.opticalGuided">电视／红外</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
-                  <button type="button" role="switch" data-optimizer-filter="noSatellite" aria-checked="true"><strong data-i18n="optimizer.satelliteGuided">全球卫星导航</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
-                  <button type="button" role="switch" data-optimizer-filter="noManual" aria-checked="true"><strong data-i18n="optimizer.manualGuided">手动指令制导</strong><span class="optimizer-switch-track" aria-hidden="true"></span><small data-optimizer-filter-state></small></button>
-                </div>
-              </fieldset>
-            </div>
-            <div class="optimizer-actions"><button type="button" data-optimizer-apply hidden><span data-i18n="page.applyRecommendedLoadout">应用推荐挂载</span></button><button type="button" data-optimizer-retry hidden><span data-i18n="page.continueSearch">继续求解</span></button></div>
-            <p class="optimizer-note" data-optimizer-context></p>
-            <p class="optimizer-status" data-optimizer-status role="status"></p>
-            <div data-optimizer-result></div>
-            <details class="optimizer-explanation"><summary><span data-i18n="page.howRecommendationsWork">推荐依据</span></summary><small data-optimizer-priority-help></small><div data-optimizer-explanation></div><p class="optimizer-filter-help" data-i18n="optimizer.guidedOnlyHelp">自动推荐只选明确制导的弹药；类别开关仍生效，手动固定挂点及配套吊舱保留，冲突时会提示。</p><p class="optimizer-filter-help" data-i18n="optimizer.guidanceHelp">三段选择同步类别开关，手改开关同步上方选择。多模弹药允许一种制导即可；手动指令制导指持续操纵弹药，未知类别不绕过排除。</p><p class="optimizer-filter-help" data-i18n="optimizer.allowedStoresHelp">亮起表示允许，点按即可排除；手动选好的挂点会保留。</p><p><span data-i18n="page.assignsWholeWeaponsToTheBaseBurnOutThreshold">按战区掉血自毁线分配完整弹药，火箭弹精确到枚。最多战区模式先保证目标数量；高收益同档先比较制导操作与投放枚数，再减少投放类型、弹种、多余伤害与载荷。手选挂点及配套要求会保留。</span></p><p><span data-i18n="page.theCoefficientIsNotAnActualSlOrRp">收益系数不等于实际银狮或研发点。仅校验客户端静态配装规则，改装与武器仍需在游戏中解锁。</span></p></details>
-          </section>
           <div class="calculator-pickers">
 
             <section class="hangar-picker" aria-labelledby="weapon-picker-title">

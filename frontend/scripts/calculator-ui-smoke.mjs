@@ -29,6 +29,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#chargeWeaponA").options.length > 600);
   await page.waitForFunction(() => document.querySelector("#airCompare button") !== null);
   await page.waitForFunction(() => document.querySelector("#calcPresetList [data-preset-id]") !== null);
+  assert.equal(await page.locator('.hangar-result-primary').isVisible(),true,'Native single-weapon loadouts retain their required projectile count');
   const open = async id => { if (!await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const close = async id => { if (await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const text = selector => page.locator(selector).textContent();
