@@ -346,7 +346,6 @@ func (manager *mobilePairingManager) Complete(client string, candidate string, n
 	expiresAt := session.expiresAt
 	completion := pairingCompletion(session, expiresAt)
 	session.code = ""
-	session.mobileLease = ""
 	return completion, mobilePairingCompleteOK
 }
 
@@ -366,7 +365,6 @@ func (manager *mobilePairingManager) Claim(candidate string, now time.Time) (mob
 	session.claimed = true
 	completion := pairingCompletion(session, session.expiresAt)
 	session.code = ""
-	session.mobileLease = ""
 	return completion, mobilePairingCompleteOK
 }
 
@@ -396,6 +394,19 @@ func (manager *mobilePairingManager) AllowsEdition(edition mobileEdition, now ti
 	manager.mu.RLock()
 	defer manager.mu.RUnlock()
 	return validMobileEdition(edition) && manager.session != nil && manager.session.edition == edition && now.Before(manager.session.expiresAt)
+}
+
+// Only a claimed Enhanced pairing can lend its temporary lease to the fixed resource relay.
+func (manager *mobilePairingManager) ResourceLease(token string, now time.Time) (string, string, bool) {
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+	session := manager.session
+	if session == nil || session.edition != mobileEditionEnhanced || !session.prepared || !session.claimed ||
+		!now.Before(session.expiresAt) || !now.Before(session.mobileLeaseExpiry) || session.mobileLease == "" ||
+		subtle.ConstantTimeCompare([]byte(token), []byte(session.token)) != 1 {
+		return "", "", false
+	}
+	return session.mobileLease, session.id, true
 }
 
 func (manager *mobilePairingManager) Authorize(token string, now time.Time) bool {

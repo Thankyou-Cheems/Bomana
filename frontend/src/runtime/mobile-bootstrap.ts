@@ -52,6 +52,12 @@ export async function authorizeMobileSession(
     } catch (error) {
       await renderMobileBridgeConnectionGate(() => mobileModule.connectMobileBridge(), error, sameOriginPairing);
     }
+    if (edition === "Enhanced" && sameOriginPairing && mobileSession) {
+      const response = await fetch(new URL("/api/v1/capabilities", location.origin), { cache: "no-store", credentials: "omit", headers: { "X-Bomana-Mobile-Pairing": mobileSession.pairingToken } });
+      const capabilities = await response.json() as { enhanced_resource_authorization?: unknown };
+      if (!response.ok || capabilities.enhanced_resource_authorization !== 1) throw new Error("请更新并重启电脑上的 Bomana Bridge，再重新配对手机。当前 Bridge 不支持 Enhanced 资源授权。");
+      document.cookie = `bomana-mobile-resource=${mobileSession.pairingToken}; Path=/mobile/Enhanced/; SameSite=Strict; Max-Age=${Math.max(0, Math.floor((mobileSession.expiresAt - Date.now()) / 1000))}${location.protocol === "https:" ? "; Secure" : ""}`;
+    }
     await start();
     void reportAppInitialized(edition, "mobile");
   } catch (error) {

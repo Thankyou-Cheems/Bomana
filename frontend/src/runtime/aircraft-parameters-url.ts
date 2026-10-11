@@ -4,7 +4,8 @@ export function aircraftParametersURL(name: string, moduleURL: string, developme
   if (!development && page?.pathname.startsWith("/app/")) {
     return new URL(`/app/shared/${name}`, page.origin);
   }
+  if (!development) return new URL(`../assets/${name}`, moduleURL);
   const url = new URL(moduleURL);
-  url.pathname = url.pathname.replace(/[^/]*$/, development ? "aircraft-parameters.json" : name);
+  url.pathname = url.pathname.replace(/[^/]*$/, "aircraft-parameters.json");
   return url;
 }

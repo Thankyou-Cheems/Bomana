@@ -202,6 +202,24 @@ func (gateway *relay) serveMobileAppAsset(response http.ResponseWriter, request 
 		http.Error(response, "mobile app unavailable", http.StatusBadGateway)
 		return
 	}
+	if strings.HasPrefix(request.URL.Path, "/mobile/Enhanced/enhanced-assets/") {
+		parsed, parseErr := url.Parse(upstreamURL)
+		cookie, cookieErr := request.Cookie("bomana-mobile-resource")
+		if parseErr != nil || parsed.Scheme != "https" || parsed.Host != "bomana.ruikang.wang" || cookieErr != nil {
+			http.Error(response, "mobile resource authorization required", http.StatusUnauthorized)
+			return
+		}
+		lease, pairingID, authorized := gateway.mobile.ResourceLease(cookie.Value, time.Now())
+		if !authorized {
+			http.Error(response, "mobile resource authorization required", http.StatusUnauthorized)
+			return
+		}
+		upstream.Header.Set("Authorization", "Bearer "+lease)
+		upstream.Header.Set("X-Bomana-Pairing-Id", pairingID)
+		protectedClient := *client
+		protectedClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+		client = &protectedClient
+	}
 	if strings.HasSuffix(strings.TrimSuffix(request.URL.Path, "/"), "/mobile/"+string(edition)) {
 		upstream.Header.Set("Accept", "text/html")
 	}

@@ -17,4 +17,10 @@ describe("aircraft resource delivery", () => {
     expect(aircraftParametersURL(name, "https://app.localhost/assets/main-12345678.js", false, new URL("https://app.localhost/")).pathname)
       .toBe(`/assets/${name}`);
   });
+  it("keeps public phone and packaged parameters outside the protected module directory", () => {
+    for (const page of [new URL("http://192.168.1.20:43123/mobile/Enhanced/"), new URL("https://app.localhost/")]) {
+      expect(aircraftParametersURL(name, new URL("enhanced-assets/main-12345678.js", page).href, false, page).href)
+        .toBe(new URL(`assets/${name}`, page).href);
+    }
+  });
 });

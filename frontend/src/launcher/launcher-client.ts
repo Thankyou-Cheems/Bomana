@@ -1,5 +1,6 @@
 import { discoverBridgeEndpoint, fetchBridgeResource, IncompatibleBridgeError, MobileBridgeError } from "../runtime/bridge-discovery";
 import { queryLocalNetworkPermission } from "../runtime/local-network-permission";
+import { canClearEnhancedResourceAccess, clearEnhancedResourceAccess } from "../runtime/enhanced-resource-access";
 import {
   clearBrowserAuthorization,
   readBrowserAuthorization,
@@ -125,19 +126,23 @@ export class BrowserAccessClient {
     const pending = this.#pending();
     if (pending) return { state: "pending", accountLabel: "等待 CheemsPay 确认", enhanced: false, userCode: pending.userCode, verificationURL: pending.verificationURL };
     const authorization = readBrowserAuthorization(this.#storage);
-    if (!authorization) return { state: "signed_out", accountLabel: "未登录 CheemsPay", enhanced: false };
+    if (!authorization) { this.#clearResourceAccess(); return { state: "signed_out", accountLabel: "未登录 CheemsPay", enhanced: false }; }
+    const isCurrent = (): boolean => readBrowserAuthorization(this.#storage)?.accessToken === authorization.accessToken;
+    const changed = (): BrowserAccess => ({ state: "unavailable", accountLabel: "账号授权已变化，请刷新页面", enhanced: false });
     let authoritativeFailure = false;
     try {
       const response = await this.#fetcher(new URL("/api/bomana/access", this.#baseURL), {
         method: "GET", cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer",
         headers: { Authorization: `Bearer ${authorization.accessToken}` },
       });
+      if (!isCurrent()) return changed();
       if (response.status === 401 || response.status === 403) {
         this.clearAuthorization();
         return { state: "signed_out", accountLabel: "CheemsPay 授权已过期", enhanced: false };
       }
       if (!response.ok) throw new Error(`CheemsPay HTTP ${response.status}`);
       const payload = await response.json() as { schemaVersion?: unknown; accountLabel?: unknown; enhanced?: unknown; enhancedLease?: unknown; enhancedLeaseExpiresAt?: unknown };
+      if (!isCurrent()) return changed();
       if (payload.schemaVersion !== 2 || typeof payload.enhanced !== "boolean") {
         authoritativeFailure = true;
         throw new Error("CheemsPay access payload is invalid");
@@ -146,6 +151,7 @@ export class BrowserAccessClient {
       const accountLabel = typeof payload.accountLabel === "string" ? payload.accountLabel : "CheemsPay 用户";
       if (!payload.enhanced) {
         saveBrowserAuthorization({ ...authorization, accountLabel, enhancedLease: null, enhancedLeaseExpiresAt: 0, validatedAt: now }, this.#storage);
+        this.#clearResourceAccess(authorization.enhancedLease);
         return { state: "authorized", accountLabel, enhanced: false, offline: false };
       }
       if (typeof payload.enhancedLease !== "string" || typeof payload.enhancedLeaseExpiresAt !== "string") {
@@ -155,6 +161,7 @@ export class BrowserAccessClient {
       let lease;
       try {
         lease = await this.#verifyLease(payload.enhancedLease, { now });
+        if (!isCurrent()) return changed();
       } catch (error) {
         authoritativeFailure = true;
         throw error;
@@ -170,11 +177,13 @@ export class BrowserAccessClient {
       }, this.#storage);
       return { state: "authorized", accountLabel, enhanced: true, offline: false, localValidUntil: lease.expiresAt };
     } catch {
+      if (!isCurrent()) return changed();
       if (!authoritativeFailure && authorization.enhancedLease) {
         try {
           const offlineNow = Date.now();
           if (offlineNow + 5 * 60_000 < authorization.validatedAt) throw new Error("local clock rollback");
           const lease = await this.#verifyLease(authorization.enhancedLease, { now: offlineNow });
+          if (!isCurrent()) return changed();
           return { state: "authorized", accountLabel: authorization.accountLabel || "CheemsPay 用户", enhanced: true, offline: true, localValidUntil: lease.expiresAt };
         } catch {
           return { state: "signed_out", accountLabel: "14 天本地授权已到期，请联网刷新", enhanced: false };
@@ -235,10 +244,12 @@ export class BrowserAccessClient {
       const token = text(payload.access_token);
       const expiresIn = Number(payload.expires_in);
       if (!token || !Number.isInteger(expiresIn) || expiresIn <= 0) throw new Error("CheemsPay access token is invalid");
+      const previousLease = readBrowserAuthorization(this.#storage)?.enhancedLease ?? null;
       saveBrowserAuthorization({
         schemaVersion: 3, accessToken: token, accountLabel: "", enhancedLease: null,
         enhancedLeaseExpiresAt: 0, validatedAt: 0,
       }, this.#storage);
+      this.#clearResourceAccess(previousLease);
       this.#storage.removeItem(PENDING_KEY);
       return this.snapshot();
     } finally { this.#polling = false; }
@@ -247,8 +258,14 @@ export class BrowserAccessClient {
   hasPending(): boolean { return this.#pending() !== null; }
 
   clearAuthorization(): void {
+    const previousLease = readBrowserAuthorization(this.#storage)?.enhancedLease ?? null;
     clearBrowserAuthorization(this.#storage);
+    this.#clearResourceAccess(previousLease);
     this.#storage.removeItem(PENDING_KEY);
+  }
+
+  #clearResourceAccess(previousLease?: string | null): void {
+    clearEnhancedResourceAccess(previousLease, () => canClearEnhancedResourceAccess(previousLease ?? null, this.#storage));
   }
 
   #pending(): { deviceCode: string; userCode: string; verificationURL: string; expiresAt: number; pollIntervalMs: number; nextPollAt: number } | null {

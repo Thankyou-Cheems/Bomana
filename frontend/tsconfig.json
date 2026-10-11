@@ -12,7 +12,8 @@
     "lib": ["ES2024", "DOM", "DOM.Iterable", "WebWorker"],
     "types": ["node", "vite/client", "vitest/globals"],
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["src", "vite.config.ts"]
 }

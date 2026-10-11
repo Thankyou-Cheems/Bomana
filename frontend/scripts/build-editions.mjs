@@ -30,7 +30,11 @@ for (const edition of editions) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${edition} frontend build failed`);
   publishSharedAircraftParameters(edition);
-  if (edition === "Enhanced") writeEnhancedRetirementWorker();
+  if (edition === "Enhanced") {
+    const { finalizeEnhancedDeliveryManifest } = await import("./enhanced-output-boundary.ts");
+    writeEnhancedRetirementWorker();
+    finalizeEnhancedDeliveryManifest(resolve(distRoot, edition));
+  }
   else writeServiceWorker(edition);
   auditEdition(edition);
 }

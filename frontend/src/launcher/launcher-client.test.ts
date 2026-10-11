@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BridgeClient, BrowserAccessClient } from "./launcher-client";
 import { clearBridgeDiscoveryForTest } from "../runtime/bridge-discovery";
+import { installEnhancedResourceAccess } from "../runtime/enhanced-resource-access";
 
 class MemoryStorage {
   readonly values = new Map<string, string>();
@@ -16,6 +17,84 @@ afterEach(() => {
 });
 
 describe("Launcher clients", () => {
+  it("clears an old account cookie even when the new Enhanced lease stays in Launcher without installation", async () => {
+    vi.stubGlobal("location", { origin: "https://bomana.ruikang.wang", protocol: "https:", pathname: "/launcher/" });
+    let lockTail = Promise.resolve();
+    vi.stubGlobal("navigator", { locks: { request: (_name: string, operation: () => Promise<void>) => { const result = lockTail.then(operation); lockTail = result.catch(() => {}); return result; } } });
+    const storage = new MemoryStorage(); const key = "bomana:cheemspay:authorization:v3";
+    const alice = `header.${btoa(JSON.stringify({ sub: "Alice" }))}.signature`;
+    const bob = `header.${btoa(JSON.stringify({ sub: "Bob" }))}.signature`;
+    const store = (accessToken: string, enhancedLease: string) => storage.setItem(key, JSON.stringify({ schemaVersion: 3, accessToken, accountLabel: accessToken, enhancedLease, enhancedLeaseExpiresAt: Date.now() + 60_000, validatedAt: Date.now() }));
+    store("Alice", alice);
+    let cookie = alice; let finish!: () => void; let started!: () => void;
+    const beginning = new Promise<void>((resolve) => { started = resolve; });
+    const delay = new Promise<void>((resolve) => { finish = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (_url: URL, init: RequestInit) => {
+      const lease = (JSON.parse(String(init.body)) as { lease: string }).lease;
+      if (init.method === "POST") { started(); await delay; cookie = lease; }
+      if (init.method === "DELETE" && cookie === lease) cookie = "";
+      return new Response(null, { status: 204 });
+    }));
+    const binding = installEnhancedResourceAccess(alice, false);
+    const rejected = expect(binding).rejects.toThrow("授权已变化");
+    await beginning;
+    const client = new BrowserAccessClient(new URL("https://pay.example"), vi.fn(), storage);
+    client.clearAuthorization(); store("Bob", bob);
+    finish(); await rejected; await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cookie).toBe("");
+    client.clearAuthorization(); await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cookie).toBe("");
+  });
+
+  it.each(["enhanced", "denied"])("cleans delayed direct logout safely when another tab becomes %s", async (nextState) => {
+    vi.stubGlobal("location", { origin: "https://bomana.ruikang.wang", protocol: "https:", pathname: "/launcher/" });
+    let lockTail = Promise.resolve();
+    vi.stubGlobal("navigator", { locks: { request: (_name: string, operation: () => Promise<void>) => { const result = lockTail.then(operation); lockTail = result.catch(() => {}); return result; } } });
+    vi.resetModules(); const otherTab = await import("../runtime/enhanced-resource-access");
+    const storage = new MemoryStorage();
+    const key = "bomana:cheemspay:authorization:v3";
+    const authorization = (token: string, lease: string | null) => JSON.stringify({ schemaVersion: 3, accessToken: token, accountLabel: "Alice", enhancedLease: lease, enhancedLeaseExpiresAt: Date.now() + 60_000, validatedAt: Date.now() });
+    storage.setItem(key, authorization("Alice-old-session", "Alice-L1"));
+    let cookie = "Alice-L1"; let finish!: () => void; let started!: () => void;
+    const beginning = new Promise<void>((resolve) => { started = resolve; });
+    const delay = new Promise<void>((resolve) => { finish = resolve; });
+    const methods: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: URL, init: RequestInit) => {
+      const lease = (JSON.parse(String(init.body)) as { lease: string }).lease;
+      methods.push(init.method!);
+      if (init.method === "POST") { if (lease === "Alice-L1") { started(); await delay; } cookie = lease; }
+      // Source policy allows same-subject deletion across normal Lease renewal.
+      if (init.method === "DELETE" && cookie.startsWith("Alice-") && lease.startsWith("Alice-")) cookie = "";
+      return new Response(null, { status: 204 });
+    }));
+    const binding = installEnhancedResourceAccess("Alice-L1", false);
+    const rejected = expect(binding).rejects.toThrow("授权已变化");
+    await beginning;
+    const client = new BrowserAccessClient(new URL("https://pay.example"), async () => new Response(JSON.stringify({ schemaVersion: 2, accountLabel: "Bob", enhanced: false })), storage);
+    client.clearAuthorization();
+    storage.setItem(key, authorization(nextState === "enhanced" ? "Alice-new-session" : "Bob", nextState === "enhanced" ? "Alice-L2" : null));
+    if (nextState === "denied") expect((await client.snapshot()).enhanced).toBe(false);
+    const renewal = nextState === "enhanced" ? otherTab.installEnhancedResourceAccess("Alice-L2", false) : Promise.resolve();
+    await Promise.resolve(); finish();
+    await rejected; await renewal; await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(methods).toEqual(nextState === "enhanced" ? ["POST", "POST"] : ["POST", "DELETE"]);
+    expect(cookie).toBe(nextState === "enhanced" ? "Alice-L2" : "");
+  });
+
+  it.each(["logout", "switch", "old-401"])("does not let a stale snapshot restore or clear another account: %s", async (action) => {
+    const storage = new MemoryStorage(); const key = "bomana:cheemspay:authorization:v3";
+    const stored = (accessToken: string) => JSON.stringify({ schemaVersion: 3, accessToken, accountLabel: "fixture", enhancedLease: "existing-lease", enhancedLeaseExpiresAt: Date.now() + 3600000, validatedAt: Date.now() });
+    storage.setItem(key, stored("account-A"));
+    let finish!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => { finish = resolve; });
+    const client = new BrowserAccessClient(new URL("https://pay.test"), (() => response) as typeof fetch, storage, async () => ({ subject: "A", entitlementVersion: 1, expiresAt: Date.now() + 3600000 }));
+    const pending = client.snapshot();
+    if (action === "logout") client.clearAuthorization(); else storage.setItem(key, stored("account-B"));
+    finish(action === "old-401" ? new Response(null, { status: 401 }) : Response.json({ schemaVersion: 2, enhanced: true, enhancedLease: "late-A-lease", enhancedLeaseExpiresAt: new Date(Date.now() + 3600000).toISOString() }));
+    expect((await pending).enhanced).toBe(false);
+    if (action === "logout") expect(storage.getItem(key)).toBeNull();
+    else expect(JSON.parse(storage.getItem(key)!).accessToken).toBe("account-B");
+  });
   it("reports a running incompatible Bridge with its version instead of asking the user to start it", async () => {
     const fetcher: typeof fetch = async () => Response.json({ schema_version: 1, bridge_protocol: 1, cache_protocol: 3, input: "official-8111-only", write_commands: false, bridge_version: "1.0.0" });
     await expect(new BridgeClient("", fetcher).probe()).resolves.toMatchObject({ state: "incompatible", message: expect.stringMatching(/1\.0\.0.*更新/) });

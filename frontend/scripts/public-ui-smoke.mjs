@@ -195,9 +195,13 @@ try {
     const map = landingPip.locator(".pip-mini-map");
     if (await map.isVisible() !== showMap) await landingPip.locator("#pip-map-toggle").click();
     await map.waitFor({ state: showMap ? "visible" : "hidden" });
+    // The grid updates before the instruments finish fitting their canvas.
+    // An old canvas can still match its old CSS width during that interval.
     await landingPip.waitForFunction(() => {
       const canvas = document.querySelector("#pip-heading-canvas");
-      return Math.abs(canvas.width / devicePixelRatio - canvas.getBoundingClientRect().width) < 2;
+      const width = canvas.getBoundingClientRect().width;
+      const slotWidth = document.querySelector(".pip-instruments-slot").getBoundingClientRect().width;
+      return Math.abs(width - slotWidth) < 2 && Math.abs(canvas.width / devicePixelRatio - width) < 2;
     });
     await assertRoute(landingPip);
     const heading = await landingPip.locator("#pip-heading-canvas").boundingBox();
@@ -208,7 +212,7 @@ try {
     }
     await landingPip.screenshot({ path: `../.artifacts/public-ui/Standard-landing-map-${showMap ? "on" : "off"}-900x120.png` });
   }
-  assert.ok(headingWidths[1] > headingWidths[0], "Hiding the map must release space for the perspective viewport");
+  assert.ok(headingWidths[1] > headingWidths[0], `Hiding the map must release space for the perspective viewport: ${JSON.stringify(headingWidths)}`);
   await landingPip.close();
   assert.equal(await landing.locator('[data-part="arrestor"]').isVisible(), false, 'Static capability belongs in the collapsed reference section');
   assert.equal(await landing.locator('[data-part="touchdown"]').isVisible(), false, 'Default panel omits static touchdown explanation');
