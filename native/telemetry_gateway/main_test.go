@@ -2,14 +2,19 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -559,5 +564,499 @@ func TestBridgePreflightOptsIntoExactOriginPrivateNetworkRead(t *testing.T) {
 	}
 	if response.Header().Get("Access-Control-Allow-Private-Network") != "true" {
 		t.Fatal("private-network read preflight was not explicitly allowed")
+	}
+}
+
+type memoryRoundTrip func(*http.Request) (*http.Response, error)
+
+func (f memoryRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+func memoryResponse() *http.Response {
+	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"valid":true}`))}
+}
+func memoryFingerprint(path string) ([]byte, string, error) {
+	if path == "/icons.ttf" {
+		return []byte{0, 1, 0, 0, 0, 1, 0, 16, 0, 0, 0, 0, 'g', 'l', 'y', 'f', 0, 0, 0, 0, 0, 0, 0, 28, 0, 0, 0, 1, 0}, "font/ttf", nil
+	}
+	return []byte(`{"valid":false}`), "application/json", nil
+}
+func memoryResolver(t *testing.T, read extui.ReadFunc, now func() time.Time) *extui.Resolver {
+	t.Helper()
+	r, e := extui.NewResolver(extui.Options{Candidates: extui.DefaultCandidates(), Read: read, Now: now})
+	if e != nil {
+		t.Fatal(e)
+	}
+	return r
+}
+
+func TestMemoryBothStartupOrdersRecover(t *testing.T) {
+	for _, first := range []bool{true, false} {
+		name := "game-first"
+		if first {
+			name = "bridge-first"
+		}
+		t.Run(name, func(t *testing.T) {
+			now := time.Unix(0, 0)
+			available := !first
+			probes := 0
+			resolver := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+				probes++
+				if !available {
+					return nil, "", errors.New("synthetic connection refused")
+				}
+				return memoryFingerprint(u.Path)
+			}, func() time.Time { return now })
+			if first {
+				if _, e := resolver.Resolve(context.Background()); e == nil {
+					t.Fatal("absent game accepted")
+				}
+				available = true
+				if _, e := resolver.Resolve(context.Background()); e == nil {
+					t.Fatal("backoff unexpectedly absent")
+				}
+				if probes != 3 {
+					t.Fatalf("negative cache reprobed: %d", probes)
+				}
+				now = now.Add(time.Second)
+			}
+			selected, e := resolver.Resolve(context.Background())
+			if e != nil || selected.Port() != "8111" {
+				t.Fatalf("resolve: %v %v", selected, e)
+			}
+			before := probes
+			if _, e = resolver.Resolve(context.Background()); e != nil || probes != before {
+				t.Fatal("warm resolver not cached")
+			}
+			t.Logf("order=%s ready=true probes=%d; no order-only permanent failure", name, probes)
+		})
+	}
+}
+
+func TestMemoryCancelledBrowserRequestPreservesHealthySelection(t *testing.T) {
+	probes := 0
+	resolver := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		if e := ctx.Err(); e != nil {
+			return nil, "", e
+		}
+		probes++
+		return memoryFingerprint(u.Path)
+	}, nil)
+	if _, e := resolver.Resolve(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	relay := newRelayWithExtUI(resolver, "https://bomana.ruikang.wang", nil)
+	relay.client.Transport = memoryRoundTrip(func(r *http.Request) (*http.Response, error) { cancel(); return nil, r.Context().Err() })
+	request := httptest.NewRequest("GET", "http://127.0.0.1:8878/api/v1/8111/state", nil).WithContext(ctx)
+	request.Header.Set("Origin", "https://bomana.ruikang.wang")
+	recorder := httptest.NewRecorder()
+	relay.ServeHTTP(recorder, request)
+	if resolver.Snapshot().State != extui.StateReady {
+		t.Fatal("caller cancellation evicted the healthy selection")
+	}
+	before := probes
+	relay.client.Transport = memoryRoundTrip(func(*http.Request) (*http.Response, error) { return memoryResponse(), nil })
+	request = httptest.NewRequest("GET", "http://127.0.0.1:8878/api/v1/8111/state", nil)
+	request.Header.Set("Origin", "https://bomana.ruikang.wang")
+	recorder = httptest.NewRecorder()
+	relay.ServeHTTP(recorder, request)
+	if recorder.Code != 200 || probes-before != 0 {
+		t.Fatalf("recovery code=%d probes=%d", recorder.Code, probes-before)
+	}
+	t.Log("caller cancellation preserved the selected upstream; next request did not repeat fingerprint probes")
+}
+
+func memoryRequest(path string, ctx context.Context) *http.Request {
+	r := httptest.NewRequest("GET", "http://127.0.0.1:8878/api/v1/8111/"+path, nil).WithContext(ctx)
+	r.Header.Set("Origin", "https://bomana.ruikang.wang")
+	return r
+}
+
+func memoryWait(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(3 * time.Second):
+		t.Fatal("memory fixture did not reach its synchronization point")
+	}
+}
+
+func TestMemoryConcurrentLateFailureDoesNotReprobeNewSelection(t *testing.T) {
+	var probes, stateCalls, indicatorCalls atomic.Int32
+	r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		probes.Add(1)
+		return memoryFingerprint(u.Path)
+	}, nil)
+	if _, err := r.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	oldInFlight, releaseOld, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var release sync.Once
+	defer release.Do(func() { close(releaseOld) })
+	gateway := newRelayWithExtUI(r, "https://bomana.ruikang.wang", nil)
+	gateway.client.Transport = memoryRoundTrip(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/state" && stateCalls.Add(1) == 1 {
+			close(oldInFlight)
+			<-releaseOld
+			return nil, errors.New("synthetic late transport failure")
+		}
+		if req.URL.Path == "/indicators" && indicatorCalls.Add(1) == 1 {
+			return nil, errors.New("synthetic current transport failure")
+		}
+		return memoryResponse(), nil
+	})
+	oldResponse := httptest.NewRecorder()
+	go func() {
+		defer close(done)
+		gateway.ServeHTTP(oldResponse, memoryRequest("state", context.Background()))
+	}()
+	memoryWait(t, oldInFlight)
+	currentResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(currentResponse, memoryRequest("indicators", context.Background()))
+	if currentResponse.Code != 200 || probes.Load() != 6 {
+		t.Fatalf("current failure must rediscover: code=%d probes=%d", currentResponse.Code, probes.Load())
+	}
+	release.Do(func() { close(releaseOld) })
+	memoryWait(t, done)
+	if oldResponse.Code != 200 || probes.Load() != 6 {
+		t.Fatalf("late failure reprobed the new same-address selection: code=%d probes=%d", oldResponse.Code, probes.Load())
+	}
+	if stateCalls.Load() != 2 || indicatorCalls.Load() != 2 {
+		t.Fatal("both requests must recover in their second attempt")
+	}
+}
+
+func TestMemoryConcurrentCancellationKeepsOtherReaderReady(t *testing.T) {
+	var probes atomic.Int32
+	r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		probes.Add(1)
+		return memoryFingerprint(u.Path)
+	}, nil)
+	if _, err := r.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	held, done := make(chan struct{}), make(chan struct{})
+	var signalHeld sync.Once
+	var canceledCalls atomic.Int32
+	gateway := newRelayWithExtUI(r, "https://bomana.ruikang.wang", nil)
+	gateway.client.Transport = memoryRoundTrip(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/state" {
+			canceledCalls.Add(1)
+			signalHeld.Do(func() { close(held) })
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		}
+		return memoryResponse(), nil
+	})
+	go func() { defer close(done); gateway.ServeHTTP(httptest.NewRecorder(), memoryRequest("state", ctx)) }()
+	memoryWait(t, held)
+	before := httptest.NewRecorder()
+	gateway.ServeHTTP(before, memoryRequest("indicators", context.Background()))
+	cancel()
+	memoryWait(t, done)
+	after := httptest.NewRecorder()
+	gateway.ServeHTTP(after, memoryRequest("indicators", context.Background()))
+	if before.Code != 200 || after.Code != 200 || probes.Load() != 3 || canceledCalls.Load() != 1 {
+		t.Fatalf("canceled reader disrupted its peer: codes=%d/%d probes=%d attempts=%d", before.Code, after.Code, probes.Load(), canceledCalls.Load())
+	}
+}
+
+func TestMemoryConcurrentColdDiscoverySharesOneSelection(t *testing.T) {
+	var probes atomic.Int32
+	entered, release := make(chan struct{}), make(chan struct{})
+	var unblock sync.Once
+	defer unblock.Do(func() { close(release) })
+	r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		if probes.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+		return memoryFingerprint(u.Path)
+	}, nil)
+	results := make(chan error, 16)
+	for i := 0; i < 16; i++ {
+		go func() {
+			selection, err := r.Resolve(context.Background())
+			if err == nil && selection.Port() != "8111" {
+				err = errors.New("wrong selected port")
+			}
+			results <- err
+		}()
+	}
+	memoryWait(t, entered)
+	unblock.Do(func() { close(release) })
+	for i := 0; i < 16; i++ {
+		select {
+		case err := <-results:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("discovery waiter stuck")
+		}
+	}
+	if probes.Load() != 3 {
+		t.Fatalf("parallel readers repeated discovery %d times", probes.Load())
+	}
+}
+
+func TestMemoryCurrentFailureFindsFallbackPort(t *testing.T) {
+	port := "8111"
+	r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		if u.Port() != port {
+			return nil, "", errors.New("synthetic refused")
+		}
+		return memoryFingerprint(u.Path)
+	}, nil)
+	old, err := r.Resolve(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port = "9222"
+	r.Invalidate(old)
+	fresh, err := r.Resolve(context.Background())
+	if err != nil || fresh.Port() != port {
+		t.Fatalf("fallback: %v %v", fresh, err)
+	}
+	r.Invalidate(old)
+	if r.Snapshot().Port != port {
+		t.Fatal("old port's failure evicted fallback")
+	}
+}
+
+func TestMemoryColdDiscoveryCanExceedBrowserBudget(t *testing.T) {
+	// Virtual latency only: each probe takes 600 ms, below the 750 ms per-probe limit.
+	// A browser cancels its request after 1500 ms, before three probes can finish.
+	elapsed := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resolver := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		if e := ctx.Err(); e != nil {
+			return nil, "", e
+		}
+		elapsed += 600
+		if elapsed >= 1500 {
+			cancel()
+			return nil, "", context.Canceled
+		}
+		return memoryFingerprint(u.Path)
+	}, nil)
+	if _, e := resolver.Resolve(ctx); !errors.Is(e, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", e)
+	}
+	if resolver.Snapshot().State != extui.StateIdle {
+		t.Fatal("canceled probe should not negative-cache")
+	}
+	t.Log("cold discovery needs 1800 ms at 600 ms/probe and cannot fit the 1500 ms Web deadline; input is synthetic")
+}
+
+func TestMemoryLateFailurePreservesRevalidatedSameOrigin(t *testing.T) {
+	probes := 0
+	resolver := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		probes++
+		return memoryFingerprint(u.Path)
+	}, nil)
+	old, e := resolver.Resolve(context.Background())
+	if e != nil {
+		t.Fatal(e)
+	}
+	resolver.Invalidate(old)
+	fresh, e := resolver.Resolve(context.Background())
+	if e != nil {
+		t.Fatal(e)
+	}
+	if probes != 6 {
+		t.Fatalf("expected revalidation: %d", probes)
+	}
+	resolver.Invalidate(old) // A second request from the old generation finishes late.
+	if resolver.Snapshot().State != extui.StateReady {
+		t.Fatal("late failure evicted the newly verified selection")
+	}
+	if fresh.Host != old.Host {
+		t.Fatal("test did not use same origin")
+	}
+	resolver.Invalidate(fresh)
+	if resolver.Snapshot().State == extui.StateReady {
+		t.Fatal("current selection failure must still invalidate")
+	}
+}
+
+type countedSelection struct {
+	gameUpstream
+	resolves, invalidations int
+}
+
+// Expire a deadline at the transport seam, without scheduler-dependent sleeps.
+type memoryDeadlineContext struct {
+	context.Context
+	done chan struct{}
+}
+
+func (ctx memoryDeadlineContext) Done() <-chan struct{} { return ctx.done }
+func (ctx memoryDeadlineContext) Err() error {
+	select {
+	case <-ctx.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func (c *countedSelection) Resolve(ctx context.Context) (*extui.Selection, error) {
+	c.resolves++
+	return c.gameUpstream.Resolve(ctx)
+}
+func (c *countedSelection) Invalidate(s *extui.Selection) bool {
+	c.invalidations++
+	return c.gameUpstream.Invalidate(s)
+}
+
+func TestMemoryCallerAbortDoesNotRetryOrInvalidate(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		name := "cancel"
+		if deadline {
+			name = "deadline"
+		}
+		t.Run(name, func(t *testing.T) {
+			r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+				return memoryFingerprint(u.Path)
+			}, nil)
+			if _, err := r.Resolve(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			upstream := &countedSelection{gameUpstream: r}
+			gateway := newRelayWithExtUI(upstream, "https://bomana.ruikang.wang", nil)
+			var logs bytes.Buffer
+			gateway.diagnostics.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+			var ctx context.Context
+			ctx, cancel := context.WithCancel(context.Background())
+			expire := cancel
+			if deadline {
+				cancel()
+				deadlineContext := memoryDeadlineContext{Context: context.Background(), done: make(chan struct{})}
+				ctx = deadlineContext
+				expire = func() { close(deadlineContext.done) }
+			}
+			defer cancel()
+			calls := 0
+			gateway.client.Transport = memoryRoundTrip(func(req *http.Request) (*http.Response, error) {
+				calls++
+				expire()
+				<-req.Context().Done()
+				return nil, req.Context().Err()
+			})
+			gateway.ServeHTTP(httptest.NewRecorder(), memoryRequest("state", ctx))
+			if calls != 1 || upstream.resolves != 1 || upstream.invalidations != 0 || r.Snapshot().State != extui.StateReady {
+				t.Fatalf("abandoned request retried/invalidated: transport=%d resolve=%d invalidate=%d", calls, upstream.resolves, upstream.invalidations)
+			}
+			kind := "caller_canceled"
+			if deadline {
+				kind = "caller_deadline"
+			}
+			if !strings.Contains(logs.String(), kind) {
+				t.Fatalf("missing bounded classification: %s", logs.String())
+			}
+		})
+	}
+}
+
+func TestMemoryUpstreamTimeoutStillInvalidatesAndRetries(t *testing.T) {
+	for _, stage := range []string{"transport", "body"} {
+		t.Run(stage, func(t *testing.T) {
+			probes, calls := 0, 0
+			r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+				probes++
+				return memoryFingerprint(u.Path)
+			}, nil)
+			if _, err := r.Resolve(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			gateway := newRelayWithExtUI(r, "https://bomana.ruikang.wang", nil)
+			var logs bytes.Buffer
+			gateway.diagnostics.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+			gateway.client.Transport = memoryRoundTrip(func(req *http.Request) (*http.Response, error) {
+				calls++
+				if calls == 1 {
+					if stage == "body" {
+						response := memoryResponse()
+						response.Body = io.NopCloser(memoryTimedOutBody{})
+						return response, nil
+					}
+					return nil, context.DeadlineExceeded
+				}
+				return memoryResponse(), nil
+			})
+			response := httptest.NewRecorder()
+			gateway.ServeHTTP(response, memoryRequest("state", context.Background()))
+			if response.Code != 200 || calls != 2 || probes != 6 {
+				t.Fatalf("real upstream timeout lost recovery: status=%d calls=%d probes=%d", response.Code, calls, probes)
+			}
+			if !strings.Contains(logs.String(), "upstream_timeout") {
+				t.Fatalf("timeout classification lost at %s: %s", stage, logs.String())
+			}
+		})
+	}
+}
+
+type memoryTimedOutBody struct{}
+
+func (memoryTimedOutBody) Read([]byte) (int, error) { return 0, context.DeadlineExceeded }
+
+func TestMemoryDiagnosticsBoundedAndExcludeRawErrors(t *testing.T) {
+	now := time.Unix(1000, 0)
+	var logs bytes.Buffer
+	d := relayDiagnostics{now: func() time.Time { return now }, logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+	r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		return memoryFingerprint(u.Path)
+	}, nil)
+	s, err := r.Resolve(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretError := &url.Error{Op: "GET", URL: "http://secret.example/private?token=PRIVATE", Err: errors.New("personal-data")}
+	for i := 0; i < 1000; i++ {
+		d.failed("/state", s, 1250*time.Millisecond, relayErrorKind(secretError, false), false)
+		d.recovered("/state", s, time.Millisecond)
+	}
+	decoder := json.NewDecoder(&logs)
+	events := []map[string]any{}
+	for {
+		var e map[string]any
+		err := decoder.Decode(&e)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		events = append(events, e)
+	}
+	if len(events) != 2 {
+		t.Fatalf("1000 repeated failures/recoveries wrote %d events", len(events))
+	}
+	allowed := map[string]bool{"time": true, "level": true, "msg": true, "route": true, "upstream_port": true, "generation": true, "elapsed_ms": true, "kind": true, "invalidated": true}
+	for _, e := range events {
+		for key := range e {
+			if !allowed[key] {
+				t.Fatalf("unexpected diagnostic data: %s", key)
+			}
+		}
+		if e["generation"] != float64(1) || e["upstream_port"] != "8111" {
+			t.Fatalf("missing selection identity: %v", e)
+		}
+	}
+	encoded, _ := json.Marshal(events)
+	for _, secret := range []string{"PRIVATE", "personal-data", "secret.example"} {
+		if bytes.Contains(encoded, []byte(secret)) {
+			t.Fatalf("diagnostic leaked %s", secret)
+		}
+	}
+	now = now.Add(30 * time.Second)
+	logs.Reset()
+	d.failed("/state", s, time.Millisecond, "upstream_timeout", true)
+	if !strings.Contains(logs.String(), "upstream_timeout") {
+		t.Fatal("next bounded interval did not log")
 	}
 }

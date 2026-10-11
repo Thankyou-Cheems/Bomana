@@ -91,6 +91,16 @@ export class SoundCues {
   get enabled(): boolean { return this.#preferences.masterEnabled; }
   get preferences(): SoundCuePreferences { return this.#preferences; }
   get ready(): boolean { return this.#context?.state === "running"; }
+  close(): void {
+    this.#stopVoices(() => true);
+    const context = this.#context;
+    this.#context = null;
+    this.#statusListeners.clear();
+    if (context && context.state !== "closed") {
+      context.onstatechange = null;
+      void context.close().catch(() => {});
+    }
+  }
   observeStatus(listener: () => void): () => void {
     this.#statusListeners.add(listener); listener();
     return () => { this.#statusListeners.delete(listener); };

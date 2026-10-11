@@ -38,10 +38,15 @@ try {
       throw new TypeError("External service disabled in cache regression");
     };
   });
+  // This cache regression owns only local assets and synthetic Bridge responses.
+  // Remote branding must not hold the document load after the cache UI is ready.
+  const origin = new URL(server.resolvedUrls.local[0]).origin;
+  await page.route('**/*', route => new URL(route.request().url()).origin === origin
+    ? route.fallback() : route.abort());
   await page.route('**/launcher/', async route => route.fulfill({
     response: await route.fetch({ url: `${server.resolvedUrls.local[0]}launcher.html` }),
   }));
-  await page.goto(`${server.resolvedUrls.local[0]}launcher/`);
+  await page.goto(`${server.resolvedUrls.local[0]}launcher/`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.body.dataset.busy !== "true" && document.querySelector("#account-actions button"), null, { timeout: 5000 })
     .catch(error => { throw new Error(`${error.message}; page errors: ${JSON.stringify(errors)}`); });
   await page.evaluate(() => { window.cacheFixture.connected = true; });
@@ -88,7 +93,7 @@ try {
   assert.ok(cacheCalls.length >= 4);
   assert.ok(cacheCalls.every(r => r.path === "/api/v1/cache/status" && r.method === "GET"), "reconnect only reads status; no selection write or map redownload");
   await page.evaluate(() => localStorage.setItem("cache-fixture-connected", "true"));
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.querySelector("#mode-badge").textContent === "已就绪");
   assert.deepEqual(errors, []);
   console.log("Launcher cache: initial connection, reconnect, stale response and Bridge 1.8.4 protocol 4 passed without downloads");

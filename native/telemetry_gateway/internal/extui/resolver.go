@@ -48,13 +48,24 @@ type Snapshot struct {
 	LastError string
 }
 
+// Selection identifies one verified upstream lifetime, even when its address is
+// reused after recovery. Resolve returns a copy; callers retain it until their
+// request completes and may invalidate only that lifetime.
+type Selection struct {
+	url.URL
+	generation uint64
+}
+
+func (selection *Selection) Generation() uint64 { return selection.generation }
+
 type Resolver struct {
 	candidates []*url.URL
 	read       ReadFunc
 	now        func() time.Time
 	retryDelay time.Duration
 	mu         sync.Mutex
-	selected   *url.URL
+	selected   *Selection
+	generation uint64
 	nextProbe  time.Time
 	lastError  error
 }
@@ -97,9 +108,12 @@ func NewResolver(options Options) (*Resolver, error) {
 	return &Resolver{candidates: candidates, read: options.Read, now: now, retryDelay: retryDelay}, nil
 }
 
-func (resolver *Resolver) Resolve(ctx context.Context) (*url.URL, error) {
+func (resolver *Resolver) Resolve(ctx context.Context) (*Selection, error) {
 	resolver.mu.Lock()
 	defer resolver.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if resolver.selected != nil {
 		copy := *resolver.selected
 		return &copy, nil
@@ -109,11 +123,13 @@ func (resolver *Resolver) Resolve(ctx context.Context) (*url.URL, error) {
 	}
 	for _, candidate := range resolver.candidates {
 		if err := resolver.verify(ctx, candidate); err == nil {
-			copy := *candidate
+			resolver.generation++
+			copy := Selection{URL: *candidate, generation: resolver.generation}
 			resolver.selected = &copy
 			resolver.nextProbe = time.Time{}
 			resolver.lastError = nil
-			return &copy, nil
+			selected := copy
+			return &selected, nil
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -124,17 +140,19 @@ func (resolver *Resolver) Resolve(ctx context.Context) (*url.URL, error) {
 	return nil, resolver.lastError
 }
 
-func (resolver *Resolver) Invalidate(candidate *url.URL) {
+func (resolver *Resolver) Invalidate(candidate *Selection) bool {
 	if candidate == nil {
-		return
+		return false
 	}
 	resolver.mu.Lock()
 	defer resolver.mu.Unlock()
-	if resolver.selected != nil && resolver.selected.Scheme == candidate.Scheme && resolver.selected.Host == candidate.Host {
+	if resolver.selected != nil && resolver.selected.generation == candidate.generation && resolver.selected.Scheme == candidate.Scheme && resolver.selected.Host == candidate.Host {
 		resolver.selected = nil
 		resolver.nextProbe = time.Time{}
 		resolver.lastError = nil
+		return true
 	}
+	return false
 }
 
 func (resolver *Resolver) Snapshot() Snapshot {

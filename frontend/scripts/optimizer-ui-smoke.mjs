@@ -124,6 +124,9 @@ try {
   // The visible plan must give projectile counts, rather than rack counts.
   await page.locator('[data-custom-new]').click();
   await page.locator('#calcBrSegments [role="radio"]').first().click();
+  assert.equal(await page.locator('.current-preset-row').evaluate(row =>
+    row.getBoundingClientRect().width <= row.closest('.loadout-comparison').getBoundingClientRect().width
+  ), true, 'The mobile current-loadout editor fits its card instead of clipping stations behind the name column');
   const rockets = custom.aircraft.a_10c.options.find(option => option.weapons.some(([id,count]) => id === 'us_hydra_70_m247' && count === 21));
   await page.locator(`[data-custom-tier="${rockets.tier}"]`).click();
   await page.locator(`[data-custom-option="${rockets.key}"]`).click();

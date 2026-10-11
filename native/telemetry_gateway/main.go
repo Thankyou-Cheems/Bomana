@@ -18,6 +18,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -71,21 +72,24 @@ type relay struct {
 	cache            *localDataStore
 	mobile           *mobilePairingManager
 	presentation     *presentationState
+	diagnostics      relayDiagnostics
 }
 
 type gameUpstream interface {
-	Resolve(context.Context) (*url.URL, error)
-	Invalidate(*url.URL)
+	Resolve(context.Context) (*extui.Selection, error)
+	Invalidate(*extui.Selection) bool
 }
 
 type fixedGameUpstream struct{ base *url.URL }
 
-func (upstream fixedGameUpstream) Resolve(context.Context) (*url.URL, error) {
-	copy := *upstream.base
-	return &copy, nil
+func (upstream fixedGameUpstream) Resolve(ctx context.Context) (*extui.Selection, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &extui.Selection{URL: *upstream.base}, nil
 }
 
-func (fixedGameUpstream) Invalidate(*url.URL) {}
+func (fixedGameUpstream) Invalidate(*extui.Selection) bool { return false }
 
 func main() {
 	listenAddress := flag.String("listen", defaultListenAddress, "loopback listener address")
@@ -314,24 +318,37 @@ func (gateway *relay) ServeHTTP(response http.ResponseWriter, request *http.Requ
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
+		started := time.Now()
 		body, contentType, upstreamBase, err := gateway.fetchExtUI(request.Context(), definition)
 		if err == nil {
+			gateway.diagnostics.recovered(definition.upstreamPath, upstreamBase, time.Since(started))
 			response.Header().Set("Content-Type", contentType)
 			response.WriteHeader(http.StatusOK)
 			_, _ = response.Write(body)
 			return
 		}
-		gateway.upstream.Invalidate(upstreamBase)
+		// A browser deadline/stop says nothing about the shared game upstream.
+		// Do not retry with an abandoned context or evict other readers' choice.
+		if callerError := request.Context().Err(); callerError != nil {
+			gateway.diagnostics.failed(definition.upstreamPath, upstreamBase, time.Since(started), relayErrorKind(callerError, true), false)
+			return
+		}
+		invalidated := gateway.upstream.Invalidate(upstreamBase)
+		kind := relayErrorKind(err, false)
+		if upstreamBase == nil {
+			kind = "discovery"
+		}
+		gateway.diagnostics.failed(definition.upstreamPath, upstreamBase, time.Since(started), kind, invalidated)
 	}
 	http.Error(response, "8111 unavailable", http.StatusBadGateway)
 }
 
-func (gateway *relay) fetchExtUI(ctx context.Context, definition routeDefinition) ([]byte, string, *url.URL, error) {
+func (gateway *relay) fetchExtUI(ctx context.Context, definition routeDefinition) ([]byte, string, *extui.Selection, error) {
 	upstreamBase, err := gateway.upstream.Resolve(ctx)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	upstreamURL := *upstreamBase
+	upstreamURL := upstreamBase.URL
 	upstreamURL.Path = definition.upstreamPath
 	upstreamURL.RawQuery = definition.upstreamQuery
 	upstreamRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, upstreamURL.String(), nil)
@@ -352,7 +369,10 @@ func (gateway *relay) fetchExtUI(ctx context.Context, definition routeDefinition
 		return nil, "", upstreamBase, errors.New("ExtUI response type rejected")
 	}
 	body, err := io.ReadAll(io.LimitReader(upstreamResponse.Body, definition.maxBytes+1))
-	if err != nil || int64(len(body)) > definition.maxBytes {
+	if err != nil {
+		return nil, "", upstreamBase, fmt.Errorf("ExtUI response read failed: %w", err)
+	}
+	if int64(len(body)) > definition.maxBytes {
 		return nil, "", upstreamBase, errors.New("ExtUI response rejected")
 	}
 	return body, contentType, upstreamBase, nil
@@ -914,4 +934,77 @@ func setSecurityHeaders(response http.ResponseWriter) {
 	response.Header().Set("Content-Security-Policy", "default-src 'none'")
 	response.Header().Set("Referrer-Policy", "no-referrer")
 	response.Header().Set("X-Content-Type-Options", "nosniff")
+}
+
+// One failure per 30 seconds and the next successful read use the existing stderr
+// logger. No request/response bodies, headers, addresses or error strings enter
+// the log. Zero value is ready; the clock/logger seams keep tests in memory.
+type relayDiagnostics struct {
+	mu               sync.Mutex
+	now              func() time.Time
+	logger           *slog.Logger
+	lastFailure      time.Time
+	awaitingRecovery bool
+}
+
+func (diagnostics *relayDiagnostics) failed(route string, selection *extui.Selection, elapsed time.Duration, kind string, invalidated bool) {
+	diagnostics.mu.Lock()
+	defer diagnostics.mu.Unlock()
+	now := time.Now()
+	if diagnostics.now != nil {
+		now = diagnostics.now()
+	}
+	if !diagnostics.lastFailure.IsZero() && now.Sub(diagnostics.lastFailure) < 30*time.Second {
+		return
+	}
+	diagnostics.lastFailure = now
+	diagnostics.awaitingRecovery = true
+	attributes := relayDiagnosticAttributes(route, selection, elapsed)
+	attributes = append(attributes, "kind", kind, "invalidated", invalidated)
+	diagnostics.log().Info("ExtUI relay failure", attributes...)
+}
+
+func (diagnostics *relayDiagnostics) recovered(route string, selection *extui.Selection, elapsed time.Duration) {
+	diagnostics.mu.Lock()
+	defer diagnostics.mu.Unlock()
+	if !diagnostics.awaitingRecovery {
+		return
+	}
+	diagnostics.awaitingRecovery = false
+	diagnostics.log().Info("ExtUI relay next read succeeded", relayDiagnosticAttributes(route, selection, elapsed)...)
+}
+
+func (diagnostics *relayDiagnostics) log() *slog.Logger {
+	if diagnostics.logger != nil {
+		return diagnostics.logger
+	}
+	return slog.Default()
+}
+
+func relayDiagnosticAttributes(route string, selection *extui.Selection, elapsed time.Duration) []any {
+	port := ""
+	var generation uint64
+	if selection != nil {
+		port = selection.Port()
+		generation = selection.Generation()
+	}
+	return []any{"route", route, "upstream_port", port, "generation", generation, "elapsed_ms", elapsed.Milliseconds()}
+}
+
+func relayErrorKind(err error, caller bool) string {
+	if caller {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "caller_deadline"
+		}
+		return "caller_canceled"
+	}
+	var networkError net.Error
+	if errors.As(err, &networkError) && networkError.Timeout() {
+		return "upstream_timeout"
+	}
+	var transportError *url.Error
+	if errors.As(err, &transportError) {
+		return "upstream_transport"
+	}
+	return "upstream_response"
 }

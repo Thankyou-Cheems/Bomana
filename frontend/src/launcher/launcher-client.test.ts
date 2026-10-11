@@ -20,7 +20,7 @@ describe("Launcher clients", () => {
   it("clears an old account cookie even when the new Enhanced lease stays in Launcher without installation", async () => {
     vi.stubGlobal("location", { origin: "https://bomana.ruikang.wang", protocol: "https:", pathname: "/launcher/" });
     let lockTail = Promise.resolve();
-    vi.stubGlobal("navigator", { locks: { request: (_name: string, operation: () => Promise<void>) => { const result = lockTail.then(operation); lockTail = result.catch(() => {}); return result; } } });
+    vi.stubGlobal("navigator", { locks: { request: (_name: string, _options: unknown, operation: () => Promise<void>) => { const result = lockTail.then(operation); lockTail = result.catch(() => {}); return result; } } });
     const storage = new MemoryStorage(); const key = "bomana:cheemspay:authorization:v3";
     const alice = `header.${btoa(JSON.stringify({ sub: "Alice" }))}.signature`;
     const bob = `header.${btoa(JSON.stringify({ sub: "Bob" }))}.signature`;
@@ -49,7 +49,7 @@ describe("Launcher clients", () => {
   it.each(["enhanced", "denied"])("cleans delayed direct logout safely when another tab becomes %s", async (nextState) => {
     vi.stubGlobal("location", { origin: "https://bomana.ruikang.wang", protocol: "https:", pathname: "/launcher/" });
     let lockTail = Promise.resolve();
-    vi.stubGlobal("navigator", { locks: { request: (_name: string, operation: () => Promise<void>) => { const result = lockTail.then(operation); lockTail = result.catch(() => {}); return result; } } });
+    vi.stubGlobal("navigator", { locks: { request: (_name: string, _options: unknown, operation: () => Promise<void>) => { const result = lockTail.then(operation); lockTail = result.catch(() => {}); return result; } } });
     vi.resetModules(); const otherTab = await import("../runtime/enhanced-resource-access");
     const storage = new MemoryStorage();
     const key = "bomana:cheemspay:authorization:v3";

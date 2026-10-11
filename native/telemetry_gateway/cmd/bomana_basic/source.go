@@ -50,7 +50,7 @@ func (s *source) read(ctx context.Context, now int64) frame {
 			continue
 		}
 		wg.Add(1)
-		go func(i int, path string) { defer wg.Done(); data[i], errs[i] = s.get(ctx, base, path) }(i, path)
+		go func(i int, path string) { defer wg.Done(); data[i], errs[i] = s.get(ctx, &base.URL, path) }(i, path)
 	}
 	wg.Wait()
 	if readMap {
