@@ -87,7 +87,7 @@ go -C native/telemetry_gateway test ./...
 go -C native/telemetry_gateway vet ./...
 ```
 
-Web 构建输出在 `frontend/dist/Lite`、`frontend/dist/Standard` 和 `frontend/dist/launcher`。公开 CI 只检查源码和构建，不保存生产密钥、不部署生产服务器，也不发布 Enhanced 或正式安装包。当前线上下载请以[在线 Launcher](https://bomana.ruikang.wang/launcher/)为准。
+Web 构建输出在 `frontend/dist/Lite`、`frontend/dist/Standard` 和 `frontend/dist/launcher`。完整检查在本地运行；维护者的导出流程另做独立构建和边界检查。公开仓库不提供托管 CI，也不能自动调用维护者的私有 runner；不保存生产密钥、不部署生产服务器、不发布 Enhanced 或正式安装包。当前线上下载请以[在线 Launcher](https://bomana.ruikang.wang/launcher/)为准。
 
 Basic Desktop 是公开源码中可按需手动构建的极简 Windows 计时 / 基础导航程序；公开仓库不承诺提供预构建桌面下载。Enhanced Desktop 是独立的私有手动分发版本，不包含在这里，也不会由公开 CI 构建。
 

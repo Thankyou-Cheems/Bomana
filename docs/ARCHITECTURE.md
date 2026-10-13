@@ -21,4 +21,4 @@ again. Standard's page and Picture-in-Picture window share one flight-status
 presentation, so reopening the window preserves gear movement direction. Each
 phone page has its own runtime while consuming the paired Bridge's observations.
 
-Public source updates are generated, tested in a clean directory and appended to public `main`. CI in this repository repeats the public checks. It does not sign official releases, store deployment credentials or deploy to Tencent Cloud. Existing tags / Releases are historical, not a second publication pipeline.
+Public source updates are generated, independently built and boundary-checked in a clean directory on the maintainer's local runner, then appended to public `main`. Contributors run the complete checks locally; this repository exports no hosted workflow or access to the private runner. It does not sign official releases, store deployment credentials or deploy to Tencent Cloud. Existing tags / Releases are historical, not a second publication pipeline.

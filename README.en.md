@@ -87,7 +87,7 @@ go -C native/telemetry_gateway test ./...
 go -C native/telemetry_gateway vet ./...
 ```
 
-Web outputs are written to `frontend/dist/Lite`, `frontend/dist/Standard` and `frontend/dist/launcher`. Public CI checks source and builds only. It has no production credentials, does not deploy production, and does not build Enhanced or official release packages. Use the [online Launcher](https://bomana.ruikang.wang/launcher/) for current downloads.
+Web outputs are written to `frontend/dist/Lite`, `frontend/dist/Standard` and `frontend/dist/launcher`. Run the full checks locally; the maintainer's export separately builds and audits the public boundary. No hosted workflow or private-runner access is exported. This repository has no production credentials, does not deploy production, and does not build Enhanced or official release packages. Use the [online Launcher](https://bomana.ruikang.wang/launcher/) for current downloads.
 
 Basic Desktop is a minimal Windows timer / basic-navigation program whose source is public and can be built manually when needed; this repository does not promise a prebuilt desktop download. Enhanced Desktop is a separate private, manually delivered edition and is not built by public CI.
 

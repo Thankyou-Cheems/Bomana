@@ -2,7 +2,6 @@
   "schema_version": 1,
   "files": [
     ".gitattributes",
-    ".github/workflows/quality.yml",
     ".gitignore",
     "AGENTS.md",
     "CONTEXT.md",
