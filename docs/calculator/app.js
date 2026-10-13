@@ -1,3 +1,5 @@
+import "./workflows.mjs";
+import { fuelFields, fuelInputIssues } from "./workflow-model.mjs";
 import { t, numberLocale, initializeLanguage, localizeName } from "./i18n.mjs";
 import { airfieldDefenseMassAssessment, airportBarPositions, airportRepairVisit, airportPaletteBands, compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, rewardUi, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
@@ -236,6 +238,8 @@ function refreshReward() {
   if (!rewardsForm || !rewardsCatalog) return;
   const mode = rewardFields.Mode.value, rules = rewardsCatalog.mechanics[mode], row = rewardVehicle();
   const method = rewardFields.Method.value, card = rewardCardReference();
+  const evidence = document.querySelector("#rewardWorkflowEvidence");
+  if (evidence) evidence.hidden = method !== "reference";
   const manualRate = rewardManualRate.checked;
   if (!manualRate) rewardFields.SlRate.value = card ? String(card.rate) : "";
   rewardFields.SlRate.disabled = !manualRate;
@@ -979,6 +983,8 @@ function renderRepairNote(target, tier) {
 function refreshAirportRepair() {
   if (!catalog || !repairPercent) return;
   refreshAirportDiagram();
+  const evidence = document.querySelector("#airportEvidence");
+  if (evidence) evidence.textContent = t("workflow.airportEvidence", "目录 {{catalog}} · 修复分支核对 {{native}}", {catalog: catalog.source.version, native: catalog.airport_repair?.native_reference?.client_version || "?"});
   const palette = airportPaletteBands(catalog.airport_display);
   const paletteContainer = document.querySelector("#airportPalette");
   paletteContainer.replaceChildren();
@@ -999,8 +1005,8 @@ function refreshAirportRepair() {
   const result = airportRepairVisit(input);
   document.querySelector("#repairPercentLabel").textContent = `${dwellingPercent}%`;
   document.querySelector("#repairResult").textContent = !result ? t("app.noVerifiedRepairRuleForTheseParameters", "当前参数没有已核对的修复规则。") : result.state === "intact"
-    ? t("app.livingQuartersIntactTheReferenceRuleDoesNotTrigger", "生活区完好 · 当前参考规则不触发修复。")
-    : result.state === "destroyed" ? t("app.livingQuartersDestroyedTheReferenceRuleStopsRegeneration", "生活区摧毁 · 当前参考规则停止回血。")
+    ? t("app.livingQuartersIntactTheReferenceRuleDoesNotTrigger", "生活区 100% · 这个受损修复分支跳过。")
+    : result.state === "destroyed" ? t("app.livingQuartersDestroyedTheReferenceRuleStopsRegeneration", "生活区 0% · 这个受损修复分支跳过。")
     : result.state === "below_threshold" ? t("app.livingQuartersBelow1BelowTheReferenceRepairThreshold", "生活区不足 1% · 未达到参考规则的修复门槛。")
     : t("app.eachRepairVisitHpToEachOfFourModules", "每次修复：四模块各 +{{v0}} HP。", {v0: result.gain.toLocaleString(numberLocale(), { maximumFractionDigits: 2 })});
   document.querySelector("#repairFormula").textContent = result
@@ -1071,28 +1077,54 @@ function renderComparison(target, tier) {
     }
     fragment.append(tr);
   }
+  const headings = [...compareTable.querySelectorAll("th")].map(cell => cell.textContent);
+  for (const row of fragment.children) [...row.children].forEach((cell, index) => { cell.dataset.label = headings[index]; });
   compareRows.replaceChildren(fragment);
 }
 
 function refreshFuel() {
-  const number = (id) => {
-    const input = document.querySelector(id);
-    if (input.validity.badInput) return NaN;
-    return input.value.trim() === "" ? null : input.valueAsNumber;
+  const values = Object.fromEntries(fuelFields.map(([id]) => {
+    const input = document.getElementById(id);
+    return [id, input.validity.badInput ? NaN : input.value.trim() === "" ? null : input.valueAsNumber];
+  }));
+  const issues = fuelInputIssues(values);
+  const labels = {
+    currentFuel: t("workflow.currentFuel", "当前燃油"), burnRate: t("workflow.burnRate", "每分钟油耗"),
+    groundSpeed: t("workflow.groundSpeed", "返航地速"), distance: t("workflow.distance", "机场距离"),
+    route: t("workflow.route", "绕行余量"), reserve: t("workflow.reserve", "到达后储备"),
   };
+  for (const [id] of fuelFields) {
+    const input = document.getElementById(id), error = document.getElementById(`${id}Error`);
+    const issue = issues.find(row => row.id === id);
+    const reasonFallbacks = {fuelMissing: "请填写{{field}}。", fuelPositive: "{{field}}必须大于 0。", fuelNonnegative: "{{field}}不能是负数。", fuelInvalid: "请填写有效的{{field}}。"};
+    // Empty untouched fields are instructions, not errors before the user starts.
+    const showError = Boolean(issue && (input.value !== "" || input.validity.badInput || input.dataset.touched));
+    input.setAttribute("aria-invalid", String(showError));
+    if (error) { error.hidden = !showError; error.textContent = showError ? t(`workflow.${issue.reason}`, reasonFallbacks[issue.reason], {field: labels[issue.label]}) : ""; }
+  }
   const plan = returnFuelPlan({
-    fuelKg: number("#fuelKg"), burnKgMin: number("#fuelBurn"),
-    groundSpeedKmh: number("#fuelSpeed"), distanceKm: number("#fuelDistance"),
-    routePercent: number("#fuelRoute"), reserveMin: number("#fuelReserve"),
+    fuelKg: values.fuelKg, burnKgMin: values.fuelBurn,
+    groundSpeedKmh: values.fuelSpeed, distanceKm: values.fuelDistance,
+    routePercent: values.fuelRoute, reserveMin: values.fuelReserve,
   });
   fuelResult.replaceChildren();
-  fuelResult.dataset.deficit = String(plan?.marginKg !== null && plan?.marginKg < 0);
+  fuelResult.dataset.deficit = String(Boolean(plan && plan.marginKg !== null && plan.marginKg < 0));
   const note = document.createElement("p");
   if (!plan) {
-    note.textContent = t("app.enterValidFuelBurnGroundSpeedDistanceAndReserve", "填入有效的油耗、地速、距离与储备；空白输入不会当作零。当前燃油可留空。");
+    const missing = issues.filter(row => row.reason === "fuelMissing").map(row => labels[row.label]);
+    note.textContent = missing.length
+      ? t("workflow.fuelMissing", "请填写{{field}}。", { field: missing.join(" / ") })
+      : issues.length ? t("workflow.fuelFix", "请检查标出的输入。")
+      : t("workflow.fuelOverflow", "输入过大，超出可计算范围；请核对单位和数值。");
     fuelResult.append(note);
     return;
   }
+  const heading = document.createElement("h3");
+  heading.className = "workflow-fuel-conclusion";
+  heading.textContent = plan.marginKg === null
+    ? t("workflow.fuelRequired", "按此工况，至少需要 {{value}} kg", {value: formatInt(plan.requiredKg)})
+    : plan.marginKg < 0 ? t("workflow.fuelDeficit", "计入储备，缺少 {{value}} kg", {value: formatInt(Math.abs(plan.marginKg))})
+    : t("workflow.fuelMargin", "含储备后，还余 {{value}} kg", {value: formatInt(plan.marginKg)});
   const dl = document.createElement("dl");
   for (const [label, value] of [[t("app.estimatedFlightTime", "预计航程时间"), `${plan.tripMin.toFixed(1)} min`], [t("app.enRouteFuel", "航程耗油"), `${formatInt(plan.tripKg)} kg`], [t("app.arrivalReserve", "到达后储备"), `${formatInt(plan.reserveKg)} kg`], [t("app.totalRequired", "合计所需"), `${formatInt(plan.requiredKg)} kg`]]) {
     const group = document.createElement("div");
@@ -1106,7 +1138,7 @@ function refreshFuel() {
   note.textContent = plan.marginKg === null
     ? t("app.enterCurrentFuelToSeeTheMarginAssumesConstant", "补充当前燃油可查看余量。以上按所填油耗和地速保持不变估算。")
     : t("app.afterFlightAndReserveKgBasedOnTheEntered", "扣除航程和储备后{{v0}} {{v1}} kg。仅按所填工况估算，油门、天气与航线改变后需要重算。", {v0: plan.marginKg < 0 ? t("app.shortfall", "缺少") : t("app.remaining2", "剩余"), v1: formatInt(Math.abs(plan.marginKg))});
-  fuelResult.append(dl, note);
+  fuelResult.append(heading, dl, note);
 }
 
 function refreshResult() {
@@ -1157,7 +1189,7 @@ function refreshResult() {
       const row = catalog.targets.find(target => target.id === id);
       const profile = catalog.bombing_point_profiles.find(profile => profile.id === "respawning");
       const hp = targetHp(row, tierFor(id === "bombing_point_planes" ? profile.tiers : catalog.airport_tiers, balanceLevel(selectedRoomBr)));
-      return {aircraftId:aircraft?.id,targetId:id,targetFullHp:hp,remainingHp:hp,roomMaxBr:Number(selectedRoomBr),battleMode:"simulator",
+      return {aircraftId:aircraft?.id,aircraftReward:aircraft?.reward,targetId:id,targetFullHp:hp,remainingHp:hp,roomMaxBr:Number(selectedRoomBr),battleMode:"simulator",
         destructionThreshold:id === "bombing_point_planes" ? hp * (1 - profile.hp_fire_mult) : undefined};
     }),
     threshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : null,
@@ -1290,6 +1322,13 @@ async function boot() {
   } catch {
     catalog = null;
     rewardsCatalog = null;
+    const unavailable = t("workflow.catalogUnavailable", "武器与任务目录加载失败或来源不一致，请刷新后重试。");
+    for (const id of ["repairResult", "airportPaletteSource", "compareContext", "defenseSelection"]) {
+      const node = document.getElementById(id); if (node) node.textContent = unavailable;
+    }
+    for (const id of ["airportDiagram", "airportDiagramReversed", "airportPalette", "repairChart", "compareRows"]) document.getElementById(id)?.replaceChildren();
+    if (compareTable) compareTable.hidden = true;
+    const evidence = document.querySelector("#airportEvidence"); if (evidence) evidence.textContent = unavailable;
     if (rewardResult) rewardResult.replaceChildren(conversionText("p", t("app.rewardDataFailedToLoadOrItsSourceIs", "收益数据加载失败或参数来源不一致，请刷新后重试。")));
     renderRewardChart(document.querySelector("#rewardChart"), null, t("app.rewardCatalogUnavailableNoCurveToDisplay", "收益目录未就绪，暂无曲线。"));
     document.querySelector("#rewardFormula").replaceChildren();
@@ -1328,6 +1367,64 @@ compareRows?.addEventListener("click", (event) => {
 
 fuelForm?.addEventListener("submit", (event) => event.preventDefault());
 fuelForm?.addEventListener("input", refreshFuel);
+fuelForm?.addEventListener("focusout", event => { if (event.target.matches("input")) { event.target.dataset.touched = "true"; refreshFuel(); } });
+
+let pendingRewardAircraft = null;
+function applyRewardAircraft(row) {
+  rewardSelectedVehicle = row.id; rewardFields.Search.value = "";
+  rewardManualRate.checked = false;
+  for (const key of ["Fraction", "Observed", "RpRate", "RpFraction"]) rewardFields[key].value = "";
+  renderRewardVehicles(); refreshReward();
+  document.querySelector("#rewardWorkflowStatus").textContent = t("workflow.rewardAircraftUsed", "已带入 {{name}}；保留账号、模式、得分和周期设置，机型相关自填值已清空。", {name: row.name});
+}
+document.querySelector("#rewardUseAircraft")?.addEventListener("click", () => {
+  const aircraft = selectedAircraft(), status = document.querySelector("#rewardWorkflowStatus");
+  document.querySelector("#rewardImportConfirm").hidden = true; pendingRewardAircraft = null;
+  if (!aircraft) { status.textContent = t("workflow.rewardNoAircraft", "先在上方选择机型，再带入这里。"); return; }
+  const row = rewardsCatalog?.vehicles.find(vehicle => vehicle.id === aircraft.id && vehicle.mode === rewardFields.Mode.value);
+  if (!row) { status.textContent = t("workflow.rewardAircraftUnavailable", "当前模式没有此机型的收益数据，请在这里另选机型。"); return; }
+  if (row.id === rewardSelectedVehicle) {
+    status.textContent = t("workflow.rewardSameAircraft", "这里已是 {{name}}，保留全部输入。", {name: row.name}); return;
+  }
+  const hasRecord = rewardManualRate.checked || ["Fraction", "Observed", "RpRate", "RpFraction"].some(key => rewardFields[key].value.trim());
+  if (hasRecord) {
+    pendingRewardAircraft = row.id;
+    document.querySelector("#rewardImportConfirm").hidden = false;
+    document.querySelector("#rewardImportMessage").textContent = t("workflow.rewardImportWarning", "换成 {{name}} 后，需要清空上一机型的实收、自填比例、卡片值和 RP 参数。得分、账号与周期设置保留。", {name: row.name});
+    document.querySelector("#rewardImportCancel").focus(); return;
+  }
+  applyRewardAircraft(row);
+});
+document.querySelector("#rewardImportApply")?.addEventListener("click", () => {
+  const row = rewardsCatalog?.vehicles.find(vehicle => vehicle.id === pendingRewardAircraft && vehicle.mode === rewardFields.Mode.value);
+  document.querySelector("#rewardImportConfirm").hidden = true; pendingRewardAircraft = null;
+  if (row) applyRewardAircraft(row);
+});
+document.querySelector("#rewardImportCancel")?.addEventListener("click", () => {
+  document.querySelector("#rewardImportConfirm").hidden = true; pendingRewardAircraft = null;
+  document.querySelector("#rewardUseAircraft").focus();
+});
+for (const field of [rewardFields.Mode, rewardFields.Vehicle, rewardFields.Method]) field?.addEventListener("change", () => {
+  document.querySelector("#rewardImportConfirm").hidden = true; pendingRewardAircraft = null;
+  document.querySelector("#rewardWorkflowStatus").textContent = "";
+});
+document.addEventListener("calculator:language", () => {
+  document.querySelector("#rewardWorkflowStatus").textContent = "";
+  document.querySelector("#rewardImportConfirm").hidden = true; pendingRewardAircraft = null;
+});
+document.querySelector("#rewardCheckObserved")?.addEventListener("click", () => {
+  rewardFields.Method.closest("details").open = true;
+  rewardFields.Method.value = "observed"; refreshReward();
+  rewardFields.Observed.focus();
+  document.querySelector("#rewardWorkflowStatus").textContent = t("workflow.rewardObservedHelp", "已打开实收核对，请填本周期即时到账银狮。");
+});
+document.querySelector(".workflow-chart-details")?.addEventListener("toggle", event => { if (event.target.open) refreshAirportRepair(); });
+document.addEventListener("calculator:tool", event => {
+  if (event.detail.id === "airportStatus") refreshAirportRepair();
+  if (event.detail.id === "usefulActions") refreshReward();
+  if (event.detail.id === "explosiveConversion") refreshConversion();
+});
+
 
 aircraftClear.addEventListener("click", () => {
   selectedAircraftId = "";

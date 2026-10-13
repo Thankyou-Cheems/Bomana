@@ -44,6 +44,195 @@ function client(relay: Relay, runtime: PublicRuntime, mobile: boolean) {
 }
 
 describe("shared cycle timer presentation", () => {
+  it.each([false, true])("an unconfirmed second page cannot clear an active timer (read before gap: %s)", async readBeforeGap => {
+    const relay = new Relay(); let now = 2000;
+    const owner = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(owner, 1000); const active = client(relay, owner, false); await active.refresh(true);
+    const other = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    const pending = client(relay, other, false);
+    now = relay.now = 3000; await other.ingest(frame(now));
+    if (readBeforeGap) await pending.refresh(true);
+    now = relay.now = 3500;
+    await other.ingest({ ...frame(now), holdover: { indicators: true, state: false, mapObjects: false } });
+    expect(other.snapshot().phase).toBe("idle");
+    const revision = relay.revision;
+    for (let i = 0; i < 5; i++) { relay.now += 500; now += 500; await pending.refresh(true); await active.refresh(true); }
+    expect(relay.revision).toBe(revision);
+    expect(relay.timer?.active).toBe(true);
+    expect(active.project(owner.snapshot()).timer.remainingSec).not.toBeNull();
+  });
+
+  it("does not interpret invalid instruments with a live Player as a confirmed exit", async () => {
+    const relay = new Relay(); let now = 2000;
+    const owner = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(owner, 1000); await client(relay, owner, false).refresh(true);
+    const other = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await other.ingest({ ...frame(now), indicators: { valid: false } });
+    const revision = relay.revision;
+    await client(relay, other, false).refresh(true);
+    expect(relay.timer?.active).toBe(true);
+    expect(relay.revision).toBe(revision);
+  });
+
+  it.each(["held-state", "missing-altitude", "stale-map"])("does not publish inactive from incomplete confirmation: %s", async kind => {
+    const relay = new Relay(); let now = 2000;
+    const owner = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(owner, 1000); await client(relay, owner, false).refresh(true);
+    const other = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await other.ingest(frame(now)); now = 2500;
+    const input = frame(now);
+    const incomplete = kind === "held-state" ? { ...input, holdover: { indicators: false, state: true, mapObjects: false } }
+      : kind === "stale-map" ? { ...input, mapObjectsSampledAtMs: 0 }
+      : { ...input, state: { ...input.state, "H, m": undefined } };
+    await other.ingest(incomplete);
+    const revision = relay.revision;
+    await client(relay, other, false).refresh(true);
+    expect(other.snapshot().phase).toBe("idle");
+    expect(relay.revision).toBe(revision);
+    expect(relay.timer?.active).toBe(true);
+  });
+
+  it("does not clear an active peer using old menu evidence", async () => {
+    const relay = new Relay(); relay.revision = 1; relay.lastReader = relay.now;
+    relay.timer = { active: true, elapsed_sec: 20, cycle_seconds: 900, life_index: 1 };
+    let now = 1000;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await runtime.ingest({ ...frame(now), indicators: { valid: false }, state: { valid: false },
+      mapObjects: [{ type: "bombing_point", x: .5, y: .3 }] });
+    now = 5000; await client(relay, runtime, false).refresh(true);
+    expect(relay.revision).toBe(1);
+    expect(relay.timer?.active).toBe(true);
+  });
+
+  it("keeps a rejected automatic spawn unpublished and retries once on the next refresh", async () => {
+    const relay = new Relay(); relay.revision = 1; relay.lastReader = relay.now;
+    relay.timer = { active: false, elapsed_sec: 0, cycle_seconds: 900, life_index: 0 };
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => 2000 });
+    await spawn(runtime, 1000); const session = client(relay, runtime, false);
+    relay.conflictNext = true;
+    await session.refresh(true);
+    expect(relay.revision).toBe(2); // One PUT, no immediate retry loop.
+    expect(runtime.snapshot().phase).toBe("alive");
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBe(899);
+    await session.refresh(true);
+    expect(relay.revision).toBe(3);
+    expect(relay.timer?.active).toBe(true);
+    for (let i = 0; i < 5; i++) await session.refresh(true);
+    expect(relay.revision).toBe(3);
+  });
+
+  it("a rejected exit is retried even when its local key was already observed", async () => {
+    const relay = new Relay(); relay.revision = 1; relay.lastReader = relay.now;
+    relay.timer = { active: true, elapsed_sec: 420, cycle_seconds: 900, life_index: 3 };
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => 1000 });
+    const session = client(relay, runtime, false); await session.refresh(true);
+    await runtime.ingest({ ...frame(1000), indicators: { valid: false }, state: { valid: false },
+      mapObjects: [{ type: "bombing_point", x: .5, y: .3 }] });
+    relay.conflictNext = true; await session.refresh(true);
+    expect(relay.timer?.active).toBe(true);
+    await session.refresh(true);
+    expect(relay.timer?.active).toBe(false);
+  });
+
+  it("a rejected phone publication immediately yields to a newly present desktop", async () => {
+    const relay = new Relay(); relay.revision = 1;
+    relay.timer = { active: false, elapsed_sec: 0, cycle_seconds: 900, life_index: 0 };
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => 2000 });
+    await spawn(runtime, 1000);
+    const fetcher = relay.fetcher(true);
+    const session = new SharedTimerSession({ runtime, mobile: true, now: () => relay.now,
+      endpoint: async () => new URL("http://127.0.0.1:8878/"), fetcher: async (...args) => {
+        if (args[1]?.method === "PUT") { relay.desktopSeen = relay.now; relay.conflictNext = true; }
+        return fetcher(...args);
+      } });
+    await session.refresh(true);
+    expect(runtime.snapshot().phase).toBe("alive");
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBeNull();
+    const revision = relay.revision; await session.refresh(true);
+    expect(relay.revision).toBe(revision);
+  });
+
+  it("rechecks a rejected spawn after that local life ends during PUT", async () => {
+    const relay = new Relay(); relay.revision = 1;
+    relay.timer = { active: false, elapsed_sec: 0, cycle_seconds: 900, life_index: 0 };
+    let now = 2000;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(runtime, 1000);
+    const fetcher = relay.fetcher(false); let release!: () => void, entered!: () => void;
+    const pending = new Promise<void>(resolve => { entered = resolve; });
+    const resume = new Promise<void>(resolve => { release = resolve; });
+    let delay = true;
+    const session = new SharedTimerSession({ runtime, mobile: false, now: () => relay.now,
+      endpoint: async () => new URL("http://127.0.0.1:8878/"), fetcher: async (...args) => {
+        const response = await fetcher(...args);
+        if (delay && args[1]?.method === "PUT") { delay = false; entered(); await resume; }
+        return response;
+      } });
+    relay.conflictNext = true;
+    const refreshing = session.refresh(true); await pending;
+    now = relay.now = 2100; await runtime.ingest({ ...frame(now), mapObjects: [] });
+    release(); await refreshing; await session.refresh(true);
+    expect(runtime.snapshot().phase).toBe("wait-next");
+    expect(session.project(runtime.snapshot()).timer.remainingSec).toBeNull();
+    expect(relay.timer?.active).toBe(false);
+  });
+
+  it("a settled inactive observer does not repeatedly overwrite another page's next life", async () => {
+    const relay = new Relay(); let now = 1000;
+    relay.revision = 1; relay.lastReader = relay.now;
+    relay.timer = { active: true, elapsed_sec: 420, cycle_seconds: 900, life_index: 3 };
+    const menu = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await menu.ingest({ ...frame(now), indicators: { valid: false }, state: { valid: false },
+      mapObjects: [{ type: "bombing_point", x: .5, y: .3 }] });
+    const observer = client(relay, menu, false); await observer.refresh(true);
+    expect(relay.timer?.active).toBe(false);
+    now = 3000;
+    const owner = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(owner, 2000); await client(relay, owner, false).refresh(true);
+    const revision = relay.revision;
+    for (let i = 0; i < 10; i++) await observer.refresh(true);
+    expect(relay.revision).toBe(revision);
+    expect(relay.timer?.active).toBe(true);
+    expect(observer.project(menu.snapshot()).timer.remainingSec).toBeNull();
+  });
+
+  it("a confirmed owner death still reaches a locally alive phone", async () => {
+    const relay = new Relay(); let now = 2000;
+    const owner = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    const phone = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    await spawn(owner, 1000); await spawn(phone, 1000);
+    const active = client(relay, owner, false), mobile = client(relay, phone, true);
+    await active.refresh(true); await mobile.refresh(true);
+    now = relay.now = 2100; await owner.ingest({ ...frame(now), mapObjects: [] });
+    expect(owner.snapshot().phase).toBe("wait-next");
+    await active.refresh(true); await mobile.refresh(true);
+    expect(phone.snapshot().phase).toBe("alive");
+    expect(mobile.project(phone.snapshot()).timer.remainingSec).toBeNull();
+    expect(relay.timer?.active).toBe(false);
+  });
+
+  it.each([
+    { name: "older origin", origin: 0, life: 1, keep: false },
+    { name: "different life", origin: 100_000, life: 2, keep: false },
+    { name: "same-life correction", origin: 100_500, life: 1, keep: true },
+  ])("first GET adoption revalidates pending map binding: $name", async test => {
+    const relay = new Relay(); let now = 100_000;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    const cached = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: 90_000 });
+    await runtime.ingest(cached(now)); now = 101_000; await runtime.ingest(cached(now));
+    relay.now = relay.anchor = relay.lastReader = now;
+    relay.revision = 1;
+    relay.timer = { active: true, elapsed_sec: (now - test.origin) / 1000, cycle_seconds: 900, life_index: test.life };
+    const session = client(relay, runtime, false);
+    await session.refresh(true);
+    expect(relay.revision).toBe(1); // Active continuing GET was adopted, not PUT.
+    expect(runtime.timerPresentation().life_index).toBe(test.life);
+    now = 120_000;
+    const changed = { ...publicFlight(now), mapInfoSampledAtMs: now,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } };
+    const snapshot = await runtime.ingest(changed);
+    expect(snapshot.timer.remainingSec).toBe(test.keep ? 900 - (now - test.origin) / 1000 : null);
+  });
   it("a late phone follows its active desktop before local spawn confirmation", async () => {
     const relay = new Relay(); let desktopNow = 2000;
     const desktop = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => desktopNow });

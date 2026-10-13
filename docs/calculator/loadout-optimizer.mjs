@@ -1,4 +1,4 @@
-import { rewardUi, rewardPlateauDamage, requiredCount, empiricalSimScore, simScoreDamageScale, simScoreDamageOf, simScoreRewardParametersSupported } from "./model.mjs";
+import { rewardUi, rewardPlateauDamage, requiredCount, empiricalSimScore, simScoreDamageScale, simScoreDamageOf, simScoreRewardParametersSupported, simScoreAircraftFactor } from "./model.mjs";
 import { validateLoadout, previewCustomPreset } from "./custom-loadouts.mjs";
 import { presetTotals } from "./loadouts.mjs";
 import { deliveryGroup, loadoutSimplicity } from "./loadout-simplicity.mjs";
@@ -527,7 +527,7 @@ function optimizeSimScore(input, highs, {timeLimit}) {
   const lower = solve(model.rewardDamage, "Minimize"), upper = solve(model.rewardDamage, "Maximize");
   if (!best) return {status: complete ? "infeasible" : "unknown", objective: "sim_score", unknown: model.unknown};
   if (lower.solverStatus !== "Optimal" || upper.solverStatus !== "Optimal") return {...best, status: "feasible", scoreUpper: null};
-  const scale = simScoreDamageScale, hp = scenario.remainingHp;
+  const scale = simScoreDamageScale * simScoreAircraftFactor({...scenario, reward}), hp = scenario.remainingHp;
   // A proportional damage/reward basis has a tight one-dimensional bound.
   // This is verified from the eligible options, never assumed for all weapons.
   const eligible = model.options.filter(option => option.damage > 0 && !option.excluded);

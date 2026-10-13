@@ -33,6 +33,7 @@ try {
   const open = async id => { if (!await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const close = async id => { if (await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const text = selector => page.locator(selector).textContent();
+  const tool = async (id, target = page) => { await target.locator(`.workflow-nav [data-workflow="${id}"]`).click(); await target.locator(`#${id}`).waitFor({ state: "visible" }); };
   // The same selected Pe-8 FAB-50 preset must recalculate against each native rule.
   for (const [mode, hitPoints, count] of [["legacy_rb", "12,000", "10"], ["legacy_ab", "50,400", "40"], ["respawning", "25,900", "21"]]) {
     await page.locator(`#calcBaseModeSegments [data-value="${mode}"]`).click();
@@ -170,7 +171,8 @@ try {
   await page.locator("#calcAircraftClear").click();
   await page.locator("#calcSearch").fill("Mk 83");
   await page.locator('#calcWeaponList [data-weapon-id="us_1000lb_mk_83_ldgp"]').click();
-  assert.match(await text("#repairResult"), /完好.*参考规则不触发/);
+  await tool("airportStatus");
+  assert.match(await text("#repairResult"), /100%.*受损修复分支跳过/);
   assert.equal(await page.locator("#repairChart .chart-current").getAttribute("data-repair-gain"), "0");
   assert.match(await text("#airportPalette"), /0%.*>0～25%.*>25～75%.*>75%/s);
   assert.match(await text("#airportPaletteSource"), /剩余耐久.*示意位置/);
@@ -206,8 +208,9 @@ try {
   assert.match(await text("#repairResult"), /2,000.03 HP/);
   assert.equal(await page.locator("#repairPercent").inputValue(), "50");
   await page.locator('[data-dwelling="0"]').click();
-  assert.match(await text("#repairResult"), /停止/);
+  assert.match(await text("#repairResult"), /0%.*受损修复分支跳过/);
   await page.locator('[data-dwelling="100"]').click();
+  await tool("usefulActions");
   assert.equal(await page.locator("#rewardVehicle").inputValue(), "f_15e");
   assert.match(await text("#rewardSource"), /客户端.*SL\/min.*不是 RP\/min/);
   assert.equal(await page.locator("#rewardFraction").isVisible(), false);
@@ -290,6 +293,7 @@ try {
   await page.locator("#rewardMode").selectOption("air_sim");
   await close("#rewardAdvanced");
 
+  await tool("explosiveConversion");
   assert.equal(await page.locator("#chargeMassA").inputValue(), "201.8");
   assert.equal(await page.locator("#chargeMassB").inputValue(), "87.1");
   assert.match(await text("#chargeSourceA"), /272.43 kg TNT/);
@@ -362,6 +366,7 @@ try {
   await page.locator("#chargeMassB").fill("0.3");
   assert.match(await text("#chargeResult strong"), /1 枚 B/);
 
+  await tool("airCombat");
   // Air-to-air: actual encounter inputs, model boundaries, replay and ARH/SARH distinction.
   assert.equal(await page.locator("#airWeapon option").count(), 10);
   assert.match(await text("#airResult"), /<5 m/);
@@ -384,6 +389,7 @@ try {
   await page.waitForFunction(() => document.querySelector("#airPlot svg") !== null);
   await page.locator("#airForm details > summary").filter({ hasText: "观测中断假设" }).click();
 
+  await tool("explosiveConversion");
   // Capture the novice flow, with all optional parameters folded away.
   await page.locator("#chargeWeaponA").selectOption("us_1000lb_mk_83_ldgp");
   await page.locator("#chargeWeaponB").selectOption("us_500lb_mk_82_ldgp");
@@ -391,17 +397,22 @@ try {
   await mkdir("../.artifacts/calculator-ui", { recursive: true });
   for (const [width, height] of [[1440, 1050], [390, 844], [320, 568]]) {
     await page.setViewportSize({ width, height });
+    await tool("usefulActions");
     await page.waitForFunction(() => {
       const chart = document.querySelector("#rewardChart");
       return Math.abs(chart.querySelector("svg").viewBox.baseVal.width - chart.clientWidth) <= 1;
     });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}: horizontal overflow`);
     assert.ok(await page.locator("#rewardChart text").first().evaluate(node => parseFloat(getComputedStyle(node).fontSize) >= 12), `${width}: unreadable chart text`);
+    await tool("airportStatus");
     await page.locator("#airportStatus").screenshot({ path: `../.artifacts/calculator-ui/airport-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
     await checkOppositeEndpoints();
     await page.locator("#airportDiagramDetails").screenshot({ path: `../.artifacts/calculator-ui/airport-bars-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
+    await tool("explosiveConversion");
     await page.locator("#explosiveConversion").screenshot({ path: `../.artifacts/calculator-ui/conversion-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
+    await tool("usefulActions");
     await page.locator("#usefulActions").screenshot({ path: `../.artifacts/calculator-ui/rewards-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
+    await tool("airCombat");
     await page.locator("#airCombat").screenshot({ path: `../.artifacts/calculator-ui/air-${width}.png`, style: "bomana-site-header { visibility: hidden; }" });
   }
   if (!remote) {
@@ -468,6 +479,7 @@ try {
     await unavailable.route("**/api/v1/calculator/**", route => route.fulfill({ status: 503, body: "Unavailable" }));
     await unavailable.goto(url);
     await unavailable.waitForFunction(() => document.querySelector("#calcSource").textContent.includes("数据未就绪"));
+    await tool("explosiveConversion", unavailable);
     await unavailable.locator("#chargeCustomA > summary").click();
     await unavailable.locator("#chargeMassA").fill("100");
     await unavailable.locator("#chargeFactorA").fill("1.5");
@@ -483,6 +495,60 @@ try {
     await mixed.waitForFunction(() => document.querySelector("#calcSource").textContent.includes("数据未就绪"));
     assert.equal(await mixed.locator("#rewardResult dd").count(), 0);
   }
+  // Exercise the lower workflow in a separate touch-capable browser context.
+  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  mobile.on("pageerror", error => errors.push(error.message));
+  await mobile.route("**/*", route => new URL(route.request().url()).origin === new URL(url).origin ? route.continue() : route.abort());
+  await mobile.goto(url + "#returnFuel");
+  await mobile.waitForFunction(() => document.querySelector("#calcPresetList [data-preset-id]") !== null);
+  const selectTool = async id => {
+    await mobile.locator(`.workflow-nav [data-workflow="${id}"]`).tap();
+    assert.deepEqual(await mobile.locator("#sortieTools > .tool-panel").evaluateAll(panels => panels.filter(panel => !panel.hidden).map(panel => panel.id)), [id]);
+    assert.equal(await mobile.locator(`#${id} h2`).evaluate(heading => heading === document.activeElement), true);
+    assert.equal(await mobile.locator(`.workflow-nav [data-workflow="${id}"]`).getAttribute("aria-current"), "location");
+    assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${id}: mobile horizontal overflow`);
+    if (id === "loadoutCompare") {
+      const comparison = await mobile.locator("#loadoutCompare").evaluate(panel => {
+        const wrapper = panel.querySelector(".workflow-comparison");
+        const rows = [...panel.querySelectorAll("#compareRows tr")];
+        const last = rows.at(-1).getBoundingClientRect();
+        return { count: rows.length, wrapperBottom: wrapper.getBoundingClientRect().bottom,
+          lastBottom: last.bottom, noteTop: panel.querySelector(":scope > .tool-note").getBoundingClientRect().top };
+      });
+      assert.ok(comparison.count >= 6, "mobile comparison retains the complete weapon list");
+      assert.ok(comparison.wrapperBottom >= comparison.lastBottom - 1, "mobile wrapper contains every card");
+      assert.ok(comparison.noteTop >= comparison.lastBottom, "comparison note follows all cards without overlap");
+    }
+  };
+  for (const id of ["returnFuel", "usefulActions", "airportStatus", "loadoutCompare", "explosiveConversion", "airCombat", "airfieldDefense", "fieldGuide"]) {
+    await selectTool(id);
+    await mobile.locator(`#${id}`).screenshot({ path: `../.artifacts/calculator-ui/workflow-${id}-390.png`, style: "bomana-site-header { visibility: hidden; }" });
+  }
+  await selectTool("returnFuel");
+  await mobile.locator("#fuelClear").tap();
+  assert.equal(await mobile.locator("#fuelMeasureApply").isDisabled(), true);
+  await mobile.locator(".fuel-measurement > summary").tap();
+  for (const [id, value] of [["fuelMeasureStart", "1000"], ["fuelMeasureEnd", "970"], ["fuelMeasureSeconds", "30"]]) await mobile.locator(`#${id}`).fill(value);
+  assert.match(await mobile.locator("#fuelMeasureResult").textContent(), /60 kg\/min/);
+  assert.equal(await mobile.locator("#fuelBurn").inputValue(), "", "measurement never silently applies itself");
+  await mobile.locator("#fuelMeasureApply").tap();
+  assert.equal(await mobile.locator("#fuelBurn").inputValue(), "60");
+  assert.equal(await mobile.locator("#fuelBurn").evaluate(field => field === document.activeElement), true);
+  for (const [id, value] of [["fuelKg", "1000"], ["fuelSpeed", "720"], ["fuelDistance", "36"]]) await mobile.locator(`#${id}`).fill(value);
+  assert.match(await mobile.locator("#fuelResult").textContent(), /484/);
+  await selectTool("fieldGuide");
+  await mobile.locator(".workflow-checklist input").first().check();
+  await mobile.locator("#guideSearch").fill("no-matching-mechanism-123456");
+  assert.match(await mobile.locator("#guideSearchStatus").textContent(), /没有匹配/);
+  await selectTool("returnFuel");
+  assert.equal(await mobile.locator("#fuelBurn").inputValue(), "60", "switching workflows retains flight input");
+  await mobile.locator("#fuelSpeed").fill("");
+  assert.equal(await mobile.locator("#fuelSpeed").getAttribute("aria-invalid"), "true");
+  assert.equal(await mobile.locator("#fuelSpeedError").isVisible(), true);
+  await mobile.locator("#fuelExample").tap();
+  assert.match(await mobile.locator("#fuelWorkflowStatus").textContent(), /示例/);
+  await mobile.locator("#returnFuel").screenshot({ path: "../.artifacts/calculator-ui/workflow-returnFuel-example-390.png", style: "bomana-site-header { visibility: hidden; }" });
+  await mobile.close();
   assert.deepEqual(errors, []);
   console.log(`Calculator Edge UI passed: simple defaults, live score/SL charts, automatic card rates, observation boundaries, search/swap, TNT/HP separation, custom parameters and desktop/mobile layout (${url})`);
 } finally { await browser.close(); if (!remote) await new Promise(resolve => site.close(resolve)); }

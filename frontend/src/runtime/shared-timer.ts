@@ -124,11 +124,12 @@ export class SharedTimerSession {
     // Older Bridges cannot prove another page is still observing this timer.
     // A paired phone can still follow their actively polling desktop owner.
     const continuing = remote.readers_present === true || this.#mobile && remote.desktop_present;
-    const snapshot = this.#runtime.snapshot();
-    const observedInactive = !local.active && snapshot.connected && snapshot.mapObjectsFresh === true && snapshot.phase !== "arming";
+    const observedInactive = this.#runtime.timerInactiveObserved();
     let changed = this.#localKey !== key || this.#mobile && !remote.desktop_present
       && this.#state?.desktop_present === true && local.active !== remote.timer?.active;
-    if (remote.timer?.active && observedInactive) {
+    // A just-opened observer may confirm the menu after its first GET. Once
+    // published, that unchanged inactive life must not fight another page's spawn.
+    if (remote.timer?.active && observedInactive && this.#awaitingLocalSpawn) {
       changed = true;
       this.#awaitingLocalSpawn = false;
     }
@@ -136,13 +137,25 @@ export class SharedTimerSession {
       changed = false; this.#awaitingLocalSpawn = false;
     }
     if (first && continuing && !observedInactive && remote.timer?.active && !local.active) this.#awaitingLocalSpawn = true;
+    const unconfirmedInactive = remote.timer?.active && continuing && !local.active && !observedInactive;
+    if (unconfirmedInactive) this.#awaitingLocalSpawn = true;
     // A previous page may have left Bridge idle before this page observed spawn.
     // The local lifecycle owner must publish that spawn even on its first read.
-    const result = (!remote.timer || first && (!continuing || observedInactive || local.active && !remote.timer.active) || !first && changed) && mayPublish
-      ? await this.#request("PUT", remote, local) : remote;
+    const publishing = (!remote.timer || first && (!continuing || observedInactive || local.active && !remote.timer.active) || !first && changed)
+      && mayPublish && !unconfirmedInactive;
+    const result = publishing ? await this.#request("PUT", remote, local) : remote;
     // Telemetry keeps running during PUT. A response for the pre-spawn/death
     // state must neither rebase the new life nor mark its change as published.
     const changedDuringRequest = key !== this.#runtime.timerPresentationKey();
+    if (publishing && !result.accepted) {
+      // A 409 observes the winner; it does not acknowledge our transition.
+      // Keep the local projection and re-evaluate on the next throttled refresh,
+      // except that a phone still yields immediately to a present desktop.
+      this.#accept(result, !changedDuringRequest && this.#mobile && result.desktop_present);
+      this.#localKey = "";
+      this.#status("计时状态同时发生变化，等待重新同步");
+      return;
+    }
     this.#accept(result, !changedDuringRequest);
     this.#localKey = changedDuringRequest ? key : this.#runtime.timerPresentationKey();
     this.#status("");

@@ -861,3 +861,63 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
   .optimizer-priority label { padding:5px 3px; overflow-wrap:anywhere; }
   .current-loadout-metrics, .loadout-comparison .optimizer-metrics { gap:2px 8px; padding:4px 7px; }
 }
+/* Lower-toolbox workflow layer. Deliberately scoped away from the loadout UI. */
+#sortieTools { margin-top: 30px; min-width: 0; }
+#sortieTools [hidden] { display: none !important; }
+#sortieTools .workflow-heading { padding: 10px 0 15px; }
+#sortieTools .workflow-heading h2 { margin: 5px 0 8px; color: #193c56; font-size: clamp(22px, 3vw, 28px); }
+#sortieTools .workflow-heading > p:last-child { margin: 0; color: #597485; font-size: 14px; }
+#sortieTools .workflow-nav { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
+#sortieTools .workflow-nav a { position: relative; display: grid; grid-template-columns: 25px 1fr; align-content: center; gap: 3px 9px; padding: 14px 12px; min-height: 78px; box-sizing: border-box; text-decoration: none; background: #f9fcff; color: #254962; border: 1px solid #bdd3df; border-radius: 11px; }
+#sortieTools .workflow-nav a:hover { border-color: #4585a3; background: #edf8fd; }
+#sortieTools .workflow-nav a[aria-current] { background: #fff1b7; border-color: #d2b857; box-shadow: inset 0 0 0 1px #f9e694; }
+#sortieTools .workflow-number { grid-row: span 2; align-self: start; font: 700 11px/1.8 ui-monospace, monospace; color: #8a7130; }
+#sortieTools .workflow-nav strong { font-size: 14px; line-height: 1.4; }
+#sortieTools .workflow-nav small { color: #637d8a; font-size: 11px; line-height: 1.5; }
+#sortieTools > .tool-panel { margin-top: 16px; scroll-margin-top: 88px; }
+#sortieTools .workflow-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 18px; }
+#sortieTools .workflow-actions > .tool-note { flex: 1 1 220px; }
+#sortieTools .conversion-use { min-height: 42px; padding: 8px 12px; font-size: 13px; line-height: 1.5; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+#sortieTools .conversion-use:disabled { opacity: .5; cursor: not-allowed; }
+#sortieTools .workflow-evidence { width: fit-content; margin: 12px 0; padding: 6px 10px; border: 1px solid #d3e1e8; border-radius: 6px; background: #eef5f8; color: #486578; font-size: 12px; line-height: 1.6; }
+#sortieTools .workflow-callout { margin: 14px 0; padding: 13px 15px; border-left: 3px solid #b99430; border-radius: 0 8px 8px 0; background: #fff9e7; color: #64572f; font-size: 13px; line-height: 1.8; }
+#sortieTools .workflow-module-guide { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 12px 0; }
+#sortieTools .workflow-module-guide > div { display: grid; gap: 4px; padding: 10px 12px; background: #edf5fa; border-radius: 7px; font-size: 12px; color: #527080; }
+#sortieTools .workflow-module-guide strong { color: #244c62; font-size: 13px; }
+#sortieTools .workflow-chart-details[open] { padding-bottom: 8px; }
+#sortieTools .workflow-field-error { color: #a34c30; font-size: 12px; text-transform: none; line-height: 1.5; }
+#sortieTools input[aria-invalid="true"] { border-color: #bc6143; box-shadow: 0 0 0 2px #ffe3d6; }
+#sortieTools .workflow-fuel-conclusion { margin: 0 0 17px; color: inherit; font-size: clamp(21px, 3vw, 27px); font-variant-numeric: tabular-nums; line-height: 1.5; }
+#sortieTools .fuel-measurement { padding: 12px 16px; background: #f3f8fc; border: 1px solid #d4e2eb; border-radius: 10px; }
+#sortieTools .fuel-measurement .tool-input-grid { margin: 14px 0; }
+#sortieTools .workflow-checklist ul { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+#sortieTools .workflow-checklist li label { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid #d3e1e9; border-radius: 8px; background: #f5faff; line-height: 1.7; cursor: pointer; }
+#sortieTools .workflow-checklist input { flex: 0 0 18px; width: 18px; height: 18px; margin-top: 3px; accent-color: #347f9a; }
+#sortieTools .workflow-guide-search { margin: 22px 0 8px; }
+#sortieTools :is(a,button,input,select,summary):focus-visible { outline: 3px solid #236f99; outline-offset: 3px; }
+#sortieTools :is(button,summary) { touch-action: manipulation; }
+#sortieTools .air-presets button[aria-pressed="true"] { background: #fff1b7; border-color: #d2b857; color: #5a4b22; }
+#sortieTools .conversion-side > .conversion-use { margin-top: 0; margin-bottom: 9px; }
+@media (max-width: 760px) {
+  #sortieTools .workflow-nav { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+  #sortieTools .workflow-nav a { padding: 11px 10px; min-height: 76px; grid-template-columns: 20px 1fr; gap: 3px 6px; }
+  #sortieTools > .tool-panel { padding: 18px 14px; border-radius: 14px; }
+  #sortieTools .tool-input-grid { gap: 14px 10px; }
+  #sortieTools input, #sortieTools select { font-size: 16px; }
+  #sortieTools .repair-controls .score-presets button, #sortieTools .air-presets button { min-height: 42px; }
+  #sortieTools .air-controls { padding: 14px; }
+  #sortieTools .workflow-comparison { max-height: none; overflow: visible; }
+  #sortieTools #compareTable, #sortieTools #compareTable tbody { display: block; min-width: 0; }
+  #sortieTools #compareTable[hidden] { display: none; }
+  #sortieTools #compareTable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #sortieTools #compareTable tr { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin: 12px 0; padding: 14px; border: 1px solid #cbdce6; border-radius: 10px; background: #f8fcff; }
+  #sortieTools #compareTable tr[data-selected="true"] { border-color: #7aafc7; background: #eaf5fc; }
+  #sortieTools #compareTable td { display: block; padding: 0; border: 0; white-space: normal; font-size: 15px; font-weight: 600; }
+  #sortieTools #compareTable td:first-child { grid-column: 1 / -1; }
+  #sortieTools #compareTable td::before { content: attr(data-label); display: block; margin-bottom: 3px; color: #6a8494; font-size: 11px; font-weight: 400; }
+  #sortieTools #compareTable td:first-child::before { content: none; }
+  #sortieTools #compareTable button { min-height: 42px; min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sortieTools * { scroll-behavior: auto; }
+}

@@ -111,7 +111,7 @@ test('guidance tri-state preserves legacy onlyGuided, excludes unknowns and comp
   assert.equal(weaponGuidanceKind(map.get('unknown')),'unknown');
   const presets=[preset('mixed',[['plain',1],['guided',1]]),preset('guided',[['guided',3]]),preset('unknown',[['unknown',3]]),preset('plain',[['plain',3]])];
   for(const mode of ['reward','targets','custom_targets','sim_score']){
-    const result=optimizeLoadout({...base,presets,weapons:map,threshold:100,targetCount:3,mode,filters:{noGuided:true},scenario:{aircraftId:'test',targetId:'airport_dwelling',roomMaxBr:10.7,remainingHp:300}},highs);
+    const result=optimizeLoadout({...base,presets,weapons:map,threshold:100,targetCount:3,mode,filters:{noGuided:true},scenario:{aircraftId:'test',aircraftReward:0,targetId:'airport_dwelling',roomMaxBr:10.7,remainingHp:300}},highs);
     assert.equal(result.preset.id,'plain',mode);
   }
   const limits={maxloadMass:-1,maxloadMassLeftConsoles:-1,maxloadMassRightConsoles:-1,maxDisbalance:-1};
@@ -123,7 +123,7 @@ test('guidance tri-state preserves legacy onlyGuided, excludes unknowns and comp
 test('airport module recommendation matches finite-preset empirical scores for runway and auxiliary HP including partial HP caps',()=>{
   const presets=loadouts.aircraft.tu_4;
   for(const remainingHp of [160000,280000,50000,1000]) {
-    const scenario={aircraftId:'tu_4',targetId:remainingHp===280000?'airport_airfield':'airport_storage',roomMaxBr:10.7,remainingHp};
+    const scenario={aircraftId:'tu_4',aircraftReward:0,targetId:remainingHp===280000?'airport_airfield':'airport_storage',roomMaxBr:10.7,remainingHp};
     const result=optimizeLoadout({...base,presets,mode:'sim_score',threshold:null,scenario},highs);
     const expected=Math.max(...presets.map(row=>empiricalSimScore({...scenario,carried:row.weapons,weapons,reward:catalog.reward}).score));
     assert.equal(result.status,'optimal');assert.ok(Math.abs(result.score-expected)<1e-7);

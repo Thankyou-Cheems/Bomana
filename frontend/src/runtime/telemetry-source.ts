@@ -28,6 +28,8 @@ export interface Official8111Frame {
   readonly state: Readonly<Record<string, unknown>> | null;
   readonly mapObjects: readonly unknown[] | Readonly<Record<string, unknown>> | null;
   readonly mapInfo: Readonly<Record<string, unknown>> | null;
+  /** Request start of the last successful map metadata read, preserved with its cache. */
+  readonly mapInfoSampledAtMs?: number | null;
   readonly gameChat?: readonly unknown[] | null;
   readonly availability: {
     readonly indicators: boolean;
@@ -57,6 +59,7 @@ export class TelemetrySource {
   readonly #includeGameChat: boolean;
   readonly #holdoverMs: number;
   #mapInfo: Readonly<Record<string, unknown>> | null = null;
+  #mapInfoSampledAtMs: number | null = null;
   #mapInfoFetchedAtMs = Number.NEGATIVE_INFINITY;
   #mapInfoPending = false;
   #gameChat: readonly unknown[] | null = null;
@@ -105,6 +108,7 @@ export class TelemetrySource {
   async readFrame(signal?: AbortSignal): Promise<Official8111Frame> {
     signal?.throwIfAborted();
     const attemptStartedAtMs = this.#now();
+    this.#discardFutureMapInfo(attemptStartedAtMs);
     let bridgeBase: URL;
     try {
       const discovery = discoverBridgeEndpoint(this.#fetch, this.#configuredURL, signal);
@@ -114,7 +118,7 @@ export class TelemetrySource {
       signal?.throwIfAborted();
       if (error instanceof IncompatibleBridgeError || error instanceof MobileBridgeError && error.fatal) throw error;
       const failedAtMs = this.#now();
-      return this.#applyHoldover(emptyFrame(failedAtMs, false, this.#mapInfo), failedAtMs);
+      return this.#applyHoldover(emptyFrame(failedAtMs, false, this.#mapInfo, this.#mapInfoSampledAtMs), failedAtMs);
     }
     this.#refreshAuxiliary(attemptStartedAtMs, this.#auxiliaryController.signal);
     const [indicatorObservation, stateObservation, mapObjectObservation] = await Promise.all([
@@ -127,6 +131,7 @@ export class TelemetrySource {
     const state = stateObservation.payload;
     const mapObjects = mapObjectObservation.payload;
     const completedAtMs = this.#now();
+    this.#discardFutureMapInfo(completedAtMs);
     const chatMessages = completedAtMs - this.#chatFetchedAtMs <= 3_000 ? this.#gameChat : null;
     const sampledAtMs = indicatorObservation.sampledAtMs
       ?? stateObservation.sampledAtMs
@@ -156,6 +161,7 @@ export class TelemetrySource {
         ? mapObjects as readonly unknown[] | Readonly<Record<string, unknown>>
         : null,
       mapInfo: this.#mapInfo,
+      mapInfoSampledAtMs: this.#mapInfoSampledAtMs,
       gameChat: chatMessages,
       availability: Object.freeze({
         indicators: indicators !== null,
@@ -171,9 +177,17 @@ export class TelemetrySource {
   cancelPending(): void {
     this.#auxiliaryController.abort();
     this.#auxiliaryController = new AbortController();
+    this.#mapInfoPending = false;
     this.#gameChat = null;
     this.#mapInfoFetchedAtMs = Number.NEGATIVE_INFINITY;
     this.#chatFetchedAtMs = Number.NEGATIVE_INFINITY;
+  }
+
+  #discardFutureMapInfo(nowMs: number): void {
+    if (this.#mapInfoFetchedAtMs <= nowMs && (this.#mapInfoSampledAtMs === null || this.#mapInfoSampledAtMs <= nowMs)) return;
+    this.cancelPending();
+    this.#mapInfo = null;
+    this.#mapInfoSampledAtMs = null;
   }
 
   #refreshAuxiliary(nowMs: number, signal?: AbortSignal): void {
@@ -181,8 +195,11 @@ export class TelemetrySource {
       this.#mapInfoPending = true;
       this.#mapInfoFetchedAtMs = nowMs;
       void this.#readOptionalObject("api/v1/8111/map-info", 262_144, signal).then(mapInfo => {
-        if (!signal?.aborted && mapInfo && normalizeOfficialMapInfo(mapInfo)) this.#mapInfo = mapInfo;
-      }).finally(() => { this.#mapInfoPending = false; });
+        if (!signal?.aborted && mapInfo && normalizeOfficialMapInfo(mapInfo)) {
+          this.#mapInfo = mapInfo;
+          this.#mapInfoSampledAtMs = nowMs;
+        }
+      }).finally(() => { if (!signal?.aborted) this.#mapInfoPending = false; });
     }
     if (this.#includeGameChat && !this.#chatPending && nowMs - this.#chatFetchedAtMs >= 1_000) {
       this.#chatPending = true;
@@ -373,6 +390,7 @@ function emptyFrame(
   sampledAtMs: number,
   bridgeReachable: boolean,
   mapInfo: Readonly<Record<string, unknown>> | null,
+  mapInfoSampledAtMs: number | null,
 ): Official8111Frame {
   return Object.freeze({
     sampledAtMs,
@@ -384,6 +402,7 @@ function emptyFrame(
     state: null,
     mapObjects: null,
     mapInfo,
+    mapInfoSampledAtMs,
     gameChat: null,
     availability: Object.freeze({ indicators: false, state: false, mapObjects: false, mapInfo: mapInfo !== null, gameChat: false }),
     holdover: Object.freeze({ indicators: false, state: false, mapObjects: false }),

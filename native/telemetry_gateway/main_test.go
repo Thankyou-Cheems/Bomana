@@ -826,30 +826,224 @@ func TestMemoryCurrentFailureFindsFallbackPort(t *testing.T) {
 	}
 }
 
-func TestMemoryColdDiscoveryCanExceedBrowserBudget(t *testing.T) {
-	// Virtual latency only: each probe takes 600 ms, below the 750 ms per-probe limit.
-	// A browser cancels its request after 1500 ms, before three probes can finish.
-	elapsed := 0
+func TestMemorySharedDiscoverySurvivesBrowserBudget(t *testing.T) {
+	var probes, elapsed atomic.Int32
+	thirdProbe, finishProbe := make(chan struct{}), make(chan struct{})
+	var finish sync.Once
+	defer finish.Do(func() { close(finishProbe) })
+	r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		if probes.Add(1) == 3 {
+			close(thirdProbe)
+			select {
+			case <-finishProbe:
+			case <-ctx.Done():
+				return nil, "", ctx.Err()
+			}
+		}
+		elapsed.Add(600)
+		return memoryFingerprint(u.Path)
+	}, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	resolver := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
-		if e := ctx.Err(); e != nil {
-			return nil, "", e
+	first := make(chan error, 1)
+	go func() { _, err := r.Resolve(ctx); first <- err }()
+	memoryWait(t, thirdProbe)
+	cancel() // Browser's 1500 ms budget expires during the third 600 ms probe.
+	select {
+	case err := <-first:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("caller: %v", err)
 		}
-		elapsed += 600
-		if elapsed >= 1500 {
-			cancel()
-			return nil, "", context.Canceled
+	case <-time.After(time.Second):
+		t.Fatal("caller cancellation waited for discovery")
+	}
+	finish.Do(func() { close(finishProbe) })
+	selected, err := r.Resolve(context.Background())
+	if err != nil || selected.Port() != "8111" || probes.Load() != 3 || elapsed.Load() != 1800 {
+		t.Fatalf("cold retry lost shared discovery: selection=%v error=%v probes=%d virtual_ms=%d", selected, err, probes.Load(), elapsed.Load())
+	}
+	// A following routed read takes 40 ms in this synthetic timeline, not 3 new probes.
+	elapsed.Add(40)
+	if _, err := r.Resolve(context.Background()); err != nil || probes.Load() != 3 || elapsed.Load() != 1840 {
+		t.Fatal("warm read repeated discovery")
+	}
+}
+
+func TestMemorySharedDiscoveryKeepsLiveWaiter(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var probes atomic.Int32
+	var unblock sync.Once
+	defer unblock.Do(func() { close(release) })
+	r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		if probes.Add(1) == 1 {
+			close(entered)
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return nil, "", ctx.Err()
+			}
 		}
 		return memoryFingerprint(u.Path)
 	}, nil)
-	if _, e := resolver.Resolve(ctx); !errors.Is(e, context.Canceled) {
-		t.Fatalf("expected cancellation, got %v", e)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	first, second := make(chan error, 1), make(chan error, 1)
+	go func() { _, err := r.Resolve(ctx); first <- err }()
+	memoryWait(t, entered)
+	go func() { _, err := r.Resolve(context.Background()); second <- err }()
+	cancel()
+	select {
+	case err := <-first:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("caller waited")
 	}
-	if resolver.Snapshot().State != extui.StateIdle {
-		t.Fatal("canceled probe should not negative-cache")
+	unblock.Do(func() { close(release) })
+	select {
+	case err := <-second:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("live waiter stalled")
 	}
-	t.Log("cold discovery needs 1800 ms at 600 ms/probe and cannot fit the 1500 ms Web deadline; input is synthetic")
+	if probes.Load() != 3 {
+		t.Fatalf("canceled waiter restarted shared fingerprint: %d", probes.Load())
+	}
+}
+
+func TestMemoryDiscoveryAfterLastWaiterHasTotalDeadline(t *testing.T) {
+	entered, stopped := make(chan struct{}), make(chan struct{})
+	var probes atomic.Int32
+	r, err := extui.NewResolver(extui.Options{Candidates: extui.DefaultCandidates(), DiscoveryTimeout: 30 * time.Millisecond,
+		Read: func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+			probes.Add(1)
+			close(entered)
+			<-ctx.Done()
+			close(stopped)
+			return nil, "", ctx.Err()
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := r.Resolve(ctx); done <- err }()
+	memoryWait(t, entered)
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("last waiter blocked")
+	}
+	memoryWait(t, stopped)
+	if _, err = r.Resolve(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("lost discovery deadline category: %v", err)
+	}
+	if probes.Load() != 1 {
+		t.Fatalf("deadline started more probes: %d", probes.Load())
+	}
+	if r.Snapshot().State != extui.StateUnavailable {
+		t.Fatal("deadline result not negative-cached")
+	}
+}
+
+func TestMemoryDiscoveryDeadlineRejectsLateSuccess(t *testing.T) {
+	var probes atomic.Int32
+	r, err := extui.NewResolver(extui.Options{Candidates: extui.DefaultCandidates(), DiscoveryTimeout: 20 * time.Millisecond,
+		Read: func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+			probes.Add(1)
+			<-ctx.Done()
+			return memoryFingerprint(u.Path)
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = r.Resolve(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("late probe accepted: %v", err)
+	}
+	if probes.Load() != 1 {
+		t.Fatalf("deadline did not stop remaining fingerprint: %d", probes.Load())
+	}
+	if r.Snapshot().State == extui.StateReady {
+		t.Fatal("expired discovery selected an upstream")
+	}
+}
+
+func TestMemoryOwnerCloseCancelsAndJoinsDiscovery(t *testing.T) {
+	entered, canceled, releaseCleanup := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var release sync.Once
+	defer release.Do(func() { close(releaseCleanup) })
+	var probes, active atomic.Int32
+	var r *extui.Resolver
+	r = memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		probes.Add(1)
+		active.Add(1)
+		defer active.Add(-1)
+		close(entered)
+		<-ctx.Done()
+		// This also proves Close does not hold the resolver lock while joining.
+		r.Snapshot()
+		close(canceled)
+		<-releaseCleanup
+		return memoryFingerprint(u.Path) // A late success cannot publish a selection.
+	}, nil)
+	results := make(chan error, 16)
+	for i := 0; i < 16; i++ {
+		go func() { _, err := r.Resolve(context.Background()); results <- err }()
+	}
+	memoryWait(t, entered)
+	closed := make(chan struct{})
+	go func() { r.Close(); close(closed) }()
+	memoryWait(t, canceled)
+	select {
+	case <-closed:
+		t.Fatal("owner returned before reader cleanup")
+	default:
+	}
+	if _, err := r.Resolve(context.Background()); !errors.Is(err, extui.ErrClosed) {
+		t.Fatalf("closed owner accepted a new caller: %v", err)
+	}
+	release.Do(func() { close(releaseCleanup) })
+	memoryWait(t, closed)
+	for i := 0; i < 16; i++ {
+		select {
+		case err := <-results:
+			if !errors.Is(err, extui.ErrClosed) {
+				t.Fatalf("waiter: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("owner left a waiter blocked")
+		}
+	}
+	if active.Load() != 0 || probes.Load() != 1 || r.Snapshot().State == extui.StateReady {
+		t.Fatal("owner closed with probe work or selected address remaining")
+	}
+	r.Close() // Idempotent after the discovery has joined.
+}
+
+func TestMemoryOwnerCloseClearsWarmSelection(t *testing.T) {
+	var probes atomic.Int32
+	r := memoryResolver(t, func(ctx context.Context, u *url.URL, _ int64) ([]byte, string, error) {
+		probes.Add(1)
+		return memoryFingerprint(u.Path)
+	}, nil)
+	if _, err := r.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+	if _, err := r.Resolve(context.Background()); !errors.Is(err, extui.ErrClosed) {
+		t.Fatal("closed warm resolver returned a selection")
+	}
+	if probes.Load() != 3 || r.Snapshot().State == extui.StateReady {
+		t.Fatal("close reprobed or retained the warm selection")
+	}
 }
 
 func TestMemoryLateFailurePreservesRevalidatedSameOrigin(t *testing.T) {

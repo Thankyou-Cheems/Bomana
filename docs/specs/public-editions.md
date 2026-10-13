@@ -1,6 +1,20 @@
 # Public Edition contract
 
 - **PUB-01 — Lite:** sortie timer and its settings / recovery. No navigation or solver.
+  A separately confirmed new life MAY bind its first fresh map metadata without
+  moving the spawn origin only when the known cache is proven to predate spawn.
+  Map-derived state still clears; unknown provenance, arming, expired/reopened
+  continuity and later map changes retain conservative reset behavior. Failed,
+  canceled or older map reads do not create fresh metadata evidence. No fixed
+  reward-clock offset is applied. This shared timer rule also covers other Editions.
+  Interrupted dynamic/Player evidence permanently revokes pending first binding
+  while ordinary timer grace remains intact. Shared timer adoption revalidates
+  the original spawn/cache basis and life index. Old clock-epoch metadata cannot
+  reinstall a future watermark; metadata request time may exceed a dynamic
+  midpoint only when it does not exceed frame receipt.
+  Unconfirmed pages cannot clear a continuing active peer's timer. Automatic
+  shared-timer conflicts remain unpublished and retry only on the next normal
+  refresh, preserving desktop precedence and the explicit command path.
 - **PUB-02 — Standard:** official zone / airfield Basic Navigation, aircraft speed limits, measured / estimated fuel, checklist, timer, mission alerts and PiP. Complete Air Realistic instruments in main Web and PiP include official aircraft, distance, short trails, closure, uncertain same-direction grouping, automatic range, nose direction, default-on remembered horizontal ground-track vector, energy trend and configuration status. Aircraft observations are separate from selectable navigation targets and withdraw on missing or expired data. No manual POI, airport module resolution, Y66 calibration, terrain, chat interpretation or weapon solving.
 - **PUB-03 — Shared source:** production public editions and this repository use the same Public Runtime, Web entry and parameter projection. Enhanced extends the runtime privately; its algorithms and assets are excluded by the source allowlist and import checks.
 - **PUB-04 — Mobile Pairing:** Standard pairs directly with the local Bridge without CheemsPay login. Public protocol and signed resource verification code may also describe Enhanced transport; they do not implement its solver or entitlement authority.

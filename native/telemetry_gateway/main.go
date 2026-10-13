@@ -128,12 +128,14 @@ func main() {
 				return http.ErrUseLastResponse
 			},
 		}),
-		RetryDelay: time.Second,
+		RetryDelay:       time.Second,
+		DiscoveryTimeout: 3 * 3 * 750 * time.Millisecond,
 	})
 	if err != nil {
 		slog.Error("invalid ExtUI resolver configuration", "error", err)
 		os.Exit(2)
 	}
+	defer extUIResolver.Close()
 	cacheStore, cacheErr := openDefaultLocalDataStore()
 	if cacheErr != nil {
 		slog.Warn("local data store unavailable", "error", cacheErr)
@@ -185,10 +187,12 @@ func main() {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
+		extUIResolver.Close()
 		_ = server.Shutdown(ctx)
 	}()
 	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("gateway stopped unexpectedly", "error", err)
+		extUIResolver.Close()
 		os.Exit(1)
 	}
 }
@@ -222,6 +226,10 @@ func newRelayWithCache(upstream *url.URL, allowedOrigin string, cache *localData
 func newRelayWithExtUI(upstream gameUpstream, allowedOrigin string, cache *localDataStore) *relay {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
+	// Keep the three dynamic reads plus an occasional map read reusable.
+	// This bounds idle storage only; active requests keep their concurrency.
+	transport.MaxIdleConns = 4
+	transport.MaxIdleConnsPerHost = 4
 	return &relay{
 		upstream:      upstream,
 		allowedOrigin: allowedOrigin,
@@ -336,7 +344,11 @@ func (gateway *relay) ServeHTTP(response http.ResponseWriter, request *http.Requ
 		invalidated := gateway.upstream.Invalidate(upstreamBase)
 		kind := relayErrorKind(err, false)
 		if upstreamBase == nil {
-			kind = "discovery"
+			if kind == "upstream_timeout" {
+				kind = "discovery_timeout"
+			} else {
+				kind = "discovery"
+			}
 		}
 		gateway.diagnostics.failed(definition.upstreamPath, upstreamBase, time.Since(started), kind, invalidated)
 	}

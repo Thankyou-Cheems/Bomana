@@ -332,7 +332,7 @@ export function createSimScoreEstimator(root, {changeRoomBr, changeScenario, sum
   const percent = root.querySelector("[data-sim-score-hp]");
   const rows = root.querySelector("[data-sim-score-rows]");
   const output = root.querySelector("[data-sim-score-result]");
-  const scenario = () => ({aircraftId: context?.aircraft?.id, targetId: context?.targetId,
+  const scenario = () => ({aircraftId: context?.aircraft?.id, aircraftReward: context?.aircraft?.reward, targetId: context?.targetId,
     battleMode: "simulator", targetFullHp: context?.hp, destructionThreshold: context?.destructionThreshold,
     roomMaxBr: Number(br.value), remainingHp: percent.value === "" ? NaN :
       Number(percent.value) >= 0 && Number(percent.value) <= 100 ? context?.hp * Number(percent.value) / 100 : NaN});
@@ -384,7 +384,7 @@ export function createSimScoreEstimator(root, {changeRoomBr, changeScenario, sum
     }
     const scope = current.targetId === "bombing_point_planes"
       ? t("simScore.baseScope", "满血战区按本轮独立摧毁估算轰炸＋摧毁分；已受损战区的摧毁归属未知。经验估算，跨条件精度未知；不计其他奖励。")
-      : t("simScore.airportScope", "机场只估算轰炸伤害分，不计摧毁奖励；伤害不足以摧毁时，摧毁分为零。经验估算，跨条件精度未知。");
+      : t("simScore.airportScope", "机场只估算轰炸伤害分，不计摧毁奖励；伤害不足以摧毁时，摧毁分为零。战斗机按 80% 经验估算，F-16A MLU 四枚 Mk 84 的 344 分支持此推断；其他条件精度未知，不计金币机加成。");
     output.append(stats, node("p", scope, "optimizer-note"));
   }
   rows.addEventListener("input", event => {

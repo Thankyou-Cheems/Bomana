@@ -427,17 +427,26 @@ export const simScoreComparisonObservations = Object.freeze([Object.freeze({
   usedForCoefficientCalibration: false, roundingMechanism: null,
   source: Object.freeze({kind: "user_battle_record", url: null, clientVersion: null,
     label: "用户实战截图 · JH-7A / 每轮 2 枚 GB1000 + 2 枚 GB250 / 两轮独立摧毁两个满血战区 · 轰炸 728 + 摧毁 364 = 1092"}),
+}), Object.freeze({
+  id: "f_16a_mlu_four_mk84_dwelling_20261013/v1", aircraftId: "f_16a_block_20_mlu",
+  weaponId: "us_2000lb_mk_84_ldgp", targetId: "airport_dwelling",
+  carriedCount: 4, deliveredCount: 4, confirmedHits: 4, initialTargetHealth: "full",
+  destroyed: false, damageScore: 344, totalScore: 344, roomMaxBr: null,
+  aircraftFactor: .8, neutralEstimate: 429.67901886792447, candidateEstimate: 343.7432150943396,
+  usedForCoefficientCalibration: false, roundingMechanism: null,
+  source: Object.freeze({kind: "user_battle_record", url: null, clientVersion: null,
+    label: "用户实战截图 2026-10-13 · F-16A MLU / 4 枚 Mk 84 全中满血生活区、未摧毁 · 轰炸基地与总分均为 344；支持机场战斗机 0.8 经验系数，未证明服务器规则"}),
 })]);
 
 export const simScoreAssumptions = Object.freeze({
   fullHit: true,
   burnComplete: true,
-  model: "empirical_sim_score/v3",
+  model: "empirical_sim_score/v4",
   damageBasis: "nominal_hp_damage_separate_from_empirical_score_damage",
   multiplierBasis: "whole_carried_loadout_reward_damage",
   acceptedDamageBasis: "separate_hp_and_score_caps_full_health_solo_base_full_hp_credit",
   empirical: true,
-  observationCount: 6,
+  observationCount: 7,
   calibrationCount: 2,
   destructionRewardScope: "full_health_solo_base_kill_estimate",
   uncalibrated: Object.freeze(["bonus", "SL", "RP"]),
@@ -549,7 +558,9 @@ export function empiricalSimScore(input = {}) {
   // empirical extrapolations; HP damage and the number solver stay unchanged.
   const soloBaseKill = isBase && knownTarget && remainingHp === targetFullHp && mayDestroy;
   const acceptedScoreDamage = soloBaseKill ? targetFullHp : Math.min(deliveredScoreDamage, remainingHp);
-  const damageScore = simScoreDamageScale * acceptedScoreDamage * multiplier;
+  const aircraftFactor = simScoreAircraftFactor(input);
+  if (aircraftFactor === null) return null;
+  const damageScore = simScoreDamageScale * acceptedScoreDamage * multiplier * aircraftFactor;
   if (!Number.isFinite(damageScore)) return null;
   // A damaged base can include teammate damage: its destruction attribution
   // stays unknown. Full-health estimates assume this delivery destroys it solo.
@@ -570,11 +581,21 @@ export function empiricalSimScore(input = {}) {
   return Object.freeze({
     score, damageScore, destructionScore, totalScore, scoreKind: totalScore === null ? "damage_only" : "total",
     carriedDamage, carriedRewardDamage, multiplier, deliveredDamage, acceptedDamage,
-    deliveredScoreDamage, acceptedScoreDamage, damageScale: simScoreDamageScale,
+    deliveredScoreDamage, acceptedScoreDamage, damageScale: simScoreDamageScale, aircraftFactor,
     calibrationId: reference.id, coverage, ...coverageLabels[coverage],
     source: reference.source, sourceLabel: reference.source.label,
     assumptions: simScoreAssumptions,
   });
+}
+
+// The F-16A MLU dwelling observation supports the existing fighter factor
+// for airport damage score. Premium and base-score effects remain unmeasured.
+export function simScoreAircraftFactor({targetId, aircraftReward, reward}) {
+  if (!targetId?.startsWith("airport_")) return 1;
+  if (!Number.isInteger(aircraftReward) || aircraftReward < 0 || aircraftReward > 3) return null;
+  if (!(aircraftReward & 1)) return 1;
+  const factor = reward?.fighter_bombing_reward_mul;
+  return Number.isFinite(factor) && factor > 0 && factor <= 1 ? factor : null;
 }
 
 export function simScoreDamageOf(weapon) {

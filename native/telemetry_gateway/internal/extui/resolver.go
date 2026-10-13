@@ -18,20 +18,25 @@ import (
 const (
 	maxProbeJSONBytes = 64 * 1024
 	maxProbeFontBytes = 2 * 1024 * 1024
+	// Three ordered ports, each with at most three 750 ms fingerprint reads.
+	defaultDiscoveryTimeout = 3 * 3 * 750 * time.Millisecond
 )
 
 var defaultPorts = [...]string{"8111", "9222", "10333"}
+var ErrClosed = errors.New("ExtUI resolver is closed")
 
 // ReadFunc performs one bounded GET, rejects non-200 responses, and returns the
 // body and Content-Type. Keeping transport outside the resolver lets the small
 // native surface use system HTTP without linking Go's HTTP/TLS implementation.
+// Read must honor context cancellation; discovery never starts parallel probes.
 type ReadFunc func(context.Context, *url.URL, int64) ([]byte, string, error)
 
 type Options struct {
-	Candidates []*url.URL
-	Read       ReadFunc
-	Now        func() time.Time
-	RetryDelay time.Duration
+	Candidates       []*url.URL
+	Read             ReadFunc
+	Now              func() time.Time
+	RetryDelay       time.Duration
+	DiscoveryTimeout time.Duration
 }
 
 type State string
@@ -59,15 +64,25 @@ type Selection struct {
 func (selection *Selection) Generation() uint64 { return selection.generation }
 
 type Resolver struct {
-	candidates []*url.URL
-	read       ReadFunc
-	now        func() time.Time
-	retryDelay time.Duration
-	mu         sync.Mutex
-	selected   *Selection
-	generation uint64
-	nextProbe  time.Time
-	lastError  error
+	candidates       []*url.URL
+	read             ReadFunc
+	now              func() time.Time
+	retryDelay       time.Duration
+	discoveryTimeout time.Duration
+	discovery        *discovery
+	closed           bool
+	mu               sync.Mutex
+	selected         *Selection
+	generation       uint64
+	nextProbe        time.Time
+	lastError        error
+}
+
+type discovery struct {
+	done      chan struct{}
+	selection *Selection
+	err       error
+	cancel    context.CancelFunc
 }
 
 func DefaultCandidates() []*url.URL {
@@ -105,39 +120,113 @@ func NewResolver(options Options) (*Resolver, error) {
 	if retryDelay <= 0 {
 		retryDelay = time.Second
 	}
-	return &Resolver{candidates: candidates, read: options.Read, now: now, retryDelay: retryDelay}, nil
+	discoveryTimeout := options.DiscoveryTimeout
+	if discoveryTimeout <= 0 {
+		discoveryTimeout = defaultDiscoveryTimeout
+	}
+	return &Resolver{candidates: candidates, read: options.Read, now: now, retryDelay: retryDelay, discoveryTimeout: discoveryTimeout}, nil
 }
 
 func (resolver *Resolver) Resolve(ctx context.Context) (*Selection, error) {
 	resolver.mu.Lock()
-	defer resolver.mu.Unlock()
 	if err := ctx.Err(); err != nil {
+		resolver.mu.Unlock()
 		return nil, err
+	}
+	if resolver.closed {
+		resolver.mu.Unlock()
+		return nil, ErrClosed
 	}
 	if resolver.selected != nil {
 		copy := *resolver.selected
+		resolver.mu.Unlock()
 		return &copy, nil
 	}
 	if resolver.lastError != nil && resolver.now().Before(resolver.nextProbe) {
-		return nil, resolver.lastError
+		err := resolver.lastError
+		resolver.mu.Unlock()
+		return nil, err
 	}
-	for _, candidate := range resolver.candidates {
-		if err := resolver.verify(ctx, candidate); err == nil {
-			resolver.generation++
-			copy := Selection{URL: *candidate, generation: resolver.generation}
-			resolver.selected = &copy
-			resolver.nextProbe = time.Time{}
-			resolver.lastError = nil
-			selected := copy
-			return &selected, nil
-		}
+	flight := resolver.discovery
+	if flight == nil {
+		flight = &discovery{done: make(chan struct{})}
+		resolver.discovery = flight
+		// Discovery belongs to the resolver, not to its first browser request.
+		// It can finish with no waiters, but only within this one total deadline.
+		discoveryContext, cancel := context.WithTimeout(context.Background(), resolver.discoveryTimeout)
+		flight.cancel = cancel
+		go resolver.discover(discoveryContext, cancel, flight)
+	}
+	resolver.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-flight.done:
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		resolver.mu.Lock()
+		defer resolver.mu.Unlock()
+		if resolver.closed {
+			return nil, ErrClosed
+		}
+		if flight.selection != nil {
+			copy := *flight.selection
+			return &copy, nil
+		}
+		return nil, flight.err
 	}
-	resolver.lastError = errors.New("War Thunder ExtUI is unavailable")
-	resolver.nextProbe = resolver.now().Add(resolver.retryDelay)
-	return nil, resolver.lastError
+}
+
+// Close cancels owner work and joins it before its transport may be released.
+// Caller cancellation remains independent; only the owner closes the resolver.
+func (resolver *Resolver) Close() {
+	resolver.mu.Lock()
+	resolver.closed = true
+	resolver.selected = nil
+	resolver.lastError = ErrClosed
+	flight := resolver.discovery
+	resolver.mu.Unlock()
+	if flight != nil {
+		flight.cancel()
+		<-flight.done // Never wait while holding the resolver mutex.
+	}
+}
+
+func (resolver *Resolver) discover(ctx context.Context, cancel context.CancelFunc, flight *discovery) {
+	defer cancel()
+	var selected *url.URL
+	for _, candidate := range resolver.candidates {
+		if ctx.Err() != nil {
+			break
+		}
+		if err := resolver.verify(ctx, candidate); err == nil {
+			if ctx.Err() == nil {
+				selected = candidate
+			}
+			break
+		}
+	}
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	if resolver.closed {
+		flight.err = ErrClosed
+	} else if selected != nil && ctx.Err() == nil {
+		resolver.generation++
+		flight.selection = &Selection{URL: *selected, generation: resolver.generation}
+		resolver.selected = flight.selection
+		resolver.nextProbe = time.Time{}
+		resolver.lastError = nil
+	} else {
+		flight.err = errors.New("War Thunder ExtUI is unavailable")
+		if ctx.Err() != nil {
+			flight.err = fmt.Errorf("War Thunder ExtUI discovery deadline: %w", ctx.Err())
+		}
+		resolver.lastError = flight.err
+		resolver.nextProbe = resolver.now().Add(resolver.retryDelay)
+	}
+	resolver.discovery = nil
+	close(flight.done)
 }
 
 func (resolver *Resolver) Invalidate(candidate *Selection) bool {
@@ -169,9 +258,15 @@ func (resolver *Resolver) Snapshot() Snapshot {
 
 func (resolver *Resolver) verify(ctx context.Context, candidate *url.URL) error {
 	for _, path := range []string{"/map_info.json", "/indicators"} {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := resolver.verifyJSON(ctx, candidate, path); err != nil {
 			return err
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return resolver.verifyFont(ctx, candidate)
 }

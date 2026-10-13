@@ -8,6 +8,148 @@ import speedCases from "./speed-limit-cases.json";
 import { airRealisticSituation } from "./air-realistic-model";
 
 describe("public runtime boundary", () => {
+
+  it.each([0, 2_000, 10_000, 27_000])("binds delayed map metadata at %i ms without moving the independently confirmed spawn", async delay => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+    const cached = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: -20_000 });
+    const fresh = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: delay,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    const initial = delay === 0 ? fresh : cached;
+    expect((await runtime.ingest(initial(0))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(initial(1_000))).timer.remainingSec).toBe(899);
+    const selected = runtime.snapshot().navigation!.items[0]!;
+    await runtime.command({ type: "navigation.select", targetId: selected.id });
+    const at = Math.max(1_000, delay);
+    const bound = await runtime.ingest(fresh(at));
+    expect(bound.timer.remainingSec).toBe(900 - at / 1000);
+    expect(bound.navigation?.mapScaleM).toEqual([200_000, 200_000]);
+    if (delay > 0) expect(bound.navigation?.selectionMode).toBe("auto");
+    expect((await runtime.ingest(fresh(900_000))).timer).toMatchObject({ cycle: 2, remainingSec: 900, lifeIndex: 1 });
+    expect((await runtime.ingest(fresh(1_800_000))).timer).toMatchObject({ cycle: 3, remainingSec: 900, lifeIndex: 1 });
+  });
+
+  it("keeps a manually restarted timer outside the first-map-binding exception", async () => {
+    let now = 0;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Lite"), now: () => now });
+    const cached = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: -20_000 });
+    await runtime.ingest(cached(0)); await runtime.ingest(cached(1_000));
+    now = 5_000;
+    await runtime.command({ type: "timer.reset" });
+    expect((await runtime.ingest({ ...cached(10_000), mapInfoSampledAtMs: 10_000,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } })).timer.remainingSec).toBeNull();
+  });
+
+  it("resets a true map change after the first life binding and ignores older metadata", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+    const cached = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: -20_000 });
+    await runtime.ingest(cached(0)); await runtime.ingest(cached(1_000));
+    const fresh = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: 10_000,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    await runtime.ingest(fresh(10_000));
+    expect((await runtime.ingest(cached(11_000))).timer.remainingSec).toBe(889);
+    expect(runtime.snapshot().navigation?.mapScaleM).toEqual([200_000, 200_000]);
+    const changed = (at: number) => ({ ...fresh(at), mapInfoSampledAtMs: 12_000,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [300_000, 300_000] } });
+    expect((await runtime.ingest(changed(12_000))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(changed(13_000))).timer.remainingSec).toBe(899);
+  });
+
+  it("consumes first binding even when the fresh map matches the old cache", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Lite") });
+    const cached = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: -20_000 });
+    await runtime.ingest(cached(0)); await runtime.ingest(cached(1_000));
+    expect((await runtime.ingest({ ...cached(2_000), mapInfoSampledAtMs: 2_000 })).timer.remainingSec).toBe(898);
+    expect((await runtime.ingest({ ...cached(10_000), mapInfoSampledAtMs: 10_000,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } })).timer.remainingSec).toBeNull();
+  });
+
+  it("revokes first binding after short missing evidence even if old-map data returns first", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+    const cached = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: -20_000 });
+    await runtime.ingest(cached(0)); await runtime.ingest(cached(1_000));
+    const missing = { ...cached(2_000), indicators: null, state: null, mapObjects: null,
+      availability: { indicators: false, state: false, mapObjects: false, mapInfo: true } };
+    expect((await runtime.ingest(missing)).timer.remainingSec).toBe(898);
+    expect((await runtime.ingest({ ...missing, sampledAtMs: 6_000 })).timer.remainingSec).toBe(894);
+    expect((await runtime.ingest(cached(7_000))).timer.remainingSec).toBe(893);
+    const changed = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: 8_000,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    expect((await runtime.ingest(changed(8_000))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(changed(9_000))).timer.remainingSec).toBe(899);
+  });
+
+  it("does not reinstall future map provenance after clock rollback", async () => {
+    let now = 60_000;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    const old = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: 60_000 });
+    await runtime.ingest(old(60_000)); await runtime.ingest(old(61_000));
+    now = 1_000;
+    runtime.reconcileTimerAfterResume(false);
+    await runtime.ingest(old(1_000));
+    const fresh = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: 1_100,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    expect((await runtime.ingest(fresh(1_100))).navigation?.mapScaleM).toEqual([200_000, 200_000]);
+    expect((await runtime.ingest(fresh(2_100))).timer.remainingSec).toBe(899);
+    expect((await runtime.ingest(fresh(31_000))).navigation?.mapScaleM).toEqual([200_000, 200_000]);
+  });
+
+  it("accepts map metadata newer than a dynamic midpoint but no newer than frame receipt", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+    const snapshot = await runtime.ingest({ ...publicFlight(1_000), receivedAtMs: 1_100,
+      mapInfoSampledAtMs: 1_050,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    expect(snapshot.navigation?.mapScaleM).toEqual([200_000, 200_000]);
+  });
+
+  it.each([
+    { name: "earlier remote origin", origin: 0, life: 1, keep: false },
+    { name: "different remote life", origin: 100_000, life: 2, keep: false },
+    { name: "same-life small correction", origin: 100_500, life: 1, keep: true },
+  ])("revalidates first binding after shared timer adoption: $name", async test => {
+    let now = 100_000;
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard"), now: () => now });
+    const cached = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: 90_000 });
+    await runtime.ingest(cached(now)); now = 101_000; await runtime.ingest(cached(now));
+    runtime.rebaseTimerPresentation({ active: true, elapsed_sec: (now - test.origin) / 1000,
+      cycle_seconds: 900, life_index: test.life });
+    now = 120_000;
+    const changed = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: 120_000,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    const bound = await runtime.ingest(changed(now));
+    expect(bound.timer.remainingSec).toBe(test.keep ? 900 - (now - test.origin) / 1000 : null);
+    if (!test.keep) expect((await runtime.ingest(changed(now + 1000))).timer.remainingSec).toBe(899);
+  });
+
+  it.each([undefined, null, 0])("keeps changed-map reset conservative without a proven pre-spawn cache (%s)", async timestamp => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Standard") });
+    const old = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: timestamp });
+    await runtime.ingest(old(0)); await runtime.ingest(old(1_000));
+    expect((await runtime.ingest({ ...old(10_000), mapInfoSampledAtMs: 10_000,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } })).timer.remainingSec).toBeNull();
+  });
+
+  it("discards an arming candidate when the map changes before confirmation", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Lite") });
+    await runtime.ingest({ ...publicFlight(0), mapInfoSampledAtMs: -20_000 });
+    const changed = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: 500,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    expect((await runtime.ingest(changed(500))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(changed(1_500))).timer.remainingSec).toBe(899);
+  });
+
+  it("does not bind old-life metadata across the twelve-second missing-evidence reset", async () => {
+    const runtime = new PublicRuntime({ edition: editionPolicy("Lite") });
+    const cached = (at: number) => ({ ...publicFlight(at), mapInfoSampledAtMs: -20_000 });
+    await runtime.ingest(cached(0)); await runtime.ingest(cached(1_000));
+    const missing = (at: number) => ({ ...cached(at), mapObjects: null,
+      availability: { ...cached(at).availability, mapObjects: false } });
+    await runtime.ingest(missing(2_000));
+    expect((await runtime.ingest(missing(14_000))).timer.remainingSec).toBeNull();
+    const fresh = (at: number) => ({ ...cached(at), mapInfoSampledAtMs: 16_000,
+      mapInfo: { valid: true, map_min: [0, 0], map_max: [200_000, 200_000] } });
+    expect((await runtime.ingest(fresh(16_000))).timer.remainingSec).toBeNull();
+    expect((await runtime.ingest(fresh(17_000))).timer.remainingSec).toBe(899);
+  });
   it.each([1000, 4700])("counts spawn confirmation latency (%i ms) in the cycle", async delayMs => {
     const runtime = new PublicRuntime({ edition: editionPolicy("Lite") });
     expect((await runtime.ingest(publicFlight(1000))).timer.remainingSec).toBeNull();

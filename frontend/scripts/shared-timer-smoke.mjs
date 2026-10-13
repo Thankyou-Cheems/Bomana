@@ -96,7 +96,24 @@ try {
   const phone = await open(true);
   await phone.waitForFunction(() => document.querySelector("#timer").textContent.startsWith("12:"));
   const seconds = async page => { const value = await page.locator("#timer").innerText(); const [m,s] = value.split(":").map(Number); return m*60+s; };
-  assert.ok(Math.abs(await seconds(desktop) - await seconds(phone)) <= 1, "Late phone must share desktop timer");
+  async function assertSynchronized(message) {
+    const deadline = performance.now() + 10000;
+    let values;
+    do {
+      values = await Promise.all([desktop, phone].map(page => page.locator('#timer').evaluate(node => {
+        const [minutes, seconds] = node.textContent.split(':').map(Number);
+        return {remaining: minutes * 60 + seconds, sampledAt: Date.now()};
+      })));
+      // Both fixture pages use this one machine's clock. Compare countdown
+      // deadlines measured inside each page, excluding IPC scheduling delay.
+      const drift = values[0].remaining - values[1].remaining
+        + (values[0].sampledAt - values[1].sampledAt) / 1000;
+      if (Math.abs(drift) <= 1) return;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    } while (performance.now() < deadline);
+    assert.fail(`${message}: ${JSON.stringify(values)}`);
+  }
+  await assertSynchronized("Late phone must share desktop timer");
   assert.equal(await phone.locator("#sound-ready").getAttribute("data-ready"), "true", "Audio initializes before any page click");
   assert.equal(await phone.locator("#sound-ready").isVisible(), false, "Ready audio needs no extra button");
   await phone.locator("#reset-timer").click();
@@ -110,9 +127,14 @@ try {
   await phone.locator("#cycle-minutes").fill("10");
   await phone.locator("#save-settings").click();
   await desktop.waitForFunction(() => document.querySelector("#timer-cycle").textContent.includes("10 分钟"));
+  const resetPublished = desktop.waitForResponse(response => new URL(response.url()).pathname === "/api/v1/presentation/timer"
+    && response.request().method() === "PUT" && response.request().postDataJSON()?.timer?.elapsed_sec === 0 && response.ok());
   await desktop.locator("#reset-timer").click();
+  const resetRevision = (await (await resetPublished).json()).revision;
+  await phone.waitForResponse(async response => new URL(response.url()).pathname === "/api/v1/presentation/timer"
+    && response.ok() && (await response.json()).revision >= resetRevision);
   await phone.waitForFunction(() => ["10:00", "09:59", "09:58"].includes(document.querySelector("#timer").textContent));
-  assert.ok(Math.abs(await seconds(desktop) - await seconds(phone)) <= 1);
+  await assertSynchronized("Desktop reset must reach the phone");
   await phone.waitForFunction(() => document.querySelector("#sound-ready").dataset.ready === "true");
   await phone.evaluate(() => {
     window.__auditAudio.state = "interrupted"; window.__auditAudioReject = true;

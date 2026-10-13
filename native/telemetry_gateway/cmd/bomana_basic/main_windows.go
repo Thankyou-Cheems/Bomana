@@ -59,8 +59,12 @@ func main() {
 			nativeError(0, err.Error())
 			return
 		}
+		samplingDone := make(chan struct{})
+		defer func() { cancel(); <-samplingDone }()
 		go func() {
+			defer close(samplingDone)
 			defer src.client.close()
+			defer src.resolver.Close() // Join probes before closing their WinHTTP session.
 			ticker := time.NewTicker(200 * time.Millisecond)
 			defer ticker.Stop()
 			for {

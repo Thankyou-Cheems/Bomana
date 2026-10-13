@@ -154,6 +154,8 @@ export class PublicRuntime {
   protected _timerEvidenceAircraft = "";
   protected _timerEvidenceMapSignature = "";
   protected _currentMapSignature = "";
+  protected _lifeMapBindingPending: { readonly observedSpawnAtMs: number; readonly mapInfoAtMs: number; readonly lifeIndex: number } | null = null;
+  protected _lastMapInfoObservationAtMs = Number.NEGATIVE_INFINITY;
   protected readonly _groundTrack = new GroundTrackEstimator();
   protected _groundTrackEstimate: GroundTrackEstimate | null = null;
   protected _lastSnapshot: EditionSnapshot;
@@ -221,6 +223,19 @@ export class PublicRuntime {
     return `${timer.active}:${timer.active ? this._lifeStartedAtMs : ""}:${timer.life_index}:${timer.cycle_seconds}`;
   }
 
+  /** An unfinished/held spawn is not evidence that another reader's life ended. */
+  timerInactiveObserved(): boolean {
+    this._expireResetUndo(this._now());
+    if (this.timerPresentation().active || this._phase === "arming") return false;
+    if (this._phase === "wait-next" || this._phase === "hangar") return true;
+    const frame = this._lastFrame;
+    return !!frame && frame.bridgeReachable
+      && Math.abs(this._now() - (frame.receivedAtMs ?? frame.sampledAtMs)) <= PLAYER_EVIDENCE_MAX_AGE_MS
+      && (["indicators", "state", "mapObjects"] as const).every(route => freshObservation(frame, route))
+      && frame.indicators?.valid === false && frame.state?.valid === false
+      && this._parseMap(frame.mapObjects).player === null;
+  }
+
   timerRecoveryPending(): boolean {
     if (this._pendingTimerResume && this._now() - this._pendingTimerResume.savedAtMs > NO_DATA_GRACE_MS) {
       this._pendingTimerResume = null;
@@ -241,6 +256,7 @@ export class PublicRuntime {
       this._lastDynamicObservationAtMs.indicators = Number.NEGATIVE_INFINITY;
       this._lastDynamicObservationAtMs.state = Number.NEGATIVE_INFINITY;
       this._lastDynamicObservationAtMs.mapObjects = Number.NEGATIVE_INFINITY;
+      this._lastMapInfoObservationAtMs = Number.NEGATIVE_INFINITY;
       this._resetUndo = null;
       this._timerEvidenceAtMs = null;
       this._lastTimerCheckpointAtMs = 0;
@@ -256,6 +272,7 @@ export class PublicRuntime {
     this._phase = "idle";
     this._lifeStartedAtMs = null;
     this._lifeIndex = 0;
+    this._lifeMapBindingPending = null;
     this._lifeAircraft = "";
     this._candidateSinceMs = null;
     this._resetUndo = null;
@@ -279,6 +296,10 @@ export class PublicRuntime {
     if (timer.active && (this._phase === "alive" || this._phase === "loss-pending")) {
       this._lifeStartedAtMs = nowMs - timer.elapsed_sec * 1000;
       this._lifeIndex = timer.life_index;
+      const pending = this._lifeMapBindingPending;
+      if (pending && (pending.lifeIndex !== this._lifeIndex || pending.mapInfoAtMs >= this._lifeStartedAtMs)) {
+        this._lifeMapBindingPending = null;
+      }
       this._persistTimerCheckpoint(nowMs, true);
     }
   }
@@ -303,15 +324,42 @@ export class PublicRuntime {
           holdover: { indicators: false, state: false, mapObjects: false, ...frame.holdover, [route]: true } };
       } else this._lastDynamicObservationAtMs[route] = atMs;
     }
+    const mapInfoAtMs = frame.mapInfoSampledAtMs;
+    // Metadata can be later than a dynamic midpoint, but never later than
+    // receipt in this clock epoch. Old-epoch cache must not reinstall a watermark.
+    if (mapInfoAtMs != null && (!Number.isFinite(mapInfoAtMs) || mapInfoAtMs > (frame.receivedAtMs ?? frame.sampledAtMs))) {
+      frame = { ...frame, mapInfo: null, mapInfoSampledAtMs: null,
+        availability: { ...frame.availability, mapInfo: false } };
+    } else if (mapInfoAtMs != null && sortieMapSignature(frame.mapInfo)) {
+      if (mapInfoAtMs < this._lastMapInfoObservationAtMs) {
+        frame = { ...frame, mapInfo: this._lastFrame?.mapInfo ?? null,
+          mapInfoSampledAtMs: this._lastMapInfoObservationAtMs };
+      } else this._lastMapInfoObservationAtMs = mapInfoAtMs;
+    }
     this._lastFrame = frame;
     this._expireResetUndo(frame.sampledAtMs);
     const telemetry = parseTelemetry(frame);
     const map = this._parseMap(frame.mapObjects);
     const frameHeld = Object.values(frame.holdover ?? {}).some(Boolean);
+    const currentLifeEvidence = this._phase === "alive" && this._lifeStartedAtMs !== null
+      && this._noDataSinceMs === null && this._lifecycleEvidenceMissingSinceMs === null
+      && frame.bridgeReachable && map.player && telemetry.indicatorsValid && telemetry.stateValid
+      && telemetry.aircraft === this._lifeAircraft
+      && (["indicators", "state", "mapObjects"] as const).every(route => freshObservation(frame, route));
+    // A short gap retains the timer's ordinary grace, but permanently ends this
+    // life's one-time map-binding exception. Recovery cannot grant it again.
+    if (this._lifeMapBindingPending && !currentLifeEvidence) this._lifeMapBindingPending = null;
     const mapSignature = sortieMapSignature(frame.mapInfo);
     if (mapSignature) {
+      const firstLifeBinding = this._lifeMapBindingPending && currentLifeEvidence
+        && frame.mapInfoSampledAtMs != null && this._lifeStartedAtMs !== null
+        && frame.mapInfoSampledAtMs >= this._lifeStartedAtMs
+        && frame.mapInfoSampledAtMs >= this._lifeMapBindingPending.observedSpawnAtMs;
       if (this._currentMapSignature && mapSignature !== this._currentMapSignature) {
-        // A different confirmed map is a new session, never a boundary return.
+        // Metadata cached before a separately confirmed spawn binds this life
+        // once. Still clear map-derived state; only its confirmed origin survives.
+        const confirmedLife = firstLifeBinding ? { startedAtMs: this._lifeStartedAtMs,
+          index: this._lifeIndex, aircraft: this._lifeAircraft } : null;
         this._beginSortieReset(frame.sampledAtMs, "aircraft-loss");
         this._resetUndo = null;
         this._sortieRecoveryStore?.clear();
@@ -325,8 +373,18 @@ export class PublicRuntime {
         this._fuel.reset();
         this._groundTrack.reset();
         this._groundTrackEstimate = null;
+        this._automaticNavigationTargetId = null;
+        this._navigationSelectionMode = "auto";
+        this._settings = { ...this._settings, selectedNavigationId: null };
         this._resetExtension("map");
+        if (confirmedLife) {
+          this._phase = "alive";
+          this._lifeStartedAtMs = confirmedLife.startedAtMs;
+          this._lifeIndex = confirmedLife.index;
+          this._lifeAircraft = confirmedLife.aircraft;
+        }
       }
+      if (firstLifeBinding) this._lifeMapBindingPending = null;
       this._currentMapSignature = mapSignature;
     }
     this._reconcilePendingTimerResume(frame, telemetry, map, mapSignature);
@@ -462,6 +520,7 @@ export class PublicRuntime {
         this._landing.configure(command.landing, this._lastSnapshot.navigation);
         break;
       case "timer.reset":
+        this._lifeMapBindingPending = null;
         this._pendingTimerResume = null;
         this._pendingSortieResume = null;
         this._timerCheckpointStore?.clear();
@@ -961,6 +1020,7 @@ export class PublicRuntime {
   }
 
   protected _beginSortieReset(nowMs: number, reason: SortieResetReason): void {
+    this._lifeMapBindingPending = null;
     if (this._resetUndo && nowMs <= this._resetUndo.expiresAtMs) return;
     const restore = this._captureSortieRestorePoint(nowMs);
     if (!restore) return;
@@ -1048,6 +1108,7 @@ export class PublicRuntime {
   }
 
   protected _applySortieRestorePoint(restore: SortieRestorePoint): void {
+    this._lifeMapBindingPending = null;
     this._currentMapSignature = restore.mapSignature;
     this._phase = restore.phase;
     this._lifeStartedAtMs = restore.lifeStartedAtMs;
@@ -1137,8 +1198,13 @@ export class PublicRuntime {
     this._phase = "alive";
     // Debouncing confirms the spawn; it must not postpone the cycle's origin.
     this._lifeStartedAtMs = observedSpawnAtMs;
+    // Missing provenance stays conservative. Only a known pre-spawn cache can
+    // explain a later first binding without independent new-session evidence.
     this._lifeAircraft = this._lastFrame ? parseTelemetry(this._lastFrame).aircraft : "";
     this._lifeIndex += 1;
+    const mapInfoAtMs = this._lastFrame?.mapInfoSampledAtMs;
+    this._lifeMapBindingPending = this._currentMapSignature && mapInfoAtMs != null && mapInfoAtMs < observedSpawnAtMs
+      ? { observedSpawnAtMs, mapInfoAtMs, lifeIndex: this._lifeIndex } : null;
     this._candidateSinceMs = null;
     this._resetUndo = null;
     this._resetSuppressedUntilEvidence = false;

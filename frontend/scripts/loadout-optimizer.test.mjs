@@ -128,7 +128,7 @@ test("manual command guidance uses native evidence and every recommendation obje
   const presets=['manual','plain'].map(id=>({id,weapons:[[id,1]],columns:1,cells:[],mass:1}));
   for(const mode of ['reward','targets','custom_targets','sim_score']){
     const result=optimizeLoadout({presets,lockedKeys:[],weapons:map,threshold:100,targetCount:1,mode,reward:catalog.reward,
-      scenario:{aircraftId:'test',targetId:'airport_dwelling',roomMaxBr:10.7,remainingHp:100},filters:{noManual:true}},highs);
+      scenario:{aircraftId:'test',aircraftReward:0,targetId:'airport_dwelling',roomMaxBr:10.7,remainingHp:100},filters:{noManual:true}},highs);
     assert.equal(result.preset.id,'plain',mode);
   }
   const definition={columns:2,center:[],limits,options:[option(0,'manual'),option(1,'plain')]};
