@@ -4,6 +4,7 @@ const filterForMode = {laser: "noLaser", infrared: "noOptical", tv: "noOptical",
 const modeBurden = {satellite: 0, infrared: 1, tv: 2, optical: 2, laser: 3, manual: 4};
 
 export function weaponGuidanceKind(weapon) {
+  if (weapon?.guidanceKind) return weapon.guidanceKind;
   if (weapon && (weapon.kind === "missile" || weapon.guidanceModes?.length || weapon.deliveryProfile?.guidance && weapon.deliveryProfile.guidance !== "none")) return "guided";
   return weapon?.deliveryProfile?.guidance === "none" ? "unguided" : "unknown";
 }

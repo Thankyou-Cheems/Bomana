@@ -29,6 +29,8 @@ try {
   await page.waitForFunction(() => document.querySelector("#chargeWeaponA").options.length > 600);
   await page.waitForFunction(() => document.querySelector("#airCompare button") !== null);
   await page.waitForFunction(() => document.querySelector("#calcPresetList [data-preset-id]") !== null);
+  assert.equal(await page.locator('#calcPresetNote').isVisible(), true);
+  assert.match(await page.locator('#calcPresetNote').innerText(), /共用投弹点|分别投弹|数据不足|制导/);
   assert.equal(await page.locator('.hangar-result-primary').isVisible(),true,'Native single-weapon loadouts retain their required projectile count');
   const open = async id => { if (!await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
   const close = async id => { if (await page.locator(id).getAttribute("open").then(value => value !== null)) await page.locator(`${id} > summary`).click(); };
@@ -70,6 +72,7 @@ try {
   assert.equal(await page.locator('#calcTargetSegments [aria-checked="true"]').count(), 1);
   await page.locator('#calcTargetSegments [data-value="airport_storage"]').click();
   assert.equal(await page.locator("#calcTarget").inputValue(), "airport_storage");
+  assert.match(await page.locator('#calcPresetNote').innerText(), /高空投弹兼容性/);
   assert.equal(await page.locator("#calcRepairNote").isVisible(), true);
   assert.equal(await page.locator("#calcBaseModeControl").isVisible(), false);
   await page.locator('#calcBrSegments [role="radio"]').first().click();
@@ -494,6 +497,46 @@ try {
     await mixed.goto(url);
     await mixed.waitForFunction(() => document.querySelector("#calcSource").textContent.includes("数据未就绪"));
     assert.equal(await mixed.locator("#rewardResult dd").count(), 0);
+  }
+  // Release planning conclusions must remain visible on a narrow viewport.
+  if (!remote) {
+    const release = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+    release.on('pageerror', error => errors.push(error.message));
+    await release.goto(url);
+    await release.waitForFunction(() => document.querySelector('#calcPresetList [data-preset-id]') !== null);
+    await release.locator('#toolDirectoryToggle').click();
+    await release.locator('#toolDirectoryLinks a[href="#combinationCalculator"]').click();
+    const result = release.locator('[data-combination-result]');
+    await release.locator('[data-combination-weapon="0"]').selectOption('us_500lb_mk_82_ldgp');
+    await release.locator('[data-combination-weapon="1"]').selectOption('us_1000lb_mk_83_ldgp');
+    assert.match(await result.innerText(), /可共用投弹点/);
+    assert.match(await result.innerText(), /参考投弹点间距约 [\d,]+–[\d,]+ 米/);
+    await release.locator('[data-combination-weapon="1"]').selectOption('su_fab_250m_62');
+    assert.match(await result.innerText(), /分别投弹/);
+    await release.locator('#calcTargetSegments [data-value="airport_storage"]').click();
+    assert.match(await result.innerText(), /高空投弹兼容性/);
+    await release.locator('[data-combination-count="1"]').fill('0');
+    assert.match(await result.innerText(), /可共用投弹点/);
+    await release.locator('[data-combination-count="1"]').fill('1');
+    await release.locator('[data-combination-weapon="1"]').selectOption('de_fx1400');
+    assert.match(await result.innerText(), /各自制导/);
+    assert.doesNotMatch(await result.innerText(), /参考投弹点间距/);
+    await release.locator('[data-calculator-language="en"]').click();
+    await result.getByText(/individual guidance/).waitFor({state:'visible'});
+    assert.ok(await release.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await release.locator('#combinationCalculator').screenshot({path:'../.artifacts/calculator-ui/mixed-release-390.png'});
+    await release.close();
+    const missing = await browser.newPage();
+    missing.on('pageerror', error => errors.push(error.message));
+    await missing.route('**/api/v1/calculator/weapons.json', async route => {
+      const response = await route.fetch(), data = await response.json();
+      for (const weapon of data.weapons) delete weapon.releaseGroup;
+      await route.fulfill({json:data});
+    });
+    await missing.goto(url);
+    await missing.waitForFunction(() => document.querySelector('#calcPresetNote').textContent.includes('数据不足'));
+    assert.equal(await missing.locator('#calcPresetNote').isVisible(),true);
+    await missing.close();
   }
   // Exercise the lower workflow in a separate touch-capable browser context.
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

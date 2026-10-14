@@ -13,7 +13,7 @@ function equivalentStores(a, b) {
   // An equal label alone proves nothing. Compare every exported field except
   // identity; require known strike parameters before combining different IDs.
   const known = row => row && [row.kg, row.dmg].every(value => Number.isFinite(value) && value > 0)
-    && Number.isFinite(row.rewardDmg) && Array.isArray(row.guidanceModes) && Object.hasOwn(row, "deliveryProfile");
+    && Number.isFinite(row.rewardDmg) && Array.isArray(row.guidanceModes) && (Object.hasOwn(row, "releaseGroup") || Object.hasOwn(row, "deliveryProfile"));
   if (!known(a) || !known(b)) return false;
   const {id: aId, ...aParameters} = a, {id: bId, ...bParameters} = b;
   return equalParameters(aParameters, bParameters);

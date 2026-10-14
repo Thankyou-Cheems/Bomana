@@ -989,5 +989,11 @@
   "workflow.rewardImportCancel": "保留當前記錄",
   "workflow.rewardSeparate": "這裏獨立選擇收益機型；更改上方機型不會自動覆蓋你的收益輸入。",
   "workflow.catalogUnavailable": "武器與任務目錄加載失敗或來源不一致，請刷新後重試。",
-  "workflow.fuelOverflow": "輸入過大，超出可計算範圍；請覈對單位和數值。"
+  "workflow.fuelOverflow": "輸入過大，超出可計算範圍；請覈對單位和數值。",
+  "release.compatible": "可共用投彈點（規劃參考）；實際投彈仍需按目前彈種確認 CCRP。",
+  "release.separate": "建議按彈種分別投彈、分別確認 CCRP；此掛載不建議共用一個投彈點。分批設定不會消除彈道差異。",
+  "release.unknown": "投彈相容性資料不足；建議按彈種分別確認 CCRP，勿假定可以一起投彈。",
+  "release.individual": "含制導彈藥或其他武器：按各自制導／發射方式投放，不能把整套傷害視為一次 CCRP 齊投。",
+  "release.airport": "機場模組按高空投彈相容性評估；注意機場防空。",
+  "release.gap": "參考投彈點間距約 {{min}}–{{max}} 公尺（非即時落點誤差）。"
 }

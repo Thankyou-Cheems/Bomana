@@ -20,7 +20,7 @@ test('all locales include complete messages and preserve interpolation variables
 
 test('UI translation references resolve in the canonical resource',()=>{
   const check=key=>assert.ok(Object.hasOwn(base,key),`missing ${key}`);
-  for(const file of ['app.js','air-ui.mjs','charts.mjs','loadouts.mjs','custom-loadout-ui.mjs','combination-ui.mjs','optimizer-ui.mjs','custom-loadouts.mjs','air-model.mjs']) {
+  for(const file of ['app.js','air-ui.mjs','charts.mjs','loadouts.mjs','loadout-simplicity.mjs','custom-loadout-ui.mjs','combination-ui.mjs','optimizer-ui.mjs','custom-loadouts.mjs','air-model.mjs']) {
     const tree=parse(read(file),{sourceType:'module'});
     const visit=node=>{
       if(!node||typeof node!=='object')return;

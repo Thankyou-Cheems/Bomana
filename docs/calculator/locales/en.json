@@ -989,5 +989,11 @@
   "workflow.rewardImportCancel": "Keep the current record",
   "workflow.rewardSeparate": "Reward aircraft selection is independent here. Changing the aircraft above will not overwrite your reward inputs.",
   "workflow.catalogUnavailable": "Weapon and mission data failed to load or their sources disagree. Refresh to retry.",
-  "workflow.fuelOverflow": "The values exceed the calculation range. Check units and values."
+  "workflow.fuelOverflow": "The values exceed the calculation range. Check units and values.",
+  "release.compatible": "Shared release point suitable for planning; confirm CCRP for the selected bomb during flight.",
+  "release.separate": "Release each bomb type separately and confirm its CCRP cue. A shared release point is not recommended; ripple settings do not remove trajectory differences.",
+  "release.unknown": "Insufficient release compatibility data. Confirm CCRP separately for each bomb type; do not assume a shared release is suitable.",
+  "release.individual": "Includes guided stores or other weapons: use their individual guidance or launch method. Total damage does not imply one CCRP salvo.",
+  "release.airport": "Airfield modules use the high-altitude release assessment; account for airfield air defenses.",
+  "release.gap": "Reference release-point spacing: about {{min}}–{{max}} m (not live impact error)."
 }

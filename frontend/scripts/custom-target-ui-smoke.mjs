@@ -140,7 +140,7 @@ try {
  const selected=await page.locator('[data-custom-tier][data-custom-selected]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-custom-selected')).filter(Boolean));
  const weaponData=JSON.parse(await readFile(resolve(root,'api/v1/calculator/weapons.json')));
  const map=new Map(weaponData.weapons.map(row=>[row.id,row]));
- for(const key of selected.filter(key=>key!==guided.key))for(const [id]of custom.aircraft.a_10c.options.find(row=>row.key===key).weapons)assert.equal(map.get(id).deliveryProfile?.guidance,'none','Automatic additions obey unguided-only');
+ for(const key of selected.filter(key=>key!==guided.key))for(const [id]of custom.aircraft.a_10c.options.find(row=>row.key===key).weapons)assert.equal(map.get(id).guidanceKind,'unguided','Automatic additions obey unguided-only');
  // Legacy storage onlyGuided:true maps to the exclusive guided state.
  await page.evaluate(()=>localStorage.setItem('bomana:calculator:optimizerFilters',JSON.stringify({onlyGuided:true})));await page.reload();
  await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();

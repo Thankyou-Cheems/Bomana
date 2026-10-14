@@ -6,6 +6,7 @@ import { rankFuzzyMatches } from "./search.mjs";
 import { reportDailyActive } from "./anonymous-daily-active.mjs";
 import { readableVehicle } from "./vehicle-names.mjs";
 import { presetTitle, presetTotals, presetDiagram, renderPresetRows } from "./loadouts.mjs";
+import { releaseMessage } from "./loadout-simplicity.mjs";
 import { createCombinationCalculator } from "./combination-ui.mjs";
 import { createCustomLoadoutEditor } from "./custom-loadout-ui.mjs";
 import { createLoadoutOptimizer, createSimScoreEstimator } from "./optimizer-ui.mjs";
@@ -609,7 +610,7 @@ function renderPresetDetail(preset) {
     item.append(conversionText("dt", label), conversionText("dd", value));
     stats.append(item);
   }
-  document.querySelector("#calcPresetNote").textContent = preset.other ? t("app.includesOtherEquipmentTotalsAboveCoverCalculableStrikeAmmunition", "含其他装备；上方仅统计可计算的对地弹药。") : "";
+  document.querySelector("#calcPresetNote").textContent = [releaseMessage(preset.weapons, weapons, target.id, catalog.releaseRanges), preset.other ? t("app.includesOtherEquipmentTotalsAboveCoverCalculableStrikeAmmunition", "含其他装备；上方仅统计可计算的对地弹药。") : ""].filter(Boolean).join(" ");
 }
 
 function choosePreset(id, focus = false) {
@@ -1176,7 +1177,7 @@ function refreshResult() {
     : `${target.label} · BR ${brRange}`;
   combination.update({ weapons: new Map(catalog.weapons.map(row => [row.id, row])),
     hp: targetHp(target, tier), fireHp: target.has_fire ? targetHp(target, tier) * (1 - target.fireMultiplier) : null,
-    targetLabel: context, preset });
+    targetLabel: context, targetId: target.id, releaseRanges: catalog.releaseRanges, preset });
   customEditor.updateHp(targetHp(target, tier));
   const carried = preset?.weapons || (aircraft && weapon && currentWeaponCapacity(aircraft, weapon.id)
     ? [[weapon.id, currentWeaponCapacity(aircraft, weapon.id)]] : []);
@@ -1184,7 +1185,7 @@ function refreshResult() {
     reward: catalog.reward, roomMaxBr: selectedRoomBr, brValues: catalog.br_values, targetId: target.id,
     destructionThreshold: target.kind === "bombing_point" ? targetHp(target, tier) * (1 - (target.has_fire ? target.fireMultiplier : 0)) : undefined,
     targetLabel: target.label, hp: targetHp(target, tier), validLoadout: !customPreview || customPreview.validation.valid});
-  optimizer.update({aircraft, scenario: scoreScenario, weapons: new Map(catalog.weapons.map(row => [row.id, row])), reward: catalog.reward,
+  optimizer.update({aircraft, scenario: scoreScenario, weapons: new Map(catalog.weapons.map(row => [row.id, row])), reward: catalog.reward, releaseRanges: catalog.releaseRanges,
     scenarios: ["bombing_point_planes","airport_dwelling","airport_storage","airport_parking","airport_airfield"].map(id => {
       const row = catalog.targets.find(target => target.id === id);
       const profile = catalog.bombing_point_profiles.find(profile => profile.id === "respawning");
@@ -1273,24 +1274,29 @@ function refreshResult() {
   }
 }
 
-async function loadJson(url) {
-  const response = await fetch(url, { cache: "no-cache" });
+async function loadJson(url, signal) {
+  const response = await fetch(url, { cache: "no-cache", signal });
   if (!response.ok) throw new Error(`http_${response.status}`);
   return response.json();
 }
 
 async function boot() {
   try {
-    const [catalogBody, weaponsBody, aircraftBody, rewardsBody] = await Promise.all([
+    const [catalogBody, weaponsBody, aircraftBody, rewardsBody, rangesBody] = await Promise.all([
       loadJson(catalogUrl),
       loadJson(weaponsUrl),
       loadJson(aircraftUrl),
       loadJson(rewardsUrl),
+      loadJson("/api/v1/calculator/release-ranges.json", AbortSignal.timeout(5000)).catch(() => null),
     ]);
     const source = sharedParameterSource([catalogBody, weaponsBody, aircraftBody, rewardsBody]);
     if (!source) throw new Error("mixed_parameter_sources");
     defenseCatalogVersion = source.version;
     catalog = catalogBody;
+    if (rangesBody?.schema === "bomana.calculator.release-ranges/v1" &&
+        sharedParameterSource([catalogBody, rangesBody]) && Array.isArray(rangesBody.ids) &&
+        rangesBody.ids.every(Array.isArray) && Array.isArray(rangesBody.ranges) &&
+        rangesBody.ranges.length === rangesBody.ids.length * (rangesBody.ids.length - 1) / 2) catalog.releaseRanges = rangesBody;
     rewardsCatalog = { ...rewardsBody, vehicles: rewardsBody.vehicles.map(readableVehicle) };
     catalog.weapons = (weaponsBody.weapons || []).map(row => ({...row,
       get name() { return localizeName(row.name, row.name_en); },

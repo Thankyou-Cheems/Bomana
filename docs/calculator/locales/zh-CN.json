@@ -989,5 +989,11 @@
   "workflow.rewardImportCancel": "保留当前记录",
   "workflow.rewardSeparate": "这里独立选择收益机型；更改上方机型不会自动覆盖你的收益输入。",
   "workflow.catalogUnavailable": "武器与任务目录加载失败或来源不一致，请刷新后重试。",
-  "workflow.fuelOverflow": "输入过大，超出可计算范围；请核对单位和数值。"
+  "workflow.fuelOverflow": "输入过大，超出可计算范围；请核对单位和数值。",
+  "release.compatible": "可共用投弹点（规划参考）；实际投弹仍需按当前弹种确认 CCRP。",
+  "release.separate": "建议按弹种分别投弹、分别确认 CCRP；此挂载不建议共用一个投弹点。分批设置不会消除弹道差异。",
+  "release.unknown": "投弹兼容性数据不足；建议按弹种分别确认 CCRP，勿假定可以一起投弹。",
+  "release.individual": "含制导弹药或其他武器：按各自制导／发射方式投放，不能把整套伤害视为一次 CCRP 齐投。",
+  "release.airport": "机场模块按高空投弹兼容性评估；注意机场防空。",
+  "release.gap": "参考投弹点间距约 {{min}}–{{max}} 米（非实时落点误差）。"
 }

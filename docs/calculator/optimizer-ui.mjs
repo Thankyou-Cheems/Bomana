@@ -2,6 +2,7 @@ import { empiricalSimScore, rewardUi } from "./model.mjs";
 import { t, numberLocale, localizeName } from "./i18n.mjs";
 import { presetDiagram, presetZoneAllocations, storesTitle } from "./loadouts.mjs";
 import { validateLoadout } from "./custom-loadouts.mjs";
+import { releaseMessage } from "./loadout-simplicity.mjs";
 import { toggleRecommendationFilter, selectRecommendationGuidance, preferredGuidanceMode, normalizeGuidanceSelection, recommendationWeaponExcluded } from "./recommendation-guidance.mjs";
 
 const node = (tag, text, className) => {
@@ -155,6 +156,7 @@ export function createLoadoutOptimizer(root, {load, apply}) {
       explanation.append(node("p", t("optimizer.deliveryModes", "投放方案的可用制导方式：{{modes}}", {modes: summary}), "optimizer-note"));
     }
     if (next.simplicity) explanation.append(node("p", t("optimizer.simpleLoadoutResult", "{{types}} 种弹药 · {{profiles}} 类投放特性", next.simplicity), "optimizer-note"));
+    explanation.append(node("p", releaseMessage(next.preset.weapons, context.weapons, scoreScenario?.targetId, context.releaseRanges), "optimizer-note"));
     if (next.maximumReward > next.reward + 1e-6) explanation.append(node("p", t("optimizer.simplerNearCap", "收益系数 {{chosen}}，收益优先方案为 {{maximum}}；优先更省事的投放方案。", {chosen: format(next.reward), maximum: format(next.maximumReward)}), "optimizer-note"));
     if (mode === "targets" && next.singleZone) {
       explanation.append(node("p", t("optimizer-ui.basesSingleBase", "{{v0}} 个战区 × {{v1}} = {{v2}}；单战区 {{v3}}", {v0: next.targets, v1: format(next.reward), v2: format(next.totalReward), v3: format(next.singleZone.totalReward)}), "optimizer-note"));

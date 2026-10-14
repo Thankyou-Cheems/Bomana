@@ -55,7 +55,7 @@ function supportedReward(reward) {
   return max > min && b >= 0 && points.every((point, i) => i === 0 || point[0] > points[i - 1][0] && point[1] <= points[i - 1][1]);
 }
 
-function prepare({definition, presets, lockedKeys, weapons, threshold, filters = {}}) {
+function prepare({definition, presets, lockedKeys, weapons, threshold, filters = {}, scenario}) {
   const custom = Boolean(definition);
   const source = custom ? definition.options : presets.filter(preset => !preset.customName);
   const options = source.map((option, i) => ({...option, variable: `x${i}`,
@@ -131,7 +131,7 @@ function prepare({definition, presets, lockedKeys, weapons, threshold, filters =
     const users = options.filter(option => option.weapons.some(([weapon, count]) => weapon === id && count > 0));
     for (const option of users) add([[option.variable, 1], [variable, -1]], "<=", 0);
     add([[variable, 1], ...users.map(option => [option.variable, -1])], "<=", 0);
-    const group = deliveryGroup(id, weapons.get(id));
+    const group = deliveryGroup(id, weapons.get(id), scenario?.targetId);
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group).push(variable);
   }
@@ -201,7 +201,7 @@ export function optimizeLoadout(input, highs, {timeLimit = 20, preparedModel} = 
       if (count) { plan[row.target].push([row.id, count]); used.set(row.id, (used.get(row.id) || 0) + count); }
     }
     if ([...used].some(([id, count]) => count > (items.get(id) || 0)) || plan.some(row => requiredCount(threshold, damageOf(row, weapons)) !== 1)) { complete = false; return {status: "Invalid solution"}; }
-    return {status: result.Status, chosen, keys, damage, rewardDamage: chosen.reduce((sum, option) => sum + option.rewardDamage, 0), plan, workload: deliveryWorkload(plan, weapons, input.filters), simplicity: loadoutSimplicity([...items], weapons), mass: validation?.mass ?? chosen.reduce((sum, option) => sum + (presetTotals(option, weapons).mass || 0), 0), effective: model.effective.reduce((sum, [name, coefficient]) => sum + coefficient * value(name), 0), warnings: validation?.warnings || []};
+    return {status: result.Status, chosen, keys, damage, rewardDamage: chosen.reduce((sum, option) => sum + option.rewardDamage, 0), plan, workload: deliveryWorkload(plan, weapons, input.filters), simplicity: loadoutSimplicity([...items], weapons, input.scenario?.targetId), mass: validation?.mass ?? chosen.reduce((sum, option) => sum + (presetTotals(option, weapons).mass || 0), 0), effective: model.effective.reduce((sum, [name, coefficient]) => sum + coefficient * value(name), 0), warnings: validation?.warnings || []};
   }
   if (!model.supplies.size || !model.options.length) return {status: "infeasible", unknown: model.unknown};
   let best, targets = 1, targetUpper = 1;
@@ -426,7 +426,7 @@ function optimizeBaseSortieScore(input, highs, timeLimit) {
     const candidate={objective:"global_sim_score",status:"feasible",kind:definition?"custom":"preset",presetId:definition?null:preset.id,preset,keys,plan,remaining:[],
       score,estimate:estimates[0],estimates,targets:plan.length,destroyedTargets:estimates.filter(row=>row.destructionScore>0).length,
       damage:damageOf(preset.weapons,weapons),rewardDamage:rewardDamageOf(preset.weapons,weapons),mass:validation?.mass ?? totals.mass ?? Infinity,
-      simplicity:loadoutSimplicity(preset.weapons,weapons),warnings:validation?.warnings || [],unknown:model.unknown};
+      simplicity:loadoutSimplicity(preset.weapons,weapons,scenario.targetId),warnings:validation?.warnings || [],unknown:model.unknown};
     if (preferRecommendation(candidate,best || {})) best=candidate;
     return {...candidate,solverStatus:solved.Status,credit:credit.reduce((sum,[name,n])=>sum+n*value(name),0)};
   }
@@ -511,7 +511,7 @@ function optimizeSimScore(input, highs, {timeLimit}) {
     const candidate = {status: solverStatus, objective: "sim_score", kind: definition ? "custom" : "preset", presetId: definition ? null : preset.id,
       preset, keys, score: estimate.score, estimate, damage: estimate.carriedDamage, rewardDamage: estimate.carriedRewardDamage,
       scoreDamage: estimate.deliveredScoreDamage,
-      mass: validation?.mass ?? totals.mass ?? Infinity, simplicity: loadoutSimplicity(preset.weapons, weapons),
+      mass: validation?.mass ?? totals.mass ?? Infinity, simplicity: loadoutSimplicity(preset.weapons, weapons, scenario.targetId),
       plan: [preset.weapons.map(row => [...row])], remaining: [], targets: 1, warnings: validation?.warnings || [], unknown: model.unknown};
     if (preferRecommendation(candidate, best || {})) best = candidate;
     return {...candidate, solverStatus};

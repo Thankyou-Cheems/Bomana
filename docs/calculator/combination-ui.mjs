@@ -1,5 +1,6 @@
 import { t, numberLocale } from "./i18n.mjs";
 import { combinationTotals } from "./custom-loadouts.mjs";
+import { releaseMessage } from "./loadout-simplicity.mjs";
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -61,6 +62,7 @@ export function createCombinationCalculator(root) {
       const entry = element("div"); entry.append(element("dt", label), element("dd", value)); stats.append(entry);
     }
     result.append(stats);
+    result.append(element("p", releaseMessage(rows, context.weapons, context.targetId, context.releaseRanges)));
     if (context.fireHp && totals.damage > 0) result.append(element("p", t("combination-ui.burnOutReferenceLoads", "点燃 / 自毁参考：{{v0}} 轮。", {v0: Math.ceil(context.fireHp / totals.damage)})));
     const comparison = context.weapons.get(reference.value);
     if (comparison) {

@@ -5,7 +5,7 @@ import loadHighs from "highs";
 import {optimizeLoadout, preferRecommendation} from "../../docs/calculator/loadout-optimizer.mjs";
 import {validateLoadout} from "../../docs/calculator/custom-loadouts.mjs";
 import {rewardUi} from "../../docs/calculator/model.mjs";
-import {deliveryGroup} from "../../docs/calculator/loadout-simplicity.mjs";
+import {deliveryGroup, releaseAssessment, releaseGap} from "../../docs/calculator/loadout-simplicity.mjs";
 import {availableGuidanceModes, guidanceExcluded, toggleRecommendationFilter, guidanceBurden, preferredGuidanceMode} from "../../docs/calculator/recommendation-guidance.mjs";
 
 const highs = await loadHighs();
@@ -115,8 +115,8 @@ test("guidance switches use available multimode routes and cannot leave guided-o
 test("manual command guidance uses native evidence and every recommendation objective respects the same exclusions", () => {
   for (const id of ['de_fx1400','su_kh_23m','us_agm_12b_bullpup']) assert.deepEqual(weapons.get(id).guidanceModes,['manual'],id);
   const fritz=weapons.get('de_fx1400');
-  assert.equal(fritz.deliveryProfile.guidance,'manual');
-  assert.notEqual(deliveryGroup('manual',fritz),deliveryGroup('plain',{...fritz,guidanceModes:[],deliveryProfile:{...fritz.deliveryProfile,guidance:'none'}}),'Uniform-loadout preferences distinguish manual steering from unguided delivery');
+  assert.equal(fritz.guidanceKind,'guided');
+  assert.notEqual(deliveryGroup('manual',fritz),deliveryGroup('plain',{...fritz,guidanceKind:'unguided',guidanceModes:[]}), 'Uniform-loadout preferences distinguish manual steering from unguided delivery');
   assert.equal(weapons.get('su_9m114').guidanceModes.includes('manual'),false,'SACLOS is not manual steering');
   const manual={kind:'missile',dmg:110,rewardDmg:110,guidanceModes:['manual']};
   const plain={kind:'bomb',dmg:100,rewardDmg:100,deliveryProfile:{guidance:'none'}};
@@ -223,7 +223,7 @@ test("near-cap rewards prefer uniform delivery while strict reward and lower ban
 });
 
 test("matching bomb delivery groups outrank fewer types with different delivery behavior", () => {
-  const bomb = {kind:'bomb',dmg:6000,deliveryProfile:{guidance:'none',drag_area_mass:.001,area_mass:.01}};
+  const bomb = {kind:'bomb',dmg:6000,releaseGroup:{standard:1,high:1}};
   const map = new Map([['a',bomb],['b',bomb],['c',bomb],['rocket',{kind:'rocket',dmg:9000}],['missile',{kind:'missile',dmg:9000}]]);
   const presets = [{id:'same-bombs',weapons:[['a',1],['b',1],['c',1]],cells:[]}, {id:'mixed-powered',weapons:[['rocket',1],['missile',1]],cells:[]}];
   const result = optimizeLoadout({definition:null,presets,lockedKeys:[],weapons:map,threshold:18000,mode:'reward',reward:catalog.reward},highs);
@@ -232,16 +232,50 @@ test("matching bomb delivery groups outrank fewer types with different delivery 
 });
 
 test("simple completion keeps user stores and favors compatible bomb profiles", () => {
-  const bomb = {kind:'bomb',dmg:60,deliveryProfile:{guidance:'none',drag_area_mass:.001,area_mass:.01}};
-  const map = new Map([['locked',{...bomb,dmg:40}],['similar',bomb],['different',{...bomb,highDrag:true}]]);
+  const bomb = {kind:'bomb',dmg:60,releaseGroup:{standard:1,high:1}};
+  const map = new Map([['locked',{...bomb,dmg:40}],['similar',bomb],['different',{...bomb,releaseGroup:{standard:2,high:2}}]]);
   const definition = {columns:2,center:[0,1],limits,options:[option(0,'locked'),option(1,'different'),option(1,'similar')]};
   const result = optimizeLoadout({definition,presets:[],lockedKeys:['0:locked'],weapons:map,threshold:100,mode:'reward',reward:catalog.reward,filters:{simpleLoadout:true}},highs);
   assert.deepEqual(result.keys,['0:locked','1:similar']);
   assert.deepEqual(result.simplicity,{types:2,profiles:1});
-  assert.notEqual(deliveryGroup('a',{...bomb,deliveryProfile:null}),deliveryGroup('b',{...bomb,deliveryProfile:null}));
-  assert.notEqual(deliveryGroup('a',bomb),deliveryGroup('b',{...bomb,satelliteGuidance:true}));
-  assert.notEqual(deliveryGroup('a',bomb),deliveryGroup('b',{...bomb,deliveryProfile:{...bomb.deliveryProfile,drag_area_mass:.01}}));
-  assert.notEqual(deliveryGroup('a',bomb),deliveryGroup('b',{...bomb,deliveryProfile:{...bomb.deliveryProfile,lift_scale:20}}));
+  assert.notEqual(deliveryGroup('a',{...bomb,releaseGroup:null}),deliveryGroup('b',{...bomb,releaseGroup:null}));
+  assert.notEqual(deliveryGroup('a',bomb),deliveryGroup('b',{...bomb,releaseGroup:{standard:2,high:2}}));
+});
+
+test("airport recommendations prefer high-altitude compatible completions and keep locked stores", () => {
+  const bomb = {kind:'bomb',dmg:60,guidanceKind:'unguided',releaseGroup:{standard:0,high:0}};
+  const map = new Map([['locked',{...bomb,dmg:40}],['similar',bomb],['different',{...bomb,releaseGroup:{standard:0,high:1}}]]);
+  const definition = {columns:2,center:[0,1],limits,options:[option(0,'locked'),option(1,'different'),option(1,'similar')]};
+  const input = {definition,presets:[],lockedKeys:['0:locked'],weapons:map,threshold:100,mode:'reward',reward:catalog.reward,scenario:{targetId:'airport_storage'}};
+  const result = optimizeLoadout(input,highs);
+  assert.deepEqual(result.keys,['0:locked','1:similar']);
+  const locked = optimizeLoadout({...input,lockedKeys:['0:locked','1:different']},highs);
+  assert.deepEqual(locked.keys,['0:locked','1:different']);
+  assert.equal(locked.simplicity.profiles,2);
+});
+
+test("release conclusions distinguish high-altitude separation, unknown data and individual guidance", () => {
+  const bomb = {kind:'bomb',guidanceKind:'unguided',releaseGroup:{standard:0,high:0}};
+  const map = new Map([['a',bomb],['b',{...bomb,releaseGroup:{standard:0,high:1}}],['unknown',{kind:'bomb'}],['guided',{...bomb,guidanceKind:'guided',guidanceModes:['satellite']}]]);
+  const mixed = [['a',1],['b',1]];
+  assert.equal(releaseAssessment(mixed,map,'bombing_point_planes'),'compatible');
+  assert.equal(releaseAssessment(mixed,map,'airport_storage'),'separate');
+  assert.equal(releaseAssessment([['a',1],['unknown',1]],map),'unknown');
+  assert.equal(releaseAssessment([['a',1],['guided',1]],map),'individual');
+  assert.equal(releaseAssessment([['a',1],['b',0]],map,'airport_storage'),'compatible');
+  assert.equal(releaseAssessment([['a',1],['a',2]],map),'compatible');
+  assert.equal(releaseAssessment([],map),'empty');
+});
+
+test("release spacing uses target-specific pair conclusions and preserves missing-data uncertainty", () => {
+  const data={ids:[['a','alias'],['b'],['c']], ranges:[[50,100,400,900],[0,50,100,200],[200,300,500,700]]};
+  assert.deepEqual(releaseGap([['a',1],['b',1]],data),{min:50,max:100});
+  assert.deepEqual(releaseGap([['b',1],['a',1]],data,'airport_storage'),{min:400,max:900});
+  assert.deepEqual(releaseGap([['a',1],['b',1],['c',1]],data,'airport_storage'),{min:500,max:900});
+  assert.deepEqual(releaseGap([['a',1],['alias',1]],data),{min:0,max:0});
+  assert.equal(releaseGap([['a',1],['b',0]],data),null);
+  assert.equal(releaseGap([['a',1],['unknown',1]],data),null);
+  assert.equal(releaseGap([['a',1],['b',1]],null),null);
 });
 
 test("simple loadouts retain maximum target coverage and reject impossible locked completions", () => {
