@@ -1,7 +1,5 @@
 import "../../../docs/assets/bomana-header.js";
 import "./styles.css";
-import { downloadEnhancedDesktop } from "./desktop-download";
-import { readBrowserAuthorization } from "../runtime/enhanced-access";
 import { BridgeClient, BrowserAccessClient, type BridgeProbe, type BrowserAccess, type Channel } from "./launcher-client";
 import { openBridgeAssetStore, type OfflineCacheStatus } from "../runtime/persistent-asset-store";
 import {
@@ -39,7 +37,6 @@ let currentState: LauncherViewState | null = null;
 let authorizationPopup: AuthorizationPopup | null = null;
 let pendingAuthorizationCode = "";
 let fallbackAccess: BrowserAccess | null = null;
-let desktopDownloading = false;
 let bridgeStatusRequest = 0;
 let latestBridgeStatus = {
   bridge: { state: "disconnected", message: "等待 Bridge 连接" } as BridgeProbe,
@@ -83,9 +80,6 @@ const authorizationFallbackCode = required("authorization-fallback-code");
 const authorizationCurrentTab = requiredButton("authorization-current-tab");
 const authorizationRetryPopup = requiredButton("authorization-retry-popup");
 const authorizationFallbackClose = requiredButton("authorization-fallback-close");
-const desktopDownload = requiredButton("download-desktop");
-const desktopDownloadStatus = required("desktop-download-status");
-desktopDownload.addEventListener("click", () => void downloadDesktop());
 
 authorizationCode.classList.add("hidden");
 required("refresh-catalog").textContent = "刷新状态";
@@ -232,8 +226,6 @@ function renderBridgeVersion(probe: BridgeProbe, release: BridgeRelease | null, 
 }
 
 function renderAccess(access: BrowserAccess): void {
-  desktopDownload.disabled = desktopDownloading || !access.enhanced || Boolean(access.offline);
-  if (!desktopDownloading) desktopDownload.textContent = access.enhanced ? "下载桌面版" : "需 Enhanced 授权";
   accountActions.replaceChildren();
   accountLabel.textContent = access.accountLabel;
   authorizationCode.classList.toggle("hidden", access.state !== "pending");
@@ -513,28 +505,6 @@ function showToast(message: string): void {
   toast.textContent = message;
   toast.classList.add("visible");
   window.setTimeout(() => toast.classList.remove("visible"), 3600);
-}
-
-async function downloadDesktop(): Promise<void> {
-  if (desktopDownloading) return;
-  desktopDownloading = true;
-  desktopDownload.disabled = true;
-  desktopDownloadStatus.textContent = "正在验证订阅与私有安装包…";
-  try {
-    const token = readBrowserAuthorization()?.accessToken ?? "";
-    const result = await downloadEnhancedDesktop(cheemsPayBase, token, fetch, fraction => {
-      desktopDownloadStatus.textContent = `正在下载 ${Math.floor(fraction * 100)}%`;
-    });
-    const url = URL.createObjectURL(result.blob);
-    const link = document.createElement("a");
-    link.href = url; link.download = result.filename; document.body.append(link); link.click(); link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    desktopDownloadStatus.textContent = "校验完成。请先解压，再运行 BomanaEnhanced.exe。";
-  } catch (error) { desktopDownloadStatus.textContent = messageOf(error); }
-  finally {
-    desktopDownloading = false;
-    if (currentState) renderAccess(currentState.access);
-  }
 }
 
 function formatSize(bytes: number): string {

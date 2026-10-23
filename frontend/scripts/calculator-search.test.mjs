@@ -19,6 +19,7 @@ test("game-font names become readable and remain searchable without losing varia
   assert.equal(vehicleName("␗F-16A MLU", "china"), "🇨🇳 F-16A MLU");
   assert.equal(vehicleName("▄P-47", "ussr"), "〔苏联〕P-47");
   assert.equal(vehicleName("AV-8B+"), "AV-8B+");
+  assert.equal(vehicleName("Weizman's \uF059Spitfire Mk.IXe", "israel"), "Weizman's 🇮🇱 Spitfire Mk.IXe");
   const row = readableVehicle({ id: "a_4e_early_iaf", country: "israel", name: "\uF059A-4E", long: "\uF059A-4E 早期型", name_en: "\uF059A-4E" });
   assert.ok(Number.isFinite(fuzzySearchScore("以色列 A4", [row.id, row.name, row.countryName])));
   assert.doesNotMatch([row.name, row.long, row.name_en].join(" "), /\p{Co}/u);

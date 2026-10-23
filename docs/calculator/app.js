@@ -888,7 +888,7 @@ function renderAircraftList() {
     if (selected) button.classList.add("is-selected");
     const name = document.createElement("span");
     name.className = "hangar-weapon-name";
-    name.textContent = item.name;
+    name.textContent = item.long || item.name;
     const detail = document.createElement("span");
     detail.className = "hangar-weapon-kind";
     detail.textContent = `${item.countryName} · ${t("app.types", "{{v0}} 种{{v1}}", {v0: item.w.length, v1: item.custom ? t("app.custom", " · 自定义") : ""})}`;
@@ -1511,8 +1511,6 @@ document.querySelector("#calcForm").addEventListener("submit", event => event.pr
 await initializeLanguage();
 document.addEventListener("calculator:language", () => {
   if (!catalog) return;
-  const aircraft = selectedAircraft();
-  aircraftSearchInput.value = aircraft?.name || aircraftSearchInput.value;
   fillSelect(targetSelect, catalog.targets, target => target.id, target => target.label, targetSelect.value);
   renderSegments(targetSelect, document.querySelector("#calcTargetSegments"));
   renderBaseModes();

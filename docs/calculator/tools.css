@@ -264,7 +264,7 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .loadout-workspace .hangar-picker-head h2 { font-size:12px; }
 .loadout-workspace .hangar-selection { margin:0; }
 .loadout-workspace .hangar-aircraft-list { display:none; }
-.loadout-workspace .aircraft-toolbar:focus-within .hangar-aircraft-list:not(:has(.hangar-weapon-empty)) { display:grid; position:absolute; top:38px; left:0; z-index:4; width:min(560px,100%); max-height:260px; margin:0; padding:6px; border:1px solid #afc8d7; border-radius:7px; background:#f8fcff; box-shadow:0 6px 18px #284a6826; }
+.loadout-workspace .aircraft-toolbar:focus-within .hangar-aircraft-list:not(:has(.hangar-weapon-empty)) { display:grid; position:absolute; top:38px; left:0; z-index:4; width:min(640px,100%); max-height:min(360px,55vh); margin:0; padding:6px; border:1px solid #afc8d7; border-radius:7px; background:#f8fcff; box-shadow:0 6px 18px #284a6826; }
 .loadout-workspace .hangar-search input, .loadout-workspace .hangar-field select { min-height:34px; padding:6px 10px; border-radius:7px; font-size:12px; }
 .native-presets h2 { margin:0; font-size:12px; }
 .native-presets .loadout-scroll { max-height:440px; margin-top:6px; }
@@ -484,11 +484,11 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 .filter-chip[aria-pressed=true]::before { border-color:#a17b23; background:#b58c2d; }
 .filter-chip:focus-visible { outline:2px solid #2388bd; outline-offset:2px; }
 #calcCustomCount { font-size:10px; opacity:.8; }
-.calculator-page .aircraft-toolbar .hangar-aircraft-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; max-height:156px; margin-top:8px; background:#dce8ef; border-radius:8px; }
+.calculator-page .aircraft-toolbar .hangar-aircraft-list { display:grid; grid-template-columns:minmax(0,1fr); gap:1px; max-height:min(360px,55vh); margin-top:8px; background:#dce8ef; border-radius:8px; }
 .calculator-page .aircraft-toolbar .hangar-aircraft-list:has(.hangar-weapon-empty) { display:block; }
 .aircraft-toolbar .hangar-aircraft-list:has(.hangar-weapon-empty:only-child) { border:0; }
-.calculator-page .aircraft-toolbar .hangar-weapon { min-height:36px; gap:6px; padding:7px 10px; border:0; background:#f7fbfd; font-size:12px; }
-.aircraft-toolbar .hangar-weapon-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.calculator-page .aircraft-toolbar .hangar-weapon { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; min-height:44px; gap:3px; padding:8px 10px; border:0; background:#f7fbfd; font-size:13px; }
+.aircraft-toolbar .hangar-weapon-name { min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.5; }
 .aircraft-toolbar .hangar-weapon-kind { font-size:10px; letter-spacing:0; }
 .aircraft-toolbar .hangar-weapon-empty { margin:0; padding:5px 0; background:#f7fbfd; }
 .calculator-page .aircraft-toolbar .hangar-weapon.is-selected { background:#fff2c6; }
@@ -533,7 +533,6 @@ body.calculator-page { font-family:"Bomana Flags", "Noto Sans SC", "Microsoft Ya
 @media (max-width:900px) {
   .airport-workspace { grid-template-columns:minmax(0,1fr); gap:12px; }
   .airport-reference { max-width:260px; }
-  .calculator-page .aircraft-toolbar .hangar-aircraft-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width:640px) {
   .calculator-page .site-header { position:static; flex-direction:row; align-items:center; padding:7px 9px; border-radius:14px; gap:6px; }

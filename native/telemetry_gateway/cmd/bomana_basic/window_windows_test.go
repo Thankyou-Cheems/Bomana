@@ -36,9 +36,11 @@ func preview(t *testing.T, r *renderer, name string) {
 		t.Fatal(err)
 	}
 }
+
+// Window tests keep their OS thread locked until the test goroutine exits,
+// so later tests cannot inherit its Windows message queue.
 func TestNativeRenderingHasIndependentZeroToFullOpacity(t *testing.T) {
 	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	r, err := newRenderer(560, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +105,6 @@ func TestNativeRenderingHasIndependentZeroToFullOpacity(t *testing.T) {
 }
 func TestNativeWindowSettingsRecoveryAndPersistence(t *testing.T) {
 	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	path := filepath.Join(t.TempDir(), "settings.json")
 	frames := make(chan frame, 1)
 	frames <- flight(time.Now().UnixMilli())
@@ -193,7 +194,6 @@ func TestSettingsCorruptionDefaultsAndAtomicReplacement(t *testing.T) {
 
 func TestNativeMessageLoopConsumesTelemetry(t *testing.T) {
 	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	// Earlier own-window tests close their message loops using WM_QUIT.
 	var msg winMsg
 	for {
@@ -221,7 +221,6 @@ func TestNativeMessageLoopConsumesTelemetry(t *testing.T) {
 
 func TestUnavailableHotkeysAreNotAdvertised(t *testing.T) {
 	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	for i, mod := range []uintptr{3, 7} {
 		registerHotKey.Call(0, uintptr(9800+i), mod|0x4000, 'M')
 		defer unregisterHotKey.Call(0, uintptr(9800+i))
@@ -242,7 +241,6 @@ func TestUnavailableHotkeysAreNotAdvertised(t *testing.T) {
 
 func TestNativeHitRoutingPassesThroughAndRestores(t *testing.T) {
 	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	class := fmt.Sprintf("Bomana.BasicDesktop.HitTest.%d", time.Now().UnixNano())
 	s := defaults()
 	s.Background = 100

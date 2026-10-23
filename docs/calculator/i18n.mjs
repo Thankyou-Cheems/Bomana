@@ -51,7 +51,8 @@ export async function initializeLanguage() {
     try { await changeLanguage(selected.dataset.calculatorLanguage); } catch { /* Keep the current language if loading fails. */ }
     finally {
       buttons.forEach(button => { button.disabled = false; });
-      picker.removeAttribute("aria-busy"); reflect(); selected.focus();
+      picker.removeAttribute("aria-busy"); reflect();
+      if (document.activeElement === document.body || picker.contains(document.activeElement)) selected.focus();
     }
   });
 }

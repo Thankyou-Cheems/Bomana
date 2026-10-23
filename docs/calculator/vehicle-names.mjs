@@ -14,16 +14,16 @@ const flags = { usa: "🇺🇸", germany: "🇩🇪", britain: "🇬🇧", japan
   south_africa: "🇿🇦", indonesia: "🇮🇩" };
 
 export function vehicleName(value, country) {
-  // Source names remain untouched in the API. Only the leading game marker is
-  // replaced, following getClearUnitName; country comes from unit metadata.
-  return String(value ?? "").replace(/^[\uF059\u2415-\u2419\u241e-\u2420\u2580-\u2588◄◊◐◘◥◔◌◢◗◡⋠]/u,
+  // Source names remain untouched in the API. Game markers can follow a pilot's
+  // name in English; their readable country still comes from unit metadata.
+  return String(value ?? "").replace(/[\uF059\u2415-\u2419\u241e-\u2420\u2580-\u2588◄◊◐◘◥◔◌◢◗◡⋠]/gu,
     () => flags[country] ? `${flags[country]} ` : `〔${localizeName(countries[country] || "特殊型号")}〕`).trim();
 }
 
 export function readableVehicle(row) {
   return { ...row, get name() { return vehicleName(localizeName(row.name, row.name_en), row.country); }, get countryName() { return localizeName(countries[row.country] || ""); },
     searchTerms: vehicleSearchTerms(row),
-    ...(row.long ? { get long() { return vehicleName(localizeName(row.long, row.name_en), row.country); } } : {}),
+    get long() { return row.long ? vehicleName(localizeName(row.long, row.name_en), row.country) : undefined; },
     ...(row.name_en ? { name_en: vehicleName(row.name_en, row.country) } : {}) };
 }
 
