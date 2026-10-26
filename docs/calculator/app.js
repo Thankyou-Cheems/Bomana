@@ -1,5 +1,6 @@
 import "./workflows.mjs";
 import { fuelFields, fuelInputIssues } from "./workflow-model.mjs";
+import { aircraftBattleRating } from "./model.mjs";
 import { t, numberLocale, initializeLanguage, localizeName } from "./i18n.mjs";
 import { airfieldDefenseMassAssessment, airportBarPositions, airportRepairVisit, airportPaletteBands, compareLoadouts, durabilityBrBuckets, equivalentWeaponCount, explosiveConversion, requiredCount, returnFuelPlan, rewardUi, sharedParameterSource, sortiePlan, usefulActionsReferences, usefulActionsReference, usefulActionsPlan, usefulActionsObservedFraction, usefulActionsCardRate, usefulActionsCurve } from "./model.mjs";
 import { rankFuzzyMatches } from "./search.mjs";
@@ -46,6 +47,11 @@ window.addEventListener("hashchange", markDirectoryLocation);
 markDirectoryLocation();
 
 const brSelect = document.querySelector("#calcBr");
+const aircraftBrMode = document.querySelector("#calcAircraftBrMode");
+const brSelectionKey = "bomana:calculator-br-selection:v1";
+let savedBrSelection = null;
+try { savedBrSelection = JSON.parse(localStorage.getItem(brSelectionKey)); } catch { /* Session-only if storage is unavailable. */ }
+if (["simulator", "realistic", "arcade"].includes(savedBrSelection?.mode)) aircraftBrMode.value = savedBrSelection.mode;
 const baseModeSelect = document.querySelector("#calcBaseMode");
 const targetSelect = document.querySelector("#calcTarget");
 const kindSelect = document.querySelector("#calcKind");
@@ -182,7 +188,7 @@ const optimizer = createLoadoutOptimizer(document.querySelector("#loadoutOptimiz
 });
 const scoreEstimator = createSimScoreEstimator(document.querySelector("#simScoreEstimator"), {
   summary: document.querySelector("#calcScoreSummary"),
-  changeRoomBr: value => { selectedRoomBr = value; renderBrOptions(); refreshResult(); },
+  changeRoomBr: value => { selectedRoomBr = value; saveBrSelection(); renderBrOptions(); refreshResult(); },
   changeScenario: () => refreshResult(),
 });
 let rewardsCatalog = null;
@@ -753,6 +759,28 @@ function renderBrOptions() {
     selectedBucket?.value || defaultBr,
   );
   renderSegments(brSelect, document.querySelector("#calcBrSegments"));
+  refreshAircraftBrNote();
+}
+
+function saveBrSelection() {
+  try { localStorage.setItem(brSelectionKey, JSON.stringify({aircraftId: selectedAircraftId, mode: aircraftBrMode.value, roomBr: selectedRoomBr})); }
+  catch { /* User selections remain usable without browser storage. */ }
+}
+
+function refreshAircraftBrNote() {
+  if (!catalog) return;
+  const aircraft = selectedAircraft();
+  const br = aircraftBattleRating(aircraft, aircraftBrMode.value, catalog.br_values);
+  document.querySelector('#calcAircraftBrNote').textContent = br
+    ? t('page.aircraftBrDefault', '机型 BR {{br}} 仅作默认；房间最高 BR 请按实际房间手动调整。', {br})
+    : t('page.aircraftBrUnknown', '当前机型缺少此模式 BR；保留房间选择，请按实际房间手动调整。');
+}
+
+function useAircraftBr() {
+  const br = aircraftBattleRating(selectedAircraft(), aircraftBrMode.value, catalog.br_values);
+  if (br !== null) selectedRoomBr = br;
+  renderBrOptions();
+  saveBrSelection();
 }
 
 const targetSegmentNames = () => ({
@@ -1310,7 +1338,11 @@ async function boot() {
     renderSegments(targetSelect, document.querySelector("#calcTargetSegments"));
     renderBaseModes();
     renderBrOptions();
-    selectedAircraftId = aircraftCatalog.find(item => item.id === "pe-8_m82")?.id || "";
+    selectedAircraftId = typeof savedBrSelection?.aircraftId === "string"
+      ? aircraftCatalog.find(item => item.id === savedBrSelection.aircraftId)?.id || ""
+      : aircraftCatalog.find(item => item.id === "pe-8_m82")?.id || "";
+    selectedRoomBr = catalog.br_values.includes(savedBrSelection?.roomBr) ? savedBrSelection.roomBr : catalog.br_values.at(-1) || defaultBr;
+    renderBrOptions();
     selectedPresetId = selectedAircraft()?.presets?.[0]?.id || "";
     document.querySelector("#calcIndividualWeapons").open = !selectedPresetId;
     aircraftSearchInput.value = selectedAircraft()?.name || "";
@@ -1346,7 +1378,9 @@ async function boot() {
 aircraftList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-aircraft-id]");
   if (!button || !aircraftList.contains(button)) return;
+  const changedAircraft = selectedAircraftId !== button.dataset.aircraftId;
   selectedAircraftId = button.dataset.aircraftId;
+  if (changedAircraft) useAircraftBr();
   const aircraft = selectedAircraft();
   selectedPresetId = aircraft?.presets?.[0]?.id || "";
   kindSelect.value = ""; searchInput.value = "";
@@ -1434,6 +1468,8 @@ document.addEventListener("calculator:tool", event => {
 
 aircraftClear.addEventListener("click", () => {
   selectedAircraftId = "";
+  saveBrSelection();
+  refreshAircraftBrNote();
   selectedPresetId = "";
   document.querySelector("#calcIndividualWeapons").open = true;
   aircraftSearchInput.value = "";
@@ -1471,7 +1507,13 @@ weaponList.addEventListener("keydown", (event) => {
 
 brSelect.addEventListener("change", () => {
   selectedRoomBr = brSelect.value;
+  saveBrSelection();
   syncSegments(brSelect, document.querySelector("#calcBrSegments")); refreshResult();
+});
+aircraftBrMode.addEventListener("change", () => {
+  if (!catalog) return;
+  useAircraftBr();
+  refreshResult();
 });
 baseModeSelect.addEventListener("change", () => {
   if (!catalog) return;

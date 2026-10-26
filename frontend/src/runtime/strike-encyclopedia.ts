@@ -1,4 +1,5 @@
 import type { StrikeRuntimeResources } from "./runtime-resources";
+import type { FlightDisplayMode } from "./flight-display-mode";
 
 export type StrikeTargetKind = "bombing_point" | "airport_module";
 export type AirportModule = "airfield" | "storage" | "parking" | "dwelling";
@@ -13,6 +14,7 @@ export interface StrikeWeaponSummary {
 export interface StrikeAircraftSummary {
   readonly id: string;
   readonly displayName: string;
+  readonly battleRatings: Readonly<Record<string, number | null>>;
 }
 
 export interface StrikeCalculation {
@@ -49,10 +51,12 @@ export class StrikeEncyclopedia {
   readonly #weaponsById: ReadonlyMap<string, WeaponRecord>;
   readonly #aircraftWeapons: ReadonlyMap<string, readonly string[]>;
   readonly #aircraft: readonly StrikeAircraftSummary[];
+  readonly #roomBrValues: readonly number[];
 
   constructor(resources: StrikeRuntimeResources) {
     this.#encyclopedia = resources.encyclopedia;
     this.#splash = resources.splash;
+    this.#roomBrValues = roomMaxBattleRatings(number(resources.encyclopedia.economic_rank_max ?? 41));
     const rawWeapons = resources.weapons.weapons;
     if (!Array.isArray(rawWeapons)) throw new Error("strike weapon catalog is invalid");
     this.#weapons = Object.freeze(rawWeapons.map(parseWeapon));
@@ -71,6 +75,8 @@ export class StrikeEncyclopedia {
       if (id) aircraft.push(Object.freeze({
         id,
         displayName: String(record.name_zh ?? record.name ?? id),
+        battleRatings: Object.freeze(record.battle_ratings && typeof record.battle_ratings === "object"
+          ? record.battle_ratings as Record<string, number | null> : {}),
       }));
       return id ? [[id, Object.freeze(weapons)] as const] : [];
     }));
@@ -78,6 +84,13 @@ export class StrikeEncyclopedia {
   }
 
   aircraft(): readonly StrikeAircraftSummary[] { return this.#aircraft; }
+
+  roomMaxBattleRatings(): readonly number[] { return this.#roomBrValues; }
+
+  aircraftBattleRating(id: string, mode: FlightDisplayMode): number | null {
+    const value = this.#aircraft.find(aircraft => aircraft.id === id)?.battleRatings[mode === "air-realistic" ? "realistic" : "simulator"];
+    return typeof value === "number" && this.#roomBrValues.includes(value) ? value : null;
+  }
 
   weapons(aircraftId?: string): readonly StrikeWeaponSummary[] {
     const allowed = aircraftId ? this.#aircraftWeapons.get(aircraftId) : null;
@@ -99,7 +112,7 @@ export class StrikeEncyclopedia {
     readonly missionMode?: "planes" | "heli";
     readonly airportModule?: AirportModule;
   }): StrikeCalculation {
-    const balanceLevel = balanceLevelFromBr(input.roomMaxBr);
+    const balanceLevel = balanceLevelFromBr(input.roomMaxBr, this.#roomBrValues);
     const weapon = this.#weaponsById.get(input.weaponId);
     if (!weapon) throw new Error("unknown_weapon");
     const damage = this.#weaponDamage(weapon);
@@ -187,13 +200,14 @@ export class StrikeEncyclopedia {
   }
 }
 
-export function roomMaxBattleRatings(): readonly number[] {
-  return Object.freeze(Array.from({ length: 42 }, (_, rank) => Math.round((rank / 3 + 1) * 10) / 10));
+export function roomMaxBattleRatings(maximumRank = 41): readonly number[] {
+  if (!Number.isInteger(maximumRank) || maximumRank < 0 || maximumRank > 50) throw new Error("invalid_economic_rank_max");
+  return Object.freeze(Array.from({ length: maximumRank + 1 }, (_, rank) => Math.round((rank / 3 + 1) * 10) / 10));
 }
 
-function balanceLevelFromBr(br: number): number {
+function balanceLevelFromBr(br: number, values: readonly number[]): number {
   if (!Number.isFinite(br)) throw new Error("invalid_room_max_br");
-  const index = roomMaxBattleRatings().findIndex((value) => Math.abs(value - br) <= 1e-6);
+  const index = values.findIndex((value) => Math.abs(value - br) <= 1e-6);
   if (index < 0) throw new Error("invalid_room_max_br");
   return index;
 }

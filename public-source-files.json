@@ -653,6 +653,7 @@
     "frontend/src/runtime/speed-strip-renderer.test.ts",
     "frontend/src/runtime/speed-strip-renderer.ts",
     "frontend/src/runtime/speed-warning.ts",
+    "frontend/src/runtime/strike-br-selection.ts",
     "frontend/src/runtime/strike-encyclopedia.test.ts",
     "frontend/src/runtime/strike-encyclopedia.ts",
     "frontend/src/runtime/target-center-motion.test.ts",

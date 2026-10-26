@@ -1,4 +1,10 @@
 {
+  "page.aircraftBrMode": "機型 BR 模式",
+  "page.aircraftBrMode.simulator": "空戰全真",
+  "page.aircraftBrMode.realistic": "空戰歷史",
+  "page.aircraftBrMode.arcade": "空戰街機",
+  "page.aircraftBrDefault": "機型 BR {{br}} 僅作預設；房間最高 BR 請依實際房間手動調整。",
+  "page.aircraftBrUnknown": "目前機型缺少此模式 BR；保留房間選擇，請依實際房間手動調整。",
   "app.selectAWeaponAboveToCompareItsMassWith": "在上方選擇武器後，可對照本節兩種防空的質量篩選窗。",
   "app.unknownVersion": "未知版本",
   "app.airDefenseResearchUses259013The": "防空研究爲 2.59.0.13；當前武器目錄爲 {{v0}}，暫不關聯彈種判斷。",

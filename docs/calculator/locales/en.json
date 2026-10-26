@@ -1,4 +1,10 @@
 {
+  "page.aircraftBrMode": "Aircraft BR mode",
+  "page.aircraftBrMode.simulator": "Air Simulator",
+  "page.aircraftBrMode.realistic": "Air Realistic",
+  "page.aircraftBrMode.arcade": "Air Arcade",
+  "page.aircraftBrDefault": "Aircraft BR {{br}} is a default. Adjust the room maximum BR to the actual room.",
+  "page.aircraftBrUnknown": "This aircraft has no BR for this mode. Your room selection is kept; adjust it to the actual room.",
   "app.selectAWeaponAboveToCompareItsMassWith": "Select a weapon above to compare its mass with the two air-defense priority windows below.",
   "app.unknownVersion": "unknown version",
   "app.airDefenseResearchUses259013The": "Air-defense research uses 2.59.0.13; the weapon catalog uses {{v0}}. Weapon-specific assessment is unavailable.",

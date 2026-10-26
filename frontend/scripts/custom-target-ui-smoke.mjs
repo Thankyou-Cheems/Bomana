@@ -25,6 +25,12 @@ try {
  const wait=async()=>{
   await page.waitForFunction(()=>['optimal','feasible','infeasible','invalid'].includes(document.querySelector('#loadoutOptimizer').dataset.state),null,{timeout:35000});
  };
+ const reloadAircraft=async()=>{
+  const selected=await page.locator('#calcAircraftSelection').innerText();
+  await page.reload();await page.locator('#calcPresetList [data-preset-id]').first().waitFor();
+  assert.equal(await page.locator('#calcAircraftSelection').innerText(),selected,'Reload preserves the current aircraft rather than the old Pe-8 boot default');
+  await wait();
+ };
  const text=()=>page.locator('[data-optimizer-result]').textContent();
  const guidanceFamilies=['noLaser','noOptical','noSatellite','noManual'];
  const allowed=async key=>page.locator(`[data-optimizer-filter="${key}"]`).getAttribute('aria-checked');
@@ -103,7 +109,7 @@ try {
    await page.locator('#loadoutOptimizer').screenshot({path:`../.artifacts/calculator-ui/custom-target-${locale}-${width}.png`});
   }
  }
- await page.reload();await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
+ await reloadAircraft();
  assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),true,'Guidance selection survives refresh');
  await checkFamilies(false);assert.equal(await allowed('noMissiles'),'false','Linked switches survive refresh');
  await page.setViewportSize({width:390,height:1050});
@@ -123,7 +129,7 @@ try {
  await page.locator('[data-optimizer-guidance-all]').click();await wait();
  await checkFamilies(true);
  await page.locator('[data-optimizer-filter="noManual"]').click();await wait();
- await page.reload();await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
+ await reloadAircraft();
  assert.equal(await page.locator('[data-optimizer-guidance-all]').isChecked(),true);assert.equal(await allowed('noManual'),'false','Partial family exclusions survive refresh');
  await page.locator('[data-optimizer-unguided-only]').click();await wait();
  await page.setViewportSize({width:1440,height:1050});
@@ -142,8 +148,7 @@ try {
  const map=new Map(weaponData.weapons.map(row=>[row.id,row]));
  for(const key of selected.filter(key=>key!==guided.key))for(const [id]of custom.aircraft.a_10c.options.find(row=>row.key===key).weapons)assert.equal(map.get(id).guidanceKind,'unguided','Automatic additions obey unguided-only');
  // Legacy storage onlyGuided:true maps to the exclusive guided state.
- await page.evaluate(()=>localStorage.setItem('bomana:calculator:optimizerFilters',JSON.stringify({onlyGuided:true})));await page.reload();
- await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();await wait();
+ await page.evaluate(()=>localStorage.setItem('bomana:calculator:optimizerFilters',JSON.stringify({onlyGuided:true})));await reloadAircraft();
  assert.equal(await page.locator('[data-optimizer-guided-only]').isChecked(),true);assert.equal(await page.locator('[data-optimizer-unguided-only]').isChecked(),false);
  assert.deepEqual(errors,[]);
  const receipt={passed:true,switchMilliseconds,workerReusedForN:true,catalogRefetchForN:0,manualFilterConflictPreserved:true,guidanceSwitchesBidirectional:true,manualCommandNativeRecommendation:true,mobileGuidanceInteraction:true,partialFiltersPersist:true,locales:['zh-CN','zh-Hant','en'],widths:[1440,390,320],errors};

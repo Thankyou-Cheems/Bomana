@@ -13,6 +13,7 @@ test("complete preset totals sum mixed stores but preserve unknown damage", () =
   assert.deepEqual(presetTotals(preset, weapons), { count: 5, damage: null, rewardDamage: null, mass: 130 });
 });
 import {
+  aircraftBattleRating,
   compareLoadouts,
   airportRepairVisit,
   airportPaletteBands,
@@ -32,6 +33,20 @@ import {
   usefulActionsCardRate,
   usefulActionsCurve,
 } from "../../docs/calculator/model.mjs";
+
+test("aircraft BR uses the selected air mode and leaves missing or unsupported values unknown", () => {
+  const aircraft = {br: [11, 10, 10.7]};
+  const values = ["10.0", "10.3", "10.7", "11.0", "15.0"];
+  assert.equal(aircraftBattleRating(aircraft, "simulator", values), "10.7");
+  assert.equal(aircraftBattleRating(aircraft, "realistic", values), "10.0");
+  assert.equal(aircraftBattleRating(aircraft, "arcade", values), "11.0");
+  assert.equal(aircraftBattleRating({br: [null, null, 15]}, "simulator", values), "15.0");
+  for (const row of [null, {}, {br: null}, {br: [null, null, null]}, {br: [null, null, "10.7"]}, {br: [null, null, 10.71]}]) {
+    assert.equal(aircraftBattleRating(row, "simulator", values), null);
+  }
+  assert.equal(aircraftBattleRating(aircraft, "ground_simulator", values), null);
+  assert.equal(aircraftBattleRating(aircraft, "simulator", ["10.0"]), null);
+});
 
 test('current parameters preserve British bomb completion counts and Su-33 capacity', () => {
   const catalog = JSON.parse(readFileSync(new URL('../../docs/api/v1/calculator/weapons.json', import.meta.url)));

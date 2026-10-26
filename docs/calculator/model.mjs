@@ -1,3 +1,11 @@
+export function aircraftBattleRating(aircraft, mode, brValues) {
+  const index = ["arcade", "realistic", "simulator"].indexOf(mode);
+  if (index < 0) return null;
+  const br = aircraft?.br?.[index];
+  return typeof br === "number" && Number.isFinite(br)
+    ? brValues.find(value => Number(value) === br) ?? null : null;
+}
+
 // Reviewed 2.59.0.13 EC rank 07 example: fr_crotale_ng + uk_rooikat_za_35.
 // This is only the mass gate of their configured projectile priority windows.
 export function airfieldDefenseMassAssessment({ massKg, sourceVersion }) {

@@ -102,7 +102,9 @@ try {
   await page.locator("[data-combination-preset]").click();
   assert.match(await page.locator("[data-combination-result]").textContent(), /完整摧毁轮次\d+ 轮/);
   await page.reload();
-  await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();
+  await page.locator('#calcPresetList [data-preset-id="a_10c_mk82_default"]').waitFor();
+  assert.match(await page.locator('#calcAircraftSelection').innerText(), /A-10C/, 'Reload restores the selected aircraft instead of the old Pe-8 boot default');
+  assert.equal(await page.locator('[data-sim-score-br]').inputValue(), '14.7', 'Reload keeps the manually selected room ceiling');
   await chooseAircraft("a_10c"); await page.locator("[data-custom-body]").waitFor();
   await page.locator(".custom-saved summary").click();
   await page.getByRole("button", {name: "制导炸弹与吊舱", exact: true}).click();
@@ -177,8 +179,10 @@ try {
   await page.route("**/weapons.json", route => route.fulfill({contentType: "application/json", body: JSON.stringify({
     ...weaponData, weapons: weaponData.weapons.map(weapon => weapon.id === "fr_mk18" ? {...weapon, dmg: null} : weapon),
   })}));
+  const selectedBeforeMissingDamage = await page.locator('#calcAircraftSelection').innerText();
   await page.reload();
-  await page.locator('#calcPresetList [data-preset-id="pe-8_fab5000"]').waitFor();
+  await page.locator('#calcPresetList [data-preset-id]').first().waitFor();
+  assert.equal(await page.locator('#calcAircraftSelection').innerText(), selectedBeforeMissingDamage, 'Missing-damage reload preserves the current Typhoon selection');
   await chooseAircraft("ef_2000_typhoon_aesa");
   await page.locator("[data-custom-body]").waitFor();
   await page.locator(".custom-saved summary").click();

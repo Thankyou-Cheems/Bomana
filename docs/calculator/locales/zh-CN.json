@@ -1,4 +1,10 @@
 {
+  "page.aircraftBrMode": "机型 BR 模式",
+  "page.aircraftBrMode.simulator": "空战全真",
+  "page.aircraftBrMode.realistic": "空战历史",
+  "page.aircraftBrMode.arcade": "空战街机",
+  "page.aircraftBrDefault": "机型 BR {{br}} 仅作默认；房间最高 BR 请按实际房间手动调整。",
+  "page.aircraftBrUnknown": "当前机型缺少此模式 BR；保留房间选择，请按实际房间手动调整。",
   "app.selectAWeaponAboveToCompareItsMassWith": "在上方选择武器后，可对照本节两种防空的质量筛选窗。",
   "app.unknownVersion": "未知版本",
   "app.airDefenseResearchUses259013The": "防空研究为 2.59.0.13；当前武器目录为 {{v0}}，暂不关联弹种判断。",
